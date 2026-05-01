@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>S.C.O.U.T. Dashboard</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #1a1a1a; color: #eee; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
+        .card { background: #2d2d2d; border-radius: 15px; padding: 20px; width: 100%; max-width: 400px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); margin-bottom: 20px; }
+        .label { font-size: 12px; color: #aaa; text-transform: uppercase; margin-bottom: 5px; }
+        .value { font-size: 24px; font-weight: bold; color: #fff; margin-bottom: 15px; }
+        .instruction-box { background: #3d3d3d; border-left: 5px solid #f1c40f; padding: 15px; border-radius: 5px; font-size: 18px; line-height: 1.5; min-height: 80px; }
+        .status-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #2ecc71; margin-right: 5px; }
+        .footer { font-size: 12px; color: #666; margin-top: 20px; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+    </style>
+</head>
+<body>
+    <h1>🛰️ S.C.O.U.T. LIVE</h1>
+    
+    <div class="card">
+        <div class="label">導航指令 (Navigation)</div>
+        <div id="instruction" class="instruction-box">等待數據...</div>
+    </div>
+
+    <div class="card grid">
+        <div>
+            <div class="label">目前座標 (Pose)</div>
+            <div id="pose" class="value">0, 0</div>
+        </div>
+        <div>
+            <div class="label">最強訊號 (Best)</div>
+            <div id="signal" class="value">-</div>
+        </div>
+    </div>
+
+    <div class="card" style="text-align- center;">
+        <div class="label">採樣點數 (Samples)</div>
+        <div id="points" class="value">0</div>
+    </div>
+
+    <div class="footer">
+ same-room-wifi-sensing | 實時更新中...</div>
+
+    <script>
+        const MAC_IP = window.location.hostname;
+        const PORT = '9099';
+
+        async function updateStatus() {
+            try {
+                const res = await fetch(`http://${MAC_IP}:${PORT}/status`);
+                const data = await res.json();
+                
+                document.getElementById('pose').innerText = `${data.x.toFixed(1)}, ${data.y.toFixed(1)}`;
+                document.getElementById('signal').innerText = `${data.best_ssid} (${data.best_rssi}dBm)`;
+                document.getElementById('points').innerText = data.points;
+                document.getElementById('instruction').innerText = data.instruction;
+            } catch (e) {
+                console.error("Update failed", e);
+            }
+        }
+
+        // 每 2 秒更新一次
+        setInterval(updateStatus, 2000);
+        updateStatus();
+    </script>
+</body>
+</html>
