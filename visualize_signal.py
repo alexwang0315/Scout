@@ -2,56 +2,69 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.interpolate import griddata
 import os
-import random
+import logging
+
+logger = logging.getLogger("S.C.O.U.T.")
 
 def generate_heatmap(world):
+    """
+    生成熱力圖（GPS/PDR融合）：
+    - 從 world.trajectory 提取 x, y 與信號強度（rssi）
+    - 使用 SciPy 的 griddata 插值生成平滑熱力圖
+    - 儲存為 heatmap.png
+    """
+    # 1. 取得軌跡數據
     traj = getattr(world, 'trajectory', [])
+    
+    # 2. 數據完整性檢查
     if len(traj) < 3:
-        print("⚠️ Data points insufficient (need at least 3 points for mapping).")
-        return
-
-    # 提取 X, Y, RSSI
-    x = np.array([p['x'] for p in traj])
-    y = np.array([p['y'] for p in traj])
-    z = np.array([max(p.get('signals', {}).values()) if p.get('signals') else -100 for p in traj])
-
-    # --- 關鍵修正：引入微小擾動 (Jitter) 解決共線/共面崩潰問題 ---
-    # 給每個點增加 +/- 0.01m 的隨機偏移
-    x = x + np.random.uniform(-0.01, 0.01, size=x.shape)
-    y = y + np.random.uniform(-0.01, 0.01, size=y.shape)
-
-    # 建立網格
-    xi = np.linspace(x.min() - 2, x.max() + 2, 100)
-    yi = np.linspace(y.min() - 2, y.max() + 2, 100)
-    xi, yi = np.meshgrid(xi, yi)
-
-    try:
-        # 嘗試使用線性插值 (高品質)
-        zi = griddata((x, y), z, (xi, yi), method='linear')
+        logger.warning("⚠️ 熱力圖點數不足（需至少3點）、無法生成圖表")
+        return False
         
-        # 處理線性插值產生的 NaN (邊緣區域)
-        # 使用 nearest 填補 NaN 區域，確保地圖完整
-        nan_mask = np.isnan(zi)
-        if np.any(nan_mask):
-            zi_nearest = griddata((x, y), z, (xi, yi), method='nearest')
-            zi[nan_mask] = zi_nearest[nan_mask]
-            
+    try:
+        # 提取 x, y, rssi（使用最大信號強度）
+        x_values = np.array([p['x'] for p in traj])
+        y_values = np.array([p['y'] for p in traj])
+        # 從 signals 中取最大 rssi，若無則使用預設值
+        z_values = np.array([
+            max(p.get('signals', {}).values()) if p.get('signals') else -100
+            for p in traj
+        ])
+        
+        # 3. 數據範圍擴張（避免邊界急激變化）
+        x_min, x_max = x_values.min() - 2, x_values.max() + 2
+        y_min, y_max = y_values.min() - 2, y_values.max() + 2
+        
+        # 建立插值網格
+        xi = np.linspace(x_min, x_max, 100)
+        yi = np.linspace(y_min, y_max, 100)
+        xi, yi = np.meshgrid(xi, yi)
+        
+        # 使用線性插值生成熱力圖
+        zi = griddata(
+            (x_values, y_values), 
+            z_values, 
+            (xi, yi), 
+            method='linear'
+        )
+        
+        # 4. 繪製熱力圖
+        plt.figure(figsize=(12, 10))
+        plt.contourf(xi, yi, zi, 30, cmap='viridis')  # 使用更新的色散映射
+        plt.colorbar(label='最大信號強度 (dBm)')
+        
+        # 標示軌跡點
+        plt.scatter(x_values, y_values, c='black', edgecolors='white', s=30, alpha=0.7)
+        plt.plot(x_values, y_values, 'white--', alpha=0.5)
+        
+        # 5. 儲存並清理
+        output_path = os.path.join(os.path.dirname(__file__), 'heatmap.png')
+        plt.savefig(output_path, dpi=300, bbox_inches='tight')
+        plt.close()
+        
+        logger.info(f"✅ 熱力圖已生成至 {output_path}")
+        return True
+        
     except Exception as e:
-        print(f"Linear interpolation failed, falling back to nearest: {e}")
-        zi = griddata((x, y), z, (xi, yi), method='nearest')
-
-    # 繪圖
-    plt.figure(figsize=(10, 8))
-    contour = plt.contourf(xi, yi, zi, 20, cmap='jet')
-    plt.colorbar(contour, label='Max Signal Strength (dBm)')
-    plt.scatter(x, y, c='black', edgecolors='white', s=30, label='Sample Points')
-    plt.plot(x, y, 'w--', alpha=0.5, label='Path')
-    plt.title('S.C.O.U.T. Fusion Signal Map (Jitter-Corrected)')
-    plt.xlabel('Relative X (m)')
-    plt.ylabel('Relative Y (m)')
-    plt.legend()
-
-    save_path = os.path.expanduser('~/scout-fusion/heatmap.png')
-    plt.savefig(save_path)
-    plt.close()
-    print(f"✅ Heatmap successfully generated: {save_path}")
+        logger.error(f"🔥 熱力圖生成錯誤：{str(e)}")
+        return False
