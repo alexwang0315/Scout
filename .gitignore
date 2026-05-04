@@ -59,3 +59,4 @@ dmypy.json
 *.db
 *.sqlite
 *.sqlite3
+.env
