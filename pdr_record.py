@@ -3,9 +3,11 @@
 # ------------------------------------------------------------
 from __future__ import annotations
 from typing import Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 class PDRRecord(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
     # ------------------- 基本識別 -------------------
     deviceID: Optional[str] = None
     loggingTime: Optional[str] = None
@@ -69,7 +71,3 @@ class PDRRecord(BaseModel):
     gyroTimestamp_sinceReboot:           Optional[float] = Field(None, alias="gyroTimestamp_sinceReboot")
     magnetometerTimestamp_sinceReboot:   Optional[float] = Field(None, alias="magnetometerTimestamp_sinceReboot")
     motionTimestamp_sinceReboot:         Optional[float] = Field(None, alias="motionTimestamp_sinceReboot")
-
-    class Config:
-        allow_population_by_field_name = True
-        extra = "ignore"
