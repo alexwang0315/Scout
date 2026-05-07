@@ -1,4 +1,5 @@
 import math
+import time
 from typing import Dict, Tuple, List
 
 class PDREngine:
@@ -42,6 +43,23 @@ class PDREngine:
             "x": self.x,
             "y": self.y,
             "time": current_time,
+            "source": "pdr"
+        })
+        return self.x, self.y
+
+    def update_position(self, distance: float, heading: float, time_val: float = None) -> Tuple[float, float]:
+        """根據距離與絕對航向更新位置，支援舊版 /pdr/update 資料流。"""
+        rad = math.radians(float(heading))
+        dx = float(distance) * math.sin(rad)
+        dy = float(distance) * math.cos(rad)
+        self.x += dx
+        self.y += dy
+        self.heading = rad
+        ts = time_val if time_val is not None else time.time()
+        self.pdr_trajectory.append({
+            "x": self.x,
+            "y": self.y,
+            "time": ts,
             "source": "pdr"
         })
         return self.x, self.y

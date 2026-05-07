@@ -36,7 +36,7 @@ async def upload_imu(request: Request):
         raise HTTPException(status_code=422, detail="Payload must be dict or list of dicts")
 
     for record in records:
-        imu_dict = record.dict()
+        imu_dict = record.model_dump()
         
         # 處理 GPS 數據
         if record.locationLatitude is not None and record.locationLongitude is not None:

@@ -22,7 +22,9 @@ class SensorLogDecoder:
         try:
             # 1. 提取距離/步數 (優先使用 pedometerDistance)
             dist_val = raw_data.get("pedometerDistance")
-            step_val = raw_data.get("pedometerNumberofSteps")
+            step_val = raw_data.get("pedometerNumberOfSteps")
+            if step_val is None:
+                step_val = raw_data.get("pedometerNumberofSteps")
             
             distance = 0.0
             source = ""
@@ -32,7 +34,7 @@ class SensorLogDecoder:
                 source = "pedometerDistance"
             elif step_val is not None:
                 distance = float(step_val) * self.default_step_length
-                source = "pedometerNumberofSteps"
+                source = "pedometerNumberOfSteps"
             else:
                 return None # 缺失距離-相關數據
 

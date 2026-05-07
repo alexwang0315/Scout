@@ -1,42 +1,57 @@
 import asyncio
-import os
 import logging
+import os
+from contextlib import asynccontextmanager
+from concurrent.futures import ThreadPoolExecutor
+from typing import Any, Dict, Optional
+
 import matplotlib
-matplotlib.use('Agg')  # 非互動式後端，用於生成圖表
-from fastapi import FastAPI, Request, HTTPException
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+from dotenv import load_dotenv
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
-from dotenv import load_dotenv
-from concurrent.futures import ThreadPoolExecutor
-import matplotlib.pyplot as plt
-import numpy as np
 
 from agent import sos_agent
-from macos_wifi import MacOSWifiWorld
-from visualize_signal import generate_heatmap
-from pdr_engine import pdr
 from imu_api import router as imu_router
+from macos_wifi import MacOSWifiWorld
+from pdr_engine import pdr
+from sensor_decoder import SensorLogDecoder
+from shared_queue import pdr_event_queue
+from visualize_signal import generate_heatmap
 
-# 載入環境變數
-load_dotenv(os.path.expanduser('~/scout-fusion/.env'))
+load_dotenv(os.path.expanduser("~/scout-fusion/.env"))
 
-# 配置參數
-DEBUG = os.getenv('SCOUT_DEBUG', 'false').lower() == 'true'
-PORT = 9099
+DEBUG = os.getenv("SCOUT_DEBUG", "false").lower() == "true"
+PORT = int(os.getenv("SCOUT_PORT", "9099"))
 
-# 日誌配置
 log_level = logging.DEBUG if DEBUG else logging.INFO
-logging.basicConfig(level=log_level, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=log_level, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("S.C.O.U.T.")
 
-# 初始化 FastAPI
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    global _worker_task
+    if _worker_task is None or _worker_task.done():
+        logger.info("Starting AI decision worker")
+        _worker_task = asyncio.create_task(ai_decision_worker())
+    try:
+        yield
+    finally:
+        if _worker_task and not _worker_task.done():
+            _worker_task.cancel()
+        executor.shutdown(wait=False, cancel_futures=True)
+
+
 app = FastAPI(
     title="S.C.O.U.T. Fusion Server",
-    description="Wi-Fi 訊號融合 + IMU/PDR 行人航位推算伺服器",
-    version="0.2.0",
+    description="Wi-Fi signal fusion + IMU/PDR pedestrian dead reckoning server",
+    version="0.2.1",
+    lifespan=lifespan,
 )
 
-# CORS 配置
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -44,183 +59,232 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 全局狀態初始化
 world = MacOSWifiWorld()
 world.trajectory = []
 trajectory_lock = asyncio.Lock()
 executor = ThreadPoolExecutor(max_workers=3)
 last_instruction = "等待初始化..."
+_worker_task: Optional[asyncio.Task] = None
 
-# ─── 軌跡圖生成函數 ───────────────────────────────────────────────
-def generate_trajectory_plot():
-    """生成軌跡圖（GPS + PDR）"""
+
+def _result_text(result: Any) -> str:
+    return str(getattr(result, "output", getattr(result, "data", result)))
+
+
+def _latest_pose() -> Dict[str, float]:
+    if pdr.pdr_trajectory:
+        last = pdr.pdr_trajectory[-1]
+        return {"x": float(last["x"]), "y": float(last["y"])}
+    return {"x": float(pdr.x), "y": float(pdr.y)}
+
+
+def generate_trajectory_plot() -> bool:
+    """Generate trajectory_map.png from combined GPS and PDR trajectories."""
     try:
-        # 獲取合併軌跡
         trajectory = pdr.get_combined_trajectory()
-        
         if len(trajectory) < 2:
-            logger.warning("軌跡點不足，無法生成圖表")
+            logger.warning("Not enough trajectory points to generate map")
             return False
-            
-        # 分離GPS和PDR點
-        gps_points = [p for p in trajectory if p['source'] == 'gps']
-        pdr_points = [p for p in trajectory if p['source'] == 'pdr']
-        
+
+        gps_points = [point for point in trajectory if point.get("source") == "gps"]
+        pdr_points = [point for point in trajectory if point.get("source") == "pdr"]
+
         plt.figure(figsize=(12, 8))
-        
-        # 繪製GPS軌跡（藍色）
+
         if gps_points:
-            gps_x = [p['x'] for p in gps_points]
-            gps_y = [p['y'] for p in gps_points]
-            plt.plot(gps_x, gps_y, 'b-', linewidth=2, label='GPS軌跡')
-            plt.scatter(gps_x, gps_y, c='blue', s=30, marker='o')
-            
-        # 繪製PDR軌跡（紅色）
+            gps_x = [point["x"] for point in gps_points]
+            gps_y = [point["y"] for point in gps_points]
+            plt.plot(gps_x, gps_y, "b-", linewidth=2, label="GPS trajectory")
+            plt.scatter(gps_x, gps_y, c="blue", s=30, marker="o")
+            plt.scatter(gps_x[0], gps_y[0], c="green", s=100, marker="^", label="GPS start")
+            plt.scatter(gps_x[-1], gps_y[-1], c="blue", s=100, marker="s", label="GPS end")
+
         if pdr_points:
-            pdr_x = [p['x'] for p in pdr_points]
-            pdr_y = [p['y'] for p in pdr_points]
-            plt.plot(pdr_x, pdr_y, 'r-', linewidth=2, label='PDR軌跡')
-            plt.scatter(pdr_x, pdr_y, c='red', s=20, marker='x')
-            
-        # 標記起點和終點
-        if gps_points:
-            plt.scatter(gps_points[0]['x'], gps_points[0]['y'], 
-                       c='green', s=100, marker='^', label='GPS起點')
-            plt.scatter(gps_points[-1]['x'], gps_points[-1]['y'], 
-                       c='blue', s=100, marker='s', label='GPS終點')
-                       
-        if pdr_points:
-            plt.scatter(pdr_points[0]['x'], pdr_points[0]['y'], 
-                       c='orange', s=100, marker='^', label='PDR起點')
-            plt.scatter(pdr_points[-1]['x'], pdr_points[-1]['y'], 
-                       c='red', s=100, marker='s', label='PDR終點')
-        
-        # 圖表裝飾
-        plt.xlabel('X 坐標 (米)')
-        plt.ylabel('Y 坐標 (米)')
-        plt.title('行人軌跡圖 (GPS + PDR)')
+            pdr_x = [point["x"] for point in pdr_points]
+            pdr_y = [point["y"] for point in pdr_points]
+            plt.plot(pdr_x, pdr_y, "r-", linewidth=2, label="PDR trajectory")
+            plt.scatter(pdr_x, pdr_y, c="red", s=20, marker="x")
+            plt.scatter(pdr_x[0], pdr_y[0], c="orange", s=100, marker="^", label="PDR start")
+            plt.scatter(pdr_x[-1], pdr_y[-1], c="red", s=100, marker="s", label="PDR end")
+
+        plt.xlabel("X (meters)")
+        plt.ylabel("Y (meters)")
+        plt.title("Pedestrian Trajectory (GPS + PDR)")
         plt.grid(True)
-        plt.legend(loc='best')
-        plt.axis('equal')  # 保持坐標比例一致
-        
-        # 保存圖表
-        plt.savefig('trajectory_map.png', dpi=300, bbox_inches='tight')
+        plt.legend(loc="best")
+        plt.axis("equal")
+        plt.savefig("trajectory_map.png", dpi=300, bbox_inches="tight")
         plt.close()
-        
-        logger.info("✅ 軌跡圖已生成: trajectory_map.png")
+        logger.info("trajectory_map.png generated")
         return True
-        
-    except Exception as e:
-        logger.error(f"生成軌跡圖失敗: {str(e)}")
+    except Exception as exc:
+        logger.exception("Failed to generate trajectory map: %s", exc)
         return False
 
-# ─── 註冊路由 ───────────────────────────────────────────────────
+
+async def ai_decision_worker() -> None:
+    """Process queued PDR events without blocking ingestion endpoints."""
+    global last_instruction
+    while True:
+        event = await pdr_event_queue.get()
+        try:
+            pose = event.get("pose", _latest_pose())
+            signals = event.get("signals", {})
+            async with trajectory_lock:
+                target_point = None
+                for point in reversed(world.trajectory):
+                    if point.get("x") == pose["x"] and point.get("y") == pose["y"]:
+                        target_point = point
+                        break
+                if target_point is None:
+                    target_point = {"x": pose["x"], "y": pose["y"], "signals": signals, "decision": None}
+                    world.trajectory.append(target_point)
+                else:
+                    target_point.setdefault("signals", signals)
+                    target_point.setdefault("decision", None)
+
+            result = await sos_agent.run(
+                "請根據最新的 PDR 座標和 Wi-Fi 訊號快照，給出明確且簡短的下一步移動指令。",
+                deps=world,
+                model_settings={"max_tokens": 256},
+            )
+            decision = _result_text(result)
+            last_instruction = decision
+
+            async with trajectory_lock:
+                target_point["decision"] = decision
+        except Exception as exc:
+            logger.exception("AI worker error: %s", exc)
+        finally:
+            pdr_event_queue.task_done()
+
+
 app.include_router(imu_router)
 
-# 原有路由（保留）
+
 @app.get("/")
-async def root():
+async def root() -> Dict[str, Any]:
     return {"status": "S.C.O.U.T. Fusion Online", "debug": DEBUG, "port": PORT}
 
+
 @app.get("/status")
-async def get_status():
+async def get_status() -> Dict[str, Any]:
     async with trajectory_lock:
-        if not world.trajectory:
-            return {"error": "No trajectory data yet"}
-        last_pose = world.trajectory[-1]
-        best_sig = world.get_best_signal()
-        return {
-            "x": last_pose['x'],
-            "y": last_pose['y'],
-            "best_ssid": best_sig['ssid'],
-            "best_rssi": best_sig['rssi'],
-            "points": len(world.trajectory),
-            "instruction": last_instruction,
-            "gps_points": len(pdr.gps_trajectory),
-            "pdr_points": len(pdr.pdr_trajectory)
-        }
+        pose = _latest_pose() if pdr.pdr_trajectory else (world.trajectory[-1] if world.trajectory else _latest_pose())
+        points = len(world.trajectory)
+
+    loop = asyncio.get_event_loop()
+    best_sig = await loop.run_in_executor(executor, world.get_best_signal)
+    return {
+        "x": pose["x"],
+        "y": pose["y"],
+        "best_ssid": best_sig["ssid"],
+        "best_rssi": best_sig["rssi"],
+        "points": points,
+        "instruction": last_instruction,
+        "gps_points": len(pdr.gps_trajectory),
+        "pdr_points": len(pdr.pdr_trajectory),
+        "queued_events": pdr_event_queue.qsize(),
+    }
+
 
 @app.post("/pdr/update")
-async def update_pdr(request: Request):
+async def update_pdr(request: Request) -> Dict[str, Any]:
     try:
         content_type = request.headers.get("content-type", "")
-        data = await request.json() if "application/json" in content_type else await request.form()
+        raw_data = await request.json() if "application/json" in content_type else dict(await request.form())
         if DEBUG:
-            logger.info(f"Incoming PDR Data: {data}")
-        
-        from sensor_decoder import SensorLogDecoder
-        decoder = SensorLogDecoder()
-        decoded = decoder.decode(data)
-        
-        if not decoded:
+            logger.debug("Incoming PDR data: %s", raw_data)
+
+        decoded = SensorLogDecoder().decode(raw_data)
+        if decoded is None:
             return {"status": "skipped", "reason": "Malformed PDR data"}
-        
+
+        curr_x, curr_y = pdr.update_position(decoded.distance, decoded.heading)
+        loop = asyncio.get_event_loop()
+        snapshot = await loop.run_in_executor(executor, world.get_full_snapshot)
+
+        event = {"pose": {"x": curr_x, "y": curr_y}, "signals": snapshot}
         async with trajectory_lock:
-            equiv_steps = int(decoded.distance / 0.75)
-            curr_x, curr_y = pdr.update_position(equiv_steps, decoded.heading)
-            loop = asyncio.get_event_loop()
-            snapshot = await loop.run_in_executor(executor, world.get_full_snapshot)
             world.trajectory.append({"x": curr_x, "y": curr_y, "signals": snapshot})
-            return {"status": "success", "pose": {"x": curr_x, "y": curr_y}}
-    except Exception as e:
-        return {"status": "error", "detail": str(e)}
+
+        try:
+            pdr_event_queue.put_nowait(event)
+            queued = True
+        except asyncio.QueueFull:
+            logger.warning("PDR event queue is full; dropping AI decision event")
+            queued = False
+
+        return {"status": "success", "pose": event["pose"], "queued_for_ai": queued}
+    except Exception as exc:
+        logger.exception("PDR update failed: %s", exc)
+        return {"status": "error", "detail": str(exc)}
+
 
 @app.get("/navigate")
-async def get_navigation():
+async def get_navigation() -> Dict[str, Any]:
     global last_instruction
     try:
         async with trajectory_lock:
             if not world.trajectory:
                 loop = asyncio.get_event_loop()
                 snapshot = await loop.run_in_executor(executor, world.get_full_snapshot)
-                world.trajectory.append({"x": 0, "y": 0, "signals": snapshot})
-            result = await sos_agent.run(
-                "請根據最新的 PDR 座標和訊號快照,分析目前最強信號位置,並給出明確的移動指令。",
-                deps=world,
-                model_settings={"max_tokens": 256}
-            )
-            response_text = getattr(result, 'output', getattr(result, 'data', str(result)))
-            last_instruction = response_text
-            return {"instruction": response_text, "best_signal": world.get_best_signal()}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+                pose = _latest_pose()
+                world.trajectory.append({"x": pose["x"], "y": pose["y"], "signals": snapshot})
+
+        result = await sos_agent.run(
+            "請根據最新的 PDR 座標和訊號快照，分析目前最強信號位置，並給出明確的移動指令。",
+            deps=world,
+            model_settings={"max_tokens": 256},
+        )
+        response_text = _result_text(result)
+        last_instruction = response_text
+
+        loop = asyncio.get_event_loop()
+        best_signal = await loop.run_in_executor(executor, world.get_best_signal)
+        return {"instruction": response_text, "best_signal": best_signal}
+    except Exception as exc:
+        logger.exception("Navigation failed: %s", exc)
+        raise HTTPException(status_code=500, detail=str(exc))
+
 
 @app.get("/generate_map")
-async def trigger_map():
+async def trigger_map() -> Dict[str, str]:
     try:
-        async with trajectory_lock:
-            loop = asyncio.get_event_loop()
-            await loop.run_in_executor(executor, generate_heatmap, world)
-            return {"status": "success", "path": "heatmap.png"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        loop = asyncio.get_event_loop()
+        success = await loop.run_in_executor(executor, generate_heatmap, world)
+        if not success:
+            return {"status": "error", "path": "heatmap.png"}
+        return {"status": "success", "path": "heatmap.png"}
+    except Exception as exc:
+        logger.exception("Heatmap generation failed: %s", exc)
+        raise HTTPException(status_code=500, detail=str(exc))
 
-# ─── 新增軌跡圖端點 ──────────────────────────────────────────────
+
 @app.get("/trajectory/map")
-async def generate_trajectory_endpoint():
-    """生成軌跡圖（GPS + PDR融合）"""
+async def generate_trajectory_endpoint() -> Dict[str, str]:
     try:
         loop = asyncio.get_event_loop()
         success = await loop.run_in_executor(executor, generate_trajectory_plot)
         if success:
             return {"status": "success", "path": "trajectory_map.png"}
-        else:
-            return {"status": "error", "detail": "Failed to generate trajectory plot"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return {"status": "error", "detail": "Failed to generate trajectory plot"}
+    except Exception as exc:
+        logger.exception("Trajectory map endpoint failed: %s", exc)
+        raise HTTPException(status_code=500, detail=str(exc))
+
 
 @app.get("/trajectory/status")
-async def trajectory_status():
-    """獲取軌跡狀態"""
+async def trajectory_status() -> Dict[str, Any]:
     return {
         "gps_points": len(pdr.gps_trajectory),
         "pdr_points": len(pdr.pdr_trajectory),
         "total_points": len(pdr.get_combined_trajectory()),
         "gps_available": len(pdr.gps_trajectory) > 0,
-        "pdr_available": len(pdr.pdr_trajectory) > 0
+        "pdr_available": len(pdr.pdr_trajectory) > 0,
     }
 
-# ─── 主入口 ──────────────────────────────────────────────────────
+
 if __name__ == "__main__":
-    logger.info(f"🚀 S.C.O.U.T. Fusion 啟動於端口 {PORT}, DEBUG={DEBUG}")
+    logger.info("Starting S.C.O.U.T. Fusion on port %s, DEBUG=%s", PORT, DEBUG)
     uvicorn.run(app, host="0.0.0.0", port=PORT)

@@ -60,3 +60,6 @@ dmypy.json
 *.sqlite
 *.sqlite3
 .env
+
+# Bug Hunter artifacts
+.bug-hunter/
