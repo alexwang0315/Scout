@@ -62,7 +62,7 @@ app.add_middleware(
 world = MacOSWifiWorld()
 world.trajectory = []
 trajectory_lock = asyncio.Lock()
-executor = ThreadPoolExecutor(max_workers=3)
+executor = ThreadPoolExecutor(max_workers=4)
 last_instruction = "等待初始化..."
 _worker_task: Optional[asyncio.Task] = None
 
@@ -206,8 +206,16 @@ async def update_pdr(request: Request) -> Dict[str, Any]:
 
         event = {"pose": {"x": curr_x, "y": curr_y}, "signals": snapshot}
         async with trajectory_lock:
-            world.trajectory.append({"x": curr_x, "y": curr_y, "signals": snapshot})
-
+            world.trajectory.append({
+                "x": curr_x,
+                "y": curr_y,
+                "signals": snapshot
+            })
+        
+        # 加強佇列監控
+        if pdr_event_queue.qsize() > 50:
+            logger.warning(f"PDR event queue size is {pdr_event_queue.qsize()}, approaching capacity")
+        
         try:
             pdr_event_queue.put_nowait(event)
             queued = True
