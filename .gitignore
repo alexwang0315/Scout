@@ -63,3 +63,6 @@ dmypy.json
 
 # Bug Hunter artifacts
 .bug-hunter/
+
+# Legacy nested Scout copy
+Scout/

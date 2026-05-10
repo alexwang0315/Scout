@@ -18,6 +18,7 @@ from imu_api import router as imu_router
 from macos_wifi import MacOSWifiWorld
 from pdr_engine import pdr
 from sensor_decoder import SensorLogDecoder
+from movement_summary import MovementAggregator, RawSensorSample
 from shared_queue import pdr_event_queue
 from visualize_signal import generate_heatmap
 
@@ -29,6 +30,11 @@ PORT = int(os.getenv("SCOUT_PORT", "9099"))
 log_level = logging.DEBUG if DEBUG else logging.INFO
 logging.basicConfig(level=log_level, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("S.C.O.U.T.")
+
+# Global movement aggregator (10Hz → summary every 2s)
+# Ship the summary to agent logic when ready.
+movement_agg = MovementAggregator(samples_per_summary=20)
+
 
 
 @asynccontextmanager
@@ -64,6 +70,7 @@ world.trajectory = []
 trajectory_lock = asyncio.Lock()
 executor = ThreadPoolExecutor(max_workers=4)
 last_instruction = "等待初始化..."
+latest_summary_result: Optional[Dict[str, Any]] = None
 _worker_task: Optional[asyncio.Task] = None
 
 
@@ -76,6 +83,26 @@ def _latest_pose() -> Dict[str, float]:
         last = pdr.pdr_trajectory[-1]
         return {"x": float(last["x"]), "y": float(last["y"])}
     return {"x": float(pdr.x), "y": float(pdr.y)}
+
+
+async def process_movement_summary(summary: Any) -> Dict[str, Any]:
+    """Create immediate local feedback from a MovementSummary without LLM calls."""
+    if summary.confidence < 0.5:
+        return {
+            "status": "low_confidence",
+            "message": "感測數據信心度不足，等待更多樣本",
+            "confidence": summary.confidence,
+        }
+
+    feedback = "姿態穩定，繼續前進" if summary.is_stable else "檢測到不穩定動作，請放慢腳步"
+    return {
+        "status": "success",
+        "feedback": feedback,
+        "heading": summary.heading,
+        "confidence": summary.confidence,
+        "anomalies": summary.anomalies,
+        "summary_text": summary.to_prompt(),
+    }
 
 
 def generate_trajectory_plot() -> bool:
@@ -188,8 +215,16 @@ async def get_status() -> Dict[str, Any]:
     }
 
 
+@app.get("/movement-summary")
+async def get_latest_summary() -> Dict[str, Any]:
+    if latest_summary_result is not None:
+        return latest_summary_result
+    return {"status": "no_summary", "message": "No movement summary data available"}
+
+
 @app.post("/pdr/update")
 async def update_pdr(request: Request) -> Dict[str, Any]:
+    global latest_summary_result
     try:
         content_type = request.headers.get("content-type", "")
         raw_data = await request.json() if "application/json" in content_type else dict(await request.form())
@@ -199,6 +234,26 @@ async def update_pdr(request: Request) -> Dict[str, Any]:
         decoded = SensorLogDecoder().decode(raw_data)
         if decoded is None:
             return {"status": "skipped", "reason": "Malformed PDR data"}
+
+        # ----------------------
+        # 新增：將 IMU 原始數據聚合為 MovementSummary，並呼叫本地決策
+        # ----------------------
+        if "imu_data" in raw_data:
+            imu_list = raw_data["imu_data"]
+            for imu in imu_list:
+                sample = RawSensorSample(
+                    accX=imu.get("accX") or imu.get("accelerometerAccelerationX", 0.0),
+                    accY=imu.get("accY") or imu.get("accelerometerAccelerationY", 0.0),
+                    accZ=imu.get("accZ") or imu.get("accelerometerAccelerationZ", 0.0),
+                    gravityY=imu.get("gravityY") or imu.get("motionGravityY", 0.0),
+                    timestamp=imu.get("timestamp") or imu.get("motionTimestamp_sinceReboot", 0.0),
+                )
+                summary = movement_agg.add_sample(sample)
+                if summary:
+                    latest_summary_result = await process_movement_summary(summary)
+                    logger.info("Movement summary processed: %s", latest_summary_result)
+        # ----------------------
+
 
         curr_x, curr_y = pdr.update_position(decoded.distance, decoded.heading)
         loop = asyncio.get_event_loop()
