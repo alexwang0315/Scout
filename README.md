@@ -9,6 +9,7 @@ S.C.O.U.T. Fusion is a FastAPI prototype that combines macOS Wi-Fi RSSI scanning
 - Updates relative position using PDR from either full IMU samples or legacy distance/heading samples.
 - Stores GPS and PDR trajectories in memory for live status and map generation.
 - Uses a `pydantic-ai` agent through OpenRouter to generate navigation instructions.
+- Aggregates Apple Watch / SensorLog IMU samples into local movement summaries without LLM calls.
 - Generates signal heatmaps and GPS/PDR trajectory images.
 - Exposes a simple dashboard in `index.html` that polls the server status.
 
@@ -23,11 +24,12 @@ S.C.O.U.T. Fusion is a FastAPI prototype that combines macOS Wi-Fi RSSI scanning
 | `pdr_record.py` | Pydantic model for mobile sensor records. |
 | `pdr_engine.py` | PDR engine for IMU-based and distance/heading-based position updates. |
 | `sensor_decoder.py` | Decoder for legacy `/pdr/update` SensorLog payloads. |
+| `movement_summary.py` | Local Apple Watch / IMU summary extraction and feedback features. |
 | `visualize_signal.py` | Signal heatmap generation. |
 | `shared_queue.py` | Shared asyncio queue for non-blocking AI decision events. |
 | `index.html` | Minimal live dashboard. |
 
-The `Scout/` directory is an older nested copy of the project and is not the active server entrypoint. Use the repository root files unless you intentionally work on the nested copy.
+The repository root is the canonical server version. The `Scout/` directory is an older nested copy kept for reference and should not be used as the active server entrypoint unless you intentionally work on that legacy copy.
 
 ## Requirements
 
@@ -168,6 +170,20 @@ Supported heading fields:
 
 The endpoint updates position and queues an AI decision event without blocking ingestion.
 
+It also accepts `imu_data` arrays from Apple Watch / SensorLog JSON exports. These samples are converted into local movement summaries using fields such as:
+
+- `accelerometerAccelerationX`
+- `accelerometerAccelerationY`
+- `accelerometerAccelerationZ`
+- `motionGravityY`
+- `motionTimestamp_sinceReboot`
+
+Movement summaries can be checked without calling the LLM:
+
+```bash
+curl http://127.0.0.1:9099/movement-summary
+```
+
 ### 4. Request Navigation
 
 ```bash
@@ -229,13 +245,14 @@ This version fixes the main execution blockers from the previous state:
 - Updated SensorLog step-field parsing to support `pedometerNumberOfSteps`.
 - Updated Pydantic v2 model config and replaced deprecated `dict()` usage.
 - Made `SCOUT_PORT` effective instead of hardcoding the runtime port.
+- Merged the legacy `Scout/server.py` Apple Watch movement-summary flow into the root `server.py`.
 
 ## Verification Commands
 
 Syntax check:
 
 ```bash
-./venv/bin/python -m py_compile agent.py imu_api.py macos_wifi.py pdr_engine.py pdr_record.py sensor_decoder.py server.py shared_queue.py visualize_signal.py
+./venv/bin/python -m py_compile agent.py imu_api.py macos_wifi.py movement_summary.py pdr_engine.py pdr_record.py sensor_decoder.py server.py shared_queue.py visualize_signal.py
 ```
 
 Import and route check:
@@ -253,6 +270,14 @@ Temporary live server check:
 ```bash
 SCOUT_PORT=9101 ./venv/bin/python server.py
 curl http://127.0.0.1:9101/
+```
+
+Apple Watch sample check:
+
+```bash
+./venv/bin/python server.py
+./send_samples.sh PdrSample
+curl http://127.0.0.1:9099/movement-summary
 ```
 
 ## Known Notes
