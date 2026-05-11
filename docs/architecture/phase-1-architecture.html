@@ -433,6 +433,7 @@
               <span class="chip">Observation Adapter</span>
               <span class="chip">POST /safety/observations</span>
               <span class="chip">SafetyRuntimeSession</span>
+              <span class="chip">Provider Interfaces</span>
               <span class="chip">ResourceState</span>
               <span class="chip">EnvironmentState</span>
               <span class="chip">CommunicationState</span>
@@ -510,8 +511,12 @@
           </article>
           <article class="node mission">
             <h3>Provider Fixtures</h3>
-            <p>Mock external context now. Real APIs later.</p>
+            <p>Mock external context through the same provider contracts real adapters will use later.</p>
             <ul>
+              <li><code>ResourceProvider</code></li>
+              <li><code>EnvironmentProvider</code></li>
+              <li><code>CommunicationProvider</code></li>
+              <li><code>provider_context</code></li>
               <li><code>ResourceState</code></li>
               <li><code>EnvironmentState</code></li>
               <li><code>CommunicationState</code></li>
@@ -669,6 +674,7 @@
             <h3>Go / No-Go</h3>
             <p>Preventive segment decision from normalized provider state.</p>
             <ul>
+              <li>provider context evidence</li>
               <li>segment requirements</li>
               <li>resource constraints</li>
               <li>weather / daylight</li>
@@ -870,6 +876,10 @@
             <tr>
               <td><code>POST /safety/observations</code></td>
               <td>Live FastAPI ingest mounted on the existing app flow; accepts raw or wrapped SensorLog payloads and preserves legacy <code>/pdr/update</code></td>
+            </tr>
+            <tr>
+              <td><code>provider_context.py</code></td>
+              <td>Assembles fixture-backed resource, environment, and communication providers into normalized MissionContext evidence for replay and live runtime</td>
             </tr>
             <tr>
               <td><code>replay_runner.py</code></td>

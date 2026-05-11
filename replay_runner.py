@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from checkpoint_manager import CheckpointArrival, CheckpointManager
-from go_no_go import GoNoGoEvaluation, GoNoGoEvaluator, MissionContext, load_mission_context
+from go_no_go import GoNoGoEvaluation, GoNoGoEvaluator, MissionContext
 from incident_package import IncidentPackageBuilder
 from incident_store import IncidentStore
 from mission_graph import MissionGraphRuntime, load_mission_graph
@@ -13,6 +13,12 @@ from mission_models import SegmentCapsule
 from offline_map import OfflineMapContext, load_offline_map_context
 from offline_map_models import CorridorEvidence
 from pdr_fallback import PdrFallbackEstimator, PositionEstimate
+from provider_context import (
+    MissionProviderBundle,
+    load_fixture_provider_bundle,
+    mission_context_from_providers,
+    provider_evidence,
+)
 from recording_policy_runtime import RecordingPolicyDecision, RecordingPolicyRuntime
 from risk_rules import RiskRuleEvaluator, load_risk_rules
 from route_matching import GpxRoute, RoutePoint, load_gpx_route
@@ -40,6 +46,7 @@ def replay_route(
     map_context_path: Path | str | None = None,
     risk_rules_path: Path | str | None = None,
     mission_context_path: Path | str | None = None,
+    mission_provider_bundle: MissionProviderBundle | None = None,
     incident_store_path: Path | str | None = None,
 ) -> ReplayResult:
     mission_path = Path(mission_graph_path)
@@ -49,7 +56,8 @@ def replay_route(
     route = load_gpx_route(route_path)
     offline_map_context = _load_map_context(mission_path, planned_route_path, map_context_path)
     risk_rule_evaluator = _load_risk_rule_evaluator(mission_path, planned_route_path, risk_rules_path)
-    mission_context = load_mission_context(mission_context_path) if mission_context_path is not None else None
+    if mission_provider_bundle is None and mission_context_path is not None:
+        mission_provider_bundle = load_fixture_provider_bundle(mission_context_path)
     go_no_go_evaluator = GoNoGoEvaluator()
     incident_store = IncidentStore(incident_store_path) if incident_store_path is not None else None
     pdr_fallback = PdrFallbackEstimator(planned_route)
@@ -85,15 +93,6 @@ def replay_route(
             planned_route=planned_route,
             offline_map_context=offline_map_context,
         )
-        go_no_go_evaluation = _go_no_go_evaluation(
-            runtime=runtime,
-            mission_context=mission_context,
-            evaluator=go_no_go_evaluator,
-            timestamp=float(index),
-            already_evaluated=go_no_go_evaluated,
-        )
-        if go_no_go_evaluation is not None:
-            go_no_go_evaluated = True
         observation = Observation(
             timestamp=float(index),
             source="gpx_replay",
@@ -122,8 +121,22 @@ def replay_route(
                     },
                     "hazards": progress_sample.map_hazards or [],
                 },
-                "go_no_go": _go_no_go_raw(go_no_go_evaluation),
             },
+        )
+        go_no_go_result = _go_no_go_evaluation(
+            runtime=runtime,
+            mission_provider_bundle=mission_provider_bundle,
+            evaluator=go_no_go_evaluator,
+            timestamp=float(index),
+            already_evaluated=go_no_go_evaluated,
+            observation=observation,
+        )
+        if go_no_go_result is not None:
+            go_no_go_evaluated = True
+        go_no_go_evaluation = go_no_go_result.evaluation if go_no_go_result is not None else None
+        observation.raw["go_no_go"] = _go_no_go_raw(go_no_go_evaluation)
+        observation.raw["provider_context"] = (
+            provider_evidence(go_no_go_result.mission_context) if go_no_go_result is not None else None
         )
         arrival = checkpoint_manager.observe(observation)
         if arrival is not None:
@@ -242,23 +255,34 @@ def _load_risk_rule_evaluator(
     return None
 
 
+@dataclass(frozen=True)
+class GoNoGoProviderResult:
+    evaluation: GoNoGoEvaluation
+    mission_context: MissionContext
+
+
 def _go_no_go_evaluation(
     *,
     runtime: MissionGraphRuntime,
-    mission_context: MissionContext | None,
+    mission_provider_bundle: MissionProviderBundle | None,
     evaluator: GoNoGoEvaluator,
     timestamp: float,
     already_evaluated: bool,
-) -> GoNoGoEvaluation | None:
-    if mission_context is None or already_evaluated:
+    observation: Observation | None = None,
+) -> GoNoGoProviderResult | None:
+    if mission_provider_bundle is None or already_evaluated:
         return None
 
+    mission_context = mission_context_from_providers(mission_provider_bundle, observation=observation)
     segment_id = mission_context.route_context.get("current_segment_id")
     if not segment_id:
         return None
 
     segment = runtime.current_segment(segment_id)
-    return evaluator.evaluate(segment, mission_context, timestamp=timestamp)
+    return GoNoGoProviderResult(
+        evaluation=evaluator.evaluate(segment, mission_context, timestamp=timestamp),
+        mission_context=mission_context,
+    )
 
 
 def _go_no_go_raw(evaluation: GoNoGoEvaluation | None) -> dict | None:

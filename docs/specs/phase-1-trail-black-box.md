@@ -29,6 +29,7 @@ The current Phase 1 baseline is replay-driven and deterministic. It includes:
 - `OfflineMapContext` backed by synthetic GeoJSON corridor and hazard evidence.
 - `RouteProgressEvaluator`, `RiskRuleEvaluator`, and `PdrFallbackEstimator` for map corridor deviation, hazard/risk-rule evaluation, backtracking/looping, and weak-GPS fallback.
 - `GoNoGoEvaluator` for deterministic resource, daylight, weather, and communication continuation decisions.
+- Provider interface layer with fixture-backed resource, environment, and communication providers that emit normalized states for `GoNoGoEvaluator`.
 - `RecordingPolicyRuntime` for safety-level-aware recording profiles and raw-ring window selection.
 - `IncidentPackageBuilder`, structured incident evidence summaries, `IncidentStore` JSON persistence, and `Safety API Mock` endpoints.
 - `phase1_replay_demo.py` for running the full Phase 1 replay pipeline from the command line.
@@ -575,6 +576,11 @@ Current Phase 1 runtime files:
 - `offline_map.py`: fixture-backed offline map context loading and spatial evidence checks.
 - `risk_rules.py`: route-specific risk rule loading and deterministic L1-L4 decision evaluation.
 - `go_no_go.py`: deterministic segment requirement evaluation from resource, environment, and communication state.
+- `resource_provider.py`: resource provider protocol and fixture-backed resource provider.
+- `environment_provider.py`: environment provider protocol and fixture-backed environment provider.
+- `communication_provider.py`: communication provider protocol and fixture-backed communication provider.
+- `communication_tool.py`: normalized communication scan protocol and fixture communication tool.
+- `provider_context.py`: provider bundle loading, normalized `MissionContext` assembly, and JSON-ready provider evidence.
 - `checkpoint_manager.py`: checkpoint arrival detection and segment sealing.
 - `mission_progress.py`: ordered checkpoint progress and segment capsule sealing.
 - `route_progress.py`: route progress, map evidence, weak GPS, backtracking/looping, and missed-checkpoint safety evaluation.
@@ -604,13 +610,13 @@ Current Phase 1 runtime files:
 - `tests/test_phase1_replay_demo.py`
 - `tests/test_observation_adapter.py`
 - `tests/test_safety_runtime_session.py`
+- `tests/test_provider_context.py`
 
-Deferred provider adapter files:
+Deferred real provider adapter files:
 
-- `resource_provider.py`: provider protocol and fixture-backed resource provider.
-- `environment_provider.py`: provider protocol and fixture-backed environment provider.
-- `communication_provider.py`: provider protocol and fixture-backed communication provider.
-- `communication_tool.py`: normalized capability scan and mock send/ack result.
+- `weather_provider.py`: real or offline weather/sunset source adapter.
+- `hardware_communication_adapter.py`: real device/radio/satellite/BLE communication adapter.
+- `resource_estimator.py`: live human-energy/fatigue estimator from wearable and pace observations.
 
 ## Code Style
 
@@ -793,6 +799,10 @@ The replay baseline should satisfy these deterministic checks:
   - normal context remains L0
   - low-battery/near-sunset context emits L2 `RESOURCE_CONSTRAINT`
   - no-signal high-risk context emits L1 `UNSAFE_CONTINUATION` without incident package.
+- Provider interface layer:
+  - fixture-backed resource, environment, and communication providers assemble normalized `MissionContext`.
+  - replay and live runtime Go/No-Go consume provider output instead of fixture JSON directly.
+  - incident raw samples preserve `provider_context` evidence when Go/No-Go is evaluated.
 - Recording policy:
   - L0 uses each segment policy normal profile
   - L2 trigger samples record `raw_lock`
@@ -818,7 +828,7 @@ The replay baseline should satisfy these deterministic checks:
   - `/pdr/update` remains the legacy Wi-Fi/PDR/AI-worker path; Phase 1 safety ingest is additive.
 - Full test suite:
   - `./venv/bin/python -m pytest tests -q`
-  - current expected result: `77 passed, 4 subtests passed`.
+  - current expected result: `81 passed, 4 subtests passed`.
 
 ## Open Questions
 

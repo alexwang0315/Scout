@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from checkpoint_manager import CheckpointArrival, CheckpointManager
-from go_no_go import GoNoGoEvaluation, GoNoGoEvaluator, MissionContext, load_mission_context
+from go_no_go import GoNoGoEvaluation, GoNoGoEvaluator, MissionContext
 from incident_package import IncidentPackageBuilder
 from incident_store import IncidentStore
 from mission_graph import MissionGraphRuntime, load_mission_graph
@@ -13,6 +13,12 @@ from mission_models import SegmentCapsule
 from mission_progress import MissionProgressTracker, MissionProgressUpdate
 from offline_map import OfflineMapContext
 from pdr_fallback import PdrFallbackEstimator, PositionEstimate
+from provider_context import (
+    MissionProviderBundle,
+    load_fixture_provider_bundle,
+    mission_context_from_providers,
+    provider_evidence,
+)
 from recording_policy_runtime import RecordingPolicyDecision, RecordingPolicyRuntime
 from replay_runner import (
     _active_segment_id,
@@ -55,6 +61,12 @@ class SafetyRuntimeSnapshot:
     stored_incident_paths: list[Path]
 
 
+@dataclass(frozen=True)
+class GoNoGoProviderResult:
+    evaluation: GoNoGoEvaluation
+    mission_context: MissionContext
+
+
 class SafetyRuntimeSession:
     def __init__(
         self,
@@ -63,6 +75,7 @@ class SafetyRuntimeSession:
         map_context_path: Path | str | None = None,
         risk_rules_path: Path | str | None = None,
         mission_context_path: Path | str | None = None,
+        mission_provider_bundle: MissionProviderBundle | None = None,
         incident_store_path: Path | str | None = None,
     ):
         mission_path = Path(mission_graph_path)
@@ -71,7 +84,9 @@ class SafetyRuntimeSession:
         self.planned_route = load_gpx_route(self.planned_route_path)
         self.offline_map_context = _load_map_context(mission_path, self.planned_route_path, map_context_path)
         self.risk_rule_evaluator = _load_risk_rule_evaluator(mission_path, self.planned_route_path, risk_rules_path)
-        self.mission_context = load_mission_context(mission_context_path) if mission_context_path is not None else None
+        if mission_provider_bundle is None and mission_context_path is not None:
+            mission_provider_bundle = load_fixture_provider_bundle(mission_context_path)
+        self.mission_provider_bundle = mission_provider_bundle
         self.go_no_go_evaluator = GoNoGoEvaluator()
         self.incident_store = IncidentStore(incident_store_path) if incident_store_path is not None else None
         self.pdr_fallback = PdrFallbackEstimator(self.planned_route)
@@ -131,8 +146,12 @@ class SafetyRuntimeSession:
             if safety_event is not None:
                 pending_events.append(safety_event)
 
-        go_no_go_evaluation = self._go_no_go_evaluation(observation.timestamp)
+        go_no_go_result = self._go_no_go_evaluation(observation)
+        go_no_go_evaluation = go_no_go_result.evaluation if go_no_go_result is not None else None
         observation.raw["go_no_go"] = _go_no_go_raw(go_no_go_evaluation)
+        observation.raw["provider_context"] = (
+            provider_evidence(go_no_go_result.mission_context) if go_no_go_result is not None else None
+        )
         if go_no_go_evaluation is not None and go_no_go_evaluation.safety_event is not None:
             pending_events.append(go_no_go_evaluation.safety_event)
 
@@ -191,17 +210,21 @@ class SafetyRuntimeSession:
             stored_incident_paths=self.stored_incident_paths,
         )
 
-    def _go_no_go_evaluation(self, timestamp: float) -> GoNoGoEvaluation | None:
-        if self.mission_context is None or self._go_no_go_evaluated:
+    def _go_no_go_evaluation(self, observation: Observation) -> GoNoGoProviderResult | None:
+        if self.mission_provider_bundle is None or self._go_no_go_evaluated:
             return None
 
-        segment_id = self.mission_context.route_context.get("current_segment_id")
+        mission_context = mission_context_from_providers(self.mission_provider_bundle, observation=observation)
+        segment_id = mission_context.route_context.get("current_segment_id")
         if not segment_id:
             return None
 
         self._go_no_go_evaluated = True
         segment = self.runtime.current_segment(segment_id)
-        return self.go_no_go_evaluator.evaluate(segment, self.mission_context, timestamp=timestamp)
+        return GoNoGoProviderResult(
+            evaluation=self.go_no_go_evaluator.evaluate(segment, mission_context, timestamp=observation.timestamp),
+            mission_context=mission_context,
+        )
 
 
 def _route_point_from_observation(observation: Observation) -> RoutePoint | None:
