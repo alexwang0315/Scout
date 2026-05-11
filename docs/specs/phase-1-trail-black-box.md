@@ -32,8 +32,9 @@ The current Phase 1 baseline is replay-driven and deterministic. It includes:
 - `RecordingPolicyRuntime` for safety-level-aware recording profiles and raw-ring window selection.
 - `IncidentPackageBuilder`, structured incident evidence summaries, `IncidentStore` JSON persistence, and `Safety API Mock` endpoints.
 - `phase1_replay_demo.py` for running the full Phase 1 replay pipeline from the command line.
+- `observation_adapter.py` for capability-based SensorLog/Apple Watch/iPhone payload normalization into `Observation`.
 
-This snapshot remains synthetic-map and fixture-first. It is ready for real Apple Watch/GPX and real local map fixture trials, but it is not yet a live Observation Layer integration.
+This snapshot remains synthetic-map and fixture-first. It is ready for real Apple Watch/GPX and real local map fixture trials. The Observation Layer has started with payload normalization and capability evidence, but live streaming into the safety runtime is still deferred to `SafetyRuntimeSession`.
 
 ### In Scope
 
@@ -577,6 +578,7 @@ Current Phase 1 runtime files:
 - `route_progress.py`: route progress, map evidence, weak GPS, backtracking/looping, and missed-checkpoint safety evaluation.
 - `pdr_fallback.py`: short weak-GPS PDR fallback and GPS re-anchor evidence.
 - `recording_policy_runtime.py`: active segment/control-zone recording profile decisions and raw-ring duration.
+- `observation_adapter.py`: capability-based SensorLog/Apple Watch/iPhone payload normalization into `Observation`.
 - `replay_runner.py`: offline replay from sample data.
 - `phase1_replay_demo.py`: command-line Phase 1 runtime demo and JSON summary output.
 - `tests/fixtures/routes/`: normal and generated abnormal routes.
@@ -596,6 +598,7 @@ Current Phase 1 runtime files:
 - `tests/test_incident_store.py`
 - `tests/test_safety_api.py`
 - `tests/test_phase1_replay_demo.py`
+- `tests/test_observation_adapter.py`
 
 Deferred provider adapter files:
 
@@ -796,9 +799,13 @@ The replay baseline should satisfy these deterministic checks:
 - Demo CLI:
   - `phase1_replay_demo.py` runs normal and abnormal routes without server startup.
   - JSON summary reports observations, safety level/events, incident ids, stored paths, checkpoint progress, segment capsules, recording profiles, and latest incident summary.
+- Observation adapter:
+  - Apple Watch/SensorLog payloads normalize GPS, IMU, heart-rate, pedometer, battery, and raw payload fields into `Observation`.
+  - Apple Watch and iPhone Wi-Fi RSSI absence is recorded as `unavailable_by_platform`, not as fake RSSI and not as an error.
+  - Server-side Wi-Fi scan evidence can be attached as a separate capability when available.
 - Full test suite:
   - `./venv/bin/python -m pytest tests -q`
-  - current expected result: `64 passed, 4 subtests passed`.
+  - current expected result: `69 passed, 4 subtests passed`.
 
 ## Open Questions
 

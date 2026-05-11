@@ -430,6 +430,7 @@
               <span class="chip">GPS</span>
               <span class="chip">PDR / IMU</span>
               <span class="chip">Radio Signal</span>
+              <span class="chip">Observation Adapter</span>
               <span class="chip">ResourceState</span>
               <span class="chip">EnvironmentState</span>
               <span class="chip">CommunicationState</span>
@@ -555,12 +556,22 @@
         <div class="stack">
           <article class="node sense">
             <h2>RecorderAgent</h2>
-            <p>Normalizes local sensor stream into observations.</p>
+            <p>Normalizes available local evidence into observations.</p>
             <ul>
               <li>GPS / PDR / IMU</li>
               <li>radio signal</li>
               <li>heart rate / pace</li>
               <li>device battery</li>
+            </ul>
+          </article>
+          <article class="node sense">
+            <h3>ObservationAdapter</h3>
+            <p>Capability-based SensorLog adapter for Apple Watch and iPhone payloads.</p>
+            <ul>
+              <li>GPS / accuracy</li>
+              <li>IMU / heart rate</li>
+              <li>pedometer / battery</li>
+              <li>RSSI unavailable by platform</li>
             </ul>
           </article>
           <article class="node sense">
@@ -825,6 +836,10 @@
             </tr>
           </thead>
           <tbody>
+            <tr>
+              <td><code>observation_adapter.py</code></td>
+              <td>Capability-based SensorLog normalization; missing watch/iPhone RSSI is explicit evidence, not fake data</td>
+            </tr>
             <tr>
               <td><code>replay_runner.py</code></td>
               <td>Pure replay integration for MissionGraph, map evidence, safety events, policies, and incidents</td>
