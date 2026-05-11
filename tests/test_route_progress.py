@@ -113,6 +113,66 @@ class RouteProgressEvaluatorTests(unittest.TestCase):
 
         self.assertIsNone(event)
 
+    def test_map_hazard_requires_sustained_presence(self):
+        runtime = MissionGraphRuntime(load_mission_graph(MISSION_PATH))
+        route = load_gpx_route(ROUTE_PATH)
+        evaluator = RouteProgressEvaluator(runtime, route)
+        hazard = {
+            "hazard_id": "hazard_bamboo_cliff_combo",
+            "hazard_type": "dense_bamboo_cliff",
+            "name": "Dense bamboo near cliff edge",
+            "l2_duration_s": 30.0,
+            "source_metadata": {
+                "source": "synthetic_fixture",
+                "source_version": "test",
+                "confidence": 0.7,
+                "last_verified_at": "2026-05-11",
+                "known_staleness_risk": "medium",
+            },
+        }
+
+        first = evaluator.observe(
+            RouteProgressSample(timestamp=0.0, progress_m=100.0, lat=25.0, lon=121.0, map_hazards=[hazard]),
+            expected_checkpoint_id=None,
+        )
+        early = evaluator.observe(
+            RouteProgressSample(timestamp=29.0, progress_m=110.0, lat=25.0, lon=121.0, map_hazards=[hazard]),
+            expected_checkpoint_id=None,
+        )
+        sustained = evaluator.observe(
+            RouteProgressSample(timestamp=30.0, progress_m=120.0, lat=25.0, lon=121.0, map_hazards=[hazard]),
+            expected_checkpoint_id=None,
+        )
+
+        self.assertIsNone(first)
+        self.assertIsNone(early)
+        self.assertIsNotNone(sustained)
+        self.assertEqual(sustained.event_type, SafetyEventType.MAP_HAZARD)
+        self.assertEqual(sustained.details["hazard_type"], "dense_bamboo_cliff")
+        self.assertEqual(sustained.details["duration_s"], 30.0)
+        self.assertEqual(sustained.details["map_source_metadata"]["source"], "synthetic_fixture")
+
+    def test_map_hazard_candidate_resets_after_exit(self):
+        runtime = MissionGraphRuntime(load_mission_graph(MISSION_PATH))
+        route = load_gpx_route(ROUTE_PATH)
+        evaluator = RouteProgressEvaluator(runtime, route)
+        hazard = {
+            "hazard_id": "hazard_short_crossing",
+            "hazard_type": "river",
+            "name": "Short river crossing",
+            "l2_duration_s": 30.0,
+            "source_metadata": {"source": "synthetic_fixture"},
+        }
+
+        evaluator.observe(RouteProgressSample(timestamp=0.0, progress_m=100.0, lat=25.0, lon=121.0, map_hazards=[hazard]), None)
+        evaluator.observe(RouteProgressSample(timestamp=20.0, progress_m=105.0, lat=25.0, lon=121.0, map_hazards=[]), None)
+        event = evaluator.observe(
+            RouteProgressSample(timestamp=31.0, progress_m=110.0, lat=25.0, lon=121.0, map_hazards=[hazard]),
+            expected_checkpoint_id=None,
+        )
+
+        self.assertIsNone(event)
+
     def test_weak_gps_requires_sustained_low_accuracy_while_moving(self):
         runtime = MissionGraphRuntime(load_mission_graph(MISSION_PATH))
         route = load_gpx_route(ROUTE_PATH)

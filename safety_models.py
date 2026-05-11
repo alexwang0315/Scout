@@ -16,6 +16,7 @@ class SafetyLevel(StrEnum):
 
 class SafetyEventType(StrEnum):
     ROUTE_DEVIATION = "route_deviation"
+    MAP_HAZARD = "map_hazard"
     BACKTRACKING_LOOP = "backtracking_loop"
     STEEP_SLOPE = "steep_slope"
     WEAK_GPS = "weak_gps"
