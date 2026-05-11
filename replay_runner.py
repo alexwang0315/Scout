@@ -12,6 +12,7 @@ from mission_models import SegmentCapsule
 from offline_map import OfflineMapContext, load_offline_map_context
 from offline_map_models import CorridorEvidence
 from pdr_fallback import PdrFallbackEstimator, PositionEstimate
+from recording_policy_runtime import RecordingPolicyDecision, RecordingPolicyRuntime
 from risk_rules import RiskRuleEvaluator, load_risk_rules
 from route_matching import GpxRoute, RoutePoint, load_gpx_route
 from route_progress import RouteProgressEvaluator, RouteProgressSample
@@ -28,6 +29,7 @@ class ReplayResult:
     safety_events: list[SafetyEvent]
     safety_state: SafetyState
     incident_packages: list[IncidentPackage]
+    recording_decisions: list[RecordingPolicyDecision]
 
 
 def replay_route(
@@ -47,6 +49,7 @@ def replay_route(
     mission_context = load_mission_context(mission_context_path) if mission_context_path is not None else None
     go_no_go_evaluator = GoNoGoEvaluator()
     pdr_fallback = PdrFallbackEstimator(planned_route)
+    recording_policy_runtime = RecordingPolicyRuntime(runtime)
     checkpoint_manager = CheckpointManager(runtime)
     progress_tracker = MissionProgressTracker(runtime)
     route_progress_evaluator = RouteProgressEvaluator(
@@ -59,6 +62,7 @@ def replay_route(
     checkpoint_hits: list[CheckpointArrival] = []
     progress_updates: list[MissionProgressUpdate] = []
     incident_packages: list[IncidentPackage] = []
+    recording_decisions: list[RecordingPolicyDecision] = []
 
     matched_route_index: int | None = None
     go_no_go_evaluated = False
@@ -116,7 +120,6 @@ def replay_route(
                 "go_no_go": _go_no_go_raw(go_no_go_evaluation),
             },
         )
-        incident_package_builder.observe(observation)
         arrival = checkpoint_manager.observe(observation)
         if arrival is not None:
             checkpoint_hits.append(arrival)
@@ -124,6 +127,24 @@ def replay_route(
         if progress_update is not None:
             progress_updates.append(progress_update)
         safety_event = route_progress_evaluator.observe(progress_sample, progress_tracker.expected_checkpoint_id)
+        pending_events = [
+            event
+            for event in [
+                safety_event,
+                go_no_go_evaluation.safety_event if go_no_go_evaluation is not None else None,
+            ]
+            if event is not None
+        ]
+        recording_decision = recording_policy_runtime.decide(
+            timestamp=float(index),
+            route_index=position_estimate.route_index,
+            current_safety_level=safety_state_machine.state.level,
+            pending_events=pending_events,
+            segment_id=_active_segment_id(runtime, progress_tracker),
+        )
+        recording_decisions.append(recording_decision)
+        observation.raw["recording_policy"] = recording_decision.model_dump(mode="json")
+        incident_package_builder.observe(observation)
         if safety_event is not None:
             _record_safety_event(
                 safety_event=safety_event,
@@ -149,6 +170,7 @@ def replay_route(
         safety_events=progress_tracker.safety_events,
         safety_state=safety_state_machine.state,
         incident_packages=incident_packages,
+        recording_decisions=recording_decisions,
     )
 
 
@@ -254,6 +276,16 @@ def _record_safety_event(
     )
     if incident_package is not None:
         incident_packages.append(incident_package)
+
+
+def _active_segment_id(runtime: MissionGraphRuntime, progress_tracker: MissionProgressTracker) -> str | None:
+    current_checkpoint_id = progress_tracker.current_checkpoint_id
+    expected_checkpoint_id = progress_tracker.expected_checkpoint_id
+    if current_checkpoint_id is None or expected_checkpoint_id is None:
+        return None
+
+    segment = runtime.segment_between(current_checkpoint_id, expected_checkpoint_id)
+    return segment.segment_id if segment is not None else None
 
 
 def _route_progress_sample(
