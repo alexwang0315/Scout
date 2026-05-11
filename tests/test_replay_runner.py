@@ -27,6 +27,14 @@ class ReplayRunnerTests(unittest.TestCase):
         ]
         self.assertEqual(progressed_checkpoints[:3], ["cp_01", "cp_02", "cp_03"])
         self.assertEqual([capsule.segment_id for capsule in result.segment_capsules[:2]], ["seg_01", "seg_02"])
+        self.assertEqual(result.recording_decisions[0].segment_id, "seg_01")
+        self.assertEqual(result.recording_decisions[0].control_zone_id, "zone_urban_edge")
+        self.assertEqual(result.recording_decisions[0].recording_policy_id, "policy_low")
+        self.assertEqual(result.recording_decisions[0].profile, "low")
+        forest_decision = next(decision for decision in result.recording_decisions if decision.segment_id == "seg_02")
+        self.assertEqual(forest_decision.control_zone_id, "zone_forest")
+        self.assertEqual(forest_decision.recording_policy_id, "policy_medium")
+        self.assertEqual(forest_decision.profile, "medium")
         self.assertEqual(result.safety_events, [])
         self.assertEqual(result.safety_state.level, "L0_NORMAL")
         self.assertEqual(result.incident_packages, [])
@@ -85,6 +93,8 @@ class ReplayRunnerTests(unittest.TestCase):
         self.assertEqual(result.safety_state.level, "L2_CONCERN")
         self.assertEqual(len(result.incident_packages), 1)
         trigger_sample = result.incident_packages[0].raw_samples[-1]
+        self.assertEqual(trigger_sample["raw"]["recording_policy"]["profile"], "raw_lock")
+        self.assertEqual(trigger_sample["raw"]["recording_policy"]["safety_level"], "L2_CONCERN")
         self.assertEqual(trigger_sample["raw"]["go_no_go"]["decision"]["decision"], "turn_back")
         self.assertEqual(
             trigger_sample["raw"]["go_no_go"]["safety_event"]["event_type"],
