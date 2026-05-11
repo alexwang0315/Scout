@@ -163,6 +163,14 @@ Phase 1 may use simple heuristics:
 
 These decisions are preventive. They may raise L1/L2 before physical danger occurs.
 
+The initial deterministic `GoNoGoEvaluator` should consume a `RouteSegment`, `ResourceState`, `EnvironmentState`, `CommunicationState`, and route context fixture. It may emit:
+
+- `RESOURCE_CONSTRAINT` for battery or human-energy deficits;
+- `UNSAFE_CONTINUATION` for daylight, weather, communication, or high-risk-zone continuation concerns;
+- no event when current state satisfies the next segment requirement.
+
+The evaluator must stay provider-agnostic. It consumes normalized state models only.
+
 ## Provider Interfaces
 
 Phase 1 should not require real-time external APIs. It must define provider interfaces and use mock/fixture-backed implementations.
@@ -528,6 +536,7 @@ New files:
 - `offline_map_models.py`: map corridor, hazard, POI, and source metadata models.
 - `offline_map.py`: fixture-backed offline map context loading and spatial evidence checks.
 - `risk_rules.py`: route-specific risk rule loading and deterministic L1-L4 decision evaluation.
+- `go_no_go.py`: deterministic segment requirement evaluation from resource, environment, and communication state.
 - `checkpoint_manager.py`: checkpoint arrival detection and segment sealing.
 - `segment_capsule.py`: compressed completed-segment records.
 - `resource_provider.py`: provider protocol and fixture-backed resource provider.
@@ -546,6 +555,7 @@ New files:
 - `tests/test_route_matching.py`
 - `tests/test_offline_map.py`
 - `tests/test_risk_rules.py`
+- `tests/test_go_no_go.py`
 - `tests/test_providers.py`
 - `tests/test_replay_runner.py`
 
