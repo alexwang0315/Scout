@@ -20,6 +20,21 @@ The primary users are wilderness explorers and search-and-rescue responders. The
 
 ## Scope
 
+### Current Implementation Snapshot
+
+The current Phase 1 baseline is replay-driven and deterministic. It includes:
+
+- `MissionGraphRuntime` for checkpoints, control zones, segment requirements, and recording policies.
+- Apple Watch SensorLog JSON to GPX conversion and replay fixtures for normal, off-route, backtracking/looping, and weak-GPS routes.
+- `OfflineMapContext` backed by synthetic GeoJSON corridor and hazard evidence.
+- `RouteProgressEvaluator`, `RiskRuleEvaluator`, and `PdrFallbackEstimator` for map corridor deviation, hazard/risk-rule evaluation, backtracking/looping, and weak-GPS fallback.
+- `GoNoGoEvaluator` for deterministic resource, daylight, weather, and communication continuation decisions.
+- `RecordingPolicyRuntime` for safety-level-aware recording profiles and raw-ring window selection.
+- `IncidentPackageBuilder`, structured incident evidence summaries, `IncidentStore` JSON persistence, and `Safety API Mock` endpoints.
+- `phase1_replay_demo.py` for running the full Phase 1 replay pipeline from the command line.
+
+This snapshot remains synthetic-map and fixture-first. It is ready for real Apple Watch/GPX and real local map fixture trials, but it is not yet a live Observation Layer integration.
+
 ### In Scope
 
 - Data models for `Observation`, `SafetyEvent`, `SafetyState`, `SafetyTransition`, and `IncidentPackage`.
@@ -63,8 +78,8 @@ Route progress is stored as sealed segment capsules:
 
 When the safety state machine reaches the configured incident trigger state, the incident package starts preserving lossless raw detail:
 
-- The package includes the previous 5 minutes of raw samples from the rolling buffer.
-- The package continues preserving raw samples losslessly for at least 5 minutes after the trigger time.
+- The package includes the previous recording-policy raw window from the rolling buffer.
+- The package window is selected from the active `RecordingPolicy.raw_ring_seconds`; current fixtures use 180s for low policy and 300s for medium/high-risk policy.
 - Data outside the incident raw window is stored as summaries and compressed trajectory segments.
 
 Default trigger point:
@@ -83,12 +98,14 @@ L0 Normal -> L1 Watch -> L2 Concern
 
 The package must preserve enough data for later reconstruction:
 
-- Raw sensor samples from `incident_triggered_at - 5 minutes` through `incident_triggered_at + 5 minutes`.
+- Raw sensor samples from `incident_triggered_at - raw_ring_seconds` through the trigger sample available at package creation. Future live observation integration should keep appending through the post-trigger window.
 - Safety events and state transitions.
 - Matched route segment and deviation measurements.
 - GPS/PDR trajectory summaries before and after the raw window.
 - Signal-strength summaries.
 - AI-readable incident summary input.
+
+`ai_summary_input` is structured evidence, not an LLM decision surface. It contains the trigger event, mission context, route evidence, map evidence, Go/No-Go decision when present, raw-window metadata, sealed capsule ids, and latest safety transition.
 
 ## Mission Graph
 
@@ -501,6 +518,22 @@ Run future safety tests:
 ./venv/bin/python -m pytest tests/test_safety_state.py tests/test_incident_package.py tests/test_route_matching.py tests/test_replay_runner.py
 ```
 
+Run the full Phase 1 test suite:
+
+```bash
+./venv/bin/python -m pytest tests -q
+```
+
+Run the Phase 1 replay demo:
+
+```bash
+./venv/bin/python phase1_replay_demo.py \
+  --mission tests/fixtures/mission_graph/normal_climb_mission.json \
+  --route tests/fixtures/routes/off_route_deviation.gpx \
+  --incident-store /tmp/scout-phase1-demo-incidents \
+  --pretty
+```
+
 Run server:
 
 ```bash
@@ -525,25 +558,27 @@ Current files to reuse:
 - `PdrSample/applewatch.json`: existing replay input.
 - `docs/ideas/scout-trail-black-box.md`: product one-pager.
 
-New files:
+Current Phase 1 runtime files:
 
 - `mission_models.py`: mission graph, checkpoint, zone, segment, provider-state, and go/no-go models.
 - `mission_graph.py`: route plan loading, checkpoint indexing, and segment policy lookup.
 - `safety_models.py`: Pydantic models and enums.
-- `safety_state.py`: L0-L4 state machine.
-- `incident_store.py`: incident package creation and local persistence.
+- `safety_state_machine.py`: L0-L4 state machine.
+- `incident_package.py`: raw sample buffer, incident package creation, and structured evidence summary input.
+- `incident_store.py`: local JSON persistence and retrieval for incident packages.
+- `safety_api.py`: Phase 1 ack/reack and incident retrieval API mock.
 - `route_matching.py`: GPX/GeoJSON route matching.
 - `offline_map_models.py`: map corridor, hazard, POI, and source metadata models.
 - `offline_map.py`: fixture-backed offline map context loading and spatial evidence checks.
 - `risk_rules.py`: route-specific risk rule loading and deterministic L1-L4 decision evaluation.
 - `go_no_go.py`: deterministic segment requirement evaluation from resource, environment, and communication state.
 - `checkpoint_manager.py`: checkpoint arrival detection and segment sealing.
-- `segment_capsule.py`: compressed completed-segment records.
-- `resource_provider.py`: provider protocol and fixture-backed resource provider.
-- `environment_provider.py`: provider protocol and fixture-backed environment provider.
-- `communication_provider.py`: provider protocol and fixture-backed communication provider.
-- `communication_tool.py`: normalized capability scan and mock send/ack result.
+- `mission_progress.py`: ordered checkpoint progress and segment capsule sealing.
+- `route_progress.py`: route progress, map evidence, weak GPS, backtracking/looping, and missed-checkpoint safety evaluation.
+- `pdr_fallback.py`: short weak-GPS PDR fallback and GPS re-anchor evidence.
+- `recording_policy_runtime.py`: active segment/control-zone recording profile decisions and raw-ring duration.
 - `replay_runner.py`: offline replay from sample data.
+- `phase1_replay_demo.py`: command-line Phase 1 runtime demo and JSON summary output.
 - `tests/fixtures/routes/`: normal and generated abnormal routes.
 - `tests/fixtures/maps/`: synthetic GeoJSON map evidence fixtures.
 - `tests/fixtures/mission_context/`: mock resource, environment, communication, and route context.
@@ -556,8 +591,18 @@ New files:
 - `tests/test_offline_map.py`
 - `tests/test_risk_rules.py`
 - `tests/test_go_no_go.py`
-- `tests/test_providers.py`
+- `tests/test_pdr_fallback.py`
 - `tests/test_replay_runner.py`
+- `tests/test_incident_store.py`
+- `tests/test_safety_api.py`
+- `tests/test_phase1_replay_demo.py`
+
+Deferred provider adapter files:
+
+- `resource_provider.py`: provider protocol and fixture-backed resource provider.
+- `environment_provider.py`: provider protocol and fixture-backed environment provider.
+- `communication_provider.py`: provider protocol and fixture-backed communication provider.
+- `communication_tool.py`: normalized capability scan and mock send/ack result.
 
 ## Code Style
 
@@ -711,6 +756,49 @@ Phase 1 is complete when:
 - Ack/reack API mock returns safety state and incident package availability.
 - AI summary code, if present, only reads incident packages and does not control escalation.
 - Tests run without network access.
+
+## Current Acceptance Checklist
+
+The replay baseline should satisfy these deterministic checks:
+
+- Normal Apple Watch route replay:
+  - `observations_processed = 3812`
+  - progressed checkpoints `cp_01` through `cp_10`
+  - sealed segment capsules `seg_01` through `seg_09`
+  - no safety events
+  - final safety level `L0_NORMAL`
+  - no incident packages
+- Off-route fixture:
+  - emits `ROUTE_DEVIATION`
+  - evidence source is `offline_map_corridor`
+  - opens one L2 incident package
+  - incident package includes map hazard ids and structured `ai_summary_input`
+  - optional `IncidentStore` writes the package JSON.
+- Backtracking/loop fixture:
+  - emits `BACKTRACKING_LOOP`
+  - opens one L2 incident package.
+- Weak-GPS fixture:
+  - emits `WEAK_GPS`
+  - includes `pdr_fallback` evidence and PDR delta
+  - does not treat weak GPS alone as map corridor deviation.
+- Go/No-Go fixtures:
+  - normal context remains L0
+  - low-battery/near-sunset context emits L2 `RESOURCE_CONSTRAINT`
+  - no-signal high-risk context emits L1 `UNSAFE_CONTINUATION` without incident package.
+- Recording policy:
+  - L0 uses each segment policy normal profile
+  - L2 trigger samples record `raw_lock`
+  - incident raw window follows the active policy `raw_ring_seconds`.
+- Safety API mock:
+  - `/safety/ack` returns safety state, latest incident id, package availability, and last known position.
+  - `/safety/incidents/{incident_id}` returns persisted incident package JSON.
+  - `/safety/checkins` and `/safety/capsules/{capsule_id}` expose checkpoint/capsule evidence.
+- Demo CLI:
+  - `phase1_replay_demo.py` runs normal and abnormal routes without server startup.
+  - JSON summary reports observations, safety level/events, incident ids, stored paths, checkpoint progress, segment capsules, recording profiles, and latest incident summary.
+- Full test suite:
+  - `./venv/bin/python -m pytest tests -q`
+  - current expected result: `64 passed, 4 subtests passed`.
 
 ## Open Questions
 

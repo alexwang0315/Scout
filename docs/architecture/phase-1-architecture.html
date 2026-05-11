@@ -403,6 +403,7 @@
               <span class="chip">Checkpoints</span>
               <span class="chip">Control Zones</span>
               <span class="chip">Segment Requirements</span>
+              <span class="chip">Recording Policies</span>
             </div>
           </article>
 
@@ -446,6 +447,7 @@
               <span class="chip">Route Matching</span>
               <span class="chip">PDR Fallback</span>
               <span class="chip">CheckpointManager</span>
+              <span class="chip">MissionProgress</span>
               <span class="chip">SafetyStateMachine</span>
               <span class="chip">Go / No-Go</span>
               <span class="chip">RecordingPolicy</span>
@@ -460,9 +462,9 @@
             <div class="mini-list">
               <span class="chip">SegmentCapsule</span>
               <span class="chip">IncidentPackage</span>
-              <span class="chip">ack/reack mock</span>
-              <span class="chip">remote alert mock</span>
-              <span class="chip">Responder Summary</span>
+              <span class="chip">IncidentStore</span>
+              <span class="chip">Safety API Mock</span>
+              <span class="chip">Replay Demo CLI</span>
             </div>
           </article>
         </div>
@@ -474,7 +476,7 @@
           </div>
           <div class="feedback">
             <strong>Risk path</strong>
-            Outside corridor or inside hazard for threshold duration → L2+ trigger → raw window locks from trigger -5 min to trigger +5 min.
+            Outside corridor or inside hazard for threshold duration → L2+ trigger → recording policy switches to raw lock → incident package persists JSON.
           </div>
         </div>
       </div>
@@ -562,16 +564,17 @@
             </ul>
           </article>
           <article class="node sense">
-            <h3>Raw Ring Buffer</h3>
-            <p>Small rolling raw window. Not full-trip raw storage.</p>
+            <h3>ReplayRunner</h3>
+            <p>Runs Phase 1 fixtures without server startup.</p>
             <ul>
-              <li>default 2-5 min</li>
-              <li>reset/reduce after checkpoint</li>
-              <li>lock on L2+</li>
+              <li>Apple Watch GPX replay</li>
+              <li>normal / off-route / loop</li>
+              <li>weak GPS fixture</li>
+              <li>optional incident store</li>
             </ul>
           </article>
           <article class="node sense">
-            <h3>RouteContextAgent</h3>
+            <h3>RouteContext Runtime</h3>
             <p>Matches position estimates to mission graph and map context.</p>
             <ul>
               <li>route match confidence</li>
@@ -595,6 +598,16 @@
               <li>seal previous segment</li>
               <li>emit check-in</li>
               <li>apply next policy</li>
+            </ul>
+          </article>
+          <article class="node decision">
+            <h3>RecordingPolicyRuntime</h3>
+            <p>Maps segment, control zone, and safety level to evidence retention.</p>
+            <ul>
+              <li>low / medium / high</li>
+              <li>raw lock on L2+</li>
+              <li>policy raw ring seconds</li>
+              <li>trigger-sample evidence</li>
             </ul>
           </article>
           <article class="node decision">
@@ -649,27 +662,33 @@
           </article>
           <article class="node response">
             <h3>IncidentStore</h3>
-            <p>Lossless raw window when L2+ triggers.</p>
+            <p>Persisted JSON package when L2+ triggers.</p>
             <ul>
-              <li>trigger -5 min</li>
-              <li>trigger +5 min</li>
+              <li>policy raw window</li>
+              <li>raw samples</li>
               <li>state transitions</li>
-              <li>AI summary input</li>
+              <li>structured summary input</li>
             </ul>
           </article>
           <article class="node response">
-            <h3>EmergencyActionExecutor</h3>
-            <p>Executes only allowed actions.</p>
+            <h3>Safety API Mock</h3>
+            <p>HTTP behavior before choosing a final ack/reack transport.</p>
             <ul>
-              <li>ack/reack mock</li>
-              <li>capsule upload mock</li>
-              <li>remote alert mock</li>
-              <li>beacon mode later</li>
+              <li><code>POST /safety/ack</code></li>
+              <li><code>GET /safety/state</code></li>
+              <li><code>GET /safety/incidents/{id}</code></li>
+              <li><code>GET /safety/capsules/{id}</code></li>
             </ul>
           </article>
           <article class="node response">
-            <h3>ResponderSummaryAgent</h3>
-            <p>Reads packages. Writes human summary. No escalation control.</p>
+            <h3>Phase 1 Demo CLI</h3>
+            <p>Runs replay, writes incidents, and emits a compact JSON summary.</p>
+            <ul>
+              <li>safety level/events</li>
+              <li>incident ids and paths</li>
+              <li>checkpoint progress</li>
+              <li>latest evidence summary</li>
+            </ul>
           </article>
         </div>
       </div>
@@ -761,8 +780,74 @@
       </div>
     </section>
 
+    <section class="matrix">
+      <div>
+        <h2 class="section-title">Phase 1 Acceptance</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Replay</th>
+              <th>Expected result</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>normal Apple Watch route</td>
+              <td>3812 observations, cp_01-cp_10, seg_01-seg_09, L0, no incident</td>
+            </tr>
+            <tr>
+              <td>off-route deviation</td>
+              <td>offline-map corridor evidence, L2 route deviation, stored incident JSON</td>
+            </tr>
+            <tr>
+              <td>backtracking / loop</td>
+              <td>sustained route-progress regression, L2 backtracking loop</td>
+            </tr>
+            <tr>
+              <td>weak GPS</td>
+              <td>PDR fallback evidence, GPS re-anchor context, weak-GPS safety event</td>
+            </tr>
+            <tr>
+              <td>Go / No-Go fixtures</td>
+              <td>normal L0, low battery L2, no-signal high-risk L1 without incident</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div>
+        <h2 class="section-title">Runtime Entrypoints</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Entrypoint</th>
+              <th>Purpose</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>replay_runner.py</code></td>
+              <td>Pure replay integration for MissionGraph, map evidence, safety events, policies, and incidents</td>
+            </tr>
+            <tr>
+              <td><code>phase1_replay_demo.py</code></td>
+              <td>Manual JSON summary for normal or abnormal route fixtures</td>
+            </tr>
+            <tr>
+              <td><code>safety_api.py</code></td>
+              <td>Behavioral ack/reack and incident retrieval mock from replay snapshots</td>
+            </tr>
+            <tr>
+              <td><code>incident_store.py</code></td>
+              <td>Local JSON persistence for incident package retrieval and export</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
     <p class="note">
-      Phase 1 keeps safety decisions deterministic. Offline map evidence is the highest-priority static terrain reference, while GPS/PDR/IMU are noisy measurements against that context. Agents help prepare context and write summaries. Checkpoints keep memory small by sealing normal history into segment capsules.
+      Phase 1 keeps safety decisions deterministic. Offline map evidence is the highest-priority static terrain reference, while GPS/PDR/IMU are noisy measurements against that context. The current baseline is replay-driven: it can demonstrate normal L0 behavior, abnormal L2 incident creation, policy-based raw windows, JSON persistence, and the safety API mock before the live Observation Layer is connected.
     </p>
   </main>
 </body>
