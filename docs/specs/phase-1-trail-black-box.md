@@ -261,6 +261,33 @@ Phase 1 default:
 
 Hazard evidence should be evaluated before GPX-only route deviation. A user entering a mapped river, cliff, landslide, or steep-slope zone can be L2 even if GPX route progress appears plausible.
 
+### Route-Specific Risk Rules
+
+Some routes are known for specific risk-factor combinations, such as dense bamboo near cliff exposure, steep slopes during weak GPS, or river crossings after rain. These combinations should be data-driven rather than hard-coded into `RouteProgressEvaluator`.
+
+Phase 1 should support fixture-backed route-specific risk rules. A rule may match:
+
+- one or more hazard types, using `any` or `all` matching;
+- sustained duration in the hazard context;
+- minimum map confidence;
+- weak-GPS requirement;
+- optional route segment ids;
+- output safety level, confidence, and reason.
+
+Rules should live under:
+
+```text
+tests/fixtures/risk_rules/
+```
+
+Expected example:
+
+```text
+tests/fixtures/risk_rules/normal_climb_rules.json
+```
+
+The initial evaluator is pure and deterministic. It consumes already-normalized evidence such as hazard types, duration, map confidence, weak-GPS state, and segment id. It does not read sensors directly.
+
 ## Safety Levels
 
 - L0 Normal: baseline recording and compressed trajectory summaries.
@@ -498,6 +525,7 @@ New files:
 - `route_matching.py`: GPX/GeoJSON route matching.
 - `offline_map_models.py`: map corridor, hazard, POI, and source metadata models.
 - `offline_map.py`: fixture-backed offline map context loading and spatial evidence checks.
+- `risk_rules.py`: route-specific risk rule loading and deterministic L1-L4 decision evaluation.
 - `checkpoint_manager.py`: checkpoint arrival detection and segment sealing.
 - `segment_capsule.py`: compressed completed-segment records.
 - `resource_provider.py`: provider protocol and fixture-backed resource provider.
@@ -515,6 +543,7 @@ New files:
 - `tests/test_segment_capsule.py`
 - `tests/test_route_matching.py`
 - `tests/test_offline_map.py`
+- `tests/test_risk_rules.py`
 - `tests/test_providers.py`
 - `tests/test_replay_runner.py`
 

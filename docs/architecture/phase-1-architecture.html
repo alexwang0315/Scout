@@ -442,6 +442,7 @@
             <p>Deterministic services compare position estimates against mission and map evidence.</p>
             <div class="mini-list">
               <span class="chip">Map Corridor Check</span>
+              <span class="chip">Risk Rules</span>
               <span class="chip">Route Matching</span>
               <span class="chip">PDR Fallback</span>
               <span class="chip">CheckpointManager</span>
@@ -602,9 +603,20 @@
             <ul>
               <li>map corridor deviation</li>
               <li>hazard-zone entry</li>
+              <li>route-specific risk rules</li>
               <li>weak GPS + PDR fallback</li>
               <li>unsafe continuation</li>
               <li>missed checkpoint</li>
+            </ul>
+          </article>
+          <article class="node decision">
+            <h3>RiskRuleEvaluator</h3>
+            <p>Route-specific combinations stay data-driven.</p>
+            <ul>
+              <li>hazard type any/all</li>
+              <li>duration threshold</li>
+              <li>map confidence</li>
+              <li>weak GPS / segment gates</li>
             </ul>
           </article>
           <article class="node decision">
