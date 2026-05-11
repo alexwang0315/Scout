@@ -275,7 +275,7 @@ Phase 1 should prioritize path-related L2 triggers:
 
 - Route deviation: distance from expected GPX/GeoJSON route exceeds threshold.
 - Map corridor deviation: best available position estimate remains outside the approved offline-map corridor after uncertainty is considered.
-- Hazard-zone entry: best available position estimate remains inside a mapped hazard zone for at least 30 seconds.
+- Map hazard: best available position estimate remains inside a mapped hazard zone for at least 30 seconds. The event type is `MAP_HAZARD`; the hazard type remains data-driven, such as `steep_slope`, `river`, `cliff`, `landslide`, `dense_bamboo`, or route-specific composite types.
 - Looping/backtracking: recent trajectory shows sustained lack of forward route progress, route-progress regression, or repeated local circulation.
 - Leaving safer terrain: movement departs the expected low-slope/easier contour corridor.
 - Steep-slope entry: matched or estimated terrain slope exceeds a configured threshold, initially 30%.

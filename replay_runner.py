@@ -57,6 +57,13 @@ def replay_route(
             previous_route_index=matched_route_index,
         )
         matched_route_index = position_estimate.route_index
+        progress_sample = _route_progress_sample(
+            timestamp=float(index),
+            point=point,
+            position_estimate=position_estimate,
+            planned_route=planned_route,
+            offline_map_context=offline_map_context,
+        )
         observation = Observation(
             timestamp=float(index),
             source="gpx_replay",
@@ -75,6 +82,16 @@ def replay_route(
                     "pdr_delta_m": position_estimate.pdr_delta_m,
                     "gps_reanchor_correction_m": position_estimate.gps_reanchor_correction_m,
                 },
+                "map_evidence": {
+                    "corridor": {
+                        "inside": progress_sample.map_corridor_inside,
+                        "corridor_id": progress_sample.map_corridor_id,
+                        "distance_m": progress_sample.map_corridor_distance_m,
+                        "allowed_distance_m": progress_sample.map_corridor_allowed_distance_m,
+                        "source_metadata": progress_sample.map_source_metadata,
+                    },
+                    "hazards": progress_sample.map_hazards or [],
+                },
             },
         )
         incident_package_builder.observe(observation)
@@ -84,13 +101,6 @@ def replay_route(
         progress_update = progress_tracker.observe(observation)
         if progress_update is not None:
             progress_updates.append(progress_update)
-        progress_sample = _route_progress_sample(
-            timestamp=float(index),
-            point=point,
-            position_estimate=position_estimate,
-            planned_route=planned_route,
-            offline_map_context=offline_map_context,
-        )
         safety_event = route_progress_evaluator.observe(progress_sample, progress_tracker.expected_checkpoint_id)
         if safety_event is not None:
             progress_tracker.safety_events.append(safety_event)
@@ -164,6 +174,12 @@ def _route_progress_sample(
         planned_route=planned_route,
         offline_map_context=offline_map_context,
     )
+    hazards = _hazard_evidence(
+        point=point,
+        position_estimate=position_estimate,
+        planned_route=planned_route,
+        offline_map_context=offline_map_context,
+    )
     return RouteProgressSample(
         timestamp=timestamp,
         progress_m=position_estimate.progress_m,
@@ -180,6 +196,7 @@ def _route_progress_sample(
         map_corridor_distance_m=corridor.distance_m if corridor is not None else None,
         map_corridor_allowed_distance_m=corridor.allowed_distance_m if corridor is not None else None,
         map_source_metadata=corridor.source_metadata.model_dump() if corridor and corridor.source_metadata else None,
+        map_hazards=hazards,
     )
 
 
@@ -203,3 +220,22 @@ def _corridor_evidence(
         point.lon,
         position_uncertainty_m=uncertainty_m,
     )
+
+
+def _hazard_evidence(
+    *,
+    point: RoutePoint,
+    position_estimate: PositionEstimate,
+    planned_route: GpxRoute,
+    offline_map_context: OfflineMapContext | None,
+) -> list[dict] | None:
+    if offline_map_context is None:
+        return None
+
+    if position_estimate.source == "pdr_fallback":
+        estimate_point = planned_route.points[position_estimate.route_index]
+        hazards = offline_map_context.hazards_at(estimate_point.lat, estimate_point.lon)
+    else:
+        hazards = offline_map_context.hazards_at(point.lat, point.lon)
+
+    return [hazard.model_dump() for hazard in hazards]

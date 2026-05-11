@@ -42,6 +42,7 @@ class RouteProgressSample:
     map_corridor_distance_m: float | None = None
     map_corridor_allowed_distance_m: float | None = None
     map_source_metadata: dict[str, Any] | None = None
+    map_hazards: list[dict[str, Any]] | None = None
 
 
 class RouteProgressEvaluator:
@@ -61,6 +62,7 @@ class RouteProgressEvaluator:
         self.suppress_regression_until_progress_m: float | None = None
         self.weak_gps_started_at: float | None = None
         self.weak_gps_start_progress_m: float | None = None
+        self.hazard_started_at: dict[str, float] = {}
         self.samples: deque[RouteProgressSample] = deque()
         self._emitted_keys: set[tuple[SafetyEventType, str]] = set()
 
@@ -69,6 +71,10 @@ class RouteProgressEvaluator:
 
         if self._is_route_deviated(sample):
             return self._route_deviation_event(sample)
+
+        map_hazard = self._map_hazard_event(sample)
+        if map_hazard is not None:
+            return map_hazard
 
         weak_gps = self._weak_gps_event(sample)
         if weak_gps is not None:
@@ -148,6 +154,54 @@ class RouteProgressEvaluator:
                 "map_source_metadata": sample.map_source_metadata,
             },
         )
+
+    def _map_hazard_event(self, sample: RouteProgressSample) -> SafetyEvent | None:
+        hazards = sample.map_hazards or []
+        active_hazard_ids = {str(hazard["hazard_id"]) for hazard in hazards if "hazard_id" in hazard}
+        for hazard_id in list(self.hazard_started_at):
+            if hazard_id not in active_hazard_ids:
+                del self.hazard_started_at[hazard_id]
+
+        for hazard in hazards:
+            if "hazard_id" not in hazard:
+                continue
+            hazard_id = str(hazard["hazard_id"])
+            if hazard_id not in self.hazard_started_at:
+                self.hazard_started_at[hazard_id] = sample.timestamp
+                continue
+
+            duration_s = sample.timestamp - self.hazard_started_at[hazard_id]
+            threshold_s = float(hazard.get("l2_duration_s", 30.0))
+            if duration_s < threshold_s:
+                continue
+
+            key = (SafetyEventType.MAP_HAZARD, hazard_id)
+            if key in self._emitted_keys:
+                continue
+            self._emitted_keys.add(key)
+
+            return SafetyEvent(
+                event_type=SafetyEventType.MAP_HAZARD,
+                level=SafetyLevel.CONCERN,
+                timestamp=sample.timestamp,
+                reason=f"Position estimate remained inside mapped hazard zone {hazard_id}.",
+                confidence=0.86,
+                details={
+                    "evidence_source": "offline_map_hazard",
+                    "hazard_id": hazard_id,
+                    "hazard_type": hazard.get("hazard_type"),
+                    "hazard_name": hazard.get("name"),
+                    "duration_s": duration_s,
+                    "threshold_s": threshold_s,
+                    "position_estimate_source": sample.estimate_source,
+                    "estimate_confidence": sample.estimate_confidence,
+                    "matched_route_index": sample.route_index,
+                    "matched_progress_m": sample.progress_m,
+                    "map_source_metadata": hazard.get("source_metadata"),
+                },
+            )
+
+        return None
 
     def _weak_gps_event(self, sample: RouteProgressSample) -> SafetyEvent | None:
         accuracy = sample.gps_horizontal_accuracy_m
