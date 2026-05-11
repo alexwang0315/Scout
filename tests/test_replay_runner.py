@@ -50,6 +50,10 @@ class ReplayRunnerTests(unittest.TestCase):
         self.assertEqual(route_event.details["map_source_metadata"]["source"], "synthetic_fixture")
         trigger_sample = result.incident_packages[0].raw_samples[-1]
         self.assertEqual(trigger_sample["raw"]["map_evidence"]["hazards"][0]["hazard_id"], "hazard_off_route_slope")
+        self.assertEqual(
+            result.incident_packages[0].raw_window_start,
+            result.incident_packages[0].triggered_at - trigger_sample["raw"]["recording_policy"]["raw_ring_seconds"],
+        )
         self.assertEqual(result.safety_state.level, "L2_CONCERN")
         self.assertEqual(len(result.incident_packages), 1)
 
