@@ -11,6 +11,7 @@ ROUTE_PATH = ROOT / "tests" / "fixtures" / "routes" / "normal_climb.gpx"
 OFF_ROUTE_PATH = ROOT / "tests" / "fixtures" / "routes" / "off_route_deviation.gpx"
 BACKTRACKING_PATH = ROOT / "tests" / "fixtures" / "routes" / "backtracking_loop.gpx"
 WEAK_GPS_PATH = ROOT / "tests" / "fixtures" / "routes" / "weak_gps_route.gpx"
+CONTEXT_DIR = ROOT / "tests" / "fixtures" / "mission_context"
 
 
 class ReplayRunnerTests(unittest.TestCase):
@@ -62,6 +63,48 @@ class ReplayRunnerTests(unittest.TestCase):
         self.assertGreater(weak_gps_event.details["pdr_delta_m"], 0.0)
         self.assertEqual(result.safety_state.level, "L2_CONCERN")
         self.assertEqual(len(result.incident_packages), 1)
+
+    def test_replay_with_normal_context_remains_l0(self):
+        result = replay_route(MISSION_PATH, ROUTE_PATH, mission_context_path=CONTEXT_DIR / "normal.json")
+
+        self.assertEqual(result.safety_events, [])
+        self.assertEqual(result.safety_state.level, "L0_NORMAL")
+        self.assertEqual(result.incident_packages, [])
+
+    def test_low_battery_context_triggers_l2_incident(self):
+        result = replay_route(
+            MISSION_PATH,
+            ROUTE_PATH,
+            mission_context_path=CONTEXT_DIR / "low_battery_near_sunset.json",
+        )
+
+        event_types = [event.event_type for event in result.safety_events]
+        self.assertIn(SafetyEventType.RESOURCE_CONSTRAINT, event_types)
+        event = next(event for event in result.safety_events if event.event_type == SafetyEventType.RESOURCE_CONSTRAINT)
+        self.assertEqual(event.details["segment_id"], "seg_05")
+        self.assertEqual(result.safety_state.level, "L2_CONCERN")
+        self.assertEqual(len(result.incident_packages), 1)
+        trigger_sample = result.incident_packages[0].raw_samples[-1]
+        self.assertEqual(trigger_sample["raw"]["go_no_go"]["decision"]["decision"], "turn_back")
+        self.assertEqual(
+            trigger_sample["raw"]["go_no_go"]["safety_event"]["event_type"],
+            SafetyEventType.RESOURCE_CONSTRAINT,
+        )
+
+    def test_no_signal_context_triggers_l1_without_incident(self):
+        result = replay_route(
+            MISSION_PATH,
+            ROUTE_PATH,
+            mission_context_path=CONTEXT_DIR / "no_signal_high_risk_zone.json",
+        )
+
+        event_types = [event.event_type for event in result.safety_events]
+        self.assertIn(SafetyEventType.UNSAFE_CONTINUATION, event_types)
+        event = next(event for event in result.safety_events if event.event_type == SafetyEventType.UNSAFE_CONTINUATION)
+        self.assertEqual(event.level, "L1_WATCH")
+        self.assertEqual(event.details["segment_id"], "seg_06")
+        self.assertEqual(result.safety_state.level, "L1_WATCH")
+        self.assertEqual(result.incident_packages, [])
 
 
 if __name__ == "__main__":
