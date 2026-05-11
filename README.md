@@ -170,7 +170,7 @@ Supported heading fields:
 
 The endpoint updates position and queues an AI decision event without blocking ingestion.
 
-It also accepts `imu_data` arrays from Apple Watch / SensorLog JSON exports. These samples are converted into local movement summaries using fields such as:
+It also accepts `imu_data` arrays from Apple Watch / SensorLog JSON exports. These samples are converted into local movement summaries and added to the PDR trajectory using fields such as:
 
 - `accelerometerAccelerationX`
 - `accelerometerAccelerationY`
@@ -182,6 +182,14 @@ Movement summaries can be checked without calling the LLM:
 
 ```bash
 curl http://127.0.0.1:9099/movement-summary
+```
+
+After sending an Apple Watch sample directory, generate the trajectory image from the same uploaded samples:
+
+```bash
+./send_samples.sh PdrSample
+curl http://127.0.0.1:9099/trajectory/status
+curl http://127.0.0.1:9099/trajectory/map
 ```
 
 ### 4. Request Navigation
