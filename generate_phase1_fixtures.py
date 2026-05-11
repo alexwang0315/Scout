@@ -309,17 +309,109 @@ def write_context_fixtures(output_dir: Path) -> None:
         (output_dir / name).write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
 
 
+def write_synthetic_map_context(route_path: Path, mission_graph_path: Path, output_path: Path) -> None:
+    tree = ET.parse(route_path)
+    root = tree.getroot()
+    ns = _ns(root)
+    points = _track_points(root, ns)
+    if not points:
+        raise ValueError(f"No GPX track points found: {route_path}")
+
+    coordinates = [
+        [_to_float(point.attrib.get("lon")), _to_float(point.attrib.get("lat"))]
+        for index, point in enumerate(points)
+        if index % 20 == 0 or index == len(points) - 1
+    ]
+    mission_graph = json.loads(mission_graph_path.read_text())
+    checkpoint_features = [
+        {
+            "type": "Feature",
+            "properties": {
+                "feature_type": "poi",
+                "id": checkpoint["checkpoint_id"],
+                "poi_type": checkpoint["checkpoint_type"],
+                "name": checkpoint["name"],
+            },
+            "geometry": {
+                "type": "Point",
+                "coordinates": [checkpoint["lon"], checkpoint["lat"]],
+            },
+        }
+        for checkpoint in mission_graph["checkpoints"]
+    ]
+
+    off_route_anchor = points[len(points) // 2]
+    hazard_lat = _to_float(off_route_anchor.attrib.get("lat")) + 0.0030
+    hazard_lon = _to_float(off_route_anchor.attrib.get("lon")) + 0.0030
+    hazard_polygon = _square_polygon(hazard_lat, hazard_lon, half_size_deg=0.00045)
+
+    geojson = {
+        "type": "FeatureCollection",
+        "properties": {
+            "source": "synthetic_fixture",
+            "source_version": "phase-1-2026-05-11",
+            "confidence": 0.65,
+            "last_verified_at": "2026-05-11",
+            "known_staleness_risk": "medium",
+        },
+        "features": [
+            {
+                "type": "Feature",
+                "properties": {
+                    "feature_type": "approved_corridor",
+                    "id": "corridor_normal_climb",
+                    "name": "Synthetic normal climb approved corridor",
+                    "route_level": "unknown",
+                },
+                "geometry": {
+                    "type": "LineString",
+                    "coordinates": coordinates,
+                },
+            },
+            {
+                "type": "Feature",
+                "properties": {
+                    "feature_type": "hazard_zone",
+                    "id": "hazard_off_route_slope",
+                    "hazard_type": "steep_slope",
+                    "name": "Synthetic off-route steep slope hazard",
+                    "l2_duration_s": 30.0,
+                },
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [hazard_polygon],
+                },
+            },
+            *checkpoint_features,
+        ],
+    }
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(json.dumps(geojson, ensure_ascii=False, indent=2) + "\n")
+
+
+def _square_polygon(lat: float, lon: float, half_size_deg: float) -> list[list[float]]:
+    return [
+        [lon - half_size_deg, lat - half_size_deg],
+        [lon + half_size_deg, lat - half_size_deg],
+        [lon + half_size_deg, lat + half_size_deg],
+        [lon - half_size_deg, lat + half_size_deg],
+        [lon - half_size_deg, lat - half_size_deg],
+    ]
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate Phase 1 route, mission graph, and context fixtures.")
     parser.add_argument("--route", type=Path, default=Path("tests/fixtures/routes/normal_climb.gpx"))
     parser.add_argument("--routes-dir", type=Path, default=Path("tests/fixtures/routes"))
     parser.add_argument("--mission-output", type=Path, default=Path("tests/fixtures/mission_graph/normal_climb_mission.json"))
     parser.add_argument("--context-dir", type=Path, default=Path("tests/fixtures/mission_context"))
+    parser.add_argument("--map-output", type=Path, default=Path("tests/fixtures/maps/normal_climb_map_context.geojson"))
     args = parser.parse_args()
 
     graph = build_mission_graph(args.route, args.mission_output)
     generate_route_variants(args.route, args.routes_dir)
     write_context_fixtures(args.context_dir)
+    write_synthetic_map_context(args.route, args.mission_output, args.map_output)
     print(f"Wrote {len(graph['checkpoints'])} checkpoints and {len(graph['segments'])} segments")
 
 
