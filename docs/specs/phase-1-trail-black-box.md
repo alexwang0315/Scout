@@ -288,6 +288,8 @@ tests/fixtures/risk_rules/normal_climb_rules.json
 
 The initial evaluator is pure and deterministic. It consumes already-normalized evidence such as hazard types, duration, map confidence, weak-GPS state, and segment id. It does not read sensors directly.
 
+`RouteProgressEvaluator` should consult route-specific rules before falling back to a generic hazard-zone L2 trigger. This lets a route downgrade low-confidence map hazards to L1, require factor combinations such as `dense_bamboo + cliff_exposure`, or escalate steep-slope hazards only when weak GPS or a specific segment context is present.
+
 ## Safety Levels
 
 - L0 Normal: baseline recording and compressed trajectory summaries.

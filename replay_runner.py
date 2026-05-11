@@ -11,6 +11,7 @@ from mission_models import SegmentCapsule
 from offline_map import OfflineMapContext, load_offline_map_context
 from offline_map_models import CorridorEvidence
 from pdr_fallback import PdrFallbackEstimator, PositionEstimate
+from risk_rules import RiskRuleEvaluator, load_risk_rules
 from route_matching import GpxRoute, RoutePoint, load_gpx_route
 from route_progress import RouteProgressEvaluator, RouteProgressSample
 from safety_models import IncidentPackage, Observation, SafetyEvent, SafetyState
@@ -32,6 +33,7 @@ def replay_route(
     mission_graph_path: Path | str,
     route_path: Path | str,
     map_context_path: Path | str | None = None,
+    risk_rules_path: Path | str | None = None,
 ) -> ReplayResult:
     mission_path = Path(mission_graph_path)
     runtime = MissionGraphRuntime(load_mission_graph(mission_path))
@@ -39,10 +41,15 @@ def replay_route(
     planned_route = load_gpx_route(planned_route_path)
     route = load_gpx_route(route_path)
     offline_map_context = _load_map_context(mission_path, planned_route_path, map_context_path)
+    risk_rule_evaluator = _load_risk_rule_evaluator(mission_path, planned_route_path, risk_rules_path)
     pdr_fallback = PdrFallbackEstimator(planned_route)
     checkpoint_manager = CheckpointManager(runtime)
     progress_tracker = MissionProgressTracker(runtime)
-    route_progress_evaluator = RouteProgressEvaluator(runtime, planned_route)
+    route_progress_evaluator = RouteProgressEvaluator(
+        runtime,
+        planned_route,
+        risk_rule_evaluator=risk_rule_evaluator,
+    )
     safety_state_machine = SafetyStateMachine()
     incident_package_builder = IncidentPackageBuilder()
     checkpoint_hits: list[CheckpointArrival] = []
@@ -157,6 +164,26 @@ def _load_map_context(
     for candidate in candidates:
         if candidate.exists():
             return load_offline_map_context(candidate)
+    return None
+
+
+def _load_risk_rule_evaluator(
+    mission_graph_path: Path,
+    planned_route_path: Path,
+    risk_rules_path: Path | str | None,
+) -> RiskRuleEvaluator | None:
+    if risk_rules_path is not None:
+        return RiskRuleEvaluator(load_risk_rules(risk_rules_path))
+
+    default_name = f"{planned_route_path.stem}_rules.json"
+    candidates = [
+        Path.cwd() / "tests" / "fixtures" / "risk_rules" / default_name,
+        mission_graph_path.parent.parent / "risk_rules" / default_name,
+        mission_graph_path.parent.parent.parent / "tests" / "fixtures" / "risk_rules" / default_name,
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            return RiskRuleEvaluator(load_risk_rules(candidate))
     return None
 
 

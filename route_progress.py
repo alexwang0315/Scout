@@ -6,6 +6,7 @@ from typing import Any
 
 from geo_utils import haversine_m
 from mission_graph import MissionGraphRuntime
+from risk_rules import RiskRuleEvaluator, RiskRuleInput
 from route_matching import GpxRoute, RoutePoint
 from safety_models import SafetyEvent, SafetyEventType, SafetyLevel
 
@@ -51,10 +52,12 @@ class RouteProgressEvaluator:
         runtime: MissionGraphRuntime,
         route: GpxRoute,
         config: RouteProgressConfig | None = None,
+        risk_rule_evaluator: RiskRuleEvaluator | None = None,
     ):
         self.runtime = runtime
         self.route = route
         self.config = config or RouteProgressConfig()
+        self.risk_rule_evaluator = risk_rule_evaluator
         self.checkpoint_progress_m = self._checkpoint_progress_m()
         self.dense_checkpoint_ids = self._dense_checkpoint_ids()
         self.high_water_progress_m: float | None = None
@@ -170,6 +173,14 @@ class RouteProgressEvaluator:
                 self.hazard_started_at[hazard_id] = sample.timestamp
                 continue
 
+        rule_event = self._risk_rule_hazard_event(sample, hazards)
+        if rule_event is not None:
+            return rule_event
+
+        for hazard in hazards:
+            if "hazard_id" not in hazard:
+                continue
+            hazard_id = str(hazard["hazard_id"])
             duration_s = sample.timestamp - self.hazard_started_at[hazard_id]
             threshold_s = float(hazard.get("l2_duration_s", 30.0))
             if duration_s < threshold_s:
@@ -202,6 +213,78 @@ class RouteProgressEvaluator:
             )
 
         return None
+
+    def _risk_rule_hazard_event(
+        self,
+        sample: RouteProgressSample,
+        hazards: list[dict[str, Any]],
+    ) -> SafetyEvent | None:
+        if self.risk_rule_evaluator is None or not hazards:
+            return None
+
+        active_hazards = [hazard for hazard in hazards if "hazard_id" in hazard]
+        if not active_hazards:
+            return None
+
+        active_since = [
+            self.hazard_started_at[str(hazard["hazard_id"])]
+            for hazard in active_hazards
+            if str(hazard["hazard_id"]) in self.hazard_started_at
+        ]
+        if not active_since:
+            return None
+
+        overlap_duration_s = sample.timestamp - max(active_since)
+        map_confidences = [
+            float(hazard.get("source_metadata", {}).get("confidence", 0.0))
+            for hazard in active_hazards
+        ]
+        map_confidence = min(map_confidences) if map_confidences else 0.0
+        weak_gps = (
+            sample.estimate_source == "pdr_fallback"
+            or (
+                sample.gps_horizontal_accuracy_m is not None
+                and sample.gps_horizontal_accuracy_m > self.config.weak_gps_accuracy_threshold_m
+            )
+        )
+        hazard_types = [str(hazard.get("hazard_type", "unknown")) for hazard in active_hazards]
+        decision = self.risk_rule_evaluator.evaluate(
+            RiskRuleInput(
+                hazard_types=hazard_types,
+                duration_s=overlap_duration_s,
+                map_confidence=map_confidence,
+                weak_gps=weak_gps,
+                context={
+                    "hazard_ids": [str(hazard["hazard_id"]) for hazard in active_hazards],
+                    "position_estimate_source": sample.estimate_source,
+                    "estimate_confidence": sample.estimate_confidence,
+                    "matched_route_index": sample.route_index,
+                    "matched_progress_m": sample.progress_m,
+                },
+            )
+        )
+        if decision is None:
+            return None
+
+        key = (SafetyEventType.MAP_HAZARD, f"risk_rule:{decision.rule_id}")
+        if key in self._emitted_keys:
+            return None
+        self._emitted_keys.add(key)
+
+        details = {
+            "evidence_source": "route_specific_risk_rule",
+            "risk_rule_id": decision.rule_id,
+            "hazard_types": hazard_types,
+            **decision.details,
+        }
+        return SafetyEvent(
+            event_type=SafetyEventType.MAP_HAZARD,
+            level=decision.level,
+            timestamp=sample.timestamp,
+            reason=decision.reason,
+            confidence=decision.confidence,
+            details=details,
+        )
 
     def _weak_gps_event(self, sample: RouteProgressSample) -> SafetyEvent | None:
         accuracy = sample.gps_horizontal_accuracy_m
