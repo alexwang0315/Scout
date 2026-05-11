@@ -63,6 +63,56 @@ class RouteProgressEvaluatorTests(unittest.TestCase):
         self.assertEqual(event.event_type, SafetyEventType.ROUTE_DEVIATION)
         self.assertEqual(event.details["matched_route_index"], 10)
 
+    def test_route_deviation_prefers_map_corridor_evidence(self):
+        runtime = MissionGraphRuntime(load_mission_graph(MISSION_PATH))
+        route = load_gpx_route(ROUTE_PATH)
+        evaluator = RouteProgressEvaluator(runtime, route)
+
+        event = evaluator.observe(
+            RouteProgressSample(
+                timestamp=100.0,
+                progress_m=100.0,
+                lat=25.0,
+                lon=121.0,
+                route_distance_m=0.0,
+                route_index=10,
+                map_corridor_inside=False,
+                map_corridor_id="corridor_normal_climb",
+                map_corridor_distance_m=12.0,
+                map_corridor_allowed_distance_m=3.0,
+                map_source_metadata={"source": "synthetic_fixture"},
+            ),
+            expected_checkpoint_id=None,
+        )
+
+        self.assertIsNotNone(event)
+        self.assertEqual(event.event_type, SafetyEventType.ROUTE_DEVIATION)
+        self.assertEqual(event.details["evidence_source"], "offline_map_corridor")
+        self.assertEqual(event.details["corridor_id"], "corridor_normal_climb")
+
+    def test_route_deviation_suppressed_when_map_corridor_contains_estimate(self):
+        runtime = MissionGraphRuntime(load_mission_graph(MISSION_PATH))
+        route = load_gpx_route(ROUTE_PATH)
+        evaluator = RouteProgressEvaluator(runtime, route)
+
+        event = evaluator.observe(
+            RouteProgressSample(
+                timestamp=100.0,
+                progress_m=100.0,
+                lat=25.0,
+                lon=121.0,
+                route_distance_m=120.0,
+                route_index=10,
+                map_corridor_inside=True,
+                map_corridor_id="corridor_normal_climb",
+                map_corridor_distance_m=2.0,
+                map_corridor_allowed_distance_m=3.0,
+            ),
+            expected_checkpoint_id=None,
+        )
+
+        self.assertIsNone(event)
+
     def test_weak_gps_requires_sustained_low_accuracy_while_moving(self):
         runtime = MissionGraphRuntime(load_mission_graph(MISSION_PATH))
         route = load_gpx_route(ROUTE_PATH)

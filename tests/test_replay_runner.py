@@ -35,6 +35,10 @@ class ReplayRunnerTests(unittest.TestCase):
 
         event_types = [event.event_type for event in result.safety_events]
         self.assertIn(SafetyEventType.ROUTE_DEVIATION, event_types)
+        route_event = next(event for event in result.safety_events if event.event_type == SafetyEventType.ROUTE_DEVIATION)
+        self.assertEqual(route_event.details["evidence_source"], "offline_map_corridor")
+        self.assertEqual(route_event.details["corridor_id"], "corridor_normal_climb")
+        self.assertEqual(route_event.details["map_source_metadata"]["source"], "synthetic_fixture")
         self.assertEqual(result.safety_state.level, "L2_CONCERN")
         self.assertEqual(len(result.incident_packages), 1)
 
