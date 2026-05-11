@@ -6,6 +6,7 @@ from pathlib import Path
 from checkpoint_manager import CheckpointArrival, CheckpointManager
 from go_no_go import GoNoGoEvaluation, GoNoGoEvaluator, MissionContext, load_mission_context
 from incident_package import IncidentPackageBuilder
+from incident_store import IncidentStore
 from mission_graph import MissionGraphRuntime, load_mission_graph
 from mission_progress import MissionProgressTracker, MissionProgressUpdate
 from mission_models import SegmentCapsule
@@ -30,6 +31,7 @@ class ReplayResult:
     safety_state: SafetyState
     incident_packages: list[IncidentPackage]
     recording_decisions: list[RecordingPolicyDecision]
+    stored_incident_paths: list[Path]
 
 
 def replay_route(
@@ -38,6 +40,7 @@ def replay_route(
     map_context_path: Path | str | None = None,
     risk_rules_path: Path | str | None = None,
     mission_context_path: Path | str | None = None,
+    incident_store_path: Path | str | None = None,
 ) -> ReplayResult:
     mission_path = Path(mission_graph_path)
     runtime = MissionGraphRuntime(load_mission_graph(mission_path))
@@ -48,6 +51,7 @@ def replay_route(
     risk_rule_evaluator = _load_risk_rule_evaluator(mission_path, planned_route_path, risk_rules_path)
     mission_context = load_mission_context(mission_context_path) if mission_context_path is not None else None
     go_no_go_evaluator = GoNoGoEvaluator()
+    incident_store = IncidentStore(incident_store_path) if incident_store_path is not None else None
     pdr_fallback = PdrFallbackEstimator(planned_route)
     recording_policy_runtime = RecordingPolicyRuntime(runtime)
     checkpoint_manager = CheckpointManager(runtime)
@@ -63,6 +67,7 @@ def replay_route(
     progress_updates: list[MissionProgressUpdate] = []
     incident_packages: list[IncidentPackage] = []
     recording_decisions: list[RecordingPolicyDecision] = []
+    stored_incident_paths: list[Path] = []
 
     matched_route_index: int | None = None
     go_no_go_evaluated = False
@@ -153,6 +158,8 @@ def replay_route(
                 incident_package_builder=incident_package_builder,
                 incident_packages=incident_packages,
                 raw_window_seconds=recording_decision.raw_ring_seconds,
+                incident_store=incident_store,
+                stored_incident_paths=stored_incident_paths,
             )
         if go_no_go_evaluation is not None and go_no_go_evaluation.safety_event is not None:
             _record_safety_event(
@@ -162,6 +169,8 @@ def replay_route(
                 incident_package_builder=incident_package_builder,
                 incident_packages=incident_packages,
                 raw_window_seconds=recording_decision.raw_ring_seconds,
+                incident_store=incident_store,
+                stored_incident_paths=stored_incident_paths,
             )
 
     return ReplayResult(
@@ -173,6 +182,7 @@ def replay_route(
         safety_state=safety_state_machine.state,
         incident_packages=incident_packages,
         recording_decisions=recording_decisions,
+        stored_incident_paths=stored_incident_paths,
     )
 
 
@@ -269,6 +279,8 @@ def _record_safety_event(
     incident_package_builder: IncidentPackageBuilder,
     incident_packages: list[IncidentPackage],
     raw_window_seconds: int,
+    incident_store: IncidentStore | None,
+    stored_incident_paths: list[Path],
 ) -> None:
     progress_tracker.safety_events.append(safety_event)
     safety_state_machine.apply_event(safety_event)
@@ -280,6 +292,8 @@ def _record_safety_event(
     )
     if incident_package is not None:
         incident_packages.append(incident_package)
+        if incident_store is not None:
+            stored_incident_paths.append(incident_store.save(incident_package))
 
 
 def _active_segment_id(runtime: MissionGraphRuntime, progress_tracker: MissionProgressTracker) -> str | None:
