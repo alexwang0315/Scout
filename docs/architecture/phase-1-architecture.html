@@ -431,6 +431,7 @@
               <span class="chip">PDR / IMU</span>
               <span class="chip">Radio Signal</span>
               <span class="chip">Observation Adapter</span>
+              <span class="chip">SafetyRuntimeSession</span>
               <span class="chip">ResourceState</span>
               <span class="chip">EnvironmentState</span>
               <span class="chip">CommunicationState</span>
@@ -582,6 +583,16 @@
               <li>normal / off-route / loop</li>
               <li>weak GPS fixture</li>
               <li>optional incident store</li>
+            </ul>
+          </article>
+          <article class="node sense">
+            <h3>SafetyRuntimeSession</h3>
+            <p>Streams live observations through the same deterministic safety stack.</p>
+            <ul>
+              <li>per-observation update</li>
+              <li>checkpoint progress</li>
+              <li>map evidence</li>
+              <li>incident persistence</li>
             </ul>
           </article>
           <article class="node sense">
@@ -839,6 +850,10 @@
             <tr>
               <td><code>observation_adapter.py</code></td>
               <td>Capability-based SensorLog normalization; missing watch/iPhone RSSI is explicit evidence, not fake data</td>
+            </tr>
+            <tr>
+              <td><code>safety_runtime_session.py</code></td>
+              <td>Streaming Observation entrypoint that reuses MissionGraph, map evidence, safety state, policies, and incident packaging</td>
             </tr>
             <tr>
               <td><code>replay_runner.py</code></td>
