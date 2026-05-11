@@ -50,6 +50,11 @@ class ReplayRunnerTests(unittest.TestCase):
         self.assertEqual(route_event.details["map_source_metadata"]["source"], "synthetic_fixture")
         trigger_sample = result.incident_packages[0].raw_samples[-1]
         self.assertEqual(trigger_sample["raw"]["map_evidence"]["hazards"][0]["hazard_id"], "hazard_off_route_slope")
+        summary = result.incident_packages[0].ai_summary_input
+        self.assertEqual(summary["event"]["event_type"], "route_deviation")
+        self.assertEqual(summary["map_evidence"]["hazard_ids"], ["hazard_off_route_slope"])
+        self.assertEqual(summary["mission_context"]["recording_profile"], "raw_lock")
+        self.assertEqual(summary["route_evidence"]["position_estimate"]["source"], "gps")
         self.assertEqual(
             result.incident_packages[0].raw_window_start,
             result.incident_packages[0].triggered_at - trigger_sample["raw"]["recording_policy"]["raw_ring_seconds"],
@@ -97,6 +102,10 @@ class ReplayRunnerTests(unittest.TestCase):
         self.assertEqual(result.safety_state.level, "L2_CONCERN")
         self.assertEqual(len(result.incident_packages), 1)
         trigger_sample = result.incident_packages[0].raw_samples[-1]
+        summary = result.incident_packages[0].ai_summary_input
+        self.assertEqual(summary["event"]["event_type"], "resource_constraint")
+        self.assertEqual(summary["mission_context"]["segment_id"], "seg_01")
+        self.assertEqual(summary["go_no_go"]["decision"]["decision"], "turn_back")
         self.assertEqual(trigger_sample["raw"]["recording_policy"]["profile"], "raw_lock")
         self.assertEqual(trigger_sample["raw"]["recording_policy"]["safety_level"], "L2_CONCERN")
         self.assertEqual(trigger_sample["raw"]["go_no_go"]["decision"]["decision"], "turn_back")
