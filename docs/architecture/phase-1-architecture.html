@@ -431,6 +431,7 @@
               <span class="chip">PDR / IMU</span>
               <span class="chip">Radio Signal</span>
               <span class="chip">Observation Adapter</span>
+              <span class="chip">POST /safety/observations</span>
               <span class="chip">SafetyRuntimeSession</span>
               <span class="chip">ResourceState</span>
               <span class="chip">EnvironmentState</span>
@@ -596,6 +597,16 @@
             </ul>
           </article>
           <article class="node sense">
+            <h3>Live Safety Ingest</h3>
+            <p>Existing FastAPI app endpoint for Apple Watch and iPhone SensorLog payloads.</p>
+            <ul>
+              <li><code>POST /safety/observations</code></li>
+              <li>raw or wrapped SensorLog body</li>
+              <li>capability evidence summary</li>
+              <li><code>/pdr/update</code> unchanged</li>
+            </ul>
+          </article>
+          <article class="node sense">
             <h3>RouteContext Runtime</h3>
             <p>Matches position estimates to mission graph and map context.</p>
             <ul>
@@ -694,8 +705,9 @@
           </article>
           <article class="node response">
             <h3>Safety API Mock</h3>
-            <p>HTTP behavior before choosing a final ack/reack transport.</p>
+            <p>HTTP behavior before choosing a final ack/reack transport, plus live safety ingest.</p>
             <ul>
+              <li><code>POST /safety/observations</code></li>
               <li><code>POST /safety/ack</code></li>
               <li><code>GET /safety/state</code></li>
               <li><code>GET /safety/incidents/{id}</code></li>
@@ -856,6 +868,10 @@
               <td>Streaming Observation entrypoint that reuses MissionGraph, map evidence, safety state, policies, and incident packaging</td>
             </tr>
             <tr>
+              <td><code>POST /safety/observations</code></td>
+              <td>Live FastAPI ingest mounted on the existing app flow; accepts raw or wrapped SensorLog payloads and preserves legacy <code>/pdr/update</code></td>
+            </tr>
+            <tr>
               <td><code>replay_runner.py</code></td>
               <td>Pure replay integration for MissionGraph, map evidence, safety events, policies, and incidents</td>
             </tr>
@@ -865,7 +881,7 @@
             </tr>
             <tr>
               <td><code>safety_api.py</code></td>
-              <td>Behavioral ack/reack and incident retrieval mock from replay snapshots</td>
+              <td>Behavioral ack/reack, live observation ingest, dynamic safety state, and incident retrieval from replay or runtime snapshots</td>
             </tr>
             <tr>
               <td><code>incident_store.py</code></td>
@@ -877,7 +893,7 @@
     </section>
 
     <p class="note">
-      Phase 1 keeps safety decisions deterministic. Offline map evidence is the highest-priority static terrain reference, while GPS/PDR/IMU are noisy measurements against that context. The current baseline is replay-driven: it can demonstrate normal L0 behavior, abnormal L2 incident creation, policy-based raw windows, JSON persistence, and the safety API mock before the live Observation Layer is connected.
+      Phase 1 keeps safety decisions deterministic. Offline map evidence is the highest-priority static terrain reference, while GPS/PDR/IMU are noisy measurements against that context. The current baseline now supports both fixture replay and live SensorLog ingestion through the existing FastAPI app: normal observations remain L0, abnormal streams create L2 incidents, policy-based raw windows are preserved, and the legacy PDR update flow stays intact.
     </p>
   </main>
 </body>
