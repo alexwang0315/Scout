@@ -47,6 +47,25 @@ class IncidentPackageBuilderTests(unittest.TestCase):
 
         self.assertIsNone(package)
 
+    def test_event_can_override_raw_window_seconds(self):
+        builder = IncidentPackageBuilder(raw_window_seconds=300)
+        for timestamp in [0.0, 120.0, 180.0, 240.0, 300.0]:
+            builder.observe(Observation(timestamp=timestamp, source="test", raw={"sample": timestamp}))
+        event = SafetyEvent(
+            event_type=SafetyEventType.ROUTE_DEVIATION,
+            level=SafetyLevel.CONCERN,
+            timestamp=300.0,
+            reason="Outside approved corridor.",
+            confidence=0.85,
+        )
+
+        package = builder.build_for_event(event, raw_window_seconds=180)
+
+        self.assertIsNotNone(package)
+        self.assertEqual(package.raw_window_start, 120.0)
+        self.assertEqual(package.raw_window_end, 480.0)
+        self.assertEqual([sample["timestamp"] for sample in package.raw_samples], [120.0, 180.0, 240.0, 300.0])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -58,7 +58,7 @@ def replay_route(
         risk_rule_evaluator=risk_rule_evaluator,
     )
     safety_state_machine = SafetyStateMachine()
-    incident_package_builder = IncidentPackageBuilder()
+    incident_package_builder = IncidentPackageBuilder(raw_window_seconds=_max_raw_ring_seconds(runtime))
     checkpoint_hits: list[CheckpointArrival] = []
     progress_updates: list[MissionProgressUpdate] = []
     incident_packages: list[IncidentPackage] = []
@@ -152,6 +152,7 @@ def replay_route(
                 safety_state_machine=safety_state_machine,
                 incident_package_builder=incident_package_builder,
                 incident_packages=incident_packages,
+                raw_window_seconds=recording_decision.raw_ring_seconds,
             )
         if go_no_go_evaluation is not None and go_no_go_evaluation.safety_event is not None:
             _record_safety_event(
@@ -160,6 +161,7 @@ def replay_route(
                 safety_state_machine=safety_state_machine,
                 incident_package_builder=incident_package_builder,
                 incident_packages=incident_packages,
+                raw_window_seconds=recording_decision.raw_ring_seconds,
             )
 
     return ReplayResult(
@@ -266,6 +268,7 @@ def _record_safety_event(
     safety_state_machine: SafetyStateMachine,
     incident_package_builder: IncidentPackageBuilder,
     incident_packages: list[IncidentPackage],
+    raw_window_seconds: int,
 ) -> None:
     progress_tracker.safety_events.append(safety_event)
     safety_state_machine.apply_event(safety_event)
@@ -273,6 +276,7 @@ def _record_safety_event(
         safety_event,
         segment_capsules=progress_tracker.segment_capsules,
         safety_transitions=safety_state_machine.state.transitions,
+        raw_window_seconds=raw_window_seconds,
     )
     if incident_package is not None:
         incident_packages.append(incident_package)
@@ -286,6 +290,12 @@ def _active_segment_id(runtime: MissionGraphRuntime, progress_tracker: MissionPr
 
     segment = runtime.segment_between(current_checkpoint_id, expected_checkpoint_id)
     return segment.segment_id if segment is not None else None
+
+
+def _max_raw_ring_seconds(runtime: MissionGraphRuntime) -> int:
+    if not runtime.graph.recording_policies:
+        return 300
+    return max(policy.raw_ring_seconds for policy in runtime.graph.recording_policies)
 
 
 def _route_progress_sample(

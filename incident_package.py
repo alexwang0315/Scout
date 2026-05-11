@@ -39,12 +39,14 @@ class IncidentPackageBuilder:
         event: SafetyEvent,
         segment_capsules: list[SegmentCapsule] | None = None,
         safety_transitions: list[SafetyTransition] | None = None,
+        raw_window_seconds: int | None = None,
     ) -> IncidentPackage | None:
         if event.level not in {SafetyLevel.CONCERN, SafetyLevel.DISTRESS, SafetyLevel.EMERGENCY}:
             return None
 
-        raw_window_start = event.timestamp - self.raw_window_seconds
-        raw_window_end = event.timestamp + self.raw_window_seconds
+        window_seconds = raw_window_seconds or self.raw_window_seconds
+        raw_window_start = event.timestamp - window_seconds
+        raw_window_end = event.timestamp + window_seconds
         capsules = segment_capsules or []
 
         return IncidentPackage(
