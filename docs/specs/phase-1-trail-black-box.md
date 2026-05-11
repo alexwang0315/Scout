@@ -34,8 +34,9 @@ The current Phase 1 baseline is replay-driven and deterministic. It includes:
 - `phase1_replay_demo.py` for running the full Phase 1 replay pipeline from the command line.
 - `observation_adapter.py` for capability-based SensorLog/Apple Watch/iPhone payload normalization into `Observation`.
 - `SafetyRuntimeSession` for streaming normalized observations through MissionGraph, offline map evidence, route progress, recording policy, and incident package logic.
+- Live FastAPI safety ingest at `POST /safety/observations`, mounted on the existing server app without changing `/pdr/update`.
 
-This snapshot remains synthetic-map and fixture-first. It is ready for real Apple Watch/GPX and real local map fixture trials. The Observation Layer now has payload normalization and a streaming safety runtime session, but the existing FastAPI `/pdr/update` endpoint is not yet wired into that session.
+This snapshot remains synthetic-map and fixture-first. It is ready for real Apple Watch/GPX and real local map fixture trials. The Observation Layer now has payload normalization, a streaming safety runtime session, and a live FastAPI ingest endpoint. The legacy `/pdr/update` endpoint remains unchanged for the Wi-Fi/PDR prototype flow.
 
 ### In Scope
 
@@ -568,7 +569,7 @@ Current Phase 1 runtime files:
 - `safety_state_machine.py`: L0-L4 state machine.
 - `incident_package.py`: raw sample buffer, incident package creation, and structured evidence summary input.
 - `incident_store.py`: local JSON persistence and retrieval for incident packages.
-- `safety_api.py`: Phase 1 ack/reack and incident retrieval API mock.
+- `safety_api.py`: Phase 1 ack/reack, incident retrieval, and live observation ingest API.
 - `route_matching.py`: GPX/GeoJSON route matching.
 - `offline_map_models.py`: map corridor, hazard, POI, and source metadata models.
 - `offline_map.py`: fixture-backed offline map context loading and spatial evidence checks.
@@ -581,6 +582,7 @@ Current Phase 1 runtime files:
 - `recording_policy_runtime.py`: active segment/control-zone recording profile decisions and raw-ring duration.
 - `observation_adapter.py`: capability-based SensorLog/Apple Watch/iPhone payload normalization into `Observation`.
 - `safety_runtime_session.py`: streaming runtime session for live `Observation` input using the same Phase 1 evaluator stack.
+- `server.py`: existing FastAPI app flow with `/safety/observations` mounted beside the legacy `/pdr/update`.
 - `replay_runner.py`: offline replay from sample data.
 - `phase1_replay_demo.py`: command-line Phase 1 runtime demo and JSON summary output.
 - `tests/fixtures/routes/`: normal and generated abnormal routes.
@@ -797,6 +799,7 @@ The replay baseline should satisfy these deterministic checks:
   - incident raw window follows the active policy `raw_ring_seconds`.
 - Safety API mock:
   - `/safety/ack` returns safety state, latest incident id, package availability, and last known position.
+  - `/safety/observations` accepts SensorLog payloads, feeds `SafetyRuntimeSession`, and returns accepted observation count, safety level/events, recording profiles, checkpoint arrivals, incident ids, stored paths, and latest capability evidence.
   - `/safety/incidents/{incident_id}` returns persisted incident package JSON.
   - `/safety/checkins` and `/safety/capsules/{capsule_id}` expose checkpoint/capsule evidence.
 - Demo CLI:
@@ -810,9 +813,12 @@ The replay baseline should satisfy these deterministic checks:
   - Missing-GPS observations preserve recording policy evidence without route events.
   - SensorLog observations flow through route matching, offline map corridor evidence, and recording policy decisions.
   - Off-route observation streams can trigger L2, build an incident package, and persist incident JSON without GPX replay.
+- Existing app flow:
+  - `server.app` registers both `/pdr/update` and `/safety/observations`.
+  - `/pdr/update` remains the legacy Wi-Fi/PDR/AI-worker path; Phase 1 safety ingest is additive.
 - Full test suite:
   - `./venv/bin/python -m pytest tests -q`
-  - current expected result: `72 passed, 4 subtests passed`.
+  - current expected result: `77 passed, 4 subtests passed`.
 
 ## Open Questions
 

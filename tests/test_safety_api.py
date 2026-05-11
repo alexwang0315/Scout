@@ -6,12 +6,16 @@ from fastapi.testclient import TestClient
 
 from incident_store import IncidentStore
 from replay_runner import replay_route
-from safety_api import create_safety_app, snapshot_from_replay_result
+from route_matching import RoutePoint, load_gpx_route
+from safety_api import SafetyApiSnapshot, create_safety_app, snapshot_from_replay_result
+from safety_models import SafetyEventType, SafetyState
+from safety_runtime_session import SafetyRuntimeSession
 
 
 ROOT = Path(__file__).resolve().parents[1]
 MISSION_PATH = ROOT / "tests" / "fixtures" / "mission_graph" / "normal_climb_mission.json"
 OFF_ROUTE_PATH = ROOT / "tests" / "fixtures" / "routes" / "off_route_deviation.gpx"
+ROUTE_PATH = ROOT / "tests" / "fixtures" / "routes" / "normal_climb.gpx"
 
 
 class SafetyApiTests(unittest.TestCase):
@@ -67,6 +71,119 @@ class SafetyApiTests(unittest.TestCase):
 
         self.assertEqual(client.get("/safety/incidents/missing").status_code, 404)
         self.assertEqual(client.get("/safety/capsules/missing").status_code, 404)
+
+    def test_live_observation_ingest_accepts_sensorlog_payload(self):
+        point = load_gpx_route(ROUTE_PATH).points[0]
+        session = SafetyRuntimeSession(MISSION_PATH)
+        client = TestClient(
+            create_safety_app(
+                SafetyApiSnapshot(safety_state=SafetyState()),
+                runtime_session=session,
+            )
+        )
+
+        response = client.post(
+            "/safety/observations",
+            json={
+                "payload": _sensorlog_record_from_point(point),
+                "device": "apple_watch",
+                "received_at": 1.0,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["observations_accepted"], 1)
+        self.assertEqual(payload["safety_level"], "L0_NORMAL")
+        self.assertEqual(payload["snapshot"]["observations_processed"], 1)
+        self.assertEqual(payload["latest_capabilities"]["wifi_rssi"]["status"], "unavailable_by_platform")
+        self.assertEqual(payload["recording_profiles"], ["low"])
+
+    def test_live_observation_ingest_accepts_raw_batch_body(self):
+        route = load_gpx_route(ROUTE_PATH)
+        session = SafetyRuntimeSession(MISSION_PATH)
+        client = TestClient(
+            create_safety_app(
+                SafetyApiSnapshot(safety_state=SafetyState()),
+                runtime_session=session,
+            )
+        )
+
+        response = client.post(
+            "/safety/observations",
+            json={"imu_data": [_sensorlog_record_from_point(point) for point in route.points[:2]]},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["observations_accepted"], 2)
+        self.assertEqual(payload["snapshot"]["observations_processed"], 2)
+        self.assertEqual(payload["safety_events"], [])
+
+    def test_live_observation_ingest_rejects_invalid_payload(self):
+        session = SafetyRuntimeSession(MISSION_PATH)
+        client = TestClient(
+            create_safety_app(
+                SafetyApiSnapshot(safety_state=SafetyState()),
+                runtime_session=session,
+            )
+        )
+
+        response = client.post("/safety/observations", json={"payload": "not-sensorlog"})
+
+        self.assertEqual(response.status_code, 422)
+
+    def test_live_observation_ingest_triggers_l2_and_dynamic_state(self):
+        route = load_gpx_route(OFF_ROUTE_PATH)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            session = SafetyRuntimeSession(MISSION_PATH, incident_store_path=tmpdir)
+            client = TestClient(
+                create_safety_app(
+                    SafetyApiSnapshot(safety_state=SafetyState()),
+                    incident_store=IncidentStore(tmpdir),
+                    runtime_session=session,
+                )
+            )
+
+            response = client.post(
+                "/safety/observations",
+                json={
+                    "payload": {
+                        "imu_data": [_sensorlog_record_from_point(point) for point in route.points]
+                    },
+                    "device": "apple_watch",
+                },
+            )
+
+            self.assertEqual(response.status_code, 200)
+            payload = response.json()
+            self.assertEqual(payload["safety_level"], "L2_CONCERN")
+            self.assertIn(
+                SafetyEventType.ROUTE_DEVIATION,
+                [event["event_type"] for event in payload["safety_events"]],
+            )
+            self.assertEqual(len(payload["incident_ids"]), 1)
+            self.assertEqual(len(payload["stored_incident_paths"]), 1)
+
+            state = client.get("/safety/state")
+            self.assertEqual(state.status_code, 200)
+            self.assertEqual(state.json()["safety_state"]["level"], "L2_CONCERN")
+            self.assertEqual(state.json()["latest_incident_id"], payload["incident_ids"][0])
+
+
+def _sensorlog_record_from_point(point: RoutePoint) -> dict:
+    return {
+        "loggingTime": point.timestamp,
+        "locationLatitude": str(point.lat),
+        "locationLongitude": str(point.lon),
+        "locationAltitude": str(point.elevation_m) if point.elevation_m is not None else None,
+        "locationHorizontalAccuracy": (
+            str(point.gps_horizontal_accuracy_m) if point.gps_horizontal_accuracy_m is not None else "8.0"
+        ),
+        "pedometerDistance": point.pedometer_distance_m,
+        "pedometerNumberOfSteps": point.pedometer_steps,
+        "accelerometerAccelerationX": "0.1",
+    }
 
 
 if __name__ == "__main__":

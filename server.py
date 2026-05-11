@@ -3,6 +3,7 @@ import logging
 import os
 from contextlib import asynccontextmanager
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 import matplotlib
@@ -19,6 +20,9 @@ from macos_wifi import MacOSWifiWorld
 from pdr_engine import pdr
 from sensor_decoder import SensorLogDecoder
 from movement_summary import MovementAggregator, RawSensorSample
+from safety_api import SafetyApiSnapshot, create_safety_router
+from safety_models import SafetyState
+from safety_runtime_session import SafetyRuntimeSession
 from shared_queue import pdr_event_queue
 from visualize_signal import generate_heatmap
 
@@ -26,6 +30,17 @@ load_dotenv(os.path.expanduser("~/scout-fusion/.env"))
 
 DEBUG = os.getenv("SCOUT_DEBUG", "false").lower() == "true"
 PORT = int(os.getenv("SCOUT_PORT", "9099"))
+SCOUT_SAFETY_ENABLED = os.getenv("SCOUT_SAFETY_ENABLED", "true").lower() == "true"
+SCOUT_ROOT = Path(__file__).resolve().parent
+SCOUT_SAFETY_MISSION_GRAPH = Path(
+    os.getenv(
+        "SCOUT_SAFETY_MISSION_GRAPH",
+        str(SCOUT_ROOT / "tests" / "fixtures" / "mission_graph" / "normal_climb_mission.json"),
+    )
+)
+SCOUT_SAFETY_INCIDENT_STORE = Path(
+    os.getenv("SCOUT_SAFETY_INCIDENT_STORE", os.path.expanduser("~/.scout-fusion/incidents"))
+)
 
 log_level = logging.DEBUG if DEBUG else logging.INFO
 logging.basicConfig(level=log_level, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -72,6 +87,17 @@ executor = ThreadPoolExecutor(max_workers=4)
 last_instruction = "等待初始化..."
 latest_summary_result: Optional[Dict[str, Any]] = None
 _worker_task: Optional[asyncio.Task] = None
+safety_runtime_session: Optional[SafetyRuntimeSession] = None
+
+if SCOUT_SAFETY_ENABLED:
+    try:
+        safety_runtime_session = SafetyRuntimeSession(
+            SCOUT_SAFETY_MISSION_GRAPH,
+            incident_store_path=SCOUT_SAFETY_INCIDENT_STORE,
+        )
+        logger.info("Phase 1 safety runtime enabled: %s", SCOUT_SAFETY_MISSION_GRAPH)
+    except Exception as exc:
+        logger.exception("Phase 1 safety runtime disabled after initialization failure: %s", exc)
 
 
 def _result_text(result: Any) -> str:
@@ -194,6 +220,13 @@ async def ai_decision_worker() -> None:
 
 
 app.include_router(imu_router)
+app.include_router(
+    create_safety_router(
+        SafetyApiSnapshot(safety_state=SafetyState()),
+        incident_store=safety_runtime_session.incident_store if safety_runtime_session else None,
+        runtime_session=safety_runtime_session,
+    )
+)
 
 
 @app.get("/")
