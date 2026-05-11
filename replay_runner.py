@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from checkpoint_manager import CheckpointArrival, CheckpointManager
+from go_no_go import GoNoGoEvaluation, GoNoGoEvaluator, MissionContext, load_mission_context
 from incident_package import IncidentPackageBuilder
 from mission_graph import MissionGraphRuntime, load_mission_graph
 from mission_progress import MissionProgressTracker, MissionProgressUpdate
@@ -34,6 +35,7 @@ def replay_route(
     route_path: Path | str,
     map_context_path: Path | str | None = None,
     risk_rules_path: Path | str | None = None,
+    mission_context_path: Path | str | None = None,
 ) -> ReplayResult:
     mission_path = Path(mission_graph_path)
     runtime = MissionGraphRuntime(load_mission_graph(mission_path))
@@ -42,6 +44,8 @@ def replay_route(
     route = load_gpx_route(route_path)
     offline_map_context = _load_map_context(mission_path, planned_route_path, map_context_path)
     risk_rule_evaluator = _load_risk_rule_evaluator(mission_path, planned_route_path, risk_rules_path)
+    mission_context = load_mission_context(mission_context_path) if mission_context_path is not None else None
+    go_no_go_evaluator = GoNoGoEvaluator()
     pdr_fallback = PdrFallbackEstimator(planned_route)
     checkpoint_manager = CheckpointManager(runtime)
     progress_tracker = MissionProgressTracker(runtime)
@@ -57,6 +61,7 @@ def replay_route(
     incident_packages: list[IncidentPackage] = []
 
     matched_route_index: int | None = None
+    go_no_go_evaluated = False
     for index, point in enumerate(route.points):
         position_estimate = pdr_fallback.estimate(
             timestamp=float(index),
@@ -71,6 +76,15 @@ def replay_route(
             planned_route=planned_route,
             offline_map_context=offline_map_context,
         )
+        go_no_go_evaluation = _go_no_go_evaluation(
+            runtime=runtime,
+            mission_context=mission_context,
+            evaluator=go_no_go_evaluator,
+            timestamp=float(index),
+            already_evaluated=go_no_go_evaluated,
+        )
+        if go_no_go_evaluation is not None:
+            go_no_go_evaluated = True
         observation = Observation(
             timestamp=float(index),
             source="gpx_replay",
@@ -99,6 +113,7 @@ def replay_route(
                     },
                     "hazards": progress_sample.map_hazards or [],
                 },
+                "go_no_go": _go_no_go_raw(go_no_go_evaluation),
             },
         )
         incident_package_builder.observe(observation)
@@ -110,15 +125,21 @@ def replay_route(
             progress_updates.append(progress_update)
         safety_event = route_progress_evaluator.observe(progress_sample, progress_tracker.expected_checkpoint_id)
         if safety_event is not None:
-            progress_tracker.safety_events.append(safety_event)
-            safety_state_machine.apply_event(safety_event)
-            incident_package = incident_package_builder.build_for_event(
-                safety_event,
-                segment_capsules=progress_tracker.segment_capsules,
-                safety_transitions=safety_state_machine.state.transitions,
+            _record_safety_event(
+                safety_event=safety_event,
+                progress_tracker=progress_tracker,
+                safety_state_machine=safety_state_machine,
+                incident_package_builder=incident_package_builder,
+                incident_packages=incident_packages,
             )
-            if incident_package is not None:
-                incident_packages.append(incident_package)
+        if go_no_go_evaluation is not None and go_no_go_evaluation.safety_event is not None:
+            _record_safety_event(
+                safety_event=go_no_go_evaluation.safety_event,
+                progress_tracker=progress_tracker,
+                safety_state_machine=safety_state_machine,
+                incident_package_builder=incident_package_builder,
+                incident_packages=incident_packages,
+            )
 
     return ReplayResult(
         observations_processed=len(route.points),
@@ -185,6 +206,54 @@ def _load_risk_rule_evaluator(
         if candidate.exists():
             return RiskRuleEvaluator(load_risk_rules(candidate))
     return None
+
+
+def _go_no_go_evaluation(
+    *,
+    runtime: MissionGraphRuntime,
+    mission_context: MissionContext | None,
+    evaluator: GoNoGoEvaluator,
+    timestamp: float,
+    already_evaluated: bool,
+) -> GoNoGoEvaluation | None:
+    if mission_context is None or already_evaluated:
+        return None
+
+    segment_id = mission_context.route_context.get("current_segment_id")
+    if not segment_id:
+        return None
+
+    segment = runtime.current_segment(segment_id)
+    return evaluator.evaluate(segment, mission_context, timestamp=timestamp)
+
+
+def _go_no_go_raw(evaluation: GoNoGoEvaluation | None) -> dict | None:
+    if evaluation is None:
+        return None
+
+    return {
+        "decision": evaluation.decision.model_dump(mode="json"),
+        "safety_event": evaluation.safety_event.model_dump(mode="json") if evaluation.safety_event else None,
+    }
+
+
+def _record_safety_event(
+    *,
+    safety_event: SafetyEvent,
+    progress_tracker: MissionProgressTracker,
+    safety_state_machine: SafetyStateMachine,
+    incident_package_builder: IncidentPackageBuilder,
+    incident_packages: list[IncidentPackage],
+) -> None:
+    progress_tracker.safety_events.append(safety_event)
+    safety_state_machine.apply_event(safety_event)
+    incident_package = incident_package_builder.build_for_event(
+        safety_event,
+        segment_capsules=progress_tracker.segment_capsules,
+        safety_transitions=safety_state_machine.state.transitions,
+    )
+    if incident_package is not None:
+        incident_packages.append(incident_package)
 
 
 def _route_progress_sample(
