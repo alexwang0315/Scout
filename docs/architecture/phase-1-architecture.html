@@ -1,0 +1,754 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Scout Phase 1 Architecture</title>
+  <style>
+    :root {
+      --bg: #f7f9f6;
+      --ink: #17201b;
+      --muted: #59665e;
+      --line: #b9c6bc;
+      --green: #246b50;
+      --green-soft: #d9ece3;
+      --blue: #255f85;
+      --blue-soft: #d8e9f4;
+      --amber: #8b6421;
+      --amber-soft: #f3e6c8;
+      --violet: #5e4c8a;
+      --violet-soft: #e5e0f1;
+      --red: #8d3a32;
+      --red-soft: #f1d9d5;
+      --gray-soft: #e7ebe6;
+      --white: #ffffff;
+      --shadow: 0 10px 28px rgba(23, 32, 27, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.45;
+    }
+
+    main {
+      width: min(1280px, calc(100vw - 32px));
+      margin: 0 auto;
+      padding: 32px 0 48px;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      gap: 24px;
+      align-items: end;
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 18px;
+      margin-bottom: 24px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 30px;
+      font-weight: 760;
+      letter-spacing: 0;
+    }
+
+    .subtitle {
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-size: 15px;
+      max-width: 780px;
+    }
+
+    .badge {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 8px 12px;
+      color: var(--green);
+      background: var(--white);
+      font-size: 13px;
+      white-space: nowrap;
+    }
+
+    .diagram {
+      display: grid;
+      grid-template-columns: 1.05fr 1.1fr 1.1fr 1.15fr 1fr;
+      gap: 18px;
+      align-items: stretch;
+    }
+
+    .system-section {
+      margin-bottom: 26px;
+    }
+
+    .system-shell {
+      background: var(--white);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+      padding: 18px;
+    }
+
+    .block-diagram {
+      display: grid;
+      grid-template-columns: 1fr 40px 1fr 40px 1.1fr 40px 1.15fr 40px 1fr;
+      align-items: center;
+      gap: 0;
+    }
+
+    .block {
+      min-height: 132px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+      background: var(--gray-soft);
+    }
+
+    .block h2,
+    .block h3 {
+      margin: 0 0 8px;
+      font-size: 16px;
+    }
+
+    .block p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .block .mini-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 12px;
+    }
+
+    .chip {
+      border: 1px solid rgba(23, 32, 27, 0.18);
+      border-radius: 999px;
+      padding: 4px 8px;
+      background: rgba(255, 255, 255, 0.65);
+      color: var(--ink);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .arrow {
+      position: relative;
+      height: 2px;
+      background: var(--line);
+      margin: 0 8px;
+    }
+
+    .arrow::after {
+      content: "";
+      position: absolute;
+      right: -1px;
+      top: -5px;
+      width: 10px;
+      height: 10px;
+      border-top: 2px solid var(--line);
+      border-right: 2px solid var(--line);
+      transform: rotate(45deg);
+      background: var(--white);
+    }
+
+    .feedback-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-top: 12px;
+    }
+
+    .feedback {
+      border: 1px dashed var(--line);
+      border-radius: 8px;
+      padding: 12px;
+      color: var(--muted);
+      font-size: 13px;
+      background: #fbfcfa;
+    }
+
+    .feedback strong {
+      display: block;
+      color: var(--ink);
+      margin-bottom: 4px;
+    }
+
+    .lane {
+      min-width: 0;
+    }
+
+    .lane-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0 0 10px;
+      font-size: 14px;
+      font-weight: 760;
+      text-transform: uppercase;
+      color: var(--muted);
+      letter-spacing: 0.04em;
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--green);
+    }
+
+    .stack {
+      display: grid;
+      gap: 12px;
+    }
+
+    .node {
+      background: var(--white);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+      box-shadow: var(--shadow);
+      min-height: 96px;
+    }
+
+    .node h2,
+    .node h3 {
+      margin: 0 0 8px;
+      font-size: 16px;
+      letter-spacing: 0;
+    }
+
+    .node p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .node ul {
+      margin: 10px 0 0;
+      padding-left: 18px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .node li + li {
+      margin-top: 4px;
+    }
+
+    .mission { border-color: #83b49f; background: var(--green-soft); }
+    .map { border-color: #a49ac9; background: var(--violet-soft); }
+    .sense { border-color: #8eb9d1; background: var(--blue-soft); }
+    .decision { border-color: #d2b66d; background: var(--amber-soft); }
+    .response { border-color: #cf948d; background: var(--red-soft); }
+    .store { background: var(--gray-soft); }
+
+    .flow {
+      position: relative;
+      margin: 26px 0;
+      height: 44px;
+      border-top: 2px solid var(--line);
+    }
+
+    .flow::after {
+      content: "";
+      position: absolute;
+      right: 0;
+      top: -7px;
+      width: 12px;
+      height: 12px;
+      border-top: 2px solid var(--line);
+      border-right: 2px solid var(--line);
+      transform: rotate(45deg);
+      background: var(--bg);
+    }
+
+    .flow-labels {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 18px;
+      margin-top: -50px;
+      margin-bottom: 22px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .flow-labels span {
+      background: var(--bg);
+      width: fit-content;
+      padding-right: 8px;
+    }
+
+    .matrix {
+      margin-top: 24px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--white);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: var(--shadow);
+      font-size: 13px;
+    }
+
+    th,
+    td {
+      text-align: left;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+    }
+
+    th {
+      background: #eef3ee;
+      color: var(--ink);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .section-title {
+      margin: 0 0 10px;
+      font-size: 18px;
+    }
+
+    .note {
+      margin-top: 20px;
+      border-left: 4px solid var(--green);
+      background: var(--white);
+      padding: 14px 16px;
+      color: var(--muted);
+      border-radius: 6px;
+      font-size: 14px;
+    }
+
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.95em;
+    }
+
+    @media (max-width: 960px) {
+      header {
+        display: block;
+      }
+
+      .badge {
+        display: inline-block;
+        margin-top: 14px;
+      }
+
+      .diagram,
+      .matrix,
+      .block-diagram,
+      .feedback-row {
+        grid-template-columns: 1fr;
+      }
+
+      .arrow {
+        width: 2px;
+        height: 28px;
+        margin: 8px auto;
+      }
+
+      .arrow::after {
+        right: -5px;
+        top: auto;
+        bottom: -1px;
+        transform: rotate(135deg);
+      }
+
+      .flow,
+      .flow-labels {
+        display: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <h1>Scout Phase 1 Architecture</h1>
+        <p class="subtitle">MissionGraph-driven safety black box with offline map evidence as the highest-priority static terrain reference. Checkpoints seal history into capsules. Raw detail stays short unless L2+ risk locks the incident window.</p>
+      </div>
+      <div class="badge">Phase 1: synthetic maps, mock providers, offline replay</div>
+    </header>
+
+    <section class="system-section" aria-label="System Block Diagram">
+      <h2 class="section-title">System Block Diagram</h2>
+      <div class="system-shell">
+        <div class="block-diagram">
+          <article class="block mission">
+            <h2>Mission Planning Layer</h2>
+            <p>Pre-trip route intent defines the mission path and required decisions.</p>
+            <div class="mini-list">
+              <span class="chip">MissionGraph</span>
+              <span class="chip">Checkpoints</span>
+              <span class="chip">Control Zones</span>
+              <span class="chip">Segment Requirements</span>
+            </div>
+          </article>
+
+          <div class="arrow" aria-hidden="true"></div>
+
+          <article class="block map">
+            <h2>Offline Map Evidence</h2>
+            <p>Static terrain and corridor facts arbitrate noisy device tracks.</p>
+            <div class="mini-list">
+              <span class="chip">Synthetic GeoJSON</span>
+              <span class="chip">Trail Corridor</span>
+              <span class="chip">Hazard Zones</span>
+              <span class="chip">POI / Terrain</span>
+              <span class="chip">Map Confidence</span>
+            </div>
+          </article>
+
+          <div class="arrow" aria-hidden="true"></div>
+
+          <article class="block sense">
+            <h2>Observation Layer</h2>
+            <p>Runtime sensors and mock providers normalize into mission state.</p>
+            <div class="mini-list">
+              <span class="chip">GPS</span>
+              <span class="chip">PDR / IMU</span>
+              <span class="chip">Radio Signal</span>
+              <span class="chip">ResourceState</span>
+              <span class="chip">EnvironmentState</span>
+              <span class="chip">CommunicationState</span>
+            </div>
+          </article>
+
+          <div class="arrow" aria-hidden="true"></div>
+
+          <article class="block decision">
+            <h2>Safety Decision Core</h2>
+            <p>Deterministic services compare position estimates against mission and map evidence.</p>
+            <div class="mini-list">
+              <span class="chip">Map Corridor Check</span>
+              <span class="chip">Route Matching</span>
+              <span class="chip">PDR Fallback</span>
+              <span class="chip">CheckpointManager</span>
+              <span class="chip">SafetyStateMachine</span>
+              <span class="chip">Go / No-Go</span>
+              <span class="chip">RecordingPolicy</span>
+            </div>
+          </article>
+
+          <div class="arrow" aria-hidden="true"></div>
+
+          <article class="block response">
+            <h2>Evidence + Response Layer</h2>
+            <p>Normal history is compressed. Risk windows preserve raw detail. Actions stay bounded.</p>
+            <div class="mini-list">
+              <span class="chip">SegmentCapsule</span>
+              <span class="chip">IncidentPackage</span>
+              <span class="chip">ack/reack mock</span>
+              <span class="chip">remote alert mock</span>
+              <span class="chip">Responder Summary</span>
+            </div>
+          </article>
+        </div>
+
+        <div class="feedback-row">
+          <div class="feedback">
+            <strong>Normal path</strong>
+            Inside approved map corridor → checkpoint reached → previous segment sealed → capsule/check-in available → raw ring buffer shrinks.
+          </div>
+          <div class="feedback">
+            <strong>Risk path</strong>
+            Outside corridor or inside hazard for threshold duration → L2+ trigger → raw window locks from trigger -5 min to trigger +5 min.
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="diagram" aria-label="Phase 1 architecture diagram">
+      <div class="lane">
+        <p class="lane-title"><span class="dot"></span>Pre-trip Mission</p>
+        <div class="stack">
+          <article class="node mission">
+            <h2>RouteMissionAgent</h2>
+            <p>Builds mission context before departure.</p>
+            <ul>
+              <li>planned GPX route</li>
+              <li>checkpoint draft</li>
+              <li>segment intent</li>
+            </ul>
+          </article>
+          <article class="node mission">
+            <h3>MissionGraph</h3>
+            <p>Route semantics for runtime.</p>
+            <ul>
+              <li><code>Checkpoint</code></li>
+              <li><code>ControlZone</code></li>
+              <li><code>SegmentRequirement</code></li>
+              <li><code>DiversionPoint</code></li>
+            </ul>
+          </article>
+          <article class="node mission">
+            <h3>Provider Fixtures</h3>
+            <p>Mock external context now. Real APIs later.</p>
+            <ul>
+              <li><code>ResourceState</code></li>
+              <li><code>EnvironmentState</code></li>
+              <li><code>CommunicationState</code></li>
+            </ul>
+          </article>
+        </div>
+      </div>
+
+      <div class="lane">
+        <p class="lane-title"><span class="dot"></span>Map Evidence</p>
+        <div class="stack">
+          <article class="node map">
+            <h2>OfflineMapContext</h2>
+            <p>Fixture-backed static terrain evidence for Phase 1.</p>
+            <ul>
+              <li>synthetic GeoJSON</li>
+              <li>source metadata</li>
+              <li>confidence / staleness</li>
+            </ul>
+          </article>
+          <article class="node map">
+            <h3>Approved Corridor</h3>
+            <p>Trail geometry is the primary reference, not the wearable track.</p>
+            <ul>
+              <li>route-level width</li>
+              <li>3m default half-width</li>
+              <li>weak GPS uncertainty gate</li>
+            </ul>
+          </article>
+          <article class="node map">
+            <h3>Hazard Evidence</h3>
+            <p>Mapped risk zones become deterministic L2 candidates.</p>
+            <ul>
+              <li>river / cliff / landslide</li>
+              <li>steep slope zone</li>
+              <li>30s sustained entry</li>
+            </ul>
+          </article>
+        </div>
+      </div>
+
+      <div class="lane">
+        <p class="lane-title"><span class="dot"></span>Runtime Sensing</p>
+        <div class="stack">
+          <article class="node sense">
+            <h2>RecorderAgent</h2>
+            <p>Normalizes local sensor stream into observations.</p>
+            <ul>
+              <li>GPS / PDR / IMU</li>
+              <li>radio signal</li>
+              <li>heart rate / pace</li>
+              <li>device battery</li>
+            </ul>
+          </article>
+          <article class="node sense">
+            <h3>Raw Ring Buffer</h3>
+            <p>Small rolling raw window. Not full-trip raw storage.</p>
+            <ul>
+              <li>default 2-5 min</li>
+              <li>reset/reduce after checkpoint</li>
+              <li>lock on L2+</li>
+            </ul>
+          </article>
+          <article class="node sense">
+            <h3>RouteContextAgent</h3>
+            <p>Matches position estimates to mission graph and map context.</p>
+            <ul>
+              <li>route match confidence</li>
+              <li>corridor membership</li>
+              <li>checkpoint arrival</li>
+              <li>zone transition</li>
+              <li>deviation / hazard signals</li>
+            </ul>
+          </article>
+        </div>
+      </div>
+
+      <div class="lane">
+        <p class="lane-title"><span class="dot"></span>Deterministic Core</p>
+        <div class="stack">
+          <article class="node decision">
+            <h2>CheckpointManager</h2>
+            <p>Turns route progress into sealed mission history.</p>
+            <ul>
+              <li>arrival radius check</li>
+              <li>seal previous segment</li>
+              <li>emit check-in</li>
+              <li>apply next policy</li>
+            </ul>
+          </article>
+          <article class="node decision">
+            <h3>SafetyStateMachine</h3>
+            <p>Auditable L0-L4 escalation. No LLM authority.</p>
+            <ul>
+              <li>map corridor deviation</li>
+              <li>hazard-zone entry</li>
+              <li>weak GPS + PDR fallback</li>
+              <li>unsafe continuation</li>
+              <li>missed checkpoint</li>
+            </ul>
+          </article>
+          <article class="node decision">
+            <h3>Go / No-Go</h3>
+            <p>Preventive segment decision.</p>
+            <ul>
+              <li>continue / hold</li>
+              <li>rest / turn back</li>
+              <li>divert / camp</li>
+            </ul>
+          </article>
+        </div>
+      </div>
+
+      <div class="lane">
+        <p class="lane-title"><span class="dot"></span>Evidence + Response</p>
+        <div class="stack">
+          <article class="node store">
+            <h2>SegmentCapsule Store</h2>
+            <p>Compressed normal history after checkpoint passage.</p>
+            <ul>
+              <li>trajectory summary</li>
+              <li>sensor summary</li>
+              <li>signal/resource summary</li>
+              <li>evidence hash</li>
+            </ul>
+          </article>
+          <article class="node response">
+            <h3>IncidentStore</h3>
+            <p>Lossless raw window when L2+ triggers.</p>
+            <ul>
+              <li>trigger -5 min</li>
+              <li>trigger +5 min</li>
+              <li>state transitions</li>
+              <li>AI summary input</li>
+            </ul>
+          </article>
+          <article class="node response">
+            <h3>EmergencyActionExecutor</h3>
+            <p>Executes only allowed actions.</p>
+            <ul>
+              <li>ack/reack mock</li>
+              <li>capsule upload mock</li>
+              <li>remote alert mock</li>
+              <li>beacon mode later</li>
+            </ul>
+          </article>
+          <article class="node response">
+            <h3>ResponderSummaryAgent</h3>
+            <p>Reads packages. Writes human summary. No escalation control.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <div class="flow" aria-hidden="true"></div>
+    <div class="flow-labels" aria-hidden="true">
+      <span>plan route</span>
+      <span>load map evidence</span>
+      <span>observe + estimate</span>
+      <span>decide deterministically</span>
+      <span>seal / alert / summarize</span>
+    </div>
+
+    <section class="matrix">
+      <div>
+        <h2 class="section-title">Safety Level Behavior</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Level</th>
+              <th>Meaning</th>
+              <th>Phase 1 action</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>L0</td>
+              <td>Normal route progress</td>
+              <td>low/medium recording, checkpoint capsule sealing</td>
+            </tr>
+            <tr>
+              <td>L1</td>
+              <td>Uncertainty rises</td>
+              <td>increase recording, retain richer summaries</td>
+            </tr>
+            <tr>
+              <td>L2</td>
+              <td>Concern</td>
+              <td>open incident, lock raw window, record map evidence, recommend go/no-go</td>
+            </tr>
+            <tr>
+              <td>L3</td>
+              <td>Distress</td>
+              <td>enable ack/reack and nearby-pull mock</td>
+            </tr>
+            <tr>
+              <td>L4</td>
+              <td>Emergency</td>
+              <td>mock remote alert, preserve evidence chain</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div>
+        <h2 class="section-title">Evidence Boundary</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Evidence</th>
+              <th>Phase 1</th>
+              <th>Future adapter</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Offline map</td>
+              <td>synthetic GeoJSON corridor, hazards, POIs, source confidence</td>
+              <td>OSM, government GeoJSON, MBTiles, verified field map</td>
+            </tr>
+            <tr>
+              <td>Resource</td>
+              <td>mock battery, pace, heart-rate trend</td>
+              <td>watch / phone / wearable sensors</td>
+            </tr>
+            <tr>
+              <td>Environment</td>
+              <td>mock weather, sunset, visibility</td>
+              <td>Open-Meteo, CWA, WeatherKit, offline almanac</td>
+            </tr>
+            <tr>
+              <td>Communication</td>
+              <td>mock Wi-Fi, cellular, BLE, LoRa, satellite, modem</td>
+              <td>hardware scan, AT commands, radio modem send</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <p class="note">
+      Phase 1 keeps safety decisions deterministic. Offline map evidence is the highest-priority static terrain reference, while GPS/PDR/IMU are noisy measurements against that context. Agents help prepare context and write summaries. Checkpoints keep memory small by sealing normal history into segment capsules.
+    </p>
+  </main>
+</body>
+</html>

@@ -85,6 +85,13 @@ def _latest_pose() -> Dict[str, float]:
     return {"x": float(pdr.x), "y": float(pdr.y)}
 
 
+def _optional_float(value: Any) -> Optional[float]:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 async def process_movement_summary(summary: Any) -> Dict[str, Any]:
     """Create immediate local feedback from a MovementSummary without LLM calls."""
     if summary.confidence < 0.5:
@@ -232,15 +239,13 @@ async def update_pdr(request: Request) -> Dict[str, Any]:
             logger.debug("Incoming PDR data: %s", raw_data)
 
         decoded = SensorLogDecoder().decode(raw_data)
-        if decoded is None:
-            return {"status": "skipped", "reason": "Malformed PDR data"}
-
-        # ----------------------
-        # 新增：將 IMU 原始數據聚合為 MovementSummary，並呼叫本地決策
-        # ----------------------
+        imu_points = 0
         if "imu_data" in raw_data:
             imu_list = raw_data["imu_data"]
             for imu in imu_list:
+                if not isinstance(imu, dict):
+                    continue
+
                 sample = RawSensorSample(
                     accX=imu.get("accX") or imu.get("accelerometerAccelerationX", 0.0),
                     accY=imu.get("accY") or imu.get("accelerometerAccelerationY", 0.0),
@@ -252,10 +257,24 @@ async def update_pdr(request: Request) -> Dict[str, Any]:
                 if summary:
                     latest_summary_result = await process_movement_summary(summary)
                     logger.info("Movement summary processed: %s", latest_summary_result)
-        # ----------------------
 
+                lat = _optional_float(imu.get("locationLatitude"))
+                lon = _optional_float(imu.get("locationLongitude"))
+                if lat is not None and lon is not None:
+                    pdr.add_gps_point(lat=lat, lon=lon)
 
-        curr_x, curr_y = pdr.update_position(decoded.distance, decoded.heading)
+                pdr.update_from_imu(imu)
+                imu_points += 1
+
+        if decoded is None and imu_points == 0:
+            return {"status": "skipped", "reason": "Malformed PDR data"}
+
+        if decoded is not None and (decoded.distance != 0 or imu_points == 0):
+            curr_x, curr_y = pdr.update_position(decoded.distance, decoded.heading)
+        else:
+            pose = _latest_pose()
+            curr_x, curr_y = pose["x"], pose["y"]
+
         loop = asyncio.get_event_loop()
         snapshot = await loop.run_in_executor(executor, world.get_full_snapshot)
 
@@ -278,7 +297,7 @@ async def update_pdr(request: Request) -> Dict[str, Any]:
             logger.warning("PDR event queue is full; dropping AI decision event")
             queued = False
 
-        return {"status": "success", "pose": event["pose"], "queued_for_ai": queued}
+        return {"status": "success", "pose": event["pose"], "queued_for_ai": queued, "imu_points": imu_points}
     except Exception as exc:
         logger.exception("PDR update failed: %s", exc)
         return {"status": "error", "detail": str(exc)}
