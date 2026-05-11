@@ -2,6 +2,7 @@ import unittest
 from pathlib import Path
 
 from mission_graph import MissionGraphRuntime, load_mission_graph
+from risk_rules import RiskRuleEvaluator, load_risk_rules
 from route_matching import load_gpx_route
 from route_progress import RouteProgressConfig, RouteProgressEvaluator, RouteProgressSample
 from safety_models import SafetyEventType
@@ -10,6 +11,7 @@ from safety_models import SafetyEventType
 ROOT = Path(__file__).resolve().parents[1]
 MISSION_PATH = ROOT / "tests" / "fixtures" / "mission_graph" / "normal_climb_mission.json"
 ROUTE_PATH = ROOT / "tests" / "fixtures" / "routes" / "normal_climb.gpx"
+RISK_RULES_PATH = ROOT / "tests" / "fixtures" / "risk_rules" / "normal_climb_rules.json"
 
 
 class RouteProgressEvaluatorTests(unittest.TestCase):
@@ -172,6 +174,79 @@ class RouteProgressEvaluatorTests(unittest.TestCase):
         )
 
         self.assertIsNone(event)
+
+    def test_map_hazard_uses_route_specific_risk_rule(self):
+        runtime = MissionGraphRuntime(load_mission_graph(MISSION_PATH))
+        route = load_gpx_route(ROUTE_PATH)
+        evaluator = RouteProgressEvaluator(
+            runtime,
+            route,
+            risk_rule_evaluator=RiskRuleEvaluator(load_risk_rules(RISK_RULES_PATH)),
+        )
+        hazards = [
+            {
+                "hazard_id": "hazard_dense_bamboo",
+                "hazard_type": "dense_bamboo",
+                "name": "Dense bamboo",
+                "l2_duration_s": 30.0,
+                "source_metadata": {"source": "synthetic_fixture", "confidence": 0.8},
+            },
+            {
+                "hazard_id": "hazard_cliff_exposure",
+                "hazard_type": "cliff_exposure",
+                "name": "Cliff exposure",
+                "l2_duration_s": 30.0,
+                "source_metadata": {"source": "synthetic_fixture", "confidence": 0.8},
+            },
+        ]
+
+        evaluator.observe(RouteProgressSample(timestamp=0.0, progress_m=100.0, lat=25.0, lon=121.0, map_hazards=hazards), None)
+        event = evaluator.observe(
+            RouteProgressSample(timestamp=30.0, progress_m=120.0, lat=25.0, lon=121.0, map_hazards=hazards),
+            expected_checkpoint_id=None,
+        )
+
+        self.assertIsNotNone(event)
+        self.assertEqual(event.event_type, SafetyEventType.MAP_HAZARD)
+        self.assertEqual(event.details["evidence_source"], "route_specific_risk_rule")
+        self.assertEqual(event.details["risk_rule_id"], "dense_bamboo_cliff_l2")
+        self.assertEqual(event.level, "L2_CONCERN")
+
+    def test_risk_rule_can_downgrade_low_confidence_hazard_to_l1(self):
+        runtime = MissionGraphRuntime(load_mission_graph(MISSION_PATH))
+        route = load_gpx_route(ROUTE_PATH)
+        evaluator = RouteProgressEvaluator(
+            runtime,
+            route,
+            risk_rule_evaluator=RiskRuleEvaluator(load_risk_rules(RISK_RULES_PATH)),
+        )
+        hazards = [
+            {
+                "hazard_id": "hazard_dense_bamboo",
+                "hazard_type": "dense_bamboo",
+                "name": "Dense bamboo",
+                "l2_duration_s": 30.0,
+                "source_metadata": {"source": "synthetic_fixture", "confidence": 0.4},
+            },
+            {
+                "hazard_id": "hazard_cliff_exposure",
+                "hazard_type": "cliff_exposure",
+                "name": "Cliff exposure",
+                "l2_duration_s": 30.0,
+                "source_metadata": {"source": "synthetic_fixture", "confidence": 0.4},
+            },
+        ]
+
+        evaluator.observe(RouteProgressSample(timestamp=0.0, progress_m=100.0, lat=25.0, lon=121.0, map_hazards=hazards), None)
+        event = evaluator.observe(
+            RouteProgressSample(timestamp=30.0, progress_m=120.0, lat=25.0, lon=121.0, map_hazards=hazards),
+            expected_checkpoint_id=None,
+        )
+
+        self.assertIsNotNone(event)
+        self.assertEqual(event.event_type, SafetyEventType.MAP_HAZARD)
+        self.assertEqual(event.details["risk_rule_id"], "low_confidence_hazard_watch")
+        self.assertEqual(event.level, "L1_WATCH")
 
     def test_weak_gps_requires_sustained_low_accuracy_while_moving(self):
         runtime = MissionGraphRuntime(load_mission_graph(MISSION_PATH))
