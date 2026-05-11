@@ -1,6 +1,8 @@
 import unittest
+import tempfile
 from pathlib import Path
 
+from incident_store import IncidentStore
 from replay_runner import replay_route
 from safety_models import SafetyEventType
 
@@ -128,6 +130,18 @@ class ReplayRunnerTests(unittest.TestCase):
         self.assertEqual(event.details["segment_id"], "seg_06")
         self.assertEqual(result.safety_state.level, "L1_WATCH")
         self.assertEqual(result.incident_packages, [])
+
+    def test_replay_can_persist_incident_package_json(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            result = replay_route(MISSION_PATH, OFF_ROUTE_PATH, incident_store_path=tmpdir)
+
+            self.assertEqual(len(result.incident_packages), 1)
+            self.assertEqual(len(result.stored_incident_paths), 1)
+            self.assertTrue(result.stored_incident_paths[0].exists())
+            store = IncidentStore(tmpdir)
+            loaded = store.load(result.incident_packages[0].incident_id)
+            self.assertEqual(loaded, result.incident_packages[0])
+            self.assertEqual(loaded.ai_summary_input["event"]["event_type"], "route_deviation")
 
 
 if __name__ == "__main__":
