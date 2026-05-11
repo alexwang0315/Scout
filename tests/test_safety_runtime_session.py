@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 MISSION_PATH = ROOT / "tests" / "fixtures" / "mission_graph" / "normal_climb_mission.json"
 ROUTE_PATH = ROOT / "tests" / "fixtures" / "routes" / "normal_climb.gpx"
 OFF_ROUTE_PATH = ROOT / "tests" / "fixtures" / "routes" / "off_route_deviation.gpx"
+CONTEXT_DIR = ROOT / "tests" / "fixtures" / "mission_context"
 
 
 class SafetyRuntimeSessionTests(unittest.TestCase):
@@ -54,6 +55,21 @@ class SafetyRuntimeSessionTests(unittest.TestCase):
         self.assertEqual(update.observation.raw["position_estimate"]["source"], "gps")
         self.assertEqual(update.observation.raw["map_evidence"]["corridor"]["inside"], True)
         self.assertEqual(update.observation.raw["capabilities"]["wifi_rssi"]["status"], "unavailable_by_platform")
+
+    def test_provider_context_flows_into_live_go_no_go(self):
+        point = load_gpx_route(ROUTE_PATH).points[0]
+        observation = _observation_from_route_point(0, point)
+        session = SafetyRuntimeSession(
+            MISSION_PATH,
+            mission_context_path=CONTEXT_DIR / "low_battery_near_sunset.json",
+        )
+
+        update = session.observe(observation)
+
+        self.assertEqual(update.safety_state.level, "L2_CONCERN")
+        self.assertEqual(update.safety_events[0].event_type, SafetyEventType.RESOURCE_CONSTRAINT)
+        self.assertEqual(update.observation.raw["provider_context"]["resource_state"]["device_battery"], 0.14)
+        self.assertEqual(update.observation.raw["provider_context"]["route_context"]["current_segment_id"], "seg_05")
 
     def test_off_route_stream_triggers_l2_and_persists_incident(self):
         route = load_gpx_route(OFF_ROUTE_PATH)

@@ -115,6 +115,14 @@ class ReplayRunnerTests(unittest.TestCase):
             trigger_sample["raw"]["go_no_go"]["safety_event"]["event_type"],
             SafetyEventType.RESOURCE_CONSTRAINT,
         )
+        self.assertEqual(
+            trigger_sample["raw"]["provider_context"]["resource_state"]["device_battery"],
+            0.14,
+        )
+        self.assertEqual(
+            trigger_sample["raw"]["provider_context"]["route_context"]["current_segment_id"],
+            "seg_05",
+        )
 
     def test_no_signal_context_triggers_l1_without_incident(self):
         result = replay_route(
