@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import deque
 from dataclasses import dataclass
+from typing import Any
 
 from geo_utils import haversine_m
 from mission_graph import MissionGraphRuntime
@@ -36,6 +37,11 @@ class RouteProgressSample:
     estimate_source: str = "gps"
     pdr_delta_m: float | None = None
     estimate_confidence: float | None = None
+    map_corridor_inside: bool | None = None
+    map_corridor_id: str | None = None
+    map_corridor_distance_m: float | None = None
+    map_corridor_allowed_distance_m: float | None = None
+    map_source_metadata: dict[str, Any] | None = None
 
 
 class RouteProgressEvaluator:
@@ -82,6 +88,9 @@ class RouteProgressEvaluator:
         return self._backtracking_or_loop_event(sample)
 
     def _is_route_deviated(self, sample: RouteProgressSample) -> bool:
+        if sample.map_corridor_inside is not None:
+            return not sample.map_corridor_inside
+
         threshold = max(
             self.config.route_deviation_threshold_m,
             3 * (sample.gps_horizontal_accuracy_m or 0.0),
@@ -89,6 +98,9 @@ class RouteProgressEvaluator:
         return sample.route_distance_m > threshold
 
     def _route_deviation_event(self, sample: RouteProgressSample) -> SafetyEvent | None:
+        if sample.map_corridor_inside is not None:
+            return self._map_corridor_deviation_event(sample)
+
         threshold = max(
             self.config.route_deviation_threshold_m,
             3 * (sample.gps_horizontal_accuracy_m or 0.0),
@@ -109,6 +121,31 @@ class RouteProgressEvaluator:
                 "threshold_m": threshold,
                 "matched_route_index": sample.route_index,
                 "matched_progress_m": sample.progress_m,
+            },
+        )
+
+    def _map_corridor_deviation_event(self, sample: RouteProgressSample) -> SafetyEvent | None:
+        key = (SafetyEventType.ROUTE_DEVIATION, f"map_corridor:{sample.map_corridor_id}")
+        if key in self._emitted_keys:
+            return None
+        self._emitted_keys.add(key)
+
+        return SafetyEvent(
+            event_type=SafetyEventType.ROUTE_DEVIATION,
+            level=SafetyLevel.CONCERN,
+            timestamp=sample.timestamp,
+            reason="Position estimate left the approved offline map corridor.",
+            confidence=0.88,
+            details={
+                "evidence_source": "offline_map_corridor",
+                "corridor_id": sample.map_corridor_id,
+                "corridor_distance_m": sample.map_corridor_distance_m,
+                "allowed_distance_m": sample.map_corridor_allowed_distance_m,
+                "position_estimate_source": sample.estimate_source,
+                "estimate_confidence": sample.estimate_confidence,
+                "matched_route_index": sample.route_index,
+                "matched_progress_m": sample.progress_m,
+                "map_source_metadata": sample.map_source_metadata,
             },
         )
 
