@@ -1,0 +1,95 @@
+{
+  "case_id": "scout_260512_field_golden",
+  "description": "2026-05-12 Apple Watch field exploration with Overpass-derived offline map corridors.",
+  "source_files": [
+    "PdrSample/stream Apple Watch 260512 08_52_37.json",
+    "PdrSample/stream Apple Watch 260512 09_39_31.json"
+  ],
+  "map_context": "tests/fixtures/maps/scout_260512_overpass_map_context.geojson",
+  "overpass_query": "tests/fixtures/maps/scout_260512_overpass_query.ql",
+  "bbox": {
+    "south": 25.0585,
+    "west": 121.6505,
+    "north": 25.073,
+    "east": 121.6705
+  },
+  "segments": [
+    {
+      "id": "watch_260512_085237",
+      "source_file": "PdrSample/stream Apple Watch 260512 08_52_37.json",
+      "start_time": "2026-05-12T08:52:38.291+08:00",
+      "end_time": "2026-05-12T09:20:47.631+08:00",
+      "duration_s": 1689.3,
+      "records": 8610,
+      "valid_location_records": 8610,
+      "sample_rate_hz": 5.0,
+      "gps_polyline_m": 2293.1,
+      "gps_polyline_acc_lte_20m_m": 2293.1,
+      "gps_polyline_acc_lte_5m_m": 1819.9,
+      "net_displacement_m": 670.5,
+      "pedometer_delta_m": 1912.7,
+      "steps_delta": 2670,
+      "horizontal_accuracy_median_m": 4.88,
+      "horizontal_accuracy_p90_m": 7.72,
+      "horizontal_accuracy_max_m": 10.74,
+      "activity_majority": "walking",
+      "heart_rate_min_bpm": 101,
+      "heart_rate_max_bpm": 121,
+      "battery_start": 0.95,
+      "battery_end": 0.9,
+      "map_sampled_points": 345,
+      "map_inside_corridor_pct": 0.948,
+      "map_inside_corridor_with_hacc_pct": 0.977,
+      "nearest_corridor_distance_p50_m": 3.3,
+      "nearest_corridor_distance_p95_m": 10.3,
+      "nearest_corridor_distance_max_m": 15.0
+    },
+    {
+      "id": "watch_260512_093931",
+      "source_file": "PdrSample/stream Apple Watch 260512 09_39_31.json",
+      "start_time": "2026-05-12T09:39:32.582+08:00",
+      "end_time": "2026-05-12T10:00:49.175+08:00",
+      "duration_s": 1276.6,
+      "records": 7050,
+      "valid_location_records": 7050,
+      "sample_rate_hz": 5.0,
+      "gps_polyline_m": 1969.7,
+      "gps_polyline_acc_lte_20m_m": 1689.3,
+      "gps_polyline_acc_lte_5m_m": 1098.0,
+      "net_displacement_m": 928.1,
+      "pedometer_delta_m": 1148.9,
+      "steps_delta": 1658,
+      "horizontal_accuracy_median_m": 7.65,
+      "horizontal_accuracy_p90_m": 27.62,
+      "horizontal_accuracy_max_m": 50.53,
+      "activity_majority": "walking",
+      "heart_rate_min_bpm": 101,
+      "heart_rate_max_bpm": 123,
+      "battery_start": 0.9,
+      "battery_end": 0.85,
+      "map_sampled_points": 282,
+      "map_inside_corridor_pct": 0.911,
+      "map_inside_corridor_with_hacc_pct": 0.979,
+      "nearest_corridor_distance_p50_m": 3.1,
+      "nearest_corridor_distance_p95_m": 12.1,
+      "nearest_corridor_distance_max_m": 20.9
+    }
+  ],
+  "gap_between_segments": {
+    "duration_s": 1125.0,
+    "endpoint_distance_m": 546.1
+  },
+  "acceptance": {
+    "min_overpass_corridors": 600,
+    "min_footway_corridors": 90,
+    "min_path_corridors": 30,
+    "min_steps_corridors": 15,
+    "min_map_inside_with_hacc_pct": 0.97,
+    "max_nearest_corridor_distance_p95_m": 13.0
+  },
+  "notes": [
+    "Raw Apple Watch SensorLog files are local evidence and are not required by the regression test.",
+    "The second segment intentionally preserves weak/noisy GPS behavior for later safety replay work.",
+    "Wi-Fi fingerprint data is not part of this golden case; it should be joined later through a signal producer."
+  ]
+}
