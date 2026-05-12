@@ -15,6 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
 from agent import sos_agent
+from admin_api import create_admin_router
 from imu_api import router as imu_router
 from macos_wifi import MacOSWifiWorld
 from pdr_engine import pdr
@@ -220,6 +221,7 @@ async def ai_decision_worker() -> None:
 
 
 app.include_router(imu_router)
+app.include_router(create_admin_router(incident_store_path=SCOUT_SAFETY_INCIDENT_STORE))
 app.include_router(
     create_safety_router(
         SafetyApiSnapshot(safety_state=SafetyState()),

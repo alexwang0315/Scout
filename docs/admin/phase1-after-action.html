@@ -1,0 +1,522 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Scout Phase 1 Admin</title>
+  <style>
+    :root {
+      --bg: #111315;
+      --surface: #181b1f;
+      --panel: #20242a;
+      --border: #343a42;
+      --text: #eef1f4;
+      --muted: #a8b0ba;
+      --route: #21a6a1;
+      --corridor: #56616d;
+      --checkpoint: #f2b84b;
+      --hazard: #d65d5d;
+      --event: #e07a3f;
+      --ok: #76b56d;
+      --focus: #8ab4f8;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    .shell {
+      display: grid;
+      grid-template-columns: 280px minmax(480px, 1fr) 360px;
+      min-height: 100vh;
+    }
+
+    aside, main, .details {
+      min-width: 0;
+      border-color: var(--border);
+    }
+
+    aside {
+      padding: 16px;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+    }
+
+    main {
+      display: grid;
+      grid-template-rows: auto 1fr;
+      background: #131619;
+    }
+
+    .details {
+      padding: 16px;
+      background: var(--surface);
+      border-left: 1px solid var(--border);
+    }
+
+    h1, h2, h3, p { margin: 0; }
+    h1 { font-size: 18px; font-weight: 650; letter-spacing: 0; }
+    h2 { margin: 22px 0 10px; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0; }
+    h3 { font-size: 15px; font-weight: 650; }
+
+    .meta {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .metric-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 14px;
+    }
+
+    .metric {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px;
+      background: var(--panel);
+    }
+
+    .metric span {
+      display: block;
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .metric strong {
+      display: block;
+      margin-top: 4px;
+      font-size: 18px;
+      letter-spacing: 0;
+    }
+
+    .filters {
+      display: grid;
+      gap: 8px;
+    }
+
+    label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--text);
+    }
+
+    input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      accent-color: var(--focus);
+    }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+    }
+
+    .toolbar code {
+      color: var(--muted);
+      font-size: 12px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .map-wrap {
+      position: relative;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    svg {
+      width: 100%;
+      height: 100%;
+      display: block;
+      background: #121619;
+    }
+
+    .corridor {
+      fill: none;
+      stroke: var(--corridor);
+      stroke-width: 1;
+      opacity: 0.42;
+      vector-effect: non-scaling-stroke;
+    }
+
+    .route {
+      fill: none;
+      stroke: var(--route);
+      stroke-width: 2.5;
+      opacity: 0.95;
+      vector-effect: non-scaling-stroke;
+    }
+
+    .checkpoint {
+      fill: var(--checkpoint);
+      stroke: #171a1e;
+      stroke-width: 1.5;
+      cursor: pointer;
+      vector-effect: non-scaling-stroke;
+    }
+
+    .hazard {
+      fill: rgba(214, 93, 93, 0.24);
+      stroke: var(--hazard);
+      stroke-width: 1.5;
+      vector-effect: non-scaling-stroke;
+    }
+
+    .event {
+      fill: var(--event);
+      stroke: #171a1e;
+      stroke-width: 1.5;
+      cursor: pointer;
+      vector-effect: non-scaling-stroke;
+    }
+
+    .is-hidden { display: none; }
+    .focus-ring { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+    .timeline {
+      display: grid;
+      gap: 8px;
+      max-height: 34vh;
+      overflow: auto;
+    }
+
+    .timeline button {
+      width: 100%;
+      text-align: left;
+      color: var(--text);
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px;
+      cursor: pointer;
+    }
+
+    .timeline button:focus-visible,
+    .item-list button:focus-visible {
+      outline: 2px solid var(--focus);
+      outline-offset: 2px;
+    }
+
+    .timeline small {
+      display: block;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+
+    .item-list {
+      display: grid;
+      gap: 8px;
+      max-height: 32vh;
+      overflow: auto;
+    }
+
+    .item-list button {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--panel);
+      color: var(--text);
+      padding: 9px;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .source {
+      color: var(--muted);
+      font-size: 12px;
+      overflow-wrap: anywhere;
+    }
+
+    pre {
+      margin: 12px 0 0;
+      padding: 12px;
+      max-height: 58vh;
+      overflow: auto;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: #111417;
+      color: #dfe5ec;
+      font-size: 12px;
+      white-space: pre-wrap;
+    }
+
+    .status {
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--panel);
+      color: var(--muted);
+    }
+
+    @media (max-width: 980px) {
+      .shell { grid-template-columns: 1fr; }
+      aside, .details { border: 0; border-bottom: 1px solid var(--border); }
+      main { min-height: 70vh; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <aside>
+      <h1>Scout Phase 1 Admin</h1>
+      <p id="caseMeta" class="meta">Loading case...</p>
+
+      <div class="metric-grid">
+        <div class="metric"><span>Route Points</span><strong id="routePoints">-</strong></div>
+        <div class="metric"><span>Corridors</span><strong id="corridors">-</strong></div>
+        <div class="metric"><span>Checkpoints</span><strong id="checkpoints">-</strong></div>
+        <div class="metric"><span>Incidents</span><strong id="incidents">-</strong></div>
+      </div>
+
+      <h2>Layers</h2>
+      <div class="filters">
+        <label><input type="checkbox" data-layer="corridors" checked> Map corridors</label>
+        <label><input type="checkbox" data-layer="route" checked> Route</label>
+        <label><input type="checkbox" data-layer="checkpoints" checked> Checkpoints</label>
+        <label><input type="checkbox" data-layer="hazards" checked> Hazards</label>
+        <label><input type="checkbox" data-layer="events" checked> Ln events</label>
+      </div>
+
+      <h2>Timeline</h2>
+      <div id="timeline" class="timeline"></div>
+    </aside>
+
+    <main>
+      <div class="toolbar">
+        <h3 id="caseTitle">After-action map</h3>
+        <code id="mapMeta">offline map evidence</code>
+      </div>
+      <div class="map-wrap">
+        <svg id="map" role="img" aria-label="Scout after-action evidence map"></svg>
+      </div>
+    </main>
+
+    <section class="details">
+      <h2>Selected Evidence</h2>
+      <h3 id="detailTitle">No selection</h3>
+      <p id="detailSource" class="source">Hover or select map evidence.</p>
+      <pre id="detailJson">{}</pre>
+
+      <h2>Mission Items</h2>
+      <div id="itemList" class="item-list"></div>
+    </section>
+  </div>
+
+  <script>
+    const CASE_ID = "scout_260512_field_golden";
+    const state = { view: null, projected: null, selected: null };
+    const svg = document.getElementById("map");
+    const layerInputs = document.querySelectorAll("[data-layer]");
+
+    function apiBase() {
+      if (location.protocol === "file:") return "http://127.0.0.1:9099";
+      return "";
+    }
+
+    function el(name, attrs = {}, text = "") {
+      const node = document.createElementNS("http://www.w3.org/2000/svg", name);
+      Object.entries(attrs).forEach(([key, value]) => node.setAttribute(key, value));
+      if (text) node.textContent = text;
+      return node;
+    }
+
+    function project(bounds, lat, lon) {
+      const width = 1000;
+      const height = 720;
+      const pad = 34;
+      const lonSpan = Math.max(bounds.east - bounds.west, 0.000001);
+      const latSpan = Math.max(bounds.north - bounds.south, 0.000001);
+      const x = pad + ((lon - bounds.west) / lonSpan) * (width - pad * 2);
+      const y = height - pad - ((lat - bounds.south) / latSpan) * (height - pad * 2);
+      return [x, y];
+    }
+
+    function pathFromCoords(bounds, coords) {
+      return coords.map((point, index) => {
+        const [x, y] = project(bounds, point.lat, point.lon);
+        return `${index === 0 ? "M" : "L"}${x.toFixed(2)},${y.toFixed(2)}`;
+      }).join(" ");
+    }
+
+    function boundsWithMap(view) {
+      const b = { ...view.route.bounds };
+      view.map.corridors.forEach(corridor => {
+        corridor.coordinates.forEach(point => {
+          b.south = Math.min(b.south, point.lat);
+          b.north = Math.max(b.north, point.lat);
+          b.west = Math.min(b.west, point.lon);
+          b.east = Math.max(b.east, point.lon);
+        });
+      });
+      return b;
+    }
+
+    function setDetail(item) {
+      state.selected = item;
+      document.getElementById("detailTitle").textContent = item.name || item.checkpoint_id || item.corridor_id || item.incident_id || item.source_id || item.evidence_type;
+      document.getElementById("detailSource").textContent = `${item.evidence_type || "evidence"} | ${item.source_path || "no source path"}`;
+      document.getElementById("detailJson").textContent = JSON.stringify(item, null, 2);
+    }
+
+    function attachEvidence(node, item) {
+      node.tabIndex = 0;
+      node.addEventListener("mouseenter", () => setDetail(item));
+      node.addEventListener("focus", () => setDetail(item));
+      node.addEventListener("click", () => setDetail(item));
+      node.addEventListener("keydown", event => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          setDetail(item);
+        }
+      });
+    }
+
+    function renderMap(view) {
+      const bounds = boundsWithMap(view);
+      svg.setAttribute("viewBox", "0 0 1000 720");
+      svg.replaceChildren();
+
+      const corridorGroup = el("g", {"data-layer-group": "corridors"});
+      view.map.corridors.forEach(corridor => {
+        if (corridor.coordinates.length < 2) return;
+        const path = el("path", {d: pathFromCoords(bounds, corridor.coordinates), class: "corridor"});
+        attachEvidence(path, corridor);
+        corridorGroup.appendChild(path);
+      });
+      svg.appendChild(corridorGroup);
+
+      const hazardGroup = el("g", {"data-layer-group": "hazards"});
+      view.map.hazards.forEach(hazard => {
+        const path = el("path", {d: pathFromCoords(bounds, hazard.polygon) + " Z", class: "hazard"});
+        attachEvidence(path, hazard);
+        hazardGroup.appendChild(path);
+      });
+      svg.appendChild(hazardGroup);
+
+      const routeCoords = view.route.points.map(point => ({lat: point.lat, lon: point.lon}));
+      const routeGroup = el("g", {"data-layer-group": "route"});
+      const routePath = el("path", {d: pathFromCoords(bounds, routeCoords), class: "route"});
+      attachEvidence(routePath, {
+        evidence_type: "device_observation",
+        source_id: "route",
+        source_path: view.route.source_path,
+        point_count: view.route.point_count,
+        total_progress_m: view.route.total_progress_m,
+        bounds: view.route.bounds
+      });
+      routeGroup.appendChild(routePath);
+      svg.appendChild(routeGroup);
+
+      const checkpointGroup = el("g", {"data-layer-group": "checkpoints"});
+      view.mission.checkpoints.forEach(checkpoint => {
+        const [x, y] = project(bounds, checkpoint.lat, checkpoint.lon);
+        const circle = el("circle", {cx: x, cy: y, r: 5, class: "checkpoint"});
+        attachEvidence(circle, checkpoint);
+        checkpointGroup.appendChild(circle);
+      });
+      svg.appendChild(checkpointGroup);
+
+      const eventGroup = el("g", {"data-layer-group": "events"});
+      view.incident_packages.forEach(packageItem => {
+        const sample = packageItem.trigger_event && packageItem.trigger_event.details;
+        const lat = sample && (sample.lat || sample.observation_lat);
+        const lon = sample && (sample.lon || sample.observation_lon);
+        if (typeof lat !== "number" || typeof lon !== "number") return;
+        const [x, y] = project(bounds, lat, lon);
+        const marker = el("circle", {cx: x, cy: y, r: 6, class: "event"});
+        attachEvidence(marker, packageItem);
+        eventGroup.appendChild(marker);
+      });
+      svg.appendChild(eventGroup);
+
+      updateLayers();
+    }
+
+    function renderTimeline(view) {
+      const timeline = document.getElementById("timeline");
+      timeline.replaceChildren();
+      const items = view.safety_timeline.length ? view.safety_timeline : [
+        {reason: "No persisted Ln transition for this case", timestamp: null, evidence_type: "runtime_decision", source_id: "empty_timeline"}
+      ];
+      items.forEach(item => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.innerHTML = `${item.to_level || "L0_NORMAL"}<small>${item.reason || item.evidence_type}</small>`;
+        button.addEventListener("click", () => setDetail(item));
+        timeline.appendChild(button);
+      });
+    }
+
+    function renderItems(view) {
+      const list = document.getElementById("itemList");
+      list.replaceChildren();
+      [...view.mission.checkpoints, ...view.risk_rules].forEach(item => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.textContent = item.name || item.checkpoint_id || item.rule_id;
+        button.addEventListener("click", () => setDetail(item));
+        list.appendChild(button);
+      });
+    }
+
+    function updateMetrics(view) {
+      document.getElementById("caseMeta").textContent = view.summary.description || view.case_id;
+      document.getElementById("caseTitle").textContent = view.case_id;
+      document.getElementById("routePoints").textContent = view.route.point_count.toLocaleString();
+      document.getElementById("corridors").textContent = view.map.corridors.length.toLocaleString();
+      document.getElementById("checkpoints").textContent = view.mission.checkpoints.length.toLocaleString();
+      document.getElementById("incidents").textContent = view.incident_packages.length.toLocaleString();
+      const meta = view.map.metadata;
+      document.getElementById("mapMeta").textContent = `${meta.source} | confidence ${meta.confidence} | staleness ${meta.known_staleness_risk}`;
+    }
+
+    function updateLayers() {
+      layerInputs.forEach(input => {
+        const group = svg.querySelector(`[data-layer-group="${input.dataset.layer}"]`);
+        if (!group) return;
+        group.classList.toggle("is-hidden", !input.checked);
+      });
+    }
+
+    async function loadCase() {
+      try {
+        const response = await fetch(`${apiBase()}/admin/cases/${CASE_ID}`);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const view = await response.json();
+        state.view = view;
+        updateMetrics(view);
+        renderMap(view);
+        renderTimeline(view);
+        renderItems(view);
+        setDetail({
+          evidence_type: "case_summary",
+          source_id: view.case_id,
+          source_path: view.artifacts.golden_case,
+          summary: view.summary,
+          artifacts: view.artifacts
+        });
+      } catch (error) {
+        document.getElementById("caseMeta").textContent = `Failed to load case: ${error.message}`;
+        document.getElementById("detailJson").textContent = String(error.stack || error);
+      }
+    }
+
+    layerInputs.forEach(input => input.addEventListener("change", updateLayers));
+    loadCase();
+  </script>
+</body>
+</html>
