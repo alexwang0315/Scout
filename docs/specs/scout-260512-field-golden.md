@@ -13,9 +13,10 @@ This golden case exists to verify that Scout can preserve real wearable telemetr
 
 ## Commands
 ```bash
-python3 -m unittest tests.test_field_golden_case tests.test_offline_map
-python3 -m json.tool tests/fixtures/field_cases/scout_260512_golden.json >/dev/null
-python3 -m json.tool tests/fixtures/maps/scout_260512_overpass_map_context.geojson >/dev/null
+./venv/bin/python generate_field_golden_case.py
+./venv/bin/python -m pytest tests/test_field_golden_case.py tests/test_offline_map.py -q
+./venv/bin/python -m json.tool tests/fixtures/field_cases/scout_260512_golden.json >/dev/null
+./venv/bin/python -m json.tool tests/fixtures/maps/scout_260512_overpass_map_context.geojson >/dev/null
 ```
 
 ## Project Structure
@@ -33,6 +34,8 @@ tests/fixtures/maps/
 
 docs/specs/
   scout-260512-field-golden.md             -> this case specification
+
+generate_field_golden_case.py              -> reproducible metrics generator from local raw SensorLog + map context
 ```
 
 ## Code Style
@@ -46,9 +49,12 @@ self.assertGreaterEqual(len(context.corridors), manifest["acceptance"]["min_over
 
 Keep thresholds explicit in `scout_260512_golden.json` so later field-data changes are reviewed as data decisions, not hidden test rewrites.
 
+The manifest intentionally stores more than a tiny pass/fail summary. It preserves per-segment sensor availability, horizontal-accuracy distribution, elevation and speed profile, activity counts, route-network coverage metrics, and representative sampled observations. This is still much smaller than the raw SensorLog exports, but it is detailed enough to detect accidental smoothing or map-corridor regressions.
+
 ## Testing Strategy
 - Unit-level regression tests load the golden manifest and Overpass GeoJSON.
 - Tests verify map context shape, source metadata, corridor counts, and route-network coverage thresholds.
+- Tests verify expanded sensor metrics and representative samples are present.
 - Tests do not require `PdrSample/*.json` raw files, because those files are large local evidence.
 - Future replay tests may opt in to raw SensorLog files when they are present locally.
 

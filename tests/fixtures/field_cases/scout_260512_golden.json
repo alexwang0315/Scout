@@ -1,6 +1,7 @@
 {
   "case_id": "scout_260512_field_golden",
   "description": "2026-05-12 Apple Watch field exploration with Overpass-derived offline map corridors.",
+  "generated_by": "generate_field_golden_case.py",
   "source_files": [
     "PdrSample/stream Apple Watch 260512 08_52_37.json",
     "PdrSample/stream Apple Watch 260512 09_39_31.json"
@@ -13,6 +14,27 @@
     "north": 25.073,
     "east": 121.6705
   },
+  "map_context_summary": {
+    "source": "openstreetmap_overpass",
+    "source_version": "2026-05-12T02:47:14Z",
+    "confidence": 0.72,
+    "known_staleness_risk": "medium",
+    "corridors": 684,
+    "pois": 0,
+    "hazards": 0,
+    "route_level_counts": {
+      "cycleway": 28,
+      "footway": 97,
+      "path": 39,
+      "pedestrian": 16,
+      "primary": 58,
+      "residential": 47,
+      "service": 320,
+      "steps": 20,
+      "tertiary": 14,
+      "unclassified": 45
+    }
+  },
   "segments": [
     {
       "id": "watch_260512_085237",
@@ -22,7 +44,7 @@
       "duration_s": 1689.3,
       "records": 8610,
       "valid_location_records": 8610,
-      "sample_rate_hz": 5.0,
+      "sample_rate_hz": 5.1,
       "gps_polyline_m": 2293.1,
       "gps_polyline_acc_lte_20m_m": 2293.1,
       "gps_polyline_acc_lte_5m_m": 1819.9,
@@ -42,7 +64,230 @@
       "map_inside_corridor_with_hacc_pct": 0.977,
       "nearest_corridor_distance_p50_m": 3.3,
       "nearest_corridor_distance_p95_m": 10.3,
-      "nearest_corridor_distance_max_m": 15.0
+      "nearest_corridor_distance_max_m": 15.0,
+      "sensor_availability": {
+        "gps_records": 8610,
+        "imu_records": 8610,
+        "heart_rate_records": 8610,
+        "battery_records": 8610,
+        "pedometer_distance_records": 8610,
+        "pedometer_steps_records": 8610
+      },
+      "horizontal_accuracy_distribution_m": {
+        "p50": 4.88,
+        "p75": 5.81,
+        "p90": 7.72,
+        "p95": 9.01,
+        "max": 10.74,
+        "lte_5_count": 4729,
+        "lte_10_count": 8461,
+        "lte_20_count": 8610,
+        "lte_50_count": 8610,
+        "gt_50_count": 0
+      },
+      "elevation_profile_m": {
+        "min": 13.5,
+        "max": 34.9,
+        "gain": 269.2,
+        "loss": 272.0
+      },
+      "speed_profile_mps": {
+        "median": 1.03,
+        "p90": 1.3,
+        "max": 2.06
+      },
+      "course_available_pct": 1.0,
+      "activity_counts": {
+        "unknown": 1747,
+        "walking": 6839,
+        "stationary": 24
+      },
+      "map_coverage": {
+        "sample_stride": 25,
+        "inside_corridor_count": 327,
+        "inside_corridor_with_hacc_count": 337,
+        "nearest_corridor_distance_p50_m": 3.3,
+        "nearest_corridor_distance_p95_m": 10.3,
+        "nearest_corridor_distance_max_m": 15.0
+      },
+      "representative_samples": [
+        {
+          "lat": 25.062407,
+          "lon": 121.653647,
+          "horizontal_accuracy_m": 10.74,
+          "nearest_corridor_id": "osm_way_608370423",
+          "nearest_corridor_distance_m": 2.0,
+          "inside_corridor": true,
+          "inside_corridor_with_hacc": true,
+          "timestamp": "2026-05-12T08:52:38.291+08:00",
+          "pedometer_distance_m": 0.0
+        },
+        {
+          "lat": 25.061764,
+          "lon": 121.653936,
+          "horizontal_accuracy_m": 8.25,
+          "nearest_corridor_id": "osm_way_842100786",
+          "nearest_corridor_distance_m": 1.3,
+          "inside_corridor": true,
+          "inside_corridor_with_hacc": true,
+          "timestamp": "2026-05-12T08:54:26.989+08:00",
+          "pedometer_distance_m": 103.4
+        },
+        {
+          "lat": 25.061181,
+          "lon": 121.654354,
+          "horizontal_accuracy_m": 5.37,
+          "nearest_corridor_id": "osm_way_539936559",
+          "nearest_corridor_distance_m": 1.5,
+          "inside_corridor": true,
+          "inside_corridor_with_hacc": true,
+          "timestamp": "2026-05-12T08:56:09.688+08:00",
+          "pedometer_distance_m": 209.1
+        },
+        {
+          "lat": 25.060553,
+          "lon": 121.654334,
+          "horizontal_accuracy_m": 4.83,
+          "nearest_corridor_id": "osm_way_575994571",
+          "nearest_corridor_distance_m": 3.6,
+          "inside_corridor": true,
+          "inside_corridor_with_hacc": true,
+          "timestamp": "2026-05-12T08:57:16.424+08:00",
+          "pedometer_distance_m": 285.0
+        },
+        {
+          "lat": 25.059525,
+          "lon": 121.653797,
+          "horizontal_accuracy_m": 5.59,
+          "nearest_corridor_id": "osm_way_539876922",
+          "nearest_corridor_distance_m": 1.4,
+          "inside_corridor": true,
+          "inside_corridor_with_hacc": true,
+          "timestamp": "2026-05-12T08:59:11.112+08:00",
+          "pedometer_distance_m": 446.4
+        },
+        {
+          "lat": 25.060444,
+          "lon": 121.652847,
+          "horizontal_accuracy_m": 3.89,
+          "nearest_corridor_id": "osm_way_395984554",
+          "nearest_corridor_distance_m": 12.2,
+          "inside_corridor": false,
+          "inside_corridor_with_hacc": false,
+          "timestamp": "2026-05-12T09:01:05.799+08:00",
+          "pedometer_distance_m": 590.0
+        },
+        {
+          "lat": 25.061668,
+          "lon": 121.652411,
+          "horizontal_accuracy_m": 5.12,
+          "nearest_corridor_id": "osm_way_395984554",
+          "nearest_corridor_distance_m": 3.1,
+          "inside_corridor": true,
+          "inside_corridor_with_hacc": true,
+          "timestamp": "2026-05-12T09:03:47.640+08:00",
+          "pedometer_distance_m": 752.8
+        },
+        {
+          "lat": 25.061947,
+          "lon": 121.652571,
+          "horizontal_accuracy_m": 3.56,
+          "nearest_corridor_id": "osm_way_98510612",
+          "nearest_corridor_distance_m": 4.8,
+          "inside_corridor": true,
+          "inside_corridor_with_hacc": true,
+          "timestamp": "2026-05-12T09:05:36.333+08:00",
+          "pedometer_distance_m": 793.2
+        },
+        {
+          "lat": 25.063127,
+          "lon": 121.652299,
+          "horizontal_accuracy_m": 4.1,
+          "nearest_corridor_id": "osm_way_430969133",
+          "nearest_corridor_distance_m": 2.0,
+          "inside_corridor": true,
+          "inside_corridor_with_hacc": true,
+          "timestamp": "2026-05-12T09:07:30.821+08:00",
+          "pedometer_distance_m": 941.3
+        },
+        {
+          "lat": 25.064012,
+          "lon": 121.652076,
+          "horizontal_accuracy_m": 5.03,
+          "nearest_corridor_id": "osm_way_1301263209",
+          "nearest_corridor_distance_m": 3.4,
+          "inside_corridor": true,
+          "inside_corridor_with_hacc": true,
+          "timestamp": "2026-05-12T09:09:25.508+08:00",
+          "pedometer_distance_m": 1079.4
+        },
+        {
+          "lat": 25.064448,
+          "lon": 121.651866,
+          "horizontal_accuracy_m": 7.01,
+          "nearest_corridor_id": "osm_way_775469799",
+          "nearest_corridor_distance_m": 0.6,
+          "inside_corridor": true,
+          "inside_corridor_with_hacc": true,
+          "timestamp": "2026-05-12T09:11:14.201+08:00",
+          "pedometer_distance_m": 1209.4
+        },
+        {
+          "lat": 25.065575,
+          "lon": 121.652305,
+          "horizontal_accuracy_m": 5.48,
+          "nearest_corridor_id": "osm_way_775469799",
+          "nearest_corridor_distance_m": 7.4,
+          "inside_corridor": true,
+          "inside_corridor_with_hacc": true,
+          "timestamp": "2026-05-12T09:13:08.888+08:00",
+          "pedometer_distance_m": 1357.3
+        },
+        {
+          "lat": 25.066755,
+          "lon": 121.652874,
+          "horizontal_accuracy_m": 5.19,
+          "nearest_corridor_id": "osm_way_775469799",
+          "nearest_corridor_distance_m": 16.3,
+          "inside_corridor": false,
+          "inside_corridor_with_hacc": false,
+          "timestamp": "2026-05-12T09:15:03.573+08:00",
+          "pedometer_distance_m": 1508.5
+        },
+        {
+          "lat": 25.067635,
+          "lon": 121.653393,
+          "horizontal_accuracy_m": 3.63,
+          "nearest_corridor_id": "osm_way_775469799",
+          "nearest_corridor_distance_m": 1.7,
+          "inside_corridor": true,
+          "inside_corridor_with_hacc": true,
+          "timestamp": "2026-05-12T09:16:58.258+08:00",
+          "pedometer_distance_m": 1646.3
+        },
+        {
+          "lat": 25.067783,
+          "lon": 121.654688,
+          "horizontal_accuracy_m": 3.71,
+          "nearest_corridor_id": "osm_way_775469798",
+          "nearest_corridor_distance_m": 0.5,
+          "inside_corridor": true,
+          "inside_corridor_with_hacc": true,
+          "timestamp": "2026-05-12T09:18:52.944+08:00",
+          "pedometer_distance_m": 1782.8
+        },
+        {
+          "lat": 25.068131,
+          "lon": 121.655742,
+          "horizontal_accuracy_m": 3.62,
+          "nearest_corridor_id": "osm_way_1189946870",
+          "nearest_corridor_distance_m": 1.3,
+          "inside_corridor": true,
+          "inside_corridor_with_hacc": true,
+          "timestamp": "2026-05-12T09:20:47.631+08:00",
+          "pedometer_distance_m": 1912.7
+        }
+      ]
     },
     {
       "id": "watch_260512_093931",
@@ -52,7 +297,7 @@
       "duration_s": 1276.6,
       "records": 7050,
       "valid_location_records": 7050,
-      "sample_rate_hz": 5.0,
+      "sample_rate_hz": 5.52,
       "gps_polyline_m": 1969.7,
       "gps_polyline_acc_lte_20m_m": 1689.3,
       "gps_polyline_acc_lte_5m_m": 1098.0,
@@ -72,7 +317,229 @@
       "map_inside_corridor_with_hacc_pct": 0.979,
       "nearest_corridor_distance_p50_m": 3.1,
       "nearest_corridor_distance_p95_m": 12.1,
-      "nearest_corridor_distance_max_m": 20.9
+      "nearest_corridor_distance_max_m": 20.9,
+      "sensor_availability": {
+        "gps_records": 7050,
+        "imu_records": 7050,
+        "heart_rate_records": 7050,
+        "battery_records": 7050,
+        "pedometer_distance_records": 7050,
+        "pedometer_steps_records": 7050
+      },
+      "horizontal_accuracy_distribution_m": {
+        "p50": 7.65,
+        "p75": 14.33,
+        "p90": 27.62,
+        "p95": 29.99,
+        "max": 50.53,
+        "lte_5_count": 1487,
+        "lte_10_count": 4909,
+        "lte_20_count": 5481,
+        "lte_50_count": 6974,
+        "gt_50_count": 76
+      },
+      "elevation_profile_m": {
+        "min": 6.3,
+        "max": 73.0,
+        "gain": 306.4,
+        "loss": 294.8
+      },
+      "speed_profile_mps": {
+        "median": 0.93,
+        "p90": 1.29,
+        "max": 2.83
+      },
+      "course_available_pct": 1.0,
+      "activity_counts": {
+        "unknown": 3102,
+        "walking": 3948
+      },
+      "map_coverage": {
+        "sample_stride": 25,
+        "inside_corridor_count": 257,
+        "inside_corridor_with_hacc_count": 276,
+        "nearest_corridor_distance_p50_m": 3.1,
+        "nearest_corridor_distance_p95_m": 12.1,
+        "nearest_corridor_distance_max_m": 20.9
+      },
+      "representative_samples": [
+        {
+          "lat": 25.067971,
+          "lon": 121.661161,
+          "horizontal_accuracy_m": 29.51,
+          "nearest_corridor_id": "osm_way_714715921",
+          "nearest_corridor_distance_m": 5.6,
+          "inside_corridor": true,
+          "inside_corridor_with_hacc": true,
+          "timestamp": "2026-05-12T09:39:32.582+08:00",
+          "pedometer_distance_m": 2725.5
+        },
+        {
+          "lat": 25.06829,
+          "lon": 121.661358,
+          "horizontal_accuracy_m": 21.13,
+          "nearest_corridor_id": "osm_way_502065280",
+          "nearest_corridor_distance_m": 0.2,
+          "inside_corridor": true,
+          "inside_corridor_with_hacc": true,
+          "timestamp": "2026-05-12T09:40:30.527+08:00",
+          "pedometer_distance_m": 2775.1
+        },
+        {
+          "lat": 25.069032,
+          "lon": 121.66223,
+          "horizontal_accuracy_m": 6.78,
+          "nearest_corridor_id": "osm_way_502065281",
+          "nearest_corridor_distance_m": 13.6,
+          "inside_corridor": false,
+          "inside_corridor_with_hacc": true,
+          "timestamp": "2026-05-12T09:41:58.442+08:00",
+          "pedometer_distance_m": 2874.0
+        },
+        {
+          "lat": 25.069278,
+          "lon": 121.663114,
+          "horizontal_accuracy_m": 10.62,
+          "nearest_corridor_id": "osm_way_252570709",
+          "nearest_corridor_distance_m": 1.8,
+          "inside_corridor": true,
+          "inside_corridor_with_hacc": true,
+          "timestamp": "2026-05-12T09:43:14.368+08:00",
+          "pedometer_distance_m": 2978.6
+        },
+        {
+          "lat": 25.06988,
+          "lon": 121.663804,
+          "horizontal_accuracy_m": 4.2,
+          "nearest_corridor_id": "osm_way_252570709",
+          "nearest_corridor_distance_m": 4.3,
+          "inside_corridor": true,
+          "inside_corridor_with_hacc": true,
+          "timestamp": "2026-05-12T09:44:36.289+08:00",
+          "pedometer_distance_m": 3078.8
+        },
+        {
+          "lat": 25.069705,
+          "lon": 121.664541,
+          "horizontal_accuracy_m": 4.43,
+          "nearest_corridor_id": "osm_way_98674818",
+          "nearest_corridor_distance_m": 0.8,
+          "inside_corridor": true,
+          "inside_corridor_with_hacc": true,
+          "timestamp": "2026-05-12T09:45:40.229+08:00",
+          "pedometer_distance_m": 3159.1
+        },
+        {
+          "lat": 25.069817,
+          "lon": 121.665362,
+          "horizontal_accuracy_m": 9.57,
+          "nearest_corridor_id": "osm_way_573230570",
+          "nearest_corridor_distance_m": 5.6,
+          "inside_corridor": true,
+          "inside_corridor_with_hacc": true,
+          "timestamp": "2026-05-12T09:47:02.152+08:00",
+          "pedometer_distance_m": 3246.3
+        },
+        {
+          "lat": 25.070232,
+          "lon": 121.66556,
+          "horizontal_accuracy_m": 8.78,
+          "nearest_corridor_id": "osm_way_252572479",
+          "nearest_corridor_distance_m": 1.0,
+          "inside_corridor": true,
+          "inside_corridor_with_hacc": true,
+          "timestamp": "2026-05-12T09:48:24.076+08:00",
+          "pedometer_distance_m": 3307.5
+        },
+        {
+          "lat": 25.070752,
+          "lon": 121.666069,
+          "horizontal_accuracy_m": 8.97,
+          "nearest_corridor_id": "osm_way_98673881",
+          "nearest_corridor_distance_m": 4.2,
+          "inside_corridor": true,
+          "inside_corridor_with_hacc": true,
+          "timestamp": "2026-05-12T09:49:51.796+08:00",
+          "pedometer_distance_m": 3416.9
+        },
+        {
+          "lat": 25.07082,
+          "lon": 121.666072,
+          "horizontal_accuracy_m": 31.63,
+          "nearest_corridor_id": "osm_way_98673881",
+          "nearest_corridor_distance_m": 3.3,
+          "inside_corridor": true,
+          "inside_corridor_with_hacc": true,
+          "timestamp": "2026-05-12T09:51:25.708+08:00",
+          "pedometer_distance_m": 3430.2
+        },
+        {
+          "lat": 25.070824,
+          "lon": 121.666096,
+          "horizontal_accuracy_m": 27.48,
+          "nearest_corridor_id": "osm_way_98673881",
+          "nearest_corridor_distance_m": 4.1,
+          "inside_corridor": true,
+          "inside_corridor_with_hacc": true,
+          "timestamp": "2026-05-12T09:52:59.629+08:00",
+          "pedometer_distance_m": 3436.9
+        },
+        {
+          "lat": 25.070976,
+          "lon": 121.666797,
+          "horizontal_accuracy_m": 5.85,
+          "nearest_corridor_id": "osm_way_395984544",
+          "nearest_corridor_distance_m": 1.6,
+          "inside_corridor": true,
+          "inside_corridor_with_hacc": true,
+          "timestamp": "2026-05-12T09:54:33.530+08:00",
+          "pedometer_distance_m": 3504.8
+        },
+        {
+          "lat": 25.071412,
+          "lon": 121.667712,
+          "horizontal_accuracy_m": 5.5,
+          "nearest_corridor_id": "osm_way_395984544",
+          "nearest_corridor_distance_m": 3.0,
+          "inside_corridor": true,
+          "inside_corridor_with_hacc": true,
+          "timestamp": "2026-05-12T09:56:07.442+08:00",
+          "pedometer_distance_m": 3619.2
+        },
+        {
+          "lat": 25.071425,
+          "lon": 121.668273,
+          "horizontal_accuracy_m": 6.92,
+          "nearest_corridor_id": "osm_way_539956449",
+          "nearest_corridor_distance_m": 0.3,
+          "inside_corridor": true,
+          "inside_corridor_with_hacc": true,
+          "timestamp": "2026-05-12T09:57:41.353+08:00",
+          "pedometer_distance_m": 3728.8
+        },
+        {
+          "lat": 25.071595,
+          "lon": 121.669003,
+          "horizontal_accuracy_m": 4.32,
+          "nearest_corridor_id": "osm_way_562920171",
+          "nearest_corridor_distance_m": 3.0,
+          "inside_corridor": true,
+          "inside_corridor_with_hacc": true,
+          "timestamp": "2026-05-12T09:59:15.264+08:00",
+          "pedometer_distance_m": 3798.6
+        },
+        {
+          "lat": 25.072081,
+          "lon": 121.669181,
+          "horizontal_accuracy_m": 5.42,
+          "nearest_corridor_id": "osm_way_562920171",
+          "nearest_corridor_distance_m": 9.3,
+          "inside_corridor": false,
+          "inside_corridor_with_hacc": true,
+          "timestamp": "2026-05-12T10:00:49.175+08:00",
+          "pedometer_distance_m": 3874.4
+        }
+      ]
     }
   ],
   "gap_between_segments": {
@@ -85,7 +552,8 @@
     "min_path_corridors": 30,
     "min_steps_corridors": 15,
     "min_map_inside_with_hacc_pct": 0.97,
-    "max_nearest_corridor_distance_p95_m": 13.0
+    "max_nearest_corridor_distance_p95_m": 13.0,
+    "min_representative_samples_per_segment": 12
   },
   "notes": [
     "Raw Apple Watch SensorLog files are local evidence and are not required by the regression test.",
