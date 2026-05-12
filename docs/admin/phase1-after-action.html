@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Scout Phase 1 Admin</title>
+  <link rel="icon" href="data:,">
   <style>
     :root {
       --bg: #111315;
@@ -33,7 +34,8 @@
     .shell {
       display: grid;
       grid-template-columns: 280px minmax(480px, 1fr) 360px;
-      min-height: 100vh;
+      height: 100vh;
+      overflow: hidden;
     }
 
     aside, main, .details {
@@ -45,6 +47,7 @@
       padding: 16px;
       background: var(--surface);
       border-right: 1px solid var(--border);
+      overflow: auto;
     }
 
     main {
@@ -57,6 +60,7 @@
       padding: 16px;
       background: var(--surface);
       border-left: 1px solid var(--border);
+      overflow: auto;
     }
 
     h1, h2, h3, p { margin: 0; }
@@ -137,6 +141,36 @@
       position: relative;
       min-height: 0;
       overflow: hidden;
+    }
+
+    .hover-hint {
+      position: fixed;
+      z-index: 20;
+      max-width: 320px;
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: rgba(24, 27, 31, 0.96);
+      color: var(--text);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.32);
+      pointer-events: none;
+      transform: translate(14px, 14px);
+    }
+
+    .hover-hint strong {
+      display: block;
+      margin-bottom: 4px;
+      font-size: 13px;
+    }
+
+    .hover-hint span {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .hover-hint.is-hidden {
+      display: none;
     }
 
     svg {
@@ -263,7 +297,11 @@
     }
 
     @media (max-width: 980px) {
-      .shell { grid-template-columns: 1fr; }
+      .shell {
+        grid-template-columns: 1fr;
+        height: auto;
+        overflow: visible;
+      }
       aside, .details { border: 0; border-bottom: 1px solid var(--border); }
       main { min-height: 70vh; }
     }
@@ -315,11 +353,13 @@
       <div id="itemList" class="item-list"></div>
     </section>
   </div>
+  <div id="hoverHint" class="hover-hint is-hidden" role="status" aria-live="polite"></div>
 
   <script>
     const CASE_ID = "scout_260512_field_golden";
     const state = { view: null, projected: null, selected: null };
     const svg = document.getElementById("map");
+    const hoverHint = document.getElementById("hoverHint");
     const layerInputs = document.querySelectorAll("[data-layer]");
 
     function apiBase() {
@@ -372,11 +412,66 @@
       document.getElementById("detailJson").textContent = JSON.stringify(item, null, 2);
     }
 
+    function hintTitle(item) {
+      return item.name || item.checkpoint_id || item.corridor_id || item.rule_id || item.incident_id || item.source_id || item.evidence_type;
+    }
+
+    function hintSummary(item) {
+      if (item.evidence_type === "map_corridor") {
+        return `${item.route_level || "corridor"} | width ${item.corridor_half_width_m}m | confidence ${item.source_metadata?.confidence ?? "-"}`;
+      }
+      if (item.evidence_type === "mission_checkpoint") {
+        return `${item.checkpoint_type} | radius ${item.arrival_radius_m}m | ${item.control_zone_after || "no zone"}`;
+      }
+      if (item.evidence_type === "risk_rule") {
+        return `${item.output_level} | ${item.hazard_types.join(", ") || "any hazard"} | ${item.min_duration_s}s`;
+      }
+      if (item.evidence_type === "incident_package") {
+        return `${item.trigger_level} | ${item.trigger_event?.event_type || "event"} | samples ${item.raw_sample_count}`;
+      }
+      if (item.evidence_type === "device_observation") {
+        return `progress ${Math.round(item.total_progress_m || item.progress_m || 0)}m | points ${item.point_count || item.index || "-"}`;
+      }
+      return item.source_path || "evidence";
+    }
+
+    function showHint(event, item) {
+      hoverHint.innerHTML = `<strong>${hintTitle(item)}</strong><span>${hintSummary(item)}</span>`;
+      moveHint(event);
+      hoverHint.classList.remove("is-hidden");
+    }
+
+    function moveHint(event) {
+      const rect = event.target && event.target.getBoundingClientRect ? event.target.getBoundingClientRect() : null;
+      const clientX = Number.isFinite(event.clientX) ? event.clientX : (rect ? rect.left : window.innerWidth / 2);
+      const clientY = Number.isFinite(event.clientY) ? event.clientY : (rect ? rect.top : window.innerHeight / 2);
+      const x = Math.min(clientX, window.innerWidth - 340);
+      const y = Math.min(clientY, window.innerHeight - 120);
+      hoverHint.style.left = `${x}px`;
+      hoverHint.style.top = `${y}px`;
+    }
+
+    function hideHint() {
+      hoverHint.classList.add("is-hidden");
+    }
+
     function attachEvidence(node, item) {
       node.tabIndex = 0;
-      node.addEventListener("mouseenter", () => setDetail(item));
-      node.addEventListener("focus", () => setDetail(item));
-      node.addEventListener("click", () => setDetail(item));
+      node.addEventListener("mouseenter", event => {
+        setDetail(item);
+        showHint(event, item);
+      });
+      node.addEventListener("mousemove", moveHint);
+      node.addEventListener("mouseleave", hideHint);
+      node.addEventListener("focus", event => {
+        setDetail(item);
+        showHint(event, item);
+      });
+      node.addEventListener("blur", hideHint);
+      node.addEventListener("click", event => {
+        setDetail(item);
+        showHint(event, item);
+      });
       node.addEventListener("keydown", event => {
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();

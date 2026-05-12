@@ -63,6 +63,8 @@ class AdminAfterActionTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("Scout Phase 1 Admin", response.text)
         self.assertIn(f"/admin/cases/${{CASE_ID}}", response.text)
+        self.assertIn("hoverHint", response.text)
+        self.assertIn("height: 100vh", response.text)
 
     def test_unknown_admin_case_returns_404(self):
         client = TestClient(create_admin_app())
