@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 from incident_store import IncidentStore
 from mission_graph import load_mission_graph
 from offline_map import load_offline_map_context
+from replay_runner import ReplayResult, replay_route
 from risk_rules import load_risk_rules
 from route_matching import load_gpx_route
 from safety_models import IncidentPackage
@@ -25,6 +27,8 @@ class AdminCaseArtifacts:
     map_context_path: Path
     mission_graph_path: Path
     risk_rules_path: Path
+    mission_context_path: Path
+    route_progress_config_path: Path
     incident_store_path: Path | None = None
 
 
@@ -44,6 +48,8 @@ def resolve_admin_case_artifacts(
         map_context_path=root / "tests" / "fixtures" / "maps" / "scout_260512_overpass_map_context.geojson",
         mission_graph_path=root / "tests" / "fixtures" / "mission_graph" / "scout_260512_field_mission.json",
         risk_rules_path=root / "tests" / "fixtures" / "risk_rules" / "scout_260512_field_rules.json",
+        mission_context_path=root / "tests" / "fixtures" / "mission_context" / "scout_260512_field_normal.json",
+        route_progress_config_path=root / "tests" / "fixtures" / "route_progress" / "scout_260512_field_config.json",
         incident_store_path=incident_store_path,
     )
 
@@ -61,6 +67,14 @@ def build_admin_case_view(
     map_context = load_offline_map_context(artifacts.map_context_path)
     risk_rules = load_risk_rules(artifacts.risk_rules_path)
     incidents = _load_incidents(artifacts.incident_store_path)
+    replay_result = _cached_replay_result(
+        str(artifacts.mission_graph_path),
+        str(artifacts.route_path),
+        str(artifacts.map_context_path),
+        str(artifacts.risk_rules_path),
+        str(artifacts.mission_context_path),
+        str(artifacts.route_progress_config_path),
+    )
 
     return {
         "case_id": case_id,
@@ -193,8 +207,9 @@ def build_admin_case_view(
             }
             for rule in risk_rules.rules
         ],
-        "safety_timeline": _safety_timeline(incidents, artifacts, root),
-        "segment_capsules": _segment_capsule_refs(incidents, artifacts, root),
+        "replay": _replay_summary(replay_result, artifacts, root),
+        "safety_timeline": _safety_timeline(replay_result, incidents, artifacts, root),
+        "segment_capsules": _segment_capsules(replay_result, incidents, artifacts, root),
         "incident_packages": [
             {
                 "incident_id": package.incident_id,
@@ -231,6 +246,25 @@ def _load_incidents(incident_store_path: Path | None) -> list[IncidentPackage]:
     return [store.load(incident_id) for incident_id in store.list_ids()]
 
 
+@lru_cache(maxsize=8)
+def _cached_replay_result(
+    mission_graph_path: str,
+    route_path: str,
+    map_context_path: str,
+    risk_rules_path: str,
+    mission_context_path: str,
+    route_progress_config_path: str,
+) -> ReplayResult:
+    return replay_route(
+        mission_graph_path,
+        route_path,
+        map_context_path=map_context_path,
+        risk_rules_path=risk_rules_path,
+        mission_context_path=mission_context_path,
+        route_progress_config_path=route_progress_config_path,
+    )
+
+
 def _artifact_refs(artifacts: AdminCaseArtifacts, root: Path) -> dict[str, str | None]:
     return {
         "golden_case": _relpath(artifacts.golden_case_path, root),
@@ -238,6 +272,8 @@ def _artifact_refs(artifacts: AdminCaseArtifacts, root: Path) -> dict[str, str |
         "map_context": _relpath(artifacts.map_context_path, root),
         "mission_graph": _relpath(artifacts.mission_graph_path, root),
         "risk_rules": _relpath(artifacts.risk_rules_path, root),
+        "mission_context": _relpath(artifacts.mission_context_path, root),
+        "route_progress_config": _relpath(artifacts.route_progress_config_path, root),
         "incident_store": str(artifacts.incident_store_path) if artifacts.incident_store_path else None,
     }
 
@@ -253,12 +289,65 @@ def _bounds(points: list[tuple[float, float]]) -> dict[str, float]:
     }
 
 
+def _replay_summary(
+    replay_result: ReplayResult,
+    artifacts: AdminCaseArtifacts,
+    root: Path,
+) -> dict[str, Any]:
+    progressed_checkpoints = [
+        update.checkpoint.checkpoint_id
+        for update in replay_result.progress_updates
+        if update.checkpoint is not None
+    ]
+    return {
+        "observations_processed": replay_result.observations_processed,
+        "safety_level": str(replay_result.safety_state.level),
+        "safety_events": [str(event.event_type) for event in replay_result.safety_events],
+        "checkpoint_count": len(progressed_checkpoints),
+        "checkpoint_hit_count": len(replay_result.checkpoint_hits),
+        "progressed_checkpoints": progressed_checkpoints,
+        "segment_capsule_count": len(replay_result.segment_capsules),
+        "segment_capsules": [capsule.capsule_id for capsule in replay_result.segment_capsules],
+        "incident_count": len(replay_result.incident_packages),
+        "recording_profiles": sorted({str(decision.profile) for decision in replay_result.recording_decisions}),
+        "source_id": "field_replay_result",
+        "source_path": _relpath(artifacts.route_progress_config_path, root),
+        "evidence_type": "replay_summary",
+    }
+
+
 def _safety_timeline(
+    replay_result: ReplayResult,
     incidents: list[IncidentPackage],
     artifacts: AdminCaseArtifacts,
     root: Path,
 ) -> list[dict[str, Any]]:
     timeline: list[dict[str, Any]] = []
+    for arrival in replay_result.checkpoint_hits:
+        timeline.append(
+            {
+                "timestamp": arrival.segment_capsule.started_at if arrival.segment_capsule else None,
+                "label": arrival.checkpoint.checkpoint_id,
+                "reason": f"Checkpoint {arrival.checkpoint.checkpoint_id} reached within {arrival.distance_m:.1f}m.",
+                "checkpoint": arrival.checkpoint.model_dump(mode="json"),
+                "distance_m": arrival.distance_m,
+                "source_id": arrival.checkpoint.checkpoint_id,
+                "source_path": _relpath(artifacts.mission_graph_path, root),
+                "evidence_type": "replay_checkpoint",
+            }
+        )
+    for capsule in replay_result.segment_capsules:
+        timeline.append(
+            {
+                "timestamp": capsule.ended_at,
+                "label": capsule.segment_id,
+                "reason": f"Segment capsule {capsule.segment_id} sealed.",
+                "capsule": capsule.model_dump(mode="json"),
+                "source_id": capsule.capsule_id,
+                "source_path": _relpath(artifacts.mission_graph_path, root),
+                "evidence_type": "segment_capsule",
+            }
+        )
     for package in incidents:
         for transition in package.safety_transitions:
             timeline.append(
@@ -282,16 +371,48 @@ def _safety_timeline(
                     "evidence_type": "runtime_decision",
                 }
             )
-    return sorted(timeline, key=lambda item: item["timestamp"])
+    if not replay_result.safety_events:
+        timeline.insert(
+            0,
+            {
+                "timestamp": 0.0,
+                "label": str(replay_result.safety_state.level),
+                "reason": "Replay completed with no Ln safety events.",
+                "source_id": "field_replay_result",
+                "source_path": _relpath(artifacts.route_progress_config_path, root),
+                "evidence_type": "runtime_decision",
+            },
+        )
+    return sorted(timeline, key=_timeline_sort_key)
 
 
-def _segment_capsule_refs(
+def _timeline_sort_key(item: dict[str, Any]) -> tuple[float, int]:
+    if item["evidence_type"] == "runtime_decision" and item.get("source_id") == "field_replay_result":
+        return (-1.0, 0)
+    timestamp = item.get("timestamp")
+    if timestamp is None:
+        return (float("inf"), 9)
+    return (float(timestamp), 1)
+
+
+def _segment_capsules(
+    replay_result: ReplayResult,
     incidents: list[IncidentPackage],
     artifacts: AdminCaseArtifacts,
     root: Path,
 ) -> list[dict[str, Any]]:
     seen: set[str] = set()
     capsules: list[dict[str, Any]] = []
+    for capsule in replay_result.segment_capsules:
+        seen.add(capsule.capsule_id)
+        capsules.append(
+            {
+                **capsule.model_dump(mode="json"),
+                "source_id": capsule.capsule_id,
+                "source_path": _relpath(artifacts.mission_graph_path, root),
+                "evidence_type": "segment_capsule",
+            }
+        )
     for package in incidents:
         for capsule_id in package.segment_capsule_ids:
             if capsule_id in seen:
