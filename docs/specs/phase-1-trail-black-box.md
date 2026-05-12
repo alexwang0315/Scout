@@ -463,6 +463,9 @@ Expected examples:
 ```text
 tests/fixtures/maps/normal_climb_map_context.geojson
 tests/fixtures/maps/off_route_hazard_context.geojson
+tests/fixtures/maps/steep_slope_map_context.geojson
+tests/fixtures/maps/scout_260512_overpass_map_context.geojson
+tests/fixtures/maps/scout_260512_overpass_query.ql
 ```
 
 The first synthetic map context should be generated from the current normal GPX route and test-only hazard placement. It should include:
@@ -473,6 +476,17 @@ The first synthetic map context should be generated from the current normal GPX 
 - checkpoint POIs derived from the mission graph;
 - at least one synthetic hazard polygon used by tests;
 - source metadata such as `source=synthetic_fixture`, `source_version`, `confidence`, and `known_staleness_risk`.
+
+Real field golden cases may use Overpass-derived OpenStreetMap linework as offline map evidence when the query is preserved next to the generated GeoJSON. These fixtures must still be deterministic in tests: keep the raw Overpass query, converted Scout map context, bbox, source timestamp, confidence, and staleness metadata in version control. Do not require large raw SensorLog captures for normal unit tests; store their reproducible summary metrics under `tests/fixtures/field_cases/`.
+
+Current field golden case:
+
+```text
+docs/specs/scout-260512-field-golden.md
+tests/fixtures/field_cases/scout_260512_golden.json
+tests/fixtures/maps/scout_260512_overpass_map_context.geojson
+tests/fixtures/maps/scout_260512_overpass_query.ql
+```
 
 Expected examples:
 
@@ -707,6 +721,7 @@ Required test areas:
   - Entering a synthetic hazard zone for less than 30 seconds does not trigger L2.
   - Remaining inside a synthetic hazard zone for at least 30 seconds triggers L2 and records map source metadata.
   - If a route-level corridor width is missing, the evaluator uses `3m` as the default corridor half-width.
+  - The 2026-05-12 field golden case loads an Overpass-derived map context with at least 600 corridors, and both Watch segments keep at least 97% sampled points inside a corridor after horizontal GPS accuracy is considered.
 - Replay:
   - Existing Apple Watch sample can be replayed without server startup.
   - Replay output is deterministic for the same input.
@@ -796,6 +811,10 @@ The replay baseline should satisfy these deterministic checks:
   - emits `WEAK_GPS`
   - includes `pdr_fallback` evidence and PDR delta
   - does not treat weak GPS alone as map corridor deviation.
+- Steep-slope terrain fixture:
+  - normal route geometry remains inside the approved map corridor.
+  - sustained `steep_slope` hazard evidence emits `MAP_HAZARD`.
+  - opens one L2 incident package without emitting `ROUTE_DEVIATION`.
 - Go/No-Go fixtures:
   - normal context remains L0
   - low-battery/near-sunset context emits L2 `RESOURCE_CONSTRAINT`
@@ -833,7 +852,7 @@ The replay baseline should satisfy these deterministic checks:
   - `/pdr/update` remains the legacy Wi-Fi/PDR/AI-worker path; Phase 1 safety ingest is additive.
 - Full test suite:
   - `./venv/bin/python -m pytest tests -q`
-  - current expected result: `82 passed, 4 subtests passed`.
+  - current expected result: `84 passed, 4 subtests passed`.
 
 ## Open Questions
 
