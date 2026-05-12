@@ -1,0 +1,49 @@
+{
+  "resource_state": {
+    "device_battery": 0.85,
+    "estimated_human_energy": 0.78,
+    "pace_trend": 0.9,
+    "heart_rate_trend": "stable",
+    "fatigue_score": 0.18
+  },
+  "environment_state": {
+    "weather_risk": 0.12,
+    "temperature_c": 25.0,
+    "rain_probability": 0.1,
+    "wind_speed_mps": 2.0,
+    "sunset_time": "2026-05-12T18:31:00+08:00",
+    "daylight_remaining_seconds": 30000,
+    "visibility": "good"
+  },
+  "communication_state": {
+    "capabilities": [
+      {
+        "channel": "cellular",
+        "available": true,
+        "signal_strength": null,
+        "supports_outbound": true,
+        "supports_inbound": true,
+        "supports_nearby_pull": false,
+        "estimated_delivery_confidence": 0.62
+      },
+      {
+        "channel": "bluetooth",
+        "available": true,
+        "signal_strength": null,
+        "supports_outbound": false,
+        "supports_inbound": true,
+        "supports_nearby_pull": true,
+        "estimated_delivery_confidence": 0.55
+      }
+    ],
+    "last_successful_uplink": "2026-05-12T08:52:38.291+08:00"
+  },
+  "route_context": {
+    "mission_id": "scout_260512_field_golden",
+    "current_segment_id": "seg_01",
+    "control_zone_id": "zone_field_approach",
+    "matched_route_confidence": 0.977,
+    "map_context": "tests/fixtures/maps/scout_260512_overpass_map_context.geojson",
+    "golden_case": "tests/fixtures/field_cases/scout_260512_golden.json"
+  }
+}

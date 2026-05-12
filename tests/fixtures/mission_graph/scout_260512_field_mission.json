@@ -1,0 +1,445 @@
+{
+  "mission_id": "scout_260512_field_golden",
+  "name": "Scout 2026-05-12 field golden mission",
+  "route_source": "tests/fixtures/routes/scout_260512_field_route.gpx",
+  "checkpoints": [
+    {
+      "checkpoint_id": "cp_01",
+      "name": "Field start",
+      "checkpoint_type": "start",
+      "lat": 25.062407,
+      "lon": 121.653647,
+      "elevation_m": 24.94,
+      "arrival_radius_m": 30.0,
+      "compression_boundary": true,
+      "must_emit_checkin": true,
+      "control_zone_after": "zone_field_approach",
+      "source": "watch_260512_085237:representative_samples[0] -> scout_260512_field_route.gpx:trkpt[0]"
+    },
+    {
+      "checkpoint_id": "cp_02",
+      "name": "Field checkpoint 02",
+      "checkpoint_type": "terrain_transition",
+      "lat": 25.059525,
+      "lon": 121.653797,
+      "elevation_m": 26.84,
+      "arrival_radius_m": 30.0,
+      "compression_boundary": true,
+      "must_emit_checkin": false,
+      "control_zone_after": "zone_field_forest",
+      "source": "watch_260512_085237:representative_samples[4] -> scout_260512_field_route.gpx:trkpt[230]"
+    },
+    {
+      "checkpoint_id": "cp_03",
+      "name": "Field checkpoint 03",
+      "checkpoint_type": "terrain_transition",
+      "lat": 25.063127,
+      "lon": 121.652299,
+      "elevation_m": 23.33,
+      "arrival_radius_m": 30.0,
+      "compression_boundary": true,
+      "must_emit_checkin": false,
+      "control_zone_after": "zone_field_forest",
+      "source": "watch_260512_085237:representative_samples[8] -> scout_260512_field_route.gpx:trkpt[459]"
+    },
+    {
+      "checkpoint_id": "cp_04",
+      "name": "Field checkpoint 04",
+      "checkpoint_type": "terrain_transition",
+      "lat": 25.065575,
+      "lon": 121.652305,
+      "elevation_m": 22.4,
+      "arrival_radius_m": 30.0,
+      "compression_boundary": true,
+      "must_emit_checkin": false,
+      "control_zone_after": "zone_field_forest",
+      "source": "watch_260512_085237:representative_samples[11] -> scout_260512_field_route.gpx:trkpt[631]"
+    },
+    {
+      "checkpoint_id": "cp_05",
+      "name": "Segment 1 end / retreat",
+      "checkpoint_type": "retreat_point",
+      "lat": 25.068131,
+      "lon": 121.655742,
+      "elevation_m": 22.05,
+      "arrival_radius_m": 30.0,
+      "compression_boundary": true,
+      "must_emit_checkin": true,
+      "control_zone_after": "zone_transfer_gap",
+      "source": "watch_260512_085237:representative_samples[15] -> scout_260512_field_route.gpx:trkpt[861]"
+    },
+    {
+      "checkpoint_id": "cp_06",
+      "name": "Segment 2 restart",
+      "checkpoint_type": "trailhead",
+      "lat": 25.067971,
+      "lon": 121.661161,
+      "elevation_m": 20.41,
+      "arrival_radius_m": 35.0,
+      "compression_boundary": true,
+      "must_emit_checkin": true,
+      "control_zone_after": "zone_weak_gps_forest",
+      "source": "watch_260512_093931:representative_samples[0] -> scout_260512_field_route.gpx:trkpt[862]"
+    },
+    {
+      "checkpoint_id": "cp_07",
+      "name": "Field checkpoint 07",
+      "checkpoint_type": "terrain_transition",
+      "lat": 25.06988,
+      "lon": 121.663804,
+      "elevation_m": 18.93,
+      "arrival_radius_m": 30.0,
+      "compression_boundary": true,
+      "must_emit_checkin": false,
+      "control_zone_after": "zone_weak_gps_forest",
+      "source": "watch_260512_093931:representative_samples[4] -> scout_260512_field_route.gpx:trkpt[1047]"
+    },
+    {
+      "checkpoint_id": "cp_08",
+      "name": "Field checkpoint 08",
+      "checkpoint_type": "terrain_transition",
+      "lat": 25.070752,
+      "lon": 121.666069,
+      "elevation_m": 36.62,
+      "arrival_radius_m": 30.0,
+      "compression_boundary": true,
+      "must_emit_checkin": false,
+      "control_zone_after": "zone_weak_gps_forest",
+      "source": "watch_260512_093931:representative_samples[8] -> scout_260512_field_route.gpx:trkpt[1238]"
+    },
+    {
+      "checkpoint_id": "cp_09",
+      "name": "Field checkpoint 09",
+      "checkpoint_type": "terrain_transition",
+      "lat": 25.070976,
+      "lon": 121.666797,
+      "elevation_m": 22.52,
+      "arrival_radius_m": 30.0,
+      "compression_boundary": true,
+      "must_emit_checkin": false,
+      "control_zone_after": "zone_weak_gps_forest",
+      "source": "watch_260512_093931:representative_samples[11] -> scout_260512_field_route.gpx:trkpt[1379]"
+    },
+    {
+      "checkpoint_id": "cp_10",
+      "name": "Field finish",
+      "checkpoint_type": "finish",
+      "lat": 25.072081,
+      "lon": 121.669181,
+      "elevation_m": 32.01,
+      "arrival_radius_m": 30.0,
+      "compression_boundary": true,
+      "must_emit_checkin": true,
+      "control_zone_after": "zone_finish_approach",
+      "source": "watch_260512_093931:representative_samples[15] -> scout_260512_field_route.gpx:trkpt[1567]"
+    }
+  ],
+  "control_zones": [
+    {
+      "zone_id": "zone_field_approach",
+      "zone_type": "trailhead",
+      "name": "field approach",
+      "expected_gps_reliability": 0.72,
+      "expected_communication_quality": 0.55,
+      "slope_risk": 0.15,
+      "notes": "Field route approach near mapped trail network."
+    },
+    {
+      "zone_id": "zone_field_forest",
+      "zone_type": "forest",
+      "name": "field forest",
+      "expected_gps_reliability": 0.62,
+      "expected_communication_quality": 0.38,
+      "slope_risk": 0.28,
+      "notes": "Mapped forest trail corridor; map evidence is advisory."
+    },
+    {
+      "zone_id": "zone_transfer_gap",
+      "zone_type": "retreat_corridor",
+      "name": "transfer gap",
+      "expected_gps_reliability": 0.8,
+      "expected_communication_quality": 0.55,
+      "slope_risk": 0.1,
+      "notes": "Observed break between two Watch recordings, not continuous walking evidence."
+    },
+    {
+      "zone_id": "zone_weak_gps_forest",
+      "zone_type": "forest",
+      "name": "weak gps forest",
+      "expected_gps_reliability": 0.45,
+      "expected_communication_quality": 0.32,
+      "slope_risk": 0.35,
+      "notes": "Second segment preserves weaker GPS for PDR fallback validation."
+    },
+    {
+      "zone_id": "zone_finish_approach",
+      "zone_type": "finish_approach",
+      "name": "finish approach",
+      "expected_gps_reliability": 0.7,
+      "expected_communication_quality": 0.5,
+      "slope_risk": 0.18,
+      "notes": "Final mapped corridor approach."
+    }
+  ],
+  "recording_policies": [
+    {
+      "policy_id": "policy_field_low",
+      "normal_profile": "low",
+      "watch_profile": "medium",
+      "concern_profile": "raw_lock",
+      "raw_ring_seconds": 180,
+      "checkpoint_seals_segment": true
+    },
+    {
+      "policy_id": "policy_field_medium",
+      "normal_profile": "medium",
+      "watch_profile": "high",
+      "concern_profile": "raw_lock",
+      "raw_ring_seconds": 300,
+      "checkpoint_seals_segment": true
+    },
+    {
+      "policy_id": "policy_field_weak_gps",
+      "normal_profile": "high",
+      "watch_profile": "high",
+      "concern_profile": "raw_lock",
+      "raw_ring_seconds": 480,
+      "checkpoint_seals_segment": true
+    }
+  ],
+  "segments": [
+    {
+      "segment_id": "seg_01",
+      "from_checkpoint_id": "cp_01",
+      "to_checkpoint_id": "cp_02",
+      "control_zone_id": "zone_field_approach",
+      "recording_policy_id": "policy_field_low",
+      "requirement": {
+        "min_device_battery": 0.15,
+        "min_estimated_human_energy": 0.35,
+        "expected_duration_seconds": 394,
+        "latest_safe_departure_time": null,
+        "requires_daylight": false,
+        "water_available": false,
+        "camp_available": false,
+        "retreat_available": false,
+        "signal_expected": true
+      },
+      "distance_m": 609.47,
+      "elevation_gain_m": 66.5,
+      "elevation_loss_m": 64.61,
+      "route_point_start_index": 0,
+      "route_point_end_index": 230
+    },
+    {
+      "segment_id": "seg_02",
+      "from_checkpoint_id": "cp_02",
+      "to_checkpoint_id": "cp_03",
+      "control_zone_id": "zone_field_forest",
+      "recording_policy_id": "policy_field_medium",
+      "requirement": {
+        "min_device_battery": 0.15,
+        "min_estimated_human_energy": 0.35,
+        "expected_duration_seconds": 499,
+        "latest_safe_departure_time": null,
+        "requires_daylight": true,
+        "water_available": false,
+        "camp_available": false,
+        "retreat_available": false,
+        "signal_expected": false
+      },
+      "distance_m": 521.97,
+      "elevation_gain_m": 45.07,
+      "elevation_loss_m": 48.57,
+      "route_point_start_index": 230,
+      "route_point_end_index": 459
+    },
+    {
+      "segment_id": "seg_03",
+      "from_checkpoint_id": "cp_03",
+      "to_checkpoint_id": "cp_04",
+      "control_zone_id": "zone_field_forest",
+      "recording_policy_id": "policy_field_medium",
+      "requirement": {
+        "min_device_battery": 0.15,
+        "min_estimated_human_energy": 0.35,
+        "expected_duration_seconds": 338,
+        "latest_safe_departure_time": null,
+        "requires_daylight": true,
+        "water_available": false,
+        "camp_available": false,
+        "retreat_available": false,
+        "signal_expected": false
+      },
+      "distance_m": 445.05,
+      "elevation_gain_m": 43.1,
+      "elevation_loss_m": 44.03,
+      "route_point_start_index": 459,
+      "route_point_end_index": 631
+    },
+    {
+      "segment_id": "seg_04",
+      "from_checkpoint_id": "cp_04",
+      "to_checkpoint_id": "cp_05",
+      "control_zone_id": "zone_field_forest",
+      "recording_policy_id": "policy_field_medium",
+      "requirement": {
+        "min_device_battery": 0.15,
+        "min_estimated_human_energy": 0.35,
+        "expected_duration_seconds": 459,
+        "latest_safe_departure_time": null,
+        "requires_daylight": true,
+        "water_available": false,
+        "camp_available": false,
+        "retreat_available": true,
+        "signal_expected": false
+      },
+      "distance_m": 587.29,
+      "elevation_gain_m": 50.13,
+      "elevation_loss_m": 50.48,
+      "route_point_start_index": 631,
+      "route_point_end_index": 861
+    },
+    {
+      "segment_id": "seg_05",
+      "from_checkpoint_id": "cp_05",
+      "to_checkpoint_id": "cp_06",
+      "control_zone_id": "zone_transfer_gap",
+      "recording_policy_id": "policy_field_medium",
+      "requirement": {
+        "min_device_battery": 0.15,
+        "min_estimated_human_energy": 0.35,
+        "expected_duration_seconds": 1125,
+        "latest_safe_departure_time": null,
+        "requires_daylight": false,
+        "water_available": false,
+        "camp_available": false,
+        "retreat_available": true,
+        "signal_expected": true
+      },
+      "distance_m": 546.1,
+      "elevation_gain_m": 0.0,
+      "elevation_loss_m": 1.64,
+      "route_point_start_index": 861,
+      "route_point_end_index": 862
+    },
+    {
+      "segment_id": "seg_06",
+      "from_checkpoint_id": "cp_06",
+      "to_checkpoint_id": "cp_07",
+      "control_zone_id": "zone_weak_gps_forest",
+      "recording_policy_id": "policy_field_weak_gps",
+      "requirement": {
+        "min_device_battery": 0.2,
+        "min_estimated_human_energy": 0.35,
+        "expected_duration_seconds": 304,
+        "latest_safe_departure_time": null,
+        "requires_daylight": true,
+        "water_available": false,
+        "camp_available": false,
+        "retreat_available": false,
+        "signal_expected": false
+      },
+      "distance_m": 591.44,
+      "elevation_gain_m": 106.56,
+      "elevation_loss_m": 108.03,
+      "route_point_start_index": 862,
+      "route_point_end_index": 1047
+    },
+    {
+      "segment_id": "seg_07",
+      "from_checkpoint_id": "cp_07",
+      "to_checkpoint_id": "cp_08",
+      "control_zone_id": "zone_weak_gps_forest",
+      "recording_policy_id": "policy_field_weak_gps",
+      "requirement": {
+        "min_device_battery": 0.2,
+        "min_estimated_human_energy": 0.35,
+        "expected_duration_seconds": 316,
+        "latest_safe_departure_time": null,
+        "requires_daylight": true,
+        "water_available": false,
+        "camp_available": false,
+        "retreat_available": false,
+        "signal_expected": false
+      },
+      "distance_m": 529.98,
+      "elevation_gain_m": 72.68,
+      "elevation_loss_m": 54.99,
+      "route_point_start_index": 1047,
+      "route_point_end_index": 1238
+    },
+    {
+      "segment_id": "seg_08",
+      "from_checkpoint_id": "cp_08",
+      "to_checkpoint_id": "cp_09",
+      "control_zone_id": "zone_weak_gps_forest",
+      "recording_policy_id": "policy_field_weak_gps",
+      "requirement": {
+        "min_device_battery": 0.2,
+        "min_estimated_human_energy": 0.35,
+        "expected_duration_seconds": 282,
+        "latest_safe_departure_time": null,
+        "requires_daylight": true,
+        "water_available": false,
+        "camp_available": false,
+        "retreat_available": false,
+        "signal_expected": false
+      },
+      "distance_m": 260.73,
+      "elevation_gain_m": 21.32,
+      "elevation_loss_m": 35.41,
+      "route_point_start_index": 1238,
+      "route_point_end_index": 1379
+    },
+    {
+      "segment_id": "seg_09",
+      "from_checkpoint_id": "cp_09",
+      "to_checkpoint_id": "cp_10",
+      "control_zone_id": "zone_weak_gps_forest",
+      "recording_policy_id": "policy_field_weak_gps",
+      "requirement": {
+        "min_device_battery": 0.2,
+        "min_estimated_human_energy": 0.35,
+        "expected_duration_seconds": 375,
+        "latest_safe_departure_time": null,
+        "requires_daylight": true,
+        "water_available": false,
+        "camp_available": false,
+        "retreat_available": false,
+        "signal_expected": false
+      },
+      "distance_m": 411.44,
+      "elevation_gain_m": 58.59,
+      "elevation_loss_m": 49.1,
+      "route_point_start_index": 1379,
+      "route_point_end_index": 1567
+    }
+  ],
+  "diversion_points": [
+    {
+      "diversion_id": "div_return_first_segment_start",
+      "name": "Return to first field start",
+      "diversion_type": "retreat",
+      "lat": 25.062407,
+      "lon": 121.653647,
+      "distance_from_route_m": 0.0,
+      "required_energy": 0.2,
+      "required_daylight_seconds": 1200,
+      "communication_available": true,
+      "risk_level": 0.25
+    },
+    {
+      "diversion_id": "div_restart_segment_two",
+      "name": "Hold at second segment restart",
+      "diversion_type": "hold",
+      "lat": 25.067971,
+      "lon": 121.661161,
+      "distance_from_route_m": 0.0,
+      "required_energy": 0.1,
+      "required_daylight_seconds": 600,
+      "communication_available": true,
+      "risk_level": 0.2
+    }
+  ]
+}
