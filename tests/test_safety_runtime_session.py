@@ -81,6 +81,8 @@ class SafetyRuntimeSessionTests(unittest.TestCase):
                 update = session.observe(_observation_from_route_point(index, point))
                 if any(event.event_type == SafetyEventType.ROUTE_DEVIATION for event in update.safety_events):
                     triggered = update
+                    for post_index, post_point in enumerate(route.points[index + 1 : index + 6], start=index + 1):
+                        session.observe(_observation_from_route_point(post_index, post_point))
                     break
 
             self.assertIsNotNone(triggered)
@@ -96,6 +98,11 @@ class SafetyRuntimeSessionTests(unittest.TestCase):
             snapshot = session.snapshot()
             self.assertEqual(snapshot.safety_state.level, "L2_CONCERN")
             self.assertEqual(len(snapshot.incident_packages), 1)
+            self.assertGreater(snapshot.incident_packages[0].raw_samples[-1]["timestamp"], triggered.incident_packages[0].triggered_at)
+            self.assertEqual(
+                snapshot.incident_packages[0].ai_summary_input["raw_window"]["latest_sample_timestamp"],
+                snapshot.incident_packages[0].raw_samples[-1]["timestamp"],
+            )
 
 
 def _observation_from_route_point(index: int, point: RoutePoint) -> Observation:

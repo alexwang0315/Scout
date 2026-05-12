@@ -50,7 +50,7 @@ class ReplayRunnerTests(unittest.TestCase):
         self.assertEqual(route_event.details["evidence_source"], "offline_map_corridor")
         self.assertEqual(route_event.details["corridor_id"], "corridor_normal_climb")
         self.assertEqual(route_event.details["map_source_metadata"]["source"], "synthetic_fixture")
-        trigger_sample = result.incident_packages[0].raw_samples[-1]
+        trigger_sample = _trigger_sample(result.incident_packages[0])
         self.assertEqual(trigger_sample["raw"]["map_evidence"]["hazards"][0]["hazard_id"], "hazard_off_route_slope")
         summary = result.incident_packages[0].ai_summary_input
         self.assertEqual(summary["event"]["event_type"], "route_deviation")
@@ -60,6 +60,11 @@ class ReplayRunnerTests(unittest.TestCase):
         self.assertEqual(
             result.incident_packages[0].raw_window_start,
             result.incident_packages[0].triggered_at - trigger_sample["raw"]["recording_policy"]["raw_ring_seconds"],
+        )
+        self.assertGreater(result.incident_packages[0].raw_samples[-1]["timestamp"], result.incident_packages[0].triggered_at)
+        self.assertEqual(
+            result.incident_packages[0].ai_summary_input["raw_window"]["latest_sample_timestamp"],
+            result.incident_packages[0].raw_samples[-1]["timestamp"],
         )
         self.assertEqual(result.safety_state.level, "L2_CONCERN")
         self.assertEqual(len(result.incident_packages), 1)
@@ -103,7 +108,7 @@ class ReplayRunnerTests(unittest.TestCase):
         self.assertEqual(event.details["segment_id"], "seg_05")
         self.assertEqual(result.safety_state.level, "L2_CONCERN")
         self.assertEqual(len(result.incident_packages), 1)
-        trigger_sample = result.incident_packages[0].raw_samples[-1]
+        trigger_sample = _trigger_sample(result.incident_packages[0])
         summary = result.incident_packages[0].ai_summary_input
         self.assertEqual(summary["event"]["event_type"], "resource_constraint")
         self.assertEqual(summary["mission_context"]["segment_id"], "seg_01")
@@ -150,6 +155,10 @@ class ReplayRunnerTests(unittest.TestCase):
             loaded = store.load(result.incident_packages[0].incident_id)
             self.assertEqual(loaded, result.incident_packages[0])
             self.assertEqual(loaded.ai_summary_input["event"]["event_type"], "route_deviation")
+            self.assertGreater(loaded.raw_samples[-1]["timestamp"], loaded.triggered_at)
+
+def _trigger_sample(package):
+    return next(sample for sample in package.raw_samples if sample["timestamp"] == package.triggered_at)
 
 
 if __name__ == "__main__":
