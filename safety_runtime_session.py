@@ -31,6 +31,7 @@ from replay_runner import (
 )
 from route_matching import GpxRoute, RoutePoint, load_gpx_route
 from route_progress import RouteProgressEvaluator, RouteProgressSample
+from route_progress import RouteProgressConfig, load_route_progress_config
 from safety_models import IncidentPackage, Observation, SafetyEvent, SafetyState
 from safety_state_machine import SafetyStateMachine
 
@@ -76,6 +77,8 @@ class SafetyRuntimeSession:
         risk_rules_path: Path | str | None = None,
         mission_context_path: Path | str | None = None,
         mission_provider_bundle: MissionProviderBundle | None = None,
+        route_progress_config: RouteProgressConfig | None = None,
+        route_progress_config_path: Path | str | None = None,
         incident_store_path: Path | str | None = None,
     ):
         mission_path = Path(mission_graph_path)
@@ -86,6 +89,8 @@ class SafetyRuntimeSession:
         self.risk_rule_evaluator = _load_risk_rule_evaluator(mission_path, self.planned_route_path, risk_rules_path)
         if mission_provider_bundle is None and mission_context_path is not None:
             mission_provider_bundle = load_fixture_provider_bundle(mission_context_path)
+        if route_progress_config is None and route_progress_config_path is not None:
+            route_progress_config = load_route_progress_config(route_progress_config_path)
         self.mission_provider_bundle = mission_provider_bundle
         self.go_no_go_evaluator = GoNoGoEvaluator()
         self.incident_store = IncidentStore(incident_store_path) if incident_store_path is not None else None
@@ -96,6 +101,7 @@ class SafetyRuntimeSession:
         self.route_progress_evaluator = RouteProgressEvaluator(
             self.runtime,
             self.planned_route,
+            config=route_progress_config,
             risk_rule_evaluator=self.risk_rule_evaluator,
         )
         self.safety_state_machine = SafetyStateMachine()

@@ -39,6 +39,7 @@ SCOUT_SAFETY_MISSION_GRAPH = Path(
         str(SCOUT_ROOT / "tests" / "fixtures" / "mission_graph" / "normal_climb_mission.json"),
     )
 )
+SCOUT_SAFETY_ROUTE_PROGRESS_CONFIG = os.getenv("SCOUT_SAFETY_ROUTE_PROGRESS_CONFIG")
 SCOUT_SAFETY_INCIDENT_STORE = Path(
     os.getenv("SCOUT_SAFETY_INCIDENT_STORE", os.path.expanduser("~/.scout-fusion/incidents"))
 )
@@ -94,6 +95,7 @@ if SCOUT_SAFETY_ENABLED:
     try:
         safety_runtime_session = SafetyRuntimeSession(
             SCOUT_SAFETY_MISSION_GRAPH,
+            route_progress_config_path=SCOUT_SAFETY_ROUTE_PROGRESS_CONFIG,
             incident_store_path=SCOUT_SAFETY_INCIDENT_STORE,
         )
         logger.info("Phase 1 safety runtime enabled: %s", SCOUT_SAFETY_MISSION_GRAPH)

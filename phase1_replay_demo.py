@@ -15,6 +15,7 @@ def run_phase1_replay_demo(args: argparse.Namespace) -> dict[str, Any]:
         map_context_path=args.map_context,
         risk_rules_path=args.risk_rules,
         mission_context_path=args.mission_context,
+        route_progress_config_path=args.route_progress_config,
         incident_store_path=args.incident_store,
     )
     return phase1_replay_summary(result)
@@ -47,6 +48,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--map-context", type=Path, default=None, help="Optional offline map GeoJSON path.")
     parser.add_argument("--risk-rules", type=Path, default=None, help="Optional risk rules JSON path.")
     parser.add_argument("--mission-context", type=Path, default=None, help="Optional Go/No-Go mission context JSON path.")
+    parser.add_argument("--route-progress-config", type=Path, default=None, help="Optional route progress config JSON path.")
     parser.add_argument("--incident-store", type=Path, default=None, help="Optional directory for incident package JSON.")
     parser.add_argument("--pretty", action="store_true", help="Pretty-print JSON output.")
     return parser

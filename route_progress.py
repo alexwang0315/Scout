@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
 from collections import deque
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from geo_utils import haversine_m
@@ -15,6 +17,7 @@ from safety_models import SafetyEvent, SafetyEventType, SafetyLevel
 class RouteProgressConfig:
     dense_checkpoint_spacing_m: float = 30.0
     route_deviation_threshold_m: float = 75.0
+    min_route_deviation_duration_s: float = 0.0
     weak_gps_accuracy_threshold_m: float = 50.0
     min_weak_gps_duration_s: float = 60.0
     min_weak_gps_movement_m: float = 20.0
@@ -65,6 +68,8 @@ class RouteProgressEvaluator:
         self.suppress_regression_until_progress_m: float | None = None
         self.weak_gps_started_at: float | None = None
         self.weak_gps_start_progress_m: float | None = None
+        self.route_deviation_started_at: float | None = None
+        self.route_deviation_key: str | None = None
         self.hazard_started_at: dict[str, float] = {}
         self.samples: deque[RouteProgressSample] = deque()
         self._emitted_keys: set[tuple[SafetyEventType, str]] = set()
@@ -74,6 +79,8 @@ class RouteProgressEvaluator:
 
         if self._is_route_deviated(sample):
             return self._route_deviation_event(sample)
+        self.route_deviation_started_at = None
+        self.route_deviation_key = None
 
         map_hazard = self._map_hazard_event(sample)
         if map_hazard is not None:
@@ -115,6 +122,8 @@ class RouteProgressEvaluator:
             3 * (sample.gps_horizontal_accuracy_m or 0.0),
         )
         key = (SafetyEventType.ROUTE_DEVIATION, "planned_route_corridor")
+        if not self._route_deviation_sustained(sample, key[1]):
+            return None
         if key in self._emitted_keys:
             return None
         self._emitted_keys.add(key)
@@ -135,6 +144,8 @@ class RouteProgressEvaluator:
 
     def _map_corridor_deviation_event(self, sample: RouteProgressSample) -> SafetyEvent | None:
         key = (SafetyEventType.ROUTE_DEVIATION, f"map_corridor:{sample.map_corridor_id}")
+        if not self._route_deviation_sustained(sample, "map_corridor"):
+            return None
         if key in self._emitted_keys:
             return None
         self._emitted_keys.add(key)
@@ -157,6 +168,19 @@ class RouteProgressEvaluator:
                 "map_source_metadata": sample.map_source_metadata,
             },
         )
+
+    def _route_deviation_sustained(self, sample: RouteProgressSample, key: str) -> bool:
+        if self.config.min_route_deviation_duration_s <= 0:
+            return True
+        if self.route_deviation_key != key:
+            self.route_deviation_key = key
+            self.route_deviation_started_at = sample.timestamp
+            return False
+        started_at = self.route_deviation_started_at
+        if started_at is None:
+            self.route_deviation_started_at = sample.timestamp
+            return False
+        return sample.timestamp - started_at >= self.config.min_route_deviation_duration_s
 
     def _map_hazard_event(self, sample: RouteProgressSample) -> SafetyEvent | None:
         hazards = sample.map_hazards or []
@@ -508,6 +532,15 @@ class RouteProgressEvaluator:
         checkpoint_ids = [self.runtime.graph.segments[0].from_checkpoint_id]
         checkpoint_ids.extend(segment.to_checkpoint_id for segment in self.runtime.graph.segments)
         return checkpoint_ids
+
+
+def load_route_progress_config(path: Path | str) -> RouteProgressConfig:
+    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    allowed = set(RouteProgressConfig.__dataclass_fields__)
+    unknown = sorted(set(payload) - allowed)
+    if unknown:
+        raise ValueError(f"Unknown route progress config keys: {', '.join(unknown)}")
+    return RouteProgressConfig(**payload)
 
 
 def sample_from_route_point(timestamp: float, point: RoutePoint) -> RouteProgressSample:

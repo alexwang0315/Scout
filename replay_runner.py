@@ -22,7 +22,7 @@ from provider_context import (
 from recording_policy_runtime import RecordingPolicyDecision, RecordingPolicyRuntime
 from risk_rules import RiskRuleEvaluator, load_risk_rules
 from route_matching import GpxRoute, RoutePoint, load_gpx_route
-from route_progress import RouteProgressEvaluator, RouteProgressSample
+from route_progress import RouteProgressConfig, RouteProgressEvaluator, RouteProgressSample, load_route_progress_config
 from safety_models import IncidentPackage, Observation, SafetyEvent, SafetyState
 from safety_state_machine import SafetyStateMachine
 
@@ -47,6 +47,8 @@ def replay_route(
     risk_rules_path: Path | str | None = None,
     mission_context_path: Path | str | None = None,
     mission_provider_bundle: MissionProviderBundle | None = None,
+    route_progress_config: RouteProgressConfig | None = None,
+    route_progress_config_path: Path | str | None = None,
     incident_store_path: Path | str | None = None,
 ) -> ReplayResult:
     mission_path = Path(mission_graph_path)
@@ -58,6 +60,8 @@ def replay_route(
     risk_rule_evaluator = _load_risk_rule_evaluator(mission_path, planned_route_path, risk_rules_path)
     if mission_provider_bundle is None and mission_context_path is not None:
         mission_provider_bundle = load_fixture_provider_bundle(mission_context_path)
+    if route_progress_config is None and route_progress_config_path is not None:
+        route_progress_config = load_route_progress_config(route_progress_config_path)
     go_no_go_evaluator = GoNoGoEvaluator()
     incident_store = IncidentStore(incident_store_path) if incident_store_path is not None else None
     pdr_fallback = PdrFallbackEstimator(planned_route)
@@ -67,6 +71,7 @@ def replay_route(
     route_progress_evaluator = RouteProgressEvaluator(
         runtime,
         planned_route,
+        config=route_progress_config,
         risk_rule_evaluator=risk_rule_evaluator,
     )
     safety_state_machine = SafetyStateMachine()

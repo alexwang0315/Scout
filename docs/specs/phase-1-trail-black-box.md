@@ -553,6 +553,19 @@ Run the Phase 1 replay demo:
   --pretty
 ```
 
+Run the 2026-05-12 field replay baseline:
+
+```bash
+./venv/bin/python phase1_replay_demo.py \
+  --mission tests/fixtures/mission_graph/scout_260512_field_mission.json \
+  --route tests/fixtures/routes/scout_260512_field_route.gpx \
+  --map-context tests/fixtures/maps/scout_260512_overpass_map_context.geojson \
+  --risk-rules tests/fixtures/risk_rules/scout_260512_field_rules.json \
+  --mission-context tests/fixtures/mission_context/scout_260512_field_normal.json \
+  --route-progress-config tests/fixtures/route_progress/scout_260512_field_config.json \
+  --pretty
+```
+
 Run server:
 
 ```bash
@@ -850,12 +863,16 @@ The replay baseline should satisfy these deterministic checks:
 - Field golden fixtures:
   - `scout_260512_golden.json` derives MissionGraph, mission context, risk rules, and downsampled GPX route fixtures through `generate_field_phase1_fixtures.py`.
   - the second Apple Watch segment preserves weak/noisy GPS evidence for later PDR fallback replay validation.
+- Field replay baseline:
+  - `scout_260512_field_config.json` applies real-field route-progress tolerances so isolated GPS/map jitter does not become L2.
+  - `scout_260512_field_route.gpx` replays through MissionGraph, Overpass map evidence, risk rules, and normal mission context as L0.
+  - abnormal synthetic fixtures still trigger L2 through the default route-progress config.
 - Existing app flow:
   - `server.app` registers both `/pdr/update` and `/safety/observations`.
   - `/pdr/update` remains the legacy Wi-Fi/PDR/AI-worker path; Phase 1 safety ingest is additive.
 - Full test suite:
   - `./venv/bin/python -m pytest tests -q`
-  - current expected result: `93 passed, 1 warning, 9 subtests passed`.
+  - current expected result: `101 passed, 1 warning, 14 subtests passed`.
 
 ## Open Questions
 
