@@ -162,7 +162,12 @@ def replay_route(
         )
         recording_decisions.append(recording_decision)
         observation.raw["recording_policy"] = recording_decision.model_dump(mode="json")
-        incident_package_builder.observe(observation)
+        updated_incident_packages = incident_package_builder.observe(observation)
+        _persist_updated_incidents(
+            updated_incident_packages,
+            incident_store=incident_store,
+            stored_incident_paths=stored_incident_paths,
+        )
         if safety_event is not None:
             _record_safety_event(
                 safety_event=safety_event,
@@ -185,6 +190,12 @@ def replay_route(
                 incident_store=incident_store,
                 stored_incident_paths=stored_incident_paths,
             )
+
+    _persist_updated_incidents(
+        incident_packages,
+        incident_store=incident_store,
+        stored_incident_paths=stored_incident_paths,
+    )
 
     return ReplayResult(
         observations_processed=len(route.points),
@@ -317,7 +328,38 @@ def _record_safety_event(
     if incident_package is not None:
         incident_packages.append(incident_package)
         if incident_store is not None:
-            stored_incident_paths.append(incident_store.save(incident_package))
+            _save_incident_package(
+                incident_package,
+                incident_store=incident_store,
+                stored_incident_paths=stored_incident_paths,
+            )
+
+
+def _persist_updated_incidents(
+    incident_packages: list[IncidentPackage],
+    *,
+    incident_store: IncidentStore | None,
+    stored_incident_paths: list[Path],
+) -> None:
+    if incident_store is None:
+        return
+    for incident_package in incident_packages:
+        _save_incident_package(
+            incident_package,
+            incident_store=incident_store,
+            stored_incident_paths=stored_incident_paths,
+        )
+
+
+def _save_incident_package(
+    incident_package: IncidentPackage,
+    *,
+    incident_store: IncidentStore,
+    stored_incident_paths: list[Path],
+) -> None:
+    path = incident_store.save(incident_package)
+    if path not in stored_incident_paths:
+        stored_incident_paths.append(path)
 
 
 def _active_segment_id(runtime: MissionGraphRuntime, progress_tracker: MissionProgressTracker) -> str | None:

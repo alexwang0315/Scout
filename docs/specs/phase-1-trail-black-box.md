@@ -102,7 +102,7 @@ L0 Normal -> L1 Watch -> L2 Concern
 
 The package must preserve enough data for later reconstruction:
 
-- Raw sensor samples from `incident_triggered_at - raw_ring_seconds` through the trigger sample available at package creation. Future live observation integration should keep appending through the post-trigger window.
+- Raw sensor samples from `incident_triggered_at - raw_ring_seconds` through `incident_triggered_at + raw_ring_seconds`. The package is created at trigger time and then keeps appending live/replay observations until the post-trigger window ends.
 - Safety events and state transitions.
 - Matched route segment and deviation measurements.
 - GPS/PDR trajectory summaries before and after the raw window.
@@ -110,6 +110,7 @@ The package must preserve enough data for later reconstruction:
 - AI-readable incident summary input.
 
 `ai_summary_input` is structured evidence, not an LLM decision surface. It contains the trigger event, mission context, route evidence, map evidence, Go/No-Go decision when present, raw-window metadata, sealed capsule ids, and latest safety transition.
+Trigger evidence remains pinned to the trigger timestamp even as later post-trigger samples extend the raw window; raw-window metadata also records the latest appended sample timestamp.
 
 ## Mission Graph
 
@@ -807,6 +808,10 @@ The replay baseline should satisfy these deterministic checks:
   - L0 uses each segment policy normal profile
   - L2 trigger samples record `raw_lock`
   - incident raw window follows the active policy `raw_ring_seconds`.
+- Incident package post-trigger window:
+  - active incidents append observations until `raw_window_end`.
+  - trigger route/map/Go-No-Go evidence remains pinned to the trigger sample.
+  - persisted incident JSON is updated as post-trigger samples arrive.
 - Safety API mock:
   - `/safety/ack` returns safety state, latest incident id, package availability, and last known position.
   - `/safety/observations` accepts SensorLog payloads, feeds `SafetyRuntimeSession`, and returns accepted observation count, safety level/events, recording profiles, checkpoint arrivals, incident ids, stored paths, and latest capability evidence.
@@ -828,7 +833,7 @@ The replay baseline should satisfy these deterministic checks:
   - `/pdr/update` remains the legacy Wi-Fi/PDR/AI-worker path; Phase 1 safety ingest is additive.
 - Full test suite:
   - `./venv/bin/python -m pytest tests -q`
-  - current expected result: `81 passed, 4 subtests passed`.
+  - current expected result: `82 passed, 4 subtests passed`.
 
 ## Open Questions
 

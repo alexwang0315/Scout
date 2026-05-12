@@ -210,6 +210,17 @@ class SafetyRuntimeSession:
             stored_incident_paths=self.stored_incident_paths,
         )
 
+    def persist_incidents(self) -> list[Path]:
+        if self.incident_store is None:
+            return []
+        new_paths: list[Path] = []
+        for incident_package in self.incident_packages:
+            path = self.incident_store.save(incident_package)
+            if path not in self.stored_incident_paths:
+                self.stored_incident_paths.append(path)
+                new_paths.append(path)
+        return new_paths
+
     def _go_no_go_evaluation(self, observation: Observation) -> GoNoGoProviderResult | None:
         if self.mission_provider_bundle is None or self._go_no_go_evaluated:
             return None

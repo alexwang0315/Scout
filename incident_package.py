@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import deque
+from dataclasses import dataclass
 from typing import Any
 
 from mission_models import SegmentCapsule
@@ -30,9 +31,32 @@ class IncidentPackageBuilder:
     def __init__(self, raw_window_seconds: int = 300):
         self.raw_window_seconds = raw_window_seconds
         self.raw_buffer = RawSampleBuffer(retention_seconds=raw_window_seconds)
+        self._active_incidents: list[_ActiveIncident] = []
 
-    def observe(self, observation: Observation) -> None:
+    def observe(self, observation: Observation) -> list[IncidentPackage]:
         self.raw_buffer.append(observation)
+        sample = observation.model_dump()
+        updated_packages: list[IncidentPackage] = []
+        remaining_incidents: list[_ActiveIncident] = []
+
+        for active in self._active_incidents:
+            if observation.timestamp > active.package.raw_window_end:
+                continue
+            remaining_incidents.append(active)
+            if observation.timestamp <= active.package.triggered_at:
+                continue
+            if observation.timestamp < active.package.raw_window_start:
+                continue
+            active.package.raw_samples.append(sample)
+            _refresh_ai_summary_input(
+                package=active.package,
+                segment_capsules=active.segment_capsules,
+                safety_transitions=active.safety_transitions,
+            )
+            updated_packages.append(active.package)
+
+        self._active_incidents = remaining_incidents
+        return updated_packages
 
     def build_for_event(
         self,
@@ -51,7 +75,7 @@ class IncidentPackageBuilder:
         transitions = safety_transitions or []
         raw_samples = self.raw_buffer.samples_between(raw_window_start, event.timestamp)
 
-        return IncidentPackage(
+        package = IncidentPackage(
             incident_id=f"incident_{event.event_type}_{int(event.timestamp)}",
             trigger_level=event.level,
             triggered_at=event.timestamp,
@@ -70,6 +94,37 @@ class IncidentPackageBuilder:
                 safety_transitions=transitions,
             ),
         )
+        self._active_incidents.append(
+            _ActiveIncident(
+                package=package,
+                segment_capsules=list(capsules),
+                safety_transitions=list(transitions),
+            )
+        )
+        return package
+
+
+@dataclass(frozen=True)
+class _ActiveIncident:
+    package: IncidentPackage
+    segment_capsules: list[SegmentCapsule]
+    safety_transitions: list[SafetyTransition]
+
+
+def _refresh_ai_summary_input(
+    *,
+    package: IncidentPackage,
+    segment_capsules: list[SegmentCapsule],
+    safety_transitions: list[SafetyTransition],
+) -> None:
+    package.ai_summary_input = _build_ai_summary_input(
+        event=package.trigger_event,
+        raw_window_start=package.raw_window_start,
+        raw_window_end=package.raw_window_end,
+        raw_samples=package.raw_samples,
+        segment_capsules=segment_capsules,
+        safety_transitions=safety_transitions,
+    )
 
 
 def _build_ai_summary_input(
@@ -81,7 +136,8 @@ def _build_ai_summary_input(
     segment_capsules: list[SegmentCapsule],
     safety_transitions: list[SafetyTransition],
 ) -> dict[str, Any]:
-    trigger_sample = raw_samples[-1] if raw_samples else None
+    trigger_sample = _trigger_sample(raw_samples, event.timestamp)
+    latest_sample = raw_samples[-1] if raw_samples else None
     raw = trigger_sample.get("raw", {}) if trigger_sample else {}
 
     return {
@@ -94,7 +150,8 @@ def _build_ai_summary_input(
             "start": raw_window_start,
             "end": raw_window_end,
             "sample_count": len(raw_samples),
-            "trigger_sample_timestamp": trigger_sample.get("timestamp") if trigger_sample else None,
+            "trigger_sample_timestamp": event.timestamp,
+            "latest_sample_timestamp": latest_sample.get("timestamp") if latest_sample else None,
         },
         "segment_capsules": {
             "capsule_ids": [capsule.capsule_id for capsule in segment_capsules],
@@ -105,6 +162,17 @@ def _build_ai_summary_input(
             "latest": safety_transitions[-1].model_dump(mode="json") if safety_transitions else None,
         },
     }
+
+
+def _trigger_sample(raw_samples: list[dict[str, Any]], timestamp: float) -> dict[str, Any] | None:
+    for sample in reversed(raw_samples):
+        if sample.get("timestamp") == timestamp:
+            return sample
+    for sample in reversed(raw_samples):
+        sample_timestamp = sample.get("timestamp")
+        if isinstance(sample_timestamp, int | float) and sample_timestamp <= timestamp:
+            return sample
+    return raw_samples[-1] if raw_samples else None
 
 
 def _mission_context_summary(raw: dict[str, Any]) -> dict[str, Any] | None:

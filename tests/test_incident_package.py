@@ -116,6 +116,31 @@ class IncidentPackageBuilderTests(unittest.TestCase):
         self.assertEqual(summary["go_no_go"]["decision"]["decision"], "turn_back")
         self.assertEqual(summary["raw_window"]["sample_count"], 1)
 
+    def test_active_incident_appends_post_trigger_samples_until_window_end(self):
+        builder = IncidentPackageBuilder(raw_window_seconds=10)
+        for timestamp in [90.0, 95.0, 100.0]:
+            builder.observe(Observation(timestamp=timestamp, source="test", raw={"sample": timestamp}))
+        event = SafetyEvent(
+            event_type=SafetyEventType.ROUTE_DEVIATION,
+            level=SafetyLevel.CONCERN,
+            timestamp=100.0,
+            reason="Outside approved corridor.",
+            confidence=0.85,
+        )
+
+        package = builder.build_for_event(event)
+        updated_at_105 = builder.observe(Observation(timestamp=105.0, source="test", raw={"sample": 105.0}))
+        updated_at_111 = builder.observe(Observation(timestamp=111.0, source="test", raw={"sample": 111.0}))
+
+        self.assertIsNotNone(package)
+        assert package is not None
+        self.assertEqual([sample["timestamp"] for sample in package.raw_samples], [90.0, 95.0, 100.0, 105.0])
+        self.assertEqual([updated.incident_id for updated in updated_at_105], [package.incident_id])
+        self.assertEqual(updated_at_111, [])
+        self.assertEqual(package.ai_summary_input["raw_window"]["sample_count"], 4)
+        self.assertEqual(package.ai_summary_input["raw_window"]["trigger_sample_timestamp"], 100.0)
+        self.assertEqual(package.ai_summary_input["raw_window"]["latest_sample_timestamp"], 105.0)
+
 
 if __name__ == "__main__":
     unittest.main()

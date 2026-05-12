@@ -169,6 +169,7 @@ def create_safety_router(
                 raise HTTPException(status_code=422, detail=str(exc)) from exc
 
             updates = [runtime_session.observe(observation) for observation in observations]
+            runtime_session.persist_incidents()
             runtime_snapshot = runtime_session.snapshot()
             return {
                 "status": "accepted",
