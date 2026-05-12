@@ -20,6 +20,18 @@
       --event: #e07a3f;
       --ok: #76b56d;
       --focus: #8ab4f8;
+      --cat-replay: #76b56d;
+      --cat-checkpoint: #f2b84b;
+      --cat-segment: #3f8cff;
+      --cat-capsule: #21a6a1;
+      --cat-timeline: #b68cff;
+      --cat-risk: #d65d5d;
+      --cat-map: #8b96a3;
+      --cat-route: #21a6a1;
+      --cat-start: #76b56d;
+      --cat-finish: #f0d264;
+      --cat-signal: #8ab4f8;
+      --cat-retreat: #e07a3f;
       --info-width: 430px;
       --tree-height: 58%;
     }
@@ -257,6 +269,26 @@
       vector-effect: non-scaling-stroke;
     }
 
+    .checkpoint-start {
+      fill: var(--cat-start);
+    }
+
+    .checkpoint-finish {
+      fill: var(--cat-finish);
+    }
+
+    .checkpoint-signal_spot {
+      fill: var(--cat-signal);
+    }
+
+    .checkpoint-retreat_point {
+      fill: var(--cat-retreat);
+    }
+
+    .checkpoint-trailhead {
+      fill: var(--cat-segment);
+    }
+
     .hazard {
       fill: rgba(214, 93, 93, 0.24);
       stroke: var(--hazard);
@@ -283,6 +315,7 @@
 
     .tree details {
       border: 1px solid var(--border);
+      border-left: 4px solid var(--category-color, var(--border));
       border-radius: 6px;
       background: var(--panel);
       overflow: hidden;
@@ -292,6 +325,7 @@
       cursor: pointer;
       padding: 10px 12px;
       font-weight: 650;
+      background: color-mix(in srgb, var(--category-color, var(--panel)) 14%, transparent);
     }
 
     .tree-group {
@@ -306,9 +340,14 @@
       color: var(--text);
       background: #171b20;
       border: 1px solid var(--border);
+      border-left: 4px solid var(--category-color, var(--border));
       border-radius: 6px;
       padding: 8px 10px;
       cursor: pointer;
+    }
+
+    .tree button:hover {
+      background: color-mix(in srgb, var(--category-color, #171b20) 18%, #171b20);
     }
 
     .tree button:focus-visible {
@@ -470,6 +509,36 @@
       document.getElementById("detailJson").textContent = JSON.stringify(item, null, 2);
     }
 
+    function evidenceCategory(item) {
+      if (!item) return "map";
+      if (item.evidence_type === "replay_summary") return "replay";
+      if (item.evidence_type === "mission_checkpoint" || item.checkpoint_id) return "checkpoint";
+      if (item.evidence_type === "mission_segment") return "segment";
+      if (item.evidence_type === "segment_capsule") return "capsule";
+      if (item.evidence_type === "runtime_decision" || item.evidence_type === "replay_checkpoint") return "timeline";
+      if (item.evidence_type === "risk_rule") return "risk";
+      if (item.evidence_type === "device_observation") return "route";
+      return "map";
+    }
+
+    function categoryColor(category) {
+      const colors = {
+        replay: "var(--cat-replay)",
+        checkpoint: "var(--cat-checkpoint)",
+        segment: "var(--cat-segment)",
+        capsule: "var(--cat-capsule)",
+        timeline: "var(--cat-timeline)",
+        risk: "var(--cat-risk)",
+        map: "var(--cat-map)",
+        route: "var(--cat-route)"
+      };
+      return colors[category] || colors.map;
+    }
+
+    function checkpointClass(checkpoint) {
+      return `checkpoint checkpoint-${checkpoint.checkpoint_type || "waypoint"}`;
+    }
+
     function hintTitle(item) {
       return item.name || item.checkpoint_id || item.corridor_id || item.rule_id || item.incident_id || item.source_id || item.evidence_type;
     }
@@ -587,7 +656,7 @@
       const checkpointGroup = el("g", {"data-layer-group": "checkpoints"});
       view.mission.checkpoints.forEach(checkpoint => {
         const [x, y] = project(bounds, checkpoint.lat, checkpoint.lon);
-        const circle = el("circle", {cx: x, cy: y, r: 5, class: "checkpoint"});
+        const circle = el("circle", {cx: x, cy: y, r: 5, class: checkpointClass(checkpoint)});
         attachEvidence(circle, checkpoint);
         checkpointGroup.appendChild(circle);
       });
@@ -612,6 +681,7 @@
     function treeButton(item, label, sublabel = "") {
       const button = document.createElement("button");
       button.type = "button";
+      button.style.setProperty("--category-color", categoryColor(evidenceCategory(item)));
       button.textContent = label;
       if (sublabel) {
         const small = document.createElement("small");
@@ -622,9 +692,10 @@
       return button;
     }
 
-    function treeGroup(title, items, mapper, open = false) {
+    function treeGroup(title, items, mapper, open = false, category = "map") {
       const details = document.createElement("details");
       details.open = open;
+      details.style.setProperty("--category-color", categoryColor(category));
       const summary = document.createElement("summary");
       summary.textContent = `${title} (${items.length})`;
       const group = document.createElement("div");
@@ -644,27 +715,27 @@
       tree.appendChild(treeGroup("Replay", [view.replay], item => ({
         label: item.safety_level,
         sublabel: `${item.observations_processed.toLocaleString()} observations | ${item.checkpoint_count} checkpoints | ${item.segment_capsule_count} capsules`
-      }), true));
+      }), true, "replay"));
       tree.appendChild(treeGroup("Checkpoints", view.mission.checkpoints, item => ({
         label: item.checkpoint_id,
         sublabel: `${item.checkpoint_type} | ${item.control_zone_after || "no zone"}`
-      }), true));
+      }), true, "checkpoint"));
       tree.appendChild(treeGroup("Segments", view.mission.segments, item => ({
         label: item.segment_id,
         sublabel: `${item.from_checkpoint_id} -> ${item.to_checkpoint_id} | ${Math.round(item.distance_m)}m`
-      }), true));
+      }), true, "segment"));
       tree.appendChild(treeGroup("Segment Capsules", view.segment_capsules, item => ({
         label: item.capsule_id,
         sublabel: `${item.segment_id || "-"} | ${item.start_checkpoint_id || "-"} -> ${item.end_checkpoint_id || "-"}`
-      })));
+      }), false, "capsule"));
       tree.appendChild(treeGroup("Timeline", view.safety_timeline, item => ({
         label: item.label || item.to_level || item.evidence_type,
         sublabel: `${item.timestamp === null || item.timestamp === undefined ? "" : `t=${Number(item.timestamp).toFixed(0)} | `}${item.reason || item.evidence_type}`
-      })));
+      }), false, "timeline"));
       tree.appendChild(treeGroup("Risk Rules", view.risk_rules, item => ({
         label: item.rule_id,
         sublabel: `${item.output_level} | ${item.hazard_types.join(", ") || "any"}`
-      })));
+      }), false, "risk"));
       tree.appendChild(treeGroup("Map Layers", [
         {
           evidence_type: "map_layer_summary",
@@ -693,7 +764,7 @@
       ], item => ({
         label: item.name,
         sublabel: `${item.count} items | ${item.metadata.source}`
-      })));
+      }), false, "map"));
     }
 
     function initSplitters() {
