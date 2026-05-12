@@ -17,6 +17,7 @@ This golden case exists to verify that Scout can preserve real wearable telemetr
 ./venv/bin/python generate_field_phase1_fixtures.py
 ./venv/bin/python -m pytest tests/test_field_golden_case.py tests/test_offline_map.py -q
 ./venv/bin/python -m pytest tests/test_field_phase1_fixtures.py -q
+./venv/bin/python -m pytest tests/test_field_replay_case.py -q
 ./venv/bin/python -m json.tool tests/fixtures/field_cases/scout_260512_golden.json >/dev/null
 ./venv/bin/python -m json.tool tests/fixtures/maps/scout_260512_overpass_map_context.geojson >/dev/null
 ```
@@ -48,6 +49,9 @@ tests/fixtures/mission_context/
 tests/fixtures/risk_rules/
   scout_260512_field_rules.json            -> field-specific hazard escalation rules
 
+tests/fixtures/route_progress/
+  scout_260512_field_config.json           -> field replay tolerances for real GPS/map jitter
+
 docs/specs/
   scout-260512-field-golden.md             -> this case specification
 
@@ -75,6 +79,7 @@ The Phase 1 fixture generator uses the golden manifest as the control document a
 - Tests verify map context shape, source metadata, corridor counts, and route-network coverage thresholds.
 - Tests verify expanded sensor metrics and representative samples are present.
 - Tests verify generated field routes, MissionGraph, mission context, and risk rules load through current Phase 1 runtime interfaces.
+- Tests verify the field route can replay against Overpass map evidence as L0 when using the field route-progress config.
 - Tests do not require `PdrSample/*.json` raw files, because those files are large local evidence.
 - Future replay tests may opt in to raw SensorLog files when they are present locally.
 
@@ -93,9 +98,9 @@ The Phase 1 fixture generator uses the golden manifest as the control document a
 - Each segment has at least 97% sampled GPS points inside the nearest corridor after horizontal accuracy is considered.
 - The second segment keeps its weaker GPS profile: p90 horizontal accuracy remains above 20m in the manifest.
 - Generated Phase 1 field fixtures load with `load_gpx_route`, `load_mission_graph`, `load_mission_context`, and `load_risk_rules`.
+- The generated field route replays through MissionGraph, Overpass map context, risk rules, and normal mission context as `L0_NORMAL`.
 - Focused tests pass with the raw SensorLog files absent.
 
 ## Open Questions
-- Should a downsampled GPX derived from these two raw SensorLog files be committed as a smaller replay fixture?
 - Should the golden case become the new default `normal_climb` mission route, or stay separate as a field-validation case?
 - What corridor widths should Scout derive from OSM `highway` and trail metadata beyond the current fixture defaults?

@@ -1,0 +1,14 @@
+{
+  "dense_checkpoint_spacing_m": 30.0,
+  "route_deviation_threshold_m": 75.0,
+  "min_route_deviation_duration_s": 30.0,
+  "weak_gps_accuracy_threshold_m": 50.0,
+  "min_weak_gps_duration_s": 60.0,
+  "min_weak_gps_movement_m": 20.0,
+  "min_backtrack_duration_s": 90.0,
+  "min_backtrack_distance_m": 45.0,
+  "min_loop_duration_s": 240.0,
+  "min_loop_path_length_m": 250.0,
+  "max_loop_displacement_m": 20.0,
+  "missed_checkpoint_overshoot_m": 30.0
+}

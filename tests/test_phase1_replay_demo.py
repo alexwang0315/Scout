@@ -21,6 +21,7 @@ class Phase1ReplayDemoTests(unittest.TestCase):
                 map_context=None,
                 risk_rules=None,
                 mission_context=None,
+                route_progress_config=None,
                 incident_store=None,
             )
         )
@@ -41,6 +42,7 @@ class Phase1ReplayDemoTests(unittest.TestCase):
                     map_context=None,
                     risk_rules=None,
                     mission_context=None,
+                    route_progress_config=None,
                     incident_store=Path(tmpdir),
                 )
             )
