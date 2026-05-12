@@ -24,9 +24,16 @@ class AdminAfterActionTests(unittest.TestCase):
         self.assertGreaterEqual(len(view["map"]["corridors"]), 600)
         self.assertEqual(len(view["risk_rules"]), 3)
         self.assertEqual(view["map"]["metadata"]["source"], "openstreetmap_overpass")
+        self.assertEqual(view["replay"]["observations_processed"], 1568)
+        self.assertEqual(view["replay"]["safety_level"], "L0_NORMAL")
+        self.assertEqual(view["replay"]["checkpoint_count"], 10)
+        self.assertEqual(view["replay"]["segment_capsule_count"], 9)
+        self.assertEqual(view["replay"]["incident_count"], 0)
         self.assertEqual(view["route"]["points"][0]["source_path"], "tests/fixtures/routes/scout_260512_field_route.gpx")
         self.assertEqual(view["mission"]["checkpoints"][0]["evidence_type"], "mission_checkpoint")
         self.assertEqual(view["map"]["corridors"][0]["evidence_type"], "map_corridor")
+        self.assertEqual(view["safety_timeline"][0]["evidence_type"], "runtime_decision")
+        self.assertIn("no Ln safety events", view["safety_timeline"][0]["reason"])
 
     def test_all_visual_layers_include_traceable_source_refs(self):
         view = build_admin_case_view(CASE_ID, root=ROOT)
@@ -36,6 +43,9 @@ class AdminAfterActionTests(unittest.TestCase):
             view["mission"]["segments"][0],
             view["map"]["corridors"][0],
             view["risk_rules"][0],
+            view["replay"],
+            view["safety_timeline"][0],
+            view["segment_capsules"][0],
         ]
 
         for sample in samples:
@@ -53,7 +63,10 @@ class AdminAfterActionTests(unittest.TestCase):
         self.assertEqual(payload["case_id"], CASE_ID)
         self.assertIn("route", payload)
         self.assertIn("map", payload)
+        self.assertIn("replay", payload)
         self.assertIn("safety_timeline", payload)
+        self.assertEqual(payload["replay"]["safety_level"], "L0_NORMAL")
+        self.assertGreaterEqual(len(payload["safety_timeline"]), 20)
 
     def test_admin_page_serves_presentation_layer(self):
         client = TestClient(create_admin_app())
@@ -65,6 +78,12 @@ class AdminAfterActionTests(unittest.TestCase):
         self.assertIn(f"/admin/cases/${{CASE_ID}}", response.text)
         self.assertIn("hoverHint", response.text)
         self.assertIn("height: 100vh", response.text)
+        self.assertIn("verticalResizer", response.text)
+        self.assertIn("horizontalResizer", response.text)
+        self.assertIn("evidenceTree", response.text)
+        self.assertIn("jsonPane", response.text)
+        self.assertIn("safetyLevel", response.text)
+        self.assertIn("segmentCapsules", response.text)
 
     def test_unknown_admin_case_returns_404(self):
         client = TestClient(create_admin_app())

@@ -20,6 +20,8 @@
       --event: #e07a3f;
       --ok: #76b56d;
       --focus: #8ab4f8;
+      --info-width: 430px;
+      --tree-height: 58%;
     }
 
     * { box-sizing: border-box; }
@@ -33,34 +35,28 @@
 
     .shell {
       display: grid;
-      grid-template-columns: 280px minmax(480px, 1fr) 360px;
+      grid-template-columns: minmax(420px, 1fr) 6px minmax(320px, var(--info-width));
       height: 100vh;
       overflow: hidden;
     }
 
-    aside, main, .details {
+    .map-pane, .info-pane {
       min-width: 0;
       border-color: var(--border);
     }
 
-    aside {
-      padding: 16px;
-      background: var(--surface);
-      border-right: 1px solid var(--border);
-      overflow: auto;
-    }
-
-    main {
+    .map-pane {
       display: grid;
       grid-template-rows: auto 1fr;
       background: #131619;
+      min-height: 0;
     }
 
-    .details {
-      padding: 16px;
+    .info-pane {
+      display: grid;
+      grid-template-rows: minmax(220px, var(--tree-height)) 6px minmax(180px, 1fr);
       background: var(--surface);
-      border-left: 1px solid var(--border);
-      overflow: auto;
+      min-height: 0;
     }
 
     h1, h2, h3, p { margin: 0; }
@@ -76,15 +72,14 @@
 
     .metric-grid {
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: repeat(6, minmax(96px, 1fr));
       gap: 8px;
-      margin-top: 14px;
     }
 
     .metric {
       border: 1px solid var(--border);
       border-radius: 6px;
-      padding: 10px;
+      padding: 8px 10px;
       background: var(--panel);
     }
 
@@ -97,12 +92,13 @@
     .metric strong {
       display: block;
       margin-top: 4px;
-      font-size: 18px;
+      font-size: 16px;
       letter-spacing: 0;
     }
 
     .filters {
-      display: grid;
+      display: flex;
+      flex-wrap: wrap;
       gap: 8px;
     }
 
@@ -111,6 +107,7 @@
       align-items: center;
       gap: 8px;
       color: var(--text);
+      font-size: 12px;
     }
 
     input[type="checkbox"] {
@@ -129,6 +126,20 @@
       background: var(--surface);
     }
 
+    .toolbar-main {
+      display: grid;
+      gap: 10px;
+      min-width: 0;
+      width: 100%;
+    }
+
+    .toolbar-title {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
     .toolbar code {
       color: var(--muted);
       font-size: 12px;
@@ -141,6 +152,48 @@
       position: relative;
       min-height: 0;
       overflow: hidden;
+    }
+
+    .splitter {
+      background: var(--border);
+      position: relative;
+      z-index: 10;
+    }
+
+    .splitter::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: transparent;
+      transition: background 120ms ease;
+    }
+
+    .splitter:hover::after,
+    .splitter.is-dragging::after {
+      background: var(--focus);
+    }
+
+    .splitter-vertical {
+      cursor: col-resize;
+    }
+
+    .splitter-horizontal {
+      cursor: row-resize;
+    }
+
+    .tree-pane,
+    .json-pane {
+      min-height: 0;
+      overflow: auto;
+      padding: 16px;
+    }
+
+    .tree-pane {
+      border-bottom: 1px solid var(--border);
+    }
+
+    .json-pane {
+      border-top: 1px solid var(--border);
     }
 
     .hover-hint {
@@ -222,51 +275,51 @@
     .is-hidden { display: none; }
     .focus-ring { outline: 2px solid var(--focus); outline-offset: 2px; }
 
-    .timeline {
+    .tree {
       display: grid;
       gap: 8px;
-      max-height: 34vh;
-      overflow: auto;
+      margin-top: 14px;
     }
 
-    .timeline button {
+    .tree details {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--panel);
+      overflow: hidden;
+    }
+
+    .tree summary {
+      cursor: pointer;
+      padding: 10px 12px;
+      font-weight: 650;
+    }
+
+    .tree-group {
+      display: grid;
+      gap: 6px;
+      padding: 0 10px 10px;
+    }
+
+    .tree button {
       width: 100%;
       text-align: left;
       color: var(--text);
-      background: var(--panel);
+      background: #171b20;
       border: 1px solid var(--border);
       border-radius: 6px;
-      padding: 10px;
+      padding: 8px 10px;
       cursor: pointer;
     }
 
-    .timeline button:focus-visible,
-    .item-list button:focus-visible {
+    .tree button:focus-visible {
       outline: 2px solid var(--focus);
       outline-offset: 2px;
     }
 
-    .timeline small {
+    .tree small {
       display: block;
       color: var(--muted);
       margin-top: 4px;
-    }
-
-    .item-list {
-      display: grid;
-      gap: 8px;
-      max-height: 32vh;
-      overflow: auto;
-    }
-
-    .item-list button {
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      background: var(--panel);
-      color: var(--text);
-      padding: 9px;
-      text-align: left;
-      cursor: pointer;
     }
 
     .source {
@@ -278,7 +331,7 @@
     pre {
       margin: 12px 0 0;
       padding: 12px;
-      max-height: 58vh;
+      max-height: none;
       overflow: auto;
       border: 1px solid var(--border);
       border-radius: 6px;
@@ -299,58 +352,63 @@
     @media (max-width: 980px) {
       .shell {
         grid-template-columns: 1fr;
+        grid-template-rows: auto auto;
         height: auto;
         overflow: visible;
       }
-      aside, .details { border: 0; border-bottom: 1px solid var(--border); }
-      main { min-height: 70vh; }
+      .splitter { display: none; }
+      .map-pane { min-height: 70vh; }
+      .info-pane { grid-template-rows: auto auto; }
+      .metric-grid { grid-template-columns: 1fr 1fr; }
     }
   </style>
 </head>
 <body>
-  <div class="shell">
-    <aside>
-      <h1>Scout Phase 1 Admin</h1>
-      <p id="caseMeta" class="meta">Loading case...</p>
-
-      <div class="metric-grid">
-        <div class="metric"><span>Route Points</span><strong id="routePoints">-</strong></div>
-        <div class="metric"><span>Corridors</span><strong id="corridors">-</strong></div>
-        <div class="metric"><span>Checkpoints</span><strong id="checkpoints">-</strong></div>
-        <div class="metric"><span>Incidents</span><strong id="incidents">-</strong></div>
-      </div>
-
-      <h2>Layers</h2>
-      <div class="filters">
-        <label><input type="checkbox" data-layer="corridors" checked> Map corridors</label>
-        <label><input type="checkbox" data-layer="route" checked> Route</label>
-        <label><input type="checkbox" data-layer="checkpoints" checked> Checkpoints</label>
-        <label><input type="checkbox" data-layer="hazards" checked> Hazards</label>
-        <label><input type="checkbox" data-layer="events" checked> Ln events</label>
-      </div>
-
-      <h2>Timeline</h2>
-      <div id="timeline" class="timeline"></div>
-    </aside>
-
-    <main>
+  <div id="shell" class="shell">
+    <main class="map-pane">
       <div class="toolbar">
-        <h3 id="caseTitle">After-action map</h3>
-        <code id="mapMeta">offline map evidence</code>
+        <div class="toolbar-main">
+          <div class="toolbar-title">
+            <h1>Scout Phase 1 Admin</h1>
+            <code id="mapMeta">offline map evidence</code>
+          </div>
+          <p id="caseMeta" class="meta">Loading case...</p>
+          <div class="metric-grid">
+            <div class="metric"><span>Safety Level</span><strong id="safetyLevel">-</strong></div>
+            <div class="metric"><span>Capsules</span><strong id="segmentCapsules">-</strong></div>
+            <div class="metric"><span>Route Points</span><strong id="routePoints">-</strong></div>
+            <div class="metric"><span>Corridors</span><strong id="corridors">-</strong></div>
+            <div class="metric"><span>Checkpoints</span><strong id="checkpoints">-</strong></div>
+            <div class="metric"><span>Incidents</span><strong id="incidents">-</strong></div>
+          </div>
+          <div class="filters" aria-label="Map layers">
+            <label><input type="checkbox" data-layer="corridors" checked> Map corridors</label>
+            <label><input type="checkbox" data-layer="route" checked> Route</label>
+            <label><input type="checkbox" data-layer="checkpoints" checked> Checkpoints</label>
+            <label><input type="checkbox" data-layer="hazards" checked> Hazards</label>
+            <label><input type="checkbox" data-layer="events" checked> Ln events</label>
+          </div>
+        </div>
       </div>
       <div class="map-wrap">
         <svg id="map" role="img" aria-label="Scout after-action evidence map"></svg>
       </div>
     </main>
 
-    <section class="details">
-      <h2>Selected Evidence</h2>
-      <h3 id="detailTitle">No selection</h3>
-      <p id="detailSource" class="source">Hover or select map evidence.</p>
-      <pre id="detailJson">{}</pre>
+    <div id="verticalResizer" class="splitter splitter-vertical" role="separator" aria-orientation="vertical" tabindex="0"></div>
 
-      <h2>Mission Items</h2>
-      <div id="itemList" class="item-list"></div>
+    <section id="infoPane" class="info-pane">
+      <div class="tree-pane">
+        <h2>Evidence Tree</h2>
+        <div id="evidenceTree" class="tree"></div>
+      </div>
+      <div id="horizontalResizer" class="splitter splitter-horizontal" role="separator" aria-orientation="horizontal" tabindex="0"></div>
+      <div id="jsonPane" class="json-pane">
+        <h2>Selected JSON</h2>
+        <h3 id="detailTitle">No selection</h3>
+        <p id="detailSource" class="source">Hover or select map evidence.</p>
+        <pre id="detailJson">{}</pre>
+      </div>
     </section>
   </div>
   <div id="hoverHint" class="hover-hint is-hidden" role="status" aria-live="polite"></div>
@@ -428,6 +486,16 @@
       }
       if (item.evidence_type === "incident_package") {
         return `${item.trigger_level} | ${item.trigger_event?.event_type || "event"} | samples ${item.raw_sample_count}`;
+      }
+      if (item.evidence_type === "replay_summary") {
+        return `${item.safety_level} | obs ${item.observations_processed} | checkpoints ${item.checkpoint_count}`;
+      }
+      if (item.evidence_type === "replay_checkpoint") {
+        return `${item.label} | distance ${Number(item.distance_m || 0).toFixed(1)}m`;
+      }
+      if (item.evidence_type === "segment_capsule") {
+        const capsule = item.capsule || item;
+        return `${capsule.segment_id || item.capsule_id} | ${capsule.start_checkpoint_id || "-"} -> ${capsule.end_checkpoint_id || "-"}`;
       }
       if (item.evidence_type === "device_observation") {
         return `progress ${Math.round(item.total_progress_m || item.progress_m || 0)}m | points ${item.point_count || item.index || "-"}`;
@@ -541,40 +609,150 @@
       updateLayers();
     }
 
-    function renderTimeline(view) {
-      const timeline = document.getElementById("timeline");
-      timeline.replaceChildren();
-      const items = view.safety_timeline.length ? view.safety_timeline : [
-        {reason: "No persisted Ln transition for this case", timestamp: null, evidence_type: "runtime_decision", source_id: "empty_timeline"}
-      ];
-      items.forEach(item => {
-        const button = document.createElement("button");
-        button.type = "button";
-        button.innerHTML = `${item.to_level || "L0_NORMAL"}<small>${item.reason || item.evidence_type}</small>`;
-        button.addEventListener("click", () => setDetail(item));
-        timeline.appendChild(button);
-      });
+    function treeButton(item, label, sublabel = "") {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = label;
+      if (sublabel) {
+        const small = document.createElement("small");
+        small.textContent = sublabel;
+        button.appendChild(small);
+      }
+      button.addEventListener("click", () => setDetail(item));
+      return button;
     }
 
-    function renderItems(view) {
-      const list = document.getElementById("itemList");
-      list.replaceChildren();
-      [...view.mission.checkpoints, ...view.risk_rules].forEach(item => {
-        const button = document.createElement("button");
-        button.type = "button";
-        button.textContent = item.name || item.checkpoint_id || item.rule_id;
-        button.addEventListener("click", () => setDetail(item));
-        list.appendChild(button);
+    function treeGroup(title, items, mapper, open = false) {
+      const details = document.createElement("details");
+      details.open = open;
+      const summary = document.createElement("summary");
+      summary.textContent = `${title} (${items.length})`;
+      const group = document.createElement("div");
+      group.className = "tree-group";
+      items.forEach(item => {
+        const mapped = mapper(item);
+        group.appendChild(treeButton(item, mapped.label, mapped.sublabel));
+      });
+      details.appendChild(summary);
+      details.appendChild(group);
+      return details;
+    }
+
+    function renderEvidenceTree(view) {
+      const tree = document.getElementById("evidenceTree");
+      tree.replaceChildren();
+      tree.appendChild(treeGroup("Replay", [view.replay], item => ({
+        label: item.safety_level,
+        sublabel: `${item.observations_processed.toLocaleString()} observations | ${item.checkpoint_count} checkpoints | ${item.segment_capsule_count} capsules`
+      }), true));
+      tree.appendChild(treeGroup("Checkpoints", view.mission.checkpoints, item => ({
+        label: item.checkpoint_id,
+        sublabel: `${item.checkpoint_type} | ${item.control_zone_after || "no zone"}`
+      }), true));
+      tree.appendChild(treeGroup("Segments", view.mission.segments, item => ({
+        label: item.segment_id,
+        sublabel: `${item.from_checkpoint_id} -> ${item.to_checkpoint_id} | ${Math.round(item.distance_m)}m`
+      }), true));
+      tree.appendChild(treeGroup("Segment Capsules", view.segment_capsules, item => ({
+        label: item.capsule_id,
+        sublabel: `${item.segment_id || "-"} | ${item.start_checkpoint_id || "-"} -> ${item.end_checkpoint_id || "-"}`
+      })));
+      tree.appendChild(treeGroup("Timeline", view.safety_timeline, item => ({
+        label: item.label || item.to_level || item.evidence_type,
+        sublabel: `${item.timestamp === null || item.timestamp === undefined ? "" : `t=${Number(item.timestamp).toFixed(0)} | `}${item.reason || item.evidence_type}`
+      })));
+      tree.appendChild(treeGroup("Risk Rules", view.risk_rules, item => ({
+        label: item.rule_id,
+        sublabel: `${item.output_level} | ${item.hazard_types.join(", ") || "any"}`
+      })));
+      tree.appendChild(treeGroup("Map Layers", [
+        {
+          evidence_type: "map_layer_summary",
+          source_id: "map_corridors",
+          source_path: view.map.source_path,
+          name: "Map corridors",
+          count: view.map.corridors.length,
+          metadata: view.map.metadata
+        },
+        {
+          evidence_type: "map_layer_summary",
+          source_id: "map_hazards",
+          source_path: view.map.source_path,
+          name: "Hazards",
+          count: view.map.hazards.length,
+          metadata: view.map.metadata
+        },
+        {
+          evidence_type: "map_layer_summary",
+          source_id: "map_pois",
+          source_path: view.map.source_path,
+          name: "POIs",
+          count: view.map.pois.length,
+          metadata: view.map.metadata
+        }
+      ], item => ({
+        label: item.name,
+        sublabel: `${item.count} items | ${item.metadata.source}`
+      })));
+    }
+
+    function initSplitters() {
+      const shell = document.getElementById("shell");
+      const infoPane = document.getElementById("infoPane");
+      const vertical = document.getElementById("verticalResizer");
+      const horizontal = document.getElementById("horizontalResizer");
+      const minInfo = 320;
+      const maxInfo = 760;
+      const minTree = 180;
+      const minJson = 180;
+
+      vertical.addEventListener("pointerdown", event => {
+        event.preventDefault();
+        vertical.setPointerCapture(event.pointerId);
+        vertical.classList.add("is-dragging");
+        const onMove = moveEvent => {
+          const shellRect = shell.getBoundingClientRect();
+          const width = Math.max(minInfo, Math.min(maxInfo, shellRect.right - moveEvent.clientX - 6));
+          shell.style.setProperty("--info-width", `${width}px`);
+        };
+        const onUp = upEvent => {
+          vertical.releasePointerCapture(upEvent.pointerId);
+          vertical.classList.remove("is-dragging");
+          vertical.removeEventListener("pointermove", onMove);
+          vertical.removeEventListener("pointerup", onUp);
+        };
+        vertical.addEventListener("pointermove", onMove);
+        vertical.addEventListener("pointerup", onUp);
+      });
+
+      horizontal.addEventListener("pointerdown", event => {
+        event.preventDefault();
+        horizontal.setPointerCapture(event.pointerId);
+        horizontal.classList.add("is-dragging");
+        const onMove = moveEvent => {
+          const rect = infoPane.getBoundingClientRect();
+          const height = Math.max(minTree, Math.min(rect.height - minJson - 6, moveEvent.clientY - rect.top));
+          infoPane.style.setProperty("--tree-height", `${height}px`);
+        };
+        const onUp = upEvent => {
+          horizontal.releasePointerCapture(upEvent.pointerId);
+          horizontal.classList.remove("is-dragging");
+          horizontal.removeEventListener("pointermove", onMove);
+          horizontal.removeEventListener("pointerup", onUp);
+        };
+        horizontal.addEventListener("pointermove", onMove);
+        horizontal.addEventListener("pointerup", onUp);
       });
     }
 
     function updateMetrics(view) {
       document.getElementById("caseMeta").textContent = view.summary.description || view.case_id;
-      document.getElementById("caseTitle").textContent = view.case_id;
-      document.getElementById("routePoints").textContent = view.route.point_count.toLocaleString();
+      document.getElementById("safetyLevel").textContent = view.replay.safety_level;
+      document.getElementById("segmentCapsules").textContent = view.replay.segment_capsule_count.toLocaleString();
+      document.getElementById("routePoints").textContent = view.replay.observations_processed.toLocaleString();
       document.getElementById("corridors").textContent = view.map.corridors.length.toLocaleString();
-      document.getElementById("checkpoints").textContent = view.mission.checkpoints.length.toLocaleString();
-      document.getElementById("incidents").textContent = view.incident_packages.length.toLocaleString();
+      document.getElementById("checkpoints").textContent = view.replay.checkpoint_count.toLocaleString();
+      document.getElementById("incidents").textContent = view.replay.incident_count.toLocaleString();
       const meta = view.map.metadata;
       document.getElementById("mapMeta").textContent = `${meta.source} | confidence ${meta.confidence} | staleness ${meta.known_staleness_risk}`;
     }
@@ -595,13 +773,13 @@
         state.view = view;
         updateMetrics(view);
         renderMap(view);
-        renderTimeline(view);
-        renderItems(view);
+        renderEvidenceTree(view);
         setDetail({
           evidence_type: "case_summary",
           source_id: view.case_id,
           source_path: view.artifacts.golden_case,
           summary: view.summary,
+          replay: view.replay,
           artifacts: view.artifacts
         });
       } catch (error) {
@@ -611,6 +789,7 @@
     }
 
     layerInputs.forEach(input => input.addEventListener("change", updateLayers));
+    initSplitters();
     loadCase();
   </script>
 </body>
