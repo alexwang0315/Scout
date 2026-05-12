@@ -847,12 +847,15 @@ The replay baseline should satisfy these deterministic checks:
   - Missing-GPS observations preserve recording policy evidence without route events.
   - SensorLog observations flow through route matching, offline map corridor evidence, and recording policy decisions.
   - Off-route observation streams can trigger L2, build an incident package, and persist incident JSON without GPX replay.
+- Field golden fixtures:
+  - `scout_260512_golden.json` derives MissionGraph, mission context, risk rules, and downsampled GPX route fixtures through `generate_field_phase1_fixtures.py`.
+  - the second Apple Watch segment preserves weak/noisy GPS evidence for later PDR fallback replay validation.
 - Existing app flow:
   - `server.app` registers both `/pdr/update` and `/safety/observations`.
   - `/pdr/update` remains the legacy Wi-Fi/PDR/AI-worker path; Phase 1 safety ingest is additive.
 - Full test suite:
   - `./venv/bin/python -m pytest tests -q`
-  - current expected result: `89 passed, 8 subtests passed`.
+  - current expected result: `93 passed, 1 warning, 9 subtests passed`.
 
 ## Open Questions
 

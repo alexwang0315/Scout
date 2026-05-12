@@ -14,7 +14,9 @@ This golden case exists to verify that Scout can preserve real wearable telemetr
 ## Commands
 ```bash
 ./venv/bin/python generate_field_golden_case.py
+./venv/bin/python generate_field_phase1_fixtures.py
 ./venv/bin/python -m pytest tests/test_field_golden_case.py tests/test_offline_map.py -q
+./venv/bin/python -m pytest tests/test_field_phase1_fixtures.py -q
 ./venv/bin/python -m json.tool tests/fixtures/field_cases/scout_260512_golden.json >/dev/null
 ./venv/bin/python -m json.tool tests/fixtures/maps/scout_260512_overpass_map_context.geojson >/dev/null
 ```
@@ -32,10 +34,25 @@ tests/fixtures/maps/
   scout_260512_overpass_query.ql           -> reproducible Overpass query
   scout_260512_overpass_map_context.geojson -> Scout offline map context converted from Overpass output
 
+tests/fixtures/routes/
+  scout_260512_field_route.gpx             -> downsampled two-segment field route fixture
+  scout_260512_085237.gpx                  -> first Watch segment route fixture
+  scout_260512_093931.gpx                  -> second Watch segment route fixture
+
+tests/fixtures/mission_graph/
+  scout_260512_field_mission.json          -> MissionGraph derived from golden representative samples
+
+tests/fixtures/mission_context/
+  scout_260512_field_normal.json           -> normal field mission context for Go/No-Go loading
+
+tests/fixtures/risk_rules/
+  scout_260512_field_rules.json            -> field-specific hazard escalation rules
+
 docs/specs/
   scout-260512-field-golden.md             -> this case specification
 
 generate_field_golden_case.py              -> reproducible metrics generator from local raw SensorLog + map context
+generate_field_phase1_fixtures.py          -> reproducible Phase 1 fixture generator from the golden case
 ```
 
 ## Code Style
@@ -51,10 +68,13 @@ Keep thresholds explicit in `scout_260512_golden.json` so later field-data chang
 
 The manifest intentionally stores more than a tiny pass/fail summary. It preserves per-segment sensor availability, horizontal-accuracy distribution, elevation and speed profile, activity counts, route-network coverage metrics, and representative sampled observations. This is still much smaller than the raw SensorLog exports, but it is detailed enough to detect accidental smoothing or map-corridor regressions.
 
+The Phase 1 fixture generator uses the golden manifest as the control document and the local raw SensorLog files as source evidence. It emits downsampled GPX fixtures with Watch extensions preserved, then derives MissionGraph checkpoints from the golden representative samples. The combined route intentionally keeps the observed gap between the two recordings visible; it is field evidence, not a claim of continuous walking across the gap.
+
 ## Testing Strategy
 - Unit-level regression tests load the golden manifest and Overpass GeoJSON.
 - Tests verify map context shape, source metadata, corridor counts, and route-network coverage thresholds.
 - Tests verify expanded sensor metrics and representative samples are present.
+- Tests verify generated field routes, MissionGraph, mission context, and risk rules load through current Phase 1 runtime interfaces.
 - Tests do not require `PdrSample/*.json` raw files, because those files are large local evidence.
 - Future replay tests may opt in to raw SensorLog files when they are present locally.
 
@@ -72,6 +92,7 @@ The manifest intentionally stores more than a tiny pass/fail summary. It preserv
 - The map fixture contains at least 600 corridors, including footway/path/steps coverage.
 - Each segment has at least 97% sampled GPS points inside the nearest corridor after horizontal accuracy is considered.
 - The second segment keeps its weaker GPS profile: p90 horizontal accuracy remains above 20m in the manifest.
+- Generated Phase 1 field fixtures load with `load_gpx_route`, `load_mission_graph`, `load_mission_context`, and `load_risk_rules`.
 - Focused tests pass with the raw SensorLog files absent.
 
 ## Open Questions
