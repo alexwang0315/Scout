@@ -872,7 +872,7 @@ The replay baseline should satisfy these deterministic checks:
   - `/pdr/update` remains the legacy Wi-Fi/PDR/AI-worker path; Phase 1 safety ingest is additive.
 - Full test suite:
   - `./venv/bin/python -m pytest tests -q`
-  - current expected result: `101 passed, 1 warning, 14 subtests passed`.
+  - current expected result: `101 passed, 1 warning, 17 subtests passed`.
 
 ## Open Questions
 

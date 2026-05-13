@@ -88,6 +88,10 @@ class AdminAfterActionTests(unittest.TestCase):
         self.assertIn("checkpoint-start", response.text)
         self.assertIn("evidenceCategory", response.text)
         self.assertIn("categoryColor", response.text)
+        self.assertIn("map-highlight", response.text)
+        self.assertIn("highlightMapFor", response.text)
+        self.assertIn("segment-overlay", response.text)
+        self.assertIn("data-source-id", response.text)
 
     def test_unknown_admin_case_returns_404(self):
         client = TestClient(create_admin_app())

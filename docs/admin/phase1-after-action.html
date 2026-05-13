@@ -261,6 +261,16 @@
       vector-effect: non-scaling-stroke;
     }
 
+    .segment-overlay {
+      fill: none;
+      stroke: var(--cat-segment);
+      stroke-width: 7;
+      opacity: 0;
+      cursor: pointer;
+      pointer-events: stroke;
+      vector-effect: non-scaling-stroke;
+    }
+
     .checkpoint {
       fill: var(--checkpoint);
       stroke: #171a1e;
@@ -302,6 +312,24 @@
       stroke-width: 1.5;
       cursor: pointer;
       vector-effect: non-scaling-stroke;
+    }
+
+    .map-highlight {
+      opacity: 1 !important;
+      stroke: var(--focus) !important;
+      stroke-width: 5 !important;
+      filter: drop-shadow(0 0 8px rgba(138, 180, 248, 0.88));
+    }
+
+    circle.map-highlight {
+      fill: var(--focus) !important;
+      stroke: #ffffff !important;
+      stroke-width: 2.5 !important;
+    }
+
+    .segment-overlay.map-highlight {
+      opacity: 0.92 !important;
+      stroke-width: 9 !important;
     }
 
     .is-hidden { display: none; }
@@ -348,6 +376,12 @@
 
     .tree button:hover {
       background: color-mix(in srgb, var(--category-color, #171b20) 18%, #171b20);
+    }
+
+    .tree button.is-selected {
+      border-color: var(--focus);
+      background: color-mix(in srgb, var(--category-color, #171b20) 26%, #171b20);
+      box-shadow: inset 0 0 0 1px var(--focus);
     }
 
     .tree button:focus-visible {
@@ -592,7 +626,65 @@
       hoverHint.classList.add("is-hidden");
     }
 
+    function evidenceSourceId(item) {
+      if (!item) return "";
+      if (item.evidence_type === "segment_capsule") return item.segment_id || item.capsule?.segment_id || item.source_id || "";
+      if (item.evidence_type === "replay_checkpoint") return item.checkpoint?.checkpoint_id || item.source_id || "";
+      return item.source_id || item.checkpoint_id || item.segment_id || item.corridor_id || item.hazard_id || item.incident_id || "";
+    }
+
+    function selectorValue(value) {
+      const raw = String(value || "");
+      if (window.CSS && CSS.escape) return CSS.escape(raw);
+      return raw.replace(/["\\]/g, "\\$&");
+    }
+
+    function mapTargetsFor(item) {
+      const id = evidenceSourceId(item);
+      if (item?.evidence_type === "risk_rule" && Array.isArray(item.segment_ids) && item.segment_ids.length) {
+        return item.segment_ids.flatMap(segmentId => Array.from(svg.querySelectorAll(`[data-source-id="${selectorValue(segmentId)}"]`)));
+      }
+      if (item?.evidence_type === "map_layer_summary") {
+        if (item.source_id === "map_corridors") return Array.from(svg.querySelectorAll('[data-map-kind="corridor"]'));
+        if (item.source_id === "map_hazards") return Array.from(svg.querySelectorAll('[data-map-kind="hazard"]'));
+        if (item.source_id === "map_pois") return Array.from(svg.querySelectorAll('[data-map-kind="poi"]'));
+      }
+      if (!id) return [];
+      return Array.from(svg.querySelectorAll(`[data-source-id="${selectorValue(id)}"]`));
+    }
+
+    function highlightTreeNode(item) {
+      document.querySelectorAll(".tree button.is-selected").forEach(node => node.classList.remove("is-selected"));
+      const sourceId = evidenceSourceId(item);
+      const category = evidenceCategory(item);
+      if (!sourceId) return;
+      const selector = `[data-tree-source-id="${selectorValue(sourceId)}"][data-tree-category="${selectorValue(category)}"]`;
+      const match = document.querySelector(selector) || document.querySelector(`[data-tree-source-id="${selectorValue(sourceId)}"]`);
+      if (match) match.classList.add("is-selected");
+    }
+
+    function highlightMapFor(item) {
+      svg.querySelectorAll(".map-highlight").forEach(node => node.classList.remove("map-highlight"));
+      const targets = mapTargetsFor(item);
+      targets.forEach(target => target.classList.add("map-highlight"));
+      targets.slice(0, 4).forEach(target => target.parentNode && target.parentNode.appendChild(target));
+    }
+
+    function selectEvidence(item) {
+      setDetail(item);
+      highlightTreeNode(item);
+      highlightMapFor(item);
+    }
+
+    function tagEvidenceNode(node, item, mapKind = "") {
+      const sourceId = evidenceSourceId(item);
+      if (sourceId) node.setAttribute("data-source-id", sourceId);
+      if (item?.evidence_type) node.setAttribute("data-evidence-type", item.evidence_type);
+      if (mapKind) node.setAttribute("data-map-kind", mapKind);
+    }
+
     function attachEvidence(node, item) {
+      tagEvidenceNode(node, item);
       node.tabIndex = 0;
       node.addEventListener("mouseenter", event => {
         setDetail(item);
@@ -601,18 +693,18 @@
       node.addEventListener("mousemove", moveHint);
       node.addEventListener("mouseleave", hideHint);
       node.addEventListener("focus", event => {
-        setDetail(item);
+        selectEvidence(item);
         showHint(event, item);
       });
       node.addEventListener("blur", hideHint);
       node.addEventListener("click", event => {
-        setDetail(item);
+        selectEvidence(item);
         showHint(event, item);
       });
       node.addEventListener("keydown", event => {
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
-          setDetail(item);
+          selectEvidence(item);
         }
       });
     }
@@ -627,6 +719,7 @@
         if (corridor.coordinates.length < 2) return;
         const path = el("path", {d: pathFromCoords(bounds, corridor.coordinates), class: "corridor"});
         attachEvidence(path, corridor);
+        tagEvidenceNode(path, corridor, "corridor");
         corridorGroup.appendChild(path);
       });
       svg.appendChild(corridorGroup);
@@ -635,6 +728,7 @@
       view.map.hazards.forEach(hazard => {
         const path = el("path", {d: pathFromCoords(bounds, hazard.polygon) + " Z", class: "hazard"});
         attachEvidence(path, hazard);
+        tagEvidenceNode(path, hazard, "hazard");
         hazardGroup.appendChild(path);
       });
       svg.appendChild(hazardGroup);
@@ -651,6 +745,18 @@
         bounds: view.route.bounds
       });
       routeGroup.appendChild(routePath);
+      view.mission.segments.forEach(segment => {
+        const start = Number(segment.route_point_start_index ?? 0);
+        const end = Number(segment.route_point_end_index ?? start);
+        const from = Math.max(0, Math.min(start, end));
+        const to = Math.min(routeCoords.length - 1, Math.max(start, end));
+        const segmentCoords = routeCoords.slice(from, to + 1);
+        if (segmentCoords.length < 2) return;
+        const segmentPath = el("path", {d: pathFromCoords(bounds, segmentCoords), class: "segment-overlay"});
+        attachEvidence(segmentPath, segment);
+        tagEvidenceNode(segmentPath, segment, "segment");
+        routeGroup.appendChild(segmentPath);
+      });
       svg.appendChild(routeGroup);
 
       const checkpointGroup = el("g", {"data-layer-group": "checkpoints"});
@@ -658,6 +764,7 @@
         const [x, y] = project(bounds, checkpoint.lat, checkpoint.lon);
         const circle = el("circle", {cx: x, cy: y, r: 5, class: checkpointClass(checkpoint)});
         attachEvidence(circle, checkpoint);
+        tagEvidenceNode(circle, checkpoint, "checkpoint");
         checkpointGroup.appendChild(circle);
       });
       svg.appendChild(checkpointGroup);
@@ -671,6 +778,7 @@
         const [x, y] = project(bounds, lat, lon);
         const marker = el("circle", {cx: x, cy: y, r: 6, class: "event"});
         attachEvidence(marker, packageItem);
+        tagEvidenceNode(marker, packageItem, "event");
         eventGroup.appendChild(marker);
       });
       svg.appendChild(eventGroup);
@@ -682,13 +790,15 @@
       const button = document.createElement("button");
       button.type = "button";
       button.style.setProperty("--category-color", categoryColor(evidenceCategory(item)));
+      button.dataset.treeSourceId = evidenceSourceId(item);
+      button.dataset.treeCategory = evidenceCategory(item);
       button.textContent = label;
       if (sublabel) {
         const small = document.createElement("small");
         small.textContent = sublabel;
         button.appendChild(small);
       }
-      button.addEventListener("click", () => setDetail(item));
+      button.addEventListener("click", () => selectEvidence(item));
       return button;
     }
 
