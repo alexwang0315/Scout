@@ -1,23 +1,61 @@
 # S.C.O.U.T. Fusion
 
-S.C.O.U.T. Fusion is a FastAPI prototype that combines macOS Wi-Fi RSSI scanning, mobile IMU/GPS uploads, pedestrian dead reckoning (PDR), and an LLM navigation agent. The goal is to guide a user toward the strongest nearby Wi-Fi signal while recording movement and signal data for maps.
+S.C.O.U.T. Fusion is a FastAPI-based wilderness safety black box. Phase 1 centers on a `MissionGraph` route plan, Apple Watch / SensorLog observations, offline map evidence, deterministic safety evaluation, incident packaging, and an after-action admin viewer.
+
+The original Wi-Fi/PDR navigation prototype still exists as a legacy app flow. The current product direction is route-aware field safety recording: prove where the traveler was, what the map and mission plan said, why a safety level changed, and what raw evidence should be sealed for later review.
+
+![Scout Phase 1 Admin after-action viewer](docs/assets/phase1-admin-after-action.png)
 
 ## What It Does
 
-- Scans nearby Wi-Fi networks on macOS with the private `airport -s` command.
-- Receives iPhone / Apple Watch / SensorLog IMU, GPS, pedometer, and motion data.
-- Updates relative position using PDR from either full IMU samples or legacy distance/heading samples.
-- Stores GPS and PDR trajectories in memory for live status and map generation.
-- Uses a `pydantic-ai` agent through OpenRouter to generate navigation instructions.
-- Aggregates Apple Watch / SensorLog IMU samples into local movement summaries without LLM calls.
-- Generates signal heatmaps and GPS/PDR trajectory images.
-- Exposes a simple dashboard in `index.html` that polls the server status.
+- Loads a `MissionGraph` with checkpoints, segments, control zones, recording policies, route requirements, and diversion metadata.
+- Replays GPX / Apple Watch-derived route fixtures into normalized safety observations.
+- Evaluates route progress, missed checkpoints, sustained backtracking, loops, weak GPS, offline map corridor deviation, map hazards, and route-specific risk rules.
+- Uses offline GeoJSON map context as static evidence for approved corridors, POIs, hazards, route-level corridor widths, confidence, and staleness metadata.
+- Builds incident packages with raw sample windows, segment capsules, safety transitions, route evidence, map evidence, and structured summary input.
+- Exposes live Phase 1 ingest APIs beside the legacy `/pdr/update` flow.
+- Provides an admin after-action viewer with SVG map evidence, route/corridor overlays, checkpoint and segment evidence, JSON inspection, and tree-to-map highlighting.
+- Keeps the legacy macOS Wi-Fi scan, PDR trajectory, heatmap, `/navigate`, and LLM navigation prototype paths available for compatibility.
+
+## Phase 1 Status
+
+Phase 1 is at release-candidate status on the `codex/phase-1-trail-black-box` branch.
+
+Validated baseline:
+
+- Normal Apple Watch route remains `L0_NORMAL`.
+- Off-route synthetic fixture triggers `L2_CONCERN` through offline map corridor evidence.
+- Backtracking/loop, weak GPS PDR fallback, steep-slope hazard, Go/No-Go provider fixtures, recording policy, incident post-trigger window, live observation ingest, and field golden replay are covered by deterministic tests.
+- Admin viewer can inspect the 2026-05-12 field golden case and link evidence tree selection to SVG map highlight.
+
+Current test expectation:
+
+```bash
+./venv/bin/python -m pytest tests -q
+# 101 passed, 1 warning, 17 subtests passed
+
+./venv/bin/python -m pytest -q
+# 102 passed, 1 warning, 17 subtests passed
+```
 
 ## Project Layout
 
 | File | Purpose |
 | --- | --- |
 | `server.py` | Main FastAPI server, route registration, background AI worker, map endpoints. |
+| `safety_api.py` | Phase 1 ack/reack, incident retrieval, check-in, capsule, and live observation ingest API. |
+| `mission_models.py` | Mission graph, checkpoint, segment, control-zone, provider-state, and Go/No-Go models. |
+| `mission_graph.py` | MissionGraph loading, checkpoint indexing, and segment policy lookup. |
+| `route_progress.py` | Route progress, map evidence, weak GPS, backtracking/looping, and missed-checkpoint evaluation. |
+| `offline_map.py` / `offline_map_models.py` | Offline GeoJSON corridor, POI, hazard, source metadata, and spatial evidence checks. |
+| `risk_rules.py` | Fixture-backed route-specific L1-L4 risk rule evaluation. |
+| `pdr_fallback.py` | Short weak-GPS dead-reckoning fallback and GPS re-anchor evidence. |
+| `replay_runner.py` | Offline replay pipeline from route samples into observations, safety events, and incident packages. |
+| `safety_runtime_session.py` | Streaming runtime session for live `Observation` input. |
+| `incident_package.py` / `incident_store.py` | Raw ring buffer, incident packaging, evidence summary input, and JSON persistence. |
+| `admin_api.py` / `admin_after_action.py` | Admin case API and after-action view model builder. |
+| `docs/admin/phase1-after-action.html` | Static admin presentation layer for field-case map and evidence inspection. |
+| `phase1_replay_demo.py` | CLI demo for normal and abnormal Phase 1 route replay. |
 | `agent.py` | Pydantic AI navigation agent and Wi-Fi scan/move tools. |
 | `macos_wifi.py` | macOS Wi-Fi scanner using `airport -s`. |
 | `imu_api.py` | `/imu/upload` router for full IMU/GPS SensorLog payloads. |
@@ -30,6 +68,69 @@ S.C.O.U.T. Fusion is a FastAPI prototype that combines macOS Wi-Fi RSSI scanning
 | `index.html` | Minimal live dashboard. |
 
 The repository root is the canonical server version. The `Scout/` directory is an older nested copy kept for reference and should not be used as the active server entrypoint unless you intentionally work on that legacy copy.
+
+## Phase 1 Admin Viewer
+
+Start the server:
+
+```bash
+SCOUT_PORT=9101 ./venv/bin/python server.py
+```
+
+Open:
+
+```text
+http://127.0.0.1:9101/admin
+```
+
+The admin page loads the default `scout_260512_field_golden` case. It shows the offline map context, route trace, checkpoints, segment capsules, replay timeline, risk rules, and selected JSON evidence. Selecting an evidence node in the right pane highlights the matching SVG map element on the left.
+
+API endpoint:
+
+```bash
+curl http://127.0.0.1:9101/admin/cases/scout_260512_field_golden
+```
+
+Relevant specs:
+
+- `docs/specs/phase-1-trail-black-box.md`
+- `docs/specs/phase-1-admin-after-action-viewer.md`
+- `docs/specs/scout-260512-field-golden.md`
+- `docs/architecture/phase-1-architecture.html`
+
+## Phase 1 Replay Demo
+
+Run a normal route:
+
+```bash
+./venv/bin/python phase1_replay_demo.py \
+  --mission tests/fixtures/mission_graph/normal_climb_mission.json \
+  --route tests/fixtures/routes/normal_climb.gpx \
+  --pretty
+```
+
+Run an off-route L2 replay and persist the incident package:
+
+```bash
+./venv/bin/python phase1_replay_demo.py \
+  --mission tests/fixtures/mission_graph/normal_climb_mission.json \
+  --route tests/fixtures/routes/off_route_deviation.gpx \
+  --incident-store /tmp/scout-phase1-demo-incidents \
+  --pretty
+```
+
+Run the 2026-05-12 field replay baseline:
+
+```bash
+./venv/bin/python phase1_replay_demo.py \
+  --mission tests/fixtures/mission_graph/scout_260512_field_mission.json \
+  --route tests/fixtures/routes/scout_260512_field_route.gpx \
+  --map-context tests/fixtures/maps/scout_260512_overpass_map_context.geojson \
+  --risk-rules tests/fixtures/risk_rules/scout_260512_field_rules.json \
+  --mission-context tests/fixtures/mission_context/scout_260512_field_normal.json \
+  --route-progress-config tests/fixtures/route_progress/scout_260512_field_config.json \
+  --pretty
+```
 
 ## Requirements
 
