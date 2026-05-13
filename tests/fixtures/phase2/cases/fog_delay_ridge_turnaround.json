@@ -1,0 +1,71 @@
+{
+  "case_id": "case.phase2.fog_delay_ridge_turnaround",
+  "title": "Fog-bound ridge turnaround with delayed checkpoint evidence",
+  "incident_type": "navigation delay in low visibility",
+  "location": "Central Taiwan mid-elevation ridge trail",
+  "route_context": "Same-day out-and-back route with an exposed ridge section before the turnaround saddle.",
+  "incident_at": "2026-04-18T15:40:00+08:00",
+  "timeline": [
+    {
+      "label": "T-180",
+      "minutes_to_incident": -180,
+      "safety_level": "L0",
+      "summary": "Team was on route but moving slower than the planned ridge pace.",
+      "evidence_refs": ["fact.cp2_arrival_delay.18m"],
+      "artifact_refs": ["artifact.watch_track.member_a"]
+    },
+    {
+      "label": "T-120",
+      "minutes_to_incident": -120,
+      "safety_level": "L1",
+      "summary": "Fog reduced visibility and the remote status artifact showed stale position for one member.",
+      "evidence_refs": ["fact.visibility.low", "fact.remote_status.stale_member_a"],
+      "artifact_refs": ["artifact.weather_station.nearby"],
+      "remote_status_ref": "remote_status.20260418T134000"
+    },
+    {
+      "label": "T-60",
+      "minutes_to_incident": -60,
+      "safety_level": "L1",
+      "summary": "Route progress showed the team had not crossed the saddle before the planned turnaround time.",
+      "evidence_refs": ["measurement.progress.behind_plan.42m"],
+      "artifact_refs": ["artifact.route_progress.replay"]
+    },
+    {
+      "label": "T-30",
+      "minutes_to_incident": -30,
+      "safety_level": "L2",
+      "summary": "Replay produced a local option set to turn around, shelter briefly, or continue to the saddle with stricter time bounds.",
+      "evidence_refs": ["option_set.turnaround_ridge_fog"],
+      "artifact_refs": ["artifact.option_set.local_json"],
+      "option_set_ref": "option_set.turnaround_ridge_fog"
+    },
+    {
+      "label": "T-0",
+      "minutes_to_incident": 0,
+      "safety_level": "L2",
+      "summary": "Incident package marked overdue status when the team remained below the saddle after the planned exit window.",
+      "evidence_refs": ["artifact.incident_package.fog_delay"]
+    }
+  ],
+  "post_incident_evidence": [
+    {
+      "id": "post.fog_delay.after_action",
+      "captured_after_minutes": 90,
+      "evidence_type": "after_action_note",
+      "summary": "Leader reported that an earlier turnaround prompt would have made the delay easier to explain and coordinate.",
+      "artifact_refs": ["artifact.after_action.leader_note"]
+    }
+  ],
+  "baseline_summary": "Baseline tracking noticed the overdue state near T-0 but did not summarize the stale remote status and fog together.",
+  "replay_summary": "Phase 2 replay joined checkpoint delay, weather, and remote status references into a bounded local decision window.",
+  "known_outcome_summary": "The team self-exited after waiting out fog; no rescue outcome is asserted.",
+  "assessment": {
+    "evidence_improved": true,
+    "earlier_awareness_minutes": 90,
+    "decision_window_minutes": 30,
+    "likely_outcome_improvement": false,
+    "guaranteed_outcome": false,
+    "rationale": "Replay likely created a practical decision window before the overdue declaration, without asserting a certain final result."
+  }
+}

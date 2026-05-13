@@ -1,0 +1,67 @@
+id: latest-team-position-check
+version: 0.1.0
+status: experimental
+type: check
+priority: 30
+triggers:
+  - event: mission.status_refresh
+    description: Inspect file-brain position facts and freshness without mutating Phase 1 tracking state.
+    required_refs:
+      - brain.facts
+      - brain.measurements
+activation_gate:
+  mode: manual
+  requires_human_approval: false
+  conditions:
+    - mission file brain is available
+    - position evidence has been imported
+noise_control:
+  cooldown_seconds: 300
+  dedupe_window_seconds: 600
+  max_runs_per_mission: 24
+  suppression_keys:
+    - mission_id
+    - team_id
+preflight:
+  required_skill_ids:
+    - device-capability-check
+  required_capabilities:
+    - file_brain.read
+  required_artifacts: []
+allowed_reads:
+  - brain.facts
+  - brain.measurements
+  - brain.checkpoints
+  - brain.routes
+allowed_writes:
+  - brain.measurements
+  - brain.reviews
+forbidden_writes:
+  - phase1.runtime
+  - pdr.samples
+  - route_progress.state
+output_schema:
+  format: brain-node
+  node_types:
+    - DerivedMeasurement
+    - HumanReview
+  required_fields:
+    - subject
+    - metric
+    - derived_from
+failure_policy:
+  on_error: record_failure
+  retry:
+    max_attempts: 0
+    backoff_seconds: 0
+  degrade_to: null
+control_surface:
+  operator_visible: true
+  manual_run_allowed: true
+  disable_allowed: true
+  status_label: Latest team position check
+audit:
+  log_inputs: true
+  log_outputs: true
+  log_decision: true
+  retention: mission_lifetime

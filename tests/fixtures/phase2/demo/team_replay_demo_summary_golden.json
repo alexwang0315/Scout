@@ -1,0 +1,64 @@
+{
+  "counts": {
+    "beacon_nodes": 1,
+    "decision_option_sets": 1,
+    "decision_options": 2,
+    "persisted_remote_status_artifacts": 1,
+    "remote_status_artifacts": 1,
+    "skill_definitions": 3,
+    "skill_run_records": 3,
+    "store_nodes": 37,
+    "team_separation_events": 1,
+    "total_nodes": 36
+  },
+  "fixture_id": "phase2.team_replay.ridge_three_person_20260513",
+  "fixture_path": "tests/fixtures/phase2/team_replay/ridge_three_person_team_replay.json",
+  "key_ids": {
+    "decision_option_sets": [
+      "options.ridge_loop_hold_or_regroup.20260513T101520"
+    ],
+    "decision_options": [
+      "option.hold_saddle_20min",
+      "option.regroup_beacon_trend"
+    ],
+    "missions": [
+      "mission.ridge_loop_20260513"
+    ],
+    "persisted_remote_status_artifacts": [
+      "artifact.remote_status_json.ridge_loop_20260513T100800"
+    ],
+    "remote_statuses": [
+      "remote_status.ridge_loop_20260513T100800"
+    ],
+    "skill_definitions": [
+      "skill.beacon_trend_mock.0_1_0",
+      "skill.decision_options.0_1_0",
+      "skill.team_checkin_summary.0_2_0"
+    ],
+    "skill_runs": [
+      "skill_run.beacon_trend_mock.20260513T101900",
+      "skill_run.decision_options.20260513T101500",
+      "skill_run.team_checkin_summary.20260513T100800"
+    ]
+  },
+  "skill_audit": {
+    "activation_decisions": {
+      "allow": 2,
+      "degrade": 1
+    },
+    "manifest_refs": [
+      "skills/scout/beacon-trend-mock.yaml",
+      "skills/scout/decision-options.yaml",
+      "skills/scout/team-checkin-summary.yaml"
+    ],
+    "manifest_refs_missing_locally": 0,
+    "missing_manifest_refs": [],
+    "run_output_refs": [
+      "options.ridge_loop_hold_or_regroup.20260513T101520",
+      "remote_status.ridge_loop_20260513T100800",
+      "signal.lin_to_maya_beacon.20260513T101900"
+    ],
+    "skill_definitions": 3,
+    "skill_runs": 3
+  }
+}

@@ -1,0 +1,240 @@
+{
+  "fixture_id": "phase2.team_replay.forest_traverse_two_person_20260513",
+  "fixture_version": 1,
+  "title": "Two-person forest traverse with short delay and no separation",
+  "scenario": {
+    "summary": "A synthetic two-person team starts a short forest traverse. Wet footing causes a small checkpoint delay, but both members remain fresh and colocated enough for a nominal remote status.",
+    "synthetic": true,
+    "local_timezone": "Asia/Taipei"
+  },
+  "nodes": [
+    {
+      "id": "artifact.route_gpx.forest_traverse_20260513",
+      "type": "Artifact",
+      "artifact_kind": "gpx",
+      "uri": "fixtures/phase2/team_replay/artifacts/forest_traverse_20260513.gpx",
+      "media_type": "application/gpx+xml",
+      "captured_at": "2026-05-13T06:45:00+08:00",
+      "metadata": {
+        "synthetic": true,
+        "source": "fixture"
+      }
+    },
+    {
+      "id": "artifact.remote_status_json.forest_20260513T082000",
+      "type": "Artifact",
+      "artifact_kind": "remote_status_json",
+      "uri": "fixtures/phase2/team_replay/artifacts/forest_remote_status_20260513T082000.json",
+      "media_type": "application/json",
+      "captured_at": "2026-05-13T08:20:00+08:00",
+      "metadata": {
+        "synthetic": true,
+        "redacted_raw_telemetry": true
+      }
+    },
+    {
+      "id": "mission.forest_traverse_20260513",
+      "type": "Mission",
+      "name": "Synthetic forest traverse pair hike",
+      "mission_owner": "person.leader_ivy",
+      "team_id": "team.forest_traverse_beta",
+      "route_id": "route.forest_traverse_south",
+      "started_at": "2026-05-13T07:15:00+08:00",
+      "status": "active"
+    },
+    {
+      "id": "team.forest_traverse_beta",
+      "type": "Team",
+      "name": "Forest Traverse Beta",
+      "leader_id": "person.leader_ivy",
+      "member_ids": [
+        "person.leader_ivy",
+        "person.member_noah"
+      ],
+      "remote_contact_ids": [
+        "person.remote_rina"
+      ]
+    },
+    {
+      "id": "person.leader_ivy",
+      "type": "Person",
+      "display_name": "Ivy Lin",
+      "role": "leader",
+      "device_ids": [
+        "device.ivy_phone"
+      ]
+    },
+    {
+      "id": "person.member_noah",
+      "type": "Person",
+      "display_name": "Noah Tsai",
+      "role": "member",
+      "device_ids": [
+        "device.noah_watch"
+      ]
+    },
+    {
+      "id": "person.remote_rina",
+      "type": "Person",
+      "display_name": "Remote contact Rina",
+      "role": "remote_contact",
+      "device_ids": []
+    },
+    {
+      "id": "device.ivy_phone",
+      "type": "Device",
+      "owner_id": "person.leader_ivy",
+      "device_type": "phone",
+      "platform": "ios",
+      "capabilities": [
+        "gps",
+        "remote_status_uplink"
+      ]
+    },
+    {
+      "id": "device.noah_watch",
+      "type": "Device",
+      "owner_id": "person.member_noah",
+      "device_type": "watch",
+      "platform": "apple_watch",
+      "capabilities": [
+        "gps",
+        "heart_rate"
+      ]
+    },
+    {
+      "id": "route.forest_traverse_south",
+      "type": "Route",
+      "name": "South forest traverse",
+      "route_type": "traverse",
+      "checkpoint_ids": [
+        "checkpoint.forest_gate",
+        "checkpoint.cedar_bridge"
+      ],
+      "segment_ids": [
+        "segment.forest_gate_cedar_bridge"
+      ],
+      "source_artifact_refs": [
+        "artifact.route_gpx.forest_traverse_20260513"
+      ]
+    },
+    {
+      "id": "checkpoint.forest_gate",
+      "type": "Checkpoint",
+      "route_id": "route.forest_traverse_south",
+      "name": "Forest service gate",
+      "lat": 24.11831,
+      "lon": 121.24472,
+      "planned_arrival_at": "2026-05-13T07:15:00+08:00",
+      "arrival_radius_m": 25.0
+    },
+    {
+      "id": "checkpoint.cedar_bridge",
+      "type": "Checkpoint",
+      "route_id": "route.forest_traverse_south",
+      "name": "Cedar bridge",
+      "lat": 24.12194,
+      "lon": 121.25118,
+      "planned_arrival_at": "2026-05-13T08:10:00+08:00",
+      "arrival_radius_m": 30.0
+    },
+    {
+      "id": "segment.forest_gate_cedar_bridge",
+      "type": "Segment",
+      "route_id": "route.forest_traverse_south",
+      "from_checkpoint_id": "checkpoint.forest_gate",
+      "to_checkpoint_id": "checkpoint.cedar_bridge",
+      "planned_distance_m": 920.0,
+      "planned_duration_seconds": 3300
+    },
+    {
+      "id": "fact.team_arrived_cedar_bridge.20260513T081800",
+      "type": "ObservedFact",
+      "subject": "team.forest_traverse_beta",
+      "predicate": "arrived_at",
+      "object": "checkpoint.cedar_bridge",
+      "observed_at": "2026-05-13T08:18:00+08:00",
+      "evidence": [
+        "artifact.remote_status_json.forest_20260513T082000"
+      ],
+      "confidence": "high"
+    },
+    {
+      "id": "measurement.cedar_bridge_delay.team.20260513T081800",
+      "type": "DerivedMeasurement",
+      "subject": "team.forest_traverse_beta",
+      "metric": "checkpoint_arrival_delay_minutes",
+      "value": 8,
+      "unit": "minutes",
+      "derived_from": [
+        "fact.team_arrived_cedar_bridge.20260513T081800"
+      ],
+      "method": "planned_arrival_vs_observed_fact"
+    },
+    {
+      "id": "remote_status.forest_traverse_20260513T082000",
+      "type": "RemoteStatusArtifact",
+      "generated_at": "2026-05-13T08:20:00+08:00",
+      "freshness_seconds": 120,
+      "status": "nominal_short_delay",
+      "team_summary": {
+        "members_total": 2,
+        "members_fresh": 2,
+        "possible_separation_member_ids": []
+      },
+      "latest_checkpoint": "checkpoint.cedar_bridge",
+      "next_checkpoint": null,
+      "safety_level": "L1",
+      "uncertainty": "low",
+      "message": "Team reached Cedar bridge eight minutes late; both member positions are fresh and no separation signal is present.",
+      "artifact_refs": [
+        "artifact.remote_status_json.forest_20260513T082000"
+      ]
+    },
+    {
+      "id": "skill.team_checkin_summary",
+      "type": "SkillDefinition",
+      "skill_id": "team_checkin_summary",
+      "version": "0.2.0",
+      "status": "field_trial",
+      "manifest_ref": "skills/team_checkin_summary/SKILL.md"
+    },
+    {
+      "id": "skill_run.team_checkin_summary.forest_20260513T082000",
+      "type": "SkillRunRecord",
+      "skill_id": "team_checkin_summary",
+      "skill_version": "0.2.0",
+      "started_at": "2026-05-13T08:19:45+08:00",
+      "ended_at": "2026-05-13T08:20:00+08:00",
+      "activation_decision": "allow",
+      "input_refs": [
+        "fact.team_arrived_cedar_bridge.20260513T081800",
+        "measurement.cedar_bridge_delay.team.20260513T081800"
+      ],
+      "output_refs": [
+        "remote_status.forest_traverse_20260513T082000"
+      ],
+      "preflight_results": {
+        "fixture_mode": true,
+        "inputs_available": true
+      },
+      "failure_policy": {
+        "on_error": "keep_last_remote_status"
+      }
+    }
+  ],
+  "timeline": [
+    {
+      "at": "2026-05-13T08:18:00+08:00",
+      "label": "Pair reaches Cedar bridge slightly late",
+      "evidence_refs": [
+        "fact.team_arrived_cedar_bridge.20260513T081800",
+        "measurement.cedar_bridge_delay.team.20260513T081800"
+      ],
+      "remote_status_ref": "remote_status.forest_traverse_20260513T082000",
+      "skill_run_refs": [
+        "skill_run.team_checkin_summary.forest_20260513T082000"
+      ]
+    }
+  ]
+}

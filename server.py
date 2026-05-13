@@ -19,6 +19,7 @@ from admin_api import create_admin_router
 from imu_api import router as imu_router
 from macos_wifi import MacOSWifiWorld
 from pdr_engine import pdr
+from phase2_admin_api import create_phase2_admin_router
 from sensor_decoder import SensorLogDecoder
 from movement_summary import MovementAggregator, RawSensorSample
 from safety_api import SafetyApiSnapshot, create_safety_router
@@ -43,6 +44,8 @@ SCOUT_SAFETY_ROUTE_PROGRESS_CONFIG = os.getenv("SCOUT_SAFETY_ROUTE_PROGRESS_CONF
 SCOUT_SAFETY_INCIDENT_STORE = Path(
     os.getenv("SCOUT_SAFETY_INCIDENT_STORE", os.path.expanduser("~/.scout-fusion/incidents"))
 )
+SCOUT_PHASE2_ADMIN_API_ENABLED = os.getenv("SCOUT_PHASE2_ADMIN_API_ENABLED", "false")
+SCOUT_PHASE2_BRAIN_STORE_ROOT = os.getenv("SCOUT_PHASE2_BRAIN_STORE_ROOT")
 
 log_level = logging.DEBUG if DEBUG else logging.INFO
 logging.basicConfig(level=log_level, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -119,6 +122,26 @@ def _optional_float(value: Any) -> Optional[float]:
         return float(value)
     except (TypeError, ValueError):
         return None
+
+
+def _is_true_like(value: str | None) -> bool:
+    return value is not None and value.strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
+def _include_phase2_admin_router(app: FastAPI) -> None:
+    if not _is_true_like(SCOUT_PHASE2_ADMIN_API_ENABLED):
+        logger.info("Phase 2 admin API disabled")
+        return
+
+    if not SCOUT_PHASE2_BRAIN_STORE_ROOT or not SCOUT_PHASE2_BRAIN_STORE_ROOT.strip():
+        logger.warning(
+            "Phase 2 admin API enabled but SCOUT_PHASE2_BRAIN_STORE_ROOT is missing; skipping router mount"
+        )
+        return
+
+    brain_store_root = Path(SCOUT_PHASE2_BRAIN_STORE_ROOT)
+    app.include_router(create_phase2_admin_router(brain_store_root=brain_store_root))
+    logger.info("Phase 2 admin API enabled: %s", brain_store_root)
 
 
 async def process_movement_summary(summary: Any) -> Dict[str, Any]:
@@ -231,6 +254,7 @@ app.include_router(
         runtime_session=safety_runtime_session,
     )
 )
+_include_phase2_admin_router(app)
 
 
 @app.get("/")
