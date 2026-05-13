@@ -1,0 +1,57 @@
+{
+  "policy_id": "policy.multi_day_expedition",
+  "version": "2026-05-13.1",
+  "contexts": [
+    {
+      "route_types": ["expedition"],
+      "duration_classes": ["multi_day"],
+      "skill_overrides": {
+        "retreat-decision-support": {
+          "min_safety_level": "L1"
+        },
+        "team-checkin-summary": {
+          "min_safety_level": "L0"
+        }
+      }
+    }
+  ],
+  "skills": {
+    "device-capability-check": {
+      "min_safety_level": "L0"
+    },
+    "team-checkin-summary": {
+      "min_safety_level": "L0",
+      "noise_control": {
+        "cooldown_minutes": 10,
+        "suppress_if_recently_acknowledged": true,
+        "acknowledgement_window_minutes": 20,
+        "require_new_evidence": true
+      },
+      "degrade_when": [
+        {
+          "weather": ["severe"],
+          "reason": "severe weather limits summary to low-bandwidth status"
+        }
+      ]
+    },
+    "retreat-decision-support": {
+      "min_safety_level": "L1",
+      "noise_control": {
+        "cooldown_minutes": 20,
+        "suppress_if_recently_acknowledged": true,
+        "acknowledgement_window_minutes": 30,
+        "require_new_evidence": true
+      },
+      "degrade_when": [
+        {
+          "weather": ["severe"],
+          "reason": "severe weather requires degraded expedition option set"
+        },
+        {
+          "team_state": ["communication_degraded"],
+          "reason": "communication degraded; produce local option set only"
+        }
+      ]
+    }
+  }
+}

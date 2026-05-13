@@ -1,0 +1,66 @@
+id: communication-state-check
+version: 0.1.0
+status: experimental
+type: check
+priority: 25
+triggers:
+  - event: mission.preflight
+    description: Summarize whether team and remote contacts have usable communication paths.
+    required_refs:
+      - brain.devices
+      - brain.teams
+activation_gate:
+  mode: manual
+  requires_human_approval: false
+  conditions:
+    - mission file brain is available
+noise_control:
+  cooldown_seconds: 600
+  dedupe_window_seconds: 1200
+  max_runs_per_mission: 8
+  suppression_keys:
+    - mission_id
+    - team_id
+preflight:
+  required_skill_ids:
+    - device-capability-check
+  required_capabilities:
+    - file_brain.read
+  required_artifacts: []
+allowed_reads:
+  - brain.devices
+  - brain.teams
+  - brain.people
+  - brain.facts
+allowed_writes:
+  - brain.facts
+  - brain.measurements
+forbidden_writes:
+  - phase1.runtime
+  - pdr.samples
+  - route_progress.state
+output_schema:
+  format: brain-node
+  node_types:
+    - ObservedFact
+    - DerivedMeasurement
+  required_fields:
+    - subject
+    - metric
+    - evidence
+failure_policy:
+  on_error: record_failure
+  retry:
+    max_attempts: 0
+    backoff_seconds: 0
+  degrade_to: device-capability-check
+control_surface:
+  operator_visible: true
+  manual_run_allowed: true
+  disable_allowed: true
+  status_label: Communication state check
+audit:
+  log_inputs: true
+  log_outputs: true
+  log_decision: true
+  retention: mission_lifetime

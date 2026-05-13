@@ -28,15 +28,92 @@ Validated baseline:
 - Backtracking/loop, weak GPS PDR fallback, steep-slope hazard, Go/No-Go provider fixtures, recording policy, incident post-trigger window, live observation ingest, and field golden replay are covered by deterministic tests.
 - Admin viewer can inspect the 2026-05-12 field golden case and link evidence tree selection to SVG map highlight.
 
-Current test expectation:
+Latest integration verification:
 
 ```bash
-./venv/bin/python -m pytest tests -q
-# 101 passed, 1 warning, 17 subtests passed
+./venv/bin/python -m pytest <Phase 2 focused target set>
+# 141 passed, 1 warning, 41 subtests passed
 
 ./venv/bin/python -m pytest -q
-# 102 passed, 1 warning, 17 subtests passed
+# 238 passed, 1 warning, 50 subtests passed
 ```
+
+These numbers were verified after the Phase 2 helper-consolidation,
+second-fixture, admin-evidence-preview cleanup, release-notes, and fixture
+manifest-coverage, artifact naming, test-hardening, and manual-write-policy
+verification slices, plus the completed reference-classifier and demo-boundary
+cleanup slices.
+
+## Phase 2 Preview
+
+Phase 2 is a preview of Scout as a personal safety operating system layered on
+top of the Phase 1 safety black box. The current completed slices are
+file-based Brain models and store behavior, fact-only writeback policy, a Scout
+skill registry and mock runtime, Ln activation gates and noise control, remote
+status JSON, bounded decision option sets, team separation and beacon mocks,
+case replay, team replay fixture persistence, option replay, case replay Brain
+integration, and a compact team replay demo runner.
+The latest cleanup slices also add an env-gated Phase 2 admin API mount, shared
+ridge-loop demo defaults, and explicit manual write permission for persisted
+decision option sets.
+The ref cleanup adds shared Phase 2 reference classification and a documented
+remote-status JSON artifact ID convention.
+The latest slices add shared store helpers, a second forest-traverse team replay
+fixture, and read-only evidence/artifact inspection fields for the Phase 2 admin
+preview payload.
+
+Key focused verification commands:
+
+```bash
+./venv/bin/python -m pytest tests/test_phase2_brain.py
+./venv/bin/python -m pytest tests/test_phase2_writeback_policy.py
+./venv/bin/python -m pytest tests/test_skill_registry.py
+./venv/bin/python -m pytest tests/test_ln_constraints.py
+./venv/bin/python -m pytest tests/test_phase2_remote_status.py
+./venv/bin/python -m pytest tests/test_decision_option_sets.py
+./venv/bin/python -m pytest tests/test_team_beacon.py
+./venv/bin/python -m pytest tests/test_phase2_case_replay.py
+./venv/bin/python -m pytest tests/test_phase2_option_replay.py
+./venv/bin/python -m pytest tests/test_phase2_refs.py
+./venv/bin/python -m pytest tests/test_phase2_store_utils.py
+./venv/bin/python -m pytest tests/test_phase2_case_replay_integration.py
+./venv/bin/python -m pytest tests/test_phase2_team_replay_demo.py
+./venv/bin/python -m pytest tests/test_phase2_team_replay_store.py
+./venv/bin/python -m pytest tests/test_phase2_team_replay_second_fixture.py
+./venv/bin/python -m pytest tests/test_phase2_remote_status_store.py
+./venv/bin/python -m pytest tests/test_phase2_brain_ingest.py
+./venv/bin/python -m pytest tests/test_admin_after_action.py
+./venv/bin/python -m pytest tests/test_phase2_admin_preview.py
+./venv/bin/python -m pytest tests/test_phase2_admin_api.py
+./venv/bin/python -m pytest tests/test_phase2_admin_api_mount.py
+./venv/bin/python -m pytest tests/test_phase2_demo_defaults.py
+./venv/bin/python -m pytest tests/test_phase2_artifact_manifest.py
+./venv/bin/python -m pytest tests/test_phase2_artifact_manifest_store.py
+./venv/bin/python -m pytest tests/test_phase2_team_replay_demo_golden.py
+./venv/bin/python -m pytest tests/test_phase2_release_check.py
+./venv/bin/python -m pytest tests/test_skill_manifest_coverage.py
+```
+
+CLI smoke demo:
+
+```bash
+./venv/bin/python phase2_team_replay_demo.py --store-root /tmp/scout-phase2-team-replay-demo
+# {"counts":{...},"fixture_id":"phase2.team_replay.ridge_three_person_20260513","fixture_path":"...","key_ids":{...},"skill_audit":{...}}
+```
+
+Preview limits:
+
+- Phase 2 currently uses JSON artifacts, local files, mocks, and replay
+  fixtures; it does not include cloud transport or real radio/beacon hardware.
+- Phase 1 deterministic safety behavior remains the baseline and is not
+  replaced by Phase 2 skills, Brain nodes, or model interpretations.
+- Decision options and beacon outputs are bounded support artifacts, not
+  guaranteed rescue outcomes or precise navigation claims.
+
+Relevant specs:
+
+- `docs/specs/phase-2-personal-safety-os.md`
+- `docs/specs/phase-2-implementation-plan.md`
 
 ## Project Layout
 

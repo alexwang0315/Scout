@@ -1,0 +1,71 @@
+id: decision-options
+version: 0.1.0
+status: experimental
+type: analysis
+priority: 55
+triggers:
+  - event: mission.decision_options_requested
+    description: Draft operator-reviewed decision options from existing team status evidence.
+    required_refs:
+      - brain.remote-status-artifacts
+      - brain.team-separation-events
+activation_gate:
+  mode: operator_approved
+  requires_human_approval: true
+  conditions:
+    - operator requests decision support
+    - supporting team status evidence exists
+noise_control:
+  cooldown_seconds: 600
+  dedupe_window_seconds: 900
+  max_runs_per_mission: 8
+  suppression_keys:
+    - mission_id
+    - decision_context
+preflight:
+  required_skill_ids:
+    - team-checkin-summary
+  required_capabilities:
+    - file_brain.read
+    - file_brain.write
+  required_artifacts: []
+allowed_reads:
+  - brain.teams
+  - brain.people
+  - brain.facts
+  - brain.measurements
+  - brain.remote-status-artifacts
+  - brain.team-separation-events
+allowed_writes:
+  - brain.decision-option-sets
+  - brain.reviews
+forbidden_writes:
+  - phase1.runtime
+  - pdr.samples
+  - route_progress.state
+  - hardware.controls
+output_schema:
+  format: brain-node
+  node_types:
+    - DecisionOptionSet
+    - HumanReview
+  required_fields:
+    - context_ref
+    - options
+    - generated_at
+failure_policy:
+  on_error: degrade
+  retry:
+    max_attempts: 0
+    backoff_seconds: 0
+  degrade_to: team-checkin-summary
+control_surface:
+  operator_visible: true
+  manual_run_allowed: true
+  disable_allowed: true
+  status_label: Decision options
+audit:
+  log_inputs: true
+  log_outputs: true
+  log_decision: true
+  retention: incident_package

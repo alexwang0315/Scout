@@ -66,3 +66,6 @@ dmypy.json
 
 # Legacy nested Scout copy
 Scout/
+!skills/
+!skills/scout/
+!skills/scout/*.yaml

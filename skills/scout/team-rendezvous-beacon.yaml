@@ -1,0 +1,72 @@
+id: team-rendezvous-beacon
+version: 0.1.0
+status: experimental
+type: beacon
+priority: 70
+triggers:
+  - event: mission.team_separation_possible
+    description: Declare a rendezvous beacon intent in the file brain without controlling radio hardware.
+    required_refs:
+      - brain.team-separation-events
+activation_gate:
+  mode: operator_approved
+  requires_human_approval: true
+  conditions:
+    - operator confirms rendezvous plan
+    - team separation evidence exists
+noise_control:
+  cooldown_seconds: 1200
+  dedupe_window_seconds: 1800
+  max_runs_per_mission: 6
+  suppression_keys:
+    - mission_id
+    - rendezvous_ref
+preflight:
+  required_skill_ids:
+    - communication-state-check
+    - latest-team-position-check
+  required_capabilities:
+    - file_brain.read
+    - file_brain.write
+  required_artifacts: []
+allowed_reads:
+  - brain.devices
+  - brain.teams
+  - brain.checkpoints
+  - brain.team-separation-events
+  - brain.measurements
+allowed_writes:
+  - brain.beacon-nodes
+  - brain.signal-bearing-measurements
+  - brain.reviews
+forbidden_writes:
+  - phase1.runtime
+  - pdr.samples
+  - route_progress.state
+  - radio.hardware
+output_schema:
+  format: brain-node
+  node_types:
+    - BeaconNode
+    - SignalBearingMeasurement
+    - HumanReview
+  required_fields:
+    - source_device_id
+    - designated_at
+    - uncertainty
+failure_policy:
+  on_error: record_failure
+  retry:
+    max_attempts: 0
+    backoff_seconds: 0
+  degrade_to: communication-state-check
+control_surface:
+  operator_visible: true
+  manual_run_allowed: true
+  disable_allowed: true
+  status_label: Team rendezvous beacon
+audit:
+  log_inputs: true
+  log_outputs: true
+  log_decision: true
+  retention: incident_package

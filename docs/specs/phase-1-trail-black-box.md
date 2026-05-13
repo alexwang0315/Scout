@@ -479,6 +479,8 @@ The first synthetic map context should be generated from the current normal GPX 
 
 Real field golden cases may use Overpass-derived OpenStreetMap linework as offline map evidence when the query is preserved next to the generated GeoJSON. These fixtures must still be deterministic in tests: keep the raw Overpass query, converted Scout map context, bbox, source timestamp, confidence, and staleness metadata in version control. Do not require large raw SensorLog captures for normal unit tests; store their reproducible summary metrics under `tests/fixtures/field_cases/`.
 
+Field cases are also system-design references, not only regression fixtures. Each accepted field case should preserve the observed terrain, sensor, map, timing, and human-safety constraints that influenced Scout behavior. When changing mission planning, route-progress semantics, alert escalation, admin after-action review, or future sensor integrations, use these cases as grounding evidence before optimizing around synthetic examples.
+
 Current field golden case:
 
 ```text

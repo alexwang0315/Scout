@@ -1,0 +1,69 @@
+id: team-checkin-summary
+version: 0.1.0
+status: experimental
+type: summary
+priority: 45
+triggers:
+  - event: mission.status_refresh
+    description: Produce an operator-readable check-in summary from existing file-brain facts.
+    required_refs:
+      - brain.teams
+      - brain.facts
+activation_gate:
+  mode: operator_approved
+  requires_human_approval: true
+  conditions:
+    - mission file brain is available
+    - operator requests a summary
+noise_control:
+  cooldown_seconds: 600
+  dedupe_window_seconds: 900
+  max_runs_per_mission: 12
+  suppression_keys:
+    - mission_id
+    - team_id
+preflight:
+  required_skill_ids:
+    - communication-state-check
+    - latest-team-position-check
+  required_capabilities:
+    - file_brain.read
+  required_artifacts: []
+allowed_reads:
+  - brain.teams
+  - brain.people
+  - brain.facts
+  - brain.measurements
+  - brain.checkpoints
+allowed_writes:
+  - brain.interpretations
+  - brain.reviews
+forbidden_writes:
+  - phase1.runtime
+  - pdr.samples
+  - route_progress.state
+output_schema:
+  format: brain-node
+  node_types:
+    - ModelInterpretation
+    - HumanReview
+  required_fields:
+    - subject
+    - claim
+    - input_refs
+failure_policy:
+  on_error: record_failure
+  retry:
+    max_attempts: 0
+    backoff_seconds: 0
+  degrade_to: latest-team-position-check
+control_surface:
+  operator_visible: true
+  manual_run_allowed: true
+  disable_allowed: true
+  status_label: Team check-in summary
+audit:
+  log_inputs: true
+  log_outputs: true
+  log_decision: true
+  retention: incident_package

@@ -1,0 +1,559 @@
+{
+  "fixture_id": "phase2.team_replay.ridge_three_person_20260513",
+  "fixture_version": 1,
+  "title": "Three-person ridge hike delayed at saddle checkpoint",
+  "scenario": {
+    "summary": "A synthetic three-person team starts a same-day ridge loop. Rain and slow footing delay the saddle checkpoint, and one member's status becomes stale enough to create a possible separation signal.",
+    "synthetic": true,
+    "local_timezone": "Asia/Taipei"
+  },
+  "nodes": [
+    {
+      "id": "artifact.route_gpx.ridge_loop_20260513",
+      "type": "Artifact",
+      "artifact_kind": "gpx",
+      "uri": "fixtures/phase2/team_replay/artifacts/ridge_loop_20260513.gpx",
+      "media_type": "application/gpx+xml",
+      "captured_at": "2026-05-13T06:30:00+08:00",
+      "metadata": {
+        "synthetic": true,
+        "source": "fixture"
+      }
+    },
+    {
+      "id": "artifact.member_02_watch_window",
+      "type": "Artifact",
+      "artifact_kind": "raw_log",
+      "uri": "fixtures/phase2/team_replay/artifacts/member_02_watch_window.json",
+      "media_type": "application/json",
+      "captured_at": "2026-05-13T09:54:00+08:00",
+      "metadata": {
+        "synthetic": true,
+        "window_seconds": 900
+      }
+    },
+    {
+      "id": "artifact.mock_rssi_scan.member_03",
+      "type": "Artifact",
+      "artifact_kind": "beacon_scan",
+      "uri": "fixtures/phase2/team_replay/artifacts/member_03_mock_rssi_scan.json",
+      "media_type": "application/json",
+      "captured_at": "2026-05-13T10:19:00+08:00",
+      "metadata": {
+        "synthetic": true,
+        "contains_exact_position": false
+      }
+    },
+    {
+      "id": "artifact.remote_status_json.20260513T100800",
+      "type": "Artifact",
+      "artifact_kind": "remote_status_json",
+      "uri": "fixtures/phase2/team_replay/artifacts/remote_status_20260513T100800.json",
+      "media_type": "application/json",
+      "captured_at": "2026-05-13T10:08:00+08:00",
+      "metadata": {
+        "synthetic": true,
+        "redacted_raw_telemetry": true
+      }
+    },
+    {
+      "id": "mission.ridge_loop_20260513",
+      "type": "Mission",
+      "name": "Synthetic ridge loop team hike",
+      "mission_owner": "person.leader_maya",
+      "team_id": "team.ridge_loop_alpha",
+      "route_id": "route.ridge_loop_north",
+      "started_at": "2026-05-13T07:05:00+08:00",
+      "status": "active"
+    },
+    {
+      "id": "team.ridge_loop_alpha",
+      "type": "Team",
+      "name": "Ridge Loop Alpha",
+      "leader_id": "person.leader_maya",
+      "member_ids": [
+        "person.leader_maya",
+        "person.member_ken",
+        "person.member_lin"
+      ],
+      "remote_contact_ids": [
+        "person.remote_dispatch"
+      ]
+    },
+    {
+      "id": "person.leader_maya",
+      "type": "Person",
+      "display_name": "Maya Chen",
+      "role": "leader",
+      "device_ids": [
+        "device.maya_watch",
+        "device.maya_phone"
+      ]
+    },
+    {
+      "id": "person.member_ken",
+      "type": "Person",
+      "display_name": "Ken Wu",
+      "role": "member",
+      "device_ids": [
+        "device.ken_watch"
+      ]
+    },
+    {
+      "id": "person.member_lin",
+      "type": "Person",
+      "display_name": "Lin Huang",
+      "role": "member",
+      "device_ids": [
+        "device.lin_phone"
+      ]
+    },
+    {
+      "id": "person.remote_dispatch",
+      "type": "Person",
+      "display_name": "Remote safety contact",
+      "role": "remote_contact",
+      "device_ids": []
+    },
+    {
+      "id": "device.maya_watch",
+      "type": "Device",
+      "owner_id": "person.leader_maya",
+      "device_type": "watch",
+      "platform": "apple_watch",
+      "capabilities": [
+        "gps",
+        "heart_rate",
+        "beacon_mock_source"
+      ]
+    },
+    {
+      "id": "device.maya_phone",
+      "type": "Device",
+      "owner_id": "person.leader_maya",
+      "device_type": "phone",
+      "platform": "ios",
+      "capabilities": [
+        "gps",
+        "remote_status_uplink"
+      ]
+    },
+    {
+      "id": "device.ken_watch",
+      "type": "Device",
+      "owner_id": "person.member_ken",
+      "device_type": "watch",
+      "platform": "apple_watch",
+      "capabilities": [
+        "gps",
+        "heart_rate"
+      ]
+    },
+    {
+      "id": "device.lin_phone",
+      "type": "Device",
+      "owner_id": "person.member_lin",
+      "device_type": "phone",
+      "platform": "android",
+      "capabilities": [
+        "gps",
+        "beacon_mock_observer"
+      ]
+    },
+    {
+      "id": "route.ridge_loop_north",
+      "type": "Route",
+      "name": "North ridge loop",
+      "route_type": "loop",
+      "checkpoint_ids": [
+        "checkpoint.trailhead",
+        "checkpoint.creek_bridge",
+        "checkpoint.saddle",
+        "checkpoint.ridge_turn"
+      ],
+      "segment_ids": [
+        "segment.trailhead_creek",
+        "segment.creek_saddle",
+        "segment.saddle_ridge_turn"
+      ],
+      "source_artifact_refs": [
+        "artifact.route_gpx.ridge_loop_20260513"
+      ]
+    },
+    {
+      "id": "checkpoint.trailhead",
+      "type": "Checkpoint",
+      "route_id": "route.ridge_loop_north",
+      "name": "Forest trailhead",
+      "lat": 24.14327,
+      "lon": 121.28164,
+      "planned_arrival_at": "2026-05-13T07:05:00+08:00",
+      "arrival_radius_m": 25.0
+    },
+    {
+      "id": "checkpoint.creek_bridge",
+      "type": "Checkpoint",
+      "route_id": "route.ridge_loop_north",
+      "name": "Creek bridge",
+      "lat": 24.14688,
+      "lon": 121.28792,
+      "planned_arrival_at": "2026-05-13T08:05:00+08:00",
+      "arrival_radius_m": 30.0
+    },
+    {
+      "id": "checkpoint.saddle",
+      "type": "Checkpoint",
+      "route_id": "route.ridge_loop_north",
+      "name": "Misty saddle",
+      "lat": 24.15142,
+      "lon": 121.29318,
+      "planned_arrival_at": "2026-05-13T09:30:00+08:00",
+      "arrival_radius_m": 35.0
+    },
+    {
+      "id": "checkpoint.ridge_turn",
+      "type": "Checkpoint",
+      "route_id": "route.ridge_loop_north",
+      "name": "North ridge turn",
+      "lat": 24.15301,
+      "lon": 121.29841,
+      "planned_arrival_at": "2026-05-13T10:25:00+08:00",
+      "arrival_radius_m": 30.0
+    },
+    {
+      "id": "segment.trailhead_creek",
+      "type": "Segment",
+      "route_id": "route.ridge_loop_north",
+      "from_checkpoint_id": "checkpoint.trailhead",
+      "to_checkpoint_id": "checkpoint.creek_bridge",
+      "planned_distance_m": 980.0,
+      "planned_duration_seconds": 3600
+    },
+    {
+      "id": "segment.creek_saddle",
+      "type": "Segment",
+      "route_id": "route.ridge_loop_north",
+      "from_checkpoint_id": "checkpoint.creek_bridge",
+      "to_checkpoint_id": "checkpoint.saddle",
+      "planned_distance_m": 1420.0,
+      "planned_duration_seconds": 5100
+    },
+    {
+      "id": "segment.saddle_ridge_turn",
+      "type": "Segment",
+      "route_id": "route.ridge_loop_north",
+      "from_checkpoint_id": "checkpoint.saddle",
+      "to_checkpoint_id": "checkpoint.ridge_turn",
+      "planned_distance_m": 760.0,
+      "planned_duration_seconds": 3300
+    },
+    {
+      "id": "fact.team_arrived_saddle.20260513T095400",
+      "type": "ObservedFact",
+      "subject": "team.ridge_loop_alpha",
+      "predicate": "arrived_at_checkpoint",
+      "object": "checkpoint.saddle",
+      "observed_at": "2026-05-13T09:54:00+08:00",
+      "evidence": [
+        "artifact.member_02_watch_window"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "id": "measurement.saddle_delay.team.20260513T095500",
+      "type": "DerivedMeasurement",
+      "subject": "team.ridge_loop_alpha",
+      "metric": "checkpoint_arrival_delay_minutes",
+      "value": 24,
+      "unit": "minutes",
+      "derived_from": [
+        "fact.team_arrived_saddle.20260513T095400",
+        "checkpoint.saddle"
+      ],
+      "method": "planned_arrival_at_vs_observed_checkpoint_arrival"
+    },
+    {
+      "id": "measurement.lin_position_freshness.20260513T101200",
+      "type": "DerivedMeasurement",
+      "subject": "person.member_lin",
+      "metric": "position_freshness_seconds",
+      "value": 1080,
+      "unit": "seconds",
+      "derived_from": [
+        "artifact.remote_status_json.20260513T100800"
+      ],
+      "method": "remote_status_last_seen_delta"
+    },
+    {
+      "id": "remote_status.ridge_loop_20260513T100800",
+      "type": "RemoteStatusArtifact",
+      "mission_id": "mission.ridge_loop_20260513",
+      "artifact_refs": [
+        "artifact.remote_status_json.20260513T100800"
+      ],
+      "generated_at": "2026-05-13T10:08:00+08:00",
+      "freshness_seconds": 240,
+      "status": "delayed_member_stale",
+      "team_summary": {
+        "members_total": 3,
+        "members_recent": 2,
+        "delayed_checkpoint_id": "checkpoint.saddle",
+        "possible_separation_member_ids": [
+          "person.member_lin"
+        ]
+      },
+      "latest_checkpoint": "checkpoint.saddle",
+      "next_checkpoint": "checkpoint.ridge_turn",
+      "safety_level": "L2",
+      "uncertainty": "medium",
+      "message": "Team reached the saddle 24 minutes late. Lin's latest position is stale, so separation is possible but unconfirmed."
+    },
+    {
+      "id": "event.possible_separation.lin.20260513T101400",
+      "type": "TeamSeparationEvent",
+      "team_id": "team.ridge_loop_alpha",
+      "detected_at": "2026-05-13T10:14:00+08:00",
+      "member_ids": [
+        "person.member_lin"
+      ],
+      "evidence_refs": [
+        "measurement.lin_position_freshness.20260513T101200",
+        "remote_status.ridge_loop_20260513T100800"
+      ],
+      "severity": "possible",
+      "reason": "Lin's device has not produced a fresh position while the other two members continue reporting near the saddle."
+    },
+    {
+      "id": "beacon.maya_watch.20260513T101700",
+      "type": "BeaconNode",
+      "source_device_id": "device.maya_watch",
+      "designated_at": "2026-05-13T10:17:00+08:00",
+      "mode": "mock",
+      "rendezvous_ref": "checkpoint.saddle",
+      "uncertainty": "medium",
+      "active": true
+    },
+    {
+      "id": "signal.lin_to_maya_beacon.20260513T101900",
+      "type": "SignalBearingMeasurement",
+      "beacon_id": "beacon.maya_watch.20260513T101700",
+      "observer_device_id": "device.lin_phone",
+      "measured_at": "2026-05-13T10:19:00+08:00",
+      "signal_type": "mock",
+      "trend": "improving",
+      "confidence": "low",
+      "evidence_refs": [
+        "artifact.mock_rssi_scan.member_03"
+      ],
+      "direction_hint": "mock signal improved while moving back toward the saddle",
+      "exact_position_claimed": false
+    },
+    {
+      "id": "skill.team_checkin_summary.0_2_0",
+      "type": "SkillDefinition",
+      "skill_id": "team-checkin-summary",
+      "version": "0.2.0",
+      "status": "field_trial",
+      "manifest_ref": "skills/scout/team-checkin-summary.yaml"
+    },
+    {
+      "id": "skill.decision_options.0_1_0",
+      "type": "SkillDefinition",
+      "skill_id": "decision-options",
+      "version": "0.1.0",
+      "status": "experimental",
+      "manifest_ref": "skills/scout/decision-options.yaml"
+    },
+    {
+      "id": "skill.beacon_trend_mock.0_1_0",
+      "type": "SkillDefinition",
+      "skill_id": "beacon-trend-mock",
+      "version": "0.1.0",
+      "status": "experimental",
+      "manifest_ref": "skills/scout/beacon-trend-mock.yaml"
+    },
+    {
+      "id": "skill_run.team_checkin_summary.20260513T100800",
+      "type": "SkillRunRecord",
+      "skill_id": "team-checkin-summary",
+      "skill_version": "0.2.0",
+      "started_at": "2026-05-13T10:07:30+08:00",
+      "ended_at": "2026-05-13T10:08:00+08:00",
+      "activation_decision": "allow",
+      "input_refs": [
+        "measurement.saddle_delay.team.20260513T095500",
+        "measurement.lin_position_freshness.20260513T101200"
+      ],
+      "output_refs": [
+        "remote_status.ridge_loop_20260513T100800"
+      ],
+      "preflight_results": {
+        "ln_gate": "L2_allow_summary",
+        "raw_telemetry_included": false
+      },
+      "failure_policy": {
+        "on_error": "emit_degraded_status"
+      }
+    },
+    {
+      "id": "skill_run.decision_options.20260513T101500",
+      "type": "SkillRunRecord",
+      "skill_id": "decision-options",
+      "skill_version": "0.1.0",
+      "started_at": "2026-05-13T10:15:00+08:00",
+      "ended_at": "2026-05-13T10:15:20+08:00",
+      "activation_decision": "degrade",
+      "input_refs": [
+        "remote_status.ridge_loop_20260513T100800",
+        "event.possible_separation.lin.20260513T101400"
+      ],
+      "output_refs": [
+        "options.ridge_loop_hold_or_regroup.20260513T101520"
+      ],
+      "preflight_results": {
+        "ln_gate": "L2_degraded_options",
+        "requires_human_pilot": true
+      },
+      "failure_policy": {
+        "on_error": "return_no_preference"
+      }
+    },
+    {
+      "id": "skill_run.beacon_trend_mock.20260513T101900",
+      "type": "SkillRunRecord",
+      "skill_id": "beacon-trend-mock",
+      "skill_version": "0.1.0",
+      "started_at": "2026-05-13T10:18:40+08:00",
+      "ended_at": "2026-05-13T10:19:05+08:00",
+      "activation_decision": "allow",
+      "input_refs": [
+        "beacon.maya_watch.20260513T101700",
+        "artifact.mock_rssi_scan.member_03"
+      ],
+      "output_refs": [
+        "signal.lin_to_maya_beacon.20260513T101900"
+      ],
+      "preflight_results": {
+        "ln_gate": "L2_allow_trend_only",
+        "exact_position_disabled": true
+      },
+      "failure_policy": {
+        "on_error": "mark_signal_unknown"
+      }
+    },
+    {
+      "id": "options.ridge_loop_hold_or_regroup.20260513T101520",
+      "type": "DecisionOptionSet",
+      "mission_id": "mission.ridge_loop_20260513",
+      "generated_at": "2026-05-13T10:15:20+08:00",
+      "current_safety_level": "L2",
+      "pilot_in_command": "person.leader_maya",
+      "options": [
+        {
+          "id": "option.hold_saddle_20min",
+          "label": "Hold at saddle",
+          "action": "hold_at_checkpoint",
+          "estimated_time_minutes": 20,
+          "resource_cost": "low",
+          "daylight_risk": "low",
+          "communication_chance": "medium",
+          "team_impact": "Keeps two members stationary at the last shared checkpoint while waiting for Lin's status to refresh.",
+          "reversibility": "high",
+          "failure_modes": [
+            "Lin continues moving away while the rest of the team waits."
+          ],
+          "confidence": "medium"
+        },
+        {
+          "id": "option.regroup_beacon_trend",
+          "label": "Use beacon trend to regroup",
+          "action": "activate_mock_beacon_and_move_only_on_improving_signal",
+          "estimated_time_minutes": 30,
+          "resource_cost": "medium",
+          "daylight_risk": "medium",
+          "communication_chance": "medium",
+          "team_impact": "Uses trend-only beacon guidance without claiming Lin's exact position.",
+          "reversibility": "medium",
+          "failure_modes": [
+            "Signal trend remains ambiguous.",
+            "Movement splits the team again if the leader leaves the checkpoint."
+          ],
+          "confidence": "low"
+        }
+      ],
+      "scout_preference": {
+        "option_id": "option.hold_saddle_20min",
+        "reason": "Highest reversibility while separation remains possible rather than confirmed."
+      },
+      "input_refs": [
+        "remote_status.ridge_loop_20260513T100800",
+        "event.possible_separation.lin.20260513T101400",
+        "skill_run.decision_options.20260513T101500"
+      ]
+    }
+  ],
+  "timeline": [
+    {
+      "label": "T-120",
+      "at": "2026-05-13T08:15:00+08:00",
+      "safety_level": "L0",
+      "summary": "All three members passed the creek bridge close to plan.",
+      "evidence_refs": [
+        "checkpoint.creek_bridge"
+      ],
+      "skill_run_refs": []
+    },
+    {
+      "label": "T-60",
+      "at": "2026-05-13T09:30:00+08:00",
+      "safety_level": "L1",
+      "summary": "The team has not yet reached the saddle at the planned arrival time.",
+      "evidence_refs": [
+        "checkpoint.saddle"
+      ],
+      "skill_run_refs": []
+    },
+    {
+      "label": "T-30",
+      "at": "2026-05-13T10:08:00+08:00",
+      "safety_level": "L2",
+      "summary": "Remote status reports a 24 minute saddle delay and stale position for Lin.",
+      "evidence_refs": [
+        "measurement.saddle_delay.team.20260513T095500",
+        "measurement.lin_position_freshness.20260513T101200"
+      ],
+      "remote_status_ref": "remote_status.ridge_loop_20260513T100800",
+      "skill_run_refs": [
+        "skill_run.team_checkin_summary.20260513T100800"
+      ]
+    },
+    {
+      "label": "T-20",
+      "at": "2026-05-13T10:15:20+08:00",
+      "safety_level": "L2",
+      "summary": "Decision options are generated in degraded mode because the separation signal is possible, not confirmed.",
+      "evidence_refs": [
+        "event.possible_separation.lin.20260513T101400"
+      ],
+      "remote_status_ref": "remote_status.ridge_loop_20260513T100800",
+      "option_set_ref": "options.ridge_loop_hold_or_regroup.20260513T101520",
+      "skill_run_refs": [
+        "skill_run.decision_options.20260513T101500"
+      ]
+    },
+    {
+      "label": "T-15",
+      "at": "2026-05-13T10:19:05+08:00",
+      "safety_level": "L2",
+      "summary": "Mock beacon scan reports improving trend only, without exact position.",
+      "evidence_refs": [
+        "signal.lin_to_maya_beacon.20260513T101900"
+      ],
+      "remote_status_ref": "remote_status.ridge_loop_20260513T100800",
+      "option_set_ref": "options.ridge_loop_hold_or_regroup.20260513T101520",
+      "skill_run_refs": [
+        "skill_run.beacon_trend_mock.20260513T101900"
+      ]
+    }
+  ]
+}
