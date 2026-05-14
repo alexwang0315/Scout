@@ -11,6 +11,8 @@ from phase2_brain_models import (
     ArtifactKind,
     BrainNode,
     DecisionOptionSet,
+    DerivedMeasurement,
+    ObservedFact,
     RemoteStatusArtifact,
     SkillRunRecord,
     TeamSeparationEvent,
@@ -31,6 +33,7 @@ class Phase2ArtifactManifest:
     decision_option_set_refs: list[dict[str, Any]]
     skill_run_refs: list[dict[str, Any]]
     case_replay_refs: list[dict[str, Any]]
+    phase1_adapter_evidence: list[dict[str, Any]]
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -41,6 +44,7 @@ class Phase2ArtifactManifest:
             "decision_option_set_refs": self.decision_option_set_refs,
             "skill_run_refs": self.skill_run_refs,
             "case_replay_refs": self.case_replay_refs,
+            "phase1_adapter_evidence": self.phase1_adapter_evidence,
         }
 
     def to_json(self) -> str:
@@ -57,6 +61,8 @@ def build_phase2_artifact_manifest(
     option_sets = sorted(_nodes_of_type(nodes, DecisionOptionSet), key=lambda node: node.id)
     skill_runs = sorted(_nodes_of_type(nodes, SkillRunRecord), key=lambda node: node.id)
     separation_events = sorted(_nodes_of_type(nodes, TeamSeparationEvent), key=lambda node: node.id)
+    facts = sorted(_nodes_of_type(nodes, ObservedFact), key=lambda node: node.id)
+    measurements = sorted(_nodes_of_type(nodes, DerivedMeasurement), key=lambda node: node.id)
 
     artifact_entries = [_artifact_entry(artifact) for artifact in artifacts]
     artifact_entries_by_id = {entry["id"]: entry for entry in artifact_entries}
@@ -77,6 +83,11 @@ def build_phase2_artifact_manifest(
             option_sets=option_sets,
             skill_runs=skill_runs,
             separation_events=separation_events,
+        ),
+        phase1_adapter_evidence=_phase1_adapter_evidence_entries(
+            artifacts=artifacts,
+            facts=facts,
+            measurements=measurements,
         ),
     )
 
@@ -229,6 +240,113 @@ def _has_any_ref(skill_run: SkillRunRecord, refs: list[str]) -> bool:
         set(skill_run.input_refs) | set(skill_run.output_refs) | set(skill_run.artifact_refs)
     )
     return not linked_refs.isdisjoint(refs)
+
+
+def _phase1_adapter_evidence_entries(
+    *,
+    artifacts: list[Artifact],
+    facts: list[ObservedFact],
+    measurements: list[DerivedMeasurement],
+) -> list[dict[str, Any]]:
+    phase1_artifacts = [artifact for artifact in artifacts if _is_phase1_adapter_artifact(artifact)]
+    phase1_artifact_ids = {artifact.id for artifact in phase1_artifacts}
+    incident_ids = sorted(
+        {
+            incident_id
+            for artifact in phase1_artifacts
+            if (incident_id := _phase1_incident_id_for_artifact(artifact))
+        }
+    )
+
+    entries: list[dict[str, Any]] = []
+    for incident_id in incident_ids:
+        incident_artifacts = [
+            artifact
+            for artifact in phase1_artifacts
+            if _phase1_incident_id_for_artifact(artifact) == incident_id
+        ]
+        incident_artifact_ids = {artifact.id for artifact in incident_artifacts}
+        related_facts = [
+            fact for fact in facts if _phase1_node_refs(fact) & incident_artifact_ids
+        ]
+        related_measurements = [
+            measurement
+            for measurement in measurements
+            if _phase1_node_refs(measurement) & incident_artifact_ids
+        ]
+        artifact_refs = sorted(
+            set().union(
+                incident_artifact_ids,
+                *(set(fact.artifact_refs) for fact in related_facts),
+                *(set(measurement.artifact_refs) for measurement in related_measurements),
+            )
+            & phase1_artifact_ids
+        )
+
+        entries.append(
+            {
+                "incident_id": incident_id,
+                "incident_package_artifact_refs": sorted(
+                    artifact.id
+                    for artifact in incident_artifacts
+                    if artifact.artifact_kind == ArtifactKind.INCIDENT_PACKAGE
+                ),
+                "package_artifact_refs": sorted(
+                    artifact.id
+                    for artifact in incident_artifacts
+                    if artifact.artifact_kind
+                    in {
+                        ArtifactKind.INCIDENT_PACKAGE,
+                        ArtifactKind.RAW_LOG,
+                        ArtifactKind.SEGMENT_CAPSULE,
+                    }
+                ),
+                "fact_ids": [fact.id for fact in related_facts],
+                "measurement_metrics": [
+                    _phase1_measurement_metric_entry(measurement)
+                    for measurement in related_measurements
+                ],
+                "artifact_refs": artifact_refs,
+            }
+        )
+    return entries
+
+
+def _is_phase1_adapter_artifact(artifact: Artifact) -> bool:
+    return (
+        artifact.id.startswith("artifact.phase1_")
+        or artifact.metadata.get("phase") == "phase1"
+    )
+
+
+def _phase1_incident_id_for_artifact(artifact: Artifact) -> str | None:
+    incident_id = artifact.metadata.get("incident_id")
+    if isinstance(incident_id, str) and incident_id:
+        return incident_id
+    if artifact.id.startswith("artifact.phase1_"):
+        return artifact.id.rsplit(".", 1)[-1]
+    return None
+
+
+def _phase1_node_refs(node: ObservedFact | DerivedMeasurement) -> set[str]:
+    refs = set(node.artifact_refs)
+    if isinstance(node, ObservedFact):
+        refs.update(node.evidence)
+    if isinstance(node, DerivedMeasurement):
+        refs.update(node.derived_from)
+    return refs
+
+
+def _phase1_measurement_metric_entry(measurement: DerivedMeasurement) -> dict[str, Any]:
+    entry: dict[str, Any] = {
+        "id": measurement.id,
+        "metric": measurement.metric,
+        "value": measurement.value,
+        "artifact_refs": sorted(measurement.artifact_refs),
+    }
+    if measurement.unit:
+        entry["unit"] = measurement.unit
+    return entry
 
 
 def _nodes_of_type(nodes: list[BrainNode], model: type[Any]) -> list[Any]:

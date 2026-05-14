@@ -8,6 +8,15 @@ The page should show the route, offline Overpass-derived map corridors, mission 
 
 This is not a live navigation UI. It is an evidence viewer for "what happened, where, why did Scout raise L1/L2/Ln, and what evidence supported that decision?"
 
+This page can later become part of the Phase 4 Pre-Trip Planning Admin flow.
+The intended evolution is not to let the after-action page edit historical
+Phase 1 evidence. It is to let a reviewer select evidence from a completed
+mission and export reviewed planning lessons or candidates for the next route.
+For example, a weak-GPS section, stale Overpass corridor, missed checkpoint, or
+useful retreat point can become a candidate checkpoint, hazard note, route
+segment requirement, recording policy adjustment, or POI for a future
+`PreTripPackage`.
+
 ## Assumptions
 
 1. The first implementation is local/dev admin only, served by the existing FastAPI app or opened through a local dev server.
@@ -154,6 +163,7 @@ def build_admin_case_view(case_id: str, *, root: Path = ROOT) -> dict[str, Any]:
   - let the admin page modify mission graph, risk rules, or incident packages in Phase 1.
   - hide weak/noisy GPS evidence to make the path look cleaner.
   - present Overpass data as guaranteed current trail truth.
+  - apply after-action findings directly to a future mission without explicit human review.
 
 ## Success Criteria
 
@@ -163,9 +173,29 @@ def build_admin_case_view(case_id: str, *, root: Path = ROOT) -> dict[str, Any]:
 - Tests validate the admin data view model and read-only API contract.
 - Existing Phase 1 tests continue to pass.
 
+## Future Phase 4 Integration
+
+The Phase 4 integration target is an export boundary:
+
+```text
+after-action evidence selection
+  -> next-plan candidate export
+  -> Phase 4 PreTripPackage draft
+  -> human review
+  -> future MissionGraph compile
+```
+
+Candidate exports should reference the original case id, source paths,
+artifact ids, map evidence ids, checkpoint ids, segment ids, segment capsule
+ids, incident ids, and reviewer notes. They may include proposed changes, but
+they must not mutate the completed mission or produce live safety decisions.
+
 ## Open Questions
 
 - Should first UI render use SVG/Canvas projection, or should we add Leaflet/MapLibre for better map interaction?
 - Should the admin page load only the latest configured mission, or support a case selector from multiple persisted runs?
 - Should incident package raw samples be shown directly, summarized, or both?
 - Do we want this page inside `server.py` now, or as a standalone static artifact until admin auth exists?
+- Which after-action evidence types should be exportable as Phase 4 next-plan
+  candidates first: checkpoints, hazards, route segments, POIs, recording
+  policies, or skill config?

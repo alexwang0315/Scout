@@ -4,7 +4,7 @@ Phase 2 v0.1 is a replay-first preview of Scout as a personal safety operating
 system layered on top of the Phase 1 trail safety black box. It adds file-backed
 Brain nodes, audited skill runs, remote status artifacts, decision-support
 outputs, case replay, fixture persistence, read-only admin previews, artifact
-manifests, and a release checker.
+manifests, a fixture-backed Phase 1 evidence adapter, and a release checker.
 
 Phase 2 does not replace Phase 1. Phase 1 deterministic route-progress,
 incident packaging, safety levels, live ingest, and after-action behavior remain
@@ -34,6 +34,9 @@ state.
   for persisted Brain evidence and artifact inspection.
 - Shared Phase 2 reference classification, store helpers, artifact ID
   conventions, and cleanup review docs.
+- Fixture-backed Phase 1 incident package adapter that imports persisted
+  incident package JSON into Phase 2 artifacts, observed facts, and deterministic
+  measurements without live `/safety/*` wiring.
 - Demo defaults are being isolated behind shared constants, but the broader demo
   boundary remains in progress or next until reusable-builder boundaries are
   verified by the code owner.
@@ -51,6 +54,8 @@ state.
 - `tests/fixtures/phase2/policies/*.json` covers Ln activation policy contexts.
 - `tests/fixtures/phase2/demo/team_replay_demo_summary_golden.json` preserves
   the compact demo summary contract.
+- `tests/fixtures/phase2/phase1_adapter/*.json` covers fixture-backed Phase 1
+  incident package imports into the Phase 2 Brain.
 - `skills/scout/*.yaml` contains registry-managed Scout skill manifests covered
   by manifest tests and release-check validation.
 
@@ -69,6 +74,9 @@ state.
 ## Safety Guardrails
 
 - Phase 1 deterministic safety behavior remains the release baseline.
+- The Phase 1 evidence adapter is downstream-only. Future live connection should
+  start after incident persistence, stay disabled by default, and fail without
+  changing Phase 1 escalation or response behavior.
 - LLM or model output must not decide L3 or L4 emergency escalation.
 - Model interpretations must not be stored as observed facts.
 - Decision option sets express bounded support choices, not commands.
@@ -112,7 +120,7 @@ Focused Phase 2 behavior and release-gate tests are listed in
 `docs/specs/phase-2-release-checklist.md`.
 
 Latest known focused Phase 2 result currently recorded in the docs:
-`141 passed, 1 warning, 41 subtests passed`.
+`153 passed, 1 warning, 41 subtests passed`.
 
 Full repository regression gate:
 
@@ -121,10 +129,11 @@ Full repository regression gate:
 ```
 
 Latest known full repository result currently recorded in the docs:
-`238 passed, 1 warning, 50 subtests passed`.
+`242 passed, 1 warning, 50 subtests passed`.
 
 These numbers should be refreshed before cutting a release. The current focused
-number includes the reference-classifier and demo-boundary cleanup slices.
+number includes the reference-classifier, demo-boundary cleanup, and completed
+Milestone 9 Phase 1 evidence adapter slices.
 
 ## Known Dirty Exclusions
 

@@ -24,6 +24,8 @@ DOC_PATHS = (
     "docs/specs/phase-2-artifact-id-convention.md",
     "docs/specs/phase-2-cleanup-review.md",
     "docs/specs/phase-2-commit-plan.md",
+    "docs/specs/phase-2-live-integration-research.md",
+    "docs/specs/phase-3-integration-plan.md",
     "docs/admin/phase1-after-action.html",
 )
 
@@ -45,6 +47,9 @@ CORE_PHASE2_PATHS = (
     "phase2_admin_api.py",
     "phase2_artifact_manifest.py",
     "phase2_artifact_manifest_store.py",
+    "phase1_incident_bridge.py",
+    "phase1_phase2_adapter.py",
+    "phase2_import_phase1_incident.py",
     "remote_status.py",
     "remote_status_store.py",
     "decision_options.py",
@@ -67,6 +72,36 @@ VERSIONED_PHASE2_DATA_PATHS = (
     "tests/fixtures/phase2/cases/fog_delay_ridge_turnaround.json",
     "tests/fixtures/phase2/cases/river_gorge_team_separation.json",
     "tests/fixtures/phase2/demo/team_replay_demo_summary_golden.json",
+    "tests/fixtures/phase2/phase1_adapter/minimal_l2_route_deviation_incident.json",
+)
+
+PHASE3_DOC_PATHS = (
+    "docs/specs/phase-3-integration-plan.md",
+    "docs/architecture/phase-1-2-architecture.html",
+)
+
+PHASE3_BRIDGE_MODULE_PATHS = (
+    "phase1_incident_bridge.py",
+    "phase1_phase2_adapter.py",
+    "phase2_import_phase1_incident.py",
+)
+
+PHASE3_BRIDGE_TEST_PATHS = (
+    "tests/test_phase1_incident_bridge.py",
+    "tests/test_phase1_phase2_adapter.py",
+    "tests/test_phase2_import_phase1_incident_cli.py",
+)
+
+PHASE3_PHASE1_ADAPTER_FIXTURE_DIR = "tests/fixtures/phase2/phase1_adapter"
+PHASE3_PHASE1_ADAPTER_SCENARIO_STEMS = (
+    ("missed_checkpoint",),
+    ("weak_gps",),
+    ("backtracking_loop",),
+    ("steep_slope", "map_hazard"),
+    ("resource_constraint",),
+    ("unsafe_continuation",),
+    ("sensor_anomaly",),
+    ("multiple_incidents",),
 )
 
 FOCUSED_TEST_PATHS = (
@@ -103,6 +138,11 @@ FOCUSED_TEST_PATHS = (
     "tests/test_phase2_fixture_skill_manifest_coverage.py",
     "tests/test_phase2_release_check.py",
     "tests/test_admin_after_action.py",
+    "tests/test_phase1_adapter_fixture_matrix.py",
+    "tests/test_phase1_incident_bridge.py",
+    "tests/test_phase1_phase2_adapter.py",
+    "tests/test_phase2_import_phase1_incident_cli.py",
+    "tests/test_phase3_decision_support_matrix.py",
 )
 
 SKILL_MANIFEST_DIR = "skills/scout"
@@ -127,6 +167,9 @@ PATH_CHECKS = (
     PathCheck("core_phase2_modules", CORE_PHASE2_PATHS),
     PathCheck("versioned_phase2_data", VERSIONED_PHASE2_DATA_PATHS),
     PathCheck("focused_tests", FOCUSED_TEST_PATHS),
+    PathCheck("phase3_docs", PHASE3_DOC_PATHS),
+    PathCheck("phase3_bridge_modules", PHASE3_BRIDGE_MODULE_PATHS),
+    PathCheck("phase3_bridge_tests", PHASE3_BRIDGE_TEST_PATHS),
 )
 
 
@@ -147,6 +190,10 @@ def build_release_check(repo_root: Path | str = REPO_ROOT) -> dict[str, Any]:
     skill_check = _check_skill_manifest_coverage(root)
     checks["skill_manifest_coverage"] = skill_check
     missing_required.extend(skill_check["missing"])
+
+    phase3_fixture_matrix = _check_phase3_phase1_adapter_fixture_matrix(root)
+    checks["phase3_phase1_adapter_fixture_matrix"] = phase3_fixture_matrix
+    missing_required.extend(phase3_fixture_matrix["missing"])
 
     missing_required = sorted(set(missing_required))
     return {
@@ -242,6 +289,53 @@ def _check_skill_manifest_coverage(root: Path) -> dict[str, Any]:
         "missing_skill_ids_by_fixture": missing_by_fixture,
         "missing": sorted(missing_paths),
     }
+
+
+def _check_phase3_phase1_adapter_fixture_matrix(root: Path) -> dict[str, Any]:
+    fixture_root = root / PHASE3_PHASE1_ADAPTER_FIXTURE_DIR
+    fixture_paths = sorted(fixture_root.glob("*.json")) if fixture_root.exists() else []
+    present_stems = {path.stem for path in fixture_paths}
+    required_stem_groups = [
+        _scenario_stem_group_label(stem_group)
+        for stem_group in PHASE3_PHASE1_ADAPTER_SCENARIO_STEMS
+    ]
+
+    missing_stem_groups = [
+        stem_group
+        for stem_group in PHASE3_PHASE1_ADAPTER_SCENARIO_STEMS
+        if not any(_phase3_stem_matches(stem, present_stems) for stem in stem_group)
+    ]
+    missing_scenarios = [
+        _scenario_stem_group_label(stem_group) for stem_group in missing_stem_groups
+    ]
+
+    missing_paths: list[str] = []
+    if not fixture_root.exists():
+        missing_paths.append(PHASE3_PHASE1_ADAPTER_FIXTURE_DIR)
+    missing_paths.extend(
+        f"{PHASE3_PHASE1_ADAPTER_FIXTURE_DIR}/{_scenario_stem_group_label(stem_group)}.json"
+        for stem_group in missing_stem_groups
+    )
+
+    return {
+        "ok": not missing_paths,
+        "fixture_dir": PHASE3_PHASE1_ADAPTER_FIXTURE_DIR,
+        "required_scenario_stems": required_stem_groups,
+        "present_scenario_stems": sorted(present_stems),
+        "missing_scenario_stems": missing_scenarios,
+        "fixtures_checked": [
+            path.relative_to(root).as_posix() for path in fixture_paths
+        ],
+        "missing": sorted(missing_paths),
+    }
+
+
+def _scenario_stem_group_label(stem_group: tuple[str, ...]) -> str:
+    return "_or_".join(stem_group)
+
+
+def _phase3_stem_matches(required_stem: str, present_stems: set[str]) -> bool:
+    return any(stem == required_stem or stem.startswith(f"{required_stem}_") for stem in present_stems)
 
 
 def _fixture_skill_ids(fixture_path: Path) -> set[str]:

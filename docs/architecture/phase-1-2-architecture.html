@@ -1,0 +1,828 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Scout Phase 1 + 2 Architecture</title>
+  <style>
+    :root {
+      --bg: #f7f9f6;
+      --ink: #17201b;
+      --muted: #59665e;
+      --line: #b9c6bc;
+      --green: #246b50;
+      --green-soft: #d9ece3;
+      --blue: #255f85;
+      --blue-soft: #d8e9f4;
+      --amber: #8b6421;
+      --amber-soft: #f3e6c8;
+      --violet: #5e4c8a;
+      --violet-soft: #e5e0f1;
+      --red: #8d3a32;
+      --red-soft: #f1d9d5;
+      --gray-soft: #e7ebe6;
+      --white: #ffffff;
+      --shadow: 0 10px 28px rgba(23, 32, 27, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.45;
+    }
+
+    main {
+      width: min(1320px, calc(100vw - 32px));
+      margin: 0 auto;
+      padding: 32px 0 48px;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      gap: 24px;
+      align-items: end;
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 18px;
+      margin-bottom: 24px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 30px;
+      font-weight: 760;
+      letter-spacing: 0;
+    }
+
+    .subtitle {
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-size: 15px;
+      max-width: 820px;
+    }
+
+    .badge {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 8px 12px;
+      color: var(--green);
+      background: var(--white);
+      font-size: 13px;
+      white-space: nowrap;
+    }
+
+    .system-section {
+      margin-bottom: 26px;
+    }
+
+    .section-title {
+      margin: 0 0 10px;
+      font-size: 18px;
+    }
+
+    .system-shell {
+      background: var(--white);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+      padding: 18px;
+    }
+
+    .network-shell {
+      background: var(--white);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+      padding: 12px;
+      overflow-x: auto;
+    }
+
+    .network-svg {
+      display: block;
+      min-width: 980px;
+      width: 100%;
+      height: auto;
+    }
+
+    .network-svg text {
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      fill: var(--ink);
+      letter-spacing: 0;
+    }
+
+    .network-title {
+      font-size: 18px;
+      font-weight: 760;
+    }
+
+    .network-label {
+      font-size: 13px;
+      font-weight: 720;
+    }
+
+    .network-small {
+      font-size: 11px;
+      fill: var(--muted);
+    }
+
+    .network-edge {
+      fill: none;
+      stroke: #7f8d84;
+      stroke-width: 2;
+    }
+
+    .network-edge.dashed {
+      stroke-dasharray: 7 6;
+    }
+
+    .network-edge.blocked {
+      stroke: var(--red);
+      stroke-width: 2.5;
+      stroke-dasharray: 5 6;
+    }
+
+    .network-box {
+      stroke: var(--line);
+      stroke-width: 1.4;
+      rx: 8;
+      ry: 8;
+    }
+
+    .phase-grid {
+      display: grid;
+      grid-template-columns: 1fr 0.58fr 1fr;
+      gap: 18px;
+      align-items: stretch;
+    }
+
+    .phase-panel {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfcfa;
+      padding: 16px;
+      min-width: 0;
+    }
+
+    .phase-panel h2 {
+      margin: 0 0 4px;
+      font-size: 18px;
+    }
+
+    .phase-panel > p {
+      margin: 0 0 14px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .stack {
+      display: grid;
+      gap: 12px;
+    }
+
+    .node {
+      background: var(--white);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+      box-shadow: var(--shadow);
+      min-height: 92px;
+    }
+
+    .node h3 {
+      margin: 0 0 8px;
+      font-size: 16px;
+      letter-spacing: 0;
+    }
+
+    .node p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .node ul {
+      margin: 10px 0 0;
+      padding-left: 18px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .node li + li {
+      margin-top: 4px;
+    }
+
+    .mission { border-color: #83b49f; background: var(--green-soft); }
+    .map { border-color: #a49ac9; background: var(--violet-soft); }
+    .sense { border-color: #8eb9d1; background: var(--blue-soft); }
+    .decision { border-color: #d2b66d; background: var(--amber-soft); }
+    .response { border-color: #cf948d; background: var(--red-soft); }
+    .store { background: var(--gray-soft); }
+
+    .boundary {
+      border: 1px dashed var(--line);
+      border-radius: 8px;
+      padding: 16px 12px;
+      display: grid;
+      gap: 12px;
+      background: #fffdf7;
+      align-content: center;
+    }
+
+    .boundary h2 {
+      margin: 0;
+      font-size: 16px;
+      text-align: center;
+    }
+
+    .boundary .rule {
+      border: 1px solid #d2b66d;
+      border-radius: 8px;
+      padding: 10px;
+      background: var(--amber-soft);
+      font-size: 13px;
+      color: var(--ink);
+    }
+
+    .bridge-arrow {
+      position: relative;
+      min-height: 42px;
+      border-top: 2px solid var(--line);
+      margin: 4px 8px;
+    }
+
+    .bridge-arrow::after {
+      content: "";
+      position: absolute;
+      right: -1px;
+      top: -7px;
+      width: 12px;
+      height: 12px;
+      border-top: 2px solid var(--line);
+      border-right: 2px solid var(--line);
+      transform: rotate(45deg);
+      background: #fffdf7;
+    }
+
+    .mini-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 12px;
+    }
+
+    .chip {
+      border: 1px solid rgba(23, 32, 27, 0.18);
+      border-radius: 999px;
+      padding: 4px 8px;
+      background: rgba(255, 255, 255, 0.65);
+      color: var(--ink);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .lane-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 18px;
+    }
+
+    .lane-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0 0 10px;
+      font-size: 14px;
+      font-weight: 760;
+      text-transform: uppercase;
+      color: var(--muted);
+      letter-spacing: 0.04em;
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--green);
+    }
+
+    .matrix {
+      margin-top: 24px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--white);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: var(--shadow);
+      font-size: 13px;
+    }
+
+    th,
+    td {
+      text-align: left;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+    }
+
+    th {
+      background: #eef3ee;
+      color: var(--ink);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .note {
+      margin-top: 20px;
+      border-left: 4px solid var(--green);
+      background: var(--white);
+      padding: 14px 16px;
+      color: var(--muted);
+      border-radius: 6px;
+      font-size: 14px;
+    }
+
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.95em;
+    }
+
+    @media (max-width: 980px) {
+      header {
+        display: block;
+      }
+
+      .badge {
+        display: inline-block;
+        margin-top: 14px;
+      }
+
+      .phase-grid,
+      .lane-grid,
+      .matrix {
+        grid-template-columns: 1fr;
+      }
+
+      .bridge-arrow {
+        width: 2px;
+        height: 34px;
+        min-height: 34px;
+        border-top: 0;
+        border-left: 2px solid var(--line);
+        margin: 2px auto;
+      }
+
+      .bridge-arrow::after {
+        right: -5px;
+        top: auto;
+        bottom: -1px;
+        transform: rotate(135deg);
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <h1>Scout Phase 1 + 2 Architecture</h1>
+        <p class="subtitle">Phase 1 remains the deterministic trail safety black box. Phase 2 reads persisted evidence into a file-backed Brain for audit, replay, remote status, and bounded decision support. Phase 3 will operationalize the bridge without letting Phase 2 control emergency escalation.</p>
+      </div>
+      <div class="badge">Phase 1 + 2: safety baseline plus evidence OS</div>
+    </header>
+
+    <section class="system-section" aria-label="Phase 1 and Phase 2 network architecture">
+      <h2 class="section-title">Network Architecture Overview</h2>
+      <div class="network-shell">
+        <svg class="network-svg" viewBox="0 0 1200 560" role="img" aria-labelledby="network-title network-desc">
+          <title id="network-title">Scout Phase 1 and Phase 2 network architecture</title>
+          <desc id="network-desc">Phase 1 produces deterministic safety evidence. The evidence boundary adapts persisted incident packages into Phase 2 Brain nodes. Phase 2 powers replay, remote status, options, manifests, and admin previews without mutating Phase 1 escalation.</desc>
+          <defs>
+            <marker id="arrowhead" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">
+              <path d="M 0 0 L 10 4 L 0 8 z" fill="#7f8d84"></path>
+            </marker>
+            <marker id="blocked-arrowhead" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">
+              <path d="M 0 0 L 10 4 L 0 8 z" fill="#8d3a32"></path>
+            </marker>
+          </defs>
+
+          <rect x="20" y="20" width="335" height="500" rx="12" fill="#fbfcfa" stroke="#b9c6bc"></rect>
+          <text x="38" y="52" class="network-title">Phase 1: Safety Runtime</text>
+          <text x="38" y="73" class="network-small">Owns live state, route risk, and L0-L4 escalation</text>
+
+          <rect class="network-box" x="55" y="105" width="115" height="62" fill="#d8e9f4"></rect>
+          <text x="72" y="130" class="network-label">Live</text>
+          <text x="72" y="148" class="network-label">Observations</text>
+          <text x="72" y="162" class="network-small">GPS / PDR</text>
+
+          <rect class="network-box" x="205" y="95" width="115" height="82" fill="#d9ece3"></rect>
+          <text x="226" y="122" class="network-label">Mission</text>
+          <text x="226" y="140" class="network-label">Graph</text>
+          <text x="226" y="158" class="network-small">route / zones</text>
+
+          <rect class="network-box" x="205" y="205" width="115" height="82" fill="#e5e0f1"></rect>
+          <text x="226" y="232" class="network-label">Offline</text>
+          <text x="226" y="250" class="network-label">Map Evidence</text>
+          <text x="226" y="268" class="network-small">corridor / hazards</text>
+
+          <rect class="network-box" x="85" y="330" width="150" height="82" fill="#f3e6c8"></rect>
+          <text x="109" y="358" class="network-label">Safety Decision</text>
+          <text x="109" y="376" class="network-label">Core</text>
+          <text x="109" y="394" class="network-small">route progress / rules</text>
+
+          <rect class="network-box" x="85" y="440" width="150" height="62" fill="#f1d9d5"></rect>
+          <text x="109" y="466" class="network-label">IncidentStore</text>
+          <text x="109" y="486" class="network-small">persisted package JSON</text>
+
+          <path class="network-edge" marker-end="url(#arrowhead)" d="M170 136 C185 136 188 136 205 136"></path>
+          <path class="network-edge" marker-end="url(#arrowhead)" d="M262 177 C262 230 230 310 196 330"></path>
+          <path class="network-edge" marker-end="url(#arrowhead)" d="M226 287 C215 310 199 323 184 330"></path>
+          <path class="network-edge" marker-end="url(#arrowhead)" d="M160 412 L160 440"></path>
+
+          <rect x="410" y="50" width="230" height="440" rx="12" fill="#fffdf7" stroke="#d2b66d" stroke-dasharray="8 6"></rect>
+          <text x="445" y="86" class="network-title">Evidence Boundary</text>
+          <text x="438" y="110" class="network-small">post-persistence only</text>
+
+          <rect class="network-box" x="445" y="150" width="160" height="76" fill="#e7ebe6"></rect>
+          <text x="474" y="178" class="network-label">Manual Import</text>
+          <text x="474" y="197" class="network-small">existing package file</text>
+
+          <rect class="network-box" x="445" y="258" width="160" height="88" fill="#d9ece3"></rect>
+          <text x="468" y="286" class="network-label">Phase 1 -> 2</text>
+          <text x="468" y="304" class="network-label">Adapter</text>
+          <text x="468" y="324" class="network-small">artifacts / facts / measurements</text>
+
+          <rect class="network-box" x="445" y="390" width="160" height="68" fill="#f3e6c8"></rect>
+          <text x="468" y="418" class="network-label">Future Bridge</text>
+          <text x="468" y="438" class="network-small">disabled by default</text>
+
+          <path class="network-edge" marker-end="url(#arrowhead)" d="M235 471 C295 471 365 430 445 424"></path>
+          <path class="network-edge" marker-end="url(#arrowhead)" d="M525 226 L525 258"></path>
+          <path class="network-edge dashed" marker-end="url(#arrowhead)" d="M525 390 L525 346"></path>
+
+          <rect x="700" y="20" width="470" height="500" rx="12" fill="#fbfcfa" stroke="#b9c6bc"></rect>
+          <text x="720" y="52" class="network-title">Phase 2: Brain + Support</text>
+          <text x="720" y="73" class="network-small">Reads evidence for audit, replay, remote status, and options</text>
+
+          <rect class="network-box" x="745" y="118" width="145" height="82" fill="#e7ebe6"></rect>
+          <text x="771" y="146" class="network-label">Artifacts</text>
+          <text x="771" y="165" class="network-small">incident / raw</text>
+          <text x="771" y="181" class="network-small">map / capsule refs</text>
+
+          <rect class="network-box" x="928" y="118" width="145" height="82" fill="#d9ece3"></rect>
+          <text x="954" y="146" class="network-label">ObservedFact</text>
+          <text x="954" y="165" class="network-small">deterministic only</text>
+
+          <rect class="network-box" x="837" y="235" width="170" height="82" fill="#d8e9f4"></rect>
+          <text x="865" y="264" class="network-label">Derived</text>
+          <text x="865" y="282" class="network-label">Measurement</text>
+          <text x="865" y="300" class="network-small">deterministic only</text>
+
+          <rect class="network-box" x="835" y="358" width="175" height="82" fill="#f3e6c8"></rect>
+          <text x="862" y="386" class="network-label">File-backed</text>
+          <text x="862" y="404" class="network-label">Brain Store</text>
+          <text x="862" y="422" class="network-small">JSON nodes / rebuildable index</text>
+
+          <rect class="network-box" x="725" y="455" width="128" height="50" fill="#e5e0f1"></rect>
+          <text x="748" y="485" class="network-label">Admin API</text>
+
+          <rect class="network-box" x="875" y="455" width="128" height="50" fill="#e5e0f1"></rect>
+          <text x="898" y="485" class="network-label">Manifest</text>
+
+          <rect class="network-box" x="1025" y="455" width="128" height="50" fill="#d8e9f4"></rect>
+          <text x="1042" y="485" class="network-label">Replay/Skills</text>
+
+          <path class="network-edge" marker-end="url(#arrowhead)" d="M605 302 C650 302 690 182 745 160"></path>
+          <path class="network-edge" marker-end="url(#arrowhead)" d="M605 302 C698 302 820 160 928 160"></path>
+          <path class="network-edge" marker-end="url(#arrowhead)" d="M605 302 C690 302 755 276 837 276"></path>
+          <path class="network-edge" marker-end="url(#arrowhead)" d="M818 200 C818 250 860 324 892 358"></path>
+          <path class="network-edge" marker-end="url(#arrowhead)" d="M1000 200 C990 255 956 318 934 358"></path>
+          <path class="network-edge" marker-end="url(#arrowhead)" d="M922 317 L922 358"></path>
+          <path class="network-edge" marker-end="url(#arrowhead)" d="M886 440 L810 455"></path>
+          <path class="network-edge" marker-end="url(#arrowhead)" d="M922 440 L939 455"></path>
+          <path class="network-edge" marker-end="url(#arrowhead)" d="M958 440 L1062 455"></path>
+
+          <rect x="690" y="528" width="480" height="26" rx="8" fill="#f1d9d5" stroke="#cf948d"></rect>
+          <text x="718" y="546" class="network-small">Guardrail: Phase 2 failures and model output never control Phase 1 escalation</text>
+          <path class="network-edge blocked" marker-end="url(#blocked-arrowhead)" d="M835 382 C620 538 265 526 178 502"></path>
+          <text x="445" y="535" class="network-small">blocked feedback into safety loop</text>
+        </svg>
+      </div>
+    </section>
+
+    <section class="system-section" aria-label="Integrated system block diagram">
+      <h2 class="section-title">Integrated System Block Diagram</h2>
+      <div class="system-shell">
+        <div class="phase-grid">
+          <section class="phase-panel" aria-label="Phase 1 safety runtime">
+            <h2>Phase 1: Trail Safety Black Box</h2>
+            <p>Live observations are evaluated against mission, route, map, resource, and risk rules. This layer owns L0-L4 safety state.</p>
+            <div class="stack">
+              <article class="node mission">
+                <h3>Mission + Map Context</h3>
+                <p>Route intent and static terrain evidence bound runtime interpretation.</p>
+                <div class="mini-list">
+                  <span class="chip">MissionGraph</span>
+                  <span class="chip">Checkpoints</span>
+                  <span class="chip">Segments</span>
+                  <span class="chip">OfflineMapContext</span>
+                  <span class="chip">Hazards</span>
+                </div>
+              </article>
+
+              <article class="node sense">
+                <h3>Observation Runtime</h3>
+                <p>Device streams and provider context normalize into safety observations.</p>
+                <div class="mini-list">
+                  <span class="chip">GPS</span>
+                  <span class="chip">PDR / IMU</span>
+                  <span class="chip">ResourceState</span>
+                  <span class="chip">EnvironmentState</span>
+                  <span class="chip">CommunicationState</span>
+                  <span class="chip">/safety/observations</span>
+                </div>
+              </article>
+
+              <article class="node decision">
+                <h3>Safety Decision Core</h3>
+                <p>Deterministic services decide watch, concern, distress, and emergency levels.</p>
+                <div class="mini-list">
+                  <span class="chip">RouteProgressEvaluator</span>
+                  <span class="chip">MissionProgressTracker</span>
+                  <span class="chip">Risk Rules</span>
+                  <span class="chip">Go / No-Go</span>
+                  <span class="chip">RecordingPolicy</span>
+                </div>
+              </article>
+
+              <article class="node response">
+                <h3>Incident Evidence</h3>
+                <p>L2+ preserves a raw evidence window after the safety state is determined.</p>
+                <div class="mini-list">
+                  <span class="chip">SegmentCapsule</span>
+                  <span class="chip">IncidentPackage</span>
+                  <span class="chip">IncidentStore</span>
+                  <span class="chip">ai_summary_input</span>
+                </div>
+              </article>
+            </div>
+          </section>
+
+          <section class="boundary" aria-label="Evidence boundary">
+            <h2>Evidence Boundary</h2>
+            <div class="rule">Allowed now: manual import of persisted Phase 1 incident package JSON.</div>
+            <div class="bridge-arrow" aria-hidden="true"></div>
+            <div class="rule">Allowed later: disabled-by-default post-persistence bridge from <code>IncidentStore</code>.</div>
+            <div class="rule">Rejected: Phase 2 inside <code>/safety/*</code>, <code>/pdr/update</code>, risk rules, map checks, or escalation.</div>
+          </section>
+
+          <section class="phase-panel" aria-label="Phase 2 evidence operating system">
+            <h2>Phase 2: Personal Safety OS</h2>
+            <p>Persisted evidence becomes auditable Brain nodes. Phase 2 creates summaries, options, replays, and admin previews without changing Phase 1 safety decisions.</p>
+            <div class="stack">
+              <article class="node store">
+                <h3>Phase 1 Evidence Adapter</h3>
+                <p>Translates stable Phase 1 packages into Brain nodes with strict provenance.</p>
+                <div class="mini-list">
+                  <span class="chip">Artifact</span>
+                  <span class="chip">ObservedFact</span>
+                  <span class="chip">DerivedMeasurement</span>
+                  <span class="chip">Manual CLI</span>
+                </div>
+              </article>
+
+              <article class="node mission">
+                <h3>File-Backed Brain Store</h3>
+                <p>JSON graph nodes and artifact refs are the Phase 2 source of truth.</p>
+                <div class="mini-list">
+                  <span class="chip">BrainFileStore</span>
+                  <span class="chip">Artifact Refs</span>
+                  <span class="chip">Rebuildable Index</span>
+                  <span class="chip">Writeback Policy</span>
+                </div>
+              </article>
+
+              <article class="node sense">
+                <h3>Replay + Support Outputs</h3>
+                <p>Skills and replay surfaces produce bounded, provenance-linked outputs.</p>
+                <div class="mini-list">
+                  <span class="chip">SkillRunRecord</span>
+                  <span class="chip">Remote Status JSON</span>
+                  <span class="chip">DecisionOptionSet</span>
+                  <span class="chip">Case Replay</span>
+                  <span class="chip">Beacon Mock</span>
+                </div>
+              </article>
+
+              <article class="node map">
+                <h3>Admin + Release Surfaces</h3>
+                <p>Operators inspect evidence, manifests, and replay outputs from persisted Brain nodes.</p>
+                <div class="mini-list">
+                  <span class="chip">Admin Preview API</span>
+                  <span class="chip">Artifact Manifest</span>
+                  <span class="chip">Release Check</span>
+                  <span class="chip">After-Action UI</span>
+                </div>
+              </article>
+            </div>
+          </section>
+        </div>
+      </div>
+    </section>
+
+    <section class="system-section" aria-label="Operational lanes">
+      <h2 class="section-title">Operational Lanes</h2>
+      <div class="lane-grid">
+        <div>
+          <p class="lane-title"><span class="dot"></span>Live Safety</p>
+          <div class="stack">
+            <article class="node decision">
+              <h3>Safety State Loop</h3>
+              <p>Phase 1 evaluates observations and emits L0-L4 updates. Phase 2 must not be a dependency.</p>
+              <ul>
+                <li><code>SafetyRuntimeSession</code></li>
+                <li><code>RouteProgressEvaluator</code></li>
+                <li><code>RiskRule</code> checks</li>
+              </ul>
+            </article>
+            <article class="node response">
+              <h3>Incident Persistence</h3>
+              <p>Incident packages are sealed after deterministic triggers and become downstream evidence.</p>
+              <ul>
+                <li><code>IncidentStore.save()</code></li>
+                <li>raw window metadata</li>
+                <li>safety transitions</li>
+              </ul>
+            </article>
+          </div>
+        </div>
+
+        <div>
+          <p class="lane-title"><span class="dot"></span>Adapter</p>
+          <div class="stack">
+            <article class="node store">
+              <h3>Fixture-Backed Import</h3>
+              <p>Current Milestone 9 path proves package-to-Brain conversion without live wiring.</p>
+              <ul>
+                <li><code>phase1_phase2_adapter.py</code></li>
+                <li><code>phase2_import_phase1_incident.py</code></li>
+                <li>idempotent node IDs</li>
+              </ul>
+            </article>
+            <article class="node store">
+              <h3>Future Bridge</h3>
+              <p>Phase 3 may add an opt-in post-persistence bridge with failure isolation.</p>
+              <ul>
+                <li>disabled by default</li>
+                <li>post-persistence only</li>
+                <li>no response mutation</li>
+              </ul>
+            </article>
+          </div>
+        </div>
+
+        <div>
+          <p class="lane-title"><span class="dot"></span>Brain + Skills</p>
+          <div class="stack">
+            <article class="node mission">
+              <h3>Evidence Graph</h3>
+              <p>Facts and measurements are automatic only when deterministic and provenance-linked.</p>
+              <ul>
+                <li><code>ObservedFact</code></li>
+                <li><code>DerivedMeasurement</code></li>
+                <li><code>Artifact</code></li>
+              </ul>
+            </article>
+            <article class="node sense">
+              <h3>Decision Support</h3>
+              <p>Model and skill outputs stay explicit, bounded, and reviewable.</p>
+              <ul>
+                <li><code>RemoteStatusArtifact</code></li>
+                <li><code>DecisionOptionSet</code></li>
+                <li><code>ModelInterpretation</code></li>
+              </ul>
+            </article>
+          </div>
+        </div>
+
+        <div>
+          <p class="lane-title"><span class="dot"></span>Audit + Ops</p>
+          <div class="stack">
+            <article class="node map">
+              <h3>Admin Preview</h3>
+              <p>Read-only surfaces show Phase 1 adapter evidence alongside Phase 2 replay outputs.</p>
+              <ul>
+                <li><code>phase1_adapter_evidence</code></li>
+                <li>artifact previews</li>
+                <li>resolved refs</li>
+              </ul>
+            </article>
+            <article class="node response">
+              <h3>Release Gates</h3>
+              <p>Focused and full regression checks keep the boundary visible before deployment.</p>
+              <ul>
+                <li><code>phase2_release_check.py</code></li>
+                <li>fixture matrix</li>
+                <li>full pytest gate</li>
+              </ul>
+            </article>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="matrix" aria-label="Boundary and ownership tables">
+      <div>
+        <h2 class="section-title">Ownership Boundary</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Concern</th>
+              <th>Owner</th>
+              <th>Rule</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Emergency escalation</td>
+              <td>Phase 1</td>
+              <td>Phase 2 data cannot decide or downgrade L3/L4 behavior.</td>
+            </tr>
+            <tr>
+              <td>Persisted incident evidence</td>
+              <td>Phase 1 produces, Phase 2 reads</td>
+              <td>Phase 2 must not rewrite Phase 1 packages.</td>
+            </tr>
+            <tr>
+              <td>Automatic Brain writes</td>
+              <td>Phase 2</td>
+              <td>Allowed only for deterministic facts and measurements.</td>
+            </tr>
+            <tr>
+              <td>Model interpretation</td>
+              <td>Phase 2</td>
+              <td>Append-only, provenance-required, never an observed fact.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div>
+        <h2 class="section-title">Current and Future Paths</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Path</th>
+              <th>Status</th>
+              <th>Purpose</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Fixture adapter</td>
+              <td>Implemented</td>
+              <td>Regression-safe package to Brain conversion.</td>
+            </tr>
+            <tr>
+              <td>Manual import CLI</td>
+              <td>Implemented</td>
+              <td>Operator-controlled after-action import.</td>
+            </tr>
+            <tr>
+              <td>Admin and manifest surfacing</td>
+              <td>Implemented</td>
+              <td>Read-only inspection of imported evidence.</td>
+            </tr>
+            <tr>
+              <td>Phase1IncidentBridge</td>
+              <td>Future Phase 3</td>
+              <td>Opt-in post-persistence bridge with failure isolation.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <div class="note">
+      Phase 3 should integrate the operational bridge, fixture matrix, release gates, and admin workflows. It should not move Phase 2 into the Phase 1 live safety loop.
+    </div>
+  </main>
+</body>
+</html>

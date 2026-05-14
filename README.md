@@ -1,6 +1,6 @@
 # S.C.O.U.T. Fusion
 
-S.C.O.U.T. Fusion is a FastAPI-based wilderness safety black box. Phase 1 centers on a `MissionGraph` route plan, Apple Watch / SensorLog observations, offline map evidence, deterministic safety evaluation, incident packaging, and an after-action admin viewer.
+S.C.O.U.T. Fusion is a FastAPI-based wilderness safety black box and file-backed safety evidence system. Phase 1 centers on a `MissionGraph` route plan, Apple Watch / SensorLog observations, offline map evidence, deterministic safety evaluation, incident packaging, and an after-action admin viewer. Phase 2 adds the file-backed Brain, replay, remote status, decision-support, and audit surfaces. Phase 3 safely connects the two after incident persistence while keeping Phase 1 as the live safety baseline.
 
 The original Wi-Fi/PDR navigation prototype still exists as a legacy app flow. The current product direction is route-aware field safety recording: prove where the traveler was, what the map and mission plan said, why a safety level changed, and what raw evidence should be sealed for later review.
 
@@ -15,6 +15,8 @@ The original Wi-Fi/PDR navigation prototype still exists as a legacy app flow. T
 - Builds incident packages with raw sample windows, segment capsules, safety transitions, route evidence, map evidence, and structured summary input.
 - Exposes live Phase 1 ingest APIs beside the legacy `/pdr/update` flow.
 - Provides an admin after-action viewer with SVG map evidence, route/corridor overlays, checkpoint and segment evidence, JSON inspection, and tree-to-map highlighting.
+- Imports persisted Phase 1 incident packages into Phase 2 Brain nodes through a disabled-by-default, post-persistence bridge.
+- Surfaces imported Phase 1 adapter evidence in Phase 2 admin preview and artifact manifests without creating a Phase 1 write path.
 - Keeps the legacy macOS Wi-Fi scan, PDR trajectory, heatmap, `/navigate`, and LLM navigation prototype paths available for compatibility.
 
 ## Phase 1 Status
@@ -28,21 +30,30 @@ Validated baseline:
 - Backtracking/loop, weak GPS PDR fallback, steep-slope hazard, Go/No-Go provider fixtures, recording policy, incident post-trigger window, live observation ingest, and field golden replay are covered by deterministic tests.
 - Admin viewer can inspect the 2026-05-12 field golden case and link evidence tree selection to SVG map highlight.
 
-Latest integration verification:
+Current release-gate verification:
 
 ```bash
-./venv/bin/python -m pytest <Phase 2 focused target set>
-# 141 passed, 1 warning, 41 subtests passed
+./venv/bin/python -m pytest \
+  tests/test_phase1_incident_bridge.py \
+  tests/test_phase1_phase2_adapter.py \
+  tests/test_phase1_adapter_fixture_matrix.py \
+  tests/test_phase2_import_phase1_incident_cli.py \
+  tests/test_phase2_admin_preview.py \
+  tests/test_phase2_artifact_manifest.py \
+  tests/test_phase3_decision_support_matrix.py \
+  tests/test_phase2_release_check.py
+# 50 passed, 1 warning
 
-./venv/bin/python -m pytest -q
-# 238 passed, 1 warning, 50 subtests passed
+./venv/bin/python phase2_release_check.py --repo-root /Users/alexwang0315/scout-fusion
+# {"ok":true,...}
+
+./venv/bin/python -m pytest
+# 274 passed, 1 warning
 ```
 
-These numbers were verified after the Phase 2 helper-consolidation,
-second-fixture, admin-evidence-preview cleanup, release-notes, and fixture
-manifest-coverage, artifact naming, test-hardening, and manual-write-policy
-verification slices, plus the completed reference-classifier and demo-boundary
-cleanup slices.
+These numbers were verified after the Phase 3 bridge, fixture matrix,
+admin/manifest read-only integration, decision-support replay matrix, release
+gate, and hardening slices.
 
 ## Phase 2 Preview
 
@@ -114,6 +125,52 @@ Relevant specs:
 
 - `docs/specs/phase-2-personal-safety-os.md`
 - `docs/specs/phase-2-implementation-plan.md`
+
+## Phase 3 Integration and Operations
+
+Phase 3 is complete for the current release gate. It operationally connects
+Phase 1 and Phase 2 in one direction:
+
+```text
+Phase 1 live safety decision
+  -> persisted IncidentPackage JSON
+  -> Phase 1 to Phase 2 adapter
+  -> Phase 2 Brain nodes
+  -> replay, remote status, options, admin, manifest, review
+```
+
+Implemented Phase 3 slices:
+
+- `Phase1IncidentBridge` is disabled by default and only runs after
+  `IncidentStore` persistence succeeds.
+- Bridge failures are logged and converted into structured result objects; they
+  do not change Phase 1 escalation, response payloads, or persisted incident
+  JSON.
+- Re-importing the same incident is idempotent.
+- Fixture coverage includes missed checkpoint, weak GPS / PDR fallback,
+  backtracking loop, steep slope / map hazard, resource constraint, unsafe
+  continuation, sensor anomaly, and multiple incidents in one mission.
+- Phase 2 admin preview and artifact manifest expose imported Phase 1 adapter
+  evidence read-only, grouped by incident id with artifact/fact/measurement
+  links.
+- Decision-support replay covers hold, turn back, wait/rest/reassess,
+  rendezvous beacon trend, notify remote contact, and continue with degraded
+  confidence options.
+
+Guardrails:
+
+- Phase 1 remains the deterministic live safety baseline.
+- Phase 2 Brain nodes, model interpretations, skill outputs, and decision
+  options do not influence Phase 1 L0-L4 safety decisions.
+- Model output is not written as `ObservedFact`.
+- The bridge is opt-in through `SCOUT_PHASE2_INCIDENT_BRIDGE=1` and
+  `SCOUT_PHASE2_BRAIN_STORE_ROOT`.
+
+Relevant specs:
+
+- `docs/specs/phase-3-integration-plan.md`
+- `docs/specs/phase-2-live-integration-research.md`
+- `docs/architecture/phase-1-2-architecture.html`
 
 ## Project Layout
 

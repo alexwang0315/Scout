@@ -2,7 +2,7 @@
   "counts": {
     "beacon_nodes": 1,
     "decision_option_sets": 1,
-    "decision_options": 2,
+    "decision_options": 6,
     "persisted_remote_status_artifacts": 1,
     "remote_status_artifacts": 1,
     "skill_definitions": 3,
@@ -18,8 +18,12 @@
       "options.ridge_loop_hold_or_regroup.20260513T101520"
     ],
     "decision_options": [
+      "option.continue_degraded_to_ridge_turn",
       "option.hold_saddle_20min",
-      "option.regroup_beacon_trend"
+      "option.notify_remote_contact_saddle_delay",
+      "option.regroup_beacon_trend",
+      "option.rest_reassess_saddle",
+      "option.turn_back_creek_bridge"
     ],
     "missions": [
       "mission.ridge_loop_20260513"

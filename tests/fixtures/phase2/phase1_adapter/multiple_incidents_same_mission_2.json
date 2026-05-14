@@ -1,0 +1,100 @@
+{
+  "incident_id": "incident_same_mission_resource_1778650800",
+  "trigger_level": "L2_CONCERN",
+  "triggered_at": 1778650800.0,
+  "trigger_event": {
+    "event_type": "resource_constraint",
+    "level": "L2_CONCERN",
+    "timestamp": 1778650800.0,
+    "reason": "Second package for the same mission records resource pressure.",
+    "confidence": 0.87,
+    "details": {
+      "mission_id": "mission.ridge_loop_multi_incident_20260513",
+      "battery_percent": 14
+    }
+  },
+  "raw_window_start": 1778650500.0,
+  "raw_window_end": 1778651100.0,
+  "raw_samples": [
+    {
+      "timestamp": 1778650500.0,
+      "source": "watch",
+      "lat": 24.153,
+      "lon": 121.292,
+      "gps_horizontal_accuracy_m": 12.0,
+      "raw": {
+        "battery_percent": 16,
+        "position_estimate": {
+          "source": "gps",
+          "progress_m": 3300.0
+        }
+      }
+    },
+    {
+      "timestamp": 1778650800.0,
+      "source": "watch",
+      "lat": 24.1535,
+      "lon": 121.2924,
+      "gps_horizontal_accuracy_m": 12.0,
+      "raw": {
+        "battery_percent": 14,
+        "position_estimate": {
+          "source": "gps",
+          "progress_m": 3344.0
+        }
+      }
+    }
+  ],
+  "segment_capsule_ids": [
+    "capsule.segment.ridge_loop.multi_incident.20260513T110000"
+  ],
+  "safety_transitions": [
+    {
+      "from_level": "L1_WATCH",
+      "to_level": "L2_CONCERN",
+      "timestamp": 1778650800.0,
+      "reason": "Multi-incident mission resource evidence crossed L2.",
+      "event": {
+        "event_type": "resource_constraint",
+        "level": "L2_CONCERN",
+        "timestamp": 1778650800.0,
+        "reason": "Second package for the same mission records resource pressure.",
+        "confidence": 0.87,
+        "details": {
+          "mission_id": "mission.ridge_loop_multi_incident_20260513",
+          "battery_percent": 14
+        }
+      }
+    }
+  ],
+  "ai_summary_input": {
+    "event": {
+      "event_type": "resource_constraint",
+      "level": "L2_CONCERN",
+      "timestamp": 1778650800.0,
+      "reason": "Second package for the same mission records resource pressure.",
+      "confidence": 0.87,
+      "details": {
+        "mission_id": "mission.ridge_loop_multi_incident_20260513",
+        "battery_percent": 14
+      }
+    },
+    "route_evidence": {
+      "timestamp": "2026-05-13T11:00:00+08:00",
+      "position_estimate": {
+        "source": "gps",
+        "progress_m": 3344.0
+      }
+    },
+    "raw_window": {
+      "start": 1778650500.0,
+      "end": 1778651100.0,
+      "sample_count": 2
+    },
+    "segment_capsules": {
+      "capsule_ids": [
+        "capsule.segment.ridge_loop.multi_incident.20260513T110000"
+      ]
+    }
+  }
+}

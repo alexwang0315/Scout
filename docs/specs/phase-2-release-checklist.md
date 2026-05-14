@@ -12,6 +12,7 @@ Docs and admin surface:
 - `docs/specs/phase-2-implementation-plan.md`
 - `docs/specs/phase-2-release-checklist.md`
 - `docs/specs/phase-2-release-notes.md`
+- `docs/specs/phase-2-live-integration-research.md`
 - `docs/admin/phase1-after-action.html`
 
 Core Phase 2 modules:
@@ -29,6 +30,8 @@ Core Phase 2 modules:
 - `phase2_admin_api.py`
 - `phase2_artifact_manifest.py`
 - `phase2_artifact_manifest_store.py`
+- `phase1_phase2_adapter.py`
+- `phase2_import_phase1_incident.py`
 - `remote_status.py`
 - `remote_status_store.py`
 - `decision_options.py`
@@ -48,6 +51,7 @@ Versioned Phase 2 data:
 - `tests/fixtures/phase2/policies/*.json`
 - `tests/fixtures/phase2/cases/*.json`
 - `tests/fixtures/phase2/demo/team_replay_demo_summary_golden.json`
+- `tests/fixtures/phase2/phase1_adapter/*.json`
 
 Focused tests:
 
@@ -75,6 +79,8 @@ Focused tests:
 - `tests/test_phase2_artifact_manifest.py`
 - `tests/test_phase2_artifact_manifest_store.py`
 - `tests/test_phase2_team_replay_demo_golden.py`
+- `tests/test_phase1_phase2_adapter.py`
+- `tests/test_phase2_import_phase1_incident_cli.py`
 - `tests/test_admin_after_action.py`
 
 ## Verification Commands
@@ -123,16 +129,38 @@ Expected focused test commands when executing tests is in scope:
 /Users/alexwang0315/scout-fusion/venv/bin/python -m pytest tests/test_phase2_release_check.py
 /Users/alexwang0315/scout-fusion/venv/bin/python -m pytest tests/test_phase2_fixture_skill_manifest_coverage.py
 /Users/alexwang0315/scout-fusion/venv/bin/python -m pytest tests/test_phase2_second_fixture_replay_integration.py
+/Users/alexwang0315/scout-fusion/venv/bin/python -m pytest tests/test_phase1_phase2_adapter.py
+/Users/alexwang0315/scout-fusion/venv/bin/python -m pytest tests/test_phase2_import_phase1_incident_cli.py
 /Users/alexwang0315/scout-fusion/venv/bin/python -m pytest tests/test_admin_after_action.py
 ```
 
 Latest known integration result for this focused Phase 2 target set:
-`141 passed, 1 warning, 41 subtests passed`. This checklist records the post
+`153 passed, 1 warning, 41 subtests passed`. This checklist records the post
 helper-consolidation, forest fixture replay probe, admin-evidence-preview
 cleanup, release-notes, fixture skill manifest-coverage, and docs validation
 refresh slice integration result, plus artifact naming enforcement,
 test-hardening, manual-write-policy verification, and the completed shared
-reference classifier and demo-boundary cleanup slices.
+reference classifier, demo-boundary cleanup, and completed Milestone 9 Phase 1
+evidence adapter slices.
+
+Focused Phase 3 release-gate command:
+
+```bash
+/Users/alexwang0315/scout-fusion/venv/bin/python -m pytest \
+  tests/test_phase1_incident_bridge.py \
+  tests/test_phase1_phase2_adapter.py \
+  tests/test_phase1_adapter_fixture_matrix.py \
+  tests/test_phase2_import_phase1_incident_cli.py \
+  tests/test_phase2_admin_preview.py \
+  tests/test_phase2_artifact_manifest.py \
+  tests/test_phase3_decision_support_matrix.py \
+  tests/test_phase2_release_check.py
+```
+
+Latest known integration result for this focused Phase 3 target set:
+`50 passed, 1 warning in 114.31s`. This records the post-persistence bridge,
+fixture matrix, importer CLI, admin/manifest read-only surfacing,
+decision-support replay, and release-gate checks.
 
 Full release gate when test execution is allowed:
 
@@ -141,8 +169,8 @@ Full release gate when test execution is allowed:
 ```
 
 Latest known integration result for the full repository regression:
-`238 passed, 1 warning, 50 subtests passed`. This is the completed full repo
-regression currently recorded for Phase 2 v0.1 release readiness.
+`274 passed, 1 warning in 388.29s`. This is the completed full repo regression
+currently recorded for Phase 3 release-gate readiness.
 
 CLI smoke command when execution is allowed:
 
@@ -154,6 +182,9 @@ CLI smoke command when execution is allowed:
 
 - Phase 1 safety runtime is the deterministic baseline and is not part of this
   release checklist slice.
+- The fixture-backed Phase 1 evidence adapter is a downstream importer only. A
+  future live bridge should remain disabled by default, post-persistence,
+  idempotent, and failure-isolated.
 - Phase 2 v0.1 uses file-backed Brain nodes, JSON artifacts, manifests, and
   mocks; it does not require a graph database, cloud transport, live radio
   hardware, drone control, or a polished production UI.

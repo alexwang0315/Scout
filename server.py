@@ -19,6 +19,7 @@ from admin_api import create_admin_router
 from imu_api import router as imu_router
 from macos_wifi import MacOSWifiWorld
 from pdr_engine import pdr
+from phase1_incident_bridge import phase1_incident_bridge_from_env
 from phase2_admin_api import create_phase2_admin_router
 from sensor_decoder import SensorLogDecoder
 from movement_summary import MovementAggregator, RawSensorSample
@@ -96,10 +97,12 @@ safety_runtime_session: Optional[SafetyRuntimeSession] = None
 
 if SCOUT_SAFETY_ENABLED:
     try:
+        incident_bridge = phase1_incident_bridge_from_env(os.environ)
         safety_runtime_session = SafetyRuntimeSession(
             SCOUT_SAFETY_MISSION_GRAPH,
             route_progress_config_path=SCOUT_SAFETY_ROUTE_PROGRESS_CONFIG,
             incident_store_path=SCOUT_SAFETY_INCIDENT_STORE,
+            incident_bridge=incident_bridge,
         )
         logger.info("Phase 1 safety runtime enabled: %s", SCOUT_SAFETY_MISSION_GRAPH)
     except Exception as exc:
