@@ -32,7 +32,14 @@ class Phase2TeamReplayDemoTests(unittest.TestCase):
             )
             self.assertEqual(
                 summary.option_ids,
-                ["option.hold_saddle_20min", "option.regroup_beacon_trend"],
+                [
+                    "option.continue_degraded_to_ridge_turn",
+                    "option.hold_saddle_20min",
+                    "option.notify_remote_contact_saddle_delay",
+                    "option.regroup_beacon_trend",
+                    "option.rest_reassess_saddle",
+                    "option.turn_back_creek_bridge",
+                ],
             )
             self.assertEqual(summary.skill_audit["skill_runs"], 3)
             self.assertEqual(summary.skill_audit["activation_decisions"], {"allow": 2, "degrade": 1})

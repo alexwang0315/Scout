@@ -87,6 +87,7 @@ def _build_rebuildable_manifest(store: BrainFileStore) -> Phase2ArtifactManifest
         decision_option_set_refs=manifest.decision_option_set_refs,
         skill_run_refs=manifest.skill_run_refs,
         case_replay_refs=manifest.case_replay_refs,
+        phase1_adapter_evidence=manifest.phase1_adapter_evidence,
     )
 
 

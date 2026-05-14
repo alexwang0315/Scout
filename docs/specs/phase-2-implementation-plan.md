@@ -363,6 +363,100 @@ flowchart TD
   - `tests/fixtures/phase2/cases/*.json`
   - `tests/test_phase2_case_replay.py`
 
+## Milestone 9: Phase 1 Evidence Adapter
+
+Goal: read deterministic Phase 1 safety outputs and persist them into the Phase
+2 file-based Brain as auditable facts, measurements, and artifacts without
+mutating the Phase 1 runtime.
+
+This milestone starts only after the Phase 2 file-based Brain RC is committed.
+It is a boundary adapter, not a new safety evaluator.
+
+### Adapter Boundary
+
+The adapter is allowed to read Phase 1 outputs such as:
+
+- incident package summaries;
+- raw-window artifact references;
+- segment capsules;
+- checkpoint progress evidence;
+- route/offline-map evidence;
+- safety level transitions;
+- deterministic trigger metadata.
+
+The adapter writes only Phase 2 Brain data:
+
+- `Artifact` nodes for incident packages, raw windows, segment capsules, map
+  evidence, route evidence, and summary payloads;
+- `ObservedFact` nodes for deterministic Phase 1 observations already present in
+  the package, such as safety transitions, triggered event type, checkpoint
+  state, and acknowledged user actions;
+- `DerivedMeasurement` nodes for deterministic values copied or recomputed from
+  Phase 1 evidence, such as delay minutes, distance from corridor, hazard dwell
+  duration, or route-progress regression amount;
+- optional `ModelInterpretation` nodes only when explicitly generated later as
+  append-only, provenance-linked analysis. The adapter itself should not need a
+  model to produce facts.
+
+### Non-Goals
+
+- Do not change `/safety/*`, `/pdr/update`, or Phase 1 live observation flow.
+- Do not change `MissionGraph`, `MissionProgressTracker`,
+  `RouteProgressEvaluator`, offline map evidence, risk rules, or incident
+  package semantics.
+- Do not let Phase 2 Brain data affect Phase 1 emergency escalation.
+- Do not synthesize `ObservedFact` from model output.
+- Do not rewrite raw Phase 1 packages; preserve them as artifacts and write new
+  Phase 2 nodes alongside them.
+
+### Task: Define adapter input fixture
+
+- Acceptance: A minimal Phase 1 incident package fixture is identified or added
+  with stable IDs for incident, route, map evidence, raw-window artifact refs,
+  safety trigger, and segment capsule refs.
+- Verify: The fixture can be loaded without starting the live app server.
+- Files:
+  - `tests/fixtures/phase2/phase1_adapter/`
+  - optional fixture pointer to an existing Phase 1 incident package fixture
+
+### Task: Map Phase 1 package evidence to Brain nodes
+
+- Acceptance: The adapter converts a Phase 1 fixture into Phase 2 `Artifact`,
+  `ObservedFact`, and deterministic `DerivedMeasurement` nodes while preserving
+  source refs and provenance.
+- Verify:
+  ```bash
+  /Users/alexwang0315/scout-fusion/venv/bin/python -m pytest tests/test_phase1_phase2_adapter.py
+  ```
+- Files:
+  - `phase1_phase2_adapter.py`
+  - `tests/test_phase1_phase2_adapter.py`
+
+### Task: Enforce writeback and provenance boundaries
+
+- Acceptance: Adapter output passes Phase 2 writeback policy; missing artifact
+  refs fail validation; `ModelInterpretation` cannot appear as an automatic fact.
+- Verify:
+  ```bash
+  /Users/alexwang0315/scout-fusion/venv/bin/python -m pytest tests/test_phase1_phase2_adapter.py tests/test_phase2_writeback_policy.py
+  ```
+- Files:
+  - `phase1_phase2_adapter.py`
+  - `tests/test_phase1_phase2_adapter.py`
+
+### Task: Preserve Phase 1 regression behavior
+
+- Acceptance: Running adapter tests does not require any Phase 1 runtime mutation,
+  and the existing full regression remains green.
+- Verify:
+  ```bash
+  /Users/alexwang0315/scout-fusion/venv/bin/python -m pytest tests/test_phase1_phase2_adapter.py
+  /Users/alexwang0315/scout-fusion/venv/bin/python -m pytest -q
+  ```
+- Files:
+  - `phase1_phase2_adapter.py`
+  - `tests/test_phase1_phase2_adapter.py`
+
 ## Current Acceptance Checklist
 
 Completed Phase 2 slices through the current state:
@@ -420,6 +514,12 @@ Completed Phase 2 slices through the current state:
 - [x] Reference classifier: shared Phase 2 ref classification distinguishes
   artifact, Brain-node, external, and unknown refs for the current release
   surface.
+- [x] Phase 1 evidence adapter: fixture-backed persisted incident packages can
+  be translated into Phase 2 artifacts, observed facts, and deterministic
+  measurements without touching live `/safety/*` or Phase 1 safety runtime.
+- [x] Milestone 9 adapter hardening and surfaces: manual CLI import,
+  idempotent adapter persistence, artifact manifest evidence, and admin/API
+  read-only evidence previews are covered without live bridge wiring.
 
 Expected focused verification commands for these slices:
 
@@ -453,14 +553,17 @@ Expected focused verification commands for these slices:
 /Users/alexwang0315/scout-fusion/venv/bin/python -m pytest tests/test_skill_manifest_coverage.py
 /Users/alexwang0315/scout-fusion/venv/bin/python -m pytest tests/test_phase2_fixture_skill_manifest_coverage.py
 /Users/alexwang0315/scout-fusion/venv/bin/python -m pytest tests/test_phase2_second_fixture_replay_integration.py
+/Users/alexwang0315/scout-fusion/venv/bin/python -m pytest tests/test_phase1_phase2_adapter.py
+/Users/alexwang0315/scout-fusion/venv/bin/python -m pytest tests/test_phase2_import_phase1_incident_cli.py
 ```
 
 Latest known integration result for the Phase 2 focused target set:
-`141 passed, 1 warning, 41 subtests passed`. This was verified after the Phase
+`153 passed, 1 warning, 41 subtests passed`. This was verified after the Phase
 2 helper-consolidation, second-fixture, admin-evidence-preview cleanup,
 release-notes, fixture manifest-coverage, artifact naming, test-hardening, and
 manual-write-policy verification slices, plus the completed reference
-classifier and demo-boundary cleanup slices.
+classifier, demo-boundary cleanup, and completed Milestone 9 Phase 1 evidence
+adapter slices.
 
 CLI smoke command:
 
@@ -476,11 +579,19 @@ Expected compact JSON summary shape:
 
 ## Next Integration Slices
 
-- Remaining Phase 2 work should build on the completed replay/demo slices while
-  keeping Phase 1 deterministic safety behavior as the baseline.
-- Demo boundary remains in progress or next unless the code owner verifies that
-  reusable builders no longer depend on ridge-loop demo defaults. Shared demo
-  constants alone are not enough to mark that boundary complete.
+- Phase 1 live incident bridge research is recorded in
+  `docs/specs/phase-2-live-integration-research.md`.
+- The next implementation slice, if approved, should add a disabled-by-default
+  post-persistence bridge from `IncidentStore` output to the existing
+  `phase1_phase2_adapter.py` path. It must be idempotent and failure-isolated:
+  Phase 2 write failures cannot change Phase 1 escalation, response payloads, or
+  incident persistence.
+- Do not connect Phase 2 directly to `/safety/observations`, `/safety/ack`,
+  `/safety/incidents/{incident_id}`, `/pdr/update`, `MissionGraph`,
+  `MissionProgressTracker`, `RouteProgressEvaluator`, offline map evidence, risk
+  rules, or recording policy.
+- Milestone 9 is otherwise complete for the fixture-backed adapter scope. Live
+  integration should be treated as a separate milestone/slice.
 
 ## Verification Gate
 
@@ -491,7 +602,7 @@ Before Phase 2 v0.1 is considered complete:
 ```
 
 Latest known integration result for the full repository regression:
-`238 passed, 1 warning, 50 subtests passed`. This should be refreshed by
+`242 passed, 1 warning, 50 subtests passed`. This should be refreshed by
 rerunning the gate before release if any further code changes land.
 
 Must also be true:

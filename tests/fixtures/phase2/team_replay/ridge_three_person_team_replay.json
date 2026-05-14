@@ -479,6 +479,67 @@
             "Movement splits the team again if the leader leaves the checkpoint."
           ],
           "confidence": "low"
+        },
+        {
+          "id": "option.turn_back_creek_bridge",
+          "label": "Turn back to creek bridge",
+          "action": "turn_back_to_previous_checkpoint",
+          "estimated_time_minutes": 45,
+          "resource_cost": "medium",
+          "daylight_risk": "medium",
+          "communication_chance": "medium",
+          "team_impact": "Moves the visible pair toward the last lower-risk checkpoint while preserving a known rendezvous target.",
+          "reversibility": "medium",
+          "failure_modes": [
+            "Lin is already above the saddle and loses the shared checkpoint context."
+          ],
+          "confidence": "medium"
+        },
+        {
+          "id": "option.rest_reassess_saddle",
+          "label": "Rest and reassess at saddle",
+          "action": "wait_rest_reassess",
+          "estimated_time_minutes": 15,
+          "resource_cost": "low",
+          "daylight_risk": "low",
+          "communication_chance": "medium",
+          "team_impact": "Creates a short low-noise window to refresh devices, check injuries, and compare positions.",
+          "reversibility": "high",
+          "failure_modes": [
+            "Weather worsens while the team is stationary."
+          ],
+          "confidence": "medium"
+        },
+        {
+          "id": "option.notify_remote_contact_saddle_delay",
+          "label": "Notify remote contact",
+          "action": "notify_remote_contact",
+          "estimated_time_minutes": 5,
+          "resource_cost": "low",
+          "daylight_risk": "low",
+          "communication_chance": "medium",
+          "team_impact": "Sends a concise status update without changing the field leader's authority.",
+          "reversibility": "high",
+          "failure_modes": [
+            "Uplink fails and the team must continue local decision-making."
+          ],
+          "confidence": "medium"
+        },
+        {
+          "id": "option.continue_degraded_to_ridge_turn",
+          "label": "Continue with degraded confidence",
+          "action": "continue_with_degraded_confidence",
+          "estimated_time_minutes": 35,
+          "resource_cost": "high",
+          "daylight_risk": "high",
+          "communication_chance": "low",
+          "team_impact": "Keeps moving only if the leader accepts degraded confidence and preserves a reversal point.",
+          "reversibility": "low",
+          "failure_modes": [
+            "Separation becomes likely before the next checkpoint.",
+            "Poor signal prevents timely regrouping."
+          ],
+          "confidence": "low"
         }
       ],
       "scout_preference": {

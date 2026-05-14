@@ -13,6 +13,7 @@ from mission_models import SegmentCapsule
 from mission_progress import MissionProgressTracker, MissionProgressUpdate
 from offline_map import OfflineMapContext
 from pdr_fallback import PdrFallbackEstimator, PositionEstimate
+from phase1_incident_bridge import Phase1IncidentBridge
 from provider_context import (
     MissionProviderBundle,
     load_fixture_provider_bundle,
@@ -80,6 +81,7 @@ class SafetyRuntimeSession:
         route_progress_config: RouteProgressConfig | None = None,
         route_progress_config_path: Path | str | None = None,
         incident_store_path: Path | str | None = None,
+        incident_bridge: Phase1IncidentBridge | None = None,
     ):
         mission_path = Path(mission_graph_path)
         self.runtime = MissionGraphRuntime(load_mission_graph(mission_path))
@@ -94,6 +96,7 @@ class SafetyRuntimeSession:
         self.mission_provider_bundle = mission_provider_bundle
         self.go_no_go_evaluator = GoNoGoEvaluator()
         self.incident_store = IncidentStore(incident_store_path) if incident_store_path is not None else None
+        self.incident_bridge = incident_bridge
         self.pdr_fallback = PdrFallbackEstimator(self.planned_route)
         self.recording_policy_runtime = RecordingPolicyRuntime(self.runtime)
         self.checkpoint_manager = CheckpointManager(self.runtime)
@@ -189,6 +192,7 @@ class SafetyRuntimeSession:
             )
             new_incidents.extend(self.incident_packages[before_incidents:])
             new_stored_paths.extend(self.stored_incident_paths[before_paths:])
+            self._bridge_stored_incidents(self.stored_incident_paths[before_paths:])
 
         self.observations_processed += 1
         return SafetyRuntimeUpdate(
@@ -225,7 +229,14 @@ class SafetyRuntimeSession:
             if path not in self.stored_incident_paths:
                 self.stored_incident_paths.append(path)
                 new_paths.append(path)
+        self._bridge_stored_incidents(new_paths)
         return new_paths
+
+    def _bridge_stored_incidents(self, paths: list[Path]) -> None:
+        if self.incident_bridge is None:
+            return
+        for path in paths:
+            self.incident_bridge.try_import_persisted_incident(path)
 
     def _go_no_go_evaluation(self, observation: Observation) -> GoNoGoProviderResult | None:
         if self.mission_provider_bundle is None or self._go_no_go_evaluated:

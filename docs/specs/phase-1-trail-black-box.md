@@ -112,6 +112,40 @@ The package must preserve enough data for later reconstruction:
 `ai_summary_input` is structured evidence, not an LLM decision surface. It contains the trigger event, mission context, route evidence, map evidence, Go/No-Go decision when present, raw-window metadata, sealed capsule ids, and latest safety transition.
 Trigger evidence remains pinned to the trigger timestamp even as later post-trigger samples extend the raw window; raw-window metadata also records the latest appended sample timestamp.
 
+## Phase 2 Evidence Adapter Contract
+
+Phase 1 may be read by Phase 2, but Phase 1 must not depend on Phase 2. The
+Phase 2 evidence adapter is a downstream reader of deterministic Phase 1
+outputs, not a participant in the live safety state machine.
+
+Stable Phase 1 outputs for the adapter:
+
+- persisted incident package JSON from `IncidentStore`;
+- `ai_summary_input` as structured incident evidence, not a model decision;
+- raw-window metadata and artifact references;
+- sealed `SegmentCapsule` ids and summaries;
+- route evidence and route-progress measurements;
+- offline map evidence, corridor/hazard ids, source metadata, and dwell timing;
+- safety events and state transitions;
+- checkpoint/check-in/ack evidence when present.
+
+Phase 1 does not write Phase 2 Brain nodes directly. The adapter may translate
+these stable outputs into Phase 2 `Artifact`, `ObservedFact`, and deterministic
+`DerivedMeasurement` nodes after the incident package has been persisted.
+Optional `ModelInterpretation` nodes belong to Phase 2 only and must remain
+append-only with provenance.
+
+Non-goals for Phase 1:
+
+- Do not call Phase 2 from `/safety/observations`, `/safety/ack`,
+  `/safety/incidents/{incident_id}`, `/safety/checkins`, or
+  `/safety/capsules/{capsule_id}`.
+- Do not let Phase 2 Brain nodes, model interpretations, or skill output change
+  Phase 1 escalation, route-progress evaluation, map evidence, recording
+  policy, or incident package semantics.
+- Do not rewrite a persisted Phase 1 incident package to satisfy Phase 2. Add
+  adapter-side artifacts or Brain nodes alongside the original package instead.
+
 ## Mission Graph
 
 `MissionGraph` is the pre-trip and replay-time route plan. It is the main Phase 1 context object.
@@ -721,6 +755,9 @@ Required test areas:
   - Raw window includes the previous 5 minutes.
   - Raw window continues for 5 minutes after trigger.
   - Outside-window data is summarized.
+  - Persisted packages expose enough stable evidence for a downstream Phase 2
+    adapter to map package, raw-window, map, route, capsule, safety-transition,
+    and checkpoint/check-in refs without running live `/safety/*` endpoints.
 - Segment capsules:
   - Normal checkpoint passage creates a compressed segment capsule.
   - Sealed capsules preserve mission meaning without full raw history.
@@ -749,6 +786,8 @@ Always:
 - Preserve raw incident-window samples losslessly.
 - Prefer checkpoint and segment capsule retention over full-trip raw retention.
 - Keep non-AI tests runnable without API keys.
+- Keep Phase 2 as a downstream evidence reader; Phase 1 safety behavior must not
+  require or consult Phase 2 Brain state.
 - Treat the root project as canonical; `Scout/` remains legacy reference unless explicitly targeted.
 
 Ask first:

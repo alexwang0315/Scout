@@ -1,12 +1,33 @@
 import json
 import unittest
+from pathlib import Path
 from tempfile import TemporaryDirectory
 
+from phase1_phase2_adapter import (
+    adapt_phase1_incident_package,
+    load_phase1_incident_package,
+    persist_phase1_adapter_output,
+)
 from phase2_artifact_manifest import build_phase2_artifact_manifest
 from phase2_brain_models import Artifact, ArtifactKind
 from phase2_brain_store import BrainFileStore
 from phase2_team_replay_demo import run_phase2_team_replay_demo
 from phase2_team_replay_store import persist_team_replay_to_brain_store
+
+
+PHASE1_ADAPTER_FIXTURE = (
+    Path(__file__).parent
+    / "fixtures"
+    / "phase2"
+    / "phase1_adapter"
+    / "minimal_l2_route_deviation_incident.json"
+)
+PHASE1_ADAPTER_FIXTURE_DIR = PHASE1_ADAPTER_FIXTURE.parent
+
+
+def _phase1_adapter_fixture_paths() -> list[Path]:
+    paths = sorted(PHASE1_ADAPTER_FIXTURE_DIR.glob("*.json"))
+    return paths or [PHASE1_ADAPTER_FIXTURE]
 
 
 class Phase2ArtifactManifestTests(unittest.TestCase):
@@ -181,6 +202,105 @@ class Phase2ArtifactManifestTests(unittest.TestCase):
                 "artifact_origin='generated'",
             ):
                 build_phase2_artifact_manifest(store)
+
+    def test_surfaces_persisted_phase1_adapter_evidence(self):
+        expected_by_incident = {}
+        outputs = []
+        for fixture_path in _phase1_adapter_fixture_paths():
+            package = load_phase1_incident_package(fixture_path)
+            output = adapt_phase1_incident_package(
+                package,
+                source_uri=fixture_path.as_posix(),
+            )
+            outputs.append(output)
+            expected_by_incident[package.incident_id] = {
+                "artifact_refs": sorted(artifact.id for artifact in output.artifacts),
+                "incident_package_refs": sorted(
+                    artifact.id
+                    for artifact in output.artifacts
+                    if artifact.artifact_kind == ArtifactKind.INCIDENT_PACKAGE
+                ),
+                "package_refs": sorted(
+                    artifact.id
+                    for artifact in output.artifacts
+                    if artifact.artifact_kind
+                    in {
+                        ArtifactKind.INCIDENT_PACKAGE,
+                        ArtifactKind.RAW_LOG,
+                        ArtifactKind.SEGMENT_CAPSULE,
+                    }
+                ),
+                "fact_ids": sorted(fact.id for fact in output.observed_facts),
+                "measurements": sorted(
+                    (
+                        {
+                            "id": measurement.id,
+                            "metric": measurement.metric,
+                            "value": measurement.value,
+                            "unit": measurement.unit,
+                            "artifact_refs": sorted(measurement.artifact_refs),
+                        }
+                        for measurement in output.derived_measurements
+                    ),
+                    key=lambda measurement: measurement["id"],
+                ),
+            }
+
+        with TemporaryDirectory() as tmpdir:
+            store = BrainFileStore(tmpdir)
+            for output in outputs:
+                persist_phase1_adapter_output(store, output)
+            before_node_ids = [node.id for node in store.list_nodes()]
+
+            manifest = build_phase2_artifact_manifest(store).to_dict()
+
+            self.assertEqual([node.id for node in store.list_nodes()], before_node_ids)
+
+        evidence_by_incident = {
+            evidence["incident_id"]: evidence for evidence in manifest["phase1_adapter_evidence"]
+        }
+        self.assertEqual(set(evidence_by_incident), set(expected_by_incident))
+        self.assertEqual(len(evidence_by_incident), len(manifest["phase1_adapter_evidence"]))
+
+        for incident_id, expected in expected_by_incident.items():
+            phase1_evidence = evidence_by_incident[incident_id]
+            self.assertEqual(phase1_evidence["artifact_refs"], expected["artifact_refs"])
+            self.assertEqual(
+                phase1_evidence["incident_package_artifact_refs"],
+                expected["incident_package_refs"],
+            )
+            self.assertEqual(phase1_evidence["package_artifact_refs"], expected["package_refs"])
+            for artifact_prefix in (
+                "artifact.phase1_incident.",
+                "artifact.phase1_raw_window.",
+                "artifact.phase1_segment_capsule.",
+                "artifact.phase1_map_evidence.",
+                "artifact.phase1_route_evidence.",
+            ):
+                self.assertEqual(
+                    any(
+                        ref.startswith(artifact_prefix)
+                        for ref in phase1_evidence["artifact_refs"]
+                    ),
+                    any(ref.startswith(artifact_prefix) for ref in expected["artifact_refs"]),
+                )
+            self.assertEqual(phase1_evidence["fact_ids"], expected["fact_ids"])
+            self.assertTrue(phase1_evidence["fact_ids"])
+            measurement_metrics = sorted(
+                phase1_evidence["measurement_metrics"],
+                key=lambda measurement: measurement["id"],
+            )
+            metrics = {measurement["metric"] for measurement in measurement_metrics}
+            expected_metrics = {
+                measurement["metric"] for measurement in expected["measurements"]
+            }
+            self.assertEqual(metrics, expected_metrics)
+            self.assertIn("raw_window_sample_count", metrics)
+            if "route_progress_regression_m" in expected_metrics:
+                self.assertIn("route_progress_regression_m", metrics)
+            if "distance_from_corridor_m" in expected_metrics:
+                self.assertIn("distance_from_corridor_m", metrics)
+            self.assertEqual(measurement_metrics, expected["measurements"])
 
 
 if __name__ == "__main__":

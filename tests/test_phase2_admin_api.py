@@ -1,13 +1,28 @@
 import unittest
+from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from phase1_phase2_adapter import (
+    adapt_phase1_incident_package,
+    load_phase1_incident_package,
+    persist_phase1_adapter_output,
+)
 from phase2_admin_api import create_phase2_admin_app, create_phase2_admin_router
 from phase2_brain_store import BrainFileStore
 from phase2_case_replay_integration import DEFAULT_OPTION_SET_REF, DEFAULT_REMOTE_STATUS_REF
 from phase2_team_replay_store import persist_team_replay_to_brain_store
+
+
+PHASE1_ADAPTER_FIXTURE = (
+    Path(__file__).parent
+    / "fixtures"
+    / "phase2"
+    / "phase1_adapter"
+    / "minimal_l2_route_deviation_incident.json"
+)
 
 
 class Phase2AdminApiTests(unittest.TestCase):
@@ -88,6 +103,55 @@ class Phase2AdminApiTests(unittest.TestCase):
                 all("assured" not in note.lower() for note in payload["safety_guardrails"])
             )
             self.assertEqual({node.id for node in store.list_nodes()}, set(before_node_ids))
+
+    def test_preview_endpoint_returns_persisted_phase1_adapter_evidence(self):
+        package = load_phase1_incident_package(PHASE1_ADAPTER_FIXTURE)
+        output = adapt_phase1_incident_package(
+            package,
+            source_uri=PHASE1_ADAPTER_FIXTURE.as_posix(),
+            mission_id="mission.ridge_loop_20260513",
+        )
+
+        with TemporaryDirectory() as tmpdir:
+            store = BrainFileStore(tmpdir)
+            persist_team_replay_to_brain_store(store)
+            persist_phase1_adapter_output(store, output)
+            before_node_ids = [node.id for node in store.list_nodes()]
+
+            client = TestClient(create_phase2_admin_app(brain_store_root=tmpdir))
+            response = client.get("/phase2/admin/preview")
+
+            self.assertEqual(response.status_code, 200)
+            payload = response.json()
+            self.assertEqual(len(payload["phase1_adapter_evidence"]), 1)
+            phase1_evidence = payload["phase1_adapter_evidence"][0]
+            self.assertEqual(
+                phase1_evidence["incident_id"],
+                "incident_route_deviation_1778644200",
+            )
+            self.assertIn(
+                "artifact.phase1_incident.incident_route_deviation_1778644200",
+                phase1_evidence["artifact_refs"],
+            )
+            self.assertIn(
+                "artifact.phase1_map_evidence.incident_route_deviation_1778644200",
+                phase1_evidence["artifact_refs"],
+            )
+            self.assertIn(
+                "fact.phase1_ack.incident_route_deviation_1778644200",
+                phase1_evidence["fact_ids"],
+            )
+            metrics = {
+                measurement["metric"]: measurement
+                for measurement in phase1_evidence["measurement_metrics"]
+            }
+            self.assertEqual(metrics["raw_window_duration_seconds"]["value"], 600.0)
+            self.assertEqual(metrics["hazard_dwell_seconds"]["value"], 90)
+            self.assertIn(
+                "artifact.phase1_map_evidence.incident_route_deviation_1778644200",
+                metrics["hazard_dwell_seconds"]["artifact_refs"],
+            )
+            self.assertEqual([node.id for node in store.list_nodes()], before_node_ids)
 
     def test_preview_router_can_be_tested_directly(self):
         with TemporaryDirectory() as tmpdir:

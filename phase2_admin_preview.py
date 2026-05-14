@@ -9,7 +9,9 @@ from phase2_brain_models import (
     BrainNode,
     BrainNodeType,
     DecisionOptionSet,
+    DerivedMeasurement,
     Mission,
+    ObservedFact,
     RemoteStatusArtifact,
     SkillRunRecord,
 )
@@ -81,6 +83,37 @@ class AdminPhase2ArtifactPreview:
 
 
 @dataclass(frozen=True)
+class AdminPhase1AdapterMeasurementPreview:
+    id: str
+    metric: str
+    value: str | int | float | bool
+    unit: str | None
+    artifact_refs: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class AdminPhase1AdapterArtifactLinkPreview:
+    artifact_ref: str
+    fact_ids: tuple[str, ...]
+    measurement_ids: tuple[str, ...]
+    measurement_metrics: tuple[str, ...]
+    evidence_count: int
+
+
+@dataclass(frozen=True)
+class AdminPhase1AdapterEvidencePreview:
+    incident_id: str
+    artifact_refs: tuple[str, ...]
+    source_artifact_ids: tuple[str, ...]
+    fact_ids: tuple[str, ...]
+    measurement_metrics: tuple[AdminPhase1AdapterMeasurementPreview, ...]
+    artifact_source_links: tuple[AdminPhase1AdapterArtifactLinkPreview, ...]
+    artifact_count: int
+    fact_count: int
+    measurement_count: int
+
+
+@dataclass(frozen=True)
 class AdminPhase2ReadOnlyPreview:
     mission_id: str
     remote_status: AdminPhase2RemoteStatusPreview
@@ -91,6 +124,7 @@ class AdminPhase2ReadOnlyPreview:
     artifact_refs: tuple[str, ...]
     evidence_refs: tuple[AdminPhase2ResolvedRefPreview, ...]
     artifact_previews: tuple[AdminPhase2ArtifactPreview, ...]
+    phase1_adapter_evidence: tuple[AdminPhase1AdapterEvidencePreview, ...]
     safety_guardrails: tuple[str, ...]
 
     @property
@@ -174,6 +208,7 @@ def build_phase2_admin_preview(
             artifact_refs=artifact_refs,
             evidence_ref_sources=evidence_ref_sources,
         ),
+        phase1_adapter_evidence=_phase1_adapter_evidence_for_preview(store),
         safety_guardrails=SAFETY_GUARDRAILS,
     )
 
@@ -343,6 +378,174 @@ def _artifact_previews_for_preview(
         )
 
     return tuple(previews)
+
+
+def _phase1_adapter_evidence_for_preview(
+    store: BrainFileStore,
+) -> tuple[AdminPhase1AdapterEvidencePreview, ...]:
+    artifacts_by_incident: dict[str, list[str]] = {}
+    fact_ids_by_incident: dict[str, list[str]] = {}
+    measurements_by_incident: dict[str, list[AdminPhase1AdapterMeasurementPreview]] = {}
+    fact_links_by_incident: dict[str, dict[str, list[str]]] = {}
+    measurement_links_by_incident: dict[
+        str,
+        dict[str, list[AdminPhase1AdapterMeasurementPreview]],
+    ] = {}
+
+    for node in store.list_nodes():
+        if isinstance(node, Artifact) and node.id.startswith("artifact.phase1_"):
+            incident_id = _phase1_incident_id_for_node(node)
+            if incident_id is not None:
+                artifacts_by_incident.setdefault(incident_id, []).append(node.id)
+            continue
+
+        if isinstance(node, ObservedFact) and node.id.startswith("fact.phase1_"):
+            incident_id = _phase1_incident_id_for_node(node)
+            if incident_id is not None:
+                fact_ids_by_incident.setdefault(incident_id, []).append(node.id)
+                for artifact_ref in _phase1_source_artifact_refs(node):
+                    fact_links_by_incident.setdefault(incident_id, {}).setdefault(
+                        artifact_ref,
+                        [],
+                    ).append(node.id)
+            continue
+
+        if isinstance(node, DerivedMeasurement) and _is_phase1_adapter_measurement(node):
+            incident_id = _phase1_incident_id_for_node(node)
+            if incident_id is not None:
+                measurement_preview = AdminPhase1AdapterMeasurementPreview(
+                    id=node.id,
+                    metric=node.metric,
+                    value=node.value,
+                    unit=node.unit,
+                    artifact_refs=tuple(node.artifact_refs),
+                )
+                measurements_by_incident.setdefault(incident_id, []).append(measurement_preview)
+                for artifact_ref in _phase1_source_artifact_refs(node):
+                    measurement_links_by_incident.setdefault(incident_id, {}).setdefault(
+                        artifact_ref,
+                        [],
+                    ).append(measurement_preview)
+
+    incident_ids = sorted(
+        set(artifacts_by_incident) | set(fact_ids_by_incident) | set(measurements_by_incident)
+    )
+    previews: list[AdminPhase1AdapterEvidencePreview] = []
+    for incident_id in incident_ids:
+        artifact_refs = tuple(sorted(_dedupe(artifacts_by_incident.get(incident_id, []))))
+        fact_ids = tuple(sorted(_dedupe(fact_ids_by_incident.get(incident_id, []))))
+        measurements = tuple(
+            sorted(
+                measurements_by_incident.get(incident_id, []),
+                key=lambda measurement: (measurement.metric, measurement.id),
+            )
+        )
+        artifact_source_links = _phase1_artifact_source_links_for_preview(
+            artifact_refs=artifact_refs,
+            fact_links=fact_links_by_incident.get(incident_id, {}),
+            measurement_links=measurement_links_by_incident.get(incident_id, {}),
+        )
+        source_artifact_ids = tuple(
+            link.artifact_ref for link in artifact_source_links if link.evidence_count > 0
+        )
+        previews.append(
+            AdminPhase1AdapterEvidencePreview(
+                incident_id=incident_id,
+                artifact_refs=artifact_refs,
+                source_artifact_ids=source_artifact_ids,
+                fact_ids=fact_ids,
+                measurement_metrics=measurements,
+                artifact_source_links=artifact_source_links,
+                artifact_count=len(artifact_refs),
+                fact_count=len(fact_ids),
+                measurement_count=len(measurements),
+            )
+        )
+
+    return tuple(previews)
+
+
+def _phase1_artifact_source_links_for_preview(
+    *,
+    artifact_refs: tuple[str, ...],
+    fact_links: dict[str, list[str]],
+    measurement_links: dict[str, list[AdminPhase1AdapterMeasurementPreview]],
+) -> tuple[AdminPhase1AdapterArtifactLinkPreview, ...]:
+    links: list[AdminPhase1AdapterArtifactLinkPreview] = []
+    for artifact_ref in artifact_refs:
+        fact_ids = tuple(sorted(_dedupe(fact_links.get(artifact_ref, []))))
+        measurements = sorted(
+            measurement_links.get(artifact_ref, []),
+            key=lambda measurement: (measurement.metric, measurement.id),
+        )
+        measurement_ids = tuple(_dedupe(measurement.id for measurement in measurements))
+        measurement_metrics = tuple(_dedupe(measurement.metric for measurement in measurements))
+        links.append(
+            AdminPhase1AdapterArtifactLinkPreview(
+                artifact_ref=artifact_ref,
+                fact_ids=fact_ids,
+                measurement_ids=measurement_ids,
+                measurement_metrics=measurement_metrics,
+                evidence_count=len(fact_ids) + len(measurement_ids),
+            )
+        )
+    return tuple(links)
+
+
+def _phase1_incident_id_for_node(node: Artifact | ObservedFact | DerivedMeasurement) -> str | None:
+    if isinstance(node, Artifact):
+        metadata_incident_id = node.metadata.get("incident_id")
+        if isinstance(metadata_incident_id, str) and metadata_incident_id:
+            return metadata_incident_id
+        for artifact_prefix in (
+            "artifact.phase1_incident.",
+            "artifact.phase1_raw_window.",
+            "artifact.phase1_summary.",
+            "artifact.phase1_route_evidence.",
+            "artifact.phase1_map_evidence.",
+        ):
+            if node.id.startswith(artifact_prefix):
+                return node.id.removeprefix(artifact_prefix)
+
+    for candidate in [getattr(node, "subject", None), *node.artifact_refs]:
+        if isinstance(candidate, str) and candidate.startswith("incident."):
+            return candidate.removeprefix("incident.")
+        if isinstance(candidate, str):
+            incident_id = _phase1_incident_id_from_artifact_ref(candidate)
+            if incident_id is not None:
+                return incident_id
+
+    return None
+
+
+def _is_phase1_adapter_measurement(node: DerivedMeasurement) -> bool:
+    return node.id.startswith("measurement.phase1_") or node.method.startswith("phase1_")
+
+
+def _phase1_source_artifact_refs(node: ObservedFact | DerivedMeasurement) -> tuple[str, ...]:
+    refs = [*node.artifact_refs]
+    if isinstance(node, ObservedFact):
+        refs.extend(node.evidence)
+    if isinstance(node, DerivedMeasurement):
+        refs.extend(node.derived_from)
+    return tuple(
+        ref
+        for ref in _dedupe(refs)
+        if classify_phase2_ref(ref) == Phase2RefKind.ARTIFACT
+    )
+
+
+def _phase1_incident_id_from_artifact_ref(ref: str) -> str | None:
+    for artifact_prefix in (
+        "artifact.phase1_incident.",
+        "artifact.phase1_raw_window.",
+        "artifact.phase1_summary.",
+        "artifact.phase1_route_evidence.",
+        "artifact.phase1_map_evidence.",
+    ):
+        if ref.startswith(artifact_prefix):
+            return ref.removeprefix(artifact_prefix)
+    return None
 
 
 def _record_ref_source(sources: dict[str, list[str]], ref: str, source_id: str) -> None:

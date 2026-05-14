@@ -1,0 +1,101 @@
+{
+  "incident_id": "incident_unsafe_continuation_1778649000",
+  "trigger_level": "L3_DISTRESS",
+  "triggered_at": 1778649000.0,
+  "trigger_event": {
+    "event_type": "unsafe_continuation",
+    "level": "L3_DISTRESS",
+    "timestamp": 1778649000.0,
+    "reason": "Continuation toward exposed segment remained selected after deteriorating resources.",
+    "confidence": 0.84,
+    "details": {
+      "decision_ref": "go_no_go.unsafe_continuation_01"
+    }
+  },
+  "raw_window_start": 1778648700.0,
+  "raw_window_end": 1778649300.0,
+  "raw_samples": [
+    {
+      "timestamp": 1778648700.0,
+      "source": "watch",
+      "lat": 24.15,
+      "lon": 121.289,
+      "gps_horizontal_accuracy_m": 12.0,
+      "raw": {
+        "position_estimate": {
+          "source": "gps",
+          "progress_m": 2860.0
+        }
+      }
+    },
+    {
+      "timestamp": 1778649000.0,
+      "source": "watch",
+      "lat": 24.1506,
+      "lon": 121.2895,
+      "gps_horizontal_accuracy_m": 12.0,
+      "raw": {
+        "selected_action": "continue",
+        "position_estimate": {
+          "source": "gps",
+          "progress_m": 2910.0
+        }
+      }
+    }
+  ],
+  "segment_capsule_ids": [
+    "capsule.segment.ridge_loop.exposed_return.20260513T103000"
+  ],
+  "safety_transitions": [
+    {
+      "from_level": "L2_CONCERN",
+      "to_level": "L3_DISTRESS",
+      "timestamp": 1778649000.0,
+      "reason": "Unsafe continuation crossed L3 distress criteria.",
+      "event": {
+        "event_type": "unsafe_continuation",
+        "level": "L3_DISTRESS",
+        "timestamp": 1778649000.0,
+        "reason": "Continuation toward exposed segment remained selected after deteriorating resources.",
+        "confidence": 0.84,
+        "details": {
+          "decision_ref": "go_no_go.unsafe_continuation_01"
+        }
+      }
+    }
+  ],
+  "ai_summary_input": {
+    "event": {
+      "event_type": "unsafe_continuation",
+      "level": "L3_DISTRESS",
+      "timestamp": 1778649000.0,
+      "reason": "Continuation toward exposed segment remained selected after deteriorating resources.",
+      "confidence": 0.84,
+      "details": {
+        "decision_ref": "go_no_go.unsafe_continuation_01"
+      }
+    },
+    "route_evidence": {
+      "timestamp": "2026-05-13T10:30:00+08:00",
+      "position_estimate": {
+        "source": "gps",
+        "progress_m": 2910.0
+      }
+    },
+    "raw_window": {
+      "start": 1778648700.0,
+      "end": 1778649300.0,
+      "sample_count": 2
+    },
+    "segment_capsules": {
+      "capsule_ids": [
+        "capsule.segment.ridge_loop.exposed_return.20260513T103000"
+      ]
+    },
+    "ack_evidence": {
+      "acknowledged": false,
+      "acknowledged_at": "2026-05-13T10:30:00+08:00",
+      "actor": "person.leader_maya"
+    }
+  }
+}
