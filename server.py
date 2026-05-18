@@ -16,11 +16,13 @@ import uvicorn
 
 from agent import sos_agent
 from admin_api import create_admin_router
+from debug_api import create_debug_page_router, create_debug_router
 from imu_api import router as imu_router
 from macos_wifi import MacOSWifiWorld
 from pdr_engine import pdr
 from phase1_incident_bridge import phase1_incident_bridge_from_env
 from phase2_admin_api import create_phase2_admin_router
+from runtime_debug_log import FileRuntimeDebugEventLog
 from sensor_decoder import SensorLogDecoder
 from movement_summary import MovementAggregator, RawSensorSample
 from safety_api import SafetyApiSnapshot, create_safety_router
@@ -47,6 +49,8 @@ SCOUT_SAFETY_INCIDENT_STORE = Path(
 )
 SCOUT_PHASE2_ADMIN_API_ENABLED = os.getenv("SCOUT_PHASE2_ADMIN_API_ENABLED", "false")
 SCOUT_PHASE2_BRAIN_STORE_ROOT = os.getenv("SCOUT_PHASE2_BRAIN_STORE_ROOT")
+SCOUT_DEBUG_API_ENABLED = os.getenv("SCOUT_DEBUG_API_ENABLED", "false")
+SCOUT_DEBUG_LOG_PATH = os.getenv("SCOUT_DEBUG_LOG_PATH")
 
 log_level = logging.DEBUG if DEBUG else logging.INFO
 logging.basicConfig(level=log_level, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -145,6 +149,17 @@ def _include_phase2_admin_router(app: FastAPI) -> None:
     brain_store_root = Path(SCOUT_PHASE2_BRAIN_STORE_ROOT)
     app.include_router(create_phase2_admin_router(brain_store_root=brain_store_root))
     logger.info("Phase 2 admin API enabled: %s", brain_store_root)
+
+
+def _include_debug_router(app: FastAPI) -> None:
+    if not _is_true_like(SCOUT_DEBUG_API_ENABLED):
+        logger.info("Phase 3.5 debug API disabled")
+        return
+
+    debug_log = FileRuntimeDebugEventLog(SCOUT_DEBUG_LOG_PATH) if SCOUT_DEBUG_LOG_PATH else None
+    app.include_router(create_debug_router(debug_log=debug_log))
+    app.include_router(create_debug_page_router())
+    logger.info("Phase 3.5 debug API enabled%s", f": {SCOUT_DEBUG_LOG_PATH}" if SCOUT_DEBUG_LOG_PATH else "")
 
 
 async def process_movement_summary(summary: Any) -> Dict[str, Any]:
@@ -258,6 +273,7 @@ app.include_router(
     )
 )
 _include_phase2_admin_router(app)
+_include_debug_router(app)
 
 
 @app.get("/")

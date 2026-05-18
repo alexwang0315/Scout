@@ -1,6 +1,6 @@
 # S.C.O.U.T. Fusion
 
-S.C.O.U.T. Fusion is a FastAPI-based wilderness safety black box and file-backed safety evidence system. Phase 1 centers on a `MissionGraph` route plan, Apple Watch / SensorLog observations, offline map evidence, deterministic safety evaluation, incident packaging, and an after-action admin viewer. Phase 2 adds the file-backed Brain, replay, remote status, decision-support, and audit surfaces. Phase 3 safely connects the two after incident persistence while keeping Phase 1 as the live safety baseline.
+S.C.O.U.T. Fusion is a FastAPI-based wilderness safety black box and file-backed safety evidence system. Phase 1 centers on a `MissionGraph` route plan, Apple Watch / SensorLog observations, offline map evidence, deterministic safety evaluation, incident packaging, and an after-action admin viewer. Phase 2 adds the file-backed Brain, replay, remote status, decision-support, and audit surfaces. Phase 3 safely connects the two after incident persistence while keeping Phase 1 as the live safety baseline. Phase 3.5 adds pre-porting runtime readiness and debug tooling so Scout behavior can be inspected before hardware deployment.
 
 The original Wi-Fi/PDR navigation prototype still exists as a legacy app flow. The current product direction is route-aware field safety recording: prove where the traveler was, what the map and mission plan said, why a safety level changed, and what raw evidence should be sealed for later review.
 
@@ -17,6 +17,7 @@ The original Wi-Fi/PDR navigation prototype still exists as a legacy app flow. T
 - Provides an admin after-action viewer with SVG map evidence, route/corridor overlays, checkpoint and segment evidence, JSON inspection, and tree-to-map highlighting.
 - Imports persisted Phase 1 incident packages into Phase 2 Brain nodes through a disabled-by-default, post-persistence bridge.
 - Surfaces imported Phase 1 adapter evidence in Phase 2 admin preview and artifact manifests without creating a Phase 1 write path.
+- Exposes opt-in, read-only Phase 3.5 debug surfaces for runtime event timelines, L0-L4 transitions, provider degraded status, Ln/skill run visibility, and mock outbound message queues.
 - Keeps the legacy macOS Wi-Fi scan, PDR trajectory, heatmap, `/navigate`, and LLM navigation prototype paths available for compatibility.
 
 ## Phase 1 Status
@@ -172,6 +173,101 @@ Relevant specs:
 - `docs/specs/phase-2-live-integration-research.md`
 - `docs/architecture/phase-1-2-architecture.html`
 
+## Phase 3.5 Runtime Readiness and Debug Tooling
+
+Phase 3.5 is complete as a pre-porting runtime observability layer. It does not
+start the Raspberry Pi / Docker hardware port and it does not change Phase 1
+safety decisions.
+
+Implemented Phase 3.5 slices:
+
+- append-only runtime debug event models and memory/file-backed JSONL logs;
+- fixture-backed runtime simulator and replay demo;
+- mock outbound transport with `queued`, `sent`, `failed`, and
+  `mock-delivered` states only;
+- read-only `/debug/events`, `/debug/state`, and `/debug/messages` JSON API;
+- opt-in `/admin/debug` web UI with timeline, map highlighting, L0-L4 state,
+  provider status, incident/bridge status, Ln/skill runs, outbound queue, and
+  boundary tabs;
+- fixture-backed UI demo and demo loader;
+- Phase 3.5 readiness checker and debug runbook.
+
+Guardrails:
+
+- `/debug` is read-only.
+- Debug events are observations, not safety runtime inputs.
+- Debug tooling must not write `ObservedFact`.
+- Outbound transport remains mock-only in Phase 3.5.
+- The debug API is disabled by default and mounted only when
+  `SCOUT_DEBUG_API_ENABLED=1`.
+
+Run the repeatable UI demo:
+
+```bash
+./venv/bin/python phase35_debug_demo_loader.py --pretty
+```
+
+Then run the printed `server_command` and open:
+
+```text
+http://127.0.0.1:9099/admin/debug
+```
+
+Latest focused verification:
+
+```bash
+./venv/bin/python -m pytest \
+  tests/test_runtime_debug_event_log.py \
+  tests/test_runtime_simulator.py \
+  tests/test_runtime_debug_ui_demo.py \
+  tests/test_mock_outbound_transport.py \
+  tests/test_debug_api.py \
+  tests/test_debug_api_mount.py \
+  tests/test_debug_page.py \
+  tests/test_phase35_debug_runbook.py \
+  tests/test_phase35_runtime_readiness_check.py \
+  tests/test_safety_runtime_session.py \
+  tests/test_safety_api.py \
+  tests/test_phase1_incident_bridge.py \
+  tests/test_skill_runtime.py
+# 69 passed, 1 warning
+
+./venv/bin/python phase35_runtime_readiness_check.py --pretty
+# {"ok": true, ...}
+
+./venv/bin/python phase2_release_check.py --repo-root /Users/alexwang0315/scout-fusion
+# {"ok": true, ...}
+```
+
+Relevant specs and runbooks:
+
+- `docs/specs/phase-3-5-runtime-readiness-debug-tooling.md`
+- `docs/admin/phase-3-5-debug-runbook.md`
+- `docs/admin/phase-3-5-runtime-debug.html`
+
+## Milestone 10 Cross-Surface AI Assistant
+
+Milestone 10 is specified but not implemented. It defines a future shared
+assistant capability for `/admin/debug`, `/admin`, `/admin/pretrip`, and future
+hardware-readiness surfaces.
+
+The milestone is intentionally separate from Phase 3.5 and Phase 4. Its first
+implementation should be mock-backed and read-only before any opt-in Pydantic AI
+provider is enabled.
+
+Guardrails:
+
+- no Phase 1 safety mutation;
+- no `ObservedFact` writes from model output;
+- no Phase 2 Brain, IncidentStore, pre-trip review, outbound, or hardware
+  mutation;
+- assistant answers must be labeled as read-only model interpretation.
+
+Relevant specs:
+
+- `docs/specs/scout-cross-surface-ai-assistant.md`
+- `docs/specs/scout-cross-surface-ai-assistant-continuation-prompt.md`
+
 ## Project Layout
 
 | File | Purpose |
@@ -189,6 +285,13 @@ Relevant specs:
 | `incident_package.py` / `incident_store.py` | Raw ring buffer, incident packaging, evidence summary input, and JSON persistence. |
 | `admin_api.py` / `admin_after_action.py` | Admin case API and after-action view model builder. |
 | `docs/admin/phase1-after-action.html` | Static admin presentation layer for field-case map and evidence inspection. |
+| `debug_api.py` | Read-only Phase 3.5 `/debug` JSON API and `/admin/debug` page router. |
+| `runtime_debug_models.py` / `runtime_debug_log.py` | Phase 3.5 debug event envelopes and append-only memory/file-backed event logs. |
+| `runtime_simulator.py` / `runtime_debug_replay_demo.py` | Fixture replay path that emits runtime debug timeline events. |
+| `runtime_debug_ui_demo.py` / `phase35_debug_demo_loader.py` | Deterministic `/admin/debug` demo data and local demo launcher output. |
+| `mock_outbound_transport.py` | Phase 3.5 mock-only outbound message queue and state transitions. |
+| `phase35_runtime_readiness_check.py` | Phase 3.5 required artifact and guardrail checker. |
+| `docs/admin/phase-3-5-runtime-debug.html` | Static Phase 3.5 runtime debug UI. |
 | `phase1_replay_demo.py` | CLI demo for normal and abnormal Phase 1 route replay. |
 | `agent.py` | Pydantic AI navigation agent and Wi-Fi scan/move tools. |
 | `macos_wifi.py` | macOS Wi-Fi scanner using `airport -s`. |
@@ -303,6 +406,10 @@ Notes:
 
 - `SCOUT_PORT` defaults to `9099` when absent.
 - `OPENROUTER_API_KEY` is required for AI navigation routes and worker decisions.
+- `SCOUT_DEBUG_API_ENABLED=1` mounts the Phase 3.5 read-only debug API and
+  `/admin/debug`.
+- `SCOUT_DEBUG_LOG_PATH=/path/to/runtime-debug-events.jsonl` points the debug
+  API at a file-backed replay/demo timeline.
 - `.env` is ignored by git and should not be committed.
 
 ## Run

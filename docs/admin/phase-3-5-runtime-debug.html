@@ -1,0 +1,1456 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Scout Phase 3.5 Runtime Debug</title>
+  <link rel="icon" href="data:,">
+  <style>
+    :root {
+      --bg: #111417;
+      --surface: #181d22;
+      --panel: #20262d;
+      --panel-soft: #242b33;
+      --border: #36404a;
+      --text: #edf2f7;
+      --muted: #a8b3bf;
+      --ok: #77b86a;
+      --warn: #e1ad50;
+      --bad: #d96b62;
+      --info: #6fa8dc;
+      --phase1: #7dc2a5;
+      --phase2: #b7a0e8;
+      --phase3: #e6b16f;
+      --phase35: #75b8d7;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      height: 100vh;
+      min-height: 100vh;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--text);
+      font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    .shell {
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      height: 100vh;
+      min-height: 0;
+    }
+
+    header {
+      display: grid;
+      grid-template-columns: minmax(280px, 1fr) auto;
+      gap: 16px;
+      align-items: start;
+      padding: 16px 18px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+    }
+
+    h1, h2, h3, p { margin: 0; }
+    h1 {
+      font-size: 18px;
+      font-weight: 650;
+      letter-spacing: 0;
+    }
+
+    h2 {
+      font-size: 13px;
+      font-weight: 650;
+      letter-spacing: 0;
+      color: var(--muted);
+      text-transform: uppercase;
+    }
+
+    h3 {
+      font-size: 14px;
+      font-weight: 650;
+      letter-spacing: 0;
+    }
+
+    code {
+      color: var(--muted);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 12px;
+    }
+
+    .meta {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .boundary {
+      justify-self: end;
+      display: grid;
+      gap: 6px;
+      max-width: 520px;
+      color: var(--muted);
+      font-size: 12px;
+      text-align: right;
+    }
+
+    .boundary strong { color: var(--text); }
+
+    main {
+      display: grid;
+      grid-template-columns: minmax(420px, 1fr) minmax(400px, 520px);
+      gap: 12px;
+      height: 100%;
+      min-height: 0;
+      padding: 12px;
+      overflow: hidden;
+    }
+
+    .column {
+      display: grid;
+      gap: 12px;
+      min-height: 0;
+      overflow: auto;
+    }
+
+    .timeline-column {
+      grid-column: 1;
+      grid-row: 1;
+      overflow: hidden;
+    }
+
+    .timeline-panel {
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      min-height: 0;
+    }
+
+    .timeline-panel .panel-body {
+      min-height: 0;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior: contain;
+      scrollbar-gutter: stable;
+    }
+
+    .details-column {
+      grid-column: 2;
+      grid-row: 1;
+      grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+      height: 100%;
+      overflow: hidden;
+    }
+
+    .details-panel {
+      display: grid;
+      grid-template-rows: auto auto minmax(0, 1fr);
+      min-height: 0;
+    }
+
+    .map-panel {
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      min-height: 0;
+    }
+
+    .map-panel .panel-body {
+      min-height: 0;
+      overflow: auto;
+      padding: 10px;
+    }
+
+    .panel {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--surface);
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    .panel-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: start;
+      padding: 11px 12px;
+      border-bottom: 1px solid var(--border);
+      background: var(--panel);
+    }
+
+    .panel-title {
+      display: grid;
+      gap: 3px;
+      min-width: 0;
+    }
+
+    .panel-body {
+      padding: 12px;
+    }
+
+    .tab-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.018);
+    }
+
+    .tab {
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 5px 9px;
+      color: var(--muted);
+      background: rgba(255, 255, 255, 0.03);
+      font-size: 12px;
+      cursor: pointer;
+      user-select: none;
+      white-space: nowrap;
+    }
+
+    .tab:hover {
+      border-color: rgba(111, 168, 220, 0.72);
+      color: var(--text);
+    }
+
+    .tab:focus {
+      outline: none;
+    }
+
+    .tab:focus-visible {
+      border-color: var(--info);
+      color: var(--text);
+      outline: 2px solid var(--info);
+      outline-offset: 2px;
+      box-shadow: 0 0 0 4px rgba(111, 168, 220, 0.2);
+    }
+
+    .tab.is-active {
+      border-color: rgba(111, 168, 220, 0.8);
+      color: var(--info);
+      background: rgba(111, 168, 220, 0.12);
+    }
+
+    .tab-panels {
+      min-height: 0;
+      overflow: auto;
+    }
+
+    .tab-panel {
+      display: none;
+      padding: 12px;
+    }
+
+    .tab-panel.is-active {
+      display: block;
+    }
+
+    .tab-panel-head {
+      display: grid;
+      gap: 3px;
+      margin-bottom: 10px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .metric {
+      min-height: 68px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 9px 10px;
+      background: var(--panel-soft);
+    }
+
+    .metric span {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .metric strong {
+      display: block;
+      margin-top: 4px;
+      font-size: 17px;
+      overflow-wrap: anywhere;
+    }
+
+    .levels {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 6px;
+    }
+
+    .level {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px 6px;
+      background: var(--panel-soft);
+      text-align: center;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .level.is-active {
+      border-color: var(--warn);
+      color: var(--text);
+      background: rgba(225, 173, 80, 0.18);
+    }
+
+    .list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .item {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 9px 10px;
+      background: var(--panel-soft);
+      min-width: 0;
+    }
+
+    .timeline-node {
+      cursor: pointer;
+    }
+
+    .timeline-node:hover {
+      border-color: rgba(111, 168, 220, 0.72);
+    }
+
+    .timeline-node:focus {
+      outline: none;
+    }
+
+    .timeline-node:focus-visible {
+      border-color: var(--info);
+      outline: 2px solid var(--info);
+      outline-offset: 2px;
+      box-shadow: 0 0 0 4px rgba(111, 168, 220, 0.2);
+    }
+
+    .timeline-node.is-selected {
+      border-color: var(--info);
+      background: rgba(111, 168, 220, 0.12);
+      box-shadow: inset 0 0 0 1px rgba(111, 168, 220, 0.32);
+    }
+
+    .item-line {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: baseline;
+    }
+
+    .timeline-meta {
+      display: grid;
+      justify-items: end;
+      gap: 4px;
+      flex: 0 0 auto;
+    }
+
+    .level-badge {
+      display: inline-flex;
+      align-items: center;
+      min-height: 18px;
+      border: 1px solid rgba(168, 179, 191, 0.5);
+      border-radius: 999px;
+      padding: 1px 7px;
+      color: var(--muted);
+      background: rgba(255, 255, 255, 0.035);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 11px;
+      white-space: nowrap;
+    }
+
+    .level-badge.is-transition {
+      color: var(--warn);
+      border-color: rgba(225, 173, 80, 0.72);
+      background: rgba(225, 173, 80, 0.12);
+    }
+
+    .level-badge.is-alert {
+      color: var(--bad);
+      border-color: rgba(217, 107, 98, 0.7);
+      background: rgba(217, 107, 98, 0.12);
+    }
+
+    .summary {
+      margin-top: 5px;
+      color: var(--muted);
+      overflow-wrap: anywhere;
+    }
+
+    .hint {
+      margin-top: 4px;
+      color: #c2ccd6;
+      font-size: 12px;
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+    }
+
+    .panel-title .hint {
+      margin-top: 0;
+      color: var(--muted);
+    }
+
+    .metric .hint {
+      font-size: 11px;
+    }
+
+    .state-context {
+      margin-top: 8px;
+      padding: 8px 10px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.025);
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 20px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 2px 7px;
+      color: var(--muted);
+      background: rgba(255, 255, 255, 0.03);
+      white-space: nowrap;
+      font-size: 12px;
+    }
+
+    .pill.ok { color: var(--ok); border-color: rgba(119, 184, 106, 0.55); }
+    .pill.warn { color: var(--warn); border-color: rgba(225, 173, 80, 0.6); }
+    .pill.bad { color: var(--bad); border-color: rgba(217, 107, 98, 0.6); }
+    .pill.info { color: var(--info); border-color: rgba(111, 168, 220, 0.6); }
+
+    .phase-phase1 { border-left: 3px solid var(--phase1); }
+    .phase-phase2 { border-left: 3px solid var(--phase2); }
+    .phase-phase3 { border-left: 3px solid var(--phase3); }
+    .phase-phase35 { border-left: 3px solid var(--phase35); }
+
+    .map-wrap {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+      background: #151a1f;
+    }
+
+    #runtimeMap {
+      display: block;
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      min-height: 260px;
+    }
+
+    .map-panel #runtimeMap {
+      height: clamp(184px, 28vh, 300px);
+      min-height: 0;
+      aspect-ratio: auto;
+    }
+
+    .map-route {
+      fill: none;
+      stroke: #7f8b97;
+      stroke-width: 8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      opacity: 0.72;
+      vector-effect: non-scaling-stroke;
+    }
+
+    .map-route-overlay {
+      fill: none;
+      stroke: transparent;
+      stroke-width: 24;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      pointer-events: none;
+      vector-effect: non-scaling-stroke;
+    }
+
+    .map-corridor {
+      fill: none;
+      stroke: rgba(125, 194, 165, 0.28);
+      stroke-width: 22;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      vector-effect: non-scaling-stroke;
+    }
+
+    .map-zone {
+      fill: rgba(217, 107, 98, 0.16);
+      stroke: rgba(217, 107, 98, 0.52);
+      stroke-width: 2;
+      vector-effect: non-scaling-stroke;
+    }
+
+    .map-node {
+      fill: var(--panel-soft);
+      stroke: var(--border);
+      stroke-width: 2;
+      vector-effect: non-scaling-stroke;
+    }
+
+    .map-node.route { fill: #75b8d7; stroke: #d5ecf6; }
+    .map-node.checkpoint { fill: #7dc2a5; stroke: #dff3eb; }
+    .map-node.safety { fill: #d96b62; stroke: #f5d5d2; }
+    .map-node.provider { fill: #e1ad50; stroke: #f4deb7; }
+    .map-node.skill { fill: #b7a0e8; stroke: #e6ddff; }
+    .map-node.outbound { fill: #6fa8dc; stroke: #d9ecfb; }
+    .map-node.bridge { fill: #e6b16f; stroke: #f7e0bd; }
+
+    .map-label {
+      fill: var(--muted);
+      font: 12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      letter-spacing: 0;
+      pointer-events: none;
+    }
+
+    .map-highlight {
+      opacity: 1 !important;
+      stroke: var(--info) !important;
+      stroke-width: 5 !important;
+      filter: drop-shadow(0 0 8px rgba(111, 168, 220, 0.88));
+    }
+
+    circle.map-highlight,
+    rect.map-highlight {
+      fill: var(--info) !important;
+      stroke: #ffffff !important;
+      stroke-width: 3 !important;
+    }
+
+    path.map-highlight {
+      stroke-width: 10 !important;
+    }
+
+    .map-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 10px;
+    }
+
+    .mono {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 12px;
+    }
+
+    .empty {
+      color: var(--muted);
+      border: 1px dashed var(--border);
+      border-radius: 6px;
+      padding: 12px;
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .error {
+      color: var(--bad);
+    }
+
+    @media (max-width: 1120px) {
+      main {
+        grid-template-columns: 1fr;
+        height: auto;
+        overflow: auto;
+      }
+
+      .column {
+        overflow: visible;
+      }
+
+      .timeline-column {
+        overflow: visible;
+      }
+
+      .timeline-panel {
+        display: block;
+      }
+
+      .timeline-panel .panel-body {
+        overflow: visible;
+        scrollbar-gutter: auto;
+      }
+
+      .timeline-column,
+      .details-column {
+        grid-column: auto;
+        grid-row: auto;
+      }
+
+      .details-column {
+        grid-template-rows: auto auto;
+        overflow: visible;
+      }
+
+      header { grid-template-columns: 1fr; }
+      .boundary { justify-self: start; text-align: left; }
+
+      .map-panel #runtimeMap {
+        height: clamp(150px, 23vh, 205px);
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header>
+      <div>
+        <h1>Scout Phase 3.5 Runtime Debug</h1>
+        <p class="meta">Engineering read-only surface for runtime readiness inspection.</p>
+        <code>/debug/events /debug/state /debug/messages</code>
+      </div>
+      <div class="boundary">
+        <strong>Debug boundary</strong>
+        <span>No safety runtime mutation. No Phase 2 writeback. Mock outbound visibility only.</span>
+        <span id="loadStatus">Loading debug snapshots...</span>
+      </div>
+    </header>
+
+    <main>
+      <section class="column details-column">
+        <article class="panel details-panel">
+          <div class="panel-head">
+            <div class="panel-title">
+              <h2>Runtime Details</h2>
+              <p class="hint">用分頁看 runtime 狀態，避免每個區塊都佔一整張卡。</p>
+            </div>
+            <span class="pill info" id="runtimeProfile">runtime unknown</span>
+          </div>
+
+          <div class="tab-list" role="tablist" aria-label="Runtime detail tabs" aria-orientation="horizontal">
+            <div class="tab is-active" role="tab" id="tab-state" tabindex="0" aria-selected="true" aria-controls="panel-state" data-tab-target="panel-state">L0-L4</div>
+            <div class="tab" role="tab" id="tab-provider" tabindex="-1" aria-selected="false" aria-controls="panel-provider" data-tab-target="panel-provider">Provider</div>
+            <div class="tab" role="tab" id="tab-incident" tabindex="-1" aria-selected="false" aria-controls="panel-incident" data-tab-target="panel-incident">Incident</div>
+            <div class="tab" role="tab" id="tab-skill" tabindex="-1" aria-selected="false" aria-controls="panel-skill" data-tab-target="panel-skill">Ln / Skill</div>
+            <div class="tab" role="tab" id="tab-outbound" tabindex="-1" aria-selected="false" aria-controls="panel-outbound" data-tab-target="panel-outbound">Outbound</div>
+            <div class="tab" role="tab" id="tab-boundary" tabindex="-1" aria-selected="false" aria-controls="panel-boundary" data-tab-target="panel-boundary">Boundary</div>
+          </div>
+
+          <div class="tab-panels">
+            <section class="tab-panel is-active" role="tabpanel" id="panel-state" aria-labelledby="tab-state">
+              <div class="tab-panel-head">
+                <h2>Current L0-L4 State</h2>
+                <p class="hint">先看這裡：預設是最新狀態；點 timeline 後切到該點。</p>
+              </div>
+              <div class="levels" id="levelStrip"></div>
+              <p class="hint state-context" id="stateSelectionContext">顯示最新 runtime snapshot。</p>
+              <div class="grid" style="margin-top: 10px;">
+                <div class="metric">
+                  <span>Safety level</span>
+                  <strong id="safetyLevel">unknown</strong>
+                  <p class="hint">目前 Scout 判定的警戒等級。</p>
+                </div>
+                <div class="metric">
+                  <span>Latest transition</span>
+                  <strong id="latestTransition">none</strong>
+                  <p class="hint">最近一次升級或降級。</p>
+                </div>
+                <div class="metric">
+                  <span>Observations</span>
+                  <strong id="observationsProcessed">0</strong>
+                  <p class="hint">已吃進來的感測或 replay 點數。</p>
+                </div>
+                <div class="metric">
+                  <span>Safety events</span>
+                  <strong id="safetyEvents">0</strong>
+                  <p class="hint">Phase 1 真正判出的安全事件。</p>
+                </div>
+              </div>
+            </section>
+
+            <section class="tab-panel" role="tabpanel" id="panel-provider" aria-labelledby="tab-provider" hidden>
+              <div class="tab-panel-head">
+                <div class="item-line">
+                  <h2>Provider Degraded Status</h2>
+                  <span class="pill" id="providerSummary">unknown</span>
+                </div>
+                <p class="hint">GPS、地圖、模型等依賴現在是否不穩。</p>
+              </div>
+              <p class="hint state-context" id="providerSelectionContext">顯示目前 timeline 範圍內的 provider 狀態。</p>
+              <div class="list" id="providerList"></div>
+            </section>
+
+            <section class="tab-panel" role="tabpanel" id="panel-incident" aria-labelledby="tab-incident" hidden>
+              <div class="tab-panel-head">
+                <div class="item-line">
+                  <h2>Incident And Bridge Status</h2>
+                  <span class="pill" id="bridgeSummary">bridge unknown</span>
+                </div>
+                <p class="hint">黑盒 package 和 Phase 3 bridge 的最新狀態。</p>
+              </div>
+              <p class="hint state-context" id="incidentSelectionContext">顯示目前 timeline 範圍內的 incident 狀態。</p>
+              <div class="grid">
+                <div class="metric">
+                  <span>Incident packages</span>
+                  <strong id="incidentPackages">0</strong>
+                  <p class="hint">已打包成黑盒資料的事件。</p>
+                </div>
+                <div class="metric">
+                  <span>Stored incidents</span>
+                  <strong id="storedIncidents">0</strong>
+                  <p class="hint">已落地保存的 incident 檔案。</p>
+                </div>
+                <div class="metric">
+                  <span>Bridge enabled</span>
+                  <strong id="bridgeEnabled">false</strong>
+                  <p class="hint">Phase 3 bridge 是否有開啟。</p>
+                </div>
+                <div class="metric">
+                  <span>Bridge latest</span>
+                  <strong id="bridgeLatest">unknown</strong>
+                  <p class="hint">最近一次 bridge 匯入結果。</p>
+                </div>
+              </div>
+              <div class="list" id="incidentList" style="margin-top: 10px;"></div>
+            </section>
+
+            <section class="tab-panel" role="tabpanel" id="panel-skill" aria-labelledby="tab-skill" hidden>
+              <div class="tab-panel-head">
+                <div class="item-line">
+                  <h2>Ln And Skill Runs</h2>
+                  <span class="pill" id="skillSummary">none</span>
+                </div>
+                <p class="hint">看 gate 是否放行、skill 是否真的跑過。</p>
+              </div>
+              <p class="hint state-context" id="skillSelectionContext">顯示目前 timeline 範圍內的 Ln gate / skill run。</p>
+              <div class="list" id="skillList"></div>
+            </section>
+
+            <section class="tab-panel" role="tabpanel" id="panel-outbound" aria-labelledby="tab-outbound" hidden>
+              <div class="tab-panel-head">
+                <div class="item-line">
+                  <h2>Outbound Queue</h2>
+                  <span class="pill" id="messageCount">0 messages</span>
+                </div>
+                <p class="hint">Scout 想送出去的訊息；目前只走 mock transport。</p>
+              </div>
+              <p class="hint state-context" id="messageSelectionContext">顯示目前 timeline 範圍內的 outbound mock 訊息。</p>
+              <div class="list" id="messageList"></div>
+            </section>
+
+            <section class="tab-panel" role="tabpanel" id="panel-boundary" aria-labelledby="tab-boundary" hidden>
+              <div class="tab-panel-head">
+                <div class="item-line">
+                  <h2>Boundary Snapshot</h2>
+                  <span class="pill ok">read only</span>
+                </div>
+                <p class="hint">確認 debug 頁仍是只讀、不回寫 runtime。</p>
+              </div>
+              <p class="hint state-context" id="boundarySelectionContext">Boundary 是 debug invariant，不因 timeline 選取改變。</p>
+              <div class="list" id="boundaryList"></div>
+            </section>
+          </div>
+        </article>
+
+        <article class="panel map-panel" aria-label="Split runtime map panel">
+          <div class="panel-head">
+            <div class="panel-title">
+              <h2>Runtime Map</h2>
+              <p class="hint">點 timeline 後，這裡標出相關部位。</p>
+            </div>
+            <span class="pill info" id="selectedMapTarget">no selection</span>
+          </div>
+          <div class="panel-body">
+            <div class="map-wrap">
+              <svg id="runtimeMap" viewBox="0 0 640 360" role="img" aria-label="Runtime event schematic map">
+                <path class="map-corridor" d="M70 285 C150 230 180 215 245 215 S345 178 410 132 S500 82 575 78" data-map-ref="route corridor route-progress observation checkpoint" />
+                <path class="map-route" d="M70 285 C150 230 180 215 245 215 S345 178 410 132 S500 82 575 78" data-map-ref="route route-progress observation checkpoint" />
+                <path class="map-route-overlay" d="M70 285 C150 230 180 215 245 215 S345 178 410 132 S500 82 575 78" data-map-ref="route route-progress observation checkpoint" />
+                <circle class="map-zone" cx="360" cy="158" r="42" data-map-ref="safety incident" />
+
+                <circle class="map-node checkpoint" cx="70" cy="285" r="10" data-map-ref="checkpoint route" />
+                <text class="map-label" x="45" y="315">start</text>
+                <circle class="map-node checkpoint" cx="245" cy="215" r="10" data-map-ref="checkpoint route-progress" />
+                <text class="map-label" x="214" y="244">checkpoint</text>
+                <circle class="map-node route" cx="328" cy="178" r="10" data-map-ref="observation route-progress progress runtime" />
+                <text class="map-label" x="300" y="205">latest obs</text>
+                <circle class="map-node safety" cx="375" cy="150" r="12" data-map-ref="safety incident" />
+                <text class="map-label" x="388" y="155">safety</text>
+                <circle class="map-node checkpoint" cx="575" cy="78" r="10" data-map-ref="checkpoint route" />
+                <text class="map-label" x="548" y="108">finish</text>
+
+                <rect class="map-node provider" x="66" y="38" width="86" height="38" rx="6" data-map-ref="provider runtime" />
+                <text class="map-label" x="82" y="62">provider</text>
+                <rect class="map-node skill" x="212" y="38" width="82" height="38" rx="6" data-map-ref="ln skill runtime" />
+                <text class="map-label" x="232" y="62">Ln/skill</text>
+                <rect class="map-node bridge" x="356" y="38" width="82" height="38" rx="6" data-map-ref="bridge phase3 incident" />
+                <text class="map-label" x="378" y="62">bridge</text>
+                <rect class="map-node outbound" x="500" y="38" width="92" height="38" rx="6" data-map-ref="outbound message runtime" />
+                <text class="map-label" x="516" y="62">outbound</text>
+              </svg>
+            </div>
+            <p class="summary" id="selectedEventSummary">Select a timeline node to highlight the related runtime map element.</p>
+            <div class="map-legend" aria-label="Runtime map legend">
+              <span class="pill info">route</span>
+              <span class="pill warn">provider</span>
+              <span class="pill info">Ln / skill</span>
+              <span class="pill warn">bridge</span>
+              <span class="pill bad">safety</span>
+              <span class="pill ok">outbound mock</span>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <section class="column timeline-column">
+        <article class="panel timeline-panel">
+          <div class="panel-head">
+            <div class="panel-title">
+              <h2>Timeline</h2>
+              <p class="hint">runtime event 的發生順序；右上 L0->L2 表示安全等級變化。</p>
+            </div>
+            <span class="pill" id="eventCount">0 events</span>
+          </div>
+          <div class="panel-body" aria-label="Runtime event timeline">
+            <div class="list" id="timeline"></div>
+          </div>
+        </article>
+
+      </section>
+    </main>
+  </div>
+
+  <script>
+    const LEVELS = ["L0", "L1", "L2", "L3", "L4"];
+    const STATUS_BAD = new Set(["degraded", "failed", "unavailable", "offline", "error"]);
+    const DEBUG_TAB_IDS = ["panel-state", "panel-provider", "panel-incident", "panel-skill", "panel-outbound", "panel-boundary"];
+    const debugPageState = {
+      events: [],
+      chronologicalEvents: [],
+      selectedEventId: "",
+      selectedTabId: "panel-state",
+      runtimeState: {},
+      messages: []
+    };
+    const runtimeMap = document.getElementById("runtimeMap");
+    const EVENT_MAP_REFS = {
+      debug_session_started: ["runtime"],
+      debug_session_completed: ["runtime"],
+      observation_ingested: ["observation", "route-progress"],
+      route_progress_evaluated: ["route-progress", "route"],
+      recording_policy_selected: ["runtime"],
+      checkpoint_detected: ["checkpoint", "route-progress"],
+      progress_update_recorded: ["route-progress", "observation"],
+      safety_event_emitted: ["safety", "incident"],
+      safety_transition_recorded: ["safety", "runtime"],
+      incident_package_created: ["incident", "safety"],
+      incident_package_persisted: ["incident", "bridge"],
+      phase3_bridge_result: ["bridge", "incident"],
+      ln_activation_gate_evaluated: ["ln", "skill"],
+      skill_run_recorded: ["skill", "ln"],
+      provider_status_recorded: ["provider"],
+      outbound_message_queued: ["outbound", "message"],
+      outbound_message_state_changed: ["outbound", "message"]
+    };
+    const EVENT_HINTS = {
+      debug_session_started: "這次 debug replay 或 runtime 觀察開始了。",
+      debug_session_completed: "這次 debug replay 或 runtime 觀察收尾了。",
+      observation_ingested: "Scout 收到一筆感測或 replay 觀測。",
+      route_progress_evaluated: "Scout 重新估算你在路線上的進度。",
+      recording_policy_selected: "系統決定這段資料要怎麼記錄。",
+      checkpoint_detected: "Scout 判定已接近或通過某個 checkpoint。",
+      progress_update_recorded: "路線進度被寫進 debug timeline。",
+      safety_event_emitted: "Phase 1 判出需要注意的安全事件。",
+      safety_transition_recorded: "L0-L4 安全等級出現變化。",
+      incident_package_created: "黑盒 incident package 已產生。",
+      incident_package_persisted: "incident package 已保存到本機 store。",
+      phase3_bridge_result: "Phase 3 bridge 嘗試把 incident 匯入下游。",
+      ln_activation_gate_evaluated: "Ln gate 判斷 skill 這次能不能啟動。",
+      skill_run_recorded: "某個 skill 的執行紀錄被觀察到。",
+      provider_status_recorded: "外部或本機 provider 狀態更新了。",
+      outbound_message_queued: "Scout 想送出一則訊息，先放進 mock queue。",
+      outbound_message_state_changed: "mock outbound 訊息狀態改變了。"
+    };
+    const LABEL_HINTS = {
+      read_only: "這個 debug surface 只能看，不能改 runtime。",
+      safety_runtime_mutation: "debug 頁不應該碰 Phase 1 safety 狀態。",
+      phase2_writeback: "debug 頁不應該寫回 Brain 或 ObservedFact。",
+      outbound_transport: "初期只允許 mock transport，不接真 SOS。",
+      provider_status: "依賴來源目前是否可用。",
+      gps: "定位來源目前是否穩定。",
+      map: "離線地圖或 map evidence 是否可用。",
+      brain: "Phase 2 Brain 只是下游觀察，不是安全裁決。",
+      model: "模型輸出只能輔助解讀，不能改安全事實。"
+    };
+
+    async function fetchJson(path) {
+      const response = await fetch(path, { cache: "no-store" });
+      if (!response.ok) {
+        throw new Error(`${path} returned ${response.status}`);
+      }
+      return response.json();
+    }
+
+    function text(value, fallback = "unknown") {
+      if (value === null || value === undefined || value === "") return fallback;
+      return String(value);
+    }
+
+    function tabIdFromUrlValue(value) {
+      const normalized = text(value, "").replace(/^#?panel-/, "");
+      const targetId = `panel-${normalized}`;
+      return DEBUG_TAB_IDS.includes(targetId) ? targetId : "panel-state";
+    }
+
+    function tabUrlValue(targetId) {
+      return text(targetId, "panel-state").replace(/^panel-/, "");
+    }
+
+    function readUrlSelection() {
+      const params = new URLSearchParams(window.location.search);
+      return {
+        tabId: tabIdFromUrlValue(params.get("tab")),
+        eventId: text(params.get("event"), "")
+      };
+    }
+
+    function writeUrlSelection(options = {}) {
+      const url = new URL(window.location.href);
+      const tabId = options.tabId || debugPageState.selectedTabId;
+      const eventId = options.eventId !== undefined ? options.eventId : debugPageState.selectedEventId;
+      if (tabId && tabId !== "panel-state") {
+        url.searchParams.set("tab", tabUrlValue(tabId));
+      } else {
+        url.searchParams.delete("tab");
+      }
+      if (eventId) {
+        url.searchParams.set("event", eventId);
+      } else {
+        url.searchParams.delete("event");
+      }
+      window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+    }
+
+    function setText(id, value, fallback) {
+      document.getElementById(id).textContent = text(value, fallback);
+    }
+
+    function numberOr(value, fallback = 0) {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : fallback;
+    }
+
+    function pillClass(value) {
+      const normalized = text(value, "").toLowerCase();
+      if (STATUS_BAD.has(normalized)) return "pill bad";
+      if (normalized === "warning" || normalized === "skipped" || normalized === "queued") return "pill warn";
+      if (normalized === "available" || normalized === "ok" || normalized === "succeeded" || normalized === "mock-delivered") return "pill ok";
+      return "pill info";
+    }
+
+    function renderLevels(safetyLevel) {
+      const activeToken = text(safetyLevel, "").slice(0, 2);
+      document.getElementById("levelStrip").innerHTML = LEVELS.map((level) => (
+        `<div class="level ${level === activeToken ? "is-active" : ""}">${level}</div>`
+      )).join("");
+    }
+
+    function metricItem(label, value, state) {
+      const normalizedLabel = String(label || "").toLowerCase();
+      return `
+        <div class="item">
+          <div class="item-line">
+            <h3>${escapeHtml(label)}</h3>
+            <span class="${pillClass(state ?? value)}">${escapeHtml(text(state ?? value))}</span>
+          </div>
+          <p class="hint">${escapeHtml(LABEL_HINTS[normalizedLabel] || "這是目前 snapshot 裡回報的一個狀態值。")}</p>
+          <p class="summary mono">${escapeHtml(text(value))}</p>
+        </div>
+      `;
+    }
+
+    function empty(label) {
+      return `<div class="empty">${escapeHtml(label)}</div>`;
+    }
+
+    function escapeHtml(value) {
+      return text(value, "").replace(/[&<>"']/g, (character) => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;"
+      }[character]));
+    }
+
+    function mapRefsForEvent(event) {
+      const refs = new Set(EVENT_MAP_REFS[event?.kind] || ["runtime"]);
+      const subject = text(event?.subject_ref, "").toLowerCase();
+      const payload = event?.payload || {};
+      if (subject.includes("checkpoint") || payload.checkpoint_id) refs.add("checkpoint");
+      if (subject.includes("incident") || payload.incident_id) refs.add("incident");
+      if (subject.includes("message") || payload.message_id) {
+        refs.add("outbound");
+        refs.add("message");
+      }
+      if (payload.provider || payload.provider_name) refs.add("provider");
+      if (payload.skill_id || payload.gate || payload.decision) refs.add("skill");
+      return Array.from(refs);
+    }
+
+    function hintForEvent(event) {
+      return EVENT_HINTS[event?.kind] || "Scout 記錄了一筆 runtime debug event。";
+    }
+
+    function safetyLevelForEvent(event) {
+      const payload = event?.payload || {};
+      return payload.to_level || payload.safety_level || payload.trigger_level || payload.level || "";
+    }
+
+    function levelToken(value, fallback = "L0") {
+      const match = text(value, "").match(/L[0-4]/i);
+      return match ? match[0].toUpperCase() : fallback;
+    }
+
+    function transitionLabelForEvent(event) {
+      const payload = event?.payload || {};
+      if (payload.from_level || payload.to_level) {
+        return `${text(payload.from_level, "?")} -> ${text(payload.to_level, "?")}`;
+      }
+      const level = safetyLevelForEvent(event);
+      if (level) return level;
+      return "";
+    }
+
+    function eventSequence(event) {
+      return numberOr(event?.sequence, 0);
+    }
+
+    function timelineWindowForEvent(event) {
+      if (!debugPageState.chronologicalEvents.length) return [];
+      const selectedSequence = event ? eventSequence(event) : eventSequence(debugPageState.chronologicalEvents[debugPageState.chronologicalEvents.length - 1]);
+      return debugPageState.chronologicalEvents.filter((candidate) => eventSequence(candidate) <= selectedSequence);
+    }
+
+    function selectedWindowLabel(event, fallback = "顯示最新 timeline 範圍。") {
+      if (!event) return fallback;
+      return `顯示 timeline #${text(event.sequence)} 以前的狀態：${hintForEvent(event)}`;
+    }
+
+    function latestEventByKind(events, kind) {
+      const matches = events.filter((event) => event.kind === kind);
+      return matches[matches.length - 1] || null;
+    }
+
+    function eventSubjectId(event) {
+      const payload = event?.payload || {};
+      return payload.message_id || payload.incident_id || event?.subject_ref || event?.event_id || "";
+    }
+
+    function latestRuntimeSnapshot() {
+      const state = debugPageState.runtimeState || {};
+      const transition = state.latest_transition || {};
+      return {
+        safetyLevel: state.safety_level || "unknown",
+        latestTransition: transition.to_level || transition.reason || "none",
+        observationsProcessed: state.observations_processed || 0,
+        safetyEvents: state.safety_events || 0,
+        context: "顯示最新 runtime snapshot。"
+      };
+    }
+
+    function timelineSnapshotForEvent(event) {
+      if (!event) return latestRuntimeSnapshot();
+      const selectedSequence = eventSequence(event);
+      const eventsUpToSelection = debugPageState.chronologicalEvents.filter(
+        (candidate) => eventSequence(candidate) <= selectedSequence
+      );
+      let safetyLevel = "";
+      let latestTransition = "none";
+      let observationsProcessed = 0;
+      let safetyEvents = 0;
+
+      eventsUpToSelection.forEach((candidate) => {
+        const payload = candidate.payload || {};
+        const observationCount = payload.observation_count ?? payload.observations_processed;
+        if (observationCount !== undefined) {
+          observationsProcessed = Math.max(observationsProcessed, numberOr(observationCount, observationsProcessed));
+        }
+        if (candidate.kind === "safety_event_emitted") {
+          safetyEvents += 1;
+        }
+        const candidateLevel = safetyLevelForEvent(candidate);
+        if (candidateLevel) {
+          safetyLevel = candidateLevel;
+        }
+        const transitionLabel = transitionLabelForEvent(candidate);
+        if (transitionLabel) {
+          latestTransition = transitionLabel;
+        }
+      });
+
+      return {
+        safetyLevel: safetyLevel || "L0",
+        latestTransition,
+        observationsProcessed,
+        safetyEvents,
+        context: `顯示 timeline #${text(event.sequence)} 當下推估的狀態：${hintForEvent(event)}`
+      };
+    }
+
+    function levelBadgeForEvent(event) {
+      const payload = event?.payload || {};
+      if (payload.from_level || payload.to_level) {
+        return `${levelToken(payload.from_level, "?")}->${levelToken(payload.to_level, "?")}`;
+      }
+      const explicitLevel = safetyLevelForEvent(event);
+      if (explicitLevel) return levelToken(explicitLevel);
+      return levelToken(timelineSnapshotForEvent(event).safetyLevel);
+    }
+
+    function levelBadgeClassForEvent(event) {
+      const badge = levelBadgeForEvent(event);
+      if (badge.includes("->")) return "level-badge is-transition";
+      if (badge === "L2" || badge === "L3" || badge === "L4") return "level-badge is-alert";
+      return "level-badge";
+    }
+
+    function renderSafetySnapshot(snapshot) {
+      setText("safetyLevel", snapshot.safetyLevel, "unknown");
+      setText("latestTransition", snapshot.latestTransition, "none");
+      setText("observationsProcessed", snapshot.observationsProcessed, "0");
+      setText("safetyEvents", snapshot.safetyEvents, "0");
+      document.getElementById("stateSelectionContext").textContent = text(snapshot.context);
+      renderLevels(snapshot.safetyLevel);
+    }
+
+    function debugEventItem(event) {
+      return `
+        <div class="item phase-${escapeHtml(event.phase)}">
+          <div class="item-line">
+            <h3>${escapeHtml(event.kind)}</h3>
+            <span class="${pillClass((event.payload || {}).status || (event.payload || {}).decision || event.severity)}">
+              ${escapeHtml((event.payload || {}).status || (event.payload || {}).decision || event.severity)}
+            </span>
+          </div>
+          <p class="hint">${escapeHtml(hintForEvent(event))}</p>
+          <p class="summary">${escapeHtml(event.summary)}</p>
+          <p class="summary mono">${escapeHtml(event.subject_ref || event.event_id)}</p>
+        </div>
+      `;
+    }
+
+    function renderProviderDetails(events, selectedEvent) {
+      const providerEvents = events.filter((event) => event.kind === "provider_status_recorded");
+      const providerByName = new Map();
+      providerEvents.forEach((event) => {
+        const payload = event.payload || {};
+        const name = payload.provider || payload.provider_name || payload.name || event.subject_ref || "provider";
+        const value = payload.status || payload.state || event.summary || event.severity;
+        providerByName.set(name, { value, state: payload.status || payload.state || event.severity });
+      });
+
+      const fallbackProviders = Object.entries(debugPageState.runtimeState.provider_status || {}).map(([name, value]) => [name, { value, state: value }]);
+      const providerEntries = providerByName.size ? Array.from(providerByName.entries()) : fallbackProviders;
+      const hasDegraded = providerEntries.some(([, record]) => STATUS_BAD.has(text(record.state || record.value, "").toLowerCase()));
+      document.getElementById("providerSummary").textContent = providerEntries.length ? (hasDegraded ? "degraded" : "available") : "not seen";
+      document.getElementById("providerSummary").className = providerEntries.length ? (hasDegraded ? "pill bad" : "pill ok") : "pill info";
+      document.getElementById("providerSelectionContext").textContent = providerByName.size
+        ? selectedWindowLabel(selectedEvent, "顯示目前 timeline 範圍內的 provider event。")
+        : "目前 timeline 範圍內沒有 provider event；顯示最新 provider snapshot。";
+      document.getElementById("providerList").innerHTML = providerEntries.length
+        ? providerEntries.map(([name, record]) => metricItem(name, record.value, record.state)).join("")
+        : empty("No provider status reported.");
+    }
+
+    function renderIncidentDetails(events, selectedEvent) {
+      const incidentEvents = events.filter((event) =>
+        event.kind === "incident_package_created" ||
+        event.kind === "incident_package_persisted" ||
+        event.kind === "phase3_bridge_result"
+      );
+      const createdIds = new Set(incidentEvents.filter((event) => event.kind === "incident_package_created").map(eventSubjectId).filter(Boolean));
+      const persistedIds = new Set(incidentEvents.filter((event) => event.kind === "incident_package_persisted").map(eventSubjectId).filter(Boolean));
+      const latestBridgeEvent = latestEventByKind(incidentEvents, "phase3_bridge_result");
+      const bridge = debugPageState.runtimeState.phase3_bridge || {};
+      const bridgeLatest = latestBridgeEvent
+        ? ((latestBridgeEvent.payload || {}).status || latestBridgeEvent.summary || latestBridgeEvent.severity)
+        : "not reached";
+      setText("incidentPackages", createdIds.size, "0");
+      setText("storedIncidents", persistedIds.size, "0");
+      setText("bridgeEnabled", bridge.enabled, "false");
+      setText("bridgeLatest", bridgeLatest, "not reached");
+      document.getElementById("bridgeSummary").textContent = bridgeLatest || text(bridge.latest_status, "bridge unknown");
+      document.getElementById("bridgeSummary").className = pillClass(bridgeLatest || bridge.latest_status);
+      document.getElementById("incidentSelectionContext").textContent = selectedWindowLabel(
+        selectedEvent,
+        "顯示目前 timeline 範圍內的 incident / bridge event。"
+      );
+      document.getElementById("incidentList").innerHTML = incidentEvents.length
+        ? incidentEvents.slice().reverse().map(debugEventItem).join("")
+        : empty("No incident or bridge events reached at this timeline node.");
+    }
+
+    function renderSkillDetails(events, selectedEvent) {
+      const skillEvents = events.filter((event) =>
+        event.kind === "ln_activation_gate_evaluated" || event.kind === "skill_run_recorded"
+      );
+      document.getElementById("skillSummary").textContent = `${skillEvents.length} records`;
+      document.getElementById("skillSelectionContext").textContent = selectedWindowLabel(
+        selectedEvent,
+        "顯示目前 timeline 範圍內的 Ln gate / skill run。"
+      );
+      document.getElementById("skillList").innerHTML = skillEvents.length
+        ? skillEvents.slice().reverse().map((event) => {
+          const payload = event.payload || {};
+          return `
+            <div class="item phase-${escapeHtml(event.phase)}">
+              <div class="item-line">
+                <h3>${escapeHtml(payload.skill_id || payload.gate || event.kind)}</h3>
+                <span class="${pillClass(payload.status || payload.decision || event.severity)}">
+                  ${escapeHtml(payload.status || payload.decision || event.severity)}
+                </span>
+              </div>
+              <p class="hint">${escapeHtml(hintForEvent(event))}</p>
+              <p class="summary">${escapeHtml(event.summary)}</p>
+              <p class="summary mono">${escapeHtml(event.subject_ref || event.event_id)}</p>
+            </div>
+          `;
+        }).join("")
+        : empty("No Ln activation or skill run events reached at this timeline node.");
+    }
+
+    function renderMessageDetails(events, selectedEvent) {
+      const outboundEvents = events.filter((event) =>
+        event.kind === "outbound_message_queued" || event.kind === "outbound_message_state_changed"
+      );
+      const stateByMessage = new Map();
+      outboundEvents.forEach((event) => {
+        const payload = event.payload || {};
+        const id = payload.message_id || event.subject_ref;
+        if (!id) return;
+        const state = payload.state || payload.status || (event.kind === "outbound_message_queued" ? "queued" : event.severity);
+        stateByMessage.set(id, state);
+      });
+      const messages = debugPageState.messages.filter((message) => stateByMessage.has(message.message_id));
+      const renderedMessages = messages.length
+        ? messages.map((message) => ({ ...message, state: stateByMessage.get(message.message_id) || message.state }))
+        : outboundEvents.map((event) => ({
+          message_id: eventSubjectId(event),
+          category: (event.payload || {}).category || event.kind,
+          state: (event.payload || {}).state || (event.payload || {}).status || event.severity,
+          body_preview: event.summary,
+          transport: (event.payload || {}).transport || "mock"
+        }));
+      document.getElementById("messageCount").textContent = `${renderedMessages.length} messages`;
+      document.getElementById("messageSelectionContext").textContent = selectedWindowLabel(
+        selectedEvent,
+        "顯示目前 timeline 範圍內的 outbound mock 訊息。"
+      );
+      document.getElementById("messageList").innerHTML = renderedMessages.length
+        ? renderedMessages.slice().reverse().map((message) => `
+          <div class="item">
+            <div class="item-line">
+              <h3>${escapeHtml(message.category)}</h3>
+              <span class="${pillClass(message.state)}">${escapeHtml(message.state)}</span>
+            </div>
+            <p class="hint">Scout 準備送出的 mock 訊息，可看狀態但不會真的發送。</p>
+            <p class="summary">${escapeHtml(message.body_preview)}</p>
+            <p class="summary mono">${escapeHtml(message.message_id)} ${escapeHtml(message.transport)}</p>
+          </div>
+        `).join("")
+        : empty("No outbound mock messages reached at this timeline node.");
+    }
+
+    function renderBoundaryDetails(selectedEvent) {
+      const boundary = debugPageState.runtimeState.debug_boundary || {};
+      document.getElementById("boundarySelectionContext").textContent = selectedEvent
+        ? `Boundary 是 debug invariant；目前選取 timeline #${text(selectedEvent.sequence)}。`
+        : "Boundary 是 debug invariant，不因 timeline 選取改變。";
+      document.getElementById("boundaryList").innerHTML = Object.keys(boundary).length
+        ? Object.entries(boundary).map(([name, value]) => metricItem(name, value)).join("")
+        : empty("No boundary snapshot reported.");
+    }
+
+    function renderSelectedDetails(selectedEvent) {
+      const events = timelineWindowForEvent(selectedEvent);
+      renderSafetySnapshot(timelineSnapshotForEvent(selectedEvent));
+      renderProviderDetails(events, selectedEvent);
+      renderIncidentDetails(events, selectedEvent);
+      renderSkillDetails(events, selectedEvent);
+      renderMessageDetails(events, selectedEvent);
+      renderBoundaryDetails(selectedEvent);
+    }
+
+    function mapTargetsForEvent(event) {
+      const refs = new Set(mapRefsForEvent(event));
+      return Array.from(runtimeMap.querySelectorAll("[data-map-ref]")).filter((node) => {
+        const tokens = text(node.dataset.mapRef, "").split(/\s+/).filter(Boolean);
+        return tokens.some((token) => refs.has(token));
+      });
+    }
+
+    function highlightMapForEvent(event) {
+      runtimeMap.querySelectorAll(".map-highlight").forEach((node) => node.classList.remove("map-highlight"));
+      const targets = mapTargetsForEvent(event);
+      targets.forEach((target) => target.classList.add("map-highlight"));
+      targets.slice(0, 4).forEach((target) => target.parentNode && target.parentNode.appendChild(target));
+      document.getElementById("selectedMapTarget").textContent = event
+        ? mapRefsForEvent(event).join(" + ")
+        : "no selection";
+      document.getElementById("selectedEventSummary").textContent = event
+        ? `${text(event.kind)} | ${hintForEvent(event)}`
+        : "Select a timeline node to highlight the related runtime map element.";
+    }
+
+    function selectTimelineNode(event, index, options = {}) {
+      debugPageState.selectedEventId = event?.event_id || "";
+      const node = document.querySelector(`[data-event-index="${index}"]`);
+      document.querySelectorAll(".timeline-node").forEach((candidate) => {
+        const isSelected = candidate === node;
+        candidate.classList.toggle("is-selected", isSelected);
+        candidate.setAttribute("aria-current", isSelected ? "true" : "false");
+        candidate.tabIndex = isSelected ? 0 : -1;
+      });
+      renderSelectedDetails(event);
+      highlightMapForEvent(event);
+      if (node && options.focus) node.focus();
+      if (options.syncUrl !== false) writeUrlSelection({ eventId: debugPageState.selectedEventId });
+    }
+
+    function moveTimelineFocus(currentIndex, key) {
+      const nodes = Array.from(document.querySelectorAll(".timeline-node"));
+      if (!nodes.length) return;
+      const currentNode = document.querySelector(`[data-event-index="${currentIndex}"]`);
+      const currentPosition = Math.max(nodes.indexOf(currentNode), 0);
+      let nextPosition = currentPosition;
+      if (key === "ArrowDown") nextPosition = Math.min(currentPosition + 1, nodes.length - 1);
+      if (key === "ArrowUp") nextPosition = Math.max(currentPosition - 1, 0);
+      if (key === "Home") nextPosition = 0;
+      if (key === "End") nextPosition = nodes.length - 1;
+      const nextNode = nodes[nextPosition];
+      const nextIndex = Number(nextNode.dataset.eventIndex || -1);
+      const nextEvent = debugPageState.events[nextIndex];
+      selectTimelineNode(nextEvent, nextIndex, { focus: true });
+    }
+
+    function bindTimelineNodes() {
+      document.querySelectorAll(".timeline-node").forEach((node) => {
+        const index = Number(node.dataset.eventIndex || -1);
+        const event = debugPageState.events[index];
+        node.addEventListener("click", () => selectTimelineNode(event, index));
+        node.addEventListener("keydown", (keyboardEvent) => {
+          if (keyboardEvent.key === "Enter" || keyboardEvent.key === " ") {
+            keyboardEvent.preventDefault();
+            selectTimelineNode(event, index);
+            return;
+          }
+          if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(keyboardEvent.key)) return;
+          keyboardEvent.preventDefault();
+          moveTimelineFocus(index, keyboardEvent.key);
+        });
+      });
+    }
+
+    function switchDebugTab(tabNode, options = {}) {
+      if (!tabNode) return;
+      const targetId = tabNode.dataset.tabTarget;
+      debugPageState.selectedTabId = targetId;
+      document.querySelectorAll('[role="tab"]').forEach((node) => {
+        const isActive = node === tabNode;
+        node.classList.toggle("is-active", isActive);
+        node.setAttribute("aria-selected", isActive ? "true" : "false");
+        node.tabIndex = isActive ? 0 : -1;
+      });
+      document.querySelectorAll(".tab-panel").forEach((panel) => {
+        const isActive = panel.id === targetId;
+        panel.classList.toggle("is-active", isActive);
+        panel.hidden = !isActive;
+      });
+      if (options.syncUrl !== false) writeUrlSelection({ tabId: targetId });
+    }
+
+    function bindDebugTabs() {
+      const tabs = Array.from(document.querySelectorAll('[role="tab"]'));
+      tabs.forEach((tabNode, index) => {
+        tabNode.addEventListener("click", () => switchDebugTab(tabNode));
+        tabNode.addEventListener("keydown", (keyboardEvent) => {
+          if (keyboardEvent.key === "Enter" || keyboardEvent.key === " ") {
+            keyboardEvent.preventDefault();
+            switchDebugTab(tabNode);
+            return;
+          }
+          if (!["ArrowRight", "ArrowLeft", "Home", "End"].includes(keyboardEvent.key)) return;
+          keyboardEvent.preventDefault();
+          let nextTab = tabs[index];
+          if (keyboardEvent.key === "ArrowRight") nextTab = tabs[(index + 1) % tabs.length];
+          if (keyboardEvent.key === "ArrowLeft") nextTab = tabs[(index - 1 + tabs.length) % tabs.length];
+          if (keyboardEvent.key === "Home") nextTab = tabs[0];
+          if (keyboardEvent.key === "End") nextTab = tabs[tabs.length - 1];
+          switchDebugTab(nextTab);
+          nextTab.focus();
+        });
+      });
+    }
+
+    function renderState(state) {
+      debugPageState.runtimeState = state || {};
+      setText("runtimeProfile", state.runtime_profile, "runtime unknown");
+      renderSelectedDetails(null);
+    }
+
+    function renderEvents(events) {
+      const chronologicalEvents = events.slice().sort((left, right) => eventSequence(left) - eventSequence(right));
+      const orderedEvents = chronologicalEvents.slice().reverse();
+      debugPageState.chronologicalEvents = chronologicalEvents;
+      debugPageState.events = orderedEvents;
+      document.getElementById("eventCount").textContent = `${events.length} events`;
+      document.getElementById("timeline").innerHTML = events.length
+        ? orderedEvents.map((event, index) => `
+          <div class="item timeline-node phase-${escapeHtml(event.phase)}" role="button" tabindex="-1" aria-current="false" data-event-index="${index}" data-map-ref="${escapeHtml(mapRefsForEvent(event).join(" "))}">
+            <div class="item-line">
+              <h3>${escapeHtml(event.kind)}</h3>
+              <div class="timeline-meta">
+                <span class="${pillClass(event.severity)}">${escapeHtml(event.phase)} #${escapeHtml(event.sequence)}</span>
+                <span class="${levelBadgeClassForEvent(event)}" aria-label="L state at this timeline node">${escapeHtml(levelBadgeForEvent(event))}</span>
+              </div>
+            </div>
+            <p class="hint">${escapeHtml(hintForEvent(event))}</p>
+            <p class="summary">${escapeHtml(event.summary)}</p>
+            <p class="summary mono">${escapeHtml(event.timestamp)} ${escapeHtml(event.subject_ref || "")}</p>
+          </div>
+        `).join("")
+        : empty("No debug events reported.");
+      bindTimelineNodes();
+      if (orderedEvents.length) {
+        const selectedIndex = Math.max(orderedEvents.findIndex((event) => event.event_id === debugPageState.selectedEventId), 0);
+        selectTimelineNode(orderedEvents[selectedIndex], selectedIndex, { syncUrl: Boolean(debugPageState.selectedEventId) });
+      } else {
+        renderSelectedDetails(null);
+        highlightMapForEvent(null);
+      }
+    }
+
+    async function loadDebugSurface() {
+      try {
+        const [eventPayload, state, messagePayload] = await Promise.all([
+          fetchJson("/debug/events?limit=200"),
+          fetchJson("/debug/state"),
+          fetchJson("/debug/messages")
+        ]);
+        renderState(state || {});
+        debugPageState.messages = messagePayload.messages || [];
+        renderEvents(eventPayload.events || []);
+        setText("loadStatus", "Snapshots loaded.");
+      } catch (error) {
+        document.getElementById("loadStatus").innerHTML =
+          `<span class="error">${escapeHtml(error.message)}</span>`;
+        renderLevels("");
+      }
+    }
+
+    const initialUrlSelection = readUrlSelection();
+    debugPageState.selectedTabId = initialUrlSelection.tabId;
+    debugPageState.selectedEventId = initialUrlSelection.eventId;
+    bindDebugTabs();
+    switchDebugTab(document.querySelector(`[data-tab-target="${debugPageState.selectedTabId}"]`), { syncUrl: false });
+    loadDebugSurface();
+  </script>
+</body>
+</html>
