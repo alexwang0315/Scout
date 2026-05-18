@@ -1,5 +1,28 @@
 # Continuation Prompt: Scout Cross-Surface AI Assistant
 
+Status: Milestone 10 initial guardrail slice is now implemented. Keep this file
+as historical handoff context; use the current completion notes below for any
+future follow-up slice.
+
+Current completed scope:
+
+- assistant request/response Pydantic models and per-surface constraints;
+- deterministic mock provider as the default no-network provider;
+- bounded read-only context adapters for debug, admin, pretrip, and hardware
+  readiness;
+- opt-in read-only `POST /assistant/query` endpoint behind
+  `SCOUT_AI_ASSISTANT_ENABLED=1`;
+- debug and pretrip assistant UI shells with read-only boundary labels and
+  suggested questions from selected timeline context;
+- opt-in Pydantic AI provider separated from `/navigate`, using external
+  cloud/local model config and local fallback;
+- `assistant_readiness_check.py` and
+  `docs/admin/cross-surface-ai-assistant-runbook.md`.
+
+Future continuation should start from a small follow-up slice, not by reopening
+Phase 1 safety decisions, Phase 2 Brain writeback, Phase 4 review decisions,
+outbound transport, or hardware control.
+
 Use this prompt in a new Codex conversation.
 
 ```text

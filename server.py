@@ -16,6 +16,8 @@ import uvicorn
 
 from agent import sos_agent
 from admin_api import create_admin_router
+from assistant_api import create_assistant_provider_from_env, create_assistant_router
+from assistant_context import create_assistant_context_resolver
 from debug_api import create_debug_page_router, create_debug_router
 from imu_api import router as imu_router
 from macos_wifi import MacOSWifiWorld
@@ -51,6 +53,9 @@ SCOUT_PHASE2_ADMIN_API_ENABLED = os.getenv("SCOUT_PHASE2_ADMIN_API_ENABLED", "fa
 SCOUT_PHASE2_BRAIN_STORE_ROOT = os.getenv("SCOUT_PHASE2_BRAIN_STORE_ROOT")
 SCOUT_DEBUG_API_ENABLED = os.getenv("SCOUT_DEBUG_API_ENABLED", "false")
 SCOUT_DEBUG_LOG_PATH = os.getenv("SCOUT_DEBUG_LOG_PATH")
+SCOUT_AI_ASSISTANT_ENABLED = os.getenv("SCOUT_AI_ASSISTANT_ENABLED", "false")
+SCOUT_AI_ASSISTANT_PROVIDER = os.getenv("SCOUT_AI_ASSISTANT_PROVIDER", "mock")
+SCOUT_AI_ASSISTANT_CONFIG_PATH = os.getenv("SCOUT_AI_ASSISTANT_CONFIG_PATH")
 
 log_level = logging.DEBUG if DEBUG else logging.INFO
 logging.basicConfig(level=log_level, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -160,6 +165,26 @@ def _include_debug_router(app: FastAPI) -> None:
     app.include_router(create_debug_router(debug_log=debug_log))
     app.include_router(create_debug_page_router())
     logger.info("Phase 3.5 debug API enabled%s", f": {SCOUT_DEBUG_LOG_PATH}" if SCOUT_DEBUG_LOG_PATH else "")
+
+
+def _include_assistant_router(app: FastAPI) -> None:
+    if not _is_true_like(SCOUT_AI_ASSISTANT_ENABLED):
+        logger.info("Scout assistant API disabled")
+        return
+
+    debug_log = FileRuntimeDebugEventLog(SCOUT_DEBUG_LOG_PATH) if SCOUT_DEBUG_LOG_PATH else None
+    provider = create_assistant_provider_from_env(os.environ)
+    app.include_router(
+        create_assistant_router(
+            provider=provider,
+            context_resolver=create_assistant_context_resolver(debug_event_log=debug_log),
+        )
+    )
+    logger.info(
+        "Scout assistant API enabled with %s provider%s",
+        SCOUT_AI_ASSISTANT_PROVIDER,
+        f" and config {SCOUT_AI_ASSISTANT_CONFIG_PATH}" if SCOUT_AI_ASSISTANT_CONFIG_PATH else "",
+    )
 
 
 async def process_movement_summary(summary: Any) -> Dict[str, Any]:
@@ -274,6 +299,7 @@ app.include_router(
 )
 _include_phase2_admin_router(app)
 _include_debug_router(app)
+_include_assistant_router(app)
 
 
 @app.get("/")

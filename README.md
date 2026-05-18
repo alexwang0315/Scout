@@ -247,13 +247,26 @@ Relevant specs and runbooks:
 
 ## Milestone 10 Cross-Surface AI Assistant
 
-Milestone 10 is specified but not implemented. It defines a future shared
-assistant capability for `/admin/debug`, `/admin`, `/admin/pretrip`, and future
-hardware-readiness surfaces.
+Milestone 10 is implemented for the initial guardrail slice. It provides a
+shared read-only assistant contract for `/admin/debug`, `/admin`,
+`/admin/pretrip`, and future hardware-readiness surfaces without changing Phase
+1 safety behavior, Phase 2 Brain writeback, Phase 4 planning review, outbound
+transport, or hardware state.
 
-The milestone is intentionally separate from Phase 3.5 and Phase 4. Its first
-implementation should be mock-backed and read-only before any opt-in Pydantic AI
-provider is enabled.
+Implemented slices:
+
+- Pydantic request/response models with per-surface constraints and source refs.
+- Deterministic mock assistant provider for default, no-network operation.
+- Bounded read-only context adapters for debug, admin after-action, pretrip, and
+  hardware-readiness surfaces.
+- Opt-in read-only `POST /assistant/query` endpoint, mounted only with
+  `SCOUT_AI_ASSISTANT_ENABLED=1`.
+- Debug and pretrip assistant UI shells labeled as read-only model
+  interpretation, including timeline-based suggested questions such as
+  `Why did CP2 become an L2 event?`.
+- Opt-in Pydantic AI provider separated from `/navigate`, with timeout/context
+  budget, prompt-boundary enforcement, and cloud-to-local model fallback config.
+- `assistant_readiness_check.py` guardrail gate and admin runbook.
 
 Guardrails:
 
@@ -263,10 +276,43 @@ Guardrails:
   mutation;
 - assistant answers must be labeled as read-only model interpretation.
 
+Enable the read-only API with the mock provider:
+
+```bash
+SCOUT_AI_ASSISTANT_ENABLED=1 \
+SCOUT_AI_ASSISTANT_PROVIDER=mock \
+./venv/bin/python server.py
+```
+
+For opt-in Pydantic AI, point the server at an external model config that
+defines both `cloud_model` and `local_model`; `token_id` is only a token
+reference and secrets remain in environment variables named by `token_env_var`.
+If cloud initialization or communication fails, the provider falls back to the
+local model and still returns only read-only model interpretations.
+
+Latest focused verification:
+
+```bash
+./venv/bin/python -m pytest \
+  tests/test_assistant_model_config.py \
+  tests/test_assistant_models.py \
+  tests/test_assistant_provider.py \
+  tests/test_assistant_pydantic_provider.py \
+  tests/test_assistant_context.py \
+  tests/test_assistant_api.py \
+  tests/test_assistant_page.py \
+  tests/test_assistant_readiness_check.py
+# 44 passed, 1 warning
+
+./venv/bin/python assistant_readiness_check.py --pretty
+# {"ok": true, ...}
+```
+
 Relevant specs:
 
 - `docs/specs/scout-cross-surface-ai-assistant.md`
 - `docs/specs/scout-cross-surface-ai-assistant-continuation-prompt.md`
+- `docs/admin/cross-surface-ai-assistant-runbook.md`
 
 ## Project Layout
 
@@ -286,6 +332,11 @@ Relevant specs:
 | `admin_api.py` / `admin_after_action.py` | Admin case API and after-action view model builder. |
 | `docs/admin/phase1-after-action.html` | Static admin presentation layer for field-case map and evidence inspection. |
 | `debug_api.py` | Read-only Phase 3.5 `/debug` JSON API and `/admin/debug` page router. |
+| `assistant_models.py` / `assistant_provider.py` | Milestone 10 read-only assistant contract and deterministic mock provider. |
+| `assistant_context.py` / `*_assistant_context.py` | Bounded surface context adapters for debug, admin, pretrip, and hardware readiness. |
+| `assistant_api.py` / `assistant_pydantic_provider.py` | Opt-in `/assistant/query` router and failure-isolated Pydantic AI provider. |
+| `assistant_model_config.py` | External cloud/local assistant model config loader with token reference validation. |
+| `assistant_readiness_check.py` | Milestone 10 required artifact and guardrail checker. |
 | `runtime_debug_models.py` / `runtime_debug_log.py` | Phase 3.5 debug event envelopes and append-only memory/file-backed event logs. |
 | `runtime_simulator.py` / `runtime_debug_replay_demo.py` | Fixture replay path that emits runtime debug timeline events. |
 | `runtime_debug_ui_demo.py` / `phase35_debug_demo_loader.py` | Deterministic `/admin/debug` demo data and local demo launcher output. |
@@ -410,6 +461,13 @@ Notes:
   `/admin/debug`.
 - `SCOUT_DEBUG_LOG_PATH=/path/to/runtime-debug-events.jsonl` points the debug
   API at a file-backed replay/demo timeline.
+- `SCOUT_AI_ASSISTANT_ENABLED=1` mounts the Milestone 10 read-only
+  `/assistant/query` API.
+- `SCOUT_AI_ASSISTANT_PROVIDER=mock|pydantic_ai` selects the assistant provider;
+  it defaults to deterministic `mock`.
+- `SCOUT_AI_ASSISTANT_CONFIG_PATH=/secure/local/scout-assistant-models.json`
+  points the opt-in Pydantic AI provider at the external cloud/local model
+  config.
 - `.env` is ignored by git and should not be committed.
 
 ## Run

@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Scout Pretrip Assistant</title>
+  <style>
+    body {
+      margin: 0;
+      color: #17202a;
+      background: #f6f8fb;
+      font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    main {
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+    .assistant-panel {
+      display: grid;
+      gap: 12px;
+      border: 1px solid #d7dee8;
+      border-radius: 8px;
+      background: #ffffff;
+      padding: 16px;
+    }
+    .panel-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      border-bottom: 1px solid #d7dee8;
+      padding-bottom: 10px;
+    }
+    .panel-title h1,
+    .panel-title h2,
+    .assistant-answer h3,
+    .assistant-limitations h3,
+    .assistant-sources h3 {
+      margin: 0;
+      letter-spacing: 0;
+    }
+    .panel-title h1 { font-size: 18px; }
+    .panel-title h2 { font-size: 16px; }
+    .meta {
+      margin: 4px 0 0;
+      color: #607086;
+    }
+    .pill {
+      border: 1px solid #28666e;
+      border-radius: 999px;
+      color: #28666e;
+      padding: 4px 8px;
+      white-space: nowrap;
+    }
+    .assistant-body {
+      display: grid;
+      gap: 12px;
+    }
+    .assistant-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .assistant-field,
+    .assistant-answer,
+    .assistant-limitations,
+    .assistant-sources {
+      display: grid;
+      gap: 6px;
+      min-width: 0;
+      border: 1px solid #d7dee8;
+      border-radius: 6px;
+      background: #fbfcfe;
+      padding: 10px;
+    }
+    .assistant-field span,
+    .assistant-answer h3,
+    .assistant-limitations h3,
+    .assistant-sources h3 {
+      color: #607086;
+      font-size: 12px;
+      font-weight: 650;
+      text-transform: uppercase;
+    }
+    .assistant-list {
+      margin: 0;
+      padding-left: 18px;
+      color: #607086;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <!-- assistant-shell:start -->
+    <article id="assistantPanel" class="assistant-panel" data-assistant-surface="pretrip" data-assistant-boundary="read-only model interpretation" aria-label="Read-only pretrip assistant">
+      <div class="panel-head">
+        <div class="panel-title">
+          <h1>Pretrip Assistant</h1>
+          <p class="meta">read-only model interpretation over planning candidates and review context.</p>
+        </div>
+        <span class="pill">surface: pretrip</span>
+      </div>
+      <div class="assistant-body">
+        <div class="assistant-grid">
+          <div class="assistant-field">
+            <span>Surface</span>
+            <strong>pretrip assistant</strong>
+          </div>
+          <div class="assistant-field">
+            <span>Read-only boundary</span>
+            <strong>read-only model interpretation</strong>
+          </div>
+        </div>
+        <section class="assistant-answer" aria-label="Assistant answer">
+          <h3>Answer</h3>
+          <p>This shell can display a read-only answer from POST /assistant/query about candidate provenance, review queue state, readiness, and source references.</p>
+        </section>
+        <section class="assistant-limitations" aria-label="Assistant limitations">
+          <h3>Limitations</h3>
+          <ul class="assistant-list">
+            <li>No review decision is created.</li>
+            <li>No departure approval is granted.</li>
+            <li>No runtime handoff or hardware control is opened.</li>
+            <li>No Phase 1 safety, Phase 2 Brain, outbound, or ObservedFact state is mutated.</li>
+          </ul>
+        </section>
+        <section class="assistant-sources" aria-label="Assistant sources">
+          <h3>Sources</h3>
+          <ul class="assistant-list">
+            <li>project manifest</li>
+            <li>candidate provenance</li>
+            <li>review queue</li>
+            <li>readiness artifacts</li>
+          </ul>
+        </section>
+      </div>
+    </article>
+    <!-- assistant-shell:end -->
+  </main>
+</body>
+</html>

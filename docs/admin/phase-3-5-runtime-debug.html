@@ -549,6 +549,78 @@
       background: rgba(255, 255, 255, 0.02);
     }
 
+    .assistant-panel {
+      display: grid;
+      grid-template-rows: auto auto;
+    }
+
+    .assistant-body {
+      display: grid;
+      gap: 10px;
+    }
+
+    .assistant-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .assistant-field,
+    .assistant-answer,
+    .assistant-limitations,
+    .assistant-sources {
+      display: grid;
+      gap: 4px;
+      min-width: 0;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px;
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .assistant-field span,
+    .assistant-answer h3,
+    .assistant-limitations h3,
+    .assistant-sources h3 {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 650;
+      text-transform: uppercase;
+    }
+
+    .assistant-field strong {
+      font-size: 13px;
+      overflow-wrap: anywhere;
+    }
+
+    .assistant-list {
+      margin: 0;
+      padding-left: 17px;
+      color: var(--muted);
+    }
+
+    .assistant-list li + li {
+      margin-top: 3px;
+    }
+
+    .assistant-prompts {
+      display: grid;
+      gap: 6px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .assistant-prompts li {
+      border: 1px solid rgba(111, 168, 220, 0.38);
+      border-radius: 999px;
+      padding: 6px 9px;
+      color: var(--text);
+      background: rgba(111, 168, 220, 0.08);
+      font-size: 12px;
+      overflow-wrap: anywhere;
+    }
+
     .error {
       color: var(--bad);
     }
@@ -812,6 +884,60 @@
           </div>
         </article>
 
+        <!-- assistant-shell:start -->
+        <article id="assistantPanel" class="panel assistant-panel" data-assistant-surface="debug" data-assistant-boundary="read-only model interpretation" aria-label="Read-only debug assistant">
+          <div class="panel-head">
+            <div class="panel-title">
+              <h2>Debug Assistant</h2>
+              <p class="hint">read-only model interpretation for the selected runtime context.</p>
+            </div>
+            <span class="pill info">surface: debug</span>
+          </div>
+          <div class="panel-body assistant-body">
+            <div class="assistant-grid">
+              <div class="assistant-field">
+                <span>Surface</span>
+                <strong>debug assistant</strong>
+              </div>
+              <div class="assistant-field">
+                <span>Read-only boundary</span>
+                <strong>read-only model interpretation</strong>
+              </div>
+            </div>
+            <section class="assistant-sources" aria-label="Assistant suggested questions">
+              <h3>Suggested questions</h3>
+              <p class="hint">Copy one question after selecting a timeline node; suggestions follow selected timeline context.</p>
+              <ul id="assistantPromptSuggestions" class="assistant-prompts" aria-label="Suggested assistant questions">
+                <li>Why did CP2 become an L2 event?</li>
+                <li>Which sources support this timeline state?</li>
+                <li>What is missing from this context?</li>
+              </ul>
+            </section>
+            <section class="assistant-answer" aria-label="Assistant answer">
+              <h3>Answer</h3>
+              <p>This shell explains L0-L4 state, provider status, bridge visibility, outbound mock state, and the selected timeline node without changing runtime state.</p>
+            </section>
+            <section class="assistant-limitations" aria-label="Assistant limitations">
+              <h3>Limitations</h3>
+              <ul class="assistant-list">
+                <li>No safety runtime mutation.</li>
+                <li>No Phase 2 writeback or ObservedFact creation.</li>
+                <li>No real outbound transport or hardware control.</li>
+                <li>The shell shows status context only until a hosted assistant response is available from /assistant/query.</li>
+              </ul>
+            </section>
+            <section class="assistant-sources" aria-label="Assistant sources">
+              <h3>Sources</h3>
+              <ul class="assistant-list">
+                <li>/debug/events</li>
+                <li>/debug/state</li>
+                <li>/debug/messages</li>
+                <li>selected timeline node</li>
+              </ul>
+            </section>
+          </div>
+        </article>
+        <!-- assistant-shell:end -->
       </section>
     </main>
   </div>
@@ -1268,6 +1394,23 @@
         : empty("No boundary snapshot reported.");
     }
 
+    function suggestedAssistantQuestions(event) {
+      const payload = event?.payload || {};
+      const checkpoint = payload.checkpoint_id || payload.checkpoint_label || (text(event?.subject_ref, "").match(/CP\d+/i) || [])[0] || "CP2";
+      const level = levelBadgeForEvent(event).match(/L[0-4]/)?.[0] || "L2";
+      return [
+        `Why did ${checkpoint} become an ${level} event?`,
+        "Which sources support this timeline state?",
+        "What is missing from this context?"
+      ];
+    }
+
+    function renderAssistantPromptSuggestions(event) {
+      document.getElementById("assistantPromptSuggestions").innerHTML = suggestedAssistantQuestions(event)
+        .map((question) => `<li>${escapeHtml(question)}</li>`)
+        .join("");
+    }
+
     function renderSelectedDetails(selectedEvent) {
       const events = timelineWindowForEvent(selectedEvent);
       renderSafetySnapshot(timelineSnapshotForEvent(selectedEvent));
@@ -1276,6 +1419,7 @@
       renderSkillDetails(events, selectedEvent);
       renderMessageDetails(events, selectedEvent);
       renderBoundaryDetails(selectedEvent);
+      renderAssistantPromptSuggestions(selectedEvent);
     }
 
     function mapTargetsForEvent(event) {
