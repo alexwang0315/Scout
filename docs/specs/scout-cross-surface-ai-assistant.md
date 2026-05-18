@@ -2,10 +2,15 @@
 
 ## Status
 
-Proposed.
+Implemented for the initial Milestone 10 guardrail slice.
 
-This document defines a small cross-surface milestone for Scout. It should be
-reviewed before implementation starts.
+This document defines the cross-surface assistant guardrails that now anchor the
+mock provider, bounded context adapters, read-only API, UI shell, opt-in
+Pydantic AI provider, cloud/local model fallback config, and readiness gate.
+
+Implementation note: this milestone is complete for the current read-only
+assistant foundation. Future slices may improve UI reuse or add richer context,
+but they must preserve the guardrails in this spec.
 
 ## Milestone Name
 
@@ -165,12 +170,31 @@ SCOUT_AI_ASSISTANT_ENABLED=1
 SCOUT_AI_ASSISTANT_PROVIDER=mock|pydantic_ai
 SCOUT_AI_ASSISTANT_TIMEOUT_SECONDS=8
 SCOUT_AI_ASSISTANT_MAX_CONTEXT_CHARS=12000
+SCOUT_AI_ASSISTANT_CONFIG_PATH=/secure/local/scout-assistant-models.json
 ```
 
 The Pydantic AI provider should be separate from `/navigate`. It may reuse
 shared model configuration, but it should have its own system prompt and tools
 because `/navigate` is navigation advice while this assistant is read-only
 state explanation.
+
+When `pydantic_ai` is enabled, the server may load an external JSON model
+configuration at startup. That file must define two profiles:
+
+- `cloud_model`: the preferred cloud model, including `model_name`, optional
+  `base_url`, `token_id`, and `token_env_var`;
+- `local_model`: the fallback local model, including `model_name`, optional
+  local `base_url`, and `token_id`.
+
+`token_id` is a token reference, not a secret payload. Secrets should stay in
+environment variables referenced by `token_env_var`.
+
+Startup behavior:
+
+- try the cloud model connection first;
+- if cloud communication fails or times out, fall back to the local model;
+- if provider startup or runtime execution fails, return a safe read-only
+  assistant error response and leave the source surface unaffected.
 
 ## API Boundary
 
@@ -307,6 +331,9 @@ Acceptance:
 - drawer/panel can be embedded in `/admin/debug` and `/admin/pretrip`;
 - it shows surface, boundary, answer, limitations, and sources;
 - it has no action controls.
+- debug timeline selection updates three suggested assistant questions, including
+  a checkpoint/level explanation prompt such as `Why did CP2 become an L2
+  event?`.
 
 ### Slice 6: Pydantic AI Opt-In Provider
 
@@ -357,11 +384,16 @@ Verification commands should follow this shape:
 
 ```bash
 /Users/alexwang0315/scout-fusion/venv/bin/python -m pytest \
+  tests/test_assistant_model_config.py \
   tests/test_assistant_models.py \
   tests/test_assistant_provider.py \
+  tests/test_assistant_pydantic_provider.py \
   tests/test_assistant_context.py \
   tests/test_assistant_api.py \
-  tests/test_assistant_page.py
+  tests/test_assistant_page.py \
+  tests/test_assistant_readiness_check.py
+
+/Users/alexwang0315/scout-fusion/venv/bin/python assistant_readiness_check.py --pretty
 ```
 
 ## Success Criteria
@@ -377,12 +409,23 @@ Milestone 10 is complete when:
 - model output is never written as `ObservedFact`;
 - UI clearly labels assistant answers as read-only model interpretation.
 
-## Open Questions
+## Resolved Implementation Choices
 
-- Should the shared assistant UI live as one reusable static JS module, or be
-  embedded per page until the frontend architecture is consolidated?
-- Should the API route be `/assistant/query` globally, or namespaced under
-  `/admin/assistant/query`?
-- Should Pydantic AI use the existing `sos_agent` model config with a separate
-  agent, or a fully separate provider configuration?
-- Which surface should ship first after the mock provider: debug or pretrip?
+- The first UI shell is embedded per page to match the current static admin
+  convention. A shared JS module can be extracted later without changing the
+  assistant contract.
+- The API route is the global read-only query endpoint `POST /assistant/query`.
+- The Pydantic AI provider uses a separate assistant provider path from
+  `/navigate`, with its own prompt boundary and external cloud/local model
+  configuration.
+- Debug and pretrip are the first UI surfaces. Admin after-action and hardware
+  readiness currently share the typed context/API foundation.
+
+## Next Slice Candidates
+
+- Extract the duplicated static assistant shell into a shared admin JS module
+  once more admin surfaces need the same controls.
+- Add richer after-action evidence selection context to the admin surface while
+  keeping historical IncidentPackage data immutable.
+- Add hardware-readiness fixtures for Pi/provider deployment dry-runs without
+  starting real hardware control.

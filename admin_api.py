@@ -11,6 +11,7 @@ from admin_after_action import ROOT, build_admin_case_view, list_admin_cases
 
 
 DEFAULT_ADMIN_PAGE = ROOT / "docs" / "admin" / "phase1-after-action.html"
+DEFAULT_PRETRIP_ADMIN_PAGE = ROOT / "docs" / "admin" / "phase4-pretrip-planning.html"
 
 
 def create_admin_app(*, incident_store_path: Path | None = None) -> FastAPI:
@@ -28,6 +29,12 @@ def create_admin_router(*, incident_store_path: Path | None = None) -> APIRouter
         if not DEFAULT_ADMIN_PAGE.exists():
             raise HTTPException(status_code=404, detail="Admin page not found")
         return DEFAULT_ADMIN_PAGE.read_text(encoding="utf-8")
+
+    @router.get("/pretrip", response_class=HTMLResponse)
+    def pretrip_admin_page() -> str:
+        if not DEFAULT_PRETRIP_ADMIN_PAGE.exists():
+            raise HTTPException(status_code=404, detail="Pre-trip admin page not found")
+        return DEFAULT_PRETRIP_ADMIN_PAGE.read_text(encoding="utf-8")
 
     @router.get("/cases")
     def cases() -> dict[str, Any]:
