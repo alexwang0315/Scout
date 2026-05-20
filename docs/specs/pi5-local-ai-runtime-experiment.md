@@ -68,6 +68,35 @@ Pi deployment location:
 ~/scout-fusion-runtime/
 ```
 
+## Committed Hardware Experiment Assets
+
+The repo now keeps the Pi/Ollama hardware experiment assets as explicit manual
+operator tools:
+
+- `docker-compose.pi.ai.yml` defines the optional `scout-ollama` service under
+  the `ai-experimental` Compose profile.
+- `tools/pi_ollama_stress.py` is a manual stress probe for an already-running
+  Ollama listener. It prints JSONL diagnostics and does not call Scout APIs.
+
+Safe manual command shape:
+
+```bash
+docker compose -f docker-compose.pi.ai.yml --profile ai-experimental up -d
+/Users/alexwang0315/scout-fusion/venv/bin/python tools/pi_ollama_stress.py \
+  --url http://127.0.0.1:11434/api/generate \
+  --model qwen2.5:0.5b \
+  --duration-s 180 \
+  --workers 4
+```
+
+Boundary:
+
+- not part of the assistant readiness gate;
+- read-only model interpretation only;
+- 不啟動本地模型 from readiness checks;
+- 不呼叫 `/safety/*` mutation;
+- no Scout state writes, no outbound send, and no hardware/provider control.
+
 ## Test 1: Single Prompt Smoke Test
 
 Goal:

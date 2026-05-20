@@ -16,6 +16,10 @@ fixture references. Milestone 10.2 Slice 8 adds a read-only CLI renderer for
 validated optional result/index files. Milestone 10.2 Slice 9 adds an operator
 checklist for the optional manual verification flow. Milestone 10.2 Slice 10
 consolidates the manual Pi/Ollama artifact chain in the cross-surface runbook.
+Milestone 10.2 Slice 11 records the repo-owned Pi/Ollama hardware experiment
+assets, `docker-compose.pi.ai.yml` and `tools/pi_ollama_stress.py`, while
+keeping them under the `ai-experimental` manual hardware prototype profile and
+not part of the assistant readiness gate.
 
 This document defines the cross-surface assistant guardrails that now anchor the
 mock provider, bounded context adapters, read-only API, UI shell, opt-in
@@ -1185,6 +1189,17 @@ Milestone 10.2 Slice 10 cross-surface runbook consolidation is complete when:
   local model listeners, hardware services, transport, or model provider
   switches.
 
+Milestone 10.2 Slice 11 hardware experiment assets are complete when:
+
+- `docker-compose.pi.ai.yml` defines the optional `scout-ollama` service under
+  the `ai-experimental` Compose profile;
+- `tools/pi_ollama_stress.py` is a manual stress probe for an already-running
+  Ollama listener and does not call Scout APIs;
+- the assets are not part of the assistant readiness gate;
+- verification preserves read-only model interpretation, 不啟動本地模型 from
+  readiness checks, 不呼叫 `/safety/*` mutation, no Scout state writes, no
+  outbound send, and no hardware/provider control.
+
 ## Resolved Implementation Choices
 
 - The first UI shell was embedded per page to match the current static admin
@@ -1210,6 +1225,7 @@ Milestone 10.2 Slice 10 cross-surface runbook consolidation is complete when:
 
 ## Next Slice Candidates
 
-After Milestone 10.2 Slice 10, the next step is a commit checkpoint for the
-manual Pi/Ollama guardrail artifacts. Commit/push is an operator decision point,
-so stop for user confirmation before creating git history.
+After Milestone 10.2 Slice 11, the next step is either a longer Pi/Ollama soak
+test record or a fixed-schema offline fallback provider contract. Both should
+remain outside Phase 1 safety authority unless explicitly promoted by a new
+spec decision.

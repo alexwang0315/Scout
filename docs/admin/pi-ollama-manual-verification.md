@@ -358,3 +358,46 @@ Operator steps:
 - 不控制 hardware。
 - 不控制 provider。
 - 不寫 Scout state。
+
+## 13. Milestone 10.2 Slice 11 Hardware Experiment Assets
+
+Milestone 10.2 Slice 11 promotes the local Pi/Ollama hardware experiment assets
+from loose operator files into repo-owned, test-covered artifacts:
+
+- `docker-compose.pi.ai.yml`：optional `scout-ollama` service，必須用
+  `ai-experimental` Compose profile 才會啟動。
+- `tools/pi_ollama_stress.py`：manual stress probe，只連到 already-running
+  Ollama listener，輸出 JSONL latency / temperature / load diagnostics。
+
+Safe manual command shape:
+
+```bash
+docker compose -f docker-compose.pi.ai.yml --profile ai-experimental up -d
+/Users/alexwang0315/scout-fusion/venv/bin/python tools/pi_ollama_stress.py \
+  --url http://127.0.0.1:11434/api/generate \
+  --model qwen2.5:0.5b \
+  --duration-s 180 \
+  --workers 4
+```
+
+Slice 11 boundaries:
+
+- not part of the assistant readiness gate。
+- read-only model interpretation。
+- 不啟動本地模型 from readiness checks。
+- 不呼叫 `/safety/*` mutation。
+- 不呼叫 `/assistant/*`。
+- 不寫 ObservedFact。
+- 不寫 Phase 2 Brain。
+- 不寫 IncidentStore。
+- 不送 outbound message。
+- 不控制 hardware。
+- 不控制 provider。
+- 不寫 Scout state。
+
+Focused verification:
+
+```bash
+/Users/alexwang0315/scout-fusion/venv/bin/python -m pytest \
+  tests/test_pi_ollama_hardware_experiment_assets.py
+```

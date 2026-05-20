@@ -1,0 +1,16 @@
+services:
+  ollama:
+    profiles:
+      - ai-experimental
+    platform: linux/arm64
+    image: ollama/ollama:latest
+    container_name: scout-ollama
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:11434:11434"
+    environment:
+      OLLAMA_HOST: 0.0.0.0:11434
+    volumes:
+      - type: bind
+        source: /data/scout/models/ollama
+        target: /root/.ollama

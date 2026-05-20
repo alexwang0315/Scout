@@ -52,6 +52,9 @@ def test_spec_tracks_slice10_consolidation_and_commit_checkpoint() -> None:
         "manual Pi/Ollama artifact chain",
         "cross-surface runbook",
         "not part of the assistant readiness gate",
-        "After Milestone 10.2 Slice 10",
+        "Milestone 10.2 Slice 11 hardware experiment assets are complete when",
+        "docker-compose.pi.ai.yml",
+        "tools/pi_ollama_stress.py",
+        "After Milestone 10.2 Slice 11",
     ):
         assert token in source
