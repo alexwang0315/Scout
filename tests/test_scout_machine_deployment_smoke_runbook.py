@@ -55,6 +55,22 @@ def test_runbook_documents_step1_environment_and_manual_smoke_ladder() -> None:
         assert token in source
 
 
+def test_runbook_documents_host_side_radio_scan_boundary() -> None:
+    source = read_runbook()
+
+    for token in (
+        "tools/pi_radio_scan_smoke.py",
+        "radio_environment_scan",
+        "/data/scout/providers/radio_scan/manual-smoke.jsonl",
+        "不呼叫 `/safety/observations`",
+        "不寫 IncidentStore",
+        "不寫 ObservedFact",
+        "不寫 Phase 2 Brain",
+        "不控制 Phase 1 safety decision",
+    ):
+        assert token in source
+
+
 def test_runbook_links_focused_local_validation_command() -> None:
     source = read_runbook()
 

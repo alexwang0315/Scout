@@ -209,6 +209,36 @@ Sensor ingestion should preserve raw evidence where possible and derive
 deterministic measurements separately. Interpretations such as fatigue,
 attention, panic, or intent should not be automatic Phase 1 facts.
 
+### Host-Side Radio Scan Tools
+
+The first Pi radio evidence tools live outside the Docker safety runtime:
+
+```text
+wifi_scan_provider.py       -> parses `iw` dBm RSSI and `nmcli` fallback scans
+ble_scan_provider.py        -> parses `btmgmt find` BLE RSSI scans
+radio_scan_provider.py      -> combines Wi-Fi + BLE into one radio_environment_scan
+tools/pi_radio_scan_smoke.py -> read-only Pi host smoke CLI
+```
+
+中文註釋：這些工具是「現場 radio evidence producer」，不是 Phase 1 safety
+evaluator。Wi-Fi scan 比較適合地點/radio fingerprint；BLE scan 比較適合
+proximity / team beacon evidence。BLE 的 LE Random address 不應被當成穩定身份。
+
+Developer smoke command on the Pi host:
+
+```bash
+sudo python3 tools/pi_radio_scan_smoke.py \
+  --wifi-interface wlan0 \
+  --ble-controller hci0 \
+  --ble-duration-seconds 10 \
+  --output-jsonl /data/scout/providers/radio_scan/manual-smoke.jsonl
+```
+
+The output is append-only JSONL when `--output-jsonl` is provided. It may be
+attached later as `server_signal_snapshot` / provider-state evidence, but the
+tool itself must not call `/safety/observations` or write IncidentStore,
+ObservedFact, or Brain records.
+
 ## Phase Boundaries
 
 ### Phase 1
