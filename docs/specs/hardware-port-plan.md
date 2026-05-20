@@ -639,6 +639,45 @@ The index covers:
 Current target state remains `scout-runtime` healthy, image id `761115bf441b`,
 `observations_processed=2`, `checkpoint_hits=1`, and `safety_level=L0_NORMAL`.
 
+## Phase 4 Admin LAN Preview Profile
+
+2026-05-20: Phase 4 pre-trip planning admin gained a separate Scout hardware
+LAN preview profile.
+
+Artifacts:
+
+- `phase4_admin_runtime.py`
+- `phase4_hardware_admin_preview.py`
+- `Dockerfile.pi.admin`
+- `docker-compose.pi.admin.yml`
+- `requirements.pi.admin.txt`
+
+Deployment shape:
+
+- keeps the existing `scout-runtime` service on host port `9099`;
+- runs `scout-phase4-admin` as a separate service, mapping host port `9110` to
+  container port `9099`;
+- serves `/admin/pretrip` through `phase4_admin_runtime:app`;
+- exposes `/health`, `/assistant/status`, and
+  `/phase4/admin-preview/status` for LAN smoke checks from the Mac;
+- stores local admin workspace edits under
+  `/data/scout/admin/pretrip-workspaces`;
+- points local OSM and raster tile cache roots at `/data/scout/osm-tiles` and
+  `/data/scout/raster-tiles`.
+
+Boundaries:
+
+- no Phase 1 field runtime is started by this profile;
+- no `/safety/*` mutation is part of the admin preview profile;
+- mock assistant is read-only and token values are never exposed;
+- live Open-Meteo weather remains opt-in through `SCOUT_WEATHER_API_ENABLED`;
+- no raw DTM, GPX, photo, or large map asset is copied into repo fixtures.
+
+中文註釋：這個 profile 是「硬體上的規劃/admin 預覽服務」，不是現場安全 runtime。
+Mac 可以用 `http://scout.local:9110/admin/pretrip` 觀看與操作 Phase 4 admin；
+真正的 `scout-runtime` 仍留在 `http://scout.local:9099`，避免把 planning UI
+和 field safety runtime 混在同一個部署邊界。
+
 ## Recommended Next Slice
 
 After the manual dry-run package, Docker dry-run gate, GPIO boundary review,

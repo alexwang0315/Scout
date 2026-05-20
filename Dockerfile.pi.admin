@@ -1,0 +1,106 @@
+# syntax=docker/dockerfile:1
+ARG TARGETPLATFORM=linux/arm64
+FROM --platform=$TARGETPLATFORM python:3.12-slim-bookworm
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    SCOUT_DATA_ROOT=/data/scout \
+    SCOUT_RUNTIME_PROFILE=pi-phase4-admin-preview \
+    SCOUT_SAFETY_ENABLED=false \
+    SCOUT_SAFETY_INCIDENT_STORE=/data/scout/incidents \
+    SCOUT_PRETRIP_WORKSPACE_ROOT=/data/scout/admin/pretrip-workspaces \
+    SCOUT_ADMIN_OSM_TILE_CACHE_ROOT=/data/scout/osm-tiles \
+    SCOUT_ADMIN_RASTER_TILE_CACHE_ROOT=/data/scout/raster-tiles \
+    SCOUT_ADMIN_OSM_TILE_FALLBACK=true \
+    SCOUT_ADMIN_RASTER_TILE_FALLBACK=true \
+    SCOUT_AI_ASSISTANT_ENABLED=1 \
+    SCOUT_AI_ASSISTANT_PROVIDER=mock \
+    SCOUT_WEATHER_API_ENABLED=false \
+    SCOUT_WEATHER_API_PROVIDER=open_meteo \
+    SCOUT_PORT=9099 \
+    SCOUT_LOG_LEVEL=info
+
+WORKDIR /app
+
+COPY requirements.pi.admin.txt .
+RUN pip install --no-cache-dir -r requirements.pi.admin.txt
+
+COPY \
+    admin_after_action.py \
+    admin_api.py \
+    admin_basemap_tiles.py \
+    admin_local_raster_tiles.py \
+    admin_map_layers.py \
+    admin_tile_cache_builder.py \
+    admin_tile_proxy.py \
+    admin_weather_overlay.py \
+    assistant_models.py \
+    assistant_provider.py \
+    checkpoint_manager.py \
+    communication_provider.py \
+    communication_tool.py \
+    environment_provider.py \
+    geo_utils.py \
+    go_no_go.py \
+    incident_package.py \
+    incident_store.py \
+    mission_graph.py \
+    mission_models.py \
+    mission_progress.py \
+    offline_map.py \
+    offline_map_models.py \
+    pdr_fallback.py \
+    phase4_admin_runtime.py \
+    pretrip_admin_view.py \
+    pretrip_expert_contribution.py \
+    pretrip_expert_contribution_apply_plan.py \
+    pretrip_models.py \
+    pretrip_review_decision_apply.py \
+    pretrip_review_decision_apply_store.py \
+    pretrip_review_decision_log.py \
+    pretrip_review_decision_store.py \
+    pretrip_review_draft_fixture.py \
+    pretrip_route_note_candidates.py \
+    pretrip_route_note_disposition_store.py \
+    pretrip_route_note_ln_proposals.py \
+    pretrip_route_note_review_options.py \
+    pretrip_route_note_reviewed_assumptions.py \
+    pretrip_workspace_project.py \
+    provider_context.py \
+    recording_policy_runtime.py \
+    replay_runner.py \
+    resource_provider.py \
+    risk_rules.py \
+    route_matching.py \
+    route_progress.py \
+    runtime_artifact_resolution.py \
+    safety_models.py \
+    safety_state_machine.py \
+    ./
+
+COPY docs/admin/phase1-after-action.html ./docs/admin/
+COPY docs/admin/phase4-pretrip-planning.html ./docs/admin/
+COPY docs/admin/scout-assistant-ui.js ./docs/admin/
+
+COPY tests/fixtures/pretrip/projects/chilai_nanhua_day1/ ./tests/fixtures/pretrip/projects/chilai_nanhua_day1/
+COPY tests/fixtures/field_cases/scout_260512_golden.json ./tests/fixtures/field_cases/
+COPY tests/fixtures/maps/scout_260512_overpass_map_context.geojson ./tests/fixtures/maps/
+COPY tests/fixtures/mission_context/scout_260512_field_normal.json ./tests/fixtures/mission_context/
+COPY tests/fixtures/mission_graph/scout_260512_field_mission.json ./tests/fixtures/mission_graph/
+COPY tests/fixtures/risk_rules/scout_260512_field_rules.json ./tests/fixtures/risk_rules/
+COPY tests/fixtures/route_progress/scout_260512_field_config.json ./tests/fixtures/route_progress/
+COPY tests/fixtures/routes/scout_260512_field_route.gpx ./tests/fixtures/routes/
+
+RUN useradd --create-home --uid 1000 scout \
+    && mkdir -p /data/scout/admin/pretrip-workspaces /data/scout/incidents \
+        /data/scout/osm-tiles /data/scout/raster-tiles /data/scout/logs \
+    && chown -R scout:scout /data/scout /app
+
+USER scout
+
+EXPOSE 9099
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+    CMD python -c "import json, urllib.request; r=urllib.request.urlopen('http://127.0.0.1:9099/health', timeout=3); raise SystemExit(0 if json.load(r).get('status') == 'ok' else 1)"
+
+CMD ["python", "-m", "uvicorn", "phase4_admin_runtime:app", "--host", "0.0.0.0", "--port", "9099"]
