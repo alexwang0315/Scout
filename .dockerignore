@@ -48,6 +48,7 @@
 !hardware_readiness_assistant_context.py
 !live_runtime_enablement.py
 !live_runtime_enablement_cli.py
+!live_runtime_soak_check.py
 !pretrip_assistant_context.py
 !runtime_input_admission.py
 !runtime_observation_envelope.py
