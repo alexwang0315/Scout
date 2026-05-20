@@ -70,6 +70,23 @@ def test_status_surface_router_exposes_only_get_read_only_status_route() -> None
     assert blocked_post.status_code == 405
 
 
+def test_status_surface_can_report_separately_mounted_live_transport_routes() -> None:
+    snapshot = build_runtime_stream_status_surface(
+        transport_routes_mounted=True,
+        live_provider_send_allowed=True,
+    )
+    payload = snapshot.model_dump(mode="json")
+
+    assert payload["boundary"]["read_only_surface"] is True
+    assert payload["boundary"]["transport_routes_mounted"] is True
+    assert payload["boundary"]["observation_ingest_allowed"] is True
+    assert payload["boundary"]["stream_control_mutation_allowed"] is True
+    assert payload["boundary"]["live_provider_send_allowed"] is True
+    assert payload["boundary"]["safety_mutation_allowed"] is False
+    assert "POST /runtime/streams/http-push/observations" in payload["boundary"]["route_inventory"]
+    assert "live transport routes are mounted separately" in payload["notes"][0]
+
+
 def test_status_surface_does_not_embed_raw_payloads_or_import_live_transport_api() -> None:
     snapshot = build_runtime_stream_status_surface().model_dump(mode="json")
     serialized = json.dumps(snapshot, ensure_ascii=False, sort_keys=True)
