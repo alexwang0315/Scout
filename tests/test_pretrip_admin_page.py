@@ -14,6 +14,7 @@ def test_pretrip_admin_page_contains_expected_layout_contract():
     assert "Scout Phase 4 Pre-Trip Planning" in html
     assert "html { height: 100%; }" in html
     assert "height: 100vh;" in html
+    assert "max-width: 100vw;" in html
     assert 'src="/admin/scout-assistant-ui.js"' in html
     assert 'id="readinessStrip"' in html
     assert "map frame" not in html.lower()
@@ -22,6 +23,11 @@ def test_pretrip_admin_page_contains_expected_layout_contract():
     assert 'id="jsonPane"' in html
     assert 'id="sectionList"' in html
     assert "grid-template-rows: auto minmax(180px, .95fr) minmax(260px, 1.05fr);" in html
+    assert "grid-template-columns: minmax(0, 1fr) minmax(300px, 360px) minmax(340px, 420px);" in html
+    assert ".detail-body > *," in html
+    assert ".tree > *," in html
+    assert ".assistant-panel > *" in html
+    assert "overflow-wrap: anywhere;" in html
     assert ".assistant-panel" in html
     assert "overflow-y: auto;" in html
     assert "overscroll-behavior: contain;" in html
@@ -137,6 +143,8 @@ def test_pretrip_admin_page_fetches_fixture_backed_read_only_project_api():
     assert 'el("image"' in html
     assert "class: \"osm-tile\"" in html
     assert "function renderWeatherOverlay" in html
+    assert "function weatherOverlayLabel" in html
+    assert "weatherOverlayLabel(cards[0]?.summary || \"Weather evidence pending.\")" in html
     assert "/admin/pretrip/projects/${PROJECT_ID}/weather-overlay" in html
     assert "state.weatherOverlay" in html
     assert "Weather API overlay" in html

@@ -53,6 +53,38 @@ SCOUT_DEBUG_API_ENABLED=1
 | admin after-action | `http://127.0.0.1:9110/admin` | after-action assistant shell rendered with read-only boundary and no action buttons |
 | hardware readiness | `http://127.0.0.1:9110/admin/hardware-readiness` | live read-only Pydantic AI response rendered from fixture-backed provider context, no hardware/provider controls |
 
+## Offline Fallback Responsive Recheck
+
+本次 recheck 使用臨時本機 server，不碰既有 `9110` 程序：
+
+```text
+SCOUT_PORT=9111
+SCOUT_SAFETY_ENABLED=false
+SCOUT_DEBUG_API_ENABLED=1
+SCOUT_AI_ASSISTANT_ENABLED=1
+SCOUT_AI_ASSISTANT_PROVIDER=mock
+```
+
+`/assistant/status` 回報 `provider=mock`、`read_only=true`、
+`model_interpretation=true`、`startup_connection_status=not_checked`，且
+`token_values_exposed=false`。
+
+Browser QA 使用 desktop `1440x1000` 與 mobile `390x844` viewport：
+
+| Check | Result |
+| --- | --- |
+| assistant surfaces | `/admin/debug`、`/admin/pretrip`、`/admin`、`/admin/hardware-readiness` 都有 read-only assistant shell |
+| offline fallback | all surfaces render `Offline fallback`; placeholder is visible when mock provider returns no schema |
+| horizontal overflow | all tested surfaces reported `horizontalOverflowPx=0` on desktop and mobile |
+| pretrip detail tabs | clicking `Post-analysis` changes `aria-selected=true`, title to `Post-analysis overview`, and section count from 14 to 4; clicking back restores `Pre-trip planning overview` |
+| pretrip assistant scroll | desktop `assistantPanel overflowY=auto`, `clientHeight=438`, `scrollHeight=1496`; answer and fallback sections are reachable without changing Scout state |
+| forbidden action buttons | no accept, approve, reject, send, write, mutate, or control buttons appear inside assistant shells |
+| console/page errors | none observed during page load and tab checks |
+
+The recheck is still read-only. It only loads pages and toggles local UI tabs; it
+does not call `/safety/*`, create review decisions, write planning artifacts,
+send outbound messages, start local models, or control hardware/provider state.
+
 ## Screenshots
 
 Initial page smoke:

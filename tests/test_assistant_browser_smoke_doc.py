@@ -41,6 +41,19 @@ def test_browser_smoke_doc_covers_all_assistant_surfaces_and_boundaries() -> Non
         "cloud_only",
         "local_fallback_enabled",
         "token_values_exposed",
+        "Offline Fallback Responsive Recheck",
+        "SCOUT_PORT=9111",
+        "SCOUT_SAFETY_ENABLED=false",
+        "SCOUT_AI_ASSISTANT_PROVIDER=mock",
+        "provider=mock",
+        "startup_connection_status=not_checked",
+        "1440x1000",
+        "390x844",
+        "horizontalOverflowPx=0",
+        "Post-analysis overview",
+        "section count from 14 to 4",
+        "assistantPanel overflowY=auto",
+        "console/page errors",
     ):
         assert token in source
 
