@@ -115,10 +115,15 @@ def test_pretrip_admin_page_fetches_fixture_backed_read_only_project_api():
     assert "OSM_TILE_URL_TEMPLATE" in html
     assert "OSM_PUBLIC_TILE_URL_TEMPLATE" in html
     assert "OSM_LOCAL_TILE_URL_TEMPLATE" in html
+    assert "const OSM_TARGET_ZOOM = 17" in html
+    assert "const OSM_MAX_TILES = 64" in html
     assert "RASTER_LOCAL_TILE_URL_TEMPLATE" in html
     assert "/admin/tiles/osm/{z}/{x}/{y}.png" in html
     assert "/admin/tiles/imagery/{project_id}/{layer_id}/{z}/{x}/{y}.png" in html
     assert "function osmTileTemplate" in html
+    assert "function tileRangeForZoom" in html
+    assert "function tileCountForZoom" in html
+    assert "tileCountForZoom(bounds, zoom) > maxTiles" in html
     assert "function rasterTileTemplate" in html
     assert 'params.get("tileSource")' in html
     assert "https://tile.openstreetmap.org/{z}/{x}/{y}.png" in html

@@ -104,6 +104,7 @@ CORE_PHASE4_PATHS = (
     "pretrip_route_note_review_options.py",
     "pretrip_route_note_reviewed_assumptions.py",
     "admin_basemap_tiles.py",
+    "phase4_live_demo_loader.py",
 )
 
 FOCUSED_PHASE4_TEST_PATHS = (
@@ -199,6 +200,7 @@ FOCUSED_PHASE4_TEST_PATHS = (
     "tests/test_pretrip_route_note_ln_proposals.py",
     "tests/test_pretrip_route_note_review_options.py",
     "tests/test_pretrip_route_note_reviewed_assumptions.py",
+    "tests/test_phase4_live_demo_loader.py",
     "tests/test_phase4_pretrip_release_check.py",
 )
 
@@ -220,6 +222,7 @@ PHASE4_UI_PATHS = (
     "tests/test_admin_tile_cache_builder.py",
     "tests/test_admin_tile_proxy.py",
     "tests/test_admin_weather_overlay.py",
+    "tests/test_phase4_live_demo_loader.py",
     "tests/test_pretrip_admin_view.py",
     "tests/test_pretrip_admin_page.py",
     "tests/test_pretrip_admin_api.py",
@@ -308,6 +311,10 @@ def build_release_check(
     admin_weather_overlay_check = _check_admin_weather_overlay(root)
     checks["admin_weather_overlay"] = admin_weather_overlay_check
     missing_required.extend(admin_weather_overlay_check["missing"])
+
+    phase4_live_demo_check = _check_phase4_live_demo_loader(root)
+    checks["phase4_live_demo_loader"] = phase4_live_demo_check
+    missing_required.extend(phase4_live_demo_check["missing"])
 
     static_boundary_check = _check_core_phase4_static_boundaries(root)
     checks["core_phase4_static_boundaries"] = static_boundary_check
@@ -904,7 +911,12 @@ def _check_admin_map_layer_stack(root: Path) -> dict[str, Any]:
         for fragment in (
             "OSM_TILE_URL_TEMPLATE",
             "OSM_LOCAL_TILE_URL_TEMPLATE",
+            "const OSM_TARGET_ZOOM = 17",
+            "const OSM_MAX_TILES = 64",
             "function osmTileTemplate",
+            "function tileRangeForZoom",
+            "function tileCountForZoom",
+            "tileCountForZoom(bounds, zoom) > maxTiles",
             "/admin/tiles/osm/{z}/{x}/{y}.png",
             "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
             "function renderOsmBasemap",
@@ -1592,6 +1604,7 @@ def _check_admin_weather_overlay(root: Path) -> dict[str, Any]:
         from admin_weather_overlay import (
             build_pretrip_weather_overlay,
             build_weather_api_runtime_status,
+            fetch_open_meteo_weather_snapshot,
         )
         from pretrip_admin_view import build_pretrip_admin_view
     except Exception as exc:
@@ -1622,9 +1635,38 @@ def _check_admin_weather_overlay(root: Path) -> dict[str, Any]:
                 "SCOUT_WEATHER_API_KEY": "release-check-secret",
             }
         )
+        open_meteo_status = build_weather_api_runtime_status(
+            {
+                "SCOUT_WEATHER_API_ENABLED": "true",
+                "SCOUT_WEATHER_API_PROVIDER": "open_meteo",
+            }
+        )
+        live_snapshot = fetch_open_meteo_weather_snapshot(
+            view["route"]["bounds"],
+            fetch_json=lambda _url, _headers: {
+                "current": {
+                    "temperature_2m": 18.2,
+                    "wind_speed_10m": 12.4,
+                    "wind_gusts_10m": 28.0,
+                    "weather_code": 61,
+                    "cloud_cover": 88,
+                },
+                "hourly": {
+                    "precipitation": [0.1, 0.2, 0, 0, 0.3, 0],
+                    "wind_speed_10m": [10, 11, 12, 13, 14, 15],
+                    "wind_gusts_10m": [20, 21, 22, 23, 24, 25],
+                    "visibility": [9000, 8000, 7000, 6000, 5000, 4000],
+                },
+            },
+        )
         overlay = build_pretrip_weather_overlay(
             view["weather"],
             runtime_status=disabled_status,
+        )
+        live_overlay = build_pretrip_weather_overlay(
+            view["weather"],
+            runtime_status=open_meteo_status,
+            live_weather_snapshot=live_snapshot,
         )
     except Exception as exc:
         return {
@@ -1635,7 +1677,7 @@ def _check_admin_weather_overlay(root: Path) -> dict[str, Any]:
 
     source_has_nonstdlib_network = any(
         token in source
-        for token in ("import requests", "requests.", "import httpx", "httpx.", "urlopen")
+        for token in ("import requests", "requests.", "import httpx", "httpx.")
     )
     if overlay.get("status") != "overlay_ready":
         missing.append("admin_weather_overlay_ready")
@@ -1655,6 +1697,16 @@ def _check_admin_weather_overlay(root: Path) -> dict[str, Any]:
         missing.append("admin_weather_overlay_disabled_status")
     if ready_status.ready is not True:
         missing.append("admin_weather_overlay_ready_status")
+    if open_meteo_status.ready is not True:
+        missing.append("admin_weather_overlay_open_meteo_ready_status")
+    if live_overlay.get("provider_mode") != "live_open_meteo_summary":
+        missing.append("admin_weather_overlay_live_provider_mode")
+    if live_overlay.get("raw_payloads_embedded") is not False:
+        missing.append("admin_weather_overlay_live_raw_payloads")
+    if live_overlay.get("external_api_calls_made") is not True:
+        missing.append("admin_weather_overlay_live_external_api_call")
+    if live_overlay.get("live_weather_snapshot", {}).get("request_url_has_secret") is not False:
+        missing.append("admin_weather_overlay_live_request_secret")
     for fragment in (
         "function renderWeatherOverlay",
         "/admin/pretrip/projects/${PROJECT_ID}/weather-overlay",
@@ -1682,7 +1734,91 @@ def _check_admin_weather_overlay(root: Path) -> dict[str, Any]:
         "glyph_count": overlay.get("counts", {}).get("glyph_count"),
         "runtime_disabled_ready": disabled_status.ready,
         "runtime_enabled_ready": ready_status.ready,
+        "runtime_open_meteo_ready": open_meteo_status.ready,
+        "live_provider_mode": live_overlay.get("provider_mode"),
+        "live_external_api_calls_made": live_overlay.get("external_api_calls_made"),
         "source_has_nonstdlib_network": source_has_nonstdlib_network,
+        "missing": missing,
+    }
+
+
+def _check_phase4_live_demo_loader(root: Path) -> dict[str, Any]:
+    try:
+        from phase4_live_demo_loader import prepare_phase4_live_demo
+    except Exception as exc:
+        return {
+            "ok": False,
+            "status": None,
+            "missing": [f"phase4_live_demo_loader_import:{exc}"],
+        }
+
+    missing: list[str] = []
+    try:
+        plan = prepare_phase4_live_demo()
+    except Exception as exc:
+        return {
+            "ok": False,
+            "status": None,
+            "missing": [f"phase4_live_demo_loader_smoke:{exc}"],
+        }
+
+    command = plan.get("server_command", "")
+    urls = plan.get("urls", {})
+    network = plan.get("network_expectations", {})
+    boundaries = plan.get("boundaries", {})
+
+    if plan.get("status") != "ready_to_start":
+        missing.append("phase4_live_demo_loader_status")
+    for fragment in (
+        "SCOUT_AI_ASSISTANT_ENABLED=1",
+        "SCOUT_AI_ASSISTANT_PROVIDER=mock",
+        "SCOUT_WEATHER_API_ENABLED=true",
+        "SCOUT_WEATHER_API_PROVIDER=open_meteo",
+        "SCOUT_SAFETY_ENABLED=false",
+        "-m uvicorn server:app",
+    ):
+        if fragment not in command:
+            missing.append(f"phase4_live_demo_loader_command:{fragment}")
+    for key in (
+        "pretrip_admin",
+        "pretrip_admin_local_tiles",
+        "after_action_admin",
+        "after_action_admin_local_tiles",
+        "assistant_status",
+        "weather_overlay",
+    ):
+        if key not in urls:
+            missing.append(f"phase4_live_demo_loader_url:{key}")
+    if network.get("open_meteo_live_weather_enabled") is not True:
+        missing.append("phase4_live_demo_loader_open_meteo")
+    if network.get("local_osm_proxy_external_fetch_allowed") is not False:
+        missing.append("phase4_live_demo_loader_local_osm_external_fetch")
+    if network.get("external_webhook_send_enabled") is not False:
+        missing.append("phase4_live_demo_loader_external_webhook")
+    if boundaries.get("phase1_runtime_mutation_allowed") is not False:
+        missing.append("phase4_live_demo_loader_phase1_mutation")
+    if boundaries.get("phase2_writeback_allowed") is not False:
+        missing.append("phase4_live_demo_loader_phase2_writeback")
+    if boundaries.get("weather_raw_payloads_embedded") is not False:
+        missing.append("phase4_live_demo_loader_weather_raw_payload")
+
+    return {
+        "ok": not missing,
+        "status": plan.get("status"),
+        "pretrip_admin_url": urls.get("pretrip_admin"),
+        "assistant_status_url": urls.get("assistant_status"),
+        "weather_overlay_url": urls.get("weather_overlay"),
+        "open_meteo_live_weather_enabled": network.get(
+            "open_meteo_live_weather_enabled"
+        ),
+        "local_osm_proxy_external_fetch_allowed": network.get(
+            "local_osm_proxy_external_fetch_allowed"
+        ),
+        "phase1_runtime_mutation_allowed": boundaries.get(
+            "phase1_runtime_mutation_allowed"
+        ),
+        "phase2_writeback_allowed": boundaries.get("phase2_writeback_allowed"),
+        "weather_raw_payloads_embedded": boundaries.get("weather_raw_payloads_embedded"),
         "missing": missing,
     }
 
@@ -1705,6 +1841,7 @@ def _check_core_phase4_static_boundaries(root: Path) -> dict[str, Any]:
     }
     allowed_calls_by_file = {
         "admin_tile_cache_builder.py": {"urlopen"},
+        "admin_weather_overlay.py": {"urlopen"},
         "runtime_load_dry_run.py": {"MissionGraphRuntime"},
         "runtime_activation_loader.py": {"SafetyRuntimeSession"},
         "runtime_remote_provider_live_adapter.py": {"urlopen"},
@@ -10314,6 +10451,9 @@ def _check_pretrip_implementation_status(root: Path) -> dict[str, Any]:
         "4.5AN",
         "4.5AO",
         "4.5AP",
+        "4.5AQ",
+        "4.5AR",
+        "4.5AS",
     }
     implemented = {
         key
@@ -10378,6 +10518,7 @@ def _check_pretrip_implementation_status(root: Path) -> dict[str, Any]:
         "tests/test_runtime_remote_provider_external_demo_bundle.py",
         "tests/test_admin_tile_proxy.py",
         "tests/test_admin_weather_overlay.py",
+        "tests/test_phase4_live_demo_loader.py",
         "tests/test_admin_tile_cache_builder.py",
         "tests/test_admin_local_raster_source.py",
         "tests/test_admin_local_raster_tiles.py",
@@ -11085,6 +11226,41 @@ def _check_pretrip_implementation_status(root: Path) -> dict[str, Any]:
     ):
         if check_name not in milestone_45ap_coverage.get("check_names", []):
             missing.append(f"implementation_status_milestone_4_5ap_coverage:{check_name}")
+
+    milestone_45aq = by_id.get("4.5AQ", {})
+    milestone_45aq_coverage = milestone_45aq.get("release_check_coverage", {})
+    if milestone_45aq.get("title") != "Crisp OSM Basemap Zoom Selection":
+        missing.append("implementation_status_milestone_4_5aq_crisp_osm_zoom")
+    for check_name in (
+        "admin_basemap_renderer",
+        "admin_map_layer_stack",
+        "focused_phase4_tests",
+    ):
+        if check_name not in milestone_45aq_coverage.get("check_names", []):
+            missing.append(f"implementation_status_milestone_4_5aq_coverage:{check_name}")
+
+    milestone_45ar = by_id.get("4.5AR", {})
+    milestone_45ar_coverage = milestone_45ar.get("release_check_coverage", {})
+    if milestone_45ar.get("title") != "Live Weather API Overlay Opt-In":
+        missing.append("implementation_status_milestone_4_5ar_live_weather_opt_in")
+    for check_name in (
+        "admin_weather_overlay",
+        "pretrip_admin_ui",
+        "focused_phase4_tests",
+    ):
+        if check_name not in milestone_45ar_coverage.get("check_names", []):
+            missing.append(f"implementation_status_milestone_4_5ar_coverage:{check_name}")
+
+    milestone_45as = by_id.get("4.5AS", {})
+    milestone_45as_coverage = milestone_45as.get("release_check_coverage", {})
+    if milestone_45as.get("title") != "Phase 4 Live Demo Loader":
+        missing.append("implementation_status_milestone_4_5as_live_demo_loader")
+    for check_name in (
+        "phase4_live_demo_loader",
+        "focused_phase4_tests",
+    ):
+        if check_name not in milestone_45as_coverage.get("check_names", []):
+            missing.append(f"implementation_status_milestone_4_5as_coverage:{check_name}")
 
     return {
         "ok": not missing,

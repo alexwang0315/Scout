@@ -808,6 +808,10 @@
     const OSM_PUBLIC_TILE_URL_TEMPLATE = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
     const OSM_LOCAL_TILE_URL_TEMPLATE = `${apiBase()}/admin/tiles/osm/{z}/{x}/{y}.png`;
     const OSM_TILE_URL_TEMPLATE = OSM_PUBLIC_TILE_URL_TEMPLATE;
+    const OSM_TARGET_ZOOM = 17;
+    const OSM_MAX_TILES = 64;
+    const OSM_MIN_ZOOM = 8;
+    const OSM_MAX_ZOOM = 20;
     const RASTER_LOCAL_TILE_URL_TEMPLATE = `${apiBase()}/admin/tiles/imagery/{project_id}/{layer_id}/{z}/{x}/{y}.png`;
     const OSM_ATTRIBUTION = "OpenStreetMap contributors";
     const state = { view: null, projected: null, selected: null };
@@ -897,19 +901,27 @@
         .replace("{x}", x)
         .replace("{y}", y);
     }
-    function chooseOsmZoom(bounds, maxTiles = 32) {
-      const span = Math.max(bounds.east - bounds.west, bounds.north - bounds.south, 0.000001);
-      let zoom = clamp(Math.floor(Math.log2(360 / span)) - 2, 10, 15);
-      while (zoom > 8 && osmTileCoverage(bounds, zoom).length > maxTiles) zoom -= 1;
+    function tileRangeForZoom(bounds, zoom) {
+      const maxIndex = (2 ** zoom) - 1;
+      return {
+        xMin: clamp(lonToTileX(bounds.west, zoom), 0, maxIndex),
+        xMax: clamp(lonToTileX(bounds.east, zoom), 0, maxIndex),
+        yMin: clamp(latToTileY(bounds.north, zoom), 0, maxIndex),
+        yMax: clamp(latToTileY(bounds.south, zoom), 0, maxIndex)
+      };
+    }
+    function tileCountForZoom(bounds, zoom) {
+      const range = tileRangeForZoom(bounds, zoom);
+      return (range.xMax - range.xMin + 1) * (range.yMax - range.yMin + 1);
+    }
+    function chooseOsmZoom(bounds, maxTiles = OSM_MAX_TILES) {
+      let zoom = clamp(OSM_TARGET_ZOOM, OSM_MIN_ZOOM, OSM_MAX_ZOOM);
+      while (zoom > OSM_MIN_ZOOM && tileCountForZoom(bounds, zoom) > maxTiles) zoom -= 1;
       return zoom;
     }
     function osmTileCoverage(bounds, zoom = null) {
       const z = zoom ?? chooseOsmZoom(bounds);
-      const maxIndex = (2 ** z) - 1;
-      const xMin = clamp(lonToTileX(bounds.west, z), 0, maxIndex);
-      const xMax = clamp(lonToTileX(bounds.east, z), 0, maxIndex);
-      const yMin = clamp(latToTileY(bounds.north, z), 0, maxIndex);
-      const yMax = clamp(latToTileY(bounds.south, z), 0, maxIndex);
+      const {xMin, xMax, yMin, yMax} = tileRangeForZoom(bounds, z);
       const tiles = [];
       for (let x = xMin; x <= xMax; x += 1) {
         for (let y = yMin; y <= yMax; y += 1) {

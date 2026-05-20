@@ -214,6 +214,34 @@ def test_current_chilai_pretrip_release_check_passes():
     assert summary["checks"]["admin_weather_overlay"]["glyph_count"] == 2
     assert summary["checks"]["admin_weather_overlay"]["runtime_disabled_ready"] is False
     assert summary["checks"]["admin_weather_overlay"]["runtime_enabled_ready"] is True
+    assert summary["checks"]["admin_weather_overlay"]["runtime_open_meteo_ready"] is True
+    assert summary["checks"]["admin_weather_overlay"]["live_provider_mode"] == (
+        "live_open_meteo_summary"
+    )
+    assert (
+        summary["checks"]["admin_weather_overlay"]["live_external_api_calls_made"]
+        is True
+    )
+    assert summary["checks"]["phase4_live_demo_loader"]["status"] == "ready_to_start"
+    assert summary["checks"]["phase4_live_demo_loader"]["pretrip_admin_url"] == (
+        "http://127.0.0.1:9099/admin/pretrip"
+    )
+    assert (
+        summary["checks"]["phase4_live_demo_loader"][
+            "open_meteo_live_weather_enabled"
+        ]
+        is True
+    )
+    assert (
+        summary["checks"]["phase4_live_demo_loader"][
+            "local_osm_proxy_external_fetch_allowed"
+        ]
+        is False
+    )
+    assert (
+        summary["checks"]["phase4_live_demo_loader"]["phase1_runtime_mutation_allowed"]
+        is False
+    )
     assert summary["checks"]["fixture_boundary"]["raw_files"] == []
     assert summary["checks"]["route_comparison"]["classification"] == "comparison_only"
     assert summary["checks"]["route_comparison"]["bbox_overlaps"] is True
@@ -2343,6 +2371,9 @@ def test_current_chilai_pretrip_release_check_passes():
         "4.5AN",
         "4.5AO",
         "4.5AP",
+        "4.5AQ",
+        "4.5AR",
+        "4.5AS",
     ]
     assert summary["checks"]["pretrip_implementation_status"]["not_started_milestones"] == []
     assert summary["checks"]["pretrip_implementation_status"]["runtime_mutation_allowed"] is False
@@ -2351,7 +2382,7 @@ def test_current_chilai_pretrip_release_check_passes():
     assert summary["checks"]["pretrip_implementation_status"]["ui_scope"] == (
         "fixture_backed_read_only_admin_preview"
     )
-    assert summary["checks"]["pretrip_implementation_status"]["focused_suite_test_count"] == 93
+    assert summary["checks"]["pretrip_implementation_status"]["focused_suite_test_count"] == 94
     assert "source.joyhike.main_site" in summary["checks"]["pretrip_source_registry"]["source_ids"]
     assert "source.joyhike.blog" in summary["checks"]["pretrip_source_registry"]["source_ids"]
     assert "source.ptt.sunriver_timing" in summary["checks"]["pretrip_source_registry"]["source_ids"]

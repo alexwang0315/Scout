@@ -199,6 +199,51 @@ def test_pretrip_project_weather_overlay_api_returns_summary_only_contract():
     assert payload["counts"]["glyph_count"] == 2
 
 
+def test_pretrip_project_weather_overlay_api_can_use_live_open_meteo_summary(
+    monkeypatch,
+):
+    def fake_snapshot(route_bounds):
+        assert route_bounds["min_lat"] < route_bounds["max_lat"]
+        return {
+            "artifact_kind": "open_meteo_weather_snapshot",
+            "status": "live_summary_ready",
+            "provider": "open_meteo",
+            "source_docs_url": "https://open-meteo.com/en/docs",
+            "request_url_has_secret": False,
+            "coordinate": {"latitude": 24.050623, "longitude": 121.24558},
+            "current": {
+                "temperature_2m_c": 18.2,
+                "wind_speed_10m_kmh": 12.4,
+                "wind_gusts_10m_kmh": 28.0,
+                "weather_code": 61,
+                "cloud_cover_pct": 88,
+            },
+            "next_6h": {"precipitation_mm": 0.6},
+            "raw_payloads_embedded": False,
+            "external_api_calls_made": True,
+            "authoritative_weather_computed": False,
+            "human_review_required": True,
+        }
+
+    monkeypatch.setenv("SCOUT_WEATHER_API_ENABLED", "true")
+    monkeypatch.setenv("SCOUT_WEATHER_API_PROVIDER", "open_meteo")
+    monkeypatch.setattr("admin_api.fetch_open_meteo_weather_snapshot", fake_snapshot)
+    client = TestClient(create_admin_app())
+
+    response = client.get(f"/admin/pretrip/projects/{PROJECT_ID}/weather-overlay")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["provider_mode"] == "live_open_meteo_summary"
+    assert payload["external_api_calls_made"] is True
+    assert payload["authoritative_weather_computed"] is False
+    assert payload["raw_payloads_embedded"] is False
+    assert payload["api_runtime_status"]["provider"] == "open_meteo"
+    assert payload["api_runtime_status"]["ready"] is True
+    assert payload["live_weather_snapshot"]["request_url_has_secret"] is False
+    assert "request_url" not in payload["live_weather_snapshot"]
+
+
 def test_admin_osm_tile_proxy_api_returns_local_offline_fallback_tile():
     client = TestClient(create_admin_app())
 

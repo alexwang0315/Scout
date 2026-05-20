@@ -100,6 +100,7 @@ PHASE4_FOCUSED_SUITE_COMMAND = (
     "tests/test_pretrip_route_note_ln_proposals.py "
     "tests/test_pretrip_route_note_review_options.py "
     "tests/test_pretrip_route_note_reviewed_assumptions.py "
+    "tests/test_phase4_live_demo_loader.py "
     "tests/test_phase4_pretrip_release_check.py"
 )
 PHASE4_RELEASE_CHECK_COMMAND = (
@@ -2384,6 +2385,93 @@ _MILESTONES: tuple[dict[str, Any], ...] = (
             "The after-action SVG map now uses the same local raster imagery tile renderer under the OSM basemap.",
             "The renderer reads the imagery tile URL template from the shared map layer contract and keeps the layer toggleable.",
             "Missing scout_260512 imagery tiles resolve through the local transparent fallback endpoint, keeping raw rasters out of repo fixtures.",
+        ],
+    },
+    {
+        "milestone": "4.5AQ",
+        "title": "Crisp OSM Basemap Zoom Selection",
+        "implementation_status": "implemented",
+        "modules": [
+            "admin_basemap_tiles.py",
+            "docs/admin/phase4-pretrip-planning.html",
+            "docs/admin/phase1-after-action.html",
+            "phase4_pretrip_release_check.py",
+        ],
+        "tests": [
+            "tests/test_admin_basemap_tiles.py",
+            "tests/test_pretrip_admin_page.py",
+            "tests/test_admin_after_action.py",
+            "tests/test_phase4_pretrip_release_check.py",
+            "tests/test_pretrip_implementation_status.py",
+        ],
+        "fixture_refs": [
+            "tests/fixtures/pretrip/projects/chilai_nanhua_day1/project.json",
+            "tests/fixtures/field_cases/scout_260512_field_golden.json",
+        ],
+        "release_check_coverage": _release_check(
+            "admin_basemap_renderer",
+            "admin_map_layer_stack",
+            "focused_phase4_tests",
+        ),
+        "notes": [
+            "OSM basemap selection now targets zoom 17 and only steps down when the map would exceed 64 tiles.",
+            "The pretrip and after-action static SVG renderers use tile-count based zoom selection instead of stretching a low-zoom tile across the viewport.",
+            "This keeps live-demo basemaps readable while preserving a bounded public/local tile request budget.",
+        ],
+    },
+    {
+        "milestone": "4.5AR",
+        "title": "Live Weather API Overlay Opt-In",
+        "implementation_status": "implemented",
+        "modules": [
+            "admin_weather_overlay.py",
+            "admin_api.py",
+            "phase4_pretrip_release_check.py",
+        ],
+        "tests": [
+            "tests/test_admin_weather_overlay.py",
+            "tests/test_pretrip_admin_api.py",
+            "tests/test_phase4_pretrip_release_check.py",
+            "tests/test_pretrip_implementation_status.py",
+        ],
+        "fixture_refs": [
+            "tests/fixtures/pretrip/projects/chilai_nanhua_day1/project.json",
+        ],
+        "release_check_coverage": _release_check(
+            "admin_weather_overlay",
+            "pretrip_admin_ui",
+            "focused_phase4_tests",
+        ),
+        "notes": [
+            "The Weather API layer can opt in to Open-Meteo live summary mode through environment configuration.",
+            "The default admin overlay remains fixture-backed and performs no external API call unless explicitly enabled.",
+            "Live weather output is summary-only, keeps raw payloads out of the response, and remains human-review-required.",
+        ],
+    },
+    {
+        "milestone": "4.5AS",
+        "title": "Phase 4 Live Demo Loader",
+        "implementation_status": "implemented",
+        "modules": [
+            "phase4_live_demo_loader.py",
+            "phase4_pretrip_release_check.py",
+        ],
+        "tests": [
+            "tests/test_phase4_live_demo_loader.py",
+            "tests/test_phase4_pretrip_release_check.py",
+            "tests/test_pretrip_implementation_status.py",
+        ],
+        "fixture_refs": [
+            "tests/fixtures/pretrip/projects/chilai_nanhua_day1/project.json",
+        ],
+        "release_check_coverage": _release_check(
+            "phase4_live_demo_loader",
+            "focused_phase4_tests",
+        ),
+        "notes": [
+            "The live demo loader prints a repeatable server command for the pretrip admin, after-action admin, mock assistant, and live weather overlay.",
+            "The plan names public OSM, local tile proxy, Open-Meteo, and webhook network expectations explicitly.",
+            "The demo boundary disables safety runtime mutation and keeps fixture writeback disabled.",
         ],
     },
 )
