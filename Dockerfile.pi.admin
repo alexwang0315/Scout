@@ -13,6 +13,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     SCOUT_ADMIN_RASTER_TILE_CACHE_ROOT=/data/scout/raster-tiles \
     SCOUT_ADMIN_OSM_TILE_FALLBACK=true \
     SCOUT_ADMIN_RASTER_TILE_FALLBACK=true \
+    SCOUT_ADMIN_AUTH_REQUIRED=true \
+    SCOUT_ADMIN_BASIC_USERNAME=scout-admin \
+    SCOUT_ADMIN_ACCESS_TOKEN_FILE=/data/scout/admin/secrets/phase4-admin-token \
     SCOUT_AI_ASSISTANT_ENABLED=1 \
     SCOUT_AI_ASSISTANT_PROVIDER=mock \
     SCOUT_WEATHER_API_ENABLED=false \
@@ -93,7 +96,8 @@ COPY tests/fixtures/routes/scout_260512_field_route.gpx ./tests/fixtures/routes/
 
 RUN useradd --create-home --uid 1000 scout \
     && mkdir -p /data/scout/admin/pretrip-workspaces /data/scout/incidents \
-        /data/scout/osm-tiles /data/scout/raster-tiles /data/scout/logs \
+        /data/scout/admin/secrets /data/scout/osm-tiles /data/scout/raster-tiles \
+        /data/scout/logs \
     && chown -R scout:scout /data/scout /app
 
 USER scout

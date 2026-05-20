@@ -30,6 +30,9 @@ def prepare_phase4_hardware_admin_preview(
         "SCOUT_PRETRIP_WORKSPACE_ROOT": "/data/scout/admin/pretrip-workspaces",
         "SCOUT_ADMIN_OSM_TILE_CACHE_ROOT": "/data/scout/osm-tiles",
         "SCOUT_ADMIN_RASTER_TILE_CACHE_ROOT": "/data/scout/raster-tiles",
+        "SCOUT_ADMIN_AUTH_REQUIRED": "true",
+        "SCOUT_ADMIN_BASIC_USERNAME": "scout-admin",
+        "SCOUT_ADMIN_ACCESS_TOKEN_FILE": "/data/scout/admin/secrets/phase4-admin-token",
     }
     return {
         "artifact_kind": "phase4_hardware_admin_preview_plan",
@@ -55,6 +58,11 @@ def prepare_phase4_hardware_admin_preview(
             "preview_status": f"{base_url}/phase4/admin-preview/status",
         },
         "operator_commands": {
+            "create_token": (
+                "mkdir -p /data/scout/admin/secrets && "
+                "openssl rand -base64 32 > /data/scout/admin/secrets/phase4-admin-token "
+                "&& chmod 600 /data/scout/admin/secrets/phase4-admin-token"
+            ),
             "build": f"docker compose -f {COMPOSE_FILE} build scout-phase4-admin",
             "start": f"docker compose -f {COMPOSE_FILE} up -d scout-phase4-admin",
             "logs": f"docker compose -f {COMPOSE_FILE} logs -f scout-phase4-admin",
@@ -76,6 +84,8 @@ def prepare_phase4_hardware_admin_preview(
         },
         "boundaries": {
             "does_not_replace_pi_runtime_service": True,
+            "admin_auth_required": True,
+            "admin_token_value_embedded": False,
             "phase1_field_runtime_started": False,
             "phase1_runtime_mutation_allowed": False,
             "phase2_writeback_allowed": False,
