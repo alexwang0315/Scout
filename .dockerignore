@@ -57,6 +57,7 @@
 !runtime_remote_provider_payload_composer.py
 !runtime_remote_provider_policy.py
 !runtime_remote_provider_send_queue.py
+!runtime_debug_models.py
 !runtime_stream_controls.py
 !runtime_stream_policy.py
 !runtime_stream_status_surface.py
