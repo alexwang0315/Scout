@@ -32,7 +32,12 @@ COPY requirements.pi.live.txt .
 RUN pip install --no-cache-dir -r requirements.pi.live.txt
 
 COPY \
+    admin_after_action.py \
     admin_assistant_context.py \
+    admin_basemap_tiles.py \
+    admin_local_raster_tiles.py \
+    admin_map_layers.py \
+    admin_tile_proxy.py \
     assistant_api.py \
     assistant_context.py \
     assistant_model_config.py \
@@ -84,6 +89,7 @@ COPY \
     runtime_remote_provider_payload_composer.py \
     runtime_remote_provider_policy.py \
     runtime_remote_provider_send_queue.py \
+    runtime_debug_models.py \
     runtime_stream_controls.py \
     runtime_stream_policy.py \
     runtime_stream_status_surface.py \
