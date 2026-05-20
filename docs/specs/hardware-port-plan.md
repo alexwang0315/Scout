@@ -525,14 +525,35 @@ Not run:
 - no hardware provider control;
 - no outbound/SOS/SMS/satellite send.
 
+## Fixture Observation Smoke Status
+
+2026-05-20: an operator-approved fixture `POST /safety/observations` smoke was
+run against the deployed `scout-runtime`.
+
+Completed:
+
+- preserved `SCOUT_ENABLE_LIVE_HARDWARE=0`, `SCOUT_ENABLE_AI_INFERENCE=0`,
+  `SCOUT_ENABLE_LOCAL_MODEL=0`, and `SCOUT_EVENT_BUS=none`;
+- accepted one fixture observation;
+- moved `observations_processed` from `0` to `1`;
+- kept `safety_level=L0_NORMAL`;
+- returned no incident ids and no stored incident paths;
+- produced no new incident files under `/data/scout/incidents`.
+
+Limitation:
+
+- the current manual fixture uses hardware-export style keys, so this validates
+  runtime ingest plumbing rather than route matching or capability availability.
+
 ## Recommended Next Slice
 
 After the manual dry-run package, Docker dry-run gate, GPIO boundary review,
 dirty-worktree cleanup plan, Scout machine read-only smoke, and runtime
-deployment takeover, the next slice is one of two bounded tracks:
+deployment takeover, and fixture observation smoke, the next slice is one of two
+bounded tracks:
 
-1. add an operator-approved fixture observation smoke with explicit rollback
-   criteria;
+1. upgrade the hardware smoke fixture to canonical SensorLog keys, then run a
+   route-aware local dry-run before any new target mutation;
 2. stabilize Phase 4 dirty worktree groups one at a time.
 
 Deliverables:

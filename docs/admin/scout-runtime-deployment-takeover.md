@@ -106,3 +106,22 @@ Rollback should be followed by the same read-only probes:
 - `GET /health`
 - `GET /runtime/status`
 - `GET /providers/status`
+
+## Follow-Up Fixture Observation Smoke
+
+2026-05-20: an operator-approved fixture `POST /safety/observations` smoke was
+run after deployment takeover.
+
+Result:
+
+- `observations_processed` moved from `0` to `1`;
+- `safety_level` stayed `L0_NORMAL`;
+- no incident ids or stored incident paths were returned;
+- no new files appeared in `/data/scout/incidents`;
+- no outbound, local model, live hardware, runtime stream, or provider send path
+  was used.
+
+Detailed evidence:
+
+- `/data/scout/deployments/fixture-observation-20260520T033354Z`
+- `docs/admin/scout-runtime-fixture-observation-smoke.md`
