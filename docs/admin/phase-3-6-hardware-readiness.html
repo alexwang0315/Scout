@@ -1,0 +1,573 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Scout Hardware Readiness</title>
+  <link rel="icon" href="data:,">
+  <style>
+    :root {
+      --bg: #101314;
+      --surface: #181d20;
+      --panel: #20272b;
+      --border: #354044;
+      --text: #edf2f3;
+      --muted: #a5b0b4;
+      --accent: #4fb7a6;
+      --warn: #e0ad4f;
+      --bad: #da6b62;
+      --ok: #74b66f;
+      --focus: #8ab4f8;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    h1, h2, h3, p { margin: 0; }
+    h1 { font-size: 18px; font-weight: 680; letter-spacing: 0; }
+    h2 { font-size: 14px; font-weight: 680; letter-spacing: 0; }
+    h3 { font-size: 13px; font-weight: 680; letter-spacing: 0; }
+    button, textarea { font: inherit; }
+
+    .shell {
+      display: grid;
+      grid-template-columns: minmax(460px, 1fr) minmax(360px, 440px);
+      min-height: 100vh;
+    }
+
+    .main,
+    .side {
+      min-width: 0;
+      padding: 18px;
+    }
+
+    .main {
+      display: grid;
+      grid-template-rows: auto auto minmax(0, 1fr);
+      gap: 14px;
+    }
+
+    .side {
+      border-left: 1px solid var(--border);
+      background: var(--surface);
+      overflow: auto;
+    }
+
+    .toolbar,
+    .panel,
+    .assistant-panel {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--panel);
+    }
+
+    .toolbar {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 14px;
+      align-items: center;
+    }
+
+    .meta,
+    .hint,
+    .assistant-status {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .summary-grid,
+    .provider-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .metric,
+    .provider-card,
+    .assistant-field,
+    .assistant-answer,
+    .assistant-limitations,
+    .assistant-sources,
+    .assistant-control {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px;
+      background: #151a1d;
+    }
+
+    .metric span,
+    .provider-card span,
+    .assistant-field span {
+      display: block;
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .metric strong,
+    .provider-card strong,
+    .assistant-field strong,
+    .assistant-field small {
+      display: block;
+      margin-top: 4px;
+      overflow-wrap: anywhere;
+    }
+
+    .provider-card {
+      cursor: pointer;
+      text-align: left;
+      color: var(--text);
+    }
+
+    .provider-card.is-selected {
+      border-color: var(--focus);
+      box-shadow: inset 0 0 0 1px var(--focus);
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      width: fit-content;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 3px 8px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .pill.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 45%, var(--border)); }
+    .pill.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 45%, var(--border)); }
+    .pill.bad { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 45%, var(--border)); }
+
+    .list {
+      display: grid;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .assistant-panel {
+      display: grid;
+      gap: 12px;
+      padding: 14px;
+    }
+
+    .assistant-head {
+      display: flex;
+      align-items: start;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .assistant-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .assistant-control {
+      display: grid;
+      gap: 8px;
+    }
+
+    .assistant-question {
+      width: 100%;
+      min-height: 74px;
+      resize: vertical;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: #101314;
+      color: var(--text);
+      padding: 9px 10px;
+    }
+
+    .assistant-actions {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .assistant-button,
+    .assistant-prompts button {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--panel);
+      color: var(--text);
+      padding: 8px 10px;
+      cursor: pointer;
+    }
+
+    .assistant-button:hover,
+    .assistant-prompts button:hover {
+      border-color: var(--focus);
+    }
+
+    .assistant-prompts,
+    .assistant-list {
+      display: grid;
+      gap: 6px;
+      margin: 8px 0 0;
+      padding-left: 18px;
+    }
+
+    .assistant-prompts {
+      padding-left: 0;
+      list-style: none;
+    }
+
+    .assistant-answer p,
+    .assistant-list li {
+      overflow-wrap: anywhere;
+    }
+
+    @media (max-width: 960px) {
+      .shell { grid-template-columns: 1fr; }
+      .side { border-left: 0; border-top: 1px solid var(--border); }
+      .summary-grid,
+      .provider-grid,
+      .assistant-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <main class="main">
+      <header class="toolbar">
+        <div>
+          <h1>Scout Hardware Readiness</h1>
+          <p class="meta">fixture-backed Pi/provider dry-run visibility; no live hardware control.</p>
+        </div>
+        <span class="pill warn">read-only readiness surface</span>
+      </header>
+
+      <section class="summary-grid" aria-label="Hardware readiness summary">
+        <div class="metric"><span>Providers</span><strong id="providerCount">0</strong></div>
+        <div class="metric"><span>Degraded</span><strong id="degradedProviderCount">0</strong></div>
+        <div class="metric"><span>Replay Events</span><strong id="replayEventCount">0</strong></div>
+        <div class="metric"><span>Mock Queue</span><strong id="mockMessageCount">0</strong></div>
+      </section>
+
+      <section class="panel" aria-label="Provider readiness list">
+        <div class="toolbar">
+          <div>
+            <h2>Provider Health</h2>
+            <p class="hint">Select a provider before asking the assistant.</p>
+          </div>
+          <span id="selectedProviderLabel" class="pill">none selected</span>
+        </div>
+        <div id="providerGrid" class="provider-grid"></div>
+      </section>
+
+      <section class="panel" aria-label="Read-only readiness evidence">
+        <div class="toolbar">
+          <div>
+            <h2>Readiness Evidence</h2>
+            <p class="hint">Sample replay, runtime debug events, and mock transport queue are explanatory only.</p>
+          </div>
+        </div>
+        <div id="evidenceList" class="list"></div>
+      </section>
+    </main>
+
+    <aside class="side">
+      <!-- assistant-shell:start -->
+      <article id="assistantPanel" class="assistant-panel" data-assistant-surface="hardware_readiness" data-assistant-boundary="read-only model interpretation" aria-label="Read-only hardware readiness assistant">
+        <div class="assistant-head">
+          <div>
+            <h2>Hardware Readiness Assistant</h2>
+            <p class="meta">read-only model interpretation over fixture-backed readiness context.</p>
+          </div>
+          <span class="pill">surface: hardware_readiness</span>
+        </div>
+        <div class="assistant-grid">
+          <div class="assistant-field">
+            <span>Surface</span>
+            <strong>hardware readiness assistant</strong>
+          </div>
+          <div class="assistant-field">
+            <span>Read-only boundary</span>
+            <strong>read-only model interpretation</strong>
+          </div>
+          <div class="assistant-field">
+            <span>Provider</span>
+            <strong id="assistantProviderStatus">checking provider status</strong>
+            <small id="assistantProviderStatusDetail">No token value is shown.</small>
+          </div>
+          <div class="assistant-field">
+            <span>Context</span>
+            <strong>fixture-backed provider dry-run</strong>
+          </div>
+        </div>
+        <section class="assistant-sources" aria-label="Assistant suggested questions">
+          <h3>Suggested questions</h3>
+          <p class="meta">Suggestions follow selected provider readiness context.</p>
+          <ul id="assistantPromptSuggestions" class="assistant-prompts" aria-label="Suggested assistant questions">
+            <li><button type="button" data-assistant-question="Why is this provider degraded?">Why is this provider degraded?</button></li>
+            <li><button type="button" data-assistant-question="What dry-run evidence supports this readiness state?">What dry-run evidence supports this readiness state?</button></li>
+            <li><button type="button" data-assistant-question="What remains blocked before live hardware?">What remains blocked before live hardware?</button></li>
+          </ul>
+        </section>
+        <section class="assistant-control" aria-label="Ask assistant">
+          <label for="assistantQuestionInput">Question</label>
+          <textarea id="assistantQuestionInput" class="assistant-question" rows="3">Why is this provider degraded?</textarea>
+          <div class="assistant-actions">
+            <button id="assistantAskButton" class="assistant-button" type="button">Ask read-only assistant</button>
+            <span id="assistantStatus" class="assistant-status">Assistant query is read-only and uses fixture-backed readiness context.</span>
+          </div>
+        </section>
+        <section class="assistant-answer" aria-label="Assistant answer">
+          <h3>Answer</h3>
+          <p id="assistantAnswerText">This shell explains provider health, sample replay, runtime debug events, and mock transport queue without controlling hardware or providers.</p>
+        </section>
+        <section class="assistant-sources" aria-label="Assistant context transparency">
+          <h3>Context</h3>
+          <ul id="assistantContextList" class="assistant-list">
+            <li>surface: hardware_readiness</li>
+            <li>selected_artifact_id: selected provider</li>
+            <li>provider status hides token values</li>
+          </ul>
+        </section>
+        <section class="assistant-limitations" aria-label="Assistant limitations">
+          <h3>Limitations</h3>
+          <ul id="assistantLimitationsList" class="assistant-list">
+            <li>No hardware control or provider control.</li>
+            <li>No real SOS, SMS, satellite, or outbound transport.</li>
+            <li>No Pi, Docker, k3s, MQTT, NATS, Coral, or Jetson deployment is started.</li>
+            <li>No Phase 1 runtime or Phase 2 Brain state is changed.</li>
+          </ul>
+        </section>
+        <section class="assistant-sources" aria-label="Assistant sources">
+          <h3>Sources</h3>
+          <ul id="assistantSourcesList" class="assistant-list">
+            <li>provider health fixture</li>
+            <li>sample replay timeline</li>
+            <li>runtime debug event fixture</li>
+            <li>mock transport queue</li>
+          </ul>
+        </section>
+      </article>
+      <!-- assistant-shell:end -->
+    </aside>
+  </div>
+
+  <script src="/admin/scout-assistant-ui.js"></script>
+  <script>
+    const state = {
+      view: null,
+      selectedProviderRef: ""
+    };
+
+    function apiBase() {
+      if (location.protocol === "file:") return "http://127.0.0.1:9099";
+      return "";
+    }
+
+    function statusClass(status) {
+      const value = String(status || "").toLowerCase();
+      if (["failed", "unavailable", "degraded"].includes(value)) return "pill bad";
+      if (["warning", "queued"].includes(value)) return "pill warn";
+      if (["available", "ok", "completed"].includes(value)) return "pill ok";
+      return "pill";
+    }
+
+    function selectedProvider() {
+      return (state.view?.provider_health || []).find(provider => provider.provider_ref === state.selectedProviderRef) || null;
+    }
+
+    function selectedProviderRef() {
+      return state.selectedProviderRef || selectedProvider()?.provider_ref || "";
+    }
+
+    function renderSummary(view) {
+      document.getElementById("providerCount").textContent = view.summary.provider_count || 0;
+      document.getElementById("degradedProviderCount").textContent = view.summary.degraded_provider_count || 0;
+      document.getElementById("replayEventCount").textContent = view.summary.sample_replay_event_count || 0;
+      document.getElementById("mockMessageCount").textContent = view.summary.mock_message_count || 0;
+    }
+
+    function renderProviders(view) {
+      const grid = document.getElementById("providerGrid");
+      grid.textContent = "";
+      view.provider_health.forEach(provider => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "provider-card";
+        button.dataset.providerRef = provider.provider_ref;
+        button.classList.toggle("is-selected", provider.provider_ref === state.selectedProviderRef);
+        button.innerHTML = `
+          <span>${provider.provider_type || "provider"}</span>
+          <strong>${provider.provider_ref}</strong>
+          <p class="${statusClass(provider.status)}">${provider.status || "unknown"}</p>
+          <p class="hint">${provider.degraded_reason || provider.last_seen_at || "fixture provider record"}</p>
+        `;
+        button.addEventListener("click", () => selectProvider(provider.provider_ref));
+        grid.appendChild(button);
+      });
+      document.getElementById("selectedProviderLabel").textContent = state.selectedProviderRef || "none selected";
+    }
+
+    function renderEvidence(view) {
+      const list = document.getElementById("evidenceList");
+      list.textContent = "";
+      [
+        ...(view.sample_replay_timeline || []),
+        ...(view.runtime_debug_events || []),
+        ...(view.mock_transport_queue || [])
+      ].forEach(item => {
+        const node = document.createElement("div");
+        node.className = "metric";
+        node.innerHTML = `
+          <span>${item.evidence_type || item.kind || item.category || "evidence"}</span>
+          <strong>${item.event_id || item.message_id || item.source_id || "fixture"}</strong>
+          <p class="hint">${item.summary || item.body_preview || item.state || "read-only fixture evidence"}</p>
+        `;
+        list.appendChild(node);
+      });
+    }
+
+    function selectProvider(providerRef) {
+      state.selectedProviderRef = providerRef;
+      renderProviders(state.view);
+      renderAssistantPromptSuggestions(selectedProvider());
+    }
+
+    function suggestedAssistantQuestions(provider) {
+      const ref = provider?.provider_ref || "this provider";
+      return [
+        `Why is ${ref} degraded?`,
+        "What dry-run evidence supports this readiness state?",
+        "What remains blocked before live hardware?"
+      ];
+    }
+
+    function renderAssistantPromptSuggestions(provider) {
+      const list = document.getElementById("assistantPromptSuggestions");
+      list.textContent = "";
+      suggestedAssistantQuestions(provider).forEach(question => {
+        const li = document.createElement("li");
+        const button = document.createElement("button");
+        button.type = "button";
+        button.dataset.assistantQuestion = question;
+        button.textContent = question;
+        li.appendChild(button);
+        list.appendChild(li);
+      });
+    }
+
+    function assistantQueryPayload(question) {
+      return {
+        surface: "hardware_readiness",
+        question,
+        selected_artifact_id: selectedProviderRef() || null
+      };
+    }
+
+    function setAssistantStatus(message, mode = "") {
+      const status = document.getElementById("assistantStatus");
+      status.textContent = message;
+      status.classList.toggle("is-error", mode === "error");
+    }
+
+    async function loadAssistantStatus() {
+      try {
+        const status = await window.ScoutAssistantUI.fetchJson("/assistant/status", {apiBase});
+        window.ScoutAssistantUI.renderProviderStatus(status);
+      } catch (error) {
+        window.ScoutAssistantUI.renderProviderStatusFailure(error);
+      }
+    }
+
+    function renderAssistantContext(payload, queryPayload) {
+      const sources = payload.sources || [];
+      const contextSummary = sources[0]?.context_summary || {};
+      const selectedProviderContext = contextSummary.selected_provider || null;
+      const items = [
+        `surface: ${queryPayload.surface}`,
+        `selected_artifact_id: ${queryPayload.selected_artifact_id || "none"}`,
+        `source_count: ${sources.length}`
+      ];
+      if (selectedProviderContext) {
+        items.push(`selected_provider: ${selectedProviderContext.provider_ref || "unknown"} | ${selectedProviderContext.status || "unknown"}`);
+      }
+      sources.filter(source => source.selected).slice(0, 4).forEach(source => {
+        items.push(`selected source: ${source.source_id} | ${source.evidence_type || "unknown"}`);
+      });
+      items.push(...window.ScoutAssistantUI.observabilityItems(payload));
+      window.ScoutAssistantUI.renderList("assistantContextList", items, "No context refs returned.");
+    }
+
+    function renderAssistantResponse(payload, queryPayload = assistantQueryPayload("")) {
+      document.getElementById("assistantAnswerText").textContent = payload.answer || "No assistant answer returned.";
+      renderAssistantContext(payload, queryPayload);
+      window.ScoutAssistantUI.renderList(
+        "assistantLimitationsList",
+        payload.limitations || [],
+        "No limitations returned by assistant provider."
+      );
+      window.ScoutAssistantUI.renderList(
+        "assistantSourcesList",
+        window.ScoutAssistantUI.sourceItems(payload),
+        "No source refs returned."
+      );
+      setAssistantStatus(
+        payload.read_only && payload.model_interpretation
+          ? "Read-only model interpretation returned."
+          : "Assistant response returned without expected read-only labels.",
+        payload.read_only && payload.model_interpretation ? "" : "error"
+      );
+    }
+
+    async function submitAssistantQuery(question) {
+      const resolvedQuestion = String(question || "").trim();
+      if (!resolvedQuestion) {
+        setAssistantStatus("Enter a question before querying the read-only assistant.", "error");
+        return;
+      }
+      document.getElementById("assistantQuestionInput").value = resolvedQuestion;
+      document.getElementById("assistantAskButton").disabled = true;
+      setAssistantStatus("Querying read-only assistant...");
+      try {
+        const queryPayload = assistantQueryPayload(resolvedQuestion);
+        const payload = await window.ScoutAssistantUI.postJson("/assistant/query", queryPayload, {apiBase});
+        renderAssistantResponse(payload, queryPayload);
+      } catch (error) {
+        document.getElementById("assistantAnswerText").textContent =
+          "Assistant query failed safely. No hardware, provider, outbound, Phase 1, or Brain state was changed.";
+        window.ScoutAssistantUI.renderList("assistantLimitationsList", [error.message || String(error)], "Assistant query failed.");
+        window.ScoutAssistantUI.renderList("assistantContextList", [
+          "surface: hardware_readiness",
+          `selected_artifact_id: ${selectedProviderRef() || "none"}`
+        ], "No selected provider context.");
+        window.ScoutAssistantUI.renderList("assistantSourcesList", [
+          selectedProviderRef() || "hardware readiness fixture"
+        ], "No selected provider context.");
+        setAssistantStatus("Assistant query failed", "error");
+      } finally {
+        document.getElementById("assistantAskButton").disabled = false;
+      }
+    }
+
+    async function loadHardwareReadiness() {
+      const view = await window.ScoutAssistantUI.fetchJson("/admin/hardware-readiness/context", {apiBase});
+      state.view = view;
+      state.selectedProviderRef = view.selected_provider?.provider_ref || view.provider_health?.[0]?.provider_ref || "";
+      renderSummary(view);
+      renderProviders(view);
+      renderEvidence(view);
+      renderAssistantPromptSuggestions(selectedProvider());
+    }
+
+    window.ScoutAssistantUI.bindQuestionControls({submit: submitAssistantQuery});
+    loadAssistantStatus();
+    loadHardwareReadiness().catch(error => {
+      document.getElementById("evidenceList").textContent = `Failed to load readiness fixture: ${error.message || error}`;
+    });
+  </script>
+</body>
+</html>

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from typing import Protocol
 
@@ -33,9 +34,14 @@ MUTATION_INTENT_FRAGMENTS = (
     "send satellite",
     "write observedfact",
     "write observed fact",
+    "create observedfact",
     "write brain",
+    "call /safety",
     "mutate",
     "control hardware",
+    "control provider",
+    "start docker",
+    "start pi",
 )
 
 
@@ -53,12 +59,17 @@ def create_configured_pydantic_runner(
         config.cloud_model,
         environ=environ,
     )
+    if config.active_profile == "local":
+        return PydanticAIEnvRunner.from_profile(
+            config.local_model,
+            environ=environ,
+        )
+    if not config.fallback_to_local_on_error:
+        return cloud_runner
     local_runner = PydanticAIEnvRunner.from_profile(
         config.local_model,
         environ=environ,
     )
-    if config.active_profile == "local":
-        return local_runner
     return FallbackPydanticAIRunner(
         primary_runner=cloud_runner,
         fallback_runner=local_runner,
@@ -119,9 +130,16 @@ class PydanticAIAssistantProvider:
         profile = getattr(self.runner, "last_profile", None)
         if profile:
             limitations.append(f"Model profile used: {profile}.")
+            limitations.append(f"model_profile_used={profile}")
         failover_count = getattr(self.runner, "failover_count", 0)
         if failover_count:
             limitations.append("Cloud model communication failed; local model fallback was used.")
+        failover_reason = getattr(self.runner, "last_failover_reason", None)
+        if failover_reason:
+            limitations.append(f"failover_reason={failover_reason}")
+        local_model_name = getattr(self.runner, "local_model_name", None)
+        if local_model_name and profile == "local":
+            limitations.append(f"local_model_name={local_model_name}")
         return ScoutAssistantResponse(
             surface=query.surface,
             answer=f"{prefix}Pydantic AI read-only model interpretation: {str(model_output).strip()}",
@@ -139,6 +157,7 @@ class FallbackPydanticAIRunner:
         fallback_runner: PydanticAIRunner,
         primary_profile: str = "cloud",
         fallback_profile: str = "local",
+        max_fallback_concurrency: int = 1,
     ):
         self.primary_runner = primary_runner
         self.fallback_runner = fallback_runner
@@ -146,6 +165,10 @@ class FallbackPydanticAIRunner:
         self.fallback_profile = fallback_profile
         self.last_profile: str | None = None
         self.last_error_type: str | None = None
+        self.last_failover_reason: str | None = None
+        self.local_model_name: str | None = getattr(fallback_runner, "model_name", None)
+        self.max_fallback_concurrency = max(1, max_fallback_concurrency)
+        self._fallback_semaphore = threading.BoundedSemaphore(self.max_fallback_concurrency)
         self.failover_count = 0
 
     def connect(self, *, timeout_seconds: int) -> None:
@@ -155,9 +178,15 @@ class FallbackPydanticAIRunner:
             return
         except Exception as exc:
             self.last_error_type = type(exc).__name__
+            self.last_failover_reason = f"primary_connect_error:{type(exc).__name__}"
             self.failover_count += 1
-        _connect_runner(self.fallback_runner, timeout_seconds=timeout_seconds)
-        self.last_profile = self.fallback_profile
+        try:
+            self.last_profile = self.fallback_profile
+            _connect_runner(self.fallback_runner, timeout_seconds=timeout_seconds)
+        except Exception as exc:
+            self.last_error_type = type(exc).__name__
+            self.last_failover_reason = f"local_connect_error:{type(exc).__name__}"
+            raise
 
     def run(self, prompt: str, *, timeout_seconds: int) -> str:
         try:
@@ -166,10 +195,26 @@ class FallbackPydanticAIRunner:
             return result
         except Exception as exc:
             self.last_error_type = type(exc).__name__
+            self.last_failover_reason = f"primary_run_error:{type(exc).__name__}"
             self.failover_count += 1
-            result = self.fallback_runner.run(prompt, timeout_seconds=timeout_seconds)
+            return self._run_fallback(prompt, timeout_seconds=timeout_seconds)
+
+    def _run_fallback(self, prompt: str, *, timeout_seconds: int) -> str:
+        acquired = self._fallback_semaphore.acquire(blocking=False)
+        if not acquired:
             self.last_profile = self.fallback_profile
-            return result
+            self.last_error_type = "LocalFallbackBusy"
+            self.last_failover_reason = "local_busy:discard_stale_request"
+            raise RuntimeError("local fallback busy; stale model request discarded")
+        try:
+            self.last_profile = self.fallback_profile
+            return self.fallback_runner.run(prompt, timeout_seconds=timeout_seconds)
+        except Exception as exc:
+            self.last_error_type = type(exc).__name__
+            self.last_failover_reason = f"local_run_error:{type(exc).__name__}"
+            raise
+        finally:
+            self._fallback_semaphore.release()
 
 
 class PydanticAIEnvRunner:

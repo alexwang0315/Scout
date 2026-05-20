@@ -1,0 +1,81 @@
+{
+  "provider_health": [
+    {
+      "provider_ref": "provider.gnss.primary",
+      "provider_type": "gnss",
+      "status": "degraded",
+      "last_seen_at": "2026-05-19T07:30:00Z",
+      "degraded_reason": "fixture signal dropout during sample replay",
+      "sample_window": {
+        "duration_s": 120,
+        "fix_quality": "intermittent"
+      },
+      "source_id": "provider.gnss.primary",
+      "source_path": "tests/fixtures/hardware/readiness_context.json",
+      "evidence_type": "hardware_provider_health"
+    },
+    {
+      "provider_ref": "provider.imu.primary",
+      "provider_type": "imu",
+      "status": "available",
+      "last_seen_at": "2026-05-19T07:30:00Z",
+      "sample_window": {
+        "duration_s": 120,
+        "dropout_count": 0
+      },
+      "source_id": "provider.imu.primary",
+      "source_path": "tests/fixtures/hardware/readiness_context.json",
+      "evidence_type": "hardware_provider_health"
+    }
+  ],
+  "sample_replay_timeline": [
+    {
+      "event_id": "hardware_replay.001",
+      "timestamp": "2026-05-19T07:30:05Z",
+      "kind": "sample_replay",
+      "status": "completed",
+      "summary": "Fixture replay completed with a degraded GNSS window.",
+      "payload": {
+        "runtime_profile": "pi-field-dry-run",
+        "live_hardware_enabled": false
+      },
+      "source_id": "hardware_replay.001",
+      "source_path": "tests/fixtures/hardware/readiness_context.json",
+      "evidence_type": "hardware_sample_replay_event"
+    }
+  ],
+  "runtime_debug_events": [
+    {
+      "event_id": "debug_event.hardware.001",
+      "timestamp": "2026-05-19T07:30:06Z",
+      "kind": "provider_status_recorded",
+      "status": "warning",
+      "summary": "Provider readiness dry-run observed GNSS degradation.",
+      "payload": {
+        "provider": "provider.gnss.primary",
+        "status": "degraded"
+      },
+      "source_id": "debug_event.hardware.001",
+      "source_path": "tests/fixtures/hardware/readiness_context.json",
+      "evidence_type": "runtime_debug_event"
+    }
+  ],
+  "mock_transport_queue": [
+    {
+      "message_id": "mock_message.hardware.001",
+      "transport": "mock",
+      "state": "queued",
+      "category": "readiness_notice",
+      "subject_ref": "provider.gnss.primary",
+      "body_preview": "Mock readiness notice only.",
+      "boundary": {
+        "real_sos_sent": false,
+        "real_sms_sent": false,
+        "real_satellite_sent": false
+      },
+      "source_id": "mock_message.hardware.001",
+      "source_path": "tests/fixtures/hardware/readiness_context.json",
+      "evidence_type": "hardware_mock_transport_message"
+    }
+  ]
+}

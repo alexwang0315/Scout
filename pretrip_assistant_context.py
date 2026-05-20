@@ -215,12 +215,15 @@ def _compact_selected_source(value: dict[str, Any]) -> dict[str, Any]:
         "source_path",
         "evidence_type",
         "title",
+        "category",
+        "priority",
         "status",
         "counts",
         "summary",
         "boundary",
         "candidate_ref",
         "review_focus",
+        "map_target_ids",
     }
     return {key: item for key, item in value.items() if key in allowed}
 

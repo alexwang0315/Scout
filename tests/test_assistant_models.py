@@ -4,6 +4,7 @@ from pydantic import ValidationError
 from assistant_models import (
     ASSISTANT_SURFACE_CONSTRAINTS,
     AssistantBoundary,
+    AssistantObservability,
     AssistantSourceRef,
     AssistantSurface,
     AssistantSurfaceConstraint,
@@ -89,6 +90,47 @@ def test_response_is_always_read_only_model_interpretation():
             read_only=False,
             sources=[],
             boundary=AssistantBoundary(surface="debug"),
+        )
+
+
+def test_response_observability_is_non_authoritative_metadata():
+    response = ScoutAssistantResponse(
+        surface="debug",
+        answer="Read-only model interpretation.",
+        sources=[],
+        boundary=AssistantBoundary(surface="debug"),
+        observability=AssistantObservability(
+            provider_class="MockAssistantProvider",
+            source_count=0,
+            selected_source_count=0,
+            context_size_chars=2,
+            latency_ms=1,
+            latency_class="fast",
+            safe_failure=False,
+            model_profile_used="local",
+            failover_reason="primary_run_error:TimeoutError",
+            local_model_name="qwen2.5:0.5b",
+        ),
+    )
+
+    payload = response.model_dump(mode="json")
+    assert payload["observability"]["provider_class"] == "MockAssistantProvider"
+    assert payload["observability"]["safe_failure"] is False
+    assert payload["observability"]["model_profile_used"] == "local"
+    assert payload["observability"]["failover_reason"] == "primary_run_error:TimeoutError"
+    assert payload["observability"]["local_model_name"] == "qwen2.5:0.5b"
+    assert "api_key" not in str(payload).lower()
+    assert "token" not in str(payload).lower()
+
+    with pytest.raises(ValidationError):
+        AssistantObservability(
+            provider_class="MockAssistantProvider",
+            source_count=0,
+            selected_source_count=0,
+            context_size_chars=2,
+            latency_ms=1,
+            latency_class="fast",
+            writeback=True,
         )
 
     with pytest.raises(ValidationError):

@@ -3,105 +3,813 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Scout Pretrip Assistant</title>
+  <title>Scout Phase 4 Pre-Trip Planning</title>
   <style>
+    :root {
+      --bg: #f6f8fb;
+      --panel: #ffffff;
+      --ink: #17202a;
+      --muted: #607086;
+      --line: #d7dee8;
+      --accent: #28666e;
+      --route: #1f7a8c;
+      --checkpoint: #b23a48;
+      --segment: #44546a;
+      --retreat: #7f5539;
+      --poi: #3a7d44;
+      --hazard: #a44a3f;
+      --review: #7251b5;
+      --surface: #eef3f7;
+      --danger: #b23a48;
+      --warning: #9a6700;
+      --ok: #26653a;
+    }
+    * { box-sizing: border-box; }
+    html { height: 100%; }
     body {
       margin: 0;
-      color: #17202a;
-      background: #f6f8fb;
+      color: var(--ink);
+      background: var(--bg);
       font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      height: 100vh;
+      min-height: 100vh;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      overflow: hidden;
     }
-    main {
-      max-width: 920px;
-      margin: 0 auto;
-      padding: 24px;
+    button, input, select { font: inherit; }
+    .readiness-strip {
+      display: grid;
+      grid-template-columns: minmax(230px, 1.35fr) repeat(4, minmax(116px, .75fr)) minmax(190px, 1fr) minmax(260px, 1.45fr);
+      gap: 8px;
+      align-items: stretch;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--line);
+      background: var(--panel);
+    }
+    .readiness-strip div {
+      min-width: 0;
+      border: 1px solid var(--line);
+      border-left: 4px solid var(--accent);
+      border-radius: 8px;
+      background: #fbfcfe;
+      padding: 8px 10px;
+    }
+    .readiness-strip span,
+    .readiness-strip small {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      overflow-wrap: anywhere;
+    }
+    .readiness-strip strong {
+      display: block;
+      margin-top: 2px;
+      font-size: 15px;
+      overflow-wrap: anywhere;
+    }
+    .readiness-strip [data-readiness-kind="blockers"] { border-left-color: var(--danger); }
+    .readiness-strip [data-readiness-kind="warnings"] { border-left-color: var(--warning); }
+    .readiness-strip [data-readiness-kind="review"] { border-left-color: var(--review); }
+    .readiness-strip [data-readiness-kind="package"] { border-left-color: var(--ok); }
+    .shell {
+      display: grid;
+      grid-template-columns: minmax(560px, 1fr) 360px 420px;
+      height: 100%;
+      min-height: 0;
+      overflow: hidden;
+    }
+    .map-pane, .route-pane, .detail-pane {
+      min-width: 0;
+      border-right: 1px solid var(--line);
+      background: var(--panel);
+      overflow: hidden;
+    }
+    .map-pane {
+      display: grid;
+      grid-template-rows: auto 1fr;
+    }
+    .toolbar {
+      border-bottom: 1px solid var(--line);
+      padding: 12px 14px;
+      background: var(--panel);
+    }
+    .toolbar-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .toolbar-title {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+    h1, h2, h3 { margin: 0; letter-spacing: 0; }
+    h1 { font-size: 18px; }
+    h2 { font-size: 14px; }
+    h3 { font-size: 13px; }
+    .meta, .source, small { color: var(--muted); }
+    .tool-button {
+      min-height: 30px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--surface);
+      color: var(--ink);
+      padding: 5px 9px;
+      cursor: pointer;
+    }
+    .tool-button[disabled] {
+      color: #8794a5;
+      cursor: not-allowed;
+      background: #f4f6f8;
+    }
+    .filters {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 8px;
+      color: var(--muted);
+    }
+    .filters label {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      white-space: nowrap;
+    }
+    .map-pan-controls {
+      display: inline-grid;
+      grid-template-columns: repeat(3, 30px);
+      grid-template-rows: repeat(3, 30px);
+      gap: 3px;
+      align-items: center;
+      justify-content: center;
+    }
+    .map-pan-controls .tool-button {
+      min-height: 30px;
+      padding: 0;
+      line-height: 1;
+    }
+    .pan-up { grid-column: 2; grid-row: 1; }
+    .pan-left { grid-column: 1; grid-row: 2; }
+    .pan-right { grid-column: 3; grid-row: 2; }
+    .pan-down { grid-column: 2; grid-row: 3; }
+    .map-wrap {
+      min-height: 0;
+      padding: 12px;
+      background: #edf2f6;
+    }
+    #map {
+      display: block;
+      width: 100%;
+      height: 100%;
+      min-height: 420px;
+      background: #fbfcfe;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      cursor: grab;
+      touch-action: none;
+      user-select: none;
+    }
+    #map.is-panning { cursor: grabbing; }
+    .layer-imagery { fill: #e5ebf1; }
+    .layer-osm { fill: #f7fafc; opacity: .72; }
+    .osm-grid {
+      stroke: #cbd6e2;
+      stroke-width: 1;
+      opacity: .5;
+      vector-effect: non-scaling-stroke;
+    }
+    .terrain-line {
+      fill: none;
+      stroke: #8aa0b5;
+      stroke-width: 1.2;
+      stroke-dasharray: 8 10;
+      opacity: .35;
+      vector-effect: non-scaling-stroke;
+    }
+    .corridor { fill: none; stroke: #718096; stroke-width: 9; opacity: .22; stroke-linecap: round; }
+    .weather-api-frame {
+      fill: rgba(31, 122, 140, .06);
+      stroke: rgba(31, 122, 140, .45);
+      stroke-width: 1.5;
+      stroke-dasharray: 10 8;
+      pointer-events: none;
+      vector-effect: non-scaling-stroke;
+    }
+    .route-line { fill: none; stroke: var(--route); stroke-width: 4; stroke-linecap: round; }
+    .segment-overlay { fill: none; stroke: var(--segment); stroke-width: 8; opacity: .24; stroke-linecap: round; }
+    .retreat-line { fill: none; stroke: var(--retreat); stroke-width: 3; stroke-dasharray: 9 6; }
+    .hazard { fill: rgba(164, 74, 63, .16); stroke: var(--hazard); stroke-width: 2; }
+    .poi { fill: var(--poi); stroke: white; stroke-width: 2; }
+    .checkpoint { fill: var(--checkpoint); stroke: white; stroke-width: 2; }
+    .route-note { fill: var(--review); stroke: white; stroke-width: 2; opacity: .88; }
+    .map-highlight { filter: drop-shadow(0 0 7px rgba(40, 102, 110, .65)); opacity: 1; }
+    [data-layer-hidden="true"] { display: none; }
+    .route-pane {
+      display: grid;
+      grid-template-rows: auto 1fr;
+    }
+    .detail-pane {
+      display: grid;
+      grid-template-rows: auto minmax(180px, .95fr) minmax(260px, 1.05fr);
+      min-height: 0;
+    }
+    .pane-head {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+      background: var(--panel);
+    }
+    .metric-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .metric {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 8px;
+      background: #fbfcfe;
+    }
+    .metric span { display: block; color: var(--muted); font-size: 12px; }
+    .metric strong { display: block; margin-top: 2px; font-size: 15px; }
+    .list-controls {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .list-controls input, .list-controls select {
+      min-width: 0;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fff;
+      color: var(--ink);
+      padding: 7px 8px;
+    }
+    .list-controls input { grid-column: 1 / -1; }
+    .review-controls {
+      display: grid;
+      gap: 8px;
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid var(--line);
+    }
+    .workspace-controls {
+      display: grid;
+      gap: 7px;
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid var(--line);
+    }
+    .workspace-action-row {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .write-status {
+      min-height: 28px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fbfcfe;
+      color: var(--muted);
+      padding: 6px 8px;
+      font-size: 12px;
+    }
+    .write-status.is-error {
+      border-color: #e5b8b4;
+      background: #fff4f3;
+      color: #8a2f27;
+    }
+    .write-status.is-success {
+      border-color: #b8d8c0;
+      background: #f1faf3;
+      color: #26653a;
+    }
+    .review-filter-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .review-filter-row select {
+      min-width: 0;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fff;
+      color: var(--ink);
+      padding: 7px 8px;
+    }
+    .review-quick-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr) auto;
+      gap: 6px;
+      align-items: stretch;
+    }
+    .review-quick {
+      min-width: 0;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fbfcfe;
+      color: var(--ink);
+      padding: 7px 8px;
+      cursor: pointer;
+    }
+    .review-quick.is-active {
+      border-color: var(--review);
+      background: #f1ecfb;
+    }
+    .review-quick strong { margin-left: 3px; }
+    .tree, .detail-body {
+      overflow: auto;
+      padding: 12px;
+      min-height: 0;
+    }
+    .tree details {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfcfe;
+      margin-bottom: 10px;
+      overflow: hidden;
+    }
+    .tree details[data-filter-empty="true"] { display: none; }
+    .tree summary {
+      cursor: pointer;
+      padding: 9px 10px;
+      font-weight: 700;
+      border-left: 4px solid var(--category-color, var(--accent));
+    }
+    .tree-group {
+      display: grid;
+      gap: 6px;
+      padding: 8px;
+      border-top: 1px solid var(--line);
+    }
+    .tree button {
+      width: 100%;
+      text-align: left;
+      border: 1px solid transparent;
+      border-left: 4px solid var(--category-color, var(--accent));
+      border-radius: 6px;
+      background: var(--panel);
+      padding: 8px;
+      cursor: pointer;
+      color: var(--ink);
+    }
+    .tree button small { display: block; margin-top: 2px; }
+    .tree button[hidden] { display: none; }
+    .tree button.is-selected {
+      border-color: var(--accent);
+      background: #edf7f8;
+    }
+    .tree-label {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .tree-label span:first-child {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .badge-row {
+      display: flex;
+      gap: 5px;
+      flex-wrap: wrap;
+      margin-top: 5px;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      max-width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #f4f7fa;
+      color: var(--muted);
+      padding: 1px 6px;
+      font-size: 11px;
+      line-height: 1.5;
+      white-space: nowrap;
+    }
+    .badge-category { border-color: var(--category-color, var(--line)); color: var(--ink); }
+    .badge-status { background: #eef7f0; color: #26653a; }
+    .tabs {
+      display: flex;
+      gap: 6px;
+      padding: 10px 12px 0;
+      border-bottom: 1px solid var(--line);
+      background: var(--panel);
+    }
+    .tab-button {
+      border: 1px solid var(--line);
+      border-bottom: 0;
+      border-radius: 6px 6px 0 0;
+      padding: 8px 10px;
+      background: var(--surface);
+      color: var(--ink);
+      cursor: pointer;
+    }
+    .tab-button.is-active { background: #fff; color: var(--accent); }
+    .detail-body {
+      display: grid;
+      grid-template-rows: auto auto auto 1fr;
+      gap: 10px;
+    }
+    .summary-list {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .summary-list div {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 8px;
+      background: #fbfcfe;
+    }
+    .section-list {
+      display: grid;
+      gap: 8px;
+    }
+    .section-card {
+      width: 100%;
+      text-align: left;
+      border: 1px solid var(--line);
+      border-left: 4px solid var(--accent);
+      border-radius: 8px;
+      background: #fff;
+      color: var(--ink);
+      padding: 8px;
+      cursor: pointer;
+    }
+    .section-card.is-selected {
+      border-color: var(--accent);
+      background: #edf7f8;
+    }
+    .section-card small {
+      display: block;
+      margin-top: 4px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .section-counts {
+      display: flex;
+      gap: 5px;
+      flex-wrap: wrap;
+      margin-top: 6px;
+    }
+    .section-boundary {
+      border-color: #c9b9ee;
+      background: #f7f3ff;
+      color: #563c91;
     }
     .assistant-panel {
       display: grid;
-      gap: 12px;
-      border: 1px solid #d7dee8;
-      border-radius: 8px;
-      background: #ffffff;
-      padding: 16px;
+      gap: 10px;
+      align-content: start;
+      min-height: 0;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      padding: 12px;
+      border-top: 1px solid var(--line);
+      background: #fbfcfe;
     }
-    .panel-head {
+    .assistant-head {
       display: flex;
-      align-items: flex-start;
       justify-content: space-between;
-      gap: 12px;
-      border-bottom: 1px solid #d7dee8;
-      padding-bottom: 10px;
+      gap: 10px;
+      align-items: start;
     }
-    .panel-title h1,
-    .panel-title h2,
-    .assistant-answer h3,
-    .assistant-limitations h3,
-    .assistant-sources h3 {
-      margin: 0;
-      letter-spacing: 0;
-    }
-    .panel-title h1 { font-size: 18px; }
-    .panel-title h2 { font-size: 16px; }
-    .meta {
-      margin: 4px 0 0;
-      color: #607086;
-    }
-    .pill {
-      border: 1px solid #28666e;
+    .assistant-head span {
+      display: inline-flex;
+      border: 1px solid var(--line);
       border-radius: 999px;
-      color: #28666e;
-      padding: 4px 8px;
+      padding: 2px 7px;
+      color: var(--muted);
+      background: var(--surface);
+      font-size: 12px;
       white-space: nowrap;
-    }
-    .assistant-body {
-      display: grid;
-      gap: 12px;
     }
     .assistant-grid {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 10px;
+      gap: 8px;
     }
     .assistant-field,
     .assistant-answer,
     .assistant-limitations,
     .assistant-sources {
       display: grid;
-      gap: 6px;
+      gap: 4px;
       min-width: 0;
-      border: 1px solid #d7dee8;
+      border: 1px solid var(--line);
       border-radius: 6px;
-      background: #fbfcfe;
-      padding: 10px;
+      padding: 8px;
+      background: #fff;
     }
     .assistant-field span,
     .assistant-answer h3,
     .assistant-limitations h3,
     .assistant-sources h3 {
-      color: #607086;
+      color: var(--muted);
       font-size: 12px;
-      font-weight: 650;
+      font-weight: 700;
       text-transform: uppercase;
+    }
+    .assistant-field strong {
+      overflow-wrap: anywhere;
     }
     .assistant-list {
       margin: 0;
-      padding-left: 18px;
-      color: #607086;
+      padding-left: 17px;
+      color: var(--muted);
+    }
+    .assistant-list li + li {
+      margin-top: 3px;
+    }
+    .assistant-control {
+      display: grid;
+      gap: 7px;
+      min-width: 0;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 8px;
+      background: #fff;
+    }
+    .assistant-control label {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+    .assistant-question {
+      width: 100%;
+      min-height: 70px;
+      resize: vertical;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 8px;
+      color: var(--ink);
+      background: #fbfcfe;
+      font: inherit;
+    }
+    .assistant-actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .assistant-button {
+      min-height: 32px;
+      border: 1px solid var(--accent);
+      border-radius: 6px;
+      background: #edf6f7;
+      color: var(--accent);
+      padding: 6px 10px;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .assistant-button:disabled {
+      cursor: wait;
+      opacity: 0.58;
+    }
+    .assistant-status {
+      color: var(--muted);
+      overflow-wrap: anywhere;
+    }
+    .assistant-status.is-error {
+      color: var(--danger);
+    }
+    .assistant-prompts {
+      display: grid;
+      gap: 6px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .assistant-prompts button {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fbfcfe;
+      color: var(--ink);
+      padding: 6px 9px;
+      font: inherit;
+      font-size: 12px;
+      text-align: left;
+      cursor: pointer;
+      overflow-wrap: anywhere;
+    }
+    .assistant-prompts button:hover,
+    .assistant-prompts button:focus-visible {
+      border-color: var(--accent);
+      outline: none;
+    }
+    pre {
+      margin: 0;
+      padding: 10px;
+      background: #101820;
+      color: #e8eef5;
+      border-radius: 8px;
+      overflow: auto;
+      min-height: 220px;
+      font-size: 12px;
+    }
+    .hover-hint {
+      position: fixed;
+      z-index: 10;
+      max-width: 330px;
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      box-shadow: 0 8px 24px rgba(23, 32, 42, .16);
+      pointer-events: none;
+    }
+    .hover-hint strong, .hover-hint span { display: block; }
+    .is-hidden { display: none; }
+    @media (max-width: 1100px) {
+      body { display: block; overflow: auto; }
+      .readiness-strip { grid-template-columns: 1fr 1fr; }
+      .shell { grid-template-columns: 1fr; grid-template-rows: auto auto auto; height: auto; overflow: visible; }
+      .map-pane, .route-pane, .detail-pane { min-height: 520px; border-right: 0; border-bottom: 1px solid var(--line); }
+      .detail-pane { grid-template-rows: auto auto auto; }
+      .assistant-panel { overflow-y: visible; }
+    }
+    @media (max-width: 640px) {
+      .readiness-strip { grid-template-columns: 1fr; }
     }
   </style>
 </head>
 <body>
-  <main>
-    <!-- assistant-shell:start -->
-    <article id="assistantPanel" class="assistant-panel" data-assistant-surface="pretrip" data-assistant-boundary="read-only model interpretation" aria-label="Read-only pretrip assistant">
-      <div class="panel-head">
-        <div class="panel-title">
-          <h1>Pretrip Assistant</h1>
-          <p class="meta">read-only model interpretation over planning candidates and review context.</p>
+  <header id="readinessStrip" class="readiness-strip" aria-label="Pre-trip readiness boundary">
+    <div data-readiness-kind="status">
+      <span>Readiness</span>
+      <strong id="readinessStripStatus">Loading...</strong>
+      <small id="readinessStripBoundary">Reviewed planning is not runtime activation.</small>
+    </div>
+    <div data-readiness-kind="blockers">
+      <span>Blockers</span>
+      <strong id="readinessBlockerCount">-</strong>
+    </div>
+    <div data-readiness-kind="warnings">
+      <span>Warnings</span>
+      <strong id="readinessWarningCount">-</strong>
+    </div>
+    <div data-readiness-kind="review">
+      <span>Field verify / review</span>
+      <strong id="readinessFieldReviewCount">-</strong>
+    </div>
+    <div data-readiness-kind="package">
+      <span>Reviewed package</span>
+      <strong id="readinessReviewedPackageStatus">-</strong>
+    </div>
+    <div data-readiness-kind="departure">
+      <span>Departure gate</span>
+      <strong id="readinessDepartureGateBoundary">Phase 4.5 required</strong>
+    </div>
+    <div data-readiness-kind="runtime">
+      <span>Runtime handoff</span>
+      <strong id="readinessRuntimeHandoffBoundary">No runtime activation</strong>
+    </div>
+  </header>
+  <div class="shell">
+    <main class="map-pane">
+      <div class="toolbar">
+        <div class="toolbar-title">
+          <h1>Scout Phase 4 Pre-Trip Planning</h1>
+          <code id="projectMeta">fixture-backed preview</code>
         </div>
-        <span class="pill">surface: pretrip</span>
+        <div class="toolbar-row" aria-label="Planning tools">
+          <button id="zoomIn" class="tool-button" type="button" title="Zoom in">+</button>
+          <button id="zoomOut" class="tool-button" type="button" title="Zoom out">-</button>
+          <button id="fitRoute" class="tool-button" type="button" title="Reset map view">Fit route</button>
+          <button id="layerControl" class="tool-button" type="button">Layers</button>
+          <div class="map-pan-controls" aria-label="Map pan controls">
+            <button id="panUp" class="tool-button pan-up" type="button" title="Pan up">&uarr;</button>
+            <button id="panLeft" class="tool-button pan-left" type="button" title="Pan left">&larr;</button>
+            <button id="panRight" class="tool-button pan-right" type="button" title="Pan right">&rarr;</button>
+            <button id="panDown" class="tool-button pan-down" type="button" title="Pan down">&darr;</button>
+          </div>
+          <button id="featureEdit" class="tool-button" type="button" disabled>Feature edit</button>
+          <button id="addCheckpoint" class="tool-button" type="button" disabled>Add CP</button>
+          <button id="removeCheckpoint" class="tool-button" type="button" disabled>Remove CP</button>
+          <button id="addRetreatRoute" class="tool-button" type="button" disabled>Add retreat route</button>
+          <button id="removeRetreatRoute" class="tool-button" type="button" disabled>Remove retreat route</button>
+          <button id="externalDataImport" class="tool-button" type="button" disabled>External data import</button>
+        </div>
+        <div class="filters" aria-label="Map layers">
+          <label><input type="checkbox" data-layer="imagery" checked> Imagery</label>
+          <label><input type="checkbox" data-layer="osm" checked> OSM</label>
+          <label><input type="checkbox" data-layer="terrain" checked> Terrain</label>
+          <label><input type="checkbox" data-layer="corridors" checked> Corridors</label>
+          <label><input type="checkbox" data-layer="route" checked> Route</label>
+          <label><input type="checkbox" data-layer="segments" checked> Segments</label>
+          <label><input type="checkbox" data-layer="checkpoints" checked> CP</label>
+          <label><input type="checkbox" data-layer="retreat" checked> Retreat</label>
+          <label><input type="checkbox" data-layer="pois" checked> POI</label>
+          <label><input type="checkbox" data-layer="hazards" checked> Hazards</label>
+          <label><input type="checkbox" data-layer="route-notes" checked> Route notes</label>
+          <label><input type="checkbox" data-layer="weather-api" checked> Weather API</label>
+        </div>
       </div>
-      <div class="assistant-body">
+      <div class="map-wrap">
+        <svg id="map" role="img" aria-label="Scout pre-trip planning evidence map"></svg>
+      </div>
+    </main>
+
+    <section class="route-pane">
+      <div class="pane-head">
+        <h2>CP / Segment Frame</h2>
+        <p id="routeMeta" class="meta">Loading pre-trip route...</p>
+        <div class="metric-grid">
+          <div class="metric"><span>Readiness</span><strong id="readinessStatus">-</strong></div>
+          <div class="metric"><span>Review Queue</span><strong id="reviewQueueCount">-</strong></div>
+          <div class="metric"><span>Checkpoints</span><strong id="checkpointCount">-</strong></div>
+          <div class="metric"><span>Segments</span><strong id="segmentCount">-</strong></div>
+        </div>
+        <div class="list-controls" aria-label="CP and segment filters">
+          <input id="cpSegmentSearch" type="search" placeholder="Search CP or segment" autocomplete="off">
+          <select id="featureCategoryFilter" aria-label="Feature category filter">
+            <option value="all">All feature categories</option>
+            <option value="checkpoint">Checkpoints</option>
+            <option value="segment">Segments</option>
+          </select>
+          <select id="featureStatusFilter" aria-label="Feature status filter">
+            <option value="all">All statuses</option>
+          </select>
+        </div>
+        <div class="review-controls" aria-label="Review queue filters">
+          <div class="review-filter-row">
+            <select id="reviewCategoryFilter" aria-label="Review queue category filter">
+              <option value="all">All review categories</option>
+            </select>
+            <select id="reviewSeverityFilter" aria-label="Review queue severity filter">
+              <option value="all">All severities</option>
+              <option value="blocker">Blocker</option>
+              <option value="warning">Warning</option>
+              <option value="review">Review</option>
+            </select>
+          </div>
+          <div class="review-quick-row" aria-label="Review queue quick filters">
+            <button id="reviewBlockerQuick" class="review-quick" type="button" data-review-severity="blocker">Blocker <strong id="reviewBlockerCount">-</strong></button>
+            <button id="reviewWarningQuick" class="review-quick" type="button" data-review-severity="warning">Warning <strong id="reviewWarningCount">-</strong></button>
+            <button id="reviewReviewQuick" class="review-quick" type="button" data-review-severity="review">Review <strong id="reviewReviewCount">-</strong></button>
+            <button id="reviewNextItem" class="tool-button" type="button">Next review</button>
+          </div>
+          <div class="review-filter-row" aria-label="Route note draft review options">
+            <select id="routeNoteDraftDisposition" aria-label="Route note draft disposition">
+              <option value="">Route-note draft option</option>
+              <option value="promote_hint">Promote hint</option>
+              <option value="promote_warning">Promote warning</option>
+              <option value="ignore">Ignore</option>
+              <option value="field_verify">Field verify</option>
+            </select>
+            <button id="routeNoteDraftPreview" class="tool-button" type="button">Preview option</button>
+            <button id="routeNoteDraftSave" class="tool-button" type="button">Save draft option</button>
+          </div>
+        </div>
+        <div class="workspace-controls" aria-label="Local workspace write actions">
+          <div class="workspace-action-row">
+            <button id="localWorkspaceCreate" class="tool-button" type="button">Create local workspace</button>
+            <button id="workspaceAcceptReview" class="tool-button" type="button">Accept selected review</button>
+            <button id="workspaceCorrectReview" class="tool-button" type="button">Correct selected review</button>
+            <button id="workspaceRejectReview" class="tool-button" type="button">Reject selected review</button>
+            <button id="workspaceRefreshApplyPlan" class="tool-button" type="button">Refresh apply plan</button>
+            <button id="routeNoteReviewedAssumptions" class="tool-button" type="button">Route-note reviewed assumptions</button>
+            <button id="expertContributionApplyResult" class="tool-button" type="button">Expert contribution apply result</button>
+          </div>
+          <div id="workspaceWriteStatus" class="write-status" role="status" aria-live="polite">Workspace-only controls are closed to final handoff and runtime writes.</div>
+        </div>
+      </div>
+      <div id="evidenceTree" class="tree"></div>
+    </section>
+
+    <aside class="detail-pane">
+      <div class="tabs" role="tablist" aria-label="Detail tabs">
+        <button id="preTripTab" class="tab-button is-active" type="button" role="tab" aria-selected="true" data-tab="pre_trip_planning">Pre-trip planning</button>
+        <button id="postAnalysisTab" class="tab-button" type="button" role="tab" aria-selected="false" data-tab="post_analysis">Post-analysis</button>
+      </div>
+      <div id="jsonPane" class="detail-body">
+        <h2 id="detailTitle">No selection</h2>
+        <p id="detailSource" class="source">Select a planning candidate or map feature.</p>
+        <div id="tabSummary" class="summary-list"></div>
+        <div id="sectionList" class="section-list" aria-label="Active tab sections"></div>
+        <pre id="detailJson">{}</pre>
+      </div>
+      <!-- assistant-shell:start -->
+      <article id="assistantPanel" class="assistant-panel" data-assistant-surface="pretrip" data-assistant-boundary="read-only model interpretation" aria-label="Read-only pretrip assistant">
+        <div class="assistant-head">
+          <div>
+            <h2>Pretrip Assistant</h2>
+            <p class="meta">read-only model interpretation over planning candidates and review context.</p>
+          </div>
+          <span>surface: pretrip</span>
+        </div>
         <div class="assistant-grid">
           <div class="assistant-field">
             <span>Surface</span>
@@ -111,32 +819,1209 @@
             <span>Read-only boundary</span>
             <strong>read-only model interpretation</strong>
           </div>
+          <div class="assistant-field">
+            <span>Provider</span>
+            <strong id="assistantProviderStatus">checking provider status</strong>
+            <small id="assistantProviderStatusDetail">No token value is shown.</small>
+          </div>
         </div>
+        <section class="assistant-sources" aria-label="Assistant suggested questions">
+          <h3>Suggested questions</h3>
+          <p class="meta">Choose one question after selecting planning evidence; suggestions follow selected planning context.</p>
+          <ul id="assistantPromptSuggestions" class="assistant-prompts" aria-label="Suggested assistant questions">
+            <li><button type="button" data-assistant-question="Why does this selected item need review?">Why does this selected item need review?</button></li>
+            <li><button type="button" data-assistant-question="What evidence is missing for this candidate?">What evidence is missing for this candidate?</button></li>
+            <li><button type="button" data-assistant-question="Could this block departure readiness?">Could this block departure readiness?</button></li>
+          </ul>
+        </section>
+        <section class="assistant-control" aria-label="Ask assistant">
+          <label for="assistantQuestionInput">Question</label>
+          <textarea id="assistantQuestionInput" class="assistant-question" rows="3">What review queue items block readiness?</textarea>
+          <div class="assistant-actions">
+            <button id="assistantAskButton" class="assistant-button" type="button">Ask read-only assistant</button>
+            <span id="assistantStatus" class="assistant-status">Assistant query is read-only and uses the selected planning context.</span>
+          </div>
+        </section>
         <section class="assistant-answer" aria-label="Assistant answer">
           <h3>Answer</h3>
-          <p>This shell can display a read-only answer from POST /assistant/query about candidate provenance, review queue state, readiness, and source references.</p>
+          <p id="assistantAnswerText">This shell can explain readiness, review queue state, candidate provenance, source refs, and missing planning context through <code>POST /assistant/query</code>.</p>
+        </section>
+        <section class="assistant-sources" aria-label="Assistant context transparency">
+          <h3>Context</h3>
+          <ul id="assistantContextList" class="assistant-list">
+            <li>surface: pretrip</li>
+            <li>project_id: chilai_nanhua_day1</li>
+            <li>selected_artifact_id: selected planning evidence</li>
+            <li>provider status hides token values</li>
+          </ul>
         </section>
         <section class="assistant-limitations" aria-label="Assistant limitations">
           <h3>Limitations</h3>
-          <ul class="assistant-list">
+          <ul id="assistantLimitationsList" class="assistant-list">
             <li>No review decision is created.</li>
             <li>No departure approval is granted.</li>
             <li>No runtime handoff or hardware control is opened.</li>
-            <li>No Phase 1 safety, Phase 2 Brain, outbound, or ObservedFact state is mutated.</li>
+            <li>Answers remain planning explanations, not MissionGraph generation.</li>
           </ul>
         </section>
         <section class="assistant-sources" aria-label="Assistant sources">
           <h3>Sources</h3>
-          <ul class="assistant-list">
+          <ul id="assistantSourcesList" class="assistant-list">
             <li>project manifest</li>
-            <li>candidate provenance</li>
+            <li>readiness and departure bundle</li>
             <li>review queue</li>
-            <li>readiness artifacts</li>
+            <li>candidate provenance and source registry</li>
           </ul>
         </section>
-      </div>
-    </article>
-    <!-- assistant-shell:end -->
-  </main>
+      </article>
+      <!-- assistant-shell:end -->
+    </aside>
+  </div>
+  <div id="hoverHint" class="hover-hint is-hidden" role="status" aria-live="polite"></div>
+
+  <script src="/admin/scout-assistant-ui.js"></script>
+  <script>
+    const PROJECT_ID = "chilai_nanhua_day1";
+    const MAP_WIDTH = 1000;
+    const MAP_HEIGHT = 720;
+    const state = {
+      view: null,
+      selected: null,
+      activeTab: "pre_trip_planning",
+      selectedSectionId: "",
+      zoom: 1,
+      panX: 0,
+      panY: 0,
+      pointerPan: null,
+      reviewQueueCursor: -1,
+      routeNoteDraftDisposition: ""
+    };
+    const svg = document.getElementById("map");
+    const hoverHint = document.getElementById("hoverHint");
+
+    function apiBase() {
+      if (location.protocol === "file:") return "http://127.0.0.1:9099";
+      return "";
+    }
+    function el(name, attrs = {}, text = "") {
+      const node = document.createElementNS("http://www.w3.org/2000/svg", name);
+      Object.entries(attrs).forEach(([key, value]) => node.setAttribute(key, value));
+      if (text) node.textContent = text;
+      return node;
+    }
+    function selectorValue(value) {
+      const raw = String(value || "");
+      if (window.CSS && CSS.escape) return CSS.escape(raw);
+      return raw.replace(/["\\]/g, "\\$&");
+    }
+    function boundsFor(view) {
+      const b = view.route.bounds;
+      return { south: b.min_lat, north: b.max_lat, west: b.min_lon, east: b.max_lon };
+    }
+    function project(bounds, lat, lon) {
+      const pad = 36 / state.zoom;
+      const lonSpan = Math.max(bounds.east - bounds.west, 0.000001);
+      const latSpan = Math.max(bounds.north - bounds.south, 0.000001);
+      const x = pad + ((lon - bounds.west) / lonSpan) * (MAP_WIDTH - pad * 2);
+      const y = MAP_HEIGHT - pad - ((lat - bounds.south) / latSpan) * (MAP_HEIGHT - pad * 2);
+      return [x, y];
+    }
+    function pathFromCoords(bounds, coords) {
+      return coords.map((point, index) => {
+        const [x, y] = project(bounds, point.lat, point.lon);
+        return `${index === 0 ? "M" : "L"}${x.toFixed(2)},${y.toFixed(2)}`;
+      }).join(" ");
+    }
+    function appendGrid(group, width, height, columns, rows, className) {
+      for (let column = 1; column < columns; column += 1) {
+        const x = (width / columns) * column;
+        group.appendChild(el("line", {x1: x, y1: 0, x2: x, y2: height, class: className}));
+      }
+      for (let row = 1; row < rows; row += 1) {
+        const y = (height / rows) * row;
+        group.appendChild(el("line", {x1: 0, y1: y, x2: width, y2: y, class: className}));
+      }
+    }
+    function evidenceSourceId(item) {
+      return item?.source_id || item?.candidate_id || item?.segment_id || item?.poi_id || item?.hazard_id || "";
+    }
+    function categoryColor(category) {
+      const colors = {
+        route: "var(--route)",
+        checkpoint: "var(--checkpoint)",
+        segment: "var(--segment)",
+        retreat: "var(--retreat)",
+        poi: "var(--poi)",
+        hazard: "var(--hazard)",
+        review: "var(--review)"
+      };
+      return colors[category] || "var(--accent)";
+    }
+    function evidenceCategory(item) {
+      const type = item?.evidence_type || "";
+      if (type.includes("checkpoint")) return "checkpoint";
+      if (type.includes("segment")) return "segment";
+      if (type.includes("retreat")) return "retreat";
+      if (type.includes("poi")) return "poi";
+      if (type.includes("hazard")) return "hazard";
+      if (type.includes("review") || type.includes("queue")) return "review";
+      return "route";
+    }
+    function hintTitle(item) {
+      return item?.label || item?.title || item?.candidate_id || item?.source_id || item?.evidence_type || "evidence";
+    }
+    function hintSummary(item) {
+      if (item?.distance_m) return `${Math.round(item.distance_m)}m | ${item.review_state || item.status || "candidate"}`;
+      return item?.source_path || item?.status || "candidate evidence";
+    }
+    function statusFor(item) {
+      return item?.review_state || item?.status || item?.severity || "candidate";
+    }
+    function reviewCategoryFor(item) {
+      return item?.category || "";
+    }
+    function reviewSeverityFor(item) {
+      return item?.severity || "";
+    }
+    function decidedCandidateRefs(view = state.view) {
+      return new Set((view?.review_decision_log?.decisions || [])
+        .map(decision => decision?.candidate_ref)
+        .filter(Boolean));
+    }
+    function isCandidateRefDecided(candidateRef, view = state.view) {
+      return Boolean(candidateRef) && decidedCandidateRefs(view).has(candidateRef);
+    }
+    function reviewDecisionStateFor(item, view = state.view) {
+      if (evidenceCategory(item) !== "review" || !item?.candidate_ref) return "";
+      return isCandidateRefDecided(item.candidate_ref, view) ? "decided" : "undecided";
+    }
+    function findEvidenceBySourceId(view, sourceId) {
+      if (!sourceId) return null;
+      const groups = [
+        [view?.summary],
+        view?.checkpoints || [],
+        view?.segments || [],
+        view?.retreat_routes || [],
+        view?.map_candidates?.poi_candidates || [],
+        view?.map_candidates?.hazard_candidates || [],
+        view?.route_notes?.candidates || [],
+        view?.review_queue?.items || []
+      ];
+      return groups.flat().find(item => evidenceSourceId(item) === sourceId) || null;
+    }
+    function routeNoteReviewOptionFor(item, view = state.view) {
+      if (!item || item.category !== "route_note") return null;
+      const options = view?.route_note_review_options?.options || [];
+      return options.find(option => option.source_route_note_candidate_id === item.candidate_ref) || null;
+    }
+    function selectedRouteNoteDraftOption() {
+      const option = routeNoteReviewOptionFor(state.selected);
+      if (!option) return null;
+      return {
+        ...option,
+        selected_admin_disposition: state.routeNoteDraftDisposition || null,
+        draft_preview_only: true
+      };
+    }
+    function itemSearchText(item, label = "", sublabel = "") {
+      return [
+        label,
+        sublabel,
+        evidenceSourceId(item),
+        item?.checkpoint_type,
+        item?.review_state,
+        item?.status,
+        item?.category,
+        item?.severity,
+        item?.from_candidate_id,
+        item?.to_candidate_id,
+        item?.poi?.poi_type,
+        item?.hazard?.hazard_type
+      ].filter(Boolean).join(" ").toLowerCase();
+    }
+    function setText(id, value) {
+      document.getElementById(id).textContent = value;
+    }
+    function updateReadinessStrip(view) {
+      const reviewCounts = view.review_queue?.counts || {};
+      const departureBoundary = view.departure_bundle?.boundary || {};
+      const runtimeBoundary = view.tabs?.post_analysis?.runtime_handoff?.boundary || {};
+      const fieldVerifyCount = view.route_note_reviewed_assumptions?.counts?.field_verification_request_count || 0;
+      const reviewCount = reviewCounts.review_count ?? 0;
+      const fieldReviewText = fieldVerifyCount > 0 ? `${fieldVerifyCount} field / ${reviewCount} review` : `${reviewCount} review`;
+
+      setText("readinessStripStatus", `${view.readiness?.status || "unknown"} planning package`);
+      setText("readinessStripBoundary", "Reviewed planning package only; runtime activation remains closed.");
+      setText("readinessBlockerCount", reviewCounts.blocker_count ?? 0);
+      setText("readinessWarningCount", reviewCounts.warning_count ?? 0);
+      setText("readinessFieldReviewCount", fieldReviewText);
+      setText("readinessReviewedPackageStatus", view.departure_bundle?.package?.status || "candidate");
+      setText(
+        "readinessDepartureGateBoundary",
+        departureBoundary.not_departure_approval && departureBoundary.human_review_required_before_departure
+          ? "Human review required; not departure approval."
+          : "Phase 4.5 departure gate required."
+      );
+      setText(
+        "readinessRuntimeHandoffBoundary",
+        runtimeBoundary.safety_api_calls_allowed === false && runtimeBoundary.final_runtime_write_allowed === false
+          ? "Phase 4.5 owns handoff; no /safety calls or runtime writes."
+          : "Phase 4.5 owns runtime handoff."
+      );
+    }
+    function mapViewBox() {
+      const width = MAP_WIDTH / state.zoom;
+      const height = MAP_HEIGHT / state.zoom;
+      const minX = (MAP_WIDTH - width) / 2 + state.panX;
+      const minY = (MAP_HEIGHT - height) / 2 + state.panY;
+      return `${minX.toFixed(2)} ${minY.toFixed(2)} ${width.toFixed(2)} ${height.toFixed(2)}`;
+    }
+    function applyMapViewport() {
+      svg.setAttribute("viewBox", mapViewBox());
+    }
+    function clampMapPan() {
+      const limitX = Math.max(0, MAP_WIDTH * (state.zoom - 1) / (2 * state.zoom));
+      const limitY = Math.max(0, MAP_HEIGHT * (state.zoom - 1) / (2 * state.zoom));
+      state.panX = Math.max(-limitX, Math.min(limitX, state.panX));
+      state.panY = Math.max(-limitY, Math.min(limitY, state.panY));
+    }
+    function panMap(dx, dy) {
+      state.panX += dx / state.zoom;
+      state.panY += dy / state.zoom;
+      clampMapPan();
+      applyMapViewport();
+    }
+    function zoomMap(delta) {
+      state.zoom = Math.max(0.8, Math.min(1.8, state.zoom + delta));
+      clampMapPan();
+      applyMapViewport();
+      highlightMapFor(state.selected);
+    }
+    function resetMapView() {
+      state.zoom = 1;
+      state.panX = 0;
+      state.panY = 0;
+      applyMapViewport();
+      highlightMapFor(state.selected);
+    }
+    function showHint(event, item) {
+      hoverHint.innerHTML = `<strong>${hintTitle(item)}</strong><span>${hintSummary(item)}</span>`;
+      moveHint(event);
+      hoverHint.classList.remove("is-hidden");
+    }
+    function moveHint(event) {
+      const x = Math.min(event.clientX || 0, window.innerWidth - 340);
+      const y = Math.min(event.clientY || 0, window.innerHeight - 120);
+      hoverHint.style.left = `${x}px`;
+      hoverHint.style.top = `${y}px`;
+    }
+    function hideHint() { hoverHint.classList.add("is-hidden"); }
+    function setDetail(item) {
+      state.selected = item;
+      document.getElementById("detailTitle").textContent = hintTitle(item);
+      document.getElementById("detailSource").textContent = `${item?.evidence_type || "evidence"} | ${item?.source_path || "no source path"}`;
+      const routeNoteOption = selectedRouteNoteDraftOption();
+      document.getElementById("detailJson").textContent = JSON.stringify(routeNoteOption ? {...item, route_note_review_option: routeNoteOption} : (item || {}), null, 2);
+      state.selectedSectionId = "";
+      highlightSectionCard();
+    }
+    function previewRouteNoteDraftDisposition() {
+      const disposition = document.getElementById("routeNoteDraftDisposition").value;
+      state.routeNoteDraftDisposition = disposition;
+      const option = selectedRouteNoteDraftOption();
+      if (!option) {
+        setWorkspaceStatus("Select a route-note review item before previewing a draft option.", "error");
+        return;
+      }
+      setWorkspaceStatus(`Previewing route-note option ${disposition || "none"} for ${option.source_route_note_candidate_id}.`, "success");
+      setDetail(state.selected);
+    }
+    function sectionCountSummary(section) {
+      return Object.entries(section?.counts || {})
+        .filter(([, value]) => typeof value === "number" || typeof value === "boolean" || typeof value === "string")
+        .slice(0, 4)
+        .map(([key, value]) => `${key.replaceAll("_", " ")}: ${value}`);
+    }
+    function sectionBoundarySummary(section) {
+      return Object.entries(section?.boundary || {})
+        .filter(([, value]) => typeof value === "boolean" || typeof value === "string")
+        .slice(0, 4)
+        .map(([key, value]) => `${key.replaceAll("_", " ")}: ${value}`);
+    }
+    function setSectionDetail(section) {
+      state.selectedSectionId = section?.id || "";
+      document.getElementById("detailTitle").textContent = section?.title || "Section";
+      document.getElementById("detailSource").textContent = `${section?.evidence_type || "section"} | ${section?.source_path || "no source path"}`;
+      document.getElementById("detailJson").textContent = JSON.stringify(section || {}, null, 2);
+      highlightSectionCard();
+    }
+    function activeTabLabel(tabId = state.activeTab) {
+      return tabId === "post_analysis" ? "Post-analysis" : "Pre-trip planning";
+    }
+    function activeTabSource(tabId = state.activeTab) {
+      return tabId === "post_analysis"
+        ? "post_analysis | read-only post-planning artifacts"
+        : "pre_trip_planning | fixture-backed planning workspace";
+    }
+    function tabOverviewPayload(view, tabId = state.activeTab) {
+      const tab = view?.tabs?.[tabId] || {};
+      const sections = tab?.sections || [];
+      return {
+        active_tab: tabId,
+        title: activeTabLabel(tabId),
+        source: activeTabSource(tabId),
+        section_count: sections.length,
+        sections: sections.map(section => ({
+          id: section.id,
+          title: section.title,
+          status: section.status || "traceable",
+          evidence_type: section.evidence_type || "section",
+          source_path: section.source_path || "no source path",
+          boundary: section.boundary || {}
+        })),
+        runtime_handoff_status: tab?.runtime_handoff?.status || null,
+        route_comparison_classification: tab?.route_comparison?.classification || null,
+        brain_seed_counts: tab?.brain_seed ? {
+          node_count: tab.brain_seed.node_count,
+          observed_fact_count: tab.brain_seed.observed_fact_count
+        } : null
+      };
+    }
+    function setActiveTabDetail(view = state.view) {
+      state.selectedSectionId = "";
+      document.getElementById("detailTitle").textContent = `${activeTabLabel()} overview`;
+      document.getElementById("detailSource").textContent = activeTabSource();
+      document.getElementById("detailJson").textContent = JSON.stringify(tabOverviewPayload(view), null, 2);
+      highlightSectionCard();
+    }
+    function highlightSectionCard() {
+      document.querySelectorAll("[data-section-id]").forEach(button => {
+        button.classList.toggle("is-selected", button.dataset.sectionId === state.selectedSectionId);
+      });
+    }
+    function highlightMapFor(item) {
+      svg.querySelectorAll(".map-highlight").forEach(node => node.classList.remove("map-highlight"));
+      const targets = mapTargetsFor(item);
+      targets.forEach(node => node.classList.add("map-highlight"));
+      targets.slice(0, 4).forEach(node => node.parentNode && node.parentNode.appendChild(node));
+    }
+    function mapTargetsFor(item) {
+      const ids = new Set([evidenceSourceId(item), ...(item?.map_target_ids || [])].filter(Boolean));
+      const targets = [];
+      ids.forEach(id => {
+        const escaped = selectorValue(id);
+        svg.querySelectorAll(`[data-source-id="${escaped}"]`).forEach(node => targets.push(node));
+        svg.querySelectorAll(`[data-source-id^="${escaped}."]`).forEach(node => targets.push(node));
+        svg.querySelectorAll(`[data-source-id^="${escaped}_"]`).forEach(node => targets.push(node));
+      });
+      return [...new Set(targets)];
+    }
+    function highlightTreeNode(item) {
+      document.querySelectorAll(".tree button.is-selected").forEach(node => node.classList.remove("is-selected"));
+      const id = selectorValue(evidenceSourceId(item));
+      const match = document.querySelector(`[data-tree-source-id="${id}"]`);
+      if (match) {
+        match.classList.add("is-selected");
+        match.closest("details")?.setAttribute("open", "");
+        match.scrollIntoView({block: "nearest"});
+      }
+    }
+    function selectEvidence(item) {
+      setDetail(item);
+      highlightMapFor(item);
+      highlightTreeNode(item);
+      renderAssistantPromptSuggestions(state.selected);
+    }
+    function setWorkspaceStatus(message, mode = "") {
+      const status = document.getElementById("workspaceWriteStatus");
+      status.textContent = message;
+      status.classList.toggle("is-error", mode === "error");
+      status.classList.toggle("is-success", mode === "success");
+    }
+    function isSelectedReviewQueueItem() {
+      return evidenceCategory(state.selected) === "review" && Boolean(state.selected?.candidate_ref);
+    }
+    async function parseWriteResponse(response) {
+      const payload = await response.json().catch(() => ({}));
+      if (response.ok) return payload;
+      const detail = payload.detail || payload.error || response.statusText || "request failed";
+      throw new Error(Array.isArray(detail) ? JSON.stringify(detail) : String(detail));
+    }
+    async function postJson(path, payload) {
+      return window.ScoutAssistantUI.postJson(path, payload, {apiBase});
+    }
+    async function fetchJson(path) {
+      return window.ScoutAssistantUI.fetchJson(path, {apiBase});
+    }
+    function assistantQueryPayload(question) {
+      return {
+        surface: "pretrip",
+        question,
+        context_ref: PROJECT_ID,
+        project_id: PROJECT_ID,
+        selected_artifact_id: evidenceSourceId(state.selected) || null
+      };
+    }
+    function setAssistantStatus(message, mode = "") {
+      const status = document.getElementById("assistantStatus");
+      status.textContent = message;
+      status.classList.toggle("is-error", mode === "error");
+    }
+    async function loadAssistantStatus() {
+      try {
+        const status = await fetchJson("/assistant/status");
+        window.ScoutAssistantUI.renderProviderStatus(status);
+      } catch (error) {
+        window.ScoutAssistantUI.renderProviderStatusFailure(error);
+      }
+    }
+    function renderAssistantList(id, items, fallback) {
+      window.ScoutAssistantUI.renderList(id, items, fallback);
+    }
+    function suggestedAssistantQuestions(item) {
+      const category = evidenceCategory(item);
+      const label = hintTitle(item);
+      if (category === "review" && item?.candidate_ref) {
+        return [
+          `Why does ${item.candidate_ref} need review?`,
+          "What evidence is missing for this candidate?",
+          "Could this block departure readiness?"
+        ];
+      }
+      if (category === "checkpoint" || category === "segment") {
+        return [
+          `Why is ${label} important for this plan?`,
+          "What evidence supports this candidate?",
+          "Could this block departure readiness?"
+        ];
+      }
+      return [
+        "Why does this selected item need review?",
+        "What evidence is missing for this candidate?",
+        "Could this block departure readiness?"
+      ];
+    }
+    function renderAssistantPromptSuggestions(item) {
+      const list = document.getElementById("assistantPromptSuggestions");
+      list.textContent = "";
+      suggestedAssistantQuestions(item).forEach(question => {
+        const li = document.createElement("li");
+        const button = document.createElement("button");
+        button.type = "button";
+        button.dataset.assistantQuestion = question;
+        button.textContent = question;
+        li.appendChild(button);
+        list.appendChild(li);
+      });
+    }
+    function renderAssistantContext(payload, queryPayload) {
+      const sources = payload.sources || [];
+      const contextSummary = sources[0]?.context_summary || {};
+      const selectedEvidence = contextSummary.selected_evidence || null;
+      const items = [
+        `surface: ${queryPayload.surface}`,
+        `project_id: ${queryPayload.project_id || "none"}`,
+        `selected_artifact_id: ${queryPayload.selected_artifact_id || "none"}`,
+        `source_count: ${sources.length}`
+      ];
+      if (selectedEvidence) {
+        items.push(`selected_evidence: ${selectedEvidence.source_id || "unknown"} | ${selectedEvidence.evidence_type || "unknown"}`);
+      }
+      sources.filter(source => source.selected).slice(0, 4).forEach(source => {
+        items.push(`selected source: ${source.source_id} | ${source.evidence_type || "unknown"}`);
+      });
+      items.push(...window.ScoutAssistantUI.observabilityItems(payload));
+      renderAssistantList("assistantContextList", items, "No context refs returned.");
+    }
+    function renderAssistantResponse(payload, queryPayload = assistantQueryPayload("")) {
+      document.getElementById("assistantAnswerText").textContent = payload.answer || "No assistant answer returned.";
+      renderAssistantContext(payload, queryPayload);
+      renderAssistantList(
+        "assistantLimitationsList",
+        payload.limitations || [],
+        "No limitations returned by assistant provider."
+      );
+      renderAssistantList(
+        "assistantSourcesList",
+        window.ScoutAssistantUI.sourceItems(payload),
+        "No source refs returned."
+      );
+      setAssistantStatus(
+        payload.read_only && payload.model_interpretation
+          ? "Read-only model interpretation returned."
+          : "Assistant response returned without expected read-only labels.",
+        payload.read_only && payload.model_interpretation ? "" : "error"
+      );
+    }
+    async function submitAssistantQuery(question) {
+      const resolvedQuestion = String(question || "").trim();
+      if (!resolvedQuestion) {
+        setAssistantStatus("Enter a question before querying the read-only assistant.", "error");
+        return;
+      }
+      document.getElementById("assistantQuestionInput").value = resolvedQuestion;
+      document.getElementById("assistantAskButton").disabled = true;
+      setAssistantStatus("Querying read-only assistant...");
+      try {
+        const queryPayload = assistantQueryPayload(resolvedQuestion);
+        const payload = await postJson("/assistant/query", queryPayload);
+        renderAssistantResponse(payload, queryPayload);
+      } catch (error) {
+        document.getElementById("assistantAnswerText").textContent =
+          "Assistant query failed safely. No candidate, review, departure, runtime handoff, or hardware state was changed.";
+        renderAssistantList("assistantLimitationsList", [error.message || String(error)], "Assistant query failed.");
+        renderAssistantList("assistantContextList", [
+          "surface: pretrip",
+          `project_id: ${PROJECT_ID}`,
+          `selected_artifact_id: ${evidenceSourceId(state.selected) || "none"}`
+        ], "No selected planning context.");
+        renderAssistantList(
+          "assistantSourcesList",
+          [evidenceSourceId(state.selected) || PROJECT_ID],
+          "No selected planning context."
+        );
+        setAssistantStatus("Assistant query failed", "error");
+      } finally {
+        document.getElementById("assistantAskButton").disabled = false;
+      }
+    }
+    function runAssistantQuestion(question) {
+      return submitAssistantQuery(question);
+    }
+    function bindAssistantControls() {
+      window.ScoutAssistantUI.bindQuestionControls({submit: runAssistantQuestion});
+    }
+    async function createLocalWorkspace() {
+      setWorkspaceStatus("Creating local workspace...");
+      try {
+        await parseWriteResponse(await fetch(`${apiBase()}/admin/pretrip/projects/${PROJECT_ID}/workspace`, {
+          method: "POST"
+        }));
+        setWorkspaceStatus("Local workspace created. Read-only project view reloaded.", "success");
+        await reloadProjectView();
+      } catch (error) {
+        setWorkspaceStatus(`Create local workspace failed: ${error.message || error}`, "error");
+      }
+    }
+    async function acceptSelectedReviewToWorkspace() {
+      if (!isSelectedReviewQueueItem()) {
+        setWorkspaceStatus("Select a review queue item with candidate_ref before accepting to workspace.", "error");
+        return;
+      }
+      const item = state.selected;
+      if (isCandidateRefDecided(item.candidate_ref)) {
+        setWorkspaceStatus(`Review candidate ${item.candidate_ref} already has a decision. Select an undecided review queue item before accepting to workspace.`, "error");
+        return;
+      }
+      setWorkspaceStatus(`Accepting ${item.candidate_ref} to local workspace...`);
+      try {
+        await parseWriteResponse(await fetch(`${apiBase()}/admin/pretrip/projects/${PROJECT_ID}/review-decisions`, {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({
+            candidate_ref: item.candidate_ref,
+            decision: "accepted",
+            summary: `Accepted from Phase 4 admin local workspace: ${hintTitle(item)}`,
+            persist_to_workspace: true
+          })
+        }));
+        setWorkspaceStatus(`Accepted ${item.candidate_ref} to local workspace review log.`, "success");
+        await reloadProjectView();
+      } catch (error) {
+        setWorkspaceStatus(`Accept selected review failed: ${error.message || error}`, "error");
+      }
+    }
+    async function saveRouteNoteDraftDispositionToWorkspace() {
+      const option = selectedRouteNoteDraftOption();
+      if (!option) {
+        setWorkspaceStatus("Select a route-note review item before saving a draft option.", "error");
+        return;
+      }
+      if (!state.routeNoteDraftDisposition) {
+        setWorkspaceStatus("Select a route-note draft disposition before saving.", "error");
+        return;
+      }
+      setWorkspaceStatus(`Saving route-note draft option ${state.routeNoteDraftDisposition} for ${option.source_route_note_candidate_id}...`);
+      try {
+        await parseWriteResponse(await fetch(`${apiBase()}/admin/pretrip/projects/${PROJECT_ID}/route-note-dispositions`, {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({
+            route_note_ref: option.source_route_note_candidate_id,
+            disposition: state.routeNoteDraftDisposition,
+            persist_to_workspace: true
+          })
+        }));
+        setWorkspaceStatus(`Saved route-note draft option ${state.routeNoteDraftDisposition} for ${option.source_route_note_candidate_id}.`, "success");
+      } catch (error) {
+        setWorkspaceStatus(`Save route-note draft option failed: ${error.message || error}`, "error");
+      }
+    }
+    function correctionSummaryFor(item) {
+      const value = window.prompt(`Correction summary for ${item.candidate_ref}`, `Corrected from Phase 4 admin local workspace: ${hintTitle(item)}`);
+      return String(value || "").trim();
+    }
+    async function correctSelectedReviewToWorkspace() {
+      if (!isSelectedReviewQueueItem()) {
+        setWorkspaceStatus("Select a review queue item with candidate_ref before correcting to workspace.", "error");
+        return;
+      }
+      const item = state.selected;
+      if (isCandidateRefDecided(item.candidate_ref)) {
+        setWorkspaceStatus(`Review candidate ${item.candidate_ref} already has a decision. Select an undecided review queue item before correcting to workspace.`, "error");
+        return;
+      }
+      const correctionSummary = correctionSummaryFor(item);
+      if (!correctionSummary) {
+        setWorkspaceStatus("Correct selected review canceled: correction summary is required.", "error");
+        return;
+      }
+      setWorkspaceStatus(`Correcting ${item.candidate_ref} in local workspace...`);
+      try {
+        await parseWriteResponse(await fetch(`${apiBase()}/admin/pretrip/projects/${PROJECT_ID}/review-decisions`, {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({
+            candidate_ref: item.candidate_ref,
+            decision: "corrected",
+            summary: `Corrected from Phase 4 admin local workspace: ${hintTitle(item)}`,
+            correction: {
+              summary: correctionSummary,
+              field_updates: {},
+              replacement_ref_ids: []
+            },
+            persist_to_workspace: true
+          })
+        }));
+        setWorkspaceStatus(`Corrected ${item.candidate_ref} in local workspace review log.`, "success");
+        await reloadProjectView();
+      } catch (error) {
+        setWorkspaceStatus(`Correct selected review failed: ${error.message || error}`, "error");
+      }
+    }
+    async function rejectSelectedReviewToWorkspace() {
+      if (!isSelectedReviewQueueItem()) {
+        setWorkspaceStatus("Select a review queue item with candidate_ref before rejecting to workspace.", "error");
+        return;
+      }
+      const item = state.selected;
+      if (isCandidateRefDecided(item.candidate_ref)) {
+        setWorkspaceStatus(`Review candidate ${item.candidate_ref} already has a decision. Select an undecided review queue item before rejecting to workspace.`, "error");
+        return;
+      }
+      setWorkspaceStatus(`Rejecting ${item.candidate_ref} in local workspace...`);
+      try {
+        await parseWriteResponse(await fetch(`${apiBase()}/admin/pretrip/projects/${PROJECT_ID}/review-decisions`, {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({
+            candidate_ref: item.candidate_ref,
+            decision: "rejected",
+            summary: `Rejected from Phase 4 admin local workspace: ${hintTitle(item)}`,
+            persist_to_workspace: true
+          })
+        }));
+        setWorkspaceStatus(`Rejected ${item.candidate_ref} in local workspace review log.`, "success");
+        await reloadProjectView();
+      } catch (error) {
+        setWorkspaceStatus(`Reject selected review failed: ${error.message || error}`, "error");
+      }
+    }
+    async function refreshWorkspaceApplyPlan() {
+      setWorkspaceStatus("Refreshing local workspace apply plan...");
+      try {
+        await parseWriteResponse(await fetch(`${apiBase()}/admin/pretrip/projects/${PROJECT_ID}/review-decision-apply-plan`, {
+          method: "POST"
+        }));
+        setWorkspaceStatus("Workspace apply plan refreshed. Read-only project view reloaded.", "success");
+        await reloadProjectView();
+      } catch (error) {
+        setWorkspaceStatus(`Refresh apply plan failed: ${error.message || error}`, "error");
+      }
+    }
+    async function generateRouteNoteReviewedAssumptionsForWorkspace() {
+      setWorkspaceStatus("Generating route-note reviewed assumptions in the local workspace only...");
+      try {
+        await parseWriteResponse(await fetch(`${apiBase()}/admin/pretrip/projects/${PROJECT_ID}/route-note-reviewed-assumptions`, {
+          method: "POST"
+        }));
+        setWorkspaceStatus("Route-note reviewed assumptions written to local workspace only. Runtime and final handoff remain closed.", "success");
+        await reloadProjectView();
+      } catch (error) {
+        setWorkspaceStatus(`Route-note reviewed assumptions failed: ${error.message || error}`, "error");
+      }
+    }
+    async function applyExpertContributionWorkspaceResult() {
+      setWorkspaceStatus("Applying expert contributions to local workspace candidate artifacts only...");
+      try {
+        await parseWriteResponse(await fetch(`${apiBase()}/admin/pretrip/projects/${PROJECT_ID}/expert-contribution-workspace-apply-result`, {
+          method: "POST"
+        }));
+        setWorkspaceStatus("Expert contribution workspace apply result written locally. No final package, MissionGraph, runtime, or Brain writeback was opened.", "success");
+        await reloadProjectView();
+      } catch (error) {
+        setWorkspaceStatus(`Expert contribution apply result failed: ${error.message || error}`, "error");
+      }
+    }
+    function attachEvidence(node, item) {
+      const id = evidenceSourceId(item);
+      if (id) node.setAttribute("data-source-id", id);
+      node.setAttribute("data-evidence-type", item.evidence_type || "pretrip_evidence");
+      node.tabIndex = 0;
+      node.addEventListener("mouseenter", event => showHint(event, item));
+      node.addEventListener("mousemove", moveHint);
+      node.addEventListener("mouseleave", hideHint);
+      node.addEventListener("focus", event => { selectEvidence(item); showHint(event, item); });
+      node.addEventListener("blur", hideHint);
+      node.addEventListener("click", event => { selectEvidence(item); showHint(event, item); });
+      node.addEventListener("keydown", event => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          selectEvidence(item);
+        }
+      });
+    }
+    function renderMap(view) {
+      const bounds = boundsFor(view);
+      svg.setAttribute("viewBox", `0 0 ${MAP_WIDTH} ${MAP_HEIGHT}`);
+      svg.replaceChildren();
+
+      const imageryGroup = el("g", {"data-layer-group": "imagery"});
+      imageryGroup.appendChild(el("rect", {x: 0, y: 0, width: MAP_WIDTH, height: MAP_HEIGHT, class: "layer-imagery"}));
+      svg.appendChild(imageryGroup);
+
+      const osmGroup = el("g", {"data-layer-group": "osm"});
+      osmGroup.appendChild(el("rect", {x: 0, y: 0, width: MAP_WIDTH, height: MAP_HEIGHT, class: "layer-osm"}));
+      appendGrid(osmGroup, MAP_WIDTH, MAP_HEIGHT, 7, 5, "osm-grid");
+      svg.appendChild(osmGroup);
+
+      const terrainGroup = el("g", {"data-layer-group": "terrain"});
+      for (let row = 1; row <= 5; row += 1) {
+        const y = 88 + row * 88;
+        terrainGroup.appendChild(el("path", {d: `M40,${y} C210,${y - 34} 365,${y + 42} 535,${y + 4} S795,${y - 40} 960,${y + 12}`, class: "terrain-line"}));
+      }
+      svg.appendChild(terrainGroup);
+
+      const corridorGroup = el("g", {"data-layer-group": "corridors"});
+      view.map_candidates.corridor_candidates.forEach(candidate => {
+        const path = el("path", {d: pathFromCoords(bounds, candidate.corridor.coordinates), class: "corridor"});
+        attachEvidence(path, candidate);
+        corridorGroup.appendChild(path);
+      });
+      svg.appendChild(corridorGroup);
+
+      const hazardGroup = el("g", {"data-layer-group": "hazards"});
+      view.map_candidates.hazard_candidates.forEach(candidate => {
+        const path = el("path", {d: pathFromCoords(bounds, candidate.hazard.polygon) + " Z", class: "hazard"});
+        attachEvidence(path, candidate);
+        hazardGroup.appendChild(path);
+      });
+      svg.appendChild(hazardGroup);
+
+      const routeGroup = el("g", {"data-layer-group": "route"});
+      const routePath = el("path", {d: pathFromCoords(bounds, view.route.polyline), class: "route-line"});
+      attachEvidence(routePath, view.route);
+      routeGroup.appendChild(routePath);
+      svg.appendChild(routeGroup);
+
+      const retreatGroup = el("g", {"data-layer-group": "retreat"});
+      view.retreat_routes.forEach(retreat => {
+        const points = [...view.checkpoints].reverse();
+        const path = el("path", {d: pathFromCoords(bounds, points), class: "retreat-line"});
+        attachEvidence(path, retreat);
+        retreatGroup.appendChild(path);
+      });
+      svg.appendChild(retreatGroup);
+
+      const segmentGroup = el("g", {"data-layer-group": "segments"});
+      view.segments.forEach(segment => {
+        const from = view.checkpoints.find(item => item.candidate_id === segment.from_candidate_id);
+        const to = view.checkpoints.find(item => item.candidate_id === segment.to_candidate_id);
+        if (!from || !to) return;
+        const path = el("path", {d: pathFromCoords(bounds, [from, to]), class: "segment-overlay"});
+        attachEvidence(path, segment);
+        segmentGroup.appendChild(path);
+      });
+      svg.appendChild(segmentGroup);
+
+      const checkpointGroup = el("g", {"data-layer-group": "checkpoints"});
+      view.checkpoints.forEach(checkpoint => {
+        const [x, y] = project(bounds, checkpoint.lat, checkpoint.lon);
+        const circle = el("circle", {cx: x, cy: y, r: 5, class: "checkpoint"});
+        attachEvidence(circle, checkpoint);
+        checkpointGroup.appendChild(circle);
+      });
+      svg.appendChild(checkpointGroup);
+
+      const poiGroup = el("g", {"data-layer-group": "pois"});
+      view.map_candidates.poi_candidates.forEach(candidate => {
+        const [x, y] = project(bounds, candidate.poi.coordinate.lat, candidate.poi.coordinate.lon);
+        const circle = el("circle", {cx: x, cy: y, r: 6, class: "poi"});
+        attachEvidence(circle, candidate);
+        poiGroup.appendChild(circle);
+      });
+      svg.appendChild(poiGroup);
+
+      const routeNoteGroup = el("g", {"data-layer-group": "route-notes"});
+      (view.route_notes?.candidates || []).forEach(candidate => {
+        const [x, y] = project(bounds, candidate.lat, candidate.lon);
+        const circle = el("circle", {cx: x, cy: y, r: 4, class: "route-note"});
+        attachEvidence(circle, candidate);
+        routeNoteGroup.appendChild(circle);
+      });
+      svg.appendChild(routeNoteGroup);
+
+      const weatherApiGroup = el("g", {"data-layer-group": "weather-api"});
+      weatherApiGroup.appendChild(el("rect", {x: 16, y: 16, width: MAP_WIDTH - 32, height: MAP_HEIGHT - 32, rx: 10, class: "weather-api-frame"}));
+      svg.appendChild(weatherApiGroup);
+      updateLayers();
+      applyMapViewport();
+      highlightMapFor(state.selected);
+    }
+    function treeButton(item, label, sublabel = "") {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.style.setProperty("--category-color", categoryColor(evidenceCategory(item)));
+      button.setAttribute("data-tree-source-id", evidenceSourceId(item));
+      button.setAttribute("data-tree-category", evidenceCategory(item));
+      button.setAttribute("data-tree-status", statusFor(item));
+      button.setAttribute("data-review-category", reviewCategoryFor(item));
+      button.setAttribute("data-review-severity", reviewSeverityFor(item));
+      if (item?.candidate_ref) button.setAttribute("data-candidate-ref", item.candidate_ref);
+      const reviewDecisionState = reviewDecisionStateFor(item);
+      if (reviewDecisionState) button.setAttribute("data-review-decision-state", reviewDecisionState);
+      button.setAttribute("data-map-target-ids", (item?.map_target_ids || []).join(" "));
+      button.setAttribute("data-tree-search-text", itemSearchText(item, label, sublabel));
+      const labelRow = document.createElement("span");
+      labelRow.className = "tree-label";
+      const labelText = document.createElement("span");
+      labelText.textContent = label;
+      const statusBadge = document.createElement("span");
+      statusBadge.className = "badge badge-status";
+      statusBadge.textContent = statusFor(item);
+      labelRow.appendChild(labelText);
+      labelRow.appendChild(statusBadge);
+      button.appendChild(labelRow);
+      const badgeRow = document.createElement("span");
+      badgeRow.className = "badge-row";
+      const categoryBadge = document.createElement("span");
+      categoryBadge.className = "badge badge-category";
+      categoryBadge.textContent = evidenceCategory(item);
+      badgeRow.appendChild(categoryBadge);
+      if (sublabel) {
+        const small = document.createElement("small");
+        small.textContent = sublabel;
+        button.appendChild(small);
+      }
+      button.appendChild(badgeRow);
+      button.addEventListener("click", () => selectEvidence(item));
+      return button;
+    }
+    function treeGroup(title, items, mapper, open = false, category = "route") {
+      const details = document.createElement("details");
+      details.open = open;
+      details.style.setProperty("--category-color", categoryColor(category));
+      const summary = document.createElement("summary");
+      summary.textContent = `${title} (${items.length})`;
+      const group = document.createElement("div");
+      group.className = "tree-group";
+      items.forEach(item => {
+        const mapped = mapper(item);
+        group.appendChild(treeButton(item, mapped.label, mapped.sublabel));
+      });
+      details.appendChild(summary);
+      details.appendChild(group);
+      return details;
+    }
+    function updateStatusFilterOptions(view) {
+      const select = document.getElementById("featureStatusFilter");
+      const statuses = new Set([...view.checkpoints, ...view.segments].map(statusFor).filter(Boolean));
+      [...select.querySelectorAll("option:not([value='all'])")].forEach(node => node.remove());
+      [...statuses].sort().forEach(status => {
+        const option = document.createElement("option");
+        option.value = status;
+        option.textContent = status;
+        select.appendChild(option);
+      });
+    }
+    function updateReviewCategoryFilterOptions(view) {
+      const select = document.getElementById("reviewCategoryFilter");
+      const categories = new Set((view.review_queue?.items || []).map(reviewCategoryFor).filter(Boolean));
+      [...select.querySelectorAll("option:not([value='all'])")].forEach(node => node.remove());
+      [...categories].sort().forEach(category => {
+        const option = document.createElement("option");
+        option.value = category;
+        option.textContent = category.replaceAll("_", " ");
+        select.appendChild(option);
+      });
+    }
+    function updateReviewQueueControls(view) {
+      const counts = view.review_queue?.counts || {};
+      document.getElementById("reviewBlockerCount").textContent = counts.blocker_count ?? 0;
+      document.getElementById("reviewWarningCount").textContent = counts.warning_count ?? 0;
+      document.getElementById("reviewReviewCount").textContent = counts.review_count ?? 0;
+      updateReviewCategoryFilterOptions(view);
+      updateReviewQuickButtons();
+    }
+    function updateReviewQuickButtons() {
+      const severity = document.getElementById("reviewSeverityFilter").value;
+      document.querySelectorAll("[data-review-severity].review-quick").forEach(button => {
+        button.classList.toggle("is-active", button.dataset.reviewSeverity === severity);
+      });
+    }
+    function setReviewSeverityFilter(severity) {
+      const select = document.getElementById("reviewSeverityFilter");
+      select.value = select.value === severity ? "all" : severity;
+      state.reviewQueueCursor = -1;
+      updateReviewQuickButtons();
+      applyTreeFilters();
+    }
+    function visibleReviewButtons() {
+      const buttons = [...document.querySelectorAll('#evidenceTree button[data-tree-category="review"]')]
+        .filter(button => !button.hidden);
+      const undecidedButtons = buttons.filter(button => button.dataset.reviewDecisionState === "undecided");
+      return undecidedButtons.length ? undecidedButtons : buttons;
+    }
+    function jumpToNextReviewItem() {
+      const buttons = visibleReviewButtons();
+      if (!buttons.length) return;
+      state.reviewQueueCursor = (state.reviewQueueCursor + 1) % buttons.length;
+      buttons[state.reviewQueueCursor].click();
+    }
+    function applyTreeFilters() {
+      const query = document.getElementById("cpSegmentSearch").value.trim().toLowerCase();
+      const category = document.getElementById("featureCategoryFilter").value;
+      const status = document.getElementById("featureStatusFilter").value;
+      const reviewCategory = document.getElementById("reviewCategoryFilter").value;
+      const reviewSeverity = document.getElementById("reviewSeverityFilter").value;
+      document.querySelectorAll("#evidenceTree button[data-tree-source-id]").forEach(button => {
+        const isCpOrSegment = button.dataset.treeCategory === "checkpoint" || button.dataset.treeCategory === "segment";
+        const isReview = button.dataset.treeCategory === "review";
+        const isSelected = button.dataset.treeSourceId === evidenceSourceId(state.selected);
+        const categoryMatch = category === "all" || button.dataset.treeCategory === category;
+        const statusMatch = status === "all" || button.dataset.treeStatus === status;
+        const queryMatch = !query || button.dataset.treeSearchText.includes(query);
+        const reviewCategoryMatch = reviewCategory === "all" || button.dataset.reviewCategory === reviewCategory;
+        const reviewSeverityMatch = reviewSeverity === "all" || button.dataset.reviewSeverity === reviewSeverity;
+        const cpSegmentHidden = isCpOrSegment && !isSelected && !(categoryMatch && statusMatch && queryMatch);
+        const reviewHidden = isReview && !isSelected && !(reviewCategoryMatch && reviewSeverityMatch);
+        button.hidden = cpSegmentHidden || reviewHidden;
+      });
+      document.querySelectorAll("#evidenceTree details").forEach(details => {
+        const buttons = [...details.querySelectorAll("button[data-tree-source-id]")];
+        const hiddenCount = buttons.filter(button => button.hidden).length;
+        details.dataset.filterEmpty = buttons.length > 0 && hiddenCount === buttons.length ? "true" : "false";
+      });
+      highlightTreeNode(state.selected);
+    }
+    function renderEvidenceTree(view) {
+      const tree = document.getElementById("evidenceTree");
+      tree.replaceChildren();
+      updateStatusFilterOptions(view);
+      updateReviewQueueControls(view);
+      tree.appendChild(treeGroup("Checkpoints", view.checkpoints, item => ({
+        label: item.label || item.candidate_id,
+        sublabel: `${item.checkpoint_type} | ${item.review_state}`
+      }), true, "checkpoint"));
+      tree.appendChild(treeGroup("Segments", view.segments, item => ({
+        label: item.label || item.candidate_id,
+        sublabel: `${item.from_candidate_id} -> ${item.to_candidate_id} | ${Math.round(item.distance_m)}m`
+      }), true, "segment"));
+      tree.appendChild(treeGroup("Retreat Routes", view.retreat_routes, item => ({
+        label: item.label || item.candidate_id,
+        sublabel: item.review_state || "candidate"
+      }), true, "retreat"));
+      tree.appendChild(treeGroup("POI", view.map_candidates.poi_candidates, item => ({
+        label: item.label || item.candidate_id,
+        sublabel: item.poi.poi_type
+      }), false, "poi"));
+      tree.appendChild(treeGroup("Hazards", view.map_candidates.hazard_candidates, item => ({
+        label: item.label || item.candidate_id,
+        sublabel: item.hazard.hazard_type
+      }), false, "hazard"));
+      tree.appendChild(treeGroup("Review Queue", view.review_queue.items, item => ({
+        label: item.title,
+        sublabel: `${item.severity} | ${item.category}`
+      }), false, "review"));
+      applyTreeFilters();
+    }
+    function renderTabSummary(view) {
+      const container = document.getElementById("tabSummary");
+      const tab = view.tabs[state.activeTab];
+      const entries = state.activeTab === "pre_trip_planning" ? [
+        ["Target ETA", view.eta.target_eta],
+        ["Turn-back ETA", view.eta.turn_back_checkpoint_eta],
+        ["Weather", view.weather.status],
+        ["Raw samples", "summary only"]
+      ] : [
+        ["Runtime handoff", tab.runtime_handoff.status],
+        ["Route comparison", tab.route_comparison.classification],
+        ["Brain nodes", tab.brain_seed.node_count],
+        ["Observed facts", tab.brain_seed.observed_fact_count]
+      ];
+      container.replaceChildren();
+      entries.forEach(([label, value]) => {
+        const box = document.createElement("div");
+        box.innerHTML = `<small>${label}</small><strong>${value}</strong>`;
+        container.appendChild(box);
+      });
+    }
+    function renderSectionList(view) {
+      const container = document.getElementById("sectionList");
+      const tab = view.tabs[state.activeTab];
+      const sections = tab?.sections || [];
+      container.replaceChildren();
+      sections.forEach(section => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "section-card";
+        button.setAttribute("data-section-id", section.id);
+        const titleRow = document.createElement("span");
+        titleRow.className = "tree-label";
+        const title = document.createElement("span");
+        title.textContent = section.title;
+        const status = document.createElement("span");
+        status.className = "badge badge-status";
+        status.textContent = section.status || "traceable";
+        titleRow.appendChild(title);
+        titleRow.appendChild(status);
+        button.appendChild(titleRow);
+        const source = document.createElement("small");
+        source.textContent = section.source_path || "no source path";
+        button.appendChild(source);
+        const countRow = document.createElement("span");
+        countRow.className = "section-counts";
+        sectionCountSummary(section).forEach(text => {
+          const badge = document.createElement("span");
+          badge.className = "badge";
+          badge.textContent = text;
+          countRow.appendChild(badge);
+        });
+        sectionBoundarySummary(section).forEach(text => {
+          const badge = document.createElement("span");
+          badge.className = "badge section-boundary";
+          badge.textContent = text;
+          countRow.appendChild(badge);
+        });
+        button.appendChild(countRow);
+        button.addEventListener("click", () => setSectionDetail(section));
+        container.appendChild(button);
+      });
+      highlightSectionCard();
+    }
+    function updateMetrics(view) {
+      document.getElementById("projectMeta").textContent = view.project_id;
+      document.getElementById("routeMeta").textContent = `${view.summary.route_name} | ${(view.route.distance_m / 1000).toFixed(2)} km`;
+      document.getElementById("readinessStatus").textContent = view.readiness.status;
+      document.getElementById("reviewQueueCount").textContent = view.review_queue.counts.item_count;
+      document.getElementById("checkpointCount").textContent = view.checkpoints.length;
+      document.getElementById("segmentCount").textContent = view.segments.length;
+      updateReadinessStrip(view);
+    }
+    function updateLayers() {
+      document.querySelectorAll("[data-layer]").forEach(input => {
+        const group = svg.querySelector(`[data-layer-group="${input.dataset.layer}"]`);
+        if (group) group.dataset.layerHidden = input.checked ? "false" : "true";
+      });
+      highlightMapFor(state.selected);
+      highlightTreeNode(state.selected);
+    }
+    function setActiveTab(tab) {
+      state.activeTab = tab;
+      document.querySelectorAll(".tab-button").forEach(button => {
+        const active = button.dataset.tab === tab;
+        button.classList.toggle("is-active", active);
+        button.setAttribute("aria-selected", active ? "true" : "false");
+      });
+      if (state.view) {
+        renderTabSummary(state.view);
+        renderSectionList(state.view);
+        setActiveTabDetail(state.view);
+      }
+    }
+    function bindControls() {
+      bindAssistantControls();
+      document.querySelectorAll("[data-layer]").forEach(input => input.addEventListener("change", updateLayers));
+      document.querySelectorAll(".tab-button").forEach(button => button.addEventListener("click", () => setActiveTab(button.dataset.tab)));
+      document.getElementById("zoomIn").addEventListener("click", () => zoomMap(0.1));
+      document.getElementById("zoomOut").addEventListener("click", () => zoomMap(-0.1));
+      document.getElementById("fitRoute").addEventListener("click", resetMapView);
+      document.getElementById("panUp").addEventListener("click", () => panMap(0, -70));
+      document.getElementById("panDown").addEventListener("click", () => panMap(0, 70));
+      document.getElementById("panLeft").addEventListener("click", () => panMap(-70, 0));
+      document.getElementById("panRight").addEventListener("click", () => panMap(70, 0));
+      document.getElementById("cpSegmentSearch").addEventListener("input", applyTreeFilters);
+      document.getElementById("featureCategoryFilter").addEventListener("change", applyTreeFilters);
+      document.getElementById("featureStatusFilter").addEventListener("change", applyTreeFilters);
+      document.getElementById("reviewCategoryFilter").addEventListener("change", () => {
+        state.reviewQueueCursor = -1;
+        applyTreeFilters();
+      });
+      document.getElementById("reviewSeverityFilter").addEventListener("change", () => {
+        state.reviewQueueCursor = -1;
+        updateReviewQuickButtons();
+        applyTreeFilters();
+      });
+      document.querySelectorAll("[data-review-severity].review-quick").forEach(button => {
+        button.addEventListener("click", () => setReviewSeverityFilter(button.dataset.reviewSeverity));
+      });
+      document.getElementById("reviewNextItem").addEventListener("click", jumpToNextReviewItem);
+      document.getElementById("routeNoteDraftDisposition").addEventListener("change", previewRouteNoteDraftDisposition);
+      document.getElementById("routeNoteDraftPreview").addEventListener("click", previewRouteNoteDraftDisposition);
+      document.getElementById("routeNoteDraftSave").addEventListener("click", saveRouteNoteDraftDispositionToWorkspace);
+      document.getElementById("localWorkspaceCreate").addEventListener("click", createLocalWorkspace);
+      document.getElementById("workspaceAcceptReview").addEventListener("click", acceptSelectedReviewToWorkspace);
+      document.getElementById("workspaceCorrectReview").addEventListener("click", correctSelectedReviewToWorkspace);
+      document.getElementById("workspaceRejectReview").addEventListener("click", rejectSelectedReviewToWorkspace);
+      document.getElementById("workspaceRefreshApplyPlan").addEventListener("click", refreshWorkspaceApplyPlan);
+      document.getElementById("routeNoteReviewedAssumptions").addEventListener("click", generateRouteNoteReviewedAssumptionsForWorkspace);
+      document.getElementById("expertContributionApplyResult").addEventListener("click", applyExpertContributionWorkspaceResult);
+      svg.addEventListener("pointerdown", event => {
+        if (event.button !== 0) return;
+        state.pointerPan = {x: event.clientX, y: event.clientY, panX: state.panX, panY: state.panY};
+        svg.classList.add("is-panning");
+        svg.setPointerCapture(event.pointerId);
+      });
+      svg.addEventListener("pointermove", event => {
+        if (!state.pointerPan) return;
+        const dx = (state.pointerPan.x - event.clientX) / state.zoom;
+        const dy = (state.pointerPan.y - event.clientY) / state.zoom;
+        state.panX = state.pointerPan.panX + dx;
+        state.panY = state.pointerPan.panY + dy;
+        clampMapPan();
+        applyMapViewport();
+      });
+      svg.addEventListener("pointerup", event => {
+        state.pointerPan = null;
+        svg.classList.remove("is-panning");
+        if (svg.hasPointerCapture(event.pointerId)) svg.releasePointerCapture(event.pointerId);
+      });
+      svg.addEventListener("pointercancel", () => {
+        state.pointerPan = null;
+        svg.classList.remove("is-panning");
+      });
+    }
+    async function reloadProjectView() {
+      const selectedSourceId = evidenceSourceId(state.selected);
+      const response = await fetch(`${apiBase()}/admin/pretrip/projects/${PROJECT_ID}`);
+      const view = await response.json();
+      state.view = view;
+      updateMetrics(view);
+      renderMap(view);
+      renderEvidenceTree(view);
+      renderTabSummary(view);
+      renderSectionList(view);
+      selectEvidence(findEvidenceBySourceId(view, selectedSourceId) || view.summary);
+    }
+    async function load() {
+      bindControls();
+      loadAssistantStatus();
+      await reloadProjectView();
+    }
+    load().catch(error => {
+      document.getElementById("detailTitle").textContent = "Failed to load pre-trip project";
+      document.getElementById("detailJson").textContent = String(error.stack || error);
+    });
+  </script>
 </body>
 </html>

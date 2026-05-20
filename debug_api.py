@@ -4,13 +4,14 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from fastapi import APIRouter, FastAPI, Query
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 
 from runtime_debug_log import MemoryRuntimeDebugEventLog
 from runtime_debug_models import RuntimeDebugEventKind
 
 
 DEFAULT_DEBUG_PAGE = Path(__file__).resolve().parent / "docs" / "admin" / "phase-3-5-runtime-debug.html"
+DEFAULT_ASSISTANT_UI_SCRIPT = Path(__file__).resolve().parent / "docs" / "admin" / "scout-assistant-ui.js"
 
 
 class DebugEventLog(Protocol):
@@ -125,13 +126,22 @@ def create_debug_router(
 def create_debug_page_router(
     *,
     debug_page_path: Path | str = DEFAULT_DEBUG_PAGE,
+    assistant_ui_script_path: Path | str = DEFAULT_ASSISTANT_UI_SCRIPT,
 ) -> APIRouter:
     router = APIRouter(prefix="/admin", tags=["debug"])
     resolved_debug_page_path = Path(debug_page_path)
+    resolved_assistant_ui_script_path = Path(assistant_ui_script_path)
 
     @router.get("/debug", response_class=HTMLResponse)
     def debug_page() -> str:
         return resolved_debug_page_path.read_text(encoding="utf-8")
+
+    @router.get("/scout-assistant-ui.js")
+    def assistant_ui_script() -> Response:
+        return Response(
+            resolved_assistant_ui_script_path.read_text(encoding="utf-8"),
+            media_type="application/javascript",
+        )
 
     return router
 

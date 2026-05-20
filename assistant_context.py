@@ -6,6 +6,7 @@ from admin_assistant_context import build_admin_assistant_context
 from assistant_models import AssistantSourceRef, AssistantSurface, ScoutAssistantQuery
 from debug_assistant_context import RuntimeDebugEventLog, DebugMessageSource, build_debug_assistant_context
 from hardware_readiness_assistant_context import build_hardware_readiness_assistant_context
+from hardware_readiness_admin_view import load_hardware_readiness_fixture
 from pretrip_assistant_context import build_pretrip_assistant_context
 
 
@@ -70,6 +71,17 @@ def build_assistant_context(
                     selected_source_id=query.selected_artifact_id,
                 )
         if query.surface == AssistantSurface.HARDWARE_READINESS:
+            if (
+                hardware_provider_health is None
+                and hardware_sample_replay_timeline is None
+                and hardware_runtime_debug_events is None
+                and hardware_mock_transport_queue is None
+            ):
+                fixture = load_hardware_readiness_fixture()
+                hardware_provider_health = fixture["provider_health"]
+                hardware_sample_replay_timeline = fixture["sample_replay_timeline"]
+                hardware_runtime_debug_events = fixture["runtime_debug_events"]
+                hardware_mock_transport_queue = fixture["mock_transport_queue"]
             return build_hardware_readiness_assistant_context(
                 provider_health=hardware_provider_health,
                 sample_replay_timeline=hardware_sample_replay_timeline,
@@ -169,7 +181,7 @@ def _source_refs(
 
 
 def _context_summary(context: dict[str, Any]) -> dict[str, Any]:
-    return {
+    summary = {
         "surface": context.get("surface"),
         "read_only": context.get("read_only"),
         "bounded": context.get("bounded"),
@@ -177,6 +189,16 @@ def _context_summary(context: dict[str, Any]) -> dict[str, Any]:
         "summary": context.get("summary", {}),
         "limitations": context.get("limitations", []),
     }
+    selected_event = context.get("selected_event")
+    if selected_event is not None:
+        summary["selected_event"] = selected_event
+    selected_evidence = context.get("selected_evidence")
+    if selected_evidence is not None:
+        summary["selected_evidence"] = selected_evidence
+    selected_provider = context.get("selected_provider")
+    if selected_provider is not None:
+        summary["selected_provider"] = selected_provider
+    return summary
 
 
 def _dedupe_source_refs(sources: list[AssistantSourceRef]) -> list[AssistantSourceRef]:

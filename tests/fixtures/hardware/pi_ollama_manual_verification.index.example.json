@@ -1,0 +1,21 @@
+{
+  "artifact_type": "manual_only_pi_ollama_verification_index",
+  "index_version": 1,
+  "generated_by": "operator_recorded_manual_index",
+  "entries": [
+    {
+      "summary_ref": "manual-pi-ollama-2026-05-19T00:00:00+08:00",
+      "fixture_path": "tests/fixtures/hardware/pi_ollama_manual_verification.example.json",
+      "timestamp": "2026-05-19T00:00:00+08:00",
+      "runtime_profile": "pi-field",
+      "local_model_name": "qwen2.5:0.5b",
+      "operator_observed_latency_ms": 5700,
+      "read_only": true,
+      "model_interpretation": true,
+      "phase1_state_changed": false,
+      "observed_fact_written": false,
+      "outbound_sent": false,
+      "hardware_controlled": false
+    }
+  ]
+}

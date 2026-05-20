@@ -4,8 +4,14 @@ from pathlib import Path
 
 
 PAGE_PATH = Path("docs/admin/phase-3-5-runtime-debug.html")
+ASSISTANT_UI_SCRIPT = Path("docs/admin/scout-assistant-ui.js")
 MUTATION_METHODS = {"POST", "PATCH", "PUT", "DELETE"}
-ALLOWED_DEBUG_ENDPOINTS = {"/debug/events", "/debug/state", "/debug/messages"}
+ALLOWED_DEBUG_ENDPOINTS = {
+    "/assistant/status",
+    "/debug/events",
+    "/debug/messages",
+    "/debug/state",
+}
 
 
 class DebugPageTests(unittest.TestCase):
@@ -156,6 +162,7 @@ class DebugPageTests(unittest.TestCase):
 
     def test_static_debug_page_fetches_only_get_debug_read_endpoints(self):
         html = PAGE_PATH.read_text(encoding="utf-8")
+        shared_script = ASSISTANT_UI_SCRIPT.read_text(encoding="utf-8")
         fetch_targets = set(re.findall(r'fetchJson\("([^"]+)"\)', html))
 
         self.assertEqual(
@@ -163,19 +170,24 @@ class DebugPageTests(unittest.TestCase):
             ALLOWED_DEBUG_ENDPOINTS,
         )
         self.assertNotIn("/safety/", html)
-        self.assertNotIn("method:", html)
-        self.assertNotIn("body:", html)
+        post_targets = set(re.findall(r'postJson\("([^"]+)"', html))
+        self.assertEqual(post_targets, {"/assistant/query"})
+        self.assertIn("scout-assistant-ui.js", html)
+        self.assertEqual(shared_script.count('method: "POST"'), 1)
+        self.assertIn("body: JSON.stringify(payload)", shared_script)
 
     def test_static_debug_page_has_no_mutation_methods_or_controls(self):
         html = PAGE_PATH.read_text(encoding="utf-8")
 
-        for method in MUTATION_METHODS:
+        for method in MUTATION_METHODS - {"POST"}:
             self.assertIsNone(
                 re.search(rf"\b{method}\b", html),
                 msg=f"Static debug page must not reference {method}.",
             )
 
-        for tag in ("button", "form", "input", "select", "textarea"):
+        self.assertIn('id="assistantAskButton"', html)
+        self.assertIn('id="assistantQuestionInput"', html)
+        for tag in ("form", "input", "select"):
             self.assertIsNone(
                 re.search(rf"<\s*{tag}\b", html, flags=re.IGNORECASE),
                 msg=f"Static debug page must not render <{tag}> controls.",

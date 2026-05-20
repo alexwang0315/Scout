@@ -113,6 +113,9 @@ class MockOutboundTransport:
     def mark_mock_delivered(self, message_id: str) -> MockOutboundMessage:
         return self._transition(message_id, "mock-delivered")
 
+    def cancel_message(self, message_id: str, *, reason: str) -> MockOutboundMessage:
+        return self._transition(message_id, "cancelled", reason=reason)
+
     def list_messages(self) -> list[MockOutboundMessage]:
         return list(self._messages.values())
 

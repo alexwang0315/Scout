@@ -5,7 +5,10 @@ from pathlib import Path
 from typing import Any
 
 from admin_assistant_context import build_admin_assistant_context
+from assistant_context import assistant_source_refs_from_context, create_assistant_context_resolver
+from assistant_models import ScoutAssistantQuery
 from debug_assistant_context import build_debug_assistant_context
+from hardware_readiness_admin_view import build_hardware_readiness_admin_view, load_hardware_readiness_fixture
 from hardware_readiness_assistant_context import build_hardware_readiness_assistant_context
 from pretrip_assistant_context import build_pretrip_assistant_context
 from runtime_debug_log import MemoryRuntimeDebugEventLog
@@ -79,6 +82,48 @@ def test_debug_context_is_bounded_read_only_and_traceable():
     } in context["sources"]
 
 
+def test_debug_context_resolver_includes_selected_event_detail_for_model_context():
+    log = MemoryRuntimeDebugEventLog(
+        [
+            _event(sequence=1, kind="debug_session_started", summary="Debug started."),
+            _event(
+                sequence=2,
+                kind="safety_event_emitted",
+                summary="CP2 emitted L2 concern after route deviation.",
+                payload={
+                    "checkpoint_id": "CP2",
+                    "safety_level": "L2_CONCERN",
+                    "reason": "off_route",
+                    "distance_from_route_m": 82,
+                },
+            ),
+        ]
+    )
+    resolver = create_assistant_context_resolver(debug_event_log=log)
+
+    sources = resolver(
+        ScoutAssistantQuery(
+            surface="debug",
+            question="Why did CP2 become L2?",
+            selected_event_id="debug_event.test.000002",
+        )
+    )
+
+    context_source = next(
+        source
+        for source in sources
+        if source.source_id == "assistant_context.debug"
+    )
+    selected_event = context_source.context_summary["selected_event"]
+
+    assert selected_event["event_id"] == "debug_event.test.000002"
+    assert selected_event["kind"] == "safety_event_emitted"
+    assert selected_event["summary"] == "CP2 emitted L2 concern after route deviation."
+    assert selected_event["payload"]["checkpoint_id"] == "CP2"
+    assert selected_event["payload"]["safety_level"] == "L2_CONCERN"
+    assert selected_event["payload"]["reason"] == "off_route"
+
+
 def test_admin_context_wraps_after_action_view_as_compact_summary():
     context = build_admin_assistant_context("scout_260512_field_golden", root=ROOT)
 
@@ -94,6 +139,111 @@ def test_admin_context_wraps_after_action_view_as_compact_summary():
     assert context["boundary"]["incident_store_write_allowed"] is False
     assert context["boundary"]["phase2_writeback_allowed"] is False
     assert any(source["evidence_type"] == "replay_summary" for source in context["sources"])
+
+
+def test_admin_context_resolver_includes_selected_evidence_detail_for_model_context():
+    context = build_admin_assistant_context(
+        "scout_260512_field_golden",
+        root=ROOT,
+        selected_source_id="cp_01",
+    )
+
+    sources = assistant_source_refs_from_context(
+        context,
+        query=ScoutAssistantQuery(
+            surface="admin",
+            question="Why is this checkpoint evidence important?",
+            context_ref="scout_260512_field_golden",
+            selected_artifact_id="cp_01",
+        ),
+    )
+
+    context_source = next(
+        source
+        for source in sources
+        if source.source_id == "assistant_context.admin"
+    )
+    selected_evidence = context_source.context_summary["selected_evidence"]
+
+    assert selected_evidence["source_id"] == "cp_01"
+    assert selected_evidence["evidence_type"] == "replay_checkpoint"
+    assert selected_evidence["label"] == "cp_01"
+    assert "Checkpoint cp_01 reached" in selected_evidence["reason"]
+    assert "raw_samples" not in str(selected_evidence)
+
+
+def test_admin_context_resolves_after_action_ui_selection_aliases():
+    route_context = build_admin_assistant_context(
+        "scout_260512_field_golden",
+        root=ROOT,
+        selected_source_id="route",
+    )
+    map_context = build_admin_assistant_context(
+        "scout_260512_field_golden",
+        root=ROOT,
+        selected_source_id="map_corridors",
+    )
+    segment_context = build_admin_assistant_context(
+        "scout_260512_field_golden",
+        root=ROOT,
+        selected_source_id="seg_01",
+    )
+
+    assert route_context["selected_evidence"]["source_id"] == "field_route"
+    assert route_context["selected_evidence"]["evidence_type"] == "field_route_summary"
+    assert route_context["selected_evidence"]["point_count"] > 1500
+    assert map_context["selected_evidence"]["source_id"] == "field_map_context"
+    assert map_context["selected_evidence"]["evidence_type"] == "map_layer_summary"
+    assert map_context["selected_evidence"]["selected_layer_id"] == "map_corridors"
+    assert map_context["selected_evidence"]["layer_count"] > 0
+    assert segment_context["selected_evidence"]["source_id"] == "seg_01"
+    assert segment_context["selected_evidence"]["evidence_type"] == "mission_segment"
+    assert segment_context["selected_evidence"]["from_checkpoint_id"] == "cp_01"
+    assert segment_context["selected_evidence"]["to_checkpoint_id"] == "cp_02"
+    assert "raw_samples" not in str(route_context["selected_evidence"])
+    assert "coordinates" not in str(map_context["selected_evidence"])
+
+
+def test_admin_context_resolves_map_layer_aliases_with_readable_source_labels():
+    expected = {
+        "map_corridors": {
+            "selected_layer_id": "map_corridors",
+            "label": "Map corridors",
+            "layer_evidence_type": "map_corridor",
+        },
+        "map_hazards": {
+            "selected_layer_id": "map_hazards",
+            "label": "Map hazards",
+            "layer_evidence_type": "map_hazard",
+        },
+        "map_pois": {
+            "selected_layer_id": "map_pois",
+            "label": "Map POIs",
+            "layer_evidence_type": "map_poi",
+        },
+    }
+
+    for selected_source_id, expected_fields in expected.items():
+        context = build_admin_assistant_context(
+            "scout_260512_field_golden",
+            root=ROOT,
+            selected_source_id=selected_source_id,
+        )
+        selected_evidence = context["selected_evidence"]
+
+        assert selected_evidence["source_id"] == "field_map_context"
+        assert selected_evidence["evidence_type"] == "map_layer_summary"
+        assert selected_evidence["source_path"].endswith("scout_260512_overpass_map_context.geojson")
+        assert selected_evidence["selected_layer_id"] == expected_fields["selected_layer_id"]
+        assert selected_evidence["label"] == expected_fields["label"]
+        assert selected_evidence["layer_evidence_type"] == expected_fields["layer_evidence_type"]
+        assert selected_evidence["layer_count"] >= 0
+        if selected_source_id == "map_corridors":
+            assert selected_evidence["layer_count"] > 0
+            assert selected_evidence["sample_labels"]
+        assert "coordinates" not in str(selected_evidence)
+        assert "polygon" not in str(selected_evidence)
+        assert "coordinate" not in str(selected_evidence)
 
 
 def test_pretrip_context_wraps_admin_view_sections_without_review_writes():
@@ -119,6 +269,40 @@ def test_pretrip_context_wraps_admin_view_sections_without_review_writes():
         source["evidence_type"] == "pretrip_review_queue_manifest"
         for source in context["sources"]
     )
+
+
+def test_pretrip_context_resolver_includes_selected_evidence_detail_for_model_context():
+    context = build_pretrip_assistant_context(
+        "chilai_nanhua_day1",
+        root=ROOT,
+        selected_source_id="candidate.cp2",
+        view_builder=_fake_pretrip_view,
+    )
+
+    sources = assistant_source_refs_from_context(
+        context,
+        query=ScoutAssistantQuery(
+            surface="pretrip",
+            question="Why does CP2 need review?",
+            project_id="chilai_nanhua_day1",
+            selected_artifact_id="candidate.cp2",
+        ),
+    )
+
+    context_source = next(
+        source
+        for source in sources
+        if source.source_id == "assistant_context.pretrip"
+    )
+    selected_evidence = context_source.context_summary["selected_evidence"]
+
+    assert selected_evidence["source_id"] == "candidate.cp2"
+    assert selected_evidence["evidence_type"] == "pretrip_checkpoint_candidate"
+    assert selected_evidence["category"] == "checkpoint"
+    assert selected_evidence["priority"] == "high"
+    assert selected_evidence["candidate_ref"] == "cp2"
+    assert selected_evidence["review_focus"] == ["timing"]
+    assert selected_evidence["map_target_ids"] == ["cp2"]
 
 
 def test_pretrip_context_fails_closed_when_admin_view_is_not_available():
@@ -189,6 +373,30 @@ def test_hardware_readiness_context_is_bounded_and_does_not_control_providers():
         "source_path": "tests/fixtures/hardware/provider_health.json",
         "evidence_type": "hardware_provider_health",
     } in context["sources"]
+
+
+def test_hardware_readiness_fixture_context_is_read_only_and_traceable():
+    fixture = load_hardware_readiness_fixture(ROOT / "tests" / "fixtures" / "hardware" / "readiness_context.json")
+    context = build_hardware_readiness_assistant_context(
+        provider_health=fixture["provider_health"],
+        sample_replay_timeline=fixture["sample_replay_timeline"],
+        runtime_debug_events=fixture["runtime_debug_events"],
+        mock_transport_queue=fixture["mock_transport_queue"],
+        selected_provider_ref="provider.gnss.primary",
+    )
+    view = build_hardware_readiness_admin_view(selected_provider_ref="provider.gnss.primary")
+
+    assert context["surface"] == "hardware_readiness"
+    assert context["summary"]["provider_count"] == 2
+    assert context["summary"]["degraded_provider_count"] == 1
+    assert context["selected_provider"]["provider_ref"] == "provider.gnss.primary"
+    assert context["selected_provider"]["status"] == "degraded"
+    assert context["boundary"]["hardware_control_allowed"] is False
+    assert context["boundary"]["provider_control_allowed"] is False
+    assert context["boundary"]["real_sos_allowed"] is False
+    assert view["read_only"] is True
+    assert view["summary"]["mock_message_count"] == 1
+    assert any(source["source_id"] == "provider.gnss.primary" for source in view["sources"])
 
 
 def test_context_adapters_have_no_forbidden_mutation_imports():

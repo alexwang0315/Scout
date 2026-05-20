@@ -24,6 +24,23 @@ class AdminAfterActionTests(unittest.TestCase):
         self.assertGreaterEqual(len(view["map"]["corridors"]), 600)
         self.assertEqual(len(view["risk_rules"]), 3)
         self.assertEqual(view["map"]["metadata"]["source"], "openstreetmap_overpass")
+        self.assertEqual(
+            [layer["layer_id"] for layer in view["map_layers"]],
+            [
+                "imagery",
+                "osm",
+                "corridors",
+                "hazards",
+                "route",
+                "checkpoints",
+                "events",
+                "weather-api",
+            ],
+        )
+        self.assertTrue(view["map_layers"][0]["label_zh"].startswith("影像圖層"))
+        self.assertTrue(view["map_layers"][-1]["label_zh"].startswith("氣象 API"))
+        self.assertFalse(view["map_layers"][-1]["available"])
+        self.assertFalse(view["map_layers"][-1]["default_enabled"])
         self.assertEqual(view["replay"]["observations_processed"], 1568)
         self.assertEqual(view["replay"]["safety_level"], "L0_NORMAL")
         self.assertEqual(view["replay"]["checkpoint_count"], 10)
@@ -82,6 +99,14 @@ class AdminAfterActionTests(unittest.TestCase):
         self.assertIn("horizontalResizer", response.text)
         self.assertIn("evidenceTree", response.text)
         self.assertIn("jsonPane", response.text)
+        self.assertIn("narrativePanel", response.text)
+        self.assertIn("Mission Narrative", response.text)
+        self.assertIn("narrativeSummary", response.text)
+        self.assertIn("narrativeFacts", response.text)
+        self.assertIn("Completed mission evidence is read-only", response.text)
+        self.assertIn("Phase 4 candidate review", response.text)
+        self.assertIn("rawJsonDetails", response.text)
+        self.assertIn("Raw JSON detail", response.text)
         self.assertIn("safetyLevel", response.text)
         self.assertIn("segmentCapsules", response.text)
         self.assertIn("--cat-checkpoint", response.text)
@@ -92,6 +117,35 @@ class AdminAfterActionTests(unittest.TestCase):
         self.assertIn("highlightMapFor", response.text)
         self.assertIn("segment-overlay", response.text)
         self.assertIn("data-source-id", response.text)
+        self.assertIn('data-layer="imagery"', response.text)
+        self.assertIn('data-layer="osm"', response.text)
+        self.assertIn('data-layer="weather-api"', response.text)
+        self.assertLess(
+            response.text.index('data-layer-group": "imagery"'),
+            response.text.index('data-layer-group": "osm"'),
+        )
+        self.assertLess(
+            response.text.index('data-layer-group": "osm"'),
+            response.text.index('data-layer-group": "weather-api"'),
+        )
+        self.assertIn('src="/admin/scout-assistant-ui.js"', response.text)
+
+    def test_admin_page_keeps_narrative_and_raw_json_selection_contract(self):
+        client = TestClient(create_admin_app())
+
+        response = client.get("/admin")
+
+        self.assertEqual(response.status_code, 200)
+        html = response.text
+        self.assertIn("function setDetail(item)", html)
+        self.assertIn('document.getElementById("narrativeSummary").textContent = narrativeSummary(item)', html)
+        self.assertIn("renderNarrativeFacts(item)", html)
+        self.assertIn('document.getElementById("detailJson").textContent = JSON.stringify(item, null, 2)', html)
+        self.assertIn("function selectEvidence(item)", html)
+        self.assertIn("setDetail(item);", html)
+        self.assertIn("highlightTreeNode(item);", html)
+        self.assertIn("highlightMapFor(item);", html)
+        self.assertIn("loadCase();", html)
 
     def test_unknown_admin_case_returns_404(self):
         client = TestClient(create_admin_app())
