@@ -25,7 +25,13 @@ def test_hardware_port_plan_records_step1_runbook_as_completed_next_slice() -> N
     for token in (
         "canonical fixture target smoke",
         "Step 1 deployment runbook freeze",
-        "stabilize host-side radio scan provider evidence",
-        "stabilize Phase 4 dirty worktree groups",
+        "host-side radio scan",
+        "provider hardening",
+        "Phase 4 admin preview auth/smoke hardening",
+        "stream read-only status mount",
+        "bounded follow-up tracks are closed",
+        "live runtime stream transport on the Scout machine",
+        "remote provider live send",
+        "local model/Ollama fallback as a deployed runtime path",
     ):
         assert token in source

@@ -100,3 +100,25 @@ def test_cleanup_plan_records_batch_3_local_artifact_hygiene() -> None:
         "must not mutate the worktree",
     ):
         assert token in source
+
+
+def test_cleanup_plan_records_batch_4_closeout_without_crossing_live_gates() -> None:
+    source = PLAN_PATH.read_text(encoding="utf-8")
+
+    for token in (
+        "## Batch 4 Closeout",
+        "grouped cleanup work is now closed",
+        "Phase 1 after-action next-plan candidates are candidate-only",
+        "Runtime stream/admission work is limited to opt-in contracts",
+        "read-only status surfaces",
+        "Phase 4 admin preview smoke now supports protected admin routes",
+        "token values excluded from repo artifacts",
+        "`trajectory_map.png` remains the only known dirty local-only artifact",
+        "enabling live runtime stream transport",
+        "enabling remote provider live send",
+        "enabling local model/Ollama fallback as a deployed runtime path",
+        "turning after-action candidates into reviewed Phase 4 planning artifacts",
+        "promoting or resetting generated local map artifacts",
+        "不代表已核准 live stream",
+    ):
+        assert token in source

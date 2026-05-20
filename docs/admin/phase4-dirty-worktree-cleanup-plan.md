@@ -122,3 +122,35 @@ Batch 3 executable gate:
   `local_only_staged:<path>` in `missing_required_artifacts`.
 - The gate must not mutate the worktree, revert files, stage files, commit
   files, or remove tracked files.
+
+## Batch 4 Closeout
+
+The grouped cleanup work is now closed for the current hardware/admin prep
+thread:
+
+- Phase 4 planning/admin work has been separated from the deterministic
+  hardware runtime commits.
+- Phase 1 after-action next-plan candidates are candidate-only and remain a
+  read-only projection from historical after-action evidence.
+- Runtime stream/admission work is limited to opt-in contracts and
+  read-only status surfaces. Live transport/provider send remains outside this
+  cleanup batch.
+- Phase 4 admin preview smoke now supports protected admin routes without
+  printing tokens or sending admin auth headers to the field runtime.
+- Scout machine Phase 4 admin auth smoke is recorded as LAN evidence, with
+  token values excluded from repo artifacts.
+- `trajectory_map.png` remains the only known dirty local-only artifact and is
+  intentionally unstaged.
+
+Remaining explicit-decision gates:
+
+- enabling live runtime stream transport on the Scout machine;
+- enabling remote provider live send;
+- enabling local model/Ollama fallback as a deployed runtime path;
+- turning after-action candidates into reviewed Phase 4 planning artifacts;
+- promoting or resetting generated local map artifacts such as
+  `trajectory_map.png`.
+
+中文註釋：這個 closeout 只表示 cleanup 分組已經收斂，不代表已核准 live stream、
+provider send、local model runtime、departure handoff、或 after-action 自動改寫
+未來計畫。
