@@ -185,6 +185,31 @@ Manual chain boundaries:
 - 不讀取 token value。
 - 不寫 Scout state。
 
+### Milestone 10.2 Slice 11: Pi/Ollama Hardware Experiment Assets
+
+The hardware experiment assets are now repo-owned and test-covered, but they
+remain manual prototype tools:
+
+- `docker-compose.pi.ai.yml` defines `scout-ollama` behind the
+  `ai-experimental` Compose profile.
+- `tools/pi_ollama_stress.py` probes an already-running Ollama listener and
+  records latency, temperature, and load diagnostics as stdout JSONL.
+
+Boundaries:
+
+- not part of the assistant readiness gate。
+- read-only model interpretation。
+- 不啟動本地模型 from readiness checks。
+- 不啟動 Ollama from readiness checks。
+- 不呼叫 `/assistant/*`。
+- 不呼叫 `/safety/*` mutation。
+- 不寫 ObservedFact。
+- 不寫 Phase 2 Brain。
+- 不寫 IncidentStore。
+- 不送 outbound。
+- 不控制 hardware。
+- 不控制 provider。
+
 ## 3. API Boundary
 
 Assistant endpoint：

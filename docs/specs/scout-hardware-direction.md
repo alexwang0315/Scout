@@ -714,6 +714,18 @@ Decision:
 Detailed evidence is recorded in
 `docs/specs/pi5-local-ai-runtime-experiment.md`.
 
+Committed operator assets:
+
+- `docker-compose.pi.ai.yml` is the optional Pi/Ollama service definition and
+  requires the `ai-experimental` Compose profile.
+- `tools/pi_ollama_stress.py` is the manual stress probe used to sample
+  Ollama latency, Pi temperature, and load from an already-running listener.
+
+These assets are not part of the assistant readiness gate. They stay in the
+hardware prototype track and preserve read-only model interpretation semantics:
+不啟動本地模型 from readiness checks, 不呼叫 `/safety/*` mutation, no Scout state
+writes, no outbound send, and no hardware/provider control.
+
 ### Step 5: Coral TPU
 
 Goal:
