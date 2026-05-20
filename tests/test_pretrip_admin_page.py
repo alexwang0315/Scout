@@ -24,6 +24,13 @@ def test_pretrip_admin_page_contains_expected_layout_contract():
     assert 'id="sectionList"' in html
     assert "grid-template-rows: auto minmax(180px, .95fr) minmax(260px, 1.05fr);" in html
     assert "grid-template-columns: minmax(0, 1fr) minmax(300px, 360px) minmax(340px, 420px);" in html
+    assert "grid-template-rows: auto minmax(0, 1fr);" in html
+    assert "grid-template-rows: auto minmax(240px, 1fr);" in html
+    assert "overflow-y: auto;" in html
+    assert "overscroll-behavior: contain;" in html
+    assert "scrollbar-gutter: stable;" in html
+    assert "min-height: 0;" in html
+    assert "#map { min-height: 420px; }" in html
     assert ".detail-body > *," in html
     assert ".tree > *," in html
     assert ".assistant-panel > *" in html
@@ -123,6 +130,7 @@ def test_pretrip_admin_page_fetches_fixture_backed_read_only_project_api():
     assert "OSM_LOCAL_TILE_URL_TEMPLATE" in html
     assert "const OSM_TARGET_ZOOM = 17" in html
     assert "const OSM_MAX_TILES = 64" in html
+    assert "const MAP_VISUAL_PADDING = 56" in html
     assert "RASTER_LOCAL_TILE_URL_TEMPLATE" in html
     assert "/admin/tiles/osm/{z}/{x}/{y}.png" in html
     assert "/admin/tiles/imagery/{project_id}/{layer_id}/{z}/{x}/{y}.png" in html

@@ -89,7 +89,7 @@
     }
     .map-pane {
       display: grid;
-      grid-template-rows: auto 1fr;
+      grid-template-rows: auto minmax(0, 1fr);
     }
     .toolbar {
       border-bottom: 1px solid var(--line);
@@ -169,7 +169,7 @@
       display: block;
       width: 100%;
       height: 100%;
-      min-height: 420px;
+      min-height: 0;
       background: #fbfcfe;
       border: 1px solid var(--line);
       border-radius: 8px;
@@ -232,7 +232,10 @@
     [data-layer-hidden="true"] { display: none; }
     .route-pane {
       display: grid;
-      grid-template-rows: auto 1fr;
+      grid-template-rows: auto minmax(240px, 1fr);
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      scrollbar-gutter: stable;
     }
     .detail-pane {
       display: grid;
@@ -348,6 +351,7 @@
       overflow: auto;
       padding: 12px;
       min-height: 0;
+      scrollbar-gutter: stable;
     }
     .tree details {
       border: 1px solid var(--line);
@@ -518,6 +522,7 @@
       min-height: 0;
       overflow-y: auto;
       overscroll-behavior: contain;
+      scrollbar-gutter: stable;
       padding: 12px;
       border-top: 1px solid var(--line);
       background: #fbfcfe;
@@ -684,6 +689,7 @@
       .readiness-strip { grid-template-columns: 1fr 1fr; }
       .shell { grid-template-columns: 1fr; grid-template-rows: auto auto auto; height: auto; overflow: visible; }
       .map-pane, .route-pane, .detail-pane { min-height: 520px; border-right: 0; border-bottom: 1px solid var(--line); }
+      #map { min-height: 420px; }
       .detail-pane { grid-template-rows: auto auto auto; }
       .assistant-panel { overflow-y: visible; }
     }
@@ -946,6 +952,7 @@
     const PROJECT_ID = "chilai_nanhua_day1";
     const MAP_WIDTH = 1000;
     const MAP_HEIGHT = 720;
+    const MAP_VISUAL_PADDING = 56;
     const OSM_PUBLIC_TILE_URL_TEMPLATE = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
     const OSM_LOCAL_TILE_URL_TEMPLATE = `${apiBase()}/admin/tiles/osm/{z}/{x}/{y}.png`;
     const OSM_TILE_URL_TEMPLATE = OSM_PUBLIC_TILE_URL_TEMPLATE;
@@ -1009,7 +1016,7 @@
       return { south: b.min_lat, north: b.max_lat, west: b.min_lon, east: b.max_lon };
     }
     function project(bounds, lat, lon) {
-      const pad = 36 / state.zoom;
+      const pad = MAP_VISUAL_PADDING / state.zoom;
       const lonSpan = Math.max(bounds.east - bounds.west, 0.000001);
       const latSpan = Math.max(bounds.north - bounds.south, 0.000001);
       const x = pad + ((lon - bounds.west) / lonSpan) * (MAP_WIDTH - pad * 2);
