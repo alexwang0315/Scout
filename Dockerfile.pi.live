@@ -82,6 +82,7 @@ COPY \
     risk_rules.py \
     route_matching.py \
     route_progress.py \
+    runtime_artifact_resolution.py \
     runtime_input_admission.py \
     runtime_observation_envelope.py \
     runtime_remote_provider_config_preflight.py \
