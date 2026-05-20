@@ -74,6 +74,7 @@ class ServerSafetyObservationAdmissionConfigTests(unittest.TestCase):
                 "SCOUT_SAFETY_ENABLED": "true",
                 "SCOUT_SAFETY_OBSERVATION_ADMISSION_ENABLED": "1",
                 "SCOUT_SAFETY_OBSERVATION_ADMISSION_SECRET": "0123456789abcdef",
+                "SCOUT_RUNTIME_STREAM_TRANSPORT_ENABLED": "false",
             },
             clear=False,
         ):
@@ -84,8 +85,8 @@ class ServerSafetyObservationAdmissionConfigTests(unittest.TestCase):
             self.assertIsNotNone(server.safety_observation_admission_config)
             route_paths = {route.path for route in server.app.routes}
             self.assertIn("/safety/observations", route_paths)
-            self.assertIn("/runtime/streams/http-push/observations", route_paths)
-            self.assertIn("/runtime/streams/websocket/observations", route_paths)
+            self.assertNotIn("/runtime/streams/http-push/observations", route_paths)
+            self.assertNotIn("/runtime/streams/websocket/observations", route_paths)
             response = client.post(
                 "/safety/observations",
                 json={"payload": {"loggingTime": 1.0}},
@@ -94,6 +95,25 @@ class ServerSafetyObservationAdmissionConfigTests(unittest.TestCase):
         self.assertEqual(response.status_code, 422)
         detail = response.json()["detail"]
         self.assertTrue(any(item.get("loc") == ["envelope"] for item in detail))
+
+    def test_runtime_stream_transport_requires_explicit_launch_guard(self):
+        with patch.dict(
+            os.environ,
+            {
+                "SCOUT_SAFETY_ENABLED": "true",
+                "SCOUT_SAFETY_OBSERVATION_ADMISSION_ENABLED": "1",
+                "SCOUT_SAFETY_OBSERVATION_ADMISSION_SECRET": "0123456789abcdef",
+                "SCOUT_RUNTIME_STREAM_TRANSPORT_ENABLED": "1",
+            },
+            clear=False,
+        ):
+            server = self._reload_server()
+            self.addCleanup(self._reload_server)
+
+        self.assertIsNotNone(server.safety_observation_admission_config)
+        route_paths = {route.path for route in server.app.routes}
+        self.assertIn("/runtime/streams/http-push/observations", route_paths)
+        self.assertIn("/runtime/streams/websocket/observations", route_paths)
 
     def test_server_fails_closed_when_admission_enabled_without_secret(self):
         with patch.dict(

@@ -25,6 +25,7 @@ def test_live_runtime_dockerfile_is_separate_from_step1_and_includes_live_module
         "live_runtime_enablement_cli.py",
         "runtime_debug_models.py",
         "runtime_stream_transport_api.py",
+        "runtime_stream_signed_sample_client.py",
         "runtime_remote_provider_live_adapter.py",
         "runtime_remote_provider_live_send_cli.py",
         "assistant_pydantic_provider.py",

@@ -37,3 +37,36 @@ def test_telegram_provider_live_send_cli_blocks_without_explicit_flags(tmp_path:
     assert result.status == "telegram_live_send_blocked"
     assert "provider_adapter_not_enabled" in result.blocker_reasons
     assert output_path.read_text(encoding="utf-8")
+
+
+def test_telegram_provider_live_send_cli_blocks_missing_intent_artifact(
+    tmp_path: Path,
+) -> None:
+    missing_intent_path = tmp_path / "missing-telegram-intent.json"
+    output_path = tmp_path / "telegram-result.json"
+    transport_calls = []
+
+    exit_code, result = run_telegram_provider_live_send_cli(
+        [
+            "--intent",
+            str(missing_intent_path),
+            "--output",
+            str(output_path),
+            "--enable-provider-adapter",
+            "--enable-live-network-send",
+            "--authorize-manual-send",
+        ],
+        transport=lambda request: transport_calls.append(request),
+    )
+    serialized = output_path.read_text(encoding="utf-8")
+
+    assert exit_code == 2
+    assert result.status == "operator_request_blocked"
+    assert result.blocker_reasons == ["missing_send_intent_artifact"]
+    assert result.live_network_send_attempted is False
+    assert result.send_performed is False
+    assert result.remote_notification_send_count == 0
+    assert transport_calls == []
+    assert "raw_secret_values_embedded" in serialized
+    assert "secret-token" not in serialized
+    assert "secret-chat-id" not in serialized
