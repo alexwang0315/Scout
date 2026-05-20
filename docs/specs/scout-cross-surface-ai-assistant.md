@@ -1126,6 +1126,21 @@ complete when:
 - verification uses mocked runners only and does not start Pi, Ollama, local
   model listeners, transport, or hardware/provider services.
 
+Milestone 10.2 Slice 13 mocked offline fallback adapter/UI formatting is
+complete when:
+
+- `ScoutAssistantResponse` can carry an `offline_fallback` structured summary
+  for fixed-schema local fallback results;
+- `PydanticAIAssistantProvider` attaches the parsed local fallback
+  interpretation to the response when schema enforcement succeeds;
+- shared assistant UI helpers expose `offlineFallbackItems` and
+  `renderOfflineFallback` so pages can render schema output without action
+  buttons;
+- the payload preserves `read_only=true`, `model_interpretation=true`, and
+  `safety_authority=false`;
+- verification uses mocked runners only and does not start Pi, Ollama, local
+  model listeners, transport, or hardware/provider services.
+
 Milestone 10.2 Slice 3 Pi field profile status/runbook is complete when:
 
 - `/assistant/status` reports runtime profile, local fallback mode, manual
@@ -1257,7 +1272,7 @@ Milestone 10.2 Slice 11 hardware experiment assets are complete when:
 
 ## Next Slice Candidates
 
-After Milestone 10.2 Slice 12, the next step is either a longer Pi/Ollama soak
-test record or a mocked offline fallback provider adapter that turns the fixed
-schema into UI-facing read-only explanations. Both should remain outside Phase
-1 safety authority unless explicitly promoted by a new spec decision.
+After Milestone 10.2 Slice 13, the next step is either wiring the shared UI
+helper into individual assistant shells or recording a longer Pi/Ollama soak
+test. Both should remain outside Phase 1 safety authority unless explicitly
+promoted by a new spec decision.

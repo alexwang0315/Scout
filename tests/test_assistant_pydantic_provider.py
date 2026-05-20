@@ -327,8 +327,15 @@ def test_local_fallback_can_enforce_fixed_schema_output_contract():
     assert "Offline fallback fixed-schema interpretation" in response.answer
     assert "目前只能做離線備援解讀" in response.answer
     assert "scout.offline_fallback.v1" in response.answer
+    assert response.offline_fallback is not None
+    assert response.offline_fallback.schema_version == OFFLINE_FALLBACK_SCHEMA_VERSION
+    assert response.offline_fallback.summary_zh == "目前只能做離線備援解讀，需由人確認定位與電量狀態。"
+    assert response.offline_fallback.read_only is True
+    assert response.offline_fallback.model_interpretation is True
+    assert response.offline_fallback.safety_authority is False
     assert runner.last_profile == "local"
     assert runner.last_fixed_schema_version == OFFLINE_FALLBACK_SCHEMA_VERSION
+    assert runner.last_offline_fallback_interpretation is not None
     assert OFFLINE_FALLBACK_SCHEMA_VERSION in str(response.limitations)
     assert "Return only one JSON object" in local.calls[0]["prompt"]
     assert OFFLINE_FALLBACK_PROMPT_ID in local.calls[0]["prompt"]

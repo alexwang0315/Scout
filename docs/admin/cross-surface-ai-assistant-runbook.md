@@ -132,6 +132,19 @@ contract:
 - 這些測試仍使用 mocked runners；不啟動本地模型、不呼叫 Ollama、不啟動
   Pi/Docker/hardware provider、不呼叫 `/safety/*` mutation、不寫 Scout state。
 
+Milestone 10.2 Slice 13 adds mocked offline fallback adapter/UI formatting:
+
+- `/assistant/query` response 可帶 `offline_fallback` structured summary。
+- `offline_fallback` 保留 `schema_version`、`prompt_id`、`summary_zh`、
+  `risk_signals`、`operator_checks`、`uncertainties`、`source_refs`、
+  `confidence`。
+- payload must keep `read_only=true`、`model_interpretation=true`、
+  `safety_authority=false`。
+- shared UI helper exposes `offlineFallbackItems` and `renderOfflineFallback`，
+  讓頁面可以顯示固定 schema 結果，但不提供 action buttons。
+- 測試使用 mocked runners only；不啟動本地模型、不呼叫 Ollama、不啟動
+  Pi/Docker/hardware provider、不呼叫 `/safety/*` mutation、不寫 Scout state。
+
 ### Milestone 10.2 Slice 3: Pi Field Profile Status + Manual Failover Runbook
 
 Slice 3 只增加 status/runbook guardrail，不啟動本地模型，也不讓 UI 或 status endpoint

@@ -85,12 +85,43 @@
   function observabilityItems(payload) {
     const obs = payload.observability || null;
     if (!obs) return [];
-    return [
+    const items = [
       `provider_class: ${text(obs.provider_class, "unknown")}`,
       `latency_class: ${text(obs.latency_class, "unknown")}`,
       `context_size_chars: ${text(obs.context_size_chars, "0")}`,
       `safe_failure: ${obs.safe_failure === true ? "true" : "false"}`
     ];
+    if (obs.model_profile_used) items.push(`model_profile_used: ${text(obs.model_profile_used)}`);
+    if (obs.failover_reason) items.push(`failover_reason: ${text(obs.failover_reason)}`);
+    if (obs.local_model_name) items.push(`local_model_name: ${text(obs.local_model_name)}`);
+    return items;
+  }
+
+  function offlineFallbackItems(payload) {
+    const fallback = payload.offline_fallback || null;
+    if (!fallback) return [];
+    return [
+      `schema_version: ${text(fallback.schema_version)}`,
+      `prompt_id: ${text(fallback.prompt_id)}`,
+      `summary_zh: ${text(fallback.summary_zh)}`,
+      `risk_signals: ${(fallback.risk_signals || []).join("; ") || "none stated"}`,
+      `operator_checks: ${(fallback.operator_checks || []).join("; ") || "none stated"}`,
+      `uncertainties: ${(fallback.uncertainties || []).join("; ") || "none stated"}`,
+      `source_refs: ${(fallback.source_refs || []).join(", ") || "none"}`,
+      `confidence: ${text(fallback.confidence)}`,
+      `read_only: ${fallback.read_only === true ? "true" : "false"}`,
+      `model_interpretation: ${fallback.model_interpretation === true ? "true" : "false"}`,
+      `safety_authority: ${fallback.safety_authority === false ? "false" : "true"}`,
+      `phase1_state_change_allowed: ${fallback.phase1_state_change_allowed === false ? "false" : "true"}`,
+      `observed_fact_write_allowed: ${fallback.observed_fact_write_allowed === false ? "false" : "true"}`,
+      `outbound_action_allowed: ${fallback.outbound_action_allowed === false ? "false" : "true"}`,
+      `hardware_control_allowed: ${fallback.hardware_control_allowed === false ? "false" : "true"}`
+    ];
+  }
+
+  function renderOfflineFallback(payload, options = {}) {
+    const listId = options.listId || "assistantOfflineFallbackList";
+    renderList(listId, offlineFallbackItems(payload), "No offline fallback schema returned.");
   }
 
   function bindQuestionControls(options) {
@@ -119,10 +150,12 @@
     bindQuestionControls,
     fetchJson,
     observabilityItems,
+    offlineFallbackItems,
     postJson,
     providerStatusDetail,
     providerStatusLabel,
     renderList,
+    renderOfflineFallback,
     renderProviderStatus,
     renderProviderStatusFailure,
     sourceItems,

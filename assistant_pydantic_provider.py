@@ -7,7 +7,13 @@ from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from typing import Protocol
 
 from assistant_model_config import AssistantModelConfig, AssistantModelProfile
-from assistant_models import AssistantBoundary, AssistantSourceRef, ScoutAssistantQuery, ScoutAssistantResponse
+from assistant_models import (
+    AssistantBoundary,
+    AssistantOfflineFallbackSummary,
+    AssistantSourceRef,
+    ScoutAssistantQuery,
+    ScoutAssistantResponse,
+)
 from assistant_offline_fallback_contract import (
     OFFLINE_FALLBACK_SCHEMA_VERSION,
     build_offline_fallback_schema_prompt,
@@ -152,12 +158,23 @@ class PydanticAIAssistantProvider:
             limitations.append(
                 f"fixed_schema_offline_fallback_contract={fixed_schema_version}"
             )
+        offline_fallback_payload = getattr(
+            self.runner,
+            "last_offline_fallback_interpretation",
+            None,
+        )
+        offline_fallback = (
+            AssistantOfflineFallbackSummary.model_validate(offline_fallback_payload)
+            if offline_fallback_payload
+            else None
+        )
         return ScoutAssistantResponse(
             surface=query.surface,
             answer=f"{prefix}Pydantic AI read-only model interpretation: {str(model_output).strip()}",
             sources=resolved_sources,
             boundary=AssistantBoundary(surface=query.surface),
             limitations=limitations,
+            offline_fallback=offline_fallback,
         )
 
 
@@ -186,6 +203,7 @@ class FallbackPydanticAIRunner:
             OFFLINE_FALLBACK_SCHEMA_VERSION if enforce_local_fixed_schema else None
         )
         self.last_fixed_schema_version: str | None = None
+        self.last_offline_fallback_interpretation: dict[str, object] | None = None
         self._fallback_semaphore = threading.BoundedSemaphore(self.max_fallback_concurrency)
         self.failover_count = 0
 
@@ -210,6 +228,8 @@ class FallbackPydanticAIRunner:
         try:
             result = self.primary_runner.run(prompt, timeout_seconds=timeout_seconds)
             self.last_profile = self.primary_profile
+            self.last_fixed_schema_version = None
+            self.last_offline_fallback_interpretation = None
             return result
         except Exception as exc:
             self.last_error_type = type(exc).__name__
@@ -239,6 +259,8 @@ class FallbackPydanticAIRunner:
                 timeout_seconds=timeout_seconds,
             )
             if not self.enforce_local_fixed_schema:
+                self.last_fixed_schema_version = None
+                self.last_offline_fallback_interpretation = None
                 return raw_output
             try:
                 interpretation = parse_offline_fallback_interpretation(raw_output)
@@ -249,6 +271,9 @@ class FallbackPydanticAIRunner:
                 )
                 raise
             self.last_fixed_schema_version = interpretation.schema_version
+            self.last_offline_fallback_interpretation = interpretation.model_dump(
+                mode="json"
+            )
             return format_offline_fallback_interpretation(interpretation)
         except Exception as exc:
             if not str(self.last_failover_reason or "").startswith(

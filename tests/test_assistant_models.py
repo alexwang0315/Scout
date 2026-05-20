@@ -4,6 +4,7 @@ from pydantic import ValidationError
 from assistant_models import (
     ASSISTANT_SURFACE_CONSTRAINTS,
     AssistantBoundary,
+    AssistantOfflineFallbackSummary,
     AssistantObservability,
     AssistantSourceRef,
     AssistantSurface,
@@ -140,6 +141,44 @@ def test_response_observability_is_non_authoritative_metadata():
             model_interpretation=False,
             sources=[],
             boundary=AssistantBoundary(surface="debug"),
+        )
+
+
+def test_response_can_include_structured_offline_fallback_summary():
+    response = ScoutAssistantResponse(
+        surface="debug",
+        answer="Read-only model interpretation.",
+        sources=[],
+        boundary=AssistantBoundary(surface="debug"),
+        offline_fallback=AssistantOfflineFallbackSummary(
+            schema_version="scout.offline_fallback.v1",
+            prompt_id="scout.offline_fallback.fixed_schema.v1",
+            summary_zh="目前只能做離線備援解讀。",
+            risk_signals=["GPS 訊號不穩"],
+            operator_checks=["確認最近檢查點"],
+            uncertainties=["沒有即時雲端模型回覆"],
+            source_refs=["assistant_context.debug"],
+            confidence="low",
+        ),
+    )
+
+    payload = response.model_dump(mode="json")
+    assert payload["offline_fallback"]["schema_version"] == "scout.offline_fallback.v1"
+    assert payload["offline_fallback"]["read_only"] is True
+    assert payload["offline_fallback"]["model_interpretation"] is True
+    assert payload["offline_fallback"]["safety_authority"] is False
+    assert payload["offline_fallback"]["phase1_state_change_allowed"] is False
+    assert payload["offline_fallback"]["observed_fact_write_allowed"] is False
+    assert payload["offline_fallback"]["outbound_action_allowed"] is False
+    assert payload["offline_fallback"]["hardware_control_allowed"] is False
+
+    with pytest.raises(ValidationError):
+        AssistantOfflineFallbackSummary(
+            schema_version="scout.offline_fallback.v1",
+            prompt_id="scout.offline_fallback.fixed_schema.v1",
+            summary_zh="unsafe",
+            confidence="low",
+            safety_authority=True,
         )
 
 
