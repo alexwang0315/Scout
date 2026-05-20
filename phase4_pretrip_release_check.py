@@ -824,6 +824,14 @@ def _check_admin_map_layer_stack(root: Path) -> dict[str, Any]:
         missing.append("admin_map_layer_stack:pretrip_api_not_top")
     if after_action_layers[0].get("layer_kind") != "imagery":
         missing.append("admin_map_layer_stack:after_action_imagery_not_bottom")
+    if after_action_layers[0].get("local_raster_manifest_supported") is not True:
+        missing.append("admin_map_layer_stack:after_action_imagery_local_raster_manifest")
+    if after_action_layers[0].get("local_raster_tile_url_template") != (
+        "/admin/tiles/imagery/{project_id}/{layer_id}/{z}/{x}/{y}.png"
+    ):
+        missing.append("admin_map_layer_stack:after_action_imagery_tile_template")
+    if after_action_layers[0].get("external_network_required") is not False:
+        missing.append("admin_map_layer_stack:after_action_imagery_external_network")
     if after_action_layers[-1].get("layer_kind") != "api":
         missing.append("admin_map_layer_stack:after_action_api_not_top")
     if after_action_layers[-1].get("available") is not False:
@@ -874,7 +882,10 @@ def _check_admin_map_layer_stack(root: Path) -> dict[str, Any]:
         ),
     }
     page_order_ok: dict[str, bool] = {}
-    page_raster_imagery_ok = False
+    page_raster_imagery_ok: dict[str, bool] = {
+        "pretrip": False,
+        "after_action": False,
+    }
     for surface, (page_path, layer_ids) in page_checks.items():
         page_text = page_path.read_text(encoding="utf-8") if page_path.exists() else ""
         if not page_text:
@@ -905,7 +916,7 @@ def _check_admin_map_layer_stack(root: Path) -> dict[str, Any]:
                 missing.append(
                     f"admin_map_layer_stack:{surface}_missing_real_basemap:{fragment}"
                 )
-        if surface == "pretrip":
+        if surface in {"pretrip", "after_action"}:
             raster_fragments = (
                 "RASTER_LOCAL_TILE_URL_TEMPLATE",
                 "function rasterTileTemplate",
@@ -921,13 +932,15 @@ def _check_admin_map_layer_stack(root: Path) -> dict[str, Any]:
                     missing.append(
                         f"admin_map_layer_stack:{surface}_missing_raster_imagery:{fragment}"
                     )
-            page_raster_imagery_ok = all(
+            page_raster_imagery_ok[surface] = all(
                 fragment in page_text for fragment in raster_fragments
             ) and page_text.find("renderRasterImagery(imageryGroup") < page_text.find(
                 "renderOsmBasemap(osmGroup"
             )
-            if not page_raster_imagery_ok:
-                missing.append("admin_map_layer_stack:pretrip_raster_imagery_renderer")
+            if not page_raster_imagery_ok[surface]:
+                missing.append(
+                    f"admin_map_layer_stack:{surface}_raster_imagery_renderer"
+                )
         positions = [
             page_text.find(f'data-layer-group": "{layer_id}"')
             for layer_id in layer_ids
@@ -951,13 +964,25 @@ def _check_admin_map_layer_stack(root: Path) -> dict[str, Any]:
         "pretrip_imagery_local_raster_tile_url_template": pretrip_layers[0].get(
             "local_raster_tile_url_template"
         ),
-        "pretrip_raster_imagery_renderer_present": page_raster_imagery_ok,
+        "pretrip_raster_imagery_renderer_present": page_raster_imagery_ok["pretrip"],
         "pretrip_imagery_external_network_required": pretrip_layers[0].get(
             "external_network_required"
         ),
         "pretrip_api_top": pretrip_layers[-1].get("layer_id") == "weather-api",
         "after_action_imagery_bottom": after_action_layers[0].get("layer_id")
         == "imagery",
+        "after_action_imagery_local_raster_manifest_supported": after_action_layers[
+            0
+        ].get("local_raster_manifest_supported"),
+        "after_action_imagery_local_raster_tile_url_template": after_action_layers[
+            0
+        ].get("local_raster_tile_url_template"),
+        "after_action_raster_imagery_renderer_present": page_raster_imagery_ok[
+            "after_action"
+        ],
+        "after_action_imagery_external_network_required": after_action_layers[0].get(
+            "external_network_required"
+        ),
         "after_action_api_top": after_action_layers[-1].get("layer_id")
         == "weather-api",
         "after_action_weather_api_available": after_action_layers[-1].get("available"),
@@ -10288,6 +10313,7 @@ def _check_pretrip_implementation_status(root: Path) -> dict[str, Any]:
         "4.5AM",
         "4.5AN",
         "4.5AO",
+        "4.5AP",
     }
     implemented = {
         key
@@ -11046,6 +11072,19 @@ def _check_pretrip_implementation_status(root: Path) -> dict[str, Any]:
     ):
         if check_name not in milestone_45ao_coverage.get("check_names", []):
             missing.append(f"implementation_status_milestone_4_5ao_coverage:{check_name}")
+
+    milestone_45ap = by_id.get("4.5AP", {})
+    milestone_45ap_coverage = milestone_45ap.get("release_check_coverage", {})
+    if milestone_45ap.get("title") != "After-Action Raster Imagery Renderer":
+        missing.append(
+            "implementation_status_milestone_4_5ap_after_action_raster_imagery_renderer"
+        )
+    for check_name in (
+        "admin_map_layer_stack",
+        "focused_phase4_tests",
+    ):
+        if check_name not in milestone_45ap_coverage.get("check_names", []):
+            missing.append(f"implementation_status_milestone_4_5ap_coverage:{check_name}")
 
     return {
         "ok": not missing,

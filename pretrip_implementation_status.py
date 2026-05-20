@@ -2358,4 +2358,32 @@ _MILESTONES: tuple[dict[str, Any], ...] = (
             "Missing local imagery tiles resolve through the local transparent fallback endpoint rather than external network fetches.",
         ],
     },
+    {
+        "milestone": "4.5AP",
+        "title": "After-Action Raster Imagery Renderer",
+        "implementation_status": "implemented",
+        "modules": [
+            "docs/admin/phase1-after-action.html",
+            "admin_map_layers.py",
+            "phase4_pretrip_release_check.py",
+        ],
+        "tests": [
+            "tests/test_admin_after_action.py",
+            "tests/test_admin_map_layers.py",
+            "tests/test_phase4_pretrip_release_check.py",
+            "tests/test_pretrip_implementation_status.py",
+        ],
+        "fixture_refs": [
+            "tests/fixtures/field_cases/scout_260512_field_golden.json",
+        ],
+        "release_check_coverage": _release_check(
+            "admin_map_layer_stack",
+            "focused_phase4_tests",
+        ),
+        "notes": [
+            "The after-action SVG map now uses the same local raster imagery tile renderer under the OSM basemap.",
+            "The renderer reads the imagery tile URL template from the shared map layer contract and keeps the layer toggleable.",
+            "Missing scout_260512 imagery tiles resolve through the local transparent fallback endpoint, keeping raw rasters out of repo fixtures.",
+        ],
+    },
 )

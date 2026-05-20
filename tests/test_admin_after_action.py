@@ -38,6 +38,12 @@ class AdminAfterActionTests(unittest.TestCase):
             ],
         )
         self.assertTrue(view["map_layers"][0]["label_zh"].startswith("影像圖層"))
+        self.assertTrue(view["map_layers"][0]["local_raster_manifest_supported"])
+        self.assertEqual(
+            view["map_layers"][0]["local_raster_tile_url_template"],
+            "/admin/tiles/imagery/{project_id}/{layer_id}/{z}/{x}/{y}.png",
+        )
+        self.assertFalse(view["map_layers"][0]["external_network_required"])
         self.assertTrue(view["map_layers"][-1]["label_zh"].startswith("氣象 API"))
         self.assertFalse(view["map_layers"][-1]["available"])
         self.assertFalse(view["map_layers"][-1]["default_enabled"])
@@ -123,9 +129,20 @@ class AdminAfterActionTests(unittest.TestCase):
         self.assertIn("OSM_TILE_URL_TEMPLATE", response.text)
         self.assertIn("OSM_PUBLIC_TILE_URL_TEMPLATE", response.text)
         self.assertIn("OSM_LOCAL_TILE_URL_TEMPLATE", response.text)
+        self.assertIn("RASTER_LOCAL_TILE_URL_TEMPLATE", response.text)
         self.assertIn("/admin/tiles/osm/{z}/{x}/{y}.png", response.text)
+        self.assertIn(
+            "/admin/tiles/imagery/{project_id}/{layer_id}/{z}/{x}/{y}.png",
+            response.text,
+        )
         self.assertIn("function osmTileTemplate", response.text)
+        self.assertIn("function rasterTileTemplate", response.text)
         self.assertIn("https://tile.openstreetmap.org/{z}/{x}/{y}.png", response.text)
+        self.assertIn("function renderRasterImagery", response.text)
+        self.assertIn("function rasterTileCoverage", response.text)
+        self.assertIn('class: "raster-tile"', response.text)
+        self.assertIn("data-raster-tile", response.text)
+        self.assertIn("local_raster_tile_url_template", response.text)
         self.assertIn("function renderOsmBasemap", response.text)
         self.assertIn("function osmTileCoverage", response.text)
         self.assertIn('el("image"', response.text)
@@ -135,6 +152,10 @@ class AdminAfterActionTests(unittest.TestCase):
         self.assertLess(
             response.text.index('data-layer-group": "imagery"'),
             response.text.index('data-layer-group": "osm"'),
+        )
+        self.assertLess(
+            response.text.index("renderRasterImagery(imageryGroup"),
+            response.text.index("renderOsmBasemap(osmGroup"),
         )
         self.assertLess(
             response.text.index('data-layer-group": "osm"'),
