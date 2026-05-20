@@ -502,13 +502,37 @@ Not run:
 
 中文註釋：這代表 Docker/Pi Step 1 已經跨到 Scout 機器實測，但還不是現場安全任務部署。
 
+## Runtime Deployment Takeover Status
+
+2026-05-20: the existing `scout-runtime` service on `scout.local` was taken over
+with the Step 1 image.
+
+Completed:
+
+- created rollback tag `scout-fusion/pi-runtime:rollback-20260520T031746Z`;
+- promoted `scout-fusion/pi-runtime:step1` to service tag
+  `scout-fusion/pi-runtime:local`;
+- recreated `scout-runtime` through the existing compose project;
+- kept `SCOUT_ENABLE_LIVE_HARDWARE=0`, `SCOUT_ENABLE_AI_INFERENCE=0`,
+  `SCOUT_ENABLE_LOCAL_MODEL=0`, and `SCOUT_EVENT_BUS=none`;
+- verified `/health`, `/runtime/status`, and `/providers/status` from the target
+  and from the workstation.
+
+Not run:
+
+- no `/safety/*` mutation;
+- no local model request;
+- no hardware provider control;
+- no outbound/SOS/SMS/satellite send.
+
 ## Recommended Next Slice
 
 After the manual dry-run package, Docker dry-run gate, GPIO boundary review,
-dirty-worktree cleanup plan, and Scout machine read-only smoke, the next slice is
-one of two bounded tracks:
+dirty-worktree cleanup plan, Scout machine read-only smoke, and runtime
+deployment takeover, the next slice is one of two bounded tracks:
 
-1. stabilize deployment operations for the existing `scout-runtime` service;
+1. add an operator-approved fixture observation smoke with explicit rollback
+   criteria;
 2. stabilize Phase 4 dirty worktree groups one at a time.
 
 Deliverables:
