@@ -220,18 +220,42 @@ Required pattern:
 Rollback to deterministic Step 1 runtime:
 
 ```bash
+cd /home/alexwang0315/scout-fusion-live
 docker compose -f docker-compose.pi.live.yml down
+
+cd /home/alexwang0315/scout-fusion-runtime
 docker compose -f docker-compose.pi.yml up -d scout
 ```
 
 Rollback 後必須確認：
 
+- `GET /health` on `9099` returns `runtime_profile=pi-field`;
 - `SCOUT_RUNTIME_PROFILE=pi-field`;
 - `SCOUT_ENABLE_LIVE_HARDWARE=0`;
 - `SCOUT_ENABLE_AI_INFERENCE=0`;
 - `SCOUT_ENABLE_LOCAL_MODEL=0`;
 - provider `control_allowed=false`;
 - no live stream transport routes are mounted.
+
+Current rollback evidence from live cutover:
+
+- cutover evidence directory: `/data/scout/deployments/live-cutover-20260520T100435Z`;
+- rollback image tag: `scout-fusion/pi-runtime:rollback-before-live-20260520T100435Z`;
+- live compose directory: `/home/alexwang0315/scout-fusion-live`;
+- deterministic Step 1 compose directory: `/home/alexwang0315/scout-fusion-runtime`.
+
+Rollback drill policy:
+
+- do not execute rollback during a documentation-only drill;
+- capture `docker ps`, `/health`, `/assistant/status`, and
+  `/runtime/streams/status-read-only` before rollback;
+- stop `scout-pi-runtime-live` before starting `scout-pi-runtime`;
+- if restoring live after a rollback drill, stop deterministic Step 1 before
+  re-starting `scout-pi-runtime-live`;
+- record the evidence directory under `/data/scout/deployments`.
+
+中文註釋：rollback 是 operator 行為，不是 assistant、runtime stream、remote
+provider、或 hardware provider 可以自動執行的動作。
 
 ## Stop Conditions
 
