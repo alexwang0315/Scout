@@ -154,6 +154,7 @@ def create_assistant_provider_status(
             "max_context_chars": model_config.max_context_chars,
             "connect_on_startup": model_config.connect_on_startup,
             "local_fallback_enabled": local_fallback_enabled,
+            "local_fallback_fixed_schema": model_config.local_fallback_fixed_schema,
             "local_fallback_mode": local_fallback_mode,
             "manual_verification_required": local_fallback_enabled and pi_field_profile,
             "cloud_only": model_config.active_profile == "cloud"
