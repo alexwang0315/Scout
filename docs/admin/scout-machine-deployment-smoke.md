@@ -50,6 +50,16 @@ manual artifact chain 記錄，不是這個 smoke 的啟動條件。
 tests/fixtures/hardware/scout_machine_target_profile.example.json
 ```
 
+Docker runtime-core contract 也只能先做離線檢查，不啟動 Docker daemon：
+
+```bash
+/Users/alexwang0315/scout-fusion/venv/bin/python -m pytest tests/test_scout_pi_docker_contract.py
+```
+
+預期結果：`Dockerfile.pi` 與 `docker-compose.pi.yml` 固定在 `linux/arm64`、`/data/scout`、
+`pi-field`、live hardware off、AI inference off、event bus none；`.dockerignore` 不把
+`docker-compose.pi.ai.yml` 或 dirty worktree 的非 runtime-core 檔案放進 build context。
+
 ## 3. Local Offline Validation
 
 在 repo root 先跑離線檢查：
@@ -70,6 +80,8 @@ tests/fixtures/hardware/scout_machine_target_profile.example.json
 ## 4. Manual Smoke Ladder
 
 以下命令只供 operator 手動執行。測試與 preflight 不會執行它們。
+本機可以先用 `scout_pi_fixture_smoke.py` 產生 manual-only plan；它只讀 target
+profile 與 fixture，不會開網路連線。
 
 確認 runtime health：
 

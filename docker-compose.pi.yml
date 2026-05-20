@@ -1,0 +1,39 @@
+services:
+  scout:
+    platform: linux/arm64
+    build:
+      context: .
+      dockerfile: Dockerfile.pi
+    image: scout-fusion/pi-runtime:step1
+    container_name: scout-pi-runtime
+    restart: unless-stopped
+    environment:
+      SCOUT_DATA_ROOT: /data/scout
+      SCOUT_RUNTIME_PROFILE: pi-field
+      SCOUT_ENABLE_LIVE_HARDWARE: "0"
+      SCOUT_ENABLE_AI_INFERENCE: "0"
+      SCOUT_ENABLE_LOCAL_MODEL: "0"
+      SCOUT_EVENT_BUS: none
+      SCOUT_SAFETY_ENABLED: "true"
+      SCOUT_SAFETY_MISSION_GRAPH: /app/tests/fixtures/mission_graph/normal_climb_mission.json
+      SCOUT_SAFETY_INCIDENT_STORE: /data/scout/incidents
+      SCOUT_PORT: "9099"
+      SCOUT_LOG_LEVEL: info
+    ports:
+      - "9099:9099"
+    volumes:
+      - type: bind
+        source: /data/scout
+        target: /data/scout
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import json, urllib.request; r=urllib.request.urlopen('http://127.0.0.1:9099/health', timeout=3); raise SystemExit(0 if json.load(r).get('status') == 'ok' else 1)",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
