@@ -115,7 +115,7 @@ Repo summaries:
 ### Phase 4 Admin Preview Smoke
 
 Directory:
-`/home/alexwang0315/scout-fusion-phase4-admin-e646f700`
+`/home/alexwang0315/scout-fusion-phase4-admin-auth`
 
 Purpose:
 
@@ -128,7 +128,10 @@ Key result:
 
 - `scout-pi-phase4-admin`: healthy
 - admin preview port: `9110 -> 9099`
-- `GET /admin/pretrip`: HTTP `200`, `id="map"` present
+- admin auth: `required=true`, `token_source=file`,
+  `token_value_exposed=false`
+- `GET /admin/pretrip`: HTTP `200` when authenticated, `id="map"` present
+- unauthenticated `GET /admin/pretrip`: HTTP `401`
 - `GET /assistant/status`: `provider=mock`, `token_values_exposed=false`
 - `POST /assistant/query`: `read_only=true`, `model_interpretation=true`
 - no `/safety/*` mutation, outbound send, local model request, or hardware
