@@ -39,11 +39,15 @@ Required secret files:
 Required environment secret refs:
 
 - `SCOUT_CLOUD_MODEL_TOKEN`
-- `SCOUT_REMOTE_WEBHOOK_URL`
-- `SCOUT_REMOTE_WEBHOOK_TOKEN`
-- `SCOUT_REMOTE_WEBHOOK_HMAC_SECRET`
-- `SCOUT_REMOTE_PRIMARY_TARGET_REF`
-- `SCOUT_REMOTE_BACKUP_TARGET_REF`
+- For `SCOUT_REMOTE_PROVIDER_KIND=telegram_bot`:
+  - `SCOUT_TELEGRAM_BOT_TOKEN`
+  - `SCOUT_TELEGRAM_TARGET_CHAT_ID`
+- For the generic webhook provider:
+  - `SCOUT_REMOTE_WEBHOOK_URL`
+  - `SCOUT_REMOTE_WEBHOOK_TOKEN`
+  - `SCOUT_REMOTE_WEBHOOK_HMAC_SECRET`
+  - `SCOUT_REMOTE_PRIMARY_TARGET_REF`
+  - `SCOUT_REMOTE_BACKUP_TARGET_REF`
 
 範例檔案：
 
@@ -111,16 +115,14 @@ chmod 600 /data/scout/secrets/runtime-stream-admission-secret /data/scout/secret
 ```bash
 cat > /data/scout/secrets/live-runtime.env <<'EOF'
 SCOUT_CLOUD_MODEL_TOKEN=<operator-cloud-model-token>
-SCOUT_REMOTE_WEBHOOK_URL=<operator-webhook-url>
-SCOUT_REMOTE_WEBHOOK_TOKEN=<operator-webhook-token>
-SCOUT_REMOTE_WEBHOOK_HMAC_SECRET=<operator-webhook-hmac-secret>
-SCOUT_REMOTE_PRIMARY_TARGET_REF=<operator-primary-target-ref>
-SCOUT_REMOTE_BACKUP_TARGET_REF=<operator-backup-target-ref>
+SCOUT_REMOTE_PROVIDER_KIND=telegram_bot
+SCOUT_TELEGRAM_BOT_TOKEN=<operator-telegram-bot-token>
+SCOUT_TELEGRAM_TARGET_CHAT_ID=<operator-telegram-target-chat-id>
 EOF
 chmod 600 /data/scout/secrets/live-runtime.env
 ```
 
-中文註釋：`docker-compose.pi.live.yml` 會透過 `env_file` 載入這個檔案，避免把 secret 值寫進 repo 或 compose YAML。
+中文註釋：`docker-compose.pi.live.yml` 會透過 `env_file` 載入這個檔案，避免把 secret 值寫進 repo 或 compose YAML。若改走 generic webhook provider，才需要 `SCOUT_REMOTE_WEBHOOK_*` 這組 refs。
 
 4. 建置並啟動 live profile。
 

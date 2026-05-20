@@ -110,6 +110,28 @@ def test_live_runtime_enablement_ready_with_explicit_refs_config_and_policy(tmp_
     assert "primary-target-secret" not in serialized
 
 
+def test_live_runtime_enablement_accepts_telegram_provider_secret_refs(
+    tmp_path: Path,
+) -> None:
+    report = build_live_runtime_enablement_report(
+        {
+            "SCOUT_REMOTE_PROVIDER_KIND": "telegram_bot",
+            "SCOUT_TELEGRAM_BOT_TOKEN": "super-secret-telegram-token",
+            "SCOUT_TELEGRAM_TARGET_CHAT_ID": "super-secret-chat-id",
+        },
+        requested_gates={LiveRuntimeGate.REMOTE_PROVIDER_LIVE_SEND},
+    )
+    serialized = json.dumps(report.model_dump(mode="json"), sort_keys=True)
+
+    assert report.status == "live_enablement_ready"
+    assert report.ready_gates == ["remote_provider_live_send"]
+    assert report.missing_secret_refs == []
+    assert "env:SCOUT_TELEGRAM_BOT_TOKEN" in report.required_secret_refs
+    assert "env:SCOUT_TELEGRAM_TARGET_CHAT_ID" in report.required_secret_refs
+    assert "super-secret-telegram-token" not in serialized
+    assert "super-secret-chat-id" not in serialized
+
+
 def test_hardware_provider_control_policy_rejects_arbitrary_shell_and_safety_mutation() -> None:
     with pytest.raises(ValidationError):
         HardwareProviderControlPolicy(
