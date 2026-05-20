@@ -55,7 +55,7 @@ This is the first real Scout hardware target.
 
 Required capabilities:
 
-- GNSS receiver for position evidence;
+- GNSS receiver for position evidence and field timestamp authority;
 - IMU for motion/PDR continuity;
 - local storage for raw ring buffer, sealed segment capsules, and incident
   packages;
@@ -196,6 +196,15 @@ Minimum sensor set:
 - battery level and charging state;
 - communication state;
 - user acknowledgement input.
+
+GNSS is mandatory, not optional, because it provides the field timestamp
+baseline as well as position. Scout should prefer authenticated/validated GNSS
+time for mission timelines, segment capsules, incident packages, and replay
+alignment. Device wall-clock time and monotonic local sequence numbers are still
+useful for ordering and degraded operation, but they should not silently replace
+GNSS time when GNSS is available.
+
+中文註釋：這裡用 `GNSS` 而不是只寫 `GPS`，是為了涵蓋 GPS、QZSS、Galileo、GLONASS、BeiDou 等衛星系統。Scout 的最低硬體能力仍然是「要有衛星定位與衛星時間來源」。
 
 Useful later:
 
