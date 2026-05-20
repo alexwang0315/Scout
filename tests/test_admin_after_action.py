@@ -120,6 +120,18 @@ class AdminAfterActionTests(unittest.TestCase):
         self.assertIn('data-layer="imagery"', response.text)
         self.assertIn('data-layer="osm"', response.text)
         self.assertIn('data-layer="weather-api"', response.text)
+        self.assertIn("OSM_TILE_URL_TEMPLATE", response.text)
+        self.assertIn("OSM_PUBLIC_TILE_URL_TEMPLATE", response.text)
+        self.assertIn("OSM_LOCAL_TILE_URL_TEMPLATE", response.text)
+        self.assertIn("/admin/tiles/osm/{z}/{x}/{y}.png", response.text)
+        self.assertIn("function osmTileTemplate", response.text)
+        self.assertIn("https://tile.openstreetmap.org/{z}/{x}/{y}.png", response.text)
+        self.assertIn("function renderOsmBasemap", response.text)
+        self.assertIn("function osmTileCoverage", response.text)
+        self.assertIn('el("image"', response.text)
+        self.assertIn('class: "osm-tile"', response.text)
+        self.assertIn("function renderWeatherOverlayPlaceholder", response.text)
+        self.assertIn("Weather API overlay", response.text)
         self.assertLess(
             response.text.index('data-layer-group": "imagery"'),
             response.text.index('data-layer-group": "osm"'),
