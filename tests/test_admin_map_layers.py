@@ -49,8 +49,15 @@ def test_pretrip_map_layers_order_imagery_bottom_and_api_top():
     assert layers[0]["preferred_manifest_kind"] == (
         "admin_local_raster_source_manifest"
     )
+    assert layers[0]["local_raster_tile_url_template"] == (
+        "/admin/tiles/imagery/{project_id}/{layer_id}/{z}/{x}/{y}.png"
+    )
+    assert layers[0]["local_raster_tile_cache_policy"] == (
+        "local_file_cache_then_transparent_fallback"
+    )
     assert layers[0]["external_network_required"] is False
     assert layers[0]["tile_cutting_required"] is False
+    assert layers[0]["downloads_tiles_into_repo"] is False
     assert layers[1]["render_mode"] == "osm_raster_tile"
     assert layers[1]["source_kind"] == "openstreetmap_tile"
     assert layers[1]["tile_url_template"] == (
