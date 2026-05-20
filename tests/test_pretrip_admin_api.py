@@ -5,6 +5,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from admin_api import create_admin_app
+from admin_local_raster_tiles import raster_tile_cache_path
 
 
 PROJECT_ID = "chilai_nanhua_day1"
@@ -217,6 +218,49 @@ def test_admin_osm_tile_proxy_api_rejects_invalid_coords():
 
     assert response.status_code == 422
     assert "tile z must be between" in response.json()["detail"]
+
+
+def test_admin_imagery_tile_proxy_api_returns_cached_png(monkeypatch, tmp_path):
+    monkeypatch.setenv("SCOUT_ADMIN_RASTER_TILE_CACHE_ROOT", str(tmp_path))
+    cached_path = raster_tile_cache_path(
+        "chilai_nanhua_day1",
+        "imagery",
+        5,
+        26,
+        13,
+        cache_root=tmp_path,
+    )
+    cached_path.parent.mkdir(parents=True)
+    cached_path.write_bytes(b"\x89PNG\r\n\x1a\ncached-raster-tile")
+    client = TestClient(create_admin_app())
+
+    response = client.get("/admin/tiles/imagery/chilai_nanhua_day1/imagery/5/26/13.png")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("image/png")
+    assert response.headers["x-scout-tile-source"] == "local_cache"
+    assert response.content == cached_path.read_bytes()
+
+
+def test_admin_imagery_tile_proxy_api_returns_transparent_fallback(monkeypatch, tmp_path):
+    monkeypatch.setenv("SCOUT_ADMIN_RASTER_TILE_CACHE_ROOT", str(tmp_path))
+    client = TestClient(create_admin_app())
+
+    response = client.get("/admin/tiles/imagery/chilai_nanhua_day1/imagery/5/26/13.png")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("image/svg+xml")
+    assert response.headers["x-scout-tile-source"] == "transparent_fallback"
+    assert b"Raster offline 5/26/13" in response.content
+
+
+def test_admin_imagery_tile_proxy_api_rejects_invalid_identity():
+    client = TestClient(create_admin_app())
+
+    response = client.get("/admin/tiles/imagery/bad!/imagery/5/26/13.png")
+
+    assert response.status_code == 422
+    assert "project_id contains unsafe characters" in response.json()["detail"]
 
 
 def test_unknown_pretrip_project_returns_404():
