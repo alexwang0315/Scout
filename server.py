@@ -16,20 +16,33 @@ import uvicorn
 
 from agent import sos_agent
 from admin_api import create_admin_router
-from assistant_api import create_assistant_provider_from_env, create_assistant_router
+from assistant_api import (
+    create_assistant_provider_from_env,
+    create_assistant_provider_status,
+    create_assistant_router,
+)
 from assistant_context import create_assistant_context_resolver
 from debug_api import create_debug_page_router, create_debug_router
+from hardware_readiness_api import create_hardware_readiness_router
 from imu_api import router as imu_router
 from macos_wifi import MacOSWifiWorld
 from pdr_engine import pdr
 from phase1_incident_bridge import phase1_incident_bridge_from_env
 from phase2_admin_api import create_phase2_admin_router
 from runtime_debug_log import FileRuntimeDebugEventLog
+from runtime_stream_transport_api import create_runtime_stream_transport_router
 from sensor_decoder import SensorLogDecoder
 from movement_summary import MovementAggregator, RawSensorSample
-from safety_api import SafetyApiSnapshot, create_safety_router
+from safety_api import (
+    SafetyApiSnapshot,
+    SafetyObservationAdmissionConfig,
+    create_safety_router,
+)
 from safety_models import SafetyState
 from safety_runtime_session import SafetyRuntimeSession
+from server_safety_observation_admission_config import (
+    create_safety_observation_admission_config_from_env,
+)
 from shared_queue import pdr_event_queue
 from visualize_signal import generate_heatmap
 
@@ -56,6 +69,16 @@ SCOUT_DEBUG_LOG_PATH = os.getenv("SCOUT_DEBUG_LOG_PATH")
 SCOUT_AI_ASSISTANT_ENABLED = os.getenv("SCOUT_AI_ASSISTANT_ENABLED", "false")
 SCOUT_AI_ASSISTANT_PROVIDER = os.getenv("SCOUT_AI_ASSISTANT_PROVIDER", "mock")
 SCOUT_AI_ASSISTANT_CONFIG_PATH = os.getenv("SCOUT_AI_ASSISTANT_CONFIG_PATH")
+SCOUT_SAFETY_OBSERVATION_ADMISSION_ENABLED = os.getenv(
+    "SCOUT_SAFETY_OBSERVATION_ADMISSION_ENABLED",
+    "false",
+)
+SCOUT_SAFETY_OBSERVATION_ADMISSION_SECRET = os.getenv(
+    "SCOUT_SAFETY_OBSERVATION_ADMISSION_SECRET"
+)
+SCOUT_SAFETY_OBSERVATION_ADMISSION_SECRET_FILE = os.getenv(
+    "SCOUT_SAFETY_OBSERVATION_ADMISSION_SECRET_FILE"
+)
 
 log_level = logging.DEBUG if DEBUG else logging.INFO
 logging.basicConfig(level=log_level, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -65,6 +88,9 @@ logger = logging.getLogger("S.C.O.U.T.")
 # Ship the summary to agent logic when ready.
 movement_agg = MovementAggregator(samples_per_summary=20)
 
+
+def _is_true_like(value: str | None) -> bool:
+    return value is not None and value.strip().lower() in {"1", "true", "yes", "y", "on"}
 
 
 @asynccontextmanager
@@ -103,9 +129,23 @@ last_instruction = "等待初始化..."
 latest_summary_result: Optional[Dict[str, Any]] = None
 _worker_task: Optional[asyncio.Task] = None
 safety_runtime_session: Optional[SafetyRuntimeSession] = None
+safety_observation_admission_config: Optional[SafetyObservationAdmissionConfig] = None
+safety_observation_admission_config_error: Optional[Exception] = None
+
+try:
+    safety_observation_admission_config = create_safety_observation_admission_config_from_env(
+        os.environ
+    )
+    if safety_observation_admission_config is not None:
+        logger.info("Signed safety observation admission enabled")
+except ValueError as exc:
+    safety_observation_admission_config_error = exc
+    logger.exception("Signed safety observation admission misconfigured; safety runtime will fail closed")
 
 if SCOUT_SAFETY_ENABLED:
     try:
+        if safety_observation_admission_config_error is not None:
+            raise safety_observation_admission_config_error
         incident_bridge = phase1_incident_bridge_from_env(os.environ)
         safety_runtime_session = SafetyRuntimeSession(
             SCOUT_SAFETY_MISSION_GRAPH,
@@ -134,10 +174,6 @@ def _optional_float(value: Any) -> Optional[float]:
         return float(value)
     except (TypeError, ValueError):
         return None
-
-
-def _is_true_like(value: str | None) -> bool:
-    return value is not None and value.strip().lower() in {"1", "true", "yes", "y", "on"}
 
 
 def _include_phase2_admin_router(app: FastAPI) -> None:
@@ -178,6 +214,7 @@ def _include_assistant_router(app: FastAPI) -> None:
         create_assistant_router(
             provider=provider,
             context_resolver=create_assistant_context_resolver(debug_event_log=debug_log),
+            provider_status=create_assistant_provider_status(provider=provider, environ=os.environ),
         )
     )
     logger.info(
@@ -185,6 +222,23 @@ def _include_assistant_router(app: FastAPI) -> None:
         SCOUT_AI_ASSISTANT_PROVIDER,
         f" and config {SCOUT_AI_ASSISTANT_CONFIG_PATH}" if SCOUT_AI_ASSISTANT_CONFIG_PATH else "",
     )
+
+
+def _include_runtime_stream_transport_router(app: FastAPI) -> None:
+    if safety_runtime_session is None:
+        logger.info("Runtime stream transport API disabled because safety runtime is unavailable")
+        return
+    if safety_observation_admission_config is None:
+        logger.info("Runtime stream transport API disabled because signed admission is unavailable")
+        return
+
+    app.include_router(
+        create_runtime_stream_transport_router(
+            runtime_session=safety_runtime_session,
+            observation_admission_config=safety_observation_admission_config,
+        )
+    )
+    logger.info("Runtime stream transport API enabled")
 
 
 async def process_movement_summary(summary: Any) -> Dict[str, Any]:
@@ -290,13 +344,16 @@ async def ai_decision_worker() -> None:
 
 app.include_router(imu_router)
 app.include_router(create_admin_router(incident_store_path=SCOUT_SAFETY_INCIDENT_STORE))
+app.include_router(create_hardware_readiness_router())
 app.include_router(
     create_safety_router(
         SafetyApiSnapshot(safety_state=SafetyState()),
         incident_store=safety_runtime_session.incident_store if safety_runtime_session else None,
         runtime_session=safety_runtime_session,
+        observation_admission_config=safety_observation_admission_config,
     )
 )
+_include_runtime_stream_transport_router(app)
 _include_phase2_admin_router(app)
 _include_debug_router(app)
 _include_assistant_router(app)
