@@ -73,6 +73,51 @@ def test_long_soak_doc_records_overnight_started_state_without_completion_claim(
         assert token in source
 
 
+def test_long_soak_doc_records_overnight_completed_state() -> None:
+    source = read_report()
+
+    for token in (
+        "`/data/scout/deployments/live-runtime-soak-overnight-20260520T152647Z`",
+        "`live-runtime-soak-check-summary.json`",
+        "`overnight-completed-summary.json`",
+        "`artifact_kind=scout_live_runtime_soak_check`",
+        "`status=passed`",
+        "`sample_count=480`",
+        "`samples_recorded=480`",
+        "`interval_seconds=60`",
+        "`samples_all_ok=true`",
+        "`blocker_reasons=[]`",
+        "`runtime_profile=pi-field-live`",
+        "`assistant_provider=pydantic_ai`",
+        "`assistant_startup_connection_status=connected:cloud`",
+        "`assistant_token_values_exposed=false`",
+        "`provider_control_checked=true`",
+        "`provider_control_status=enabled`",
+        "`provider_control_allowed_actions=[read_provider_status]`",
+        "`provider_control_token_value_exposed=false`",
+        "`stream_control_status=observing`",
+        "`stream_control_record_count=0`",
+        "`stream_telemetry_totals.accepted_count=0`",
+        "`stream_telemetry_totals.rejected_count=0`",
+        "`stream_telemetry_totals.queued_count=0`",
+        "`stream_telemetry_totals.active_websocket_connections=0`",
+        "`first_sample_ok=true`",
+        "`last_sample_ok=true`",
+        "`first_sample_index=0`",
+        "`last_sample_index=479`",
+        "`raw_payloads_embedded=false`",
+        "`secret_values_embedded=false`",
+        "`read_only_soak=true`",
+        "`new_observations_sent=false`",
+        "`stream_control_mutation_performed=false`",
+        "`remote_provider_send_performed=false`",
+        "`hardware_control_performed=false`",
+        "`phase2_writeback_performed=false`",
+        "no `live_runtime_soak_check.py` process remained after completion",
+    ):
+        assert token in source
+
+
 def test_long_soak_doc_records_post_guard_bounded_soak() -> None:
     source = read_report()
 
@@ -126,6 +171,8 @@ def test_long_soak_doc_keeps_boundaries_explicit() -> None:
         "no stream control mutation performed",
         "no remote provider send",
         "no Telegram send",
+        "no SMS send",
+        "no satellite send",
         "no SOS send",
         "no hardware control action",
         "no rollback",

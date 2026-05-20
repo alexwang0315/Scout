@@ -15,6 +15,9 @@ Overnight soak started evidence:
 Latest post-guard bounded soak evidence:
 `/data/scout/deployments/live-runtime-soak-post-guard-20260520T153214Z`
 
+Latest completed overnight soak evidence:
+`/data/scout/deployments/live-runtime-soak-overnight-20260520T152647Z`
+
 ## Scope
 
 This slice adds `live_runtime_soak_check.py`, a repeatable read-only soak
@@ -176,6 +179,58 @@ Started summary:
 狀態；完成後要讀取同一個 evidence directory 的
 `live-runtime-soak-check-summary.json` 再更新 completed report。
 
+## Overnight Run Completed
+
+Completed evidence directory:
+`/data/scout/deployments/live-runtime-soak-overnight-20260520T152647Z`
+
+Completed summary artifact:
+`live-runtime-soak-check-summary.json`
+
+Condensed completed summary artifact:
+`overnight-completed-summary.json`
+
+Result:
+
+- `artifact_kind=scout_live_runtime_soak_check`;
+- `status=passed`;
+- `sample_count=480`;
+- `samples_recorded=480`;
+- `interval_seconds=60`;
+- `samples_all_ok=true`;
+- `blocker_reasons=[]`;
+- `runtime_profile=pi-field-live`;
+- `assistant_provider=pydantic_ai`;
+- `assistant_startup_connection_status=connected:cloud`;
+- `assistant_token_values_exposed=false`;
+- `provider_control_checked=true`;
+- `provider_control_status=enabled`;
+- `provider_control_allowed_actions=[read_provider_status]`;
+- `provider_control_token_value_exposed=false`;
+- `stream_control_status=observing`;
+- `stream_control_record_count=0`;
+- `stream_telemetry_totals.accepted_count=0`;
+- `stream_telemetry_totals.rejected_count=0`;
+- `stream_telemetry_totals.queued_count=0`;
+- `stream_telemetry_totals.active_websocket_connections=0`;
+- `first_sample_ok=true`;
+- `last_sample_ok=true`;
+- `first_sample_index=0`;
+- `last_sample_index=479`;
+- `raw_payloads_embedded=false`;
+- `secret_values_embedded=false`;
+- `read_only_soak=true`;
+- `new_observations_sent=false`;
+- `stream_control_mutation_performed=false`;
+- `remote_provider_send_performed=false`;
+- `hardware_control_performed=false`;
+- `phase2_writeback_performed=false`;
+- no `live_runtime_soak_check.py` process remained after completion.
+
+中文註釋：這份 completed report 代表 overnight read-only soak 完成。它沒有送新
+observation，沒有 pause/resume，沒有 Telegram / SOS / SMS / satellite send，
+也沒有啟用 incident bridge、硬體控制、Phase 2 writeback 或 review mutation。
+
 ## Boundary
 
 Performed in this slice:
@@ -183,6 +238,7 @@ Performed in this slice:
 - added a read-only soak checker;
 - ran one short three-sample live smoke;
 - started one overnight read-only soak;
+- recorded one completed overnight read-only soak;
 - packaged the checker into the live image contract.
 
 Not performed:
