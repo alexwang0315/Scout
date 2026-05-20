@@ -66,6 +66,26 @@ class AssistantObservability(BaseModel):
     local_model_name: str | None = None
 
 
+class AssistantOfflineFallbackSummary(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: str
+    prompt_id: str
+    summary_zh: str
+    risk_signals: list[str] = Field(default_factory=list)
+    operator_checks: list[str] = Field(default_factory=list)
+    uncertainties: list[str] = Field(default_factory=list)
+    source_refs: list[str] = Field(default_factory=list)
+    confidence: Literal["low", "medium", "high"]
+    read_only: Literal[True] = True
+    model_interpretation: Literal[True] = True
+    safety_authority: Literal[False] = False
+    phase1_state_change_allowed: Literal[False] = False
+    observed_fact_write_allowed: Literal[False] = False
+    outbound_action_allowed: Literal[False] = False
+    hardware_control_allowed: Literal[False] = False
+
+
 class AssistantSurfacePolicy(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -190,6 +210,7 @@ class ScoutAssistantResponse(BaseModel):
     boundary: AssistantBoundary
     limitations: list[str] = Field(default_factory=list)
     observability: AssistantObservability | None = None
+    offline_fallback: AssistantOfflineFallbackSummary | None = None
 
     @model_validator(mode="after")
     def boundary_must_match_surface(self) -> "ScoutAssistantResponse":

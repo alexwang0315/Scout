@@ -187,6 +187,11 @@ def test_shared_assistant_ui_module_has_read_only_fetch_and_render_helpers():
     assert '"Content-Type": "application/json"' in script
     assert "renderProviderStatus" in script
     assert "observabilityItems" in script
+    assert "offlineFallbackItems" in script
+    assert "renderOfflineFallback" in script
+    assert "assistantOfflineFallbackList" in script
+    assert "schema_version" in script
+    assert "safety_authority" in script
     assert "token_values_exposed" in script
     assert "api_key" not in script.lower()
 
