@@ -579,24 +579,46 @@ Completed:
 - produced no new incident files under `/data/scout/incidents`;
 - kept provider `control_allowed=false` for every provider.
 
+## Step 1 Deployment Runbook Status
+
+2026-05-20: the Scout machine Step 1 deployment runbook and evidence index were
+frozen.
+
+Artifacts:
+
+- `docs/admin/scout-machine-step1-deployment-runbook.md`
+- `docs/admin/scout-machine-step1-evidence-index.md`
+
+The index covers:
+
+- deployment takeover evidence at `/data/scout/deployments/20260520T031746Z`;
+- hardware-export fixture smoke evidence at
+  `/data/scout/deployments/fixture-observation-20260520T033354Z`;
+- canonical fixture target smoke evidence at
+  `/data/scout/deployments/canonical-fixture-observation-20260520T035132Z`.
+
+Current target state remains `scout-runtime` healthy, image id `761115bf441b`,
+`observations_processed=2`, `checkpoint_hits=1`, and `safety_level=L0_NORMAL`.
+
 ## Recommended Next Slice
 
 After the manual dry-run package, Docker dry-run gate, GPIO boundary review,
 dirty-worktree cleanup plan, Scout machine read-only smoke, and runtime
 deployment takeover, fixture observation smoke, canonical fixture local dry-run,
-and canonical fixture target smoke, the next slice is one of two bounded tracks:
+canonical fixture target smoke, and Step 1 deployment runbook freeze, the next
+slice is one of two bounded tracks:
 
-1. freeze the Scout machine Step 1 deployment runbook and evidence index;
+1. stabilize host-side radio scan provider evidence as a separate read-only provider slice;
 2. stabilize Phase 4 dirty worktree groups one at a time.
 
 Deliverables:
 
-- runtime service ownership and restart policy documented;
-- version/tag strategy for replacing `scout-fusion/pi-runtime:local`;
-- backup and rollback checklist for `/data/scout`;
-- explicit approval before any `/safety/observations` fixture smoke;
-- separate commit plan for Phase 4 planning core, admin map UI, and runtime
-  stream/live provider drafts.
+- radio scan evidence remains host-side and read-only;
+- radio scan evidence does not call `/safety/observations`;
+- radio scan evidence does not write IncidentStore, ObservedFact, or Phase 2
+  Brain state;
+- Phase 4 cleanup keeps planning/admin UI work separate from runtime/hardware
+  behavior.
 
-中文註釋：下一步是「如何接管既有 runtime service」的部署決策，不是自動把 dirty
-worktree、GPIO、live provider 或本地模型併入 Phase 1 safety path。
+中文註釋：下一步若做 radio scan，只能整理「環境證據」與手動 smoke，不是讓 Wi-Fi/BLE
+訊號直接改 Phase 1 safety decision，也不是啟用 live provider control。

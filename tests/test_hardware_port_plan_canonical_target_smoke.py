@@ -19,12 +19,13 @@ def test_hardware_port_plan_records_canonical_fixture_target_smoke_status() -> N
         assert token in source
 
 
-def test_hardware_port_plan_next_slice_is_deployment_runbook_or_phase4_cleanup() -> None:
+def test_hardware_port_plan_records_step1_runbook_as_completed_next_slice() -> None:
     source = PLAN_PATH.read_text(encoding="utf-8")
 
     for token in (
         "canonical fixture target smoke",
-        "freeze the Scout machine Step 1 deployment runbook and evidence index",
+        "Step 1 deployment runbook freeze",
+        "stabilize host-side radio scan provider evidence",
         "stabilize Phase 4 dirty worktree groups",
     ):
         assert token in source
