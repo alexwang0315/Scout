@@ -11,6 +11,10 @@ from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from admin_after_action import ROOT, build_admin_case_view, list_admin_cases
+from admin_local_raster_tiles import (
+    DEFAULT_RASTER_TILE_CACHE_ROOT,
+    load_or_build_raster_tile_payload,
+)
 from admin_tile_proxy import (
     DEFAULT_OSM_TILE_CACHE_ROOT,
     load_or_build_osm_tile_payload,
@@ -178,6 +182,29 @@ def create_admin_router(
                 y,
                 cache_root=_osm_tile_cache_root_from_env(),
                 fallback_enabled=_osm_tile_fallback_enabled_from_env(),
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+        return Response(
+            payload.body,
+            media_type=payload.media_type,
+            headers=payload.headers(),
+        )
+
+    @router.get("/tiles/imagery/{project_id}/{layer_id}/{z}/{x}/{y}.png")
+    def imagery_tile(project_id: str, layer_id: str, z: int, x: int, y: int) -> Response:
+        try:
+            payload = load_or_build_raster_tile_payload(
+                project_id,
+                layer_id,
+                z,
+                x,
+                y,
+                cache_root=_raster_tile_cache_root_from_env(),
+                fallback_enabled=_raster_tile_fallback_enabled_from_env(),
             )
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -798,4 +825,18 @@ def _osm_tile_cache_root_from_env() -> Path:
 
 def _osm_tile_fallback_enabled_from_env() -> bool:
     value = os.getenv("SCOUT_ADMIN_OSM_TILE_FALLBACK", "true")
+    return value.strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
+def _raster_tile_cache_root_from_env() -> Path:
+    value = os.getenv("SCOUT_ADMIN_RASTER_TILE_CACHE_ROOT")
+    return (
+        Path(value).expanduser()
+        if value
+        else DEFAULT_RASTER_TILE_CACHE_ROOT.expanduser()
+    )
+
+
+def _raster_tile_fallback_enabled_from_env() -> bool:
+    value = os.getenv("SCOUT_ADMIN_RASTER_TILE_FALLBACK", "true")
     return value.strip().lower() in {"1", "true", "yes", "y", "on"}
