@@ -145,6 +145,18 @@ Milestone 10.2 Slice 13 adds mocked offline fallback adapter/UI formatting:
 - 測試使用 mocked runners only；不啟動本地模型、不呼叫 Ollama、不啟動
   Pi/Docker/hardware provider、不呼叫 `/safety/*` mutation、不寫 Scout state。
 
+Milestone 10.2 Slice 14 wires the offline fallback panel into each assistant
+shell:
+
+- debug、pretrip、admin after-action、hardware readiness 都顯示
+  `Offline fallback` read-only panel。
+- successful `/assistant/query` response 會呼叫 shared
+  `renderOfflineFallback(payload)`。
+- failed query 會呼叫 `renderOfflineFallback({})`，回到 no-schema placeholder。
+- static UI smoke gate 會檢查每個 shell 都有 `Offline fallback` token。
+- 這仍是 UI formatting only；不啟動本地模型、不呼叫 Ollama、不啟動
+  Pi/Docker/hardware provider、不呼叫 `/safety/*` mutation、不寫 Scout state。
+
 ### Milestone 10.2 Slice 3: Pi Field Profile Status + Manual Failover Runbook
 
 Slice 3 只增加 status/runbook guardrail，不啟動本地模型，也不讓 UI 或 status endpoint
