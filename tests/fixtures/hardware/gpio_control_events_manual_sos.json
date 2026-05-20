@@ -1,0 +1,35 @@
+[
+  {
+    "event_type": "manual_sos_button_observed",
+    "source": "gpio.sos_button",
+    "observed_at": 1778642500.0,
+    "device_mode": "ARMED",
+    "pattern": "long_press_plus_three_short",
+    "authority": "operator_observed",
+    "debounce_ms": 800,
+    "confidence": 1.0,
+    "details": {
+      "fixture_only": true
+    }
+  },
+  {
+    "event_type": "alert_ack_button_observed",
+    "source": "gpio.ack_button",
+    "observed_at": 1778642510.0,
+    "device_mode": "ARMED",
+    "pattern": "single_press",
+    "authority": "operator_observed",
+    "debounce_ms": 250,
+    "confidence": 1.0
+  },
+  {
+    "event_type": "local_alert_silence_observed",
+    "source": "gpio.silence_button",
+    "observed_at": 1778642520.0,
+    "device_mode": "ARMED",
+    "pattern": "double_press",
+    "authority": "operator_observed",
+    "debounce_ms": 250,
+    "confidence": 1.0
+  }
+]

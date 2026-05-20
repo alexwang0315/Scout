@@ -1,0 +1,14 @@
+{
+  "operator_alias": "field_operator",
+  "target_id": "scout-pi5-prototype-01",
+  "host_label": "scout.local",
+  "started_at": "2026-05-20T00:00:00Z",
+  "health_status": "not_run",
+  "runtime_status": "not_run",
+  "provider_status": "not_run",
+  "incident_store_path": "/data/scout/incidents",
+  "stop_conditions_checked": false,
+  "notes": [
+    "Template only; do not record token, secret, api_key, or authorization values."
+  ]
+}

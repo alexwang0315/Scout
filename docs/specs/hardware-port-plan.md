@@ -482,20 +482,20 @@ Only after Pi 5 + Docker runtime is stable:
 
 ## Recommended Next Slice
 
-After Slice 0-5, the next slice is Scout machine manual dry-run package. Slice
-0-5 now cover offline target prep, runtime portability audit, data-root/health
-contract, Docker runtime-core contract, manual-only fixture smoke planning, and
-fixture-backed provider contracts.
+After the manual dry-run package, Docker dry-run gate, GPIO boundary review, and
+dirty-worktree cleanup plan, the next slice is an operator-approved Scout
+machine dry run. The current repo artifacts can prepare commands and evidence,
+but they still do not execute Docker, connect to Pi, call live `/safety/*`, or
+start local models.
 
 Deliverables:
 
-- target host/port/data-root worksheet;
-- manual Docker build/run checklist;
-- manual smoke evidence template;
-- operator-only `/safety/observations` fixture smoke procedure;
-- explicit stop conditions for degraded health, wrong data root, live AI,
-  event bus, outbound, or provider control.
+- operator-selected target host and SSH/console path;
+- explicit approval to run `docker compose -f docker-compose.pi.yml up`;
+- manual capture of `/health`, `/runtime/status`, `/providers/status`;
+- explicit approval before any operator-run `/safety/observations` fixture smoke;
+- evidence artifact filled from `tests/fixtures/hardware/scout_machine_dry_run_package.example.json`.
 
-中文註釋：下一步不應自動部署；它是把即將對 Scout machine 做的人工 dry-run 準備成
-可記錄、可停止、可回報的操作包。等 operator 指定 target 後，才進入真的 Pi/Docker
-manual smoke。
+中文註釋：下一步需要人的部署決策。沒有 target machine 與 operator approval 前，Scout
+仍停在本機 contract/dry-run 階段，不應自動部署、不應啟動本地模型，也不應把 GPIO 或
+provider event 直接接進 Phase 1 safety mutation。
