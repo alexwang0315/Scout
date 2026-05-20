@@ -23,6 +23,7 @@ from recording_policy_runtime import RecordingPolicyDecision, RecordingPolicyRun
 from risk_rules import RiskRuleEvaluator, load_risk_rules
 from route_matching import GpxRoute, RoutePoint, load_gpx_route
 from route_progress import RouteProgressConfig, RouteProgressEvaluator, RouteProgressSample, load_route_progress_config
+from runtime_artifact_resolution import resolve_runtime_route_source
 from safety_models import IncidentPackage, Observation, SafetyEvent, SafetyState
 from safety_state_machine import SafetyStateMachine
 
@@ -216,19 +217,7 @@ def replay_route(
 
 
 def _resolve_route_source(mission_graph_path: Path, route_source: str) -> Path:
-    route_path = Path(route_source)
-    if route_path.is_absolute():
-        return route_path
-
-    candidates = [
-        Path.cwd() / route_path,
-        mission_graph_path.parent / route_path,
-        mission_graph_path.parent.parent.parent / route_path,
-    ]
-    for candidate in candidates:
-        if candidate.exists():
-            return candidate
-    return candidates[0]
+    return resolve_runtime_route_source(mission_graph_path, route_source)
 
 
 def _load_map_context(
