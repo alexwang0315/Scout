@@ -32,3 +32,16 @@ def test_canonical_fixture_local_dry_run_doc_keeps_target_read_only() -> None:
         "hardware provider control: none",
     ):
         assert token in source
+
+
+def test_canonical_fixture_local_dry_run_doc_links_followup_target_smoke() -> None:
+    source = DOC_PATH.read_text(encoding="utf-8")
+
+    for token in (
+        "## Follow-Up Target Smoke",
+        "`observations_processed` moved from `1` to `2`",
+        "`checkpoint_hits` moved from `0` to `1`",
+        "checkpoint `cp_01` was hit",
+        "canonical-fixture-observation-20260520T035132Z",
+    ):
+        assert token in source

@@ -67,3 +67,21 @@ Capabilities expected as available:
 If this local dry-run stays green, the next deploy slice can run the canonical
 fixture once against `scout.local`, using the same rollback criteria as the
 previous fixture observation smoke.
+
+## Follow-Up Target Smoke
+
+2026-05-20: the canonical fixture was run once against `scout.local`.
+
+Result:
+
+- `observations_processed` moved from `1` to `2`;
+- `checkpoint_hits` moved from `0` to `1`;
+- checkpoint `cp_01` was hit;
+- required capabilities were available;
+- `safety_level` stayed `L0_NORMAL`;
+- no incident ids, stored incident paths, or new incident files were produced.
+
+Detailed evidence:
+
+- `/data/scout/deployments/canonical-fixture-observation-20260520T035132Z`
+- `docs/admin/scout-runtime-canonical-fixture-target-smoke.md`

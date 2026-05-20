@@ -25,7 +25,8 @@ def test_hardware_port_plan_fixture_smoke_points_to_canonical_target_smoke() -> 
         "manual_observation_smoke.canonical.example.json",
         "verified GPS, horizontal accuracy, IMU, battery",
         "target network calls and target `/safety/*` mutation at zero",
-        "run one canonical fixture target smoke against `scout.local`",
+        "## Canonical Fixture Target Smoke Status",
+        "freeze the Scout machine Step 1 deployment runbook and evidence index",
         "stabilize Phase 4 dirty worktree groups",
     ):
         assert token in source
