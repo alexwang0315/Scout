@@ -1,0 +1,21 @@
+{
+  "active_profile": "cloud",
+  "cloud_model": {
+    "base_url": "https://api.openai.com/v1",
+    "model_name": "gpt-4.1-mini",
+    "profile": "cloud",
+    "token_env_var": "SCOUT_CLOUD_MODEL_TOKEN",
+    "token_id": "operator-managed-cloud-token"
+  },
+  "connect_on_startup": true,
+  "fallback_to_local_on_error": true,
+  "local_fallback_fixed_schema": true,
+  "local_model": {
+    "base_url": "http://scout-ollama:11434/v1",
+    "model_name": "qwen2.5:0.5b",
+    "profile": "local",
+    "token_id": "ollama-local-no-token"
+  },
+  "max_context_chars": 12000,
+  "timeout_seconds": 8
+}

@@ -1,0 +1,22 @@
+{
+  "allowed_actions": [
+    "read_provider_status",
+    "set_device_mode",
+    "restart_provider"
+  ],
+  "allowed_provider_refs": [
+    "provider.gnss.live.v0",
+    "provider.imu.live.v0",
+    "provider.battery.live.v0",
+    "provider.ble.live.v0",
+    "provider.cellular.live.v0"
+  ],
+  "arbitrary_shell_allowed": false,
+  "artifact_kind": "hardware_provider_control_policy",
+  "operator_authorization_required": true,
+  "outbound_send_allowed": false,
+  "phase1_safety_decision_mutation_allowed": false,
+  "policy_id": "hardware_control_policy.pi5_live.v0",
+  "safety_mutation_allowed": false,
+  "token_values_embedded": false
+}
