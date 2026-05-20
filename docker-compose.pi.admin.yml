@@ -1,0 +1,43 @@
+services:
+  scout-phase4-admin:
+    platform: linux/arm64
+    build:
+      context: .
+      dockerfile: Dockerfile.pi.admin
+    image: scout-fusion/pi-phase4-admin:preview
+    container_name: scout-pi-phase4-admin
+    restart: unless-stopped
+    environment:
+      SCOUT_DATA_ROOT: /data/scout
+      SCOUT_RUNTIME_PROFILE: pi-phase4-admin-preview
+      SCOUT_SAFETY_ENABLED: "false"
+      SCOUT_SAFETY_INCIDENT_STORE: /data/scout/incidents
+      SCOUT_PRETRIP_WORKSPACE_ROOT: /data/scout/admin/pretrip-workspaces
+      SCOUT_ADMIN_OSM_TILE_CACHE_ROOT: /data/scout/osm-tiles
+      SCOUT_ADMIN_RASTER_TILE_CACHE_ROOT: /data/scout/raster-tiles
+      SCOUT_ADMIN_OSM_TILE_FALLBACK: "true"
+      SCOUT_ADMIN_RASTER_TILE_FALLBACK: "true"
+      SCOUT_AI_ASSISTANT_ENABLED: "1"
+      SCOUT_AI_ASSISTANT_PROVIDER: mock
+      SCOUT_WEATHER_API_ENABLED: "${SCOUT_WEATHER_API_ENABLED:-false}"
+      SCOUT_WEATHER_API_PROVIDER: open_meteo
+      SCOUT_PORT: "9099"
+      SCOUT_LOG_LEVEL: info
+    ports:
+      - "9110:9099"
+    volumes:
+      - type: bind
+        source: /data/scout
+        target: /data/scout
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import json, urllib.request; r=urllib.request.urlopen('http://127.0.0.1:9099/health', timeout=3); raise SystemExit(0 if json.load(r).get('status') == 'ok' else 1)",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
