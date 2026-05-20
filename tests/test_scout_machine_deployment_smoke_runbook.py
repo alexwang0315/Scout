@@ -79,3 +79,25 @@ def test_runbook_links_focused_local_validation_command() -> None:
         "tests/test_scout_hardware_prototype_prep.py "
         "tests/test_scout_machine_deployment_smoke_runbook.py"
     ) in source
+
+
+def test_runbook_documents_local_admin_assistant_prototype_gate() -> None:
+    source = read_runbook()
+
+    for token in (
+        "Local Admin / Assistant Prototype Gate",
+        "admin_hardware_prototype_smoke_check.py",
+        "SCOUT_BROWSER_NODE",
+        "SCOUT_BROWSER_NODE_PATH",
+        "--browser-mode required",
+        "GET /assistant/status",
+        "provider 是 `mock`",
+        "assistant_ui_smoke_check.py --pretty",
+        "assistant_readiness_check.py --pretty",
+        "assistant_browser_smoke_check.py --base-url http://127.0.0.1:9111 --pretty",
+        "不連 `scout.local`",
+        "不啟動 Ollama",
+        "不呼叫 `/safety/*` mutation",
+        "不控制硬體 provider",
+    ):
+        assert token in source
