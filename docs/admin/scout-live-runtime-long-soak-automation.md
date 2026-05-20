@@ -12,6 +12,9 @@ Latest short live smoke evidence:
 Overnight soak started evidence:
 `/data/scout/deployments/live-runtime-soak-overnight-20260520T110838Z`
 
+Latest post-guard bounded soak evidence:
+`/data/scout/deployments/live-runtime-soak-post-guard-20260520T153214Z`
+
 ## Scope
 
 This slice adds `live_runtime_soak_check.py`, a repeatable read-only soak
@@ -76,6 +79,50 @@ Result:
 - `stream_telemetry_totals.active_websocket_connections=0`;
 - `raw_payloads_embedded=false`;
 - `secret_values_embedded=false`.
+
+## Post-Guard Bounded Soak
+
+After the signed HTTP push sample and live guard update, a bounded read-only
+soak was run while the overnight soak continued in the background.
+
+Evidence directory:
+`/data/scout/deployments/live-runtime-soak-post-guard-20260520T153214Z`
+
+Command path used:
+`/tmp/live_runtime_soak_check.py`
+
+中文註釋：目前 running container 尚未以包含 packaged `/app/live_runtime_soak_check.py`
+的 image 重建，為避免中斷正在跑的 overnight soak，本次 bounded soak 使用已在
+container 內的 `/tmp` checker。下一次 live image rebuild 後才應改用 `/app` path。
+
+Result:
+
+- `status=passed`;
+- `sample_count=6`;
+- `interval_seconds=10`;
+- `samples_all_ok=true`;
+- `runtime_profile=pi-field-live`;
+- `health_status=ok`;
+- `assistant_provider=pydantic_ai`;
+- `assistant_startup_connection_status=connected:cloud`;
+- `assistant_token_values_exposed=false`;
+- `stream_control_status=observing`;
+- `stream_telemetry_totals.accepted_count=0`;
+- `stream_telemetry_totals.rejected_count=0`;
+- `stream_telemetry_totals.queued_count=0`;
+- `stream_telemetry_totals.active_websocket_connections=0`;
+- `provider_control_status=enabled`;
+- `provider_control_allowed_actions=[read_provider_status]`;
+- `provider_control_token_value_exposed=false`;
+- `raw_payloads_embedded=false`;
+- `secret_values_embedded=false`;
+- `overnight_soak_still_running=true`;
+- `read_only_soak=true`;
+- `new_observations_sent=false`;
+- `stream_control_mutation_performed=false`;
+- `remote_provider_send_performed=false`;
+- `hardware_control_performed=false`;
+- `phase2_writeback_performed=false`.
 
 ## Packaging
 
