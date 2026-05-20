@@ -147,7 +147,7 @@ def build_live_runtime_enablement_report(
             if missing:
                 gate_blockers.append("missing_runtime_stream_admission_secret")
         elif gate == LiveRuntimeGate.REMOTE_PROVIDER_LIVE_SEND:
-            refs = _remote_provider_required_secret_refs()
+            refs = _remote_provider_required_secret_refs(environ)
             required_secret_refs.extend(refs)
             missing = [ref for ref in refs if not _secret_ref_available(ref, environ)]
             missing_secret_refs.extend(missing)
@@ -257,7 +257,12 @@ def _hardware_control_token_refs(environ: Mapping[str, str]) -> list[str]:
     return ["env:SCOUT_HARDWARE_PROVIDER_CONTROL_TOKEN"]
 
 
-def _remote_provider_required_secret_refs() -> list[str]:
+def _remote_provider_required_secret_refs(environ: Mapping[str, str]) -> list[str]:
+    if environ.get("SCOUT_REMOTE_PROVIDER_KIND", "").strip().lower() == "telegram_bot":
+        return [
+            "env:SCOUT_TELEGRAM_BOT_TOKEN",
+            "env:SCOUT_TELEGRAM_TARGET_CHAT_ID",
+        ]
     policy = build_webhook_remote_provider_policy_contract()
     config = build_webhook_remote_provider_config_template(policy)
     return config.required_secret_refs()
