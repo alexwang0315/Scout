@@ -8,12 +8,20 @@
    `pretrip_models.py`, `pretrip_source_ingest.py`, candidate/readiness/artifact manifest tests.
 2. Phase 4 admin and map UI:
    `pretrip_admin_view.py`, `admin_map_layers.py`, `admin_basemap_tiles.py`, static admin pages.
-3. Phase 4.5 runtime handoff:
+3. Phase 1 after-action UI:
+   `admin_after_action.py`, `docs/admin/phase1-after-action.html`,
+   `tests/test_admin_after_action.py`; keep generated/local map artifacts out
+   unless they are explicitly promoted as fixtures.
+4. Phase 4.5 runtime handoff:
    `pretrip_runtime_*`, `runtime_activation_loader.py`, `runtime_load_dry_run.py`.
-4. Runtime stream and remote provider drafts:
-   `runtime_stream_*`, `runtime_remote_provider_*`.
-5. Local-only field data:
-   `PdrSample/*`, `trajectory_map.png`, `catographydata/`.
+5. Runtime stream, admission, and remote provider drafts:
+   `runtime_stream_*`, `runtime_remote_provider_*`,
+   `runtime_observation_envelope.py`, `runtime_input_admission.py`,
+   `server_safety_observation_admission_config.py`, and safety API/server
+   mount changes.
+6. Local-only field data:
+   `PdrSample/*`, `trajectory_map.png`, `catographydata/`,
+   `install_skills.sh`.
 
 ## Exclusion Rules
 
@@ -22,6 +30,10 @@
 - Do not commit live runtime provider send paths with assistant guardrail work.
 - Keep `/safety/*` mutation changes separate from read-only assistant/debug/hardware readiness work.
 - Keep local model/Ollama compose separate from deterministic Pi runtime-core.
+- Keep after-action UI cleanup separate from Phase 4 pretrip planning UI unless
+  the change is explicitly an after-action-to-next-plan read-only projection.
+- Keep runtime stream/admission commits opt-in, secret-gated, and separate from
+  remote provider live-send paths.
 
 ## Validation
 
@@ -45,3 +57,21 @@ Completed separation:
 
 Next cleanup batch should choose one Phase 4 group at a time, starting with
 planning core models/fixtures if the user wants to stabilize Phase 4. Do not combine it with runtime stream/live provider send paths.
+
+## Batch 2 Ready State
+
+The remaining dirty worktree is now grouped for these follow-up slices:
+
+1. Phase 4 planning core models and fixture outputs.
+2. Phase 4 admin/map UI and static pretrip page.
+3. Phase 1 after-action UI.
+4. Runtime stream/admission opt-in contract.
+5. Runtime remote provider live-send drafts.
+
+Ordering rule:
+
+- finish and commit Phase 4 planning/admin groups before touching runtime stream/admission;
+- commit after-action UI as its own Phase 1 admin surface slice;
+- do not stage `PdrSample/*`, `catographydata/`, `trajectory_map.png`, or `install_skills.sh` during these cleanup batches;
+- do not enable local model/Ollama or remote provider live-send in the same
+  slice as deterministic runtime or planning UI.
