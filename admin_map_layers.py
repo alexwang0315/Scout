@@ -8,6 +8,7 @@ from admin_basemap_tiles import (
     DEFAULT_CACHE_POLICY as OSM_CACHE_POLICY,
     DEFAULT_OSM_TILE_URL_TEMPLATE as OSM_TILE_URL_TEMPLATE,
 )
+from admin_local_raster_tiles import LOCAL_RASTER_TILE_URL_TEMPLATE
 from admin_tile_proxy import LOCAL_OSM_TILE_URL_TEMPLATE
 
 
@@ -305,8 +306,13 @@ def _layer_renderer_contract(layer_id: str) -> dict[str, Any]:
         return {
             "local_raster_manifest_supported": True,
             "preferred_manifest_kind": "admin_local_raster_source_manifest",
+            "local_raster_tile_url_template": LOCAL_RASTER_TILE_URL_TEMPLATE,
+            "local_raster_tile_cache_policy": (
+                "local_file_cache_then_transparent_fallback"
+            ),
             "external_network_required": False,
             "tile_cutting_required": False,
+            "downloads_tiles_into_repo": False,
         }
     if layer_id == "osm":
         return {
