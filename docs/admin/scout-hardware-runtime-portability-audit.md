@@ -84,7 +84,22 @@ fixture smoke 與 release gate 是否足夠清楚。只要某個模組會要求 
 讓硬體原型先證明最重要的事情：安全核心能啟動、能讀任務、能保存證據、能在缺少可選
 provider 時維持 degraded 狀態，而不是因為周邊功能沒有準備好就整個服務失敗。
 
-## 5. Verification Ladder
+## 5. Hardware Provider Contract
+
+Slice 5 adds a fixture-backed provider manifest contract in `hardware_provider_contract.py`
+with an example at `tests/fixtures/hardware/provider_contract.example.json`.
+
+The contract covers `gnss`, `imu`, `battery`, `ble`, and `cellular` provider
+domains. It only validates provider metadata, evidence field names, and
+degraded/unavailable behavior projections. It does not create adapters, poll
+devices, call `/safety/*`, send outbound messages, or write `IncidentStore`,
+`ObservedFact`, `Brain`, or Phase 1 safety decisions.
+
+中文註釋：這裡的 provider contract 是硬體能力與降級行為的唯讀清單，不是 provider
+控制器。即使 BLE 或 cellular fixture 顯示 degraded/unavailable，也只會形成 readiness
+投影；Scout runtime 應繼續啟動並把缺失當作狀態證據，而不是讓這份 contract 改變安全判斷。
+
+## 6. Verification Ladder
 
 部署前本機驗證：
 
@@ -92,7 +107,8 @@ provider 時維持 degraded 狀態，而不是因為周邊功能沒有準備好�
 /Users/alexwang0315/scout-fusion/venv/bin/python -m pytest \
   tests/test_scout_hardware_prototype_prep.py \
   tests/test_scout_machine_deployment_smoke_runbook.py \
-  tests/test_scout_hardware_runtime_portability_audit.py
+  tests/test_scout_hardware_runtime_portability_audit.py \
+  tests/test_hardware_provider_contract.py
 ```
 
 Phase 1 baseline 建議另外跑：
@@ -112,15 +128,15 @@ Release/boundary 建議另外跑：
 這些都是 local validation，不連 Pi、不控制真硬體、不呼叫 live `/safety/*` mutation。
 真正 Pi smoke 必須等 operator 指定 target host、port、data root 與啟動方式後再手動跑。
 
-## 6. Next Slice
+## 7. Next Slice
 
-下一個可實作 slice 是 data-root and health contract：
+Slice 2-5 完成後，下一個可實作 slice 是 Scout machine manual dry-run package：
 
-- 定義 `/data/scout` 目錄布局；
-- 定義 `/health` 最小欄位；
-- 確認 incident store path 會落在 mounted data root；
-- 用 temporary data root 做本機測試；
-- 仍不啟動本地模型、不接 event bus、不接真 hardware provider。
+- 固定 target host/port/data root 的 operator worksheet；
+- 在不啟動本地模型的前提下準備手動 Docker build/run checklist；
+- 產生一份 manual smoke evidence template；
+- 明確標示 `/safety/observations` fixture smoke 只能由 operator 手動執行；
+- 仍不接 event bus、不接真 hardware provider、不送 outbound。
 
-中文註釋：下一步可以開始做最小 Pi runtime health contract，但那會更接近可部署 runtime。
-若要真的跑 Docker 或對 Pi 發 curl，需要 operator 明確提供目標與允許手動 smoke。
+中文註釋：下一步會從「本機 contract」進入「人工 dry-run 準備」。只要還沒有 target
+machine 決策，就不應自動啟動 Docker、不應對 Pi 發 curl，也不應把 Ollama 或本地模型拉進來。

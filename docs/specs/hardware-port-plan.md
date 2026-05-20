@@ -327,6 +327,8 @@ Acceptance:
 - incident package is visible under `/data/scout/incidents`;
 - restart does not corrupt persisted state;
 - missing optional hardware providers degrade safely.
+- local `scout_pi_fixture_smoke.py` only renders a manual-only command plan and
+  never executes network calls or `/safety/*` mutation.
 
 中文註釋：第一個硬體 demo 的驗收不是漂亮 UI，而是「能跑、能判斷、能落盤、重開機後證據還在」。
 
@@ -480,15 +482,20 @@ Only after Pi 5 + Docker runtime is stable:
 
 ## Recommended Next Slice
 
-Start with Slice 1: Runtime Portability Audit. Slice 0 has an offline target
-profile and manual smoke runbook; it is deployment prep, not a Pi deployment.
+After Slice 0-5, the next slice is Scout machine manual dry-run package. Slice
+0-5 now cover offline target prep, runtime portability audit, data-root/health
+contract, Docker runtime-core contract, manual-only fixture smoke planning, and
+fixture-backed provider contracts.
 
 Deliverables:
 
-- module classification table;
-- import-time blocker list;
-- proposed dependency profiles;
-- first Docker runtime-core include/exclude list;
-- list of tests that must pass before Pi deployment.
+- target host/port/data-root worksheet;
+- manual Docker build/run checklist;
+- manual smoke evidence template;
+- operator-only `/safety/observations` fixture smoke procedure;
+- explicit stop conditions for degraded health, wrong data root, live AI,
+  event bus, outbound, or provider control.
 
-中文註釋：下一步先做 port audit，因為它可以快速找出「哪裡會在 Linux arm64 / Docker / Pi 上壞掉」，又不會改變 Scout 的安全語義。
+中文註釋：下一步不應自動部署；它是把即將對 Scout machine 做的人工 dry-run 準備成
+可記錄、可停止、可回報的操作包。等 operator 指定 target 後，才進入真的 Pi/Docker
+manual smoke。

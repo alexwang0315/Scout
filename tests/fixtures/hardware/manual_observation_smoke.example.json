@@ -1,0 +1,21 @@
+{
+  "payload": {
+    "loggingTime": 1778642400.0,
+    "locationLatitude(WGS84)": 24.121,
+    "locationLongitude(WGS84)": 121.254,
+    "locationAltitude(m)": 2480.0,
+    "locationSpeed(m/s)": 0.8,
+    "locationCourse(°)": 90.0,
+    "locationHorizontalAccuracy(m)": 5.0,
+    "accelerometerAccelerationX(G)": 0.01,
+    "accelerometerAccelerationY(G)": 0.02,
+    "accelerometerAccelerationZ(G)": 0.98,
+    "motionYaw(rad)": 0.0,
+    "motionPitch(rad)": 0.0,
+    "motionRoll(rad)": 0.0,
+    "batteryLevel(%)": 90.0
+  },
+  "device": "apple_watch",
+  "source": "fixture_hardware_smoke",
+  "received_at": 1778642400.5
+}
