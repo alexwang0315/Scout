@@ -6,6 +6,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
+from admin_map_layers import build_after_action_map_layers
 from incident_store import IncidentStore
 from mission_graph import load_mission_graph
 from offline_map import load_offline_map_context
@@ -67,6 +68,7 @@ def build_admin_case_view(
     map_context = load_offline_map_context(artifacts.map_context_path)
     risk_rules = load_risk_rules(artifacts.risk_rules_path)
     incidents = _load_incidents(artifacts.incident_store_path)
+    map_metadata = map_context.source_metadata.model_dump(mode="json")
     replay_result = _cached_replay_result(
         str(artifacts.mission_graph_path),
         str(artifacts.route_path),
@@ -155,7 +157,7 @@ def build_admin_case_view(
         },
         "map": {
             "source_path": _relpath(artifacts.map_context_path, root),
-            "metadata": map_context.source_metadata.model_dump(mode="json"),
+            "metadata": map_metadata,
             "corridors": [
                 {
                     "corridor_id": corridor.corridor_id,
@@ -198,6 +200,15 @@ def build_admin_case_view(
                 for poi in map_context.pois
             ],
         },
+        "map_layers": build_after_action_map_layers(
+            map_source_path=_relpath(artifacts.map_context_path, root),
+            map_metadata=map_metadata,
+            route_source_path=_relpath(artifacts.route_path, root),
+            mission_graph_source_path=_relpath(artifacts.mission_graph_path, root),
+            incident_store_path=str(artifacts.incident_store_path)
+            if artifacts.incident_store_path
+            else None,
+        ),
         "risk_rules": [
             {
                 **rule.model_dump(mode="json"),
