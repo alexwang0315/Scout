@@ -389,7 +389,8 @@ tools/pi_radio_scan_smoke.py
 ```
 
 `tools/pi_radio_scan_smoke.py` combines Wi-Fi RSSI and BLE RSSI into one
-`radio_environment_scan` JSON payload and can append it to:
+`radio_environment_scan` JSON payload with a fixed read-only `boundary` block,
+then can append it to:
 
 ```text
 /data/scout/providers/radio_scan/*.jsonl
@@ -402,8 +403,10 @@ Rules:
   dBm is unavailable;
 - treat BLE RSSI as proximity / team beacon evidence, not stable identity or
   precise location;
+- validate `radio_counts` against the Wi-Fi/BLE payload before writing JSONL;
 - do not call `/safety/observations`, write IncidentStore, write ObservedFact,
-  or change Phase 1 safety decisions from this tool.
+  write Phase 2 Brain, send outbound messages, control hardware providers, or
+  change Phase 1 safety decisions from this tool.
 
 ## Environment Variables
 

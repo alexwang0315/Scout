@@ -245,10 +245,12 @@ sudo python3 tools/pi_radio_scan_smoke.py \
   --output-jsonl /data/scout/providers/radio_scan/manual-smoke.jsonl
 ```
 
-The output is append-only JSONL when `--output-jsonl` is provided. It may be
-attached later as `server_signal_snapshot` / provider-state evidence, but the
-tool itself must not call `/safety/observations` or write IncidentStore,
-ObservedFact, or Brain records.
+The output is append-only JSONL when `--output-jsonl` is provided. The payload
+includes a fixed read-only `boundary` block and validates `radio_counts`
+against the Wi-Fi/BLE payload before writing. It may be attached later as
+`server_signal_snapshot` / provider-state evidence, but the tool itself must
+not call `/safety/observations`, write IncidentStore, write ObservedFact, write
+Brain records, send outbound messages, control hardware providers, or change Phase 1 safety decisions.
 
 ## Phase Boundaries
 
