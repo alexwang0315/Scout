@@ -1,0 +1,3747 @@
+{
+  "artifacts": [
+    {
+      "artifact_kind": "other",
+      "artifact_refs": [],
+      "captured_at": null,
+      "created_at": null,
+      "id": "artifact.pretrip_package.chilai_nanhua_day1",
+      "media_type": "application/json",
+      "metadata": {
+        "artifact_kind": "pretrip_package",
+        "package_id": "pretrip.chilai_nanhua_day1.v0",
+        "phase": "phase4_pretrip",
+        "project_id": "chilai_nanhua_day1",
+        "status": "reviewed",
+        "version": "0.1.0"
+      },
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "sha256": null,
+      "type": "Artifact",
+      "uri": "outputs/pretrip_package.reviewed.json"
+    },
+    {
+      "artifact_kind": "gpx",
+      "artifact_refs": [],
+      "captured_at": null,
+      "created_at": null,
+      "id": "artifact.gpx.chilai_nanhua_day1",
+      "media_type": "application/gpx+xml",
+      "metadata": {
+        "phase": "phase4_pretrip",
+        "pretrip_kind": "gpx",
+        "provenance": {
+          "captured_at": null,
+          "collected_at": null,
+          "license_note": null,
+          "method": "pretrip-source-ingest",
+          "notes": "",
+          "source_kind": "gpx",
+          "source_ref": "artifact.gpx.chilai_nanhua_day1",
+          "uri": "/Users/alexwang0315/downloads/奇萊南華-能高越嶺步道Day1.gpx"
+        },
+        "size_bytes": 275392
+      },
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "sha256": "3c1f4843ecea5cb2fc85f92934d3d1a220738c900576e4976d4c09975673956c",
+      "type": "Artifact",
+      "uri": "/Users/alexwang0315/downloads/奇萊南華-能高越嶺步道Day1.gpx"
+    },
+    {
+      "artifact_kind": "photo",
+      "artifact_refs": [],
+      "captured_at": null,
+      "created_at": null,
+      "id": "artifact.photo.g11_hiking",
+      "media_type": "image/jpeg",
+      "metadata": {
+        "phase": "phase4_pretrip",
+        "pretrip_kind": "photo",
+        "provenance": {
+          "captured_at": null,
+          "collected_at": null,
+          "license_note": null,
+          "method": "pretrip-source-ingest",
+          "notes": "",
+          "source_kind": "photo",
+          "source_ref": "artifact.photo.g11_hiking",
+          "uri": "/Users/alexwang0315/downloads/G11_hiking.jpg"
+        },
+        "size_bytes": 209877
+      },
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "sha256": "ff28bf2fd66c6f8a63e759800fcdb8363862832ebe7b87dc900e849f1c7a058d",
+      "type": "Artifact",
+      "uri": "/Users/alexwang0315/downloads/G11_hiking.jpg"
+    },
+    {
+      "artifact_kind": "other",
+      "artifact_refs": [],
+      "captured_at": null,
+      "created_at": null,
+      "id": "artifact.pretrip_reference.planning_ref.joyhike.main_site",
+      "media_type": "text/html",
+      "metadata": {
+        "artifact_treatment": [
+          "Artifact",
+          "ModelInterpretation",
+          "HumanReview",
+          "DerivedMeasurement"
+        ],
+        "not_observed_fact": true,
+        "notes": "Registered as implementation context only; no crawler or dynamic app extraction in this slice.",
+        "phase": "phase4_pretrip",
+        "reference_id": "planning_ref.joyhike.main_site",
+        "reference_type": "reference_product",
+        "scout_meaning": "Reference product precedent for Taiwan hiking planning primitives; not the controlling Scout data source.",
+        "supported_primitives": [
+          "route_nodes",
+          "segment_distance",
+          "elevation_gain_loss",
+          "daily_ascent_descent",
+          "estimated_walking_time",
+          "rest_time",
+          "weather",
+          "permit_hut_logistics",
+          "group_coordination"
+        ],
+        "title": "Joyhike main site"
+      },
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "sha256": null,
+      "type": "Artifact",
+      "uri": "https://joyhike.com/"
+    },
+    {
+      "artifact_kind": "other",
+      "artifact_refs": [],
+      "captured_at": null,
+      "created_at": null,
+      "id": "artifact.pretrip_reference.planning_ref.joyhike.route_planning_model",
+      "media_type": "text/html",
+      "metadata": {
+        "artifact_treatment": [
+          "Artifact",
+          "ModelInterpretation",
+          "HumanReview",
+          "DerivedMeasurement"
+        ],
+        "not_observed_fact": true,
+        "notes": "Planning reference only; accepted assumptions require human review.",
+        "phase": "phase4_pretrip",
+        "reference_id": "planning_ref.joyhike.route_planning_model",
+        "reference_type": "route_planning_method",
+        "scout_meaning": "Reference model for planning primitives and route difficulty context.",
+        "supported_primitives": [
+          "route_nodes",
+          "segment_distance",
+          "elevation_gain_loss",
+          "estimated_walking_time",
+          "rest_time",
+          "weather"
+        ],
+        "title": "Joyhike blog route planning model"
+      },
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "sha256": null,
+      "type": "Artifact",
+      "uri": "https://blog.joyhike.com/2022/05/trailslevel.html"
+    },
+    {
+      "artifact_kind": "other",
+      "artifact_refs": [],
+      "captured_at": null,
+      "created_at": null,
+      "id": "artifact.pretrip_reference.planning_ref.ptt.sunriver_timing",
+      "media_type": "text/html",
+      "metadata": {
+        "artifact_treatment": [
+          "Artifact",
+          "ModelInterpretation",
+          "HumanReview",
+          "DerivedMeasurement"
+        ],
+        "not_observed_fact": true,
+        "notes": "Not an ObservedFact; calculations become DerivedMeasurement only after assumptions are explicit.",
+        "phase": "phase4_pretrip",
+        "reference_id": "planning_ref.ptt.sunriver_timing",
+        "reference_type": "community_timing_evidence",
+        "scout_meaning": "Community evidence for route-guide timing and fitness calibration assumptions.",
+        "supported_primitives": [
+          "route_guide_segment_time_minutes",
+          "personal_route_guide_multiplier",
+          "team_route_guide_multiplier",
+          "pace_multiplier_basis",
+          "fixed_rest_minutes",
+          "conservative_long_day_adjustment",
+          "eta_at_checkpoint",
+          "eta_at_camp_or_overnight_point",
+          "dark_arrival_margin_minutes",
+          "planned_vs_actual_calibration_refs"
+        ],
+        "title": "PTT Hiking 上河時間與步程計算"
+      },
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "sha256": null,
+      "type": "Artifact",
+      "uri": "https://www.ptt.cc/bbs/Hiking/M.1696430399.A.151.html"
+    },
+    {
+      "artifact_kind": "other",
+      "artifact_refs": [],
+      "captured_at": null,
+      "created_at": null,
+      "id": "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0",
+      "media_type": "application/json",
+      "metadata": {
+        "artifact_kind": "human_review_log",
+        "log_id": "review_log.chilai_nanhua_day1.v0",
+        "phase": "phase4_pretrip",
+        "review_count": 47
+      },
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "sha256": null,
+      "type": "Artifact",
+      "uri": "reviews/human_reviews.json"
+    },
+    {
+      "artifact_kind": "other",
+      "artifact_refs": [],
+      "captured_at": null,
+      "created_at": null,
+      "id": "artifact.pretrip_output.poi_readiness_candidates.chilai_nanhua_day1.v0",
+      "media_type": "application/json",
+      "metadata": {
+        "artifact_kind": "poi_readiness_candidates",
+        "candidate_context": true,
+        "not_observed_fact": true,
+        "output_name": "poi_readiness_candidates",
+        "phase": "phase4_pretrip",
+        "project_id": "chilai_nanhua_day1",
+        "summary": {
+          "artifact_id": "poi_readiness_candidates.chilai_nanhua_day1.v0",
+          "artifact_kind": "poi_readiness_candidates",
+          "counts": {
+            "blocker_candidate_count": 0,
+            "finding_candidate_count": 0,
+            "policy_candidate_count": 1,
+            "route_corridor_poi_count": 1,
+            "warning_candidate_count": 0
+          },
+          "findings_count": 0,
+          "policy_version": "0.1.0",
+          "project_id": "chilai_nanhua_day1",
+          "status": "candidate_only"
+        }
+      },
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "sha256": null,
+      "type": "Artifact",
+      "uri": "outputs/poi_readiness_candidates.json"
+    },
+    {
+      "artifact_kind": "other",
+      "artifact_refs": [],
+      "captured_at": null,
+      "created_at": null,
+      "id": "artifact.pretrip_output.segment_policy_candidates.chilai_nanhua_day1.v0",
+      "media_type": "application/json",
+      "metadata": {
+        "artifact_kind": "segment_policy_candidates",
+        "candidate_context": true,
+        "not_observed_fact": true,
+        "output_name": "segment_policy_candidates",
+        "phase": "phase4_pretrip",
+        "project_id": "chilai_nanhua_day1",
+        "summary": {
+          "artifact_id": "segment_policy_candidates.chilai_nanhua_day1.v0",
+          "artifact_kind": "segment_policy_candidates",
+          "candidates_count": 10,
+          "counts": {
+            "candidate_only_count": 10,
+            "human_review_required_count": 10,
+            "requires_daylight_count": 10,
+            "retreat_available_count": 2,
+            "segment_policy_candidate_count": 10,
+            "signal_expected_count": 1
+          },
+          "policy_version": "0.1.0",
+          "project_id": "chilai_nanhua_day1",
+          "status": "candidate_only"
+        }
+      },
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "sha256": null,
+      "type": "Artifact",
+      "uri": "outputs/segment_policy_candidates.json"
+    },
+    {
+      "artifact_kind": "other",
+      "artifact_refs": [],
+      "captured_at": null,
+      "created_at": null,
+      "id": "artifact.pretrip_output.plan_validation_candidates.chilai_nanhua_day1.v0",
+      "media_type": "application/json",
+      "metadata": {
+        "artifact_kind": "plan_validation_candidates",
+        "candidate_context": true,
+        "not_observed_fact": true,
+        "output_name": "plan_validation_candidates",
+        "phase": "phase4_pretrip",
+        "project_id": "chilai_nanhua_day1",
+        "summary": {
+          "artifact_id": "plan_validation_candidates.chilai_nanhua_day1.v0",
+          "artifact_kind": "plan_validation_candidates",
+          "counts": {
+            "blocker_candidate_count": 0,
+            "finding_candidate_count": 6,
+            "source_ref_count": 8,
+            "warning_candidate_count": 6
+          },
+          "findings_count": 6,
+          "policy_version": "0.1.0",
+          "project_id": "chilai_nanhua_day1",
+          "status": "candidate_only"
+        }
+      },
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "sha256": null,
+      "type": "Artifact",
+      "uri": "outputs/plan_validation_candidates.json"
+    },
+    {
+      "artifact_kind": "other",
+      "artifact_refs": [],
+      "captured_at": null,
+      "created_at": null,
+      "id": "artifact.pretrip_output.weather_daylight.chilai_nanhua_day1.2026-05-03.v0",
+      "media_type": "application/json",
+      "metadata": {
+        "artifact_kind": "weather_daylight_evidence",
+        "candidate_context": true,
+        "not_observed_fact": true,
+        "output_name": "weather_daylight_evidence",
+        "phase": "phase4_pretrip",
+        "project_id": "chilai_nanhua_day1",
+        "summary": {
+          "evidence_id": "weather_daylight.chilai_nanhua_day1.2026-05-03.v0",
+          "project_id": "chilai_nanhua_day1",
+          "status": "candidate_only"
+        }
+      },
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "sha256": null,
+      "type": "Artifact",
+      "uri": "outputs/weather_daylight_evidence.json"
+    },
+    {
+      "artifact_kind": "other",
+      "artifact_refs": [],
+      "captured_at": null,
+      "created_at": null,
+      "id": "artifact.pretrip_output.contour_interpretation.chilai_nanhua_day1.v0",
+      "media_type": "application/json",
+      "metadata": {
+        "artifact_kind": "contour_interpretation_candidates",
+        "candidate_context": true,
+        "not_observed_fact": true,
+        "output_name": "contour_interpretation_candidates",
+        "phase": "phase4_pretrip",
+        "project_id": "chilai_nanhua_day1",
+        "summary": {
+          "artifact_id": "contour_interpretation.chilai_nanhua_day1.v0",
+          "candidates_count": 2,
+          "project_id": "chilai_nanhua_day1",
+          "status": "candidate"
+        }
+      },
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "sha256": null,
+      "type": "Artifact",
+      "uri": "outputs/contour_interpretation_candidates.json"
+    },
+    {
+      "artifact_kind": "other",
+      "artifact_refs": [],
+      "captured_at": null,
+      "created_at": null,
+      "id": "artifact.pretrip_output.resource_plan.chilai_nanhua_day1.v0",
+      "media_type": "application/json",
+      "metadata": {
+        "artifact_kind": "resource_team_departure_plan",
+        "candidate_context": true,
+        "not_observed_fact": true,
+        "output_name": "resource_plan",
+        "phase": "phase4_pretrip",
+        "project_id": "chilai_nanhua_day1",
+        "summary": {
+          "artifact_kind": "resource_team_departure_plan",
+          "devices_count": 4,
+          "equipment_count": 4,
+          "project_id": "chilai_nanhua_day1",
+          "status": "candidate_only"
+        }
+      },
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "sha256": null,
+      "type": "Artifact",
+      "uri": "outputs/resource_plan.json"
+    }
+  ],
+  "derived_measurements": [
+    {
+      "artifact_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "created_at": null,
+      "derived_from": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "id": "measurement.pretrip_route_distance_m.chilai_nanhua_day1",
+      "method": "pretrip_route_summary.distance_m",
+      "metric": "route_distance_m",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "subject": "pretrip_project.chilai_nanhua_day1",
+      "type": "DerivedMeasurement",
+      "unit": "meters",
+      "value": 14599.78,
+      "write_policy": "automatic"
+    },
+    {
+      "artifact_refs": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "created_at": null,
+      "derived_from": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "id": "measurement.pretrip_route_guide_segment_time_minutes.timing.g11_nenggao.001",
+      "method": "pretrip_route_guide_timing_candidate.route_guide_segment_time_minutes",
+      "metric": "route_guide_segment_time_minutes",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "subject": "timing.g11_nenggao.001",
+      "type": "DerivedMeasurement",
+      "unit": "minutes",
+      "value": 30,
+      "write_policy": "automatic"
+    },
+    {
+      "artifact_refs": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "created_at": null,
+      "derived_from": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "id": "measurement.pretrip_route_guide_segment_time_minutes.timing.g11_nenggao.002",
+      "method": "pretrip_route_guide_timing_candidate.route_guide_segment_time_minutes",
+      "metric": "route_guide_segment_time_minutes",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "subject": "timing.g11_nenggao.002",
+      "type": "DerivedMeasurement",
+      "unit": "minutes",
+      "value": 30,
+      "write_policy": "automatic"
+    },
+    {
+      "artifact_refs": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "created_at": null,
+      "derived_from": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "id": "measurement.pretrip_route_guide_segment_time_minutes.timing.g11_nenggao.003",
+      "method": "pretrip_route_guide_timing_candidate.route_guide_segment_time_minutes",
+      "metric": "route_guide_segment_time_minutes",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "subject": "timing.g11_nenggao.003",
+      "type": "DerivedMeasurement",
+      "unit": "minutes",
+      "value": 120,
+      "write_policy": "automatic"
+    },
+    {
+      "artifact_refs": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "created_at": null,
+      "derived_from": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "id": "measurement.pretrip_route_guide_return_time_minutes.timing.g11_nenggao.003",
+      "method": "pretrip_route_guide_timing_candidate.route_guide_return_time_minutes",
+      "metric": "route_guide_return_time_minutes",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "subject": "timing.g11_nenggao.003",
+      "type": "DerivedMeasurement",
+      "unit": "minutes",
+      "value": 100,
+      "write_policy": "automatic"
+    },
+    {
+      "artifact_refs": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "created_at": null,
+      "derived_from": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "id": "measurement.pretrip_route_guide_segment_time_minutes.timing.g11_nenggao.004",
+      "method": "pretrip_route_guide_timing_candidate.route_guide_segment_time_minutes",
+      "metric": "route_guide_segment_time_minutes",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "subject": "timing.g11_nenggao.004",
+      "type": "DerivedMeasurement",
+      "unit": "minutes",
+      "value": 210,
+      "write_policy": "automatic"
+    },
+    {
+      "artifact_refs": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "created_at": null,
+      "derived_from": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "id": "measurement.pretrip_route_guide_return_time_minutes.timing.g11_nenggao.004",
+      "method": "pretrip_route_guide_timing_candidate.route_guide_return_time_minutes",
+      "metric": "route_guide_return_time_minutes",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "subject": "timing.g11_nenggao.004",
+      "type": "DerivedMeasurement",
+      "unit": "minutes",
+      "value": 180,
+      "write_policy": "automatic"
+    },
+    {
+      "artifact_refs": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "created_at": null,
+      "derived_from": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "id": "measurement.pretrip_route_guide_segment_time_minutes.timing.g11_nenggao.005",
+      "method": "pretrip_route_guide_timing_candidate.route_guide_segment_time_minutes",
+      "metric": "route_guide_segment_time_minutes",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "subject": "timing.g11_nenggao.005",
+      "type": "DerivedMeasurement",
+      "unit": "minutes",
+      "value": 50,
+      "write_policy": "automatic"
+    },
+    {
+      "artifact_refs": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "created_at": null,
+      "derived_from": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "id": "measurement.pretrip_route_guide_return_time_minutes.timing.g11_nenggao.005",
+      "method": "pretrip_route_guide_timing_candidate.route_guide_return_time_minutes",
+      "metric": "route_guide_return_time_minutes",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "subject": "timing.g11_nenggao.005",
+      "type": "DerivedMeasurement",
+      "unit": "minutes",
+      "value": 55,
+      "write_policy": "automatic"
+    },
+    {
+      "artifact_refs": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "created_at": null,
+      "derived_from": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "id": "measurement.pretrip_route_guide_segment_time_minutes.timing.g11_nenggao.006",
+      "method": "pretrip_route_guide_timing_candidate.route_guide_segment_time_minutes",
+      "metric": "route_guide_segment_time_minutes",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "subject": "timing.g11_nenggao.006",
+      "type": "DerivedMeasurement",
+      "unit": "minutes",
+      "value": 120,
+      "write_policy": "automatic"
+    },
+    {
+      "artifact_refs": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "created_at": null,
+      "derived_from": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "id": "measurement.pretrip_route_guide_return_time_minutes.timing.g11_nenggao.006",
+      "method": "pretrip_route_guide_timing_candidate.route_guide_return_time_minutes",
+      "metric": "route_guide_return_time_minutes",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "subject": "timing.g11_nenggao.006",
+      "type": "DerivedMeasurement",
+      "unit": "minutes",
+      "value": 240,
+      "write_policy": "automatic"
+    },
+    {
+      "artifact_refs": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "created_at": null,
+      "derived_from": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "id": "measurement.pretrip_route_guide_segment_time_minutes.timing.g11_nenggao.007",
+      "method": "pretrip_route_guide_timing_candidate.route_guide_segment_time_minutes",
+      "metric": "route_guide_segment_time_minutes",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "subject": "timing.g11_nenggao.007",
+      "type": "DerivedMeasurement",
+      "unit": "minutes",
+      "value": 140,
+      "write_policy": "automatic"
+    },
+    {
+      "artifact_refs": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "created_at": null,
+      "derived_from": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "id": "measurement.pretrip_route_guide_return_time_minutes.timing.g11_nenggao.007",
+      "method": "pretrip_route_guide_timing_candidate.route_guide_return_time_minutes",
+      "metric": "route_guide_return_time_minutes",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "subject": "timing.g11_nenggao.007",
+      "type": "DerivedMeasurement",
+      "unit": "minutes",
+      "value": 170,
+      "write_policy": "automatic"
+    },
+    {
+      "artifact_refs": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "created_at": null,
+      "derived_from": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "id": "measurement.pretrip_route_guide_segment_time_minutes.timing.g11_nenggao.008",
+      "method": "pretrip_route_guide_timing_candidate.route_guide_segment_time_minutes",
+      "metric": "route_guide_segment_time_minutes",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "subject": "timing.g11_nenggao.008",
+      "type": "DerivedMeasurement",
+      "unit": "minutes",
+      "value": 180,
+      "write_policy": "automatic"
+    },
+    {
+      "artifact_refs": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "created_at": null,
+      "derived_from": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "id": "measurement.pretrip_route_guide_return_time_minutes.timing.g11_nenggao.008",
+      "method": "pretrip_route_guide_timing_candidate.route_guide_return_time_minutes",
+      "metric": "route_guide_return_time_minutes",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "subject": "timing.g11_nenggao.008",
+      "type": "DerivedMeasurement",
+      "unit": "minutes",
+      "value": 260,
+      "write_policy": "automatic"
+    },
+    {
+      "artifact_refs": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "created_at": null,
+      "derived_from": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "id": "measurement.pretrip_route_guide_segment_time_minutes.timing.g11_nenggao.009",
+      "method": "pretrip_route_guide_timing_candidate.route_guide_segment_time_minutes",
+      "metric": "route_guide_segment_time_minutes",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "subject": "timing.g11_nenggao.009",
+      "type": "DerivedMeasurement",
+      "unit": "minutes",
+      "value": 120,
+      "write_policy": "automatic"
+    },
+    {
+      "artifact_refs": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "created_at": null,
+      "derived_from": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "id": "measurement.pretrip_route_guide_segment_time_minutes.timing.g11_nenggao.010",
+      "method": "pretrip_route_guide_timing_candidate.route_guide_segment_time_minutes",
+      "metric": "route_guide_segment_time_minutes",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "subject": "timing.g11_nenggao.010",
+      "type": "DerivedMeasurement",
+      "unit": "minutes",
+      "value": 5,
+      "write_policy": "automatic"
+    },
+    {
+      "artifact_refs": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "created_at": null,
+      "derived_from": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "id": "measurement.pretrip_route_guide_segment_time_minutes.timing.g11_nenggao.011",
+      "method": "pretrip_route_guide_timing_candidate.route_guide_segment_time_minutes",
+      "metric": "route_guide_segment_time_minutes",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "subject": "timing.g11_nenggao.011",
+      "type": "DerivedMeasurement",
+      "unit": "minutes",
+      "value": 30,
+      "write_policy": "automatic"
+    },
+    {
+      "artifact_refs": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "created_at": null,
+      "derived_from": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "id": "measurement.pretrip_route_guide_segment_time_minutes.timing.g11_nenggao.012",
+      "method": "pretrip_route_guide_timing_candidate.route_guide_segment_time_minutes",
+      "metric": "route_guide_segment_time_minutes",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "subject": "timing.g11_nenggao.012",
+      "type": "DerivedMeasurement",
+      "unit": "minutes",
+      "value": 10,
+      "write_policy": "automatic"
+    },
+    {
+      "artifact_refs": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "created_at": null,
+      "derived_from": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "id": "measurement.pretrip_route_guide_ascent_time_minutes.timing.g11_nenggao.013",
+      "method": "pretrip_route_guide_timing_candidate.route_guide_ascent_time_minutes",
+      "metric": "route_guide_ascent_time_minutes",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "subject": "timing.g11_nenggao.013",
+      "type": "DerivedMeasurement",
+      "unit": "minutes",
+      "value": 60,
+      "write_policy": "automatic"
+    },
+    {
+      "artifact_refs": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "created_at": null,
+      "derived_from": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "id": "measurement.pretrip_route_guide_descent_time_minutes.timing.g11_nenggao.013",
+      "method": "pretrip_route_guide_timing_candidate.route_guide_descent_time_minutes",
+      "metric": "route_guide_descent_time_minutes",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "subject": "timing.g11_nenggao.013",
+      "type": "DerivedMeasurement",
+      "unit": "minutes",
+      "value": 40,
+      "write_policy": "automatic"
+    },
+    {
+      "artifact_refs": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "created_at": null,
+      "derived_from": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "id": "measurement.pretrip_route_guide_ascent_time_minutes.timing.g11_nenggao.014",
+      "method": "pretrip_route_guide_timing_candidate.route_guide_ascent_time_minutes",
+      "metric": "route_guide_ascent_time_minutes",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "subject": "timing.g11_nenggao.014",
+      "type": "DerivedMeasurement",
+      "unit": "minutes",
+      "value": 20,
+      "write_policy": "automatic"
+    },
+    {
+      "artifact_refs": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "created_at": null,
+      "derived_from": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "id": "measurement.pretrip_route_guide_descent_time_minutes.timing.g11_nenggao.014",
+      "method": "pretrip_route_guide_timing_candidate.route_guide_descent_time_minutes",
+      "metric": "route_guide_descent_time_minutes",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "subject": "timing.g11_nenggao.014",
+      "type": "DerivedMeasurement",
+      "unit": "minutes",
+      "value": 15,
+      "write_policy": "automatic"
+    },
+    {
+      "artifact_refs": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "created_at": null,
+      "derived_from": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "id": "measurement.pretrip_route_guide_segment_time_minutes.timing.g11_nenggao.015",
+      "method": "pretrip_route_guide_timing_candidate.route_guide_segment_time_minutes",
+      "metric": "route_guide_segment_time_minutes",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "subject": "timing.g11_nenggao.015",
+      "type": "DerivedMeasurement",
+      "unit": "minutes",
+      "value": 40,
+      "write_policy": "automatic"
+    },
+    {
+      "artifact_refs": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "created_at": null,
+      "derived_from": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "id": "measurement.pretrip_route_guide_return_time_minutes.timing.g11_nenggao.015",
+      "method": "pretrip_route_guide_timing_candidate.route_guide_return_time_minutes",
+      "metric": "route_guide_return_time_minutes",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "subject": "timing.g11_nenggao.015",
+      "type": "DerivedMeasurement",
+      "unit": "minutes",
+      "value": 60,
+      "write_policy": "automatic"
+    },
+    {
+      "artifact_refs": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "created_at": null,
+      "derived_from": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "id": "measurement.pretrip_route_guide_segment_time_minutes.timing.g11_nenggao.016",
+      "method": "pretrip_route_guide_timing_candidate.route_guide_segment_time_minutes",
+      "metric": "route_guide_segment_time_minutes",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "subject": "timing.g11_nenggao.016",
+      "type": "DerivedMeasurement",
+      "unit": "minutes",
+      "value": 40,
+      "write_policy": "automatic"
+    },
+    {
+      "artifact_refs": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "created_at": null,
+      "derived_from": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "id": "measurement.pretrip_route_guide_return_time_minutes.timing.g11_nenggao.016",
+      "method": "pretrip_route_guide_timing_candidate.route_guide_return_time_minutes",
+      "metric": "route_guide_return_time_minutes",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "subject": "timing.g11_nenggao.016",
+      "type": "DerivedMeasurement",
+      "unit": "minutes",
+      "value": 30,
+      "write_policy": "automatic"
+    },
+    {
+      "artifact_refs": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "created_at": null,
+      "derived_from": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "id": "measurement.pretrip_route_guide_ascent_time_minutes.timing.g11_nenggao.017",
+      "method": "pretrip_route_guide_timing_candidate.route_guide_ascent_time_minutes",
+      "metric": "route_guide_ascent_time_minutes",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "subject": "timing.g11_nenggao.017",
+      "type": "DerivedMeasurement",
+      "unit": "minutes",
+      "value": 140,
+      "write_policy": "automatic"
+    },
+    {
+      "artifact_refs": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "created_at": null,
+      "derived_from": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "id": "measurement.pretrip_route_guide_descent_time_minutes.timing.g11_nenggao.017",
+      "method": "pretrip_route_guide_timing_candidate.route_guide_descent_time_minutes",
+      "metric": "route_guide_descent_time_minutes",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "subject": "timing.g11_nenggao.017",
+      "type": "DerivedMeasurement",
+      "unit": "minutes",
+      "value": 170,
+      "write_policy": "automatic"
+    },
+    {
+      "artifact_refs": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "created_at": null,
+      "derived_from": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "id": "measurement.pretrip_route_guide_ascent_time_minutes.timing.g11_nenggao.018",
+      "method": "pretrip_route_guide_timing_candidate.route_guide_ascent_time_minutes",
+      "metric": "route_guide_ascent_time_minutes",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "subject": "timing.g11_nenggao.018",
+      "type": "DerivedMeasurement",
+      "unit": "minutes",
+      "value": 140,
+      "write_policy": "automatic"
+    },
+    {
+      "artifact_refs": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "created_at": null,
+      "derived_from": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "id": "measurement.pretrip_route_guide_descent_time_minutes.timing.g11_nenggao.018",
+      "method": "pretrip_route_guide_timing_candidate.route_guide_descent_time_minutes",
+      "metric": "route_guide_descent_time_minutes",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "subject": "timing.g11_nenggao.018",
+      "type": "DerivedMeasurement",
+      "unit": "minutes",
+      "value": 160,
+      "write_policy": "automatic"
+    }
+  ],
+  "human_reviews": [
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "accepted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.cp.start",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Accepted for first reviewed MissionGraph compile fixture.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "cp.start",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "accepted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.cp.001",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Accepted for first reviewed MissionGraph compile fixture.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "cp.001",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "accepted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.cp.002",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Accepted for first reviewed MissionGraph compile fixture.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "cp.002",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "accepted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.cp.003",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Accepted for first reviewed MissionGraph compile fixture.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "cp.003",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "accepted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.cp.004",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Accepted for first reviewed MissionGraph compile fixture.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "cp.004",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "accepted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.cp.005",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Accepted for first reviewed MissionGraph compile fixture.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "cp.005",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "accepted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.cp.006",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Accepted for first reviewed MissionGraph compile fixture.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "cp.006",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "accepted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.cp.007",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Accepted for first reviewed MissionGraph compile fixture.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "cp.007",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "accepted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.cp.008",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Accepted for first reviewed MissionGraph compile fixture.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "cp.008",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "accepted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.cp.009",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Accepted for first reviewed MissionGraph compile fixture.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "cp.009",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "accepted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.cp.finish",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Accepted for first reviewed MissionGraph compile fixture.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "cp.finish",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "accepted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.seg.001",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Accepted as deterministic GPX-derived segment candidate for reviewed compile fixture.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "seg.001",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "accepted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.seg.002",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Accepted as deterministic GPX-derived segment candidate for reviewed compile fixture.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "seg.002",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "accepted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.seg.003",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Accepted as deterministic GPX-derived segment candidate for reviewed compile fixture.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "seg.003",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "accepted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.seg.004",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Accepted as deterministic GPX-derived segment candidate for reviewed compile fixture.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "seg.004",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "accepted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.seg.005",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Accepted as deterministic GPX-derived segment candidate for reviewed compile fixture.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "seg.005",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "accepted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.seg.006",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Accepted as deterministic GPX-derived segment candidate for reviewed compile fixture.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "seg.006",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "accepted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.seg.007",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Accepted as deterministic GPX-derived segment candidate for reviewed compile fixture.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "seg.007",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "accepted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.seg.008",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Accepted as deterministic GPX-derived segment candidate for reviewed compile fixture.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "seg.008",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "accepted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.seg.009",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Accepted as deterministic GPX-derived segment candidate for reviewed compile fixture.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "seg.009",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "accepted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.seg.010",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Accepted as deterministic GPX-derived segment candidate for reviewed compile fixture.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "seg.010",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "accepted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.retreat.chilai_nanhua_day1.return_to_entry",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Accepted user clarification: practical retreat/alternate is returning to entry by reverse route.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "retreat.chilai_nanhua_day1.return_to_entry",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "noted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.map.corridor.chilai_nanhua_primary_corridor",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Map candidate retained for planning context; not compiled into Phase 1 MissionGraph in this slice.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "map.corridor.chilai_nanhua_primary_corridor",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "noted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.map.poi.trailhead_entry",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Map candidate retained for planning context; not compiled into Phase 1 MissionGraph in this slice.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "map.poi.trailhead_entry",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "noted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.map.hazard.deep_mountain_no_easy_exit",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Map candidate retained for planning context; not compiled into Phase 1 MissionGraph in this slice.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "map.hazard.deep_mountain_no_easy_exit",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "noted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.timing_assumption.chilai_nanhua_day1.schema",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Timing assumption captured from user-provided OCR; ETA calibration remains a later slice.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "timing_assumption.chilai_nanhua_day1.schema",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "noted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.timing.g11_nenggao.001",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Timing assumption captured from user-provided OCR; ETA calibration remains a later slice.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "timing.g11_nenggao.001",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "noted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.timing.g11_nenggao.002",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Timing assumption captured from user-provided OCR; ETA calibration remains a later slice.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "timing.g11_nenggao.002",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "noted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.timing.g11_nenggao.003",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Timing assumption captured from user-provided OCR; ETA calibration remains a later slice.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "timing.g11_nenggao.003",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "noted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.timing.g11_nenggao.004",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Timing assumption captured from user-provided OCR; ETA calibration remains a later slice.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "timing.g11_nenggao.004",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "noted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.timing.g11_nenggao.005",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Timing assumption captured from user-provided OCR; ETA calibration remains a later slice.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "timing.g11_nenggao.005",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "noted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.timing.g11_nenggao.006",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Timing assumption captured from user-provided OCR; ETA calibration remains a later slice.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "timing.g11_nenggao.006",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "noted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.timing.g11_nenggao.007",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Timing assumption captured from user-provided OCR; ETA calibration remains a later slice.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "timing.g11_nenggao.007",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "noted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.timing.g11_nenggao.008",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Timing assumption captured from user-provided OCR; ETA calibration remains a later slice.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "timing.g11_nenggao.008",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "noted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.timing.g11_nenggao.009",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Timing assumption captured from user-provided OCR; ETA calibration remains a later slice.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "timing.g11_nenggao.009",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "noted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.timing.g11_nenggao.010",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Timing assumption captured from user-provided OCR; ETA calibration remains a later slice.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "timing.g11_nenggao.010",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "noted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.timing.g11_nenggao.011",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Timing assumption captured from user-provided OCR; ETA calibration remains a later slice.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "timing.g11_nenggao.011",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "noted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.timing.g11_nenggao.012",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Timing assumption captured from user-provided OCR; ETA calibration remains a later slice.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "timing.g11_nenggao.012",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "noted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.timing.g11_nenggao.013",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Timing assumption captured from user-provided OCR; ETA calibration remains a later slice.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "timing.g11_nenggao.013",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "noted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.timing.g11_nenggao.014",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Timing assumption captured from user-provided OCR; ETA calibration remains a later slice.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "timing.g11_nenggao.014",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "noted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.timing.g11_nenggao.015",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Timing assumption captured from user-provided OCR; ETA calibration remains a later slice.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "timing.g11_nenggao.015",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "noted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.timing.g11_nenggao.016",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Timing assumption captured from user-provided OCR; ETA calibration remains a later slice.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "timing.g11_nenggao.016",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "noted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.timing.g11_nenggao.017",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Timing assumption captured from user-provided OCR; ETA calibration remains a later slice.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "timing.g11_nenggao.017",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "noted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.timing.g11_nenggao.018",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Timing assumption captured from user-provided OCR; ETA calibration remains a later slice.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "timing.g11_nenggao.018",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "noted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.planning_ref.joyhike.main_site",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Planning reference retained as Artifact/ModelInterpretation context, not ObservedFact.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "planning_ref.joyhike.main_site",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "noted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.planning_ref.joyhike.route_planning_model",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Planning reference retained as Artifact/ModelInterpretation context, not ObservedFact.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "planning_ref.joyhike.route_planning_model",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "noted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.planning_ref.ptt.sunriver_timing",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Planning reference retained as Artifact/ModelInterpretation context, not ObservedFact.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "planning_ref.ptt.sunriver_timing",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    }
+  ],
+  "model_interpretations": [
+    {
+      "artifact_refs": [
+        "artifact.pretrip_output.poi_readiness_candidates.chilai_nanhua_day1.v0"
+      ],
+      "claim": "poi_readiness_candidates is preserved as candidate planning context only; human review is required before safety-critical use. blocker_candidate_count=0; finding_candidate_count=0; policy_candidate_count=1; route_corridor_poi_count=1; warning_candidate_count=0; findings_count=0",
+      "created_at": null,
+      "generated_at": "2026-05-14T00:00:00+08:00",
+      "id": "interpretation.pretrip_output.poi_readiness_candidates.chilai_nanhua_day1.v0",
+      "input_refs": [
+        "artifact.pretrip_output.poi_readiness_candidates.chilai_nanhua_day1.v0"
+      ],
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "model": "phase4_pretrip_planning_output",
+      "model_version": "0.1.0",
+      "subject": "pretrip_project.chilai_nanhua_day1",
+      "type": "ModelInterpretation",
+      "write_policy": "append_only_requires_review"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_output.segment_policy_candidates.chilai_nanhua_day1.v0"
+      ],
+      "claim": "segment_policy_candidates is preserved as candidate planning context only; human review is required before safety-critical use. candidate_only_count=10; human_review_required_count=10; requires_daylight_count=10; retreat_available_count=2; segment_policy_candidate_count=10; signal_expected_count=1; candidates_count=10",
+      "created_at": null,
+      "generated_at": "2026-05-14T00:00:00+08:00",
+      "id": "interpretation.pretrip_output.segment_policy_candidates.chilai_nanhua_day1.v0",
+      "input_refs": [
+        "artifact.pretrip_output.segment_policy_candidates.chilai_nanhua_day1.v0"
+      ],
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "model": "phase4_pretrip_planning_output",
+      "model_version": "0.1.0",
+      "subject": "pretrip_project.chilai_nanhua_day1",
+      "type": "ModelInterpretation",
+      "write_policy": "append_only_requires_review"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_output.plan_validation_candidates.chilai_nanhua_day1.v0"
+      ],
+      "claim": "plan_validation_candidates is preserved as candidate planning context only; human review is required before safety-critical use. blocker_candidate_count=0; finding_candidate_count=6; source_ref_count=8; warning_candidate_count=6; findings_count=6",
+      "created_at": null,
+      "generated_at": "2026-05-14T00:00:00+08:00",
+      "id": "interpretation.pretrip_output.plan_validation_candidates.chilai_nanhua_day1.v0",
+      "input_refs": [
+        "artifact.pretrip_output.plan_validation_candidates.chilai_nanhua_day1.v0"
+      ],
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "model": "phase4_pretrip_planning_output",
+      "model_version": "0.1.0",
+      "subject": "pretrip_project.chilai_nanhua_day1",
+      "type": "ModelInterpretation",
+      "write_policy": "append_only_requires_review"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_output.weather_daylight.chilai_nanhua_day1.2026-05-03.v0"
+      ],
+      "claim": "weather_daylight_evidence is preserved as candidate planning context only; human review is required before safety-critical use. status=candidate_only",
+      "created_at": null,
+      "generated_at": "2026-05-14T00:00:00+08:00",
+      "id": "interpretation.pretrip_output.weather_daylight.chilai_nanhua_day1.2026-05-03.v0",
+      "input_refs": [
+        "artifact.pretrip_output.weather_daylight.chilai_nanhua_day1.2026-05-03.v0"
+      ],
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "model": "phase4_pretrip_planning_output",
+      "model_version": "0.1.0",
+      "subject": "pretrip_project.chilai_nanhua_day1",
+      "type": "ModelInterpretation",
+      "write_policy": "append_only_requires_review"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_output.contour_interpretation.chilai_nanhua_day1.v0"
+      ],
+      "claim": "contour_interpretation_candidates is preserved as candidate planning context only; human review is required before safety-critical use. candidates_count=2",
+      "created_at": null,
+      "generated_at": "2026-05-14T00:00:00+08:00",
+      "id": "interpretation.pretrip_output.contour_interpretation.chilai_nanhua_day1.v0",
+      "input_refs": [
+        "artifact.pretrip_output.contour_interpretation.chilai_nanhua_day1.v0"
+      ],
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "model": "phase4_pretrip_planning_output",
+      "model_version": "0.1.0",
+      "subject": "pretrip_project.chilai_nanhua_day1",
+      "type": "ModelInterpretation",
+      "write_policy": "append_only_requires_review"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_output.resource_plan.chilai_nanhua_day1.v0"
+      ],
+      "claim": "resource_plan is preserved as candidate planning context only; human review is required before safety-critical use. devices_count=4; equipment_count=4",
+      "created_at": null,
+      "generated_at": "2026-05-14T00:00:00+08:00",
+      "id": "interpretation.pretrip_output.resource_plan.chilai_nanhua_day1.v0",
+      "input_refs": [
+        "artifact.pretrip_output.resource_plan.chilai_nanhua_day1.v0"
+      ],
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "model": "phase4_pretrip_planning_output",
+      "model_version": "0.1.0",
+      "subject": "pretrip_project.chilai_nanhua_day1",
+      "type": "ModelInterpretation",
+      "write_policy": "append_only_requires_review"
+    }
+  ],
+  "nodes": [
+    {
+      "artifact_kind": "other",
+      "artifact_refs": [],
+      "captured_at": null,
+      "created_at": null,
+      "id": "artifact.pretrip_package.chilai_nanhua_day1",
+      "media_type": "application/json",
+      "metadata": {
+        "artifact_kind": "pretrip_package",
+        "package_id": "pretrip.chilai_nanhua_day1.v0",
+        "phase": "phase4_pretrip",
+        "project_id": "chilai_nanhua_day1",
+        "status": "reviewed",
+        "version": "0.1.0"
+      },
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "sha256": null,
+      "type": "Artifact",
+      "uri": "outputs/pretrip_package.reviewed.json"
+    },
+    {
+      "artifact_kind": "gpx",
+      "artifact_refs": [],
+      "captured_at": null,
+      "created_at": null,
+      "id": "artifact.gpx.chilai_nanhua_day1",
+      "media_type": "application/gpx+xml",
+      "metadata": {
+        "phase": "phase4_pretrip",
+        "pretrip_kind": "gpx",
+        "provenance": {
+          "captured_at": null,
+          "collected_at": null,
+          "license_note": null,
+          "method": "pretrip-source-ingest",
+          "notes": "",
+          "source_kind": "gpx",
+          "source_ref": "artifact.gpx.chilai_nanhua_day1",
+          "uri": "/Users/alexwang0315/downloads/奇萊南華-能高越嶺步道Day1.gpx"
+        },
+        "size_bytes": 275392
+      },
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "sha256": "3c1f4843ecea5cb2fc85f92934d3d1a220738c900576e4976d4c09975673956c",
+      "type": "Artifact",
+      "uri": "/Users/alexwang0315/downloads/奇萊南華-能高越嶺步道Day1.gpx"
+    },
+    {
+      "artifact_kind": "photo",
+      "artifact_refs": [],
+      "captured_at": null,
+      "created_at": null,
+      "id": "artifact.photo.g11_hiking",
+      "media_type": "image/jpeg",
+      "metadata": {
+        "phase": "phase4_pretrip",
+        "pretrip_kind": "photo",
+        "provenance": {
+          "captured_at": null,
+          "collected_at": null,
+          "license_note": null,
+          "method": "pretrip-source-ingest",
+          "notes": "",
+          "source_kind": "photo",
+          "source_ref": "artifact.photo.g11_hiking",
+          "uri": "/Users/alexwang0315/downloads/G11_hiking.jpg"
+        },
+        "size_bytes": 209877
+      },
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "sha256": "ff28bf2fd66c6f8a63e759800fcdb8363862832ebe7b87dc900e849f1c7a058d",
+      "type": "Artifact",
+      "uri": "/Users/alexwang0315/downloads/G11_hiking.jpg"
+    },
+    {
+      "artifact_kind": "other",
+      "artifact_refs": [],
+      "captured_at": null,
+      "created_at": null,
+      "id": "artifact.pretrip_reference.planning_ref.joyhike.main_site",
+      "media_type": "text/html",
+      "metadata": {
+        "artifact_treatment": [
+          "Artifact",
+          "ModelInterpretation",
+          "HumanReview",
+          "DerivedMeasurement"
+        ],
+        "not_observed_fact": true,
+        "notes": "Registered as implementation context only; no crawler or dynamic app extraction in this slice.",
+        "phase": "phase4_pretrip",
+        "reference_id": "planning_ref.joyhike.main_site",
+        "reference_type": "reference_product",
+        "scout_meaning": "Reference product precedent for Taiwan hiking planning primitives; not the controlling Scout data source.",
+        "supported_primitives": [
+          "route_nodes",
+          "segment_distance",
+          "elevation_gain_loss",
+          "daily_ascent_descent",
+          "estimated_walking_time",
+          "rest_time",
+          "weather",
+          "permit_hut_logistics",
+          "group_coordination"
+        ],
+        "title": "Joyhike main site"
+      },
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "sha256": null,
+      "type": "Artifact",
+      "uri": "https://joyhike.com/"
+    },
+    {
+      "artifact_kind": "other",
+      "artifact_refs": [],
+      "captured_at": null,
+      "created_at": null,
+      "id": "artifact.pretrip_reference.planning_ref.joyhike.route_planning_model",
+      "media_type": "text/html",
+      "metadata": {
+        "artifact_treatment": [
+          "Artifact",
+          "ModelInterpretation",
+          "HumanReview",
+          "DerivedMeasurement"
+        ],
+        "not_observed_fact": true,
+        "notes": "Planning reference only; accepted assumptions require human review.",
+        "phase": "phase4_pretrip",
+        "reference_id": "planning_ref.joyhike.route_planning_model",
+        "reference_type": "route_planning_method",
+        "scout_meaning": "Reference model for planning primitives and route difficulty context.",
+        "supported_primitives": [
+          "route_nodes",
+          "segment_distance",
+          "elevation_gain_loss",
+          "estimated_walking_time",
+          "rest_time",
+          "weather"
+        ],
+        "title": "Joyhike blog route planning model"
+      },
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "sha256": null,
+      "type": "Artifact",
+      "uri": "https://blog.joyhike.com/2022/05/trailslevel.html"
+    },
+    {
+      "artifact_kind": "other",
+      "artifact_refs": [],
+      "captured_at": null,
+      "created_at": null,
+      "id": "artifact.pretrip_reference.planning_ref.ptt.sunriver_timing",
+      "media_type": "text/html",
+      "metadata": {
+        "artifact_treatment": [
+          "Artifact",
+          "ModelInterpretation",
+          "HumanReview",
+          "DerivedMeasurement"
+        ],
+        "not_observed_fact": true,
+        "notes": "Not an ObservedFact; calculations become DerivedMeasurement only after assumptions are explicit.",
+        "phase": "phase4_pretrip",
+        "reference_id": "planning_ref.ptt.sunriver_timing",
+        "reference_type": "community_timing_evidence",
+        "scout_meaning": "Community evidence for route-guide timing and fitness calibration assumptions.",
+        "supported_primitives": [
+          "route_guide_segment_time_minutes",
+          "personal_route_guide_multiplier",
+          "team_route_guide_multiplier",
+          "pace_multiplier_basis",
+          "fixed_rest_minutes",
+          "conservative_long_day_adjustment",
+          "eta_at_checkpoint",
+          "eta_at_camp_or_overnight_point",
+          "dark_arrival_margin_minutes",
+          "planned_vs_actual_calibration_refs"
+        ],
+        "title": "PTT Hiking 上河時間與步程計算"
+      },
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "sha256": null,
+      "type": "Artifact",
+      "uri": "https://www.ptt.cc/bbs/Hiking/M.1696430399.A.151.html"
+    },
+    {
+      "artifact_kind": "other",
+      "artifact_refs": [],
+      "captured_at": null,
+      "created_at": null,
+      "id": "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0",
+      "media_type": "application/json",
+      "metadata": {
+        "artifact_kind": "human_review_log",
+        "log_id": "review_log.chilai_nanhua_day1.v0",
+        "phase": "phase4_pretrip",
+        "review_count": 47
+      },
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "sha256": null,
+      "type": "Artifact",
+      "uri": "reviews/human_reviews.json"
+    },
+    {
+      "artifact_kind": "other",
+      "artifact_refs": [],
+      "captured_at": null,
+      "created_at": null,
+      "id": "artifact.pretrip_output.poi_readiness_candidates.chilai_nanhua_day1.v0",
+      "media_type": "application/json",
+      "metadata": {
+        "artifact_kind": "poi_readiness_candidates",
+        "candidate_context": true,
+        "not_observed_fact": true,
+        "output_name": "poi_readiness_candidates",
+        "phase": "phase4_pretrip",
+        "project_id": "chilai_nanhua_day1",
+        "summary": {
+          "artifact_id": "poi_readiness_candidates.chilai_nanhua_day1.v0",
+          "artifact_kind": "poi_readiness_candidates",
+          "counts": {
+            "blocker_candidate_count": 0,
+            "finding_candidate_count": 0,
+            "policy_candidate_count": 1,
+            "route_corridor_poi_count": 1,
+            "warning_candidate_count": 0
+          },
+          "findings_count": 0,
+          "policy_version": "0.1.0",
+          "project_id": "chilai_nanhua_day1",
+          "status": "candidate_only"
+        }
+      },
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "sha256": null,
+      "type": "Artifact",
+      "uri": "outputs/poi_readiness_candidates.json"
+    },
+    {
+      "artifact_kind": "other",
+      "artifact_refs": [],
+      "captured_at": null,
+      "created_at": null,
+      "id": "artifact.pretrip_output.segment_policy_candidates.chilai_nanhua_day1.v0",
+      "media_type": "application/json",
+      "metadata": {
+        "artifact_kind": "segment_policy_candidates",
+        "candidate_context": true,
+        "not_observed_fact": true,
+        "output_name": "segment_policy_candidates",
+        "phase": "phase4_pretrip",
+        "project_id": "chilai_nanhua_day1",
+        "summary": {
+          "artifact_id": "segment_policy_candidates.chilai_nanhua_day1.v0",
+          "artifact_kind": "segment_policy_candidates",
+          "candidates_count": 10,
+          "counts": {
+            "candidate_only_count": 10,
+            "human_review_required_count": 10,
+            "requires_daylight_count": 10,
+            "retreat_available_count": 2,
+            "segment_policy_candidate_count": 10,
+            "signal_expected_count": 1
+          },
+          "policy_version": "0.1.0",
+          "project_id": "chilai_nanhua_day1",
+          "status": "candidate_only"
+        }
+      },
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "sha256": null,
+      "type": "Artifact",
+      "uri": "outputs/segment_policy_candidates.json"
+    },
+    {
+      "artifact_kind": "other",
+      "artifact_refs": [],
+      "captured_at": null,
+      "created_at": null,
+      "id": "artifact.pretrip_output.plan_validation_candidates.chilai_nanhua_day1.v0",
+      "media_type": "application/json",
+      "metadata": {
+        "artifact_kind": "plan_validation_candidates",
+        "candidate_context": true,
+        "not_observed_fact": true,
+        "output_name": "plan_validation_candidates",
+        "phase": "phase4_pretrip",
+        "project_id": "chilai_nanhua_day1",
+        "summary": {
+          "artifact_id": "plan_validation_candidates.chilai_nanhua_day1.v0",
+          "artifact_kind": "plan_validation_candidates",
+          "counts": {
+            "blocker_candidate_count": 0,
+            "finding_candidate_count": 6,
+            "source_ref_count": 8,
+            "warning_candidate_count": 6
+          },
+          "findings_count": 6,
+          "policy_version": "0.1.0",
+          "project_id": "chilai_nanhua_day1",
+          "status": "candidate_only"
+        }
+      },
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "sha256": null,
+      "type": "Artifact",
+      "uri": "outputs/plan_validation_candidates.json"
+    },
+    {
+      "artifact_kind": "other",
+      "artifact_refs": [],
+      "captured_at": null,
+      "created_at": null,
+      "id": "artifact.pretrip_output.weather_daylight.chilai_nanhua_day1.2026-05-03.v0",
+      "media_type": "application/json",
+      "metadata": {
+        "artifact_kind": "weather_daylight_evidence",
+        "candidate_context": true,
+        "not_observed_fact": true,
+        "output_name": "weather_daylight_evidence",
+        "phase": "phase4_pretrip",
+        "project_id": "chilai_nanhua_day1",
+        "summary": {
+          "evidence_id": "weather_daylight.chilai_nanhua_day1.2026-05-03.v0",
+          "project_id": "chilai_nanhua_day1",
+          "status": "candidate_only"
+        }
+      },
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "sha256": null,
+      "type": "Artifact",
+      "uri": "outputs/weather_daylight_evidence.json"
+    },
+    {
+      "artifact_kind": "other",
+      "artifact_refs": [],
+      "captured_at": null,
+      "created_at": null,
+      "id": "artifact.pretrip_output.contour_interpretation.chilai_nanhua_day1.v0",
+      "media_type": "application/json",
+      "metadata": {
+        "artifact_kind": "contour_interpretation_candidates",
+        "candidate_context": true,
+        "not_observed_fact": true,
+        "output_name": "contour_interpretation_candidates",
+        "phase": "phase4_pretrip",
+        "project_id": "chilai_nanhua_day1",
+        "summary": {
+          "artifact_id": "contour_interpretation.chilai_nanhua_day1.v0",
+          "candidates_count": 2,
+          "project_id": "chilai_nanhua_day1",
+          "status": "candidate"
+        }
+      },
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "sha256": null,
+      "type": "Artifact",
+      "uri": "outputs/contour_interpretation_candidates.json"
+    },
+    {
+      "artifact_kind": "other",
+      "artifact_refs": [],
+      "captured_at": null,
+      "created_at": null,
+      "id": "artifact.pretrip_output.resource_plan.chilai_nanhua_day1.v0",
+      "media_type": "application/json",
+      "metadata": {
+        "artifact_kind": "resource_team_departure_plan",
+        "candidate_context": true,
+        "not_observed_fact": true,
+        "output_name": "resource_plan",
+        "phase": "phase4_pretrip",
+        "project_id": "chilai_nanhua_day1",
+        "summary": {
+          "artifact_kind": "resource_team_departure_plan",
+          "devices_count": 4,
+          "equipment_count": 4,
+          "project_id": "chilai_nanhua_day1",
+          "status": "candidate_only"
+        }
+      },
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "sha256": null,
+      "type": "Artifact",
+      "uri": "outputs/resource_plan.json"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "accepted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.cp.start",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Accepted for first reviewed MissionGraph compile fixture.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "cp.start",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "accepted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.cp.001",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Accepted for first reviewed MissionGraph compile fixture.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "cp.001",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "accepted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.cp.002",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Accepted for first reviewed MissionGraph compile fixture.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "cp.002",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "accepted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.cp.003",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Accepted for first reviewed MissionGraph compile fixture.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "cp.003",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "accepted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.cp.004",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Accepted for first reviewed MissionGraph compile fixture.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "cp.004",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "accepted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.cp.005",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Accepted for first reviewed MissionGraph compile fixture.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "cp.005",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "accepted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.cp.006",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Accepted for first reviewed MissionGraph compile fixture.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "cp.006",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "accepted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.cp.007",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Accepted for first reviewed MissionGraph compile fixture.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "cp.007",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "accepted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.cp.008",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Accepted for first reviewed MissionGraph compile fixture.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "cp.008",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "accepted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.cp.009",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Accepted for first reviewed MissionGraph compile fixture.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "cp.009",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "accepted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.cp.finish",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Accepted for first reviewed MissionGraph compile fixture.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "cp.finish",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "accepted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.seg.001",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Accepted as deterministic GPX-derived segment candidate for reviewed compile fixture.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "seg.001",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "accepted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.seg.002",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Accepted as deterministic GPX-derived segment candidate for reviewed compile fixture.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "seg.002",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "accepted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.seg.003",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Accepted as deterministic GPX-derived segment candidate for reviewed compile fixture.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "seg.003",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "accepted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.seg.004",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Accepted as deterministic GPX-derived segment candidate for reviewed compile fixture.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "seg.004",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "accepted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.seg.005",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Accepted as deterministic GPX-derived segment candidate for reviewed compile fixture.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "seg.005",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "accepted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.seg.006",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Accepted as deterministic GPX-derived segment candidate for reviewed compile fixture.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "seg.006",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "accepted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.seg.007",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Accepted as deterministic GPX-derived segment candidate for reviewed compile fixture.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "seg.007",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "accepted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.seg.008",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Accepted as deterministic GPX-derived segment candidate for reviewed compile fixture.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "seg.008",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "accepted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.seg.009",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Accepted as deterministic GPX-derived segment candidate for reviewed compile fixture.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "seg.009",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "accepted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.seg.010",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Accepted as deterministic GPX-derived segment candidate for reviewed compile fixture.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "seg.010",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "accepted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.retreat.chilai_nanhua_day1.return_to_entry",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Accepted user clarification: practical retreat/alternate is returning to entry by reverse route.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "retreat.chilai_nanhua_day1.return_to_entry",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "noted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.map.corridor.chilai_nanhua_primary_corridor",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Map candidate retained for planning context; not compiled into Phase 1 MissionGraph in this slice.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "map.corridor.chilai_nanhua_primary_corridor",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "noted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.map.poi.trailhead_entry",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Map candidate retained for planning context; not compiled into Phase 1 MissionGraph in this slice.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "map.poi.trailhead_entry",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "noted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.map.hazard.deep_mountain_no_easy_exit",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Map candidate retained for planning context; not compiled into Phase 1 MissionGraph in this slice.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "map.hazard.deep_mountain_no_easy_exit",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "noted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.timing_assumption.chilai_nanhua_day1.schema",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Timing assumption captured from user-provided OCR; ETA calibration remains a later slice.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "timing_assumption.chilai_nanhua_day1.schema",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "noted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.timing.g11_nenggao.001",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Timing assumption captured from user-provided OCR; ETA calibration remains a later slice.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "timing.g11_nenggao.001",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "noted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.timing.g11_nenggao.002",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Timing assumption captured from user-provided OCR; ETA calibration remains a later slice.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "timing.g11_nenggao.002",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "noted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.timing.g11_nenggao.003",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Timing assumption captured from user-provided OCR; ETA calibration remains a later slice.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "timing.g11_nenggao.003",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "noted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.timing.g11_nenggao.004",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Timing assumption captured from user-provided OCR; ETA calibration remains a later slice.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "timing.g11_nenggao.004",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "noted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.timing.g11_nenggao.005",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Timing assumption captured from user-provided OCR; ETA calibration remains a later slice.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "timing.g11_nenggao.005",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "noted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.timing.g11_nenggao.006",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Timing assumption captured from user-provided OCR; ETA calibration remains a later slice.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "timing.g11_nenggao.006",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "noted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.timing.g11_nenggao.007",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Timing assumption captured from user-provided OCR; ETA calibration remains a later slice.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "timing.g11_nenggao.007",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "noted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.timing.g11_nenggao.008",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Timing assumption captured from user-provided OCR; ETA calibration remains a later slice.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "timing.g11_nenggao.008",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "noted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.timing.g11_nenggao.009",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Timing assumption captured from user-provided OCR; ETA calibration remains a later slice.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "timing.g11_nenggao.009",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "noted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.timing.g11_nenggao.010",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Timing assumption captured from user-provided OCR; ETA calibration remains a later slice.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "timing.g11_nenggao.010",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "noted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.timing.g11_nenggao.011",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Timing assumption captured from user-provided OCR; ETA calibration remains a later slice.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "timing.g11_nenggao.011",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "noted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.timing.g11_nenggao.012",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Timing assumption captured from user-provided OCR; ETA calibration remains a later slice.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "timing.g11_nenggao.012",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "noted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.timing.g11_nenggao.013",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Timing assumption captured from user-provided OCR; ETA calibration remains a later slice.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "timing.g11_nenggao.013",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "noted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.timing.g11_nenggao.014",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Timing assumption captured from user-provided OCR; ETA calibration remains a later slice.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "timing.g11_nenggao.014",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "noted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.timing.g11_nenggao.015",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Timing assumption captured from user-provided OCR; ETA calibration remains a later slice.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "timing.g11_nenggao.015",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "noted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.timing.g11_nenggao.016",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Timing assumption captured from user-provided OCR; ETA calibration remains a later slice.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "timing.g11_nenggao.016",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "noted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.timing.g11_nenggao.017",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Timing assumption captured from user-provided OCR; ETA calibration remains a later slice.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "timing.g11_nenggao.017",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "noted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.timing.g11_nenggao.018",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Timing assumption captured from user-provided OCR; ETA calibration remains a later slice.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "timing.g11_nenggao.018",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "noted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.planning_ref.joyhike.main_site",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Planning reference retained as Artifact/ModelInterpretation context, not ObservedFact.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "planning_ref.joyhike.main_site",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "noted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.planning_ref.joyhike.route_planning_model",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Planning reference retained as Artifact/ModelInterpretation context, not ObservedFact.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "planning_ref.joyhike.route_planning_model",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_review_log.review_log.chilai_nanhua_day1.v0"
+      ],
+      "correction_refs": [],
+      "created_at": null,
+      "decision": "noted",
+      "id": "review.pretrip.review.chilai_nanhua_day1.planning_ref.ptt.sunriver_timing",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "notes": "Planning reference retained as Artifact/ModelInterpretation context, not ObservedFact.",
+      "reviewed_at": "2026-05-14T16:00:00+08:00",
+      "reviewed_ref": "planning_ref.ptt.sunriver_timing",
+      "reviewer_id": "person.trip_leader",
+      "type": "HumanReview",
+      "write_policy": "human_reviewed"
+    },
+    {
+      "artifact_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "created_at": null,
+      "derived_from": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "id": "measurement.pretrip_route_distance_m.chilai_nanhua_day1",
+      "method": "pretrip_route_summary.distance_m",
+      "metric": "route_distance_m",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "subject": "pretrip_project.chilai_nanhua_day1",
+      "type": "DerivedMeasurement",
+      "unit": "meters",
+      "value": 14599.78,
+      "write_policy": "automatic"
+    },
+    {
+      "artifact_refs": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "created_at": null,
+      "derived_from": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "id": "measurement.pretrip_route_guide_segment_time_minutes.timing.g11_nenggao.001",
+      "method": "pretrip_route_guide_timing_candidate.route_guide_segment_time_minutes",
+      "metric": "route_guide_segment_time_minutes",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "subject": "timing.g11_nenggao.001",
+      "type": "DerivedMeasurement",
+      "unit": "minutes",
+      "value": 30,
+      "write_policy": "automatic"
+    },
+    {
+      "artifact_refs": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "created_at": null,
+      "derived_from": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "id": "measurement.pretrip_route_guide_segment_time_minutes.timing.g11_nenggao.002",
+      "method": "pretrip_route_guide_timing_candidate.route_guide_segment_time_minutes",
+      "metric": "route_guide_segment_time_minutes",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "subject": "timing.g11_nenggao.002",
+      "type": "DerivedMeasurement",
+      "unit": "minutes",
+      "value": 30,
+      "write_policy": "automatic"
+    },
+    {
+      "artifact_refs": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "created_at": null,
+      "derived_from": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "id": "measurement.pretrip_route_guide_segment_time_minutes.timing.g11_nenggao.003",
+      "method": "pretrip_route_guide_timing_candidate.route_guide_segment_time_minutes",
+      "metric": "route_guide_segment_time_minutes",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "subject": "timing.g11_nenggao.003",
+      "type": "DerivedMeasurement",
+      "unit": "minutes",
+      "value": 120,
+      "write_policy": "automatic"
+    },
+    {
+      "artifact_refs": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "created_at": null,
+      "derived_from": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "id": "measurement.pretrip_route_guide_return_time_minutes.timing.g11_nenggao.003",
+      "method": "pretrip_route_guide_timing_candidate.route_guide_return_time_minutes",
+      "metric": "route_guide_return_time_minutes",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "subject": "timing.g11_nenggao.003",
+      "type": "DerivedMeasurement",
+      "unit": "minutes",
+      "value": 100,
+      "write_policy": "automatic"
+    },
+    {
+      "artifact_refs": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "created_at": null,
+      "derived_from": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "id": "measurement.pretrip_route_guide_segment_time_minutes.timing.g11_nenggao.004",
+      "method": "pretrip_route_guide_timing_candidate.route_guide_segment_time_minutes",
+      "metric": "route_guide_segment_time_minutes",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "subject": "timing.g11_nenggao.004",
+      "type": "DerivedMeasurement",
+      "unit": "minutes",
+      "value": 210,
+      "write_policy": "automatic"
+    },
+    {
+      "artifact_refs": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "created_at": null,
+      "derived_from": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "id": "measurement.pretrip_route_guide_return_time_minutes.timing.g11_nenggao.004",
+      "method": "pretrip_route_guide_timing_candidate.route_guide_return_time_minutes",
+      "metric": "route_guide_return_time_minutes",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "subject": "timing.g11_nenggao.004",
+      "type": "DerivedMeasurement",
+      "unit": "minutes",
+      "value": 180,
+      "write_policy": "automatic"
+    },
+    {
+      "artifact_refs": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "created_at": null,
+      "derived_from": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "id": "measurement.pretrip_route_guide_segment_time_minutes.timing.g11_nenggao.005",
+      "method": "pretrip_route_guide_timing_candidate.route_guide_segment_time_minutes",
+      "metric": "route_guide_segment_time_minutes",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "subject": "timing.g11_nenggao.005",
+      "type": "DerivedMeasurement",
+      "unit": "minutes",
+      "value": 50,
+      "write_policy": "automatic"
+    },
+    {
+      "artifact_refs": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "created_at": null,
+      "derived_from": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "id": "measurement.pretrip_route_guide_return_time_minutes.timing.g11_nenggao.005",
+      "method": "pretrip_route_guide_timing_candidate.route_guide_return_time_minutes",
+      "metric": "route_guide_return_time_minutes",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "subject": "timing.g11_nenggao.005",
+      "type": "DerivedMeasurement",
+      "unit": "minutes",
+      "value": 55,
+      "write_policy": "automatic"
+    },
+    {
+      "artifact_refs": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "created_at": null,
+      "derived_from": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "id": "measurement.pretrip_route_guide_segment_time_minutes.timing.g11_nenggao.006",
+      "method": "pretrip_route_guide_timing_candidate.route_guide_segment_time_minutes",
+      "metric": "route_guide_segment_time_minutes",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "subject": "timing.g11_nenggao.006",
+      "type": "DerivedMeasurement",
+      "unit": "minutes",
+      "value": 120,
+      "write_policy": "automatic"
+    },
+    {
+      "artifact_refs": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "created_at": null,
+      "derived_from": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "id": "measurement.pretrip_route_guide_return_time_minutes.timing.g11_nenggao.006",
+      "method": "pretrip_route_guide_timing_candidate.route_guide_return_time_minutes",
+      "metric": "route_guide_return_time_minutes",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "subject": "timing.g11_nenggao.006",
+      "type": "DerivedMeasurement",
+      "unit": "minutes",
+      "value": 240,
+      "write_policy": "automatic"
+    },
+    {
+      "artifact_refs": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "created_at": null,
+      "derived_from": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "id": "measurement.pretrip_route_guide_segment_time_minutes.timing.g11_nenggao.007",
+      "method": "pretrip_route_guide_timing_candidate.route_guide_segment_time_minutes",
+      "metric": "route_guide_segment_time_minutes",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "subject": "timing.g11_nenggao.007",
+      "type": "DerivedMeasurement",
+      "unit": "minutes",
+      "value": 140,
+      "write_policy": "automatic"
+    },
+    {
+      "artifact_refs": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "created_at": null,
+      "derived_from": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "id": "measurement.pretrip_route_guide_return_time_minutes.timing.g11_nenggao.007",
+      "method": "pretrip_route_guide_timing_candidate.route_guide_return_time_minutes",
+      "metric": "route_guide_return_time_minutes",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "subject": "timing.g11_nenggao.007",
+      "type": "DerivedMeasurement",
+      "unit": "minutes",
+      "value": 170,
+      "write_policy": "automatic"
+    },
+    {
+      "artifact_refs": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "created_at": null,
+      "derived_from": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "id": "measurement.pretrip_route_guide_segment_time_minutes.timing.g11_nenggao.008",
+      "method": "pretrip_route_guide_timing_candidate.route_guide_segment_time_minutes",
+      "metric": "route_guide_segment_time_minutes",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "subject": "timing.g11_nenggao.008",
+      "type": "DerivedMeasurement",
+      "unit": "minutes",
+      "value": 180,
+      "write_policy": "automatic"
+    },
+    {
+      "artifact_refs": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "created_at": null,
+      "derived_from": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "id": "measurement.pretrip_route_guide_return_time_minutes.timing.g11_nenggao.008",
+      "method": "pretrip_route_guide_timing_candidate.route_guide_return_time_minutes",
+      "metric": "route_guide_return_time_minutes",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "subject": "timing.g11_nenggao.008",
+      "type": "DerivedMeasurement",
+      "unit": "minutes",
+      "value": 260,
+      "write_policy": "automatic"
+    },
+    {
+      "artifact_refs": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "created_at": null,
+      "derived_from": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "id": "measurement.pretrip_route_guide_segment_time_minutes.timing.g11_nenggao.009",
+      "method": "pretrip_route_guide_timing_candidate.route_guide_segment_time_minutes",
+      "metric": "route_guide_segment_time_minutes",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "subject": "timing.g11_nenggao.009",
+      "type": "DerivedMeasurement",
+      "unit": "minutes",
+      "value": 120,
+      "write_policy": "automatic"
+    },
+    {
+      "artifact_refs": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "created_at": null,
+      "derived_from": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "id": "measurement.pretrip_route_guide_segment_time_minutes.timing.g11_nenggao.010",
+      "method": "pretrip_route_guide_timing_candidate.route_guide_segment_time_minutes",
+      "metric": "route_guide_segment_time_minutes",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "subject": "timing.g11_nenggao.010",
+      "type": "DerivedMeasurement",
+      "unit": "minutes",
+      "value": 5,
+      "write_policy": "automatic"
+    },
+    {
+      "artifact_refs": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "created_at": null,
+      "derived_from": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "id": "measurement.pretrip_route_guide_segment_time_minutes.timing.g11_nenggao.011",
+      "method": "pretrip_route_guide_timing_candidate.route_guide_segment_time_minutes",
+      "metric": "route_guide_segment_time_minutes",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "subject": "timing.g11_nenggao.011",
+      "type": "DerivedMeasurement",
+      "unit": "minutes",
+      "value": 30,
+      "write_policy": "automatic"
+    },
+    {
+      "artifact_refs": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "created_at": null,
+      "derived_from": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "id": "measurement.pretrip_route_guide_segment_time_minutes.timing.g11_nenggao.012",
+      "method": "pretrip_route_guide_timing_candidate.route_guide_segment_time_minutes",
+      "metric": "route_guide_segment_time_minutes",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "subject": "timing.g11_nenggao.012",
+      "type": "DerivedMeasurement",
+      "unit": "minutes",
+      "value": 10,
+      "write_policy": "automatic"
+    },
+    {
+      "artifact_refs": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "created_at": null,
+      "derived_from": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "id": "measurement.pretrip_route_guide_ascent_time_minutes.timing.g11_nenggao.013",
+      "method": "pretrip_route_guide_timing_candidate.route_guide_ascent_time_minutes",
+      "metric": "route_guide_ascent_time_minutes",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "subject": "timing.g11_nenggao.013",
+      "type": "DerivedMeasurement",
+      "unit": "minutes",
+      "value": 60,
+      "write_policy": "automatic"
+    },
+    {
+      "artifact_refs": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "created_at": null,
+      "derived_from": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "id": "measurement.pretrip_route_guide_descent_time_minutes.timing.g11_nenggao.013",
+      "method": "pretrip_route_guide_timing_candidate.route_guide_descent_time_minutes",
+      "metric": "route_guide_descent_time_minutes",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "subject": "timing.g11_nenggao.013",
+      "type": "DerivedMeasurement",
+      "unit": "minutes",
+      "value": 40,
+      "write_policy": "automatic"
+    },
+    {
+      "artifact_refs": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "created_at": null,
+      "derived_from": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "id": "measurement.pretrip_route_guide_ascent_time_minutes.timing.g11_nenggao.014",
+      "method": "pretrip_route_guide_timing_candidate.route_guide_ascent_time_minutes",
+      "metric": "route_guide_ascent_time_minutes",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "subject": "timing.g11_nenggao.014",
+      "type": "DerivedMeasurement",
+      "unit": "minutes",
+      "value": 20,
+      "write_policy": "automatic"
+    },
+    {
+      "artifact_refs": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "created_at": null,
+      "derived_from": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "id": "measurement.pretrip_route_guide_descent_time_minutes.timing.g11_nenggao.014",
+      "method": "pretrip_route_guide_timing_candidate.route_guide_descent_time_minutes",
+      "metric": "route_guide_descent_time_minutes",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "subject": "timing.g11_nenggao.014",
+      "type": "DerivedMeasurement",
+      "unit": "minutes",
+      "value": 15,
+      "write_policy": "automatic"
+    },
+    {
+      "artifact_refs": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "created_at": null,
+      "derived_from": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "id": "measurement.pretrip_route_guide_segment_time_minutes.timing.g11_nenggao.015",
+      "method": "pretrip_route_guide_timing_candidate.route_guide_segment_time_minutes",
+      "metric": "route_guide_segment_time_minutes",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "subject": "timing.g11_nenggao.015",
+      "type": "DerivedMeasurement",
+      "unit": "minutes",
+      "value": 40,
+      "write_policy": "automatic"
+    },
+    {
+      "artifact_refs": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "created_at": null,
+      "derived_from": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "id": "measurement.pretrip_route_guide_return_time_minutes.timing.g11_nenggao.015",
+      "method": "pretrip_route_guide_timing_candidate.route_guide_return_time_minutes",
+      "metric": "route_guide_return_time_minutes",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "subject": "timing.g11_nenggao.015",
+      "type": "DerivedMeasurement",
+      "unit": "minutes",
+      "value": 60,
+      "write_policy": "automatic"
+    },
+    {
+      "artifact_refs": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "created_at": null,
+      "derived_from": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "id": "measurement.pretrip_route_guide_segment_time_minutes.timing.g11_nenggao.016",
+      "method": "pretrip_route_guide_timing_candidate.route_guide_segment_time_minutes",
+      "metric": "route_guide_segment_time_minutes",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "subject": "timing.g11_nenggao.016",
+      "type": "DerivedMeasurement",
+      "unit": "minutes",
+      "value": 40,
+      "write_policy": "automatic"
+    },
+    {
+      "artifact_refs": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "created_at": null,
+      "derived_from": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "id": "measurement.pretrip_route_guide_return_time_minutes.timing.g11_nenggao.016",
+      "method": "pretrip_route_guide_timing_candidate.route_guide_return_time_minutes",
+      "metric": "route_guide_return_time_minutes",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "subject": "timing.g11_nenggao.016",
+      "type": "DerivedMeasurement",
+      "unit": "minutes",
+      "value": 30,
+      "write_policy": "automatic"
+    },
+    {
+      "artifact_refs": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "created_at": null,
+      "derived_from": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "id": "measurement.pretrip_route_guide_ascent_time_minutes.timing.g11_nenggao.017",
+      "method": "pretrip_route_guide_timing_candidate.route_guide_ascent_time_minutes",
+      "metric": "route_guide_ascent_time_minutes",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "subject": "timing.g11_nenggao.017",
+      "type": "DerivedMeasurement",
+      "unit": "minutes",
+      "value": 140,
+      "write_policy": "automatic"
+    },
+    {
+      "artifact_refs": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "created_at": null,
+      "derived_from": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "id": "measurement.pretrip_route_guide_descent_time_minutes.timing.g11_nenggao.017",
+      "method": "pretrip_route_guide_timing_candidate.route_guide_descent_time_minutes",
+      "metric": "route_guide_descent_time_minutes",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "subject": "timing.g11_nenggao.017",
+      "type": "DerivedMeasurement",
+      "unit": "minutes",
+      "value": 170,
+      "write_policy": "automatic"
+    },
+    {
+      "artifact_refs": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "created_at": null,
+      "derived_from": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "id": "measurement.pretrip_route_guide_ascent_time_minutes.timing.g11_nenggao.018",
+      "method": "pretrip_route_guide_timing_candidate.route_guide_ascent_time_minutes",
+      "metric": "route_guide_ascent_time_minutes",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "subject": "timing.g11_nenggao.018",
+      "type": "DerivedMeasurement",
+      "unit": "minutes",
+      "value": 140,
+      "write_policy": "automatic"
+    },
+    {
+      "artifact_refs": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "created_at": null,
+      "derived_from": [
+        "artifact.photo.g11_hiking",
+        "artifact.pretrip_package.chilai_nanhua_day1"
+      ],
+      "id": "measurement.pretrip_route_guide_descent_time_minutes.timing.g11_nenggao.018",
+      "method": "pretrip_route_guide_timing_candidate.route_guide_descent_time_minutes",
+      "metric": "route_guide_descent_time_minutes",
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "subject": "timing.g11_nenggao.018",
+      "type": "DerivedMeasurement",
+      "unit": "minutes",
+      "value": 160,
+      "write_policy": "automatic"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_output.poi_readiness_candidates.chilai_nanhua_day1.v0"
+      ],
+      "claim": "poi_readiness_candidates is preserved as candidate planning context only; human review is required before safety-critical use. blocker_candidate_count=0; finding_candidate_count=0; policy_candidate_count=1; route_corridor_poi_count=1; warning_candidate_count=0; findings_count=0",
+      "created_at": null,
+      "generated_at": "2026-05-14T00:00:00+08:00",
+      "id": "interpretation.pretrip_output.poi_readiness_candidates.chilai_nanhua_day1.v0",
+      "input_refs": [
+        "artifact.pretrip_output.poi_readiness_candidates.chilai_nanhua_day1.v0"
+      ],
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "model": "phase4_pretrip_planning_output",
+      "model_version": "0.1.0",
+      "subject": "pretrip_project.chilai_nanhua_day1",
+      "type": "ModelInterpretation",
+      "write_policy": "append_only_requires_review"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_output.segment_policy_candidates.chilai_nanhua_day1.v0"
+      ],
+      "claim": "segment_policy_candidates is preserved as candidate planning context only; human review is required before safety-critical use. candidate_only_count=10; human_review_required_count=10; requires_daylight_count=10; retreat_available_count=2; segment_policy_candidate_count=10; signal_expected_count=1; candidates_count=10",
+      "created_at": null,
+      "generated_at": "2026-05-14T00:00:00+08:00",
+      "id": "interpretation.pretrip_output.segment_policy_candidates.chilai_nanhua_day1.v0",
+      "input_refs": [
+        "artifact.pretrip_output.segment_policy_candidates.chilai_nanhua_day1.v0"
+      ],
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "model": "phase4_pretrip_planning_output",
+      "model_version": "0.1.0",
+      "subject": "pretrip_project.chilai_nanhua_day1",
+      "type": "ModelInterpretation",
+      "write_policy": "append_only_requires_review"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_output.plan_validation_candidates.chilai_nanhua_day1.v0"
+      ],
+      "claim": "plan_validation_candidates is preserved as candidate planning context only; human review is required before safety-critical use. blocker_candidate_count=0; finding_candidate_count=6; source_ref_count=8; warning_candidate_count=6; findings_count=6",
+      "created_at": null,
+      "generated_at": "2026-05-14T00:00:00+08:00",
+      "id": "interpretation.pretrip_output.plan_validation_candidates.chilai_nanhua_day1.v0",
+      "input_refs": [
+        "artifact.pretrip_output.plan_validation_candidates.chilai_nanhua_day1.v0"
+      ],
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "model": "phase4_pretrip_planning_output",
+      "model_version": "0.1.0",
+      "subject": "pretrip_project.chilai_nanhua_day1",
+      "type": "ModelInterpretation",
+      "write_policy": "append_only_requires_review"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_output.weather_daylight.chilai_nanhua_day1.2026-05-03.v0"
+      ],
+      "claim": "weather_daylight_evidence is preserved as candidate planning context only; human review is required before safety-critical use. status=candidate_only",
+      "created_at": null,
+      "generated_at": "2026-05-14T00:00:00+08:00",
+      "id": "interpretation.pretrip_output.weather_daylight.chilai_nanhua_day1.2026-05-03.v0",
+      "input_refs": [
+        "artifact.pretrip_output.weather_daylight.chilai_nanhua_day1.2026-05-03.v0"
+      ],
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "model": "phase4_pretrip_planning_output",
+      "model_version": "0.1.0",
+      "subject": "pretrip_project.chilai_nanhua_day1",
+      "type": "ModelInterpretation",
+      "write_policy": "append_only_requires_review"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_output.contour_interpretation.chilai_nanhua_day1.v0"
+      ],
+      "claim": "contour_interpretation_candidates is preserved as candidate planning context only; human review is required before safety-critical use. candidates_count=2",
+      "created_at": null,
+      "generated_at": "2026-05-14T00:00:00+08:00",
+      "id": "interpretation.pretrip_output.contour_interpretation.chilai_nanhua_day1.v0",
+      "input_refs": [
+        "artifact.pretrip_output.contour_interpretation.chilai_nanhua_day1.v0"
+      ],
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "model": "phase4_pretrip_planning_output",
+      "model_version": "0.1.0",
+      "subject": "pretrip_project.chilai_nanhua_day1",
+      "type": "ModelInterpretation",
+      "write_policy": "append_only_requires_review"
+    },
+    {
+      "artifact_refs": [
+        "artifact.pretrip_output.resource_plan.chilai_nanhua_day1.v0"
+      ],
+      "claim": "resource_plan is preserved as candidate planning context only; human review is required before safety-critical use. devices_count=4; equipment_count=4",
+      "created_at": null,
+      "generated_at": "2026-05-14T00:00:00+08:00",
+      "id": "interpretation.pretrip_output.resource_plan.chilai_nanhua_day1.v0",
+      "input_refs": [
+        "artifact.pretrip_output.resource_plan.chilai_nanhua_day1.v0"
+      ],
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "model": "phase4_pretrip_planning_output",
+      "model_version": "0.1.0",
+      "subject": "pretrip_project.chilai_nanhua_day1",
+      "type": "ModelInterpretation",
+      "write_policy": "append_only_requires_review"
+    }
+  ],
+  "observed_facts": []
+}

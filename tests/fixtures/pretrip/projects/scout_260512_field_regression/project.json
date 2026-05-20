@@ -1,0 +1,38 @@
+{
+  "checkpoint_candidate_count": 6,
+  "checkpoint_candidates_ref": "candidates/checkpoints.json",
+  "compiled_into_mountain_calibration": false,
+  "compiled_mission_graph_ref": null,
+  "field_data_to_fixtures_regression": true,
+  "fixture_kind": "field-data-to-fixtures-regression",
+  "hazard_candidate_count": 1,
+  "map_candidates_ref": "candidates/map_candidates.json",
+  "map_summary_id": "map_summary.scout_260512_overpass.v0",
+  "map_summary_ref": "normalized/map/map_summary.json",
+  "mountain_calibration_project_id": "chilai_nanhua_day1",
+  "notes": [
+    "Scout 260512 remains a field-data-to-fixtures regression case.",
+    "Chilai-Nanhua Day 1 remains the primary mountain calibration fixture.",
+    "No raw Apple Watch, GPX, or map payloads are copied into this project directory."
+  ],
+  "package_ref": "outputs/pretrip_package.json",
+  "phase1_live_runtime_touched": false,
+  "poi_candidate_count": 1,
+  "primary_mountain_calibration": false,
+  "project_id": "scout_260512_field_regression",
+  "raw_payloads_embedded": false,
+  "route_summary_artifact_id": "artifact.route.scout_260512_field_route_gpx",
+  "route_summary_ref": "normalized/routes/route_summary.json",
+  "segment_candidate_count": 5,
+  "segment_candidates_ref": "candidates/segments.json",
+  "source_artifact_count": 3,
+  "source_case_id": "scout_260512_field_golden",
+  "source_refs": [
+    "tests/fixtures/field_cases/scout_260512_golden.json",
+    "tests/fixtures/routes/scout_260512_field_route.gpx",
+    "tests/fixtures/maps/scout_260512_overpass_map_context.geojson",
+    "tests/fixtures/maps/scout_260512_overpass_query.ql",
+    "tests/fixtures/mission_graph/scout_260512_field_mission.json",
+    "tests/fixtures/route_progress/scout_260512_field_config.json"
+  ]
+}

@@ -1,0 +1,83 @@
+{
+  "matrix_id": "pretrip.project_matrix.v0",
+  "phase": "phase_4_pretrip_fixture_project_matrix",
+  "projects": [
+    {
+      "candidate_counts": {
+        "checkpoint": 11,
+        "map_corridor": 1,
+        "map_hazard": 1,
+        "map_poi": 1,
+        "planning_reference": 3,
+        "retreat_route": 1,
+        "route_guide_timing": 19,
+        "segment": 10,
+        "source_artifact": 2,
+        "timing_measurement": 18
+      },
+      "label": "Chilai-Nanhua Day 1",
+      "project_id": "chilai_nanhua_day1",
+      "raw_payload_embedding": {
+        "embedded": false,
+        "policy": "refs_and_counts_only"
+      },
+      "refs": {
+        "package": "tests/fixtures/pretrip/projects/chilai_nanhua_day1/outputs/pretrip_package.json",
+        "project": "tests/fixtures/pretrip/projects/chilai_nanhua_day1/project.json",
+        "project_root": "tests/fixtures/pretrip/projects/chilai_nanhua_day1",
+        "reviewed_package": "tests/fixtures/pretrip/projects/chilai_nanhua_day1/outputs/pretrip_package.reviewed.json"
+      },
+      "release_check_boundary_flags": {
+        "check_boundary": "phase4_fixture_matrix_only",
+        "compiled_into_mountain_calibration": true,
+        "field_data_to_fixtures_regression": false,
+        "fixture_only": true,
+        "phase1_live_runtime_touched": false,
+        "phase2_bridge_touched": false,
+        "primary_mountain_calibration": true,
+        "raw_payloads_embedded": false,
+        "safety_api_calls_allowed": false
+      },
+      "role": "primary_mountain_calibration"
+    },
+    {
+      "candidate_counts": {
+        "checkpoint": 6,
+        "map_corridor": 0,
+        "map_hazard": 1,
+        "map_poi": 1,
+        "planning_reference": 0,
+        "retreat_route": 0,
+        "route_guide_timing": 0,
+        "segment": 5,
+        "source_artifact": 3,
+        "timing_measurement": 0
+      },
+      "label": "Scout 260512 field regression",
+      "project_id": "scout_260512_field_regression",
+      "raw_payload_embedding": {
+        "embedded": false,
+        "policy": "refs_and_counts_only"
+      },
+      "refs": {
+        "package": "tests/fixtures/pretrip/projects/scout_260512_field_regression/outputs/pretrip_package.json",
+        "project": "tests/fixtures/pretrip/projects/scout_260512_field_regression/project.json",
+        "project_root": "tests/fixtures/pretrip/projects/scout_260512_field_regression",
+        "reviewed_package": null
+      },
+      "release_check_boundary_flags": {
+        "check_boundary": "phase4_fixture_matrix_only",
+        "compiled_into_mountain_calibration": false,
+        "field_data_to_fixtures_regression": true,
+        "fixture_only": true,
+        "phase1_live_runtime_touched": false,
+        "phase2_bridge_touched": false,
+        "primary_mountain_calibration": false,
+        "raw_payloads_embedded": false,
+        "safety_api_calls_allowed": false
+      },
+      "role": "field_data_to_fixtures_regression"
+    }
+  ],
+  "schema_version": "0.1.0"
+}

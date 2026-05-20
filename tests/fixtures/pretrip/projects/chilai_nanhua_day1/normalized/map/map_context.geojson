@@ -1,0 +1,95 @@
+{
+  "features": [
+    {
+      "geometry": {
+        "coordinates": [
+          [
+            121.21036249036372,
+            24.0532973
+          ],
+          [
+            121.2455,
+            24.0512
+          ],
+          [
+            121.28079717511966,
+            24.045320698458436
+          ]
+        ],
+        "type": "LineString"
+      },
+      "properties": {
+        "corridor_half_width_m": 30,
+        "feature_type": "approved_corridor",
+        "id": "chilai_nanhua_primary_corridor",
+        "name": "Chilai-Nanhua Day1 primary corridor candidate",
+        "route_level": "mountain_trail_candidate"
+      },
+      "type": "Feature"
+    },
+    {
+      "geometry": {
+        "coordinates": [
+          121.21036249036372,
+          24.0532973
+        ],
+        "type": "Point"
+      },
+      "properties": {
+        "confidence": 0.75,
+        "feature_type": "trailhead",
+        "id": "trailhead_entry",
+        "name": "Entry / retreat return point",
+        "poi_type": "trailhead"
+      },
+      "type": "Feature"
+    },
+    {
+      "geometry": {
+        "coordinates": [
+          [
+            [
+              121.238,
+              24.058
+            ],
+            [
+              121.282,
+              24.058
+            ],
+            [
+              121.282,
+              24.042
+            ],
+            [
+              121.238,
+              24.042
+            ],
+            [
+              121.238,
+              24.058
+            ]
+          ]
+        ],
+        "type": "Polygon"
+      },
+      "properties": {
+        "feature_type": "terrain_constraint",
+        "hazard_type": "limited_retreat_options",
+        "id": "deep_mountain_no_easy_exit",
+        "l2_duration_s": 60,
+        "name": "Deep mountain section with limited retreat options"
+      },
+      "type": "Feature"
+    }
+  ],
+  "properties": {
+    "confidence": 0.6,
+    "known_staleness_risk": "medium",
+    "last_verified_at": "2026-05-14",
+    "license_note": "local fixture metadata only",
+    "notes": "Small Phase 4 GeoJSON candidate fixture; not an external crawler output.",
+    "source": "manual_pretrip_fixture",
+    "source_version": "0.1.0"
+  },
+  "type": "FeatureCollection"
+}

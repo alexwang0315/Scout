@@ -1,0 +1,33 @@
+[
+  {
+    "candidate_id": "retreat.chilai_nanhua_day1.return_to_entry",
+    "confidence": "high",
+    "distance_m": 14599.78,
+    "entry_checkpoint_candidate_id": "cp.start",
+    "expected_use": "both",
+    "human_review_required": false,
+    "label": "Return to entry via reversed primary route",
+    "notes": "Configured as both retreat and alternate route for readiness because practical off-route evacuation options are limited after entering the deep mountain section.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "manual_route_planning_assumption",
+        "notes": "User clarified this route effectively retreats by reversing the primary route back to the entry point after entering deep mountain terrain.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/downloads/奇萊南華-能高越嶺步道Day1.gpx"
+      }
+    ],
+    "retreat_type": "return_to_entry",
+    "reversed_from_primary_route": true,
+    "review_state": "accepted",
+    "route_point_end_index": 2210,
+    "route_point_start_index": 0,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "trigger_checkpoint_candidate_id": "cp.finish"
+  }
+]

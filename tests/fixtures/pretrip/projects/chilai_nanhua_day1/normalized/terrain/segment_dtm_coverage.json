@@ -1,0 +1,490 @@
+{
+  "candidate_tile_count": 10,
+  "dtm_coverage_summary_id": "dtm_coverage.chilai_nanhua_day1.20m",
+  "notes": "Metadata-only Phase 4 terrain summary; does not read or copy DTM grid rasters.",
+  "route_artifact_id": "artifact.gpx.chilai_nanhua_day1",
+  "route_bbox_twd97": {
+    "crs": "TWD97 / TM2 zone 121 (EPSG:3826-compatible)",
+    "max_x": 278559.255,
+    "max_y": 2661464.797,
+    "min_x": 271393.061,
+    "min_y": 2659838.709
+  },
+  "segment_count": 10,
+  "segment_metadata": [
+    {
+      "candidate_tiles": [
+        {
+          "county": "南投縣",
+          "match_reason": "bbox_progress_overlap",
+          "progress_end_m": 1779.893,
+          "progress_start_m": 0.0,
+          "tile_id": "96213088",
+          "tile_ref": "南投縣:96213088"
+        },
+        {
+          "county": "南投縣",
+          "match_reason": "bbox_progress_overlap",
+          "progress_end_m": 4367.281,
+          "progress_start_m": 0.0,
+          "tile_id": "96213089",
+          "tile_ref": "南投縣:96213089"
+        }
+      ],
+      "from_candidate_id": "cp.start",
+      "notes": "Segment progress is approximated from candidate distances; tile progress is approximated from DTM bbox overlap with route bbox.",
+      "progress_end_m": 1502.26,
+      "progress_start_m": 0.0,
+      "route_point_end_index": 249,
+      "route_point_start_index": 0,
+      "segment_candidate_id": "seg.001",
+      "to_candidate_id": "cp.001"
+    },
+    {
+      "candidate_tiles": [
+        {
+          "county": "南投縣",
+          "match_reason": "bbox_progress_overlap",
+          "progress_end_m": 7368.08,
+          "progress_start_m": 2250.414,
+          "tile_id": "96213078",
+          "tile_ref": "南投縣:96213078"
+        },
+        {
+          "county": "南投縣",
+          "match_reason": "bbox_progress_overlap",
+          "progress_end_m": 9955.469,
+          "progress_start_m": 2250.414,
+          "tile_id": "96213079",
+          "tile_ref": "南投縣:96213079"
+        },
+        {
+          "county": "南投縣",
+          "match_reason": "bbox_progress_overlap",
+          "progress_end_m": 1779.893,
+          "progress_start_m": 0.0,
+          "tile_id": "96213088",
+          "tile_ref": "南投縣:96213088"
+        },
+        {
+          "county": "南投縣",
+          "match_reason": "bbox_progress_overlap",
+          "progress_end_m": 4367.281,
+          "progress_start_m": 0.0,
+          "tile_id": "96213089",
+          "tile_ref": "南投縣:96213089"
+        },
+        {
+          "county": "南投縣",
+          "match_reason": "bbox_progress_overlap",
+          "progress_end_m": 7044.455,
+          "progress_start_m": 2309.233,
+          "tile_id": "96213090",
+          "tile_ref": "南投縣:96213090"
+        }
+      ],
+      "from_candidate_id": "cp.001",
+      "notes": "Segment progress is approximated from candidate distances; tile progress is approximated from DTM bbox overlap with route bbox.",
+      "progress_end_m": 3002.109,
+      "progress_start_m": 1502.26,
+      "route_point_end_index": 490,
+      "route_point_start_index": 249,
+      "segment_candidate_id": "seg.002",
+      "to_candidate_id": "cp.002"
+    },
+    {
+      "candidate_tiles": [
+        {
+          "county": "南投縣",
+          "match_reason": "bbox_progress_overlap",
+          "progress_end_m": 7368.08,
+          "progress_start_m": 2250.414,
+          "tile_id": "96213078",
+          "tile_ref": "南投縣:96213078"
+        },
+        {
+          "county": "南投縣",
+          "match_reason": "bbox_progress_overlap",
+          "progress_end_m": 9955.469,
+          "progress_start_m": 2250.414,
+          "tile_id": "96213079",
+          "tile_ref": "南投縣:96213079"
+        },
+        {
+          "county": "南投縣",
+          "match_reason": "bbox_progress_overlap",
+          "progress_end_m": 4367.281,
+          "progress_start_m": 0.0,
+          "tile_id": "96213089",
+          "tile_ref": "南投縣:96213089"
+        },
+        {
+          "county": "南投縣",
+          "match_reason": "bbox_progress_overlap",
+          "progress_end_m": 7044.455,
+          "progress_start_m": 2309.233,
+          "tile_id": "96213090",
+          "tile_ref": "南投縣:96213090"
+        }
+      ],
+      "from_candidate_id": "cp.002",
+      "notes": "Segment progress is approximated from candidate distances; tile progress is approximated from DTM bbox overlap with route bbox.",
+      "progress_end_m": 4505.501,
+      "progress_start_m": 3002.109,
+      "route_point_end_index": 742,
+      "route_point_start_index": 490,
+      "segment_candidate_id": "seg.003",
+      "to_candidate_id": "cp.003"
+    },
+    {
+      "candidate_tiles": [
+        {
+          "county": "南投縣",
+          "match_reason": "bbox_progress_overlap",
+          "progress_end_m": 9101.382,
+          "progress_start_m": 4896.621,
+          "tile_id": "96212081",
+          "tile_ref": "南投縣:96212081"
+        },
+        {
+          "county": "南投縣",
+          "match_reason": "bbox_progress_overlap",
+          "progress_end_m": 7368.08,
+          "progress_start_m": 2250.414,
+          "tile_id": "96213078",
+          "tile_ref": "南投縣:96213078"
+        },
+        {
+          "county": "南投縣",
+          "match_reason": "bbox_progress_overlap",
+          "progress_end_m": 9955.469,
+          "progress_start_m": 2250.414,
+          "tile_id": "96213079",
+          "tile_ref": "南投縣:96213079"
+        },
+        {
+          "county": "南投縣",
+          "match_reason": "bbox_progress_overlap",
+          "progress_end_m": 12542.857,
+          "progress_start_m": 4649.431,
+          "tile_id": "96213080",
+          "tile_ref": "南投縣:96213080"
+        },
+        {
+          "county": "南投縣",
+          "match_reason": "bbox_progress_overlap",
+          "progress_end_m": 7044.455,
+          "progress_start_m": 2309.233,
+          "tile_id": "96213090",
+          "tile_ref": "南投縣:96213090"
+        },
+        {
+          "county": "花蓮縣",
+          "match_reason": "bbox_progress_overlap",
+          "progress_end_m": 9101.382,
+          "progress_start_m": 4896.621,
+          "tile_id": "96212081",
+          "tile_ref": "花蓮縣:96212081"
+        }
+      ],
+      "from_candidate_id": "cp.003",
+      "notes": "Segment progress is approximated from candidate distances; tile progress is approximated from DTM bbox overlap with route bbox.",
+      "progress_end_m": 6000.719,
+      "progress_start_m": 4505.501,
+      "route_point_end_index": 989,
+      "route_point_start_index": 742,
+      "segment_candidate_id": "seg.004",
+      "to_candidate_id": "cp.004"
+    },
+    {
+      "candidate_tiles": [
+        {
+          "county": "南投縣",
+          "match_reason": "bbox_progress_overlap",
+          "progress_end_m": 14599.785,
+          "progress_start_m": 7236.819,
+          "tile_id": "96212071",
+          "tile_ref": "南投縣:96212071"
+        },
+        {
+          "county": "南投縣",
+          "match_reason": "bbox_progress_overlap",
+          "progress_end_m": 9101.382,
+          "progress_start_m": 4896.621,
+          "tile_id": "96212081",
+          "tile_ref": "南投縣:96212081"
+        },
+        {
+          "county": "南投縣",
+          "match_reason": "bbox_progress_overlap",
+          "progress_end_m": 7368.08,
+          "progress_start_m": 2250.414,
+          "tile_id": "96213078",
+          "tile_ref": "南投縣:96213078"
+        },
+        {
+          "county": "南投縣",
+          "match_reason": "bbox_progress_overlap",
+          "progress_end_m": 9955.469,
+          "progress_start_m": 2250.414,
+          "tile_id": "96213079",
+          "tile_ref": "南投縣:96213079"
+        },
+        {
+          "county": "南投縣",
+          "match_reason": "bbox_progress_overlap",
+          "progress_end_m": 12542.857,
+          "progress_start_m": 4649.431,
+          "tile_id": "96213080",
+          "tile_ref": "南投縣:96213080"
+        },
+        {
+          "county": "南投縣",
+          "match_reason": "bbox_progress_overlap",
+          "progress_end_m": 7044.455,
+          "progress_start_m": 2309.233,
+          "tile_id": "96213090",
+          "tile_ref": "南投縣:96213090"
+        },
+        {
+          "county": "花蓮縣",
+          "match_reason": "bbox_progress_overlap",
+          "progress_end_m": 14599.785,
+          "progress_start_m": 7236.819,
+          "tile_id": "96212071",
+          "tile_ref": "花蓮縣:96212071"
+        },
+        {
+          "county": "花蓮縣",
+          "match_reason": "bbox_progress_overlap",
+          "progress_end_m": 9101.382,
+          "progress_start_m": 4896.621,
+          "tile_id": "96212081",
+          "tile_ref": "花蓮縣:96212081"
+        }
+      ],
+      "from_candidate_id": "cp.004",
+      "notes": "Segment progress is approximated from candidate distances; tile progress is approximated from DTM bbox overlap with route bbox.",
+      "progress_end_m": 7508.588,
+      "progress_start_m": 6000.719,
+      "route_point_end_index": 1236,
+      "route_point_start_index": 989,
+      "segment_candidate_id": "seg.005",
+      "to_candidate_id": "cp.005"
+    },
+    {
+      "candidate_tiles": [
+        {
+          "county": "南投縣",
+          "match_reason": "bbox_progress_overlap",
+          "progress_end_m": 14599.785,
+          "progress_start_m": 7236.819,
+          "tile_id": "96212071",
+          "tile_ref": "南投縣:96212071"
+        },
+        {
+          "county": "南投縣",
+          "match_reason": "bbox_progress_overlap",
+          "progress_end_m": 9101.382,
+          "progress_start_m": 4896.621,
+          "tile_id": "96212081",
+          "tile_ref": "南投縣:96212081"
+        },
+        {
+          "county": "南投縣",
+          "match_reason": "bbox_progress_overlap",
+          "progress_end_m": 9955.469,
+          "progress_start_m": 2250.414,
+          "tile_id": "96213079",
+          "tile_ref": "南投縣:96213079"
+        },
+        {
+          "county": "南投縣",
+          "match_reason": "bbox_progress_overlap",
+          "progress_end_m": 12542.857,
+          "progress_start_m": 4649.431,
+          "tile_id": "96213080",
+          "tile_ref": "南投縣:96213080"
+        },
+        {
+          "county": "花蓮縣",
+          "match_reason": "bbox_progress_overlap",
+          "progress_end_m": 14599.785,
+          "progress_start_m": 7236.819,
+          "tile_id": "96212071",
+          "tile_ref": "花蓮縣:96212071"
+        },
+        {
+          "county": "花蓮縣",
+          "match_reason": "bbox_progress_overlap",
+          "progress_end_m": 9101.382,
+          "progress_start_m": 4896.621,
+          "tile_id": "96212081",
+          "tile_ref": "花蓮縣:96212081"
+        }
+      ],
+      "from_candidate_id": "cp.005",
+      "notes": "Segment progress is approximated from candidate distances; tile progress is approximated from DTM bbox overlap with route bbox.",
+      "progress_end_m": 9000.011,
+      "progress_start_m": 7508.588,
+      "route_point_end_index": 1480,
+      "route_point_start_index": 1236,
+      "segment_candidate_id": "seg.006",
+      "to_candidate_id": "cp.006"
+    },
+    {
+      "candidate_tiles": [
+        {
+          "county": "南投縣",
+          "match_reason": "bbox_progress_overlap",
+          "progress_end_m": 14599.785,
+          "progress_start_m": 7236.819,
+          "tile_id": "96212071",
+          "tile_ref": "南投縣:96212071"
+        },
+        {
+          "county": "南投縣",
+          "match_reason": "bbox_progress_overlap",
+          "progress_end_m": 9101.382,
+          "progress_start_m": 4896.621,
+          "tile_id": "96212081",
+          "tile_ref": "南投縣:96212081"
+        },
+        {
+          "county": "南投縣",
+          "match_reason": "bbox_progress_overlap",
+          "progress_end_m": 9955.469,
+          "progress_start_m": 2250.414,
+          "tile_id": "96213079",
+          "tile_ref": "南投縣:96213079"
+        },
+        {
+          "county": "南投縣",
+          "match_reason": "bbox_progress_overlap",
+          "progress_end_m": 12542.857,
+          "progress_start_m": 4649.431,
+          "tile_id": "96213080",
+          "tile_ref": "南投縣:96213080"
+        },
+        {
+          "county": "花蓮縣",
+          "match_reason": "bbox_progress_overlap",
+          "progress_end_m": 14599.785,
+          "progress_start_m": 7236.819,
+          "tile_id": "96212071",
+          "tile_ref": "花蓮縣:96212071"
+        },
+        {
+          "county": "花蓮縣",
+          "match_reason": "bbox_progress_overlap",
+          "progress_end_m": 9101.382,
+          "progress_start_m": 4896.621,
+          "tile_id": "96212081",
+          "tile_ref": "花蓮縣:96212081"
+        }
+      ],
+      "from_candidate_id": "cp.006",
+      "notes": "Segment progress is approximated from candidate distances; tile progress is approximated from DTM bbox overlap with route bbox.",
+      "progress_end_m": 10500.976,
+      "progress_start_m": 9000.011,
+      "route_point_end_index": 1727,
+      "route_point_start_index": 1480,
+      "segment_candidate_id": "seg.007",
+      "to_candidate_id": "cp.007"
+    },
+    {
+      "candidate_tiles": [
+        {
+          "county": "南投縣",
+          "match_reason": "bbox_progress_overlap",
+          "progress_end_m": 14599.785,
+          "progress_start_m": 7236.819,
+          "tile_id": "96212071",
+          "tile_ref": "南投縣:96212071"
+        },
+        {
+          "county": "南投縣",
+          "match_reason": "bbox_progress_overlap",
+          "progress_end_m": 12542.857,
+          "progress_start_m": 4649.431,
+          "tile_id": "96213080",
+          "tile_ref": "南投縣:96213080"
+        },
+        {
+          "county": "花蓮縣",
+          "match_reason": "bbox_progress_overlap",
+          "progress_end_m": 14599.785,
+          "progress_start_m": 7236.819,
+          "tile_id": "96212071",
+          "tile_ref": "花蓮縣:96212071"
+        }
+      ],
+      "from_candidate_id": "cp.007",
+      "notes": "Segment progress is approximated from candidate distances; tile progress is approximated from DTM bbox overlap with route bbox.",
+      "progress_end_m": 12616.702,
+      "progress_start_m": 10500.976,
+      "route_point_end_index": 1921,
+      "route_point_start_index": 1727,
+      "segment_candidate_id": "seg.008",
+      "to_candidate_id": "cp.008"
+    },
+    {
+      "candidate_tiles": [
+        {
+          "county": "南投縣",
+          "match_reason": "bbox_progress_overlap",
+          "progress_end_m": 14599.785,
+          "progress_start_m": 7236.819,
+          "tile_id": "96212071",
+          "tile_ref": "南投縣:96212071"
+        },
+        {
+          "county": "花蓮縣",
+          "match_reason": "bbox_progress_overlap",
+          "progress_end_m": 14599.785,
+          "progress_start_m": 7236.819,
+          "tile_id": "96212071",
+          "tile_ref": "花蓮縣:96212071"
+        }
+      ],
+      "from_candidate_id": "cp.008",
+      "notes": "Segment progress is approximated from candidate distances; tile progress is approximated from DTM bbox overlap with route bbox.",
+      "progress_end_m": 13502.465,
+      "progress_start_m": 12616.702,
+      "route_point_end_index": 2067,
+      "route_point_start_index": 1921,
+      "segment_candidate_id": "seg.009",
+      "to_candidate_id": "cp.009"
+    },
+    {
+      "candidate_tiles": [
+        {
+          "county": "南投縣",
+          "match_reason": "bbox_progress_overlap",
+          "progress_end_m": 14599.785,
+          "progress_start_m": 7236.819,
+          "tile_id": "96212071",
+          "tile_ref": "南投縣:96212071"
+        },
+        {
+          "county": "花蓮縣",
+          "match_reason": "bbox_progress_overlap",
+          "progress_end_m": 14599.785,
+          "progress_start_m": 7236.819,
+          "tile_id": "96212071",
+          "tile_ref": "花蓮縣:96212071"
+        }
+      ],
+      "from_candidate_id": "cp.009",
+      "notes": "Segment progress is approximated from candidate distances; tile progress is approximated from DTM bbox overlap with route bbox.",
+      "progress_end_m": 14599.785,
+      "progress_start_m": 13502.465,
+      "route_point_end_index": 2210,
+      "route_point_start_index": 2067,
+      "segment_candidate_id": "seg.010",
+      "to_candidate_id": "cp.finish"
+    }
+  ],
+  "summary_id": "terrain_summary.chilai_nanhua_day1.20m",
+  "unlinked_segment_ids": []
+}

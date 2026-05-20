@@ -337,6 +337,9 @@ These should remain sequential:
 - `ModelInterpretation` must be append-only and reviewable.
 - Phase 2 write failures must not affect Phase 1 safety responses.
 - Any future live bridge must be explicit, opt-in, and post-persistence only.
+- Phase 4 pre-trip review queues may create draft UI review actions/logs, but
+  those drafts stay outside accepted planning assumptions until a human
+  review/resolver path accepts them.
 
 ## Completion Criteria
 

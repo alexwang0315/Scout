@@ -1,0 +1,314 @@
+{
+  "artifact_kind": "resource_team_departure_plan",
+  "assumptions": [
+    "Two-person team placeholder for fixture validation.",
+    "Contact details are managed outside repo fixtures.",
+    "Device and equipment readiness are pre-departure planning claims requiring review."
+  ],
+  "departure_readiness_context": {
+    "blocker_candidates": [],
+    "blocks_existing_eta_or_readiness": false,
+    "hard_readiness_mutation_allowed": false,
+    "notes": [
+      "Resource plan is candidate-only and does not alter outputs/readiness_report.json.",
+      "Accepted placeholders are validation context, not proof of future field conditions."
+    ],
+    "status": "candidate_context_only",
+    "warning_candidates": [
+      "teammate phone start battery needs confirmation",
+      "water carry and refill plan needs reviewer confirmation",
+      "headlamp set count is a planning placeholder"
+    ]
+  },
+  "devices": [
+    {
+      "battery_required": true,
+      "capability_labels": [
+        "offline_map",
+        "gps",
+        "cellular_checkin"
+      ],
+      "device_id": "device.owner_phone",
+      "device_type": "phone",
+      "estimated_start_battery_pct": 95,
+      "notes": "",
+      "owner_ref": "person.owner_placeholder",
+      "readiness": "ready",
+      "review": {
+        "human_review_required": false,
+        "input_status": "human_reviewed",
+        "notes": "Fixture placeholder accepted for validation context; no contact secrets included.",
+        "review_ref": "reviews/human_reviews.json#resource-plan-placeholder",
+        "review_state": "accepted",
+        "reviewed_at": "2026-05-02T20:00:00+08:00",
+        "reviewed_by": "reviewer.planning_admin"
+      }
+    },
+    {
+      "battery_required": true,
+      "capability_labels": [
+        "gps_track",
+        "heart_rate",
+        "battery_status"
+      ],
+      "device_id": "device.owner_watch",
+      "device_type": "watch",
+      "estimated_start_battery_pct": 90,
+      "notes": "",
+      "owner_ref": "person.owner_placeholder",
+      "readiness": "ready",
+      "review": {
+        "human_review_required": false,
+        "input_status": "human_reviewed",
+        "notes": "Fixture placeholder accepted for validation context; no contact secrets included.",
+        "review_ref": "reviews/human_reviews.json#resource-plan-placeholder",
+        "review_state": "accepted",
+        "reviewed_at": "2026-05-02T20:00:00+08:00",
+        "reviewed_by": "reviewer.planning_admin"
+      }
+    },
+    {
+      "battery_required": true,
+      "capability_labels": [
+        "backup_navigation",
+        "cellular_checkin"
+      ],
+      "device_id": "device.teammate_phone",
+      "device_type": "phone",
+      "estimated_start_battery_pct": null,
+      "notes": "Candidate placeholder until teammate confirms start battery.",
+      "owner_ref": "person.teammate_placeholder",
+      "readiness": "unknown",
+      "review": {
+        "human_review_required": true,
+        "input_status": "human_provided_placeholder",
+        "notes": "Planning placeholder requires confirmation before departure.",
+        "review_ref": null,
+        "review_state": "needs_review",
+        "reviewed_at": null,
+        "reviewed_by": null
+      }
+    },
+    {
+      "battery_required": true,
+      "capability_labels": [
+        "device_charging"
+      ],
+      "device_id": "device.shared_power_bank",
+      "device_type": "power_bank",
+      "estimated_start_battery_pct": 100,
+      "notes": "",
+      "owner_ref": "person.owner_placeholder",
+      "readiness": "ready",
+      "review": {
+        "human_review_required": false,
+        "input_status": "human_reviewed",
+        "notes": "Fixture placeholder accepted for validation context; no contact secrets included.",
+        "review_ref": "reviews/human_reviews.json#resource-plan-placeholder",
+        "review_state": "accepted",
+        "reviewed_at": "2026-05-02T20:00:00+08:00",
+        "reviewed_by": "reviewer.planning_admin"
+      }
+    }
+  ],
+  "emergency_plan": {
+    "emergency_access_notes": [
+      "Use reviewed route retreat summary before departure.",
+      "Escalation details live outside this fixture and are not stored in repo."
+    ],
+    "emergency_contact_aliases": [
+      "remote.primary_placeholder",
+      "remote.backup_placeholder"
+    ],
+    "nearest_known_help_ref": "map.poi_candidate.help_placeholder",
+    "plan_id": "emergency_plan.chilai_nanhua_day1.v0",
+    "review": {
+      "human_review_required": true,
+      "input_status": "human_provided_placeholder",
+      "notes": "Planning placeholder requires confirmation before departure.",
+      "review_ref": null,
+      "review_state": "needs_review",
+      "reviewed_at": null,
+      "reviewed_by": null
+    },
+    "secret_contact_details_included": false
+  },
+  "equipment": [
+    {
+      "category": "navigation",
+      "equipment_id": "equipment.offline_map_cache",
+      "label": "Offline map cache",
+      "notes": "",
+      "owner_ref": "person.owner_placeholder",
+      "quantity_label": "team shared",
+      "readiness": "available",
+      "required_for_departure": true,
+      "review": {
+        "human_review_required": false,
+        "input_status": "human_reviewed",
+        "notes": "Fixture placeholder accepted for validation context; no contact secrets included.",
+        "review_ref": "reviews/human_reviews.json#resource-plan-placeholder",
+        "review_state": "accepted",
+        "reviewed_at": "2026-05-02T20:00:00+08:00",
+        "reviewed_by": "reviewer.planning_admin"
+      }
+    },
+    {
+      "category": "lighting",
+      "equipment_id": "equipment.headlamp_set",
+      "label": "Headlamp set",
+      "notes": "",
+      "owner_ref": null,
+      "quantity_label": "one per hiker placeholder",
+      "readiness": "available",
+      "required_for_departure": true,
+      "review": {
+        "human_review_required": true,
+        "input_status": "human_provided_placeholder",
+        "notes": "Planning placeholder requires confirmation before departure.",
+        "review_ref": null,
+        "review_state": "needs_review",
+        "reviewed_at": null,
+        "reviewed_by": null
+      }
+    },
+    {
+      "category": "water",
+      "equipment_id": "equipment.water_plan",
+      "label": "Water carry and refill plan",
+      "notes": "Needs reviewer confirmation against weather/daylight context.",
+      "owner_ref": null,
+      "quantity_label": "capacity placeholder",
+      "readiness": "limited",
+      "required_for_departure": true,
+      "review": {
+        "human_review_required": true,
+        "input_status": "human_provided_placeholder",
+        "notes": "Planning placeholder requires confirmation before departure.",
+        "review_ref": null,
+        "review_state": "needs_review",
+        "reviewed_at": null,
+        "reviewed_by": null
+      }
+    },
+    {
+      "category": "first_aid",
+      "equipment_id": "equipment.first_aid",
+      "label": "First aid kit",
+      "notes": "",
+      "owner_ref": "person.owner_placeholder",
+      "quantity_label": null,
+      "readiness": "available",
+      "required_for_departure": true,
+      "review": {
+        "human_review_required": false,
+        "input_status": "human_reviewed",
+        "notes": "Fixture placeholder accepted for validation context; no contact secrets included.",
+        "review_ref": "reviews/human_reviews.json#resource-plan-placeholder",
+        "review_state": "accepted",
+        "reviewed_at": "2026-05-02T20:00:00+08:00",
+        "reviewed_by": "reviewer.planning_admin"
+      }
+    }
+  ],
+  "external_api_calls_made": false,
+  "mission_owner": {
+    "display_label": "Mission owner placeholder",
+    "owner_id": "person.owner_placeholder",
+    "review": {
+      "human_review_required": false,
+      "input_status": "human_reviewed",
+      "notes": "Fixture placeholder accepted for validation context; no contact secrets included.",
+      "review_ref": "reviews/human_reviews.json#resource-plan-placeholder",
+      "review_state": "accepted",
+      "reviewed_at": "2026-05-02T20:00:00+08:00",
+      "reviewed_by": "reviewer.planning_admin"
+    },
+    "role": "mission_owner"
+  },
+  "package_ref": "outputs/pretrip_package.reviewed.json",
+  "pii_redaction_policy": "aliases_only_no_phone_email_or_secret_contact_details",
+  "plan_id": "resource_plan.chilai_nanhua_day1.v0",
+  "project_id": "chilai_nanhua_day1",
+  "raw_payloads_embedded": false,
+  "readiness_report_ref": "outputs/readiness_report.json",
+  "remote_contact_plan": {
+    "escalation_policy_summary": "Remote contacts receive aliases, route timing expectations, and retreat summary only; phone numbers and private escalation channels stay outside repo fixtures.",
+    "excluded_payloads": [
+      "raw_gpx",
+      "raw_dtm",
+      "raw_photos",
+      "pdr_samples",
+      "phone_numbers",
+      "email_addresses",
+      "private_messaging_handles"
+    ],
+    "plan_id": "remote_contact_plan.chilai_nanhua_day1.v0",
+    "planned_checkin_labels": [
+      "pre-departure check-in",
+      "turn-back checkpoint expectation",
+      "day1 target arrival expectation"
+    ],
+    "remote_contact_aliases": [
+      "remote.primary_placeholder",
+      "remote.backup_placeholder"
+    ],
+    "review": {
+      "human_review_required": true,
+      "input_status": "human_provided_placeholder",
+      "notes": "Planning placeholder requires confirmation before departure.",
+      "review_ref": null,
+      "review_state": "needs_review",
+      "reviewed_at": null,
+      "reviewed_by": null
+    },
+    "secret_contact_details_included": false,
+    "shareable_summary_ref": "outputs/remote_contact_summary.json"
+  },
+  "remote_contact_summary_ref": "outputs/remote_contact_summary.json",
+  "source_refs": [
+    "outputs/pretrip_package.reviewed.json",
+    "outputs/readiness_report.json",
+    "outputs/remote_contact_summary.json"
+  ],
+  "status": "candidate_only",
+  "team_members": [
+    {
+      "device_ids": [
+        "device.owner_phone",
+        "device.owner_watch"
+      ],
+      "display_label": "Mission owner placeholder",
+      "member_id": "person.owner_placeholder",
+      "required_for_departure": true,
+      "review": {
+        "human_review_required": false,
+        "input_status": "human_reviewed",
+        "notes": "Fixture placeholder accepted for validation context; no contact secrets included.",
+        "review_ref": "reviews/human_reviews.json#resource-plan-placeholder",
+        "review_state": "accepted",
+        "reviewed_at": "2026-05-02T20:00:00+08:00",
+        "reviewed_by": "reviewer.planning_admin"
+      },
+      "role": "leader"
+    },
+    {
+      "device_ids": [
+        "device.teammate_phone"
+      ],
+      "display_label": "Team member placeholder",
+      "member_id": "person.teammate_placeholder",
+      "required_for_departure": true,
+      "review": {
+        "human_review_required": true,
+        "input_status": "human_provided_placeholder",
+        "notes": "Planning placeholder requires confirmation before departure.",
+        "review_ref": null,
+        "review_state": "needs_review",
+        "reviewed_at": null,
+        "reviewed_by": null
+      },
+      "role": "member"
+    }
+  ]
+}

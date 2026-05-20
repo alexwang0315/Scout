@@ -1,0 +1,1855 @@
+{
+  "checkpoint_candidates": [
+    {
+      "arrival_radius_m": 30.0,
+      "candidate_id": "cp.start",
+      "checkpoint_type": "start",
+      "compression_boundary": true,
+      "confidence": "high",
+      "label": "Start",
+      "lat": 24.0532973,
+      "lon": 121.2104806,
+      "notes": "Generated from GPX route distance spacing.",
+      "provenance": [
+        {
+          "captured_at": null,
+          "collected_at": null,
+          "license_note": null,
+          "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+          "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+          "source_kind": "gpx",
+          "source_ref": "artifact.gpx.chilai_nanhua_day1",
+          "uri": "/Users/alexwang0315/downloads/奇萊南華-能高越嶺步道Day1.gpx"
+        }
+      ],
+      "review_state": "accepted",
+      "route_point_index": 0,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1"
+      ]
+    },
+    {
+      "arrival_radius_m": 30.0,
+      "candidate_id": "cp.001",
+      "checkpoint_type": "route_progress",
+      "compression_boundary": true,
+      "confidence": "high",
+      "label": "CP 001",
+      "lat": 24.057004058494407,
+      "lon": 121.21650146390151,
+      "notes": "Generated from GPX route distance spacing.",
+      "provenance": [
+        {
+          "captured_at": null,
+          "collected_at": null,
+          "license_note": null,
+          "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+          "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+          "source_kind": "gpx",
+          "source_ref": "artifact.gpx.chilai_nanhua_day1",
+          "uri": "/Users/alexwang0315/downloads/奇萊南華-能高越嶺步道Day1.gpx"
+        }
+      ],
+      "review_state": "accepted",
+      "route_point_index": 249,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1"
+      ]
+    },
+    {
+      "arrival_radius_m": 30.0,
+      "candidate_id": "cp.002",
+      "checkpoint_type": "route_progress",
+      "compression_boundary": true,
+      "confidence": "high",
+      "label": "CP 002",
+      "lat": 24.056342458482312,
+      "lon": 121.2255030212119,
+      "notes": "Generated from GPX route distance spacing.",
+      "provenance": [
+        {
+          "captured_at": null,
+          "collected_at": null,
+          "license_note": null,
+          "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+          "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+          "source_kind": "gpx",
+          "source_ref": "artifact.gpx.chilai_nanhua_day1",
+          "uri": "/Users/alexwang0315/downloads/奇萊南華-能高越嶺步道Day1.gpx"
+        }
+      ],
+      "review_state": "accepted",
+      "route_point_index": 490,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1"
+      ]
+    },
+    {
+      "arrival_radius_m": 30.0,
+      "candidate_id": "cp.003",
+      "checkpoint_type": "route_progress",
+      "compression_boundary": true,
+      "confidence": "high",
+      "label": "CP 003",
+      "lat": 24.049814899533658,
+      "lon": 121.23069368603292,
+      "notes": "Generated from GPX route distance spacing.",
+      "provenance": [
+        {
+          "captured_at": null,
+          "collected_at": null,
+          "license_note": null,
+          "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+          "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+          "source_kind": "gpx",
+          "source_ref": "artifact.gpx.chilai_nanhua_day1",
+          "uri": "/Users/alexwang0315/downloads/奇萊南華-能高越嶺步道Day1.gpx"
+        }
+      ],
+      "review_state": "accepted",
+      "route_point_index": 742,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1"
+      ]
+    },
+    {
+      "arrival_radius_m": 30.0,
+      "candidate_id": "cp.004",
+      "checkpoint_type": "route_progress",
+      "compression_boundary": true,
+      "confidence": "high",
+      "label": "CP 004",
+      "lat": 24.047778125697818,
+      "lon": 121.23783544302235,
+      "notes": "Generated from GPX route distance spacing.",
+      "provenance": [
+        {
+          "captured_at": null,
+          "collected_at": null,
+          "license_note": null,
+          "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+          "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+          "source_kind": "gpx",
+          "source_ref": "artifact.gpx.chilai_nanhua_day1",
+          "uri": "/Users/alexwang0315/downloads/奇萊南華-能高越嶺步道Day1.gpx"
+        }
+      ],
+      "review_state": "accepted",
+      "route_point_index": 989,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1"
+      ]
+    },
+    {
+      "arrival_radius_m": 30.0,
+      "candidate_id": "cp.005",
+      "checkpoint_type": "route_progress",
+      "compression_boundary": true,
+      "confidence": "high",
+      "label": "CP 005",
+      "lat": 24.052577525102574,
+      "lon": 121.24460209206103,
+      "notes": "Generated from GPX route distance spacing.",
+      "provenance": [
+        {
+          "captured_at": null,
+          "collected_at": null,
+          "license_note": null,
+          "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+          "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+          "source_kind": "gpx",
+          "source_ref": "artifact.gpx.chilai_nanhua_day1",
+          "uri": "/Users/alexwang0315/downloads/奇萊南華-能高越嶺步道Day1.gpx"
+        }
+      ],
+      "review_state": "accepted",
+      "route_point_index": 1236,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1"
+      ]
+    },
+    {
+      "arrival_radius_m": 30.0,
+      "candidate_id": "cp.006",
+      "checkpoint_type": "route_progress",
+      "compression_boundary": true,
+      "confidence": "high",
+      "label": "CP 006",
+      "lat": 24.04393920510446,
+      "lon": 121.25143141911224,
+      "notes": "Generated from GPX route distance spacing.",
+      "provenance": [
+        {
+          "captured_at": null,
+          "collected_at": null,
+          "license_note": null,
+          "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+          "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+          "source_kind": "gpx",
+          "source_ref": "artifact.gpx.chilai_nanhua_day1",
+          "uri": "/Users/alexwang0315/downloads/奇萊南華-能高越嶺步道Day1.gpx"
+        }
+      ],
+      "review_state": "accepted",
+      "route_point_index": 1480,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1"
+      ]
+    },
+    {
+      "arrival_radius_m": 30.0,
+      "candidate_id": "cp.007",
+      "checkpoint_type": "route_progress",
+      "compression_boundary": true,
+      "confidence": "high",
+      "label": "CP 007",
+      "lat": 24.04746022572128,
+      "lon": 121.25729293570427,
+      "notes": "Generated from GPX route distance spacing.",
+      "provenance": [
+        {
+          "captured_at": null,
+          "collected_at": null,
+          "license_note": null,
+          "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+          "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+          "source_kind": "gpx",
+          "source_ref": "artifact.gpx.chilai_nanhua_day1",
+          "uri": "/Users/alexwang0315/downloads/奇萊南華-能高越嶺步道Day1.gpx"
+        }
+      ],
+      "review_state": "accepted",
+      "route_point_index": 1727,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1"
+      ]
+    },
+    {
+      "arrival_radius_m": 30.0,
+      "candidate_id": "cp.008",
+      "checkpoint_type": "route_progress",
+      "compression_boundary": true,
+      "confidence": "high",
+      "label": "CP 008",
+      "lat": 24.044571772935505,
+      "lon": 121.2733009249338,
+      "notes": "Generated from GPX route distance spacing.",
+      "provenance": [
+        {
+          "captured_at": null,
+          "collected_at": null,
+          "license_note": null,
+          "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+          "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+          "source_kind": "gpx",
+          "source_ref": "artifact.gpx.chilai_nanhua_day1",
+          "uri": "/Users/alexwang0315/downloads/奇萊南華-能高越嶺步道Day1.gpx"
+        }
+      ],
+      "review_state": "accepted",
+      "route_point_index": 1921,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1"
+      ]
+    },
+    {
+      "arrival_radius_m": 30.0,
+      "candidate_id": "cp.009",
+      "checkpoint_type": "route_progress",
+      "compression_boundary": true,
+      "confidence": "high",
+      "label": "CP 009",
+      "lat": 24.047881741215313,
+      "lon": 121.27885484806663,
+      "notes": "Generated from GPX route distance spacing.",
+      "provenance": [
+        {
+          "captured_at": null,
+          "collected_at": null,
+          "license_note": null,
+          "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+          "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+          "source_kind": "gpx",
+          "source_ref": "artifact.gpx.chilai_nanhua_day1",
+          "uri": "/Users/alexwang0315/downloads/奇萊南華-能高越嶺步道Day1.gpx"
+        }
+      ],
+      "review_state": "accepted",
+      "route_point_index": 2067,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1"
+      ]
+    },
+    {
+      "arrival_radius_m": 30.0,
+      "candidate_id": "cp.finish",
+      "checkpoint_type": "finish",
+      "compression_boundary": true,
+      "confidence": "high",
+      "label": "Finish",
+      "lat": 24.045320698458436,
+      "lon": 121.27965119586655,
+      "notes": "Generated from GPX route distance spacing.",
+      "provenance": [
+        {
+          "captured_at": null,
+          "collected_at": null,
+          "license_note": null,
+          "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+          "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+          "source_kind": "gpx",
+          "source_ref": "artifact.gpx.chilai_nanhua_day1",
+          "uri": "/Users/alexwang0315/downloads/奇萊南華-能高越嶺步道Day1.gpx"
+        }
+      ],
+      "review_state": "accepted",
+      "route_point_index": 2210,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1"
+      ]
+    }
+  ],
+  "dtm_coverage_summary": {
+    "candidate_tiles": [
+      {
+        "bbox_twd97": {
+          "crs": "TWD97 / TM2 zone 121 (EPSG:3826-compatible)",
+          "max_x": 279080.0,
+          "max_y": 2663020.0,
+          "min_x": 276200.0,
+          "min_y": 2660360.0
+        },
+        "cols": 144,
+        "county": "南投縣",
+        "coverage_note": "intersects GPX bounding box in TWD97 projected coordinates",
+        "grid_uri": "/Users/alexwang0315/scout-fusion/catographydata/DTM/分幅_南投縣20MDEM(2025)/96212071dem.grd",
+        "header_uri": "/Users/alexwang0315/scout-fusion/catographydata/DTM/分幅_南投縣20MDEM(2025)/96212071dem.hdr",
+        "horizontal_datum": "TWD97[2020]",
+        "intersects_route_bbox": true,
+        "origin_x": 276200.0,
+        "origin_y": 2660360.0,
+        "resolution_x_m": 20.0,
+        "resolution_y_m": 20.0,
+        "rows": 133,
+        "tile_id": "96212071",
+        "vertical_datum": "TWVD2001"
+      },
+      {
+        "bbox_twd97": {
+          "crs": "TWD97 / TM2 zone 121 (EPSG:3826-compatible)",
+          "max_x": 279080.0,
+          "max_y": 2660240.0,
+          "min_x": 276200.0,
+          "min_y": 2657580.0
+        },
+        "cols": 144,
+        "county": "南投縣",
+        "coverage_note": "intersects GPX bounding box in TWD97 projected coordinates",
+        "grid_uri": "/Users/alexwang0315/scout-fusion/catographydata/DTM/分幅_南投縣20MDEM(2025)/96212081dem.grd",
+        "header_uri": "/Users/alexwang0315/scout-fusion/catographydata/DTM/分幅_南投縣20MDEM(2025)/96212081dem.hdr",
+        "horizontal_datum": "TWD97[2020]",
+        "intersects_route_bbox": true,
+        "origin_x": 276200.0,
+        "origin_y": 2657580.0,
+        "resolution_x_m": 20.0,
+        "resolution_y_m": 20.0,
+        "rows": 133,
+        "tile_id": "96212081",
+        "vertical_datum": "TWVD2001"
+      },
+      {
+        "bbox_twd97": {
+          "crs": "TWD97 / TM2 zone 121 (EPSG:3826-compatible)",
+          "max_x": 271460.0,
+          "max_y": 2662980.0,
+          "min_x": 268580.0,
+          "min_y": 2660340.0
+        },
+        "cols": 144,
+        "county": "南投縣",
+        "coverage_note": "intersects GPX bounding box in TWD97 projected coordinates",
+        "grid_uri": "/Users/alexwang0315/scout-fusion/catographydata/DTM/分幅_南投縣20MDEM(2025)/96213078dem.grd",
+        "header_uri": "/Users/alexwang0315/scout-fusion/catographydata/DTM/分幅_南投縣20MDEM(2025)/96213078dem.hdr",
+        "horizontal_datum": "TWD97[2020]",
+        "intersects_route_bbox": true,
+        "origin_x": 268580.0,
+        "origin_y": 2660340.0,
+        "resolution_x_m": 20.0,
+        "resolution_y_m": 20.0,
+        "rows": 132,
+        "tile_id": "96213078",
+        "vertical_datum": "TWVD2001"
+      },
+      {
+        "bbox_twd97": {
+          "crs": "TWD97 / TM2 zone 121 (EPSG:3826-compatible)",
+          "max_x": 274000.0,
+          "max_y": 2662980.0,
+          "min_x": 271120.0,
+          "min_y": 2660340.0
+        },
+        "cols": 144,
+        "county": "南投縣",
+        "coverage_note": "intersects GPX bounding box in TWD97 projected coordinates",
+        "grid_uri": "/Users/alexwang0315/scout-fusion/catographydata/DTM/分幅_南投縣20MDEM(2025)/96213079dem.grd",
+        "header_uri": "/Users/alexwang0315/scout-fusion/catographydata/DTM/分幅_南投縣20MDEM(2025)/96213079dem.hdr",
+        "horizontal_datum": "TWD97[2020]",
+        "intersects_route_bbox": true,
+        "origin_x": 271120.0,
+        "origin_y": 2660340.0,
+        "resolution_x_m": 20.0,
+        "resolution_y_m": 20.0,
+        "rows": 132,
+        "tile_id": "96213079",
+        "vertical_datum": "TWVD2001"
+      },
+      {
+        "bbox_twd97": {
+          "crs": "TWD97 / TM2 zone 121 (EPSG:3826-compatible)",
+          "max_x": 276540.0,
+          "max_y": 2663000.0,
+          "min_x": 273660.0,
+          "min_y": 2660360.0
+        },
+        "cols": 144,
+        "county": "南投縣",
+        "coverage_note": "intersects GPX bounding box in TWD97 projected coordinates",
+        "grid_uri": "/Users/alexwang0315/scout-fusion/catographydata/DTM/分幅_南投縣20MDEM(2025)/96213080dem.grd",
+        "header_uri": "/Users/alexwang0315/scout-fusion/catographydata/DTM/分幅_南投縣20MDEM(2025)/96213080dem.hdr",
+        "horizontal_datum": "TWD97[2020]",
+        "intersects_route_bbox": true,
+        "origin_x": 273660.0,
+        "origin_y": 2660360.0,
+        "resolution_x_m": 20.0,
+        "resolution_y_m": 20.0,
+        "rows": 132,
+        "tile_id": "96213080",
+        "vertical_datum": "TWVD2001"
+      },
+      {
+        "bbox_twd97": {
+          "crs": "TWD97 / TM2 zone 121 (EPSG:3826-compatible)",
+          "max_x": 271460.0,
+          "max_y": 2660220.0,
+          "min_x": 268580.0,
+          "min_y": 2657580.0
+        },
+        "cols": 144,
+        "county": "南投縣",
+        "coverage_note": "intersects GPX bounding box in TWD97 projected coordinates",
+        "grid_uri": "/Users/alexwang0315/scout-fusion/catographydata/DTM/分幅_南投縣20MDEM(2025)/96213088dem.grd",
+        "header_uri": "/Users/alexwang0315/scout-fusion/catographydata/DTM/分幅_南投縣20MDEM(2025)/96213088dem.hdr",
+        "horizontal_datum": "TWD97[2020]",
+        "intersects_route_bbox": true,
+        "origin_x": 268580.0,
+        "origin_y": 2657580.0,
+        "resolution_x_m": 20.0,
+        "resolution_y_m": 20.0,
+        "rows": 132,
+        "tile_id": "96213088",
+        "vertical_datum": "TWVD2001"
+      },
+      {
+        "bbox_twd97": {
+          "crs": "TWD97 / TM2 zone 121 (EPSG:3826-compatible)",
+          "max_x": 274000.0,
+          "max_y": 2660220.0,
+          "min_x": 271120.0,
+          "min_y": 2657580.0
+        },
+        "cols": 144,
+        "county": "南投縣",
+        "coverage_note": "intersects GPX bounding box in TWD97 projected coordinates",
+        "grid_uri": "/Users/alexwang0315/scout-fusion/catographydata/DTM/分幅_南投縣20MDEM(2025)/96213089dem.grd",
+        "header_uri": "/Users/alexwang0315/scout-fusion/catographydata/DTM/分幅_南投縣20MDEM(2025)/96213089dem.hdr",
+        "horizontal_datum": "TWD97[2020]",
+        "intersects_route_bbox": true,
+        "origin_x": 271120.0,
+        "origin_y": 2657580.0,
+        "resolution_x_m": 20.0,
+        "resolution_y_m": 20.0,
+        "rows": 132,
+        "tile_id": "96213089",
+        "vertical_datum": "TWVD2001"
+      },
+      {
+        "bbox_twd97": {
+          "crs": "TWD97 / TM2 zone 121 (EPSG:3826-compatible)",
+          "max_x": 276540.0,
+          "max_y": 2660240.0,
+          "min_x": 273660.0,
+          "min_y": 2657580.0
+        },
+        "cols": 144,
+        "county": "南投縣",
+        "coverage_note": "intersects GPX bounding box in TWD97 projected coordinates",
+        "grid_uri": "/Users/alexwang0315/scout-fusion/catographydata/DTM/分幅_南投縣20MDEM(2025)/96213090dem.grd",
+        "header_uri": "/Users/alexwang0315/scout-fusion/catographydata/DTM/分幅_南投縣20MDEM(2025)/96213090dem.hdr",
+        "horizontal_datum": "TWD97[2020]",
+        "intersects_route_bbox": true,
+        "origin_x": 273660.0,
+        "origin_y": 2657580.0,
+        "resolution_x_m": 20.0,
+        "resolution_y_m": 20.0,
+        "rows": 133,
+        "tile_id": "96213090",
+        "vertical_datum": "TWVD2001"
+      },
+      {
+        "bbox_twd97": {
+          "crs": "TWD97 / TM2 zone 121 (EPSG:3826-compatible)",
+          "max_x": 279080.0,
+          "max_y": 2663020.0,
+          "min_x": 276200.0,
+          "min_y": 2660360.0
+        },
+        "cols": 144,
+        "county": "花蓮縣",
+        "coverage_note": "intersects GPX bounding box in TWD97 projected coordinates",
+        "grid_uri": "/Users/alexwang0315/scout-fusion/catographydata/DTM/分幅_花蓮縣20MDEM(2025)/96212071dem.grd",
+        "header_uri": "/Users/alexwang0315/scout-fusion/catographydata/DTM/分幅_花蓮縣20MDEM(2025)/96212071dem.hdr",
+        "horizontal_datum": "TWD97[2020]",
+        "intersects_route_bbox": true,
+        "origin_x": 276200.0,
+        "origin_y": 2660360.0,
+        "resolution_x_m": 20.0,
+        "resolution_y_m": 20.0,
+        "rows": 133,
+        "tile_id": "96212071",
+        "vertical_datum": "TWVD2001"
+      },
+      {
+        "bbox_twd97": {
+          "crs": "TWD97 / TM2 zone 121 (EPSG:3826-compatible)",
+          "max_x": 279080.0,
+          "max_y": 2660240.0,
+          "min_x": 276200.0,
+          "min_y": 2657580.0
+        },
+        "cols": 144,
+        "county": "花蓮縣",
+        "coverage_note": "intersects GPX bounding box in TWD97 projected coordinates",
+        "grid_uri": "/Users/alexwang0315/scout-fusion/catographydata/DTM/分幅_花蓮縣20MDEM(2025)/96212081dem.grd",
+        "header_uri": "/Users/alexwang0315/scout-fusion/catographydata/DTM/分幅_花蓮縣20MDEM(2025)/96212081dem.hdr",
+        "horizontal_datum": "TWD97[2020]",
+        "intersects_route_bbox": true,
+        "origin_x": 276200.0,
+        "origin_y": 2657580.0,
+        "resolution_x_m": 20.0,
+        "resolution_y_m": 20.0,
+        "rows": 133,
+        "tile_id": "96212081",
+        "vertical_datum": "TWVD2001"
+      }
+    ],
+    "missing_grid_count": 0,
+    "notes": "DTM tiles are referenced by metadata only; source rasters are not copied into repo fixtures.",
+    "route_artifact_id": "artifact.gpx.chilai_nanhua_day1",
+    "route_bbox_twd97": {
+      "crs": "TWD97 / TM2 zone 121 (EPSG:3826-compatible)",
+      "max_x": 278559.255,
+      "max_y": 2661464.797,
+      "min_x": 271393.061,
+      "min_y": 2659838.709
+    },
+    "route_bbox_wgs84": {
+      "max_lat": 24.057907788530006,
+      "max_lon": 121.28079717511966,
+      "min_lat": 24.043338071400207,
+      "min_lon": 121.21036249036372
+    },
+    "scanned_header_count": 1411,
+    "source_dirs": [
+      "/Users/alexwang0315/scout-fusion/catographydata/DTM/分幅_南投縣20MDEM(2025)",
+      "/Users/alexwang0315/scout-fusion/catographydata/DTM/分幅_花蓮縣20MDEM(2025)"
+    ],
+    "summary_id": "dtm_coverage.chilai_nanhua_day1.20m"
+  },
+  "package_id": "pretrip.chilai_nanhua_day1.v0",
+  "planning_references": [
+    {
+      "artifact_treatment": [
+        "Artifact",
+        "ModelInterpretation",
+        "HumanReview",
+        "DerivedMeasurement"
+      ],
+      "not_observed_fact": true,
+      "notes": "Registered as implementation context only; no crawler or dynamic app extraction in this slice.",
+      "reference_id": "planning_ref.joyhike.main_site",
+      "reference_type": "reference_product",
+      "scout_meaning": "Reference product precedent for Taiwan hiking planning primitives; not the controlling Scout data source.",
+      "supported_primitives": [
+        "route_nodes",
+        "segment_distance",
+        "elevation_gain_loss",
+        "daily_ascent_descent",
+        "estimated_walking_time",
+        "rest_time",
+        "weather",
+        "permit_hut_logistics",
+        "group_coordination"
+      ],
+      "title": "Joyhike main site",
+      "uri": "https://joyhike.com/"
+    },
+    {
+      "artifact_treatment": [
+        "Artifact",
+        "ModelInterpretation",
+        "HumanReview",
+        "DerivedMeasurement"
+      ],
+      "not_observed_fact": true,
+      "notes": "Planning reference only; accepted assumptions require human review.",
+      "reference_id": "planning_ref.joyhike.route_planning_model",
+      "reference_type": "route_planning_method",
+      "scout_meaning": "Reference model for planning primitives and route difficulty context.",
+      "supported_primitives": [
+        "route_nodes",
+        "segment_distance",
+        "elevation_gain_loss",
+        "estimated_walking_time",
+        "rest_time",
+        "weather"
+      ],
+      "title": "Joyhike blog route planning model",
+      "uri": "https://blog.joyhike.com/2022/05/trailslevel.html"
+    },
+    {
+      "artifact_treatment": [
+        "Artifact",
+        "ModelInterpretation",
+        "HumanReview",
+        "DerivedMeasurement"
+      ],
+      "not_observed_fact": true,
+      "notes": "Not an ObservedFact; calculations become DerivedMeasurement only after assumptions are explicit.",
+      "reference_id": "planning_ref.ptt.sunriver_timing",
+      "reference_type": "community_timing_evidence",
+      "scout_meaning": "Community evidence for route-guide timing and fitness calibration assumptions.",
+      "supported_primitives": [
+        "route_guide_segment_time_minutes",
+        "personal_route_guide_multiplier",
+        "team_route_guide_multiplier",
+        "pace_multiplier_basis",
+        "fixed_rest_minutes",
+        "conservative_long_day_adjustment",
+        "eta_at_checkpoint",
+        "eta_at_camp_or_overnight_point",
+        "dark_arrival_margin_minutes",
+        "planned_vs_actual_calibration_refs"
+      ],
+      "title": "PTT Hiking 上河時間與步程計算",
+      "uri": "https://www.ptt.cc/bbs/Hiking/M.1696430399.A.151.html"
+    }
+  ],
+  "project_id": "chilai_nanhua_day1",
+  "readiness_notes": [
+    "multiday traverse planning requires reviewed alternate or retreat route before MissionGraph compile",
+    "source ingest and DTM coverage are metadata-only in this slice",
+    "when pace multiplier basis is unknown, readiness ETA should default to total elapsed time including normal rest"
+  ],
+  "retreat_route_candidates": [
+    {
+      "candidate_id": "retreat.chilai_nanhua_day1.return_to_entry",
+      "confidence": "high",
+      "distance_m": 14599.78,
+      "entry_checkpoint_candidate_id": "cp.start",
+      "expected_use": "both",
+      "human_review_required": false,
+      "label": "Return to entry via reversed primary route",
+      "notes": "Configured as both retreat and alternate route for readiness because practical off-route evacuation options are limited after entering the deep mountain section.",
+      "provenance": [
+        {
+          "captured_at": null,
+          "collected_at": null,
+          "license_note": null,
+          "method": "manual_route_planning_assumption",
+          "notes": "User clarified this route effectively retreats by reversing the primary route back to the entry point after entering deep mountain terrain.",
+          "source_kind": "gpx",
+          "source_ref": "artifact.gpx.chilai_nanhua_day1",
+          "uri": "/Users/alexwang0315/downloads/奇萊南華-能高越嶺步道Day1.gpx"
+        }
+      ],
+      "retreat_type": "return_to_entry",
+      "reversed_from_primary_route": true,
+      "review_state": "accepted",
+      "route_point_end_index": 2210,
+      "route_point_start_index": 0,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1"
+      ],
+      "trigger_checkpoint_candidate_id": "cp.finish"
+    }
+  ],
+  "route_guide_timing_candidates": [
+    {
+      "candidate_id": "timing_assumption.chilai_nanhua_day1.schema",
+      "confidence": "unknown",
+      "conservative_long_day_adjustment": 1.0,
+      "dark_arrival_margin_minutes": null,
+      "eta_at_camp_or_overnight_point": null,
+      "eta_at_checkpoint": null,
+      "fixed_rest_minutes": 0,
+      "from_node_name": null,
+      "label": "Route-guide timing and fitness calibration assumption schema",
+      "movement_label": null,
+      "notes": "Optional fields reserved for reviewed guide-time and pace multiplier assumptions; ETA calculation is intentionally deferred.",
+      "pace_multiplier_basis": "mixed_unknown",
+      "personal_route_guide_multiplier": null,
+      "planned_vs_actual_calibration_refs": [],
+      "provenance": [
+        {
+          "captured_at": null,
+          "collected_at": null,
+          "license_note": null,
+          "method": "manual_schema_registration",
+          "notes": "Schema placeholder only; no article scraping or AI extraction in this slice.",
+          "source_kind": "planning_references",
+          "source_ref": "planning_ref.ptt.sunriver_timing",
+          "uri": "https://www.ptt.cc/bbs/Hiking/M.1696430399.A.151.html"
+        }
+      ],
+      "readiness_eta_policy": "total_elapsed_time_including_normal_rest",
+      "review_state": "needs_review",
+      "route_branch": null,
+      "route_guide_ascent_time_minutes": null,
+      "route_guide_descent_time_minutes": null,
+      "route_guide_return_time_minutes": null,
+      "route_guide_segment_time_minutes": null,
+      "segment_candidate_id": null,
+      "source_refs": [
+        "planning_ref.ptt.sunriver_timing"
+      ],
+      "team_route_guide_multiplier": null,
+      "to_node_name": null,
+      "vehicle_access_note": null,
+      "vehicle_or_shuttle_likely": false
+    },
+    {
+      "candidate_id": "timing.g11_nenggao.001",
+      "confidence": "medium",
+      "conservative_long_day_adjustment": 1.0,
+      "dark_arrival_margin_minutes": null,
+      "eta_at_camp_or_overnight_point": null,
+      "eta_at_checkpoint": null,
+      "fixed_rest_minutes": 0,
+      "from_node_name": "霧社",
+      "label": "霧社 -> 廬山部落",
+      "movement_label": null,
+      "notes": "User-provided route-guide timing transcription. Timing is for planning calibration only until reviewed against the route plan.",
+      "pace_multiplier_basis": "mixed_unknown",
+      "personal_route_guide_multiplier": null,
+      "planned_vs_actual_calibration_refs": [],
+      "provenance": [
+        {
+          "captured_at": null,
+          "collected_at": null,
+          "license_note": null,
+          "method": "user_provided_ocr_transcription",
+          "notes": "User-provided OCR text from G11 能高越嶺步程示意圖; no automated image extraction in this slice.",
+          "source_kind": "photo",
+          "source_ref": "artifact.photo.g11_hiking",
+          "uri": "/Users/alexwang0315/downloads/G11_hiking.jpg"
+        }
+      ],
+      "readiness_eta_policy": "total_elapsed_time_including_normal_rest",
+      "review_state": "needs_review",
+      "route_branch": "main",
+      "route_guide_ascent_time_minutes": null,
+      "route_guide_descent_time_minutes": null,
+      "route_guide_return_time_minutes": null,
+      "route_guide_segment_time_minutes": 30,
+      "segment_candidate_id": null,
+      "source_refs": [
+        "artifact.photo.g11_hiking"
+      ],
+      "team_route_guide_multiplier": null,
+      "to_node_name": "廬山部落",
+      "vehicle_access_note": "OCR note: segment has vehicle icon or likely road/shuttle access.",
+      "vehicle_or_shuttle_likely": true
+    },
+    {
+      "candidate_id": "timing.g11_nenggao.002",
+      "confidence": "medium",
+      "conservative_long_day_adjustment": 1.0,
+      "dark_arrival_margin_minutes": null,
+      "eta_at_camp_or_overnight_point": null,
+      "eta_at_checkpoint": null,
+      "fixed_rest_minutes": 0,
+      "from_node_name": "廬山部落",
+      "label": "廬山部落 -> 屯原登山口",
+      "movement_label": null,
+      "notes": "User-provided route-guide timing transcription. Timing is for planning calibration only until reviewed against the route plan.",
+      "pace_multiplier_basis": "mixed_unknown",
+      "personal_route_guide_multiplier": null,
+      "planned_vs_actual_calibration_refs": [],
+      "provenance": [
+        {
+          "captured_at": null,
+          "collected_at": null,
+          "license_note": null,
+          "method": "user_provided_ocr_transcription",
+          "notes": "User-provided OCR text from G11 能高越嶺步程示意圖; no automated image extraction in this slice.",
+          "source_kind": "photo",
+          "source_ref": "artifact.photo.g11_hiking",
+          "uri": "/Users/alexwang0315/downloads/G11_hiking.jpg"
+        }
+      ],
+      "readiness_eta_policy": "total_elapsed_time_including_normal_rest",
+      "review_state": "needs_review",
+      "route_branch": "main",
+      "route_guide_ascent_time_minutes": null,
+      "route_guide_descent_time_minutes": null,
+      "route_guide_return_time_minutes": null,
+      "route_guide_segment_time_minutes": 30,
+      "segment_candidate_id": null,
+      "source_refs": [
+        "artifact.photo.g11_hiking"
+      ],
+      "team_route_guide_multiplier": null,
+      "to_node_name": "屯原登山口",
+      "vehicle_access_note": "OCR note: segment has vehicle icon or likely road/shuttle access.",
+      "vehicle_or_shuttle_likely": true
+    },
+    {
+      "candidate_id": "timing.g11_nenggao.003",
+      "confidence": "medium",
+      "conservative_long_day_adjustment": 1.0,
+      "dark_arrival_margin_minutes": null,
+      "eta_at_camp_or_overnight_point": null,
+      "eta_at_checkpoint": null,
+      "fixed_rest_minutes": 0,
+      "from_node_name": "屯原登山口",
+      "label": "屯原登山口 -> 雲海保線所",
+      "movement_label": "去程/回程",
+      "notes": "User-provided route-guide timing transcription. Timing is for planning calibration only until reviewed against the route plan.",
+      "pace_multiplier_basis": "mixed_unknown",
+      "personal_route_guide_multiplier": null,
+      "planned_vs_actual_calibration_refs": [],
+      "provenance": [
+        {
+          "captured_at": null,
+          "collected_at": null,
+          "license_note": null,
+          "method": "user_provided_ocr_transcription",
+          "notes": "User-provided OCR text from G11 能高越嶺步程示意圖; no automated image extraction in this slice.",
+          "source_kind": "photo",
+          "source_ref": "artifact.photo.g11_hiking",
+          "uri": "/Users/alexwang0315/downloads/G11_hiking.jpg"
+        }
+      ],
+      "readiness_eta_policy": "total_elapsed_time_including_normal_rest",
+      "review_state": "needs_review",
+      "route_branch": "main",
+      "route_guide_ascent_time_minutes": null,
+      "route_guide_descent_time_minutes": null,
+      "route_guide_return_time_minutes": 100,
+      "route_guide_segment_time_minutes": 120,
+      "segment_candidate_id": null,
+      "source_refs": [
+        "artifact.photo.g11_hiking"
+      ],
+      "team_route_guide_multiplier": null,
+      "to_node_name": "雲海保線所",
+      "vehicle_access_note": null,
+      "vehicle_or_shuttle_likely": false
+    },
+    {
+      "candidate_id": "timing.g11_nenggao.004",
+      "confidence": "medium",
+      "conservative_long_day_adjustment": 1.0,
+      "dark_arrival_margin_minutes": null,
+      "eta_at_camp_or_overnight_point": null,
+      "eta_at_checkpoint": null,
+      "fixed_rest_minutes": 0,
+      "from_node_name": "雲海保線所",
+      "label": "雲海保線所 -> 天池山莊",
+      "movement_label": "去程/回程",
+      "notes": "User-provided route-guide timing transcription. Timing is for planning calibration only until reviewed against the route plan.",
+      "pace_multiplier_basis": "mixed_unknown",
+      "personal_route_guide_multiplier": null,
+      "planned_vs_actual_calibration_refs": [],
+      "provenance": [
+        {
+          "captured_at": null,
+          "collected_at": null,
+          "license_note": null,
+          "method": "user_provided_ocr_transcription",
+          "notes": "User-provided OCR text from G11 能高越嶺步程示意圖; no automated image extraction in this slice.",
+          "source_kind": "photo",
+          "source_ref": "artifact.photo.g11_hiking",
+          "uri": "/Users/alexwang0315/downloads/G11_hiking.jpg"
+        }
+      ],
+      "readiness_eta_policy": "total_elapsed_time_including_normal_rest",
+      "review_state": "needs_review",
+      "route_branch": "main",
+      "route_guide_ascent_time_minutes": null,
+      "route_guide_descent_time_minutes": null,
+      "route_guide_return_time_minutes": 180,
+      "route_guide_segment_time_minutes": 210,
+      "segment_candidate_id": null,
+      "source_refs": [
+        "artifact.photo.g11_hiking"
+      ],
+      "team_route_guide_multiplier": null,
+      "to_node_name": "天池山莊",
+      "vehicle_access_note": null,
+      "vehicle_or_shuttle_likely": false
+    },
+    {
+      "candidate_id": "timing.g11_nenggao.005",
+      "confidence": "medium",
+      "conservative_long_day_adjustment": 1.0,
+      "dark_arrival_margin_minutes": null,
+      "eta_at_camp_or_overnight_point": null,
+      "eta_at_checkpoint": null,
+      "fixed_rest_minutes": 0,
+      "from_node_name": "天池山莊",
+      "label": "天池山莊 -> 縣界埡口",
+      "movement_label": "去程/回程",
+      "notes": "User-provided route-guide timing transcription. Timing is for planning calibration only until reviewed against the route plan.",
+      "pace_multiplier_basis": "mixed_unknown",
+      "personal_route_guide_multiplier": null,
+      "planned_vs_actual_calibration_refs": [],
+      "provenance": [
+        {
+          "captured_at": null,
+          "collected_at": null,
+          "license_note": null,
+          "method": "user_provided_ocr_transcription",
+          "notes": "User-provided OCR text from G11 能高越嶺步程示意圖; no automated image extraction in this slice.",
+          "source_kind": "photo",
+          "source_ref": "artifact.photo.g11_hiking",
+          "uri": "/Users/alexwang0315/downloads/G11_hiking.jpg"
+        }
+      ],
+      "readiness_eta_policy": "total_elapsed_time_including_normal_rest",
+      "review_state": "needs_review",
+      "route_branch": "main",
+      "route_guide_ascent_time_minutes": null,
+      "route_guide_descent_time_minutes": null,
+      "route_guide_return_time_minutes": 55,
+      "route_guide_segment_time_minutes": 50,
+      "segment_candidate_id": null,
+      "source_refs": [
+        "artifact.photo.g11_hiking"
+      ],
+      "team_route_guide_multiplier": null,
+      "to_node_name": "縣界埡口",
+      "vehicle_access_note": null,
+      "vehicle_or_shuttle_likely": false
+    },
+    {
+      "candidate_id": "timing.g11_nenggao.006",
+      "confidence": "medium",
+      "conservative_long_day_adjustment": 1.0,
+      "dark_arrival_margin_minutes": null,
+      "eta_at_camp_or_overnight_point": null,
+      "eta_at_checkpoint": null,
+      "fixed_rest_minutes": 0,
+      "from_node_name": "縣界埡口",
+      "label": "縣界埡口 -> 檜林保線所",
+      "movement_label": "去程/回程",
+      "notes": "User-provided route-guide timing transcription. Timing is for planning calibration only until reviewed against the route plan.",
+      "pace_multiplier_basis": "mixed_unknown",
+      "personal_route_guide_multiplier": null,
+      "planned_vs_actual_calibration_refs": [],
+      "provenance": [
+        {
+          "captured_at": null,
+          "collected_at": null,
+          "license_note": null,
+          "method": "user_provided_ocr_transcription",
+          "notes": "User-provided OCR text from G11 能高越嶺步程示意圖; no automated image extraction in this slice.",
+          "source_kind": "photo",
+          "source_ref": "artifact.photo.g11_hiking",
+          "uri": "/Users/alexwang0315/downloads/G11_hiking.jpg"
+        }
+      ],
+      "readiness_eta_policy": "total_elapsed_time_including_normal_rest",
+      "review_state": "needs_review",
+      "route_branch": "main",
+      "route_guide_ascent_time_minutes": null,
+      "route_guide_descent_time_minutes": null,
+      "route_guide_return_time_minutes": 240,
+      "route_guide_segment_time_minutes": 120,
+      "segment_candidate_id": null,
+      "source_refs": [
+        "artifact.photo.g11_hiking"
+      ],
+      "team_route_guide_multiplier": null,
+      "to_node_name": "檜林保線所",
+      "vehicle_access_note": null,
+      "vehicle_or_shuttle_likely": false
+    },
+    {
+      "candidate_id": "timing.g11_nenggao.007",
+      "confidence": "medium",
+      "conservative_long_day_adjustment": 1.0,
+      "dark_arrival_margin_minutes": null,
+      "eta_at_camp_or_overnight_point": null,
+      "eta_at_checkpoint": null,
+      "fixed_rest_minutes": 0,
+      "from_node_name": "檜林保線所",
+      "label": "檜林保線所 -> 五甲崩山",
+      "movement_label": "去程/回程",
+      "notes": "User-provided route-guide timing transcription. Timing is for planning calibration only until reviewed against the route plan.",
+      "pace_multiplier_basis": "mixed_unknown",
+      "personal_route_guide_multiplier": null,
+      "planned_vs_actual_calibration_refs": [],
+      "provenance": [
+        {
+          "captured_at": null,
+          "collected_at": null,
+          "license_note": null,
+          "method": "user_provided_ocr_transcription",
+          "notes": "User-provided OCR text from G11 能高越嶺步程示意圖; no automated image extraction in this slice.",
+          "source_kind": "photo",
+          "source_ref": "artifact.photo.g11_hiking",
+          "uri": "/Users/alexwang0315/downloads/G11_hiking.jpg"
+        }
+      ],
+      "readiness_eta_policy": "total_elapsed_time_including_normal_rest",
+      "review_state": "needs_review",
+      "route_branch": "main",
+      "route_guide_ascent_time_minutes": null,
+      "route_guide_descent_time_minutes": null,
+      "route_guide_return_time_minutes": 170,
+      "route_guide_segment_time_minutes": 140,
+      "segment_candidate_id": null,
+      "source_refs": [
+        "artifact.photo.g11_hiking"
+      ],
+      "team_route_guide_multiplier": null,
+      "to_node_name": "五甲崩山",
+      "vehicle_access_note": null,
+      "vehicle_or_shuttle_likely": false
+    },
+    {
+      "candidate_id": "timing.g11_nenggao.008",
+      "confidence": "medium",
+      "conservative_long_day_adjustment": 1.0,
+      "dark_arrival_margin_minutes": null,
+      "eta_at_camp_or_overnight_point": null,
+      "eta_at_checkpoint": null,
+      "fixed_rest_minutes": 0,
+      "from_node_name": "五甲崩山",
+      "label": "五甲崩山 -> 奇萊保線所",
+      "movement_label": "去程/回程",
+      "notes": "User-provided route-guide timing transcription. Timing is for planning calibration only until reviewed against the route plan.",
+      "pace_multiplier_basis": "mixed_unknown",
+      "personal_route_guide_multiplier": null,
+      "planned_vs_actual_calibration_refs": [],
+      "provenance": [
+        {
+          "captured_at": null,
+          "collected_at": null,
+          "license_note": null,
+          "method": "user_provided_ocr_transcription",
+          "notes": "User-provided OCR text from G11 能高越嶺步程示意圖; no automated image extraction in this slice.",
+          "source_kind": "photo",
+          "source_ref": "artifact.photo.g11_hiking",
+          "uri": "/Users/alexwang0315/downloads/G11_hiking.jpg"
+        }
+      ],
+      "readiness_eta_policy": "total_elapsed_time_including_normal_rest",
+      "review_state": "needs_review",
+      "route_branch": "main",
+      "route_guide_ascent_time_minutes": null,
+      "route_guide_descent_time_minutes": null,
+      "route_guide_return_time_minutes": 260,
+      "route_guide_segment_time_minutes": 180,
+      "segment_candidate_id": null,
+      "source_refs": [
+        "artifact.photo.g11_hiking"
+      ],
+      "team_route_guide_multiplier": null,
+      "to_node_name": "奇萊保線所",
+      "vehicle_access_note": null,
+      "vehicle_or_shuttle_likely": false
+    },
+    {
+      "candidate_id": "timing.g11_nenggao.009",
+      "confidence": "medium",
+      "conservative_long_day_adjustment": 1.0,
+      "dark_arrival_margin_minutes": null,
+      "eta_at_camp_or_overnight_point": null,
+      "eta_at_checkpoint": null,
+      "fixed_rest_minutes": 0,
+      "from_node_name": "奇萊保線所",
+      "label": "奇萊保線所 -> 銅門",
+      "movement_label": null,
+      "notes": "User-provided route-guide timing transcription. Timing is for planning calibration only until reviewed against the route plan.",
+      "pace_multiplier_basis": "mixed_unknown",
+      "personal_route_guide_multiplier": null,
+      "planned_vs_actual_calibration_refs": [],
+      "provenance": [
+        {
+          "captured_at": null,
+          "collected_at": null,
+          "license_note": null,
+          "method": "user_provided_ocr_transcription",
+          "notes": "User-provided OCR text from G11 能高越嶺步程示意圖; no automated image extraction in this slice.",
+          "source_kind": "photo",
+          "source_ref": "artifact.photo.g11_hiking",
+          "uri": "/Users/alexwang0315/downloads/G11_hiking.jpg"
+        }
+      ],
+      "readiness_eta_policy": "total_elapsed_time_including_normal_rest",
+      "review_state": "needs_review",
+      "route_branch": "main",
+      "route_guide_ascent_time_minutes": null,
+      "route_guide_descent_time_minutes": null,
+      "route_guide_return_time_minutes": null,
+      "route_guide_segment_time_minutes": 120,
+      "segment_candidate_id": null,
+      "source_refs": [
+        "artifact.photo.g11_hiking"
+      ],
+      "team_route_guide_multiplier": null,
+      "to_node_name": "銅門",
+      "vehicle_access_note": "OCR note: segment has vehicle icon or likely road/shuttle access.",
+      "vehicle_or_shuttle_likely": true
+    },
+    {
+      "candidate_id": "timing.g11_nenggao.010",
+      "confidence": "medium",
+      "conservative_long_day_adjustment": 1.0,
+      "dark_arrival_margin_minutes": null,
+      "eta_at_camp_or_overnight_point": null,
+      "eta_at_checkpoint": null,
+      "fixed_rest_minutes": 0,
+      "from_node_name": "銅門",
+      "label": "銅門 -> 仁壽橋",
+      "movement_label": null,
+      "notes": "User-provided route-guide timing transcription. Timing is for planning calibration only until reviewed against the route plan.",
+      "pace_multiplier_basis": "mixed_unknown",
+      "personal_route_guide_multiplier": null,
+      "planned_vs_actual_calibration_refs": [],
+      "provenance": [
+        {
+          "captured_at": null,
+          "collected_at": null,
+          "license_note": null,
+          "method": "user_provided_ocr_transcription",
+          "notes": "User-provided OCR text from G11 能高越嶺步程示意圖; no automated image extraction in this slice.",
+          "source_kind": "photo",
+          "source_ref": "artifact.photo.g11_hiking",
+          "uri": "/Users/alexwang0315/downloads/G11_hiking.jpg"
+        }
+      ],
+      "readiness_eta_policy": "total_elapsed_time_including_normal_rest",
+      "review_state": "needs_review",
+      "route_branch": "main",
+      "route_guide_ascent_time_minutes": null,
+      "route_guide_descent_time_minutes": null,
+      "route_guide_return_time_minutes": null,
+      "route_guide_segment_time_minutes": 5,
+      "segment_candidate_id": null,
+      "source_refs": [
+        "artifact.photo.g11_hiking"
+      ],
+      "team_route_guide_multiplier": null,
+      "to_node_name": "仁壽橋",
+      "vehicle_access_note": "OCR note: segment has vehicle icon or likely road/shuttle access.",
+      "vehicle_or_shuttle_likely": true
+    },
+    {
+      "candidate_id": "timing.g11_nenggao.011",
+      "confidence": "medium",
+      "conservative_long_day_adjustment": 1.0,
+      "dark_arrival_margin_minutes": null,
+      "eta_at_camp_or_overnight_point": null,
+      "eta_at_checkpoint": null,
+      "fixed_rest_minutes": 0,
+      "from_node_name": "仁壽橋",
+      "label": "仁壽橋 -> 花蓮",
+      "movement_label": null,
+      "notes": "User-provided route-guide timing transcription. Timing is for planning calibration only until reviewed against the route plan.",
+      "pace_multiplier_basis": "mixed_unknown",
+      "personal_route_guide_multiplier": null,
+      "planned_vs_actual_calibration_refs": [],
+      "provenance": [
+        {
+          "captured_at": null,
+          "collected_at": null,
+          "license_note": null,
+          "method": "user_provided_ocr_transcription",
+          "notes": "User-provided OCR text from G11 能高越嶺步程示意圖; no automated image extraction in this slice.",
+          "source_kind": "photo",
+          "source_ref": "artifact.photo.g11_hiking",
+          "uri": "/Users/alexwang0315/downloads/G11_hiking.jpg"
+        }
+      ],
+      "readiness_eta_policy": "total_elapsed_time_including_normal_rest",
+      "review_state": "needs_review",
+      "route_branch": "main",
+      "route_guide_ascent_time_minutes": null,
+      "route_guide_descent_time_minutes": null,
+      "route_guide_return_time_minutes": null,
+      "route_guide_segment_time_minutes": 30,
+      "segment_candidate_id": null,
+      "source_refs": [
+        "artifact.photo.g11_hiking"
+      ],
+      "team_route_guide_multiplier": null,
+      "to_node_name": "花蓮",
+      "vehicle_access_note": "OCR note: segment has vehicle icon or likely road/shuttle access.",
+      "vehicle_or_shuttle_likely": true
+    },
+    {
+      "candidate_id": "timing.g11_nenggao.012",
+      "confidence": "medium",
+      "conservative_long_day_adjustment": 1.0,
+      "dark_arrival_margin_minutes": null,
+      "eta_at_camp_or_overnight_point": null,
+      "eta_at_checkpoint": null,
+      "fixed_rest_minutes": 0,
+      "from_node_name": "花蓮",
+      "label": "花蓮 -> 鯉魚潭",
+      "movement_label": null,
+      "notes": "User-provided route-guide timing transcription. Timing is for planning calibration only until reviewed against the route plan.",
+      "pace_multiplier_basis": "mixed_unknown",
+      "personal_route_guide_multiplier": null,
+      "planned_vs_actual_calibration_refs": [],
+      "provenance": [
+        {
+          "captured_at": null,
+          "collected_at": null,
+          "license_note": null,
+          "method": "user_provided_ocr_transcription",
+          "notes": "User-provided OCR text from G11 能高越嶺步程示意圖; no automated image extraction in this slice.",
+          "source_kind": "photo",
+          "source_ref": "artifact.photo.g11_hiking",
+          "uri": "/Users/alexwang0315/downloads/G11_hiking.jpg"
+        }
+      ],
+      "readiness_eta_policy": "total_elapsed_time_including_normal_rest",
+      "review_state": "needs_review",
+      "route_branch": "main",
+      "route_guide_ascent_time_minutes": null,
+      "route_guide_descent_time_minutes": null,
+      "route_guide_return_time_minutes": null,
+      "route_guide_segment_time_minutes": 10,
+      "segment_candidate_id": null,
+      "source_refs": [
+        "artifact.photo.g11_hiking"
+      ],
+      "team_route_guide_multiplier": null,
+      "to_node_name": "鯉魚潭",
+      "vehicle_access_note": "OCR note: segment has vehicle icon or likely road/shuttle access.",
+      "vehicle_or_shuttle_likely": true
+    },
+    {
+      "candidate_id": "timing.g11_nenggao.013",
+      "confidence": "medium",
+      "conservative_long_day_adjustment": 1.0,
+      "dark_arrival_margin_minutes": null,
+      "eta_at_camp_or_overnight_point": null,
+      "eta_at_checkpoint": null,
+      "fixed_rest_minutes": 0,
+      "from_node_name": "天池山莊",
+      "label": "天池山莊 -> 天池岔路口",
+      "movement_label": "上行/下行",
+      "notes": "User-provided route-guide timing transcription. Timing is for planning calibration only until reviewed against the route plan.",
+      "pace_multiplier_basis": "mixed_unknown",
+      "personal_route_guide_multiplier": null,
+      "planned_vs_actual_calibration_refs": [],
+      "provenance": [
+        {
+          "captured_at": null,
+          "collected_at": null,
+          "license_note": null,
+          "method": "user_provided_ocr_transcription",
+          "notes": "User-provided OCR text from G11 能高越嶺步程示意圖; no automated image extraction in this slice.",
+          "source_kind": "photo",
+          "source_ref": "artifact.photo.g11_hiking",
+          "uri": "/Users/alexwang0315/downloads/G11_hiking.jpg"
+        }
+      ],
+      "readiness_eta_policy": "total_elapsed_time_including_normal_rest",
+      "review_state": "needs_review",
+      "route_branch": "branch_chilai_south_peak",
+      "route_guide_ascent_time_minutes": 60,
+      "route_guide_descent_time_minutes": 40,
+      "route_guide_return_time_minutes": null,
+      "route_guide_segment_time_minutes": null,
+      "segment_candidate_id": null,
+      "source_refs": [
+        "artifact.photo.g11_hiking"
+      ],
+      "team_route_guide_multiplier": null,
+      "to_node_name": "天池岔路口",
+      "vehicle_access_note": null,
+      "vehicle_or_shuttle_likely": false
+    },
+    {
+      "candidate_id": "timing.g11_nenggao.014",
+      "confidence": "medium",
+      "conservative_long_day_adjustment": 1.0,
+      "dark_arrival_margin_minutes": null,
+      "eta_at_camp_or_overnight_point": null,
+      "eta_at_checkpoint": null,
+      "fixed_rest_minutes": 0,
+      "from_node_name": "天池岔路口",
+      "label": "天池岔路口 -> 南峰登山口",
+      "movement_label": "上行/下行",
+      "notes": "User-provided route-guide timing transcription. Timing is for planning calibration only until reviewed against the route plan.",
+      "pace_multiplier_basis": "mixed_unknown",
+      "personal_route_guide_multiplier": null,
+      "planned_vs_actual_calibration_refs": [],
+      "provenance": [
+        {
+          "captured_at": null,
+          "collected_at": null,
+          "license_note": null,
+          "method": "user_provided_ocr_transcription",
+          "notes": "User-provided OCR text from G11 能高越嶺步程示意圖; no automated image extraction in this slice.",
+          "source_kind": "photo",
+          "source_ref": "artifact.photo.g11_hiking",
+          "uri": "/Users/alexwang0315/downloads/G11_hiking.jpg"
+        }
+      ],
+      "readiness_eta_policy": "total_elapsed_time_including_normal_rest",
+      "review_state": "needs_review",
+      "route_branch": "branch_chilai_south_peak",
+      "route_guide_ascent_time_minutes": 20,
+      "route_guide_descent_time_minutes": 15,
+      "route_guide_return_time_minutes": null,
+      "route_guide_segment_time_minutes": null,
+      "segment_candidate_id": null,
+      "source_refs": [
+        "artifact.photo.g11_hiking"
+      ],
+      "team_route_guide_multiplier": null,
+      "to_node_name": "南峰登山口",
+      "vehicle_access_note": null,
+      "vehicle_or_shuttle_likely": false
+    },
+    {
+      "candidate_id": "timing.g11_nenggao.015",
+      "confidence": "medium",
+      "conservative_long_day_adjustment": 1.0,
+      "dark_arrival_margin_minutes": null,
+      "eta_at_camp_or_overnight_point": null,
+      "eta_at_checkpoint": null,
+      "fixed_rest_minutes": 0,
+      "from_node_name": "南峰登山口",
+      "label": "南峰登山口 -> 奇萊主山南峰",
+      "movement_label": "去程/回程",
+      "notes": "User-provided route-guide timing transcription. Timing is for planning calibration only until reviewed against the route plan.",
+      "pace_multiplier_basis": "mixed_unknown",
+      "personal_route_guide_multiplier": null,
+      "planned_vs_actual_calibration_refs": [],
+      "provenance": [
+        {
+          "captured_at": null,
+          "collected_at": null,
+          "license_note": null,
+          "method": "user_provided_ocr_transcription",
+          "notes": "User-provided OCR text from G11 能高越嶺步程示意圖; no automated image extraction in this slice.",
+          "source_kind": "photo",
+          "source_ref": "artifact.photo.g11_hiking",
+          "uri": "/Users/alexwang0315/downloads/G11_hiking.jpg"
+        }
+      ],
+      "readiness_eta_policy": "total_elapsed_time_including_normal_rest",
+      "review_state": "needs_review",
+      "route_branch": "branch_chilai_south_peak",
+      "route_guide_ascent_time_minutes": null,
+      "route_guide_descent_time_minutes": null,
+      "route_guide_return_time_minutes": 60,
+      "route_guide_segment_time_minutes": 40,
+      "segment_candidate_id": null,
+      "source_refs": [
+        "artifact.photo.g11_hiking"
+      ],
+      "team_route_guide_multiplier": null,
+      "to_node_name": "奇萊主山南峰",
+      "vehicle_access_note": null,
+      "vehicle_or_shuttle_likely": false
+    },
+    {
+      "candidate_id": "timing.g11_nenggao.016",
+      "confidence": "medium",
+      "conservative_long_day_adjustment": 1.0,
+      "dark_arrival_margin_minutes": null,
+      "eta_at_camp_or_overnight_point": null,
+      "eta_at_checkpoint": null,
+      "fixed_rest_minutes": 0,
+      "from_node_name": "天池岔路口",
+      "label": "天池岔路口 -> 南華山",
+      "movement_label": "去程/回程",
+      "notes": "User-provided route-guide timing transcription. Timing is for planning calibration only until reviewed against the route plan.",
+      "pace_multiplier_basis": "mixed_unknown",
+      "personal_route_guide_multiplier": null,
+      "planned_vs_actual_calibration_refs": [],
+      "provenance": [
+        {
+          "captured_at": null,
+          "collected_at": null,
+          "license_note": null,
+          "method": "user_provided_ocr_transcription",
+          "notes": "User-provided OCR text from G11 能高越嶺步程示意圖; no automated image extraction in this slice.",
+          "source_kind": "photo",
+          "source_ref": "artifact.photo.g11_hiking",
+          "uri": "/Users/alexwang0315/downloads/G11_hiking.jpg"
+        }
+      ],
+      "readiness_eta_policy": "total_elapsed_time_including_normal_rest",
+      "review_state": "needs_review",
+      "route_branch": "branch_nanhua",
+      "route_guide_ascent_time_minutes": null,
+      "route_guide_descent_time_minutes": null,
+      "route_guide_return_time_minutes": 30,
+      "route_guide_segment_time_minutes": 40,
+      "segment_candidate_id": null,
+      "source_refs": [
+        "artifact.photo.g11_hiking"
+      ],
+      "team_route_guide_multiplier": null,
+      "to_node_name": "南華山",
+      "vehicle_access_note": null,
+      "vehicle_or_shuttle_likely": false
+    },
+    {
+      "candidate_id": "timing.g11_nenggao.017",
+      "confidence": "medium",
+      "conservative_long_day_adjustment": 1.0,
+      "dark_arrival_margin_minutes": null,
+      "eta_at_camp_or_overnight_point": null,
+      "eta_at_checkpoint": null,
+      "fixed_rest_minutes": 0,
+      "from_node_name": "縣界埡口",
+      "label": "縣界埡口 -> 卡賀爾山",
+      "movement_label": "上行/下行",
+      "notes": "User-provided route-guide timing transcription. Timing is for planning calibration only until reviewed against the route plan.",
+      "pace_multiplier_basis": "mixed_unknown",
+      "personal_route_guide_multiplier": null,
+      "planned_vs_actual_calibration_refs": [],
+      "provenance": [
+        {
+          "captured_at": null,
+          "collected_at": null,
+          "license_note": null,
+          "method": "user_provided_ocr_transcription",
+          "notes": "User-provided OCR text from G11 能高越嶺步程示意圖; no automated image extraction in this slice.",
+          "source_kind": "photo",
+          "source_ref": "artifact.photo.g11_hiking",
+          "uri": "/Users/alexwang0315/downloads/G11_hiking.jpg"
+        }
+      ],
+      "readiness_eta_policy": "total_elapsed_time_including_normal_rest",
+      "review_state": "needs_review",
+      "route_branch": "branch_nenggao_main_peak",
+      "route_guide_ascent_time_minutes": 140,
+      "route_guide_descent_time_minutes": 170,
+      "route_guide_return_time_minutes": null,
+      "route_guide_segment_time_minutes": null,
+      "segment_candidate_id": null,
+      "source_refs": [
+        "artifact.photo.g11_hiking"
+      ],
+      "team_route_guide_multiplier": null,
+      "to_node_name": "卡賀爾山",
+      "vehicle_access_note": null,
+      "vehicle_or_shuttle_likely": false
+    },
+    {
+      "candidate_id": "timing.g11_nenggao.018",
+      "confidence": "medium",
+      "conservative_long_day_adjustment": 1.0,
+      "dark_arrival_margin_minutes": null,
+      "eta_at_camp_or_overnight_point": null,
+      "eta_at_checkpoint": null,
+      "fixed_rest_minutes": 0,
+      "from_node_name": "縣界埡口",
+      "label": "縣界埡口 -> 能高主峰",
+      "movement_label": "上行/下行",
+      "notes": "User-provided route-guide timing transcription. Timing is for planning calibration only until reviewed against the route plan.",
+      "pace_multiplier_basis": "mixed_unknown",
+      "personal_route_guide_multiplier": null,
+      "planned_vs_actual_calibration_refs": [],
+      "provenance": [
+        {
+          "captured_at": null,
+          "collected_at": null,
+          "license_note": null,
+          "method": "user_provided_ocr_transcription",
+          "notes": "User-provided OCR text from G11 能高越嶺步程示意圖; no automated image extraction in this slice.",
+          "source_kind": "photo",
+          "source_ref": "artifact.photo.g11_hiking",
+          "uri": "/Users/alexwang0315/downloads/G11_hiking.jpg"
+        }
+      ],
+      "readiness_eta_policy": "total_elapsed_time_including_normal_rest",
+      "review_state": "needs_review",
+      "route_branch": "branch_nenggao_main_peak",
+      "route_guide_ascent_time_minutes": 140,
+      "route_guide_descent_time_minutes": 160,
+      "route_guide_return_time_minutes": null,
+      "route_guide_segment_time_minutes": null,
+      "segment_candidate_id": null,
+      "source_refs": [
+        "artifact.photo.g11_hiking"
+      ],
+      "team_route_guide_multiplier": null,
+      "to_node_name": "能高主峰",
+      "vehicle_access_note": null,
+      "vehicle_or_shuttle_likely": false
+    }
+  ],
+  "route_summary": {
+    "artifact_id": "artifact.gpx.chilai_nanhua_day1",
+    "bbox_wgs84": {
+      "max_lat": 24.057907788530006,
+      "max_lon": 121.28079717511966,
+      "min_lat": 24.043338071400207,
+      "min_lon": 121.21036249036372
+    },
+    "distance_m": 14599.78,
+    "elevation_max_m": 2878.99,
+    "elevation_min_m": 2152.02,
+    "ended_at": "2026-05-03T10:35:59Z",
+    "point_count": 2211,
+    "route_name": "奇萊南華-能高越嶺步道Day1",
+    "started_at": "2026-05-02T23:55:35Z"
+  },
+  "segment_candidates": [
+    {
+      "candidate_id": "seg.001",
+      "confidence": "high",
+      "distance_m": 1502.260061203277,
+      "elevation_gain_m": 247.974853515625,
+      "elevation_loss_m": 57.236170613321065,
+      "from_candidate_id": "cp.start",
+      "label": "Segment 001",
+      "notes": "Generated between adjacent checkpoint candidates.",
+      "provenance": [
+        {
+          "captured_at": null,
+          "collected_at": null,
+          "license_note": null,
+          "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+          "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+          "source_kind": "gpx",
+          "source_ref": "artifact.gpx.chilai_nanhua_day1",
+          "uri": "/Users/alexwang0315/downloads/奇萊南華-能高越嶺步道Day1.gpx"
+        }
+      ],
+      "review_state": "accepted",
+      "route_point_end_index": 249,
+      "route_point_start_index": 0,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1"
+      ],
+      "to_candidate_id": "cp.001"
+    },
+    {
+      "candidate_id": "seg.002",
+      "confidence": "high",
+      "distance_m": 1499.8485825235111,
+      "elevation_gain_m": 190.37841796875,
+      "elevation_loss_m": 89.03662109375,
+      "from_candidate_id": "cp.001",
+      "label": "Segment 002",
+      "notes": "Generated between adjacent checkpoint candidates.",
+      "provenance": [
+        {
+          "captured_at": null,
+          "collected_at": null,
+          "license_note": null,
+          "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+          "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+          "source_kind": "gpx",
+          "source_ref": "artifact.gpx.chilai_nanhua_day1",
+          "uri": "/Users/alexwang0315/downloads/奇萊南華-能高越嶺步道Day1.gpx"
+        }
+      ],
+      "review_state": "accepted",
+      "route_point_end_index": 490,
+      "route_point_start_index": 249,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1"
+      ],
+      "to_candidate_id": "cp.002"
+    },
+    {
+      "candidate_id": "seg.003",
+      "confidence": "high",
+      "distance_m": 1503.391922289445,
+      "elevation_gain_m": 39.381103515625,
+      "elevation_loss_m": 219.71630859375,
+      "from_candidate_id": "cp.002",
+      "label": "Segment 003",
+      "notes": "Generated between adjacent checkpoint candidates.",
+      "provenance": [
+        {
+          "captured_at": null,
+          "collected_at": null,
+          "license_note": null,
+          "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+          "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+          "source_kind": "gpx",
+          "source_ref": "artifact.gpx.chilai_nanhua_day1",
+          "uri": "/Users/alexwang0315/downloads/奇萊南華-能高越嶺步道Day1.gpx"
+        }
+      ],
+      "review_state": "accepted",
+      "route_point_end_index": 742,
+      "route_point_start_index": 490,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1"
+      ],
+      "to_candidate_id": "cp.003"
+    },
+    {
+      "candidate_id": "seg.004",
+      "confidence": "high",
+      "distance_m": 1495.2180097809783,
+      "elevation_gain_m": 94.852294921875,
+      "elevation_loss_m": 44.881591796875,
+      "from_candidate_id": "cp.003",
+      "label": "Segment 004",
+      "notes": "Generated between adjacent checkpoint candidates.",
+      "provenance": [
+        {
+          "captured_at": null,
+          "collected_at": null,
+          "license_note": null,
+          "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+          "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+          "source_kind": "gpx",
+          "source_ref": "artifact.gpx.chilai_nanhua_day1",
+          "uri": "/Users/alexwang0315/downloads/奇萊南華-能高越嶺步道Day1.gpx"
+        }
+      ],
+      "review_state": "accepted",
+      "route_point_end_index": 989,
+      "route_point_start_index": 742,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1"
+      ],
+      "to_candidate_id": "cp.004"
+    },
+    {
+      "candidate_id": "seg.005",
+      "confidence": "high",
+      "distance_m": 1507.8692582540393,
+      "elevation_gain_m": 119.75830078125,
+      "elevation_loss_m": 74.332275390625,
+      "from_candidate_id": "cp.004",
+      "label": "Segment 005",
+      "notes": "Generated between adjacent checkpoint candidates.",
+      "provenance": [
+        {
+          "captured_at": null,
+          "collected_at": null,
+          "license_note": null,
+          "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+          "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+          "source_kind": "gpx",
+          "source_ref": "artifact.gpx.chilai_nanhua_day1",
+          "uri": "/Users/alexwang0315/downloads/奇萊南華-能高越嶺步道Day1.gpx"
+        }
+      ],
+      "review_state": "accepted",
+      "route_point_end_index": 1236,
+      "route_point_start_index": 989,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1"
+      ],
+      "to_candidate_id": "cp.005"
+    },
+    {
+      "candidate_id": "seg.006",
+      "confidence": "high",
+      "distance_m": 1491.4228965500827,
+      "elevation_gain_m": 197.922607421875,
+      "elevation_loss_m": 53.842041015625,
+      "from_candidate_id": "cp.005",
+      "label": "Segment 006",
+      "notes": "Generated between adjacent checkpoint candidates.",
+      "provenance": [
+        {
+          "captured_at": null,
+          "collected_at": null,
+          "license_note": null,
+          "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+          "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+          "source_kind": "gpx",
+          "source_ref": "artifact.gpx.chilai_nanhua_day1",
+          "uri": "/Users/alexwang0315/downloads/奇萊南華-能高越嶺步道Day1.gpx"
+        }
+      ],
+      "review_state": "accepted",
+      "route_point_end_index": 1480,
+      "route_point_start_index": 1236,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1"
+      ],
+      "to_candidate_id": "cp.006"
+    },
+    {
+      "candidate_id": "seg.007",
+      "confidence": "high",
+      "distance_m": 1500.9652567188673,
+      "elevation_gain_m": 125.88720703125,
+      "elevation_loss_m": 35.05908203125,
+      "from_candidate_id": "cp.006",
+      "label": "Segment 007",
+      "notes": "Generated between adjacent checkpoint candidates.",
+      "provenance": [
+        {
+          "captured_at": null,
+          "collected_at": null,
+          "license_note": null,
+          "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+          "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+          "source_kind": "gpx",
+          "source_ref": "artifact.gpx.chilai_nanhua_day1",
+          "uri": "/Users/alexwang0315/downloads/奇萊南華-能高越嶺步道Day1.gpx"
+        }
+      ],
+      "review_state": "accepted",
+      "route_point_end_index": 1727,
+      "route_point_start_index": 1480,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1"
+      ],
+      "to_candidate_id": "cp.007"
+    },
+    {
+      "candidate_id": "seg.008",
+      "confidence": "high",
+      "distance_m": 2115.7255889030953,
+      "elevation_gain_m": 223.2724609375,
+      "elevation_loss_m": 35.953857421875,
+      "from_candidate_id": "cp.007",
+      "label": "Segment 008",
+      "notes": "Generated between adjacent checkpoint candidates.",
+      "provenance": [
+        {
+          "captured_at": null,
+          "collected_at": null,
+          "license_note": null,
+          "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+          "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+          "source_kind": "gpx",
+          "source_ref": "artifact.gpx.chilai_nanhua_day1",
+          "uri": "/Users/alexwang0315/downloads/奇萊南華-能高越嶺步道Day1.gpx"
+        }
+      ],
+      "review_state": "accepted",
+      "route_point_end_index": 1921,
+      "route_point_start_index": 1727,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1"
+      ],
+      "to_candidate_id": "cp.008"
+    },
+    {
+      "candidate_id": "seg.009",
+      "confidence": "high",
+      "distance_m": 885.7631932362565,
+      "elevation_gain_m": 86.3603515625,
+      "elevation_loss_m": 32.103759765625,
+      "from_candidate_id": "cp.008",
+      "label": "Segment 009",
+      "notes": "Generated between adjacent checkpoint candidates.",
+      "provenance": [
+        {
+          "captured_at": null,
+          "collected_at": null,
+          "license_note": null,
+          "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+          "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+          "source_kind": "gpx",
+          "source_ref": "artifact.gpx.chilai_nanhua_day1",
+          "uri": "/Users/alexwang0315/downloads/奇萊南華-能高越嶺步道Day1.gpx"
+        }
+      ],
+      "review_state": "accepted",
+      "route_point_end_index": 2067,
+      "route_point_start_index": 1921,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1"
+      ],
+      "to_candidate_id": "cp.009"
+    },
+    {
+      "candidate_id": "seg.010",
+      "confidence": "high",
+      "distance_m": 1097.3201822394167,
+      "elevation_gain_m": 90.702392578125,
+      "elevation_loss_m": 109.90380859375,
+      "from_candidate_id": "cp.009",
+      "label": "Segment 010",
+      "notes": "Generated between adjacent checkpoint candidates.",
+      "provenance": [
+        {
+          "captured_at": null,
+          "collected_at": null,
+          "license_note": null,
+          "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+          "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+          "source_kind": "gpx",
+          "source_ref": "artifact.gpx.chilai_nanhua_day1",
+          "uri": "/Users/alexwang0315/downloads/奇萊南華-能高越嶺步道Day1.gpx"
+        }
+      ],
+      "review_state": "accepted",
+      "route_point_end_index": 2210,
+      "route_point_start_index": 2067,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1"
+      ],
+      "to_candidate_id": "cp.finish"
+    }
+  ],
+  "source_artifacts": [
+    {
+      "artifact_id": "artifact.gpx.chilai_nanhua_day1",
+      "kind": "gpx",
+      "media_type": "application/gpx+xml",
+      "metadata": {},
+      "provenance": {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip-source-ingest",
+        "notes": "",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/downloads/奇萊南華-能高越嶺步道Day1.gpx"
+      },
+      "sha256": "3c1f4843ecea5cb2fc85f92934d3d1a220738c900576e4976d4c09975673956c",
+      "size_bytes": 275392,
+      "uri": "/Users/alexwang0315/downloads/奇萊南華-能高越嶺步道Day1.gpx"
+    },
+    {
+      "artifact_id": "artifact.photo.g11_hiking",
+      "kind": "photo",
+      "media_type": "image/jpeg",
+      "metadata": {},
+      "provenance": {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip-source-ingest",
+        "notes": "",
+        "source_kind": "photo",
+        "source_ref": "artifact.photo.g11_hiking",
+        "uri": "/Users/alexwang0315/downloads/G11_hiking.jpg"
+      },
+      "sha256": "ff28bf2fd66c6f8a63e759800fcdb8363862832ebe7b87dc900e849f1c7a058d",
+      "size_bytes": 209877,
+      "uri": "/Users/alexwang0315/downloads/G11_hiking.jpg"
+    }
+  ],
+  "status": "reviewed",
+  "version": "0.1.0"
+}

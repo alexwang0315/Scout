@@ -1,0 +1,204 @@
+{
+  "corridor_candidates": [
+    {
+      "candidate_id": "map.corridor.chilai_nanhua_primary_corridor",
+      "corridor": {
+        "coordinates": [
+          {
+            "lat": 24.0532973,
+            "lon": 121.21036249036372
+          },
+          {
+            "lat": 24.0512,
+            "lon": 121.2455
+          },
+          {
+            "lat": 24.045320698458436,
+            "lon": 121.28079717511966
+          }
+        ],
+        "corridor_half_width_m": 30.0,
+        "corridor_id": "chilai_nanhua_primary_corridor",
+        "name": "Chilai-Nanhua Day1 primary corridor candidate",
+        "route_level": "mountain_trail_candidate",
+        "source_metadata": {
+          "confidence": 0.6,
+          "known_staleness_risk": "medium",
+          "last_verified_at": "2026-05-14",
+          "source": "manual_pretrip_fixture",
+          "source_version": "0.1.0"
+        }
+      },
+      "label": "Chilai-Nanhua Day1 primary corridor candidate",
+      "notes": "Imported as candidate map data; human review required before compilation.",
+      "provenance": [
+        {
+          "captured_at": null,
+          "collected_at": null,
+          "license_note": "local fixture metadata only",
+          "method": "geojson_feature_collection_import",
+          "notes": "Small Phase 4 GeoJSON candidate fixture; not an external crawler output.",
+          "source_kind": "other",
+          "source_ref": "map_context.chilai_nanhua_day1.manual",
+          "uri": "tests/fixtures/pretrip/projects/chilai_nanhua_day1/normalized/map/map_context.geojson"
+        }
+      ],
+      "review_required": true,
+      "review_state": "needs_review",
+      "source_metadata": {
+        "confidence": 0.6,
+        "known_staleness_risk": "medium",
+        "last_verified_at": "2026-05-14",
+        "source": "manual_pretrip_fixture",
+        "source_version": "0.1.0"
+      },
+      "source_refs": [
+        "map_context.chilai_nanhua_day1.manual"
+      ]
+    }
+  ],
+  "hazard_candidates": [
+    {
+      "candidate_id": "map.hazard.deep_mountain_no_easy_exit",
+      "hazard": {
+        "hazard_id": "deep_mountain_no_easy_exit",
+        "hazard_type": "limited_retreat_options",
+        "l2_duration_s": 60.0,
+        "name": "Deep mountain section with limited retreat options",
+        "polygon": [
+          {
+            "lat": 24.058,
+            "lon": 121.238
+          },
+          {
+            "lat": 24.058,
+            "lon": 121.282
+          },
+          {
+            "lat": 24.042,
+            "lon": 121.282
+          },
+          {
+            "lat": 24.042,
+            "lon": 121.238
+          },
+          {
+            "lat": 24.058,
+            "lon": 121.238
+          }
+        ],
+        "source_metadata": {
+          "confidence": 0.6,
+          "known_staleness_risk": "medium",
+          "last_verified_at": "2026-05-14",
+          "source": "manual_pretrip_fixture",
+          "source_version": "0.1.0"
+        }
+      },
+      "label": "Deep mountain section with limited retreat options",
+      "notes": "Imported as candidate map data; human review required before compilation.",
+      "provenance": [
+        {
+          "captured_at": null,
+          "collected_at": null,
+          "license_note": "local fixture metadata only",
+          "method": "geojson_feature_collection_import",
+          "notes": "Small Phase 4 GeoJSON candidate fixture; not an external crawler output.",
+          "source_kind": "other",
+          "source_ref": "map_context.chilai_nanhua_day1.manual",
+          "uri": "tests/fixtures/pretrip/projects/chilai_nanhua_day1/normalized/map/map_context.geojson"
+        }
+      ],
+      "review_required": true,
+      "review_state": "needs_review",
+      "source_metadata": {
+        "confidence": 0.6,
+        "known_staleness_risk": "medium",
+        "last_verified_at": "2026-05-14",
+        "source": "manual_pretrip_fixture",
+        "source_version": "0.1.0"
+      },
+      "source_refs": [
+        "map_context.chilai_nanhua_day1.manual"
+      ]
+    }
+  ],
+  "poi_candidates": [
+    {
+      "candidate_id": "map.poi.trailhead_entry",
+      "label": "Entry / retreat return point",
+      "notes": "Imported as candidate map data; human review required before compilation.",
+      "poi": {
+        "coordinate": {
+          "lat": 24.0532973,
+          "lon": 121.21036249036372
+        },
+        "name": "Entry / retreat return point",
+        "poi_id": "trailhead_entry",
+        "poi_type": "trailhead",
+        "source_metadata": {
+          "confidence": 0.6,
+          "known_staleness_risk": "medium",
+          "last_verified_at": "2026-05-14",
+          "source": "manual_pretrip_fixture",
+          "source_version": "0.1.0"
+        }
+      },
+      "provenance": [
+        {
+          "captured_at": null,
+          "collected_at": null,
+          "license_note": "local fixture metadata only",
+          "method": "geojson_feature_collection_import",
+          "notes": "Small Phase 4 GeoJSON candidate fixture; not an external crawler output.",
+          "source_kind": "other",
+          "source_ref": "map_context.chilai_nanhua_day1.manual",
+          "uri": "tests/fixtures/pretrip/projects/chilai_nanhua_day1/normalized/map/map_context.geojson"
+        }
+      ],
+      "review_required": true,
+      "review_state": "needs_review",
+      "source_metadata": {
+        "confidence": 0.6,
+        "known_staleness_risk": "medium",
+        "last_verified_at": "2026-05-14",
+        "source": "manual_pretrip_fixture",
+        "source_version": "0.1.0"
+      },
+      "source_refs": [
+        "map_context.chilai_nanhua_day1.manual"
+      ]
+    }
+  ],
+  "source_artifact": {
+    "artifact_id": "geojson.map_context.chilai_nanhua_day1.manual",
+    "kind": "other",
+    "media_type": "application/geo+json",
+    "metadata": {
+      "candidate_layer": "pretrip_map",
+      "review_required": true,
+      "source": "manual_pretrip_fixture",
+      "source_version": "0.1.0"
+    },
+    "provenance": {
+      "captured_at": null,
+      "collected_at": null,
+      "license_note": "local fixture metadata only",
+      "method": "geojson_feature_collection_import",
+      "notes": "Small Phase 4 GeoJSON candidate fixture; not an external crawler output.",
+      "source_kind": "other",
+      "source_ref": "map_context.chilai_nanhua_day1.manual",
+      "uri": "tests/fixtures/pretrip/projects/chilai_nanhua_day1/normalized/map/map_context.geojson"
+    },
+    "sha256": "f4d5d4eb5876c526cf81f5d7064ddd8e121bbfc1cc11434180cf7012dcee292d",
+    "size_bytes": 1287,
+    "uri": "tests/fixtures/pretrip/projects/chilai_nanhua_day1/normalized/map/map_context.geojson"
+  },
+  "source_metadata": {
+    "confidence": 0.6,
+    "known_staleness_risk": "medium",
+    "last_verified_at": "2026-05-14",
+    "source": "manual_pretrip_fixture",
+    "source_version": "0.1.0"
+  }
+}

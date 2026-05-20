@@ -1,0 +1,131 @@
+{
+  "actions": [
+    {
+      "action_id": "review_draft.chilai_nanhua_day1.contour.contour.g11.seg_001_003",
+      "action_kind": "request_human_note",
+      "admin_api_integration": false,
+      "candidate_ref": "contour.g11.seg_001_003",
+      "category": "contour",
+      "decision_recorded": false,
+      "draft_only": true,
+      "draft_state": "draft",
+      "package_mutation_allowed": false,
+      "proposed_fields": {
+        "candidate_ref": "contour.g11.seg_001_003",
+        "confidence_after_review": "human_review_required",
+        "review_note": "Confirm terrain concern from candidate metadata before it can influence planning.",
+        "target_segment_refs": [
+          "seg.001",
+          "seg.002",
+          "seg.003"
+        ]
+      },
+      "reviewer_prompt": "Confirm or rewrite the contour note; do not attach raw image, terrain raster, or route payloads.",
+      "runtime_mutation_allowed": false,
+      "source_artifact_kind": "contour_interpretation_candidates",
+      "source_mutation_allowed": false,
+      "source_ref": "outputs/contour_interpretation_candidates.json",
+      "source_ref_key": "contour_interpretation_candidates_ref",
+      "summary": "Ask reviewer to confirm whether close-contour concern should remain a candidate note.",
+      "title": "Draft contour review note"
+    },
+    {
+      "action_id": "review_draft.chilai_nanhua_day1.segment_policy.policy_candidate.chilai_nanhua_day1.seg.001",
+      "action_kind": "propose_candidate_edit",
+      "admin_api_integration": false,
+      "candidate_ref": "policy_candidate.chilai_nanhua_day1.seg.001",
+      "category": "segment_policy",
+      "decision_recorded": false,
+      "draft_only": true,
+      "draft_state": "draft",
+      "package_mutation_allowed": false,
+      "proposed_fields": {
+        "camp_available": false,
+        "requires_daylight": true,
+        "retreat_available": true,
+        "review_state_after_edit": "proposed",
+        "segment_candidate_id": "seg.001",
+        "signal_expected": true,
+        "water_available": false
+      },
+      "reviewer_prompt": "Review these policy assumptions as draft fields only; do not compile them into MissionGraph runtime policy.",
+      "runtime_mutation_allowed": false,
+      "source_artifact_kind": "segment_policy_candidates",
+      "source_mutation_allowed": false,
+      "source_ref": "outputs/segment_policy_candidates.json",
+      "source_ref_key": "segment_policy_candidates_ref",
+      "summary": "Prepare a human-review draft for conservative daylight, water, camp, retreat, and signal assumptions.",
+      "title": "Draft segment policy review edit"
+    },
+    {
+      "action_id": "review_draft.chilai_nanhua_day1.poi_readiness.poi_readiness_policy.chilai_nanhua_day1.route_corridor_poi_coverage",
+      "action_kind": "propose_candidate_edit",
+      "admin_api_integration": false,
+      "candidate_ref": "poi_readiness_policy.chilai_nanhua_day1.route_corridor_poi_coverage",
+      "category": "poi_readiness",
+      "decision_recorded": false,
+      "draft_only": true,
+      "draft_state": "draft",
+      "package_mutation_allowed": false,
+      "proposed_fields": {
+        "category": "route_corridor_poi_coverage",
+        "corridor_distance_m": 1000.0,
+        "current_finding_count": 0,
+        "minimum_poi_count": 1,
+        "review_state_after_edit": "proposed",
+        "route_corridor_poi_count": 1,
+        "severity": "warning"
+      },
+      "reviewer_prompt": "Review the POI corridor distance/count parameters as draft fields only; do not turn missing POI categories into blockers.",
+      "runtime_mutation_allowed": false,
+      "source_artifact_kind": "poi_readiness_candidates",
+      "source_mutation_allowed": false,
+      "source_ref": "outputs/poi_readiness_candidates.json",
+      "source_ref_key": "poi_readiness_candidates_ref",
+      "summary": "Prepare admin review of the parameterized route-corridor POI coverage policy.",
+      "title": "Draft POI corridor coverage policy review"
+    }
+  ],
+  "artifact_kind": "pretrip_review_draft_log",
+  "boundary": {
+    "admin_api_integration": false,
+    "decisions_recorded": false,
+    "draft_only": true,
+    "external_api_calls_made": false,
+    "notes": [
+      "Draft output fixture only; it records proposed review actions, not decisions.",
+      "Candidate artifacts, reviewed package outputs, review logs, and runtime stores remain read-only.",
+      "No admin API, external API, package mutation, source mutation, or runtime mutation is performed."
+    ],
+    "package_mutation_allowed": false,
+    "phase1_runtime_mutation_allowed": false,
+    "phase2_writeback_allowed": false,
+    "raw_payloads_embedded": false,
+    "review_log_mutation_allowed": false,
+    "runtime_mutation_allowed": false,
+    "source_mutation_allowed": false
+  },
+  "counts": {
+    "action_count": 3,
+    "category_counts": {
+      "contour": 1,
+      "poi_readiness": 1,
+      "segment_policy": 1
+    },
+    "draft_action_count": 3,
+    "mutation_action_count": 0,
+    "source_ref_count": 3
+  },
+  "log_id": "review_draft_log.chilai_nanhua_day1.v0",
+  "notes": [
+    "Representative Review Workflow slice C output for contour, segment policy, and POI readiness review drafts.",
+    "Action payloads are compact pointers and proposed fields only; raw route, image, terrain, and sensor payloads are not embedded."
+  ],
+  "project_id": "chilai_nanhua_day1",
+  "source_refs": [
+    "outputs/contour_interpretation_candidates.json",
+    "outputs/segment_policy_candidates.json",
+    "outputs/poi_readiness_candidates.json"
+  ],
+  "status": "draft_only"
+}

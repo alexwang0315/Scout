@@ -1,0 +1,274 @@
+{
+  "artifact_kind": "pretrip_source_registry",
+  "entries": [
+    {
+      "accepted_assumption_policy": "human_review_required",
+      "deterministic_measurements": [],
+      "fetch_policy": "no_network",
+      "human_review_before_accepted_assumptions": true,
+      "kind": "web_reference",
+      "label": "Joyhike main route page",
+      "notes": "Stored as a pointer only. No crawler, scraper, or source snapshot is created here.",
+      "reference_only": true,
+      "scout_meaning": "Route-planning reference product context only; do not ingest as field truth.",
+      "source_id": "source.joyhike.main_site",
+      "supported_capabilities": [
+        "route_reference_indexing",
+        "candidate_checkpoint_context"
+      ],
+      "timing_fitness_calibration": null,
+      "treatment": [
+        "Artifact",
+        "ModelInterpretation",
+        "HumanReview"
+      ],
+      "uri": "https://www.joyhike.com/"
+    },
+    {
+      "accepted_assumption_policy": "human_review_required",
+      "deterministic_measurements": [],
+      "fetch_policy": "no_network",
+      "human_review_before_accepted_assumptions": true,
+      "kind": "web_reference",
+      "label": "Joyhike blog planning references",
+      "notes": "Human review is required before converting narrative context into accepted assumptions.",
+      "reference_only": true,
+      "scout_meaning": "Narrative route context that may suggest candidate POI or timing questions.",
+      "source_id": "source.joyhike.blog",
+      "supported_capabilities": [
+        "route_narrative_context",
+        "candidate_poi_context"
+      ],
+      "timing_fitness_calibration": null,
+      "treatment": [
+        "Artifact",
+        "ModelInterpretation",
+        "HumanReview"
+      ],
+      "uri": "https://www.joyhike.com/blog"
+    },
+    {
+      "accepted_assumption_policy": "human_review_required",
+      "deterministic_measurements": [],
+      "fetch_policy": "no_network",
+      "human_review_before_accepted_assumptions": true,
+      "kind": "community_article",
+      "label": "PTT Sunriver timing article",
+      "notes": "Do not promote article claims to accepted assumptions until reviewed.",
+      "reference_only": true,
+      "scout_meaning": "Community timing reference for later manual calibration discussion.",
+      "source_id": "source.ptt.sunriver_timing",
+      "supported_capabilities": [
+        "route_guide_timing_context",
+        "fitness_calibration_context"
+      ],
+      "timing_fitness_calibration": {
+        "capability_id": "calibration.ptt_sunriver_timing_context",
+        "notes": "Supports calibration inputs only; this registry does not produce computed ETA.",
+        "output_scope": "calibration_inputs_only",
+        "requires_human_review": true,
+        "supported_fields": [
+          "published_segment_minutes",
+          "reported_pack_weight_class",
+          "reported_team_experience_level",
+          "reported_rest_pattern"
+        ]
+      },
+      "treatment": [
+        "Artifact",
+        "ModelInterpretation",
+        "HumanReview"
+      ],
+      "uri": "https://www.ptt.cc/"
+    },
+    {
+      "accepted_assumption_policy": "human_review_required",
+      "deterministic_measurements": [],
+      "fetch_policy": "local_reference_only",
+      "human_review_before_accepted_assumptions": true,
+      "kind": "image_map",
+      "label": "G11 image-map reference",
+      "notes": "Any georeference or route label interpretation remains a reviewed model interpretation.",
+      "reference_only": true,
+      "scout_meaning": "Image-map context for candidate POI/checkpoint interpretation.",
+      "source_id": "source.g11.image_map",
+      "supported_capabilities": [
+        "image_map_georeference_prompt",
+        "candidate_checkpoint_context"
+      ],
+      "timing_fitness_calibration": null,
+      "treatment": [
+        "Artifact",
+        "ModelInterpretation",
+        "HumanReview"
+      ],
+      "uri": "local://references/g11-image-map"
+    },
+    {
+      "accepted_assumption_policy": "human_review_required",
+      "deterministic_measurements": [
+        {
+          "capability_id": "measurement.local_gpx.distance_bbox_elevation",
+          "method": "parse GPX points, sum segment haversine distances, and compute bbox/elevation extrema",
+          "notes": "",
+          "output_scope": "candidate_measurement"
+        }
+      ],
+      "fetch_policy": "local_reference_only",
+      "human_review_before_accepted_assumptions": true,
+      "kind": "local_directory",
+      "label": "Local GPX source directory",
+      "notes": "",
+      "reference_only": true,
+      "scout_meaning": "Local GPX files can provide deterministic geometry summaries for planning candidates.",
+      "source_id": "source.local.gpx_dir",
+      "supported_capabilities": [
+        "route_geometry_summary",
+        "route_distance_measurement"
+      ],
+      "timing_fitness_calibration": null,
+      "treatment": [
+        "Artifact",
+        "DerivedMeasurement",
+        "HumanReview"
+      ],
+      "uri": "local://pretrip/gpx"
+    },
+    {
+      "accepted_assumption_policy": "human_review_required",
+      "deterministic_measurements": [],
+      "fetch_policy": "local_reference_only",
+      "human_review_before_accepted_assumptions": true,
+      "kind": "local_directory",
+      "label": "Local JPG source directory",
+      "notes": "",
+      "reference_only": true,
+      "scout_meaning": "Photo references can support manual context review but are not facts by themselves.",
+      "source_id": "source.local.jpg_dir",
+      "supported_capabilities": [
+        "photo_inventory",
+        "manual_context_review"
+      ],
+      "timing_fitness_calibration": null,
+      "treatment": [
+        "Artifact",
+        "HumanReview"
+      ],
+      "uri": "local://pretrip/photos"
+    },
+    {
+      "accepted_assumption_policy": "human_review_required",
+      "deterministic_measurements": [
+        {
+          "capability_id": "measurement.local_dtm.coverage_bbox",
+          "method": "parse DTM headers and intersect projected tile bboxes with route bbox",
+          "notes": "",
+          "output_scope": "candidate_measurement"
+        }
+      ],
+      "fetch_policy": "local_reference_only",
+      "human_review_before_accepted_assumptions": true,
+      "kind": "local_directory",
+      "label": "Local DTM source directories",
+      "notes": "",
+      "reference_only": true,
+      "scout_meaning": "Local DTM headers and rasters can support deterministic terrain metadata candidates.",
+      "source_id": "source.local.dtm_dirs",
+      "supported_capabilities": [
+        "dtm_header_inventory",
+        "route_dtm_coverage_summary"
+      ],
+      "timing_fitness_calibration": null,
+      "treatment": [
+        "Artifact",
+        "DerivedMeasurement",
+        "HumanReview"
+      ],
+      "uri": "local://pretrip/dtm"
+    },
+    {
+      "accepted_assumption_policy": "human_review_required",
+      "deterministic_measurements": [
+        {
+          "capability_id": "measurement.comparison_gpx.distance_overlap",
+          "method": "compare local GPX geometry against primary route geometry",
+          "notes": "Comparison output must not be compiled into MissionGraph without review.",
+          "output_scope": "candidate_measurement"
+        }
+      ],
+      "fetch_policy": "local_reference_only",
+      "human_review_before_accepted_assumptions": true,
+      "kind": "local_file",
+      "label": "Rudy-map-like comparison GPX",
+      "notes": "",
+      "reference_only": true,
+      "scout_meaning": "Comparison route geometry for side-by-side planning analysis only.",
+      "source_id": "source.comparison.rudy_like_gpx",
+      "supported_capabilities": [
+        "route_similarity_measurement",
+        "comparison_only_route_context"
+      ],
+      "timing_fitness_calibration": null,
+      "treatment": [
+        "Artifact",
+        "DerivedMeasurement",
+        "ModelInterpretation",
+        "HumanReview"
+      ],
+      "uri": "local://pretrip/comparison/rudy-like-route.gpx"
+    },
+    {
+      "accepted_assumption_policy": "human_review_required",
+      "deterministic_measurements": [
+        {
+          "capability_id": "measurement.scout_260512.route_summary_refs",
+          "method": "read existing fixture summaries and reference deterministic route/map metrics",
+          "notes": "",
+          "output_scope": "metadata_only"
+        }
+      ],
+      "fetch_policy": "local_reference_only",
+      "human_review_before_accepted_assumptions": true,
+      "kind": "field_reference",
+      "label": "scout_260512 field references",
+      "notes": "",
+      "reference_only": true,
+      "scout_meaning": "Prior field evidence can seed regression planning questions without mutating field evidence.",
+      "source_id": "source.scout_260512.field_refs",
+      "supported_capabilities": [
+        "field_regression_reference",
+        "planned_vs_actual_calibration_context"
+      ],
+      "timing_fitness_calibration": {
+        "capability_id": "calibration.scout_260512.planned_vs_actual_context",
+        "notes": "Provides calibration context from existing field refs, not a new ETA.",
+        "output_scope": "calibration_inputs_only",
+        "requires_human_review": true,
+        "supported_fields": [
+          "actual_elapsed_minutes",
+          "actual_distance_m",
+          "actual_elevation_gain_m",
+          "device_accuracy_summary"
+        ]
+      },
+      "treatment": [
+        "Artifact",
+        "DerivedMeasurement",
+        "ModelInterpretation",
+        "HumanReview"
+      ],
+      "uri": "repo://tests/fixtures/field_cases/scout_260512_golden.json"
+    }
+  ],
+  "network_policy": "no_network",
+  "notes": [
+    "Registry stores source references and treatment only; it does not crawl, fetch, snapshot, or parse remote websites.",
+    "Accepted planning assumptions require HumanReview before promotion.",
+    "DerivedMeasurement is allowed only for deterministic local calculations; observed-fact treatment is intentionally unsupported.",
+    "Timing and fitness fields describe supported calibration inputs only, not computed ETA."
+  ],
+  "observed_fact_policy": "never",
+  "phase": "Phase 4",
+  "project_scope": "chilai_nanhua_day1",
+  "registry_id": "pretrip_source_registry.phase4.chilai_nanhua_day1.v0"
+}

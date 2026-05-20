@@ -1,0 +1,310 @@
+[
+  {
+    "arrival_radius_m": 30.0,
+    "candidate_id": "cp.start",
+    "checkpoint_type": "start",
+    "compression_boundary": true,
+    "confidence": "high",
+    "label": "Start",
+    "lat": 24.0532973,
+    "lon": 121.2104806,
+    "notes": "Generated from GPX route distance spacing.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/downloads/奇萊南華-能高越嶺步道Day1.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_index": 0,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ]
+  },
+  {
+    "arrival_radius_m": 30.0,
+    "candidate_id": "cp.001",
+    "checkpoint_type": "route_progress",
+    "compression_boundary": true,
+    "confidence": "high",
+    "label": "CP 001",
+    "lat": 24.057004058494407,
+    "lon": 121.21650146390151,
+    "notes": "Generated from GPX route distance spacing.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/downloads/奇萊南華-能高越嶺步道Day1.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_index": 249,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ]
+  },
+  {
+    "arrival_radius_m": 30.0,
+    "candidate_id": "cp.002",
+    "checkpoint_type": "route_progress",
+    "compression_boundary": true,
+    "confidence": "high",
+    "label": "CP 002",
+    "lat": 24.056342458482312,
+    "lon": 121.2255030212119,
+    "notes": "Generated from GPX route distance spacing.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/downloads/奇萊南華-能高越嶺步道Day1.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_index": 490,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ]
+  },
+  {
+    "arrival_radius_m": 30.0,
+    "candidate_id": "cp.003",
+    "checkpoint_type": "route_progress",
+    "compression_boundary": true,
+    "confidence": "high",
+    "label": "CP 003",
+    "lat": 24.049814899533658,
+    "lon": 121.23069368603292,
+    "notes": "Generated from GPX route distance spacing.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/downloads/奇萊南華-能高越嶺步道Day1.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_index": 742,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ]
+  },
+  {
+    "arrival_radius_m": 30.0,
+    "candidate_id": "cp.004",
+    "checkpoint_type": "route_progress",
+    "compression_boundary": true,
+    "confidence": "high",
+    "label": "CP 004",
+    "lat": 24.047778125697818,
+    "lon": 121.23783544302235,
+    "notes": "Generated from GPX route distance spacing.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/downloads/奇萊南華-能高越嶺步道Day1.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_index": 989,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ]
+  },
+  {
+    "arrival_radius_m": 30.0,
+    "candidate_id": "cp.005",
+    "checkpoint_type": "route_progress",
+    "compression_boundary": true,
+    "confidence": "high",
+    "label": "CP 005",
+    "lat": 24.052577525102574,
+    "lon": 121.24460209206103,
+    "notes": "Generated from GPX route distance spacing.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/downloads/奇萊南華-能高越嶺步道Day1.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_index": 1236,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ]
+  },
+  {
+    "arrival_radius_m": 30.0,
+    "candidate_id": "cp.006",
+    "checkpoint_type": "route_progress",
+    "compression_boundary": true,
+    "confidence": "high",
+    "label": "CP 006",
+    "lat": 24.04393920510446,
+    "lon": 121.25143141911224,
+    "notes": "Generated from GPX route distance spacing.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/downloads/奇萊南華-能高越嶺步道Day1.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_index": 1480,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ]
+  },
+  {
+    "arrival_radius_m": 30.0,
+    "candidate_id": "cp.007",
+    "checkpoint_type": "route_progress",
+    "compression_boundary": true,
+    "confidence": "high",
+    "label": "CP 007",
+    "lat": 24.04746022572128,
+    "lon": 121.25729293570427,
+    "notes": "Generated from GPX route distance spacing.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/downloads/奇萊南華-能高越嶺步道Day1.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_index": 1727,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ]
+  },
+  {
+    "arrival_radius_m": 30.0,
+    "candidate_id": "cp.008",
+    "checkpoint_type": "route_progress",
+    "compression_boundary": true,
+    "confidence": "high",
+    "label": "CP 008",
+    "lat": 24.044571772935505,
+    "lon": 121.2733009249338,
+    "notes": "Generated from GPX route distance spacing.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/downloads/奇萊南華-能高越嶺步道Day1.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_index": 1921,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ]
+  },
+  {
+    "arrival_radius_m": 30.0,
+    "candidate_id": "cp.009",
+    "checkpoint_type": "route_progress",
+    "compression_boundary": true,
+    "confidence": "high",
+    "label": "CP 009",
+    "lat": 24.047881741215313,
+    "lon": 121.27885484806663,
+    "notes": "Generated from GPX route distance spacing.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/downloads/奇萊南華-能高越嶺步道Day1.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_index": 2067,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ]
+  },
+  {
+    "arrival_radius_m": 30.0,
+    "candidate_id": "cp.finish",
+    "checkpoint_type": "finish",
+    "compression_boundary": true,
+    "confidence": "high",
+    "label": "Finish",
+    "lat": 24.045320698458436,
+    "lon": 121.27965119586655,
+    "notes": "Generated from GPX route distance spacing.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/downloads/奇萊南華-能高越嶺步道Day1.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_index": 2210,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ]
+  }
+]

@@ -1,0 +1,1285 @@
+{
+  "artifact_kind": "pretrip_review_queue_manifest",
+  "boundary": {
+    "accepts_candidates": false,
+    "candidate_queue_only": true,
+    "decisions_recorded": false,
+    "external_api_calls_made": false,
+    "notes": [
+      "Queue manifest only; it records no accept/reject decisions.",
+      "Source package, reviews, runtime handoff, departure bundle, and live runtime stores are read-only inputs.",
+      "No UI, external API call, package mutation, review-log mutation, or runtime mutation is performed."
+    ],
+    "package_mutation_allowed": false,
+    "phase1_runtime_mutation_allowed": false,
+    "phase2_writeback_allowed": false,
+    "raw_payloads_embedded": false,
+    "rejects_candidates": false,
+    "review_log_mutation_allowed": false,
+    "runtime_mutation_allowed": false,
+    "ui_included": false
+  },
+  "counts": {
+    "blocker_count": 0,
+    "category_counts": {
+      "contour_interpretation": 2,
+      "departure_bundle": 1,
+      "plan_validation": 6,
+      "route_note": 21,
+      "runtime_handoff": 1,
+      "segment_policy": 10,
+      "weather_daylight": 1
+    },
+    "item_count": 42,
+    "review_count": 33,
+    "source_ref_count": 8,
+    "warning_count": 9
+  },
+  "items": [
+    {
+      "accept_reject_allowed": false,
+      "candidate_only": true,
+      "candidate_ref": "contour.g11.seg_001_003",
+      "category": "contour_interpretation",
+      "decision_recorded": false,
+      "evidence_summary": {
+        "confidence": "low",
+        "interpretation_mode": "manual",
+        "not_observed_fact": true,
+        "source_artifact_refs": {
+          "dtm_coverage_summary_ref": "dtm_coverage.chilai_nanhua_day1.20m",
+          "image_artifact_ref": "artifact.photo.g11_hiking",
+          "segment_dtm_coverage_ref": "terrain_summary.chilai_nanhua_day1.20m"
+        },
+        "status": "candidate"
+      },
+      "human_review_required": true,
+      "item_id": "review_queue.chilai_nanhua_day1.contour.contour.g11.seg_001_003",
+      "mutation_allowed": false,
+      "review_focus": [
+        "seg.001",
+        "seg.002",
+        "seg.003"
+      ],
+      "severity": "review",
+      "source_artifact_kind": "contour_interpretation_candidates",
+      "source_ref": "outputs/contour_interpretation_candidates.json",
+      "source_ref_key": "contour_interpretation_candidates_ref",
+      "summary": "Metadata-only candidate linked to the G11_hiking image-map and DTM baseline refs; not compiled into runtime safety facts.",
+      "title": "Contour interpretation review: contour.g11.seg_001_003"
+    },
+    {
+      "accept_reject_allowed": false,
+      "candidate_only": true,
+      "candidate_ref": "contour.g11.seg_006_008",
+      "category": "contour_interpretation",
+      "decision_recorded": false,
+      "evidence_summary": {
+        "confidence": "unknown",
+        "interpretation_mode": "ai_assisted",
+        "not_observed_fact": true,
+        "source_artifact_refs": {
+          "dtm_coverage_summary_ref": "dtm_coverage.chilai_nanhua_day1.20m",
+          "image_artifact_ref": "artifact.photo.g11_hiking",
+          "segment_dtm_coverage_ref": "terrain_summary.chilai_nanhua_day1.20m"
+        },
+        "status": "candidate"
+      },
+      "human_review_required": true,
+      "item_id": "review_queue.chilai_nanhua_day1.contour.contour.g11.seg_006_008",
+      "mutation_allowed": false,
+      "review_focus": [
+        "seg.006",
+        "seg.007",
+        "seg.008"
+      ],
+      "severity": "review",
+      "source_artifact_kind": "contour_interpretation_candidates",
+      "source_ref": "outputs/contour_interpretation_candidates.json",
+      "source_ref_key": "contour_interpretation_candidates_ref",
+      "summary": "AI-assisted is allowed only as a candidate source label; this fixture stores no model output payload or observed fact.",
+      "title": "Contour interpretation review: contour.g11.seg_006_008"
+    },
+    {
+      "accept_reject_allowed": false,
+      "candidate_only": true,
+      "candidate_ref": "departure_bundle.chilai_nanhua_day1.v0",
+      "category": "departure_bundle",
+      "decision_recorded": false,
+      "evidence_summary": {
+        "not_departure_approval": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "required_ref_count": 24,
+        "status": "frozen_candidate"
+      },
+      "human_review_required": true,
+      "item_id": "review_queue.chilai_nanhua_day1.departure_bundle.departure_bundle.chilai_nanhua_day1.v0",
+      "mutation_allowed": false,
+      "review_focus": [
+        "readiness_refs",
+        "resource_plan",
+        "remote_summary",
+        "terrain_refs",
+        "audit_refs"
+      ],
+      "severity": "review",
+      "source_artifact_kind": "pretrip_departure_bundle_manifest",
+      "source_ref": "outputs/departure_bundle_manifest.json",
+      "source_ref_key": "departure_bundle_manifest_ref",
+      "summary": "Frozen candidate departure bundle is not real departure approval.",
+      "title": "Departure bundle human-review gate"
+    },
+    {
+      "accept_reject_allowed": false,
+      "candidate_only": true,
+      "candidate_ref": "plan_validation.chilai_nanhua_day1.resource_plan.warning_candidates.01",
+      "category": "plan_validation",
+      "decision_recorded": false,
+      "evidence_summary": {
+        "candidate_only": true,
+        "rule_id": "resource_plan_warning_candidate",
+        "source_artifact_kind": "resource_plan"
+      },
+      "human_review_required": true,
+      "item_id": "review_queue.chilai_nanhua_day1.plan_validation.plan_validation.chilai_nanhua_day1.resource_plan.warning_candidates.01",
+      "mutation_allowed": false,
+      "review_focus": [],
+      "severity": "warning",
+      "source_artifact_kind": "plan_validation_candidates",
+      "source_ref": "outputs/plan_validation_candidates.json",
+      "source_ref_key": "plan_validation_candidates_ref",
+      "summary": "teammate phone start battery needs confirmation",
+      "title": "Plan validation warning: resource_plan_warning_candidate"
+    },
+    {
+      "accept_reject_allowed": false,
+      "candidate_only": true,
+      "candidate_ref": "plan_validation.chilai_nanhua_day1.resource_plan.warning_candidates.02",
+      "category": "plan_validation",
+      "decision_recorded": false,
+      "evidence_summary": {
+        "candidate_only": true,
+        "rule_id": "resource_plan_warning_candidate",
+        "source_artifact_kind": "resource_plan"
+      },
+      "human_review_required": true,
+      "item_id": "review_queue.chilai_nanhua_day1.plan_validation.plan_validation.chilai_nanhua_day1.resource_plan.warning_candidates.02",
+      "mutation_allowed": false,
+      "review_focus": [],
+      "severity": "warning",
+      "source_artifact_kind": "plan_validation_candidates",
+      "source_ref": "outputs/plan_validation_candidates.json",
+      "source_ref_key": "plan_validation_candidates_ref",
+      "summary": "water carry and refill plan needs reviewer confirmation",
+      "title": "Plan validation warning: resource_plan_warning_candidate"
+    },
+    {
+      "accept_reject_allowed": false,
+      "candidate_only": true,
+      "candidate_ref": "plan_validation.chilai_nanhua_day1.resource_plan.warning_candidates.03",
+      "category": "plan_validation",
+      "decision_recorded": false,
+      "evidence_summary": {
+        "candidate_only": true,
+        "rule_id": "resource_plan_warning_candidate",
+        "source_artifact_kind": "resource_plan"
+      },
+      "human_review_required": true,
+      "item_id": "review_queue.chilai_nanhua_day1.plan_validation.plan_validation.chilai_nanhua_day1.resource_plan.warning_candidates.03",
+      "mutation_allowed": false,
+      "review_focus": [],
+      "severity": "warning",
+      "source_artifact_kind": "plan_validation_candidates",
+      "source_ref": "outputs/plan_validation_candidates.json",
+      "source_ref_key": "plan_validation_candidates_ref",
+      "summary": "headlamp set count is a planning placeholder",
+      "title": "Plan validation warning: resource_plan_warning_candidate"
+    },
+    {
+      "accept_reject_allowed": false,
+      "candidate_only": true,
+      "candidate_ref": "plan_validation.chilai_nanhua_day1.segment_policy.daylight_review",
+      "category": "plan_validation",
+      "decision_recorded": false,
+      "evidence_summary": {
+        "candidate_only": true,
+        "rule_id": "segment_policy_requires_reviewed_daylight",
+        "source_artifact_kind": "segment_policy_candidates"
+      },
+      "human_review_required": true,
+      "item_id": "review_queue.chilai_nanhua_day1.plan_validation.plan_validation.chilai_nanhua_day1.segment_policy.daylight_review",
+      "mutation_allowed": false,
+      "review_focus": [
+        "reviewed_daylight_window"
+      ],
+      "severity": "warning",
+      "source_artifact_kind": "plan_validation_candidates",
+      "source_ref": "outputs/plan_validation_candidates.json",
+      "source_ref_key": "plan_validation_candidates_ref",
+      "summary": "Segment policies require daylight but only candidate weather/daylight evidence is present.",
+      "title": "Plan validation warning: segment_policy_requires_reviewed_daylight"
+    },
+    {
+      "accept_reject_allowed": false,
+      "candidate_only": true,
+      "candidate_ref": "plan_validation.chilai_nanhua_day1.segment_policy.human_review_required",
+      "category": "plan_validation",
+      "decision_recorded": false,
+      "evidence_summary": {
+        "candidate_only": true,
+        "rule_id": "segment_policy_candidates_require_human_review",
+        "source_artifact_kind": "segment_policy_candidates"
+      },
+      "human_review_required": true,
+      "item_id": "review_queue.chilai_nanhua_day1.plan_validation.plan_validation.chilai_nanhua_day1.segment_policy.human_review_required",
+      "mutation_allowed": false,
+      "review_focus": [
+        "accepted_segment_policy_reviews"
+      ],
+      "severity": "warning",
+      "source_artifact_kind": "plan_validation_candidates",
+      "source_ref": "outputs/plan_validation_candidates.json",
+      "source_ref_key": "plan_validation_candidates_ref",
+      "summary": "Segment policy candidates require human review before compile-time use.",
+      "title": "Plan validation warning: segment_policy_candidates_require_human_review"
+    },
+    {
+      "accept_reject_allowed": false,
+      "candidate_only": true,
+      "candidate_ref": "plan_validation.chilai_nanhua_day1.weather_daylight_placeholder",
+      "category": "plan_validation",
+      "decision_recorded": false,
+      "evidence_summary": {
+        "candidate_only": true,
+        "rule_id": "weather_daylight_placeholder_requires_review",
+        "source_artifact_kind": "weather_daylight_evidence"
+      },
+      "human_review_required": true,
+      "item_id": "review_queue.chilai_nanhua_day1.plan_validation.plan_validation.chilai_nanhua_day1.weather_daylight_placeholder",
+      "mutation_allowed": false,
+      "review_focus": [
+        "reviewed_weather_window",
+        "reviewed_daylight_window"
+      ],
+      "severity": "warning",
+      "source_artifact_kind": "plan_validation_candidates",
+      "source_ref": "outputs/plan_validation_candidates.json",
+      "source_ref_key": "plan_validation_candidates_ref",
+      "summary": "Weather/daylight evidence is placeholder-only and needs review before go/no-go planning.",
+      "title": "Plan validation warning: weather_daylight_placeholder_requires_review"
+    },
+    {
+      "accept_reject_allowed": false,
+      "candidate_only": true,
+      "candidate_ref": "route_note.rudy_like_gpx.wpt_000",
+      "category": "route_note",
+      "decision_recorded": false,
+      "evidence_summary": {
+        "lat": 24.056505002,
+        "lon": 121.237940015,
+        "note_category": "route_condition_hint",
+        "potential_ln_signal": true,
+        "requires_human_review": true,
+        "scout_interpretation": "ModelInterpretation",
+        "source_waypoint_index": 0
+      },
+      "human_review_required": true,
+      "item_id": "review_queue.chilai_nanhua_day1.route_note.route_note.rudy_like_gpx.wpt_000",
+      "mutation_allowed": false,
+      "review_focus": [
+        "route_note_interpretation",
+        "ln_warning_candidate",
+        "accept_ignore_or_field_verify"
+      ],
+      "severity": "review",
+      "source_artifact_kind": "pretrip_route_note_candidates",
+      "source_ref": "candidates/route_note_candidates.json",
+      "source_ref_key": "route_note_candidates_ref",
+      "summary": "024西門、阿凡找到獸俓及當時記錄上切點",
+      "title": "Route note Ln proposal review: route_condition_hint"
+    },
+    {
+      "accept_reject_allowed": false,
+      "candidate_only": true,
+      "candidate_ref": "route_note.rudy_like_gpx.wpt_001",
+      "category": "route_note",
+      "decision_recorded": false,
+      "evidence_summary": {
+        "lat": 24.051785991,
+        "lon": 121.266630013,
+        "note_category": "route_condition_hint",
+        "potential_ln_signal": true,
+        "requires_human_review": true,
+        "scout_interpretation": "ModelInterpretation",
+        "source_waypoint_index": 1
+      },
+      "human_review_required": true,
+      "item_id": "review_queue.chilai_nanhua_day1.route_note.route_note.rudy_like_gpx.wpt_001",
+      "mutation_allowed": false,
+      "review_focus": [
+        "route_note_interpretation",
+        "ln_warning_candidate",
+        "accept_ignore_or_field_verify"
+      ],
+      "severity": "review",
+      "source_artifact_kind": "pretrip_route_note_candidates",
+      "source_ref": "candidates/route_note_candidates.json",
+      "source_ref_key": "route_note_candidates_ref",
+      "summary": "026出箭竹林，有展望，繼續上切上稜",
+      "title": "Route note Ln proposal review: route_condition_hint"
+    },
+    {
+      "accept_reject_allowed": false,
+      "candidate_only": true,
+      "candidate_ref": "route_note.rudy_like_gpx.wpt_006",
+      "category": "route_note",
+      "decision_recorded": false,
+      "evidence_summary": {
+        "lat": 24.056938263,
+        "lon": 121.240617111,
+        "note_category": "hazard_hint",
+        "potential_ln_signal": true,
+        "requires_human_review": true,
+        "scout_interpretation": "ModelInterpretation",
+        "source_waypoint_index": 6
+      },
+      "human_review_required": true,
+      "item_id": "review_queue.chilai_nanhua_day1.route_note.route_note.rudy_like_gpx.wpt_006",
+      "mutation_allowed": false,
+      "review_focus": [
+        "route_note_interpretation",
+        "ln_warning_candidate",
+        "accept_ignore_or_field_verify"
+      ],
+      "severity": "warning",
+      "source_artifact_kind": "pretrip_route_note_candidates",
+      "source_ref": "candidates/route_note_candidates.json",
+      "source_ref_key": "route_note_candidates_ref",
+      "summary": "2638大崩塌勿右切/架繩取左小徑",
+      "title": "Route note Ln proposal review: hazard_hint"
+    },
+    {
+      "accept_reject_allowed": false,
+      "candidate_only": true,
+      "candidate_ref": "route_note.rudy_like_gpx.wpt_018",
+      "category": "route_note",
+      "decision_recorded": false,
+      "evidence_summary": {
+        "lat": 24.05431699,
+        "lon": 121.247224985,
+        "note_category": "route_condition_hint",
+        "potential_ln_signal": true,
+        "requires_human_review": true,
+        "scout_interpretation": "ModelInterpretation",
+        "source_waypoint_index": 18
+      },
+      "human_review_required": true,
+      "item_id": "review_queue.chilai_nanhua_day1.route_note.route_note.rudy_like_gpx.wpt_018",
+      "mutation_allowed": false,
+      "review_focus": [
+        "route_note_interpretation",
+        "ln_warning_candidate",
+        "accept_ignore_or_field_verify"
+      ],
+      "severity": "review",
+      "source_artifact_kind": "pretrip_route_note_candidates",
+      "source_ref": "candidates/route_note_candidates.json",
+      "source_ref_key": "route_note_candidates_ref",
+      "summary": "上切點(好走)",
+      "title": "Route note Ln proposal review: route_condition_hint"
+    },
+    {
+      "accept_reject_allowed": false,
+      "candidate_only": true,
+      "candidate_ref": "route_note.rudy_like_gpx.wpt_019",
+      "category": "route_note",
+      "decision_recorded": false,
+      "evidence_summary": {
+        "lat": 24.052390996,
+        "lon": 121.250370964,
+        "note_category": "route_condition_hint",
+        "potential_ln_signal": true,
+        "requires_human_review": true,
+        "scout_interpretation": "ModelInterpretation",
+        "source_waypoint_index": 19
+      },
+      "human_review_required": true,
+      "item_id": "review_queue.chilai_nanhua_day1.route_note.route_note.rudy_like_gpx.wpt_019",
+      "mutation_allowed": false,
+      "review_focus": [
+        "route_note_interpretation",
+        "ln_warning_candidate",
+        "accept_ignore_or_field_verify"
+      ],
+      "severity": "review",
+      "source_artifact_kind": "pretrip_route_note_candidates",
+      "source_ref": "candidates/route_note_candidates.json",
+      "source_ref_key": "route_note_candidates_ref",
+      "summary": "上稜(路徑算清楚)",
+      "title": "Route note Ln proposal review: route_condition_hint"
+    },
+    {
+      "accept_reject_allowed": false,
+      "candidate_only": true,
+      "candidate_ref": "route_note.rudy_like_gpx.wpt_024",
+      "category": "route_note",
+      "decision_recorded": false,
+      "evidence_summary": {
+        "lat": 24.056712035,
+        "lon": 121.244007004,
+        "note_category": "route_condition_hint",
+        "potential_ln_signal": true,
+        "requires_human_review": true,
+        "scout_interpretation": "ModelInterpretation",
+        "source_waypoint_index": 24
+      },
+      "human_review_required": true,
+      "item_id": "review_queue.chilai_nanhua_day1.route_note.route_note.rudy_like_gpx.wpt_024",
+      "mutation_allowed": false,
+      "review_focus": [
+        "route_note_interpretation",
+        "ln_warning_candidate",
+        "accept_ignore_or_field_verify"
+      ],
+      "severity": "review",
+      "source_artifact_kind": "pretrip_route_note_candidates",
+      "source_ref": "candidates/route_note_candidates.json",
+      "source_ref_key": "route_note_candidates_ref",
+      "summary": "上稜之後下稜 有路徑",
+      "title": "Route note Ln proposal review: route_condition_hint"
+    },
+    {
+      "accept_reject_allowed": false,
+      "candidate_only": true,
+      "candidate_ref": "route_note.rudy_like_gpx.wpt_027",
+      "category": "route_note",
+      "decision_recorded": false,
+      "evidence_summary": {
+        "lat": 24.05274773,
+        "lon": 121.261946373,
+        "note_category": "route_condition_hint",
+        "potential_ln_signal": true,
+        "requires_human_review": true,
+        "scout_interpretation": "ModelInterpretation",
+        "source_waypoint_index": 27
+      },
+      "human_review_required": true,
+      "item_id": "review_queue.chilai_nanhua_day1.route_note.route_note.rudy_like_gpx.wpt_027",
+      "mutation_allowed": false,
+      "review_focus": [
+        "route_note_interpretation",
+        "ln_warning_candidate",
+        "accept_ignore_or_field_verify"
+      ],
+      "severity": "review",
+      "source_artifact_kind": "pretrip_route_note_candidates",
+      "source_ref": "candidates/route_note_candidates.json",
+      "source_ref_key": "route_note_candidates_ref",
+      "summary": "南華會師大岩可腰繞",
+      "title": "Route note Ln proposal review: route_condition_hint"
+    },
+    {
+      "accept_reject_allowed": false,
+      "candidate_only": true,
+      "candidate_ref": "route_note.rudy_like_gpx.wpt_028",
+      "category": "route_note",
+      "decision_recorded": false,
+      "evidence_summary": {
+        "lat": 24.054785036,
+        "lon": 121.249809964,
+        "note_category": "hazard_hint",
+        "potential_ln_signal": true,
+        "requires_human_review": true,
+        "scout_interpretation": "ModelInterpretation",
+        "source_waypoint_index": 28
+      },
+      "human_review_required": true,
+      "item_id": "review_queue.chilai_nanhua_day1.route_note.route_note.rudy_like_gpx.wpt_028",
+      "mutation_allowed": false,
+      "review_focus": [
+        "route_note_interpretation",
+        "ln_warning_candidate",
+        "accept_ignore_or_field_verify"
+      ],
+      "severity": "warning",
+      "source_artifact_kind": "pretrip_route_note_candidates",
+      "source_ref": "candidates/route_note_candidates.json",
+      "source_ref_key": "route_note_candidates_ref",
+      "summary": "危險轉彎處(?",
+      "title": "Route note Ln proposal review: hazard_hint"
+    },
+    {
+      "accept_reject_allowed": false,
+      "candidate_only": true,
+      "candidate_ref": "route_note.rudy_like_gpx.wpt_032",
+      "category": "route_note",
+      "decision_recorded": false,
+      "evidence_summary": {
+        "lat": 24.051579963,
+        "lon": 121.268630018,
+        "note_category": "route_condition_hint",
+        "potential_ln_signal": true,
+        "requires_human_review": true,
+        "scout_interpretation": "ModelInterpretation",
+        "source_waypoint_index": 32
+      },
+      "human_review_required": true,
+      "item_id": "review_queue.chilai_nanhua_day1.route_note.route_note.rudy_like_gpx.wpt_032",
+      "mutation_allowed": false,
+      "review_focus": [
+        "route_note_interpretation",
+        "ln_warning_candidate",
+        "accept_ignore_or_field_verify"
+      ],
+      "severity": "review",
+      "source_artifact_kind": "pretrip_route_note_candidates",
+      "source_ref": "candidates/route_note_candidates.json",
+      "source_ref_key": "route_note_candidates_ref",
+      "summary": "小腰繞再上切",
+      "title": "Route note Ln proposal review: route_condition_hint"
+    },
+    {
+      "accept_reject_allowed": false,
+      "candidate_only": true,
+      "candidate_ref": "route_note.rudy_like_gpx.wpt_036",
+      "category": "route_note",
+      "decision_recorded": false,
+      "evidence_summary": {
+        "lat": 24.056269974,
+        "lon": 121.239220016,
+        "note_category": "route_condition_hint",
+        "potential_ln_signal": true,
+        "requires_human_review": true,
+        "scout_interpretation": "ModelInterpretation",
+        "source_waypoint_index": 36
+      },
+      "human_review_required": true,
+      "item_id": "review_queue.chilai_nanhua_day1.route_note.route_note.rudy_like_gpx.wpt_036",
+      "mutation_allowed": false,
+      "review_focus": [
+        "route_note_interpretation",
+        "ln_warning_candidate",
+        "accept_ignore_or_field_verify"
+      ],
+      "severity": "review",
+      "source_artifact_kind": "pretrip_route_note_candidates",
+      "source_ref": "candidates/route_note_candidates.json",
+      "source_ref_key": "route_note_candidates_ref",
+      "summary": "山老鼠路腰繞起點",
+      "title": "Route note Ln proposal review: route_condition_hint"
+    },
+    {
+      "accept_reject_allowed": false,
+      "candidate_only": true,
+      "candidate_ref": "route_note.rudy_like_gpx.wpt_040",
+      "category": "route_note",
+      "decision_recorded": false,
+      "evidence_summary": {
+        "lat": 24.056934994,
+        "lon": 121.238162974,
+        "note_category": "route_condition_hint",
+        "potential_ln_signal": true,
+        "requires_human_review": true,
+        "scout_interpretation": "ModelInterpretation",
+        "source_waypoint_index": 40
+      },
+      "human_review_required": true,
+      "item_id": "review_queue.chilai_nanhua_day1.route_note.route_note.rudy_like_gpx.wpt_040",
+      "mutation_allowed": false,
+      "review_focus": [
+        "route_note_interpretation",
+        "ln_warning_candidate",
+        "accept_ignore_or_field_verify"
+      ],
+      "severity": "review",
+      "source_artifact_kind": "pretrip_route_note_candidates",
+      "source_ref": "candidates/route_note_candidates.json",
+      "source_ref_key": "route_note_candidates_ref",
+      "summary": "左邊低繞好走",
+      "title": "Route note Ln proposal review: route_condition_hint"
+    },
+    {
+      "accept_reject_allowed": false,
+      "candidate_only": true,
+      "candidate_ref": "route_note.rudy_like_gpx.wpt_061",
+      "category": "route_note",
+      "decision_recorded": false,
+      "evidence_summary": {
+        "lat": 24.057406979,
+        "lon": 121.241319012,
+        "note_category": "route_condition_hint",
+        "potential_ln_signal": true,
+        "requires_human_review": true,
+        "scout_interpretation": "ModelInterpretation",
+        "source_waypoint_index": 61
+      },
+      "human_review_required": true,
+      "item_id": "review_queue.chilai_nanhua_day1.route_note.route_note.rudy_like_gpx.wpt_061",
+      "mutation_allowed": false,
+      "review_focus": [
+        "route_note_interpretation",
+        "ln_warning_candidate",
+        "accept_ignore_or_field_verify"
+      ],
+      "severity": "review",
+      "source_artifact_kind": "pretrip_route_note_candidates",
+      "source_ref": "candidates/route_note_candidates.json",
+      "source_ref_key": "route_note_candidates_ref",
+      "summary": "繼續腰繞",
+      "title": "Route note Ln proposal review: route_condition_hint"
+    },
+    {
+      "accept_reject_allowed": false,
+      "candidate_only": true,
+      "candidate_ref": "route_note.rudy_like_gpx.wpt_062",
+      "category": "route_note",
+      "decision_recorded": false,
+      "evidence_summary": {
+        "lat": 24.051408973,
+        "lon": 121.266363971,
+        "note_category": "route_condition_hint",
+        "potential_ln_signal": true,
+        "requires_human_review": true,
+        "scout_interpretation": "ModelInterpretation",
+        "source_waypoint_index": 62
+      },
+      "human_review_required": true,
+      "item_id": "review_queue.chilai_nanhua_day1.route_note.route_note.rudy_like_gpx.wpt_062",
+      "mutation_allowed": false,
+      "review_focus": [
+        "route_note_interpretation",
+        "ln_warning_candidate",
+        "accept_ignore_or_field_verify"
+      ],
+      "severity": "review",
+      "source_artifact_kind": "pretrip_route_note_candidates",
+      "source_ref": "candidates/route_note_candidates.json",
+      "source_ref_key": "route_note_candidates_ref",
+      "summary": "腰繞再上切",
+      "title": "Route note Ln proposal review: route_condition_hint"
+    },
+    {
+      "accept_reject_allowed": false,
+      "candidate_only": true,
+      "candidate_ref": "route_note.rudy_like_gpx.wpt_063",
+      "category": "route_note",
+      "decision_recorded": false,
+      "evidence_summary": {
+        "lat": 24.052427961,
+        "lon": 121.261931034,
+        "note_category": "route_condition_hint",
+        "potential_ln_signal": true,
+        "requires_human_review": true,
+        "scout_interpretation": "ModelInterpretation",
+        "source_waypoint_index": 63
+      },
+      "human_review_required": true,
+      "item_id": "review_queue.chilai_nanhua_day1.route_note.route_note.rudy_like_gpx.wpt_063",
+      "mutation_allowed": false,
+      "review_focus": [
+        "route_note_interpretation",
+        "ln_warning_candidate",
+        "accept_ignore_or_field_verify"
+      ],
+      "severity": "review",
+      "source_artifact_kind": "pretrip_route_note_candidates",
+      "source_ref": "candidates/route_note_candidates.json",
+      "source_ref_key": "route_note_candidates_ref",
+      "summary": "腰繞大石頭右邊",
+      "title": "Route note Ln proposal review: route_condition_hint"
+    },
+    {
+      "accept_reject_allowed": false,
+      "candidate_only": true,
+      "candidate_ref": "route_note.rudy_like_gpx.wpt_064",
+      "category": "route_note",
+      "decision_recorded": false,
+      "evidence_summary": {
+        "lat": 24.057150995,
+        "lon": 121.243026992,
+        "note_category": "route_condition_hint",
+        "potential_ln_signal": true,
+        "requires_human_review": true,
+        "scout_interpretation": "ModelInterpretation",
+        "source_waypoint_index": 64
+      },
+      "human_review_required": true,
+      "item_id": "review_queue.chilai_nanhua_day1.route_note.route_note.rudy_like_gpx.wpt_064",
+      "mutation_allowed": false,
+      "review_focus": [
+        "route_note_interpretation",
+        "ln_warning_candidate",
+        "accept_ignore_or_field_verify"
+      ],
+      "severity": "review",
+      "source_artifact_kind": "pretrip_route_note_candidates",
+      "source_ref": "candidates/route_note_candidates.json",
+      "source_ref_key": "route_note_candidates_ref",
+      "summary": "腰繞好走",
+      "title": "Route note Ln proposal review: route_condition_hint"
+    },
+    {
+      "accept_reject_allowed": false,
+      "candidate_only": true,
+      "candidate_ref": "route_note.rudy_like_gpx.wpt_065",
+      "category": "route_note",
+      "decision_recorded": false,
+      "evidence_summary": {
+        "lat": 24.052027976,
+        "lon": 121.258801986,
+        "note_category": "route_condition_hint",
+        "potential_ln_signal": true,
+        "requires_human_review": true,
+        "scout_interpretation": "ModelInterpretation",
+        "source_waypoint_index": 65
+      },
+      "human_review_required": true,
+      "item_id": "review_queue.chilai_nanhua_day1.route_note.route_note.rudy_like_gpx.wpt_065",
+      "mutation_allowed": false,
+      "review_focus": [
+        "route_note_interpretation",
+        "ln_warning_candidate",
+        "accept_ignore_or_field_verify"
+      ],
+      "severity": "review",
+      "source_artifact_kind": "pretrip_route_note_candidates",
+      "source_ref": "candidates/route_note_candidates.json",
+      "source_ref_key": "route_note_candidates_ref",
+      "summary": "腰繞好走1",
+      "title": "Route note Ln proposal review: route_condition_hint"
+    },
+    {
+      "accept_reject_allowed": false,
+      "candidate_only": true,
+      "candidate_ref": "route_note.rudy_like_gpx.wpt_070",
+      "category": "route_note",
+      "decision_recorded": false,
+      "evidence_summary": {
+        "lat": 24.056856958,
+        "lon": 121.239692001,
+        "note_category": "route_condition_hint",
+        "potential_ln_signal": true,
+        "requires_human_review": true,
+        "scout_interpretation": "ModelInterpretation",
+        "source_waypoint_index": 70
+      },
+      "human_review_required": true,
+      "item_id": "review_queue.chilai_nanhua_day1.route_note.route_note.rudy_like_gpx.wpt_070",
+      "mutation_allowed": false,
+      "review_focus": [
+        "route_note_interpretation",
+        "ln_warning_candidate",
+        "accept_ignore_or_field_verify"
+      ],
+      "severity": "review",
+      "source_artifact_kind": "pretrip_route_note_candidates",
+      "source_ref": "candidates/route_note_candidates.json",
+      "source_ref_key": "route_note_candidates_ref",
+      "summary": "走左腰繞",
+      "title": "Route note Ln proposal review: route_condition_hint"
+    },
+    {
+      "accept_reject_allowed": false,
+      "candidate_only": true,
+      "candidate_ref": "route_note.rudy_like_gpx.wpt_073",
+      "category": "route_note",
+      "decision_recorded": false,
+      "evidence_summary": {
+        "lat": 24.051594967,
+        "lon": 121.269893004,
+        "note_category": "route_condition_hint",
+        "potential_ln_signal": true,
+        "requires_human_review": true,
+        "scout_interpretation": "ModelInterpretation",
+        "source_waypoint_index": 73
+      },
+      "human_review_required": true,
+      "item_id": "review_queue.chilai_nanhua_day1.route_note.route_note.rudy_like_gpx.wpt_073",
+      "mutation_allowed": false,
+      "review_focus": [
+        "route_note_interpretation",
+        "ln_warning_candidate",
+        "accept_ignore_or_field_verify"
+      ],
+      "severity": "review",
+      "source_artifact_kind": "pretrip_route_note_candidates",
+      "source_ref": "candidates/route_note_candidates.json",
+      "source_ref_key": "route_note_candidates_ref",
+      "summary": "走稜有路",
+      "title": "Route note Ln proposal review: route_condition_hint"
+    },
+    {
+      "accept_reject_allowed": false,
+      "candidate_only": true,
+      "candidate_ref": "route_note.rudy_like_gpx.wpt_075",
+      "category": "route_note",
+      "decision_recorded": false,
+      "evidence_summary": {
+        "lat": 24.052677993,
+        "lon": 121.251846012,
+        "note_category": "route_condition_hint",
+        "potential_ln_signal": true,
+        "requires_human_review": true,
+        "scout_interpretation": "ModelInterpretation",
+        "source_waypoint_index": 75
+      },
+      "human_review_required": true,
+      "item_id": "review_queue.chilai_nanhua_day1.route_note.route_note.rudy_like_gpx.wpt_075",
+      "mutation_allowed": false,
+      "review_focus": [
+        "route_note_interpretation",
+        "ln_warning_candidate",
+        "accept_ignore_or_field_verify"
+      ],
+      "severity": "review",
+      "source_artifact_kind": "pretrip_route_note_candidates",
+      "source_ref": "candidates/route_note_candidates.json",
+      "source_ref_key": "route_note_candidates_ref",
+      "summary": "路徑清楚",
+      "title": "Route note Ln proposal review: route_condition_hint"
+    },
+    {
+      "accept_reject_allowed": false,
+      "candidate_only": true,
+      "candidate_ref": "route_note.rudy_like_gpx.wpt_076",
+      "category": "route_note",
+      "decision_recorded": false,
+      "evidence_summary": {
+        "lat": 24.051970979,
+        "lon": 121.258118022,
+        "note_category": "route_condition_hint",
+        "potential_ln_signal": true,
+        "requires_human_review": true,
+        "scout_interpretation": "ModelInterpretation",
+        "source_waypoint_index": 76
+      },
+      "human_review_required": true,
+      "item_id": "review_queue.chilai_nanhua_day1.route_note.route_note.rudy_like_gpx.wpt_076",
+      "mutation_allowed": false,
+      "review_focus": [
+        "route_note_interpretation",
+        "ln_warning_candidate",
+        "accept_ignore_or_field_verify"
+      ],
+      "severity": "review",
+      "source_artifact_kind": "pretrip_route_note_candidates",
+      "source_ref": "candidates/route_note_candidates.json",
+      "source_ref_key": "route_note_candidates_ref",
+      "summary": "路徑清楚1",
+      "title": "Route note Ln proposal review: route_condition_hint"
+    },
+    {
+      "accept_reject_allowed": false,
+      "candidate_only": true,
+      "candidate_ref": "route_note.rudy_like_gpx.wpt_078",
+      "category": "route_note",
+      "decision_recorded": false,
+      "evidence_summary": {
+        "lat": 24.054238033,
+        "lon": 121.247463031,
+        "note_category": "route_condition_hint",
+        "potential_ln_signal": true,
+        "requires_human_review": true,
+        "scout_interpretation": "ModelInterpretation",
+        "source_waypoint_index": 78
+      },
+      "human_review_required": true,
+      "item_id": "review_queue.chilai_nanhua_day1.route_note.route_note.rudy_like_gpx.wpt_078",
+      "mutation_allowed": false,
+      "review_focus": [
+        "route_note_interpretation",
+        "ln_warning_candidate",
+        "accept_ignore_or_field_verify"
+      ],
+      "severity": "review",
+      "source_artifact_kind": "pretrip_route_note_candidates",
+      "source_ref": "candidates/route_note_candidates.json",
+      "source_ref_key": "route_note_candidates_ref",
+      "summary": "這也有一個上切點（粉色布條）",
+      "title": "Route note Ln proposal review: route_condition_hint"
+    },
+    {
+      "accept_reject_allowed": false,
+      "candidate_only": true,
+      "candidate_ref": "runtime_handoff_metadata.chilai_nanhua_day1.v0",
+      "category": "runtime_handoff",
+      "decision_recorded": false,
+      "evidence_summary": {
+        "bridge_mutation_count": 0,
+        "phase1_runtime_mutation_allowed": false,
+        "plan_version_id": "pretrip.chilai_nanhua_day1.v0:0.1.0",
+        "runtime_write_count": 0,
+        "safety_call_count": 0,
+        "status": "candidate_metadata_only"
+      },
+      "human_review_required": true,
+      "item_id": "review_queue.chilai_nanhua_day1.runtime_handoff.runtime_handoff_metadata.chilai_nanhua_day1.v0",
+      "mutation_allowed": false,
+      "review_focus": [
+        "readiness_refs",
+        "route_refs",
+        "reviewed_mission_graph_ref",
+        "runtime_boundary"
+      ],
+      "severity": "review",
+      "source_artifact_kind": "pretrip_runtime_handoff_metadata",
+      "source_ref": "outputs/runtime_handoff_metadata.candidate.json",
+      "source_ref_key": "runtime_handoff_metadata_ref",
+      "summary": "Candidate handoff metadata needs human review before any later runtime integration.",
+      "title": "Runtime handoff metadata gate"
+    },
+    {
+      "accept_reject_allowed": false,
+      "candidate_only": true,
+      "candidate_ref": "policy_candidate.chilai_nanhua_day1.seg.001",
+      "category": "segment_policy",
+      "decision_recorded": false,
+      "evidence_summary": {
+        "compile_boundary": "candidate_only_not_runtime",
+        "expected_duration_seconds": 2504,
+        "from_candidate_id": "cp.start",
+        "review_state": "proposed",
+        "segment_candidate_id": "seg.001",
+        "to_candidate_id": "cp.001"
+      },
+      "human_review_required": true,
+      "item_id": "review_queue.chilai_nanhua_day1.segment_policy.policy_candidate.chilai_nanhua_day1.seg.001",
+      "mutation_allowed": false,
+      "review_focus": [
+        "daylight_required",
+        "water_unavailable",
+        "camp_unavailable"
+      ],
+      "severity": "review",
+      "source_artifact_kind": "segment_policy_candidates",
+      "source_ref": "outputs/segment_policy_candidates.json",
+      "source_ref_key": "segment_policy_candidates_ref",
+      "summary": "Human review must accept or edit this candidate before it can be used as compile input.",
+      "title": "Segment policy review: seg.001"
+    },
+    {
+      "accept_reject_allowed": false,
+      "candidate_only": true,
+      "candidate_ref": "policy_candidate.chilai_nanhua_day1.seg.002",
+      "category": "segment_policy",
+      "decision_recorded": false,
+      "evidence_summary": {
+        "compile_boundary": "candidate_only_not_runtime",
+        "expected_duration_seconds": 2500,
+        "from_candidate_id": "cp.001",
+        "review_state": "proposed",
+        "segment_candidate_id": "seg.002",
+        "to_candidate_id": "cp.002"
+      },
+      "human_review_required": true,
+      "item_id": "review_queue.chilai_nanhua_day1.segment_policy.policy_candidate.chilai_nanhua_day1.seg.002",
+      "mutation_allowed": false,
+      "review_focus": [
+        "daylight_required",
+        "water_unavailable",
+        "camp_unavailable",
+        "retreat_unavailable",
+        "signal_unexpected"
+      ],
+      "severity": "review",
+      "source_artifact_kind": "segment_policy_candidates",
+      "source_ref": "outputs/segment_policy_candidates.json",
+      "source_ref_key": "segment_policy_candidates_ref",
+      "summary": "Human review must accept or edit this candidate before it can be used as compile input.",
+      "title": "Segment policy review: seg.002"
+    },
+    {
+      "accept_reject_allowed": false,
+      "candidate_only": true,
+      "candidate_ref": "policy_candidate.chilai_nanhua_day1.seg.003",
+      "category": "segment_policy",
+      "decision_recorded": false,
+      "evidence_summary": {
+        "compile_boundary": "candidate_only_not_runtime",
+        "expected_duration_seconds": 2506,
+        "from_candidate_id": "cp.002",
+        "review_state": "proposed",
+        "segment_candidate_id": "seg.003",
+        "to_candidate_id": "cp.003"
+      },
+      "human_review_required": true,
+      "item_id": "review_queue.chilai_nanhua_day1.segment_policy.policy_candidate.chilai_nanhua_day1.seg.003",
+      "mutation_allowed": false,
+      "review_focus": [
+        "daylight_required",
+        "water_unavailable",
+        "camp_unavailable",
+        "retreat_unavailable",
+        "signal_unexpected"
+      ],
+      "severity": "review",
+      "source_artifact_kind": "segment_policy_candidates",
+      "source_ref": "outputs/segment_policy_candidates.json",
+      "source_ref_key": "segment_policy_candidates_ref",
+      "summary": "Human review must accept or edit this candidate before it can be used as compile input.",
+      "title": "Segment policy review: seg.003"
+    },
+    {
+      "accept_reject_allowed": false,
+      "candidate_only": true,
+      "candidate_ref": "policy_candidate.chilai_nanhua_day1.seg.004",
+      "category": "segment_policy",
+      "decision_recorded": false,
+      "evidence_summary": {
+        "compile_boundary": "candidate_only_not_runtime",
+        "expected_duration_seconds": 2492,
+        "from_candidate_id": "cp.003",
+        "review_state": "proposed",
+        "segment_candidate_id": "seg.004",
+        "to_candidate_id": "cp.004"
+      },
+      "human_review_required": true,
+      "item_id": "review_queue.chilai_nanhua_day1.segment_policy.policy_candidate.chilai_nanhua_day1.seg.004",
+      "mutation_allowed": false,
+      "review_focus": [
+        "daylight_required",
+        "water_unavailable",
+        "camp_unavailable",
+        "retreat_unavailable",
+        "signal_unexpected"
+      ],
+      "severity": "review",
+      "source_artifact_kind": "segment_policy_candidates",
+      "source_ref": "outputs/segment_policy_candidates.json",
+      "source_ref_key": "segment_policy_candidates_ref",
+      "summary": "Human review must accept or edit this candidate before it can be used as compile input.",
+      "title": "Segment policy review: seg.004"
+    },
+    {
+      "accept_reject_allowed": false,
+      "candidate_only": true,
+      "candidate_ref": "policy_candidate.chilai_nanhua_day1.seg.005",
+      "category": "segment_policy",
+      "decision_recorded": false,
+      "evidence_summary": {
+        "compile_boundary": "candidate_only_not_runtime",
+        "expected_duration_seconds": 2513,
+        "from_candidate_id": "cp.004",
+        "review_state": "proposed",
+        "segment_candidate_id": "seg.005",
+        "to_candidate_id": "cp.005"
+      },
+      "human_review_required": true,
+      "item_id": "review_queue.chilai_nanhua_day1.segment_policy.policy_candidate.chilai_nanhua_day1.seg.005",
+      "mutation_allowed": false,
+      "review_focus": [
+        "daylight_required",
+        "water_unavailable",
+        "camp_unavailable",
+        "retreat_unavailable",
+        "signal_unexpected"
+      ],
+      "severity": "review",
+      "source_artifact_kind": "segment_policy_candidates",
+      "source_ref": "outputs/segment_policy_candidates.json",
+      "source_ref_key": "segment_policy_candidates_ref",
+      "summary": "Human review must accept or edit this candidate before it can be used as compile input.",
+      "title": "Segment policy review: seg.005"
+    },
+    {
+      "accept_reject_allowed": false,
+      "candidate_only": true,
+      "candidate_ref": "policy_candidate.chilai_nanhua_day1.seg.006",
+      "category": "segment_policy",
+      "decision_recorded": false,
+      "evidence_summary": {
+        "compile_boundary": "candidate_only_not_runtime",
+        "expected_duration_seconds": 2486,
+        "from_candidate_id": "cp.005",
+        "review_state": "proposed",
+        "segment_candidate_id": "seg.006",
+        "to_candidate_id": "cp.006"
+      },
+      "human_review_required": true,
+      "item_id": "review_queue.chilai_nanhua_day1.segment_policy.policy_candidate.chilai_nanhua_day1.seg.006",
+      "mutation_allowed": false,
+      "review_focus": [
+        "daylight_required",
+        "water_unavailable",
+        "camp_unavailable",
+        "retreat_unavailable",
+        "signal_unexpected"
+      ],
+      "severity": "review",
+      "source_artifact_kind": "segment_policy_candidates",
+      "source_ref": "outputs/segment_policy_candidates.json",
+      "source_ref_key": "segment_policy_candidates_ref",
+      "summary": "Human review must accept or edit this candidate before it can be used as compile input.",
+      "title": "Segment policy review: seg.006"
+    },
+    {
+      "accept_reject_allowed": false,
+      "candidate_only": true,
+      "candidate_ref": "policy_candidate.chilai_nanhua_day1.seg.007",
+      "category": "segment_policy",
+      "decision_recorded": false,
+      "evidence_summary": {
+        "compile_boundary": "candidate_only_not_runtime",
+        "expected_duration_seconds": 2502,
+        "from_candidate_id": "cp.006",
+        "review_state": "proposed",
+        "segment_candidate_id": "seg.007",
+        "to_candidate_id": "cp.007"
+      },
+      "human_review_required": true,
+      "item_id": "review_queue.chilai_nanhua_day1.segment_policy.policy_candidate.chilai_nanhua_day1.seg.007",
+      "mutation_allowed": false,
+      "review_focus": [
+        "daylight_required",
+        "water_unavailable",
+        "camp_unavailable",
+        "retreat_unavailable",
+        "signal_unexpected"
+      ],
+      "severity": "review",
+      "source_artifact_kind": "segment_policy_candidates",
+      "source_ref": "outputs/segment_policy_candidates.json",
+      "source_ref_key": "segment_policy_candidates_ref",
+      "summary": "Human review must accept or edit this candidate before it can be used as compile input.",
+      "title": "Segment policy review: seg.007"
+    },
+    {
+      "accept_reject_allowed": false,
+      "candidate_only": true,
+      "candidate_ref": "policy_candidate.chilai_nanhua_day1.seg.008",
+      "category": "segment_policy",
+      "decision_recorded": false,
+      "evidence_summary": {
+        "compile_boundary": "candidate_only_not_runtime",
+        "expected_duration_seconds": 3526,
+        "from_candidate_id": "cp.007",
+        "review_state": "proposed",
+        "segment_candidate_id": "seg.008",
+        "to_candidate_id": "cp.008"
+      },
+      "human_review_required": true,
+      "item_id": "review_queue.chilai_nanhua_day1.segment_policy.policy_candidate.chilai_nanhua_day1.seg.008",
+      "mutation_allowed": false,
+      "review_focus": [
+        "daylight_required",
+        "water_unavailable",
+        "camp_unavailable",
+        "retreat_unavailable",
+        "signal_unexpected"
+      ],
+      "severity": "review",
+      "source_artifact_kind": "segment_policy_candidates",
+      "source_ref": "outputs/segment_policy_candidates.json",
+      "source_ref_key": "segment_policy_candidates_ref",
+      "summary": "Human review must accept or edit this candidate before it can be used as compile input.",
+      "title": "Segment policy review: seg.008"
+    },
+    {
+      "accept_reject_allowed": false,
+      "candidate_only": true,
+      "candidate_ref": "policy_candidate.chilai_nanhua_day1.seg.009",
+      "category": "segment_policy",
+      "decision_recorded": false,
+      "evidence_summary": {
+        "compile_boundary": "candidate_only_not_runtime",
+        "expected_duration_seconds": 1476,
+        "from_candidate_id": "cp.008",
+        "review_state": "proposed",
+        "segment_candidate_id": "seg.009",
+        "to_candidate_id": "cp.009"
+      },
+      "human_review_required": true,
+      "item_id": "review_queue.chilai_nanhua_day1.segment_policy.policy_candidate.chilai_nanhua_day1.seg.009",
+      "mutation_allowed": false,
+      "review_focus": [
+        "daylight_required",
+        "water_unavailable",
+        "camp_unavailable",
+        "retreat_unavailable",
+        "signal_unexpected"
+      ],
+      "severity": "review",
+      "source_artifact_kind": "segment_policy_candidates",
+      "source_ref": "outputs/segment_policy_candidates.json",
+      "source_ref_key": "segment_policy_candidates_ref",
+      "summary": "Human review must accept or edit this candidate before it can be used as compile input.",
+      "title": "Segment policy review: seg.009"
+    },
+    {
+      "accept_reject_allowed": false,
+      "candidate_only": true,
+      "candidate_ref": "policy_candidate.chilai_nanhua_day1.seg.010",
+      "category": "segment_policy",
+      "decision_recorded": false,
+      "evidence_summary": {
+        "compile_boundary": "candidate_only_not_runtime",
+        "expected_duration_seconds": 1829,
+        "from_candidate_id": "cp.009",
+        "review_state": "proposed",
+        "segment_candidate_id": "seg.010",
+        "to_candidate_id": "cp.finish"
+      },
+      "human_review_required": true,
+      "item_id": "review_queue.chilai_nanhua_day1.segment_policy.policy_candidate.chilai_nanhua_day1.seg.010",
+      "mutation_allowed": false,
+      "review_focus": [
+        "daylight_required",
+        "water_unavailable",
+        "camp_unavailable",
+        "signal_unexpected"
+      ],
+      "severity": "review",
+      "source_artifact_kind": "segment_policy_candidates",
+      "source_ref": "outputs/segment_policy_candidates.json",
+      "source_ref_key": "segment_policy_candidates_ref",
+      "summary": "Human review must accept or edit this candidate before it can be used as compile input.",
+      "title": "Segment policy review: seg.010"
+    },
+    {
+      "accept_reject_allowed": false,
+      "candidate_only": true,
+      "candidate_ref": "weather_daylight.chilai_nanhua_day1.2026-05-03.v0",
+      "category": "weather_daylight",
+      "decision_recorded": false,
+      "evidence_summary": {
+        "daylight_source_status": "manual_placeholder",
+        "external_api_calls_made": false,
+        "staleness": "placeholder",
+        "validation_status": "human_review_required",
+        "weather_source_status": "manual_placeholder"
+      },
+      "human_review_required": true,
+      "item_id": "review_queue.chilai_nanhua_day1.weather_daylight.weather_daylight.chilai_nanhua_day1.2026-05-03.v0",
+      "mutation_allowed": false,
+      "review_focus": [
+        "reviewed_weather_window",
+        "reviewed_daylight_window"
+      ],
+      "severity": "warning",
+      "source_artifact_kind": "weather_daylight_evidence",
+      "source_ref": "outputs/weather_daylight_evidence.json",
+      "source_ref_key": "weather_daylight_evidence_ref",
+      "summary": "Weather and daylight fields are placeholder-only and require human review before go/no-go use.",
+      "title": "Weather/daylight placeholder review"
+    }
+  ],
+  "manifest_id": "review_queue.chilai_nanhua_day1.v0",
+  "notes": [
+    "Candidate-only Phase 4 human review queue manifest.",
+    "Items are compact pointers to existing Chilai fixture candidate artifacts.",
+    "Reviewers must use separate review tooling to accept, reject, or edit candidates."
+  ],
+  "project_id": "chilai_nanhua_day1",
+  "source_refs": [
+    "outputs/plan_validation_candidates.json",
+    "outputs/poi_readiness_candidates.json",
+    "outputs/segment_policy_candidates.json",
+    "outputs/weather_daylight_evidence.json",
+    "outputs/contour_interpretation_candidates.json",
+    "candidates/route_note_candidates.json",
+    "outputs/runtime_handoff_metadata.candidate.json",
+    "outputs/departure_bundle_manifest.json"
+  ],
+  "status": "candidate_review_queue_only"
+}
