@@ -48,6 +48,18 @@ def test_current_chilai_pretrip_release_check_passes():
     ] is False
     assert summary["checks"]["admin_map_layer_stack"]["pretrip_api_top"] is True
     assert summary["checks"]["admin_map_layer_stack"]["after_action_imagery_bottom"] is True
+    assert summary["checks"]["admin_map_layer_stack"][
+        "after_action_imagery_local_raster_manifest_supported"
+    ] is True
+    assert summary["checks"]["admin_map_layer_stack"][
+        "after_action_imagery_local_raster_tile_url_template"
+    ] == "/admin/tiles/imagery/{project_id}/{layer_id}/{z}/{x}/{y}.png"
+    assert summary["checks"]["admin_map_layer_stack"][
+        "after_action_raster_imagery_renderer_present"
+    ] is True
+    assert summary["checks"]["admin_map_layer_stack"][
+        "after_action_imagery_external_network_required"
+    ] is False
     assert summary["checks"]["admin_map_layer_stack"]["after_action_api_top"] is True
     assert (
         summary["checks"]["admin_map_layer_stack"]["after_action_weather_api_available"]
@@ -2330,6 +2342,7 @@ def test_current_chilai_pretrip_release_check_passes():
         "4.5AM",
         "4.5AN",
         "4.5AO",
+        "4.5AP",
     ]
     assert summary["checks"]["pretrip_implementation_status"]["not_started_milestones"] == []
     assert summary["checks"]["pretrip_implementation_status"]["runtime_mutation_allowed"] is False

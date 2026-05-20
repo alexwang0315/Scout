@@ -97,6 +97,7 @@ def test_manifest_maps_phase4_milestones_and_marks_ui_not_started():
         "4.5AM",
         "4.5AN",
         "4.5AO",
+        "4.5AP",
     ]
     for milestone_id in [
         "0",
@@ -170,6 +171,7 @@ def test_manifest_maps_phase4_milestones_and_marks_ui_not_started():
         "4.5AM",
         "4.5AN",
         "4.5AO",
+        "4.5AP",
     ]:
         milestone = milestones[milestone_id]
         assert milestone["implementation_status"] == "implemented"
@@ -1393,6 +1395,24 @@ def test_manifest_maps_phase4_milestones_and_marks_ui_not_started():
     assert milestone_45ao["release_check_coverage"]["check_names"] == [
         "admin_map_layer_stack",
         "pretrip_admin_ui",
+        "focused_phase4_tests",
+    ]
+
+    milestone_45ap = milestones["4.5AP"]
+    assert milestone_45ap["title"] == "After-Action Raster Imagery Renderer"
+    assert milestone_45ap["modules"] == [
+        "docs/admin/phase1-after-action.html",
+        "admin_map_layers.py",
+        "phase4_pretrip_release_check.py",
+    ]
+    assert milestone_45ap["tests"] == [
+        "tests/test_admin_after_action.py",
+        "tests/test_admin_map_layers.py",
+        "tests/test_phase4_pretrip_release_check.py",
+        "tests/test_pretrip_implementation_status.py",
+    ]
+    assert milestone_45ap["release_check_coverage"]["check_names"] == [
+        "admin_map_layer_stack",
         "focused_phase4_tests",
     ]
 
