@@ -1,15 +1,20 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import json
+import os
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
-from typing import Any, Callable
+from pathlib import Path
+from typing import Any, Callable, Mapping
 
 
 DEFAULT_ADMIN_BASE_URL = "http://scout.local:9110"
 DEFAULT_RUNTIME_BASE_URL = "http://scout.local:9099"
+DEFAULT_ADMIN_BASIC_USERNAME = "scout-admin"
+DEFAULT_ADMIN_TOKEN_ENV = "SCOUT_ADMIN_ACCESS_TOKEN"
 DEFAULT_TIMEOUT_SECONDS = 3.0
 
 UrlOpen = Callable[..., Any]
@@ -52,15 +57,22 @@ def build_phase4_hardware_demo_smoke(
     *,
     admin_base_url: str = DEFAULT_ADMIN_BASE_URL,
     runtime_base_url: str = DEFAULT_RUNTIME_BASE_URL,
+    admin_auth_token: str | None = None,
+    admin_basic_username: str = DEFAULT_ADMIN_BASIC_USERNAME,
     timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
     urlopen: UrlOpen = urllib.request.urlopen,
 ) -> dict[str, Any]:
     admin_base = _normalize_base_url(admin_base_url)
     runtime_base = _normalize_base_url(runtime_base_url)
+    admin_auth_header = _build_basic_auth_header(
+        username=admin_basic_username,
+        token=admin_auth_token,
+    )
     endpoints = [
         _check_endpoint(
             spec,
             base_url=admin_base if spec.base == "admin" else runtime_base,
+            auth_header=admin_auth_header if spec.base == "admin" else None,
             timeout_seconds=timeout_seconds,
             urlopen=urlopen,
         )
@@ -82,6 +94,14 @@ def build_phase4_hardware_demo_smoke(
             "hardware_control_allowed": False,
             "secrets_in_output_allowed": False,
             "response_body_echo_allowed": False,
+            "admin_auth_supported": True,
+            "runtime_auth_header_sent": False,
+        },
+        "auth": {
+            "admin_auth_header_sent": bool(admin_auth_header),
+            "admin_auth_scheme": "basic" if admin_auth_header else None,
+            "admin_basic_username": admin_basic_username,
+            "token_value_exposed": False,
         },
         "endpoint_statuses": endpoints,
         "counts": {
@@ -96,16 +116,20 @@ def _check_endpoint(
     spec: EndpointSpec,
     *,
     base_url: str,
+    auth_header: str | None,
     timeout_seconds: float,
     urlopen: UrlOpen,
 ) -> dict[str, Any]:
     url = f"{base_url}{spec.path}"
+    headers = {
+        "Accept": "application/json,text/html;q=0.9,*/*;q=0.1",
+        "User-Agent": "scout-phase4-hardware-demo-smoke/1",
+    }
+    if auth_header:
+        headers["Authorization"] = auth_header
     request = urllib.request.Request(
         url,
-        headers={
-            "Accept": "application/json,text/html;q=0.9,*/*;q=0.1",
-            "User-Agent": "scout-phase4-hardware-demo-smoke/1",
-        },
+        headers=headers,
         method="GET",
     )
     result: dict[str, Any] = {
@@ -118,6 +142,7 @@ def _check_endpoint(
         "http_status": None,
         "content_type": None,
         "expected_content": spec.expected_content,
+        "auth_header_sent": bool(auth_header),
         "summary": "not checked",
         "missing": [],
     }
@@ -220,6 +245,18 @@ def _safe_payload_summary(payload: dict[str, Any]) -> dict[str, Any]:
             )
             if key in payload["boundaries"]
         }
+    if isinstance(payload.get("auth"), dict):
+        summary["auth"] = {
+            key: payload["auth"].get(key)
+            for key in (
+                "required",
+                "token_configured",
+                "token_source",
+                "token_value_exposed",
+                "misconfigured",
+            )
+            if key in payload["auth"]
+        }
     if "project_id" in payload:
         summary["project_id"] = payload["project_id"]
     return summary
@@ -249,6 +286,32 @@ def _normalize_base_url(value: str) -> str:
     return normalized
 
 
+def _build_basic_auth_header(*, username: str, token: str | None) -> str | None:
+    clean_token = token.strip() if isinstance(token, str) else ""
+    if not clean_token:
+        return None
+    clean_username = username.strip() or DEFAULT_ADMIN_BASIC_USERNAME
+    raw = f"{clean_username}:{clean_token}".encode("utf-8")
+    return "Basic " + base64.b64encode(raw).decode("ascii")
+
+
+def _resolve_admin_auth_token(
+    *,
+    token_env: str = DEFAULT_ADMIN_TOKEN_ENV,
+    token_file: str | None = None,
+    environ: Mapping[str, str] | None = None,
+) -> str | None:
+    env = os.environ if environ is None else environ
+    if token_file:
+        try:
+            token = Path(token_file).expanduser().read_text(encoding="utf-8").strip()
+        except OSError:
+            token = ""
+        if token:
+            return token
+    return env.get(token_env, "").strip() or None
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
@@ -258,6 +321,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--admin-base-url", default=DEFAULT_ADMIN_BASE_URL)
     parser.add_argument("--runtime-base-url", default=DEFAULT_RUNTIME_BASE_URL)
+    parser.add_argument("--admin-basic-username", default=DEFAULT_ADMIN_BASIC_USERNAME)
+    parser.add_argument("--admin-token-env", default=DEFAULT_ADMIN_TOKEN_ENV)
+    parser.add_argument("--admin-token-file")
     parser.add_argument("--timeout-seconds", type=float, default=DEFAULT_TIMEOUT_SECONDS)
     parser.add_argument("--pretty", action="store_true")
     return parser
@@ -265,9 +331,15 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    admin_auth_token = _resolve_admin_auth_token(
+        token_env=args.admin_token_env,
+        token_file=args.admin_token_file,
+    )
     result = build_phase4_hardware_demo_smoke(
         admin_base_url=args.admin_base_url,
         runtime_base_url=args.runtime_base_url,
+        admin_auth_token=admin_auth_token,
+        admin_basic_username=args.admin_basic_username,
         timeout_seconds=args.timeout_seconds,
     )
     print(json.dumps(result, ensure_ascii=True, indent=2 if args.pretty else None))

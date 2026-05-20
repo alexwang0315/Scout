@@ -681,11 +681,15 @@ Boundaries:
 Smoke helpers:
 
 - `phase4_hardware_demo_smoke.py` runs read-only HTTP GET checks against the
-  deployed admin preview and runtime health endpoints.
+  deployed admin preview and runtime health endpoints. For protected admin
+  routes it can attach Basic auth from `SCOUT_ADMIN_ACCESS_TOKEN` or an
+  operator-provided token file, but it never echoes the token or response body.
 - `phase4_hardware_tile_workspace_smoke.py` is plan-only. It prints the tile,
   workspace-copy, and review-decision-preview endpoints but does not call
   `scout.local`, download external tiles, write repo fixtures, mutate Phase 1,
-  or write Phase 2 Brain state.
+  or write Phase 2 Brain state. The printed contract marks deployed admin
+  tile/workspace/review routes as auth-required because the LAN preview is
+  protected by default.
 
 中文註釋：這個 profile 是「硬體上的規劃/admin 預覽服務」，不是現場安全 runtime。
 Mac 可以用 `http://scout.local:9110/admin/pretrip` 觀看與操作 Phase 4 admin；
