@@ -515,6 +515,68 @@
       font-size: 12px;
     }
 
+    .next-plan-panel {
+      display: grid;
+      gap: 10px;
+      margin-top: 16px;
+      padding-top: 14px;
+      border-top: 1px solid var(--border);
+    }
+
+    .next-plan-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .next-plan-link {
+      color: var(--focus);
+      text-decoration: none;
+      font-size: 12px;
+    }
+
+    .next-plan-link:focus-visible,
+    .next-plan-link:hover {
+      text-decoration: underline;
+    }
+
+    .next-plan-list {
+      display: grid;
+      gap: 8px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .next-plan-item {
+      border: 1px solid var(--border);
+      border-left: 4px solid var(--cat-map);
+      border-radius: 6px;
+      padding: 9px 10px;
+      background: #171b20;
+    }
+
+    .next-plan-item.is-related {
+      border-left-color: var(--focus);
+      background: #1c222a;
+    }
+
+    .next-plan-item strong {
+      display: block;
+      font-size: 13px;
+      font-weight: 650;
+    }
+
+    .next-plan-item span {
+      display: block;
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 12px;
+      overflow-wrap: anywhere;
+    }
+
     .raw-json-details {
       margin-top: 16px;
       border-top: 1px solid var(--border);
@@ -730,6 +792,30 @@
           <div id="narrativeFacts" class="narrative-facts"></div>
           <p id="narrativeReadOnlyNote" class="read-only-note">Completed mission evidence is read-only. Any future plan output belongs to Phase 4 candidate review.</p>
         </div>
+        <section id="nextPlanCandidatePanel" class="next-plan-panel" aria-label="Phase 4 next-plan candidate projection">
+          <div class="next-plan-head">
+            <div>
+              <h2>After-Action Next Plan Candidates</h2>
+              <p class="meta">candidate-only Phase 4 projection from completed mission evidence.</p>
+            </div>
+            <a class="next-plan-link" href="/admin/pretrip">Review workspace</a>
+          </div>
+          <ul id="nextPlanCandidateList" class="next-plan-list">
+            <li class="next-plan-item">
+              <strong>Review transfer-gap checkpoint boundary</strong>
+              <span>candidate-only; human review required; MissionGraph compile blocked_until_human_review.</span>
+            </li>
+            <li class="next-plan-item">
+              <strong>Review weak-GPS recording policy</strong>
+              <span>candidate-only; no ObservedFact writeback; no historical evidence mutation.</span>
+            </li>
+            <li class="next-plan-item">
+              <strong>Re-check medium-staleness map corridors</strong>
+              <span>model suggestion candidate; no Phase 1 safety decision mutation.</span>
+            </li>
+          </ul>
+          <p class="read-only-note">This panel does not accept, reject, compile, or write next-plan candidates.</p>
+        </section>
         <p id="detailSource" class="source">Hover or select map evidence.</p>
         <details id="rawJsonDetails" class="raw-json-details">
           <summary>Raw JSON detail</summary>
@@ -838,6 +924,32 @@
     const OSM_MAX_ZOOM = 20;
     const RASTER_LOCAL_TILE_URL_TEMPLATE = `${apiBase()}/admin/tiles/imagery/{project_id}/{layer_id}/{z}/{x}/{y}.png`;
     const OSM_ATTRIBUTION = "OpenStreetMap contributors";
+    const AFTER_ACTION_NEXT_PLAN_CANDIDATES = [
+      {
+        candidate_id: "after_action.scout_260512.transfer_gap.checkpoint_review",
+        title: "Review transfer-gap checkpoint boundary",
+        kind: "checkpoint_candidate",
+        summary: "Candidate-only checkpoint-boundary review for cp_05/cp_06 transfer-gap evidence.",
+        related: ["cp_05", "cp_06", "seg_05"],
+        boundary: "human review required; MissionGraph compile blocked_until_human_review"
+      },
+      {
+        candidate_id: "after_action.scout_260512.weak_gps.recording_policy_review",
+        title: "Review weak-GPS recording policy",
+        kind: "segment_policy_candidate",
+        summary: "Reviewer-note candidate for weak GPS segments with high corridor agreement.",
+        related: ["seg_06", "seg_09", "watch_260512_093931"],
+        boundary: "no ObservedFact writeback; no historical evidence mutation"
+      },
+      {
+        candidate_id: "after_action.scout_260512.map_corridor.staleness_review",
+        title: "Re-check medium-staleness map corridors",
+        kind: "map_corridor_candidate",
+        summary: "Model-suggestion candidate for reused corridor evidence with medium staleness risk.",
+        related: ["openstreetmap_overpass", "map.scout_260512.overpass_corridors"],
+        boundary: "no Phase 1 safety decision mutation; candidate-only"
+      }
+    ];
     const state = { view: null, projected: null, selected: null };
     const svg = document.getElementById("map");
     const hoverHint = document.getElementById("hoverHint");
@@ -1033,6 +1145,7 @@
       document.getElementById("detailSource").textContent = `${item.evidence_type || "evidence"} | ${item.source_path || "no source path"}`;
       document.getElementById("narrativeSummary").textContent = narrativeSummary(item);
       renderNarrativeFacts(item);
+      renderNextPlanCandidates(item);
       document.getElementById("detailJson").textContent = JSON.stringify(item, null, 2);
     }
 
@@ -1183,6 +1296,49 @@
         fact.appendChild(labelNode);
         fact.appendChild(valueNode);
         facts.appendChild(fact);
+      });
+    }
+
+    function nextPlanCandidatesFor(item) {
+      if (!item) return AFTER_ACTION_NEXT_PLAN_CANDIDATES;
+      const refs = [
+        item.checkpoint_id,
+        item.segment_id,
+        item.capsule?.segment_id,
+        item.id,
+        item.source_id,
+        item.corridor_id
+      ].filter(Boolean);
+      const related = AFTER_ACTION_NEXT_PLAN_CANDIDATES.filter(candidate =>
+        candidate.related.some(ref => refs.includes(ref))
+      );
+      return related.length ? related : AFTER_ACTION_NEXT_PLAN_CANDIDATES;
+    }
+
+    function renderNextPlanCandidates(item) {
+      const list = document.getElementById("nextPlanCandidateList");
+      list.replaceChildren();
+      const refs = [
+        item?.checkpoint_id,
+        item?.segment_id,
+        item?.capsule?.segment_id,
+        item?.id,
+        item?.source_id,
+        item?.corridor_id
+      ].filter(Boolean);
+      nextPlanCandidatesFor(item).forEach(candidate => {
+        const li = document.createElement("li");
+        li.className = "next-plan-item";
+        if (candidate.related.some(ref => refs.includes(ref))) {
+          li.classList.add("is-related");
+        }
+        const title = document.createElement("strong");
+        title.textContent = candidate.title;
+        const summary = document.createElement("span");
+        summary.textContent = `${candidate.candidate_id} | ${candidate.kind} | ${candidate.summary} ${candidate.boundary}.`;
+        li.appendChild(title);
+        li.appendChild(summary);
+        list.appendChild(li);
       });
     }
 
