@@ -44,3 +44,16 @@ def test_gpio_control_contract_has_no_safety_runtime_imports() -> None:
         "httpx",
     ):
         assert forbidden not in source
+
+
+def test_gpio_live_endpoint_decision_stays_projection_only() -> None:
+    source = Path("docs/specs/pi5-gpio-control-surface.md").read_text(encoding="utf-8")
+
+    for token in (
+        "Decision for this milestone: no live GPIO endpoint is added.",
+        "remain projection-only",
+        "cannot be converted into a",
+        "`/safety/*` mutation",
+        "who may arm the button path",
+    ):
+        assert token in source

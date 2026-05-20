@@ -1,0 +1,62 @@
+# Runtime Stream and Live Provider Boundary Review
+
+Date: 2026-05-20
+
+這份 review 收束目前 dirty worktree 裡的 `runtime_stream_*` 與
+`runtime_remote_provider_*` 草稿。它不是啟用 live stream 或 live provider 的 approval。
+
+## Current Status
+
+- Runtime stream policy, telemetry, controls, and transport API are present as
+  draft Phase 4.5/runtime-handoff artifacts.
+- Remote provider policy, payload composer, send queue, demo harness, and live
+  adapter are present as draft artifacts.
+- These files are not part of the deterministic Pi Step 1 runtime-core commit.
+- These files must not be bundled with assistant guardrails or hardware
+  readiness commits until their live-send boundary is explicitly approved.
+
+## Boundary Decision
+
+For the current hardware prototype prep:
+
+- Do not mount runtime stream transport routes into the Scout machine runtime.
+- Do not enable remote provider live send by default.
+- Do not couple runtime stream controls to GPIO events.
+- Do not let assistant responses pause, resume, drain, or end runtime streams.
+- Do not let assistant responses enqueue, approve, or send provider payloads.
+- Do not call `/safety/*` mutation from runtime stream smoke.
+- Do not write IncidentStore, ObservedFact, Brain, or HumanReview from stream
+  telemetry.
+
+中文註釋：runtime stream 可以先作為「邊界模型與只讀 telemetry」存在，但不能被誤認為
+已經允許 live provider send、incident bridge enablement 或安全決策 mutation。
+
+## Required Gates Before Live Use
+
+1. Operator policy naming who may enable a stream and for how long.
+2. Authentication and replay-protection test plan for every transport.
+3. Backpressure/drop behavior verified with fixture load tests.
+4. Explicit incident bridge enablement separate from stream acceptance.
+5. Manual provider-send authorization separate from queued intent.
+6. Rollback plan that leaves Phase 1 safety runtime deterministic.
+7. Browser/admin UI wording that labels all stream summaries as read-only until
+   live mode is approved.
+
+## Commit Hygiene
+
+Runtime stream/live provider files should be grouped into a dedicated commit
+after the above boundary is accepted. They should not be staged with:
+
+- hardware Docker Step 1 runtime-core;
+- assistant guardrail API/UI work;
+- Phase 4 pretrip planning core;
+- local-only field captures;
+- local model/Ollama compose.
+
+## Next Implementation Slice
+
+The next safe slice is a read-only stream status surface that renders existing
+policy/telemetry snapshots without mounting live transport send routes.
+
+中文註釋：如果下一步要真的開 live provider send，就需要使用者明確決策；這不是可以由
+cleanup 或 smoke 自動跨過的邊界。

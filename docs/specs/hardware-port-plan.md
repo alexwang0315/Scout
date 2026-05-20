@@ -480,22 +480,45 @@ Only after Pi 5 + Docker runtime is stable:
 
 中文註釋：這些問題不阻止開始 Docker/Pi runtime port；它們會影響後續硬體 provider 與外型設計。
 
+## Scout Machine Smoke Status
+
+2026-05-20: Scout machine remote smoke reached the first hardware target.
+
+Completed:
+
+- copied a clean runtime-core package from commit `b41f50cd` to `scout.local`;
+- built `scout-fusion/pi-runtime:step1` successfully on the target;
+- observed an existing healthy `scout-runtime` on `9099`;
+- smoke-tested the new `step1` image on temporary host port `9101`;
+- verified `/health`, `/runtime/status`, and `/providers/status`;
+- removed the temporary smoke container.
+
+Not run:
+
+- no `/safety/*` mutation;
+- no outbound/SOS/SMS/satellite send;
+- no local model request;
+- no live hardware or provider control.
+
+中文註釋：這代表 Docker/Pi Step 1 已經跨到 Scout 機器實測，但還不是現場安全任務部署。
+
 ## Recommended Next Slice
 
-After the manual dry-run package, Docker dry-run gate, GPIO boundary review, and
-dirty-worktree cleanup plan, the next slice is an operator-approved Scout
-machine dry run. The current repo artifacts can prepare commands and evidence,
-but they still do not execute Docker, connect to Pi, call live `/safety/*`, or
-start local models.
+After the manual dry-run package, Docker dry-run gate, GPIO boundary review,
+dirty-worktree cleanup plan, and Scout machine read-only smoke, the next slice is
+one of two bounded tracks:
+
+1. stabilize deployment operations for the existing `scout-runtime` service;
+2. stabilize Phase 4 dirty worktree groups one at a time.
 
 Deliverables:
 
-- operator-selected target host and SSH/console path;
-- explicit approval to run `docker compose -f docker-compose.pi.yml up`;
-- manual capture of `/health`, `/runtime/status`, `/providers/status`;
-- explicit approval before any operator-run `/safety/observations` fixture smoke;
-- evidence artifact filled from `tests/fixtures/hardware/scout_machine_dry_run_package.example.json`.
+- runtime service ownership and restart policy documented;
+- version/tag strategy for replacing `scout-fusion/pi-runtime:local`;
+- backup and rollback checklist for `/data/scout`;
+- explicit approval before any `/safety/observations` fixture smoke;
+- separate commit plan for Phase 4 planning core, admin map UI, and runtime
+  stream/live provider drafts.
 
-中文註釋：下一步需要人的部署決策。沒有 target machine 與 operator approval 前，Scout
-仍停在本機 contract/dry-run 階段，不應自動部署、不應啟動本地模型，也不應把 GPIO 或
-provider event 直接接進 Phase 1 safety mutation。
+中文註釋：下一步是「如何接管既有 runtime service」的部署決策，不是自動把 dirty
+worktree、GPIO、live provider 或本地模型併入 Phase 1 safety path。
