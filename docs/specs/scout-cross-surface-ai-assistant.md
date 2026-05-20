@@ -1141,6 +1141,19 @@ complete when:
 - verification uses mocked runners only and does not start Pi, Ollama, local
   model listeners, transport, or hardware/provider services.
 
+Milestone 10.2 Slice 14 assistant shell offline fallback panels are complete
+when:
+
+- debug, pretrip, admin after-action, and hardware readiness assistant shells
+  each include an `Offline fallback` read-only panel;
+- each shell renders `offline_fallback` through the shared
+  `renderOfflineFallback` helper after successful `/assistant/query`;
+- failed assistant queries reset the panel to the safe no-schema placeholder;
+- the static UI smoke gate requires the `Offline fallback` shell token across
+  all assistant surfaces;
+- verification remains static/browser-free and does not start Pi, Ollama, local
+  model listeners, transport, or hardware/provider services.
+
 Milestone 10.2 Slice 3 Pi field profile status/runbook is complete when:
 
 - `/assistant/status` reports runtime profile, local fallback mode, manual
@@ -1272,7 +1285,7 @@ Milestone 10.2 Slice 11 hardware experiment assets are complete when:
 
 ## Next Slice Candidates
 
-After Milestone 10.2 Slice 13, the next step is either wiring the shared UI
-helper into individual assistant shells or recording a longer Pi/Ollama soak
-test. Both should remain outside Phase 1 safety authority unless explicitly
-promoted by a new spec decision.
+After Milestone 10.2 Slice 14, the next step is either browser visual QA for
+the offline fallback panels or recording a longer Pi/Ollama soak test. Both
+should remain outside Phase 1 safety authority unless explicitly promoted by a
+new spec decision.

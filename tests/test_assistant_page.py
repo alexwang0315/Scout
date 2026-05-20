@@ -38,9 +38,11 @@ def assert_shared_assistant_contract(shell: str, surface: str) -> None:
     assert 'data-assistant-boundary="read-only model interpretation"' in shell
     assert "read-only model interpretation" in shell
     assert "Answer" in shell
+    assert "Offline fallback" in shell
     assert "Limitations" in shell
     assert "Sources" in shell
     assert 'class="assistant-answer"' in shell
+    assert 'id="assistantOfflineFallbackList"' in shell
     assert 'class="assistant-limitations"' in shell
     assert 'class="assistant-sources"' in shell
     assert MUTATION_BUTTON_RE.search(shell) is None
@@ -63,6 +65,8 @@ def assert_live_query_contract(html: str, shell: str, surface: str) -> None:
     assert '"Content-Type": "application/json"' in combined
     assert f'surface: "{surface}"' in html
     assert "renderAssistantResponse" in html
+    assert "renderOfflineFallback(payload)" in html
+    assert "renderOfflineFallback({})" in html
     assert "Assistant query failed" in html
     payload_function = function_block(html, "assistantQueryPayload")
     for field in FORBIDDEN_QUERY_FIELDS:

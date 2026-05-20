@@ -333,6 +333,12 @@
             <li>provider status hides token values</li>
           </ul>
         </section>
+        <section class="assistant-sources" aria-label="Assistant offline fallback schema">
+          <h3>Offline fallback</h3>
+          <ul id="assistantOfflineFallbackList" class="assistant-list">
+            <li>No offline fallback schema returned.</li>
+          </ul>
+        </section>
         <section class="assistant-limitations" aria-label="Assistant limitations">
           <h3>Limitations</h3>
           <ul id="assistantLimitationsList" class="assistant-list">
@@ -505,6 +511,7 @@
     function renderAssistantResponse(payload, queryPayload = assistantQueryPayload("")) {
       document.getElementById("assistantAnswerText").textContent = payload.answer || "No assistant answer returned.";
       renderAssistantContext(payload, queryPayload);
+      window.ScoutAssistantUI.renderOfflineFallback(payload);
       window.ScoutAssistantUI.renderList(
         "assistantLimitationsList",
         payload.limitations || [],
@@ -547,6 +554,7 @@
         window.ScoutAssistantUI.renderList("assistantSourcesList", [
           selectedProviderRef() || "hardware readiness fixture"
         ], "No selected provider context.");
+        window.ScoutAssistantUI.renderOfflineFallback({});
         setAssistantStatus("Assistant query failed", "error");
       } finally {
         document.getElementById("assistantAskButton").disabled = false;

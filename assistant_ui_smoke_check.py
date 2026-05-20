@@ -128,6 +128,7 @@ def _missing_shell_tokens(surface: str, shell: str) -> list[str]:
         'data-assistant-boundary="read-only model interpretation"',
         "read-only model interpretation",
         "Context",
+        "Offline fallback",
         "Limitations",
         "Sources",
     )
