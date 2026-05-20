@@ -545,15 +545,31 @@ Limitation:
 - the current manual fixture uses hardware-export style keys, so this validates
   runtime ingest plumbing rather than route matching or capability availability.
 
+## Canonical Fixture Local Dry Run Status
+
+2026-05-20: the hardware smoke fixture gained a canonical SensorLog variant and
+was verified against a local temporary `scout_pi_runtime` app.
+
+Completed:
+
+- added `tests/fixtures/hardware/manual_observation_smoke.canonical.example.json`;
+- used canonical adapter keys such as `locationLatitude`, `locationLongitude`,
+  `locationHorizontalAccuracy`, `accelerometerAccelerationX`, and
+  `batteryLevel`;
+- verified GPS, horizontal accuracy, IMU, battery, pedometer distance, and
+  pedometer steps as available capabilities;
+- verified the route-aware path by hitting checkpoint `cp_01`;
+- kept target network calls and target `/safety/*` mutation at zero.
+
 ## Recommended Next Slice
 
 After the manual dry-run package, Docker dry-run gate, GPIO boundary review,
 dirty-worktree cleanup plan, Scout machine read-only smoke, and runtime
-deployment takeover, and fixture observation smoke, the next slice is one of two
-bounded tracks:
+deployment takeover, fixture observation smoke, and canonical fixture local
+dry-run, the next slice is one of two bounded tracks:
 
-1. upgrade the hardware smoke fixture to canonical SensorLog keys, then run a
-   route-aware local dry-run before any new target mutation;
+1. run one canonical fixture target smoke against `scout.local`, using the same
+   rollback criteria as the previous fixture observation smoke;
 2. stabilize Phase 4 dirty worktree groups one at a time.
 
 Deliverables:

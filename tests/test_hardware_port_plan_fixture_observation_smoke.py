@@ -17,13 +17,15 @@ def test_hardware_port_plan_records_fixture_observation_smoke_status() -> None:
         assert token in source
 
 
-def test_hardware_port_plan_next_slice_is_canonical_fixture_before_target_mutation() -> None:
+def test_hardware_port_plan_fixture_smoke_points_to_canonical_target_smoke() -> None:
     source = PLAN_PATH.read_text(encoding="utf-8")
 
     for token in (
-        "upgrade the hardware smoke fixture to canonical SensorLog keys",
-        "route-aware local dry-run",
-        "before any new target mutation",
+        "## Canonical Fixture Local Dry Run Status",
+        "manual_observation_smoke.canonical.example.json",
+        "verified GPS, horizontal accuracy, IMU, battery",
+        "target network calls and target `/safety/*` mutation at zero",
+        "run one canonical fixture target smoke against `scout.local`",
         "stabilize Phase 4 dirty worktree groups",
     ):
         assert token in source
