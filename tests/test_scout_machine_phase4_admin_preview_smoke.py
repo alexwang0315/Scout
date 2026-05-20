@@ -42,6 +42,19 @@ def test_phase4_admin_preview_smoke_records_read_only_admin_and_assistant_probes
         assert token in source
 
 
+def test_phase4_admin_preview_smoke_records_runtime_stream_status_route_disabled_on_hardware() -> None:
+    source = REPORT_PATH.read_text(encoding="utf-8")
+
+    for token in (
+        "`GET http://scout.local:9099/runtime/streams/status-read-only` returned HTTP",
+        "`404` in this hardware smoke",
+        "`SCOUT_RUNTIME_STREAM_STATUS_ENABLED=1`",
+        "deployed field runtime during this smoke",
+        "沒有因此開啟 observation ingest、control、或 provider send",
+    ):
+        assert token in source
+
+
 def test_phase4_admin_preview_smoke_preserves_safety_and_hardware_boundaries() -> None:
     source = REPORT_PATH.read_text(encoding="utf-8")
 
@@ -69,11 +82,48 @@ def test_phase4_admin_preview_smoke_records_auth_smoke_without_token_leak() -> N
         "`admin_auth_scheme=basic`",
         "`token_value_exposed=false`",
         "`runtime_auth_header_sent=false`",
+        "`GET http://scout.local:9110/admin/pretrip` without auth: HTTP `401`",
         "`GET http://scout.local:9099/health`: HTTP `200`, without an auth header.",
         "The temporary Mac token file was removed after the smoke.",
     ):
         assert token in source
     assert "secret-token" not in source
+
+
+def test_phase4_admin_preview_smoke_records_tile_and_review_preview_probes() -> None:
+    source = REPORT_PATH.read_text(encoding="utf-8")
+
+    for token in (
+        "## Map Tile And Review Preview Smoke",
+        "`GET http://scout.local:9110/admin/tiles/osm/5/26/13.png`: HTTP `200`",
+        "`content_type=image/svg+xml`, fallback tile response",
+        "`GET http://scout.local:9110/admin/tiles/imagery/chilai_nanhua_day1/imagery/5/26/13.png`",
+        "`content_type=image/svg+xml`, fallback imagery response",
+        "`candidate_ref=contour.g11.seg_001_003`",
+        "`persist_to_workspace=false`: HTTP `200`",
+        "`artifact_kind=pretrip_review_decision_preview`, `preview=true`",
+        "`admin_api_write_performed=false`",
+        "`fixture_file_mutation_allowed=false`",
+        "`phase1_runtime_mutation_allowed=false`",
+        "`phase2_writeback_allowed=false`",
+        "`runtime_mutation_allowed=false`",
+        "workspace` was not executed",
+        "review-decision smoke 只跑 preview",
+    ):
+        assert token in source
+
+
+def test_phase4_admin_preview_smoke_records_runtime_status_route_not_deployed() -> None:
+    source = REPORT_PATH.read_text(encoding="utf-8")
+
+    for token in (
+        "`GET http://scout.local:9099/runtime/streams/status-read-only` returned HTTP",
+        "`404` in this hardware smoke",
+        "`SCOUT_RUNTIME_STREAM_STATUS_ENABLED=1`",
+        "deployed field runtime during this smoke",
+        "沒有因此開啟 observation ingest、control、或 provider send",
+    ):
+        assert token in source
 
 
 def test_step1_evidence_index_links_phase4_admin_preview_smoke() -> None:
@@ -89,6 +139,14 @@ def test_step1_evidence_index_links_phase4_admin_preview_smoke() -> None:
         "`GET /admin/pretrip`: HTTP `200` when authenticated, `id=\"map\"` present",
         "`GET /assistant/status`: `provider=mock`, `token_values_exposed=false`",
         "`POST /assistant/query`: `read_only=true`, `model_interpretation=true`",
+        "`GET /runtime/streams/status-read-only` on field runtime: HTTP `404`",
+        "`SCOUT_RUNTIME_STREAM_STATUS_ENABLED=1`",
+        "`GET /admin/tiles/osm/5/26/13.png`: HTTP `200`, fallback tile response",
+        "`GET /admin/tiles/imagery/chilai_nanhua_day1/imagery/5/26/13.png`: HTTP",
+        "`persist_to_workspace=false`: HTTP `200`, preview-only, no workspace write",
+        "workspace creation POST was not executed",
+        "`GET /runtime/streams/status-read-only` on the field runtime returned HTTP",
+        "status-only runtime stream surface was not enabled on hardware",
         "docs/admin/scout-machine-phase4-admin-preview-smoke.md",
         "`scout-pi-phase4-admin` status: healthy on `9110`",
     ):

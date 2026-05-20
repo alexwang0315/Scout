@@ -134,6 +134,18 @@ Key result:
 - unauthenticated `GET /admin/pretrip`: HTTP `401`
 - `GET /assistant/status`: `provider=mock`, `token_values_exposed=false`
 - `POST /assistant/query`: `read_only=true`, `model_interpretation=true`
+- `GET /runtime/streams/status-read-only` on field runtime: HTTP `404`; the
+  repo route remains opt-in with `SCOUT_RUNTIME_STREAM_STATUS_ENABLED=1`
+- `GET /admin/tiles/osm/5/26/13.png`: HTTP `200`, fallback tile response
+- `GET /admin/tiles/imagery/chilai_nanhua_day1/imagery/5/26/13.png`: HTTP
+  `200`, fallback imagery response
+- `POST /admin/pretrip/projects/chilai_nanhua_day1/review-decisions` with
+  `persist_to_workspace=false`: HTTP `200`, preview-only, no workspace write
+- workspace creation POST was not executed because it intentionally writes a
+  local workspace and is not idempotent
+- `GET /runtime/streams/status-read-only` on the field runtime returned HTTP
+  `404`, so the status-only runtime stream surface was not enabled on hardware
+  in this smoke
 - no `/safety/*` mutation, outbound send, local model request, or hardware
   provider control
 
