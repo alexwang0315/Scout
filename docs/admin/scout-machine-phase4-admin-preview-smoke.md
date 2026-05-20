@@ -47,6 +47,14 @@ Read-only `docker ps` showed:
 - `local_model_enabled=false`;
 - `event_bus=none`.
 
+`GET http://scout.local:9099/runtime/streams/status-read-only` returned HTTP
+`404` in this hardware smoke. The read-only status route exists in the repo
+behind `SCOUT_RUNTIME_STREAM_STATUS_ENABLED=1`, but it was not enabled on the
+deployed field runtime during this smoke.
+
+中文註釋：這不是錯誤；它表示目前硬體上的 field runtime 還沒有開啟 runtime stream
+status-only 查詢面，也沒有因此開啟 observation ingest、control、或 provider send。
+
 ## Admin Preview Health Probe
 
 `GET http://127.0.0.1:9110/health` returned:
@@ -98,6 +106,7 @@ The smoke result was:
 
 Endpoint results:
 
+- `GET http://scout.local:9110/admin/pretrip` without auth: HTTP `401`;
 - `GET http://scout.local:9110/health`: HTTP `200`;
 - `GET http://scout.local:9110/admin/pretrip`: HTTP `200`;
 - `GET http://scout.local:9110/admin/pretrip/projects/chilai_nanhua_day1`:
@@ -110,6 +119,38 @@ The temporary Mac token file was removed after the smoke.
 
 中文註釋：`9110` 是 LAN 上的 Phase 4 admin preview，需要登入；`9099` 是現場
 field runtime health probe，這次 smoke 沒有把 admin token 傳給 runtime。
+
+## Map Tile And Review Preview Smoke
+
+Authenticated live probes from the Mac returned:
+
+- `GET http://scout.local:9110/admin/tiles/osm/5/26/13.png`: HTTP `200`,
+  `content_type=image/svg+xml`, fallback tile response, `718` bytes;
+- `GET http://scout.local:9110/admin/tiles/imagery/chilai_nanhua_day1/imagery/5/26/13.png`:
+  HTTP `200`, `content_type=image/svg+xml`, fallback imagery response,
+  `313` bytes;
+- `POST http://scout.local:9110/admin/pretrip/projects/chilai_nanhua_day1/review-decisions`
+  with `candidate_ref=contour.g11.seg_001_003` and
+  `persist_to_workspace=false`: HTTP `200`,
+  `artifact_kind=pretrip_review_decision_preview`, `preview=true`.
+
+The review preview response preserved the expected boundary:
+
+- `admin_api_write_performed=false`;
+- `fixture_file_mutation_allowed=false`;
+- `phase1_runtime_mutation_allowed=false`;
+- `phase2_writeback_allowed=false`;
+- `runtime_mutation_allowed=false`;
+- `fixture_files_mutated=false`;
+- `phase1_runtime_mutated=false`;
+- `phase2_writeback_performed=false`.
+
+`POST /admin/pretrip/projects/chilai_nanhua_day1/workspace` was not executed in
+this smoke because it intentionally creates a local workspace and returns `409`
+on repeated runs when the workspace already exists.
+
+中文註釋：tile smoke 只證明硬體上的 admin service 可以提供地圖圖層 fallback；
+review-decision smoke 只跑 preview，不把 admin 決定寫入 workspace。
 
 ## Admin Page Smoke
 
