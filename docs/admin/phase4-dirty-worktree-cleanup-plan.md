@@ -28,3 +28,20 @@
 ```bash
 /Users/alexwang0315/scout-fusion/venv/bin/python -m pytest tests/test_phase4_dirty_worktree_cleanup_plan.py
 ```
+
+## Batch 1 Result
+
+Batch 1 kept the hardware-port commits narrow and did not stage the Phase 4 dirty worktree flood.
+
+Completed separation:
+
+- hardware runtime-core and Scout machine smoke evidence are documented
+  separately from pretrip planning;
+- `PdrSample/*`, `catographydata/`, and `trajectory_map.png` remain local-only;
+- `runtime_stream_*` and `runtime_remote_provider_*` remain a separate boundary
+  review group;
+- `docker-compose.pi.ai.yml` remains outside deterministic Docker Step 1;
+- `/safety/*` mutation changes remain outside assistant/hardware readiness work.
+
+Next cleanup batch should choose one Phase 4 group at a time, starting with
+planning core models/fixtures if the user wants to stabilize Phase 4. Do not combine it with runtime stream/live provider send paths.

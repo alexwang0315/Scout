@@ -21,3 +21,21 @@ projection report，不開網路、不 POST、不碰 runtime。
 中文註釋：手動 SOS 按鈕的真實語義很重要，但目前 slice 只允許形成 operator-reviewed
 artifact。等 hardware runtime、operator policy、事件防抖與誤觸流程確認後，才能討論是否
 建立 live runtime endpoint。
+
+## Live Endpoint Decision
+
+Decision for this milestone: no live GPIO endpoint is added.
+
+`manual_sos_button_observed` and related events remain projection-only. They can
+appear in an operator-reviewed artifact, but they cannot be converted into a
+Phase 1 safety event, `/safety/*` mutation, outbound message, incident write, or
+provider command by default.
+
+To reopen this decision, the project needs a separate operator policy that
+defines:
+
+- who may arm the button path;
+- debounce and accidental-press handling;
+- offline confirmation wording;
+- exact Phase 1 adapter semantics;
+- rollback behavior when GPIO hardware is unavailable.

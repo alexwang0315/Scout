@@ -27,3 +27,16 @@ def test_phase4_dirty_worktree_cleanup_plan_keeps_hardware_port_separate() -> No
         "Keep local model/Ollama compose separate from deterministic Pi runtime-core",
     ):
         assert token in source
+
+
+def test_phase4_dirty_worktree_cleanup_plan_records_batch_1_result() -> None:
+    source = PLAN_PATH.read_text(encoding="utf-8")
+
+    for token in (
+        "## Batch 1 Result",
+        "did not stage the Phase 4 dirty worktree flood",
+        "`runtime_stream_*` and `runtime_remote_provider_*`",
+        "`docker-compose.pi.ai.yml` remains outside deterministic Docker Step 1",
+        "Do not combine it with runtime stream/live provider send paths",
+    ):
+        assert token in source
