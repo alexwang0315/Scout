@@ -5,8 +5,8 @@ from collections.abc import Mapping
 from typing import Any
 
 
-DEFAULT_MOUNTAIN_ROUTE_ZOOM = 13
-DEFAULT_MAX_TILES = 32
+DEFAULT_MOUNTAIN_ROUTE_ZOOM = 17
+DEFAULT_MAX_TILES = 64
 DEFAULT_VIEWPORT_WIDTH = 1000
 DEFAULT_VIEWPORT_HEIGHT = 720
 DEFAULT_OSM_TILE_URL_TEMPLATE = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"

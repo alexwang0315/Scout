@@ -129,6 +129,8 @@ class AdminAfterActionTests(unittest.TestCase):
         self.assertIn("OSM_TILE_URL_TEMPLATE", response.text)
         self.assertIn("OSM_PUBLIC_TILE_URL_TEMPLATE", response.text)
         self.assertIn("OSM_LOCAL_TILE_URL_TEMPLATE", response.text)
+        self.assertIn("const OSM_TARGET_ZOOM = 17", response.text)
+        self.assertIn("const OSM_MAX_TILES = 64", response.text)
         self.assertIn("RASTER_LOCAL_TILE_URL_TEMPLATE", response.text)
         self.assertIn("/admin/tiles/osm/{z}/{x}/{y}.png", response.text)
         self.assertIn(
@@ -136,6 +138,9 @@ class AdminAfterActionTests(unittest.TestCase):
             response.text,
         )
         self.assertIn("function osmTileTemplate", response.text)
+        self.assertIn("function tileRangeForZoom", response.text)
+        self.assertIn("function tileCountForZoom", response.text)
+        self.assertIn("tileCountForZoom(bounds, zoom) > maxTiles", response.text)
         self.assertIn("function rasterTileTemplate", response.text)
         self.assertIn("https://tile.openstreetmap.org/{z}/{x}/{y}.png", response.text)
         self.assertIn("function renderRasterImagery", response.text)

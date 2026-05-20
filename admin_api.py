@@ -20,8 +20,10 @@ from admin_tile_proxy import (
     load_or_build_osm_tile_payload,
 )
 from admin_weather_overlay import (
+    OPEN_METEO_PROVIDER,
     build_pretrip_weather_overlay,
     build_weather_api_runtime_status,
+    fetch_open_meteo_weather_snapshot,
 )
 from pretrip_admin_view import (
     build_pretrip_admin_view,
@@ -168,9 +170,28 @@ def create_admin_router(
             raise HTTPException(status_code=404, detail="Pre-trip project not found") from exc
 
         weather_payload = {**view["weather"], "project_id": project_id}
+        runtime_status = build_weather_api_runtime_status()
+        live_weather_snapshot = None
+        if runtime_status.ready and runtime_status.provider == OPEN_METEO_PROVIDER:
+            try:
+                live_weather_snapshot = fetch_open_meteo_weather_snapshot(
+                    view["route"]["bounds"]
+                )
+            except Exception as exc:
+                live_weather_snapshot = {
+                    "artifact_kind": "open_meteo_weather_snapshot",
+                    "status": "live_summary_failed",
+                    "provider": OPEN_METEO_PROVIDER,
+                    "external_api_calls_made": True,
+                    "raw_payloads_embedded": False,
+                    "authoritative_weather_computed": False,
+                    "human_review_required": True,
+                    "error_summary": str(exc),
+                }
         return build_pretrip_weather_overlay(
             weather_payload,
-            runtime_status=build_weather_api_runtime_status(),
+            runtime_status=runtime_status,
+            live_weather_snapshot=live_weather_snapshot,
         )
 
     @router.get("/tiles/osm/{z}/{x}/{y}.png")

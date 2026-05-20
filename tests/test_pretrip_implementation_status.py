@@ -98,6 +98,9 @@ def test_manifest_maps_phase4_milestones_and_marks_ui_not_started():
         "4.5AN",
         "4.5AO",
         "4.5AP",
+        "4.5AQ",
+        "4.5AR",
+        "4.5AS",
     ]
     for milestone_id in [
         "0",
@@ -172,6 +175,9 @@ def test_manifest_maps_phase4_milestones_and_marks_ui_not_started():
         "4.5AN",
         "4.5AO",
         "4.5AP",
+        "4.5AQ",
+        "4.5AR",
+        "4.5AS",
     ]:
         milestone = milestones[milestone_id]
         assert milestone["implementation_status"] == "implemented"
@@ -1416,6 +1422,62 @@ def test_manifest_maps_phase4_milestones_and_marks_ui_not_started():
         "focused_phase4_tests",
     ]
 
+    milestone_45aq = milestones["4.5AQ"]
+    assert milestone_45aq["title"] == "Crisp OSM Basemap Zoom Selection"
+    assert milestone_45aq["modules"] == [
+        "admin_basemap_tiles.py",
+        "docs/admin/phase4-pretrip-planning.html",
+        "docs/admin/phase1-after-action.html",
+        "phase4_pretrip_release_check.py",
+    ]
+    assert milestone_45aq["tests"] == [
+        "tests/test_admin_basemap_tiles.py",
+        "tests/test_pretrip_admin_page.py",
+        "tests/test_admin_after_action.py",
+        "tests/test_phase4_pretrip_release_check.py",
+        "tests/test_pretrip_implementation_status.py",
+    ]
+    assert milestone_45aq["release_check_coverage"]["check_names"] == [
+        "admin_basemap_renderer",
+        "admin_map_layer_stack",
+        "focused_phase4_tests",
+    ]
+
+    milestone_45ar = milestones["4.5AR"]
+    assert milestone_45ar["title"] == "Live Weather API Overlay Opt-In"
+    assert milestone_45ar["modules"] == [
+        "admin_weather_overlay.py",
+        "admin_api.py",
+        "phase4_pretrip_release_check.py",
+    ]
+    assert milestone_45ar["tests"] == [
+        "tests/test_admin_weather_overlay.py",
+        "tests/test_pretrip_admin_api.py",
+        "tests/test_phase4_pretrip_release_check.py",
+        "tests/test_pretrip_implementation_status.py",
+    ]
+    assert milestone_45ar["release_check_coverage"]["check_names"] == [
+        "admin_weather_overlay",
+        "pretrip_admin_ui",
+        "focused_phase4_tests",
+    ]
+
+    milestone_45as = milestones["4.5AS"]
+    assert milestone_45as["title"] == "Phase 4 Live Demo Loader"
+    assert milestone_45as["modules"] == [
+        "phase4_live_demo_loader.py",
+        "phase4_pretrip_release_check.py",
+    ]
+    assert milestone_45as["tests"] == [
+        "tests/test_phase4_live_demo_loader.py",
+        "tests/test_phase4_pretrip_release_check.py",
+        "tests/test_pretrip_implementation_status.py",
+    ]
+    assert milestone_45as["release_check_coverage"]["check_names"] == [
+        "phase4_live_demo_loader",
+        "focused_phase4_tests",
+    ]
+
 
 def test_manifest_is_metadata_only_and_names_expected_validation_commands():
     manifest = build_pretrip_implementation_status_manifest().to_dict()
@@ -1463,6 +1525,7 @@ def test_manifest_is_metadata_only_and_names_expected_validation_commands():
     assert "tests/test_admin_tile_cache_builder.py" in commands["phase4_focused_suite"]
     assert "tests/test_admin_tile_proxy.py" in commands["phase4_focused_suite"]
     assert "tests/test_admin_weather_overlay.py" in commands["phase4_focused_suite"]
+    assert "tests/test_phase4_live_demo_loader.py" in commands["phase4_focused_suite"]
     assert "tests/test_pretrip_review_draft.py" in commands["phase4_focused_suite"]
     assert "tests/test_pretrip_review_draft_fixture.py" in commands["phase4_focused_suite"]
     assert "tests/test_pretrip_review_decision_log.py" in commands["phase4_focused_suite"]

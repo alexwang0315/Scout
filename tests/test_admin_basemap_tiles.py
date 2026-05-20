@@ -63,6 +63,20 @@ def test_chilai_like_bbox_generates_bounded_tile_list():
     assert all(tile["cache_policy"] == basemap.DEFAULT_CACHE_POLICY for tile in tiles)
 
 
+def test_default_chilai_like_bbox_prefers_crisp_demo_zoom_under_tile_cap():
+    contract = basemap.build_osm_basemap_contract(
+        {
+            "min_lat": 24.043338071400207,
+            "min_lon": 121.21036249036372,
+            "max_lat": 24.057907788530006,
+            "max_lon": 121.28079717511966,
+        },
+    )
+
+    assert contract["zoom"] >= 16
+    assert 16 < contract["tile_count"] <= basemap.DEFAULT_MAX_TILES
+
+
 def test_default_openstreetmap_url_and_custom_template():
     default_contract = basemap.build_osm_basemap_contract(
         {"south": 24.1, "west": 121.3, "north": 24.12, "east": 121.32},
