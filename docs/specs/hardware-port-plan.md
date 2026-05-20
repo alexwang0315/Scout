@@ -699,13 +699,12 @@ Mac 可以用 `http://scout.local:9110/admin/pretrip` 觀看與操作 Phase 4 ad
 ## Recommended Next Slice
 
 After the manual dry-run package, Docker dry-run gate, GPIO boundary review,
-dirty-worktree cleanup plan, Scout machine read-only smoke, and runtime
-deployment takeover, fixture observation smoke, canonical fixture local dry-run,
-canonical fixture target smoke, and Step 1 deployment runbook freeze, the next
-slice is one of two bounded tracks:
-
-1. stabilize host-side radio scan provider evidence as a separate read-only provider slice;
-2. stabilize Phase 4 dirty worktree groups one at a time.
+dirty-worktree cleanup plan, Scout machine read-only smoke, runtime deployment
+takeover, fixture observation smoke, canonical fixture local dry-run, canonical
+fixture target smoke, Step 1 deployment runbook freeze, host-side radio scan
+provider hardening, Phase 4 admin preview auth/smoke hardening, and runtime
+stream read-only status mount, the bounded follow-up tracks are closed for this
+prep pass.
 
 Deliverables:
 
@@ -714,7 +713,20 @@ Deliverables:
 - radio scan evidence does not write IncidentStore, ObservedFact, or Phase 2
   Brain state;
 - Phase 4 cleanup keeps planning/admin UI work separate from runtime/hardware
-  behavior.
+  behavior;
+- Phase 4 admin preview auth smoke keeps tokens out of repo artifacts and does
+  not send admin auth headers to the field runtime;
+- runtime stream status is opt-in and read-only. It does not mount live
+  transport, control, provider-send, or `/safety/*` mutation routes.
+
+Remaining gates require explicit operator/product decisions:
+
+- live runtime stream transport on the Scout machine;
+- remote provider live send;
+- local model/Ollama fallback as a deployed runtime path;
+- hardware provider control;
+- Phase 4 reviewed planning artifact promotion and departure/runtime handoff.
 
 中文註釋：下一步若做 radio scan，只能整理「環境證據」與手動 smoke，不是讓 Wi-Fi/BLE
-訊號直接改 Phase 1 safety decision，也不是啟用 live provider control。
+訊號直接改 Phase 1 safety decision，也不是啟用 live provider control。這輪 closeout
+也沒有核准 live stream、provider send、本地模型 runtime、或硬體控制。
