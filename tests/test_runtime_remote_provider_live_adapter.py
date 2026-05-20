@@ -171,6 +171,11 @@ class RuntimeRemoteProviderLiveAdapterTests(unittest.TestCase):
             self.assertEqual(result.remote_notification_send_count, 1)
             self.assertEqual(result.http_status_code, 200)
             self.assertEqual(result.provider_message_ref, "provider-message-001")
+            self.assertEqual(
+                result.provider_response_body_sha256,
+                "070c160a6299c5438070b1aa737b14fc2992ed49579c14264884886a5876f971",
+            )
+            self.assertIsNone(result.provider_response_preview)
             self.assertEqual(result.secret_ref_schemes, ["env", "file", "keychain", "keychain"])
             self.assertEqual(result.secret_values_loaded, True)
             self.assertEqual(result.raw_secret_values_embedded, False)

@@ -164,6 +164,55 @@ Expected readiness:
 - `startup_connection_status` is `connected:cloud` or `connected:local`;
 - `token_values_exposed=false`.
 
+## Runtime Stream Launch Guard
+
+`scout_pi_runtime.py` mounts live HTTP push / WebSocket stream routes only after
+the live enablement gates are ready. The general `server.py` launch path uses an
+additional explicit guard:
+
+```bash
+SCOUT_RUNTIME_STREAM_TRANSPORT_ENABLED=1
+```
+
+中文註釋：`SCOUT_SAFETY_OBSERVATION_ADMISSION_ENABLED=1` 只代表簽章准入可用；
+它本身不應該自動打開 HTTP push 或 WebSocket mutation route。若 demo 使用
+`server.py` 而不是 `scout_pi_runtime.py`，operator 必須另外設定
+`SCOUT_RUNTIME_STREAM_TRANSPORT_ENABLED=1`。
+
+Signed HTTP push dry-run:
+
+```bash
+python runtime_stream_signed_sample_client.py \
+  --base-url http://127.0.0.1:9099 \
+  --payload /data/scout/deployments/live-demo/sample-observation.json \
+  --secret-file /data/scout/secrets/runtime-stream-admission-secret \
+  --output /data/scout/deployments/live-demo/signed-http-push.dry-run.json
+```
+
+中文註釋：沒有 `--send` 時不送網路、不呼叫 runtime、不寫 IncidentStore；輸出只
+保留 hash、envelope metadata 與 boundary，不嵌入原始 location payload 或 secret。
+
+Operator-approved HTTP push send:
+
+```bash
+python runtime_stream_signed_sample_client.py \
+  --base-url http://127.0.0.1:9099 \
+  --payload /data/scout/deployments/live-demo/sample-observation.json \
+  --secret-file /data/scout/secrets/runtime-stream-admission-secret \
+  --sequence-no 1 \
+  --send \
+  --output /data/scout/deployments/live-demo/signed-http-push.sent.json
+```
+
+Expected send summary:
+
+- `status=sent`;
+- `response_admission_status=admitted_not_forwarded`;
+- `response_transport_surface=http_push`;
+- `network_send_attempted=true`;
+- `raw_payloads_embedded=false`;
+- `secret_values_embedded=false`.
+
 ## 手動驗證
 
 Assistant query:

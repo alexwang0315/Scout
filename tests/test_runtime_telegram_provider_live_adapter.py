@@ -93,6 +93,67 @@ def test_telegram_provider_send_uses_telegram_payload_without_serializing_secret
     assert "api.telegram.org" not in serialized
 
 
+def test_telegram_provider_redacts_real_response_body_with_chat_metadata() -> None:
+    captured_requests = []
+    provider_body = json.dumps(
+        {
+            "ok": True,
+            "result": {
+                "message_id": 8871,
+                "chat": {
+                    "id": "secret-chat-id",
+                    "first_name": "Private Recipient",
+                },
+                "text": _intent().body_preview,
+            },
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+    )
+
+    def transport(request):
+        captured_requests.append(request)
+        return {
+            "status_code": 200,
+            "response_body": provider_body,
+        }
+
+    result = send_telegram_provider_intent(
+        _intent(),
+        options=TelegramProviderLiveSendOptions(
+            provider_adapter_enabled=True,
+            live_network_send_enabled=True,
+            manual_send_authorization=True,
+        ),
+        resolver=RuntimeRemoteSecretResolver(
+            env={
+                "SCOUT_TELEGRAM_BOT_TOKEN": "secret-token",
+                "SCOUT_TELEGRAM_TARGET_CHAT_ID": "secret-chat-id",
+            }
+        ),
+        transport=transport,
+    )
+    serialized = result.to_json()
+
+    assert result.status == "sent"
+    assert result.provider_message_ref == "telegram_message:8871"
+    assert result.provider_response_body_sha256 == hashlib.sha256(
+        provider_body.encode("utf-8")
+    ).hexdigest()
+    assert result.provider_response_ok is True
+    assert result.provider_response_message_id == 8871
+    assert result.provider_response_preview is None
+    assert len(captured_requests) == 1
+    for forbidden in (
+        "secret-token",
+        "secret-chat-id",
+        "Private Recipient",
+        _intent().body_preview,
+        "api.telegram.org",
+    ):
+        assert forbidden not in serialized
+
+
 def test_telegram_provider_source_has_no_safety_or_phase2_imports() -> None:
     import runtime_telegram_provider_live_adapter
 

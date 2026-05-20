@@ -119,6 +119,10 @@ class RuntimeRemoteProviderLiveSendResult(RuntimeRemoteProviderLiveAdapterModel)
     remote_notification_send_count: int
     http_status_code: int | None = None
     provider_message_ref: str | None = None
+    provider_response_body_sha256: str | None = Field(
+        default=None,
+        pattern=r"^[a-f0-9]{64}$",
+    )
     provider_response_preview: str | None = None
     secret_values_loaded: bool = False
     secret_values_loaded_count: int = 0
@@ -288,10 +292,8 @@ def send_runtime_remote_provider_webhook_intent(
         request_body_hash=body_hash,
         http_status_code=response.status_code,
         provider_message_ref=response.provider_message_ref,
-        provider_response_preview=_normalize_preview(
-            response.response_body,
-            max_chars=active_options.response_preview_max_chars,
-        ),
+        provider_response_body_sha256=_response_body_hash(response.response_body),
+        provider_response_preview=None,
         secret_audits=secret_audits,
     )
 
@@ -327,6 +329,7 @@ def _live_send_result(
     request_body_hash: str | None = None,
     http_status_code: int | None = None,
     provider_message_ref: str | None = None,
+    provider_response_body_sha256: str | None = None,
     provider_response_preview: str | None = None,
     provider_error: str | None = None,
     secret_audits: list[RuntimeRemoteResolvedSecret] | None = None,
@@ -349,6 +352,7 @@ def _live_send_result(
         remote_notification_send_count=remote_notification_send_count,
         http_status_code=http_status_code,
         provider_message_ref=provider_message_ref,
+        provider_response_body_sha256=provider_response_body_sha256,
         provider_response_preview=provider_response_preview,
         secret_values_loaded=bool(active_secret_audits),
         secret_values_loaded_count=len(active_secret_audits),
@@ -484,6 +488,12 @@ def _canonical_hash(payload: dict[str, Any]) -> str:
         separators=(",", ":"),
     )
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _response_body_hash(value: str) -> str | None:
+    if not value:
+        return None
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
 def _normalize_preview(value: str, *, max_chars: int) -> str:

@@ -96,6 +96,7 @@ COPY \
     runtime_telegram_provider_live_send_cli.py \
     runtime_stream_controls.py \
     runtime_stream_policy.py \
+    runtime_stream_signed_sample_client.py \
     runtime_stream_status_surface.py \
     runtime_stream_telemetry.py \
     runtime_stream_transport_api.py \

@@ -73,6 +73,12 @@ def test_live_runtime_operator_runbook_documents_startup_fallback_and_validation
         "docker compose -f docker-compose.pi.live.yml up -d scout-live",
         "curl --max-time 5 http://127.0.0.1:9099/assistant/status",
         "--env-file /data/scout/secrets/live-runtime.env",
+        "SCOUT_RUNTIME_STREAM_TRANSPORT_ENABLED=1",
+        "runtime_stream_signed_sample_client.py",
+        "signed-http-push.dry-run.json",
+        "signed-http-push.sent.json",
+        "response_admission_status=admitted_not_forwarded",
+        "raw_payloads_embedded=false",
     ):
         assert token in source
 
@@ -146,6 +152,7 @@ def test_live_runtime_operator_env_example_uses_file_refs_without_raw_secrets() 
     for token in (
         "SCOUT_RUNTIME_PROFILE=pi-field-live",
         "SCOUT_ENABLE_LIVE_RUNTIME=1",
+        "SCOUT_RUNTIME_STREAM_TRANSPORT_ENABLED=1",
         "SCOUT_SAFETY_OBSERVATION_ADMISSION_SECRET_FILE=/data/scout/secrets/runtime-stream-admission-secret",
         "SCOUT_AI_ASSISTANT_CONFIG_PATH=/data/scout/config/assistant-models.json",
         "SCOUT_HARDWARE_PROVIDER_CONTROL_TOKEN_FILE=/data/scout/secrets/hardware-provider-control-token",

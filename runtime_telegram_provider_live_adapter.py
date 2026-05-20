@@ -85,6 +85,12 @@ class TelegramProviderLiveSendResult(TelegramProviderLiveAdapterModel):
     remote_notification_send_count: int
     http_status_code: int | None = None
     provider_message_ref: str | None = None
+    provider_response_body_sha256: str | None = Field(
+        default=None,
+        pattern=r"^[a-f0-9]{64}$",
+    )
+    provider_response_ok: bool | None = None
+    provider_response_message_id: int | None = Field(default=None, ge=0)
     provider_response_preview: str | None = None
     blocker_count: int = 0
     blocker_reasons: list[str] = Field(default_factory=list)
@@ -172,6 +178,7 @@ def send_telegram_provider_intent(
         )
 
     sent = 200 <= response.status_code < 300
+    response_summary = _safe_telegram_response_summary(response.response_body)
     return _result(
         send_intent,
         status=TelegramProviderLiveSendStatus.SENT
@@ -183,10 +190,12 @@ def send_telegram_provider_intent(
         remote_notification_send_count=1 if sent else 0,
         request_body_hash=body_hash,
         http_status_code=response.status_code,
-        provider_message_ref=response.provider_message_ref,
-        provider_response_preview=response.response_body[
-            : active_options.response_preview_max_chars
-        ],
+        provider_message_ref=response.provider_message_ref
+        or response_summary["provider_message_ref"],
+        provider_response_body_sha256=response_summary["provider_response_body_sha256"],
+        provider_response_ok=response_summary["provider_response_ok"],
+        provider_response_message_id=response_summary["provider_response_message_id"],
+        provider_response_preview=None,
         secret_values_loaded=True,
         secret_values_loaded_count=2,
     )
@@ -249,6 +258,37 @@ def _normalize_response(response: Any) -> TelegramHttpResponse:
     raise TypeError("transport must return a dict or TelegramHttpResponse")
 
 
+def _safe_telegram_response_summary(response_body: str) -> dict[str, Any]:
+    response_hash = (
+        hashlib.sha256(response_body.encode("utf-8")).hexdigest()
+        if response_body
+        else None
+    )
+    provider_response_ok: bool | None = None
+    provider_response_message_id: int | None = None
+    provider_message_ref: str | None = None
+    try:
+        parsed = json.loads(response_body) if response_body else {}
+    except json.JSONDecodeError:
+        parsed = {}
+    if isinstance(parsed, dict):
+        raw_ok = parsed.get("ok")
+        if isinstance(raw_ok, bool):
+            provider_response_ok = raw_ok
+        result = parsed.get("result")
+        if isinstance(result, dict):
+            raw_message_id = result.get("message_id")
+            if isinstance(raw_message_id, int) and raw_message_id >= 0:
+                provider_response_message_id = raw_message_id
+                provider_message_ref = f"telegram_message:{raw_message_id}"
+    return {
+        "provider_response_body_sha256": response_hash,
+        "provider_response_ok": provider_response_ok,
+        "provider_response_message_id": provider_response_message_id,
+        "provider_message_ref": provider_message_ref,
+    }
+
+
 def _result(
     send_intent: TelegramProviderSendIntent,
     *,
@@ -260,6 +300,9 @@ def _result(
     request_body_hash: str | None = None,
     http_status_code: int | None = None,
     provider_message_ref: str | None = None,
+    provider_response_body_sha256: str | None = None,
+    provider_response_ok: bool | None = None,
+    provider_response_message_id: int | None = None,
     provider_response_preview: str | None = None,
     provider_error: str | None = None,
     secret_values_loaded: bool = False,
@@ -277,6 +320,9 @@ def _result(
         remote_notification_send_count=remote_notification_send_count,
         http_status_code=http_status_code,
         provider_message_ref=provider_message_ref,
+        provider_response_body_sha256=provider_response_body_sha256,
+        provider_response_ok=provider_response_ok,
+        provider_response_message_id=provider_response_message_id,
         provider_response_preview=provider_response_preview,
         blocker_count=len(blockers),
         blocker_reasons=blockers,

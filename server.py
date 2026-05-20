@@ -86,6 +86,10 @@ SCOUT_RUNTIME_STREAM_STATUS_ENABLED = os.getenv(
     "SCOUT_RUNTIME_STREAM_STATUS_ENABLED",
     "false",
 )
+SCOUT_RUNTIME_STREAM_TRANSPORT_ENABLED = os.getenv(
+    "SCOUT_RUNTIME_STREAM_TRANSPORT_ENABLED",
+    "false",
+)
 
 log_level = logging.DEBUG if DEBUG else logging.INFO
 logging.basicConfig(level=log_level, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -234,6 +238,9 @@ def _include_assistant_router(app: FastAPI) -> None:
 
 
 def _include_runtime_stream_transport_router(app: FastAPI) -> None:
+    if not _is_true_like(SCOUT_RUNTIME_STREAM_TRANSPORT_ENABLED):
+        logger.info("Runtime stream transport API disabled by explicit launch guard")
+        return
     if safety_runtime_session is None:
         logger.info("Runtime stream transport API disabled because safety runtime is unavailable")
         return
@@ -266,9 +273,18 @@ def _include_runtime_stream_status_router(app: FastAPI) -> None:
                 if safety_observation_admission_config is not None
                 else None
             ),
+            transport_routes_mounted=_runtime_stream_transport_ready(),
         )
     )
     logger.info("Runtime stream read-only status API enabled")
+
+
+def _runtime_stream_transport_ready() -> bool:
+    return (
+        _is_true_like(SCOUT_RUNTIME_STREAM_TRANSPORT_ENABLED)
+        and safety_runtime_session is not None
+        and safety_observation_admission_config is not None
+    )
 
 
 async def process_movement_summary(summary: Any) -> Dict[str, Any]:
