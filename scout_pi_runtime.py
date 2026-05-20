@@ -138,6 +138,12 @@ def create_pi_runtime_app(environ: Mapping[str, str] | None = None) -> FastAPI:
     )
     telemetry_store = RuntimeStreamTelemetryStore()
     control_store = RuntimeStreamControlStore()
+    runtime_stream_transport_enabled = (
+        live_enablement_ready
+        and runtime_session is not None
+        and observation_admission_config is not None
+        and LiveRuntimeGate.RUNTIME_STREAM.value in live_enablement_report.ready_gates
+    )
     if runtime_stream_status_enabled:
         app.include_router(
             create_runtime_stream_status_router(
@@ -148,14 +154,12 @@ def create_pi_runtime_app(environ: Mapping[str, str] | None = None) -> FastAPI:
                     if observation_admission_config is not None
                     else None
                 ),
+                transport_routes_mounted=runtime_stream_transport_enabled,
+                live_provider_send_allowed=(
+                    remote_provider_live_send_enabled and live_enablement_ready
+                ),
             )
         )
-    runtime_stream_transport_enabled = (
-        live_enablement_ready
-        and runtime_session is not None
-        and observation_admission_config is not None
-        and LiveRuntimeGate.RUNTIME_STREAM.value in live_enablement_report.ready_gates
-    )
     if runtime_stream_transport_enabled:
         app.include_router(
             create_runtime_stream_transport_router(
