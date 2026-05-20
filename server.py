@@ -30,6 +30,9 @@ from pdr_engine import pdr
 from phase1_incident_bridge import phase1_incident_bridge_from_env
 from phase2_admin_api import create_phase2_admin_router
 from runtime_debug_log import FileRuntimeDebugEventLog
+from runtime_stream_controls import RuntimeStreamControlStore
+from runtime_stream_status_surface import create_runtime_stream_status_router
+from runtime_stream_telemetry import RuntimeStreamTelemetryStore
 from runtime_stream_transport_api import create_runtime_stream_transport_router
 from sensor_decoder import SensorLogDecoder
 from movement_summary import MovementAggregator, RawSensorSample
@@ -78,6 +81,10 @@ SCOUT_SAFETY_OBSERVATION_ADMISSION_SECRET = os.getenv(
 )
 SCOUT_SAFETY_OBSERVATION_ADMISSION_SECRET_FILE = os.getenv(
     "SCOUT_SAFETY_OBSERVATION_ADMISSION_SECRET_FILE"
+)
+SCOUT_RUNTIME_STREAM_STATUS_ENABLED = os.getenv(
+    "SCOUT_RUNTIME_STREAM_STATUS_ENABLED",
+    "false",
 )
 
 log_level = logging.DEBUG if DEBUG else logging.INFO
@@ -131,6 +138,8 @@ _worker_task: Optional[asyncio.Task] = None
 safety_runtime_session: Optional[SafetyRuntimeSession] = None
 safety_observation_admission_config: Optional[SafetyObservationAdmissionConfig] = None
 safety_observation_admission_config_error: Optional[Exception] = None
+runtime_stream_telemetry_store = RuntimeStreamTelemetryStore()
+runtime_stream_control_store = RuntimeStreamControlStore()
 
 try:
     safety_observation_admission_config = create_safety_observation_admission_config_from_env(
@@ -236,9 +245,30 @@ def _include_runtime_stream_transport_router(app: FastAPI) -> None:
         create_runtime_stream_transport_router(
             runtime_session=safety_runtime_session,
             observation_admission_config=safety_observation_admission_config,
+            telemetry_store=runtime_stream_telemetry_store,
+            control_store=runtime_stream_control_store,
         )
     )
     logger.info("Runtime stream transport API enabled")
+
+
+def _include_runtime_stream_status_router(app: FastAPI) -> None:
+    if not _is_true_like(SCOUT_RUNTIME_STREAM_STATUS_ENABLED):
+        logger.info("Runtime stream read-only status API disabled")
+        return
+
+    app.include_router(
+        create_runtime_stream_status_router(
+            telemetry_store=runtime_stream_telemetry_store,
+            control_store=runtime_stream_control_store,
+            admission_state=(
+                safety_observation_admission_config.state
+                if safety_observation_admission_config is not None
+                else None
+            ),
+        )
+    )
+    logger.info("Runtime stream read-only status API enabled")
 
 
 async def process_movement_summary(summary: Any) -> Dict[str, Any]:
@@ -353,6 +383,7 @@ app.include_router(
         observation_admission_config=safety_observation_admission_config,
     )
 )
+_include_runtime_stream_status_router(app)
 _include_runtime_stream_transport_router(app)
 _include_phase2_admin_router(app)
 _include_debug_router(app)

@@ -918,6 +918,9 @@ for admin/debug usage and does not control the stream.
 Default policy:
 
 - `GET /runtime/streams/status` exposes current transport status;
+- `GET /runtime/streams/status-read-only` may be mounted independently with
+  `SCOUT_RUNTIME_STREAM_STATUS_ENABLED=1` for policy/control/admission-summary
+  inspection without opening transport routes;
 - telemetry records HTTP push accepted/rejected counts;
 - telemetry records WebSocket connection state as `idle`, `connected`, or
   `closed`;

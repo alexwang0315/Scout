@@ -67,8 +67,14 @@ Implemented read-only status slice:
 
 - `runtime_stream_status_surface.py`;
 - `tests/test_runtime_stream_status_surface.py`;
+- `tests/test_server_runtime_stream_status_mount.py`;
 - `GET /runtime/streams/status-read-only` when the status-only router is
   explicitly mounted.
+- Server mount is opt-in with `SCOUT_RUNTIME_STREAM_STATUS_ENABLED=1`; the
+  default server does not mount this route.
+- The status-only mount is independent from signed admission startup. If signed
+  admission is missing or misconfigured, the read-only status route can still
+  report policy/control summaries without opening transport routes.
 
 The status surface combines:
 
@@ -90,4 +96,5 @@ Boundary:
 
 中文註釋：這個 surface 只顯示政策與狀態摘要，不掛
 `/runtime/streams/http-push/observations`、WebSocket ingest、pause/resume/end
-control、或 remote provider send route。
+control、或 remote provider send route。`SCOUT_RUNTIME_STREAM_STATUS_ENABLED=1`
+只代表開啟只讀查詢面，不代表允許 runtime stream 真的接收資料。
