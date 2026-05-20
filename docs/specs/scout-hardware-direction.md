@@ -217,6 +217,8 @@ The first Pi radio evidence tools live outside the Docker safety runtime:
 wifi_scan_provider.py       -> parses `iw` dBm RSSI and `nmcli` fallback scans
 ble_scan_provider.py        -> parses `btmgmt find` BLE RSSI scans
 radio_scan_provider.py      -> combines Wi-Fi + BLE into one radio_environment_scan
+tools/pi_wifi_scan_smoke.py  -> read-only Wi-Fi-only host smoke CLI
+tools/pi_ble_scan_smoke.py   -> read-only BLE-only host smoke CLI
 tools/pi_radio_scan_smoke.py -> read-only Pi host smoke CLI
 ```
 

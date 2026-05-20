@@ -377,6 +377,8 @@ Pi hardware prototype work now has a read-only radio scan toolchain:
 wifi_scan_provider.py
 ble_scan_provider.py
 radio_scan_provider.py
+tools/pi_wifi_scan_smoke.py
+tools/pi_ble_scan_smoke.py
 tools/pi_radio_scan_smoke.py
 ```
 
