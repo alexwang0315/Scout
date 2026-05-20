@@ -77,6 +77,33 @@ Docker runtime-core contract 也只能先做離線檢查，不啟動 Docker daem
 - local model service 沒有被啟用。
 - 產生的 smoke checklist 全部標示為 manual-only。
 
+## 3.5 Local Admin / Assistant Prototype Gate
+
+在真正對 Scout machine 或 Pi 發出任何命令前，可以先跑本機 host-side gate。這一步只在
+`127.0.0.1` 啟動臨時 Scout server，使用 mock assistant，不連 `scout.local`、不啟動
+Ollama、不啟動本地模型、不呼叫 `/safety/*` mutation，也不控制硬體 provider。
+
+```bash
+SCOUT_BROWSER_NODE=/Users/alexwang0315/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node \
+SCOUT_BROWSER_NODE_PATH=/Users/alexwang0315/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules \
+/Users/alexwang0315/scout-fusion/venv/bin/python admin_hardware_prototype_smoke_check.py \
+  --browser-mode required \
+  --pretty
+```
+
+這個 gate 會自動執行：
+
+- `GET /assistant/status`，確認 provider 是 `mock`、`read_only=true`、
+  `model_interpretation=true`、`token_values_exposed=false`；
+- `assistant_ui_smoke_check.py --pretty`；
+- `assistant_readiness_check.py --pretty`；
+- `assistant_browser_smoke_check.py --base-url http://127.0.0.1:9111 --pretty`。
+
+中文註釋：這是部署前的 admin/debug/pretrip/hardware-readiness UI guardrail，
+不是 real-device smoke，也不是 assistant readiness gate 的替代品。若 operator 沒有
+Node/Playwright，可先用 `--browser-mode skip` 只跑 server/status/static/readiness；
+真部署前建議使用 `--browser-mode required`。
+
 ## 4. Manual Smoke Ladder
 
 以下命令只供 operator 手動執行。測試與 preflight 不會執行它們。
