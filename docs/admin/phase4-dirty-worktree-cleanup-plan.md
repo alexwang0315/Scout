@@ -75,3 +75,37 @@ Ordering rule:
 - do not stage `PdrSample/*`, `catographydata/`, `trajectory_map.png`, or `install_skills.sh` during these cleanup batches;
 - do not enable local model/Ollama or remote provider live-send in the same
   slice as deterministic runtime or planning UI.
+
+## Batch 3 Local Artifact Hygiene
+
+This batch classifies local-only artifacts so future Phase 4, runtime, and
+hardware prototype slices do not accidentally stage heavyweight captures.
+
+Repo-owned clarification:
+
+- `docs/specs/case-study-addition-skill.md` is a Scout internal specification
+  for future built-in case-study skills. It belongs in this repo and must not be treated as local scratch or ignored by `.gitignore`.
+
+Ignored local artifacts:
+
+- `PdrSample/` contains local raw field captures. Version only curated manifests
+  or derived fixtures after explicit approval.
+- `catographydata/` contains local raw DTM/map data. Version only clipped or
+  summarized metadata fixtures.
+- `trajectory_map.png` is a generated/local map image. It is already tracked,
+  so `.gitignore` does not hide the current modification. Do not reset, untrack,
+  or recommit it without a separate explicit decision.
+- `install_skills.sh` is a local operator setup helper, not a Scout runtime or
+  planning artifact.
+
+Future visible slices:
+
+- `docker-compose.pi.ai.yml` and `tools/pi_ollama_stress.py` remain visible
+  rather than ignored because they may become a separate Pi/Ollama hardware
+  experiment slice with docs and tests.
+
+Validation:
+
+```bash
+/Users/alexwang0315/scout-fusion/venv/bin/python -m pytest tests/test_phase4_dirty_worktree_cleanup_plan.py
+```

@@ -69,3 +69,11 @@ Scout/
 !skills/
 !skills/scout/
 !skills/scout/*.yaml
+
+# Scout local captures and heavyweight map data
+PdrSample/
+catographydata/
+trajectory_map.png
+
+# Local operator setup helpers
+install_skills.sh
