@@ -98,6 +98,11 @@ def test_builds_fixture_backed_pretrip_admin_view():
         "weather-api",
     ]
     assert view["map_layers"][0]["label_zh"].startswith("影像圖層")
+    assert view["map_layers"][0]["local_raster_manifest_supported"] is True
+    assert view["map_layers"][0]["local_raster_tile_url_template"] == (
+        "/admin/tiles/imagery/{project_id}/{layer_id}/{z}/{x}/{y}.png"
+    )
+    assert view["map_layers"][0]["external_network_required"] is False
     assert view["map_layers"][-1]["label_zh"].startswith("氣象 API")
     assert view["map_layers"][-1]["external_api_calls_made"] is False
     assert view["tabs"]["pre_trip_planning"]["map_layers"] == view["map_layers"]

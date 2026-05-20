@@ -30,6 +30,8 @@
       "Runtime lifecycle controls write local pause/resume/end/abort records only; they do not process observations, call safety APIs, enable incident bridge, or write Phase 2.",
       "Admin map surfaces share a metadata-backed layer stack: imagery is bottom, OSM and evidence sit in the middle, and API/weather overlays are top.",
       "Local GeoTIFF raster sources can be represented through small metadata manifests for imagery layers without moving raw rasters into repo fixtures.",
+      "Local GeoTIFF raster tile pyramids can be planned and cut into ~/.cache/scout-fusion/raster-tiles for offline imagery preview without external network access.",
+      "The pretrip admin map renders local raster imagery tiles under the OSM basemap through the shared layer toggle contract.",
       "Admin map surfaces now render real OpenStreetMap raster tile image elements through a bounded Web Mercator tile contract; tile fetches remain browser/local-proxy behavior, not release-check crawler behavior.",
       "Local OSM tile proxy serves existing local cache files or generated offline fallback tiles, and never downloads tiles into repo fixtures.",
       "Hardware tile cache planning uses ~/.cache/scout-fusion/osm-tiles, a 10 GiB default cap, bbox expansion, and zoom 5-20 range metadata; public OSM bulk prefetch remains blocked.",
@@ -2606,12 +2608,90 @@
         "tests/test_pretrip_implementation_status.py"
       ],
       "title": "Local GeoTIFF Raster Source Manifest"
+    },
+    {
+      "fixture_refs": [
+        "tests/fixtures/pretrip/projects/chilai_nanhua_day1/project.json"
+      ],
+      "implementation_status": "implemented",
+      "milestone": "4.5AN",
+      "modules": [
+        "admin_local_raster_tiles.py",
+        "admin_local_raster_source.py",
+        "admin_api.py",
+        "admin_map_layers.py",
+        "phase4_pretrip_release_check.py"
+      ],
+      "notes": [
+        "The tile pyramid planner estimates local PNG imagery tiles for WGS84 GeoTIFF sources under the 10 GiB cache limit.",
+        "The cutter writes PNG tiles only to ~/.cache/scout-fusion/raster-tiles or a caller-provided local cache root, never repo fixtures.",
+        "The admin API can serve cached imagery PNG tiles or transparent fallback tiles without external network fetches."
+      ],
+      "release_check_coverage": {
+        "check_names": [
+          "admin_local_raster_tiles",
+          "admin_map_layer_stack",
+          "pretrip_admin_ui",
+          "focused_phase4_tests"
+        ],
+        "commands": [
+          "phase4_focused_suite",
+          "phase4_release_check"
+        ],
+        "covered": true
+      },
+      "tests": [
+        "tests/test_admin_local_raster_tiles.py",
+        "tests/test_admin_local_raster_source.py",
+        "tests/test_admin_map_layers.py",
+        "tests/test_pretrip_admin_api.py",
+        "tests/test_phase4_pretrip_release_check.py",
+        "tests/test_pretrip_implementation_status.py"
+      ],
+      "title": "Local GeoTIFF Raster Tile Pyramid"
+    },
+    {
+      "fixture_refs": [
+        "tests/fixtures/pretrip/projects/chilai_nanhua_day1/project.json"
+      ],
+      "implementation_status": "implemented",
+      "milestone": "4.5AO",
+      "modules": [
+        "docs/admin/phase4-pretrip-planning.html",
+        "admin_map_layers.py",
+        "phase4_pretrip_release_check.py"
+      ],
+      "notes": [
+        "The pretrip SVG map now renders local raster imagery <image> tiles before the OSM basemap layer.",
+        "The imagery renderer reads the local raster tile URL template from the map layer contract and keeps the layer toggleable.",
+        "Missing local imagery tiles resolve through the local transparent fallback endpoint rather than external network fetches."
+      ],
+      "release_check_coverage": {
+        "check_names": [
+          "admin_map_layer_stack",
+          "pretrip_admin_ui",
+          "focused_phase4_tests"
+        ],
+        "commands": [
+          "phase4_focused_suite",
+          "phase4_release_check"
+        ],
+        "covered": true
+      },
+      "tests": [
+        "tests/test_pretrip_admin_page.py",
+        "tests/test_pretrip_admin_view.py",
+        "tests/test_admin_map_layers.py",
+        "tests/test_phase4_pretrip_release_check.py",
+        "tests/test_pretrip_implementation_status.py"
+      ],
+      "title": "Pretrip Raster Imagery Renderer"
     }
   ],
   "phase": "phase_4_pretrip_planning",
   "schema_version": "0.1.0",
   "validation_commands": {
-    "phase4_focused_suite": "/Users/alexwang0315/scout-fusion/venv/bin/python -m pytest tests/test_pretrip_source_ingest.py tests/test_pretrip_candidate_generation.py tests/test_pretrip_geojson_import.py tests/test_pretrip_map_compiler.py tests/test_pretrip_terrain_summary.py tests/test_pretrip_timing_calibration.py tests/test_pretrip_eta_plan.py tests/test_pretrip_skill_audit.py tests/test_pretrip_skill_manifest_catalog.py tests/test_pretrip_readiness.py tests/test_pretrip_review_models.py tests/test_pretrip_review_resolver.py tests/test_pretrip_review_integration.py tests/test_pretrip_review_queue.py tests/test_pretrip_mission_compiler.py tests/test_pretrip_brain_seed.py tests/test_pretrip_brain_seed_store.py tests/test_pretrip_artifact_manifest.py tests/test_pretrip_remote_summary.py tests/test_pretrip_route_comparison.py tests/test_pretrip_poi_readiness.py tests/test_pretrip_segment_policy.py tests/test_pretrip_plan_validation.py tests/test_pretrip_runtime_audit.py tests/test_pretrip_runtime_handoff_metadata.py tests/test_pretrip_review_profiles.py tests/test_pretrip_departure_gate.py tests/test_pretrip_departure_gate_resolution.py tests/test_pretrip_final_mission_graph.py tests/test_pretrip_runtime_handoff.py tests/test_pretrip_runtime_export.py tests/test_pretrip_runtime_artifact_resolution.py tests/test_pretrip_runtime_activation_preflight.py tests/test_pretrip_runtime_activation_request.py tests/test_runtime_load_dry_run.py tests/test_runtime_activation_loader.py tests/test_runtime_stream_policy.py tests/test_runtime_observation_envelope.py tests/test_runtime_input_admission.py tests/test_safety_observation_admission_api.py tests/test_server_safety_observation_admission_config.py tests/test_runtime_stream_transport_api.py tests/test_runtime_stream_telemetry.py tests/test_runtime_stream_controls.py tests/test_runtime_incident_bridge_opt_in.py tests/test_runtime_incident_bridge_enablement.py tests/test_runtime_incident_bridge_delivery_ack.py tests/test_runtime_remote_provider_policy.py tests/test_runtime_remote_provider_config_preflight.py tests/test_runtime_remote_provider_payload_composer.py tests/test_runtime_remote_provider_send_queue.py tests/test_runtime_remote_provider_live_adapter.py tests/test_runtime_remote_provider_live_send_cli.py tests/test_runtime_remote_provider_demo_harness.py tests/test_runtime_remote_provider_demo_bundle.py tests/test_runtime_remote_provider_external_demo_bundle.py tests/test_pretrip_after_action_candidates.py tests/test_pretrip_resource_plan.py tests/test_pretrip_weather_daylight.py tests/test_pretrip_contour_interpretation.py tests/test_pretrip_departure_bundle.py tests/test_pretrip_scout260512_fixture.py tests/test_pretrip_project_matrix.py tests/test_pretrip_source_registry.py tests/test_pretrip_implementation_status.py tests/test_pretrip_decision_register.py tests/test_pretrip_fixture_hygiene.py tests/test_admin_map_layers.py tests/test_admin_local_raster_source.py tests/test_admin_basemap_tiles.py tests/test_admin_tile_cache_builder.py tests/test_admin_tile_proxy.py tests/test_admin_weather_overlay.py tests/test_pretrip_admin_view.py tests/test_pretrip_admin_page.py tests/test_pretrip_admin_api.py tests/test_admin_after_action.py tests/test_pretrip_review_draft.py tests/test_pretrip_review_draft_fixture.py tests/test_pretrip_review_decision_log.py tests/test_pretrip_review_decision_apply.py tests/test_pretrip_review_decision_apply_store.py tests/test_pretrip_review_decision_store.py tests/test_pretrip_workspace_project.py tests/test_pretrip_external_import_queue.py tests/test_pretrip_expert_contribution.py tests/test_pretrip_expert_contribution_apply_plan.py tests/test_pretrip_route_note_candidates.py tests/test_pretrip_route_note_ln_proposals.py tests/test_pretrip_route_note_review_options.py tests/test_pretrip_route_note_reviewed_assumptions.py tests/test_phase4_pretrip_release_check.py",
+    "phase4_focused_suite": "/Users/alexwang0315/scout-fusion/venv/bin/python -m pytest tests/test_pretrip_source_ingest.py tests/test_pretrip_candidate_generation.py tests/test_pretrip_geojson_import.py tests/test_pretrip_map_compiler.py tests/test_pretrip_terrain_summary.py tests/test_pretrip_timing_calibration.py tests/test_pretrip_eta_plan.py tests/test_pretrip_skill_audit.py tests/test_pretrip_skill_manifest_catalog.py tests/test_pretrip_readiness.py tests/test_pretrip_review_models.py tests/test_pretrip_review_resolver.py tests/test_pretrip_review_integration.py tests/test_pretrip_review_queue.py tests/test_pretrip_mission_compiler.py tests/test_pretrip_brain_seed.py tests/test_pretrip_brain_seed_store.py tests/test_pretrip_artifact_manifest.py tests/test_pretrip_remote_summary.py tests/test_pretrip_route_comparison.py tests/test_pretrip_poi_readiness.py tests/test_pretrip_segment_policy.py tests/test_pretrip_plan_validation.py tests/test_pretrip_runtime_audit.py tests/test_pretrip_runtime_handoff_metadata.py tests/test_pretrip_review_profiles.py tests/test_pretrip_departure_gate.py tests/test_pretrip_departure_gate_resolution.py tests/test_pretrip_final_mission_graph.py tests/test_pretrip_runtime_handoff.py tests/test_pretrip_runtime_export.py tests/test_pretrip_runtime_artifact_resolution.py tests/test_pretrip_runtime_activation_preflight.py tests/test_pretrip_runtime_activation_request.py tests/test_runtime_load_dry_run.py tests/test_runtime_activation_loader.py tests/test_runtime_stream_policy.py tests/test_runtime_observation_envelope.py tests/test_runtime_input_admission.py tests/test_safety_observation_admission_api.py tests/test_server_safety_observation_admission_config.py tests/test_runtime_stream_transport_api.py tests/test_runtime_stream_telemetry.py tests/test_runtime_stream_controls.py tests/test_runtime_incident_bridge_opt_in.py tests/test_runtime_incident_bridge_enablement.py tests/test_runtime_incident_bridge_delivery_ack.py tests/test_runtime_remote_provider_policy.py tests/test_runtime_remote_provider_config_preflight.py tests/test_runtime_remote_provider_payload_composer.py tests/test_runtime_remote_provider_send_queue.py tests/test_runtime_remote_provider_live_adapter.py tests/test_runtime_remote_provider_live_send_cli.py tests/test_runtime_remote_provider_demo_harness.py tests/test_runtime_remote_provider_demo_bundle.py tests/test_runtime_remote_provider_external_demo_bundle.py tests/test_pretrip_after_action_candidates.py tests/test_pretrip_resource_plan.py tests/test_pretrip_weather_daylight.py tests/test_pretrip_contour_interpretation.py tests/test_pretrip_departure_bundle.py tests/test_pretrip_scout260512_fixture.py tests/test_pretrip_project_matrix.py tests/test_pretrip_source_registry.py tests/test_pretrip_implementation_status.py tests/test_pretrip_decision_register.py tests/test_pretrip_fixture_hygiene.py tests/test_admin_map_layers.py tests/test_admin_local_raster_source.py tests/test_admin_local_raster_tiles.py tests/test_admin_basemap_tiles.py tests/test_admin_tile_cache_builder.py tests/test_admin_tile_proxy.py tests/test_admin_weather_overlay.py tests/test_pretrip_admin_view.py tests/test_pretrip_admin_page.py tests/test_pretrip_admin_api.py tests/test_admin_after_action.py tests/test_pretrip_review_draft.py tests/test_pretrip_review_draft_fixture.py tests/test_pretrip_review_decision_log.py tests/test_pretrip_review_decision_apply.py tests/test_pretrip_review_decision_apply_store.py tests/test_pretrip_review_decision_store.py tests/test_pretrip_workspace_project.py tests/test_pretrip_external_import_queue.py tests/test_pretrip_expert_contribution.py tests/test_pretrip_expert_contribution_apply_plan.py tests/test_pretrip_route_note_candidates.py tests/test_pretrip_route_note_ln_proposals.py tests/test_pretrip_route_note_review_options.py tests/test_pretrip_route_note_reviewed_assumptions.py tests/test_phase4_pretrip_release_check.py",
     "phase4_release_check": "/Users/alexwang0315/scout-fusion/venv/bin/python phase4_pretrip_release_check.py"
   }
 }
