@@ -31,3 +31,16 @@ def test_scout_runtime_deployment_takeover_keeps_step1_boundaries() -> None:
         "provider `control_allowed=false`",
     ):
         assert token in source
+
+
+def test_scout_runtime_deployment_takeover_links_fixture_observation_smoke() -> None:
+    source = DOC_PATH.read_text(encoding="utf-8")
+
+    for token in (
+        "## Follow-Up Fixture Observation Smoke",
+        "`observations_processed` moved from `0` to `1`",
+        "`safety_level` stayed `L0_NORMAL`",
+        "no incident ids or stored incident paths were returned",
+        "fixture-observation-20260520T033354Z",
+    ):
+        assert token in source

@@ -18,8 +18,8 @@ def test_hardware_port_plan_records_runtime_deployment_takeover() -> None:
         assert token in source
 
 
-def test_hardware_port_plan_next_slice_requires_operator_fixture_observation() -> None:
+def test_hardware_port_plan_takeover_status_keeps_mutation_boundary_explicit() -> None:
     source = PLAN_PATH.read_text(encoding="utf-8")
 
-    assert "operator-approved fixture observation smoke" in source
+    assert "## Runtime Deployment Takeover Status" in source
     assert "no `/safety/*` mutation" in source
