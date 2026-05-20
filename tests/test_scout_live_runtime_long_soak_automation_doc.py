@@ -73,6 +73,37 @@ def test_long_soak_doc_records_overnight_started_state_without_completion_claim(
         assert token in source
 
 
+def test_long_soak_doc_records_post_guard_bounded_soak() -> None:
+    source = read_report()
+
+    for token in (
+        "`/data/scout/deployments/live-runtime-soak-post-guard-20260520T153214Z`",
+        "`/tmp/live_runtime_soak_check.py`",
+        "避免中斷正在跑的 overnight soak",
+        "`status=passed`",
+        "`sample_count=6`",
+        "`interval_seconds=10`",
+        "`samples_all_ok=true`",
+        "`runtime_profile=pi-field-live`",
+        "`health_status=ok`",
+        "`assistant_provider=pydantic_ai`",
+        "`assistant_startup_connection_status=connected:cloud`",
+        "`assistant_token_values_exposed=false`",
+        "`stream_control_status=observing`",
+        "`stream_telemetry_totals.accepted_count=0`",
+        "`stream_telemetry_totals.rejected_count=0`",
+        "`stream_telemetry_totals.queued_count=0`",
+        "`stream_telemetry_totals.active_websocket_connections=0`",
+        "`provider_control_status=enabled`",
+        "`provider_control_allowed_actions=[read_provider_status]`",
+        "`provider_control_token_value_exposed=false`",
+        "`overnight_soak_still_running=true`",
+        "`read_only_soak=true`",
+        "`phase2_writeback_performed=false`",
+    ):
+        assert token in source
+
+
 def test_long_soak_doc_records_packaging_and_longer_run_command() -> None:
     source = read_report()
 
