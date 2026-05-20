@@ -118,6 +118,14 @@ export SCOUT_REMOTE_BACKUP_TARGET_REF='<operator-backup-target-ref>'
 
 4. 建置並啟動 live profile。
 
+先跑 preflight-only CLI：
+
+```bash
+python live_runtime_enablement_cli.py --env-file tests/fixtures/live_runtime/operator-env.example --pretty
+```
+
+中文註釋：這個 CLI 只檢查 gate、config 與 secret ref 是否存在；不連模型、不送 webhook、不啟動 Docker、不控制硬體。
+
 ```bash
 docker compose -f docker-compose.pi.live.yml build scout-live
 docker compose -f docker-compose.pi.live.yml up -d scout-live
@@ -235,6 +243,7 @@ Stop and rollback if any of these occur:
 /Users/alexwang0315/scout-fusion/venv/bin/python -m pytest \
   tests/test_live_runtime_docker_contract.py \
   tests/test_live_runtime_enablement.py \
+  tests/test_live_runtime_enablement_cli.py \
   tests/test_scout_pi_runtime.py \
   tests/test_scout_live_runtime_operator_runbook.py
 ```

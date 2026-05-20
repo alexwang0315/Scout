@@ -19,6 +19,7 @@ def test_live_runtime_dockerfile_is_separate_from_step1_and_includes_live_module
     assert "SCOUT_HARDWARE_PROVIDER_CONTROL_TOKEN_FILE=/data/scout/secrets/hardware-provider-control-token" in source
     for module in (
         "live_runtime_enablement.py",
+        "live_runtime_enablement_cli.py",
         "runtime_stream_transport_api.py",
         "runtime_remote_provider_live_adapter.py",
         "runtime_remote_provider_live_send_cli.py",

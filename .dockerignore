@@ -47,6 +47,7 @@
 !hardware_readiness_admin_view.py
 !hardware_readiness_assistant_context.py
 !live_runtime_enablement.py
+!live_runtime_enablement_cli.py
 !pretrip_assistant_context.py
 !runtime_input_admission.py
 !runtime_observation_envelope.py
