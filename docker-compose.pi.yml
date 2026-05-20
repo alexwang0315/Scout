@@ -14,6 +14,7 @@ services:
       SCOUT_ENABLE_AI_INFERENCE: "0"
       SCOUT_ENABLE_LOCAL_MODEL: "0"
       SCOUT_EVENT_BUS: none
+      SCOUT_RUNTIME_STREAM_STATUS_ENABLED: "${SCOUT_RUNTIME_STREAM_STATUS_ENABLED:-false}"
       SCOUT_SAFETY_ENABLED: "true"
       SCOUT_SAFETY_MISSION_GRAPH: /app/tests/fixtures/mission_graph/normal_climb_mission.json
       SCOUT_SAFETY_INCIDENT_STORE: /data/scout/incidents

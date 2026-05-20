@@ -182,6 +182,11 @@ def build_live_runtime_enablement_report(
                     assistant_config_error_type = type(exc).__name__
                     gate_blockers.append("assistant_model_config_invalid")
         elif gate == LiveRuntimeGate.HARDWARE_PROVIDER_CONTROL:
+            control_token_ref = "env:SCOUT_HARDWARE_PROVIDER_CONTROL_TOKEN"
+            required_secret_refs.append(control_token_ref)
+            if not _secret_ref_available(control_token_ref, environ):
+                missing_secret_refs.append(control_token_ref)
+                gate_blockers.append("missing_hardware_control_token")
             if not hardware_policy_path:
                 gate_blockers.append("missing_hardware_control_policy")
             else:

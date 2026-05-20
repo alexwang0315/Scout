@@ -10,6 +10,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     SCOUT_ENABLE_AI_INFERENCE=0 \
     SCOUT_ENABLE_LOCAL_MODEL=0 \
     SCOUT_EVENT_BUS=none \
+    SCOUT_RUNTIME_STREAM_STATUS_ENABLED=false \
     SCOUT_SAFETY_MISSION_GRAPH=/app/tests/fixtures/mission_graph/normal_climb_mission.json \
     SCOUT_SAFETY_INCIDENT_STORE=/data/scout/incidents \
     SCOUT_PORT=9099 \
@@ -51,6 +52,14 @@ COPY \
     risk_rules.py \
     route_matching.py \
     route_progress.py \
+    runtime_artifact_resolution.py \
+    runtime_input_admission.py \
+    runtime_observation_envelope.py \
+    runtime_remote_provider_policy.py \
+    runtime_stream_controls.py \
+    runtime_stream_policy.py \
+    runtime_stream_status_surface.py \
+    runtime_stream_telemetry.py \
     safety_api.py \
     safety_models.py \
     safety_runtime_session.py \
