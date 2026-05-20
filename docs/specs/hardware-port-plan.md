@@ -648,6 +648,8 @@ Artifacts:
 
 - `phase4_admin_runtime.py`
 - `phase4_hardware_admin_preview.py`
+- `phase4_hardware_demo_smoke.py`
+- `phase4_hardware_tile_workspace_smoke.py`
 - `Dockerfile.pi.admin`
 - `docker-compose.pi.admin.yml`
 - `requirements.pi.admin.txt`
@@ -662,16 +664,28 @@ Deployment shape:
   `/phase4/admin-preview/status` for LAN smoke checks from the Mac;
 - stores local admin workspace edits under
   `/data/scout/admin/pretrip-workspaces`;
+- requires admin auth by default with `SCOUT_ADMIN_AUTH_REQUIRED=true` and token
+  material read from `/data/scout/admin/secrets/phase4-admin-token`;
 - points local OSM and raster tile cache roots at `/data/scout/osm-tiles` and
   `/data/scout/raster-tiles`.
 
 Boundaries:
 
 - no Phase 1 field runtime is started by this profile;
+- admin token values are never embedded in status or smoke output;
 - no `/safety/*` mutation is part of the admin preview profile;
 - mock assistant is read-only and token values are never exposed;
 - live Open-Meteo weather remains opt-in through `SCOUT_WEATHER_API_ENABLED`;
 - no raw DTM, GPX, photo, or large map asset is copied into repo fixtures.
+
+Smoke helpers:
+
+- `phase4_hardware_demo_smoke.py` runs read-only HTTP GET checks against the
+  deployed admin preview and runtime health endpoints.
+- `phase4_hardware_tile_workspace_smoke.py` is plan-only. It prints the tile,
+  workspace-copy, and review-decision-preview endpoints but does not call
+  `scout.local`, download external tiles, write repo fixtures, mutate Phase 1,
+  or write Phase 2 Brain state.
 
 中文註釋：這個 profile 是「硬體上的規劃/admin 預覽服務」，不是現場安全 runtime。
 Mac 可以用 `http://scout.local:9110/admin/pretrip` 觀看與操作 Phase 4 admin；

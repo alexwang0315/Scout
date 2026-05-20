@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import os
+from base64 import b64decode
+from hmac import compare_digest
 from pathlib import Path
 from typing import Any, Mapping
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 
 from admin_api import create_admin_router
 from assistant_models import AssistantSourceRef, ScoutAssistantQuery, ScoutAssistantResponse
@@ -14,6 +17,7 @@ from assistant_provider import MockAssistantProvider
 DEFAULT_DATA_ROOT = Path("/data/scout")
 DEFAULT_ADMIN_WORKSPACE_ROOT = DEFAULT_DATA_ROOT / "admin" / "pretrip-workspaces"
 DEFAULT_INCIDENT_STORE = DEFAULT_DATA_ROOT / "incidents"
+DEFAULT_ADMIN_BASIC_USERNAME = "scout-admin"
 
 
 def create_phase4_admin_runtime_app(
@@ -29,6 +33,7 @@ def create_phase4_admin_runtime_app(
         env.get("SCOUT_SAFETY_INCIDENT_STORE", str(DEFAULT_INCIDENT_STORE))
     ).expanduser()
     assistant_enabled = _is_true_like(env.get("SCOUT_AI_ASSISTANT_ENABLED", "1"))
+    auth_config = _admin_auth_config(env)
     provider = MockAssistantProvider()
 
     app = FastAPI(
@@ -39,6 +44,30 @@ def create_phase4_admin_runtime_app(
         ),
         version="0.1.0",
     )
+
+    @app.middleware("http")
+    async def admin_auth_middleware(request: Request, call_next):
+        if _admin_auth_allowed(request, auth_config):
+            return await call_next(request)
+        status_code = 503 if auth_config["misconfigured"] else 401
+        headers = {}
+        if status_code == 401:
+            headers["WWW-Authenticate"] = (
+                f'Basic realm="Scout Phase 4 Admin", charset="UTF-8"'
+            )
+        return JSONResponse(
+            {
+                "detail": (
+                    "admin auth is required"
+                    if status_code == 401
+                    else "admin auth is required but no token is configured"
+                ),
+                "auth": _admin_auth_status(auth_config),
+            },
+            status_code=status_code,
+            headers=headers,
+        )
+
     app.include_router(
         create_admin_router(
             incident_store_path=incident_store,
@@ -63,6 +92,7 @@ def create_phase4_admin_runtime_app(
                 "pretrip_project": "/admin/pretrip/projects/chilai_nanhua_day1",
                 "assistant_status": "/assistant/status" if assistant_enabled else None,
             },
+            "auth": _admin_auth_status(auth_config),
             "boundaries": _runtime_boundaries(env, assistant_enabled=assistant_enabled),
         }
 
@@ -89,6 +119,7 @@ def create_phase4_admin_runtime_app(
                 ),
                 "repo_fixture_write_allowed": False,
             },
+            "auth": _admin_auth_status(auth_config),
             "boundaries": _runtime_boundaries(env, assistant_enabled=assistant_enabled),
         }
 
@@ -179,6 +210,85 @@ def _assistant_sources(query: ScoutAssistantQuery) -> list[AssistantSourceRef]:
             )
         )
     return refs
+
+
+def _admin_auth_config(env: Mapping[str, str]) -> dict[str, Any]:
+    required = _is_true_like(env.get("SCOUT_ADMIN_AUTH_REQUIRED"))
+    username = env.get("SCOUT_ADMIN_BASIC_USERNAME", DEFAULT_ADMIN_BASIC_USERNAME)
+    token = env.get("SCOUT_ADMIN_ACCESS_TOKEN")
+    token_file = env.get("SCOUT_ADMIN_ACCESS_TOKEN_FILE")
+    token_source = "env" if token else None
+    if not token and token_file:
+        path = Path(token_file).expanduser()
+        try:
+            token = path.read_text(encoding="utf-8").strip()
+            token_source = "file"
+        except OSError:
+            token = None
+            token_source = "file_unreadable"
+    configured = bool(token)
+    return {
+        "required": required,
+        "username": username,
+        "token": token,
+        "token_configured": configured,
+        "token_source": token_source,
+        "misconfigured": required and not configured,
+    }
+
+
+def _admin_auth_status(auth_config: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "required": bool(auth_config["required"]),
+        "scheme": "basic_or_bearer_token",
+        "basic_username": auth_config["username"],
+        "token_configured": bool(auth_config["token_configured"]),
+        "token_source": auth_config["token_source"],
+        "token_value_exposed": False,
+        "misconfigured": bool(auth_config["misconfigured"]),
+    }
+
+
+def _admin_auth_allowed(request: Request, auth_config: Mapping[str, Any]) -> bool:
+    if request.url.path == "/health":
+        return True
+    if not auth_config["required"]:
+        return True
+    token = auth_config["token"]
+    if not token:
+        return False
+
+    header = request.headers.get("authorization", "")
+    return _bearer_token_valid(header, token) or _basic_token_valid(
+        header,
+        username=str(auth_config["username"]),
+        token=token,
+    )
+
+
+def _bearer_token_valid(header: str, token: str) -> bool:
+    prefix = "Bearer "
+    if not header.startswith(prefix):
+        return False
+    supplied = header.removeprefix(prefix).strip()
+    return bool(supplied) and compare_digest(supplied, token)
+
+
+def _basic_token_valid(header: str, *, username: str, token: str) -> bool:
+    prefix = "Basic "
+    if not header.startswith(prefix):
+        return False
+    try:
+        decoded = b64decode(header.removeprefix(prefix), validate=True).decode("utf-8")
+    except Exception:
+        return False
+    supplied_username, separator, supplied_token = decoded.partition(":")
+    if separator != ":":
+        return False
+    return compare_digest(supplied_username, username) and compare_digest(
+        supplied_token,
+        token,
+    )
 
 
 def _is_true_like(value: str | None) -> bool:
