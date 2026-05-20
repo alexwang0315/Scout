@@ -112,12 +112,39 @@ Repo summaries:
 - `docs/admin/scout-runtime-canonical-fixture-local-dry-run.md`
 - `docs/admin/scout-runtime-canonical-fixture-target-smoke.md`
 
+### Phase 4 Admin Preview Smoke
+
+Directory:
+`/home/alexwang0315/scout-fusion-phase4-admin-e646f700`
+
+Purpose:
+
+- separate LAN-visible Phase 4 admin preview service;
+- verify `/admin/pretrip` returns a map-bearing page from the Scout machine;
+- verify mock read-only assistant status/query on port `9110`;
+- keep the field runtime on port `9099`.
+
+Key result:
+
+- `scout-pi-phase4-admin`: healthy
+- admin preview port: `9110 -> 9099`
+- `GET /admin/pretrip`: HTTP `200`, `id="map"` present
+- `GET /assistant/status`: `provider=mock`, `token_values_exposed=false`
+- `POST /assistant/query`: `read_only=true`, `model_interpretation=true`
+- no `/safety/*` mutation, outbound send, local model request, or hardware
+  provider control
+
+Repo summary:
+
+- `docs/admin/scout-machine-phase4-admin-preview-smoke.md`
+
 ## Current Runtime Snapshot
 
 Last read-only check in this slice:
 
 - `scout-runtime` image id: `761115bf441b`
 - `scout-runtime` status: healthy
+- `scout-pi-phase4-admin` status: healthy on `9110`
 - `scout-ollama` present but not queried or changed
 - `/health`: `status=ok`
 - `/runtime/status`: `observations_processed=2`
