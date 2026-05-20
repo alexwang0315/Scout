@@ -137,6 +137,7 @@ def run_admin_hardware_prototype_smoke(
         [python_executable, "server.py"],
         cwd=REPO_ROOT,
         env=env,
+        stdin=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.STDOUT,
         text=True,

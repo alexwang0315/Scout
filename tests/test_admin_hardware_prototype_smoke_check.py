@@ -5,6 +5,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import admin_hardware_prototype_smoke_check as smoke
 from admin_hardware_prototype_smoke_check import (
     AdminHardwarePrototypeSmokeStep,
     build_plan_only_result,
@@ -114,3 +115,41 @@ def test_failed_step_makes_result_failed() -> None:
     assert result.counts.failed == 1
     assert result.counts.skipped == 1
     assert result.steps[0].missing_required_artifacts == ["assistant_status_unavailable"]
+
+
+def test_runtime_smoke_closes_server_stdin_to_avoid_child_startup_stalls(monkeypatch) -> None:
+    captured = {}
+
+    class FakeProcess:
+        def poll(self):
+            return 0
+
+    def fake_popen(*args, **kwargs):
+        captured["args"] = args
+        captured["kwargs"] = kwargs
+        return FakeProcess()
+
+    monkeypatch.setattr(smoke.subprocess, "Popen", fake_popen)
+    monkeypatch.setattr(
+        smoke,
+        "_wait_for_assistant_status",
+        lambda *_args, **_kwargs: AdminHardwarePrototypeSmokeStep(
+            step_id="assistant_status",
+            status="failed",
+            summary="not reached",
+            missing_required_artifacts=["assistant_status_unavailable"],
+        ),
+    )
+    monkeypatch.setattr(smoke, "_stop_process", lambda _process: None)
+
+    result = smoke.run_admin_hardware_prototype_smoke(
+        python_executable=sys.executable,
+        node_executable="node",
+        node_path=None,
+        port=9111,
+        browser_mode="skip",
+        wait_seconds=0.1,
+    )
+
+    assert result.status == "failed"
+    assert captured["kwargs"]["stdin"] is subprocess.DEVNULL
