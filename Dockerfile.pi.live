@@ -37,6 +37,7 @@ COPY \
     admin_basemap_tiles.py \
     admin_local_raster_tiles.py \
     admin_map_layers.py \
+    admin_tile_cache_builder.py \
     admin_tile_proxy.py \
     assistant_api.py \
     assistant_context.py \
@@ -109,6 +110,8 @@ COPY tests/fixtures/mission_graph/normal_climb_mission.json ./tests/fixtures/mis
 COPY tests/fixtures/routes/normal_climb.gpx ./tests/fixtures/routes/
 COPY tests/fixtures/hardware/provider_contract.example.json ./tests/fixtures/hardware/
 COPY tests/fixtures/pretrip/projects/chilai_nanhua_day1/ ./tests/fixtures/pretrip/projects/chilai_nanhua_day1/
+
+RUN python -c "import scout_pi_runtime"
 
 RUN useradd --create-home --uid 1000 scout \
     && mkdir -p /data/scout/missions /data/scout/incidents /data/scout/capsules \
