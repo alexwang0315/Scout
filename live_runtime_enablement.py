@@ -182,10 +182,13 @@ def build_live_runtime_enablement_report(
                     assistant_config_error_type = type(exc).__name__
                     gate_blockers.append("assistant_model_config_invalid")
         elif gate == LiveRuntimeGate.HARDWARE_PROVIDER_CONTROL:
-            control_token_ref = "env:SCOUT_HARDWARE_PROVIDER_CONTROL_TOKEN"
-            required_secret_refs.append(control_token_ref)
-            if not _secret_ref_available(control_token_ref, environ):
-                missing_secret_refs.append(control_token_ref)
+            control_token_refs = _hardware_control_token_refs(environ)
+            required_secret_refs.extend(control_token_refs)
+            missing = [
+                ref for ref in control_token_refs if not _secret_ref_available(ref, environ)
+            ]
+            missing_secret_refs.extend(missing)
+            if missing:
                 gate_blockers.append("missing_hardware_control_token")
             if not hardware_policy_path:
                 gate_blockers.append("missing_hardware_control_policy")
@@ -246,6 +249,12 @@ def _runtime_stream_secret_refs(environ: Mapping[str, str]) -> list[str]:
     if environ.get("SCOUT_SAFETY_OBSERVATION_ADMISSION_SECRET_FILE"):
         return [f"file:{environ['SCOUT_SAFETY_OBSERVATION_ADMISSION_SECRET_FILE']}"]
     return ["env:SCOUT_SAFETY_OBSERVATION_ADMISSION_SECRET"]
+
+
+def _hardware_control_token_refs(environ: Mapping[str, str]) -> list[str]:
+    if environ.get("SCOUT_HARDWARE_PROVIDER_CONTROL_TOKEN_FILE"):
+        return [f"file:{environ['SCOUT_HARDWARE_PROVIDER_CONTROL_TOKEN_FILE']}"]
+    return ["env:SCOUT_HARDWARE_PROVIDER_CONTROL_TOKEN"]
 
 
 def _remote_provider_required_secret_refs() -> list[str]:

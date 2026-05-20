@@ -1,0 +1,119 @@
+# syntax=docker/dockerfile:1
+ARG TARGETPLATFORM=linux/arm64
+FROM --platform=$TARGETPLATFORM python:3.12-slim-bookworm
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    SCOUT_DATA_ROOT=/data/scout \
+    SCOUT_RUNTIME_PROFILE=pi-field-live \
+    SCOUT_ENABLE_LIVE_RUNTIME=1 \
+    SCOUT_ENABLE_LIVE_HARDWARE=1 \
+    SCOUT_ENABLE_AI_INFERENCE=1 \
+    SCOUT_ENABLE_LOCAL_MODEL=1 \
+    SCOUT_EVENT_BUS=none \
+    SCOUT_RUNTIME_STREAM_STATUS_ENABLED=1 \
+    SCOUT_SAFETY_OBSERVATION_ADMISSION_ENABLED=1 \
+    SCOUT_SAFETY_OBSERVATION_ADMISSION_SECRET_FILE=/data/scout/secrets/runtime-stream-admission-secret \
+    SCOUT_AI_ASSISTANT_ENABLED=1 \
+    SCOUT_AI_ASSISTANT_PROVIDER=pydantic_ai \
+    SCOUT_AI_ASSISTANT_CONFIG_PATH=/data/scout/config/assistant-models.json \
+    SCOUT_REMOTE_PROVIDER_LIVE_SEND_ENABLED=1 \
+    SCOUT_HARDWARE_PROVIDER_CONTROL_ENABLED=1 \
+    SCOUT_HARDWARE_PROVIDER_CONTROL_POLICY_PATH=/data/scout/config/hardware-provider-control-policy.json \
+    SCOUT_HARDWARE_PROVIDER_CONTROL_TOKEN_FILE=/data/scout/secrets/hardware-provider-control-token \
+    SCOUT_SAFETY_MISSION_GRAPH=/app/tests/fixtures/mission_graph/normal_climb_mission.json \
+    SCOUT_SAFETY_INCIDENT_STORE=/data/scout/incidents \
+    SCOUT_PORT=9099 \
+    SCOUT_LOG_LEVEL=info
+
+WORKDIR /app
+
+COPY requirements.pi.live.txt .
+RUN pip install --no-cache-dir -r requirements.pi.live.txt
+
+COPY \
+    admin_assistant_context.py \
+    assistant_api.py \
+    assistant_context.py \
+    assistant_model_config.py \
+    assistant_models.py \
+    assistant_offline_fallback_contract.py \
+    assistant_provider.py \
+    assistant_pydantic_provider.py \
+    checkpoint_manager.py \
+    communication_provider.py \
+    communication_tool.py \
+    debug_assistant_context.py \
+    environment_provider.py \
+    geo_utils.py \
+    go_no_go.py \
+    hardware_readiness_admin_view.py \
+    hardware_readiness_assistant_context.py \
+    incident_package.py \
+    incident_store.py \
+    live_runtime_enablement.py \
+    mission_graph.py \
+    mission_models.py \
+    mission_progress.py \
+    observation_adapter.py \
+    offline_map.py \
+    offline_map_models.py \
+    pdr_fallback.py \
+    phase1_incident_bridge.py \
+    phase1_phase2_adapter.py \
+    phase2_brain_ingest.py \
+    phase2_brain_models.py \
+    phase2_brain_store.py \
+    phase2_refs.py \
+    phase2_store_utils.py \
+    phase2_writeback_policy.py \
+    pretrip_assistant_context.py \
+    provider_context.py \
+    recording_policy_runtime.py \
+    replay_runner.py \
+    resource_provider.py \
+    risk_rules.py \
+    route_matching.py \
+    route_progress.py \
+    runtime_input_admission.py \
+    runtime_observation_envelope.py \
+    runtime_remote_provider_config_preflight.py \
+    runtime_remote_provider_live_adapter.py \
+    runtime_remote_provider_live_send_cli.py \
+    runtime_remote_provider_payload_composer.py \
+    runtime_remote_provider_policy.py \
+    runtime_remote_provider_send_queue.py \
+    runtime_stream_controls.py \
+    runtime_stream_policy.py \
+    runtime_stream_status_surface.py \
+    runtime_stream_telemetry.py \
+    runtime_stream_transport_api.py \
+    safety_api.py \
+    safety_models.py \
+    safety_runtime_session.py \
+    safety_state_machine.py \
+    scout_pi_runtime.py \
+    server_safety_observation_admission_config.py \
+    skill_registry_models.py \
+    skill_runtime.py \
+    ./
+
+COPY tests/fixtures/mission_graph/normal_climb_mission.json ./tests/fixtures/mission_graph/
+COPY tests/fixtures/routes/normal_climb.gpx ./tests/fixtures/routes/
+COPY tests/fixtures/hardware/provider_contract.example.json ./tests/fixtures/hardware/
+COPY tests/fixtures/pretrip/projects/chilai_nanhua_day1/ ./tests/fixtures/pretrip/projects/chilai_nanhua_day1/
+
+RUN useradd --create-home --uid 1000 scout \
+    && mkdir -p /data/scout/missions /data/scout/incidents /data/scout/capsules \
+        /data/scout/raw_ring /data/scout/logs /data/scout/providers /data/scout/tmp \
+        /data/scout/config /data/scout/secrets \
+    && chown -R scout:scout /data/scout /app
+
+USER scout
+
+EXPOSE 9099
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD python -c "import json, urllib.request; r=urllib.request.urlopen('http://127.0.0.1:9099/health', timeout=3); raise SystemExit(0 if json.load(r).get('status') == 'ok' else 1)"
+
+CMD ["python", "-m", "uvicorn", "scout_pi_runtime:app", "--host", "0.0.0.0", "--port", "9099"]

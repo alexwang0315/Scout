@@ -125,3 +125,31 @@ def test_hardware_provider_control_policy_rejects_arbitrary_shell_and_safety_mut
             allowed_actions=["read_provider_status"],
             safety_mutation_allowed=True,
         )
+
+
+def test_live_runtime_enablement_accepts_hardware_control_token_file(tmp_path: Path) -> None:
+    token_file = tmp_path / "hardware-control-token"
+    token_file.write_text("secret-value-not-in-path\n", encoding="utf-8")
+    hardware_policy = tmp_path / "hardware-control-policy.json"
+    hardware_policy.write_text(
+        HardwareProviderControlPolicy(
+            policy_id="hardware_control_policy.pi5_live.v0",
+            allowed_provider_refs=["provider.gnss.live.v0"],
+            allowed_actions=["read_provider_status"],
+        ).to_json(),
+        encoding="utf-8",
+    )
+
+    report = build_live_runtime_enablement_report(
+        {
+            "SCOUT_HARDWARE_PROVIDER_CONTROL_POLICY_PATH": str(hardware_policy),
+            "SCOUT_HARDWARE_PROVIDER_CONTROL_TOKEN_FILE": str(token_file),
+        },
+        requested_gates={LiveRuntimeGate.HARDWARE_PROVIDER_CONTROL},
+    )
+    serialized = json.dumps(report.model_dump(mode="json"), sort_keys=True)
+
+    assert report.status == "live_enablement_ready"
+    assert f"file:{token_file}" in report.required_secret_refs
+    assert report.missing_secret_refs == []
+    assert "secret-value-not-in-path" not in serialized
