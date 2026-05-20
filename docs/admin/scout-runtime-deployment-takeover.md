@@ -125,3 +125,25 @@ Detailed evidence:
 
 - `/data/scout/deployments/fixture-observation-20260520T033354Z`
 - `docs/admin/scout-runtime-fixture-observation-smoke.md`
+
+## Follow-Up Canonical Fixture Target Smoke
+
+2026-05-20: a canonical SensorLog fixture `POST /safety/observations` smoke was
+run after the local canonical dry-run.
+
+Result:
+
+- `observations_processed` moved from `1` to `2`;
+- `checkpoint_hits` moved from `0` to `1`;
+- checkpoint `cp_01` was hit;
+- required capabilities were available;
+- `safety_level` stayed `L0_NORMAL`;
+- no incident ids or stored incident paths were returned;
+- no new files appeared in `/data/scout/incidents`;
+- no outbound, local model, live hardware, runtime stream, or provider send path
+  was used.
+
+Detailed evidence:
+
+- `/data/scout/deployments/canonical-fixture-observation-20260520T035132Z`
+- `docs/admin/scout-runtime-canonical-fixture-target-smoke.md`

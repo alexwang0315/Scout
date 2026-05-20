@@ -561,15 +561,32 @@ Completed:
 - verified the route-aware path by hitting checkpoint `cp_01`;
 - kept target network calls and target `/safety/*` mutation at zero.
 
+## Canonical Fixture Target Smoke Status
+
+2026-05-20: the canonical fixture was run once against the deployed
+`scout-runtime` on `scout.local`.
+
+Completed:
+
+- accepted one canonical fixture observation;
+- moved `observations_processed` from `1` to `2`;
+- moved `checkpoint_hits` from `0` to `1`;
+- hit checkpoint `cp_01`;
+- verified GPS, horizontal accuracy, IMU, battery, pedometer distance, and
+  pedometer steps as available capabilities on the target;
+- kept `safety_level=L0_NORMAL`;
+- returned no incident ids and no stored incident paths;
+- produced no new incident files under `/data/scout/incidents`;
+- kept provider `control_allowed=false` for every provider.
+
 ## Recommended Next Slice
 
 After the manual dry-run package, Docker dry-run gate, GPIO boundary review,
 dirty-worktree cleanup plan, Scout machine read-only smoke, and runtime
-deployment takeover, fixture observation smoke, and canonical fixture local
-dry-run, the next slice is one of two bounded tracks:
+deployment takeover, fixture observation smoke, canonical fixture local dry-run,
+and canonical fixture target smoke, the next slice is one of two bounded tracks:
 
-1. run one canonical fixture target smoke against `scout.local`, using the same
-   rollback criteria as the previous fixture observation smoke;
+1. freeze the Scout machine Step 1 deployment runbook and evidence index;
 2. stabilize Phase 4 dirty worktree groups one at a time.
 
 Deliverables:

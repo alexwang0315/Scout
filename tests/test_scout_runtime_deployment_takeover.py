@@ -44,3 +44,17 @@ def test_scout_runtime_deployment_takeover_links_fixture_observation_smoke() -> 
         "fixture-observation-20260520T033354Z",
     ):
         assert token in source
+
+
+def test_scout_runtime_deployment_takeover_links_canonical_target_smoke() -> None:
+    source = DOC_PATH.read_text(encoding="utf-8")
+
+    for token in (
+        "## Follow-Up Canonical Fixture Target Smoke",
+        "`observations_processed` moved from `1` to `2`",
+        "`checkpoint_hits` moved from `0` to `1`",
+        "checkpoint `cp_01` was hit",
+        "required capabilities were available",
+        "canonical-fixture-observation-20260520T035132Z",
+    ):
+        assert token in source
