@@ -245,6 +245,31 @@
       background: #121619;
     }
 
+    .layer-imagery {
+      fill: #101418;
+    }
+
+    .layer-osm {
+      fill: #161b20;
+      opacity: 0.86;
+    }
+
+    .osm-grid {
+      stroke: #2f3a45;
+      stroke-width: 1;
+      opacity: 0.55;
+      vector-effect: non-scaling-stroke;
+    }
+
+    .weather-api-frame {
+      fill: rgba(138, 180, 248, 0.04);
+      stroke: rgba(138, 180, 248, 0.34);
+      stroke-width: 1.2;
+      stroke-dasharray: 10 8;
+      pointer-events: none;
+      vector-effect: non-scaling-stroke;
+    }
+
     .corridor {
       fill: none;
       stroke: var(--corridor);
@@ -401,6 +426,177 @@
       overflow-wrap: anywhere;
     }
 
+    .narrative-panel {
+      display: grid;
+      gap: 12px;
+    }
+
+    .narrative-summary {
+      color: var(--text);
+      font-size: 14px;
+      line-height: 1.55;
+    }
+
+    .narrative-facts {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .narrative-fact {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px 10px;
+      background: #171b20;
+    }
+
+    .narrative-fact span {
+      display: block;
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .narrative-fact strong {
+      display: block;
+      margin-top: 3px;
+      overflow-wrap: anywhere;
+      font-size: 13px;
+      font-weight: 650;
+    }
+
+    .read-only-note {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .raw-json-details {
+      margin-top: 16px;
+      border-top: 1px solid var(--border);
+      padding-top: 12px;
+    }
+
+    .raw-json-details summary {
+      cursor: pointer;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 650;
+      text-transform: uppercase;
+    }
+
+    .assistant-panel {
+      display: grid;
+      gap: 12px;
+      margin-top: 16px;
+      padding-top: 14px;
+      border-top: 1px solid var(--border);
+    }
+
+    .assistant-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: start;
+    }
+
+    .assistant-head span,
+    .assistant-status {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .assistant-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .assistant-field,
+    .assistant-answer,
+    .assistant-limitations,
+    .assistant-sources,
+    .assistant-control {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: #171b20;
+      padding: 10px;
+    }
+
+    .assistant-field span {
+      display: block;
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .assistant-field strong,
+    .assistant-field small {
+      display: block;
+      margin-top: 4px;
+      overflow-wrap: anywhere;
+    }
+
+    .assistant-field small {
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .assistant-control {
+      display: grid;
+      gap: 8px;
+    }
+
+    .assistant-question {
+      width: 100%;
+      min-height: 72px;
+      resize: vertical;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: #111417;
+      color: var(--text);
+      padding: 9px 10px;
+      font: inherit;
+    }
+
+    .assistant-actions {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .assistant-button,
+    .assistant-prompts button {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--panel);
+      color: var(--text);
+      padding: 8px 10px;
+      cursor: pointer;
+      font: inherit;
+    }
+
+    .assistant-button:hover,
+    .assistant-prompts button:hover {
+      border-color: var(--focus);
+    }
+
+    .assistant-prompts,
+    .assistant-list {
+      display: grid;
+      gap: 6px;
+      margin: 8px 0 0;
+      padding-left: 18px;
+    }
+
+    .assistant-prompts {
+      padding-left: 0;
+      list-style: none;
+    }
+
+    .assistant-answer p,
+    .assistant-list li {
+      overflow-wrap: anywhere;
+    }
+
     pre {
       margin: 12px 0 0;
       padding: 12px;
@@ -433,6 +629,7 @@
       .map-pane { min-height: 70vh; }
       .info-pane { grid-template-rows: auto auto; }
       .metric-grid { grid-template-columns: 1fr 1fr; }
+      .narrative-facts { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -455,11 +652,14 @@
             <div class="metric"><span>Incidents</span><strong id="incidents">-</strong></div>
           </div>
           <div class="filters" aria-label="Map layers">
+            <label><input type="checkbox" data-layer="imagery" checked> Imagery</label>
+            <label><input type="checkbox" data-layer="osm" checked> OSM</label>
             <label><input type="checkbox" data-layer="corridors" checked> Map corridors</label>
             <label><input type="checkbox" data-layer="route" checked> Route</label>
             <label><input type="checkbox" data-layer="checkpoints" checked> Checkpoints</label>
             <label><input type="checkbox" data-layer="hazards" checked> Hazards</label>
             <label><input type="checkbox" data-layer="events" checked> Ln events</label>
+            <label><input type="checkbox" data-layer="weather-api"> Weather API</label>
           </div>
         </div>
       </div>
@@ -477,15 +677,102 @@
       </div>
       <div id="horizontalResizer" class="splitter splitter-horizontal" role="separator" aria-orientation="horizontal" tabindex="0"></div>
       <div id="jsonPane" class="json-pane">
-        <h2>Selected JSON</h2>
-        <h3 id="detailTitle">No selection</h3>
+        <div id="narrativePanel" class="narrative-panel" aria-live="polite">
+          <h2>Mission Narrative</h2>
+          <h3 id="detailTitle">No selection</h3>
+          <p id="narrativeSummary" class="narrative-summary">Select evidence to read the mission story in plain language.</p>
+          <div id="narrativeFacts" class="narrative-facts"></div>
+          <p id="narrativeReadOnlyNote" class="read-only-note">Completed mission evidence is read-only. Any future plan output belongs to Phase 4 candidate review.</p>
+        </div>
         <p id="detailSource" class="source">Hover or select map evidence.</p>
-        <pre id="detailJson">{}</pre>
+        <details id="rawJsonDetails" class="raw-json-details">
+          <summary>Raw JSON detail</summary>
+          <pre id="detailJson">{}</pre>
+        </details>
+        <!-- assistant-shell:start -->
+        <article id="assistantPanel" class="assistant-panel" data-assistant-surface="admin" data-assistant-boundary="read-only model interpretation" aria-label="Read-only after-action assistant">
+          <div class="assistant-head">
+            <div>
+              <h2>After-Action Assistant</h2>
+              <p class="meta">read-only model interpretation over completed mission evidence.</p>
+            </div>
+            <span>surface: admin</span>
+          </div>
+          <div class="assistant-grid">
+            <div class="assistant-field">
+              <span>Surface</span>
+              <strong>after-action admin assistant</strong>
+            </div>
+            <div class="assistant-field">
+              <span>Read-only boundary</span>
+              <strong>read-only model interpretation</strong>
+            </div>
+            <div class="assistant-field">
+              <span>Provider</span>
+              <strong id="assistantProviderStatus">checking provider status</strong>
+              <small id="assistantProviderStatusDetail">No token value is shown.</small>
+            </div>
+            <div class="assistant-field">
+              <span>Context</span>
+              <strong>selected historical evidence</strong>
+            </div>
+          </div>
+          <section class="assistant-sources" aria-label="Assistant suggested questions">
+            <h3>Suggested questions</h3>
+            <p class="meta">Choose one question after selecting evidence; suggestions follow selected after-action context.</p>
+            <ul id="assistantPromptSuggestions" class="assistant-prompts" aria-label="Suggested assistant questions">
+              <li><button type="button" data-assistant-question="Why is this selected evidence important?">Why is this selected evidence important?</button></li>
+              <li><button type="button" data-assistant-question="Which sources support this after-action evidence?">Which sources support this after-action evidence?</button></li>
+              <li><button type="button" data-assistant-question="What remains uncertain in this evidence?">What remains uncertain in this evidence?</button></li>
+            </ul>
+          </section>
+          <section class="assistant-control" aria-label="Ask assistant">
+            <label for="assistantQuestionInput">Question</label>
+            <textarea id="assistantQuestionInput" class="assistant-question" rows="3">Why is this selected evidence important?</textarea>
+            <div class="assistant-actions">
+              <button id="assistantAskButton" class="assistant-button" type="button">Ask read-only assistant</button>
+              <span id="assistantStatus" class="assistant-status">Assistant query is read-only and uses selected after-action context.</span>
+            </div>
+          </section>
+          <section class="assistant-answer" aria-label="Assistant answer">
+            <h3>Answer</h3>
+            <p id="assistantAnswerText">This shell explains completed mission evidence, persisted references, and selected map/tree context without changing historical incident or Brain state.</p>
+          </section>
+          <section class="assistant-sources" aria-label="Assistant context transparency">
+            <h3>Context</h3>
+            <ul id="assistantContextList" class="assistant-list">
+              <li>surface: admin</li>
+              <li>context_ref: scout_260512_field_golden</li>
+              <li>selected_artifact_id: selected evidence source</li>
+              <li>provider status hides token values</li>
+            </ul>
+          </section>
+          <section class="assistant-limitations" aria-label="Assistant limitations">
+            <h3>Limitations</h3>
+            <ul id="assistantLimitationsList" class="assistant-list">
+              <li>No historical incident or evidence rewrite.</li>
+              <li>No Phase 2 Brain writeback or ObservedFact creation.</li>
+              <li>No Phase 1 safety decision mutation.</li>
+              <li>No outbound transport or hardware control.</li>
+            </ul>
+          </section>
+          <section class="assistant-sources" aria-label="Assistant sources">
+            <h3>Sources</h3>
+            <ul id="assistantSourcesList" class="assistant-list">
+              <li>after-action evidence tree</li>
+              <li>selected map evidence</li>
+              <li>case replay summary</li>
+              <li>incident package refs when present</li>
+            </ul>
+          </section>
+        </article>
+        <!-- assistant-shell:end -->
       </div>
     </section>
   </div>
   <div id="hoverHint" class="hover-hint is-hidden" role="status" aria-live="polite"></div>
 
+  <script src="/admin/scout-assistant-ui.js"></script>
   <script>
     const CASE_ID = "scout_260512_field_golden";
     const state = { view: null, projected: null, selected: null };
@@ -523,6 +810,17 @@
       }).join(" ");
     }
 
+    function appendGrid(group, width, height, columns, rows, className) {
+      for (let column = 1; column < columns; column += 1) {
+        const x = (width / columns) * column;
+        group.appendChild(el("line", {x1: x, y1: 0, x2: x, y2: height, class: className}));
+      }
+      for (let row = 1; row < rows; row += 1) {
+        const y = (height / rows) * row;
+        group.appendChild(el("line", {x1: 0, y1: y, x2: width, y2: y, class: className}));
+      }
+    }
+
     function boundsWithMap(view) {
       const b = { ...view.route.bounds };
       view.map.corridors.forEach(corridor => {
@@ -538,9 +836,161 @@
 
     function setDetail(item) {
       state.selected = item;
-      document.getElementById("detailTitle").textContent = item.name || item.checkpoint_id || item.corridor_id || item.incident_id || item.source_id || item.evidence_type;
+      document.getElementById("detailTitle").textContent = detailTitle(item);
       document.getElementById("detailSource").textContent = `${item.evidence_type || "evidence"} | ${item.source_path || "no source path"}`;
+      document.getElementById("narrativeSummary").textContent = narrativeSummary(item);
+      renderNarrativeFacts(item);
       document.getElementById("detailJson").textContent = JSON.stringify(item, null, 2);
+    }
+
+    function detailTitle(item) {
+      return item.name || item.checkpoint_id || item.segment_id || item.capsule_id || item.corridor_id || item.incident_id || item.source_id || item.evidence_type;
+    }
+
+    function formatNumber(value, suffix = "") {
+      if (value === null || value === undefined || value === "") return "-";
+      const number = Number(value);
+      if (!Number.isFinite(number)) return String(value);
+      return `${Math.round(number).toLocaleString()}${suffix}`;
+    }
+
+    function narrativeSummary(item) {
+      if (!item) return "Select evidence to read the mission story in plain language.";
+      if (item.evidence_type === "case_summary") {
+        const replay = item.replay || {};
+        return `Completed mission replay ended at ${replay.safety_level || "-"} after ${formatNumber(replay.observations_processed)} observations, ${formatNumber(replay.checkpoint_count)} reached checkpoints, and ${formatNumber(replay.segment_capsule_count)} sealed segment capsules.`;
+      }
+      if (item.evidence_type === "replay_summary") {
+        const eventText = item.safety_events?.length ? item.safety_events.join(", ") : "no Ln safety events";
+        return `Scout processed ${formatNumber(item.observations_processed)} observations and finished at ${item.safety_level || "-"} with ${eventText}.`;
+      }
+      if (item.evidence_type === "mission_checkpoint") {
+        return `This checkpoint is a ${item.checkpoint_type || "mission"} marker with a ${formatNumber(item.arrival_radius_m, "m")} arrival radius. It anchors the route review and can highlight its map position.`;
+      }
+      if (item.evidence_type === "mission_segment") {
+        return `This route segment connects ${item.from_checkpoint_id || "-"} to ${item.to_checkpoint_id || "-"} across about ${formatNumber(item.distance_m, "m")}. Selecting it highlights the matching route span on the map.`;
+      }
+      if (item.evidence_type === "segment_capsule") {
+        return `Scout sealed this segment capsule for ${item.segment_id || item.capsule?.segment_id || "-"} as after-action evidence from ${item.start_checkpoint_id || item.capsule?.start_checkpoint_id || "-"} to ${item.end_checkpoint_id || item.capsule?.end_checkpoint_id || "-"}.`;
+      }
+      if (item.evidence_type === "runtime_decision") {
+        return item.reason || `Runtime decision evidence recorded ${item.from_level || "-"} to ${item.to_level || item.label || "-"}.`;
+      }
+      if (item.evidence_type === "replay_checkpoint") {
+        return item.reason || `Replay reached checkpoint ${item.label || item.source_id || "-"} within ${formatNumber(item.distance_m, "m")}.`;
+      }
+      if (item.evidence_type === "risk_rule") {
+        return `This read-only risk rule would produce ${item.output_level || "-"} after ${formatNumber(item.min_duration_s, "s")} in ${item.hazard_types?.join(", ") || "matching hazards"}.`;
+      }
+      if (item.evidence_type === "map_layer_summary") {
+        return `${item.name || "Map layer"} contributes ${formatNumber(item.count)} map evidence items from ${item.metadata?.source || item.source_path || "the offline map context"}.`;
+      }
+      if (item.evidence_type === "map_corridor") {
+        return `${item.name || "Map corridor"} is offline map context with ${formatNumber(item.corridor_half_width_m, "m")} half-width and ${item.source_metadata?.confidence || "-"} confidence.`;
+      }
+      if (item.evidence_type === "map_hazard") {
+        return `${item.name || "Map hazard"} marks ${item.hazard_type || "hazard"} context used for after-action risk review.`;
+      }
+      if (item.evidence_type === "incident_package") {
+        return `Incident package ${item.incident_id || item.source_id || "-"} was triggered at ${item.trigger_level || "-"} with ${formatNumber(item.raw_sample_count)} raw samples summarized here.`;
+      }
+      if (item.evidence_type === "device_observation") {
+        return `The route trace contains ${formatNumber(item.point_count || item.index)} observed points and about ${formatNumber(item.total_progress_m || item.progress_m, "m")} of progress.`;
+      }
+      return "Selected evidence is shown as a readable summary here, with the raw JSON kept below for audit detail.";
+    }
+
+    function narrativeFacts(item) {
+      const sourceId = evidenceSourceId(item);
+      const base = [
+        ["Evidence", item?.evidence_type || "evidence"],
+        ["Source ID", sourceId || "-"]
+      ];
+      if (!item) return base;
+      if (item.evidence_type === "case_summary") {
+        return [
+          ["Case", item.source_id || "-"],
+          ["Safety", item.replay?.safety_level || "-"],
+          ["Checkpoints", formatNumber(item.replay?.checkpoint_count)],
+          ["Incidents", formatNumber(item.replay?.incident_count)]
+        ];
+      }
+      if (item.evidence_type === "replay_summary") {
+        return [
+          ["Safety", item.safety_level],
+          ["Observations", formatNumber(item.observations_processed)],
+          ["Capsules", formatNumber(item.segment_capsule_count)],
+          ["Incidents", formatNumber(item.incident_count)]
+        ];
+      }
+      if (item.evidence_type === "mission_checkpoint") {
+        return [
+          ["Checkpoint", item.checkpoint_id],
+          ["Type", item.checkpoint_type],
+          ["Radius", formatNumber(item.arrival_radius_m, "m")],
+          ["Next Zone", item.control_zone_after || "-"]
+        ];
+      }
+      if (item.evidence_type === "mission_segment") {
+        return [
+          ["Segment", item.segment_id],
+          ["From", item.from_checkpoint_id],
+          ["To", item.to_checkpoint_id],
+          ["Distance", formatNumber(item.distance_m, "m")]
+        ];
+      }
+      if (item.evidence_type === "segment_capsule") {
+        return [
+          ["Capsule", item.capsule_id || item.source_id],
+          ["Segment", item.segment_id || item.capsule?.segment_id || "-"],
+          ["From", item.start_checkpoint_id || item.capsule?.start_checkpoint_id || "-"],
+          ["To", item.end_checkpoint_id || item.capsule?.end_checkpoint_id || "-"]
+        ];
+      }
+      if (item.evidence_type === "runtime_decision") {
+        return [
+          ["Time", item.timestamp === null || item.timestamp === undefined ? "-" : `t=${Number(item.timestamp).toFixed(0)}`],
+          ["From", item.from_level || "-"],
+          ["To", item.to_level || item.label || "-"],
+          ["Source ID", sourceId || "-"]
+        ];
+      }
+      if (item.evidence_type === "risk_rule") {
+        return [
+          ["Rule", item.rule_id],
+          ["Output", item.output_level],
+          ["Duration", formatNumber(item.min_duration_s, "s")],
+          ["Hazards", item.hazard_types?.join(", ") || "any"]
+        ];
+      }
+      if (item.evidence_type === "map_layer_summary") {
+        return [
+          ["Layer", item.name],
+          ["Items", formatNumber(item.count)],
+          ["Map Source", item.metadata?.source || "-"],
+          ["Staleness", item.metadata?.known_staleness_risk || "-"]
+        ];
+      }
+      return base.concat([
+        ["Title", detailTitle(item)],
+        ["Source Path", item.source_path || "-"]
+      ]).slice(0, 4);
+    }
+
+    function renderNarrativeFacts(item) {
+      const facts = document.getElementById("narrativeFacts");
+      facts.replaceChildren();
+      narrativeFacts(item).forEach(([label, value]) => {
+        const fact = document.createElement("div");
+        fact.className = "narrative-fact";
+        const labelNode = document.createElement("span");
+        labelNode.textContent = label;
+        const valueNode = document.createElement("strong");
+        valueNode.textContent = value === null || value === undefined || value === "" ? "-" : String(value);
+        fact.appendChild(labelNode);
+        fact.appendChild(valueNode);
+        facts.appendChild(fact);
+      });
     }
 
     function evidenceCategory(item) {
@@ -674,6 +1124,148 @@
       setDetail(item);
       highlightTreeNode(item);
       highlightMapFor(item);
+      renderAssistantPromptSuggestions(state.selected);
+    }
+
+    function selectedAssistantContextLabel(item) {
+      return evidenceSourceId(item) || item?.source_id || CASE_ID;
+    }
+
+    function suggestedAssistantQuestions(item) {
+      const label = detailTitle(item || {}) || "selected evidence";
+      if (item?.evidence_type === "replay_checkpoint") {
+        return [
+          `Why was ${label} considered reached?`,
+          "Which sources support this checkpoint evidence?",
+          "What remains uncertain in this evidence?"
+        ];
+      }
+      if (item?.evidence_type === "runtime_decision") {
+        return [
+          `Why did Scout record ${item.to_level || label}?`,
+          "Which sources support this after-action decision?",
+          "What remains uncertain in this evidence?"
+        ];
+      }
+      return [
+        "Why is this selected evidence important?",
+        "Which sources support this after-action evidence?",
+        "What remains uncertain in this evidence?"
+      ];
+    }
+
+    function renderAssistantPromptSuggestions(item) {
+      const list = document.getElementById("assistantPromptSuggestions");
+      list.textContent = "";
+      suggestedAssistantQuestions(item).forEach(question => {
+        const li = document.createElement("li");
+        const button = document.createElement("button");
+        button.type = "button";
+        button.dataset.assistantQuestion = question;
+        button.textContent = question;
+        li.appendChild(button);
+        list.appendChild(li);
+      });
+    }
+
+    function assistantQueryPayload(question) {
+      return {
+        surface: "admin",
+        question,
+        context_ref: CASE_ID,
+        selected_artifact_id: selectedAssistantContextLabel(state.selected)
+      };
+    }
+
+    function setAssistantStatus(message, mode = "") {
+      const status = document.getElementById("assistantStatus");
+      status.textContent = message;
+      status.classList.toggle("is-error", mode === "error");
+    }
+
+    async function loadAssistantStatus() {
+      try {
+        const status = await window.ScoutAssistantUI.fetchJson("/assistant/status", {apiBase});
+        window.ScoutAssistantUI.renderProviderStatus(status);
+      } catch (error) {
+        window.ScoutAssistantUI.renderProviderStatusFailure(error);
+      }
+    }
+
+    function renderAssistantContext(payload, queryPayload) {
+      const sources = payload.sources || [];
+      const contextSummary = sources[0]?.context_summary || {};
+      const selectedEvidence = contextSummary.selected_evidence || null;
+      const items = [
+        `surface: ${queryPayload.surface}`,
+        `context_ref: ${queryPayload.context_ref || "none"}`,
+        `selected_artifact_id: ${queryPayload.selected_artifact_id || "none"}`,
+        `source_count: ${sources.length}`
+      ];
+      if (selectedEvidence) {
+        items.push(`selected_evidence: ${selectedEvidence.source_id || "unknown"} | ${selectedEvidence.evidence_type || "unknown"}`);
+      }
+      sources.filter(source => source.selected).slice(0, 4).forEach(source => {
+        items.push(`selected source: ${source.source_id} | ${source.evidence_type || "unknown"}`);
+      });
+      items.push(...window.ScoutAssistantUI.observabilityItems(payload));
+      window.ScoutAssistantUI.renderList("assistantContextList", items, "No context refs returned.");
+    }
+
+    function renderAssistantResponse(payload, queryPayload = assistantQueryPayload("")) {
+      document.getElementById("assistantAnswerText").textContent = payload.answer || "No assistant answer returned.";
+      renderAssistantContext(payload, queryPayload);
+      window.ScoutAssistantUI.renderList(
+        "assistantLimitationsList",
+        payload.limitations || [],
+        "No limitations returned by assistant provider."
+      );
+      window.ScoutAssistantUI.renderList(
+        "assistantSourcesList",
+        window.ScoutAssistantUI.sourceItems(payload),
+        "No source refs returned."
+      );
+      setAssistantStatus(
+        payload.read_only && payload.model_interpretation
+          ? "Read-only model interpretation returned."
+          : "Assistant response returned without expected read-only labels.",
+        payload.read_only && payload.model_interpretation ? "" : "error"
+      );
+    }
+
+    async function submitAssistantQuery(question) {
+      const resolvedQuestion = String(question || "").trim();
+      if (!resolvedQuestion) {
+        setAssistantStatus("Enter a question before querying the read-only assistant.", "error");
+        return;
+      }
+      document.getElementById("assistantQuestionInput").value = resolvedQuestion;
+      document.getElementById("assistantAskButton").disabled = true;
+      setAssistantStatus("Querying read-only assistant...");
+      try {
+        const queryPayload = assistantQueryPayload(resolvedQuestion);
+        const payload = await window.ScoutAssistantUI.postJson("/assistant/query", queryPayload, {apiBase});
+        renderAssistantResponse(payload, queryPayload);
+      } catch (error) {
+        document.getElementById("assistantAnswerText").textContent =
+          "Assistant query failed safely. No historical incident, evidence, Brain, Phase 1, outbound, or hardware state was changed.";
+        window.ScoutAssistantUI.renderList("assistantLimitationsList", [error.message || String(error)], "Assistant query failed.");
+        window.ScoutAssistantUI.renderList("assistantContextList", [
+          "surface: admin",
+          `context_ref: ${CASE_ID}`,
+          `selected_artifact_id: ${selectedAssistantContextLabel(state.selected) || "none"}`
+        ], "No selected after-action context.");
+        window.ScoutAssistantUI.renderList("assistantSourcesList", [
+          selectedAssistantContextLabel(state.selected) || CASE_ID
+        ], "No selected after-action context.");
+        setAssistantStatus("Assistant query failed", "error");
+      } finally {
+        document.getElementById("assistantAskButton").disabled = false;
+      }
+    }
+
+    function bindAssistantControls() {
+      window.ScoutAssistantUI.bindQuestionControls({submit: submitAssistantQuery});
     }
 
     function tagEvidenceNode(node, item, mapKind = "") {
@@ -713,6 +1305,15 @@
       const bounds = boundsWithMap(view);
       svg.setAttribute("viewBox", "0 0 1000 720");
       svg.replaceChildren();
+
+      const imageryGroup = el("g", {"data-layer-group": "imagery"});
+      imageryGroup.appendChild(el("rect", {x: 0, y: 0, width: 1000, height: 720, class: "layer-imagery"}));
+      svg.appendChild(imageryGroup);
+
+      const osmGroup = el("g", {"data-layer-group": "osm"});
+      osmGroup.appendChild(el("rect", {x: 0, y: 0, width: 1000, height: 720, class: "layer-osm"}));
+      appendGrid(osmGroup, 1000, 720, 7, 5, "osm-grid");
+      svg.appendChild(osmGroup);
 
       const corridorGroup = el("g", {"data-layer-group": "corridors"});
       view.map.corridors.forEach(corridor => {
@@ -782,6 +1383,10 @@
         eventGroup.appendChild(marker);
       });
       svg.appendChild(eventGroup);
+
+      const weatherApiGroup = el("g", {"data-layer-group": "weather-api"});
+      weatherApiGroup.appendChild(el("rect", {x: 14, y: 14, width: 972, height: 692, rx: 10, class: "weather-api-frame"}));
+      svg.appendChild(weatherApiGroup);
 
       updateLayers();
     }
@@ -971,6 +1576,8 @@
 
     layerInputs.forEach(input => input.addEventListener("change", updateLayers));
     initSplitters();
+    bindAssistantControls();
+    loadAssistantStatus();
     loadCase();
   </script>
 </body>

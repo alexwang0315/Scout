@@ -117,6 +117,8 @@
     .timeline-column {
       grid-column: 1;
       grid-row: 1;
+      grid-template-rows: minmax(220px, 1fr) minmax(300px, 0.9fr);
+      height: 100%;
       overflow: hidden;
     }
 
@@ -551,12 +553,17 @@
 
     .assistant-panel {
       display: grid;
-      grid-template-rows: auto auto;
+      grid-template-rows: auto minmax(0, 1fr);
+      min-height: 0;
+      overflow: hidden;
     }
 
     .assistant-body {
       display: grid;
       gap: 10px;
+      min-height: 0;
+      overflow-y: auto;
+      padding-right: 2px;
     }
 
     .assistant-grid {
@@ -603,6 +610,67 @@
       margin-top: 3px;
     }
 
+    .assistant-control {
+      display: grid;
+      gap: 7px;
+    }
+
+    .assistant-control label {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 650;
+      text-transform: uppercase;
+    }
+
+    .assistant-question {
+      width: 100%;
+      min-height: 68px;
+      resize: vertical;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px;
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.04);
+      font: inherit;
+    }
+
+    .assistant-actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .assistant-button,
+    .assistant-prompts button {
+      border: 1px solid rgba(111, 168, 220, 0.38);
+      border-radius: 6px;
+      color: var(--text);
+      background: rgba(111, 168, 220, 0.08);
+      font: inherit;
+      cursor: pointer;
+    }
+
+    .assistant-button {
+      min-height: 32px;
+      padding: 6px 10px;
+      font-weight: 650;
+    }
+
+    .assistant-button:disabled {
+      cursor: wait;
+      opacity: 0.58;
+    }
+
+    .assistant-status {
+      color: var(--muted);
+      overflow-wrap: anywhere;
+    }
+
+    .assistant-status.error {
+      color: var(--bad);
+    }
+
     .assistant-prompts {
       display: grid;
       gap: 6px;
@@ -611,14 +679,20 @@
       list-style: none;
     }
 
-    .assistant-prompts li {
-      border: 1px solid rgba(111, 168, 220, 0.38);
-      border-radius: 999px;
+    .assistant-prompts button {
+      width: 100%;
       padding: 6px 9px;
-      color: var(--text);
-      background: rgba(111, 168, 220, 0.08);
       font-size: 12px;
+      text-align: left;
       overflow-wrap: anywhere;
+    }
+
+    .assistant-prompts button:hover,
+    .assistant-prompts button:focus-visible,
+    .assistant-button:hover,
+    .assistant-button:focus-visible {
+      border-color: rgba(111, 168, 220, 0.7);
+      outline: none;
     }
 
     .error {
@@ -903,23 +977,44 @@
                 <span>Read-only boundary</span>
                 <strong>read-only model interpretation</strong>
               </div>
+              <div class="assistant-field">
+                <span>Provider</span>
+                <strong id="assistantProviderStatus">checking provider status</strong>
+                <small id="assistantProviderStatusDetail">No token value is shown.</small>
+              </div>
             </div>
             <section class="assistant-sources" aria-label="Assistant suggested questions">
               <h3>Suggested questions</h3>
-              <p class="hint">Copy one question after selecting a timeline node; suggestions follow selected timeline context.</p>
+              <p class="hint">Choose one question after selecting a timeline node; suggestions follow selected timeline context.</p>
               <ul id="assistantPromptSuggestions" class="assistant-prompts" aria-label="Suggested assistant questions">
-                <li>Why did CP2 become an L2 event?</li>
-                <li>Which sources support this timeline state?</li>
-                <li>What is missing from this context?</li>
+                <li><button type="button" data-assistant-question="Why did CP2 become an L2 event?">Why did CP2 become an L2 event?</button></li>
+                <li><button type="button" data-assistant-question="Which sources support this timeline state?">Which sources support this timeline state?</button></li>
+                <li><button type="button" data-assistant-question="What is missing from this context?">What is missing from this context?</button></li>
               </ul>
+            </section>
+            <section class="assistant-control" aria-label="Ask assistant">
+              <label for="assistantQuestionInput">Question</label>
+              <textarea id="assistantQuestionInput" class="assistant-question" rows="3">Why did CP2 become an L2 event?</textarea>
+              <div class="assistant-actions">
+                <button id="assistantAskButton" class="assistant-button" type="button">Ask read-only assistant</button>
+                <span id="assistantStatus" class="assistant-status">Assistant query is read-only and uses selected timeline context.</span>
+              </div>
             </section>
             <section class="assistant-answer" aria-label="Assistant answer">
               <h3>Answer</h3>
-              <p>This shell explains L0-L4 state, provider status, bridge visibility, outbound mock state, and the selected timeline node without changing runtime state.</p>
+              <p id="assistantAnswerText">This shell explains L0-L4 state, provider status, bridge visibility, outbound mock state, and the selected timeline node without changing runtime state.</p>
+            </section>
+            <section class="assistant-sources" aria-label="Assistant context transparency">
+              <h3>Context</h3>
+              <ul id="assistantContextList" class="assistant-list">
+                <li>surface: debug</li>
+                <li>selected_event_id: selected timeline node</li>
+                <li>provider status hides token values</li>
+              </ul>
             </section>
             <section class="assistant-limitations" aria-label="Assistant limitations">
               <h3>Limitations</h3>
-              <ul class="assistant-list">
+              <ul id="assistantLimitationsList" class="assistant-list">
                 <li>No safety runtime mutation.</li>
                 <li>No Phase 2 writeback or ObservedFact creation.</li>
                 <li>No real outbound transport or hardware control.</li>
@@ -928,7 +1023,7 @@
             </section>
             <section class="assistant-sources" aria-label="Assistant sources">
               <h3>Sources</h3>
-              <ul class="assistant-list">
+              <ul id="assistantSourcesList" class="assistant-list">
                 <li>/debug/events</li>
                 <li>/debug/state</li>
                 <li>/debug/messages</li>
@@ -942,6 +1037,7 @@
     </main>
   </div>
 
+  <script src="/admin/scout-assistant-ui.js"></script>
   <script>
     const LEVELS = ["L0", "L1", "L2", "L3", "L4"];
     const STATUS_BAD = new Set(["degraded", "failed", "unavailable", "offline", "error"]);
@@ -1006,11 +1102,11 @@
     };
 
     async function fetchJson(path) {
-      const response = await fetch(path, { cache: "no-store" });
-      if (!response.ok) {
-        throw new Error(`${path} returned ${response.status}`);
-      }
-      return response.json();
+      return window.ScoutAssistantUI.fetchJson(path);
+    }
+
+    async function postJson(path, payload) {
+      return window.ScoutAssistantUI.postJson(path, payload);
     }
 
     function text(value, fallback = "unknown") {
@@ -1407,8 +1503,113 @@
 
     function renderAssistantPromptSuggestions(event) {
       document.getElementById("assistantPromptSuggestions").innerHTML = suggestedAssistantQuestions(event)
-        .map((question) => `<li>${escapeHtml(question)}</li>`)
+        .map((question) => `<li><button type="button" data-assistant-question="${escapeHtml(question)}">${escapeHtml(question)}</button></li>`)
         .join("");
+    }
+
+    function assistantQueryPayload(question) {
+      return {
+        surface: "debug",
+        question,
+        context_ref: debugPageState.runtimeState.session_id || debugPageState.runtimeState.debug_session_id || null,
+        selected_event_id: debugPageState.selectedEventId || null
+      };
+    }
+
+    function setAssistantStatus(message, state = "") {
+      const status = document.getElementById("assistantStatus");
+      status.textContent = message;
+      status.className = `assistant-status ${state}`.trim();
+    }
+
+    async function loadAssistantStatus() {
+      try {
+        const status = await fetchJson("/assistant/status");
+        window.ScoutAssistantUI.renderProviderStatus(status);
+      } catch (error) {
+        window.ScoutAssistantUI.renderProviderStatusFailure(error);
+      }
+    }
+
+    function renderAssistantContext(payload, queryPayload) {
+      const sources = payload.sources || [];
+      const contextSummary = sources[0]?.context_summary || {};
+      const selectedEvent = contextSummary.selected_event || null;
+      const items = [
+        `surface: ${text(queryPayload.surface)}`,
+        `context_ref: ${text(queryPayload.context_ref, "none")}`,
+        `selected_event_id: ${text(queryPayload.selected_event_id, "none")}`,
+        `source_count: ${sources.length}`
+      ];
+      if (selectedEvent) {
+        items.push(`selected_event: ${text(selectedEvent.event_id)} | ${text(selectedEvent.kind)}`);
+      }
+      sources.filter((source) => source.selected).slice(0, 4).forEach((source) => {
+        items.push(`selected source: ${text(source.source_id)} | ${text(source.evidence_type, "unknown")}`);
+      });
+      items.push(...window.ScoutAssistantUI.observabilityItems(payload));
+      renderAssistantList("assistantContextList", items);
+    }
+
+    function renderAssistantResponse(payload, queryPayload = assistantQueryPayload("")) {
+      document.getElementById("assistantAnswerText").textContent = payload.answer || "No assistant answer returned.";
+      renderAssistantContext(payload, queryPayload);
+      renderAssistantList(
+        "assistantLimitationsList",
+        payload.limitations || ["No limitations returned by assistant provider."]
+      );
+      renderAssistantList(
+        "assistantSourcesList",
+        window.ScoutAssistantUI.sourceItems(payload)
+      );
+      setAssistantStatus(
+        payload.read_only && payload.model_interpretation
+          ? "Read-only model interpretation returned."
+          : "Assistant response returned without expected read-only labels.",
+        payload.read_only && payload.model_interpretation ? "" : "error"
+      );
+    }
+
+    function renderAssistantList(id, items) {
+      window.ScoutAssistantUI.renderList(id, items);
+    }
+
+    async function submitAssistantQuery(question) {
+      const resolvedQuestion = text(question, "").trim();
+      if (!resolvedQuestion) {
+        setAssistantStatus("Enter a question before querying the read-only assistant.", "error");
+        return;
+      }
+      document.getElementById("assistantQuestionInput").value = resolvedQuestion;
+      document.getElementById("assistantAskButton").disabled = true;
+      setAssistantStatus("Querying read-only assistant...");
+      try {
+        const queryPayload = assistantQueryPayload(resolvedQuestion);
+        const payload = await postJson("/assistant/query", queryPayload);
+        renderAssistantResponse(payload, queryPayload);
+      } catch (error) {
+        document.getElementById("assistantAnswerText").textContent =
+          "Assistant query failed safely. No debug, safety, outbound, Brain, or hardware state was changed.";
+        renderAssistantList("assistantLimitationsList", [error.message || String(error)]);
+        renderAssistantList("assistantContextList", [
+          `surface: debug`,
+          `selected_event_id: ${debugPageState.selectedEventId || "selected timeline node unavailable"}`
+        ]);
+        renderAssistantList("assistantSourcesList", [
+          debugPageState.selectedEventId || "selected timeline node unavailable"
+        ]);
+        setAssistantStatus("Assistant query failed", "error");
+      } finally {
+        document.getElementById("assistantAskButton").disabled = false;
+      }
+    }
+
+    function runAssistantQuestion(question) {
+      return submitAssistantQuery(question);
+    }
+
+    function bindAssistantControls() {
+      window.ScoutAssistantUI.bindQuestionControls({submit: runAssistantQuestion});
     }
 
     function renderSelectedDetails(selectedEvent) {
@@ -1592,8 +1793,10 @@
     const initialUrlSelection = readUrlSelection();
     debugPageState.selectedTabId = initialUrlSelection.tabId;
     debugPageState.selectedEventId = initialUrlSelection.eventId;
+    bindAssistantControls();
     bindDebugTabs();
     switchDebugTab(document.querySelector(`[data-tab-target="${debugPageState.selectedTabId}"]`), { syncUrl: false });
+    loadAssistantStatus();
     loadDebugSurface();
   </script>
 </body>

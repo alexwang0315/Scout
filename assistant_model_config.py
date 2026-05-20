@@ -29,7 +29,7 @@ class AssistantModelConfig(BaseModel):
     timeout_seconds: int = Field(default=DEFAULT_ASSISTANT_TIMEOUT_SECONDS, ge=1, le=120)
     max_context_chars: int = Field(default=DEFAULT_ASSISTANT_MAX_CONTEXT_CHARS, ge=1000, le=200000)
     connect_on_startup: bool = True
-    fallback_to_local_on_error: Literal[True] = True
+    fallback_to_local_on_error: bool = True
 
     @model_validator(mode="after")
     def validate_profile_roles(self) -> "AssistantModelConfig":

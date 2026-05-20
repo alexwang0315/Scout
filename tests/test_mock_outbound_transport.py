@@ -55,15 +55,20 @@ class MockOutboundTransportTests(unittest.TestCase):
         transport.mark_sent(sent.message_id)
         transport.mark_failed(failed.message_id, reason="mock provider unavailable")
         transport.mark_mock_delivered(delivered.message_id)
+        transport.cancel_message(sent.message_id, reason="operator cancelled stale mock")
 
         states = {message.message_id: message.state for message in transport.list_messages()}
-        self.assertEqual(states[sent.message_id], "sent")
+        self.assertEqual(states[sent.message_id], "cancelled")
         self.assertEqual(states[failed.message_id], "failed")
         self.assertEqual(states[delivered.message_id], "mock-delivered")
 
         state_events = log.list_events(kind="outbound_message_state_changed")
-        self.assertEqual([event.payload["state"] for event in state_events], ["sent", "failed", "mock-delivered"])
+        self.assertEqual(
+            [event.payload["state"] for event in state_events],
+            ["sent", "failed", "mock-delivered", "cancelled"],
+        )
         self.assertEqual(state_events[1].payload["reason"], "mock provider unavailable")
+        self.assertEqual(state_events[3].payload["reason"], "operator cancelled stale mock")
 
     def test_every_state_transition_keeps_mock_boundaries_false(self):
         log = MemoryRuntimeDebugEventLog()

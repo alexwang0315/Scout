@@ -51,6 +51,21 @@ class AssistantBoundary(BaseModel):
     hardware_control_allowed: Literal[False] = False
 
 
+class AssistantObservability(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    provider_class: str
+    source_count: int = Field(ge=0)
+    selected_source_count: int = Field(ge=0)
+    context_size_chars: int = Field(ge=0)
+    latency_ms: int = Field(ge=0)
+    latency_class: Literal["fast", "slow", "timeout_or_error"]
+    safe_failure: bool = False
+    model_profile_used: str | None = None
+    failover_reason: str | None = None
+    local_model_name: str | None = None
+
+
 class AssistantSurfacePolicy(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -174,6 +189,7 @@ class ScoutAssistantResponse(BaseModel):
     sources: list[AssistantSourceRef] = Field(default_factory=list)
     boundary: AssistantBoundary
     limitations: list[str] = Field(default_factory=list)
+    observability: AssistantObservability | None = None
 
     @model_validator(mode="after")
     def boundary_must_match_surface(self) -> "ScoutAssistantResponse":

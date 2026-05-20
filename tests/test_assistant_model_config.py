@@ -63,17 +63,21 @@ def test_model_config_requires_distinct_cloud_and_local_profiles():
             }
         )
 
-    with pytest.raises(ValidationError, match="fallback_to_local_on_error"):
-        AssistantModelConfig.model_validate(
-            {
-                "cloud_model": {
-                    "profile": "cloud",
-                    "model_name": "cloud",
-                },
-                "local_model": {
-                    "profile": "local",
-                    "model_name": "local",
-                },
-                "fallback_to_local_on_error": False,
-            }
-        )
+
+def test_model_config_can_disable_local_fallback_without_removing_local_profile():
+    config = AssistantModelConfig.model_validate(
+        {
+            "cloud_model": {
+                "profile": "cloud",
+                "model_name": "cloud",
+            },
+            "local_model": {
+                "profile": "local",
+                "model_name": "local",
+            },
+            "fallback_to_local_on_error": False,
+        }
+    )
+
+    assert config.fallback_to_local_on_error is False
+    assert config.local_model.model_name == "local"
