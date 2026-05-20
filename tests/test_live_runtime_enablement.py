@@ -77,6 +77,7 @@ def test_live_runtime_enablement_ready_with_explicit_refs_config_and_policy(tmp_
         "SCOUT_AI_ASSISTANT_CONFIG_PATH": str(assistant_config),
         "SCOUT_CLOUD_MODEL_TOKEN": "super-secret-cloud-token",
         "SCOUT_HARDWARE_PROVIDER_CONTROL_POLICY_PATH": str(hardware_policy),
+        "SCOUT_HARDWARE_PROVIDER_CONTROL_TOKEN": "super-secret-hardware-control-token",
     }
 
     report = build_live_runtime_enablement_report(
@@ -99,11 +100,13 @@ def test_live_runtime_enablement_ready_with_explicit_refs_config_and_policy(tmp_
     assert "env:SCOUT_SAFETY_OBSERVATION_ADMISSION_SECRET" in report.required_secret_refs
     assert "env:SCOUT_REMOTE_WEBHOOK_URL" in report.required_secret_refs
     assert "env:SCOUT_CLOUD_MODEL_TOKEN" in report.required_secret_refs
+    assert "env:SCOUT_HARDWARE_PROVIDER_CONTROL_TOKEN" in report.required_secret_refs
     assert report.hardware_control_policy_id == "hardware_control_policy.pi5_live.v0"
     assert report.local_model_base_url_configured is True
     assert "super-secret-admission-value" not in serialized
     assert "super-secret-provider-token" not in serialized
     assert "super-secret-cloud-token" not in serialized
+    assert "super-secret-hardware-control-token" not in serialized
     assert "primary-target-secret" not in serialized
 
 

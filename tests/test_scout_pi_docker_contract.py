@@ -36,6 +36,14 @@ RUNTIME_CORE_MODULES = {
     "risk_rules.py",
     "route_matching.py",
     "route_progress.py",
+    "runtime_artifact_resolution.py",
+    "runtime_input_admission.py",
+    "runtime_observation_envelope.py",
+    "runtime_remote_provider_policy.py",
+    "runtime_stream_controls.py",
+    "runtime_stream_policy.py",
+    "runtime_stream_status_surface.py",
+    "runtime_stream_telemetry.py",
     "safety_api.py",
     "safety_models.py",
     "safety_runtime_session.py",
@@ -52,6 +60,7 @@ REQUIRED_STEP1_ENV = {
     "SCOUT_ENABLE_AI_INFERENCE": "0",
     "SCOUT_ENABLE_LOCAL_MODEL": "0",
     "SCOUT_EVENT_BUS": "none",
+    "SCOUT_RUNTIME_STREAM_STATUS_ENABLED": "false",
 }
 
 FORBIDDEN_RUNTIME_TERMS = (
@@ -80,6 +89,7 @@ def test_pi_dockerfile_targets_arm64_step1_runtime_core() -> None:
     assert "FROM --platform=$TARGETPLATFORM python:3.12-slim-bookworm" in source
     assert "SCOUT_SAFETY_MISSION_GRAPH=/app/tests/fixtures/mission_graph/normal_climb_mission.json" in source
     assert "SCOUT_SAFETY_INCIDENT_STORE=/data/scout/incidents" in source
+    assert "SCOUT_RUNTIME_STREAM_STATUS_ENABLED=false" in source
     assert 'CMD ["python", "-m", "uvicorn", "scout_pi_runtime:app"' in source
     assert "COPY *.py" not in source
 
@@ -101,7 +111,13 @@ def test_pi_compose_keeps_step1_profile_without_live_hardware_ai_or_event_bus() 
     assert "depends_on:" not in source
 
     for key, value in REQUIRED_STEP1_ENV.items():
-        expected = f'{key}: "{value}"' if value == "0" else f"{key}: {value}"
+        if key == "SCOUT_RUNTIME_STREAM_STATUS_ENABLED":
+            expected = (
+                'SCOUT_RUNTIME_STREAM_STATUS_ENABLED: '
+                '"${SCOUT_RUNTIME_STREAM_STATUS_ENABLED:-false}"'
+            )
+        else:
+            expected = f'{key}: "{value}"' if value == "0" else f"{key}: {value}"
         assert expected in source
 
 
