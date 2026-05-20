@@ -85,6 +85,34 @@ The recheck is still read-only. It only loads pages and toggles local UI tabs; i
 does not call `/safety/*`, create review decisions, write planning artifacts,
 send outbound messages, start local models, or control hardware/provider state.
 
+## Automated Browser Gate
+
+`assistant_browser_smoke_check.py` turns the responsive recheck into a repeatable
+assistant browser smoke gate. It expects a running Scout server and uses
+Playwright through an explicit Node runtime. The pretrip URL uses
+`tileSource=local` so the smoke does not depend on public map tile service
+availability.
+
+Example:
+
+```bash
+SCOUT_BROWSER_NODE=/path/to/node \
+SCOUT_BROWSER_NODE_PATH=/path/to/node_modules \
+./venv/bin/python assistant_browser_smoke_check.py \
+  --base-url http://127.0.0.1:9111 \
+  --pretty
+```
+
+The gate verifies:
+
+- all four assistant surfaces render the read-only shell and `Offline fallback`;
+- desktop and mobile viewports have `horizontalOverflowPx=0`;
+- pretrip `Post-analysis` / `Pre-trip planning` tabs change the detail content;
+- the desktop pretrip assistant panel remains scrollable;
+- no assistant shell contains accept, approve, reject, send, write, mutate, or
+  control buttons;
+- browser console and page errors stay empty.
+
 ## Screenshots
 
 Initial page smoke:
