@@ -143,9 +143,6 @@ Key result:
   `persist_to_workspace=false`: HTTP `200`, preview-only, no workspace write
 - workspace creation POST was not executed because it intentionally writes a
   local workspace and is not idempotent
-- `GET /runtime/streams/status-read-only` on the field runtime returned HTTP
-  `404`, so the status-only runtime stream surface was not enabled on hardware
-  in this smoke
 - no `/safety/*` mutation, outbound send, local model request, or hardware
   provider control
 

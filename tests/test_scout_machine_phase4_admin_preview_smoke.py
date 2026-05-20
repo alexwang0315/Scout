@@ -145,8 +145,8 @@ def test_step1_evidence_index_links_phase4_admin_preview_smoke() -> None:
         "`GET /admin/tiles/imagery/chilai_nanhua_day1/imagery/5/26/13.png`: HTTP",
         "`persist_to_workspace=false`: HTTP `200`, preview-only, no workspace write",
         "workspace creation POST was not executed",
-        "`GET /runtime/streams/status-read-only` on the field runtime returned HTTP",
-        "status-only runtime stream surface was not enabled on hardware",
+        "`GET /runtime/streams/status-read-only` on field runtime: HTTP `404`",
+        "repo route remains opt-in",
         "docs/admin/scout-machine-phase4-admin-preview-smoke.md",
         "`scout-pi-phase4-admin` status: healthy on `9110`",
     ):
