@@ -29,3 +29,29 @@ def test_runtime_stream_live_provider_review_names_required_gates() -> None:
         "read-only stream status surface",
     ):
         assert token in source
+
+
+def test_runtime_stream_live_provider_review_records_status_surface_slice() -> None:
+    source = REVIEW_PATH.read_text(encoding="utf-8")
+
+    for token in (
+        "## Read-Only Status Surface",
+        "runtime_stream_status_surface.py",
+        "tests/test_runtime_stream_status_surface.py",
+        "GET /runtime/streams/status-read-only",
+        "RuntimeStreamPolicyManifest",
+        "RuntimeStreamTelemetrySnapshot",
+        "RuntimeStreamControlSnapshot",
+        "RuntimeRemoteProviderPolicyContract",
+        "transport_routes_mounted=false",
+        "observation_ingest_allowed=false",
+        "stream_control_mutation_allowed=false",
+        "live_provider_send_allowed=false",
+        "safety_mutation_allowed=false",
+        "phase2_writeback_allowed=false",
+        "raw_payloads_embedded=false",
+        "/runtime/streams/http-push/observations",
+        "WebSocket ingest",
+        "remote provider send route",
+    ):
+        assert token in source

@@ -60,3 +60,34 @@ policy/telemetry snapshots without mounting live transport send routes.
 
 中文註釋：如果下一步要真的開 live provider send，就需要使用者明確決策；這不是可以由
 cleanup 或 smoke 自動跨過的邊界。
+
+## Read-Only Status Surface
+
+Implemented read-only status slice:
+
+- `runtime_stream_status_surface.py`;
+- `tests/test_runtime_stream_status_surface.py`;
+- `GET /runtime/streams/status-read-only` when the status-only router is
+  explicitly mounted.
+
+The status surface combines:
+
+- `RuntimeStreamPolicyManifest`;
+- `RuntimeStreamTelemetrySnapshot`;
+- `RuntimeStreamControlSnapshot`;
+- `RuntimeRemoteProviderPolicyContract`.
+
+Boundary:
+
+- `transport_routes_mounted=false`;
+- `observation_ingest_allowed=false`;
+- `stream_control_mutation_allowed=false`;
+- `live_provider_send_allowed=false`;
+- `safety_mutation_allowed=false`;
+- `incident_bridge_enable_allowed=false`;
+- `phase2_writeback_allowed=false`;
+- `raw_payloads_embedded=false`.
+
+中文註釋：這個 surface 只顯示政策與狀態摘要，不掛
+`/runtime/streams/http-push/observations`、WebSocket ingest、pause/resume/end
+control、或 remote provider send route。
