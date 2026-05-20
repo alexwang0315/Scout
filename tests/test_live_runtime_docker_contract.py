@@ -36,6 +36,7 @@ def test_live_runtime_dockerfile_is_separate_from_step1_and_includes_live_module
     assert "SCOUT_ENABLE_LIVE_RUNTIME=1" not in step1
     assert "SCOUT_AI_ASSISTANT_PROVIDER=pydantic_ai" not in step1
     assert 'RUN python -c "import scout_pi_runtime"' in source
+    assert "!runtime_stream_signed_sample_client.py" in read(".dockerignore")
 
 
 def test_live_runtime_compose_requires_operator_secret_files_without_values() -> None:
