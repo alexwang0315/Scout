@@ -57,6 +57,27 @@ def fake_urlopen_from(routes: dict[str, FakeResponse]):
     return fake_urlopen
 
 
+def recording_urlopen_from(
+    routes: dict[str, FakeResponse],
+    calls: list[dict[str, str | None]],
+):
+    def fake_urlopen(request, timeout):
+        assert timeout == 3.0
+        assert request.get_method() == "GET"
+        url = request.full_url
+        calls.append(
+            {
+                "url": url,
+                "authorization": request.get_header("Authorization"),
+            }
+        )
+        if url not in routes:
+            raise urllib.error.URLError(f"unexpected URL: {url}")
+        return routes[url]
+
+    return fake_urlopen
+
+
 def passing_routes(
     *,
     admin_base: str = "http://scout.local:9110",
@@ -159,6 +180,37 @@ def test_output_summarizes_payloads_without_echoing_secrets_or_full_body() -> No
     assert "authorization" not in serialized
 
 
+def test_admin_auth_header_is_sent_only_to_admin_endpoints_without_echoing_token() -> None:
+    calls: list[dict[str, str | None]] = []
+    result = smoke.build_phase4_hardware_demo_smoke(
+        admin_auth_token="secret-token",
+        admin_basic_username="scout-admin",
+        urlopen=recording_urlopen_from(passing_routes(), calls),
+    )
+    serialized = json.dumps(result)
+
+    assert result["status"] == "passed"
+    assert result["auth"] == {
+        "admin_auth_header_sent": True,
+        "admin_auth_scheme": "basic",
+        "admin_basic_username": "scout-admin",
+        "token_value_exposed": False,
+    }
+    assert "secret-token" not in serialized
+    assert "Authorization" not in serialized
+    assert "authorization" not in serialized
+    admin_calls = [call for call in calls if call["url"].startswith("http://scout.local:9110")]
+    runtime_calls = [call for call in calls if call["url"].startswith("http://scout.local:9099")]
+    assert admin_calls
+    assert runtime_calls == [
+        {
+            "url": "http://scout.local:9099/health",
+            "authorization": None,
+        }
+    ]
+    assert all((call["authorization"] or "").startswith("Basic ") for call in admin_calls)
+
+
 def test_failed_assistant_boundary_marks_result_failed() -> None:
     routes = passing_routes()
     routes["http://scout.local:9110/assistant/status"] = FakeResponse(
@@ -241,6 +293,28 @@ def test_base_url_rejects_credentials() -> None:
         )
 
 
+def test_admin_token_resolver_prefers_file_without_exposing_value(tmp_path: Path) -> None:
+    token_file = tmp_path / "admin-token"
+    token_file.write_text("file-token\n", encoding="utf-8")
+
+    assert (
+        smoke._resolve_admin_auth_token(
+            token_env="SCOUT_ADMIN_ACCESS_TOKEN",
+            token_file=str(token_file),
+            environ={"SCOUT_ADMIN_ACCESS_TOKEN": "env-token"},
+        )
+        == "file-token"
+    )
+    assert (
+        smoke._resolve_admin_auth_token(
+            token_env="SCOUT_ADMIN_ACCESS_TOKEN",
+            token_file=str(tmp_path / "missing-token"),
+            environ={"SCOUT_ADMIN_ACCESS_TOKEN": "env-token"},
+        )
+        == "env-token"
+    )
+
+
 def test_cli_help_names_default_lan_targets_without_network() -> None:
     completed = subprocess.run(
         [
@@ -256,3 +330,6 @@ def test_cli_help_names_default_lan_targets_without_network() -> None:
     assert completed.returncode == 0
     assert "--admin-base-url" in completed.stdout
     assert "--runtime-base-url" in completed.stdout
+    assert "--admin-basic-username" in completed.stdout
+    assert "--admin-token-env" in completed.stdout
+    assert "--admin-token-file" in completed.stdout

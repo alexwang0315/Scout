@@ -27,6 +27,14 @@ def test_smoke_plan_defines_deployed_admin_preview_endpoints() -> None:
     assert plan["execution_mode"] == "plan_only"
     assert plan["default_behavior"]["makes_live_network_calls"] is False
     assert plan["default_behavior"]["calls_scout_local"] is False
+    assert plan["admin_auth"] == {
+        "required": True,
+        "supported_schemes": ["basic", "bearer"],
+        "basic_username": "scout-admin",
+        "token_file_on_hardware": "/data/scout/admin/secrets/phase4-admin-token",
+        "token_value_embedded": False,
+        "token_value_printed_by_plan": False,
+    }
 
     endpoints = plan["endpoints"]
     assert endpoints["local_osm_tile"]["method"] == "GET"
@@ -34,6 +42,7 @@ def test_smoke_plan_defines_deployed_admin_preview_endpoints() -> None:
     assert endpoints["local_osm_tile"]["url"] == (
         "http://scout.local:9110/admin/tiles/osm/5/26/13.png"
     )
+    assert endpoints["local_osm_tile"]["auth_required"] is True
     assert endpoints["local_osm_tile"]["live_network_allowed"] is False
 
     assert endpoints["local_imagery_tile"]["method"] == "GET"
@@ -44,6 +53,7 @@ def test_smoke_plan_defines_deployed_admin_preview_endpoints() -> None:
         "local_cache",
         "transparent_fallback",
     ]
+    assert endpoints["local_imagery_tile"]["auth_required"] is True
 
     assert endpoints["workspace_post"]["method"] == "POST"
     assert endpoints["workspace_post"]["path"] == (
@@ -52,6 +62,7 @@ def test_smoke_plan_defines_deployed_admin_preview_endpoints() -> None:
     assert endpoints["workspace_post"]["expected_mutation_scope"] == (
         "local_pretrip_workspace_only"
     )
+    assert endpoints["workspace_post"]["auth_required"] is True
 
     assert endpoints["review_decision_preview"]["method"] == "POST"
     assert endpoints["review_decision_preview"]["path"] == (
@@ -61,6 +72,7 @@ def test_smoke_plan_defines_deployed_admin_preview_endpoints() -> None:
         "persist_to_workspace"
     ] is False
     assert endpoints["review_decision_preview"]["expected_mutation_scope"] == "none"
+    assert endpoints["review_decision_preview"]["auth_required"] is True
 
 
 def test_smoke_plan_records_forbidden_mutation_boundaries() -> None:
@@ -104,6 +116,8 @@ def test_smoke_cli_outputs_ascii_json_without_calling_scout_local() -> None:
     completed.stdout.encode("ascii")
     payload = json.loads(completed.stdout)
     assert payload["default_behavior"]["calls_scout_local"] is False
+    assert payload["admin_auth"]["required"] is True
+    assert payload["admin_auth"]["token_value_embedded"] is False
     assert payload["endpoints"]["workspace_post"]["url"] == (
         "http://scout.local:9110/admin/pretrip/projects/"
         "chilai_nanhua_day1/workspace"
