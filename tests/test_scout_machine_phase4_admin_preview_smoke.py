@@ -11,7 +11,7 @@ def test_phase4_admin_preview_smoke_records_target_service_and_ports() -> None:
     for token in (
         "Phase 4 admin preview package: `ed1688cf`",
         "`/home/alexwang0315/scout-fusion-phase4-admin-auth`",
-        "`scout-runtime`: healthy, host `9099 -> 9099`",
+        "`scout-pi-runtime`: healthy, host `9099 -> 9099`",
         "`scout-pi-phase4-admin`: healthy, host `9110 -> 9099`",
         "`scout-ollama`: present on `11434`, not touched by this smoke",
         "recommended_mac_url=http://scout.local:9110/admin/pretrip",
@@ -42,15 +42,23 @@ def test_phase4_admin_preview_smoke_records_read_only_admin_and_assistant_probes
         assert token in source
 
 
-def test_phase4_admin_preview_smoke_records_runtime_stream_status_route_disabled_on_hardware() -> None:
+def test_phase4_admin_preview_smoke_records_runtime_stream_status_route_enabled_on_hardware() -> None:
     source = REPORT_PATH.read_text(encoding="utf-8")
 
     for token in (
         "`GET http://scout.local:9099/runtime/streams/status-read-only` returned HTTP",
-        "`404` in this hardware smoke",
-        "`SCOUT_RUNTIME_STREAM_STATUS_ENABLED=1`",
-        "deployed field runtime during this smoke",
-        "沒有因此開啟 observation ingest、control、或 provider send",
+        "`200` after the field runtime was rebuilt",
+        "`SCOUT_RUNTIME_STREAM_STATUS_ENABLED=true`",
+        "`artifact_kind=runtime_stream_status_surface`",
+        "`status=read_only_status_ready`",
+        "`transport_routes_mounted=false`",
+        "`observation_ingest_allowed=false`",
+        "`stream_control_mutation_allowed=false`",
+        "`live_provider_send_allowed=false`",
+        "`safety_mutation_allowed=false`",
+        "`phase2_writeback_allowed=false`",
+        "runtime-stream-status-deployment-summary.json",
+        "沒有開啟 observation ingest",
     ):
         assert token in source
 
@@ -107,21 +115,33 @@ def test_phase4_admin_preview_smoke_records_tile_and_review_preview_probes() -> 
         "`phase1_runtime_mutation_allowed=false`",
         "`phase2_writeback_allowed=false`",
         "`runtime_mutation_allowed=false`",
-        "workspace` was not executed",
         "review-decision smoke 只跑 preview",
     ):
         assert token in source
 
 
-def test_phase4_admin_preview_smoke_records_runtime_status_route_not_deployed() -> None:
+def test_phase4_admin_preview_smoke_records_workspace_creation_live_probe() -> None:
     source = REPORT_PATH.read_text(encoding="utf-8")
 
     for token in (
-        "`GET http://scout.local:9099/runtime/streams/status-read-only` returned HTTP",
-        "`404` in this hardware smoke",
-        "`SCOUT_RUNTIME_STREAM_STATUS_ENABLED=1`",
-        "deployed field runtime during this smoke",
-        "沒有因此開啟 observation ingest、control、或 provider send",
+        "`POST http://scout.local:9110/admin/pretrip/projects/chilai_nanhua_day1/workspace`",
+        "returned HTTP `200`",
+        "`artifact_kind=pretrip_workspace_copy`",
+        "`persisted=true`",
+        "`workspace_root=/data/scout/admin/pretrip-workspaces/chilai_nanhua_day1`",
+        "workspace file count: `44`",
+        "workspace size: about `904KB`",
+        "`project.json` present in the workspace",
+        "`admin_api_write_performed=true`",
+        "`workspace_file_mutation_allowed=true`",
+        "`fixture_file_mutation_allowed=false`",
+        "`phase1_runtime_mutation_allowed=false`",
+        "`phase2_writeback_allowed=false`",
+        "`runtime_mutation_allowed=false`",
+        "repeat `POST /admin/pretrip/projects/chilai_nanhua_day1/workspace` returned",
+        "HTTP `409`",
+        "intentionally non-idempotent",
+        "不寫 repo",
     ):
         assert token in source
 
@@ -139,14 +159,17 @@ def test_step1_evidence_index_links_phase4_admin_preview_smoke() -> None:
         "`GET /admin/pretrip`: HTTP `200` when authenticated, `id=\"map\"` present",
         "`GET /assistant/status`: `provider=mock`, `token_values_exposed=false`",
         "`POST /assistant/query`: `read_only=true`, `model_interpretation=true`",
-        "`GET /runtime/streams/status-read-only` on field runtime: HTTP `404`",
-        "`SCOUT_RUNTIME_STREAM_STATUS_ENABLED=1`",
+        "`GET /runtime/streams/status-read-only` on field runtime: HTTP `200`",
+        "`SCOUT_RUNTIME_STREAM_STATUS_ENABLED=true`",
+        "no transport route",
+        "observation ingest",
+        "no provider send",
         "`GET /admin/tiles/osm/5/26/13.png`: HTTP `200`, fallback tile response",
         "`GET /admin/tiles/imagery/chilai_nanhua_day1/imagery/5/26/13.png`: HTTP",
         "`persist_to_workspace=false`: HTTP `200`, preview-only, no workspace write",
-        "workspace creation POST was not executed",
-        "`GET /runtime/streams/status-read-only` on field runtime: HTTP `404`",
-        "repo route remains opt-in",
+        "`POST /admin/pretrip/projects/chilai_nanhua_day1/workspace`: HTTP `200`",
+        "`44` files",
+        "repeat workspace creation POST returned HTTP `409`",
         "docs/admin/scout-machine-phase4-admin-preview-smoke.md",
         "`scout-pi-phase4-admin` status: healthy on `9110`",
     ):

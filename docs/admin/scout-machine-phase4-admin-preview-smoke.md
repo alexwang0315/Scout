@@ -31,7 +31,7 @@ does not approve live runtime stream, provider send, or safety mutation paths.
 
 Read-only `docker ps` showed:
 
-- `scout-runtime`: healthy, host `9099 -> 9099`.
+- `scout-pi-runtime`: healthy, host `9099 -> 9099`.
 - `scout-pi-phase4-admin`: healthy, host `9110 -> 9099`.
 - `scout-ollama`: present on `11434`, not touched by this smoke.
 
@@ -46,14 +46,31 @@ Read-only `docker ps` showed:
 - `ai_inference_enabled=false`;
 - `local_model_enabled=false`;
 - `event_bus=none`.
+- `runtime_stream_status_enabled=true`.
 
 `GET http://scout.local:9099/runtime/streams/status-read-only` returned HTTP
-`404` in this hardware smoke. The read-only status route exists in the repo
-behind `SCOUT_RUNTIME_STREAM_STATUS_ENABLED=1`, but it was not enabled on the
-deployed field runtime during this smoke.
+`200` after the field runtime was rebuilt with
+`SCOUT_RUNTIME_STREAM_STATUS_ENABLED=true`.
 
-中文註釋：這不是錯誤；它表示目前硬體上的 field runtime 還沒有開啟 runtime stream
-status-only 查詢面，也沒有因此開啟 observation ingest、control、或 provider send。
+Runtime stream status summary:
+
+- `artifact_kind=runtime_stream_status_surface`;
+- `status=read_only_status_ready`;
+- `read_only_surface=true`;
+- `transport_routes_mounted=false`;
+- `observation_ingest_allowed=false`;
+- `stream_control_mutation_allowed=false`;
+- `live_provider_send_allowed=false`;
+- `safety_mutation_allowed=false`;
+- `phase2_writeback_allowed=false`;
+- `raw_payloads_embedded=false`.
+
+Evidence summary on Scout hardware:
+
+`/data/scout/deployments/runtime-stream-status-fix-20260520T082751Z/runtime-stream-status-deployment-summary.json`
+
+中文註釋：這次只開啟 runtime stream 的只讀查詢面；沒有開啟 observation ingest、
+pause/resume/end control、provider send、incident bridge、或 Phase 2 writeback。
 
 ## Admin Preview Health Probe
 
@@ -145,12 +162,33 @@ The review preview response preserved the expected boundary:
 - `phase1_runtime_mutated=false`;
 - `phase2_writeback_performed=false`.
 
-`POST /admin/pretrip/projects/chilai_nanhua_day1/workspace` was not executed in
-this smoke because it intentionally creates a local workspace and returns `409`
-on repeated runs when the workspace already exists.
+`POST http://scout.local:9110/admin/pretrip/projects/chilai_nanhua_day1/workspace`
+was then executed once and returned HTTP `200`:
+
+- `artifact_kind=pretrip_workspace_copy`;
+- `project_id=chilai_nanhua_day1`;
+- `persisted=true`;
+- `workspace_root=/data/scout/admin/pretrip-workspaces/chilai_nanhua_day1`;
+- workspace file count: `44`;
+- workspace size: about `904KB`;
+- `project.json` present in the workspace;
+- `admin_api_write_performed=true`;
+- `workspace_file_mutation_allowed=true`;
+- `fixture_file_mutation_allowed=false`;
+- `phase1_runtime_mutation_allowed=false`;
+- `phase2_writeback_allowed=false`;
+- `runtime_mutation_allowed=false`;
+- `external_api_calls_made=false`;
+- `raw_payloads_embedded=false`.
+
+A repeat `POST /admin/pretrip/projects/chilai_nanhua_day1/workspace` returned
+HTTP `409` because the workspace already exists. This confirms the current
+workspace creation route is intentionally non-idempotent.
 
 中文註釋：tile smoke 只證明硬體上的 admin service 可以提供地圖圖層 fallback；
-review-decision smoke 只跑 preview，不把 admin 決定寫入 workspace。
+review-decision smoke 只跑 preview，不把 admin 決定寫入 workspace。workspace
+creation smoke 會寫入 `/data/scout/admin/pretrip-workspaces`，但不寫 repo
+fixture、不改 Phase 1 runtime，也不寫 Phase 2 Brain。
 
 ## Admin Page Smoke
 
