@@ -1,0 +1,185 @@
+{
+  "artifact_id": "after_action_next_plan_candidates.chilai_nanhua_day1.scout_260512.v0",
+  "artifact_kind": "after_action_next_plan_candidates",
+  "candidates": [
+    {
+      "candidate_id": "after_action.scout_260512.transfer_gap.checkpoint_review",
+      "candidate_only": true,
+      "evidence_refs": [
+        {
+          "brain_node_kind": null,
+          "evidence_kind": "source_route",
+          "raw_payload_embedded": false,
+          "ref_id": "route.scout_260512.field_route",
+          "source_id": "scout_260512_field_route.gpx",
+          "source_path": "tests/fixtures/routes/scout_260512_field_route.gpx",
+          "summary": "Source route ref only; GPX track points are not embedded."
+        },
+        {
+          "brain_node_kind": null,
+          "evidence_kind": "checkpoint",
+          "raw_payload_embedded": false,
+          "ref_id": "checkpoint.cp_05",
+          "source_id": "cp_05",
+          "source_path": "tests/fixtures/mission_graph/scout_260512_field_mission.json",
+          "summary": "Segment 1 end / retreat (retreat_point) at reviewed mission coordinates."
+        },
+        {
+          "brain_node_kind": null,
+          "evidence_kind": "checkpoint",
+          "raw_payload_embedded": false,
+          "ref_id": "checkpoint.cp_06",
+          "source_id": "cp_06",
+          "source_path": "tests/fixtures/mission_graph/scout_260512_field_mission.json",
+          "summary": "Segment 2 restart (trailhead) at reviewed mission coordinates."
+        },
+        {
+          "brain_node_kind": null,
+          "evidence_kind": "segment_capsule",
+          "raw_payload_embedded": false,
+          "ref_id": "segment_capsule.capsule_seg_05",
+          "source_id": "capsule_seg_05",
+          "source_path": "tests/fixtures/mission_graph/scout_260512_field_mission.json",
+          "summary": "Segment capsule ref for transfer gap; distance_m=546.1, route points 861..862."
+        },
+        {
+          "brain_node_kind": "DerivedMeasurement",
+          "evidence_kind": "brain_node",
+          "raw_payload_embedded": false,
+          "ref_id": "brain.derived_measurement.scout_260512.seg_05.transfer_gap",
+          "source_id": "brain.derived_measurement.scout_260512.seg_05.transfer_gap",
+          "source_path": "tests/fixtures/mission_graph/scout_260512_field_mission.json",
+          "summary": "Derived segment-distance and route-index summary for candidate export."
+        }
+      ],
+      "finding_kind": "deterministic_finding",
+      "future_mission_graph_compile": "blocked_until_human_review",
+      "historical_evidence_mutation_allowed": false,
+      "human_review_required": true,
+      "observed_fact_writeback_allowed": false,
+      "review_state": "proposed",
+      "summary": "Segment seg_05 spans the cp_05 to cp_06 recording break with only adjacent route-point indexes; keep it as a next-plan checkpoint-boundary candidate, not a compiled MissionGraph change.",
+      "target_pretrip_candidate_kind": "checkpoint_candidate",
+      "title": "Review transfer-gap checkpoint boundary"
+    },
+    {
+      "candidate_id": "after_action.scout_260512.weak_gps.recording_policy_review",
+      "candidate_only": true,
+      "evidence_refs": [
+        {
+          "brain_node_kind": null,
+          "evidence_kind": "segment_capsule",
+          "raw_payload_embedded": false,
+          "ref_id": "field_segment.watch_260512_093931",
+          "source_id": "watch_260512_093931",
+          "source_path": "tests/fixtures/field_cases/scout_260512_golden.json",
+          "summary": "Field segment summary only: p90 horizontal accuracy 27.62m, map corridor agreement with hacc 0.979."
+        },
+        {
+          "brain_node_kind": null,
+          "evidence_kind": "segment_capsule",
+          "raw_payload_embedded": false,
+          "ref_id": "segment_capsule.capsule_seg_06",
+          "source_id": "capsule_seg_06",
+          "source_path": "tests/fixtures/mission_graph/scout_260512_field_mission.json",
+          "summary": "First weak-GPS forest segment capsule ref for policy review."
+        },
+        {
+          "brain_node_kind": null,
+          "evidence_kind": "segment_capsule",
+          "raw_payload_embedded": false,
+          "ref_id": "segment_capsule.capsule_seg_09",
+          "source_id": "capsule_seg_09",
+          "source_path": "tests/fixtures/mission_graph/scout_260512_field_mission.json",
+          "summary": "Final weak-GPS forest segment capsule ref for policy review."
+        },
+        {
+          "brain_node_kind": "HumanReview",
+          "evidence_kind": "brain_node",
+          "raw_payload_embedded": false,
+          "ref_id": "brain.human_review.scout_260512.weak_gps_policy_note",
+          "source_id": "brain.human_review.scout_260512.weak_gps_policy_note",
+          "source_path": "tests/fixtures/field_cases/scout_260512_golden.json",
+          "summary": "Placeholder human-review node id; no observed facts are written."
+        }
+      ],
+      "finding_kind": "reviewer_note",
+      "future_mission_graph_compile": "blocked_until_human_review",
+      "historical_evidence_mutation_allowed": false,
+      "human_review_required": true,
+      "observed_fact_writeback_allowed": false,
+      "review_state": "proposed",
+      "summary": "The second Watch segment has p90 horizontal accuracy above 20m while map corridor agreement remains high; preserve this as a reviewer-note candidate for future recording-policy tuning.",
+      "target_pretrip_candidate_kind": "segment_policy_candidate",
+      "title": "Review weak-GPS recording policy"
+    },
+    {
+      "candidate_id": "after_action.scout_260512.map_corridor.staleness_review",
+      "candidate_only": true,
+      "evidence_refs": [
+        {
+          "brain_node_kind": null,
+          "evidence_kind": "map_evidence",
+          "raw_payload_embedded": false,
+          "ref_id": "map.scout_260512.overpass_corridors",
+          "source_id": "openstreetmap_overpass",
+          "source_path": "tests/fixtures/maps/scout_260512_overpass_map_context.geojson",
+          "summary": "684 map features; source_version=2026-05-12T02:47:14Z; staleness=medium."
+        },
+        {
+          "brain_node_kind": "ModelInterpretation",
+          "evidence_kind": "brain_node",
+          "raw_payload_embedded": false,
+          "ref_id": "brain.model_interpretation.scout_260512.map_corridor_staleness",
+          "source_id": "brain.model_interpretation.scout_260512.map_corridor_staleness",
+          "source_path": "tests/fixtures/maps/scout_260512_overpass_map_context.geojson",
+          "summary": "Model suggestion to review reused corridors before next-plan compile."
+        }
+      ],
+      "finding_kind": "model_suggestion",
+      "future_mission_graph_compile": "blocked_until_human_review",
+      "historical_evidence_mutation_allowed": false,
+      "human_review_required": true,
+      "observed_fact_writeback_allowed": false,
+      "review_state": "proposed",
+      "summary": "The after-action map context is useful but marked medium staleness risk; future plans should treat reused corridor evidence as a model suggestion requiring human review.",
+      "target_pretrip_candidate_kind": "map_corridor_candidate",
+      "title": "Re-check medium-staleness map corridors"
+    }
+  ],
+  "counts": {
+    "brain_node_ref_count": 3,
+    "candidate_count": 3,
+    "checkpoint_ref_count": 2,
+    "deterministic_finding": 1,
+    "evidence_ref_count": 11,
+    "human_review_required_count": 3,
+    "incident_package_ref_count": 0,
+    "map_evidence_ref_count": 1,
+    "model_suggestion": 1,
+    "reviewer_note": 1,
+    "segment_capsule_ref_count": 4,
+    "source_ref_count": 5,
+    "source_route_ref_count": 1
+  },
+  "historical_evidence_mutation_allowed": false,
+  "notes": [
+    "Candidate-only Phase 4 after-action export; it does not touch the after-action UI/API.",
+    "Evidence refs are summaries and pointers only; raw samples and incident samples are not embedded.",
+    "Deterministic findings, reviewer notes, and model suggestions all require human review before future MissionGraph compile.",
+    "The scout_260512 field fixture has no incident package refs, so incident_package_ref_count is zero."
+  ],
+  "observed_fact_writeback_allowed": false,
+  "policy_version": "0.1.0",
+  "project_id": "chilai_nanhua_day1",
+  "raw_payloads_embedded": false,
+  "source_case_id": "scout_260512_field_golden",
+  "source_refs": [
+    "tests/fixtures/field_cases/scout_260512_golden.json",
+    "tests/fixtures/mission_graph/scout_260512_field_mission.json",
+    "tests/fixtures/maps/scout_260512_overpass_map_context.geojson",
+    "tests/fixtures/routes/scout_260512_field_route.gpx",
+    "tests/fixtures/route_progress/scout_260512_field_config.json"
+  ],
+  "status": "candidate_only"
+}

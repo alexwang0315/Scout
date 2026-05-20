@@ -1,0 +1,256 @@
+{
+  "candidate_tiles": [
+    {
+      "bbox_twd97": {
+        "crs": "TWD97 / TM2 zone 121 (EPSG:3826-compatible)",
+        "max_x": 279080.0,
+        "max_y": 2663020.0,
+        "min_x": 276200.0,
+        "min_y": 2660360.0
+      },
+      "cols": 144,
+      "county": "南投縣",
+      "coverage_note": "intersects GPX bounding box in TWD97 projected coordinates",
+      "grid_uri": "/Users/alexwang0315/scout-fusion/catographydata/DTM/分幅_南投縣20MDEM(2025)/96212071dem.grd",
+      "header_uri": "/Users/alexwang0315/scout-fusion/catographydata/DTM/分幅_南投縣20MDEM(2025)/96212071dem.hdr",
+      "horizontal_datum": "TWD97[2020]",
+      "intersects_route_bbox": true,
+      "origin_x": 276200.0,
+      "origin_y": 2660360.0,
+      "resolution_x_m": 20.0,
+      "resolution_y_m": 20.0,
+      "rows": 133,
+      "tile_id": "96212071",
+      "vertical_datum": "TWVD2001"
+    },
+    {
+      "bbox_twd97": {
+        "crs": "TWD97 / TM2 zone 121 (EPSG:3826-compatible)",
+        "max_x": 279080.0,
+        "max_y": 2660240.0,
+        "min_x": 276200.0,
+        "min_y": 2657580.0
+      },
+      "cols": 144,
+      "county": "南投縣",
+      "coverage_note": "intersects GPX bounding box in TWD97 projected coordinates",
+      "grid_uri": "/Users/alexwang0315/scout-fusion/catographydata/DTM/分幅_南投縣20MDEM(2025)/96212081dem.grd",
+      "header_uri": "/Users/alexwang0315/scout-fusion/catographydata/DTM/分幅_南投縣20MDEM(2025)/96212081dem.hdr",
+      "horizontal_datum": "TWD97[2020]",
+      "intersects_route_bbox": true,
+      "origin_x": 276200.0,
+      "origin_y": 2657580.0,
+      "resolution_x_m": 20.0,
+      "resolution_y_m": 20.0,
+      "rows": 133,
+      "tile_id": "96212081",
+      "vertical_datum": "TWVD2001"
+    },
+    {
+      "bbox_twd97": {
+        "crs": "TWD97 / TM2 zone 121 (EPSG:3826-compatible)",
+        "max_x": 271460.0,
+        "max_y": 2662980.0,
+        "min_x": 268580.0,
+        "min_y": 2660340.0
+      },
+      "cols": 144,
+      "county": "南投縣",
+      "coverage_note": "intersects GPX bounding box in TWD97 projected coordinates",
+      "grid_uri": "/Users/alexwang0315/scout-fusion/catographydata/DTM/分幅_南投縣20MDEM(2025)/96213078dem.grd",
+      "header_uri": "/Users/alexwang0315/scout-fusion/catographydata/DTM/分幅_南投縣20MDEM(2025)/96213078dem.hdr",
+      "horizontal_datum": "TWD97[2020]",
+      "intersects_route_bbox": true,
+      "origin_x": 268580.0,
+      "origin_y": 2660340.0,
+      "resolution_x_m": 20.0,
+      "resolution_y_m": 20.0,
+      "rows": 132,
+      "tile_id": "96213078",
+      "vertical_datum": "TWVD2001"
+    },
+    {
+      "bbox_twd97": {
+        "crs": "TWD97 / TM2 zone 121 (EPSG:3826-compatible)",
+        "max_x": 274000.0,
+        "max_y": 2662980.0,
+        "min_x": 271120.0,
+        "min_y": 2660340.0
+      },
+      "cols": 144,
+      "county": "南投縣",
+      "coverage_note": "intersects GPX bounding box in TWD97 projected coordinates",
+      "grid_uri": "/Users/alexwang0315/scout-fusion/catographydata/DTM/分幅_南投縣20MDEM(2025)/96213079dem.grd",
+      "header_uri": "/Users/alexwang0315/scout-fusion/catographydata/DTM/分幅_南投縣20MDEM(2025)/96213079dem.hdr",
+      "horizontal_datum": "TWD97[2020]",
+      "intersects_route_bbox": true,
+      "origin_x": 271120.0,
+      "origin_y": 2660340.0,
+      "resolution_x_m": 20.0,
+      "resolution_y_m": 20.0,
+      "rows": 132,
+      "tile_id": "96213079",
+      "vertical_datum": "TWVD2001"
+    },
+    {
+      "bbox_twd97": {
+        "crs": "TWD97 / TM2 zone 121 (EPSG:3826-compatible)",
+        "max_x": 276540.0,
+        "max_y": 2663000.0,
+        "min_x": 273660.0,
+        "min_y": 2660360.0
+      },
+      "cols": 144,
+      "county": "南投縣",
+      "coverage_note": "intersects GPX bounding box in TWD97 projected coordinates",
+      "grid_uri": "/Users/alexwang0315/scout-fusion/catographydata/DTM/分幅_南投縣20MDEM(2025)/96213080dem.grd",
+      "header_uri": "/Users/alexwang0315/scout-fusion/catographydata/DTM/分幅_南投縣20MDEM(2025)/96213080dem.hdr",
+      "horizontal_datum": "TWD97[2020]",
+      "intersects_route_bbox": true,
+      "origin_x": 273660.0,
+      "origin_y": 2660360.0,
+      "resolution_x_m": 20.0,
+      "resolution_y_m": 20.0,
+      "rows": 132,
+      "tile_id": "96213080",
+      "vertical_datum": "TWVD2001"
+    },
+    {
+      "bbox_twd97": {
+        "crs": "TWD97 / TM2 zone 121 (EPSG:3826-compatible)",
+        "max_x": 271460.0,
+        "max_y": 2660220.0,
+        "min_x": 268580.0,
+        "min_y": 2657580.0
+      },
+      "cols": 144,
+      "county": "南投縣",
+      "coverage_note": "intersects GPX bounding box in TWD97 projected coordinates",
+      "grid_uri": "/Users/alexwang0315/scout-fusion/catographydata/DTM/分幅_南投縣20MDEM(2025)/96213088dem.grd",
+      "header_uri": "/Users/alexwang0315/scout-fusion/catographydata/DTM/分幅_南投縣20MDEM(2025)/96213088dem.hdr",
+      "horizontal_datum": "TWD97[2020]",
+      "intersects_route_bbox": true,
+      "origin_x": 268580.0,
+      "origin_y": 2657580.0,
+      "resolution_x_m": 20.0,
+      "resolution_y_m": 20.0,
+      "rows": 132,
+      "tile_id": "96213088",
+      "vertical_datum": "TWVD2001"
+    },
+    {
+      "bbox_twd97": {
+        "crs": "TWD97 / TM2 zone 121 (EPSG:3826-compatible)",
+        "max_x": 274000.0,
+        "max_y": 2660220.0,
+        "min_x": 271120.0,
+        "min_y": 2657580.0
+      },
+      "cols": 144,
+      "county": "南投縣",
+      "coverage_note": "intersects GPX bounding box in TWD97 projected coordinates",
+      "grid_uri": "/Users/alexwang0315/scout-fusion/catographydata/DTM/分幅_南投縣20MDEM(2025)/96213089dem.grd",
+      "header_uri": "/Users/alexwang0315/scout-fusion/catographydata/DTM/分幅_南投縣20MDEM(2025)/96213089dem.hdr",
+      "horizontal_datum": "TWD97[2020]",
+      "intersects_route_bbox": true,
+      "origin_x": 271120.0,
+      "origin_y": 2657580.0,
+      "resolution_x_m": 20.0,
+      "resolution_y_m": 20.0,
+      "rows": 132,
+      "tile_id": "96213089",
+      "vertical_datum": "TWVD2001"
+    },
+    {
+      "bbox_twd97": {
+        "crs": "TWD97 / TM2 zone 121 (EPSG:3826-compatible)",
+        "max_x": 276540.0,
+        "max_y": 2660240.0,
+        "min_x": 273660.0,
+        "min_y": 2657580.0
+      },
+      "cols": 144,
+      "county": "南投縣",
+      "coverage_note": "intersects GPX bounding box in TWD97 projected coordinates",
+      "grid_uri": "/Users/alexwang0315/scout-fusion/catographydata/DTM/分幅_南投縣20MDEM(2025)/96213090dem.grd",
+      "header_uri": "/Users/alexwang0315/scout-fusion/catographydata/DTM/分幅_南投縣20MDEM(2025)/96213090dem.hdr",
+      "horizontal_datum": "TWD97[2020]",
+      "intersects_route_bbox": true,
+      "origin_x": 273660.0,
+      "origin_y": 2657580.0,
+      "resolution_x_m": 20.0,
+      "resolution_y_m": 20.0,
+      "rows": 133,
+      "tile_id": "96213090",
+      "vertical_datum": "TWVD2001"
+    },
+    {
+      "bbox_twd97": {
+        "crs": "TWD97 / TM2 zone 121 (EPSG:3826-compatible)",
+        "max_x": 279080.0,
+        "max_y": 2663020.0,
+        "min_x": 276200.0,
+        "min_y": 2660360.0
+      },
+      "cols": 144,
+      "county": "花蓮縣",
+      "coverage_note": "intersects GPX bounding box in TWD97 projected coordinates",
+      "grid_uri": "/Users/alexwang0315/scout-fusion/catographydata/DTM/分幅_花蓮縣20MDEM(2025)/96212071dem.grd",
+      "header_uri": "/Users/alexwang0315/scout-fusion/catographydata/DTM/分幅_花蓮縣20MDEM(2025)/96212071dem.hdr",
+      "horizontal_datum": "TWD97[2020]",
+      "intersects_route_bbox": true,
+      "origin_x": 276200.0,
+      "origin_y": 2660360.0,
+      "resolution_x_m": 20.0,
+      "resolution_y_m": 20.0,
+      "rows": 133,
+      "tile_id": "96212071",
+      "vertical_datum": "TWVD2001"
+    },
+    {
+      "bbox_twd97": {
+        "crs": "TWD97 / TM2 zone 121 (EPSG:3826-compatible)",
+        "max_x": 279080.0,
+        "max_y": 2660240.0,
+        "min_x": 276200.0,
+        "min_y": 2657580.0
+      },
+      "cols": 144,
+      "county": "花蓮縣",
+      "coverage_note": "intersects GPX bounding box in TWD97 projected coordinates",
+      "grid_uri": "/Users/alexwang0315/scout-fusion/catographydata/DTM/分幅_花蓮縣20MDEM(2025)/96212081dem.grd",
+      "header_uri": "/Users/alexwang0315/scout-fusion/catographydata/DTM/分幅_花蓮縣20MDEM(2025)/96212081dem.hdr",
+      "horizontal_datum": "TWD97[2020]",
+      "intersects_route_bbox": true,
+      "origin_x": 276200.0,
+      "origin_y": 2657580.0,
+      "resolution_x_m": 20.0,
+      "resolution_y_m": 20.0,
+      "rows": 133,
+      "tile_id": "96212081",
+      "vertical_datum": "TWVD2001"
+    }
+  ],
+  "missing_grid_count": 0,
+  "notes": "DTM tiles are referenced by metadata only; source rasters are not copied into repo fixtures.",
+  "route_artifact_id": "artifact.gpx.chilai_nanhua_day1",
+  "route_bbox_twd97": {
+    "crs": "TWD97 / TM2 zone 121 (EPSG:3826-compatible)",
+    "max_x": 278559.255,
+    "max_y": 2661464.797,
+    "min_x": 271393.061,
+    "min_y": 2659838.709
+  },
+  "route_bbox_wgs84": {
+    "max_lat": 24.057907788530006,
+    "max_lon": 121.28079717511966,
+    "min_lat": 24.043338071400207,
+    "min_lon": 121.21036249036372
+  },
+  "scanned_header_count": 1411,
+  "source_dirs": [
+    "/Users/alexwang0315/scout-fusion/catographydata/DTM/分幅_南投縣20MDEM(2025)",
+    "/Users/alexwang0315/scout-fusion/catographydata/DTM/分幅_花蓮縣20MDEM(2025)"
+  ],
+  "summary_id": "dtm_coverage.chilai_nanhua_day1.20m"
+}

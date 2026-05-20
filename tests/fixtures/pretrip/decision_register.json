@@ -1,0 +1,252 @@
+{
+  "artifact_kind": "pretrip_decision_register",
+  "metadata_only": true,
+  "no_crawler": true,
+  "no_network": true,
+  "no_runtime_effects": true,
+  "notes": [
+    "Metadata-only Phase 4 decision register.",
+    "This artifact records planning policy decisions only; it does not call providers, crawl sources, change UI, or affect runtime safety behavior.",
+    "The initial Phase 4 implementation decisions are resolved as candidate-only, fixture-backed policies; future field-trial thresholds can still be tightened with new decisions."
+  ],
+  "open_questions": [],
+  "phase": "phase_4_pretrip",
+  "register_id": "pretrip.decision_register.phase4.v0",
+  "resolved_decisions": [
+    {
+      "constraints": [
+        "Primary mountain calibration remains fixture-backed.",
+        "Does not imply live provider sync or runtime mutation."
+      ],
+      "decision_id": "phase4.decision.primary_fixture.chilai_nanhua_day1",
+      "impact": "fixture_calibration",
+      "refs": [
+        "docs/specs/phase-4-pre-trip-planning-platform.md#resolved-decisions",
+        "tests/fixtures/pretrip/projects/chilai_nanhua_day1/project.json"
+      ],
+      "resolution": "Use Chilai-Nanhua / Nenggao Day 1 as the primary mountain calibration case for Phase 4.",
+      "status": "resolved",
+      "summary": "The first mountain calibration fixture is Chilai-Nanhua Day 1.",
+      "title": "Primary mountain calibration fixture"
+    },
+    {
+      "constraints": [
+        "Regression fixture is secondary to the Chilai mountain calibration case.",
+        "Raw local capture payloads remain outside this decision register."
+      ],
+      "decision_id": "phase4.decision.regression_fixture.scout_260512",
+      "impact": "fixture_calibration",
+      "refs": [
+        "tests/fixtures/pretrip/project_matrix.json",
+        "tests/fixtures/pretrip/projects/scout_260512_field_regression/project.json"
+      ],
+      "resolution": "Keep scout_260512 as the field-data-to-fixtures regression project in the Phase 4 fixture matrix.",
+      "status": "resolved",
+      "summary": "The Scout 260512 project is a regression fixture, not the primary mountain calibration case.",
+      "title": "Scout 260512 regression fixture"
+    },
+    {
+      "constraints": [
+        "Do not commit raw DTM rasters as planning fixtures.",
+        "Fixture JSON may carry metadata and reduced summaries only."
+      ],
+      "decision_id": "phase4.decision.dtm.metadata_only",
+      "impact": "terrain_metadata",
+      "refs": [
+        "docs/specs/phase-4-pre-trip-planning-platform.md#resolved-decisions",
+        "pretrip_source_ingest.py",
+        "tests/fixtures/pretrip/projects/chilai_nanhua_day1/normalized/terrain/dtm_coverage_summary.json"
+      ],
+      "resolution": "DTM remains metadata-only for Phase 4 fixtures; raw DTM stays local/offline.",
+      "status": "resolved",
+      "summary": "Terrain evidence can reference DTM metadata and reduced summaries but not raw rasters.",
+      "title": "DTM metadata-only treatment"
+    },
+    {
+      "constraints": [
+        "Return-to-entry is a planning candidate/policy ref, not a live runtime override.",
+        "Future alternate/retreat policy can still tighten readiness separately."
+      ],
+      "decision_id": "phase4.decision.retreat.return_to_entry",
+      "impact": "retreat_policy",
+      "refs": [
+        "docs/specs/phase-4-pre-trip-planning-platform.md#resolved-decisions",
+        "tests/fixtures/pretrip/projects/chilai_nanhua_day1/outputs/pretrip_package.json"
+      ],
+      "resolution": "Use a return-to-entry retreat route candidate for the initial Chilai Phase 4 package.",
+      "status": "resolved",
+      "summary": "The initial retreat treatment is a return-to-entry candidate rather than a separate live runtime path.",
+      "title": "Return-to-entry retreat route"
+    },
+    {
+      "constraints": [
+        "Joyhike and PTT references support planning context and timing candidates.",
+        "They do not become authoritative runtime facts without review."
+      ],
+      "decision_id": "phase4.decision.sources.joyhike_ptt_reference_only",
+      "impact": "source_treatment",
+      "refs": [
+        "tests/fixtures/pretrip/source_registry/chilai_nanhua_day1_source_registry.json",
+        "tests/fixtures/pretrip/projects/chilai_nanhua_day1/candidates/planning_references.json"
+      ],
+      "resolution": "Treat Joyhike and PTT as source-linked planning references, not as crawler-backed or authoritative live inputs.",
+      "status": "resolved",
+      "summary": "Joyhike/PTT are preserved as provenance-backed reference material for the fixture.",
+      "title": "Joyhike/PTT source treatment"
+    },
+    {
+      "constraints": [
+        "Timing fields can be absent when the source does not provide them.",
+        "Unknown timing basis must remain explicit in downstream artifacts."
+      ],
+      "decision_id": "phase4.decision.timing.optional_fields",
+      "impact": "timing_schema",
+      "refs": [
+        "pretrip_timing_calibration.py",
+        "tests/fixtures/pretrip/projects/chilai_nanhua_day1/outputs/timing_measurements.json"
+      ],
+      "resolution": "Keep route-guide timing fields optional where source material is incomplete.",
+      "status": "resolved",
+      "summary": "Timing candidates may carry optional fields instead of forcing invented precision.",
+      "title": "Optional timing fields"
+    },
+    {
+      "constraints": [
+        "UI reads fixture-backed Phase 4 planning artifacts only.",
+        "Review/edit toolbar controls remain disabled until a later explicit write-path slice.",
+        "No Phase 1 live runtime mutation or safety API call is allowed."
+      ],
+      "decision_id": "phase4.decision.ui.fixture_backed_read_only",
+      "impact": "ui_boundary",
+      "refs": [
+        "docs/specs/pre-trip-planning-admin.md#milestone-7-minimal-admin-ui",
+        "docs/admin/phase4-pretrip-planning.html",
+        "pretrip_admin_view.py"
+      ],
+      "resolution": "Start Milestone 7 with a fixture-backed read-only admin preview UI.",
+      "status": "resolved",
+      "summary": "The first Phase 4 UI slice is read-only and evidence-driven.",
+      "title": "Fixture-backed read-only admin UI"
+    },
+    {
+      "constraints": [
+        "No POI category absence can become a blocker or warning.",
+        "The policy remains candidate-only and does not mutate hard readiness."
+      ],
+      "decision_id": "phase4.decision.poi.corridor_coverage_policy",
+      "impact": "readiness_policy",
+      "refs": [
+        "pretrip_poi_readiness.py",
+        "tests/fixtures/pretrip/projects/chilai_nanhua_day1/outputs/poi_readiness_candidates.json"
+      ],
+      "resolution": "Use an admin-parameterizable route-corridor POI coverage rule: default 1000m corridor distance, minimum 1 POI, warning severity, and no category-specific blocker/warning findings.",
+      "status": "resolved",
+      "summary": "POI category absence is not a blocker or warning; only missing POI coverage near the route corridor can warn.",
+      "title": "POI route-corridor coverage policy"
+    },
+    {
+      "constraints": [
+        "No live weather API dependency in core tests.",
+        "Threshold references do not imply authoritative or reviewed weather."
+      ],
+      "decision_id": "phase4.decision.weather_daylight.quantitative_thresholds",
+      "impact": "weather_daylight",
+      "refs": [
+        "pretrip_weather_daylight.py",
+        "tests/fixtures/pretrip/projects/chilai_nanhua_day1/outputs/weather_daylight_evidence.json"
+      ],
+      "resolution": "Use CWA-style reference thresholds for rain, fog, wind, and dark-arrival margin as optional configurable policy fields; fixture evidence remains placeholder/manual and human-review-required.",
+      "status": "resolved",
+      "summary": "Weather/daylight evidence carries configurable CWA-style threshold references while remaining candidate-only until reviewed.",
+      "title": "Weather/daylight quantitative threshold references"
+    },
+    {
+      "constraints": [
+        "Contour interpretation must not become ObservedFact.",
+        "Raw image or raster payloads must not be embedded in fixture JSON."
+      ],
+      "decision_id": "phase4.decision.contour.ai_assisted_admin_review",
+      "impact": "contour_strategy",
+      "refs": [
+        "pretrip_contour_interpretation.py",
+        "tests/fixtures/pretrip/projects/chilai_nanhua_day1/outputs/contour_interpretation_candidates.json"
+      ],
+      "resolution": "Represent contour interpretation as candidate-only AI-assisted or manual-baseline records with an admin-review lifecycle; accepted planning assumptions require HumanReview.",
+      "status": "resolved",
+      "summary": "Contour interpretation uses AI-assisted candidates followed by admin review for final decisions.",
+      "title": "AI-assisted contour review lifecycle"
+    },
+    {
+      "constraints": [
+        "Comparison routes are not authoritative for the mission package.",
+        "Raw external GPX is not committed as a fixture without explicit redistributable source approval."
+      ],
+      "decision_id": "phase4.decision.route_comparison.derived_summary_only",
+      "impact": "legal_fixture_use",
+      "refs": [
+        "pretrip_route_comparison.py",
+        "tests/fixtures/pretrip/projects/chilai_nanhua_day1/outputs/route_comparison.json"
+      ],
+      "resolution": "Keep route comparison output metadata-only: hash, bbox, distance, point deltas, and source-use treatment flags; raw external GPX is not versioned, not authoritative, and not compiled into MissionGraph.",
+      "status": "resolved",
+      "summary": "External comparison GPX sources are treated as derived summaries only unless redistributable fixture rights are reviewed later.",
+      "title": "Route comparison derived-summary-only treatment"
+    },
+    {
+      "constraints": [
+        "Decision log rows are append-only review records.",
+        "No source artifact, pre-trip package, runtime state, Phase 2 Brain state, or MissionGraph output is mutated.",
+        "No raw source payloads or external API calls are embedded in the fixture."
+      ],
+      "decision_id": "phase4.decision.review_log.fixture_only_append_only",
+      "impact": "review_decision_log",
+      "refs": [
+        "docs/specs/pre-trip-planning-admin.md#milestone-8-fixture-only-review-decisions-and-external-import-requests",
+        "pretrip_review_decision_log.py",
+        "tests/test_pretrip_review_decision_log.py"
+      ],
+      "resolution": "Use a fixture-only review decision log for Phase 4 review outcomes: append-only, no package/runtime/Brain mutation, and no MissionGraph compile.",
+      "status": "resolved",
+      "summary": "Review outcomes can be recorded as fixture-backed decision-log metadata without applying them to runtime or compiled mission artifacts.",
+      "title": "Fixture-only append-only review decision log"
+    },
+    {
+      "constraints": [
+        "Requests store URL and intent metadata only.",
+        "No fetch, crawler, scrape, snapshot, or raw remote payload is allowed in this slice.",
+        "Requested items remain Artifact/planning-reference candidates until human review."
+      ],
+      "decision_id": "phase4.decision.external_import_queue.url_request_only",
+      "impact": "external_import_queue",
+      "refs": [
+        "docs/specs/pre-trip-planning-admin.md#milestone-8-fixture-only-review-decisions-and-external-import-requests",
+        "pretrip_external_import_queue.py",
+        "tests/test_pretrip_external_import_queue.py"
+      ],
+      "resolution": "Model the external import queue as URL/request-only metadata: no fetch, no crawler, no raw payload, and no authoritative Artifact until human review accepts a planning-reference candidate.",
+      "status": "resolved",
+      "summary": "External references are queued as pending human-review requests rather than imported source content.",
+      "title": "URL-only external import queue"
+    },
+    {
+      "constraints": [
+        "POI policy, remote contact summary, weather/daylight thresholds, contour treatment, and route comparison source treatment are closed by existing resolved decisions.",
+        "Crawler/live write-path work remains out of scope unless separately approved.",
+        "Closed backlog decisions do not imply network, crawler, package mutation, runtime mutation, Brain mutation, or MissionGraph compile behavior."
+      ],
+      "decision_id": "phase4.decision.backlog.current_policy_set_closed",
+      "impact": "scope_boundary",
+      "refs": [
+        "docs/specs/pre-trip-planning-admin.md#backlog-next-decisions",
+        "pretrip_decision_register.py",
+        "tests/fixtures/pretrip/decision_register.json"
+      ],
+      "resolution": "Close the current Backlog / Next Decisions policy set as resolved: route-corridor POI coverage only, remote contact summary present, weather/daylight thresholds optional configurable reference data, contour interpretation AI-assisted candidates plus admin review, and route comparison derived-summary-only.",
+      "status": "resolved",
+      "summary": "The previously open Phase 4 admin backlog policy questions are now recorded as resolved scope decisions.",
+      "title": "Current backlog policy set closed"
+    }
+  ],
+  "schema_version": "0.1.0",
+  "ui_scope": "fixture_backed_read_only_admin_preview"
+}

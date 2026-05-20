@@ -1,0 +1,211 @@
+{
+  "artifact_kind": "plan_to_runtime_audit_manifest",
+  "axes": [
+    {
+      "axis": "checkpoint_eta",
+      "comparison_executed": false,
+      "comparison_method": "compare planned ETA estimates with observed checkpoint timing after Phase 3 imports persisted runtime evidence",
+      "notes": [],
+      "observed_item_count": 0,
+      "planned_item_count": 4,
+      "planned_refs": [
+        "outputs/planned_eta.json",
+        "outputs/timing_measurements.json"
+      ],
+      "raw_payloads_embedded": false,
+      "runtime_evidence_expected": [
+        "persisted checkpoint arrival/departure timestamps",
+        "runtime segment timing summaries"
+      ],
+      "status": "candidate_only"
+    },
+    {
+      "axis": "route_progress_corridor",
+      "comparison_executed": false,
+      "comparison_method": "compare planned route identity and corridor candidates with persisted route-progress and corridor evidence",
+      "notes": [
+        "route_comparison_classification=comparison_only"
+      ],
+      "observed_item_count": 0,
+      "planned_item_count": 2211,
+      "planned_refs": [
+        "normalized/routes/route_summary.json",
+        "outputs/route_comparison.json",
+        "candidates/map_candidates.json",
+        "outputs/compiled_mission_graph.reviewed.json"
+      ],
+      "raw_payloads_embedded": false,
+      "runtime_evidence_expected": [
+        "route-progress evaluator output",
+        "map-corridor deviation evidence",
+        "segment capsule route samples summarized by Phase 1"
+      ],
+      "status": "candidate_only"
+    },
+    {
+      "axis": "retreat_decision",
+      "comparison_executed": false,
+      "comparison_method": "compare planned turn-back checkpoint and retreat route candidates with post-trip decision and movement evidence",
+      "notes": [],
+      "observed_item_count": 0,
+      "planned_item_count": 1,
+      "planned_refs": [
+        "candidates/retreat_routes.json",
+        "outputs/planned_eta.json",
+        "outputs/pretrip_package.reviewed.json"
+      ],
+      "raw_payloads_embedded": false,
+      "runtime_evidence_expected": [
+        "runtime retreat/escalation decisions",
+        "turn-back checkpoint timing",
+        "return-to-entry route-progress evidence"
+      ],
+      "status": "candidate_only"
+    },
+    {
+      "axis": "segment_policy",
+      "comparison_executed": false,
+      "comparison_method": "compare candidate segment requirements and recording policy with the policy metadata preserved by runtime artifacts",
+      "notes": [],
+      "observed_item_count": 0,
+      "planned_item_count": 10,
+      "planned_refs": [
+        "outputs/segment_policy_candidates.json",
+        "outputs/compiled_mission_graph.reviewed.json"
+      ],
+      "raw_payloads_embedded": false,
+      "runtime_evidence_expected": [
+        "runtime segment policy metadata",
+        "recording-policy selections",
+        "segment capsule boundaries"
+      ],
+      "status": "candidate_only"
+    },
+    {
+      "axis": "weather_daylight",
+      "comparison_executed": false,
+      "comparison_method": "compare reviewed weather/daylight assumptions with actual timing and any post-trip weather/daylight review evidence",
+      "notes": [
+        "weather_validation_status=human_review_required"
+      ],
+      "observed_item_count": 0,
+      "planned_item_count": 1,
+      "planned_refs": [
+        "outputs/weather_daylight_evidence.json",
+        "outputs/segment_policy_candidates.json"
+      ],
+      "raw_payloads_embedded": false,
+      "runtime_evidence_expected": [
+        "runtime daylight margins",
+        "weather-related human reviews",
+        "segment timing near dark-arrival boundaries"
+      ],
+      "status": "candidate_only"
+    },
+    {
+      "axis": "resource_remote_summary",
+      "comparison_executed": false,
+      "comparison_method": "compare departure resource plan and remote-contact summary with post-trip resource and communication evidence",
+      "notes": [],
+      "observed_item_count": 0,
+      "planned_item_count": 9,
+      "planned_refs": [
+        "outputs/resource_plan.json",
+        "outputs/remote_contact_summary.json"
+      ],
+      "raw_payloads_embedded": false,
+      "runtime_evidence_expected": [
+        "resource status observations summarized after trip",
+        "remote check-in communication evidence",
+        "device/battery issue reviews"
+      ],
+      "status": "candidate_only"
+    },
+    {
+      "axis": "brain_seed_run_records",
+      "comparison_executed": false,
+      "comparison_method": "compare expected Phase 4 Brain seed/run records with Phase 2/3 records preserved after runtime import",
+      "notes": [
+        "observed_fact_count=0",
+        "planning_skill_run_count=5"
+      ],
+      "observed_item_count": 0,
+      "planned_item_count": 102,
+      "planned_refs": [
+        "outputs/brain_seed_nodes.json",
+        "outputs/planning_skill_audit.json"
+      ],
+      "raw_payloads_embedded": false,
+      "runtime_evidence_expected": [
+        "Phase 2 imported planning nodes",
+        "runtime SkillRunRecord nodes",
+        "post-trip model interpretation and human review records"
+      ],
+      "status": "candidate_only"
+    },
+    {
+      "axis": "readiness_validation",
+      "comparison_executed": false,
+      "comparison_method": "compare pre-trip readiness and validation candidates with later Phase 3 release/admin comparison outcomes",
+      "notes": [
+        "hard_readiness_status=ready",
+        "plan_validation_status=candidate_only"
+      ],
+      "observed_item_count": 0,
+      "planned_item_count": 6,
+      "planned_refs": [
+        "outputs/readiness_report.json",
+        "outputs/plan_validation_candidates.json",
+        "candidates/skill_config_manifest.json"
+      ],
+      "raw_payloads_embedded": false,
+      "runtime_evidence_expected": [
+        "post-trip release gate findings",
+        "after-action validation findings",
+        "runtime bridge import status"
+      ],
+      "status": "candidate_only"
+    }
+  ],
+  "boundary": {
+    "candidate_only": true,
+    "incident_package_imported": false,
+    "live_comparison_performed": false,
+    "observed_runtime_data_embedded": false,
+    "phase1_runtime_mutation_allowed": false,
+    "raw_payloads_embedded": false
+  },
+  "counts": {
+    "comparison_axis_count": 8,
+    "live_comparison_count": 0,
+    "observed_item_count": 0,
+    "planned_ref_count": 15,
+    "raw_payload_count": 0
+  },
+  "manifest_id": "runtime_audit_manifest.chilai_nanhua_day1.v0",
+  "notes": [
+    "Fixture-first Phase 4 manifest for later Phase 3 plan-to-runtime audit.",
+    "No observed runtime data, incident package payload, or Phase 1 runtime artifact is imported.",
+    "Each axis records refs and expected comparison method only; comparisons are intentionally not executed in this slice."
+  ],
+  "plan_version_id": "pretrip.chilai_nanhua_day1.v0:0.1.0",
+  "planned_refs": {
+    "brain_seed_ref": "outputs/brain_seed_nodes.json",
+    "compiled_mission_graph_ref": "outputs/compiled_mission_graph.reviewed.json",
+    "package_ref": "outputs/pretrip_package.json",
+    "plan_validation_ref": "outputs/plan_validation_candidates.json",
+    "planned_eta_ref": "outputs/planned_eta.json",
+    "planning_skill_audit_ref": "outputs/planning_skill_audit.json",
+    "readiness_report_ref": "outputs/readiness_report.json",
+    "remote_contact_summary_ref": "outputs/remote_contact_summary.json",
+    "resource_plan_ref": "outputs/resource_plan.json",
+    "retreat_routes_ref": "candidates/retreat_routes.json",
+    "reviewed_package_ref": "outputs/pretrip_package.reviewed.json",
+    "route_comparison_ref": "outputs/route_comparison.json",
+    "route_summary_ref": "normalized/routes/route_summary.json",
+    "segment_policy_ref": "outputs/segment_policy_candidates.json",
+    "weather_daylight_ref": "outputs/weather_daylight_evidence.json"
+  },
+  "project_id": "chilai_nanhua_day1",
+  "status": "candidate_only"
+}

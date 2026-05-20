@@ -1,0 +1,85 @@
+{
+  "bbox_comparison": {
+    "comparison_overlap_ratio": 0.681377,
+    "intersection_area_degrees2": 0.0003285205,
+    "intersection_wgs84": {
+      "max_lat": 24.0579078,
+      "max_lon": 121.279854,
+      "min_lat": 24.051077,
+      "min_lon": 121.23176
+    },
+    "overlaps": true,
+    "primary_overlap_ratio": 0.320129
+  },
+  "classification": "comparison_only",
+  "comparison_id": "route_comparison.chilai_nanhua_day1.similar_gpx.v0",
+  "comparison_route": {
+    "artifact_id": "artifact.gpx.chilai_nanhua_day1.similar_reference",
+    "bbox_wgs84": {
+      "max_lat": 24.061101973,
+      "max_lon": 121.279853974,
+      "min_lat": 24.051076965,
+      "min_lon": 121.231760038
+    },
+    "distance_m": 9546.54,
+    "elevation_range_m": {
+      "max": 3343.0,
+      "min": 2561.0
+    },
+    "point_count": 936,
+    "route_name": "2022-08-20_21尾上深堀踏查(文若) 001",
+    "sha256": "b469a7d448a4d2f4d7de47d78f19083c220759323a4d32bb3251b081f236217c",
+    "size_bytes": 149914,
+    "source_uri": "/Users/alexwang0315/downloads/6966d6fa4d9d9652b2da064c7345fb22_p.gpx",
+    "timestamp_range": {
+      "ended_at": "2022-08-21T01:10:35Z",
+      "started_at": "2022-08-19T23:54:34Z"
+    }
+  },
+  "distance_delta_m": -5053.24,
+  "notes": [
+    "Metadata-only comparison output; raw GPX track data is not copied into repo fixtures.",
+    "External reference GPX is represented as derived summary, hash, bbox, distance, and point deltas only.",
+    "Similar GPX is comparison-only evidence and is not authoritative for the Chilai-Nanhua plan.",
+    "Comparison route is not compiled into MissionGraph and does not alter candidate checkpoints, segments, or retreat routes."
+  ],
+  "point_count_delta": -1275,
+  "primary_route": {
+    "artifact_id": "artifact.gpx.chilai_nanhua_day1",
+    "bbox_wgs84": {
+      "max_lat": 24.057907788530006,
+      "max_lon": 121.28079717511966,
+      "min_lat": 24.043338071400207,
+      "min_lon": 121.21036249036372
+    },
+    "distance_m": 14599.78,
+    "elevation_range_m": {
+      "max": 2878.99,
+      "min": 2152.02
+    },
+    "point_count": 2211,
+    "route_name": "奇萊南華-能高越嶺步道Day1",
+    "sha256": "3c1f4843ecea5cb2fc85f92934d3d1a220738c900576e4976d4c09975673956c",
+    "size_bytes": 275392,
+    "source_uri": "/Users/alexwang0315/downloads/奇萊南華-能高越嶺步道Day1.gpx",
+    "timestamp_range": {
+      "ended_at": "2026-05-03T10:35:59Z",
+      "started_at": "2026-05-02T23:55:35Z"
+    }
+  },
+  "source_use_treatment": {
+    "authoritative_for_mission": false,
+    "compiled_into_mission_graph": false,
+    "derived_summary_only": true,
+    "external_reference_comparison_only": true,
+    "primary_user_provided_source": true,
+    "raw_source_versioned": false,
+    "redistributable_fixture_allowed": false,
+    "treatment_levels": [
+      "primary_user_provided_source",
+      "external_reference_comparison_only",
+      "derived_summary_only",
+      "non_authoritative_non_compiled_reference"
+    ]
+  }
+}

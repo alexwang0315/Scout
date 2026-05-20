@@ -1,0 +1,69 @@
+{
+  "assumption": {
+    "assumption_id": "eta_assumption.chilai_nanhua_day1.day1.v0",
+    "day1_target_node_name": "天池山莊",
+    "daylight_policy_status": "not_evaluated_requires_sun_window",
+    "elapsed_time_policy": "total_elapsed_time_including_normal_rest",
+    "human_provided_route_stats": null,
+    "notes": [
+      "ETA uses reviewed route-guide timing candidates only; no sun-window or dark-arrival calculation is performed in this slice.",
+      "When multiplier basis is unknown, planning remains conservative and uses total elapsed time including normal rest."
+    ],
+    "planned_start_offset_minutes": 60,
+    "planned_start_source": "route_summary.started_at_plus_offset",
+    "planned_start_time": "2026-05-03T08:55:35+08:00",
+    "return_to_entry_eta_if_turn_back_at_checkpoint": "2026-05-03T13:35:35+08:00",
+    "target_eta": "2026-05-03T15:25:35+08:00",
+    "team_multiplier_status": "not_derived_no_human_stats",
+    "turn_back_checkpoint_eta": "2026-05-03T11:55:35+08:00",
+    "turn_back_checkpoint_node_name": "雲海保線所"
+  },
+  "estimates": [
+    {
+      "cumulative_duration_minutes": 30,
+      "elapsed_time_policy": "total_elapsed_time_including_normal_rest",
+      "estimate_id": "eta.timing.g11_nenggao.001",
+      "eta": "2026-05-03T09:25:35+08:00",
+      "from_node_name": "霧社",
+      "route_guide_time_kind": "segment",
+      "segment_duration_minutes": 30,
+      "source_candidate_id": "timing.g11_nenggao.001",
+      "to_node_name": "廬山部落"
+    },
+    {
+      "cumulative_duration_minutes": 60,
+      "elapsed_time_policy": "total_elapsed_time_including_normal_rest",
+      "estimate_id": "eta.timing.g11_nenggao.002",
+      "eta": "2026-05-03T09:55:35+08:00",
+      "from_node_name": "廬山部落",
+      "route_guide_time_kind": "segment",
+      "segment_duration_minutes": 30,
+      "source_candidate_id": "timing.g11_nenggao.002",
+      "to_node_name": "屯原登山口"
+    },
+    {
+      "cumulative_duration_minutes": 180,
+      "elapsed_time_policy": "total_elapsed_time_including_normal_rest",
+      "estimate_id": "eta.timing.g11_nenggao.003",
+      "eta": "2026-05-03T11:55:35+08:00",
+      "from_node_name": "屯原登山口",
+      "route_guide_time_kind": "segment",
+      "segment_duration_minutes": 120,
+      "source_candidate_id": "timing.g11_nenggao.003",
+      "to_node_name": "雲海保線所"
+    },
+    {
+      "cumulative_duration_minutes": 390,
+      "elapsed_time_policy": "total_elapsed_time_including_normal_rest",
+      "estimate_id": "eta.timing.g11_nenggao.004",
+      "eta": "2026-05-03T15:25:35+08:00",
+      "from_node_name": "雲海保線所",
+      "route_guide_time_kind": "segment",
+      "segment_duration_minutes": 210,
+      "source_candidate_id": "timing.g11_nenggao.004",
+      "to_node_name": "天池山莊"
+    }
+  ],
+  "plan_id": "eta_plan.chilai_nanhua_day1.day1.v0",
+  "project_id": "chilai_nanhua_day1"
+}

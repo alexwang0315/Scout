@@ -1,0 +1,78 @@
+[
+  {
+    "artifact_treatment": [
+      "Artifact",
+      "ModelInterpretation",
+      "HumanReview",
+      "DerivedMeasurement"
+    ],
+    "not_observed_fact": true,
+    "notes": "Registered as implementation context only; no crawler or dynamic app extraction in this slice.",
+    "reference_id": "planning_ref.joyhike.main_site",
+    "reference_type": "reference_product",
+    "scout_meaning": "Reference product precedent for Taiwan hiking planning primitives; not the controlling Scout data source.",
+    "supported_primitives": [
+      "route_nodes",
+      "segment_distance",
+      "elevation_gain_loss",
+      "daily_ascent_descent",
+      "estimated_walking_time",
+      "rest_time",
+      "weather",
+      "permit_hut_logistics",
+      "group_coordination"
+    ],
+    "title": "Joyhike main site",
+    "uri": "https://joyhike.com/"
+  },
+  {
+    "artifact_treatment": [
+      "Artifact",
+      "ModelInterpretation",
+      "HumanReview",
+      "DerivedMeasurement"
+    ],
+    "not_observed_fact": true,
+    "notes": "Planning reference only; accepted assumptions require human review.",
+    "reference_id": "planning_ref.joyhike.route_planning_model",
+    "reference_type": "route_planning_method",
+    "scout_meaning": "Reference model for planning primitives and route difficulty context.",
+    "supported_primitives": [
+      "route_nodes",
+      "segment_distance",
+      "elevation_gain_loss",
+      "estimated_walking_time",
+      "rest_time",
+      "weather"
+    ],
+    "title": "Joyhike blog route planning model",
+    "uri": "https://blog.joyhike.com/2022/05/trailslevel.html"
+  },
+  {
+    "artifact_treatment": [
+      "Artifact",
+      "ModelInterpretation",
+      "HumanReview",
+      "DerivedMeasurement"
+    ],
+    "not_observed_fact": true,
+    "notes": "Not an ObservedFact; calculations become DerivedMeasurement only after assumptions are explicit.",
+    "reference_id": "planning_ref.ptt.sunriver_timing",
+    "reference_type": "community_timing_evidence",
+    "scout_meaning": "Community evidence for route-guide timing and fitness calibration assumptions.",
+    "supported_primitives": [
+      "route_guide_segment_time_minutes",
+      "personal_route_guide_multiplier",
+      "team_route_guide_multiplier",
+      "pace_multiplier_basis",
+      "fixed_rest_minutes",
+      "conservative_long_day_adjustment",
+      "eta_at_checkpoint",
+      "eta_at_camp_or_overnight_point",
+      "dark_arrival_margin_minutes",
+      "planned_vs_actual_calibration_refs"
+    ],
+    "title": "PTT Hiking 上河時間與步程計算",
+    "uri": "https://www.ptt.cc/bbs/Hiking/M.1696430399.A.151.html"
+  }
+]

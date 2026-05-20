@@ -1,0 +1,1259 @@
+{
+  "artifact_kind": "pretrip_departure_bundle_manifest",
+  "artifact_manifest": {
+    "missing_ref_count": 0,
+    "project_artifact_count": 42,
+    "project_ref_hashes": [
+      {
+        "exists": true,
+        "ref": "outputs/pretrip_package.json",
+        "ref_key": "package_ref",
+        "sha256": "0b70c91941267cc5b23bd5d9ea56c13977c9f8f25519c18b9e6baf94ad6b91ab",
+        "status": "candidate",
+        "summary": {
+          "checkpoint_candidate_count": 11,
+          "has_dtm_coverage_summary": true,
+          "package_id": "pretrip.chilai_nanhua_day1.v0",
+          "project_id": "chilai_nanhua_day1",
+          "segment_candidate_count": 10,
+          "source_artifact_count": 2,
+          "status": "candidate",
+          "version": "0.1.0"
+        }
+      },
+      {
+        "exists": true,
+        "ref": "normalized/routes/route_summary.json",
+        "ref_key": "route_summary_ref",
+        "sha256": "7fb5eb4265f01247b3b84092a19803d7bfdb36e5f77ff09b45aa9330532095c0",
+        "status": null,
+        "summary": {
+          "distance_m": 14599.78,
+          "point_count": 2211,
+          "route_name": "奇萊南華-能高越嶺步道Day1"
+        }
+      },
+      {
+        "exists": true,
+        "ref": "outputs/route_comparison.json",
+        "ref_key": "route_comparison_ref",
+        "sha256": "3ecc614a7cc496651734b140356ae67b35d1787f4025a07aa38238bb771616fb",
+        "status": null,
+        "summary": {
+          "bbox_overlaps": true,
+          "classification": "comparison_only",
+          "comparison_id": "route_comparison.chilai_nanhua_day1.similar_gpx.v0",
+          "comparison_route_name": "2022-08-20_21尾上深堀踏查(文若) 001",
+          "distance_delta_m": -5053.24,
+          "point_count_delta": -1275,
+          "primary_route_name": "奇萊南華-能高越嶺步道Day1"
+        }
+      },
+      {
+        "exists": true,
+        "ref": "normalized/terrain/dtm_coverage_summary.json",
+        "ref_key": "dtm_coverage_summary_ref",
+        "sha256": "42a381686fbf7ff7b91e9402cd175fe59911e89e1983cc6b614a835595048162",
+        "status": null,
+        "summary": {
+          "candidate_tile_count": 10,
+          "missing_grid_count": 0,
+          "scanned_header_count": 1411,
+          "summary_id": "dtm_coverage.chilai_nanhua_day1.20m"
+        }
+      },
+      {
+        "exists": true,
+        "ref": "normalized/terrain/segment_dtm_coverage.json",
+        "ref_key": "segment_dtm_coverage_ref",
+        "sha256": "52b353c96d2afde56c31dd4a170cca81b04053ade340fa4ce764db2f7ddb2225",
+        "status": null,
+        "summary": {
+          "candidate_tile_count": 10,
+          "dtm_coverage_summary_id": "dtm_coverage.chilai_nanhua_day1.20m",
+          "segment_count": 10,
+          "summary_id": "terrain_summary.chilai_nanhua_day1.20m",
+          "unlinked_segment_count": 0
+        }
+      },
+      {
+        "exists": true,
+        "ref": "candidates/checkpoints.json",
+        "ref_key": "checkpoint_candidates_ref",
+        "sha256": "c61da902412b9fd6ef700cef1f913707c9bc2dde4a5e3536b27def232a0395d5",
+        "status": null,
+        "summary": {
+          "item_count": 11
+        }
+      },
+      {
+        "exists": true,
+        "ref": "candidates/segments.json",
+        "ref_key": "segment_candidates_ref",
+        "sha256": "16dff7676ca93a24df80e8f5f5dedf9ca48b2f9162839b586456e6c2085f5026",
+        "status": null,
+        "summary": {
+          "item_count": 10
+        }
+      },
+      {
+        "exists": true,
+        "ref": "candidates/retreat_routes.json",
+        "ref_key": "retreat_routes_ref",
+        "sha256": "1056291d55392dfb7e718aef189011bdb540f0b10816a7d4fb9af18a7e5ae9fe",
+        "status": null,
+        "summary": {
+          "item_count": 1
+        }
+      },
+      {
+        "exists": true,
+        "ref": "normalized/map/map_context.geojson",
+        "ref_key": "map_context_ref",
+        "sha256": "f9342ed8c828ed8c453a752f62dffbcc6eabe085f85463d7403adbc2e8df8a25",
+        "status": null,
+        "summary": {
+          "feature_count": 3,
+          "geojson_type": "FeatureCollection"
+        }
+      },
+      {
+        "exists": true,
+        "ref": "candidates/map_candidates.json",
+        "ref_key": "map_candidates_ref",
+        "sha256": "6367059283fea7de688df8bc8333ff5e64a9272ca27c2c3609b8ba46516bed85",
+        "status": null,
+        "summary": {
+          "corridor_candidate_count": 1,
+          "hazard_candidate_count": 1,
+          "poi_candidate_count": 1
+        }
+      },
+      {
+        "exists": true,
+        "ref": "candidates/planning_references.json",
+        "ref_key": "planning_references_ref",
+        "sha256": "3058bc6763d89955ec4c93c97451a81a7b8d691bef73f94982fb45fac4b362ab",
+        "status": null,
+        "summary": {
+          "item_count": 3
+        }
+      },
+      {
+        "exists": true,
+        "ref": "candidates/route_guide_timing.json",
+        "ref_key": "route_guide_timing_ref",
+        "sha256": "0d418dcc2d236236749bb9ef84a8d6a97ecedec454ce9f8e4cb8b3cdf2bf32c4",
+        "status": null,
+        "summary": {
+          "item_count": 19
+        }
+      },
+      {
+        "exists": true,
+        "ref": "candidates/route_note_candidates.json",
+        "ref_key": "route_note_candidates_ref",
+        "sha256": "9b2a41873bf773a6e64f900adfd7d5008138bab166b0d05bf456849919ac0348",
+        "status": "candidate_only",
+        "summary": {
+          "artifact_id": "route_note_candidates.chilai_nanhua_day1.rudy_like_gpx.v0",
+          "camp_or_water_hint_count": 8,
+          "hazard_hint_count": 2,
+          "landmark_hint_count": 37,
+          "note_candidate_count": 81,
+          "potential_ln_signal_count": 21,
+          "project_id": "chilai_nanhua_day1",
+          "raw_gpx_embedded": false,
+          "requires_human_review_before_ln_upgrade": true,
+          "route_condition_hint_count": 19,
+          "status": "candidate_only"
+        }
+      },
+      {
+        "exists": true,
+        "ref": "outputs/route_note_ln_proposals.json",
+        "ref_key": "route_note_ln_proposals_ref",
+        "sha256": "ce1db8fe116ac130ef61831a263818c926dfb4d3bc6237330f81ec26ed50f92d",
+        "status": "candidate_only",
+        "summary": {
+          "artifact_id": "route_note_ln_proposals.chilai_nanhua_day1.v0",
+          "hint_coverage_proposal_count": 19,
+          "human_review_required_before_use": true,
+          "human_review_required_count": 21,
+          "observed_fact_count": 0,
+          "project_id": "chilai_nanhua_day1",
+          "proposal_count": 21,
+          "raw_gpx_embedded": false,
+          "runtime_mutation_count": 0,
+          "status": "candidate_only",
+          "warning_coverage_proposal_count": 2
+        }
+      },
+      {
+        "exists": true,
+        "ref": "outputs/route_note_review_options.json",
+        "ref_key": "route_note_review_options_ref",
+        "sha256": "09bfb42ea4dc34a52d168c218728fbe416291cad1167a8c14ee19c23b1ff005c",
+        "status": "candidate_only_draft_only",
+        "summary": {
+          "artifact_id": "route_note_review_options.chilai_nanhua_day1.v0",
+          "candidate_only": true,
+          "candidate_only_count": 21,
+          "decision_recorded_count": 0,
+          "decision_recording_allowed": false,
+          "draft_only": true,
+          "draft_only_count": 21,
+          "project_id": "chilai_nanhua_day1",
+          "raw_gpx_embedded": false,
+          "review_option_count": 21,
+          "review_options_only": true,
+          "runtime_mutation_count": 0,
+          "status": "candidate_only_draft_only"
+        }
+      },
+      {
+        "exists": true,
+        "ref": "candidates/skill_config_manifest.json",
+        "ref_key": "skill_config_manifest_ref",
+        "sha256": "f4d76e84b46d999f474f1cf87597fce129988a524fee8efef7a14a24ddd8e206",
+        "status": null,
+        "summary": {
+          "manifest_id": "skill_config_manifest.chilai_nanhua_day1.pretrip_readiness.v0",
+          "project_id": "chilai_nanhua_day1",
+          "scope": "pretrip_readiness",
+          "version": "0.1.0"
+        }
+      },
+      {
+        "exists": true,
+        "ref": "outputs/readiness_report.json",
+        "ref_key": "readiness_report_ref",
+        "sha256": "0ee8e517b1e912f0c1e3664ee381b9d1870739bce1f52c4231a467251550fae5",
+        "status": "ready",
+        "summary": {
+          "finding_count": 0,
+          "status": "ready"
+        }
+      },
+      {
+        "exists": true,
+        "ref": "reviews/human_reviews.json",
+        "ref_key": "human_reviews_ref",
+        "sha256": "e8ab656c2172c7133a0eb18ef049ab1b569fce7d5b0059d4986aa076a2e75c65",
+        "status": null,
+        "summary": {
+          "log_id": "review_log.chilai_nanhua_day1.v0",
+          "review_count": 47
+        }
+      },
+      {
+        "exists": true,
+        "ref": "outputs/pretrip_package.reviewed.json",
+        "ref_key": "reviewed_package_ref",
+        "sha256": "2f3e8d3784f54e58c78a57fa3ceb6b6538277bff1050c936fb8b4ae9d269b68e",
+        "status": "reviewed",
+        "summary": {
+          "checkpoint_candidate_count": 11,
+          "package_id": "pretrip.chilai_nanhua_day1.v0",
+          "project_id": "chilai_nanhua_day1",
+          "retreat_route_candidate_count": 1,
+          "segment_candidate_count": 10,
+          "status": "reviewed",
+          "version": "0.1.0"
+        }
+      },
+      {
+        "exists": true,
+        "ref": "outputs/compiled_mission_graph.candidate.json",
+        "ref_key": "compiled_mission_graph_candidate_ref",
+        "sha256": "c2b42fee4feffbf7bca18d0262cc38a07b629df83e9dc8b4ac166bdf10a3015e",
+        "status": null,
+        "summary": {
+          "checkpoint_count": 11,
+          "diversion_point_count": 1,
+          "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+          "name": "奇萊南華-能高越嶺步道Day1",
+          "segment_count": 10
+        }
+      },
+      {
+        "exists": true,
+        "ref": "outputs/compiled_mission_graph.reviewed.json",
+        "ref_key": "compiled_mission_graph_reviewed_ref",
+        "sha256": "c2b42fee4feffbf7bca18d0262cc38a07b629df83e9dc8b4ac166bdf10a3015e",
+        "status": null,
+        "summary": {
+          "checkpoint_count": 11,
+          "diversion_point_count": 1,
+          "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+          "name": "奇萊南華-能高越嶺步道Day1",
+          "segment_count": 10
+        }
+      },
+      {
+        "exists": true,
+        "ref": "outputs/timing_measurements.json",
+        "ref_key": "timing_measurements_ref",
+        "sha256": "edf1513e34d793f8e53c6417491cc3ebbc8c162a33874ca56d3b33827fcc1ce8",
+        "status": null,
+        "summary": {
+          "measurement_candidate_count": 18
+        }
+      },
+      {
+        "exists": true,
+        "ref": "outputs/planned_eta.json",
+        "ref_key": "planned_eta_ref",
+        "sha256": "23f2c6034d309d08720cb200d14efd50391c82d6c890979380f973739997ca61",
+        "status": null,
+        "summary": {
+          "day1_target_node_name": "天池山莊",
+          "estimate_count": 4,
+          "plan_id": "eta_plan.chilai_nanhua_day1.day1.v0",
+          "planned_start_time": "2026-05-03T08:55:35+08:00",
+          "target_eta": "2026-05-03T15:25:35+08:00",
+          "team_multiplier_status": "not_derived_no_human_stats",
+          "turn_back_checkpoint_eta": "2026-05-03T11:55:35+08:00",
+          "turn_back_checkpoint_node_name": "雲海保線所"
+        }
+      },
+      {
+        "exists": true,
+        "ref": "outputs/brain_seed_nodes.json",
+        "ref_key": "brain_seed_nodes_ref",
+        "sha256": "e703ce2ba48a6006ccd19158a567ffc61ac820a4978c8b032deada1981a71ced",
+        "status": null,
+        "summary": {
+          "artifact_count": 13,
+          "derived_measurement_count": 31,
+          "human_review_count": 47,
+          "model_interpretation_count": 6,
+          "node_count": 97,
+          "observed_fact_count": 0
+        }
+      },
+      {
+        "exists": true,
+        "ref": "outputs/planning_skill_audit.json",
+        "ref_key": "planning_skill_audit_ref",
+        "sha256": "e1cb58bb30c8018e95f1e512f92ce92b737b5160e7a0a406d304aae663b13f31",
+        "status": null,
+        "summary": {
+          "node_types": [
+            "SkillRunRecord"
+          ],
+          "project_id": "chilai_nanhua_day1",
+          "record_count": 5,
+          "skill_ids": [
+            "pretrip-source-ingest",
+            "pretrip-cp-segment-suggest",
+            "pretrip-map-import",
+            "pretrip-mission-compile",
+            "pretrip-brain-seed-export"
+          ]
+        }
+      },
+      {
+        "exists": true,
+        "ref": "outputs/planning_skill_manifest_catalog.json",
+        "ref_key": "planning_skill_manifest_catalog_ref",
+        "sha256": "d924f84cb02d7cf1a4822fe2ba5b70f16322f5e4d475cea5646d998d3dc984c6",
+        "status": null,
+        "summary": {
+          "automatic_brain_write_allowed_count": 0,
+          "catalog_id": "planning_skill_manifest_catalog.chilai_nanhua_day1.v0",
+          "manifest_count": 5,
+          "phase1_runtime_mutation_allowed_count": 0,
+          "project_id": "chilai_nanhua_day1",
+          "raw_payloads_embedded": false,
+          "skill_catalog_artifact_kind": "planning_skill_manifest_catalog",
+          "skill_ids": [
+            "pretrip-source-ingest",
+            "pretrip-cp-segment-suggest",
+            "pretrip-map-import",
+            "pretrip-mission-compile",
+            "pretrip-brain-seed-export"
+          ]
+        }
+      },
+      {
+        "exists": true,
+        "ref": "outputs/poi_readiness_candidates.json",
+        "ref_key": "poi_readiness_candidates_ref",
+        "sha256": "4a29819ee5dc15e9dff056bf9c5672ea4fae1a2db7ebc9adaf62421576e8dc16",
+        "status": "candidate_only",
+        "summary": {
+          "artifact_id": "poi_readiness_candidates.chilai_nanhua_day1.v0",
+          "blocker_candidate_count": 0,
+          "finding_candidate_count": 0,
+          "finding_severities": [],
+          "policy_candidate_count": 1,
+          "policy_categories": [
+            "route_corridor_poi_coverage"
+          ],
+          "project_id": "chilai_nanhua_day1",
+          "route_corridor_poi_count": 1,
+          "status": "candidate_only",
+          "warning_candidate_count": 0
+        }
+      },
+      {
+        "exists": true,
+        "ref": "outputs/segment_policy_candidates.json",
+        "ref_key": "segment_policy_candidates_ref",
+        "sha256": "12b36c24cb815648edc905d319e03ae6b1ba86a4b7907d328ac37a94cd6b1a4c",
+        "status": "candidate_only",
+        "summary": {
+          "artifact_id": "segment_policy_candidates.chilai_nanhua_day1.v0",
+          "candidate_count": 10,
+          "candidate_only_count": 10,
+          "human_review_required_count": 10,
+          "project_id": "chilai_nanhua_day1",
+          "requires_daylight_count": 10,
+          "retreat_available_count": 2,
+          "signal_expected_count": 1,
+          "status": "candidate_only"
+        }
+      },
+      {
+        "exists": true,
+        "ref": "outputs/plan_validation_candidates.json",
+        "ref_key": "plan_validation_candidates_ref",
+        "sha256": "256de699fa6254ee9afbcfaff7e5e839b99f124f9ee81621375c5d8546f738ad",
+        "status": "candidate_only",
+        "summary": {
+          "artifact_id": "plan_validation_candidates.chilai_nanhua_day1.v0",
+          "blocker_candidate_count": 0,
+          "finding_candidate_count": 6,
+          "finding_severities": [
+            "warning"
+          ],
+          "hard_readiness_finding_count": 0,
+          "hard_readiness_mutation_allowed": false,
+          "hard_readiness_status": "ready",
+          "project_id": "chilai_nanhua_day1",
+          "raw_payloads_embedded": false,
+          "source_ref_count": 8,
+          "status": "candidate_only",
+          "warning_candidate_count": 6
+        }
+      },
+      {
+        "exists": true,
+        "ref": "outputs/runtime_audit_manifest.json",
+        "ref_key": "runtime_audit_manifest_ref",
+        "sha256": "ca777997116b5b80a2e6a0725a1ae9dc051ce475dd5fb31f272156c8b2659100",
+        "status": "candidate_only",
+        "summary": {
+          "axis_names": [
+            "checkpoint_eta",
+            "route_progress_corridor",
+            "retreat_decision",
+            "segment_policy",
+            "weather_daylight",
+            "resource_remote_summary",
+            "brain_seed_run_records",
+            "readiness_validation"
+          ],
+          "comparison_axis_count": 8,
+          "incident_package_imported": false,
+          "live_comparison_count": 0,
+          "manifest_id": "runtime_audit_manifest.chilai_nanhua_day1.v0",
+          "observed_item_count": 0,
+          "phase1_runtime_mutation_allowed": false,
+          "planned_ref_count": 15,
+          "project_id": "chilai_nanhua_day1",
+          "raw_payload_count": 0,
+          "runtime_artifact_kind": "plan_to_runtime_audit_manifest",
+          "status": "candidate_only"
+        }
+      },
+      {
+        "exists": true,
+        "ref": "outputs/runtime_handoff_metadata.candidate.json",
+        "ref_key": "runtime_handoff_metadata_ref",
+        "sha256": "86ba9992630d9c759374317e1d072a14156eeb3a725c1b253b8bf62c6e2b6147",
+        "status": "candidate_metadata_only",
+        "summary": {
+          "bridge_mutation_allowed": false,
+          "bridge_mutation_count": 0,
+          "candidate_metadata_only": true,
+          "final_runtime_write_allowed": false,
+          "handoff_artifact_kind": "pretrip_runtime_handoff_metadata",
+          "live_runtime_read_allowed": false,
+          "manifest_id": "runtime_handoff_metadata.chilai_nanhua_day1.v0",
+          "phase1_runtime_mutation_allowed": false,
+          "phase2_writeback_allowed": false,
+          "plan_version_id": "pretrip.chilai_nanhua_day1.v0:0.1.0",
+          "project_id": "chilai_nanhua_day1",
+          "raw_payloads_embedded": false,
+          "readiness_ref_count": 3,
+          "route_ref_count": 4,
+          "route_source_count": 1,
+          "runtime_write_count": 0,
+          "safety_api_calls_allowed": false,
+          "safety_call_count": 0,
+          "status": "candidate_metadata_only"
+        }
+      },
+      {
+        "exists": true,
+        "ref": "outputs/after_action_next_plan_candidates.json",
+        "ref_key": "after_action_next_plan_candidates_ref",
+        "sha256": "8cc608a50fba4028fa5038ef7d716e127a9126f7869a39b0b2fe30885cd6e3d3",
+        "status": "candidate_only",
+        "summary": {
+          "artifact_id": "after_action_next_plan_candidates.chilai_nanhua_day1.scout_260512.v0",
+          "brain_node_ref_count": 3,
+          "candidate_count": 3,
+          "deterministic_finding_count": 1,
+          "evidence_ref_count": 11,
+          "historical_evidence_mutation_allowed": false,
+          "incident_package_ref_count": 0,
+          "model_suggestion_count": 1,
+          "observed_fact_writeback_allowed": false,
+          "project_id": "chilai_nanhua_day1",
+          "raw_payloads_embedded": false,
+          "reviewer_note_count": 1,
+          "source_case_id": "scout_260512_field_golden",
+          "status": "candidate_only"
+        }
+      },
+      {
+        "exists": true,
+        "ref": "outputs/review_queue_manifest.json",
+        "ref_key": "review_queue_manifest_ref",
+        "sha256": "9ed6cef757f35b21e2739f6f483b50b08d506c801362555101103f125b5a4674",
+        "status": "candidate_review_queue_only",
+        "summary": {
+          "accepts_candidates": false,
+          "blocker_count": 0,
+          "candidate_queue_only": true,
+          "category_counts": {
+            "contour_interpretation": 2,
+            "departure_bundle": 1,
+            "plan_validation": 6,
+            "route_note": 21,
+            "runtime_handoff": 1,
+            "segment_policy": 10,
+            "weather_daylight": 1
+          },
+          "decisions_recorded": false,
+          "item_count": 42,
+          "manifest_id": "review_queue.chilai_nanhua_day1.v0",
+          "package_mutation_allowed": false,
+          "phase1_runtime_mutation_allowed": false,
+          "phase2_writeback_allowed": false,
+          "project_id": "chilai_nanhua_day1",
+          "queue_artifact_kind": "pretrip_review_queue_manifest",
+          "raw_payloads_embedded": false,
+          "rejects_candidates": false,
+          "review_count": 33,
+          "review_log_mutation_allowed": false,
+          "source_ref_count": 8,
+          "status": "candidate_review_queue_only",
+          "ui_included": false,
+          "warning_count": 9
+        }
+      },
+      {
+        "exists": true,
+        "ref": "reviews/review_draft_log.json",
+        "ref_key": "review_draft_log_ref",
+        "sha256": "82b0179eaffc50396e6898aa79b9da8e22d0b69cb9900e227f8c7078dcebdfd9",
+        "status": "draft_only",
+        "summary": {
+          "action_count": 3,
+          "admin_api_integration": false,
+          "category_counts": {
+            "contour": 1,
+            "poi_readiness": 1,
+            "segment_policy": 1
+          },
+          "decisions_recorded": false,
+          "draft_action_count": 3,
+          "draft_artifact_kind": "pretrip_review_draft_log",
+          "draft_only": true,
+          "external_api_calls_made": false,
+          "log_id": "review_draft_log.chilai_nanhua_day1.v0",
+          "mutation_action_count": 0,
+          "package_mutation_allowed": false,
+          "phase1_runtime_mutation_allowed": false,
+          "phase2_writeback_allowed": false,
+          "project_id": "chilai_nanhua_day1",
+          "raw_payloads_embedded": false,
+          "review_log_mutation_allowed": false,
+          "runtime_mutation_allowed": false,
+          "source_mutation_allowed": false,
+          "source_ref_count": 3,
+          "status": "draft_only"
+        }
+      },
+      {
+        "exists": true,
+        "ref": "reviews/review_decision_log.json",
+        "ref_key": "review_decision_log_ref",
+        "sha256": "b67fc79c3e53d530f1d204141d3f6d2c8833bd9b4b07e42a10fc5d8335a1a205",
+        "status": null,
+        "summary": {
+          "accepted_count": 1,
+          "action_count": 3,
+          "admin_api_integration": false,
+          "compiles_mission_graph": false,
+          "corrected_count": 1,
+          "decision_artifact_kind": "pretrip_review_decision_log",
+          "log_id": "review_decision_log.chilai_nanhua_day1.v0",
+          "package_mutation_allowed": false,
+          "package_mutation_count": 0,
+          "phase1_runtime_mutation_allowed": false,
+          "phase2_writeback_allowed": false,
+          "project_id": "chilai_nanhua_day1",
+          "raw_payloads_embedded": false,
+          "rejected_count": 1,
+          "runtime_mutation_allowed": false,
+          "runtime_mutation_count": 0,
+          "source_mutation_allowed": false,
+          "source_ref_count": 3
+        }
+      },
+      {
+        "exists": true,
+        "ref": "outputs/review_decision_apply_plan.json",
+        "ref_key": "review_decision_apply_plan_ref",
+        "sha256": "a90d0c16ded18b02e0ece65bb2b4009ecdf2a78f6ac48e901df879d40c9c5c33",
+        "status": null,
+        "summary": {
+          "accepted_count": 1,
+          "apply_artifact_kind": "pretrip_review_decision_apply_plan",
+          "compiles_mission_graph": false,
+          "corrected_count": 1,
+          "decision_count": 3,
+          "package_candidate_apply_count": 0,
+          "package_mutation_allowed": false,
+          "phase1_runtime_mutation_allowed": false,
+          "phase2_writeback_allowed": false,
+          "plan_id": "review_decision_apply_plan.chilai_nanhua_day1.v0",
+          "project_id": "chilai_nanhua_day1",
+          "raw_payloads_embedded": false,
+          "rejected_count": 1,
+          "runtime_mutation_allowed": false,
+          "runtime_mutation_count": 0,
+          "source_mutation_allowed": false,
+          "would_apply_only": true
+        }
+      },
+      {
+        "exists": true,
+        "ref": "outputs/external_import_queue.json",
+        "ref_key": "external_import_queue_ref",
+        "sha256": "9dc0b493392e79bfe61035716ec54821bc17c07f8f601eb5ed03b523e7053576",
+        "status": "pending_human_review",
+        "summary": {
+          "crawler_enabled_count": 0,
+          "network_call_count": 0,
+          "no_crawler": true,
+          "no_network": true,
+          "observed_fact_count": 0,
+          "pending_count": 3,
+          "project_id": "chilai_nanhua_day1",
+          "queue_id": "external_import_queue.chilai_nanhua_day1.v0",
+          "raw_payloads_embedded": false,
+          "request_count": 3,
+          "source_ids": [
+            "source.joyhike.main_site",
+            "source.joyhike.blog",
+            "source.ptt.sunriver_timing"
+          ],
+          "status": "pending_human_review"
+        }
+      },
+      {
+        "exists": true,
+        "ref": "outputs/expert_contribution_log.json",
+        "ref_key": "expert_contribution_log_ref",
+        "sha256": "06d8391dcd33fa6a2dcde8c0545cc65964022981e95ed6f57c2a53c33d8f36be",
+        "status": "candidate_memory_seed_only",
+        "summary": {
+          "brain_writeback_allowed": false,
+          "brain_writeback_count": 0,
+          "candidate_set_edit_count": 2,
+          "contribution_count": 3,
+          "external_import_edit_count": 1,
+          "log_id": "expert_contribution_log.chilai_nanhua_day1.v0",
+          "memory_seed_candidate_count": 3,
+          "memory_seed_candidate_only": true,
+          "project_id": "chilai_nanhua_day1",
+          "status": "candidate_memory_seed_only"
+        }
+      },
+      {
+        "exists": true,
+        "ref": "outputs/remote_contact_summary.json",
+        "ref_key": "remote_contact_summary_ref",
+        "sha256": "a9ad143692cca951eb4c8fb2fe0130fea43d0df026a8ba5ebfabc80e3744532e",
+        "status": null,
+        "summary": {
+          "audience": "remote_contacts",
+          "conservative_note_count": 3,
+          "day1_target_eta": "2026-05-03T15:25:35+08:00",
+          "planned_start": "2026-05-03T08:55:35+08:00",
+          "project_id": "chilai_nanhua_day1",
+          "readiness_status": "ready",
+          "return_to_entry_eta": "2026-05-03T13:35:35+08:00",
+          "route_name": "奇萊南華-能高越嶺步道Day1",
+          "source_package_version": "0.1.0",
+          "summary_id": "remote_contact_summary.chilai_nanhua_day1.v0",
+          "turn_back_checkpoint_eta": "2026-05-03T11:55:35+08:00"
+        }
+      },
+      {
+        "exists": true,
+        "ref": "outputs/resource_plan.json",
+        "ref_key": "resource_plan_ref",
+        "sha256": "c77e747615d2b592cce84cd5f0d24ec4e352cdb2ef2898831fa96cce16529099",
+        "status": "candidate_only",
+        "summary": {
+          "blocker_candidate_count": 0,
+          "blocks_existing_eta_or_readiness": false,
+          "device_count": 4,
+          "equipment_count": 4,
+          "external_api_calls_made": false,
+          "hard_readiness_mutation_allowed": false,
+          "plan_id": "resource_plan.chilai_nanhua_day1.v0",
+          "project_id": "chilai_nanhua_day1",
+          "raw_payloads_embedded": false,
+          "resource_artifact_kind": "resource_team_departure_plan",
+          "status": "candidate_only",
+          "team_member_count": 2,
+          "warning_candidate_count": 3
+        }
+      },
+      {
+        "exists": true,
+        "ref": "outputs/weather_daylight_evidence.json",
+        "ref_key": "weather_daylight_evidence_ref",
+        "sha256": "f9185793acc58afacd0b8dffd2b6068c06b8d629cc32ae536b2df6e06773662f",
+        "status": "candidate_only",
+        "summary": {
+          "authoritative_weather_computed": false,
+          "confidence": "unknown",
+          "dark_arrival_warning_margin_min": 60,
+          "date": "2026-05-03",
+          "daylight_source_status": "manual_placeholder",
+          "evidence_id": "weather_daylight.chilai_nanhua_day1.2026-05-03.v0",
+          "external_api_calls_made": false,
+          "human_review_required": true,
+          "project_id": "chilai_nanhua_day1",
+          "route_ref": "normalized/routes/route_summary.json",
+          "source_ref_count": 3,
+          "staleness": "placeholder",
+          "status": "candidate_only",
+          "threshold_policy_configurable": true,
+          "threshold_policy_id": "cwa_style_mountain_weather_daylight_reference.v0",
+          "threshold_policy_status": "reference_only",
+          "validation_status": "human_review_required",
+          "weather_source_status": "manual_placeholder"
+        }
+      },
+      {
+        "exists": true,
+        "ref": "outputs/contour_interpretation_candidates.json",
+        "ref_key": "contour_interpretation_candidates_ref",
+        "sha256": "3c4b7278223e85bf6a4e877485fc8db223aec5fe540fc87229c4ac468df7151c",
+        "status": "candidate",
+        "summary": {
+          "artifact_id": "contour_interpretation.chilai_nanhua_day1.v0",
+          "candidate_count": 2,
+          "human_review_required_count": 2,
+          "not_observed_fact": true,
+          "project_id": "chilai_nanhua_day1",
+          "status": "candidate"
+        }
+      }
+    ],
+    "source_artifact_count": 2,
+    "source_checksum_summaries": [
+      {
+        "artifact_id": "artifact:gpx:chilai_nanhua_day1",
+        "artifact_kind": "gpx",
+        "media_type": "application/gpx+xml",
+        "sha256": "3c1f4843ecea5cb2fc85f92934d3d1a220738c900576e4976d4c09975673956c",
+        "size_bytes": 275392
+      },
+      {
+        "artifact_id": "artifact:photo:g11_hiking",
+        "artifact_kind": "photo",
+        "media_type": "image/jpeg",
+        "sha256": "ff28bf2fd66c6f8a63e759800fcdb8363862832ebe7b87dc900e849f1c7a058d",
+        "size_bytes": 209877
+      }
+    ],
+    "total_artifact_count": 44
+  },
+  "audit_refs": [
+    {
+      "exists": true,
+      "ref": "reviews/human_reviews.json",
+      "ref_key": "human_reviews_ref",
+      "sha256": "e8ab656c2172c7133a0eb18ef049ab1b569fce7d5b0059d4986aa076a2e75c65",
+      "status": null,
+      "summary": {
+        "log_id": "review_log.chilai_nanhua_day1.v0",
+        "review_count": 47
+      }
+    },
+    {
+      "exists": true,
+      "ref": "reviews/review_draft_log.json",
+      "ref_key": "review_draft_log_ref",
+      "sha256": "82b0179eaffc50396e6898aa79b9da8e22d0b69cb9900e227f8c7078dcebdfd9",
+      "status": "draft_only",
+      "summary": {
+        "action_count": 3,
+        "admin_api_integration": false,
+        "category_counts": {
+          "contour": 1,
+          "poi_readiness": 1,
+          "segment_policy": 1
+        },
+        "decisions_recorded": false,
+        "draft_action_count": 3,
+        "draft_artifact_kind": "pretrip_review_draft_log",
+        "draft_only": true,
+        "external_api_calls_made": false,
+        "log_id": "review_draft_log.chilai_nanhua_day1.v0",
+        "mutation_action_count": 0,
+        "package_mutation_allowed": false,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "project_id": "chilai_nanhua_day1",
+        "raw_payloads_embedded": false,
+        "review_log_mutation_allowed": false,
+        "runtime_mutation_allowed": false,
+        "source_mutation_allowed": false,
+        "source_ref_count": 3,
+        "status": "draft_only"
+      }
+    },
+    {
+      "exists": true,
+      "ref": "outputs/planning_skill_audit.json",
+      "ref_key": "planning_skill_audit_ref",
+      "sha256": "e1cb58bb30c8018e95f1e512f92ce92b737b5160e7a0a406d304aae663b13f31",
+      "status": null,
+      "summary": {
+        "node_types": [
+          "SkillRunRecord"
+        ],
+        "project_id": "chilai_nanhua_day1",
+        "record_count": 5,
+        "skill_ids": [
+          "pretrip-source-ingest",
+          "pretrip-cp-segment-suggest",
+          "pretrip-map-import",
+          "pretrip-mission-compile",
+          "pretrip-brain-seed-export"
+        ]
+      }
+    },
+    {
+      "exists": true,
+      "ref": "outputs/runtime_audit_manifest.json",
+      "ref_key": "runtime_audit_manifest_ref",
+      "sha256": "ca777997116b5b80a2e6a0725a1ae9dc051ce475dd5fb31f272156c8b2659100",
+      "status": "candidate_only",
+      "summary": {
+        "axis_names": [
+          "checkpoint_eta",
+          "route_progress_corridor",
+          "retreat_decision",
+          "segment_policy",
+          "weather_daylight",
+          "resource_remote_summary",
+          "brain_seed_run_records",
+          "readiness_validation"
+        ],
+        "comparison_axis_count": 8,
+        "incident_package_imported": false,
+        "live_comparison_count": 0,
+        "manifest_id": "runtime_audit_manifest.chilai_nanhua_day1.v0",
+        "observed_item_count": 0,
+        "phase1_runtime_mutation_allowed": false,
+        "planned_ref_count": 15,
+        "project_id": "chilai_nanhua_day1",
+        "raw_payload_count": 0,
+        "runtime_artifact_kind": "plan_to_runtime_audit_manifest",
+        "status": "candidate_only"
+      }
+    },
+    {
+      "exists": true,
+      "ref": "outputs/after_action_next_plan_candidates.json",
+      "ref_key": "after_action_next_plan_candidates_ref",
+      "sha256": "8cc608a50fba4028fa5038ef7d716e127a9126f7869a39b0b2fe30885cd6e3d3",
+      "status": "candidate_only",
+      "summary": {
+        "artifact_id": "after_action_next_plan_candidates.chilai_nanhua_day1.scout_260512.v0",
+        "brain_node_ref_count": 3,
+        "candidate_count": 3,
+        "deterministic_finding_count": 1,
+        "evidence_ref_count": 11,
+        "historical_evidence_mutation_allowed": false,
+        "incident_package_ref_count": 0,
+        "model_suggestion_count": 1,
+        "observed_fact_writeback_allowed": false,
+        "project_id": "chilai_nanhua_day1",
+        "raw_payloads_embedded": false,
+        "reviewer_note_count": 1,
+        "source_case_id": "scout_260512_field_golden",
+        "status": "candidate_only"
+      }
+    },
+    {
+      "exists": true,
+      "ref": "outputs/brain_seed_nodes.json",
+      "ref_key": "brain_seed_nodes_ref",
+      "sha256": "e703ce2ba48a6006ccd19158a567ffc61ac820a4978c8b032deada1981a71ced",
+      "status": null,
+      "summary": {
+        "artifact_count": 13,
+        "derived_measurement_count": 31,
+        "human_review_count": 47,
+        "model_interpretation_count": 6,
+        "node_count": 97,
+        "observed_fact_count": 0
+      }
+    }
+  ],
+  "boundary": {
+    "external_api_calls_made": false,
+    "fixture_first": true,
+    "human_review_required_before_departure": true,
+    "not_departure_approval": true,
+    "notes": [
+      "Field-trial handoff manifest only; it does not approve real departure.",
+      "All refs point at fixture-reviewed or candidate planning artifacts.",
+      "Review draft log refs are audit-only draft pointers and are not departure approval.",
+      "Phase 1 runtime and Phase 2 writeback stores are not mutated by this builder.",
+      "Raw GPX, JPG, DTM, and incident/sample payloads are excluded."
+    ],
+    "phase1_runtime_mutation_allowed": false,
+    "phase2_writeback_allowed": false,
+    "raw_payloads_embedded": false
+  },
+  "bundle_id": "departure_bundle.chilai_nanhua_day1.v0",
+  "counts": {
+    "audit_ref_count": 6,
+    "readiness_finding_count": 0,
+    "remote_conservative_note_count": 3,
+    "required_ref_count": 24,
+    "resource_blocker_candidate_count": 0,
+    "resource_warning_candidate_count": 3,
+    "route_ref_count": 7,
+    "source_checksum_count": 2,
+    "terrain_ref_count": 3
+  },
+  "package": {
+    "checkpoint_candidate_count": 11,
+    "package_id": "pretrip.chilai_nanhua_day1.v0",
+    "project_id": "chilai_nanhua_day1",
+    "retreat_route_candidate_count": 1,
+    "reviewed_package_ref": "outputs/pretrip_package.reviewed.json",
+    "segment_candidate_count": 10,
+    "source_artifact_count": 2,
+    "status": "reviewed",
+    "version": "0.1.0"
+  },
+  "project_id": "chilai_nanhua_day1",
+  "readiness_refs": [
+    {
+      "exists": true,
+      "ref": "outputs/readiness_report.json",
+      "ref_key": "readiness_report_ref",
+      "sha256": "0ee8e517b1e912f0c1e3664ee381b9d1870739bce1f52c4231a467251550fae5",
+      "status": "ready",
+      "summary": {
+        "finding_count": 0,
+        "status": "ready"
+      }
+    },
+    {
+      "exists": true,
+      "ref": "outputs/plan_validation_candidates.json",
+      "ref_key": "plan_validation_candidates_ref",
+      "sha256": "256de699fa6254ee9afbcfaff7e5e839b99f124f9ee81621375c5d8546f738ad",
+      "status": "candidate_only",
+      "summary": {
+        "artifact_id": "plan_validation_candidates.chilai_nanhua_day1.v0",
+        "blocker_candidate_count": 0,
+        "finding_candidate_count": 6,
+        "finding_severities": [
+          "warning"
+        ],
+        "hard_readiness_finding_count": 0,
+        "hard_readiness_mutation_allowed": false,
+        "hard_readiness_status": "ready",
+        "project_id": "chilai_nanhua_day1",
+        "raw_payloads_embedded": false,
+        "source_ref_count": 8,
+        "status": "candidate_only",
+        "warning_candidate_count": 6
+      }
+    },
+    {
+      "exists": true,
+      "ref": "outputs/poi_readiness_candidates.json",
+      "ref_key": "poi_readiness_candidates_ref",
+      "sha256": "4a29819ee5dc15e9dff056bf9c5672ea4fae1a2db7ebc9adaf62421576e8dc16",
+      "status": "candidate_only",
+      "summary": {
+        "artifact_id": "poi_readiness_candidates.chilai_nanhua_day1.v0",
+        "blocker_candidate_count": 0,
+        "finding_candidate_count": 0,
+        "finding_severities": [],
+        "policy_candidate_count": 1,
+        "policy_categories": [
+          "route_corridor_poi_coverage"
+        ],
+        "project_id": "chilai_nanhua_day1",
+        "route_corridor_poi_count": 1,
+        "status": "candidate_only",
+        "warning_candidate_count": 0
+      }
+    },
+    {
+      "exists": true,
+      "ref": "outputs/segment_policy_candidates.json",
+      "ref_key": "segment_policy_candidates_ref",
+      "sha256": "12b36c24cb815648edc905d319e03ae6b1ba86a4b7907d328ac37a94cd6b1a4c",
+      "status": "candidate_only",
+      "summary": {
+        "artifact_id": "segment_policy_candidates.chilai_nanhua_day1.v0",
+        "candidate_count": 10,
+        "candidate_only_count": 10,
+        "human_review_required_count": 10,
+        "project_id": "chilai_nanhua_day1",
+        "requires_daylight_count": 10,
+        "retreat_available_count": 2,
+        "signal_expected_count": 1,
+        "status": "candidate_only"
+      }
+    },
+    {
+      "exists": true,
+      "ref": "outputs/weather_daylight_evidence.json",
+      "ref_key": "weather_daylight_evidence_ref",
+      "sha256": "f9185793acc58afacd0b8dffd2b6068c06b8d629cc32ae536b2df6e06773662f",
+      "status": "candidate_only",
+      "summary": {
+        "authoritative_weather_computed": false,
+        "confidence": "unknown",
+        "dark_arrival_warning_margin_min": 60,
+        "date": "2026-05-03",
+        "daylight_source_status": "manual_placeholder",
+        "evidence_id": "weather_daylight.chilai_nanhua_day1.2026-05-03.v0",
+        "external_api_calls_made": false,
+        "human_review_required": true,
+        "project_id": "chilai_nanhua_day1",
+        "route_ref": "normalized/routes/route_summary.json",
+        "source_ref_count": 3,
+        "staleness": "placeholder",
+        "status": "candidate_only",
+        "threshold_policy_configurable": true,
+        "threshold_policy_id": "cwa_style_mountain_weather_daylight_reference.v0",
+        "threshold_policy_status": "reference_only",
+        "validation_status": "human_review_required",
+        "weather_source_status": "manual_placeholder"
+      }
+    }
+  ],
+  "release_gate_compatibility_notes": [
+    "Integrated into the Phase 4 release gate as an additive fixture artifact.",
+    "The release gate validates project refs, fixture boundaries, MissionGraph compatibility, readiness, resource, remote, runtime-audit, and artifact-manifest checks.",
+    "The manifest remains a frozen candidate handoff and does not approve real departure."
+  ],
+  "remote_summary": {
+    "exists": true,
+    "ref": "outputs/remote_contact_summary.json",
+    "ref_key": "remote_contact_summary_ref",
+    "sha256": "a9ad143692cca951eb4c8fb2fe0130fea43d0df026a8ba5ebfabc80e3744532e",
+    "status": null,
+    "summary": {
+      "audience": "remote_contacts",
+      "conservative_note_count": 3,
+      "day1_target_eta": "2026-05-03T15:25:35+08:00",
+      "planned_start": "2026-05-03T08:55:35+08:00",
+      "project_id": "chilai_nanhua_day1",
+      "readiness_status": "ready",
+      "return_to_entry_eta": "2026-05-03T13:35:35+08:00",
+      "route_name": "奇萊南華-能高越嶺步道Day1",
+      "source_package_version": "0.1.0",
+      "summary_id": "remote_contact_summary.chilai_nanhua_day1.v0",
+      "turn_back_checkpoint_eta": "2026-05-03T11:55:35+08:00"
+    }
+  },
+  "resource_plan": {
+    "exists": true,
+    "ref": "outputs/resource_plan.json",
+    "ref_key": "resource_plan_ref",
+    "sha256": "c77e747615d2b592cce84cd5f0d24ec4e352cdb2ef2898831fa96cce16529099",
+    "status": "candidate_only",
+    "summary": {
+      "blocker_candidate_count": 0,
+      "blocks_existing_eta_or_readiness": false,
+      "device_count": 4,
+      "equipment_count": 4,
+      "external_api_calls_made": false,
+      "hard_readiness_mutation_allowed": false,
+      "plan_id": "resource_plan.chilai_nanhua_day1.v0",
+      "project_id": "chilai_nanhua_day1",
+      "raw_payloads_embedded": false,
+      "resource_artifact_kind": "resource_team_departure_plan",
+      "status": "candidate_only",
+      "team_member_count": 2,
+      "warning_candidate_count": 3
+    }
+  },
+  "reviewed_mission_graph": {
+    "exists": true,
+    "ref": "outputs/compiled_mission_graph.reviewed.json",
+    "ref_key": "compiled_mission_graph_reviewed_ref",
+    "sha256": "c2b42fee4feffbf7bca18d0262cc38a07b629df83e9dc8b4ac166bdf10a3015e",
+    "status": null,
+    "summary": {
+      "checkpoint_count": 11,
+      "diversion_point_count": 1,
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "name": "奇萊南華-能高越嶺步道Day1",
+      "segment_count": 10
+    }
+  },
+  "route_refs": [
+    {
+      "exists": true,
+      "ref": "normalized/routes/route_summary.json",
+      "ref_key": "route_summary_ref",
+      "sha256": "7fb5eb4265f01247b3b84092a19803d7bfdb36e5f77ff09b45aa9330532095c0",
+      "status": null,
+      "summary": {
+        "distance_m": 14599.78,
+        "point_count": 2211,
+        "route_name": "奇萊南華-能高越嶺步道Day1"
+      }
+    },
+    {
+      "exists": true,
+      "ref": "outputs/route_comparison.json",
+      "ref_key": "route_comparison_ref",
+      "sha256": "3ecc614a7cc496651734b140356ae67b35d1787f4025a07aa38238bb771616fb",
+      "status": null,
+      "summary": {
+        "bbox_overlaps": true,
+        "classification": "comparison_only",
+        "comparison_id": "route_comparison.chilai_nanhua_day1.similar_gpx.v0",
+        "comparison_route_name": "2022-08-20_21尾上深堀踏查(文若) 001",
+        "distance_delta_m": -5053.24,
+        "point_count_delta": -1275,
+        "primary_route_name": "奇萊南華-能高越嶺步道Day1"
+      }
+    },
+    {
+      "exists": true,
+      "ref": "candidates/checkpoints.json",
+      "ref_key": "checkpoint_candidates_ref",
+      "sha256": "c61da902412b9fd6ef700cef1f913707c9bc2dde4a5e3536b27def232a0395d5",
+      "status": null,
+      "summary": {
+        "item_count": 11
+      }
+    },
+    {
+      "exists": true,
+      "ref": "candidates/segments.json",
+      "ref_key": "segment_candidates_ref",
+      "sha256": "16dff7676ca93a24df80e8f5f5dedf9ca48b2f9162839b586456e6c2085f5026",
+      "status": null,
+      "summary": {
+        "item_count": 10
+      }
+    },
+    {
+      "exists": true,
+      "ref": "candidates/retreat_routes.json",
+      "ref_key": "retreat_routes_ref",
+      "sha256": "1056291d55392dfb7e718aef189011bdb540f0b10816a7d4fb9af18a7e5ae9fe",
+      "status": null,
+      "summary": {
+        "item_count": 1
+      }
+    },
+    {
+      "exists": true,
+      "ref": "normalized/map/map_context.geojson",
+      "ref_key": "map_context_ref",
+      "sha256": "f9342ed8c828ed8c453a752f62dffbcc6eabe085f85463d7403adbc2e8df8a25",
+      "status": null,
+      "summary": {
+        "feature_count": 3,
+        "geojson_type": "FeatureCollection"
+      }
+    },
+    {
+      "exists": true,
+      "ref": "candidates/map_candidates.json",
+      "ref_key": "map_candidates_ref",
+      "sha256": "6367059283fea7de688df8bc8333ff5e64a9272ca27c2c3609b8ba46516bed85",
+      "status": null,
+      "summary": {
+        "corridor_candidate_count": 1,
+        "hazard_candidate_count": 1,
+        "poi_candidate_count": 1
+      }
+    }
+  ],
+  "status": "frozen_candidate",
+  "terrain_refs": [
+    {
+      "exists": true,
+      "ref": "normalized/terrain/dtm_coverage_summary.json",
+      "ref_key": "dtm_coverage_summary_ref",
+      "sha256": "42a381686fbf7ff7b91e9402cd175fe59911e89e1983cc6b614a835595048162",
+      "status": null,
+      "summary": {
+        "candidate_tile_count": 10,
+        "missing_grid_count": 0,
+        "scanned_header_count": 1411,
+        "summary_id": "dtm_coverage.chilai_nanhua_day1.20m"
+      }
+    },
+    {
+      "exists": true,
+      "ref": "normalized/terrain/segment_dtm_coverage.json",
+      "ref_key": "segment_dtm_coverage_ref",
+      "sha256": "52b353c96d2afde56c31dd4a170cca81b04053ade340fa4ce764db2f7ddb2225",
+      "status": null,
+      "summary": {
+        "candidate_tile_count": 10,
+        "dtm_coverage_summary_id": "dtm_coverage.chilai_nanhua_day1.20m",
+        "segment_count": 10,
+        "summary_id": "terrain_summary.chilai_nanhua_day1.20m",
+        "unlinked_segment_count": 0
+      }
+    },
+    {
+      "exists": true,
+      "ref": "outputs/contour_interpretation_candidates.json",
+      "ref_key": "contour_interpretation_candidates_ref",
+      "sha256": "3c4b7278223e85bf6a4e877485fc8db223aec5fe540fc87229c4ac468df7151c",
+      "status": "candidate",
+      "summary": {
+        "artifact_id": "contour_interpretation.chilai_nanhua_day1.v0",
+        "candidate_count": 2,
+        "human_review_required_count": 2,
+        "not_observed_fact": true,
+        "project_id": "chilai_nanhua_day1",
+        "status": "candidate"
+      }
+    }
+  ]
+}

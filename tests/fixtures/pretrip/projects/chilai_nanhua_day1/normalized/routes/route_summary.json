@@ -1,0 +1,16 @@
+{
+  "artifact_id": "artifact.gpx.chilai_nanhua_day1",
+  "bbox_wgs84": {
+    "max_lat": 24.057907788530006,
+    "max_lon": 121.28079717511966,
+    "min_lat": 24.043338071400207,
+    "min_lon": 121.21036249036372
+  },
+  "distance_m": 14599.78,
+  "elevation_max_m": 2878.99,
+  "elevation_min_m": 2152.02,
+  "ended_at": "2026-05-03T10:35:59Z",
+  "point_count": 2211,
+  "route_name": "奇萊南華-能高越嶺步道Day1",
+  "started_at": "2026-05-02T23:55:35Z"
+}

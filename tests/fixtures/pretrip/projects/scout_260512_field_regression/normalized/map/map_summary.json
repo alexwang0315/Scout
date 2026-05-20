@@ -1,0 +1,36 @@
+{
+  "bbox": {
+    "east": 121.6705,
+    "north": 25.073,
+    "south": 25.0585,
+    "west": 121.6505
+  },
+  "confidence": 0.72,
+  "corridor_count": 684,
+  "hazard_count": 0,
+  "known_staleness_risk": "medium",
+  "map_context_ref": "tests/fixtures/maps/scout_260512_overpass_map_context.geojson",
+  "notes": [
+    "Summary is derived from the existing Overpass map fixture.",
+    "GeoJSON features are not embedded in the pre-trip regression outputs."
+  ],
+  "overpass_query_ref": "tests/fixtures/maps/scout_260512_overpass_query.ql",
+  "poi_count": 0,
+  "raw_payload_embedded": false,
+  "route_level_counts": {
+    "cycleway": 28,
+    "footway": 97,
+    "path": 39,
+    "pedestrian": 16,
+    "primary": 58,
+    "residential": 47,
+    "service": 320,
+    "steps": 20,
+    "tertiary": 14,
+    "unclassified": 45
+  },
+  "source": "openstreetmap_overpass",
+  "source_ref": "artifact.map.scout_260512_overpass_summary",
+  "source_version": "2026-05-12T02:47:14Z",
+  "summary_id": "map_summary.scout_260512_overpass.v0"
+}

@@ -1,0 +1,147 @@
+[
+  {
+    "candidate_id": "seg.001",
+    "confidence": "high",
+    "distance_m": 1001.8748799464934,
+    "elevation_gain_m": 99.05999999999993,
+    "elevation_loss_m": 102.74000000000002,
+    "from_candidate_id": "cp.start",
+    "label": "Segment 001",
+    "notes": "Field-data regression segment placeholder; not a primary mountain calibration segment.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.route.scout_260512_field_route_gpx",
+        "uri": "tests/fixtures/routes/scout_260512_field_route.gpx"
+      }
+    ],
+    "review_state": "needs_review",
+    "route_point_end_index": 410,
+    "route_point_start_index": 0,
+    "source_refs": [
+      "artifact.route.scout_260512_field_route_gpx"
+    ],
+    "to_candidate_id": "cp.001"
+  },
+  {
+    "candidate_id": "seg.002",
+    "confidence": "high",
+    "distance_m": 999.212395033829,
+    "elevation_gain_m": 89.68999999999993,
+    "elevation_loss_m": 91.19999999999993,
+    "from_candidate_id": "cp.001",
+    "label": "Segment 002",
+    "notes": "Field-data regression segment placeholder; not a primary mountain calibration segment.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.route.scout_260512_field_route_gpx",
+        "uri": "tests/fixtures/routes/scout_260512_field_route.gpx"
+      }
+    ],
+    "review_state": "needs_review",
+    "route_point_end_index": 793,
+    "route_point_start_index": 410,
+    "source_refs": [
+      "artifact.route.scout_260512_field_route_gpx"
+    ],
+    "to_candidate_id": "cp.002"
+  },
+  {
+    "candidate_id": "seg.003",
+    "confidence": "high",
+    "distance_m": 999.6382157704543,
+    "elevation_gain_m": 87.09000000000003,
+    "elevation_loss_m": 86.56,
+    "from_candidate_id": "cp.002",
+    "label": "Segment 003",
+    "notes": "Field-data regression segment placeholder; not a primary mountain calibration segment.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.route.scout_260512_field_route_gpx",
+        "uri": "tests/fixtures/routes/scout_260512_field_route.gpx"
+      }
+    ],
+    "review_state": "needs_review",
+    "route_point_end_index": 962,
+    "route_point_start_index": 793,
+    "source_refs": [
+      "artifact.route.scout_260512_field_route_gpx"
+    ],
+    "to_candidate_id": "cp.003"
+  },
+  {
+    "candidate_id": "seg.004",
+    "confidence": "high",
+    "distance_m": 1002.5864097333357,
+    "elevation_gain_m": 119.84999999999995,
+    "elevation_loss_m": 117.58,
+    "from_candidate_id": "cp.003",
+    "label": "Segment 004",
+    "notes": "Field-data regression segment placeholder; not a primary mountain calibration segment.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.route.scout_260512_field_route_gpx",
+        "uri": "tests/fixtures/routes/scout_260512_field_route.gpx"
+      }
+    ],
+    "review_state": "needs_review",
+    "route_point_end_index": 1344,
+    "route_point_start_index": 962,
+    "source_refs": [
+      "artifact.route.scout_260512_field_route_gpx"
+    ],
+    "to_candidate_id": "cp.004"
+  },
+  {
+    "candidate_id": "seg.005",
+    "confidence": "high",
+    "distance_m": 500.15649578047197,
+    "elevation_gain_m": 68.22,
+    "elevation_loss_m": 58.76000000000002,
+    "from_candidate_id": "cp.004",
+    "label": "Segment 005",
+    "notes": "Field-data regression segment placeholder; not a primary mountain calibration segment.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.route.scout_260512_field_route_gpx",
+        "uri": "tests/fixtures/routes/scout_260512_field_route.gpx"
+      }
+    ],
+    "review_state": "needs_review",
+    "route_point_end_index": 1567,
+    "route_point_start_index": 1344,
+    "source_refs": [
+      "artifact.route.scout_260512_field_route_gpx"
+    ],
+    "to_candidate_id": "cp.finish"
+  }
+]

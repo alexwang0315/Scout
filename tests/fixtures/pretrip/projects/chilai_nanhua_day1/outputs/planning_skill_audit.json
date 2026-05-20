@@ -1,0 +1,257 @@
+{
+  "project_id": "chilai_nanhua_day1",
+  "project_ref": "project.json",
+  "records": [
+    {
+      "activation_decision": "allow",
+      "artifact_refs": [],
+      "created_at": null,
+      "ended_at": "2026-05-14T00:00:00+08:00",
+      "failure_policy": {
+        "degrade_to": null,
+        "on_error": "record_failure",
+        "retry": {
+          "backoff_seconds": 0,
+          "max_attempts": 0
+        }
+      },
+      "id": "skill_run.phase4_pretrip.chilai_nanhua_day1.01.pretrip-source-ingest",
+      "input_refs": [
+        "project.json",
+        "normalized/routes/route_summary.json",
+        "candidates/planning_references.json"
+      ],
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "output_refs": [
+        "outputs/pretrip_package.json",
+        "candidates/checkpoints.json",
+        "candidates/segments.json",
+        "candidates/retreat_routes.json"
+      ],
+      "preflight_results": {
+        "missing_project_ref_keys": [],
+        "project_id": "chilai_nanhua_day1",
+        "project_ref": "project.json",
+        "required_capabilities": [
+          "project_refs.read",
+          "pretrip_package.write_candidate"
+        ],
+        "required_project_ref_keys": [
+          "route_summary_ref",
+          "planning_references_ref",
+          "package_ref",
+          "checkpoint_candidates_ref",
+          "segment_candidates_ref",
+          "retreat_routes_ref"
+        ],
+        "status": "passed",
+        "writeback_policy": {
+          "automatic_brain_write": false,
+          "creates_model_interpretation": false,
+          "creates_observed_fact": false,
+          "record_kind": "SkillRunRecord"
+        }
+      },
+      "skill_id": "pretrip-source-ingest",
+      "skill_version": "0.1.0",
+      "started_at": "2026-05-14T00:00:00+08:00",
+      "type": "SkillRunRecord"
+    },
+    {
+      "activation_decision": "allow",
+      "artifact_refs": [],
+      "created_at": null,
+      "ended_at": "2026-05-14T00:00:00+08:00",
+      "failure_policy": {
+        "degrade_to": null,
+        "on_error": "record_failure",
+        "retry": {
+          "backoff_seconds": 0,
+          "max_attempts": 0
+        }
+      },
+      "id": "skill_run.phase4_pretrip.chilai_nanhua_day1.02.pretrip-cp-segment-suggest",
+      "input_refs": [
+        "project.json",
+        "outputs/pretrip_package.json",
+        "normalized/routes/route_summary.json"
+      ],
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "output_refs": [
+        "candidates/checkpoints.json",
+        "candidates/segments.json"
+      ],
+      "preflight_results": {
+        "missing_project_ref_keys": [],
+        "project_id": "chilai_nanhua_day1",
+        "project_ref": "project.json",
+        "required_capabilities": [
+          "project_refs.read",
+          "planning_candidates.write"
+        ],
+        "required_project_ref_keys": [
+          "package_ref",
+          "route_summary_ref",
+          "checkpoint_candidates_ref",
+          "segment_candidates_ref"
+        ],
+        "status": "passed",
+        "writeback_policy": {
+          "automatic_brain_write": false,
+          "creates_model_interpretation": false,
+          "creates_observed_fact": false,
+          "record_kind": "SkillRunRecord"
+        }
+      },
+      "skill_id": "pretrip-cp-segment-suggest",
+      "skill_version": "0.1.0",
+      "started_at": "2026-05-14T00:00:00+08:00",
+      "type": "SkillRunRecord"
+    },
+    {
+      "activation_decision": "allow",
+      "artifact_refs": [],
+      "created_at": null,
+      "ended_at": "2026-05-14T00:00:00+08:00",
+      "failure_policy": {
+        "degrade_to": null,
+        "on_error": "defer",
+        "retry": {
+          "backoff_seconds": 0,
+          "max_attempts": 0
+        }
+      },
+      "id": "skill_run.phase4_pretrip.chilai_nanhua_day1.03.pretrip-map-import",
+      "input_refs": [
+        "project.json",
+        "normalized/map/map_context.geojson"
+      ],
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "output_refs": [
+        "candidates/map_candidates.json"
+      ],
+      "preflight_results": {
+        "missing_project_ref_keys": [],
+        "project_id": "chilai_nanhua_day1",
+        "project_ref": "project.json",
+        "required_capabilities": [
+          "project_refs.read",
+          "geojson.read"
+        ],
+        "required_project_ref_keys": [
+          "map_context_ref",
+          "map_candidates_ref"
+        ],
+        "status": "passed",
+        "writeback_policy": {
+          "automatic_brain_write": false,
+          "creates_model_interpretation": false,
+          "creates_observed_fact": false,
+          "record_kind": "SkillRunRecord"
+        }
+      },
+      "skill_id": "pretrip-map-import",
+      "skill_version": "0.1.0",
+      "started_at": "2026-05-14T00:00:00+08:00",
+      "type": "SkillRunRecord"
+    },
+    {
+      "activation_decision": "allow",
+      "artifact_refs": [],
+      "created_at": null,
+      "ended_at": "2026-05-14T00:00:00+08:00",
+      "failure_policy": {
+        "degrade_to": null,
+        "on_error": "defer",
+        "retry": {
+          "backoff_seconds": 0,
+          "max_attempts": 0
+        }
+      },
+      "id": "skill_run.phase4_pretrip.chilai_nanhua_day1.04.pretrip-mission-compile",
+      "input_refs": [
+        "project.json",
+        "outputs/pretrip_package.reviewed.json",
+        "reviews/human_reviews.json"
+      ],
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "output_refs": [
+        "outputs/compiled_mission_graph.reviewed.json"
+      ],
+      "preflight_results": {
+        "missing_project_ref_keys": [],
+        "project_id": "chilai_nanhua_day1",
+        "project_ref": "project.json",
+        "required_capabilities": [
+          "project_refs.read",
+          "mission_graph.compile_candidate"
+        ],
+        "required_project_ref_keys": [
+          "reviewed_package_ref",
+          "human_reviews_ref",
+          "compiled_mission_graph_reviewed_ref"
+        ],
+        "status": "passed",
+        "writeback_policy": {
+          "automatic_brain_write": false,
+          "creates_model_interpretation": false,
+          "creates_observed_fact": false,
+          "record_kind": "SkillRunRecord"
+        }
+      },
+      "skill_id": "pretrip-mission-compile",
+      "skill_version": "0.1.0",
+      "started_at": "2026-05-14T00:00:00+08:00",
+      "type": "SkillRunRecord"
+    },
+    {
+      "activation_decision": "allow",
+      "artifact_refs": [],
+      "created_at": null,
+      "ended_at": "2026-05-14T00:00:00+08:00",
+      "failure_policy": {
+        "degrade_to": null,
+        "on_error": "record_failure",
+        "retry": {
+          "backoff_seconds": 0,
+          "max_attempts": 0
+        }
+      },
+      "id": "skill_run.phase4_pretrip.chilai_nanhua_day1.05.pretrip-brain-seed-export",
+      "input_refs": [
+        "project.json",
+        "outputs/pretrip_package.reviewed.json",
+        "reviews/human_reviews.json"
+      ],
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "output_refs": [
+        "outputs/brain_seed_nodes.json"
+      ],
+      "preflight_results": {
+        "missing_project_ref_keys": [],
+        "project_id": "chilai_nanhua_day1",
+        "project_ref": "project.json",
+        "required_capabilities": [
+          "project_refs.read",
+          "brain_seed.export_candidate"
+        ],
+        "required_project_ref_keys": [
+          "reviewed_package_ref",
+          "human_reviews_ref",
+          "brain_seed_nodes_ref"
+        ],
+        "status": "passed",
+        "writeback_policy": {
+          "automatic_brain_write": false,
+          "creates_model_interpretation": false,
+          "creates_observed_fact": false,
+          "record_kind": "SkillRunRecord"
+        }
+      },
+      "skill_id": "pretrip-brain-seed-export",
+      "skill_version": "0.1.0",
+      "started_at": "2026-05-14T00:00:00+08:00",
+      "type": "SkillRunRecord"
+    }
+  ]
+}

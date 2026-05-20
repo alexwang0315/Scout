@@ -1,0 +1,292 @@
+[
+  {
+    "candidate_id": "seg.001",
+    "confidence": "high",
+    "distance_m": 1502.260061203277,
+    "elevation_gain_m": 247.974853515625,
+    "elevation_loss_m": 57.236170613321065,
+    "from_candidate_id": "cp.start",
+    "label": "Segment 001",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/downloads/奇萊南華-能高越嶺步道Day1.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 249,
+    "route_point_start_index": 0,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.001"
+  },
+  {
+    "candidate_id": "seg.002",
+    "confidence": "high",
+    "distance_m": 1499.8485825235111,
+    "elevation_gain_m": 190.37841796875,
+    "elevation_loss_m": 89.03662109375,
+    "from_candidate_id": "cp.001",
+    "label": "Segment 002",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/downloads/奇萊南華-能高越嶺步道Day1.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 490,
+    "route_point_start_index": 249,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.002"
+  },
+  {
+    "candidate_id": "seg.003",
+    "confidence": "high",
+    "distance_m": 1503.391922289445,
+    "elevation_gain_m": 39.381103515625,
+    "elevation_loss_m": 219.71630859375,
+    "from_candidate_id": "cp.002",
+    "label": "Segment 003",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/downloads/奇萊南華-能高越嶺步道Day1.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 742,
+    "route_point_start_index": 490,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.003"
+  },
+  {
+    "candidate_id": "seg.004",
+    "confidence": "high",
+    "distance_m": 1495.2180097809783,
+    "elevation_gain_m": 94.852294921875,
+    "elevation_loss_m": 44.881591796875,
+    "from_candidate_id": "cp.003",
+    "label": "Segment 004",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/downloads/奇萊南華-能高越嶺步道Day1.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 989,
+    "route_point_start_index": 742,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.004"
+  },
+  {
+    "candidate_id": "seg.005",
+    "confidence": "high",
+    "distance_m": 1507.8692582540393,
+    "elevation_gain_m": 119.75830078125,
+    "elevation_loss_m": 74.332275390625,
+    "from_candidate_id": "cp.004",
+    "label": "Segment 005",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/downloads/奇萊南華-能高越嶺步道Day1.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 1236,
+    "route_point_start_index": 989,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.005"
+  },
+  {
+    "candidate_id": "seg.006",
+    "confidence": "high",
+    "distance_m": 1491.4228965500827,
+    "elevation_gain_m": 197.922607421875,
+    "elevation_loss_m": 53.842041015625,
+    "from_candidate_id": "cp.005",
+    "label": "Segment 006",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/downloads/奇萊南華-能高越嶺步道Day1.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 1480,
+    "route_point_start_index": 1236,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.006"
+  },
+  {
+    "candidate_id": "seg.007",
+    "confidence": "high",
+    "distance_m": 1500.9652567188673,
+    "elevation_gain_m": 125.88720703125,
+    "elevation_loss_m": 35.05908203125,
+    "from_candidate_id": "cp.006",
+    "label": "Segment 007",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/downloads/奇萊南華-能高越嶺步道Day1.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 1727,
+    "route_point_start_index": 1480,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.007"
+  },
+  {
+    "candidate_id": "seg.008",
+    "confidence": "high",
+    "distance_m": 2115.7255889030953,
+    "elevation_gain_m": 223.2724609375,
+    "elevation_loss_m": 35.953857421875,
+    "from_candidate_id": "cp.007",
+    "label": "Segment 008",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/downloads/奇萊南華-能高越嶺步道Day1.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 1921,
+    "route_point_start_index": 1727,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.008"
+  },
+  {
+    "candidate_id": "seg.009",
+    "confidence": "high",
+    "distance_m": 885.7631932362565,
+    "elevation_gain_m": 86.3603515625,
+    "elevation_loss_m": 32.103759765625,
+    "from_candidate_id": "cp.008",
+    "label": "Segment 009",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/downloads/奇萊南華-能高越嶺步道Day1.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 2067,
+    "route_point_start_index": 1921,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.009"
+  },
+  {
+    "candidate_id": "seg.010",
+    "confidence": "high",
+    "distance_m": 1097.3201822394167,
+    "elevation_gain_m": 90.702392578125,
+    "elevation_loss_m": 109.90380859375,
+    "from_candidate_id": "cp.009",
+    "label": "Segment 010",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/downloads/奇萊南華-能高越嶺步道Day1.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 2210,
+    "route_point_start_index": 2067,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.finish"
+  }
+]

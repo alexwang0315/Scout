@@ -1,0 +1,492 @@
+{
+  "artifact_id": "segment_policy_candidates.chilai_nanhua_day1.v0",
+  "artifact_kind": "segment_policy_candidates",
+  "candidates": [
+    {
+      "candidate_id": "policy_candidate.chilai_nanhua_day1.seg.001",
+      "candidate_only": true,
+      "compile_boundary": "candidate_only_not_runtime",
+      "expected_duration_source": "route_geometry_distance_fallback",
+      "expected_duration_source_ref": "seg.001",
+      "from_candidate_id": "cp.start",
+      "human_review_required": true,
+      "label": "Segment 001 policy candidate",
+      "notes": "Human review must accept or edit this candidate before it can be used as compile input.",
+      "recording_policy": {
+        "checkpoint_seals_segment": true,
+        "concern_profile": "raw_lock",
+        "normal_profile": "medium",
+        "policy_id": "policy.chilai_nanhua_day1.seg.001.candidate",
+        "raw_ring_seconds": 300,
+        "watch_profile": "high"
+      },
+      "recording_policy_rationale": [
+        "Use conservative medium/high/raw-lock profiles for mountain pre-trip candidates.",
+        "Checkpoint boundaries seal segment capsules for after-action and plan-to-runtime audit.",
+        "Raw ring duration remains compatible with the existing Phase 1 RecordingPolicy model."
+      ],
+      "requirement": {
+        "camp_available": false,
+        "expected_duration_seconds": 2504,
+        "latest_safe_departure_time": null,
+        "min_device_battery": 0.25,
+        "min_estimated_human_energy": 0.4,
+        "requires_daylight": true,
+        "retreat_available": true,
+        "signal_expected": true,
+        "water_available": false
+      },
+      "requirement_rationale": [
+        "Daylight is required for this mountain pre-trip candidate until reviewed sun-window evidence exists.",
+        "Water and camp availability are false because no reviewed segment-local water/camp POI candidate is linked.",
+        "Retreat is available because a retreat route candidate is attached to one segment endpoint.",
+        "Signal is expected only at the start-adjacent segment until reviewed signal POIs exist."
+      ],
+      "review_state": "proposed",
+      "segment_candidate_id": "seg.001",
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1"
+      ],
+      "to_candidate_id": "cp.001"
+    },
+    {
+      "candidate_id": "policy_candidate.chilai_nanhua_day1.seg.002",
+      "candidate_only": true,
+      "compile_boundary": "candidate_only_not_runtime",
+      "expected_duration_source": "route_geometry_distance_fallback",
+      "expected_duration_source_ref": "seg.002",
+      "from_candidate_id": "cp.001",
+      "human_review_required": true,
+      "label": "Segment 002 policy candidate",
+      "notes": "Human review must accept or edit this candidate before it can be used as compile input.",
+      "recording_policy": {
+        "checkpoint_seals_segment": true,
+        "concern_profile": "raw_lock",
+        "normal_profile": "medium",
+        "policy_id": "policy.chilai_nanhua_day1.seg.002.candidate",
+        "raw_ring_seconds": 240,
+        "watch_profile": "high"
+      },
+      "recording_policy_rationale": [
+        "Use conservative medium/high/raw-lock profiles for mountain pre-trip candidates.",
+        "Checkpoint boundaries seal segment capsules for after-action and plan-to-runtime audit.",
+        "Raw ring duration remains compatible with the existing Phase 1 RecordingPolicy model."
+      ],
+      "requirement": {
+        "camp_available": false,
+        "expected_duration_seconds": 2500,
+        "latest_safe_departure_time": null,
+        "min_device_battery": 0.25,
+        "min_estimated_human_energy": 0.4,
+        "requires_daylight": true,
+        "retreat_available": false,
+        "signal_expected": false,
+        "water_available": false
+      },
+      "requirement_rationale": [
+        "Daylight is required for this mountain pre-trip candidate until reviewed sun-window evidence exists.",
+        "Water and camp availability are false because no reviewed segment-local water/camp POI candidate is linked.",
+        "Retreat is not marked available because no retreat route candidate is attached to either segment endpoint.",
+        "Signal is not expected for deep-mountain segments without reviewed signal POI evidence."
+      ],
+      "review_state": "proposed",
+      "segment_candidate_id": "seg.002",
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1"
+      ],
+      "to_candidate_id": "cp.002"
+    },
+    {
+      "candidate_id": "policy_candidate.chilai_nanhua_day1.seg.003",
+      "candidate_only": true,
+      "compile_boundary": "candidate_only_not_runtime",
+      "expected_duration_source": "route_geometry_distance_fallback",
+      "expected_duration_source_ref": "seg.003",
+      "from_candidate_id": "cp.002",
+      "human_review_required": true,
+      "label": "Segment 003 policy candidate",
+      "notes": "Human review must accept or edit this candidate before it can be used as compile input.",
+      "recording_policy": {
+        "checkpoint_seals_segment": true,
+        "concern_profile": "raw_lock",
+        "normal_profile": "medium",
+        "policy_id": "policy.chilai_nanhua_day1.seg.003.candidate",
+        "raw_ring_seconds": 240,
+        "watch_profile": "high"
+      },
+      "recording_policy_rationale": [
+        "Use conservative medium/high/raw-lock profiles for mountain pre-trip candidates.",
+        "Checkpoint boundaries seal segment capsules for after-action and plan-to-runtime audit.",
+        "Raw ring duration remains compatible with the existing Phase 1 RecordingPolicy model."
+      ],
+      "requirement": {
+        "camp_available": false,
+        "expected_duration_seconds": 2506,
+        "latest_safe_departure_time": null,
+        "min_device_battery": 0.25,
+        "min_estimated_human_energy": 0.4,
+        "requires_daylight": true,
+        "retreat_available": false,
+        "signal_expected": false,
+        "water_available": false
+      },
+      "requirement_rationale": [
+        "Daylight is required for this mountain pre-trip candidate until reviewed sun-window evidence exists.",
+        "Water and camp availability are false because no reviewed segment-local water/camp POI candidate is linked.",
+        "Retreat is not marked available because no retreat route candidate is attached to either segment endpoint.",
+        "Signal is not expected for deep-mountain segments without reviewed signal POI evidence."
+      ],
+      "review_state": "proposed",
+      "segment_candidate_id": "seg.003",
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1"
+      ],
+      "to_candidate_id": "cp.003"
+    },
+    {
+      "candidate_id": "policy_candidate.chilai_nanhua_day1.seg.004",
+      "candidate_only": true,
+      "compile_boundary": "candidate_only_not_runtime",
+      "expected_duration_source": "route_geometry_distance_fallback",
+      "expected_duration_source_ref": "seg.004",
+      "from_candidate_id": "cp.003",
+      "human_review_required": true,
+      "label": "Segment 004 policy candidate",
+      "notes": "Human review must accept or edit this candidate before it can be used as compile input.",
+      "recording_policy": {
+        "checkpoint_seals_segment": true,
+        "concern_profile": "raw_lock",
+        "normal_profile": "medium",
+        "policy_id": "policy.chilai_nanhua_day1.seg.004.candidate",
+        "raw_ring_seconds": 240,
+        "watch_profile": "high"
+      },
+      "recording_policy_rationale": [
+        "Use conservative medium/high/raw-lock profiles for mountain pre-trip candidates.",
+        "Checkpoint boundaries seal segment capsules for after-action and plan-to-runtime audit.",
+        "Raw ring duration remains compatible with the existing Phase 1 RecordingPolicy model."
+      ],
+      "requirement": {
+        "camp_available": false,
+        "expected_duration_seconds": 2492,
+        "latest_safe_departure_time": null,
+        "min_device_battery": 0.25,
+        "min_estimated_human_energy": 0.4,
+        "requires_daylight": true,
+        "retreat_available": false,
+        "signal_expected": false,
+        "water_available": false
+      },
+      "requirement_rationale": [
+        "Daylight is required for this mountain pre-trip candidate until reviewed sun-window evidence exists.",
+        "Water and camp availability are false because no reviewed segment-local water/camp POI candidate is linked.",
+        "Retreat is not marked available because no retreat route candidate is attached to either segment endpoint.",
+        "Signal is not expected for deep-mountain segments without reviewed signal POI evidence."
+      ],
+      "review_state": "proposed",
+      "segment_candidate_id": "seg.004",
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1"
+      ],
+      "to_candidate_id": "cp.004"
+    },
+    {
+      "candidate_id": "policy_candidate.chilai_nanhua_day1.seg.005",
+      "candidate_only": true,
+      "compile_boundary": "candidate_only_not_runtime",
+      "expected_duration_source": "route_geometry_distance_fallback",
+      "expected_duration_source_ref": "seg.005",
+      "from_candidate_id": "cp.004",
+      "human_review_required": true,
+      "label": "Segment 005 policy candidate",
+      "notes": "Human review must accept or edit this candidate before it can be used as compile input.",
+      "recording_policy": {
+        "checkpoint_seals_segment": true,
+        "concern_profile": "raw_lock",
+        "normal_profile": "medium",
+        "policy_id": "policy.chilai_nanhua_day1.seg.005.candidate",
+        "raw_ring_seconds": 240,
+        "watch_profile": "high"
+      },
+      "recording_policy_rationale": [
+        "Use conservative medium/high/raw-lock profiles for mountain pre-trip candidates.",
+        "Checkpoint boundaries seal segment capsules for after-action and plan-to-runtime audit.",
+        "Raw ring duration remains compatible with the existing Phase 1 RecordingPolicy model."
+      ],
+      "requirement": {
+        "camp_available": false,
+        "expected_duration_seconds": 2513,
+        "latest_safe_departure_time": null,
+        "min_device_battery": 0.25,
+        "min_estimated_human_energy": 0.4,
+        "requires_daylight": true,
+        "retreat_available": false,
+        "signal_expected": false,
+        "water_available": false
+      },
+      "requirement_rationale": [
+        "Daylight is required for this mountain pre-trip candidate until reviewed sun-window evidence exists.",
+        "Water and camp availability are false because no reviewed segment-local water/camp POI candidate is linked.",
+        "Retreat is not marked available because no retreat route candidate is attached to either segment endpoint.",
+        "Signal is not expected for deep-mountain segments without reviewed signal POI evidence."
+      ],
+      "review_state": "proposed",
+      "segment_candidate_id": "seg.005",
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1"
+      ],
+      "to_candidate_id": "cp.005"
+    },
+    {
+      "candidate_id": "policy_candidate.chilai_nanhua_day1.seg.006",
+      "candidate_only": true,
+      "compile_boundary": "candidate_only_not_runtime",
+      "expected_duration_source": "route_geometry_distance_fallback",
+      "expected_duration_source_ref": "seg.006",
+      "from_candidate_id": "cp.005",
+      "human_review_required": true,
+      "label": "Segment 006 policy candidate",
+      "notes": "Human review must accept or edit this candidate before it can be used as compile input.",
+      "recording_policy": {
+        "checkpoint_seals_segment": true,
+        "concern_profile": "raw_lock",
+        "normal_profile": "medium",
+        "policy_id": "policy.chilai_nanhua_day1.seg.006.candidate",
+        "raw_ring_seconds": 240,
+        "watch_profile": "high"
+      },
+      "recording_policy_rationale": [
+        "Use conservative medium/high/raw-lock profiles for mountain pre-trip candidates.",
+        "Checkpoint boundaries seal segment capsules for after-action and plan-to-runtime audit.",
+        "Raw ring duration remains compatible with the existing Phase 1 RecordingPolicy model."
+      ],
+      "requirement": {
+        "camp_available": false,
+        "expected_duration_seconds": 2486,
+        "latest_safe_departure_time": null,
+        "min_device_battery": 0.25,
+        "min_estimated_human_energy": 0.4,
+        "requires_daylight": true,
+        "retreat_available": false,
+        "signal_expected": false,
+        "water_available": false
+      },
+      "requirement_rationale": [
+        "Daylight is required for this mountain pre-trip candidate until reviewed sun-window evidence exists.",
+        "Water and camp availability are false because no reviewed segment-local water/camp POI candidate is linked.",
+        "Retreat is not marked available because no retreat route candidate is attached to either segment endpoint.",
+        "Signal is not expected for deep-mountain segments without reviewed signal POI evidence."
+      ],
+      "review_state": "proposed",
+      "segment_candidate_id": "seg.006",
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1"
+      ],
+      "to_candidate_id": "cp.006"
+    },
+    {
+      "candidate_id": "policy_candidate.chilai_nanhua_day1.seg.007",
+      "candidate_only": true,
+      "compile_boundary": "candidate_only_not_runtime",
+      "expected_duration_source": "route_geometry_distance_fallback",
+      "expected_duration_source_ref": "seg.007",
+      "from_candidate_id": "cp.006",
+      "human_review_required": true,
+      "label": "Segment 007 policy candidate",
+      "notes": "Human review must accept or edit this candidate before it can be used as compile input.",
+      "recording_policy": {
+        "checkpoint_seals_segment": true,
+        "concern_profile": "raw_lock",
+        "normal_profile": "medium",
+        "policy_id": "policy.chilai_nanhua_day1.seg.007.candidate",
+        "raw_ring_seconds": 240,
+        "watch_profile": "high"
+      },
+      "recording_policy_rationale": [
+        "Use conservative medium/high/raw-lock profiles for mountain pre-trip candidates.",
+        "Checkpoint boundaries seal segment capsules for after-action and plan-to-runtime audit.",
+        "Raw ring duration remains compatible with the existing Phase 1 RecordingPolicy model."
+      ],
+      "requirement": {
+        "camp_available": false,
+        "expected_duration_seconds": 2502,
+        "latest_safe_departure_time": null,
+        "min_device_battery": 0.25,
+        "min_estimated_human_energy": 0.4,
+        "requires_daylight": true,
+        "retreat_available": false,
+        "signal_expected": false,
+        "water_available": false
+      },
+      "requirement_rationale": [
+        "Daylight is required for this mountain pre-trip candidate until reviewed sun-window evidence exists.",
+        "Water and camp availability are false because no reviewed segment-local water/camp POI candidate is linked.",
+        "Retreat is not marked available because no retreat route candidate is attached to either segment endpoint.",
+        "Signal is not expected for deep-mountain segments without reviewed signal POI evidence."
+      ],
+      "review_state": "proposed",
+      "segment_candidate_id": "seg.007",
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1"
+      ],
+      "to_candidate_id": "cp.007"
+    },
+    {
+      "candidate_id": "policy_candidate.chilai_nanhua_day1.seg.008",
+      "candidate_only": true,
+      "compile_boundary": "candidate_only_not_runtime",
+      "expected_duration_source": "route_geometry_distance_fallback",
+      "expected_duration_source_ref": "seg.008",
+      "from_candidate_id": "cp.007",
+      "human_review_required": true,
+      "label": "Segment 008 policy candidate",
+      "notes": "Human review must accept or edit this candidate before it can be used as compile input.",
+      "recording_policy": {
+        "checkpoint_seals_segment": true,
+        "concern_profile": "raw_lock",
+        "normal_profile": "medium",
+        "policy_id": "policy.chilai_nanhua_day1.seg.008.candidate",
+        "raw_ring_seconds": 240,
+        "watch_profile": "high"
+      },
+      "recording_policy_rationale": [
+        "Use conservative medium/high/raw-lock profiles for mountain pre-trip candidates.",
+        "Checkpoint boundaries seal segment capsules for after-action and plan-to-runtime audit.",
+        "Raw ring duration remains compatible with the existing Phase 1 RecordingPolicy model."
+      ],
+      "requirement": {
+        "camp_available": false,
+        "expected_duration_seconds": 3526,
+        "latest_safe_departure_time": null,
+        "min_device_battery": 0.25,
+        "min_estimated_human_energy": 0.4,
+        "requires_daylight": true,
+        "retreat_available": false,
+        "signal_expected": false,
+        "water_available": false
+      },
+      "requirement_rationale": [
+        "Daylight is required for this mountain pre-trip candidate until reviewed sun-window evidence exists.",
+        "Water and camp availability are false because no reviewed segment-local water/camp POI candidate is linked.",
+        "Retreat is not marked available because no retreat route candidate is attached to either segment endpoint.",
+        "Signal is not expected for deep-mountain segments without reviewed signal POI evidence."
+      ],
+      "review_state": "proposed",
+      "segment_candidate_id": "seg.008",
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1"
+      ],
+      "to_candidate_id": "cp.008"
+    },
+    {
+      "candidate_id": "policy_candidate.chilai_nanhua_day1.seg.009",
+      "candidate_only": true,
+      "compile_boundary": "candidate_only_not_runtime",
+      "expected_duration_source": "route_geometry_distance_fallback",
+      "expected_duration_source_ref": "seg.009",
+      "from_candidate_id": "cp.008",
+      "human_review_required": true,
+      "label": "Segment 009 policy candidate",
+      "notes": "Human review must accept or edit this candidate before it can be used as compile input.",
+      "recording_policy": {
+        "checkpoint_seals_segment": true,
+        "concern_profile": "raw_lock",
+        "normal_profile": "medium",
+        "policy_id": "policy.chilai_nanhua_day1.seg.009.candidate",
+        "raw_ring_seconds": 240,
+        "watch_profile": "high"
+      },
+      "recording_policy_rationale": [
+        "Use conservative medium/high/raw-lock profiles for mountain pre-trip candidates.",
+        "Checkpoint boundaries seal segment capsules for after-action and plan-to-runtime audit.",
+        "Raw ring duration remains compatible with the existing Phase 1 RecordingPolicy model."
+      ],
+      "requirement": {
+        "camp_available": false,
+        "expected_duration_seconds": 1476,
+        "latest_safe_departure_time": null,
+        "min_device_battery": 0.25,
+        "min_estimated_human_energy": 0.4,
+        "requires_daylight": true,
+        "retreat_available": false,
+        "signal_expected": false,
+        "water_available": false
+      },
+      "requirement_rationale": [
+        "Daylight is required for this mountain pre-trip candidate until reviewed sun-window evidence exists.",
+        "Water and camp availability are false because no reviewed segment-local water/camp POI candidate is linked.",
+        "Retreat is not marked available because no retreat route candidate is attached to either segment endpoint.",
+        "Signal is not expected for deep-mountain segments without reviewed signal POI evidence."
+      ],
+      "review_state": "proposed",
+      "segment_candidate_id": "seg.009",
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1"
+      ],
+      "to_candidate_id": "cp.009"
+    },
+    {
+      "candidate_id": "policy_candidate.chilai_nanhua_day1.seg.010",
+      "candidate_only": true,
+      "compile_boundary": "candidate_only_not_runtime",
+      "expected_duration_source": "route_geometry_distance_fallback",
+      "expected_duration_source_ref": "seg.010",
+      "from_candidate_id": "cp.009",
+      "human_review_required": true,
+      "label": "Segment 010 policy candidate",
+      "notes": "Human review must accept or edit this candidate before it can be used as compile input.",
+      "recording_policy": {
+        "checkpoint_seals_segment": true,
+        "concern_profile": "raw_lock",
+        "normal_profile": "medium",
+        "policy_id": "policy.chilai_nanhua_day1.seg.010.candidate",
+        "raw_ring_seconds": 300,
+        "watch_profile": "high"
+      },
+      "recording_policy_rationale": [
+        "Use conservative medium/high/raw-lock profiles for mountain pre-trip candidates.",
+        "Checkpoint boundaries seal segment capsules for after-action and plan-to-runtime audit.",
+        "Raw ring duration remains compatible with the existing Phase 1 RecordingPolicy model."
+      ],
+      "requirement": {
+        "camp_available": false,
+        "expected_duration_seconds": 1829,
+        "latest_safe_departure_time": null,
+        "min_device_battery": 0.25,
+        "min_estimated_human_energy": 0.4,
+        "requires_daylight": true,
+        "retreat_available": true,
+        "signal_expected": false,
+        "water_available": false
+      },
+      "requirement_rationale": [
+        "Daylight is required for this mountain pre-trip candidate until reviewed sun-window evidence exists.",
+        "Water and camp availability are false because no reviewed segment-local water/camp POI candidate is linked.",
+        "Retreat is available because a retreat route candidate is attached to one segment endpoint.",
+        "Signal is not expected for deep-mountain segments without reviewed signal POI evidence."
+      ],
+      "review_state": "proposed",
+      "segment_candidate_id": "seg.010",
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1"
+      ],
+      "to_candidate_id": "cp.finish"
+    }
+  ],
+  "counts": {
+    "candidate_only_count": 10,
+    "human_review_required_count": 10,
+    "requires_daylight_count": 10,
+    "retreat_available_count": 2,
+    "segment_policy_candidate_count": 10,
+    "signal_expected_count": 1
+  },
+  "notes": [
+    "Candidate-only Phase 4 segment policy output; does not write MissionGraph or live Phase 1 runtime.",
+    "SegmentRequirement and RecordingPolicy payloads use mission_models-compatible shapes for later reviewed compilation.",
+    "Chilai Day 1 timing candidates are route-guide level and not segment-id mapped in this fixture, so segment durations fall back to route geometry distance."
+  ],
+  "policy_version": "0.1.0",
+  "project_id": "chilai_nanhua_day1",
+  "status": "candidate_only"
+}
