@@ -44,6 +44,7 @@ REQUIRED_PATHS = (
     "docs/admin/screenshots/assistant-browser-live-admin.jpg",
     "docs/admin/screenshots/assistant-browser-live-hardware-readiness.jpg",
     "assistant_ui_smoke_check.py",
+    "assistant_browser_smoke_check.py",
     "tests/fixtures/hardware/readiness_context.json",
     "tests/test_assistant_models.py",
     "tests/test_assistant_model_config.py",
@@ -54,6 +55,7 @@ REQUIRED_PATHS = (
     "tests/test_assistant_page.py",
     "tests/test_assistant_readiness_check.py",
     "tests/test_assistant_ui_smoke_check.py",
+    "tests/test_assistant_browser_smoke_check.py",
     "tests/test_assistant_browser_smoke_doc.py",
     "tests/test_hardware_readiness_api.py",
     "tests/test_hardware_readiness_runbook.py",
@@ -267,6 +269,11 @@ BROWSER_SMOKE_DOC_TOKENS = (
     "cloud_only",
     "local_fallback_enabled",
     "token_values_exposed",
+    "assistant_browser_smoke_check.py",
+    "SCOUT_BROWSER_NODE",
+    "SCOUT_BROWSER_NODE_PATH",
+    "tileSource=local",
+    "assistant browser smoke gate",
 )
 
 

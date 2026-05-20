@@ -54,6 +54,11 @@ def test_browser_smoke_doc_covers_all_assistant_surfaces_and_boundaries() -> Non
         "section count from 14 to 4",
         "assistantPanel overflowY=auto",
         "console/page errors",
+        "assistant_browser_smoke_check.py",
+        "SCOUT_BROWSER_NODE",
+        "SCOUT_BROWSER_NODE_PATH",
+        "tileSource=local",
+        "assistant browser smoke gate",
     ):
         assert token in source
 
