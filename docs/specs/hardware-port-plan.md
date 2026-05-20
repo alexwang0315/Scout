@@ -347,12 +347,18 @@ First provider manifests:
 - `ble.phone_bridge`;
 - `cellular.remote_status`.
 
+`gnss.position` is also the first timestamp authority provider. It must emit
+GNSS-derived time when available, not only latitude/longitude. Scout-owned
+storage may add local receive time and monotonic sequence numbers, but those are
+audit/fallback fields rather than the primary field timestamp.
+
 Each capability should declare:
 
 - capability id;
 - device class;
 - transport;
 - required permissions;
+- timestamp source and confidence;
 - sampling or message rate;
 - power draw class;
 - failure modes;
