@@ -20,6 +20,7 @@ def test_live_runtime_dockerfile_is_separate_from_step1_and_includes_live_module
     for module in (
         "admin_after_action.py",
         "admin_map_layers.py",
+        "admin_tile_cache_builder.py",
         "live_runtime_enablement.py",
         "live_runtime_enablement_cli.py",
         "runtime_debug_models.py",
@@ -33,6 +34,7 @@ def test_live_runtime_dockerfile_is_separate_from_step1_and_includes_live_module
 
     assert "SCOUT_ENABLE_LIVE_RUNTIME=1" not in step1
     assert "SCOUT_AI_ASSISTANT_PROVIDER=pydantic_ai" not in step1
+    assert 'RUN python -c "import scout_pi_runtime"' in source
 
 
 def test_live_runtime_compose_requires_operator_secret_files_without_values() -> None:
