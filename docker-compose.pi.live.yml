@@ -7,6 +7,8 @@ services:
     image: scout-fusion/pi-runtime:live
     container_name: scout-pi-runtime-live
     restart: unless-stopped
+    env_file:
+      - /data/scout/secrets/live-runtime.env
     environment:
       SCOUT_DATA_ROOT: /data/scout
       SCOUT_RUNTIME_PROFILE: pi-field-live
@@ -30,6 +32,8 @@ services:
       SCOUT_HARDWARE_PROVIDER_CONTROL_TOKEN_FILE: /data/scout/secrets/hardware-provider-control-token
       SCOUT_PORT: "9099"
       SCOUT_LOG_LEVEL: info
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "9099:9099"
     volumes:
