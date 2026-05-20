@@ -92,6 +92,8 @@ COPY \
     runtime_remote_provider_policy.py \
     runtime_remote_provider_send_queue.py \
     runtime_debug_models.py \
+    runtime_telegram_provider_live_adapter.py \
+    runtime_telegram_provider_live_send_cli.py \
     runtime_stream_controls.py \
     runtime_stream_policy.py \
     runtime_stream_status_surface.py \
