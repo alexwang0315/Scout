@@ -115,10 +115,18 @@ def test_pretrip_admin_page_fetches_fixture_backed_read_only_project_api():
     assert "OSM_TILE_URL_TEMPLATE" in html
     assert "OSM_PUBLIC_TILE_URL_TEMPLATE" in html
     assert "OSM_LOCAL_TILE_URL_TEMPLATE" in html
+    assert "RASTER_LOCAL_TILE_URL_TEMPLATE" in html
     assert "/admin/tiles/osm/{z}/{x}/{y}.png" in html
+    assert "/admin/tiles/imagery/{project_id}/{layer_id}/{z}/{x}/{y}.png" in html
     assert "function osmTileTemplate" in html
+    assert "function rasterTileTemplate" in html
     assert 'params.get("tileSource")' in html
     assert "https://tile.openstreetmap.org/{z}/{x}/{y}.png" in html
+    assert "function renderRasterImagery" in html
+    assert "function rasterTileCoverage" in html
+    assert "class: \"raster-tile\"" in html
+    assert "data-raster-tile" in html
+    assert "local_raster_tile_url_template" in html
     assert "function renderOsmBasemap" in html
     assert "function osmTileCoverage" in html
     assert 'el("image"' in html
@@ -129,6 +137,9 @@ def test_pretrip_admin_page_fetches_fixture_backed_read_only_project_api():
     assert "Weather API overlay" in html
     assert html.index('data-layer-group": "imagery"') < html.index(
         'data-layer-group": "osm"'
+    )
+    assert html.index("renderRasterImagery(imageryGroup") < html.index(
+        "renderOsmBasemap(osmGroup"
     )
     assert html.index('data-layer-group": "osm"') < html.index(
         'data-layer-group": "terrain"'

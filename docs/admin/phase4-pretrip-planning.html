@@ -176,6 +176,7 @@
     #map.is-panning { cursor: grabbing; }
     .layer-imagery { fill: #e5ebf1; }
     .layer-osm { fill: #f7fafc; opacity: .72; }
+    .raster-tile { opacity: .92; image-rendering: auto; }
     .osm-tile { opacity: .86; image-rendering: auto; }
     .osm-attribution {
       fill: #405064;
@@ -904,6 +905,7 @@
     const OSM_PUBLIC_TILE_URL_TEMPLATE = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
     const OSM_LOCAL_TILE_URL_TEMPLATE = `${apiBase()}/admin/tiles/osm/{z}/{x}/{y}.png`;
     const OSM_TILE_URL_TEMPLATE = OSM_PUBLIC_TILE_URL_TEMPLATE;
+    const RASTER_LOCAL_TILE_URL_TEMPLATE = `${apiBase()}/admin/tiles/imagery/{project_id}/{layer_id}/{z}/{x}/{y}.png`;
     const OSM_ATTRIBUTION = "OpenStreetMap contributors";
     const state = {
       view: null,
@@ -929,6 +931,19 @@
       const params = new URLSearchParams(location.search);
       const requested = params.get("tileSource") || params.get("tiles") || localStorage.getItem("scout.osmTileSource");
       return requested === "local" ? OSM_LOCAL_TILE_URL_TEMPLATE : OSM_PUBLIC_TILE_URL_TEMPLATE;
+    }
+    function mapLayerById(view, layerId) {
+      return (view?.map_layers || []).find(layer => layer.layer_id === layerId) || {};
+    }
+    function apiUrlTemplate(template) {
+      if (!template) return "";
+      if (template.startsWith("http://") || template.startsWith("https://")) return template;
+      if (template.startsWith("/")) return `${apiBase()}${template}`;
+      return template;
+    }
+    function rasterTileTemplate(view) {
+      const layer = mapLayerById(view, "imagery");
+      return apiUrlTemplate(layer.local_raster_tile_url_template) || RASTER_LOCAL_TILE_URL_TEMPLATE;
     }
     function el(name, attrs = {}, text = "") {
       const node = document.createElementNS("http://www.w3.org/2000/svg", name);
@@ -979,6 +994,16 @@
     function osmTileUrl(z, x, y) {
       return osmTileTemplate().replace("{z}", z).replace("{x}", x).replace("{y}", y);
     }
+    function rasterTileUrl(view, z, x, y) {
+      const layer = mapLayerById(view, "imagery");
+      const layerId = layer.layer_id || "imagery";
+      return rasterTileTemplate(view)
+        .replace("{project_id}", PROJECT_ID)
+        .replace("{layer_id}", layerId)
+        .replace("{z}", z)
+        .replace("{x}", x)
+        .replace("{y}", y);
+    }
     function chooseOsmZoom(bounds, maxTiles = 32) {
       const span = Math.max(bounds.east - bounds.west, bounds.north - bounds.south, 0.000001);
       let zoom = clamp(Math.floor(Math.log2(360 / span)) - 2, 10, 15);
@@ -1006,6 +1031,30 @@
         }
       }
       return tiles;
+    }
+    function rasterTileCoverage(view, bounds, zoom = null) {
+      return osmTileCoverage(bounds, zoom).map(tile => ({
+        ...tile,
+        href: rasterTileUrl(view, tile.z, tile.x, tile.y)
+      }));
+    }
+    function renderRasterImagery(group, view, bounds, width, height) {
+      group.appendChild(el("rect", {x: 0, y: 0, width, height, class: "layer-imagery"}));
+      rasterTileCoverage(view, bounds).forEach(tile => {
+        const [x1, y1] = project(bounds, tile.north, tile.west);
+        const [x2, y2] = project(bounds, tile.south, tile.east);
+        group.appendChild(el("image", {
+          href: tile.href,
+          x: Math.min(x1, x2).toFixed(2),
+          y: Math.min(y1, y2).toFixed(2),
+          width: Math.abs(x2 - x1).toFixed(2),
+          height: Math.abs(y2 - y1).toFixed(2),
+          class: "raster-tile",
+          preserveAspectRatio: "none",
+          "data-raster-tile": `${tile.z}/${tile.x}/${tile.y}`,
+          "data-source-kind": "local_geotiff"
+        }));
+      });
     }
     function renderOsmBasemap(group, bounds, width, height) {
       group.appendChild(el("rect", {x: 0, y: 0, width, height, class: "layer-osm"}));
@@ -1682,7 +1731,7 @@
       svg.replaceChildren();
 
       const imageryGroup = el("g", {"data-layer-group": "imagery"});
-      imageryGroup.appendChild(el("rect", {x: 0, y: 0, width: MAP_WIDTH, height: MAP_HEIGHT, class: "layer-imagery"}));
+      renderRasterImagery(imageryGroup, view, bounds, MAP_WIDTH, MAP_HEIGHT);
       svg.appendChild(imageryGroup);
 
       const osmGroup = el("g", {"data-layer-group": "osm"});
