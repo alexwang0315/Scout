@@ -590,6 +590,7 @@ class AssistantApiTests(unittest.TestCase):
         self.assertFalse(status["cloud_only"])
         self.assertEqual(status["runtime_profile"], "pi-field")
         self.assertEqual(status["local_fallback_mode"], "pi_field_manual_opt_in")
+        self.assertTrue(status["local_fallback_fixed_schema"])
         self.assertTrue(status["manual_verification_required"])
         self.assertEqual(status["local_fallback_max_concurrency"], 1)
         self.assertFalse(status["readiness_starts_local_model"])

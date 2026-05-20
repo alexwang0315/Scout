@@ -386,6 +386,9 @@ Rules:
 - discard stale model requests instead of delaying safety evaluation;
 - prefer short classification or fixed-schema outputs over long free-form
   answers;
+- use `ScoutOfflineFallbackInterpretation` with
+  `schema_version=scout.offline_fallback.v1` before any local fallback output is
+  shown as an assistant explanation;
 - store output as `model_interpretation`, not as observed fact;
 - include model name, prompt id, timestamp, latency, and runtime mode in
   provenance;

@@ -28,7 +28,8 @@ def test_loads_cloud_and_local_model_profiles_from_external_json(tmp_path: Path)
           "timeout_seconds": 4,
           "max_context_chars": 9000,
           "connect_on_startup": true,
-          "fallback_to_local_on_error": true
+          "fallback_to_local_on_error": true,
+          "local_fallback_fixed_schema": true
         }
         """,
         encoding="utf-8",
@@ -46,6 +47,7 @@ def test_loads_cloud_and_local_model_profiles_from_external_json(tmp_path: Path)
     assert config.max_context_chars == 9000
     assert config.connect_on_startup is True
     assert config.fallback_to_local_on_error is True
+    assert config.local_fallback_fixed_schema is True
 
 
 def test_model_config_requires_distinct_cloud_and_local_profiles():
@@ -80,4 +82,5 @@ def test_model_config_can_disable_local_fallback_without_removing_local_profile(
     )
 
     assert config.fallback_to_local_on_error is False
+    assert config.local_fallback_fixed_schema is True
     assert config.local_model.model_name == "local"

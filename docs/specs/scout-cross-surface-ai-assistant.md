@@ -288,6 +288,24 @@ Slice 2 provider hardening acceptance:
 - all tests use mocked runners only and do not require live Ollama, Pi, Docker,
   hardware providers, network connectivity, or local model listeners.
 
+Slice 12 fixed-schema offline fallback provider contract acceptance:
+
+- `assistant_offline_fallback_contract.py` defines
+  `ScoutOfflineFallbackInterpretation` with
+  `schema_version=scout.offline_fallback.v1` and
+  `prompt_id=scout.offline_fallback.fixed_schema.v1`;
+- local fallback prompts require one JSON object and set `read_only=true`,
+  `model_interpretation=true`, `safety_authority=false`,
+  `phase1_state_change_allowed=false`, `observed_fact_write_allowed=false`,
+  `outbound_action_allowed=false`, and `hardware_control_allowed=false`;
+- `FallbackPydanticAIRunner` can enforce the fixed schema on the local fallback
+  path and records `fixed_schema_offline_fallback_contract`;
+- invalid local fallback schema output fails safely as
+  `local_schema_validation_error:*`;
+- this remains provider-contract work only: no local model listener startup, no
+  `/safety/*` mutation, no Scout state writes, no outbound send, and no
+  hardware/provider control.
+
 Milestone 10.2 Slice 3: Pi Field Profile Status + Manual Failover Runbook
 
 Slice 3 status/runbook acceptance:
@@ -1094,6 +1112,20 @@ Milestone 10.2 Slice 2 provider failover hardening is complete when:
 - the readiness gate checks the hardening tokens without starting local model,
   hardware, transport, or deployment services.
 
+Milestone 10.2 Slice 12 fixed-schema offline fallback provider contract is
+complete when:
+
+- `ScoutOfflineFallbackInterpretation` validates local fallback output as a
+  bounded JSON model interpretation rather than free-form safety advice;
+- the local fallback prompt names `scout.offline_fallback.v1` and
+  `scout.offline_fallback.fixed_schema.v1`;
+- Pydantic provider fallback can enforce the schema and expose
+  `fixed_schema_offline_fallback_contract` provenance;
+- invalid local fallback schema output becomes a safe provider failure, not a
+  safety/runtime action;
+- verification uses mocked runners only and does not start Pi, Ollama, local
+  model listeners, transport, or hardware/provider services.
+
 Milestone 10.2 Slice 3 Pi field profile status/runbook is complete when:
 
 - `/assistant/status` reports runtime profile, local fallback mode, manual
@@ -1225,7 +1257,7 @@ Milestone 10.2 Slice 11 hardware experiment assets are complete when:
 
 ## Next Slice Candidates
 
-After Milestone 10.2 Slice 11, the next step is either a longer Pi/Ollama soak
-test record or a fixed-schema offline fallback provider contract. Both should
-remain outside Phase 1 safety authority unless explicitly promoted by a new
-spec decision.
+After Milestone 10.2 Slice 12, the next step is either a longer Pi/Ollama soak
+test record or a mocked offline fallback provider adapter that turns the fixed
+schema into UI-facing read-only explanations. Both should remain outside Phase
+1 safety authority unless explicitly promoted by a new spec decision.

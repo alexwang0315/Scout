@@ -1,11 +1,16 @@
 import socket
 import threading
 import urllib.request
+import json
 
 import pytest
 
 from assistant_models import AssistantSourceRef, ScoutAssistantQuery
 from assistant_model_config import AssistantModelConfig
+from assistant_offline_fallback_contract import (
+    OFFLINE_FALLBACK_PROMPT_ID,
+    OFFLINE_FALLBACK_SCHEMA_VERSION,
+)
 from assistant_pydantic_provider import (
     FallbackPydanticAIRunner,
     PydanticAIAssistantProvider,
@@ -302,6 +307,51 @@ def test_cloud_runner_falls_back_to_local_runner_on_communication_failure():
     assert any("local model fallback was used" in item for item in response.limitations)
 
 
+def test_local_fallback_can_enforce_fixed_schema_output_contract():
+    cloud = FakeRunner("cloud should not win", fail_run=True)
+    local = FakeRunner(_fixed_schema_local_output(), model_name="qwen2.5:0.5b")
+    runner = FallbackPydanticAIRunner(
+        primary_runner=cloud,
+        fallback_runner=local,
+        primary_profile="cloud",
+        fallback_profile="local",
+        enforce_local_fixed_schema=True,
+    )
+    provider = PydanticAIAssistantProvider(runner=runner, timeout_seconds=2)
+
+    response = provider.answer(
+        ScoutAssistantQuery(surface="debug", question="Explain offline fallback."),
+        sources=[],
+    )
+
+    assert "Offline fallback fixed-schema interpretation" in response.answer
+    assert "目前只能做離線備援解讀" in response.answer
+    assert "scout.offline_fallback.v1" in response.answer
+    assert runner.last_profile == "local"
+    assert runner.last_fixed_schema_version == OFFLINE_FALLBACK_SCHEMA_VERSION
+    assert OFFLINE_FALLBACK_SCHEMA_VERSION in str(response.limitations)
+    assert "Return only one JSON object" in local.calls[0]["prompt"]
+    assert OFFLINE_FALLBACK_PROMPT_ID in local.calls[0]["prompt"]
+
+
+def test_invalid_fixed_schema_local_fallback_output_fails_safely():
+    cloud = FakeRunner("cloud should not win", fail_run=True)
+    local = FakeRunner('{"summary_zh": "send SOS now"}', model_name="qwen2.5:0.5b")
+    runner = FallbackPydanticAIRunner(
+        primary_runner=cloud,
+        fallback_runner=local,
+        primary_profile="cloud",
+        fallback_profile="local",
+        enforce_local_fixed_schema=True,
+    )
+
+    with pytest.raises(Exception):
+        runner.run("question", timeout_seconds=2)
+
+    assert runner.last_profile == "local"
+    assert runner.last_failover_reason.startswith("local_schema_validation_error:")
+
+
 def test_local_fallback_allows_only_one_active_request_and_discards_stale_request():
     class BlockingLocalRunner(FakeRunner):
         def __init__(self):
@@ -413,3 +463,51 @@ def test_configured_runner_does_not_create_local_fallback_when_disabled():
     assert isinstance(runner, PydanticAIEnvRunner)
     assert runner.profile_name == "cloud"
     assert runner.model_name == "cloud/test"
+
+
+def test_configured_runner_enforces_fixed_schema_for_local_fallback_by_default():
+    config = AssistantModelConfig.model_validate(
+        {
+            "active_profile": "cloud",
+            "cloud_model": {
+                "profile": "cloud",
+                "model_name": "cloud/test",
+                "base_url": "https://cloud.example/v1",
+            },
+            "local_model": {
+                "profile": "local",
+                "model_name": "qwen2.5:0.5b",
+                "base_url": "http://127.0.0.1:11434/v1",
+            },
+            "fallback_to_local_on_error": True,
+        }
+    )
+
+    runner = create_configured_pydantic_runner(config, environ={})
+
+    assert isinstance(runner, FallbackPydanticAIRunner)
+    assert runner.enforce_local_fixed_schema is True
+    assert runner.fixed_schema_offline_fallback_contract == OFFLINE_FALLBACK_SCHEMA_VERSION
+
+
+def _fixed_schema_local_output() -> str:
+    return json.dumps(
+        {
+            "schema_version": OFFLINE_FALLBACK_SCHEMA_VERSION,
+            "prompt_id": OFFLINE_FALLBACK_PROMPT_ID,
+            "summary_zh": "目前只能做離線備援解讀，需由人確認定位與電量狀態。",
+            "risk_signals": ["GPS 訊號不穩", "電量偏低"],
+            "operator_checks": ["確認最近檢查點"],
+            "uncertainties": ["沒有即時雲端模型回覆"],
+            "source_refs": ["assistant_context.debug"],
+            "confidence": "low",
+            "read_only": True,
+            "model_interpretation": True,
+            "safety_authority": False,
+            "phase1_state_change_allowed": False,
+            "observed_fact_write_allowed": False,
+            "outbound_action_allowed": False,
+            "hardware_control_allowed": False,
+        },
+        ensure_ascii=False,
+    )

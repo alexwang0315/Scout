@@ -8,6 +8,12 @@ from typing import Protocol
 
 from assistant_model_config import AssistantModelConfig, AssistantModelProfile
 from assistant_models import AssistantBoundary, AssistantSourceRef, ScoutAssistantQuery, ScoutAssistantResponse
+from assistant_offline_fallback_contract import (
+    OFFLINE_FALLBACK_SCHEMA_VERSION,
+    build_offline_fallback_schema_prompt,
+    format_offline_fallback_interpretation,
+    parse_offline_fallback_interpretation,
+)
 
 
 DEFAULT_TIMEOUT_SECONDS = 8
@@ -75,6 +81,7 @@ def create_configured_pydantic_runner(
         fallback_runner=local_runner,
         primary_profile="cloud",
         fallback_profile="local",
+        enforce_local_fixed_schema=config.local_fallback_fixed_schema,
     )
 
 
@@ -140,6 +147,11 @@ class PydanticAIAssistantProvider:
         local_model_name = getattr(self.runner, "local_model_name", None)
         if local_model_name and profile == "local":
             limitations.append(f"local_model_name={local_model_name}")
+        fixed_schema_version = getattr(self.runner, "last_fixed_schema_version", None)
+        if fixed_schema_version:
+            limitations.append(
+                f"fixed_schema_offline_fallback_contract={fixed_schema_version}"
+            )
         return ScoutAssistantResponse(
             surface=query.surface,
             answer=f"{prefix}Pydantic AI read-only model interpretation: {str(model_output).strip()}",
@@ -158,6 +170,7 @@ class FallbackPydanticAIRunner:
         primary_profile: str = "cloud",
         fallback_profile: str = "local",
         max_fallback_concurrency: int = 1,
+        enforce_local_fixed_schema: bool = False,
     ):
         self.primary_runner = primary_runner
         self.fallback_runner = fallback_runner
@@ -168,6 +181,11 @@ class FallbackPydanticAIRunner:
         self.last_failover_reason: str | None = None
         self.local_model_name: str | None = getattr(fallback_runner, "model_name", None)
         self.max_fallback_concurrency = max(1, max_fallback_concurrency)
+        self.enforce_local_fixed_schema = enforce_local_fixed_schema
+        self.fixed_schema_offline_fallback_contract = (
+            OFFLINE_FALLBACK_SCHEMA_VERSION if enforce_local_fixed_schema else None
+        )
+        self.last_fixed_schema_version: str | None = None
         self._fallback_semaphore = threading.BoundedSemaphore(self.max_fallback_concurrency)
         self.failover_count = 0
 
@@ -208,10 +226,36 @@ class FallbackPydanticAIRunner:
             raise RuntimeError("local fallback busy; stale model request discarded")
         try:
             self.last_profile = self.fallback_profile
-            return self.fallback_runner.run(prompt, timeout_seconds=timeout_seconds)
+            fallback_prompt = (
+                build_offline_fallback_schema_prompt(
+                    prompt,
+                    local_model_name=self.local_model_name,
+                )
+                if self.enforce_local_fixed_schema
+                else prompt
+            )
+            raw_output = self.fallback_runner.run(
+                fallback_prompt,
+                timeout_seconds=timeout_seconds,
+            )
+            if not self.enforce_local_fixed_schema:
+                return raw_output
+            try:
+                interpretation = parse_offline_fallback_interpretation(raw_output)
+            except Exception as exc:
+                self.last_error_type = type(exc).__name__
+                self.last_failover_reason = (
+                    f"local_schema_validation_error:{type(exc).__name__}"
+                )
+                raise
+            self.last_fixed_schema_version = interpretation.schema_version
+            return format_offline_fallback_interpretation(interpretation)
         except Exception as exc:
-            self.last_error_type = type(exc).__name__
-            self.last_failover_reason = f"local_run_error:{type(exc).__name__}"
+            if not str(self.last_failover_reason or "").startswith(
+                "local_schema_validation_error:"
+            ):
+                self.last_error_type = type(exc).__name__
+                self.last_failover_reason = f"local_run_error:{type(exc).__name__}"
             raise
         finally:
             self._fallback_semaphore.release()

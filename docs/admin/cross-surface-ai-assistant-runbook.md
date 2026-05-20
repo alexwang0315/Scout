@@ -114,6 +114,24 @@ Milestone 10.2 Slice 2 hardening 已用 mocked runners 驗證：
   read-only failure response；
 - 這些測試不啟動本地模型、不呼叫 Ollama、不啟動 Pi/Docker/hardware provider。
 
+Milestone 10.2 Slice 12 adds the fixed-schema offline fallback provider
+contract:
+
+- `assistant_offline_fallback_contract.py` defines
+  `ScoutOfflineFallbackInterpretation`。
+- fixed schema version: `scout.offline_fallback.v1`。
+- fixed prompt id: `scout.offline_fallback.fixed_schema.v1`。
+- local fallback output must set `read_only=true`、
+  `model_interpretation=true`、`safety_authority=false`、
+  `phase1_state_change_allowed=false`、`observed_fact_write_allowed=false`、
+  `outbound_action_allowed=false`、`hardware_control_allowed=false`。
+- `FallbackPydanticAIRunner` 可在 local fallback path enforce schema，並回報
+  `fixed_schema_offline_fallback_contract`。
+- invalid schema 會成為 `local_schema_validation_error:*` safe provider
+  failure，不是 safety/runtime action。
+- 這些測試仍使用 mocked runners；不啟動本地模型、不呼叫 Ollama、不啟動
+  Pi/Docker/hardware provider、不呼叫 `/safety/*` mutation、不寫 Scout state。
+
 ### Milestone 10.2 Slice 3: Pi Field Profile Status + Manual Failover Runbook
 
 Slice 3 只增加 status/runbook guardrail，不啟動本地模型，也不讓 UI 或 status endpoint
