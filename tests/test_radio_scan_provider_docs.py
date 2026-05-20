@@ -1,0 +1,38 @@
+from pathlib import Path
+
+
+HARDWARE_DIRECTION_PATH = Path("docs/specs/scout-hardware-direction.md")
+HARDWARE_PORT_PLAN_PATH = Path("docs/specs/hardware-port-plan.md")
+
+
+def test_hardware_direction_documents_host_side_radio_scan_tools() -> None:
+    source = HARDWARE_DIRECTION_PATH.read_text(encoding="utf-8")
+
+    for token in (
+        "### Host-Side Radio Scan Tools",
+        "wifi_scan_provider.py",
+        "ble_scan_provider.py",
+        "radio_scan_provider.py",
+        "tools/pi_radio_scan_smoke.py",
+        "not call `/safety/observations`",
+        "write IncidentStore",
+        "ObservedFact",
+        "Brain records",
+    ):
+        assert token in source
+
+
+def test_hardware_port_plan_keeps_radio_scan_provider_read_only() -> None:
+    source = HARDWARE_PORT_PLAN_PATH.read_text(encoding="utf-8")
+
+    for token in (
+        "### Host-Side Radio Scan Provider",
+        "/data/scout/providers/radio_scan/*.jsonl",
+        "run this on the Pi host",
+        "not inside the Step 1 Docker safety runtime",
+        "do not call `/safety/observations`",
+        "write IncidentStore",
+        "write ObservedFact",
+        "change Phase 1 safety decisions",
+    ):
+        assert token in source

@@ -101,6 +101,45 @@ curl --max-time 5 http://scout.local:9099/runtime/status
 curl --max-time 5 http://scout.local:9099/providers/status
 ```
 
+Scout repo includes a unified host-side radio scan smoke tool:
+
+```bash
+sudo python3 tools/pi_radio_scan_smoke.py \
+  --wifi-interface wlan0 \
+  --ble-controller hci0 \
+  --ble-duration-seconds 10 \
+  --output-jsonl /data/scout/providers/radio_scan/manual-smoke.jsonl
+```
+
+中文註釋：`pi_radio_scan_smoke.py` 會整合 Wi-Fi RSSI 與 BLE RSSI 成單一
+`radio_environment_scan` JSON。它是 Pi host-side evidence tool，不呼叫 `/safety/observations`，
+不寫 IncidentStore、不寫 ObservedFact、不寫 Phase 2 Brain，不控制 Phase 1 safety decision；
+若某個 provider 失敗，只會在 `provider_errors` 裡記錄。
+
+確認 Pi host 可以產生 Wi-Fi RSSI evidence。`nmcli` 只能提供 signal percentage；
+若要真正 dBm RSSI，優先用 `iw`：
+
+```bash
+ssh alexwang0315@scout.local \
+  'sudo /sbin/iw dev wlan0 scan | egrep "^BSS |signal:|freq:|SSID:" | sed -n "1,120p"'
+```
+
+預期結果：每個 AP block 至少包含 BSSID、frequency、`signal: -NN.NN dBm`、SSID。
+這個 smoke 只讀取 radio scan evidence，不寫 `/safety/observations`，也不改 Phase 1
+safety decision。
+
+確認 Pi host 可以產生 BLE RSSI evidence。BLE scan 適合 proximity / team beacon
+證據，不應被視為穩定身份或精準定位，尤其是 LE Random address：
+
+```bash
+ssh alexwang0315@scout.local \
+  'timeout 10s sudo btmgmt find'
+```
+
+預期結果：`dev_found` records 會包含 BLE address、address type、`rssi -NN`、
+advertising flags。這個 smoke 只確認藍牙 proximity evidence 可取得，不寫
+`/safety/observations`，也不改 Phase 1 safety decision。
+
 若 operator 已明確開始 hardware prototype smoke，才可用 fixture payload 手動測
 `/safety/observations`。這一步是 mutation，所以不得由 preflight、自動測試或
 assistant 執行：

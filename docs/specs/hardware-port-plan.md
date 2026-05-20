@@ -369,6 +369,34 @@ Acceptance:
 
 中文註釋：先定 contract 和 fixture，再接真硬體。不要讓某個 GNSS/IMU/modem SDK 直接滲透進 safety evaluator。
 
+### Host-Side Radio Scan Provider
+
+Pi hardware prototype work now has a read-only radio scan toolchain:
+
+```text
+wifi_scan_provider.py
+ble_scan_provider.py
+radio_scan_provider.py
+tools/pi_radio_scan_smoke.py
+```
+
+`tools/pi_radio_scan_smoke.py` combines Wi-Fi RSSI and BLE RSSI into one
+`radio_environment_scan` JSON payload and can append it to:
+
+```text
+/data/scout/providers/radio_scan/*.jsonl
+```
+
+Rules:
+
+- run this on the Pi host, not inside the Step 1 Docker safety runtime;
+- prefer `iw` for Wi-Fi dBm RSSI and fall back to `nmcli` percentage only when
+  dBm is unavailable;
+- treat BLE RSSI as proximity / team beacon evidence, not stable identity or
+  precise location;
+- do not call `/safety/observations`, write IncidentStore, write ObservedFact,
+  or change Phase 1 safety decisions from this tool.
+
 ## Environment Variables
 
 Minimum Step 1 variables:
