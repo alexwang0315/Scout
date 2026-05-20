@@ -4,11 +4,14 @@ import json
 import subprocess
 import sys
 
+import pytest
 from ble_scan_provider import parse_btmgmt_find
+from pydantic import ValidationError
 from radio_scan_provider import (
     RadioScanSnapshot,
     append_radio_scan_jsonl,
     radio_scan_payload,
+    validate_radio_scan_payload,
 )
 from wifi_scan_provider import parse_iw_scan
 
@@ -36,6 +39,14 @@ eir_len 30
 
     assert payload["source"] == "pi_radio_scan.host"
     assert payload["evidence_kind"] == "radio_environment_scan"
+    assert payload["boundary"]["host_side_only"] is True
+    assert payload["boundary"]["read_only"] is True
+    assert payload["boundary"]["calls_safety_observations_allowed"] is False
+    assert payload["boundary"]["incident_store_write_allowed"] is False
+    assert payload["boundary"]["observed_fact_write_allowed"] is False
+    assert payload["boundary"]["brain_write_allowed"] is False
+    assert payload["boundary"]["hardware_provider_control_allowed"] is False
+    assert payload["boundary"]["endpoint_calls"] == []
     assert payload["phase1_safety_decision_change_allowed"] is False
     assert payload["wifi"]["best_bssid"] == "60:83:e7:30:32:92"
     assert payload["wifi"]["best_rssi_dbm"] == -27.0
@@ -56,6 +67,30 @@ def test_radio_scan_payload_records_provider_errors_without_failing_snapshot() -
     assert payload["ble"] is None
     assert payload["provider_errors"] == {"wifi": "PermissionError: scan not allowed"}
     assert payload["radio_counts"] == {"wifi_access_points": 0, "ble_devices": 0, "errors": 1}
+
+
+def test_radio_scan_payload_contract_rejects_mutation_boundary() -> None:
+    payload = radio_scan_payload(
+        RadioScanSnapshot(captured_at="2026-05-20T00:00:02+00:00")
+    )
+    payload["boundary"]["calls_safety_observations_allowed"] = True
+
+    with pytest.raises(ValidationError) as exc_info:
+        validate_radio_scan_payload(payload)
+
+    assert "calls_safety_observations_allowed" in str(exc_info.value)
+
+
+def test_radio_scan_payload_contract_rejects_count_mismatch() -> None:
+    payload = radio_scan_payload(
+        RadioScanSnapshot(captured_at="2026-05-20T00:00:02+00:00")
+    )
+    payload["radio_counts"]["errors"] = 1
+
+    with pytest.raises(ValidationError) as exc_info:
+        validate_radio_scan_payload(payload)
+
+    assert "provider error count" in str(exc_info.value)
 
 
 def test_append_radio_scan_jsonl_writes_one_json_line(tmp_path) -> None:

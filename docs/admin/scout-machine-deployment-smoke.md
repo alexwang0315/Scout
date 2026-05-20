@@ -139,9 +139,11 @@ sudo python3 tools/pi_radio_scan_smoke.py \
 ```
 
 中文註釋：`pi_radio_scan_smoke.py` 會整合 Wi-Fi RSSI 與 BLE RSSI 成單一
-`radio_environment_scan` JSON。它是 Pi host-side evidence tool，不呼叫 `/safety/observations`，
-不寫 IncidentStore、不寫 ObservedFact、不寫 Phase 2 Brain，不控制 Phase 1 safety decision；
-若某個 provider 失敗，只會在 `provider_errors` 裡記錄。
+`radio_environment_scan` JSON。payload 會帶 fixed read-only `boundary` block，並在寫入
+JSONL 前驗證 `radio_counts` 與 Wi-Fi/BLE payload 一致。它是 Pi host-side evidence tool，
+不呼叫 `/safety/observations`，不寫 IncidentStore、不寫 ObservedFact、不寫 Phase 2 Brain，
+不送 outbound、不控制 hardware provider、不控制 Phase 1 safety decision；若某個 provider
+失敗，只會在 `provider_errors` 裡記錄。
 
 確認 Pi host 可以產生 Wi-Fi RSSI evidence。`nmcli` 只能提供 signal percentage；
 若要真正 dBm RSSI，優先用 `iw`：

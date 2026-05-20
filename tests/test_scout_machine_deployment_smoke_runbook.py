@@ -62,10 +62,14 @@ def test_runbook_documents_host_side_radio_scan_boundary() -> None:
         "tools/pi_radio_scan_smoke.py",
         "radio_environment_scan",
         "/data/scout/providers/radio_scan/manual-smoke.jsonl",
+        "fixed read-only `boundary` block",
+        "驗證 `radio_counts`",
         "不呼叫 `/safety/observations`",
         "不寫 IncidentStore",
         "不寫 ObservedFact",
         "不寫 Phase 2 Brain",
+        "不送 outbound",
+        "不控制 hardware provider",
         "不控制 Phase 1 safety decision",
     ):
         assert token in source
