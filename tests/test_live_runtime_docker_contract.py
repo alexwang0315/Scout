@@ -38,12 +38,15 @@ def test_live_runtime_compose_requires_operator_secret_files_without_values() ->
     for token in (
         "dockerfile: Dockerfile.pi.live",
         "image: scout-fusion/pi-runtime:live",
+        "env_file:",
+        "- /data/scout/secrets/live-runtime.env",
         "SCOUT_RUNTIME_PROFILE: pi-field-live",
         "SCOUT_RUNTIME_STREAM_STATUS_ENABLED: \"1\"",
         "SCOUT_SAFETY_OBSERVATION_ADMISSION_SECRET_FILE: /data/scout/secrets/runtime-stream-admission-secret",
         "SCOUT_AI_ASSISTANT_CONFIG_PATH: /data/scout/config/assistant-models.json",
         "SCOUT_HARDWARE_PROVIDER_CONTROL_POLICY_PATH: /data/scout/config/hardware-provider-control-policy.json",
         "SCOUT_HARDWARE_PROVIDER_CONTROL_TOKEN_FILE: /data/scout/secrets/hardware-provider-control-token",
+        "host.docker.internal:host-gateway",
     ):
         assert token in source
 
@@ -53,6 +56,7 @@ def test_live_runtime_compose_requires_operator_secret_files_without_values() ->
         "SCOUT_CLOUD_MODEL_TOKEN:",
         "hardware-control-token-value",
         "love0315",
+        "OPENROUTER_API_KEY",
     ):
         assert forbidden not in source
 

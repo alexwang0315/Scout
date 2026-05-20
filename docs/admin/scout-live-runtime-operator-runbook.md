@@ -34,6 +34,7 @@ Required secret files:
 
 - `/data/scout/secrets/runtime-stream-admission-secret`
 - `/data/scout/secrets/hardware-provider-control-token`
+- `/data/scout/secrets/live-runtime.env`
 
 Required environment secret refs:
 
@@ -105,23 +106,31 @@ printf '%s\n' '<operator-hardware-control-token>' > /data/scout/secrets/hardware
 chmod 600 /data/scout/secrets/runtime-stream-admission-secret /data/scout/secrets/hardware-provider-control-token
 ```
 
-3. 匯出雲端模型與 remote provider secrets。
+3. 寫入雲端模型與 remote provider secrets。
 
 ```bash
-export SCOUT_CLOUD_MODEL_TOKEN='<operator-cloud-model-token>'
-export SCOUT_REMOTE_WEBHOOK_URL='<operator-webhook-url>'
-export SCOUT_REMOTE_WEBHOOK_TOKEN='<operator-webhook-token>'
-export SCOUT_REMOTE_WEBHOOK_HMAC_SECRET='<operator-webhook-hmac-secret>'
-export SCOUT_REMOTE_PRIMARY_TARGET_REF='<operator-primary-target-ref>'
-export SCOUT_REMOTE_BACKUP_TARGET_REF='<operator-backup-target-ref>'
+cat > /data/scout/secrets/live-runtime.env <<'EOF'
+SCOUT_CLOUD_MODEL_TOKEN=<operator-cloud-model-token>
+SCOUT_REMOTE_WEBHOOK_URL=<operator-webhook-url>
+SCOUT_REMOTE_WEBHOOK_TOKEN=<operator-webhook-token>
+SCOUT_REMOTE_WEBHOOK_HMAC_SECRET=<operator-webhook-hmac-secret>
+SCOUT_REMOTE_PRIMARY_TARGET_REF=<operator-primary-target-ref>
+SCOUT_REMOTE_BACKUP_TARGET_REF=<operator-backup-target-ref>
+EOF
+chmod 600 /data/scout/secrets/live-runtime.env
 ```
+
+中文註釋：`docker-compose.pi.live.yml` 會透過 `env_file` 載入這個檔案，避免把 secret 值寫進 repo 或 compose YAML。
 
 4. 建置並啟動 live profile。
 
 先跑 preflight-only CLI：
 
 ```bash
-python live_runtime_enablement_cli.py --env-file tests/fixtures/live_runtime/operator-env.example --pretty
+python live_runtime_enablement_cli.py \
+  --env-file tests/fixtures/live_runtime/operator-env.example \
+  --env-file /data/scout/secrets/live-runtime.env \
+  --pretty
 ```
 
 中文註釋：這個 CLI 只檢查 gate、config 與 secret ref 是否存在；不連模型、不送 webhook、不啟動 Docker、不控制硬體。

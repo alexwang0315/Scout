@@ -41,6 +41,7 @@ def test_live_runtime_operator_runbook_documents_external_config_and_secret_refs
         "/data/scout/config/hardware-provider-control-policy.json",
         "/data/scout/secrets/runtime-stream-admission-secret",
         "/data/scout/secrets/hardware-provider-control-token",
+        "/data/scout/secrets/live-runtime.env",
         "SCOUT_CLOUD_MODEL_TOKEN",
         "SCOUT_REMOTE_WEBHOOK_URL",
         "SCOUT_REMOTE_WEBHOOK_TOKEN",
@@ -68,6 +69,7 @@ def test_live_runtime_operator_runbook_documents_startup_fallback_and_validation
         "docker compose -f docker-compose.pi.live.yml build scout-live",
         "docker compose -f docker-compose.pi.live.yml up -d scout-live",
         "curl --max-time 5 http://127.0.0.1:9099/assistant/status",
+        "--env-file /data/scout/secrets/live-runtime.env",
     ):
         assert token in source
 
@@ -102,7 +104,7 @@ def test_live_runtime_example_assistant_model_config_parses_and_uses_secret_refs
     assert config.cloud_model.token_env_var == "SCOUT_CLOUD_MODEL_TOKEN"
     assert config.cloud_model.token_id == "operator-managed-cloud-token"
     assert config.local_model.profile == "local"
-    assert config.local_model.base_url == "http://scout-ollama:11434/v1"
+    assert config.local_model.base_url == "http://host.docker.internal:11434/v1"
     assert config.connect_on_startup is True
     assert config.fallback_to_local_on_error is True
     assert config.local_fallback_fixed_schema is True
