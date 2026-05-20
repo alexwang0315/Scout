@@ -92,5 +92,11 @@ def test_cleanup_plan_records_batch_3_local_artifact_hygiene() -> None:
         "without a separate explicit decision",
         "`install_skills.sh` is a local operator setup helper",
         "`docker-compose.pi.ai.yml` and `tools/pi_ollama_stress.py` remain visible",
+        "tests/test_local_artifact_hygiene_check.py",
+        "local_artifact_hygiene_check.py",
+        "Dirty but unstaged local-only artifacts are allowed and reported",
+        "Staged local-only artifacts fail the gate",
+        "local_only_staged:<path>",
+        "must not mutate the worktree",
     ):
         assert token in source

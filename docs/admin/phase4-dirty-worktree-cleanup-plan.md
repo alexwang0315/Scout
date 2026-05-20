@@ -107,5 +107,18 @@ Future visible slices:
 Validation:
 
 ```bash
-/Users/alexwang0315/scout-fusion/venv/bin/python -m pytest tests/test_phase4_dirty_worktree_cleanup_plan.py
+/Users/alexwang0315/scout-fusion/venv/bin/python -m pytest tests/test_phase4_dirty_worktree_cleanup_plan.py tests/test_local_artifact_hygiene_check.py
+/Users/alexwang0315/scout-fusion/venv/bin/python local_artifact_hygiene_check.py --pretty
 ```
+
+Batch 3 executable gate:
+
+- `local_artifact_hygiene_check.py` is a read-only git status gate for
+  local-only artifacts.
+- Dirty but unstaged local-only artifacts are allowed and reported. This covers
+  the current tracked `trajectory_map.png` case without resetting, untracking,
+  or recommitting the image.
+- Staged local-only artifacts fail the gate with
+  `local_only_staged:<path>` in `missing_required_artifacts`.
+- The gate must not mutate the worktree, revert files, stage files, commit
+  files, or remove tracked files.
