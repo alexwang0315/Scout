@@ -59,6 +59,7 @@ COPY \
     incident_store.py \
     live_runtime_enablement.py \
     live_runtime_enablement_cli.py \
+    live_runtime_soak_check.py \
     mission_graph.py \
     mission_models.py \
     mission_progress.py \
