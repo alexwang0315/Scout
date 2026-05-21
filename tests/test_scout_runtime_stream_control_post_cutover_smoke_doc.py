@@ -75,6 +75,48 @@ def test_control_smoke_records_incident_and_secret_boundaries() -> None:
         assert token in source
 
 
+def test_control_smoke_records_operator_auth_hardening() -> None:
+    source = read_report()
+
+    for token in (
+        "`/data/scout/deployments/live-control-auth-20260521T002419Z`",
+        "`/data/scout/deployments/runtime-stream-control-auth-smoke-20260521T002445Z`",
+        "`runtime-stream-control-auth-smoke-summary.json`",
+        "`artifact_kind=scout_runtime_stream_control_auth_smoke`",
+        "`status=passed`",
+        "`repo_commit=af02ce4f`",
+        "`health_status=ok`",
+        "`runtime_profile=pi-field-live`",
+        "`runtime_stream_transport_enabled=true`",
+        "`remote_provider_live_send_enabled=true`",
+        "`hardware_provider_control_enabled=true`",
+        "`operator_authorization_required_before=true`",
+        "`token_value_exposed_before=false`",
+        "`missing_token_status_code=401`",
+        "`missing_token_reason=runtime_stream_control_auth_required`",
+        "`wrong_token_status_code=401`",
+        "`wrong_token_reason=runtime_stream_control_auth_required`",
+        "`authorized_pause_status_code=200`",
+        "`authorized_pause_status_after=paused`",
+        "`authorized_resume_status_code=200`",
+        "`authorized_resume_status_after=observing`",
+        "`post_control_status=observing`",
+        "`post_control_record_count=2`",
+        "`status_surface_control_status=observing`",
+        "`token_value_exposed_after=false`",
+        "`secret_values_embedded=false`",
+        "`new_observations_sent=false`",
+        "`stream_control_mutation_performed=true`",
+        "`stream_control_final_status_restored=true`",
+        "`remote_provider_send_performed=false`",
+        "`hardware_control_performed=false`",
+        "`phase2_writeback_performed=false`",
+        "SCOUT_RUNTIME_STREAM_CONTROL_TOKEN(_FILE)",
+        "falls back to",
+    ):
+        assert token in source
+
+
 def test_control_smoke_keeps_runtime_boundaries_explicit() -> None:
     source = read_report()
 
