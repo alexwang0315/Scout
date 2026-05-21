@@ -167,6 +167,7 @@ def create_pi_runtime_app(environ: Mapping[str, str] | None = None) -> FastAPI:
                 observation_admission_config=observation_admission_config,
                 telemetry_store=telemetry_store,
                 control_store=control_store,
+                control_bearer_token=_runtime_stream_control_token_from_env(env),
             )
         )
     if live_enablement_ready and _is_true_like(env.get("SCOUT_AI_ASSISTANT_ENABLED")):
@@ -403,6 +404,19 @@ def _hardware_control_token_from_env(env: Mapping[str, str]) -> str:
         return Path(token_file).expanduser().read_text(encoding="utf-8").strip()
     except OSError:
         return ""
+
+
+def _runtime_stream_control_token_from_env(env: Mapping[str, str]) -> str:
+    token = env.get("SCOUT_RUNTIME_STREAM_CONTROL_TOKEN", "").strip()
+    if token:
+        return token
+    token_file = env.get("SCOUT_RUNTIME_STREAM_CONTROL_TOKEN_FILE", "").strip()
+    if token_file:
+        try:
+            return Path(token_file).expanduser().read_text(encoding="utf-8").strip()
+        except OSError:
+            return ""
+    return _hardware_control_token_from_env(env)
 
 
 def _path_from_env(env: Mapping[str, str], key: str, default: Path) -> Path:

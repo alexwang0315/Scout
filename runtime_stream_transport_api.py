@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from hmac import compare_digest
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, HTTPException, Request, WebSocket, WebSocketDisconnect
 from pydantic import ValidationError
 
 from runtime_stream_controls import (
@@ -26,10 +27,12 @@ def create_runtime_stream_transport_router(
     server_signal_snapshot_provider: Callable[[], dict[str, Any] | None] | None = None,
     telemetry_store: RuntimeStreamTelemetryStore | None = None,
     control_store: RuntimeStreamControlStore | None = None,
+    control_bearer_token: str | None = None,
 ) -> APIRouter:
     router = APIRouter(prefix="/runtime/streams", tags=["runtime-streams"])
     telemetry = telemetry_store or RuntimeStreamTelemetryStore()
     controls = control_store or RuntimeStreamControlStore()
+    normalized_control_token = (control_bearer_token or "").strip()
 
     @router.get("/status")
     def runtime_stream_status() -> dict[str, Any]:
@@ -41,10 +44,17 @@ def create_runtime_stream_transport_router(
 
     @router.get("/control/status")
     def runtime_stream_control_status() -> dict[str, Any]:
-        return controls.snapshot().model_dump(mode="json")
+        payload = controls.snapshot().model_dump(mode="json")
+        payload["operator_authorization_required"] = bool(normalized_control_token)
+        payload["token_value_exposed"] = False
+        return payload
 
     @router.post("/control/pause")
-    def pause_runtime_stream(request: RuntimeStreamControlRequest) -> dict[str, Any]:
+    def pause_runtime_stream(
+        request: RuntimeStreamControlRequest,
+        http_request: Request,
+    ) -> dict[str, Any]:
+        _require_control_authorization(http_request, normalized_control_token)
         try:
             result = controls.pause(
                 operator_id=request.operator_id,
@@ -55,7 +65,11 @@ def create_runtime_stream_transport_router(
         return result.model_dump(mode="json")
 
     @router.post("/control/resume")
-    def resume_runtime_stream(request: RuntimeStreamControlRequest) -> dict[str, Any]:
+    def resume_runtime_stream(
+        request: RuntimeStreamControlRequest,
+        http_request: Request,
+    ) -> dict[str, Any]:
+        _require_control_authorization(http_request, normalized_control_token)
         try:
             result = controls.resume(
                 operator_id=request.operator_id,
@@ -66,7 +80,11 @@ def create_runtime_stream_transport_router(
         return result.model_dump(mode="json")
 
     @router.post("/control/end")
-    def end_runtime_stream(request: RuntimeStreamControlRequest) -> dict[str, Any]:
+    def end_runtime_stream(
+        request: RuntimeStreamControlRequest,
+        http_request: Request,
+    ) -> dict[str, Any]:
+        _require_control_authorization(http_request, normalized_control_token)
         try:
             result = controls.end(
                 operator_id=request.operator_id,
@@ -77,7 +95,11 @@ def create_runtime_stream_transport_router(
         return result.model_dump(mode="json")
 
     @router.post("/control/drain-queue")
-    def drain_runtime_stream_queue(request: RuntimeStreamControlRequest) -> dict[str, Any]:
+    def drain_runtime_stream_queue(
+        request: RuntimeStreamControlRequest,
+        http_request: Request,
+    ) -> dict[str, Any]:
+        _require_control_authorization(http_request, normalized_control_token)
         try:
             record = controls.drain_queue(
                 observation_admission_config.state,
@@ -167,6 +189,26 @@ def create_runtime_stream_transport_router(
             telemetry.record_websocket_disconnected()
 
     return router
+
+
+def _require_control_authorization(request: Request, bearer_token: str) -> None:
+    if not bearer_token:
+        return
+    if not _bearer_token_valid(
+        request.headers.get("authorization", ""),
+        bearer_token,
+    ):
+        raise HTTPException(
+            status_code=401,
+            detail={"reason": "runtime_stream_control_auth_required"},
+        )
+
+
+def _bearer_token_valid(header: str, token: str) -> bool:
+    prefix = "Bearer "
+    if not header.startswith(prefix) or not token:
+        return False
+    return compare_digest(header.removeprefix(prefix).strip(), token)
 
 
 def _control_rejection(controls: RuntimeStreamControlStore) -> dict[str, Any] | None:

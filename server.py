@@ -90,6 +90,12 @@ SCOUT_RUNTIME_STREAM_TRANSPORT_ENABLED = os.getenv(
     "SCOUT_RUNTIME_STREAM_TRANSPORT_ENABLED",
     "false",
 )
+SCOUT_RUNTIME_STREAM_CONTROL_TOKEN = os.getenv("SCOUT_RUNTIME_STREAM_CONTROL_TOKEN")
+SCOUT_RUNTIME_STREAM_CONTROL_TOKEN_FILE = os.getenv("SCOUT_RUNTIME_STREAM_CONTROL_TOKEN_FILE")
+SCOUT_HARDWARE_PROVIDER_CONTROL_TOKEN = os.getenv("SCOUT_HARDWARE_PROVIDER_CONTROL_TOKEN")
+SCOUT_HARDWARE_PROVIDER_CONTROL_TOKEN_FILE = os.getenv(
+    "SCOUT_HARDWARE_PROVIDER_CONTROL_TOKEN_FILE"
+)
 
 log_level = logging.DEBUG if DEBUG else logging.INFO
 logging.basicConfig(level=log_level, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -254,6 +260,7 @@ def _include_runtime_stream_transport_router(app: FastAPI) -> None:
             observation_admission_config=safety_observation_admission_config,
             telemetry_store=runtime_stream_telemetry_store,
             control_store=runtime_stream_control_store,
+            control_bearer_token=_runtime_stream_control_token_from_env(),
         )
     )
     logger.info("Runtime stream transport API enabled")
@@ -285,6 +292,28 @@ def _runtime_stream_transport_ready() -> bool:
         and safety_runtime_session is not None
         and safety_observation_admission_config is not None
     )
+
+
+def _runtime_stream_control_token_from_env() -> str:
+    token = (SCOUT_RUNTIME_STREAM_CONTROL_TOKEN or "").strip()
+    if token:
+        return token
+    token_file = (SCOUT_RUNTIME_STREAM_CONTROL_TOKEN_FILE or "").strip()
+    if token_file:
+        try:
+            return Path(token_file).expanduser().read_text(encoding="utf-8").strip()
+        except OSError:
+            return ""
+    token = (SCOUT_HARDWARE_PROVIDER_CONTROL_TOKEN or "").strip()
+    if token:
+        return token
+    token_file = (SCOUT_HARDWARE_PROVIDER_CONTROL_TOKEN_FILE or "").strip()
+    if not token_file:
+        return ""
+    try:
+        return Path(token_file).expanduser().read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
 
 
 async def process_movement_summary(summary: Any) -> Dict[str, Any]:
