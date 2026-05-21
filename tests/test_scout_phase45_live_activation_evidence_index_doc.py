@@ -40,6 +40,7 @@ def test_index_links_live_runtime_reports_and_evidence_dirs() -> None:
         "docs/admin/scout-runtime-stream-post-cutover-smoke.md",
         "docs/admin/scout-runtime-stream-websocket-post-cutover-smoke.md",
         "docs/admin/scout-runtime-stream-control-post-cutover-smoke.md",
+        "docs/admin/scout-runtime-ingest-surface-smoke.md",
         "docs/admin/scout-live-runtime-post-cutover-soak.md",
         "docs/admin/scout-live-runtime-long-soak-automation.md",
         "docs/admin/scout-live-runtime-guard-update-and-signed-sample.md",
@@ -52,6 +53,7 @@ def test_index_links_live_runtime_reports_and_evidence_dirs() -> None:
         "`/data/scout/deployments/packaged-signed-sample-client-20260521T001534Z`",
         "`/data/scout/deployments/runtime-stream-control-auth-smoke-20260521T002445Z`",
         "`/data/scout/deployments/provider-control-status-auth-smoke-20260521T003406Z`",
+        "`/data/scout/deployments/ingest-surface-smoke-20260521T004438Z`",
         "`/data/scout/deployments/live-runtime-soak-overnight-20260520T152647Z`",
     ):
         assert token in source
