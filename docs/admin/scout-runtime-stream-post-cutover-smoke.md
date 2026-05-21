@@ -137,12 +137,15 @@ Not performed:
 - no ObservedFact write;
 - no HumanReview or review decision mutation.
 
-## Follow-Up
+## Follow-Up Status
 
-Next runtime slices should stay separate:
+The original follow-up slices are now complete or deliberately scoped out:
 
-- websocket admission smoke with short connection lifecycle evidence;
-- operator pause/resume/drain smoke against live stream controls;
-- longer post-cutover soak with periodic `health`, `assistant/status`, and
-  `runtime/streams/status-read-only` samples;
-- rollback drill documentation without changing production unless needed.
+- WebSocket admission smoke: `docs/admin/scout-runtime-stream-websocket-post-cutover-smoke.md`;
+- operator pause/resume/drain smoke: `docs/admin/scout-runtime-stream-control-post-cutover-smoke.md`;
+- longer post-cutover soak: `docs/admin/scout-live-runtime-post-cutover-soak.md`
+  and `docs/admin/scout-live-runtime-long-soak-automation.md`;
+- rollback drill documentation: `docs/admin/scout-live-runtime-rollback-drill.md`.
+
+Remaining work belongs to the next milestone: real Apple Watch/mobile
+continuous stream evidence and any operator-approved rollback execution.

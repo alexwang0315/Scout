@@ -48,6 +48,9 @@ def test_live_runtime_preflight_smoke_lists_missing_remote_provider_refs() -> No
     source = read_report()
 
     for token in (
+        "Historical status: this preflight gate was later satisfied",
+        "docs/admin/scout-live-runtime-shadow-smoke.md",
+        "docs/admin/scout-live-runtime-live-send-and-cutover.md",
         "`env:SCOUT_REMOTE_WEBHOOK_URL`",
         "`env:SCOUT_REMOTE_WEBHOOK_TOKEN`",
         "`env:SCOUT_REMOTE_WEBHOOK_HMAC_SECRET`",

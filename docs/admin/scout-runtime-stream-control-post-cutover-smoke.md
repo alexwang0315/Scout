@@ -184,8 +184,16 @@ Not performed:
 - no ObservedFact write;
 - no HumanReview or review decision mutation.
 
-## Follow-Up
+## Follow-Up Status
 
-The next safe runtime slice is a longer post-cutover soak: sample `health`,
-`assistant/status`, `runtime/streams/status-read-only`, and provider-control
-status for a bounded period without adding new observations or control actions.
+The original longer-soak follow-up is complete:
+
+- bounded post-cutover soak:
+  `docs/admin/scout-live-runtime-post-cutover-soak.md`;
+- completed overnight soak:
+  `docs/admin/scout-live-runtime-long-soak-automation.md`;
+- packaged app rebuild smoke:
+  `docs/admin/scout-live-runtime-long-soak-automation.md`.
+
+Remaining control work belongs to the next milestone only if real device
+streams expose new operator workflows.

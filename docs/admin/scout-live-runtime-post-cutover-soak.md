@@ -91,10 +91,18 @@ Not performed:
 - no ObservedFact write;
 - no HumanReview or review decision mutation.
 
-## Follow-Up
+## Follow-Up Status
 
-Next safe slices:
+The original follow-up slices are now complete or deliberately scoped:
 
-- rollback drill documentation without executing rollback;
-- post-cutover operator runbook refresh;
-- optional longer soak window if this runtime should stay on `9099` overnight.
+- rollback drill documentation:
+  `docs/admin/scout-live-runtime-rollback-drill.md`;
+- longer soak window:
+  `docs/admin/scout-live-runtime-long-soak-automation.md`;
+- packaged checker rebuild:
+  `docs/admin/scout-live-runtime-long-soak-automation.md`;
+- operator auth hardening:
+  `docs/admin/scout-runtime-stream-control-post-cutover-smoke.md` and
+  `docs/admin/scout-provider-control-status-auth-smoke.md`.
+
+Rollback execution remains operator-only and is not required for this live activation evidence milestone.

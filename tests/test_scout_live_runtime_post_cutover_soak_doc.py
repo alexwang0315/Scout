@@ -69,3 +69,18 @@ def test_post_cutover_soak_records_read_only_boundaries() -> None:
         "no HumanReview or review decision mutation",
     ):
         assert token in source
+
+
+def test_post_cutover_soak_marks_followups_complete_or_scoped() -> None:
+    source = read_report()
+
+    for token in (
+        "## Follow-Up Status",
+        "docs/admin/scout-live-runtime-rollback-drill.md",
+        "docs/admin/scout-live-runtime-long-soak-automation.md",
+        "docs/admin/scout-runtime-stream-control-post-cutover-smoke.md",
+        "docs/admin/scout-provider-control-status-auth-smoke.md",
+        "Rollback execution remains operator-only",
+        "not required for this live activation evidence milestone",
+    ):
+        assert token in source

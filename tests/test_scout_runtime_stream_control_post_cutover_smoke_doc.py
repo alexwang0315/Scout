@@ -134,3 +134,18 @@ def test_control_smoke_keeps_runtime_boundaries_explicit() -> None:
         "no HumanReview or review decision mutation",
     ):
         assert token in source
+
+
+def test_control_smoke_marks_soak_followups_complete() -> None:
+    source = read_report()
+
+    for token in (
+        "## Follow-Up Status",
+        "bounded post-cutover soak",
+        "completed overnight soak",
+        "packaged app rebuild smoke",
+        "docs/admin/scout-live-runtime-post-cutover-soak.md",
+        "docs/admin/scout-live-runtime-long-soak-automation.md",
+        "Remaining control work belongs to the next milestone",
+    ):
+        assert token in source

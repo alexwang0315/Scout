@@ -116,9 +116,15 @@ Not performed:
 - no ObservedFact write;
 - no HumanReview or review decision mutation.
 
-## Follow-Up
+## Follow-Up Status
 
-The next safe runtime slice is a live stream-control smoke that pauses and
-resumes the stream locally, then verifies the final control state is
-`observing`. It should avoid `end` on production unless rollback or a controlled
-maintenance window is intended.
+The original next slice is complete:
+
+- stream-control smoke:
+  `docs/admin/scout-runtime-stream-control-post-cutover-smoke.md`;
+- stream-control auth hardening:
+  `docs/admin/scout-runtime-stream-control-post-cutover-smoke.md`;
+- final control state after the latest auth smoke: `observing`.
+
+Remaining stream work belongs to the next milestone: real Apple Watch/mobile
+continuous stream evidence and load/thermal behavior with real cadence.

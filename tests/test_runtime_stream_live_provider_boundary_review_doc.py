@@ -51,5 +51,7 @@ def test_boundary_review_preserves_non_goals_after_live_enablement() -> None:
         "硬體 driver",
         "Phase 2 writeback",
         "either satisfied by dedicated evidence or kept as explicit non-goals",
+        "## Historical Next Implementation Slice",
+        "That slice is now complete",
     ):
         assert token in source
