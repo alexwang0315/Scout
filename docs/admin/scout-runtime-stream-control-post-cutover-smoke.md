@@ -9,6 +9,12 @@ Runtime URL: `http://scout.local:9099`
 Evidence directory:
 `/data/scout/deployments/runtime-stream-control-smoke-20260520T102538Z`
 
+Latest auth-hardening deployment evidence:
+`/data/scout/deployments/live-control-auth-20260521T002419Z`
+
+Latest control auth smoke evidence:
+`/data/scout/deployments/runtime-stream-control-auth-smoke-20260521T002445Z`
+
 ## Scope
 
 This smoke verifies that production `pi-field-live` stream controls on `9099`
@@ -98,6 +104,58 @@ Result:
 - `incident_ids_returned_count=0`;
 - `stored_incident_paths_count=0`.
 
+## Operator Auth Hardening
+
+After the packaged live runtime rebuild, stream control mutation routes were
+hardened to require an operator bearer token. The live profile uses
+`SCOUT_RUNTIME_STREAM_CONTROL_TOKEN(_FILE)` when set, otherwise it falls back to
+the existing hardware provider control token ref.
+
+Auth smoke deployment evidence:
+`/data/scout/deployments/live-control-auth-20260521T002419Z`
+
+Auth smoke evidence directory:
+`/data/scout/deployments/runtime-stream-control-auth-smoke-20260521T002445Z`
+
+Summary artifact:
+`runtime-stream-control-auth-smoke-summary.json`
+
+Result:
+
+- `artifact_kind=scout_runtime_stream_control_auth_smoke`;
+- `status=passed`;
+- `repo_commit=af02ce4f`;
+- `health_status=ok`;
+- `runtime_profile=pi-field-live`;
+- `runtime_stream_transport_enabled=true`;
+- `remote_provider_live_send_enabled=true`;
+- `hardware_provider_control_enabled=true`;
+- `operator_authorization_required_before=true`;
+- `token_value_exposed_before=false`;
+- `missing_token_status_code=401`;
+- `missing_token_reason=runtime_stream_control_auth_required`;
+- `wrong_token_status_code=401`;
+- `wrong_token_reason=runtime_stream_control_auth_required`;
+- `authorized_pause_status_code=200`;
+- `authorized_pause_status_after=paused`;
+- `authorized_resume_status_code=200`;
+- `authorized_resume_status_after=observing`;
+- `post_control_status=observing`;
+- `post_control_record_count=2`;
+- `status_surface_control_status=observing`;
+- `token_value_exposed_after=false`;
+- `secret_values_embedded=false`;
+- `new_observations_sent=false`;
+- `stream_control_mutation_performed=true`;
+- `stream_control_final_status_restored=true`;
+- `remote_provider_send_performed=false`;
+- `hardware_control_performed=false`;
+- `phase2_writeback_performed=false`.
+
+中文註釋：這次 auth smoke 只測 runtime stream control 的操作者認證。它有執行
+一次 authorized pause/resume，但最後回到 `observing`。它沒有送新 observation、
+沒有 remote provider send、沒有硬體控制，也沒有 Phase 2 writeback。
+
 ## Boundary
 
 Performed:
@@ -107,6 +165,9 @@ Performed:
 - one local resume;
 - one accepted HTTP observation after resume;
 - one empty queue drain;
+- one missing-token control rejection;
+- one wrong-token control rejection;
+- one authorized control pause/resume auth smoke with final status restored;
 - read-only status/telemetry checks.
 
 Not performed:
