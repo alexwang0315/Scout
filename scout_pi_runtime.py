@@ -336,7 +336,12 @@ def _include_hardware_provider_control_routes(
     bearer_token: str,
 ) -> None:
     @app.get("/providers/control/status")
-    def hardware_provider_control_status() -> dict[str, Any]:
+    def hardware_provider_control_status(http_request: Request) -> dict[str, Any]:
+        if not _bearer_token_valid(
+            http_request.headers.get("authorization", ""),
+            bearer_token,
+        ):
+            raise HTTPException(status_code=401, detail={"reason": "hardware_control_auth_required"})
         return {
             "artifact_kind": "hardware_provider_control_status",
             "status": "enabled",

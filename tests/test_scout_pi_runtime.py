@@ -258,7 +258,11 @@ class ScoutPiRuntimeTests(unittest.TestCase):
             stream_status = client.get("/runtime/streams/status-read-only")
             assistant_status = client.get("/assistant/status")
             providers = client.get("/providers/status")
-            control_status = client.get("/providers/control/status")
+            unauthorized_control_status = client.get("/providers/control/status")
+            control_status = client.get(
+                "/providers/control/status",
+                headers={"Authorization": "Bearer hardware-control-token"},
+            )
             stream_control_status = client.get("/runtime/streams/control/status")
             unauthorized_stream_pause = client.post(
                 "/runtime/streams/control/pause",
@@ -318,6 +322,11 @@ class ScoutPiRuntimeTests(unittest.TestCase):
             self.assertEqual(
                 authorized_stream_resume.json()["snapshot_after"]["status"],
                 "observing",
+            )
+            self.assertEqual(unauthorized_control_status.status_code, 401)
+            self.assertEqual(
+                unauthorized_control_status.json()["detail"]["reason"],
+                "hardware_control_auth_required",
             )
             self.assertEqual(unauthorized_control.status_code, 401)
             self.assertEqual(authorized_control.status_code, 200)
