@@ -848,6 +848,10 @@ Default policy:
 - duplicate or out-of-order sequence numbers are rejected before runtime
   observation processing;
 - the API response exposes admission summary metadata, not raw payload;
+- direct signed `/safety/observations` responses include
+  `ingest_surface=safety_api_direct`;
+- direct signed `/safety/observations` responses include
+  `admission_transport=<envelope transport>` so operators can distinguish the signed envelope transport from the API surface that received it;
 - legacy unsigned SensorLog ingest remains available only when the admission
   config is not installed.
 
@@ -899,6 +903,8 @@ Default policy:
   payload may reach runtime observation processing;
 - accepted messages return admission summary metadata and do not expose raw
   payload;
+- accepted HTTP push messages return `ingest_surface=runtime_stream_http_push`;
+- accepted WebSocket messages return `ingest_surface=runtime_stream_websocket`;
 - rejected messages do not call `SafetyRuntimeSession.observe`;
 - this transport surface does not enable incident bridge notifications and
   does not write Phase 2 Brain state.

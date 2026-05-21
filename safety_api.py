@@ -209,11 +209,14 @@ def ingest_safety_observation_body(
 ) -> dict[str, Any]:
     admission_summary: dict[str, Any] | None = None
     transport_surface: str | None = None
+    ingest_surface = "safety_api_direct"
     expected_transport = (
         RuntimeStreamTransportKind(required_transport)
         if required_transport is not None
         else None
     )
+    if expected_transport is not None:
+        ingest_surface = f"runtime_stream_{expected_transport.value}"
     if observation_admission_config is None:
         try:
             ingest_request = _ingest_request_from_body(body)
@@ -319,9 +322,12 @@ def ingest_safety_observation_body(
             "incident_packages": len(runtime_snapshot.incident_packages),
             "stored_incidents": len(runtime_snapshot.stored_incident_paths),
         },
+        "ingest_surface": ingest_surface,
     }
     if admission_summary is not None:
         response["admission"] = admission_summary
+        if expected_transport is None:
+            response["admission_transport"] = transport_surface
     if expected_transport is not None:
         response["transport_surface"] = transport_surface or expected_transport.value
     return response
