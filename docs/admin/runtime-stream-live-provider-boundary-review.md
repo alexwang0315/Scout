@@ -5,6 +5,31 @@ Date: 2026-05-20
 這份 review 收束目前 dirty worktree 裡的 `runtime_stream_*` 與
 `runtime_remote_provider_*` 草稿。它不是啟用 live stream 或 live provider 的 approval。
 
+## Supersession Note
+
+Status as of 2026-05-21: this review is historical boundary context. It has
+been superseded by the Phase 4.5 live activation evidence index:
+
+- `docs/admin/scout-phase4-5-live-activation-evidence-index.md`.
+
+The live `pi-field-live` runtime is now deployed on `scout.local:9099` with
+operator-approved evidence for:
+
+- live runtime cutover;
+- signed HTTP push admission;
+- signed WebSocket admission;
+- runtime stream pause/resume/drain controls;
+- runtime stream control operator auth;
+- provider control status operator auth;
+- packaged signed sample client smoke;
+- packaged soak checker smoke;
+- completed overnight read-only soak.
+
+中文註釋：本文件早期的「不要 live use」是當時的保護邊界，不是目前狀態。現在
+live runtime 已啟用，但仍不代表自動 field mission activation，也不代表允許
+incident bridge、SOS/SMS/satellite send、assistant safety mutation、硬體 driver
+invocation 或 Phase 2 writeback。
+
 ## Current Status
 
 - Runtime stream policy, telemetry, controls, and transport API are present as
@@ -32,6 +57,8 @@ For the current hardware prototype prep:
 已經允許 live provider send、incident bridge enablement 或安全決策 mutation。
 
 ## Required Gates Before Live Use
+
+Status: the gates below have been either satisfied by dedicated evidence or kept as explicit non-goals for this milestone.
 
 1. Operator policy naming who may enable a stream and for how long.
 2. Authentication and replay-protection test plan for every transport.
