@@ -104,6 +104,64 @@ Sample summary:
 transport endpoint 接受後，該 observation 仍會進入 Phase 1 runtime observe path。
 這次結果保持 `L0_NORMAL`，沒有新增 incident 檔案。
 
+## Packaged Client Smoke After Rebuild
+
+After the live image was rebuilt with the signed sample client under `/app`, a
+second signed HTTP push smoke was run from the packaged client path.
+
+Evidence directory:
+`/data/scout/deployments/packaged-signed-sample-client-20260521T001534Z`
+
+Artifacts:
+
+- `sample-observation.json`;
+- `sample-observation.validated.json`;
+- `signed-http-push.dry-run.json`;
+- `signed-http-push.sent.json`;
+- `packaged-signed-sample-client-summary.json`;
+- `runtime-stream-status.before.json`;
+- `runtime-stream-status.after.json`;
+- `health.after.json`.
+
+Sample summary:
+
+- `artifact_kind=scout_live_runtime_packaged_signed_sample_client_smoke`;
+- `status=passed`;
+- `client_path=/app/runtime_stream_signed_sample_client.py`;
+- `dry_run_status=dry_run_ready`;
+- `dry_run_network_send_attempted=false`;
+- `send_status=sent`;
+- `http_status_code=200`;
+- `response_status=accepted`;
+- `response_admission_status=admitted_not_forwarded`;
+- `response_transport_surface=http_push`;
+- `observations_accepted=1`;
+- `safety_level=L0_NORMAL`;
+- `network_send_attempted=true`;
+- `send_performed=true`;
+- `health_status=ok`;
+- `runtime_profile=pi-field-live`;
+- `runtime_stream_transport_enabled=true`;
+- `remote_provider_live_send_enabled=true`;
+- `hardware_provider_control_enabled=true`;
+- `telemetry_http_accepted_delta=1`;
+- `telemetry_http_rejected_delta=0`;
+- `incident_file_delta=0`;
+- `incident_bridge_enabled=false`;
+- `phase2_writeback_count=0`;
+- `raw_payloads_embedded=false`;
+- `secret_values_embedded=false`;
+- `endpoint_secret_embedded=false`;
+- `new_observations_sent=true`;
+- `stream_control_mutation_performed=false`;
+- `remote_provider_send_performed=false`;
+- `hardware_control_performed=false`;
+- `phase2_writeback_performed=false`.
+
+中文註釋：這次 smoke 是驗證 live image 內建的 packaged client 可以完成 dry-run
+與 operator-approved send。它會寫入一筆正常測試 observation，但不觸發
+Telegram、SOS、incident bridge、hardware control 或 Phase 2 writeback。
+
 ## Boundary
 
 Performed:
@@ -111,6 +169,7 @@ Performed:
 - rebuilt and redeployed `scout-fusion/pi-runtime:live`;
 - packaged `runtime_stream_signed_sample_client.py` into the live image;
 - sent one operator-approved signed HTTP push observation;
+- verified packaged `/app/runtime_stream_signed_sample_client.py` after rebuild;
 - verified live runtime health and read-only status after deployment.
 
 Not performed:
@@ -126,4 +185,3 @@ Not performed:
 - no ObservedFact write;
 - no HumanReview or review decision mutation;
 - no raw secret value written to committed docs.
-
