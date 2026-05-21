@@ -259,6 +259,21 @@ class ScoutPiRuntimeTests(unittest.TestCase):
             assistant_status = client.get("/assistant/status")
             providers = client.get("/providers/status")
             control_status = client.get("/providers/control/status")
+            stream_control_status = client.get("/runtime/streams/control/status")
+            unauthorized_stream_pause = client.post(
+                "/runtime/streams/control/pause",
+                json={"operator_id": "operator.admin.local", "reason": "smoke"},
+            )
+            authorized_stream_pause = client.post(
+                "/runtime/streams/control/pause",
+                headers={"Authorization": "Bearer hardware-control-token"},
+                json={"operator_id": "operator.admin.local", "reason": "smoke"},
+            )
+            authorized_stream_resume = client.post(
+                "/runtime/streams/control/resume",
+                headers={"Authorization": "Bearer hardware-control-token"},
+                json={"operator_id": "operator.admin.local", "reason": "resume"},
+            )
             unauthorized_control = client.post(
                 "/providers/control/provider.gnss.live.v0/actions/read_provider_status",
                 json={"operator_id": "operator.admin.local", "reason": "smoke"},
@@ -290,6 +305,20 @@ class ScoutPiRuntimeTests(unittest.TestCase):
             self.assertTrue(providers.json()["providers"][0]["control_allowed"])
             self.assertEqual(control_status.status_code, 200)
             self.assertEqual(control_status.json()["policy_id"], "hardware_control_policy.pi5_live.v0")
+            self.assertEqual(stream_control_status.status_code, 200)
+            self.assertTrue(stream_control_status.json()["operator_authorization_required"])
+            self.assertFalse(stream_control_status.json()["token_value_exposed"])
+            self.assertEqual(unauthorized_stream_pause.status_code, 401)
+            self.assertEqual(authorized_stream_pause.status_code, 200)
+            self.assertEqual(
+                authorized_stream_pause.json()["snapshot_after"]["status"],
+                "paused",
+            )
+            self.assertEqual(authorized_stream_resume.status_code, 200)
+            self.assertEqual(
+                authorized_stream_resume.json()["snapshot_after"]["status"],
+                "observing",
+            )
             self.assertEqual(unauthorized_control.status_code, 401)
             self.assertEqual(authorized_control.status_code, 200)
             body = authorized_control.json()

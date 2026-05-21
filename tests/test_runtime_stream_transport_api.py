@@ -312,6 +312,44 @@ class RuntimeStreamTransportApiTests(unittest.TestCase):
         self.assertEqual(status["boundary"]["incident_bridge_enabled"], False)
         self.assertEqual(status["control"]["boundary"]["phase2_writeback_count"], 0)
 
+    def test_operator_controls_require_bearer_token_when_configured(self):
+        secret_key = "runtime-stream-secret"
+        admission_config = SafetyObservationAdmissionConfig(secret_key=secret_key)
+        session = SafetyRuntimeSession(MISSION_PATH)
+        client = _client(
+            session=session,
+            admission_config=admission_config,
+            control_bearer_token="operator-control-token",
+        )
+
+        status = client.get("/runtime/streams/control/status")
+        missing_token = client.post(
+            "/runtime/streams/control/pause",
+            json={"operator_id": "admin.local", "reason": "manual pause"},
+        )
+        wrong_token = client.post(
+            "/runtime/streams/control/pause",
+            headers={"Authorization": "Bearer wrong-token"},
+            json={"operator_id": "admin.local", "reason": "manual pause"},
+        )
+        authorized = client.post(
+            "/runtime/streams/control/pause",
+            headers={"Authorization": "Bearer operator-control-token"},
+            json={"operator_id": "admin.local", "reason": "manual pause"},
+        )
+
+        self.assertEqual(status.status_code, 200)
+        self.assertTrue(status.json()["operator_authorization_required"])
+        self.assertFalse(status.json()["token_value_exposed"])
+        self.assertEqual(missing_token.status_code, 401)
+        self.assertEqual(
+            missing_token.json()["detail"]["reason"],
+            "runtime_stream_control_auth_required",
+        )
+        self.assertEqual(wrong_token.status_code, 401)
+        self.assertEqual(authorized.status_code, 200)
+        self.assertEqual(authorized.json()["snapshot_after"]["status"], "paused")
+
 
 def _client(
     *,
@@ -319,6 +357,7 @@ def _client(
     admission_config: SafetyObservationAdmissionConfig,
     telemetry_store: RuntimeStreamTelemetryStore | None = None,
     control_store: RuntimeStreamControlStore | None = None,
+    control_bearer_token: str | None = None,
 ) -> TestClient:
     app = FastAPI()
     app.include_router(
@@ -327,6 +366,7 @@ def _client(
             observation_admission_config=admission_config,
             telemetry_store=telemetry_store,
             control_store=control_store,
+            control_bearer_token=control_bearer_token,
         )
     )
     return TestClient(app)
