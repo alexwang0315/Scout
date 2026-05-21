@@ -88,3 +88,16 @@ def test_websocket_smoke_keeps_runtime_boundaries_explicit() -> None:
         "no HumanReview or review decision mutation",
     ):
         assert token in source
+
+
+def test_websocket_smoke_marks_control_followup_complete() -> None:
+    source = read_report()
+
+    for token in (
+        "## Follow-Up Status",
+        "stream-control smoke",
+        "stream-control auth hardening",
+        "final control state after the latest auth smoke: `observing`",
+        "Remaining stream work belongs to the next milestone",
+    ):
+        assert token in source

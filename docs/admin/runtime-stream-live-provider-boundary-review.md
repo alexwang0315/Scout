@@ -80,10 +80,12 @@ after the above boundary is accepted. They should not be staged with:
 - local-only field captures;
 - local model/Ollama compose.
 
-## Next Implementation Slice
+## Historical Next Implementation Slice
 
-The next safe slice is a read-only stream status surface that renders existing
-policy/telemetry snapshots without mounting live transport send routes.
+The original next safe slice was a read-only stream status surface that renders
+existing policy/telemetry snapshots without mounting live transport send routes.
+That slice is now complete, and later live transport/operator-auth evidence is
+indexed in `docs/admin/scout-phase4-5-live-activation-evidence-index.md`.
 
 中文註釋：如果下一步要真的開 live provider send，就需要使用者明確決策；這不是可以由
 cleanup 或 smoke 自動跨過的邊界。

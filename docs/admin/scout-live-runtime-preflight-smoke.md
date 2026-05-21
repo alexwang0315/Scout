@@ -124,6 +124,11 @@ Not performed:
 
 ## Next Operator Decision
 
+Historical status: this preflight gate was later satisfied by the
+Telegram-like provider path and recorded in
+`docs/admin/scout-live-runtime-shadow-smoke.md` and
+`docs/admin/scout-live-runtime-live-send-and-cutover.md`.
+
 To complete the fourth gate, provide a Scout-compatible webhook endpoint and
 secret set for:
 

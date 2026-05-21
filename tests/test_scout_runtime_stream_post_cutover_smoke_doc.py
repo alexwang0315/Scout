@@ -86,3 +86,18 @@ def test_post_cutover_smoke_keeps_runtime_boundaries_explicit() -> None:
         "no HumanReview or review decision mutation",
     ):
         assert token in source
+
+
+def test_post_cutover_smoke_marks_followups_complete_or_next_milestone() -> None:
+    source = read_report()
+
+    for token in (
+        "## Follow-Up Status",
+        "docs/admin/scout-runtime-stream-websocket-post-cutover-smoke.md",
+        "docs/admin/scout-runtime-stream-control-post-cutover-smoke.md",
+        "docs/admin/scout-live-runtime-post-cutover-soak.md",
+        "docs/admin/scout-live-runtime-long-soak-automation.md",
+        "docs/admin/scout-live-runtime-rollback-drill.md",
+        "Remaining work belongs to the next milestone",
+    ):
+        assert token in source
