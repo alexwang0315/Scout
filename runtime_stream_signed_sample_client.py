@@ -63,6 +63,8 @@ class RuntimeStreamSignedSampleResult(RuntimeStreamSignedSampleModel):
     response_status: str | None = None
     response_admission_status: str | None = None
     response_transport_surface: str | None = None
+    response_ingest_surface: str | None = None
+    response_admission_transport: str | None = None
     observations_accepted: int | None = Field(default=None, ge=0)
     safety_level: str | None = None
     blocker_count: int = 0
@@ -214,6 +216,8 @@ def run_runtime_stream_signed_sample(
         response_status=response_summary.get("status"),
         response_admission_status=response_summary.get("admission_status"),
         response_transport_surface=response_summary.get("transport_surface"),
+        response_ingest_surface=response_summary.get("ingest_surface"),
+        response_admission_transport=response_summary.get("admission_transport"),
         observations_accepted=response_summary.get("observations_accepted"),
         safety_level=response_summary.get("safety_level"),
         blockers=[] if sent else [f"http_status:{response.status_code}"],
@@ -337,6 +341,8 @@ def _safe_response_summary(response_body: str) -> dict[str, Any]:
             else None
         ),
         "transport_surface": _string_or_none(parsed.get("transport_surface")),
+        "ingest_surface": _string_or_none(parsed.get("ingest_surface")),
+        "admission_transport": _string_or_none(parsed.get("admission_transport")),
         "observations_accepted": (
             parsed.get("observations_accepted")
             if isinstance(parsed.get("observations_accepted"), int)
@@ -366,6 +372,8 @@ def _result(
     response_status: str | None = None,
     response_admission_status: str | None = None,
     response_transport_surface: str | None = None,
+    response_ingest_surface: str | None = None,
+    response_admission_transport: str | None = None,
     observations_accepted: int | None = None,
     safety_level: str | None = None,
     blockers: list[str] | None = None,
@@ -391,6 +399,8 @@ def _result(
         response_status=response_status,
         response_admission_status=response_admission_status,
         response_transport_surface=response_transport_surface,
+        response_ingest_surface=response_ingest_surface,
+        response_admission_transport=response_admission_transport,
         observations_accepted=observations_accepted,
         safety_level=safety_level,
         blocker_count=len(active_blockers),

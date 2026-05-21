@@ -55,6 +55,7 @@ def test_signed_sample_send_posts_signed_body_and_sanitizes_response() -> None:
     response_body = json.dumps(
         {
             "status": "accepted",
+            "ingest_surface": "runtime_stream_http_push",
             "transport_surface": "http_push",
             "observations_accepted": 1,
             "safety_level": "L0_NORMAL",
@@ -86,6 +87,8 @@ def test_signed_sample_send_posts_signed_body_and_sanitizes_response() -> None:
     assert result.response_status == "accepted"
     assert result.response_admission_status == "admitted_not_forwarded"
     assert result.response_transport_surface == "http_push"
+    assert result.response_ingest_surface == "runtime_stream_http_push"
+    assert result.response_admission_transport is None
     assert result.observations_accepted == 1
     assert result.safety_level == "L0_NORMAL"
     assert len(captured_requests) == 1
