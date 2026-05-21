@@ -124,7 +124,7 @@ def test_long_soak_doc_records_post_guard_bounded_soak() -> None:
     for token in (
         "`/data/scout/deployments/live-runtime-soak-post-guard-20260520T153214Z`",
         "`/tmp/live_runtime_soak_check.py`",
-        "避免中斷正在跑的 overnight soak",
+        "避免中斷當時正在跑的",
         "`status=passed`",
         "`sample_count=6`",
         "`interval_seconds=10`",
@@ -155,10 +155,54 @@ def test_long_soak_doc_records_packaging_and_longer_run_command() -> None:
     for token in (
         "`Dockerfile.pi.live` copies `live_runtime_soak_check.py`",
         "`.dockerignore` explicitly allows `live_runtime_soak_check.py`",
+        "The 2026-05-21 packaged app rebuild verified this contract",
         "python /app/live_runtime_soak_check.py",
         "--sample-count 120",
         "--interval-seconds 60",
         "roughly two hours",
+    ):
+        assert token in source
+
+
+def test_long_soak_doc_records_packaged_app_rebuild_smoke() -> None:
+    source = read_report()
+
+    for token in (
+        "`/data/scout/deployments/live-head-rebuild-20260521T000120Z`",
+        "`/data/scout/deployments/live-runtime-soak-packaged-app-20260521T000152Z`",
+        "`packaged-app-rebuild-summary.json`",
+        "`artifact_kind=scout_live_runtime_packaged_app_rebuild_summary`",
+        "`status=deployed`",
+        "`repo_commit=7a2ec4ef`",
+        "`health_status=ok`",
+        "`runtime_profile=pi-field-live`",
+        "`runtime_stream_transport_enabled=true`",
+        "`remote_provider_live_send_enabled=true`",
+        "`hardware_provider_control_enabled=true`",
+        "`packaged_soak_checker_path=/app/live_runtime_soak_check.py`",
+        "`packaged_signed_sample_client_path=/app/runtime_stream_signed_sample_client.py`",
+        "`packaged_soak_checker_present=true`",
+        "`packaged_signed_sample_client_present=true`",
+        "`packaged_tools_py_compile_ok=true`",
+        "`soak_status=passed`",
+        "`soak_sample_count=3`",
+        "`soak_samples_recorded=3`",
+        "`soak_samples_all_ok=true`",
+        "`assistant_provider=pydantic_ai`",
+        "`assistant_startup_connection_status=connected:cloud`",
+        "`assistant_token_values_exposed=false`",
+        "`provider_control_status=enabled`",
+        "`provider_control_allowed_actions=[read_provider_status]`",
+        "`provider_control_token_value_exposed=false`",
+        "`stream_control_status=observing`",
+        "`raw_payloads_embedded=false`",
+        "`secret_values_embedded=false`",
+        "`read_only_soak=true`",
+        "`new_observations_sent=false`",
+        "`stream_control_mutation_performed=false`",
+        "`remote_provider_send_performed=false`",
+        "`hardware_control_performed=false`",
+        "`phase2_writeback_performed=false`",
     ):
         assert token in source
 

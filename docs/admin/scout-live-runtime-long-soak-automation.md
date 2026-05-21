@@ -18,6 +18,12 @@ Latest post-guard bounded soak evidence:
 Latest completed overnight soak evidence:
 `/data/scout/deployments/live-runtime-soak-overnight-20260520T152647Z`
 
+Latest packaged app rebuild evidence:
+`/data/scout/deployments/live-head-rebuild-20260521T000120Z`
+
+Latest packaged app soak smoke evidence:
+`/data/scout/deployments/live-runtime-soak-packaged-app-20260521T000152Z`
+
 ## Scope
 
 This slice adds `live_runtime_soak_check.py`, a repeatable read-only soak
@@ -94,9 +100,9 @@ Evidence directory:
 Command path used:
 `/tmp/live_runtime_soak_check.py`
 
-中文註釋：目前 running container 尚未以包含 packaged `/app/live_runtime_soak_check.py`
-的 image 重建，為避免中斷正在跑的 overnight soak，本次 bounded soak 使用已在
-container 內的 `/tmp` checker。下一次 live image rebuild 後才應改用 `/app` path。
+中文註釋：這次 bounded soak 發生時，running container 尚未以包含 packaged
+`/app/live_runtime_soak_check.py` 的 image 重建。為避免中斷當時正在跑的
+overnight soak，本次 bounded soak 使用已在 container 內的 `/tmp` checker。
 
 Result:
 
@@ -134,8 +140,63 @@ Result:
 - `Dockerfile.pi.live` copies `live_runtime_soak_check.py`;
 - `.dockerignore` explicitly allows `live_runtime_soak_check.py`.
 
-This removes the need for future manual `docker cp` use after the next live
-image rebuild.
+The 2026-05-21 packaged app rebuild verified this contract, so future soaks
+should use the `/app/live_runtime_soak_check.py` path rather than manual
+`docker cp`.
+
+## Packaged App Rebuild Smoke
+
+After the completed overnight soak, the live image was rebuilt from repo commit
+`7a2ec4ef` and the production `scout-pi-runtime-live` container was recreated.
+
+Deployment evidence directory:
+`/data/scout/deployments/live-head-rebuild-20260521T000120Z`
+
+Packaged app soak evidence directory:
+`/data/scout/deployments/live-runtime-soak-packaged-app-20260521T000152Z`
+
+Summary artifact:
+`packaged-app-rebuild-summary.json`
+
+Result:
+
+- `artifact_kind=scout_live_runtime_packaged_app_rebuild_summary`;
+- `status=deployed`;
+- `repo_commit=7a2ec4ef`;
+- `health_status=ok`;
+- `runtime_profile=pi-field-live`;
+- `runtime_stream_transport_enabled=true`;
+- `remote_provider_live_send_enabled=true`;
+- `hardware_provider_control_enabled=true`;
+- `packaged_soak_checker_path=/app/live_runtime_soak_check.py`;
+- `packaged_signed_sample_client_path=/app/runtime_stream_signed_sample_client.py`;
+- `packaged_soak_checker_present=true`;
+- `packaged_signed_sample_client_present=true`;
+- `packaged_tools_py_compile_ok=true`;
+- `soak_status=passed`;
+- `soak_sample_count=3`;
+- `soak_samples_recorded=3`;
+- `soak_samples_all_ok=true`;
+- `assistant_provider=pydantic_ai`;
+- `assistant_startup_connection_status=connected:cloud`;
+- `assistant_token_values_exposed=false`;
+- `provider_control_status=enabled`;
+- `provider_control_allowed_actions=[read_provider_status]`;
+- `provider_control_token_value_exposed=false`;
+- `stream_control_status=observing`;
+- `raw_payloads_embedded=false`;
+- `secret_values_embedded=false`;
+- `read_only_soak=true`;
+- `new_observations_sent=false`;
+- `stream_control_mutation_performed=false`;
+- `remote_provider_send_performed=false`;
+- `hardware_control_performed=false`;
+- `phase2_writeback_performed=false`.
+
+中文註釋：這次 rebuild 只把已測過的工具正式放進 live image 內，並用 packaged
+`/app/live_runtime_soak_check.py` 做三筆 read-only smoke。它沒有送新 observation，
+沒有 pause/resume，沒有 Telegram / SOS / SMS / satellite send，也沒有硬體控制或
+Phase 2 writeback。
 
 ## Longer Run
 
@@ -239,7 +300,10 @@ Performed in this slice:
 - ran one short three-sample live smoke;
 - started one overnight read-only soak;
 - recorded one completed overnight read-only soak;
-- packaged the checker into the live image contract.
+- packaged the checker into the live image contract;
+- rebuilt the live image after the overnight soak completed;
+- verified the packaged `/app/live_runtime_soak_check.py` path with a
+  three-sample read-only smoke.
 
 Not performed:
 
