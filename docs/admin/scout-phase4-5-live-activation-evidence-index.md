@@ -62,6 +62,7 @@ observation processing:
 - `docs/admin/scout-live-runtime-post-cutover-soak.md`
 - `docs/admin/scout-live-runtime-long-soak-automation.md`
 - `docs/admin/scout-live-runtime-guard-update-and-signed-sample.md`
+- `docs/admin/scout-provider-control-status-auth-smoke.md`
 - `docs/admin/scout-live-runtime-rollback-drill.md`
 
 ## Current Provenance Summary
@@ -87,6 +88,7 @@ Signed observation and stream evidence:
 - `/data/scout/deployments/signed-http-push-sample-20260520T111146Z`;
 - `/data/scout/deployments/packaged-signed-sample-client-20260521T001534Z`;
 - `/data/scout/deployments/runtime-stream-control-auth-smoke-20260521T002445Z`.
+- `/data/scout/deployments/provider-control-status-auth-smoke-20260521T003406Z`.
 
 Soak and packaged-tool evidence:
 
@@ -106,6 +108,14 @@ Latest hardening evidence:
 - `authorized_pause_status_after=paused`;
 - `authorized_resume_status_after=observing`;
 - `stream_control_final_status_restored=true`.
+- `/data/scout/deployments/live-provider-control-auth-20260521T003333Z`;
+- `repo_commit=7c95fd6f`;
+- `unauthorized_status_code=401`;
+- `unauthorized_reason=hardware_control_auth_required`;
+- `authorized_status_code=200`;
+- `provider_control_allowed_actions=[read_provider_status]`;
+- `operator_authorization_required=true`;
+- `token_value_exposed=false`.
 
 ## Boundary Notes
 

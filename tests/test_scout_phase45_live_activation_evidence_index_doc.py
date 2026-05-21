@@ -43,6 +43,7 @@ def test_index_links_live_runtime_reports_and_evidence_dirs() -> None:
         "docs/admin/scout-live-runtime-post-cutover-soak.md",
         "docs/admin/scout-live-runtime-long-soak-automation.md",
         "docs/admin/scout-live-runtime-guard-update-and-signed-sample.md",
+        "docs/admin/scout-provider-control-status-auth-smoke.md",
         "docs/admin/scout-live-runtime-rollback-drill.md",
         "`/data/scout/deployments/live-cutover-20260520T100435Z`",
         "`scout-fusion/pi-runtime:rollback-before-live-20260520T100435Z`",
@@ -50,6 +51,7 @@ def test_index_links_live_runtime_reports_and_evidence_dirs() -> None:
         "`/data/scout/deployments/signed-http-push-sample-20260520T111146Z`",
         "`/data/scout/deployments/packaged-signed-sample-client-20260521T001534Z`",
         "`/data/scout/deployments/runtime-stream-control-auth-smoke-20260521T002445Z`",
+        "`/data/scout/deployments/provider-control-status-auth-smoke-20260521T003406Z`",
         "`/data/scout/deployments/live-runtime-soak-overnight-20260520T152647Z`",
     ):
         assert token in source
@@ -83,6 +85,7 @@ def test_index_preserves_safety_and_secret_boundaries() -> None:
         "no HumanReview or review decision mutation",
         "`secret_values_embedded=false`",
         "`raw_payloads_embedded=false`",
+        "`token_value_exposed=false`",
         "signed HTTP samples must remain explicitly operator-approved",
     ):
         assert token in source
