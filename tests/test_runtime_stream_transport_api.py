@@ -48,6 +48,7 @@ class RuntimeStreamTransportApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         body = response.json()
         self.assertEqual(body["status"], "accepted")
+        self.assertEqual(body["ingest_surface"], "runtime_stream_http_push")
         self.assertEqual(body["transport_surface"], "http_push")
         self.assertEqual(body["observations_accepted"], 1)
         self.assertEqual(body["admission"]["status"], "admitted_not_forwarded")
@@ -81,6 +82,7 @@ class RuntimeStreamTransportApiTests(unittest.TestCase):
             body = websocket.receive_json()
 
         self.assertEqual(body["status"], "accepted")
+        self.assertEqual(body["ingest_surface"], "runtime_stream_websocket")
         self.assertEqual(body["transport_surface"], "websocket")
         self.assertEqual(body["observations_accepted"], 1)
         self.assertEqual(body["admission"]["status"], "admitted_not_forwarded")

@@ -75,6 +75,10 @@ def test_index_preserves_safety_and_secret_boundaries() -> None:
     source = read_report()
 
     for token in (
+        "`ingest_surface=safety_api_direct`",
+        "`ingest_surface=runtime_stream_http_push`",
+        "`ingest_surface=runtime_stream_websocket`",
+        "Continuous Apple Watch/mobile streams should use `/runtime/streams/*`",
         "no automatic SOS send",
         "no SMS send",
         "no satellite send",

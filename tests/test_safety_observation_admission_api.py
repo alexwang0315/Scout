@@ -51,6 +51,8 @@ class SafetyObservationAdmissionApiTests(unittest.TestCase):
         self.assertEqual(body["status"], "accepted")
         self.assertEqual(body["observations_accepted"], 1)
         self.assertEqual(body["snapshot"]["observations_processed"], 1)
+        self.assertEqual(body["ingest_surface"], "safety_api_direct")
+        self.assertEqual(body["admission_transport"], "http_push")
         self.assertEqual(body["admission"]["status"], "admitted_not_forwarded")
         self.assertEqual(body["admission"]["source_id"], "runtime_source.apple_watch.v0")
         self.assertEqual(body["admission"]["device_id"], "watch.api.001")

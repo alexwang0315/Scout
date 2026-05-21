@@ -119,6 +119,13 @@ Latest hardening evidence:
 
 ## Boundary Notes
 
+- Direct signed `/safety/observations` remains a lower-level safety API after
+  handoff and now reports `ingest_surface=safety_api_direct`.
+- Runtime stream HTTP push and WebSocket entries report
+  `ingest_surface=runtime_stream_http_push` or
+  `ingest_surface=runtime_stream_websocket`.
+- Continuous Apple Watch/mobile streams should use `/runtime/streams/*` when
+  stream telemetry and operator pause/resume controls are required.
 - no automatic SOS send;
 - no SMS send;
 - no satellite send;
