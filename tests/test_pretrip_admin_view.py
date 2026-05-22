@@ -4,7 +4,11 @@ from pathlib import Path
 
 import pytest
 
-from pretrip_admin_view import build_pretrip_admin_view, list_pretrip_admin_projects
+from pretrip_admin_view import (
+    build_pretrip_admin_view,
+    list_pretrip_admin_projects,
+    load_pretrip_debug_projection_view,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -15,20 +19,41 @@ def test_builds_fixture_backed_pretrip_admin_view():
     view = build_pretrip_admin_view(PROJECT_ID, root=ROOT)
 
     assert view["project_id"] == PROJECT_ID
-    assert view["summary"]["route_name"] == "奇萊南華-能高越嶺步道Day1"
+    assert view["summary"]["route_name"] == "2013-10-08 10:58:50 每日記錄"
     assert view["summary"]["status"] == "candidate"
-    assert view["route"]["point_count"] == 2211
-    assert view["route"]["distance_m"] == 14599.78
+    assert view["route"]["point_count"] == 6909
+    assert view["route"]["distance_m"] == 162559.51
     assert len(view["route"]["point_samples"]) == 3
     assert len(view["route"]["polyline"]) >= 2
-    assert len(view["checkpoints"]) == 11
-    assert len(view["segments"]) == 10
+    assert len(view["checkpoints"]) == 110
+    assert len(view["segments"]) == 109
+    assert view["segments"][0]["display_geometry"]["display_point_count"] > 1
     assert len(view["retreat_routes"]) == 1
+    assert view["reference_tracks"]["reference_track_count"] == 23
+    assert view["reference_tracks"]["boundary"]["runtime_safety_truth"] is False
+    assert len(view["reference_tracks"]["reference_tracks"]) == 23
+    assert (
+        view["reference_tracks"]["reference_tracks"][0]["display_geometry"][
+            "display_point_count"
+        ]
+        > 1
+    )
+    assert view["checkpoint_events"]["event_count"] == 110
+    assert view["checkpoint_events"]["source_gpx"]["point_count"] == 6909
+    assert view["checkpoint_events"]["source_gpx"]["trimming_performed"] is False
     assert view["map_candidates"]["counts"] == {
         "corridor_candidates": 1,
-        "hazard_candidates": 1,
-        "poi_candidates": 1,
+        "hazard_candidates": 0,
+        "poi_candidates": 2,
     }
+    assert view["overpass_evidence"]["counts"]["candidates"] == 219
+    assert view["overpass_evidence"]["counts"]["skipped"] == 0
+    assert len(view["overpass_evidence"]["corridor_candidates"]) == 191
+    assert len(view["overpass_evidence"]["hazard_candidates"]) == 0
+    assert len(view["overpass_evidence"]["poi_candidates"]) == 28
+    assert view["overpass_evidence"]["boundary"]["runtime_truth"] is False
+    assert view["overpass_evidence"]["boundary"]["live_network_required"] is False
+    assert view["overpass_evidence"]["request"]["endpoint"] == "https://overpass-api.de/api/interpreter"
     assert view["readiness"]["status"] == "ready"
     assert view["eta"]["target_eta"] == "2026-05-03T15:25:35+08:00"
     assert view["route_notes"]["counts"]["note_candidate_count"] == 81
@@ -90,6 +115,7 @@ def test_builds_fixture_backed_pretrip_admin_view():
         "corridors",
         "hazards",
         "route",
+        "reference-tracks",
         "retreat",
         "segments",
         "checkpoints",
@@ -106,6 +132,51 @@ def test_builds_fixture_backed_pretrip_admin_view():
     assert view["map_layers"][-1]["label_zh"].startswith("氣象 API")
     assert view["map_layers"][-1]["external_api_calls_made"] is False
     assert view["tabs"]["pre_trip_planning"]["map_layers"] == view["map_layers"]
+    assert view["layer_preparation"]["status"] == "not_prepared"
+    assert view["layer_preparation"]["network_policy"]["network_calls_made"] is False
+    assert view["layer_preparation"]["boundary"]["phase1_runtime_mutation_allowed"] is False
+    assert view["layer_preparation"]["boundary"]["workspace_file_mutation_allowed"] is False
+
+
+def test_loads_debug_projection_view_with_shared_map_and_dense_timeline():
+    projection = load_pretrip_debug_projection_view(PROJECT_ID, root=ROOT)
+
+    assert projection["artifact_kind"] == "pretrip_debug_projection"
+    assert projection["project_id"] == PROJECT_ID
+    assert projection["event_count"] > 200
+    assert projection["counts"]["checkpoint_candidate_count"] == 110
+    assert projection["counts"]["segment_candidate_count"] == 109
+    assert projection["counts"]["reference_track_count"] == 23
+    assert projection["counts"]["source_lifecycle_event_count"] == 4
+    assert projection["route"]["point_count"] == 6909
+    assert (
+        projection["route"]["display_geometry"]["boundary"][
+            "internal_gpx_points_preserved"
+        ]
+        is True
+    )
+    assert projection["route"]["display_geometry"]["display_point_count"] > 6000
+    assert projection["reference_tracks"]["reference_track_count"] == 23
+    assert projection["overpass_evidence"]["counts"]["candidates"] == 219
+    assert projection["boundary"]["phase1_runtime_mutation_allowed"] is False
+    assert projection["boundary"]["runtime_safety_truth"] is False
+
+    kinds = {event["kind"] for event in projection["timeline_events"]}
+    assert {"checkpoint_detected", "route_progress_evaluated"}.issubset(kinds)
+    checkpoint_event = next(
+        event
+        for event in projection["timeline_events"]
+        if event["kind"] == "checkpoint_detected"
+    )
+    segment_event = next(
+        event
+        for event in projection["timeline_events"]
+        if event["kind"] == "route_progress_evaluated"
+    )
+    assert checkpoint_event["payload"]["checkpoint_id"].startswith("cp.")
+    assert checkpoint_event["payload"]["runtime_safety_truth"] is False
+    assert segment_event["payload"]["segment_id"].startswith("seg.")
+    assert segment_event["payload"]["map_target_ids"]
 
 
 def test_builds_admin_view_from_local_workspace_project_root(tmp_path):
@@ -153,7 +224,7 @@ def test_view_is_summary_only_and_has_traceable_source_refs():
         view["checkpoints"][0],
         view["segments"][0],
         view["retreat_routes"][0],
-        view["map_candidates"]["hazard_candidates"][0],
+        view["map_candidates"]["poi_candidates"][0],
         view["review_queue"],
         view["review_draft_log"],
         view["raw_sample_summary"],
@@ -168,54 +239,55 @@ def test_view_is_summary_only_and_has_traceable_source_refs():
     assert raw_summary["raw_gpx_read"] is False
     assert raw_summary["raw_photo_read"] is False
     assert raw_summary["raw_dtm_read"] is False
-    assert raw_summary["terrain_metadata"]["candidate_tile_count"] == 10
-    assert raw_summary["terrain_metadata"]["segment_count"] == 10
+    assert raw_summary["terrain_metadata"]["candidate_tile_count"] == 48
+    assert raw_summary["terrain_metadata"]["segment_count"] == 109
     assert "raw_samples" not in str(raw_summary)
 
 
 def test_view_exposes_planning_and_post_analysis_tabs():
     view = build_pretrip_admin_view(PROJECT_ID, root=ROOT)
 
-    assert set(view["tabs"]) == {"pre_trip_planning", "post_analysis"}
+    assert set(view["tabs"]) == {"pre_trip_planning", "post_analysis", "review_workspace"}
     planning = view["tabs"]["pre_trip_planning"]
     post = view["tabs"]["post_analysis"]
-    assert planning["review_queue"]["boundary"]["candidate_queue_only"] is True
-    assert planning["review_draft_log"]["boundary"]["draft_only"] is True
-    assert planning["review_draft_log"]["boundary"]["decisions_recorded"] is False
-    assert planning["review_draft_log"]["boundary"]["package_mutation_allowed"] is False
-    assert planning["review_draft_log"]["boundary"]["source_mutation_allowed"] is False
-    assert planning["review_draft_log"]["boundary"]["runtime_mutation_allowed"] is False
-    assert planning["review_draft_log"]["boundary"]["phase1_runtime_mutation_allowed"] is False
-    assert planning["review_decision_apply_plan"]["source_path"].endswith(
+    review_workspace = view["tabs"]["review_workspace"]
+    assert review_workspace["review_queue"]["boundary"]["candidate_queue_only"] is True
+    assert review_workspace["review_draft_log"]["boundary"]["draft_only"] is True
+    assert review_workspace["review_draft_log"]["boundary"]["decisions_recorded"] is False
+    assert review_workspace["review_draft_log"]["boundary"]["package_mutation_allowed"] is False
+    assert review_workspace["review_draft_log"]["boundary"]["source_mutation_allowed"] is False
+    assert review_workspace["review_draft_log"]["boundary"]["runtime_mutation_allowed"] is False
+    assert review_workspace["review_draft_log"]["boundary"]["phase1_runtime_mutation_allowed"] is False
+    assert review_workspace["review_decision_apply_plan"]["source_path"].endswith(
         "outputs/review_decision_apply_plan.json"
     )
-    assert planning["review_decision_apply_plan"]["boundary"]["would_apply_only"] is True
+    assert review_workspace["review_decision_apply_plan"]["boundary"]["would_apply_only"] is True
     assert (
-        planning["review_decision_apply_plan"]["boundary"][
+        review_workspace["review_decision_apply_plan"]["boundary"][
             "package_mutation_allowed"
         ]
         is False
     )
     assert (
-        planning["review_decision_apply_plan"]["boundary"]["source_mutation_allowed"]
+        review_workspace["review_decision_apply_plan"]["boundary"]["source_mutation_allowed"]
         is False
     )
     assert (
-        planning["review_decision_apply_plan"]["boundary"]["runtime_mutation_allowed"]
+        review_workspace["review_decision_apply_plan"]["boundary"]["runtime_mutation_allowed"]
         is False
     )
     assert (
-        planning["review_decision_apply_plan"]["boundary"][
+        review_workspace["review_decision_apply_plan"]["boundary"][
             "phase1_runtime_mutation_allowed"
         ]
         is False
     )
     assert (
-        planning["review_decision_apply_plan"]["boundary"]["phase2_writeback_allowed"]
+        review_workspace["review_decision_apply_plan"]["boundary"]["phase2_writeback_allowed"]
         is False
     )
     assert (
-        planning["review_decision_apply_plan"]["boundary"]["compiles_mission_graph"]
+        review_workspace["review_decision_apply_plan"]["boundary"]["compiles_mission_graph"]
         is False
     )
     assert planning["resources"]["raw_payloads_embedded"] is False
@@ -230,14 +302,22 @@ def test_tabs_expose_compact_traceable_detail_sections():
 
     planning_sections = view["tabs"]["pre_trip_planning"]["sections"]
     post_sections = view["tabs"]["post_analysis"]["sections"]
+    review_sections = view["tabs"]["review_workspace"]["sections"]
 
     assert [(section["id"], section["title"]) for section in planning_sections] == [
         ("eta", "ETA Plan"),
         ("readiness", "Readiness"),
         ("resources", "Resources"),
+        ("layer_preparation", "Layer Preparation"),
         ("weather", "Weather And Daylight"),
+        ("overpass_evidence", "Overpass Vector Evidence"),
         ("route_notes", "Route Notes"),
         ("route_note_ln_proposals", "Route Note Ln Proposals"),
+        ("reference_tracks", "Reference Tracks"),
+        ("checkpoint_events", "Checkpoint Events"),
+        ("departure_bundle", "Departure Bundle"),
+    ]
+    assert [(section["id"], section["title"]) for section in review_sections] == [
         ("route_note_review_options", "Route Note Review Options"),
         ("review_queue", "Review Queue"),
         ("review_draft_log", "Review Draft Log"),
@@ -245,17 +325,19 @@ def test_tabs_expose_compact_traceable_detail_sections():
         ("review_decision_apply_plan", "Review Decision Apply Plan"),
         ("external_import_queue", "External Import Queue"),
         ("expert_contributions", "Expert Contributions"),
-        ("departure_bundle", "Departure Bundle"),
     ]
     assert [(section["id"], section["title"]) for section in post_sections] == [
         ("runtime_handoff", "Runtime Handoff"),
         ("route_comparison", "Route Comparison"),
         ("brain_seed", "Brain Seed"),
         ("after_action_next_plan", "After-Action Next Plan"),
+        ("admin_surface_projection", "Admin Surface Projection"),
+        ("debug_projection", "Debug Projection"),
     ]
 
     sections_by_id = {
-        section["id"]: section for section in [*planning_sections, *post_sections]
+        section["id"]: section
+        for section in [*planning_sections, *post_sections, *review_sections]
     }
     for section in sections_by_id.values():
         assert section["source_id"]
@@ -394,6 +476,35 @@ def test_tabs_expose_compact_traceable_detail_sections():
     assert sections_by_id["route_comparison"]["counts"]["point_count_delta"] == -1275
     assert sections_by_id["brain_seed"]["counts"]["observed_fact_count"] == 0
     assert sections_by_id["after_action_next_plan"]["counts"]["candidate_count"] == 3
+    assert sections_by_id["admin_surface_projection"]["counts"] == {
+        "checkpoint_candidate_count": 110,
+        "reference_track_count": 23,
+        "segment_candidate_count": 109,
+    }
+    assert sections_by_id["admin_surface_projection"]["summary"]["surface_targets"] == [
+        "/admin",
+        "/admin/pretrip",
+        "/admin/debug",
+    ]
+    assert (
+        sections_by_id["admin_surface_projection"]["boundary"][
+            "phase1_runtime_mutation_allowed"
+        ]
+        is False
+    )
+    assert sections_by_id["debug_projection"]["counts"] == {"event_count": 4}
+    assert (
+        sections_by_id["debug_projection"]["summary"][
+            "file_runtime_debug_log_compatible"
+        ]
+        is True
+    )
+    assert (
+        sections_by_id["debug_projection"]["boundary"][
+            "phase1_runtime_mutation_allowed"
+        ]
+        is False
+    )
 
 
 def test_tab_detail_sections_do_not_embed_raw_payload_fragments():
@@ -479,7 +590,7 @@ def test_list_pretrip_admin_projects_and_unknown_project():
     assert projects == [
         {
             "project_id": PROJECT_ID,
-            "name": "奇萊南華-能高越嶺步道Day1",
+            "name": "能高安東軍縱走 GPX corpus",
             "kind": "phase4_pretrip_fixture",
         }
     ]

@@ -5,12 +5,13 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
+from xml.etree.ElementTree import ParseError
 
 from fastapi import APIRouter, FastAPI, HTTPException
 from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
-from admin_after_action import ROOT, build_admin_case_view, list_admin_cases
+from admin_after_action import PRETRIP_CASE_ID, ROOT, build_admin_case_view, list_admin_cases
 from admin_local_raster_tiles import (
     DEFAULT_RASTER_TILE_CACHE_ROOT,
     load_or_build_raster_tile_payload,
@@ -28,6 +29,9 @@ from admin_weather_overlay import (
 from pretrip_admin_view import (
     build_pretrip_admin_view,
     list_pretrip_admin_projects,
+    load_pretrip_admin_surface_projection,
+    load_pretrip_debug_projection_view,
+    load_pretrip_debug_projection_events,
     resolve_pretrip_project_artifacts,
 )
 from pretrip_expert_contribution_apply_plan import (
@@ -35,6 +39,13 @@ from pretrip_expert_contribution_apply_plan import (
     DEFAULT_WORKSPACE_APPLY_RESULT_REF as DEFAULT_EXPERT_CONTRIBUTION_WORKSPACE_APPLY_RESULT_REF,
     apply_expert_contributions_to_workspace,
     write_expert_contribution_apply_plan,
+)
+from pretrip_import import PretripImportRequest, run_pretrip_import
+from pretrip_layer_preparation import (
+    DEFAULT_LAYERS as DEFAULT_PRETRIP_LAYER_PREPARATION_LAYERS,
+    LayerPreparationRequest,
+    build_layer_preparation_preview,
+    run_layer_preparation,
 )
 from pretrip_review_decision_apply_store import (
     write_review_decision_apply_plan_for_workspace,
@@ -46,6 +57,11 @@ from pretrip_route_note_review_options import AdminDisposition
 from pretrip_route_note_reviewed_assumptions import (
     DEFAULT_ROUTE_NOTE_REVIEWED_ASSUMPTIONS_REF,
     write_route_note_reviewed_assumptions_for_workspace,
+)
+from pretrip_source_ingest import sha256_file, summarize_gpx
+from pretrip_workspace_edit import (
+    PreTripWorkspaceEditRequest,
+    apply_pretrip_workspace_edit_to_workspace,
 )
 from pretrip_workspace_project import copy_pretrip_project_workspace
 
@@ -93,6 +109,70 @@ class PreTripRouteNoteDispositionRequest(BaseModel):
     reviewer_alias: str = Field(default="trip_leader", min_length=1)
     decided_at: str | None = None
     persist_to_workspace: bool = False
+
+
+class PreTripImportGpxRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    golden_route_gpx: str = Field(min_length=1)
+    reference_dir: str | None = Field(default=None, min_length=1)
+    reference_gpx: list[str] = Field(default_factory=list)
+    reference_gpx_paths: list[str] = Field(default_factory=list)
+    workspace_root: str | None = Field(default=None, min_length=1)
+    profile: Literal["mac-workstation", "pi-offline", "pi-online-explicit"] = "pi-offline"
+    template_project_root: str | None = Field(default=None, min_length=1)
+    checkpoint_spacing_m: float = Field(default=1_500.0, gt=0)
+    max_reference_display_points: int = Field(default=1_000, gt=0)
+    import_timestamp: str | None = None
+    import_stage: Literal["pretrip"] = "pretrip"
+    overwrite: bool = False
+
+    @model_validator(mode="after")
+    def normalize_blank_paths(self) -> "PreTripImportGpxRequest":
+        self.reference_dir = self.reference_dir.strip() or None if self.reference_dir else None
+        self.workspace_root = self.workspace_root.strip() or None if self.workspace_root else None
+        self.template_project_root = (
+            self.template_project_root.strip() or None
+            if self.template_project_root
+            else None
+        )
+        combined = [
+            path.strip()
+            for path in [*self.reference_gpx_paths, *self.reference_gpx]
+            if path.strip()
+        ]
+        self.reference_gpx_paths = combined
+        self.reference_gpx = combined
+        return self
+
+
+class PreTripImportGpxRunRequest(PreTripImportGpxRequest):
+    confirm_import: bool = False
+
+
+class PreTripPrepareLayersRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    layers: list[str] = Field(
+        default_factory=lambda: list(DEFAULT_PRETRIP_LAYER_PREPARATION_LAYERS)
+    )
+    workspace_root: str | None = Field(default=None, min_length=1)
+    profile: Literal["mac-workstation", "pi-offline", "pi-online-explicit"] = "pi-offline"
+    network_mode: Literal["no-network", "explicit-fetch"] = "no-network"
+    allow_network_fetch: bool = False
+    route_corridor_m: float = Field(default=500.0, gt=0)
+    bbox: dict[str, Any] | None = None
+    prepared_at: str | None = None
+
+    @model_validator(mode="after")
+    def normalize_layers_and_workspace(self) -> "PreTripPrepareLayersRequest":
+        self.layers = [layer.strip() for layer in self.layers if layer.strip()]
+        self.workspace_root = self.workspace_root.strip() or None if self.workspace_root else None
+        return self
+
+
+class PreTripPrepareLayersRunRequest(PreTripPrepareLayersRequest):
+    confirm_prepare: bool = False
 
 
 def create_admin_app(
@@ -145,7 +225,11 @@ def create_admin_router(
 
     @router.get("/pretrip/projects")
     def pretrip_projects() -> dict[str, Any]:
-        return {"projects": list_pretrip_admin_projects()}
+        return {
+            "projects": list_pretrip_admin_projects(
+                workspace_root=pretrip_workspace_root,
+            )
+        }
 
     @router.get("/pretrip/projects/{project_id}")
     def pretrip_project(project_id: str) -> dict[str, Any]:
@@ -193,6 +277,279 @@ def create_admin_router(
             runtime_status=runtime_status,
             live_weather_snapshot=live_weather_snapshot,
         )
+
+    @router.get("/pretrip/projects/{project_id}/admin-projection")
+    def pretrip_project_admin_projection(project_id: str) -> dict[str, Any]:
+        project_root = _pretrip_workspace_project_root(
+            pretrip_workspace_root,
+            project_id=project_id,
+        )
+        try:
+            return load_pretrip_admin_surface_projection(
+                project_id,
+                project_root=project_root,
+            )
+        except KeyError as exc:
+            raise HTTPException(
+                status_code=404,
+                detail="Pre-trip admin projection not found",
+            ) from exc
+
+    @router.get("/pretrip/projects/{project_id}/debug-projection-events")
+    def pretrip_project_debug_projection_events(project_id: str) -> dict[str, Any]:
+        project_root = _pretrip_workspace_project_root(
+            pretrip_workspace_root,
+            project_id=project_id,
+        )
+        try:
+            return load_pretrip_debug_projection_events(
+                project_id,
+                project_root=project_root,
+            )
+        except KeyError as exc:
+            raise HTTPException(
+                status_code=404,
+                detail="Pre-trip debug projection events not found",
+            ) from exc
+
+    @router.get("/pretrip/projects/{project_id}/debug-projection")
+    def pretrip_project_debug_projection(project_id: str) -> dict[str, Any]:
+        project_root = _pretrip_workspace_project_root(
+            pretrip_workspace_root,
+            project_id=project_id,
+        )
+        try:
+            return load_pretrip_debug_projection_view(
+                project_id,
+                project_root=project_root,
+            )
+        except KeyError as exc:
+            raise HTTPException(
+                status_code=404,
+                detail="Pre-trip debug projection not found",
+            ) from exc
+
+    @router.post("/pretrip/projects/{project_id}/import-gpx-preview")
+    def pretrip_import_gpx_preview(
+        project_id: str,
+        request: PreTripImportGpxRequest,
+    ) -> dict[str, Any]:
+        try:
+            return _build_pretrip_import_gpx_preview(
+                project_id=project_id,
+                request=request,
+                pretrip_workspace_root=pretrip_workspace_root,
+            )
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (ValueError, OSError, ParseError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @router.post("/pretrip/projects/{project_id}/import-gpx")
+    def pretrip_import_gpx(
+        project_id: str,
+        request: PreTripImportGpxRunRequest,
+    ) -> dict[str, Any]:
+        if not request.confirm_import:
+            raise HTTPException(
+                status_code=400,
+                detail="confirm_import=true is required",
+            )
+
+        try:
+            workspace_root = _pretrip_import_workspace_root(
+                pretrip_workspace_root,
+                request=request,
+            )
+            _build_pretrip_import_gpx_preview(
+                project_id=project_id,
+                request=request,
+                pretrip_workspace_root=pretrip_workspace_root,
+            )
+            manifest = run_pretrip_import(
+                PretripImportRequest(
+                    project_id=project_id,
+                    primary_gpx=_path_from_admin_request(request.golden_route_gpx),
+                    reference_dir=_optional_path_from_admin_request(request.reference_dir),
+                    reference_gpx_paths=tuple(
+                        _path_from_admin_request(path)
+                        for path in request.reference_gpx_paths
+                    ),
+                    workspace_root=workspace_root,
+                    profile=request.profile,
+                    template_project_root=_optional_path_from_admin_request(
+                        request.template_project_root
+                    ),
+                    checkpoint_spacing_m=request.checkpoint_spacing_m,
+                    max_reference_display_points=request.max_reference_display_points,
+                    overwrite=request.overwrite,
+                    import_timestamp=request.import_timestamp,
+                    import_stage="pretrip",
+                )
+            )
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except FileExistsError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except (ValueError, OSError, ValidationError, ParseError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+        project_root = (workspace_root.expanduser() / project_id).resolve()
+        outputs = manifest.get("outputs", {})
+        manifest_path = project_root / outputs.get("import_manifest_ref", "")
+        admin_projection_path = project_root / outputs.get("admin_projection_ref", "")
+        debug_projection_events_path = (
+            project_root / outputs.get("debug_projection_events_ref", "")
+        )
+        return {
+            "project_id": project_id,
+            "artifact_kind": "pretrip_import_gpx_result",
+            "persisted": True,
+            "preview": False,
+            "manifest": manifest,
+            "paths": {
+                "project_root": str(project_root),
+                "project": str(project_root / "project.json"),
+                "project_path": str(project_root / "project.json"),
+                "import_manifest": str(manifest_path),
+                "manifest_path": str(manifest_path),
+                "admin_projection": str(admin_projection_path),
+                "admin_projection_path": str(admin_projection_path),
+                "debug_projection_events": str(debug_projection_events_path),
+                "debug_projection_events_path": str(debug_projection_events_path),
+            },
+            "boundary": _pretrip_import_gpx_boundary(
+                request,
+                admin_api_write_performed=True,
+            ),
+            "mutation": {
+                "source_mutated": False,
+                "package_mutated": False,
+                "mission_graph_mutated": False,
+                "runtime_mutated": False,
+                "phase1_runtime_mutated": False,
+                "phase2_writeback_performed": False,
+                "fixture_files_mutated": False,
+                "workspace_files_mutated": True,
+                "workspace_import_outputs_mutated": True,
+            },
+        }
+
+    @router.get("/pretrip/projects/{project_id}/layer-preparation")
+    def pretrip_project_layer_preparation(project_id: str) -> dict[str, Any]:
+        try:
+            project_root = _pretrip_workspace_project_root(
+                pretrip_workspace_root,
+                project_id=project_id,
+            )
+            view = build_pretrip_admin_view(project_id, project_root=project_root)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="Pre-trip project not found") from exc
+        return view["layer_preparation"]
+
+    @router.post("/pretrip/projects/{project_id}/prepare-layers-preview")
+    def pretrip_prepare_layers_preview(
+        project_id: str,
+        request: PreTripPrepareLayersRequest,
+    ) -> dict[str, Any]:
+        try:
+            project_root = _pretrip_prepare_layers_project_root(
+                pretrip_workspace_root,
+                project_id=project_id,
+                request=request,
+            )
+            manifest = build_layer_preparation_preview(
+                _pretrip_prepare_layers_request(
+                    project_id=project_id,
+                    project_root=project_root,
+                    request=request,
+                )
+            )
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (ValueError, KeyError, OSError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+        return {
+            "project_id": project_id,
+            "artifact_kind": "pretrip_layer_preparation_preview_result",
+            "preview": True,
+            "persisted": False,
+            "manifest": manifest,
+            "paths": _pretrip_prepare_layers_paths(project_root, manifest),
+            "boundary": {
+                **manifest["boundary"],
+                "admin_api_write_performed": False,
+            },
+            "mutation": {
+                "source_mutated": False,
+                "package_mutated": False,
+                "mission_graph_mutated": False,
+                "runtime_mutated": False,
+                "phase1_runtime_mutated": False,
+                "phase2_writeback_performed": False,
+                "fixture_files_mutated": False,
+                "workspace_files_mutated": False,
+                "workspace_layer_outputs_mutated": False,
+            },
+        }
+
+    @router.post("/pretrip/projects/{project_id}/prepare-layers")
+    def pretrip_prepare_layers(
+        project_id: str,
+        request: PreTripPrepareLayersRunRequest,
+    ) -> dict[str, Any]:
+        if not request.confirm_prepare:
+            raise HTTPException(
+                status_code=400,
+                detail="confirm_prepare=true is required",
+            )
+
+        try:
+            project_root = _pretrip_prepare_layers_project_root(
+                pretrip_workspace_root,
+                project_id=project_id,
+                request=request,
+            )
+            if _pretrip_project_root_is_repo_fixture(project_root):
+                raise ValueError(
+                    "prepare-layers writes only project workspaces, not repo fixtures"
+                )
+            manifest = run_layer_preparation(
+                _pretrip_prepare_layers_request(
+                    project_id=project_id,
+                    project_root=project_root,
+                    request=request,
+                )
+            )
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (ValueError, KeyError, OSError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+        return {
+            "project_id": project_id,
+            "artifact_kind": "pretrip_layer_preparation_result",
+            "preview": False,
+            "persisted": True,
+            "manifest": manifest,
+            "paths": _pretrip_prepare_layers_paths(project_root, manifest),
+            "boundary": {
+                **manifest["boundary"],
+                "admin_api_write_performed": True,
+            },
+            "mutation": {
+                "source_mutated": False,
+                "package_mutated": False,
+                "mission_graph_mutated": False,
+                "runtime_mutated": False,
+                "phase1_runtime_mutated": False,
+                "phase2_writeback_performed": False,
+                "fixture_files_mutated": False,
+                "workspace_files_mutated": True,
+                "workspace_layer_outputs_mutated": True,
+            },
+        }
 
     @router.get("/tiles/osm/{z}/{x}/{y}.png")
     def osm_tile(z: int, x: int, y: int) -> Response:
@@ -501,6 +858,35 @@ def create_admin_router(
             },
         }
 
+    @router.post("/pretrip/projects/{project_id}/workspace-edits")
+    def pretrip_workspace_edit(
+        project_id: str,
+        request: PreTripWorkspaceEditRequest,
+    ) -> dict[str, Any]:
+        if not request.persist_to_workspace:
+            raise HTTPException(
+                status_code=409,
+                detail="workspace edit operations require persist_to_workspace=true",
+            )
+
+        project_root = _pretrip_workspace_project_root(
+            pretrip_workspace_root,
+            project_id=project_id,
+        )
+        if project_root is None:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "workspace edit operations require create_admin_app("
+                    "pretrip_workspace_root=...) with a local workspace project.json"
+                ),
+            )
+
+        try:
+            return apply_pretrip_workspace_edit_to_workspace(project_root, request)
+        except (FileNotFoundError, ValueError, ValidationError) as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
     @router.post("/pretrip/projects/{project_id}/review-decision-apply-plan")
     def pretrip_review_decision_apply_plan(project_id: str) -> dict[str, Any]:
         try:
@@ -754,7 +1140,19 @@ def create_admin_router(
     @router.get("/cases/{case_id}")
     def case(case_id: str) -> dict[str, Any]:
         try:
-            return build_admin_case_view(case_id, incident_store_path=resolved_incident_store_path)
+            pretrip_project_root = (
+                _pretrip_workspace_project_root(
+                    pretrip_workspace_root,
+                    project_id=case_id,
+                )
+                if case_id == PRETRIP_CASE_ID
+                else None
+            )
+            return build_admin_case_view(
+                case_id,
+                incident_store_path=resolved_incident_store_path,
+                pretrip_project_root=pretrip_project_root,
+            )
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="Admin case not found") from exc
 
@@ -781,6 +1179,349 @@ def _review_decision_preview_id(
 ) -> str:
     candidate_ref = request.candidate_ref.replace("/", "_")
     return f"review_decision_preview.{project_id}.{request.decision}.{candidate_ref}"
+
+
+def _build_pretrip_import_gpx_preview(
+    *,
+    project_id: str,
+    request: PreTripImportGpxRequest,
+    pretrip_workspace_root: Path | None,
+) -> dict[str, Any]:
+    _validate_pretrip_import_project_id(project_id)
+    if request.profile == "pi-online-explicit":
+        raise ValueError("pi-online-explicit is reserved for a later audited network slice")
+
+    workspace_root = _pretrip_import_workspace_root(
+        pretrip_workspace_root,
+        request=request,
+    )
+    golden_route = _path_from_admin_request(request.golden_route_gpx).resolve()
+    if not golden_route.exists():
+        raise FileNotFoundError(f"golden route GPX not found: {golden_route}")
+    if not golden_route.is_file():
+        raise ValueError(f"golden route GPX is not a file: {golden_route}")
+
+    template_root = _optional_path_from_admin_request(request.template_project_root)
+    if template_root is not None and not template_root.exists():
+        raise FileNotFoundError(f"template project root not found: {template_root}")
+    if template_root is not None and not template_root.is_dir():
+        raise ValueError(f"template project root is not a directory: {template_root}")
+
+    reference_paths = _pretrip_import_reference_paths(
+        request,
+        golden_route=golden_route,
+    )
+    route_summary = summarize_gpx(
+        golden_route,
+        f"artifact.gpx.{project_id}",
+    ).model_dump(mode="json")
+    project_root = (workspace_root.expanduser() / project_id).resolve()
+    project_exists = project_root.exists()
+    blocking_reasons = (
+        ["target project workspace already exists and overwrite=false"]
+        if project_exists and not request.overwrite
+        else []
+    )
+    golden_source_record = _pretrip_import_source_record(
+        golden_route,
+        role=_pretrip_import_golden_route_role(request),
+    )
+    reference_source_records = [
+        _pretrip_import_source_record(path, role="reference_track")
+        for path in reference_paths
+    ]
+
+    return {
+        "project_id": project_id,
+        "artifact_kind": "pretrip_import_gpx_preview",
+        "preview": True,
+        "persisted": False,
+        "profile": request.profile,
+        "import_stage": request.import_stage,
+        "workspace_root": str(workspace_root.expanduser().resolve()),
+        "project_root": str(project_root),
+        "project_exists": project_exists,
+        "overwrite_requested": request.overwrite,
+        "plan": {
+            "workspace_project_root": str(project_root),
+            "target_project_exists": project_exists,
+            "overwrite": request.overwrite,
+            "can_run": not blocking_reasons,
+            "blocking_reasons": blocking_reasons,
+            "profile": request.profile,
+            "import_stage": request.import_stage,
+            "checkpoint_spacing_m": request.checkpoint_spacing_m,
+            "max_reference_display_points": request.max_reference_display_points,
+            "golden_route_count": 1,
+            "reference_track_count": len(reference_paths),
+            "source_file_count": 1 + len(reference_paths),
+            "output_paths": _pretrip_import_output_paths(project_root),
+        },
+        "inputs": {
+            "golden_route_gpx": golden_source_record,
+            "reference_tracks": reference_source_records,
+            "template_project_root": str(template_root) if template_root else None,
+        },
+        "provenance": {
+            "golden_route_gpx": {
+                **golden_source_record,
+                "route_summary": route_summary,
+            },
+            "reference_tracks": reference_source_records,
+        },
+        "route_summary": route_summary,
+        "counts": {
+            "source_file_count": 1 + len(reference_paths),
+            "golden_route_count": 1,
+            "reference_track_count": len(reference_paths),
+            "route_point_count": route_summary["point_count"],
+        },
+        "settings": {
+            "checkpoint_spacing_m": request.checkpoint_spacing_m,
+            "max_reference_display_points": request.max_reference_display_points,
+        },
+        "planning_semantics": _pretrip_import_gpx_planning_semantics(request),
+        "boundary": _pretrip_import_gpx_boundary(
+            request,
+            admin_api_write_performed=False,
+        ),
+        "mutation": {
+            "source_mutated": False,
+            "package_mutated": False,
+            "mission_graph_mutated": False,
+            "runtime_mutated": False,
+            "phase1_runtime_mutated": False,
+            "phase2_writeback_performed": False,
+            "workspace_files_mutated": False,
+        },
+    }
+
+
+def _pretrip_import_workspace_root(
+    pretrip_workspace_root: Path | None,
+    *,
+    request: PreTripImportGpxRequest,
+) -> Path:
+    if request.workspace_root:
+        return _path_from_admin_request(request.workspace_root)
+    if pretrip_workspace_root is not None:
+        return Path(pretrip_workspace_root).expanduser()
+    raise HTTPException(
+        status_code=409,
+        detail="Import GPX requires create_admin_app(pretrip_workspace_root=...).",
+    )
+
+
+def _pretrip_prepare_layers_project_root(
+    pretrip_workspace_root: Path | None,
+    *,
+    project_id: str,
+    request: PreTripPrepareLayersRequest,
+) -> Path:
+    if request.workspace_root:
+        workspace_root = _path_from_admin_request(request.workspace_root)
+        project_root = workspace_root.expanduser() / project_id
+    elif pretrip_workspace_root is not None:
+        project_root = Path(pretrip_workspace_root).expanduser() / project_id
+    else:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Prepare layers requires create_admin_app("
+                "pretrip_workspace_root=...) or workspace_root."
+            ),
+        )
+    project_path = project_root / "project.json"
+    if not project_path.exists():
+        raise FileNotFoundError(f"project.json not found: {project_path}")
+    return project_root.resolve()
+
+
+def _pretrip_prepare_layers_request(
+    *,
+    project_id: str,
+    project_root: Path,
+    request: PreTripPrepareLayersRequest,
+) -> LayerPreparationRequest:
+    return LayerPreparationRequest(
+        project_id=project_id,
+        project_root=project_root,
+        layers=tuple(request.layers),
+        profile=request.profile,
+        network_mode=request.network_mode,
+        allow_network_fetch=request.allow_network_fetch,
+        bbox=request.bbox,
+        route_corridor_m=request.route_corridor_m,
+        prepared_at=request.prepared_at,
+    )
+
+
+def _pretrip_prepare_layers_paths(
+    project_root: Path,
+    manifest: dict[str, Any],
+) -> dict[str, str]:
+    outputs = manifest.get("outputs", {})
+    return {
+        "project_root": str(project_root),
+        "project": str(project_root / "project.json"),
+        "project_path": str(project_root / "project.json"),
+        "layer_preparation_manifest": str(
+            project_root / outputs.get("layer_preparation_manifest_ref", "")
+        ),
+        "manifest_path": str(
+            project_root / outputs.get("layer_preparation_manifest_ref", "")
+        ),
+        "layer_preparation_job": str(
+            project_root / outputs.get("layer_preparation_job_ref", "")
+        ),
+        "summary": str(
+            project_root / outputs.get("layer_preparation_summary_ref", "")
+        ),
+        "adapter_manifest": str(
+            project_root / outputs.get("layer_adapter_manifest_ref", "")
+        ),
+        "validation_report": str(
+            project_root / outputs.get("layer_validation_report_ref", "")
+        ),
+        "map_projection": str(
+            project_root / outputs.get("layer_map_projection_ref", "")
+        ),
+        "debug_projection_events": str(
+            project_root / outputs.get("layer_debug_projection_events_ref", "")
+        ),
+    }
+
+
+def _pretrip_import_reference_paths(
+    request: PreTripImportGpxRequest,
+    *,
+    golden_route: Path,
+) -> list[Path]:
+    candidates = [
+        _path_from_admin_request(path).resolve()
+        for path in request.reference_gpx_paths
+    ]
+    if request.reference_dir:
+        reference_dir = _path_from_admin_request(request.reference_dir).resolve()
+        if not reference_dir.exists():
+            raise FileNotFoundError(f"reference directory not found: {reference_dir}")
+        if not reference_dir.is_dir():
+            raise ValueError(f"reference directory is not a directory: {reference_dir}")
+        candidates.extend(sorted(reference_dir.glob("*.gpx")))
+
+    unique: dict[str, Path] = {}
+    for path in candidates:
+        resolved = path.resolve()
+        if resolved == golden_route:
+            continue
+        if not resolved.exists():
+            raise FileNotFoundError(f"reference GPX not found: {resolved}")
+        if not resolved.is_file():
+            raise ValueError(f"reference GPX is not a file: {resolved}")
+        unique[resolved.as_posix()] = resolved
+    return [unique[key] for key in sorted(unique)]
+
+
+def _path_from_admin_request(value: str) -> Path:
+    if "://" in value:
+        raise ValueError("Import GPX requires local filesystem paths.")
+    return Path(value).expanduser()
+
+
+def _optional_path_from_admin_request(value: str | None) -> Path | None:
+    return _path_from_admin_request(value) if value else None
+
+
+def _pretrip_import_source_record(path: Path, *, role: str) -> dict[str, Any]:
+    stat = path.stat()
+    return {
+        "role": role,
+        "uri": path.resolve().as_posix(),
+        "sha256": sha256_file(path),
+        "size_bytes": stat.st_size,
+    }
+
+
+def _pretrip_import_output_paths(project_root: Path) -> dict[str, str]:
+    output_refs = {
+        "project": "project.json",
+        "import_manifest": "outputs/import_manifest.json",
+        "admin_projection": "outputs/admin_projection.json",
+        "debug_projection_events": "outputs/debug_projection_events.jsonl",
+        "pretrip_package": "outputs/pretrip_package.json",
+        "route_summary": "normalized/routes/route_summary.json",
+        "checkpoints": "candidates/checkpoints.json",
+        "segments": "candidates/segments.json",
+    }
+    return {
+        key: str((project_root / ref).resolve())
+        for key, ref in output_refs.items()
+    }
+
+
+def _pretrip_import_golden_route_role(request: PreTripImportGpxRequest) -> str:
+    return "golden_route_reference"
+
+
+def _pretrip_import_gpx_planning_semantics(
+    request: PreTripImportGpxRequest,
+) -> dict[str, Any]:
+    return {
+        "golden_route": {
+            "role": _pretrip_import_golden_route_role(request),
+            "meaning": "selected similar reference route before departure",
+            "actual_user_track": False,
+            "runtime_safety_truth": False,
+        },
+        "pretrip_actual_user_track_exists": False,
+        "manual_waypoint_route_policy": {
+            "unwalked_route_sections_allowed": True,
+            "manual_waypoints_required": True,
+            "danger_review_required": True,
+        },
+    }
+
+
+def _pretrip_import_gpx_boundary(
+    request: PreTripImportGpxRequest,
+    *,
+    admin_api_write_performed: bool,
+) -> dict[str, Any]:
+    return {
+        "pretrip_candidate_evidence_only": True,
+        "golden_route_is_reference_evidence": True,
+        "actual_user_track_available": False,
+        "actual_user_track_required_before_post_analysis": True,
+        "network_calls_allowed": False,
+        "external_api_calls_made": False,
+        "admin_api_write_performed": admin_api_write_performed,
+        "workspace_file_mutation_allowed": admin_api_write_performed,
+        "fixture_file_mutation_allowed": False,
+        "source_mutation_allowed": False,
+        "package_mutation_allowed": False,
+        "mission_graph_mutation_allowed": False,
+        "runtime_mutation_allowed": False,
+        "compiles_mission_graph": False,
+        "final_mission_graph_compiled": False,
+        "phase1_runtime_mutation_allowed": False,
+        "phase2_writeback_allowed": False,
+        "phase2_brain_writeback_allowed": False,
+        "incident_store_mutation_allowed": False,
+        "real_outbound_transport_allowed": False,
+        "raw_gpx_embedded_in_json": False,
+        "unwalked_route_sections_require_manual_waypoints": True,
+        "unwalked_route_sections_require_danger_review": True,
+    }
+
+
+def _validate_pretrip_import_project_id(project_id: str) -> None:
+    allowed = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.-")
+    if (
+        not project_id
+        or project_id in {".", ".."}
+        or any(char not in allowed for char in project_id)
+    ):
+        raise ValueError(f"project_id contains unsafe characters: {project_id}")
 
 
 def _pretrip_workspace_review_log_path(
@@ -823,6 +1564,16 @@ def _pretrip_workspace_project_root(
         if candidate.exists():
             return candidate.parent
     return None
+
+
+def _pretrip_project_root_is_repo_fixture(project_root: Path) -> bool:
+    fixture_root = (ROOT / "tests" / "fixtures" / "pretrip" / "projects").resolve()
+    resolved = project_root.resolve()
+    try:
+        resolved.relative_to(fixture_root)
+    except ValueError:
+        return False
+    return True
 
 
 def _pretrip_workspace_apply_plan_path(project_root: Path) -> Path:

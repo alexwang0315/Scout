@@ -59,6 +59,32 @@ def _copy_pretrip_workspace(tmp_path: Path) -> Path:
     return workspace_root
 
 
+def _write_small_gpx(
+    path: Path,
+    *,
+    name: str,
+    points: list[tuple[float, float, float]],
+) -> None:
+    trkpts = "\n".join(
+        f'      <trkpt lat="{lat}" lon="{lon}"><ele>{ele}</ele></trkpt>'
+        for lat, lon, ele in points
+    )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        f"""<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="scout-test" xmlns="http://www.topografix.com/GPX/1/1">
+  <trk>
+    <name>{name}</name>
+    <trkseg>
+{trkpts}
+    </trkseg>
+  </trk>
+</gpx>
+""",
+        encoding="utf-8",
+    )
+
+
 def _accepted_review_payload(
     *,
     candidate_ref: str = ACCEPTED_CONTOUR_CANDIDATE_REF,
@@ -132,7 +158,7 @@ def test_pretrip_projects_api_lists_fixture_projects():
     assert response.json()["projects"] == [
         {
             "project_id": PROJECT_ID,
-            "name": "奇萊南華-能高越嶺步道Day1",
+            "name": "能高安東軍縱走 GPX corpus",
             "kind": "phase4_pretrip_fixture",
         }
     ]
@@ -147,8 +173,10 @@ def test_pretrip_project_api_returns_read_only_view_model():
     payload = response.json()
     assert payload["project_id"] == PROJECT_ID
     assert payload["readiness"]["status"] == "ready"
-    assert len(payload["checkpoints"]) == 11
-    assert len(payload["segments"]) == 10
+    assert len(payload["checkpoints"]) == 110
+    assert len(payload["segments"]) == 109
+    assert payload["reference_tracks"]["reference_track_count"] == 23
+    assert payload["checkpoint_events"]["event_count"] == 110
     assert payload["raw_sample_summary"]["raw_payloads_embedded"] is False
     assert payload["review_draft_log"]["status"] == "draft_only"
     assert payload["review_draft_log"]["counts"]["action_count"] == 3
@@ -356,7 +384,7 @@ def test_pretrip_project_workspace_api_creates_metadata_only_tmp_copy(tmp_path):
         workspace_project_root / "outputs" / "review_decision_apply_plan.json"
     ).is_file()
     assert all(
-        path.suffix.lower() in {".json", ".geojson"}
+        path.suffix.lower() in {".json", ".geojson", ".jsonl"}
         for path in workspace_project_root.rglob("*")
         if path.is_file()
     )
@@ -386,6 +414,304 @@ def test_pretrip_project_workspace_api_rejects_without_workspace_root():
     assert response.status_code == 409
     assert "pretrip_workspace_root" in response.json()["detail"]
     assert _repo_fixture_bytes() == original_fixture_bytes
+
+
+def test_pretrip_import_gpx_preview_validates_paths_without_writing(tmp_path):
+    original_fixture_bytes = _repo_fixture_bytes()
+    workspace_root = tmp_path / "pretrip_workspace"
+    inbox = tmp_path / "inbox"
+    reference_dir = inbox / "refs"
+    golden_route = inbox / "golden-route.gpx"
+    explicit_reference = inbox / "reference-explicit.gpx"
+    directory_reference = reference_dir / "reference-dir.gpx"
+    _write_small_gpx(
+        golden_route,
+        name="api preview golden route",
+        points=[
+            (24.0, 121.0, 1000.0),
+            (24.006, 121.006, 1010.0),
+            (24.012, 121.012, 1020.0),
+        ],
+    )
+    _write_small_gpx(
+        explicit_reference,
+        name="api preview explicit reference",
+        points=[(24.0, 121.0, 1000.0), (24.01, 121.01, 1015.0)],
+    )
+    _write_small_gpx(
+        directory_reference,
+        name="api preview directory reference",
+        points=[(24.001, 121.001, 1001.0), (24.011, 121.011, 1016.0)],
+    )
+    client = TestClient(create_admin_app(pretrip_workspace_root=workspace_root))
+
+    response = client.post(
+        "/admin/pretrip/projects/api_preview_import/import-gpx-preview",
+        json={
+            "golden_route_gpx": str(golden_route),
+            "reference_dir": str(reference_dir),
+            "reference_gpx_paths": [str(explicit_reference)],
+            "profile": "pi-offline",
+            "checkpoint_spacing_m": 500.0,
+            "max_reference_display_points": 3,
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["artifact_kind"] == "pretrip_import_gpx_preview"
+    assert payload["preview"] is True
+    assert payload["persisted"] is False
+    assert payload["plan"]["can_run"] is True
+    assert payload["plan"]["source_file_count"] == 3
+    assert payload["plan"]["golden_route_count"] == 1
+    assert payload["plan"]["reference_track_count"] == 2
+    assert payload["provenance"]["golden_route_gpx"]["role"] == "golden_route_reference"
+    assert payload["provenance"]["golden_route_gpx"]["route_summary"]["route_name"] == (
+        "api preview golden route"
+    )
+    assert payload["planning_semantics"]["golden_route"]["actual_user_track"] is False
+    assert payload["boundary"]["runtime_mutation_allowed"] is False
+    assert payload["boundary"]["phase1_runtime_mutation_allowed"] is False
+    assert payload["boundary"]["phase2_writeback_allowed"] is False
+    assert payload["boundary"]["final_mission_graph_compiled"] is False
+    assert payload["mutation"]["workspace_files_mutated"] is False
+    assert not (workspace_root / "api_preview_import").exists()
+    assert "<trkpt" not in response.text.lower()
+    assert _repo_fixture_bytes() == original_fixture_bytes
+
+
+def test_pretrip_import_gpx_preview_rejects_missing_local_reference(tmp_path):
+    workspace_root = tmp_path / "pretrip_workspace"
+    golden_route = tmp_path / "golden-route.gpx"
+    _write_small_gpx(
+        golden_route,
+        name="api missing ref golden route",
+        points=[(24.0, 121.0, 1000.0), (24.01, 121.01, 1010.0)],
+    )
+    client = TestClient(create_admin_app(pretrip_workspace_root=workspace_root))
+
+    response = client.post(
+        "/admin/pretrip/projects/api_missing_ref/import-gpx-preview",
+        json={
+            "golden_route_gpx": str(golden_route),
+            "reference_gpx_paths": [str(tmp_path / "missing-reference.gpx")],
+        },
+    )
+
+    assert response.status_code == 404
+    assert "reference GPX not found" in response.json()["detail"]
+    assert not (workspace_root / "api_missing_ref").exists()
+
+
+def test_pretrip_import_gpx_preview_rejects_actual_track_stage(tmp_path):
+    workspace_root = tmp_path / "pretrip_workspace"
+    golden_route = tmp_path / "golden-route.gpx"
+    _write_small_gpx(
+        golden_route,
+        name="api post analysis rejected",
+        points=[(24.0, 121.0, 1000.0), (24.01, 121.01, 1010.0)],
+    )
+    client = TestClient(create_admin_app(pretrip_workspace_root=workspace_root))
+
+    response = client.post(
+        "/admin/pretrip/projects/api_post_analysis/import-gpx-preview",
+        json={
+            "golden_route_gpx": str(golden_route),
+            "import_stage": "post_analysis",
+        },
+    )
+
+    assert response.status_code == 422
+    assert not (workspace_root / "api_post_analysis").exists()
+
+
+def test_pretrip_import_gpx_run_requires_confirmation(tmp_path):
+    workspace_root = tmp_path / "pretrip_workspace"
+    golden_route = tmp_path / "golden-route.gpx"
+    _write_small_gpx(
+        golden_route,
+        name="api confirmation golden route",
+        points=[(24.0, 121.0, 1000.0), (24.01, 121.01, 1010.0)],
+    )
+    client = TestClient(create_admin_app(pretrip_workspace_root=workspace_root))
+
+    response = client.post(
+        "/admin/pretrip/projects/api_requires_confirm/import-gpx",
+        json={"golden_route_gpx": str(golden_route)},
+    )
+
+    assert response.status_code == 400
+    assert "confirm_import=true is required" in response.json()["detail"]
+    assert not (workspace_root / "api_requires_confirm").exists()
+
+
+def test_pretrip_import_gpx_run_writes_workspace_and_returns_projection_paths(tmp_path):
+    workspace_root = tmp_path / "pretrip_workspace"
+    inbox = tmp_path / "inbox"
+    reference_dir = inbox / "refs"
+    golden_route = inbox / "golden-route.gpx"
+    explicit_reference = inbox / "reference-explicit.gpx"
+    directory_reference = reference_dir / "reference-dir.gpx"
+    _write_small_gpx(
+        golden_route,
+        name="api run golden route",
+        points=[
+            (24.0, 121.0, 1000.0),
+            (24.006, 121.006, 1010.0),
+            (24.012, 121.012, 1020.0),
+        ],
+    )
+    _write_small_gpx(
+        explicit_reference,
+        name="api run explicit reference",
+        points=[(24.0, 121.0, 1000.0), (24.01, 121.01, 1015.0)],
+    )
+    _write_small_gpx(
+        directory_reference,
+        name="api run directory reference",
+        points=[(24.001, 121.001, 1001.0), (24.011, 121.011, 1016.0)],
+    )
+    client = TestClient(create_admin_app(pretrip_workspace_root=workspace_root))
+
+    response = client.post(
+        "/admin/pretrip/projects/api_run_import/import-gpx",
+        json={
+            "confirm_import": True,
+            "golden_route_gpx": str(golden_route),
+            "reference_dir": str(reference_dir),
+            "reference_gpx_paths": [str(explicit_reference)],
+            "profile": "pi-offline",
+            "checkpoint_spacing_m": 500.0,
+            "max_reference_display_points": 2,
+            "import_timestamp": "2026-05-21T00:00:00+00:00",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    paths = payload["paths"]
+    manifest = payload["manifest"]
+    assert payload["artifact_kind"] == "pretrip_import_gpx_result"
+    assert payload["persisted"] is True
+    assert payload["preview"] is False
+    assert manifest["inputs"]["golden_route_gpx"]["role"] == "golden_route_reference"
+    assert manifest["counts"]["golden_route_count"] == 1
+    assert manifest["counts"]["reference_track_count"] == 2
+    assert manifest["boundary"]["actual_user_track_available"] is False
+    assert manifest["boundary"]["phase1_runtime_mutation_allowed"] is False
+    assert manifest["boundary"]["mission_graph_compiled"] is False
+    assert payload["boundary"]["runtime_mutation_allowed"] is False
+    assert payload["boundary"]["final_mission_graph_compiled"] is False
+    assert payload["mutation"]["workspace_import_outputs_mutated"] is True
+    assert Path(paths["manifest_path"]).is_file()
+    assert Path(paths["admin_projection_path"]).is_file()
+    assert Path(paths["debug_projection_events_path"]).is_file()
+    assert paths["manifest_path"].endswith("outputs/import_manifest.json")
+    assert paths["admin_projection_path"].endswith("outputs/admin_projection.json")
+    assert paths["debug_projection_events_path"].endswith(
+        "outputs/debug_projection_events.jsonl"
+    )
+    assert "<trkpt" not in response.text.lower()
+
+    admin_projection = client.get(
+        "/admin/pretrip/projects/api_run_import/admin-projection"
+    )
+    debug_projection = client.get(
+        "/admin/pretrip/projects/api_run_import/debug-projection-events"
+    )
+    debug_projection_view = client.get(
+        "/admin/pretrip/projects/api_run_import/debug-projection"
+    )
+    assert admin_projection.status_code == 200
+    assert admin_projection.json()["planning_semantics"][
+        "pretrip_actual_user_track_exists"
+    ] is False
+    assert debug_projection.status_code == 200
+    assert debug_projection.json()["event_count"] == 4
+    assert debug_projection.json()["boundary"]["phase1_runtime_mutation_allowed"] is False
+    assert debug_projection_view.status_code == 200
+    debug_projection_payload = debug_projection_view.json()
+    assert debug_projection_payload["event_count"] > 4
+    assert debug_projection_payload["counts"]["reference_track_count"] == 2
+    assert debug_projection_payload["boundary"]["runtime_safety_truth"] is False
+    assert debug_projection_payload["timeline_events"][2]["kind"] == "checkpoint_detected"
+
+
+def test_pretrip_prepare_layers_preview_is_workspace_metadata_only(tmp_path):
+    original_fixture_bytes = _repo_fixture_bytes()
+    workspace_root = _copy_pretrip_workspace(tmp_path)
+    client = TestClient(create_admin_app(pretrip_workspace_root=workspace_root))
+
+    response = client.post(
+        f"/admin/pretrip/projects/{PROJECT_ID}/prepare-layers-preview",
+        json={
+            "layers": ["osm", "overpass", "terrain", "imagery", "weather"],
+            "prepared_at": "2026-05-22T00:00:00+00:00",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["artifact_kind"] == "pretrip_layer_preparation_preview_result"
+    assert payload["preview"] is True
+    assert payload["persisted"] is False
+    assert payload["manifest"]["counts"]["layer_count"] == 5
+    assert payload["manifest"]["network_policy"]["network_calls_made"] is False
+    assert payload["boundary"]["workspace_file_mutation_allowed"] is False
+    assert payload["boundary"]["phase1_runtime_mutation_allowed"] is False
+    assert payload["mutation"]["workspace_files_mutated"] is False
+    assert not (workspace_root / PROJECT_ID / "outputs" / "layers").exists()
+    assert "<trkpt" not in response.text.lower()
+    assert _repo_fixture_bytes() == original_fixture_bytes
+
+
+def test_pretrip_prepare_layers_run_writes_workspace_and_feeds_admin_debug(tmp_path):
+    workspace_root = _copy_pretrip_workspace(tmp_path)
+    client = TestClient(create_admin_app(pretrip_workspace_root=workspace_root))
+
+    rejected = client.post(
+        f"/admin/pretrip/projects/{PROJECT_ID}/prepare-layers",
+        json={"layers": ["osm", "terrain"]},
+    )
+    response = client.post(
+        f"/admin/pretrip/projects/{PROJECT_ID}/prepare-layers",
+        json={
+            "confirm_prepare": True,
+            "layers": ["osm", "terrain"],
+            "prepared_at": "2026-05-22T00:00:00+00:00",
+        },
+    )
+    layer_view_response = client.get(
+        f"/admin/pretrip/projects/{PROJECT_ID}/layer-preparation"
+    )
+    debug_response = client.get(
+        f"/admin/pretrip/projects/{PROJECT_ID}/debug-projection-events"
+    )
+
+    assert rejected.status_code == 400
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["artifact_kind"] == "pretrip_layer_preparation_result"
+    assert payload["persisted"] is True
+    assert payload["manifest"]["counts"]["layer_count"] == 2
+    assert payload["manifest"]["boundary"]["phase1_runtime_mutation_allowed"] is False
+    assert payload["manifest"]["boundary"]["final_mission_graph_compiled"] is False
+    assert payload["mutation"]["workspace_layer_outputs_mutated"] is True
+    assert Path(payload["paths"]["manifest_path"]).is_file()
+
+    assert layer_view_response.status_code == 200
+    layer_view = layer_view_response.json()
+    assert layer_view["status"] == "ready_with_warnings"
+    assert layer_view["counts"]["ready_layer_count"] == 2
+    assert [layer["layer_id"] for layer in layer_view["layers"]] == ["osm", "terrain"]
+
+    assert debug_response.status_code == 200
+    debug_payload = debug_response.json()
+    assert debug_payload["event_count"] > 4
+    assert debug_payload["layer_source_path"] == (
+        "outputs/layers/projections/admin_debug_events.jsonl"
+    )
 
 
 def test_pretrip_review_decision_api_returns_accepted_preview_record():
@@ -615,6 +941,284 @@ def test_pretrip_route_note_disposition_api_rejects_duplicate_workspace_append(
     assert persisted_log["counts"]["disposition_count"] == 1
 
 
+def test_pretrip_workspace_edit_api_adds_manual_checkpoint_to_workspace_only(tmp_path):
+    original_fixture_bytes = _repo_fixture_bytes()
+    workspace_root = _copy_pretrip_workspace(tmp_path)
+    workspace_project_root = workspace_root / PROJECT_ID
+    workspace_log = workspace_project_root / "reviews" / "workspace_edit_log.json"
+    workspace_checkpoints = workspace_project_root / "candidates" / "checkpoints.json"
+    workspace_package = workspace_project_root / "outputs" / "pretrip_package.json"
+    before_checkpoints = workspace_checkpoints.read_bytes()
+    before_package = workspace_package.read_bytes()
+    client = TestClient(create_admin_app(pretrip_workspace_root=workspace_root))
+
+    response = client.post(
+        f"/admin/pretrip/projects/{PROJECT_ID}/workspace-edits",
+        json={
+            "operation": "add_checkpoint",
+            "summary": "Manual waypoint candidate added from local pretrip map edit.",
+            "reviewer_alias": "trip_leader",
+            "created_at": "2026-05-21T10:00:00+08:00",
+            "candidate": {
+                "candidate_id": "manual.cp.water_001",
+                "label": "Manual water waypoint",
+                "lat": 24.053,
+                "lon": 121.231,
+                "checkpoint_type": "waypoint",
+                "review_state": "needs_human_review",
+            },
+            "source_refs": ["admin.pretrip.map_click"],
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["artifact_kind"] == "pretrip_workspace_edit_log"
+    assert payload["persisted"] is True
+    assert payload["append_only"] is True
+    assert payload["candidate_only"] is True
+    assert payload["counts"]["edit_count"] == 1
+    assert payload["counts"]["add_checkpoint_count"] == 1
+    assert payload["counts"]["candidate_only_edit_count"] == 1
+    assert payload["counts"]["package_mutation_count"] == 0
+    assert payload["counts"]["mission_graph_mutation_count"] == 0
+    assert payload["counts"]["runtime_mutation_count"] == 0
+    assert payload["counts"]["phase1_runtime_mutation_count"] == 0
+    assert payload["record"]["operation"] == "add_checkpoint"
+    assert payload["record"]["target_kind"] == "checkpoint_waypoint"
+    assert payload["record"]["candidate_payload"]["candidate_id"] == (
+        "manual.cp.water_001"
+    )
+    assert payload["record"]["candidate_only"] is True
+    assert payload["record"]["candidate_artifact_mutation_allowed"] is False
+    assert payload["record"]["package_mutation_allowed"] is False
+    assert payload["record"]["mission_graph_mutation_allowed"] is False
+    assert payload["record"]["runtime_mutation_allowed"] is False
+    assert payload["record"]["phase1_runtime_mutation_allowed"] is False
+    assert payload["record"]["phase2_writeback_allowed"] is False
+    assert payload["record"]["final_mission_graph_compiled"] is False
+    assert payload["boundary"]["local_workspace_only"] is True
+    assert payload["boundary"]["candidate_only"] is True
+    assert payload["boundary"]["candidate_artifact_mutation_allowed"] is False
+    assert payload["boundary"]["workspace_candidate_artifact_mutation_allowed"] is True
+    assert payload["boundary"]["package_mutation_allowed"] is False
+    assert payload["boundary"]["mission_graph_mutation_allowed"] is False
+    assert payload["boundary"]["runtime_mutation_allowed"] is False
+    assert payload["boundary"]["phase1_runtime_mutation_allowed"] is False
+    assert payload["boundary"]["phase2_writeback_allowed"] is False
+    assert payload["boundary"]["compiles_mission_graph"] is False
+    assert payload["boundary"]["final_mission_graph_compiled"] is False
+    assert payload["boundary"]["external_api_calls_made"] is False
+    assert payload["boundary"]["fixture_file_mutation_allowed"] is False
+    assert payload["boundary"]["workspace_file_mutation_allowed"] is True
+    assert payload["boundary"]["workspace_edit_log_path"] == str(workspace_log)
+    assert payload["mutation"]["candidate_artifacts_mutated"] is False
+    assert payload["mutation"]["workspace_candidate_artifacts_mutated"] is True
+    assert payload["mutation"]["checkpoint_candidates_mutated"] is True
+    assert payload["mutation"]["retreat_route_candidates_mutated"] is False
+    assert payload["mutation"]["package_mutated"] is False
+    assert payload["mutation"]["mission_graph_mutated"] is False
+    assert payload["mutation"]["runtime_mutated"] is False
+    assert payload["mutation"]["phase1_runtime_mutated"] is False
+    assert payload["mutation"]["phase2_writeback_performed"] is False
+    assert payload["mutation"]["fixture_files_mutated"] is False
+    assert payload["mutation"]["workspace_files_mutated"] is True
+    assert payload["mutation"]["workspace_edit_log_mutated"] is True
+
+    persisted_log = json.loads(workspace_log.read_text(encoding="utf-8"))
+    assert persisted_log["counts"]["edit_count"] == 1
+    assert persisted_log["records"][0]["operation"] == "add_checkpoint"
+    assert persisted_log["records"][0]["candidate_payload"]["candidate_id"] == (
+        "manual.cp.water_001"
+    )
+    assert "Final MissionGraph" not in workspace_log.read_text(encoding="utf-8")
+    assert "/safety/" not in workspace_log.read_text(encoding="utf-8")
+    after_checkpoints = json.loads(workspace_checkpoints.read_text(encoding="utf-8"))
+    before_checkpoint_payload = json.loads(before_checkpoints)
+    assert len(after_checkpoints) == len(before_checkpoint_payload) + 1
+    assert after_checkpoints[-1]["candidate_id"] == "manual.cp.water_001"
+    assert after_checkpoints[-1]["review_state"] == "needs_human_review"
+    assert workspace_package.read_bytes() == before_package
+    assert _repo_fixture_bytes() == original_fixture_bytes
+
+
+def test_pretrip_workspace_edit_api_records_planned_tool_operations(tmp_path):
+    original_fixture_bytes = _repo_fixture_bytes()
+    workspace_root = _copy_pretrip_workspace(tmp_path)
+    workspace_project_root = workspace_root / PROJECT_ID
+    workspace_log = workspace_project_root / "reviews" / "workspace_edit_log.json"
+    workspace_checkpoints = workspace_project_root / "candidates" / "checkpoints.json"
+    workspace_retreat_routes = (
+        workspace_project_root / "candidates" / "retreat_routes.json"
+    )
+    before_checkpoints = workspace_checkpoints.read_bytes()
+    before_retreat_routes = workspace_retreat_routes.read_bytes()
+    client = TestClient(create_admin_app(pretrip_workspace_root=workspace_root))
+
+    requests = [
+        {
+            "operation": "remove_checkpoint",
+            "target_ref": "cp.010",
+            "summary": "Remove checkpoint candidate from local planning draft.",
+        },
+        {
+            "operation": "add_retreat_route",
+            "summary": "Add local retreat route candidate for human review.",
+            "candidate": {
+                "candidate_id": "retreat.manual.shelter_exit",
+                "entry_checkpoint_candidate_id": "cp.010",
+                "retreat_type": "alternate_route",
+                "expected_use": "retreat",
+                "review_state": "needs_human_review",
+            },
+        },
+        {
+            "operation": "remove_retreat_route",
+            "target_ref": "retreat.chilai_nanhua_day1.return_to_entry",
+            "summary": "Remove retreat route candidate from local planning draft.",
+        },
+        {
+            "operation": "feature_edit",
+            "target_ref": "overpass.node.shelter_001",
+            "field_updates": {
+                "review_state": "needs_human_review",
+                "label": "Potential shelter feature",
+            },
+            "summary": "Update local feature candidate fields.",
+        },
+        {
+            "operation": "select_trail_generate_waypoint",
+            "target_ref": "overpass.way.trail_001",
+            "candidate": {
+                "candidate_id": "manual.cp.trail_select_001",
+                "label": "Trail-selected waypoint",
+                "lat": 24.055,
+                "lon": 121.233,
+                "review_state": "needs_human_review",
+            },
+            "summary": "Generate waypoint candidate from selected trail evidence.",
+        },
+        {
+            "operation": "rectangle_group_selection",
+            "target_refs": ["cp.011", "cp.012"],
+            "selection": {
+                "bbox_wgs84": {
+                    "min_lat": 24.04,
+                    "min_lon": 121.22,
+                    "max_lat": 24.06,
+                    "max_lon": 121.24,
+                }
+            },
+            "summary": "Record local rectangle group selection.",
+        },
+    ]
+
+    responses = [
+        client.post(
+            f"/admin/pretrip/projects/{PROJECT_ID}/workspace-edits",
+            json=request,
+        )
+        for request in requests
+    ]
+
+    assert [response.status_code for response in responses] == [200] * len(requests)
+    final_payload = responses[-1].json()
+    assert final_payload["counts"]["edit_count"] == 6
+    assert final_payload["counts"]["remove_checkpoint_count"] == 1
+    assert final_payload["counts"]["add_retreat_route_count"] == 1
+    assert final_payload["counts"]["remove_retreat_route_count"] == 1
+    assert final_payload["counts"]["feature_edit_count"] == 1
+    assert final_payload["counts"]["select_trail_generate_waypoint_count"] == 1
+    assert final_payload["counts"]["rectangle_group_selection_count"] == 1
+    assert final_payload["counts"]["candidate_artifact_mutation_count"] == 0
+    assert final_payload["counts"]["package_mutation_count"] == 0
+    assert final_payload["counts"]["mission_graph_mutation_count"] == 0
+    assert final_payload["counts"]["runtime_mutation_count"] == 0
+    assert final_payload["counts"]["phase2_writeback_count"] == 0
+    assert final_payload["record"]["operation"] == "rectangle_group_selection"
+    assert final_payload["record"]["target_kind"] == "rectangle_selection"
+    assert final_payload["boundary"]["workspace_candidate_artifact_mutation_allowed"] is True
+    assert final_payload["boundary"]["package_mutation_allowed"] is False
+    assert final_payload["boundary"]["mission_graph_mutation_allowed"] is False
+    assert final_payload["boundary"]["runtime_mutation_allowed"] is False
+    assert final_payload["boundary"]["phase1_runtime_mutation_allowed"] is False
+    assert final_payload["boundary"]["phase2_writeback_allowed"] is False
+    assert final_payload["boundary"]["final_mission_graph_compiled"] is False
+
+    persisted_log = json.loads(workspace_log.read_text(encoding="utf-8"))
+    assert [record["operation"] for record in persisted_log["records"]] == [
+        "remove_checkpoint",
+        "add_retreat_route",
+        "remove_retreat_route",
+        "feature_edit",
+        "select_trail_generate_waypoint",
+        "rectangle_group_selection",
+    ]
+    assert persisted_log["records"][1]["target_kind"] == "retreat_route"
+    assert persisted_log["records"][3]["field_updates"]["label"] == (
+        "Potential shelter feature"
+    )
+    assert responses[0].json()["mutation"]["checkpoint_candidates_mutated"] is True
+    assert responses[1].json()["mutation"]["retreat_route_candidates_mutated"] is True
+    assert responses[2].json()["mutation"]["retreat_route_candidates_mutated"] is True
+    assert responses[3].json()["mutation"]["workspace_candidate_artifacts_mutated"] is False
+    assert responses[4].json()["mutation"]["checkpoint_candidates_mutated"] is True
+    after_checkpoints = json.loads(workspace_checkpoints.read_text(encoding="utf-8"))
+    after_retreat_routes = json.loads(workspace_retreat_routes.read_text(encoding="utf-8"))
+    assert workspace_checkpoints.read_bytes() != before_checkpoints
+    assert workspace_retreat_routes.read_bytes() != before_retreat_routes
+    assert all(item["candidate_id"] != "cp.010" for item in after_checkpoints)
+    assert any(
+        item["candidate_id"] == "manual.cp.trail_select_001"
+        for item in after_checkpoints
+    )
+    assert all(
+        item["candidate_id"] != "retreat.chilai_nanhua_day1.return_to_entry"
+        for item in after_retreat_routes
+    )
+    assert any(
+        item["candidate_id"] == "retreat.manual.shelter_exit"
+        for item in after_retreat_routes
+    )
+    assert _repo_fixture_bytes() == original_fixture_bytes
+
+
+def test_pretrip_workspace_edit_api_rejects_without_workspace():
+    original_fixture_bytes = _repo_fixture_bytes()
+    client = TestClient(create_admin_app())
+
+    response = client.post(
+        f"/admin/pretrip/projects/{PROJECT_ID}/workspace-edits",
+        json={
+            "operation": "remove_checkpoint",
+            "target_ref": "cp.010",
+            "summary": "Remove checkpoint candidate from local planning draft.",
+        },
+    )
+
+    assert response.status_code == 409
+    assert "pretrip_workspace_root" in response.json()["detail"]
+    assert _repo_fixture_bytes() == original_fixture_bytes
+
+
+def test_pretrip_workspace_edit_api_rejects_repo_fixture_root():
+    original_fixture_bytes = _repo_fixture_bytes()
+    client = TestClient(create_admin_app(pretrip_workspace_root=FIXTURE_PROJECT_ROOT))
+
+    response = client.post(
+        f"/admin/pretrip/projects/{PROJECT_ID}/workspace-edits",
+        json={
+            "operation": "remove_checkpoint",
+            "target_ref": "cp.010",
+            "summary": "Remove checkpoint candidate from local planning draft.",
+        },
+    )
+
+    assert response.status_code == 409
+    assert "copied workspace, not repo fixtures" in response.json()["detail"]
+    assert _repo_fixture_bytes() == original_fixture_bytes
+
+
 def test_pretrip_route_note_reviewed_assumptions_api_rejects_without_workspace():
     original_fixture_bytes = _repo_fixture_bytes()
     client = TestClient(create_admin_app())
@@ -706,7 +1310,7 @@ def test_pretrip_project_api_overlays_route_note_reviewed_assumptions(tmp_path):
     assert assumptions["boundary"]["runtime_activation_allowed"] is False
     sections = {
         section["id"]: section
-        for section in view["tabs"]["pre_trip_planning"]["sections"]
+        for section in view["tabs"]["review_workspace"]["sections"]
     }
     assert sections["route_note_reviewed_assumptions"]["counts"][
         "accepted_interpretation_count"
@@ -1444,7 +2048,7 @@ def test_pretrip_project_api_overlays_expert_contribution_workspace_apply_result
     assert result["boundary"]["runtime_mutation_allowed"] is False
     sections = {
         section["id"]: section
-        for section in view["tabs"]["pre_trip_planning"]["sections"]
+        for section in view["tabs"]["review_workspace"]["sections"]
     }
     assert sections["expert_contribution_apply_plan"]["counts"][
         "planned_operation_count"
@@ -1452,6 +2056,121 @@ def test_pretrip_project_api_overlays_expert_contribution_workspace_apply_result
     assert sections["expert_contribution_workspace_apply_result"]["counts"][
         "applied_operation_count"
     ] == 3
+
+
+def test_pretrip_import_gpx_preview_api_is_no_write(tmp_path):
+    workspace_root = tmp_path / "workspaces"
+    golden = tmp_path / "gpx" / "golden.gpx"
+    reference = tmp_path / "gpx" / "references" / "expert.gpx"
+    _write_small_gpx(
+        golden,
+        name="Golden reference route",
+        points=[
+            (24.0910, 121.1810, 2200.0),
+            (24.0925, 121.1835, 2260.0),
+            (24.0940, 121.1860, 2310.0),
+        ],
+    )
+    _write_small_gpx(
+        reference,
+        name="Expert reference route",
+        points=[
+            (24.0908, 121.1808, 2190.0),
+            (24.0924, 121.1832, 2255.0),
+            (24.0942, 121.1862, 2305.0),
+        ],
+    )
+    client = TestClient(create_admin_app(pretrip_workspace_root=workspace_root))
+
+    response = client.post(
+        "/admin/pretrip/projects/imported/import-gpx-preview",
+        json={
+            "golden_route_gpx": str(golden),
+            "reference_dir": str(reference.parent),
+            "checkpoint_spacing_m": 25,
+            "max_reference_display_points": 10,
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["artifact_kind"] == "pretrip_import_gpx_preview"
+    assert payload["persisted"] is False
+    assert payload["counts"]["golden_route_count"] == 1
+    assert payload["counts"]["reference_track_count"] == 1
+    assert payload["inputs"]["golden_route_gpx"]["role"] == "golden_route_reference"
+    assert payload["boundary"]["admin_api_write_performed"] is False
+    assert payload["boundary"]["network_calls_allowed"] is False
+    assert payload["boundary"]["phase1_runtime_mutation_allowed"] is False
+    assert payload["boundary"]["compiles_mission_graph"] is False
+    assert payload["planning_semantics"]["golden_route"]["actual_user_track"] is False
+    assert not (workspace_root / "imported").exists()
+
+
+def test_pretrip_import_gpx_run_api_requires_confirmation_and_writes_workspace(
+    tmp_path,
+):
+    workspace_root = tmp_path / "workspaces"
+    golden = tmp_path / "gpx" / "golden.gpx"
+    reference = tmp_path / "gpx" / "references" / "expert.gpx"
+    _write_small_gpx(
+        golden,
+        name="Golden reference route",
+        points=[
+            (24.0910, 121.1810, 2200.0),
+            (24.0925, 121.1835, 2260.0),
+            (24.0940, 121.1860, 2310.0),
+        ],
+    )
+    _write_small_gpx(
+        reference,
+        name="Expert reference route",
+        points=[
+            (24.0908, 121.1808, 2190.0),
+            (24.0924, 121.1832, 2255.0),
+            (24.0942, 121.1862, 2305.0),
+        ],
+    )
+    client = TestClient(create_admin_app(pretrip_workspace_root=workspace_root))
+    payload = {
+        "golden_route_gpx": str(golden),
+        "reference_dir": str(reference.parent),
+        "template_project_root": str(FIXTURE_PROJECT_ROOT),
+        "checkpoint_spacing_m": 25,
+        "max_reference_display_points": 10,
+        "overwrite": False,
+    }
+
+    rejected = client.post(
+        "/admin/pretrip/projects/imported/import-gpx",
+        json=payload,
+    )
+    response = client.post(
+        "/admin/pretrip/projects/imported/import-gpx",
+        json={**payload, "confirm_import": True},
+    )
+    view_response = client.get("/admin/pretrip/projects/imported")
+
+    assert rejected.status_code == 400
+    assert response.status_code == 200
+    result = response.json()
+    assert result["artifact_kind"] == "pretrip_import_gpx_result"
+    assert result["persisted"] is True
+    assert result["manifest"]["counts"]["golden_route_count"] == 1
+    assert result["manifest"]["counts"]["reference_track_count"] == 1
+    assert result["manifest"]["boundary"]["actual_user_track_available"] is False
+    assert result["boundary"]["admin_api_write_performed"] is True
+    assert result["boundary"]["phase1_runtime_mutation_allowed"] is False
+    assert result["boundary"]["compiles_mission_graph"] is False
+    project_root = workspace_root / "imported"
+    assert (project_root / "project.json").exists()
+    assert (project_root / "outputs" / "import_manifest.json").exists()
+    assert (project_root / "outputs" / "admin_projection.json").exists()
+    assert (project_root / "outputs" / "debug_projection_events.jsonl").exists()
+    assert view_response.status_code == 200
+    view = view_response.json()
+    assert view["project_id"] == "imported"
+    assert view["reference_tracks"]["reference_track_count"] == 1
 
 
 def test_pretrip_review_decision_api_returns_corrected_preview_record():

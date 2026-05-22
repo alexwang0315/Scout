@@ -30,6 +30,7 @@ def test_pretrip_map_layers_order_imagery_bottom_and_api_top():
         "corridors",
         "hazards",
         "route",
+        "reference-tracks",
         "retreat",
         "segments",
         "checkpoints",

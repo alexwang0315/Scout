@@ -71,6 +71,42 @@ class Phase2AdminApiMountTests(unittest.TestCase):
             self.assertIn("/pdr/update", routes)
             self.assertIn("/status", routes)
 
+    def test_pretrip_workspace_root_env_enables_workspace_edit_routes(self):
+        with TemporaryDirectory() as tmpdir:
+            with patch.dict(
+                os.environ,
+                {"SCOUT_PRETRIP_WORKSPACE_ROOT": tmpdir},
+                clear=False,
+            ):
+                server = self._reload_server()
+                self.addCleanup(self._reload_server)
+
+                client = TestClient(server.app)
+                workspace_response = client.post(
+                    "/admin/pretrip/projects/chilai_nanhua_day1/workspace"
+                )
+                edit_response = client.post(
+                    "/admin/pretrip/projects/chilai_nanhua_day1/workspace-edits",
+                    json={
+                        "operation": "add_checkpoint",
+                        "summary": "Server env workspace edit smoke.",
+                        "candidate": {
+                            "candidate_id": "manual.cp.server_env_smoke",
+                            "label": "Server env smoke",
+                            "lat": 24.05,
+                            "lon": 121.22,
+                            "checkpoint_type": "waypoint",
+                            "review_state": "needs_human_review",
+                        },
+                    },
+                )
+
+            self.assertEqual(workspace_response.status_code, 200)
+            self.assertEqual(edit_response.status_code, 200)
+            payload = edit_response.json()
+            self.assertTrue(payload["mutation"]["workspace_candidate_artifacts_mutated"])
+            self.assertFalse(payload["boundary"]["phase1_runtime_mutation_allowed"])
+
 
 if __name__ == "__main__":
     unittest.main()

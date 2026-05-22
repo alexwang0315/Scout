@@ -82,6 +82,15 @@ _LAYER_SPECS: dict[str, AdminMapLayerSpec] = {
         render_mode="svg_overlay",
         source_kind="route_fixture",
     ),
+    "reference-tracks": AdminMapLayerSpec(
+        layer_id="reference-tracks",
+        label="Reference tracks",
+        label_zh="參考軌跡圖層（專家/山友 GPX）",
+        layer_kind="evidence",
+        z_index=52,
+        render_mode="svg_overlay",
+        source_kind="reference_track",
+    ),
     "retreat": AdminMapLayerSpec(
         layer_id="retreat",
         label="Retreat",
@@ -163,6 +172,11 @@ def build_pretrip_map_layers(
         "corridors": ("pretrip.map_layer.corridors", source_refs.get("map_candidates")),
         "hazards": ("pretrip.map_layer.hazards", source_refs.get("map_candidates")),
         "route": ("pretrip.map_layer.route", source_refs.get("route_summary")),
+        "reference-tracks": (
+            "pretrip.map_layer.reference_tracks",
+            source_refs.get("reference_track_display_geometry")
+            or source_refs.get("reference_tracks"),
+        ),
         "retreat": ("pretrip.map_layer.retreat", source_refs.get("retreat_routes")),
         "segments": ("pretrip.map_layer.segments", source_refs.get("segments")),
         "checkpoints": ("pretrip.map_layer.checkpoints", source_refs.get("checkpoints")),
@@ -181,6 +195,7 @@ def build_pretrip_map_layers(
             "corridors",
             "hazards",
             "route",
+            "reference-tracks",
             "retreat",
             "segments",
             "checkpoints",
