@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from admin_map_layers import build_pretrip_map_layers
+from pretrip_layer_preparation import build_layer_preparation_not_prepared_view
 
 
 ROOT = Path(__file__).resolve().parent
@@ -40,6 +41,7 @@ def build_pretrip_admin_view(
     readiness = _load_json(artifacts["readiness"])
     eta = _load_json(artifacts["eta"])
     route_notes = _load_json(artifacts["route_notes"])
+    overpass_evidence = _load_json(artifacts["overpass_evidence"])
     route_note_ln_proposals = _load_json(artifacts["route_note_ln_proposals"])
     route_note_review_options = _load_json(artifacts["route_note_review_options"])
     review_queue = _load_json(artifacts["review_queue"])
@@ -63,6 +65,22 @@ def build_pretrip_admin_view(
     contour = _load_json(artifacts["contour"])
     remote_summary = _load_json(artifacts["remote_summary"])
     route_comparison = _load_json(artifacts["route_comparison"])
+    reference_tracks = _load_optional_json(artifacts.get("reference_tracks"))
+    checkpoint_events = _load_optional_json(artifacts.get("checkpoint_events"))
+    segment_display_geometry = _load_optional_json(
+        artifacts.get("segment_display_geometry")
+    )
+    reference_track_display_geometry = _load_optional_json(
+        artifacts.get("reference_track_display_geometry")
+    )
+    import_manifest = _load_optional_json(artifacts.get("import_manifest"))
+    layer_preparation_manifest = _load_optional_json(
+        artifacts.get("layer_preparation_manifest")
+    )
+    admin_surface_projection = _load_optional_json(artifacts.get("admin_projection"))
+    debug_projection_events = _load_optional_jsonl(
+        artifacts.get("debug_projection_events")
+    )
     segment_dtm = _load_json(artifacts["segment_dtm"])
     human_reviews = _load_json(artifacts["human_reviews"])
     runtime_handoff = _load_json(artifacts["runtime_handoff"])
@@ -101,6 +119,9 @@ def build_pretrip_admin_view(
                 segments,
                 source_path=source_refs["segments"],
                 evidence_type="pretrip_segment_candidate",
+                display_geometry=_segment_display_geometry_by_id(
+                    segment_display_geometry
+                ),
             ),
             "retreat_routes": _candidate_list(
                 retreat_routes,
@@ -127,6 +148,30 @@ def build_pretrip_admin_view(
             "estimates": eta.get("estimates", []),
         },
         "route_notes": _route_note_summary(route_notes, source_refs["route_notes"]),
+        "reference_tracks": _reference_tracks_summary(
+            reference_tracks,
+            source_refs.get("reference_tracks", ""),
+            display_geometry=reference_track_display_geometry,
+            display_source_path=source_refs.get("reference_track_display_geometry", ""),
+        )
+        if reference_tracks is not None
+        else None,
+        "checkpoint_events": _checkpoint_events_summary(
+            checkpoint_events,
+            source_refs.get("checkpoint_events", ""),
+        )
+        if checkpoint_events is not None
+        else None,
+        "layer_preparation": _layer_preparation_summary(
+            layer_preparation_manifest,
+            source_refs.get("layer_preparation_manifest", ""),
+            project_id=project_id,
+            project_root=artifacts["project"].parent,
+        ),
+        "overpass_evidence": _overpass_evidence_summary(
+            overpass_evidence,
+            source_refs["overpass_evidence"],
+        ),
         "route_note_ln_proposals": _route_note_ln_proposal_summary(
             route_note_ln_proposals,
             source_refs["route_note_ln_proposals"],
@@ -190,7 +235,24 @@ def build_pretrip_admin_view(
                 source_refs["expert_contribution_workspace_apply_result"],
             )
         )
-    planning_tab["sections"] = _planning_sections(planning_tab)
+    planning_sections = _planning_sections(planning_tab)
+    review_workspace_section_ids = {
+        "review_queue",
+        "route_note_review_options",
+        "route_note_reviewed_assumptions",
+        "review_draft_log",
+        "review_decision_log",
+        "review_decision_apply_plan",
+        "external_import_queue",
+        "expert_contributions",
+        "expert_contribution_apply_plan",
+        "expert_contribution_workspace_apply_result",
+    }
+    planning_tab["sections"] = [
+        section
+        for section in planning_sections
+        if section["id"] not in review_workspace_section_ids
+    ]
 
     post_analysis_tab = {
         "runtime_handoff": _runtime_handoff_summary(
@@ -212,7 +274,45 @@ def build_pretrip_admin_view(
         "after_action_next_plan": _after_action_summary(after_action, source_refs["after_action"]),
         "brain_seed": _brain_seed_summary(brain_seed, source_refs["brain_seed"]),
     }
+    if admin_surface_projection is not None:
+        post_analysis_tab["admin_surface_projection"] = _admin_projection_summary(
+            admin_surface_projection,
+            source_refs["admin_projection"],
+        )
+    if debug_projection_events is not None:
+        post_analysis_tab["debug_projection"] = _debug_projection_events_summary(
+            debug_projection_events,
+            source_refs["debug_projection_events"],
+        )
+    if import_manifest is not None:
+        post_analysis_tab["import_manifest"] = _import_manifest_summary(
+            import_manifest,
+            source_refs["import_manifest"],
+        )
     post_analysis_tab["sections"] = _post_analysis_sections(post_analysis_tab)
+    review_workspace_tab = {
+        "review_queue": planning_tab["review_queue"],
+        "route_note_review_options": planning_tab["route_note_review_options"],
+        "route_note_reviewed_assumptions": planning_tab.get(
+            "route_note_reviewed_assumptions"
+        ),
+        "review_draft_log": planning_tab["review_draft_log"],
+        "review_decision_log": planning_tab["review_decision_log"],
+        "review_decision_apply_plan": planning_tab["review_decision_apply_plan"],
+        "external_import_queue": planning_tab["external_import_queue"],
+        "expert_contributions": planning_tab["expert_contributions"],
+        "expert_contribution_apply_plan": planning_tab.get(
+            "expert_contribution_apply_plan"
+        ),
+        "expert_contribution_workspace_apply_result": planning_tab.get(
+            "expert_contribution_workspace_apply_result"
+        ),
+    }
+    review_workspace_tab["sections"] = [
+        section
+        for section in planning_sections
+        if section["id"] in review_workspace_section_ids
+    ]
 
     return {
         "project_id": project_id,
@@ -226,6 +326,10 @@ def build_pretrip_admin_view(
         "readiness": planning_tab["readiness"],
         "eta": planning_tab["eta"],
         "route_notes": planning_tab["route_notes"],
+        "reference_tracks": planning_tab["reference_tracks"],
+        "checkpoint_events": planning_tab["checkpoint_events"],
+        "layer_preparation": planning_tab["layer_preparation"],
+        "overpass_evidence": planning_tab["overpass_evidence"],
         "route_note_ln_proposals": planning_tab["route_note_ln_proposals"],
         "route_note_review_options": planning_tab["route_note_review_options"],
         "route_note_reviewed_assumptions": planning_tab.get(
@@ -248,10 +352,14 @@ def build_pretrip_admin_view(
         "weather": planning_tab["weather"],
         "contours": planning_tab["contours"],
         "map_layers": planning_tab["map_layers"],
+        "import_manifest": post_analysis_tab.get("import_manifest"),
+        "admin_surface_projection": post_analysis_tab.get("admin_surface_projection"),
+        "debug_projection": post_analysis_tab.get("debug_projection"),
         "raw_sample_summary": _raw_sample_summary(pretrip_package, segment_dtm, source_refs),
         "tabs": {
             "pre_trip_planning": planning_tab,
             "post_analysis": post_analysis_tab,
+            "review_workspace": review_workspace_tab,
         },
     }
 
@@ -262,19 +370,14 @@ def resolve_pretrip_project_artifacts(
     root: Path = ROOT,
     project_root: Path | None = None,
 ) -> dict[str, Path]:
-    if project_id != CHILAI_NANHUA_DAY1_PROJECT_ID:
-        raise KeyError(project_id)
-
-    resolved_project_root = (
-        Path(project_root)
-        if project_root is not None
-        else root / "tests" / "fixtures" / "pretrip" / "projects" / project_id
+    resolved_project_root = resolve_pretrip_project_root(
+        project_id,
+        root=root,
+        project_root=project_root,
     )
     project_path = resolved_project_root / "project.json"
     project = _load_json(project_path)
-    if project.get("project_id") != project_id:
-        raise KeyError(project_id)
-    return {
+    artifacts = {
         "project": project_path,
         "route_summary": resolved_project_root / project["route_summary_ref"],
         "map_context": resolved_project_root / project["map_context_ref"],
@@ -286,6 +389,11 @@ def resolve_pretrip_project_artifacts(
         "readiness": resolved_project_root / project["readiness_report_ref"],
         "eta": resolved_project_root / project["planned_eta_ref"],
         "route_notes": resolved_project_root / project["route_note_candidates_ref"],
+        "overpass_evidence": resolved_project_root / project["overpass_evidence_ref"],
+        "overpass_map_context": resolved_project_root
+        / project["overpass_map_context_ref"],
+        "overpass_raw_payload": resolved_project_root
+        / project["overpass_raw_payload_ref"],
         "route_note_ln_proposals": resolved_project_root
         / project["route_note_ln_proposals_ref"],
         "route_note_review_options": resolved_project_root
@@ -316,16 +424,806 @@ def resolve_pretrip_project_artifacts(
         "after_action": resolved_project_root / project["after_action_next_plan_candidates_ref"],
         "brain_seed": resolved_project_root / project["brain_seed_nodes_ref"],
     }
+    for artifact_key, project_ref_key in {
+        "reference_tracks": "reference_tracks_ref",
+        "reference_track_display_geometry": "reference_track_display_geometry_ref",
+        "checkpoint_events": "checkpoint_events_ref",
+        "segment_display_geometry": "segment_display_geometry_ref",
+        "import_manifest": "import_manifest_ref",
+        "layer_preparation_manifest": "layer_preparation_manifest_ref",
+        "layer_preparation_job": "layer_preparation_job_ref",
+        "layer_preparation_summary": "layer_preparation_summary_ref",
+        "layer_adapter_manifest": "layer_adapter_manifest_ref",
+        "layer_validation_report": "layer_validation_report_ref",
+        "layer_map_projection": "layer_map_projection_ref",
+        "layer_debug_projection_events": "layer_debug_projection_events_ref",
+        "admin_projection": "admin_projection_ref",
+        "debug_projection_events": "debug_projection_events_ref",
+    }.items():
+        if project.get(project_ref_key):
+            artifacts[artifact_key] = resolved_project_root / project[project_ref_key]
+    return artifacts
 
 
-def list_pretrip_admin_projects() -> list[dict[str, str]]:
+def resolve_pretrip_project_root(
+    project_id: str,
+    *,
+    root: Path = ROOT,
+    project_root: Path | None = None,
+) -> Path:
+    if project_root is None and project_id != CHILAI_NANHUA_DAY1_PROJECT_ID:
+        raise KeyError(project_id)
+    resolved_project_root = (
+        Path(project_root)
+        if project_root is not None
+        else root / "tests" / "fixtures" / "pretrip" / "projects" / project_id
+    )
+    project_path = resolved_project_root / "project.json"
+    if not project_path.exists():
+        raise KeyError(project_id)
+    project = _load_json(project_path)
+    if project.get("project_id") != project_id:
+        raise KeyError(project_id)
+    return resolved_project_root
+
+
+def load_pretrip_admin_surface_projection(
+    project_id: str,
+    *,
+    root: Path = ROOT,
+    project_root: Path | None = None,
+) -> dict[str, Any]:
+    resolved_project_root = resolve_pretrip_project_root(
+        project_id,
+        root=root,
+        project_root=project_root,
+    )
+    project = _load_json(resolved_project_root / "project.json")
+    projection_ref = project.get("admin_projection_ref")
+    if not projection_ref:
+        return _synthetic_admin_projection_for_project(project_id, resolved_project_root)
+    projection_path = resolved_project_root / projection_ref
+    if not projection_path.exists():
+        return _synthetic_admin_projection_for_project(project_id, resolved_project_root)
+    payload = _load_json(projection_path)
+    return {
+        **payload,
+        "source_path": projection_ref,
+        "evidence_type": "pretrip_admin_surface_projection",
+    }
+
+
+def load_pretrip_debug_projection_events(
+    project_id: str,
+    *,
+    root: Path = ROOT,
+    project_root: Path | None = None,
+) -> dict[str, Any]:
+    resolved_project_root = resolve_pretrip_project_root(
+        project_id,
+        root=root,
+        project_root=project_root,
+    )
+    project = _load_json(resolved_project_root / "project.json")
+    events_ref = project.get("debug_projection_events_ref")
+    layer_events_ref = project.get("layer_debug_projection_events_ref")
+    layer_events = _load_optional_jsonl(
+        resolved_project_root / layer_events_ref if layer_events_ref else None
+    ) or []
+    if not events_ref:
+        events = _synthetic_debug_projection_events_for_project(project_id, resolved_project_root)
+        events = [*events, *layer_events]
+        return {
+            "artifact_kind": "pretrip_debug_projection_events",
+            "project_id": project_id,
+            "source_path": "project.json#synthetic-debug-projection-events",
+            "layer_source_path": layer_events_ref or "",
+            "evidence_type": "pretrip_debug_projection_events",
+            "event_count": len(events),
+            "events": events,
+            "boundary": _debug_projection_boundary(events),
+        }
+    events_path = resolved_project_root / events_ref
+    if not events_path.exists():
+        events = _synthetic_debug_projection_events_for_project(project_id, resolved_project_root)
+        events = [*events, *layer_events]
+        return {
+            "artifact_kind": "pretrip_debug_projection_events",
+            "project_id": project_id,
+            "source_path": "project.json#synthetic-debug-projection-events",
+            "layer_source_path": layer_events_ref or "",
+            "evidence_type": "pretrip_debug_projection_events",
+            "event_count": len(events),
+            "events": events,
+            "boundary": _debug_projection_boundary(events),
+        }
+    events = [*_load_jsonl(events_path), *layer_events]
+    return {
+        "artifact_kind": "pretrip_debug_projection_events",
+        "project_id": project_id,
+        "source_path": events_ref,
+        "layer_source_path": layer_events_ref or "",
+        "evidence_type": "pretrip_debug_projection_events",
+        "event_count": len(events),
+        "events": events,
+        "boundary": _debug_projection_boundary(events),
+    }
+
+
+def load_pretrip_debug_projection_view(
+    project_id: str,
+    *,
+    root: Path = ROOT,
+    project_root: Path | None = None,
+) -> dict[str, Any]:
+    resolved_project_root = resolve_pretrip_project_root(
+        project_id,
+        root=root,
+        project_root=project_root,
+    )
+    project = _load_json(resolved_project_root / "project.json")
+    def optional_project_path(ref_key: str) -> Path | None:
+        project_ref = project.get(ref_key)
+        return resolved_project_root / project_ref if project_ref else None
+
+    route_summary = _load_json(resolved_project_root / project["route_summary_ref"])
+    map_context = _load_json(resolved_project_root / project["map_context_ref"])
+    checkpoints_raw = _load_json(
+        resolved_project_root / project["checkpoint_candidates_ref"]
+    )
+    segments_raw = _load_json(resolved_project_root / project["segment_candidates_ref"])
+    map_candidates_raw = _load_json(resolved_project_root / project["map_candidates_ref"])
+    reference_tracks_raw = _load_optional_json(
+        optional_project_path("reference_tracks_ref")
+    )
+    reference_track_display_geometry = _load_optional_json(
+        optional_project_path("reference_track_display_geometry_ref")
+    )
+    checkpoint_events_raw = _load_optional_json(
+        optional_project_path("checkpoint_events_ref")
+    )
+    segment_display_geometry = _load_optional_json(
+        optional_project_path("segment_display_geometry_ref")
+    )
+    overpass_evidence_raw = _load_optional_json(
+        optional_project_path("overpass_evidence_ref")
+    )
+    retreat_routes_raw = _load_optional_json(
+        optional_project_path("retreat_routes_ref")
+    )
+    readiness_raw = _load_optional_json(
+        optional_project_path("readiness_report_ref")
+    )
+    source_refs = {
+        "project": "project.json",
+        "route_summary": project["route_summary_ref"],
+        "map_context": project["map_context_ref"],
+        "checkpoints": project["checkpoint_candidates_ref"],
+        "segments": project["segment_candidates_ref"],
+        "map_candidates": project["map_candidates_ref"],
+        "reference_tracks": project.get("reference_tracks_ref", ""),
+        "reference_track_display_geometry": project.get(
+            "reference_track_display_geometry_ref",
+            "",
+        ),
+        "checkpoint_events": project.get("checkpoint_events_ref", ""),
+        "segment_display_geometry": project.get("segment_display_geometry_ref", ""),
+        "overpass_evidence": project.get("overpass_evidence_ref", ""),
+        "retreat_routes": project.get("retreat_routes_ref", ""),
+        "readiness": project.get("readiness_report_ref", ""),
+        "segment_dtm": project.get("segment_dtm_coverage_ref", ""),
+        "route_notes": project.get("route_note_candidates_ref", ""),
+        "weather_daylight": project.get("weather_daylight_evidence_ref", ""),
+    }
+    checkpoints = _candidate_list(
+        checkpoints_raw,
+        source_path=source_refs["checkpoints"],
+        evidence_type="pretrip_checkpoint_candidate",
+    )
+    segments = _candidate_list(
+        segments_raw,
+        source_path=source_refs["segments"],
+        evidence_type="pretrip_segment_candidate",
+        display_geometry=_segment_display_geometry_by_id(segment_display_geometry),
+    )
+    view = {
+        "project_id": project_id,
+        "route": {
+            "source_id": route_summary["artifact_id"],
+            "source_path": source_refs["route_summary"],
+            "evidence_type": "pretrip_route_summary",
+            "route_name": route_summary["route_name"],
+            "bounds": route_summary["bbox_wgs84"],
+            "point_count": route_summary["point_count"],
+            "distance_m": route_summary["distance_m"],
+            "elevation_min_m": route_summary.get("elevation_min_m"),
+            "elevation_max_m": route_summary.get("elevation_max_m"),
+            "started_at": route_summary.get("started_at"),
+            "ended_at": route_summary.get("ended_at"),
+            "polyline": _route_polyline(map_context),
+        },
+        "checkpoints": checkpoints,
+        "segments": segments,
+        "retreat_routes": _candidate_list(
+            retreat_routes_raw or [],
+            source_path=source_refs["retreat_routes"],
+            evidence_type="pretrip_retreat_route_candidate",
+        ),
+        "map_candidates": _map_candidate_summary(
+            map_candidates_raw,
+            source_refs["map_candidates"],
+        ),
+        "overpass_evidence": _debug_projection_overpass_summary(
+            project_id,
+            overpass_evidence_raw,
+            source_refs["overpass_evidence"],
+        ),
+        "reference_tracks": _reference_tracks_summary(
+            reference_tracks_raw,
+            source_refs["reference_tracks"],
+            display_geometry=reference_track_display_geometry,
+            display_source_path=source_refs["reference_track_display_geometry"],
+        )
+        if reference_tracks_raw is not None
+        else _empty_reference_tracks(project_id, source_refs["reference_tracks"]),
+        "checkpoint_events": _checkpoint_events_summary(
+            checkpoint_events_raw,
+            source_refs["checkpoint_events"],
+        )
+        if checkpoint_events_raw is not None
+        else _empty_checkpoint_events(project_id, source_refs["checkpoint_events"]),
+        "map_layers": build_pretrip_map_layers(
+            source_refs=source_refs,
+            weather={
+                "source_id": "pretrip.map_layer.weather_api",
+                "source_path": source_refs["weather_daylight"],
+                "external_api_calls_made": False,
+            },
+        ),
+        "readiness": _summary_with_source(
+            readiness_raw or {"status": "unknown", "findings": []},
+            source_id=f"readiness.{project_id}",
+            source_path=source_refs["readiness"],
+            evidence_type="pretrip_readiness_report",
+            include_keys=("status", "findings"),
+        ),
+    }
+    lifecycle_events = load_pretrip_debug_projection_events(
+        project_id,
+        root=root,
+        project_root=resolved_project_root,
+    )
+    timeline_events = _debug_projection_timeline_events(
+        view,
+        lifecycle_events.get("events", []),
+    )
+    return {
+        "artifact_kind": "pretrip_debug_projection",
+        "schema_version": "0.1.0",
+        "project_id": project_id,
+        "source_path": "project.json#debug-projection-view",
+        "evidence_type": "pretrip_debug_projection_view",
+        "surface_targets": ["/admin/debug"],
+        "projection_only": True,
+        "route": {
+            **view["route"],
+            "display_geometry": _route_display_geometry_from_segments(
+                project_id,
+                view["segments"],
+            ),
+        },
+        "checkpoints": view["checkpoints"],
+        "segments": view["segments"],
+        "retreat_routes": view["retreat_routes"],
+        "map_candidates": view["map_candidates"],
+        "overpass_evidence": view["overpass_evidence"],
+        "reference_tracks": view["reference_tracks"],
+        "checkpoint_events": view["checkpoint_events"],
+        "map_layers": view["map_layers"],
+        "readiness": view["readiness"],
+        "timeline_events": timeline_events,
+        "event_count": len(timeline_events),
+        "source_debug_projection_events": lifecycle_events,
+        "counts": {
+            "route_point_count": view["route"]["point_count"],
+            "checkpoint_candidate_count": len(view["checkpoints"]),
+            "segment_candidate_count": len(view["segments"]),
+            "reference_track_count": view["reference_tracks"].get(
+                "reference_track_count",
+                0,
+            ),
+            "timeline_event_count": len(timeline_events),
+            "source_lifecycle_event_count": lifecycle_events.get("event_count", 0),
+        },
+        "boundary": {
+            **_debug_projection_boundary(lifecycle_events.get("events", [])),
+            "projection_only": True,
+            "golden_route_is_reference_evidence": True,
+            "runtime_safety_truth": False,
+            "candidate_only": True,
+            "source_lifecycle_events_preserved": True,
+            "phase1_runtime_mutation_allowed": False,
+            "phase2_brain_writeback_allowed": False,
+            "incident_store_mutation_allowed": False,
+            "real_outbound_transport_allowed": False,
+            "mission_graph_compiled": False,
+        },
+    }
+
+
+def _synthetic_admin_projection_for_project(
+    project_id: str,
+    project_root: Path,
+) -> dict[str, Any]:
+    route_summary = _load_json(project_root / "normalized" / "routes" / "route_summary.json")
+    checkpoints = _load_json(project_root / "candidates" / "checkpoints.json")
+    segments = _load_json(project_root / "candidates" / "segments.json")
+    reference_tracks = _load_optional_json(project_root / "outputs" / "reference_tracks.json")
+    payload = {
+        "artifact_kind": "pretrip_admin_surface_projection",
+        "schema_version": "0.1.0",
+        "project_id": project_id,
+        "surface_targets": ["/admin", "/admin/pretrip", "/admin/debug"],
+        "projection_only": True,
+        "import_stage": "pretrip",
+        "route": {
+            "route_role": "golden_route_reference",
+            "route_name": route_summary["route_name"],
+            "point_count": route_summary["point_count"],
+            "distance_m": route_summary["distance_m"],
+            "bbox_wgs84": route_summary["bbox_wgs84"],
+            "route_summary_ref": "normalized/routes/route_summary.json",
+            "map_context_ref": "normalized/map/map_context.geojson",
+        },
+        "candidate_counts": {
+            "checkpoint_candidate_count": len(checkpoints),
+            "segment_candidate_count": len(segments),
+            "reference_track_count": (
+                reference_tracks or {}
+            ).get("reference_track_count", 0),
+        },
+        "pretrip_surface": {
+            "project_ref": "project.json",
+            "package_ref": "outputs/pretrip_package.json",
+        },
+        "after_action_surface": {
+            "after_action_style_projection": True,
+            "completed_mission_replay": False,
+            "incident_package_source": False,
+            "pretrip_actual_user_track_available": False,
+            "pretrip_golden_route_replacement_expected_after_return": True,
+        },
+        "debug_surface": {
+            "debug_projection_events_ref": "project.json#synthetic-debug-projection-events",
+            "file_runtime_debug_log_compatible": True,
+            "live_runtime_events": False,
+        },
+        "boundary": {
+            "projection_only": True,
+            "golden_route_is_reference_evidence": True,
+            "phase1_runtime_mutation_allowed": False,
+            "phase2_brain_writeback_allowed": False,
+            "incident_store_mutation_allowed": False,
+            "real_outbound_transport_allowed": False,
+            "mission_graph_compiled": False,
+        },
+    }
+    return {
+        **payload,
+        "source_path": "project.json#synthetic-admin-projection",
+        "evidence_type": "pretrip_admin_surface_projection",
+    }
+
+
+def _synthetic_debug_projection_events_for_project(
+    project_id: str,
+    project_root: Path,
+) -> list[dict[str, Any]]:
+    route_summary = _load_json(project_root / "normalized" / "routes" / "route_summary.json")
+    checkpoints = _load_json(project_root / "candidates" / "checkpoints.json")
+    segments = _load_json(project_root / "candidates" / "segments.json")
+    reference_tracks = _load_optional_json(project_root / "outputs" / "reference_tracks.json")
+    boundary = {
+        "projection_only": True,
+        "golden_route_is_reference_evidence": True,
+        "phase1_runtime_mutation_allowed": False,
+        "phase2_brain_writeback_allowed": False,
+        "incident_store_mutation_allowed": False,
+        "real_outbound_transport_allowed": False,
+        "mission_graph_compiled": False,
+    }
+    base_payload = {
+        "project_id": project_id,
+        "profile": "pi-offline",
+        "import_stage": "pretrip",
+        "route_role": "golden_route_reference",
+        "projection_only": True,
+        "boundary": boundary,
+    }
+    event_specs = [
+        ("debug_session_started", "Pretrip GPX projection started.", {}),
+        (
+            "provider_status_recorded",
+            "Local GPX corpus projection sources were inspected.",
+            {
+                "provider": "local_gpx_corpus",
+                "golden_route_count": 1,
+                "reference_track_count": (
+                    reference_tracks or {}
+                ).get("reference_track_count", 0),
+                "network_calls_allowed": False,
+            },
+        ),
+        (
+            "progress_update_recorded",
+            "Pretrip route candidates were generated from the GPX set.",
+            {
+                "route_point_count": route_summary["point_count"],
+                "distance_m": route_summary["distance_m"],
+                "checkpoint_candidate_count": len(checkpoints),
+                "segment_candidate_count": len(segments),
+            },
+        ),
+        (
+            "debug_session_completed",
+            "Pretrip GPX projection completed without runtime mutation.",
+            {
+                "safety_level": "L0_NORMAL",
+                "observations_processed": route_summary["point_count"],
+                "mission_graph_compiled": False,
+                "actual_user_track_available": False,
+            },
+        ),
+    ]
     return [
         {
+            "event_id": f"debug_event.pretrip_import.{project_id}.{index:06d}",
+            "session_id": f"debug_session.pretrip_import.{project_id}",
+            "mission_id": None,
+            "timestamp": "2026-05-21T00:00:00+00:00",
+            "sequence": index,
+            "kind": kind,
+            "source": "pretrip_import",
+            "phase": "phase35",
+            "severity": "info",
+            "subject_ref": project_id,
+            "correlation_refs": [f"artifact.gpx.{project_id}"],
+            "summary": summary,
+            "payload": {**base_payload, **payload},
+        }
+        for index, (kind, summary, payload) in enumerate(event_specs, start=1)
+    ]
+
+
+def _route_display_geometry_from_segments(
+    project_id: str,
+    segments: list[dict[str, Any]],
+) -> dict[str, Any]:
+    coordinates: list[dict[str, float]] = []
+    for segment in segments:
+        display_geometry = segment.get("display_geometry")
+        segment_coordinates = (
+            display_geometry.get("coordinates", [])
+            if isinstance(display_geometry, dict)
+            else []
+        )
+        if len(segment_coordinates) < 2:
+            continue
+        for point in segment_coordinates:
+            if not isinstance(point, dict):
+                continue
+            lat = point.get("lat")
+            lon = point.get("lon")
+            if not isinstance(lat, (int, float)) or not isinstance(lon, (int, float)):
+                continue
+            normalized = {"lat": float(lat), "lon": float(lon)}
+            if coordinates and coordinates[-1] == normalized:
+                continue
+            coordinates.append(normalized)
+    return {
+        "source_id": f"route_display_geometry.{project_id}",
+        "source_path": "outputs/segment_display_geometry.json",
+        "evidence_type": "pretrip_route_display_geometry",
+        "display_point_count": len(coordinates),
+        "coordinates": coordinates,
+        "boundary": {
+            "display_geometry_only": True,
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+            "internal_gpx_points_preserved": True,
+        },
+    }
+
+
+def _debug_projection_overpass_summary(
+    project_id: str,
+    payload: dict[str, Any] | None,
+    source_path: str,
+) -> dict[str, Any]:
+    if payload is not None:
+        return _overpass_evidence_summary(payload, source_path)
+    return {
+        "source_id": f"overpass_evidence.{project_id}",
+        "source_path": source_path,
+        "evidence_type": "pretrip_overpass_vector_evidence",
+        "status": "not_available",
+        "counts": {"candidates": 0, "skipped": 0},
+        "boundary": {
+            "candidate_only": True,
+            "runtime_truth": False,
+            "live_network_required": False,
+        },
+        "request": {},
+        "source_artifact": {},
+        "normalized_geojson_ref": "",
+        "raw_response_sha256": "",
+        "conversion_rule_version": "",
+        "corridor_candidates": [],
+        "hazard_candidates": [],
+        "poi_candidates": [],
+        "skipped_objects": [],
+    }
+
+
+def _empty_reference_tracks(project_id: str, source_path: str) -> dict[str, Any]:
+    return {
+        "source_id": f"reference_tracks.{project_id}",
+        "source_path": source_path,
+        "evidence_type": "pretrip_reference_track_summary",
+        "reference_track_count": 0,
+        "route_role": "golden_route",
+        "golden_route": {},
+        "primary_route": {},
+        "reference_tracks": [],
+        "boundary": {
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+            "raw_gpx_copied_to_repo": False,
+        },
+        "notes": [],
+    }
+
+
+def _empty_checkpoint_events(project_id: str, source_path: str) -> dict[str, Any]:
+    return {
+        "source_id": f"checkpoint_events.{project_id}",
+        "source_path": source_path,
+        "evidence_type": "pretrip_checkpoint_event_candidates",
+        "event_count": 0,
+        "source_gpx": {},
+        "events": [],
+        "boundary": {
+            "candidate_only": True,
+            "runtime_mutation_allowed": False,
+            "phase1_runtime_mutation_allowed": False,
+            "phase2_writeback_allowed": False,
+        },
+        "notes": [],
+    }
+
+
+def _debug_projection_timeline_events(
+    view: dict[str, Any],
+    lifecycle_events: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    project_id = view["project_id"]
+    route = view["route"]
+    checkpoints = view["checkpoints"]
+    segments = view["segments"]
+    checkpoint_event_by_id = {
+        event.get("checkpoint_candidate_id"): event
+        for event in (view.get("checkpoint_events", {}).get("events") or [])
+        if event.get("checkpoint_candidate_id")
+    }
+    boundary = {
+        **_debug_projection_boundary(lifecycle_events),
+        "projection_only": True,
+        "golden_route_is_reference_evidence": True,
+        "runtime_safety_truth": False,
+        "candidate_only": True,
+        "phase1_runtime_mutation_allowed": False,
+        "phase2_brain_writeback_allowed": False,
+        "incident_store_mutation_allowed": False,
+        "real_outbound_transport_allowed": False,
+        "mission_graph_compiled": False,
+    }
+    base_payload = {
+        "project_id": project_id,
+        "profile": "pretrip_debug_projection",
+        "import_stage": "pretrip",
+        "route_role": "golden_route_reference",
+        "projection_only": True,
+        "runtime_safety_truth": False,
+        "boundary": boundary,
+    }
+    events: list[dict[str, Any]] = []
+
+    def append_event(kind: str, summary: str, payload: dict[str, Any]) -> None:
+        sequence = len(events) + 1
+        event_timestamp = payload.pop(
+            "timestamp",
+            payload.get("observed_at")
+            or route.get("started_at")
+            or "2026-05-21T00:00:00Z",
+        )
+        subject_ref = payload.pop("subject_ref", f"pretrip.{project_id}")
+        map_target_ids = payload.get("map_target_ids") or []
+        events.append(
+            {
+                "event_id": f"debug_event.pretrip_projection.{project_id}.{sequence:06d}",
+                "session_id": f"pretrip_projection.{project_id}",
+                "mission_id": None,
+                "sequence": sequence,
+                "timestamp": event_timestamp,
+                "phase": "phase4",
+                "kind": kind,
+                "severity": payload.pop("severity", "info"),
+                "summary": summary,
+                "subject_ref": subject_ref,
+                "correlation_refs": [
+                    "artifact.gpx.chilai_nanhua_day1",
+                    *map_target_ids,
+                ],
+                "payload": {
+                    **base_payload,
+                    **payload,
+                    "map_target_ids": map_target_ids,
+                },
+            }
+        )
+
+    append_event(
+        "debug_session_started",
+        f"{project_id} debug projection loaded from the shared GPX set.",
+        {
+            "subject_ref": f"project.{project_id}",
+            "map_target_ids": ["route"],
+            "route_point_count": route["point_count"],
+            "distance_m": route["distance_m"],
+            "checkpoint_candidate_count": len(checkpoints),
+            "segment_candidate_count": len(segments),
+            "reference_track_count": view.get("reference_tracks", {}).get(
+                "reference_track_count",
+                0,
+            ),
+        },
+    )
+    append_event(
+        "provider_status_recorded",
+        (
+            "Debug projection sources use local GPX, map, OSM, Overpass, "
+            "and DEM evidence only."
+        ),
+        {
+            "subject_ref": "provider.pretrip_evidence_bundle",
+            "provider": "pretrip_evidence_bundle",
+            "status": "available",
+            "map_target_ids": ["route", "overpass", "reference-tracks"],
+            "network_calls_allowed": False,
+            "local_fixture_backed": True,
+            "overpass_candidate_count": view.get("overpass_evidence", {})
+            .get("counts", {})
+            .get("candidates", 0),
+        },
+    )
+
+    segment_by_from_checkpoint = {
+        segment.get("from_candidate_id"): segment for segment in segments
+    }
+    for checkpoint in checkpoints:
+        checkpoint_id = checkpoint.get("candidate_id", "")
+        checkpoint_event = checkpoint_event_by_id.get(checkpoint_id, {})
+        label = checkpoint.get("label") or checkpoint_id
+        append_event(
+            "checkpoint_detected",
+            (
+                f"Projected checkpoint candidate {label} is visible on the "
+                "shared GPX timeline."
+            ),
+            {
+                "timestamp": checkpoint_event.get("observed_at"),
+                "subject_ref": checkpoint_id,
+                "map_target_ids": [checkpoint_id],
+                "checkpoint_id": checkpoint_id,
+                "checkpoint_label": label,
+                "checkpoint_type": checkpoint.get("checkpoint_type"),
+                "progress_m": checkpoint_event.get("progress_m"),
+                "route_point_index": checkpoint.get("route_point_index"),
+                "lat": checkpoint.get("lat"),
+                "lon": checkpoint.get("lon"),
+                "safety_level": "L0_PRETRIP_PROJECTION",
+                "projection_event_type": "checkpoint_candidate",
+            },
+        )
+        segment = segment_by_from_checkpoint.get(checkpoint_id)
+        if not segment:
+            continue
+        segment_label = segment.get("label") or segment.get("candidate_id", "")
+        append_event(
+            "route_progress_evaluated",
+            (
+                f"Projected segment frame {segment_label} links "
+                f"{segment.get('from_candidate_id')} to {segment.get('to_candidate_id')}."
+            ),
+            {
+                "timestamp": checkpoint_event.get("observed_at"),
+                "subject_ref": segment.get("candidate_id"),
+                "map_target_ids": [
+                    segment.get("candidate_id"),
+                    segment.get("from_candidate_id"),
+                    segment.get("to_candidate_id"),
+                ],
+                "segment_id": segment.get("candidate_id"),
+                "from_checkpoint_id": segment.get("from_candidate_id"),
+                "to_checkpoint_id": segment.get("to_candidate_id"),
+                "distance_m": segment.get("distance_m"),
+                "elevation_gain_m": segment.get("elevation_gain_m"),
+                "elevation_loss_m": segment.get("elevation_loss_m"),
+                "route_point_start_index": segment.get("route_point_start_index"),
+                "route_point_end_index": segment.get("route_point_end_index"),
+                "observation_count": segment.get("route_point_end_index", 0),
+                "safety_level": "L0_PRETRIP_PROJECTION",
+                "projection_event_type": "segment_candidate",
+            },
+        )
+
+    append_event(
+        "debug_session_completed",
+        f"{project_id} debug projection completed without runtime mutation.",
+        {
+            "timestamp": route.get("ended_at"),
+            "subject_ref": f"project.{project_id}",
+            "map_target_ids": ["route"],
+            "observations_processed": route["point_count"],
+            "safety_level": "L0_PRETRIP_PROJECTION",
+            "checkpoint_candidate_count": len(checkpoints),
+            "segment_candidate_count": len(segments),
+        },
+    )
+    return events
+
+
+def list_pretrip_admin_projects(
+    *,
+    workspace_root: Path | None = None,
+) -> list[dict[str, str]]:
+    projects = [
+        {
             "project_id": CHILAI_NANHUA_DAY1_PROJECT_ID,
-            "name": "奇萊南華-能高越嶺步道Day1",
+            "name": "能高安東軍縱走 GPX corpus",
             "kind": "phase4_pretrip_fixture",
         }
     ]
+    if workspace_root is None:
+        return projects
+
+    root = Path(workspace_root).expanduser()
+    candidates = []
+    if (root / "project.json").exists():
+        candidates.append(root / "project.json")
+    candidates.extend(sorted(root.glob("*/project.json")))
+    project_index_by_id = {
+        project["project_id"]: index for index, project in enumerate(projects)
+    }
+    for project_path in candidates:
+        try:
+            project = _load_json(project_path)
+        except (json.JSONDecodeError, OSError):
+            continue
+        project_id = str(project.get("project_id") or "")
+        if not project_id:
+            continue
+        record = {
+            "project_id": project_id,
+            "name": str(project.get("route_name") or project_id),
+            "kind": str(project.get("import_profile") or "phase4_pretrip_workspace"),
+        }
+        if project_id in project_index_by_id:
+            projects[project_index_by_id[project_id]] = record
+            continue
+        project_index_by_id[project_id] = len(projects)
+        projects.append(record)
+    return projects
 
 
 def _project_summary(
@@ -357,16 +1255,43 @@ def _candidate_list(
     *,
     source_path: str,
     evidence_type: str,
+    display_geometry: dict[str, dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
+    display_geometry = display_geometry or {}
     return [
         {
             **candidate,
             "source_id": candidate["candidate_id"],
             "source_path": source_path,
             "evidence_type": evidence_type,
+            **(
+                {"display_geometry": display_geometry[candidate["candidate_id"]]}
+                if candidate["candidate_id"] in display_geometry
+                else {}
+            ),
         }
         for candidate in candidates
     ]
+
+
+def _segment_display_geometry_by_id(
+    payload: dict[str, Any] | None,
+) -> dict[str, dict[str, Any]]:
+    if not payload:
+        return {}
+    return {
+        item["segment_candidate_id"]: {
+            "source_id": item["segment_candidate_id"],
+            "source_path": payload.get("source_path")
+            or "outputs/segment_display_geometry.json",
+            "evidence_type": "pretrip_segment_display_geometry",
+            "source_point_count": item.get("source_point_count"),
+            "display_point_count": len(item.get("coordinates", [])),
+            "coordinates": item.get("coordinates", []),
+            "boundary": payload.get("boundary", {}),
+        }
+        for item in payload.get("segments", [])
+    }
 
 
 def _route_point_samples(
@@ -696,6 +1621,170 @@ def _route_note_summary(payload: dict[str, Any], source_path: str) -> dict[str, 
     }
 
 
+def _layer_preparation_summary(
+    payload: dict[str, Any] | None,
+    source_path: str,
+    *,
+    project_id: str,
+    project_root: Path,
+) -> dict[str, Any]:
+    if payload is None:
+        return build_layer_preparation_not_prepared_view(
+            project_id,
+            project_root=project_root,
+        )
+    return {
+        "source_id": payload["job_id"],
+        "source_path": source_path,
+        "evidence_type": "pretrip_layer_preparation_manifest",
+        "artifact_kind": "pretrip_layer_preparation_summary",
+        "schema_version": payload["schema_version"],
+        "project_id": payload["project_id"],
+        "status": payload["validation"]["status"],
+        "profile": payload["profile"],
+        "network_mode": payload["network_mode"],
+        "prepared_at": payload["finished_at"],
+        "bbox_wgs84": payload["bbox_wgs84"],
+        "route_corridor": payload["route_corridor"],
+        "counts": payload["counts"],
+        "network_policy": payload["network_policy"],
+        "boundary": payload["boundary"],
+        "layers": [
+            {
+                "layer_id": layer["layer_id"],
+                "status": layer["status"],
+                "adapter": layer["adapter"],
+                "counts": layer["counts"],
+                "source_ref_count": len(layer.get("source_refs", [])),
+                "warning_count": len(layer.get("warnings", [])),
+                "blocker_count": len(layer.get("blockers", [])),
+                "stale_risk": layer.get("stale_risk"),
+                "lifecycle": layer["lifecycle"],
+            }
+            for layer in payload.get("layers", [])
+        ],
+        "validation": payload["validation"],
+        "outputs": payload["outputs"],
+        "notes": payload.get("notes", []),
+    }
+
+
+def _overpass_evidence_summary(payload: dict[str, Any], source_path: str) -> dict[str, Any]:
+    candidates = payload.get("candidates", [])
+    return {
+        "source_id": payload["source_artifact"]["artifact_id"],
+        "source_path": source_path,
+        "evidence_type": "pretrip_overpass_vector_evidence",
+        "status": "candidate_only",
+        "counts": payload["counts"],
+        "boundary": _summary_boundary(payload["boundary"]),
+        "request": payload["request"],
+        "source_artifact": payload["source_artifact"],
+        "normalized_geojson_ref": payload["normalized_geojson_ref"],
+        "raw_response_sha256": payload["request"]["raw_response_sha256"],
+        "conversion_rule_version": payload["request"]["conversion_rule_version"],
+        "corridor_candidates": [
+            _overpass_candidate(candidate, source_path, "pretrip_overpass_corridor_candidate")
+            for candidate in candidates
+            if candidate["feature_type"] == "approved_corridor"
+        ],
+        "hazard_candidates": [
+            _overpass_candidate(candidate, source_path, "pretrip_overpass_hazard_candidate")
+            for candidate in candidates
+            if candidate["feature_type"] == "hazard_zone"
+        ],
+        "poi_candidates": [
+            _overpass_candidate(candidate, source_path, "pretrip_overpass_poi_candidate")
+            for candidate in candidates
+            if candidate["feature_type"] == "poi"
+        ],
+        "skipped_objects": payload.get("skipped_objects", []),
+    }
+
+
+def _overpass_candidate(
+    candidate: dict[str, Any],
+    source_path: str,
+    evidence_type: str,
+) -> dict[str, Any]:
+    feature = candidate["geojson_feature"]
+    properties = feature["properties"]
+    return {
+        "candidate_id": candidate["candidate_id"],
+        "source_id": candidate["candidate_id"],
+        "source_path": source_path,
+        "evidence_type": evidence_type,
+        "label": candidate["label"],
+        "candidate_type": candidate["candidate_type"],
+        "feature_type": candidate["feature_type"],
+        "review_state": "needs_review",
+        "confidence": candidate["confidence"],
+        "stale_risk": candidate["stale_risk"],
+        "osm_type": candidate["osm_type"],
+        "osm_id": candidate["osm_id"],
+        "tags": candidate["tags"],
+        "conversion_rule_version": candidate["conversion_rule_version"],
+        "linked_route_ref": candidate.get("linked_route_ref"),
+        "linked_segment_ref": candidate.get("linked_segment_ref"),
+        "linked_checkpoint_ref": candidate.get("linked_checkpoint_ref"),
+        "geometry": candidate["geometry"],
+        "map_target_ids": [candidate["candidate_id"]],
+        "map_summary": {
+            "endpoint": properties.get("endpoint"),
+            "http_status": properties.get("http_status"),
+            "raw_response_sha256": properties.get("raw_response_sha256"),
+            "normalized_artifact_path": properties.get("normalized_artifact_path"),
+            "runtime_truth": properties.get("runtime_truth"),
+        },
+        **_overpass_map_payload(candidate, properties),
+    }
+
+
+def _overpass_map_payload(candidate: dict[str, Any], properties: dict[str, Any]) -> dict[str, Any]:
+    geometry = candidate["geometry"]
+    if candidate["feature_type"] == "approved_corridor":
+        return {
+            "corridor": {
+                "corridor_id": candidate["candidate_id"],
+                "name": candidate["label"],
+                "coordinates": _geojson_line_coordinates(geometry),
+                "corridor_half_width_m": 12.0,
+                "route_level": properties.get("route_level"),
+            }
+        }
+    if candidate["feature_type"] == "hazard_zone":
+        return {
+            "hazard": {
+                "hazard_id": candidate["candidate_id"],
+                "hazard_type": properties.get("hazard_type", "terrain_risk"),
+                "name": candidate["label"],
+                "polygon": _geojson_line_coordinates(
+                    {"coordinates": geometry.get("coordinates", [[]])[0]}
+                ),
+            }
+        }
+    return {
+        "poi": {
+            "poi_id": candidate["candidate_id"],
+            "poi_type": properties.get("poi_type", "unknown"),
+            "name": candidate["label"],
+            "coordinate": _geojson_point_coordinate(geometry),
+        }
+    }
+
+
+def _geojson_line_coordinates(geometry: dict[str, Any]) -> list[dict[str, float]]:
+    return [
+        {"lon": float(lon), "lat": float(lat)}
+        for lon, lat in geometry.get("coordinates", [])
+    ]
+
+
+def _geojson_point_coordinate(geometry: dict[str, Any]) -> dict[str, float]:
+    lon, lat = geometry.get("coordinates", [0.0, 0.0])[:2]
+    return {"lon": float(lon), "lat": float(lat)}
+
+
 def _route_note_ln_proposal_summary(
     payload: dict[str, Any],
     source_path: str,
@@ -941,6 +2030,84 @@ def _runtime_audit_summary(payload: dict[str, Any], source_path: str) -> dict[st
     }
 
 
+def _reference_tracks_summary(
+    payload: dict[str, Any],
+    source_path: str,
+    *,
+    display_geometry: dict[str, Any] | None = None,
+    display_source_path: str = "",
+) -> dict[str, Any]:
+    display_by_id = {
+        item["reference_id"]: item
+        for item in (display_geometry or {}).get("reference_tracks", [])
+    }
+    return {
+        "source_id": f"reference_tracks.{payload['project_id']}",
+        "source_path": source_path,
+        "evidence_type": "pretrip_reference_track_summary",
+        "reference_track_count": payload["reference_track_count"],
+        "route_role": payload.get("route_role", "golden_route"),
+        "golden_route": payload.get("golden_route") or payload["primary_route"],
+        "primary_route": payload["primary_route"],
+        "reference_tracks": [
+            _reference_track_item(track, source_path, display_by_id, display_source_path)
+            for track in payload.get("reference_tracks", [])
+        ],
+        "boundary": payload["boundary"],
+        "notes": payload.get("notes", []),
+    }
+
+
+def _reference_track_item(
+    track: dict[str, Any],
+    source_path: str,
+    display_by_id: dict[str, dict[str, Any]],
+    display_source_path: str,
+) -> dict[str, Any]:
+    reference_id = track["reference_id"]
+    display = display_by_id.get(reference_id)
+    return {
+        **track,
+        "candidate_id": reference_id,
+        "source_id": reference_id,
+        "source_path": source_path,
+        "evidence_type": "pretrip_reference_track",
+        "label": track.get("route", {}).get("route_name") or reference_id,
+        "review_state": "reference_only",
+        "map_target_ids": [reference_id],
+        **(
+            {
+                "display_geometry": {
+                    "source_id": reference_id,
+                    "source_path": display_source_path,
+                    "evidence_type": "pretrip_reference_track_display_geometry",
+                    "source_point_count": display.get("source_point_count"),
+                    "display_point_count": display.get("display_point_count"),
+                    "display_sampling_performed": display.get(
+                        "display_sampling_performed"
+                    ),
+                    "coordinates": display.get("coordinates", []),
+                }
+            }
+            if display is not None
+            else {}
+        ),
+    }
+
+
+def _checkpoint_events_summary(payload: dict[str, Any], source_path: str) -> dict[str, Any]:
+    return {
+        "source_id": f"checkpoint_events.{payload['project_id']}",
+        "source_path": source_path,
+        "evidence_type": "pretrip_checkpoint_event_candidates",
+        "event_count": payload["event_count"],
+        "source_gpx": payload["source_gpx"],
+        "events": payload.get("events", []),
+        "boundary": payload["boundary"],
+        "notes": payload.get("notes", []),
+    }
+
+
 def _route_comparison_summary(payload: dict[str, Any], source_path: str) -> dict[str, Any]:
     return {
         "source_id": payload["comparison_id"],
@@ -998,8 +2165,12 @@ def _planning_sections(planning_tab: dict[str, Any]) -> list[dict[str, Any]]:
     eta = planning_tab["eta"]
     readiness = planning_tab["readiness"]
     resources = planning_tab["resources"]
+    layer_preparation = planning_tab["layer_preparation"]
     weather = planning_tab["weather"]
+    overpass_evidence = planning_tab["overpass_evidence"]
     route_notes = planning_tab["route_notes"]
+    reference_tracks = planning_tab.get("reference_tracks")
+    checkpoint_events = planning_tab.get("checkpoint_events")
     route_note_ln_proposals = planning_tab["route_note_ln_proposals"]
     route_note_review_options = planning_tab["route_note_review_options"]
     route_note_reviewed_assumptions = planning_tab.get(
@@ -1059,6 +2230,37 @@ def _planning_sections(planning_tab: dict[str, Any]) -> list[dict[str, Any]]:
             },
         ),
         _section(
+            "layer_preparation",
+            "Layer Preparation",
+            layer_preparation,
+            status=layer_preparation["status"],
+            counts=layer_preparation["counts"],
+            summary={
+                "profile": layer_preparation.get("profile"),
+                "network_mode": layer_preparation["network_policy"].get(
+                    "network_mode"
+                ),
+                "network_calls_made": layer_preparation["network_policy"].get(
+                    "network_calls_made"
+                ),
+                "ready_layer_count": layer_preparation["counts"].get(
+                    "ready_layer_count"
+                ),
+                "missing_layer_count": layer_preparation["counts"].get(
+                    "missing_layer_count"
+                ),
+                "layers": [
+                    {
+                        "layer_id": layer["layer_id"],
+                        "status": layer["status"],
+                        "warning_count": layer.get("warning_count", 0),
+                    }
+                    for layer in layer_preparation.get("layers", [])
+                ],
+            },
+            boundary=layer_preparation["boundary"],
+        ),
+        _section(
             "weather",
             "Weather And Daylight",
             weather,
@@ -1075,6 +2277,29 @@ def _planning_sections(planning_tab: dict[str, Any]) -> list[dict[str, Any]]:
                 "daylight_source_status": weather["daylight"].get("source_status"),
                 "external_api_calls_made": weather["external_api_calls_made"],
             },
+        ),
+        _section(
+            "overpass_evidence",
+            "Overpass Vector Evidence",
+            overpass_evidence,
+            status=overpass_evidence["status"],
+            counts=overpass_evidence["counts"],
+            summary={
+                "candidate_count": overpass_evidence["counts"].get("candidates"),
+                "skipped_object_count": overpass_evidence["counts"].get("skipped"),
+                "raw_response_sha256": overpass_evidence["raw_response_sha256"],
+                "conversion_rule_version": overpass_evidence[
+                    "conversion_rule_version"
+                ],
+                "normalized_geojson_ref": overpass_evidence[
+                    "normalized_geojson_ref"
+                ],
+                "endpoint": overpass_evidence["request"]["endpoint"],
+                "live_network_required": overpass_evidence["boundary"].get(
+                    "live_network_required"
+                ),
+            },
+            boundary=overpass_evidence["boundary"],
         ),
         _section(
             "route_notes",
@@ -1139,6 +2364,36 @@ def _planning_sections(planning_tab: dict[str, Any]) -> list[dict[str, Any]]:
             boundary=route_note_review_options["boundary"],
         ),
     ]
+    if reference_tracks is not None:
+        sections.append(
+            _section(
+                "reference_tracks",
+                "Reference Tracks",
+                reference_tracks,
+                counts={"reference_track_count": reference_tracks["reference_track_count"]},
+                summary={
+                    "primary_route_name": reference_tracks["primary_route"].get("route_name"),
+                    "runtime_safety_truth": reference_tracks["boundary"].get("runtime_safety_truth"),
+                    "raw_gpx_copied_to_repo": reference_tracks["boundary"].get("raw_gpx_copied_to_repo"),
+                },
+                boundary=reference_tracks["boundary"],
+            )
+        )
+    if checkpoint_events is not None:
+        sections.append(
+            _section(
+                "checkpoint_events",
+                "Checkpoint Events",
+                checkpoint_events,
+                counts={"event_count": checkpoint_events["event_count"]},
+                summary={
+                    "source_point_count": checkpoint_events["source_gpx"].get("point_count"),
+                    "trimming_performed": checkpoint_events["source_gpx"].get("trimming_performed"),
+                    "sampling_performed": checkpoint_events["source_gpx"].get("sampling_performed"),
+                },
+                boundary=checkpoint_events["boundary"],
+            )
+        )
     if route_note_reviewed_assumptions is not None:
         sections.append(
             _section(
@@ -1374,8 +2629,11 @@ def _post_analysis_sections(post_analysis_tab: dict[str, Any]) -> list[dict[str,
     route_comparison = post_analysis_tab["route_comparison"]
     brain_seed = post_analysis_tab["brain_seed"]
     after_action = post_analysis_tab["after_action_next_plan"]
+    import_manifest = post_analysis_tab.get("import_manifest")
+    admin_surface_projection = post_analysis_tab.get("admin_surface_projection")
+    debug_projection = post_analysis_tab.get("debug_projection")
 
-    return [
+    sections = [
         _section(
             "runtime_handoff",
             "Runtime Handoff",
@@ -1448,6 +2706,66 @@ def _post_analysis_sections(post_analysis_tab: dict[str, Any]) -> list[dict[str,
             },
         ),
     ]
+    if import_manifest is not None:
+        sections.append(
+            _section(
+                "import_manifest",
+                "Import Manifest",
+                import_manifest,
+                status=import_manifest["profile"],
+                counts=import_manifest["counts"],
+                summary={
+                    "source_file_count": import_manifest["counts"].get(
+                        "source_file_count"
+                    ),
+                    "reference_track_count": import_manifest["counts"].get(
+                        "reference_track_count"
+                    ),
+                    "network_calls_allowed": import_manifest["network_policy"].get(
+                        "network_calls_allowed"
+                    ),
+                },
+                boundary=import_manifest["boundary"],
+            )
+        )
+    if admin_surface_projection is not None:
+        sections.append(
+            _section(
+                "admin_surface_projection",
+                "Admin Surface Projection",
+                admin_surface_projection,
+                counts=admin_surface_projection["candidate_counts"],
+                summary={
+                    "surface_targets": admin_surface_projection["surface_targets"],
+                    "projection_only": admin_surface_projection["projection_only"],
+                    "completed_mission_replay": admin_surface_projection[
+                        "after_action_surface"
+                    ].get("completed_mission_replay"),
+                    "debug_projection_events_ref": admin_surface_projection[
+                        "debug_surface"
+                    ].get("debug_projection_events_ref"),
+                },
+                boundary=admin_surface_projection["boundary"],
+            )
+        )
+    if debug_projection is not None:
+        sections.append(
+            _section(
+                "debug_projection",
+                "Debug Projection",
+                debug_projection,
+                counts={"event_count": debug_projection["event_count"]},
+                summary={
+                    "event_kinds": debug_projection["event_kinds"],
+                    "file_runtime_debug_log_compatible": debug_projection[
+                        "file_runtime_debug_log_compatible"
+                    ],
+                    "latest_summary": debug_projection["latest_summary"],
+                },
+                boundary=debug_projection["boundary"],
+            )
+        )
+    return sections
 
 
 def _section(
@@ -1481,6 +2799,73 @@ def _summary_boundary(boundary: dict[str, Any]) -> dict[str, Any]:
         key: value
         for key, value in boundary.items()
         if isinstance(value, bool) or key.endswith("_allowed")
+    }
+
+
+def _import_manifest_summary(payload: dict[str, Any], source_path: str) -> dict[str, Any]:
+    return {
+        "source_id": f"import_manifest.{payload['project_id']}",
+        "source_path": source_path,
+        "evidence_type": "pretrip_import_manifest",
+        "profile": payload["profile"],
+        "counts": payload["counts"],
+        "network_policy": payload["network_policy"],
+        "outputs": payload["outputs"],
+        "boundary": payload["boundary"],
+    }
+
+
+def _admin_projection_summary(
+    payload: dict[str, Any],
+    source_path: str,
+) -> dict[str, Any]:
+    return {
+        "source_id": f"admin_surface_projection.{payload['project_id']}",
+        "source_path": source_path,
+        "evidence_type": "pretrip_admin_surface_projection",
+        "artifact_kind": payload["artifact_kind"],
+        "surface_targets": payload["surface_targets"],
+        "projection_only": payload["projection_only"],
+        "route": payload["route"],
+        "candidate_counts": payload["candidate_counts"],
+        "pretrip_surface": payload["pretrip_surface"],
+        "after_action_surface": payload["after_action_surface"],
+        "debug_surface": payload["debug_surface"],
+        "boundary": payload["boundary"],
+    }
+
+
+def _debug_projection_events_summary(
+    events: list[dict[str, Any]],
+    source_path: str,
+) -> dict[str, Any]:
+    latest = events[-1] if events else {}
+    return {
+        "source_id": "debug_projection_events",
+        "source_path": source_path,
+        "evidence_type": "pretrip_debug_projection_events",
+        "event_count": len(events),
+        "event_kinds": [event.get("kind") for event in events],
+        "latest_summary": latest.get("summary"),
+        "file_runtime_debug_log_compatible": True,
+        "events": events,
+        "boundary": _debug_projection_boundary(events),
+    }
+
+
+def _debug_projection_boundary(events: list[dict[str, Any]]) -> dict[str, Any]:
+    for event in events:
+        payload = event.get("payload") or {}
+        boundary = payload.get("boundary")
+        if isinstance(boundary, dict):
+            return boundary
+    return {
+        "projection_only": True,
+        "phase1_runtime_mutation_allowed": False,
+        "phase2_brain_writeback_allowed": False,
+        "incident_store_mutation_allowed": False,
+        "real_outbound_transport_allowed": False,
+        "mission_graph_compiled": False,
     }
 
 
@@ -1524,8 +2909,20 @@ def _load_json(path: Path) -> Any:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def _load_optional_json(path: Path) -> Any | None:
-    return _load_json(path) if path.exists() else None
+def _load_jsonl(path: Path) -> list[dict[str, Any]]:
+    return [
+        json.loads(line)
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+
+
+def _load_optional_json(path: Path | None) -> Any | None:
+    return _load_json(path) if path is not None and path.exists() else None
+
+
+def _load_optional_jsonl(path: Path | None) -> list[dict[str, Any]] | None:
+    return _load_jsonl(path) if path is not None and path.exists() else None
 
 
 def _relpath(path: Path, root: Path) -> str:

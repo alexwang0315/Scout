@@ -96,6 +96,7 @@ SCOUT_HARDWARE_PROVIDER_CONTROL_TOKEN = os.getenv("SCOUT_HARDWARE_PROVIDER_CONTR
 SCOUT_HARDWARE_PROVIDER_CONTROL_TOKEN_FILE = os.getenv(
     "SCOUT_HARDWARE_PROVIDER_CONTROL_TOKEN_FILE"
 )
+SCOUT_PRETRIP_WORKSPACE_ROOT = os.getenv("SCOUT_PRETRIP_WORKSPACE_ROOT")
 
 log_level = logging.DEBUG if DEBUG else logging.INFO
 logging.basicConfig(level=log_level, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -418,7 +419,16 @@ async def ai_decision_worker() -> None:
 
 
 app.include_router(imu_router)
-app.include_router(create_admin_router(incident_store_path=SCOUT_SAFETY_INCIDENT_STORE))
+app.include_router(
+    create_admin_router(
+        incident_store_path=SCOUT_SAFETY_INCIDENT_STORE,
+        pretrip_workspace_root=(
+            Path(SCOUT_PRETRIP_WORKSPACE_ROOT).expanduser()
+            if SCOUT_PRETRIP_WORKSPACE_ROOT
+            else None
+        ),
+    )
+)
 app.include_router(create_hardware_readiness_router())
 app.include_router(
     create_safety_router(
