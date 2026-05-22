@@ -46,10 +46,22 @@
       color: var(--text);
       font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
+    button, input, summary, a {
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: rgba(33, 166, 161, .18);
+    }
+    button:focus-visible,
+    input:focus-visible,
+    summary:focus-visible,
+    a:focus-visible {
+      outline: 2px solid var(--focus);
+      outline-offset: 2px;
+    }
 
     .shell {
       display: grid;
-      grid-template-columns: minmax(420px, 1fr) 6px minmax(320px, var(--info-width));
+      grid-template-columns: minmax(270px, 360px) minmax(640px, 1fr) minmax(300px, 400px);
+      grid-template-areas: "tree map detail";
       height: 100vh;
       max-width: 100vw;
       overflow: hidden;
@@ -61,15 +73,16 @@
     }
 
     .map-pane {
+      grid-area: map;
       display: grid;
       grid-template-rows: auto 1fr;
       background: #131619;
       min-height: 0;
+      border-left: 1px solid var(--border);
     }
 
     .info-pane {
-      display: grid;
-      grid-template-rows: minmax(220px, var(--tree-height)) 6px minmax(180px, 1fr);
+      display: contents;
       background: var(--surface);
       min-height: 0;
     }
@@ -115,9 +128,9 @@
     }
 
     .filters {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 6px;
       min-width: 0;
       max-width: 100%;
     }
@@ -136,6 +149,52 @@
       height: 16px;
       accent-color: var(--focus);
     }
+    .layer-menu {
+      position: relative;
+      width: fit-content;
+      max-width: 100%;
+    }
+    .layer-menu summary {
+      min-height: 32px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: var(--panel);
+      color: var(--text);
+      padding: 5px 10px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 650;
+      list-style: none;
+    }
+    .layer-menu summary::-webkit-details-marker { display: none; }
+    .layer-menu summary::after {
+      content: "";
+      width: 6px;
+      height: 6px;
+      border-right: 1px solid var(--muted);
+      border-bottom: 1px solid var(--muted);
+      transform: rotate(45deg) translateY(-2px);
+    }
+    .layer-menu[open] summary::after {
+      transform: rotate(225deg) translateY(-1px);
+    }
+    .layer-menu-panel {
+      position: absolute;
+      top: calc(100% + 8px);
+      left: 0;
+      width: min(360px, calc(100vw - 32px));
+      max-height: 320px;
+      overflow: auto;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--surface);
+      padding: 10px;
+      box-shadow: 0 18px 42px rgba(0, 0, 0, .28);
+      z-index: 20;
+    }
 
     .toolbar {
       display: flex;
@@ -147,7 +206,9 @@
       background: var(--surface);
       min-width: 0;
       max-width: 100%;
-      overflow: hidden;
+      overflow: visible;
+      position: relative;
+      z-index: 4;
     }
 
     .toolbar-main {
@@ -203,10 +264,12 @@
     }
 
     .splitter-vertical {
+      display: none;
       cursor: col-resize;
     }
 
     .splitter-horizontal {
+      display: none;
       cursor: row-resize;
     }
 
@@ -218,11 +281,15 @@
     }
 
     .tree-pane {
-      border-bottom: 1px solid var(--border);
+      grid-area: tree;
+      border-right: 1px solid var(--border);
+      background: var(--surface);
     }
 
     .json-pane {
-      border-top: 1px solid var(--border);
+      grid-area: detail;
+      border-left: 1px solid var(--border);
+      background: var(--surface);
     }
 
     .hover-hint {
@@ -584,6 +651,9 @@
     }
 
     .raw-json-details summary {
+      display: flex;
+      align-items: center;
+      min-height: 30px;
       cursor: pointer;
       color: var(--muted);
       font-size: 12px;
@@ -594,9 +664,30 @@
     .assistant-panel {
       display: grid;
       gap: 12px;
+      padding: 14px 0 0;
+    }
+
+    .assistant-drawer {
       margin-top: 16px;
-      padding-top: 14px;
       border-top: 1px solid var(--border);
+    }
+
+    .assistant-drawer summary {
+      min-height: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      color: var(--text);
+      cursor: pointer;
+      font-weight: 650;
+    }
+
+    .assistant-drawer summary::after {
+      content: "Read-only";
+      color: var(--muted);
+      font-size: 11px;
+      text-transform: uppercase;
     }
 
     .assistant-head {
@@ -729,13 +820,27 @@
     @media (max-width: 980px) {
       .shell {
         grid-template-columns: 1fr;
+        grid-template-areas:
+          "map"
+          "info";
         grid-template-rows: auto auto;
         height: auto;
         overflow: visible;
       }
       .splitter { display: none; }
       .map-pane { min-height: min(760px, 92vh); }
-      .info-pane { grid-template-rows: auto auto; }
+      .info-pane {
+        grid-area: info;
+        display: grid;
+        grid-template-rows: auto auto;
+      }
+      .tree-pane,
+      .json-pane {
+        grid-area: auto;
+        border-left: 0;
+        border-right: 0;
+      }
+      .tree-pane { border-bottom: 1px solid var(--border); }
       .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .narrative-facts { grid-template-columns: 1fr; }
     }
@@ -747,28 +852,33 @@
       <div class="toolbar">
         <div class="toolbar-main">
           <div class="toolbar-title">
-            <h1>Scout Phase 1 Admin</h1>
+            <h1>After-Action</h1>
             <code id="mapMeta">offline map evidence</code>
           </div>
           <p id="caseMeta" class="meta">Loading case...</p>
           <div class="metric-grid">
-            <div class="metric"><span>Safety Level</span><strong id="safetyLevel">-</strong></div>
+            <div class="metric"><span>Safety</span><strong id="safetyLevel">-</strong></div>
             <div class="metric"><span>Capsules</span><strong id="segmentCapsules">-</strong></div>
-            <div class="metric"><span>Route Points</span><strong id="routePoints">-</strong></div>
+            <div class="metric"><span>Points</span><strong id="routePoints">-</strong></div>
             <div class="metric"><span>Corridors</span><strong id="corridors">-</strong></div>
-            <div class="metric"><span>Checkpoints</span><strong id="checkpoints">-</strong></div>
+            <div class="metric"><span>CP</span><strong id="checkpoints">-</strong></div>
             <div class="metric"><span>Incidents</span><strong id="incidents">-</strong></div>
           </div>
-          <div class="filters" aria-label="Map layers">
-            <label><input type="checkbox" data-layer="imagery" checked> Imagery</label>
-            <label><input type="checkbox" data-layer="osm" checked> OSM</label>
-            <label><input type="checkbox" data-layer="corridors" checked> Map corridors</label>
-            <label><input type="checkbox" data-layer="route" checked> Route</label>
-            <label><input type="checkbox" data-layer="checkpoints" checked> Checkpoints</label>
-            <label><input type="checkbox" data-layer="hazards" checked> Hazards</label>
-            <label><input type="checkbox" data-layer="events" checked> Ln events</label>
-            <label><input type="checkbox" data-layer="weather-api"> Weather API</label>
-          </div>
+          <details class="layer-menu">
+            <summary title="Map layer controls" aria-label="Map layer controls">Layers</summary>
+            <div class="layer-menu-panel">
+              <div class="filters" aria-label="Map layers">
+                <label><input type="checkbox" data-layer="imagery" checked> Imagery</label>
+                <label><input type="checkbox" data-layer="osm" checked> OSM</label>
+                <label><input type="checkbox" data-layer="corridors" checked> Corridors</label>
+                <label><input type="checkbox" data-layer="route" checked> Route</label>
+                <label><input type="checkbox" data-layer="checkpoints" checked> CP</label>
+                <label><input type="checkbox" data-layer="hazards" checked> Hazards</label>
+                <label><input type="checkbox" data-layer="events" checked> Ln</label>
+                <label><input type="checkbox" data-layer="weather-api"> Weather</label>
+              </div>
+            </div>
+          </details>
         </div>
       </div>
       <div class="map-wrap">
@@ -790,28 +900,28 @@
           <h3 id="detailTitle">No selection</h3>
           <p id="narrativeSummary" class="narrative-summary">Select evidence to read the mission story in plain language.</p>
           <div id="narrativeFacts" class="narrative-facts"></div>
-          <p id="narrativeReadOnlyNote" class="read-only-note">Completed mission evidence is read-only. Any future plan output belongs to Phase 4 candidate review.</p>
+          <p id="narrativeReadOnlyNote" class="read-only-note">chilai_nanhua_day1 is shown as read-only GPX projection evidence. It is not Phase 1 runtime safety truth.</p>
         </div>
         <section id="nextPlanCandidatePanel" class="next-plan-panel" aria-label="Phase 4 next-plan candidate projection">
           <div class="next-plan-head">
             <div>
               <h2>After-Action Next Plan Candidates</h2>
-              <p class="meta">candidate-only Phase 4 projection from completed mission evidence.</p>
+              <p class="meta">candidate-only Phase 4 projection from the shared chilai_nanhua_day1 GPX set.</p>
             </div>
             <a class="next-plan-link" href="/admin/pretrip">Review workspace</a>
           </div>
           <ul id="nextPlanCandidateList" class="next-plan-list">
             <li class="next-plan-item">
-              <strong>Review transfer-gap checkpoint boundary</strong>
-              <span>candidate-only; human review required; MissionGraph compile blocked_until_human_review.</span>
+              <strong>Review golden route semantics</strong>
+              <span>pretrip golden route（出發前主參考路線）is not an actual walked track before departure.</span>
             </li>
             <li class="next-plan-item">
-              <strong>Review weak-GPS recording policy</strong>
-              <span>candidate-only; no ObservedFact writeback; no historical evidence mutation.</span>
+              <strong>Review manual waypoint policy</strong>
+              <span>unwalked route sections（未曾發生的路徑區段）require manual waypoint candidates and danger review.</span>
             </li>
             <li class="next-plan-item">
-              <strong>Re-check medium-staleness map corridors</strong>
-              <span>model suggestion candidate; no Phase 1 safety decision mutation.</span>
+              <strong>Review reference track coverage</strong>
+              <span>23 reference tracks are evidence only; they do not become runtime safety truth.</span>
             </li>
           </ul>
           <p class="read-only-note">This panel does not accept, reject, compile, or write next-plan candidates.</p>
@@ -821,6 +931,8 @@
           <summary>Raw JSON detail</summary>
           <pre id="detailJson">{}</pre>
         </details>
+        <details class="assistant-drawer" open>
+          <summary aria-label="Open read-only after-action assistant">Assistant</summary>
         <!-- assistant-shell:start -->
         <article id="assistantPanel" class="assistant-panel" data-assistant-surface="admin" data-assistant-boundary="read-only model interpretation" aria-label="Read-only after-action assistant">
           <div class="assistant-head">
@@ -853,9 +965,9 @@
             <h3>Suggested questions</h3>
             <p class="meta">Choose one question after selecting evidence; suggestions follow selected after-action context.</p>
             <ul id="assistantPromptSuggestions" class="assistant-prompts" aria-label="Suggested assistant questions">
-              <li><button type="button" data-assistant-question="Why is this selected evidence important?">Why is this selected evidence important?</button></li>
-              <li><button type="button" data-assistant-question="Which sources support this after-action evidence?">Which sources support this after-action evidence?</button></li>
-              <li><button type="button" data-assistant-question="What remains uncertain in this evidence?">What remains uncertain in this evidence?</button></li>
+              <li><button type="button" data-assistant-question="Why is this selected evidence important?" title="Why is this selected evidence important?" aria-label="Why is this selected evidence important?">Why important?</button></li>
+              <li><button type="button" data-assistant-question="Which sources support this after-action evidence?" title="Which sources support this after-action evidence?" aria-label="Which sources support this after-action evidence?">Sources?</button></li>
+              <li><button type="button" data-assistant-question="What remains uncertain in this evidence?" title="What remains uncertain in this evidence?" aria-label="What remains uncertain in this evidence?">Uncertain?</button></li>
             </ul>
           </section>
           <section class="assistant-control" aria-label="Ask assistant">
@@ -905,6 +1017,7 @@
           </section>
         </article>
         <!-- assistant-shell:end -->
+        </details>
       </div>
     </section>
   </div>
@@ -912,7 +1025,7 @@
 
   <script src="/admin/scout-assistant-ui.js"></script>
   <script>
-    const CASE_ID = "scout_260512_field_golden";
+    const CASE_ID = "chilai_nanhua_day1";
     const MAP_WIDTH = 1000;
     const MAP_HEIGHT = 720;
     const OSM_PUBLIC_TILE_URL_TEMPLATE = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
@@ -926,28 +1039,28 @@
     const OSM_ATTRIBUTION = "OpenStreetMap contributors";
     const AFTER_ACTION_NEXT_PLAN_CANDIDATES = [
       {
-        candidate_id: "after_action.scout_260512.transfer_gap.checkpoint_review",
-        title: "Review transfer-gap checkpoint boundary",
-        kind: "checkpoint_candidate",
-        summary: "Candidate-only checkpoint-boundary review for cp_05/cp_06 transfer-gap evidence.",
-        related: ["cp_05", "cp_06", "seg_05"],
-        boundary: "human review required; MissionGraph compile blocked_until_human_review"
+        candidate_id: "after_action.chilai_nanhua_day1.golden_route_semantics",
+        title: "Review golden route semantics",
+        kind: "route_semantics_candidate",
+        summary: "出發前 golden route is a selected similar reference route, not the user's already-walked track.",
+        related: ["artifact.gpx.chilai_nanhua_day1", "cp.start", "cp.finish"],
+        boundary: "candidate-only; no Phase 1 runtime mutation"
       },
       {
-        candidate_id: "after_action.scout_260512.weak_gps.recording_policy_review",
-        title: "Review weak-GPS recording policy",
-        kind: "segment_policy_candidate",
-        summary: "Reviewer-note candidate for weak GPS segments with high corridor agreement.",
-        related: ["seg_06", "seg_09", "watch_260512_093931"],
-        boundary: "no ObservedFact writeback; no historical evidence mutation"
+        candidate_id: "after_action.chilai_nanhua_day1.manual_waypoint_policy",
+        title: "Review manual waypoint policy",
+        kind: "manual_waypoint_policy_candidate",
+        summary: "Unwalked route sections（未曾發生的路徑區段）must be drawn manually and flagged for danger review.",
+        related: ["cp.start", "seg.001", "seg.109"],
+        boundary: "candidate-only; MissionGraph compile remains blocked until human review"
       },
       {
-        candidate_id: "after_action.scout_260512.map_corridor.staleness_review",
-        title: "Re-check medium-staleness map corridors",
-        kind: "map_corridor_candidate",
-        summary: "Model-suggestion candidate for reused corridor evidence with medium staleness risk.",
-        related: ["openstreetmap_overpass", "map.scout_260512.overpass_corridors"],
-        boundary: "no Phase 1 safety decision mutation; candidate-only"
+        candidate_id: "after_action.chilai_nanhua_day1.reference_track_coverage",
+        title: "Review reference track coverage",
+        kind: "reference_track_candidate",
+        summary: "Compare the 23 GPX reference tracks against the selected golden route before review.",
+        related: ["outputs/reference_tracks.json", "artifact.gpx.chilai_nanhua_day1.reference.001"],
+        boundary: "reference tracks stay planning evidence only; not runtime safety truth"
       }
     ];
     const state = { view: null, projected: null, selected: null };
@@ -1502,6 +1615,14 @@
         "What remains uncertain in this evidence?"
       ];
     }
+    function assistantQuestionLabel(question) {
+      if (question.startsWith("Why was ")) return "Why reached?";
+      if (question.startsWith("Why did ")) return "Why recorded?";
+      if (question.startsWith("Why is ")) return "Why important?";
+      if (question.startsWith("Which sources")) return "Sources?";
+      if (question.startsWith("What remains uncertain")) return "Uncertain?";
+      return "Ask";
+    }
 
     function renderAssistantPromptSuggestions(item) {
       const list = document.getElementById("assistantPromptSuggestions");
@@ -1511,7 +1632,9 @@
         const button = document.createElement("button");
         button.type = "button";
         button.dataset.assistantQuestion = question;
-        button.textContent = question;
+        button.title = question;
+        button.setAttribute("aria-label", question);
+        button.textContent = assistantQuestionLabel(question);
         li.appendChild(button);
         list.appendChild(li);
       });

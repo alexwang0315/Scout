@@ -6,7 +6,8 @@ Define the product and interface direction for Scout's admin-facing UI surfaces:
 
 - Phase 3.5 runtime debug console at `/admin/debug`;
 - Phase 1 after-action review at `/admin`;
-- Phase 4 pre-trip planning workspace at `/admin/pretrip`.
+- Phase 4 pre-trip planning workspace at `/admin/pretrip`;
+- hardware readiness review at `/admin/hardware-readiness`.
 
 This document is a design guide, not an implementation plan. It should keep
 future UI work aligned with Scout's safety architecture: Phase 1 remains the
@@ -24,6 +25,29 @@ system. Navigation, planning, and AI assistance are supporting roles. The UI
 should expose evidence, uncertainty, provenance, and human review state before
 it presents recommendations.
 
+### Map As World Bridge
+
+The map is Scout's bridge to the real world. Nearly every meaningful Scout
+message is about geography, terrain, route position, timing, or what happened
+to a person in a place. The map must therefore act as the shared semantic
+coordinate system across admin surfaces, not as a decorative preview panel.
+
+Design implications:
+
+- The primary work surface should be map-centered whenever the page explains
+  route, runtime, planning, or after-action evidence.
+- Timeline events, evidence tree nodes, review items, route notes, candidates,
+  and assistant context should resolve to map targets when geographic evidence
+  exists.
+- When an item cannot be placed on the map, the UI should say why: missing
+  coordinate, unresolved source ref, non-geographic provider state, or boundary
+  evidence only.
+- The map should show relationships, not only locations: route progression,
+  segment frame, reference tracks, hazard zones, retreat options, provider
+  dropout area, and selected-event context.
+- Assistant answers should cite the selected map/evidence context rather than
+  becoming a free-floating chat response.
+
 ### User Role Separation
 
 Scout should not collapse every admin page into a single generic dashboard.
@@ -31,9 +55,10 @@ Each surface has a different user and different job:
 
 | Surface | Primary user | Primary job | Interaction posture |
 | --- | --- | --- | --- |
-| `/admin/debug` | Engineer/operator | Diagnose runtime behavior | Dense, read-only, event-first |
-| `/admin` | Mission owner/reviewer | Understand what happened | Map-first, evidence-led, readable |
-| `/admin/pretrip` | Trip leader/planner | Prepare a future mission | Workspace-first, review-gated |
+| `/admin/debug` | Engineer/operator | Diagnose runtime behavior | Review Console / engineer console |
+| `/admin` | Mission owner/reviewer | Understand what happened | Map Canvas |
+| `/admin/pretrip` | Trip leader/planner | Prepare a future mission | Mission Board |
+| `/admin/hardware-readiness` | Operator/hardware reviewer | Review provider dry-run readiness | Compact readiness console |
 
 ### Evidence Before Advice
 
@@ -57,7 +82,28 @@ Every surface should show what it can and cannot do:
 - `/admin` reviews completed evidence and must not rewrite historical missions.
 - `/admin/pretrip` edits planning workspace material and must not imply live
   runtime activation.
+- `/admin/hardware-readiness` reviews provider and dry-run evidence but must not
+  control hardware, providers, outbound transport, Phase 1 runtime, or Phase 2
+  Brain state.
 - Phase 4.5 owns departure approval and runtime handoff.
+
+### Chosen Template Mapping
+
+The proposed visual templates are now assigned by surface. Future UI work
+should use these mappings as the default shape before inventing another admin
+layout:
+
+| Surface | Template | Meaning |
+| --- | --- | --- |
+| `/admin/pretrip` | Mission Board | Planning workspace with visible blockers, review queues, map context, and workspace-only controls. |
+| `/admin` | Map Canvas | After-action review anchored on the mission map, evidence tree, and readable mission narrative. |
+| `/admin/debug` | Review Console / engineer console | Dense read-only runtime console for event correlation, projections, endpoint payloads, and bug-report evidence. |
+| `/admin/hardware-readiness` | Compact readiness console | Small provider/readiness cockpit for dry-run evidence, fixture/live status, and assistant context without provider control. |
+
+The template mapping changes presentation only. It does not change safety
+authority, endpoint method boundaries, Phase 4.5 handoff requirements, or the
+rule that model output is read-only interpretation until a human accepts it in
+the correct phase.
 
 ## Visual Language
 
@@ -83,11 +129,12 @@ Use color as state, not decoration.
 | `route`, `checkpoint`, `segment`, `retreat`, `hazard`, `poi` | Map and mission artifacts |
 | `ok`, `warning`, `bad`, `info` | Runtime and review status |
 | `candidate`, `reviewed`, `rejected`, `field_verify` | Planning review state |
-| `phase1`, `phase2`, `phase3`, `phase35`, `phase4`, `phase45` | Boundary and provenance labels |
+| `phase1`, `phase2`, `phase3`, `phase35`, `phase36`, `phase4`, `phase45` | Boundary and provenance labels |
 
-Dark mode is appropriate for `/admin/debug`. The after-action and pre-trip
-surfaces may use dark or light themes, but should not be dominated by one hue
-family. Contrast must remain strong for outdoor review conditions.
+Dark mode is appropriate for `/admin/debug` and `/admin/hardware-readiness`.
+The after-action and pre-trip surfaces may use dark or light themes, but should
+not be dominated by one hue family. Contrast must remain strong for outdoor
+review conditions.
 
 ### Typography
 
@@ -113,12 +160,18 @@ family. Contrast must remain strong for outdoor review conditions.
 Purpose: help an engineer explain why Scout produced a runtime state, event,
 message, bridge attempt, or skill-gate decision.
 
-The debug console should stay dense and engineer-first. It should be optimized
-for correlation, replay, and bug reports.
+Template: Review Console / engineer console.
+
+The debug console should stay dense, read-only, and engineer-first. It should
+be optimized for correlation, replay, endpoint payload review, and bug reports.
+It should still use the shared surface skeleton on desktop: timeline rail on the
+left, debug evidence map as the largest central work area, and runtime
+details/assistant on the right.
 
 Core layout:
 
 - chronological timeline as the primary navigation;
+- debug evidence map in the center as the largest work area;
 - current or selected L0-L4 snapshot;
 - provider/degraded status;
 - incident and bridge status;
@@ -132,6 +185,8 @@ Required behavior:
 - All data fetches are GET-only.
 - No POST, PATCH, PUT, DELETE, form submission, or runtime mutation controls.
 - Timeline selection drives the details panel and runtime map highlight.
+- Non-geographic events should still explain their nearest world context:
+  selected session, route segment, provider, outbound recipient, or boundary.
 - Selected event state should be deep-linkable in the URL.
 - Every event should expose copyable refs: event id, sequence, session id,
   incident ref, artifact ref, source path when available.
@@ -160,9 +215,13 @@ Non-goals:
 Purpose: help a mission owner or reviewer understand what happened after a
 completed mission.
 
-The after-action surface should be map-first and evidence-led. It can retain a
-technical JSON detail pane, but the primary experience should use human-readable
-evidence labels and mission narrative.
+Template: Map Canvas.
+
+The after-action surface should be map-first and evidence-led. The map must sit
+in the center and own the largest desktop column; evidence tree and
+narrative/assistant details are supporting rails, not the primary frame. It can
+retain a technical JSON detail pane, but the primary experience should use
+human-readable evidence labels and mission narrative.
 
 Core layout:
 
@@ -176,6 +235,8 @@ Required behavior:
 
 - Evidence tree selection drives map highlight by default.
 - Map selection should locate the corresponding evidence node when possible.
+- The narrative should stay anchored to selected map/evidence context instead
+  of becoming a detached report.
 - Completed mission evidence is immutable from this surface.
 - Any next-plan output is a Phase 4 candidate, not a historical edit.
 - Dense technical details should be available but not the first thing a
@@ -212,9 +273,15 @@ Non-goals:
 Purpose: help a trip leader assemble route, terrain, timing, map, weather,
 team, and review evidence before a mission.
 
+Template: Mission Board.
+
 The pre-trip admin should behave like a project workspace, not a dashboard.
 The user should understand what is ready, what is uncertain, and what still
 requires human review before runtime handoff.
+Desktop layout should match the template hierarchy: feature/search rail on the
+left, the map as the largest central work area, and detail/review/assistant
+context on the right. The map is not a preview panel; it is the main planning
+canvas.
 
 Core workflow:
 
@@ -241,6 +308,12 @@ Core layout:
 Required behavior:
 
 - Candidate artifacts must show source, confidence, and review state.
+- Feature search, review queue items, and candidate details should share one
+  selected map/evidence context.
+- Planning actions should make their geographic target explicit before they
+  write workspace artifacts.
+- Workspace imports should distinguish reference routes, comparable tracks,
+  and actual walked tracks because they mean different things in the world.
 - Workspace write controls must be labeled as workspace-only.
 - Planning actions must not imply departure approval.
 - Reviewed planning package must remain distinct from runtime handoff.
@@ -267,6 +340,52 @@ Non-goals:
 - Do not compile directly into live Phase 1 runtime without Phase 4.5 handoff.
 - Do not treat community route references as ground truth.
 
+### `/admin/hardware-readiness`: Provider Readiness Review
+
+Purpose: help an operator review fixture-backed provider health, runtime dry-run
+evidence, and mock queue state before live hardware work advances.
+
+Template: compact readiness console.
+
+The hardware-readiness surface should feel closer to `/admin/debug` than to
+pre-trip planning: dense, explicit, and safety-boundary first. It is not a live
+hardware control panel.
+
+Core layout:
+
+- provider readiness summary;
+- provider health cards;
+- selected provider detail;
+- replay/runtime debug evidence list;
+- mock message queue visibility;
+- read-only assistant panel scoped to hardware readiness context.
+
+Required behavior:
+
+- Provider selection may change the displayed context, but must not control the
+  provider.
+- Assistant output is read-only model interpretation.
+- Token values, credentials, and hardware-control secrets must never be shown.
+- No Phase 1 runtime state, Phase 2 Brain state, hardware provider state, or
+  outbound transport state is changed from this surface.
+- The surface should make fixture-backed versus live-hardware status visually
+  explicit.
+
+Future improvements:
+
+- Add a provider readiness timeline grouped by GNSS, IMU, comms, battery, and
+  storage.
+- Add a dry-run evidence export for hardware review notes.
+- Add copyable provider refs and runtime-debug refs.
+- Add a clear "live hardware disabled" or "live hardware enabled" status band
+  before any future live run.
+
+Non-goals:
+
+- Do not add provider mutation controls.
+- Do not start local models, listeners, or hardware daemons from readiness UI.
+- Do not treat readiness assistant output as approval to enter runtime.
+
 ## Common Interaction Rules
 
 ### Selection
@@ -283,6 +402,18 @@ Non-goals:
 - Empty filtered states should explain how to recover.
 - Common filters: category, severity, review state, phase, event kind, map
   layer, source type.
+
+### Assistant Visibility
+
+- If a surface includes the cross-surface assistant drawer, the drawer may be
+  collapsible for workspace density.
+- The assistant drawer must be open or otherwise visible by default on initial
+  page load.
+- The default visible assistant state must include a prompt textarea and an
+  `Ask` button.
+- Assistant output remains read-only model interpretation. The drawer must not
+  introduce hidden writes, live `/safety/*` calls, provider controls, outbound
+  sends, Phase 2 Brain writes, departure approval, or runtime handoff.
 
 ### Copying and References
 
@@ -360,6 +491,7 @@ Every UI slice should keep or add tests for:
 - map/tree/detail selection linkage;
 - review state and filter behavior;
 - no live `/safety/*` calls from admin planning/debug pages.
+- no hardware/provider mutation from hardware-readiness pages.
 
 ## Suggested Next Slices
 
@@ -370,8 +502,10 @@ Every UI slice should keep or add tests for:
    detail.
 4. Pre-trip readiness strip: blockers, warnings, field-verify, reviewed
    package, departure gate.
-5. Shared admin token vocabulary across the three pages.
-6. Browser-based screenshot checks once the local servers for all three
+5. Hardware-readiness inclusion: keep provider readiness as a fourth admin UI
+   surface with explicit no-control boundaries.
+6. Shared admin token vocabulary across the four pages.
+7. Browser-based screenshot checks once the local servers for all Scout admin
    surfaces are consistently startable.
 
 ## Open Questions

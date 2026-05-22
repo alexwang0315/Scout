@@ -34,13 +34,24 @@ def test_hardware_readiness_admin_page_serves_static_shell_and_shared_script():
 
     assert page.status_code == 200
     assert "Scout Hardware Readiness" in page.text
+    assert 'data-ui-style="template-console"' in page.text
+    assert 'data-layout="provider-first-console"' in page.text
+    assert 'data-boundary="no-hardware-provider-mutation"' in page.text
+    assert 'data-assistant-default-visible="true"' in page.text
     assert "data-assistant-surface=\"hardware_readiness\"" in page.text
     assert "read-only model interpretation" in page.text
+    assert "Provider dry-run review. Fixture-backed. No control path." in page.text
+    assert "No hardware control, provider control, real SOS, outbound transport, Phase 1 runtime writes, or Phase 2 Brain writes." in page.text
+    assert "Select context only." in page.text
     assert "/assistant/query" in page.text
     assert "/assistant/status" in page.text
     assert "/admin/hardware-readiness/context" in page.text
     assert "No hardware control or provider control." in page.text
     assert "No real SOS, SMS, satellite, or outbound transport." in page.text
+    assert ">Why degraded?</button>" in page.text
+    assert ">Evidence?</button>" in page.text
+    assert ">Blockers?</button>" in page.text
+    assert "function assistantQuestionLabel" in page.text
     assert script.status_code == 200
     assert "window.ScoutAssistantUI" in script.text
 

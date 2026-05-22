@@ -22,6 +22,13 @@
       --phase2: #b7a0e8;
       --phase3: #e6b16f;
       --phase35: #75b8d7;
+      --phase4: #7dc2a5;
+      --route: #f2c94c;
+      --segment: #9aa8b5;
+      --checkpoint: #d96b62;
+      --reference: #9bd0ff;
+      --overpass: #7dc2a5;
+      --poi: #e6b16f;
     }
 
     * { box-sizing: border-box; }
@@ -33,6 +40,16 @@
       background: var(--bg);
       color: var(--text);
       font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    button, textarea, summary, [role="tab"], [role="button"] {
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: rgba(111, 168, 220, 0.16);
+    }
+    button:focus-visible,
+    textarea:focus-visible,
+    summary:focus-visible {
+      outline: 2px solid var(--info);
+      outline-offset: 2px;
     }
 
     .shell {
@@ -96,10 +113,51 @@
     }
 
     .boundary strong { color: var(--text); }
+    .boundary-chip-row {
+      display: flex;
+      justify-content: flex-end;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .debug-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .debug-button {
+      min-height: 30px;
+      border: 1px solid rgba(111, 168, 220, 0.42);
+      border-radius: 6px;
+      padding: 5px 9px;
+      color: var(--text);
+      background: rgba(111, 168, 220, 0.08);
+      font: inherit;
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    .debug-button:hover,
+    .debug-button:focus-visible {
+      border-color: rgba(111, 168, 220, 0.78);
+      outline: none;
+    }
+
+    .debug-button:disabled {
+      cursor: wait;
+      opacity: 0.58;
+    }
 
     main {
       display: grid;
-      grid-template-columns: minmax(420px, 1fr) minmax(400px, 520px);
+      grid-template-columns: minmax(300px, 360px) minmax(640px, 1fr) minmax(360px, 460px);
+      grid-template-rows: minmax(0, 1fr) minmax(260px, 0.72fr);
+      grid-template-areas:
+        "timeline map details"
+        "timeline map assistant";
       gap: 12px;
       height: 100%;
       min-height: 0;
@@ -108,21 +166,15 @@
     }
 
     .column {
-      display: grid;
-      gap: 12px;
-      min-height: 0;
-      overflow: auto;
+      display: contents;
     }
 
     .timeline-column {
-      grid-column: 1;
-      grid-row: 1;
-      grid-template-rows: minmax(220px, 1fr) minmax(300px, 0.9fr);
-      height: 100%;
-      overflow: hidden;
+      min-height: 0;
     }
 
     .timeline-panel {
+      grid-area: timeline;
       display: grid;
       grid-template-rows: auto minmax(0, 1fr);
       min-height: 0;
@@ -137,28 +189,29 @@
     }
 
     .details-column {
-      grid-column: 2;
-      grid-row: 1;
-      grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
-      height: 100%;
-      overflow: hidden;
+      min-height: 0;
     }
 
     .details-panel {
+      grid-area: details;
       display: grid;
       grid-template-rows: auto auto minmax(0, 1fr);
       min-height: 0;
     }
 
     .map-panel {
+      grid-area: map;
       display: grid;
       grid-template-rows: auto minmax(0, 1fr);
       min-height: 0;
     }
 
     .map-panel .panel-body {
+      display: grid;
+      grid-template-rows: minmax(0, 1fr) auto auto;
+      gap: 8px;
       min-height: 0;
-      overflow: auto;
+      overflow: hidden;
       padding: 10px;
     }
 
@@ -308,6 +361,40 @@
       gap: 8px;
     }
 
+    .endpoint-grid {
+      display: grid;
+      gap: 10px;
+    }
+
+    .endpoint-window {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--panel-soft);
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    .endpoint-window h3 {
+      padding: 9px 10px;
+      border-bottom: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 12px;
+      text-transform: uppercase;
+    }
+
+    .endpoint-window pre {
+      max-height: 190px;
+      margin: 0;
+      padding: 10px;
+      overflow: auto;
+      color: var(--text);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 11px;
+      line-height: 1.45;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
     .item {
       border: 1px solid var(--border);
       border-radius: 6px;
@@ -434,12 +521,14 @@
     .phase-phase2 { border-left: 3px solid var(--phase2); }
     .phase-phase3 { border-left: 3px solid var(--phase3); }
     .phase-phase35 { border-left: 3px solid var(--phase35); }
+    .phase-phase4 { border-left: 3px solid var(--phase4); }
 
     .map-wrap {
       border: 1px solid var(--border);
       border-radius: 6px;
       overflow: hidden;
       background: #151a1f;
+      min-height: 0;
     }
 
     #runtimeMap {
@@ -450,7 +539,7 @@
     }
 
     .map-panel #runtimeMap {
-      height: clamp(184px, 28vh, 300px);
+      height: 100%;
       min-height: 0;
       aspect-ratio: auto;
     }
@@ -513,6 +602,75 @@
       pointer-events: none;
     }
 
+    .layer-imagery { fill: #172026; }
+    .layer-osm { fill: #1d252b; }
+    .osm-tile,
+    .raster-tile {
+      opacity: .44;
+      image-rendering: auto;
+    }
+    .raster-tile { opacity: .28; }
+    .osm-attribution {
+      fill: rgba(237, 242, 247, .68);
+      font: 10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      pointer-events: none;
+    }
+    .route-line {
+      fill: none;
+      stroke: var(--route);
+      stroke-width: 4;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      vector-effect: non-scaling-stroke;
+    }
+    .reference-track {
+      fill: none;
+      stroke: var(--reference);
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      opacity: .34;
+      vector-effect: non-scaling-stroke;
+    }
+    .segment-overlay {
+      fill: none;
+      stroke: var(--segment);
+      stroke-width: 7;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      opacity: .28;
+      vector-effect: non-scaling-stroke;
+    }
+    .checkpoint {
+      fill: var(--checkpoint);
+      stroke: #fff;
+      stroke-width: 2;
+      vector-effect: non-scaling-stroke;
+    }
+    .poi,
+    .overpass-poi {
+      fill: var(--poi);
+      stroke: #fff;
+      stroke-width: 1.5;
+      vector-effect: non-scaling-stroke;
+    }
+    .overpass-corridor {
+      fill: none;
+      stroke: var(--overpass);
+      stroke-width: 3;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      opacity: .5;
+      vector-effect: non-scaling-stroke;
+    }
+    .hazard,
+    .overpass-hazard {
+      fill: rgba(217, 107, 98, .16);
+      stroke: rgba(217, 107, 98, .68);
+      stroke-width: 2;
+      vector-effect: non-scaling-stroke;
+    }
+
     .map-highlight {
       opacity: 1 !important;
       stroke: var(--info) !important;
@@ -556,6 +714,36 @@
       grid-template-rows: auto minmax(0, 1fr);
       min-height: 0;
       overflow: hidden;
+    }
+    .assistant-drawer {
+      grid-area: assistant;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      min-height: 0;
+    }
+    .assistant-drawer summary {
+      min-height: 38px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+      background: var(--panel);
+      color: var(--text);
+      cursor: pointer;
+      font-weight: 650;
+      list-style-position: inside;
+    }
+    .assistant-drawer summary::after {
+      content: "Read-only";
+      color: var(--muted);
+      font-size: 11px;
+      text-transform: uppercase;
+    }
+    .assistant-drawer .assistant-panel {
+      border: 0;
+      border-radius: 0;
     }
 
     .assistant-body {
@@ -702,16 +890,18 @@
     @media (max-width: 1120px) {
       main {
         grid-template-columns: 1fr;
+        grid-template-rows: auto auto auto auto;
+        grid-template-areas:
+          "timeline"
+          "map"
+          "details"
+          "assistant";
         height: auto;
         overflow: auto;
       }
 
       .column {
-        overflow: visible;
-      }
-
-      .timeline-column {
-        overflow: visible;
+        display: contents;
       }
 
       .timeline-panel {
@@ -722,23 +912,11 @@
         overflow: visible;
         scrollbar-gutter: auto;
       }
-
-      .timeline-column,
-      .details-column {
-        grid-column: auto;
-        grid-row: auto;
-      }
-
-      .details-column {
-        grid-template-rows: auto auto;
-        overflow: visible;
-      }
-
       header { grid-template-columns: 1fr; }
       .boundary { justify-self: start; text-align: left; }
 
       .map-panel #runtimeMap {
-        height: clamp(150px, 23vh, 205px);
+        height: clamp(260px, 60vh, 520px);
       }
     }
   </style>
@@ -747,14 +925,21 @@
   <div class="shell">
     <header>
       <div>
-        <h1>Scout Phase 3.5 Runtime Debug</h1>
-        <p class="meta">Engineering read-only surface for runtime readiness inspection.</p>
+        <h1>Runtime Debug</h1>
+        <p class="meta">Read-only engineering console aligned to chilai_nanhua_day1 when available.</p>
         <code>/debug/events /debug/state /debug/messages</code>
       </div>
       <div class="boundary">
         <strong>Debug boundary</strong>
-        <span>No safety runtime mutation. No Phase 2 writeback. Mock outbound visibility only.</span>
-        <span id="loadStatus">Loading debug snapshots...</span>
+        <div class="boundary-chip-row" aria-label="Debug boundary guarantees">
+          <span class="pill ok" title="No safety runtime mutation">Runtime closed</span>
+          <span class="pill ok" title="No Phase 2 writeback">No writeback</span>
+          <span class="pill info" title="Mock outbound visibility only">Mock only</span>
+        </div>
+        <div class="debug-actions">
+          <button class="debug-button" type="button" id="debugClearButton" title="Clear projected debug events only">Clear</button>
+          <span id="loadStatus">Loading debug snapshots...</span>
+        </div>
       </div>
     </header>
 
@@ -776,6 +961,7 @@
             <div class="tab" role="tab" id="tab-skill" tabindex="-1" aria-selected="false" aria-controls="panel-skill" data-tab-target="panel-skill">Ln / Skill</div>
             <div class="tab" role="tab" id="tab-outbound" tabindex="-1" aria-selected="false" aria-controls="panel-outbound" data-tab-target="panel-outbound">Outbound</div>
             <div class="tab" role="tab" id="tab-boundary" tabindex="-1" aria-selected="false" aria-controls="panel-boundary" data-tab-target="panel-boundary">Boundary</div>
+            <div class="tab" role="tab" id="tab-api" tabindex="-1" aria-selected="false" aria-controls="panel-api" data-tab-target="panel-api">API</div>
           </div>
 
           <div class="tab-panels">
@@ -891,54 +1077,53 @@
               <p class="hint state-context" id="boundarySelectionContext">Boundary 是 debug invariant，不因 timeline 選取改變。</p>
               <div class="list" id="boundaryList"></div>
             </section>
+
+            <section class="tab-panel" role="tabpanel" id="panel-api" aria-labelledby="tab-api" hidden>
+              <div class="tab-panel-head">
+                <div class="item-line">
+                  <h2>Debug Endpoint Payloads</h2>
+                  <span class="pill info">projection only</span>
+                </div>
+                <p class="hint">直接顯示 /debug/events、/debug/state、/debug/messages 的最新回應，方便確認 replay 訊號是否進來。</p>
+              </div>
+              <div class="endpoint-grid" aria-label="Debug endpoint payload windows">
+                <section class="endpoint-window" aria-label="/debug/events payload">
+                  <h3>/debug/events</h3>
+                  <pre id="debugEventsPayload">{}</pre>
+                </section>
+                <section class="endpoint-window" aria-label="/debug/state payload">
+                  <h3>/debug/state</h3>
+                  <pre id="debugStatePayload">{}</pre>
+                </section>
+                <section class="endpoint-window" aria-label="/debug/messages payload">
+                  <h3>/debug/messages</h3>
+                  <pre id="debugMessagesPayload">{}</pre>
+                </section>
+              </div>
+            </section>
           </div>
         </article>
 
         <article class="panel map-panel" aria-label="Split runtime map panel">
           <div class="panel-head">
             <div class="panel-title">
-              <h2>Runtime Map</h2>
-              <p class="hint">點 timeline 後，這裡標出相關部位。</p>
+              <h2>Debug Evidence Map</h2>
+              <p class="hint">使用和 pretrip/admin 相同的 GPX、OSM、Overpass、reference tracks 投影。</p>
             </div>
             <span class="pill info" id="selectedMapTarget">no selection</span>
           </div>
           <div class="panel-body">
             <div class="map-wrap">
-              <svg id="runtimeMap" viewBox="0 0 640 360" role="img" aria-label="Runtime event schematic map">
-                <path class="map-corridor" d="M70 285 C150 230 180 215 245 215 S345 178 410 132 S500 82 575 78" data-map-ref="route corridor route-progress observation checkpoint" />
-                <path class="map-route" d="M70 285 C150 230 180 215 245 215 S345 178 410 132 S500 82 575 78" data-map-ref="route route-progress observation checkpoint" />
-                <path class="map-route-overlay" d="M70 285 C150 230 180 215 245 215 S345 178 410 132 S500 82 575 78" data-map-ref="route route-progress observation checkpoint" />
-                <circle class="map-zone" cx="360" cy="158" r="42" data-map-ref="safety incident" />
-
-                <circle class="map-node checkpoint" cx="70" cy="285" r="10" data-map-ref="checkpoint route" />
-                <text class="map-label" x="45" y="315">start</text>
-                <circle class="map-node checkpoint" cx="245" cy="215" r="10" data-map-ref="checkpoint route-progress" />
-                <text class="map-label" x="214" y="244">checkpoint</text>
-                <circle class="map-node route" cx="328" cy="178" r="10" data-map-ref="observation route-progress progress runtime" />
-                <text class="map-label" x="300" y="205">latest obs</text>
-                <circle class="map-node safety" cx="375" cy="150" r="12" data-map-ref="safety incident" />
-                <text class="map-label" x="388" y="155">safety</text>
-                <circle class="map-node checkpoint" cx="575" cy="78" r="10" data-map-ref="checkpoint route" />
-                <text class="map-label" x="548" y="108">finish</text>
-
-                <rect class="map-node provider" x="66" y="38" width="86" height="38" rx="6" data-map-ref="provider runtime" />
-                <text class="map-label" x="82" y="62">provider</text>
-                <rect class="map-node skill" x="212" y="38" width="82" height="38" rx="6" data-map-ref="ln skill runtime" />
-                <text class="map-label" x="232" y="62">Ln/skill</text>
-                <rect class="map-node bridge" x="356" y="38" width="82" height="38" rx="6" data-map-ref="bridge phase3 incident" />
-                <text class="map-label" x="378" y="62">bridge</text>
-                <rect class="map-node outbound" x="500" y="38" width="92" height="38" rx="6" data-map-ref="outbound message runtime" />
-                <text class="map-label" x="516" y="62">outbound</text>
+              <svg id="runtimeMap" viewBox="0 0 1000 720" role="img" aria-label="chilai_nanhua_day1 debug evidence map">
               </svg>
             </div>
             <p class="summary" id="selectedEventSummary">Select a timeline node to highlight the related runtime map element.</p>
             <div class="map-legend" aria-label="Runtime map legend">
-              <span class="pill info">route</span>
-              <span class="pill warn">provider</span>
-              <span class="pill info">Ln / skill</span>
-              <span class="pill warn">bridge</span>
-              <span class="pill bad">safety</span>
-              <span class="pill ok">outbound mock</span>
+              <span class="pill info">golden route</span>
+              <span class="pill info">reference GPX</span>
+              <span class="pill ok">OSM / Overpass</span>
+              <span class="pill bad">CP</span>
+              <span class="pill warn">segment frame</span>
             </div>
           </div>
         </article>
@@ -958,8 +1143,10 @@
           </div>
         </article>
 
+        <details class="panel assistant-drawer" open>
+          <summary aria-label="Open read-only debug assistant">Assistant</summary>
         <!-- assistant-shell:start -->
-        <article id="assistantPanel" class="panel assistant-panel" data-assistant-surface="debug" data-assistant-boundary="read-only model interpretation" aria-label="Read-only debug assistant">
+        <article id="assistantPanel" class="assistant-panel" data-assistant-surface="debug" data-assistant-boundary="read-only model interpretation" aria-label="Read-only debug assistant">
           <div class="panel-head">
             <div class="panel-title">
               <h2>Debug Assistant</h2>
@@ -987,9 +1174,9 @@
               <h3>Suggested questions</h3>
               <p class="hint">Choose one question after selecting a timeline node; suggestions follow selected timeline context.</p>
               <ul id="assistantPromptSuggestions" class="assistant-prompts" aria-label="Suggested assistant questions">
-                <li><button type="button" data-assistant-question="Why did CP2 become an L2 event?">Why did CP2 become an L2 event?</button></li>
-                <li><button type="button" data-assistant-question="Which sources support this timeline state?">Which sources support this timeline state?</button></li>
-                <li><button type="button" data-assistant-question="What is missing from this context?">What is missing from this context?</button></li>
+                <li><button type="button" data-assistant-question="Why did CP2 become an L2 event?" title="Why did CP2 become an L2 event?" aria-label="Why did CP2 become an L2 event?">Why L2?</button></li>
+                <li><button type="button" data-assistant-question="Which sources support this timeline state?" title="Which sources support this timeline state?" aria-label="Which sources support this timeline state?">Sources?</button></li>
+                <li><button type="button" data-assistant-question="What is missing from this context?" title="What is missing from this context?" aria-label="What is missing from this context?">Missing?</button></li>
               </ul>
             </section>
             <section class="assistant-control" aria-label="Ask assistant">
@@ -1030,6 +1217,8 @@
             <section class="assistant-sources" aria-label="Assistant sources">
               <h3>Sources</h3>
               <ul id="assistantSourcesList" class="assistant-list">
+                <li>/admin/pretrip/projects/chilai_nanhua_day1/debug-projection</li>
+                <li>/admin/pretrip/projects/chilai_nanhua_day1/debug-projection-events</li>
                 <li>/debug/events</li>
                 <li>/debug/state</li>
                 <li>/debug/messages</li>
@@ -1039,22 +1228,37 @@
           </div>
         </article>
         <!-- assistant-shell:end -->
+        </details>
       </section>
     </main>
   </div>
 
   <script src="/admin/scout-assistant-ui.js"></script>
   <script>
+    const PRETRIP_PROJECT_ID = "chilai_nanhua_day1";
+    const PRETRIP_DEBUG_PROJECTION_PATH = "/admin/pretrip/projects/chilai_nanhua_day1/debug-projection";
+    const PRETRIP_DEBUG_PROJECTION_EVENTS_PATH = "/admin/pretrip/projects/chilai_nanhua_day1/debug-projection-events";
+    const MAP_WIDTH = 1000;
+    const MAP_HEIGHT = 720;
+    const MAP_VISUAL_PADDING = 56;
+    const OSM_LOCAL_TILE_URL_TEMPLATE = `${apiBase()}/admin/tiles/osm/{z}/{x}/{y}.png`;
+    const OSM_TARGET_ZOOM = 15;
+    const OSM_MAX_TILES = 48;
+    const OSM_MIN_ZOOM = 8;
+    const OSM_MAX_ZOOM = 20;
+    const RASTER_LOCAL_TILE_URL_TEMPLATE = `${apiBase()}/admin/tiles/imagery/{project_id}/{layer_id}/{z}/{x}/{y}.png`;
+    const OSM_ATTRIBUTION = "OpenStreetMap contributors";
     const LEVELS = ["L0", "L1", "L2", "L3", "L4"];
     const STATUS_BAD = new Set(["degraded", "failed", "unavailable", "offline", "error"]);
-    const DEBUG_TAB_IDS = ["panel-state", "panel-provider", "panel-incident", "panel-skill", "panel-outbound", "panel-boundary"];
+    const DEBUG_TAB_IDS = ["panel-state", "panel-provider", "panel-incident", "panel-skill", "panel-outbound", "panel-boundary", "panel-api"];
     const debugPageState = {
       events: [],
       chronologicalEvents: [],
       selectedEventId: "",
       selectedTabId: "panel-state",
       runtimeState: {},
-      messages: []
+      messages: [],
+      projection: null
     };
     const runtimeMap = document.getElementById("runtimeMap");
     const EVENT_MAP_REFS = {
@@ -1159,6 +1363,19 @@
       document.getElementById(id).textContent = text(value, fallback);
     }
 
+    function endpointPayloadText(payload) {
+      const serialized = JSON.stringify(payload || {}, null, 2);
+      const maxLength = 12000;
+      if (serialized.length <= maxLength) return serialized;
+      return `${serialized.slice(0, maxLength)}\n... truncated ${serialized.length - maxLength} chars`;
+    }
+
+    function renderEndpointPayloads(eventPayload, statePayload, messagePayload) {
+      setText("debugEventsPayload", endpointPayloadText(eventPayload), "{}");
+      setText("debugStatePayload", endpointPayloadText(statePayload), "{}");
+      setText("debugMessagesPayload", endpointPayloadText(messagePayload), "{}");
+    }
+
     function numberOr(value, fallback = 0) {
       const parsed = Number(value);
       return Number.isFinite(parsed) ? parsed : fallback;
@@ -1207,10 +1424,264 @@
       }[character]));
     }
 
+    function apiBase() {
+      if (location.protocol === "file:") return "http://127.0.0.1:9099";
+      return "";
+    }
+
+    function svgEl(name, attrs = {}, content = "") {
+      const node = document.createElementNS("http://www.w3.org/2000/svg", name);
+      Object.entries(attrs).forEach(([key, value]) => node.setAttribute(key, value));
+      if (content) node.textContent = content;
+      return node;
+    }
+
+    function selectorValue(value) {
+      const raw = String(value || "");
+      if (window.CSS && CSS.escape) return CSS.escape(raw);
+      return raw.replace(/["\\]/g, "\\$&");
+    }
+
+    function mapLayerById(projection, layerId) {
+      return (projection?.map_layers || []).find(layer => layer.layer_id === layerId) || {};
+    }
+
+    function apiUrlTemplate(template) {
+      if (!template) return "";
+      if (template.startsWith("http://") || template.startsWith("https://")) return template;
+      if (template.startsWith("/")) return `${apiBase()}${template}`;
+      return template;
+    }
+
+    function rasterTileTemplate(projection) {
+      const layer = mapLayerById(projection, "imagery");
+      return apiUrlTemplate(layer.local_raster_tile_url_template) || RASTER_LOCAL_TILE_URL_TEMPLATE;
+    }
+
+    function boundsForProjection(projection) {
+      const bounds = projection?.route?.bounds || {};
+      return {
+        south: Number(bounds.min_lat),
+        north: Number(bounds.max_lat),
+        west: Number(bounds.min_lon),
+        east: Number(bounds.max_lon)
+      };
+    }
+
+    function projectPoint(bounds, lat, lon) {
+      const pad = MAP_VISUAL_PADDING;
+      const lonSpan = Math.max(bounds.east - bounds.west, 0.000001);
+      const latSpan = Math.max(bounds.north - bounds.south, 0.000001);
+      const x = pad + ((lon - bounds.west) / lonSpan) * (MAP_WIDTH - pad * 2);
+      const y = MAP_HEIGHT - pad - ((lat - bounds.south) / latSpan) * (MAP_HEIGHT - pad * 2);
+      return [x, y];
+    }
+
+    function pathFromCoords(bounds, coords) {
+      return (coords || []).map((point, index) => {
+        const [x, y] = projectPoint(bounds, Number(point.lat), Number(point.lon));
+        return `${index === 0 ? "M" : "L"}${x.toFixed(2)},${y.toFixed(2)}`;
+      }).join(" ");
+    }
+
+    function clamp(value, min, max) {
+      return Math.max(min, Math.min(max, value));
+    }
+
+    function lonToTileX(lon, zoom) {
+      return Math.floor(((lon + 180) / 360) * (2 ** zoom));
+    }
+
+    function latToTileY(lat, zoom) {
+      const latRad = clamp(lat, -85.05112878, 85.05112878) * Math.PI / 180;
+      return Math.floor((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * (2 ** zoom));
+    }
+
+    function tileXToLon(x, zoom) {
+      return x / (2 ** zoom) * 360 - 180;
+    }
+
+    function tileYToLat(y, zoom) {
+      const n = Math.PI - 2 * Math.PI * y / (2 ** zoom);
+      return 180 / Math.PI * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)));
+    }
+
+    function osmTileUrl(z, x, y) {
+      return OSM_LOCAL_TILE_URL_TEMPLATE
+        .replace("{z}", z)
+        .replace("{x}", x)
+        .replace("{y}", y);
+    }
+
+    function rasterTileUrl(projection, z, x, y) {
+      const layer = mapLayerById(projection, "imagery");
+      return rasterTileTemplate(projection)
+        .replace("{project_id}", PRETRIP_PROJECT_ID)
+        .replace("{layer_id}", layer.layer_id || "imagery")
+        .replace("{z}", z)
+        .replace("{x}", x)
+        .replace("{y}", y);
+    }
+
+    function tileRangeForZoom(bounds, zoom) {
+      const maxIndex = (2 ** zoom) - 1;
+      return {
+        xMin: clamp(lonToTileX(bounds.west, zoom), 0, maxIndex),
+        xMax: clamp(lonToTileX(bounds.east, zoom), 0, maxIndex),
+        yMin: clamp(latToTileY(bounds.north, zoom), 0, maxIndex),
+        yMax: clamp(latToTileY(bounds.south, zoom), 0, maxIndex)
+      };
+    }
+
+    function tileCountForZoom(bounds, zoom) {
+      const range = tileRangeForZoom(bounds, zoom);
+      return (range.xMax - range.xMin + 1) * (range.yMax - range.yMin + 1);
+    }
+
+    function chooseOsmZoom(bounds) {
+      let zoom = clamp(OSM_TARGET_ZOOM, OSM_MIN_ZOOM, OSM_MAX_ZOOM);
+      while (zoom > OSM_MIN_ZOOM && tileCountForZoom(bounds, zoom) > OSM_MAX_TILES) zoom -= 1;
+      return zoom;
+    }
+
+    function tileCoverage(bounds) {
+      const z = chooseOsmZoom(bounds);
+      const {xMin, xMax, yMin, yMax} = tileRangeForZoom(bounds, z);
+      const tiles = [];
+      for (let x = xMin; x <= xMax; x += 1) {
+        for (let y = yMin; y <= yMax; y += 1) {
+          tiles.push({
+            z, x, y,
+            west: tileXToLon(x, z),
+            east: tileXToLon(x + 1, z),
+            north: tileYToLat(y, z),
+            south: tileYToLat(y + 1, z)
+          });
+        }
+      }
+      return tiles;
+    }
+
+    function attachMapEvidence(node, item, mapRef = "") {
+      const id = item?.source_id || item?.candidate_id || item?.segment_id || item?.checkpoint_id || "";
+      if (id) node.setAttribute("data-source-id", id);
+      node.setAttribute("data-map-ref", mapRef || id || item?.evidence_type || "evidence");
+    }
+
+    function appendRasterLayer(group, projection, bounds, kind) {
+      const isImagery = kind === "imagery";
+      group.appendChild(svgEl("rect", {x: 0, y: 0, width: MAP_WIDTH, height: MAP_HEIGHT, class: isImagery ? "layer-imagery" : "layer-osm"}));
+      tileCoverage(bounds).forEach(tile => {
+        const [x1, y1] = projectPoint(bounds, tile.north, tile.west);
+        const [x2, y2] = projectPoint(bounds, tile.south, tile.east);
+        group.appendChild(svgEl("image", {
+          href: isImagery ? rasterTileUrl(projection, tile.z, tile.x, tile.y) : osmTileUrl(tile.z, tile.x, tile.y),
+          x: Math.min(x1, x2).toFixed(2),
+          y: Math.min(y1, y2).toFixed(2),
+          width: Math.abs(x2 - x1).toFixed(2),
+          height: Math.abs(y2 - y1).toFixed(2),
+          class: isImagery ? "raster-tile" : "osm-tile",
+          preserveAspectRatio: "none",
+          "data-map-ref": isImagery ? "imagery" : "osm"
+        }));
+      });
+      if (!isImagery) {
+        group.appendChild(svgEl("text", {x: MAP_WIDTH - 10, y: MAP_HEIGHT - 10, "text-anchor": "end", class: "osm-attribution"}, OSM_ATTRIBUTION));
+      }
+    }
+
+    function renderDebugEvidenceMap(projection) {
+      if (!projection?.route?.bounds) return;
+      const bounds = boundsForProjection(projection);
+      runtimeMap.setAttribute("viewBox", `0 0 ${MAP_WIDTH} ${MAP_HEIGHT}`);
+      runtimeMap.replaceChildren();
+
+      const osmGroup = svgEl("g", {"data-layer-group": "osm"});
+      appendRasterLayer(osmGroup, projection, bounds, "osm");
+      runtimeMap.appendChild(osmGroup);
+
+      const imageryGroup = svgEl("g", {"data-layer-group": "imagery"});
+      appendRasterLayer(imageryGroup, projection, bounds, "imagery");
+      runtimeMap.appendChild(imageryGroup);
+
+      const overpassGroup = svgEl("g", {"data-layer-group": "overpass"});
+      (projection.overpass_evidence?.corridor_candidates || []).forEach(candidate => {
+        const path = svgEl("path", {d: pathFromCoords(bounds, candidate.corridor?.coordinates || []), class: "overpass-corridor"});
+        attachMapEvidence(path, candidate, `overpass ${candidate.source_id || candidate.candidate_id || ""}`);
+        overpassGroup.appendChild(path);
+      });
+      (projection.overpass_evidence?.hazard_candidates || []).forEach(candidate => {
+        const path = svgEl("path", {d: `${pathFromCoords(bounds, candidate.hazard?.polygon || [])} Z`, class: "overpass-hazard"});
+        attachMapEvidence(path, candidate, `overpass ${candidate.source_id || candidate.candidate_id || ""}`);
+        overpassGroup.appendChild(path);
+      });
+      (projection.overpass_evidence?.poi_candidates || []).forEach(candidate => {
+        const coordinate = candidate.poi?.coordinate;
+        if (!coordinate) return;
+        const [x, y] = projectPoint(bounds, coordinate.lat, coordinate.lon);
+        const circle = svgEl("circle", {cx: x, cy: y, r: 4, class: "overpass-poi"});
+        attachMapEvidence(circle, candidate, `overpass ${candidate.source_id || candidate.candidate_id || ""}`);
+        overpassGroup.appendChild(circle);
+      });
+      runtimeMap.appendChild(overpassGroup);
+
+      const referenceGroup = svgEl("g", {"data-layer-group": "reference-tracks"});
+      (projection.reference_tracks?.reference_tracks || []).forEach(track => {
+        const coords = track.display_geometry?.coordinates || [];
+        if (coords.length < 2) return;
+        const path = svgEl("path", {d: pathFromCoords(bounds, coords), class: "reference-track"});
+        attachMapEvidence(path, track, `reference-tracks ${track.source_id || track.artifact_id || ""}`);
+        referenceGroup.appendChild(path);
+      });
+      runtimeMap.appendChild(referenceGroup);
+
+      const routeGroup = svgEl("g", {"data-layer-group": "route"});
+      const routeCoords = projection.route.display_geometry?.coordinates?.length
+        ? projection.route.display_geometry.coordinates
+        : projection.route.polyline;
+      const routePath = svgEl("path", {d: pathFromCoords(bounds, routeCoords), class: "route-line"});
+      attachMapEvidence(routePath, projection.route, "route route-progress");
+      routeGroup.appendChild(routePath);
+      runtimeMap.appendChild(routeGroup);
+
+      const segmentGroup = svgEl("g", {"data-layer-group": "segments"});
+      (projection.segments || []).forEach(segment => {
+        const coords = segment.display_geometry?.coordinates || [];
+        if (coords.length < 2) return;
+        const path = svgEl("path", {d: pathFromCoords(bounds, coords), class: "segment-overlay"});
+        attachMapEvidence(path, segment, `route-progress segment ${segment.candidate_id}`);
+        segmentGroup.appendChild(path);
+      });
+      runtimeMap.appendChild(segmentGroup);
+
+      const checkpointGroup = svgEl("g", {"data-layer-group": "checkpoints"});
+      (projection.checkpoints || []).forEach(checkpoint => {
+        const [x, y] = projectPoint(bounds, checkpoint.lat, checkpoint.lon);
+        const circle = svgEl("circle", {cx: x, cy: y, r: 4.5, class: "checkpoint"});
+        attachMapEvidence(circle, checkpoint, `checkpoint route-progress ${checkpoint.candidate_id}`);
+        checkpointGroup.appendChild(circle);
+      });
+      runtimeMap.appendChild(checkpointGroup);
+
+      const poiGroup = svgEl("g", {"data-layer-group": "pois"});
+      (projection.map_candidates?.poi_candidates || []).forEach(candidate => {
+        const coordinate = candidate.poi?.coordinate;
+        if (!coordinate) return;
+        const [x, y] = projectPoint(bounds, coordinate.lat, coordinate.lon);
+        const circle = svgEl("circle", {cx: x, cy: y, r: 5, class: "poi"});
+        attachMapEvidence(circle, candidate, `poi ${candidate.source_id || candidate.candidate_id || ""}`);
+        poiGroup.appendChild(circle);
+      });
+      runtimeMap.appendChild(poiGroup);
+    }
+
     function mapRefsForEvent(event) {
       const refs = new Set(EVENT_MAP_REFS[event?.kind] || ["runtime"]);
       const subject = text(event?.subject_ref, "").toLowerCase();
       const payload = event?.payload || {};
+      (payload.map_target_ids || []).filter(Boolean).forEach(ref => refs.add(ref));
+      if (payload.segment_id) refs.add(payload.segment_id);
+      if (payload.checkpoint_id) refs.add(payload.checkpoint_id);
       if (subject.includes("checkpoint") || payload.checkpoint_id) refs.add("checkpoint");
       if (subject.includes("incident") || payload.incident_id) refs.add("incident");
       if (subject.includes("message") || payload.message_id) {
@@ -1264,6 +1735,80 @@
     function latestEventByKind(events, kind) {
       const matches = events.filter((event) => event.kind === kind);
       return matches[matches.length - 1] || null;
+    }
+
+    function latestEventPayload(events, kind) {
+      const event = latestEventByKind(events, kind);
+      return event?.payload || {};
+    }
+
+    async function loadProjectedDebugEventPayload() {
+      try {
+        const projection = await fetchJson(PRETRIP_DEBUG_PROJECTION_PATH);
+        const sourceLifecycleEvents = projection.source_debug_projection_events || {};
+        return {
+          payload: {
+            artifact_kind: "pretrip_debug_projection_timeline",
+            project_id: projection.project_id,
+            source_path: projection.source_path,
+            evidence_type: projection.evidence_type,
+            event_count: projection.event_count,
+            events: projection.timeline_events || [],
+            source_lifecycle_event_count: sourceLifecycleEvents.event_count || 0,
+            boundary: projection.boundary || {}
+          },
+          projection,
+          projected: true
+        };
+      } catch (projectionError) {
+        let payload;
+        try {
+          payload = await fetchJson(PRETRIP_DEBUG_PROJECTION_EVENTS_PATH);
+        } catch {
+          payload = await fetchJson("/debug/events?limit=200");
+        }
+        return {
+          payload: {
+            ...payload,
+            projection_fallback: {
+              requested_project_id: PRETRIP_PROJECT_ID,
+              error: projectionError.message
+            }
+          },
+          projection: null,
+          projected: false
+        };
+      }
+    }
+
+    function stateWithProjectedEvents(state, eventPayload) {
+      const events = eventPayload.events || [];
+      const latestCompleted = latestEventPayload(events, "debug_session_completed");
+      const latestSafety = latestEventPayload(events, "safety_event_emitted");
+      const latestProvider = latestEventPayload(events, "provider_status_recorded");
+      const latest = events[events.length - 1] || {};
+      const boundary = {
+        read_only: true,
+        phase1_mutation_allowed: false,
+        phase2_writeback_allowed: false,
+        real_outbound_transport_allowed: false,
+        ...(eventPayload.boundary || {}),
+        ...(state.debug_boundary || {})
+      };
+      return {
+        ...state,
+        debug_session_id: latest.session_id || state.debug_session_id || state.session_id || null,
+        runtime_profile: eventPayload.project_id
+          ? `pretrip_projection:${eventPayload.project_id}`
+          : (state.runtime_profile || "phase35-debug"),
+        safety_level: latestCompleted.safety_level || latestSafety.safety_level || state.safety_level || "L0_NORMAL",
+        observations_processed: latestCompleted.observations_processed ?? state.observations_processed,
+        event_count: events.length || state.event_count || 0,
+        provider_status: latestProvider.provider
+          ? {[latestProvider.provider]: latestProvider.status || "available"}
+          : (state.provider_status || {}),
+        debug_boundary: boundary
+      };
     }
 
     function eventSubjectId(event) {
@@ -1506,10 +2051,16 @@
         "What is missing from this context?"
       ];
     }
+    function assistantQuestionLabel(question) {
+      if (question.startsWith("Why did ")) return "Why L2?";
+      if (question.startsWith("Which sources")) return "Sources?";
+      if (question.startsWith("What is missing")) return "Missing?";
+      return "Ask";
+    }
 
     function renderAssistantPromptSuggestions(event) {
       document.getElementById("assistantPromptSuggestions").innerHTML = suggestedAssistantQuestions(event)
-        .map((question) => `<li><button type="button" data-assistant-question="${escapeHtml(question)}">${escapeHtml(question)}</button></li>`)
+        .map((question) => `<li><button type="button" data-assistant-question="${escapeHtml(question)}" title="${escapeHtml(question)}" aria-label="${escapeHtml(question)}">${escapeHtml(assistantQuestionLabel(question))}</button></li>`)
         .join("");
     }
 
@@ -1633,10 +2184,16 @@
 
     function mapTargetsForEvent(event) {
       const refs = new Set(mapRefsForEvent(event));
-      return Array.from(runtimeMap.querySelectorAll("[data-map-ref]")).filter((node) => {
+      const targets = Array.from(runtimeMap.querySelectorAll("[data-map-ref]")).filter((node) => {
         const tokens = text(node.dataset.mapRef, "").split(/\s+/).filter(Boolean);
         return tokens.some((token) => refs.has(token));
       });
+      refs.forEach((ref) => {
+        const escaped = selectorValue(ref);
+        runtimeMap.querySelectorAll(`[data-source-id="${escaped}"]`).forEach(node => targets.push(node));
+        runtimeMap.querySelectorAll(`[data-source-id^="${escaped}."]`).forEach(node => targets.push(node));
+      });
+      return [...new Set(targets)];
     }
 
     function highlightMapForEvent(event) {
@@ -1782,15 +2339,25 @@
 
     async function loadDebugSurface() {
       try {
-        const [eventPayload, state, messagePayload] = await Promise.all([
-          fetchJson("/debug/events?limit=200"),
+        const [eventResult, state, messagePayload] = await Promise.all([
+          loadProjectedDebugEventPayload(),
           fetchJson("/debug/state"),
           fetchJson("/debug/messages")
         ]);
-        renderState(state || {});
+        const eventPayload = eventResult.payload || {};
+        debugPageState.projection = eventResult.projection || null;
+        if (debugPageState.projection) renderDebugEvidenceMap(debugPageState.projection);
+        const resolvedState = stateWithProjectedEvents(state || {}, eventPayload);
+        renderEndpointPayloads(eventPayload || {}, resolvedState || {}, messagePayload || {});
+        renderState(resolvedState || {});
         debugPageState.messages = messagePayload.messages || [];
         renderEvents(eventPayload.events || []);
-        setText("loadStatus", "Snapshots loaded.");
+        setText(
+          "loadStatus",
+          eventResult.projected
+            ? "chilai_nanhua_day1 projection loaded."
+            : "Runtime debug snapshots loaded; pretrip projection endpoint unavailable."
+        );
       } catch (error) {
         document.getElementById("loadStatus").innerHTML =
           `<span class="error">${escapeHtml(error.message)}</span>`;
@@ -1798,10 +2365,33 @@
       }
     }
 
+    async function clearDebugProjection() {
+      const button = document.getElementById("debugClearButton");
+      if (!window.confirm("Clear projected debug events only? Runtime, safety, incidents, outbound, Brain, and hardware state will not be changed.")) return;
+      button.disabled = true;
+      setText("loadStatus", "Clearing debug projection...");
+      try {
+        await postJson("/debug/clear", {confirm_debug_projection_clear: true});
+        debugPageState.selectedEventId = "";
+        await loadDebugSurface();
+        setText("loadStatus", "Debug projection cleared. Awaiting incoming replay events.");
+      } catch (error) {
+        document.getElementById("loadStatus").innerHTML =
+          `<span class="error">${escapeHtml(error.message)}</span>`;
+      } finally {
+        button.disabled = false;
+      }
+    }
+
+    function bindDebugControls() {
+      document.getElementById("debugClearButton").addEventListener("click", clearDebugProjection);
+    }
+
     const initialUrlSelection = readUrlSelection();
     debugPageState.selectedTabId = initialUrlSelection.tabId;
     debugPageState.selectedEventId = initialUrlSelection.eventId;
     bindAssistantControls();
+    bindDebugControls();
     bindDebugTabs();
     switchDebugTab(document.querySelector(`[data-tab-target="${debugPageState.selectedTabId}"]`), { syncUrl: false });
     loadAssistantStatus();

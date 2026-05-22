@@ -7,17 +7,18 @@
   <link rel="icon" href="data:,">
   <style>
     :root {
-      --bg: #101314;
-      --surface: #181d20;
-      --panel: #20272b;
-      --border: #354044;
-      --text: #edf2f3;
-      --muted: #a5b0b4;
+      --bg: #121923;
+      --surface: #151e2a;
+      --panel: #202b3a;
+      --panel-strong: #253244;
+      --border: #334157;
+      --text: #edf3f8;
+      --muted: #9faec0;
       --accent: #4fb7a6;
-      --warn: #e0ad4f;
-      --bad: #da6b62;
-      --ok: #74b66f;
-      --focus: #8ab4f8;
+      --warn: #d8a43e;
+      --bad: #e17368;
+      --ok: #79b878;
+      --focus: #86b7ff;
     }
 
     * { box-sizing: border-box; }
@@ -26,31 +27,37 @@
       min-height: 100vh;
       background: var(--bg);
       color: var(--text);
-      font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font: 13px/1.42 ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
 
     h1, h2, h3, p { margin: 0; }
-    h1 { font-size: 18px; font-weight: 680; letter-spacing: 0; }
-    h2 { font-size: 14px; font-weight: 680; letter-spacing: 0; }
-    h3 { font-size: 13px; font-weight: 680; letter-spacing: 0; }
+    h1 { font-size: 17px; font-weight: 750; letter-spacing: .01em; }
+    h2 { font-size: 13px; font-weight: 750; letter-spacing: .04em; text-transform: uppercase; }
+    h3 { font-size: 12px; font-weight: 750; letter-spacing: .04em; text-transform: uppercase; }
     button, textarea { font: inherit; }
+    button, textarea { touch-action: manipulation; }
+    button:focus-visible,
+    textarea:focus-visible {
+      outline: 2px solid var(--focus);
+      outline-offset: 2px;
+    }
 
     .shell {
       display: grid;
-      grid-template-columns: minmax(460px, 1fr) minmax(360px, 440px);
+      grid-template-columns: minmax(620px, 1fr) minmax(360px, 420px);
       min-height: 100vh;
     }
 
     .main,
     .side {
       min-width: 0;
-      padding: 18px;
+      padding: 14px;
     }
 
     .main {
       display: grid;
-      grid-template-rows: auto auto minmax(0, 1fr);
-      gap: 14px;
+      grid-template-rows: auto minmax(0, 1fr);
+      gap: 10px;
     }
 
     .side {
@@ -63,7 +70,7 @@
     .panel,
     .assistant-panel {
       border: 1px solid var(--border);
-      border-radius: 6px;
+      border-radius: 10px;
       background: var(--panel);
     }
 
@@ -71,7 +78,7 @@
       display: flex;
       justify-content: space-between;
       gap: 16px;
-      padding: 14px;
+      padding: 12px;
       align-items: center;
     }
 
@@ -82,11 +89,64 @@
       font-size: 12px;
     }
 
+    .boundary-strip {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto auto;
+      gap: 8px;
+      align-items: center;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: #101722;
+      padding: 10px 12px;
+    }
+
+    .readiness-workbench {
+      display: grid;
+      grid-template-columns: 250px minmax(0, 1fr);
+      min-height: 0;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      background: var(--surface);
+    }
+
+    .readiness-rail,
+    .readiness-stage {
+      min-width: 0;
+      padding: 12px;
+      overflow: auto;
+    }
+
+    .readiness-rail {
+      border-right: 1px solid var(--border);
+      background: #111a25;
+    }
+
+    .readiness-stage {
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      gap: 10px;
+    }
+
     .summary-grid,
     .provider-grid {
       display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 10px;
+      gap: 6px;
+    }
+
+    .summary-grid {
+      grid-template-columns: 1fr 1fr;
+      margin-top: 10px;
+    }
+
+    .provider-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .panel > .provider-grid,
+    .panel > .list {
+      margin-top: 0;
+      padding: 10px;
     }
 
     .metric,
@@ -97,9 +157,9 @@
     .assistant-sources,
     .assistant-control {
       border: 1px solid var(--border);
-      border-radius: 6px;
-      padding: 10px;
-      background: #151a1d;
+      border-radius: 8px;
+      padding: 9px;
+      background: var(--panel);
     }
 
     .metric span,
@@ -107,7 +167,10 @@
     .assistant-field span {
       display: block;
       color: var(--muted);
-      font-size: 11px;
+      font-size: 10px;
+      font-weight: 750;
+      letter-spacing: .05em;
+      text-transform: uppercase;
     }
 
     .metric strong,
@@ -115,14 +178,20 @@
     .assistant-field strong,
     .assistant-field small {
       display: block;
-      margin-top: 4px;
+      margin-top: 2px;
       overflow-wrap: anywhere;
+    }
+
+    .metric strong {
+      font-size: 18px;
+      font-variant-numeric: tabular-nums;
     }
 
     .provider-card {
       cursor: pointer;
       text-align: left;
       color: var(--text);
+      min-height: 116px;
     }
 
     .provider-card.is-selected {
@@ -138,7 +207,10 @@
       border-radius: 999px;
       padding: 3px 8px;
       color: var(--muted);
-      font-size: 12px;
+      font-size: 11px;
+      font-weight: 750;
+      letter-spacing: .03em;
+      text-transform: uppercase;
     }
 
     .pill.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 45%, var(--border)); }
@@ -147,14 +219,16 @@
 
     .list {
       display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 8px;
       margin-top: 10px;
     }
 
     .assistant-panel {
       display: grid;
-      gap: 12px;
-      padding: 14px;
+      gap: 10px;
+      padding: 12px;
+      background: #111a25;
     }
 
     .assistant-head {
@@ -180,7 +254,7 @@
       min-height: 74px;
       resize: vertical;
       border: 1px solid var(--border);
-      border-radius: 6px;
+      border-radius: 8px;
       background: #101314;
       color: var(--text);
       padding: 9px 10px;
@@ -196,7 +270,7 @@
     .assistant-button,
     .assistant-prompts button {
       border: 1px solid var(--border);
-      border-radius: 6px;
+      border-radius: 8px;
       background: var(--panel);
       color: var(--text);
       padding: 8px 10px;
@@ -226,11 +300,18 @@
       overflow-wrap: anywhere;
     }
 
-    @media (max-width: 960px) {
+    @media (max-width: 1160px) {
       .shell { grid-template-columns: 1fr; }
       .side { border-left: 0; border-top: 1px solid var(--border); }
+    }
+
+    @media (max-width: 960px) {
+      .boundary-strip,
+      .readiness-workbench { grid-template-columns: 1fr; }
+      .readiness-rail { border-right: 0; border-bottom: 1px solid var(--border); }
       .summary-grid,
       .provider-grid,
+      .list,
       .assistant-grid { grid-template-columns: 1fr; }
     }
   </style>
@@ -238,50 +319,69 @@
 <body>
   <div class="shell">
     <main class="main">
-      <header class="toolbar">
+      <header class="toolbar" data-ui-style="template-console">
         <div>
           <h1>Scout Hardware Readiness</h1>
-          <p class="meta">fixture-backed Pi/provider dry-run visibility; no live hardware control.</p>
+          <p class="meta">Provider dry-run review. Fixture-backed. No control path.</p>
         </div>
-        <span class="pill warn">read-only readiness surface</span>
+        <span class="pill warn">read-only</span>
       </header>
 
-      <section class="summary-grid" aria-label="Hardware readiness summary">
-        <div class="metric"><span>Providers</span><strong id="providerCount">0</strong></div>
-        <div class="metric"><span>Degraded</span><strong id="degradedProviderCount">0</strong></div>
-        <div class="metric"><span>Replay Events</span><strong id="replayEventCount">0</strong></div>
-        <div class="metric"><span>Mock Queue</span><strong id="mockMessageCount">0</strong></div>
-      </section>
-
-      <section class="panel" aria-label="Provider readiness list">
-        <div class="toolbar">
+      <section class="readiness-workbench" data-layout="provider-first-console" aria-label="Provider readiness console">
+        <aside class="readiness-rail" aria-label="Hardware readiness summary">
           <div>
-            <h2>Provider Health</h2>
-            <p class="hint">Select a provider before asking the assistant.</p>
+            <h2>Readiness</h2>
+            <p class="hint">Fixture-backed Pi/provider dry-run visibility.</p>
           </div>
-          <span id="selectedProviderLabel" class="pill">none selected</span>
-        </div>
-        <div id="providerGrid" class="provider-grid"></div>
-      </section>
+          <div class="summary-grid">
+            <div class="metric"><span>Providers</span><strong id="providerCount">0</strong></div>
+            <div class="metric"><span>Degraded</span><strong id="degradedProviderCount">0</strong></div>
+            <div class="metric"><span>Replay</span><strong id="replayEventCount">0</strong></div>
+            <div class="metric"><span>Mock</span><strong id="mockMessageCount">0</strong></div>
+          </div>
+        </aside>
 
-      <section class="panel" aria-label="Read-only readiness evidence">
-        <div class="toolbar">
-          <div>
-            <h2>Readiness Evidence</h2>
-            <p class="hint">Sample replay, runtime debug events, and mock transport queue are explanatory only.</p>
-          </div>
+        <div class="readiness-stage">
+          <section class="boundary-strip" data-boundary="no-hardware-provider-mutation" aria-label="Read-only hardware boundary">
+            <div>
+              <h2>Boundary</h2>
+              <p class="hint">No hardware control, provider control, real SOS, outbound transport, Phase 1 runtime writes, or Phase 2 Brain writes.</p>
+            </div>
+            <span class="pill warn">fixture-backed</span>
+            <span class="pill">assistant visible</span>
+          </section>
+
+          <section class="panel" aria-label="Provider readiness list">
+            <div class="toolbar">
+              <div>
+                <h2>Providers</h2>
+                <p class="hint">Select context only.</p>
+              </div>
+              <span id="selectedProviderLabel" class="pill">none selected</span>
+            </div>
+            <div id="providerGrid" class="provider-grid"></div>
+          </section>
+
+          <section class="panel" aria-label="Read-only readiness evidence">
+            <div class="toolbar">
+              <div>
+                <h2>Evidence</h2>
+                <p class="hint">Replay, debug events, and mock queue are explanatory only.</p>
+              </div>
+            </div>
+            <div id="evidenceList" class="list"></div>
+          </section>
         </div>
-        <div id="evidenceList" class="list"></div>
       </section>
     </main>
 
     <aside class="side">
       <!-- assistant-shell:start -->
-      <article id="assistantPanel" class="assistant-panel" data-assistant-surface="hardware_readiness" data-assistant-boundary="read-only model interpretation" aria-label="Read-only hardware readiness assistant">
+      <article id="assistantPanel" class="assistant-panel" data-assistant-surface="hardware_readiness" data-assistant-boundary="read-only model interpretation" data-assistant-default-visible="true" aria-label="Read-only hardware readiness assistant">
         <div class="assistant-head">
           <div>
             <h2>Hardware Readiness Assistant</h2>
-            <p class="meta">read-only model interpretation over fixture-backed readiness context.</p>
+            <p class="meta">read-only model interpretation.</p>
           </div>
           <span class="pill">surface: hardware_readiness</span>
         </div>
@@ -308,9 +408,9 @@
           <h3>Suggested questions</h3>
           <p class="meta">Suggestions follow selected provider readiness context.</p>
           <ul id="assistantPromptSuggestions" class="assistant-prompts" aria-label="Suggested assistant questions">
-            <li><button type="button" data-assistant-question="Why is this provider degraded?">Why is this provider degraded?</button></li>
-            <li><button type="button" data-assistant-question="What dry-run evidence supports this readiness state?">What dry-run evidence supports this readiness state?</button></li>
-            <li><button type="button" data-assistant-question="What remains blocked before live hardware?">What remains blocked before live hardware?</button></li>
+            <li><button type="button" data-assistant-question="Why is this provider degraded?" title="Why is this provider degraded?" aria-label="Why is this provider degraded?">Why degraded?</button></li>
+            <li><button type="button" data-assistant-question="What dry-run evidence supports this readiness state?" title="What dry-run evidence supports this readiness state?" aria-label="What dry-run evidence supports this readiness state?">Evidence?</button></li>
+            <li><button type="button" data-assistant-question="What remains blocked before live hardware?" title="What remains blocked before live hardware?" aria-label="What remains blocked before live hardware?">Blockers?</button></li>
           </ul>
         </section>
         <section class="assistant-control" aria-label="Ask assistant">
@@ -451,6 +551,12 @@
         "What remains blocked before live hardware?"
       ];
     }
+    function assistantQuestionLabel(question) {
+      if (question.startsWith("Why is ")) return "Why degraded?";
+      if (question.startsWith("What dry-run evidence")) return "Evidence?";
+      if (question.startsWith("What remains blocked")) return "Blockers?";
+      return "Ask";
+    }
 
     function renderAssistantPromptSuggestions(provider) {
       const list = document.getElementById("assistantPromptSuggestions");
@@ -460,7 +566,9 @@
         const button = document.createElement("button");
         button.type = "button";
         button.dataset.assistantQuestion = question;
-        button.textContent = question;
+        button.title = question;
+        button.setAttribute("aria-label", question);
+        button.textContent = assistantQuestionLabel(question);
         li.appendChild(button);
         list.appendChild(li);
       });

@@ -9,6 +9,7 @@ from admin_api import create_admin_app
 
 ROOT = Path(__file__).resolve().parents[1]
 CASE_ID = "scout_260512_field_golden"
+PRETRIP_CASE_ID = "chilai_nanhua_day1"
 
 
 class AdminAfterActionTests(unittest.TestCase):
@@ -91,6 +92,34 @@ class AdminAfterActionTests(unittest.TestCase):
         self.assertEqual(payload["replay"]["safety_level"], "L0_NORMAL")
         self.assertGreaterEqual(len(payload["safety_timeline"]), 20)
 
+    def test_admin_case_api_can_project_chilai_nanhua_gpx_set(self):
+        client = TestClient(create_admin_app())
+
+        response = client.get(f"/admin/cases/{PRETRIP_CASE_ID}")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["case_id"], PRETRIP_CASE_ID)
+        self.assertEqual(payload["project_id"], PRETRIP_CASE_ID)
+        self.assertEqual(payload["route"]["point_count"], 6909)
+        self.assertEqual(len(payload["route"]["points"]), 6909)
+        self.assertEqual(len(payload["mission"]["checkpoints"]), 110)
+        self.assertEqual(len(payload["mission"]["segments"]), 109)
+        self.assertEqual(payload["replay"]["checkpoint_count"], 110)
+        self.assertEqual(payload["replay"]["segment_capsule_count"], 109)
+        self.assertEqual(payload["replay"]["completed_mission_replay"], False)
+        self.assertEqual(payload["admin_surface_projection"]["surface_targets"], [
+            "/admin",
+            "/admin/pretrip",
+            "/admin/debug",
+        ])
+        self.assertEqual(payload["debug_projection"]["event_count"], 4)
+        self.assertFalse(
+            payload["admin_surface_projection"]["boundary"][
+                "phase1_runtime_mutation_allowed"
+            ]
+        )
+
     def test_admin_page_serves_presentation_layer(self):
         client = TestClient(create_admin_app())
 
@@ -104,6 +133,11 @@ class AdminAfterActionTests(unittest.TestCase):
         self.assertIn("max-width: 100vw", response.text)
         self.assertIn("overflow-x: hidden", response.text)
         self.assertIn("min-height: min(760px, 92vh)", response.text)
+        self.assertIn("grid-template-columns: minmax(270px, 360px) minmax(640px, 1fr) minmax(300px, 400px)", response.text)
+        self.assertIn('grid-template-areas: "tree map detail"', response.text)
+        self.assertIn("grid-area: map", response.text)
+        self.assertIn("grid-area: tree", response.text)
+        self.assertIn("grid-area: detail", response.text)
         self.assertIn("grid-template-columns: repeat(6, minmax(0, 1fr))", response.text)
         self.assertIn("grid-template-columns: repeat(2, minmax(0, 1fr))", response.text)
         self.assertIn("verticalResizer", response.text)
@@ -111,18 +145,28 @@ class AdminAfterActionTests(unittest.TestCase):
         self.assertIn("evidenceTree", response.text)
         self.assertIn("jsonPane", response.text)
         self.assertIn("narrativePanel", response.text)
+        self.assertIn("layer-menu", response.text)
+        self.assertIn('aria-label="Map layer controls"', response.text)
+        self.assertIn("assistant-drawer", response.text)
+        self.assertIn('<details class="assistant-drawer" open>', response.text)
+        self.assertIn('aria-label="Open read-only after-action assistant"', response.text)
+        self.assertIn('id="assistantQuestionInput"', response.text)
+        self.assertIn('id="assistantAskButton"', response.text)
+        self.assertIn(">Why important?</button>", response.text)
+        self.assertIn("function assistantQuestionLabel", response.text)
         self.assertIn("Mission Narrative", response.text)
         self.assertIn("narrativeSummary", response.text)
         self.assertIn("narrativeFacts", response.text)
-        self.assertIn("Completed mission evidence is read-only", response.text)
-        self.assertIn("Phase 4 candidate review", response.text)
+        self.assertIn("chilai_nanhua_day1 is shown as read-only GPX projection evidence", response.text)
+        self.assertIn("not Phase 1 runtime safety truth", response.text)
+        self.assertIn('const CASE_ID = "chilai_nanhua_day1"', response.text)
         self.assertIn("nextPlanCandidatePanel", response.text)
         self.assertIn("After-Action Next Plan Candidates", response.text)
-        self.assertIn("candidate-only Phase 4 projection", response.text)
-        self.assertIn("after_action.scout_260512.transfer_gap.checkpoint_review", response.text)
-        self.assertIn("after_action.scout_260512.weak_gps.recording_policy_review", response.text)
-        self.assertIn("after_action.scout_260512.map_corridor.staleness_review", response.text)
-        self.assertIn("blocked_until_human_review", response.text)
+        self.assertIn("candidate-only Phase 4 projection from the shared chilai_nanhua_day1 GPX set", response.text)
+        self.assertIn("after_action.chilai_nanhua_day1.golden_route_semantics", response.text)
+        self.assertIn("after_action.chilai_nanhua_day1.manual_waypoint_policy", response.text)
+        self.assertIn("after_action.chilai_nanhua_day1.reference_track_coverage", response.text)
+        self.assertIn("blocked until human review", response.text)
         self.assertIn("does not accept, reject, compile, or write", response.text)
         self.assertIn("rawJsonDetails", response.text)
         self.assertIn("Raw JSON detail", response.text)
