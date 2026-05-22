@@ -4,8 +4,10 @@ from fastapi.testclient import TestClient
 
 from debug_api import create_debug_app
 from mock_outbound_transport import MockOutboundTransport
+from mock_voice_transport import MockVoiceTransport
 from runtime_debug_log import MemoryRuntimeDebugEventLog
 from runtime_debug_models import RuntimeDebugEvent
+from voice_cue_models import VoiceCue
 
 
 class DebugApiTests(unittest.TestCase):
@@ -56,6 +58,34 @@ class DebugApiTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual([event["sequence"] for event in response.json()["events"]], [3, 4])
+
+    def test_debug_events_can_filter_voice_cue_projection(self):
+        log = MemoryRuntimeDebugEventLog()
+        transport = MockVoiceTransport(
+            debug_log=log,
+            session_id="debug_session.voice",
+            mission_id="mission.normal_climb",
+            timestamp_factory=lambda: "2026-05-21T10:00:00Z",
+        )
+        cue = VoiceCue(
+            cue_id="voice_cue.route.000001",
+            priority="warning",
+            category="route",
+            text_zh="偏離路線，請停下確認方向。",
+            source_event_refs=["debug_event.route.000001"],
+            confidence=0.92,
+        )
+        transport.queue_voice_cue(cue, engine="piper")
+        client = TestClient(create_debug_app(debug_log=log))
+
+        response = client.get("/debug/events", params={"kind": "voice_cue_queued"})
+
+        self.assertEqual(response.status_code, 200)
+        events = response.json()["events"]
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]["kind"], "voice_cue_queued")
+        self.assertEqual(events[0]["payload"]["cue_id"], cue.cue_id)
+        self.assertEqual(events[0]["payload"]["boundary"]["remote_outbound_allowed"], False)
 
     def test_debug_api_source_has_no_safety_or_brain_mutation_imports(self):
         source = __import__("pathlib").Path("debug_api.py").read_text(encoding="utf-8")

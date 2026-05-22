@@ -1,0 +1,28 @@
+[
+  {
+    "cue_id": "voice_cue.device.000001",
+    "priority": "info",
+    "category": "device",
+    "text_zh": "裝置電量正常。",
+    "source_event_refs": ["debug_event.provider_status.000001"],
+    "confidence": 0.95
+  },
+  {
+    "cue_id": "voice_cue.route.000001",
+    "priority": "warning",
+    "category": "route",
+    "text_zh": "偏離路線，請停下確認方向。",
+    "source_event_refs": ["debug_event.route_progress.000010"],
+    "confidence": 0.92,
+    "require_ack": true
+  },
+  {
+    "cue_id": "voice_cue.body.000001",
+    "priority": "caution",
+    "category": "body",
+    "text_zh": "模型解讀：移動速度下降，請自行確認身體狀況。",
+    "source_kind": "read_only_model_interpretation",
+    "source_event_refs": ["debug_event.model_interpretation.000003"],
+    "confidence": 0.61
+  }
+]
