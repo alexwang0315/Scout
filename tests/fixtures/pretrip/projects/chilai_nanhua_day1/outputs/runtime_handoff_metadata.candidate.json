@@ -37,12 +37,12 @@
       "exists": true,
       "ref": "outputs/pretrip_package.json",
       "ref_key": "package_ref",
-      "sha256": "0b70c91941267cc5b23bd5d9ea56c13977c9f8f25519c18b9e6baf94ad6b91ab",
+      "sha256": "d548e26099d75516744805c75f717b03742f0d8549994a6bbe216da2227ae2e9",
       "status": "candidate",
       "summary": {
-        "checkpoint_candidate_count": 11,
+        "checkpoint_candidate_count": 110,
         "package_id": "pretrip.chilai_nanhua_day1.v0",
-        "segment_candidate_count": 10,
+        "segment_candidate_count": 109,
         "source_artifact_count": 2,
         "status": "candidate",
         "version": "0.1.0"
@@ -133,13 +133,13 @@
       "exists": true,
       "ref": "normalized/routes/route_summary.json",
       "ref_key": "route_summary_ref",
-      "sha256": "7fb5eb4265f01247b3b84092a19803d7bfdb36e5f77ff09b45aa9330532095c0",
+      "sha256": "13ccdd2559fe62ee8de1b8020a4c8a417ffaef70f915fe500ee1acbd6f112cee",
       "status": null,
       "summary": {
         "artifact_id": "artifact:gpx:chilai_nanhua_day1",
-        "distance_m": 14599.78,
-        "point_count": 2211,
-        "route_name": "奇萊南華-能高越嶺步道Day1"
+        "distance_m": 162559.51,
+        "point_count": 6909,
+        "route_name": "2013-10-08 10:58:50 每日記錄"
       }
     },
     {

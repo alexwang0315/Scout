@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 
-ALLOWED_METADATA_SUFFIXES = frozenset({".json", ".geojson"})
+ALLOWED_METADATA_SUFFIXES = frozenset({".json", ".geojson", ".jsonl"})
 RAW_SOURCE_SUFFIXES = frozenset(
     {
         ".asc",

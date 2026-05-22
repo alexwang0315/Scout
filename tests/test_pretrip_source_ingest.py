@@ -15,9 +15,9 @@ def test_chilai_pretrip_package_fixture_validates():
 
     assert package.package_id == "pretrip.chilai_nanhua_day1.v0"
     assert package.status == "candidate"
-    assert package.route_summary.route_name == "奇萊南華-能高越嶺步道Day1"
-    assert package.route_summary.point_count == 2211
-    assert package.route_summary.distance_m > 14_000
+    assert package.route_summary.route_name == "2013-10-08 10:58:50 每日記錄"
+    assert package.route_summary.point_count == 6909
+    assert package.route_summary.distance_m > 162_000
     assert {artifact.kind for artifact in package.source_artifacts} == {"gpx", "photo"}
     assert len(package.planning_references) == 3
     assert all(reference.not_observed_fact for reference in package.planning_references)
@@ -33,8 +33,8 @@ def test_chilai_pretrip_package_fixture_validates():
     assert g11_timing.to_node_name == "廬山部落"
     assert g11_timing.route_guide_segment_time_minutes == 30
     assert g11_timing.review_state == "needs_review"
-    assert len(package.checkpoint_candidates) == 11
-    assert len(package.segment_candidates) == 10
+    assert len(package.checkpoint_candidates) == 110
+    assert len(package.segment_candidates) == 109
     assert len(package.retreat_route_candidates) == 1
     assert package.retreat_route_candidates[0].retreat_type == "return_to_entry"
     assert package.retreat_route_candidates[0].expected_use == "both"
@@ -45,7 +45,7 @@ def test_chilai_pretrip_package_fixture_validates():
     assert package.dtm_coverage_summary is not None
     assert package.dtm_coverage_summary.scanned_header_count == 1411
     assert package.dtm_coverage_summary.missing_grid_count == 0
-    assert len(package.dtm_coverage_summary.candidate_tiles) == 10
+    assert len(package.dtm_coverage_summary.candidate_tiles) == 48
     assert {tile.county for tile in package.dtm_coverage_summary.candidate_tiles} == {"南投縣", "花蓮縣"}
 
 

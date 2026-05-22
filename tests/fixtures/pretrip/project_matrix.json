@@ -4,14 +4,14 @@
   "projects": [
     {
       "candidate_counts": {
-        "checkpoint": 11,
+        "checkpoint": 110,
         "map_corridor": 1,
-        "map_hazard": 1,
-        "map_poi": 1,
+        "map_hazard": 0,
+        "map_poi": 2,
         "planning_reference": 3,
         "retreat_route": 1,
         "route_guide_timing": 19,
-        "segment": 10,
+        "segment": 109,
         "source_artifact": 2,
         "timing_measurement": 18
       },
