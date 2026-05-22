@@ -23,6 +23,15 @@ class RuntimeDebugEventLogTests(unittest.TestCase):
         self.assertEqual(log.list_events(since_sequence=1), [second])
         self.assertEqual(log.list_events(limit=1), [second])
 
+    def test_memory_log_can_clear_projection_events(self):
+        log = MemoryRuntimeDebugEventLog([
+            _event(sequence=1, kind="debug_session_started"),
+            _event(sequence=2, kind="observation_ingested"),
+        ])
+
+        self.assertEqual(log.clear(), 2)
+        self.assertEqual(log.list_events(), [])
+
     def test_memory_log_accepts_voice_cue_debug_events(self):
         log = MemoryRuntimeDebugEventLog()
         queued = _event(sequence=1, kind="voice_cue_queued")
@@ -66,6 +75,17 @@ class RuntimeDebugEventLogTests(unittest.TestCase):
             )
 
             self.assertEqual(log.list_events(), [event])
+
+    def test_file_log_clear_truncates_projection_events(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "runtime-debug-events.jsonl"
+            log = FileRuntimeDebugEventLog(path)
+            log.append(_event(sequence=1, kind="debug_session_started"))
+            log.append(_event(sequence=2, kind="observation_ingested"))
+
+            self.assertEqual(log.clear(), 2)
+            self.assertEqual(path.read_text(encoding="utf-8"), "")
+            self.assertEqual(log.list_events(), [])
 
     def test_try_append_reports_write_failure_without_raising(self):
         with tempfile.TemporaryDirectory() as tmpdir:

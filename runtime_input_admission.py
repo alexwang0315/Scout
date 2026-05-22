@@ -11,6 +11,10 @@ from runtime_observation_envelope import (
     RuntimeObservationEnvelope,
     verify_runtime_observation_envelope,
 )
+from runtime_stream_device_identity import (
+    RuntimeStreamDeviceRegistry,
+    check_runtime_stream_device_identity,
+)
 from runtime_stream_policy import (
     RuntimeStreamPolicyManifest,
     RuntimeStreamSourcePolicy,
@@ -90,6 +94,10 @@ class RuntimeInputAdmissionDecision(RuntimeInputAdmissionModel):
     policy_matched: bool
     transport_allowed: bool
     token_scope_allowed: bool
+    device_identity_matched: bool
+    device_identity_reason: str
+    credential_ref: str | None = None
+    secret_value_exposed: Literal[False] = False
     connected: bool
     retry_attempt: int = Field(ge=0)
     retry_attempt_limit: int = Field(ge=0)
@@ -128,6 +136,7 @@ def admit_runtime_observation_input(
     secret_key: str,
     policy_manifest: RuntimeStreamPolicyManifest,
     state: RuntimeInputAdmissionState | None = None,
+    device_registry: RuntimeStreamDeviceRegistry | None = None,
     connected: bool = True,
     retry_attempt: int = 0,
 ) -> RuntimeInputAdmissionDecision:
@@ -151,6 +160,9 @@ def admit_runtime_observation_input(
             policy_matched=False,
             transport_allowed=False,
             token_scope_allowed=False,
+            device_identity_matched=False,
+            device_identity_reason="signature_not_verified",
+            credential_ref=None,
             connected=connected,
             retry_attempt=retry_attempt,
             retry_attempt_limit=retry_attempt_limit,
@@ -179,6 +191,29 @@ def admit_runtime_observation_input(
             policy_matched=policy_matched,
             transport_allowed=transport_allowed,
             token_scope_allowed=token_scope_allowed,
+            device_identity_matched=False,
+            device_identity_reason="source_policy_not_matched",
+            credential_ref=None,
+            connected=connected,
+            retry_attempt=retry_attempt,
+            retry_attempt_limit=retry_attempt_limit,
+            counts=RuntimeInputAdmissionCounts(rejected_count=1),
+        )
+
+    device_identity = check_runtime_stream_device_identity(device_registry, envelope)
+    if not device_identity.matched:
+        return _decision(
+            envelope,
+            status=RuntimeInputAdmissionStatus.REJECTED_SOURCE_POLICY,
+            reason=device_identity.reason,
+            state_after=next_state,
+            signature_verified=True,
+            policy_matched=True,
+            transport_allowed=True,
+            token_scope_allowed=True,
+            device_identity_matched=False,
+            device_identity_reason=device_identity.reason,
+            credential_ref=device_identity.credential_ref,
             connected=connected,
             retry_attempt=retry_attempt,
             retry_attempt_limit=retry_attempt_limit,
@@ -195,6 +230,9 @@ def admit_runtime_observation_input(
             policy_matched=True,
             transport_allowed=True,
             token_scope_allowed=True,
+            device_identity_matched=True,
+            device_identity_reason=device_identity.reason,
+            credential_ref=device_identity.credential_ref,
             connected=connected,
             retry_attempt=retry_attempt,
             retry_attempt_limit=retry_attempt_limit,
@@ -212,6 +250,9 @@ def admit_runtime_observation_input(
             policy_matched=True,
             transport_allowed=True,
             token_scope_allowed=True,
+            device_identity_matched=True,
+            device_identity_reason=device_identity.reason,
+            credential_ref=device_identity.credential_ref,
             connected=connected,
             retry_attempt=retry_attempt,
             retry_attempt_limit=retry_attempt_limit,
@@ -234,6 +275,9 @@ def admit_runtime_observation_input(
             policy_matched=True,
             transport_allowed=True,
             token_scope_allowed=True,
+            device_identity_matched=True,
+            device_identity_reason=device_identity.reason,
+            credential_ref=device_identity.credential_ref,
             connected=connected,
             retry_attempt=retry_attempt,
             retry_attempt_limit=retry_attempt_limit,
@@ -253,6 +297,9 @@ def admit_runtime_observation_input(
             policy_matched=True,
             transport_allowed=True,
             token_scope_allowed=True,
+            device_identity_matched=True,
+            device_identity_reason=device_identity.reason,
+            credential_ref=device_identity.credential_ref,
             connected=False,
             retry_attempt=retry_attempt,
             retry_attempt_limit=retry_attempt_limit,
@@ -270,6 +317,9 @@ def admit_runtime_observation_input(
             policy_matched=True,
             transport_allowed=True,
             token_scope_allowed=True,
+            device_identity_matched=True,
+            device_identity_reason=device_identity.reason,
+            credential_ref=device_identity.credential_ref,
             connected=False,
             retry_attempt=retry_attempt,
             retry_attempt_limit=retry_attempt_limit,
@@ -285,6 +335,9 @@ def admit_runtime_observation_input(
         policy_matched=True,
         transport_allowed=True,
         token_scope_allowed=True,
+        device_identity_matched=True,
+        device_identity_reason=device_identity.reason,
+        credential_ref=device_identity.credential_ref,
         connected=True,
         retry_attempt=retry_attempt,
         retry_attempt_limit=retry_attempt_limit,
@@ -302,6 +355,9 @@ def _decision(
     policy_matched: bool,
     transport_allowed: bool,
     token_scope_allowed: bool,
+    device_identity_matched: bool,
+    device_identity_reason: str,
+    credential_ref: str | None,
     connected: bool,
     retry_attempt: int,
     retry_attempt_limit: int,
@@ -323,6 +379,9 @@ def _decision(
         policy_matched=policy_matched,
         transport_allowed=transport_allowed,
         token_scope_allowed=token_scope_allowed,
+        device_identity_matched=device_identity_matched,
+        device_identity_reason=device_identity_reason,
+        credential_ref=credential_ref,
         connected=connected,
         retry_attempt=retry_attempt,
         retry_attempt_limit=retry_attempt_limit,

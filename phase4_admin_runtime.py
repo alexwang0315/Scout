@@ -12,6 +12,8 @@ from fastapi.responses import JSONResponse
 from admin_api import create_admin_router
 from assistant_models import AssistantSourceRef, ScoutAssistantQuery, ScoutAssistantResponse
 from assistant_provider import MockAssistantProvider
+from debug_api import create_debug_page_router, create_debug_router
+from runtime_debug_log import FileRuntimeDebugEventLog
 
 
 DEFAULT_DATA_ROOT = Path("/data/scout")
@@ -33,6 +35,8 @@ def create_phase4_admin_runtime_app(
         env.get("SCOUT_SAFETY_INCIDENT_STORE", str(DEFAULT_INCIDENT_STORE))
     ).expanduser()
     assistant_enabled = _is_true_like(env.get("SCOUT_AI_ASSISTANT_ENABLED", "1"))
+    debug_enabled = _is_true_like(env.get("SCOUT_DEBUG_API_ENABLED"))
+    debug_log_path = env.get("SCOUT_DEBUG_LOG_PATH")
     auth_config = _admin_auth_config(env)
     provider = MockAssistantProvider()
 
@@ -74,6 +78,10 @@ def create_phase4_admin_runtime_app(
             pretrip_workspace_root=workspace_root,
         )
     )
+    if debug_enabled:
+        debug_log = FileRuntimeDebugEventLog(debug_log_path) if debug_log_path else None
+        app.include_router(create_debug_router(debug_log=debug_log))
+        app.include_router(create_debug_page_router())
 
     @app.get("/health")
     def health() -> dict[str, Any]:
@@ -91,9 +99,15 @@ def create_phase4_admin_runtime_app(
                 "pretrip_admin": "/admin/pretrip",
                 "pretrip_project": "/admin/pretrip/projects/chilai_nanhua_day1",
                 "assistant_status": "/assistant/status" if assistant_enabled else None,
+                "debug_admin": "/admin/debug" if debug_enabled else None,
+                "debug_events": "/debug/events" if debug_enabled else None,
             },
             "auth": _admin_auth_status(auth_config),
-            "boundaries": _runtime_boundaries(env, assistant_enabled=assistant_enabled),
+            "boundaries": _runtime_boundaries(
+                env,
+                assistant_enabled=assistant_enabled,
+                debug_enabled=debug_enabled,
+            ),
         }
 
     @app.get("/phase4/admin-preview/status")
@@ -120,7 +134,11 @@ def create_phase4_admin_runtime_app(
                 "repo_fixture_write_allowed": False,
             },
             "auth": _admin_auth_status(auth_config),
-            "boundaries": _runtime_boundaries(env, assistant_enabled=assistant_enabled),
+            "boundaries": _runtime_boundaries(
+                env,
+                assistant_enabled=assistant_enabled,
+                debug_enabled=debug_enabled,
+            ),
         }
 
     if assistant_enabled:
@@ -161,6 +179,7 @@ def _runtime_boundaries(
     env: Mapping[str, str],
     *,
     assistant_enabled: bool,
+    debug_enabled: bool,
 ) -> dict[str, Any]:
     return {
         "phase1_field_runtime_started": False,
@@ -174,6 +193,9 @@ def _runtime_boundaries(
         "assistant_enabled": assistant_enabled,
         "assistant_provider": "mock" if assistant_enabled else "disabled",
         "assistant_read_only": assistant_enabled,
+        "debug_api_enabled": debug_enabled,
+        "debug_projection_clear_allowed": debug_enabled,
+        "debug_projection_clear_mutates_runtime": False,
         "weather_live_api_opt_in": _is_true_like(env.get("SCOUT_WEATHER_API_ENABLED")),
         "weather_raw_payloads_embedded": False,
     }

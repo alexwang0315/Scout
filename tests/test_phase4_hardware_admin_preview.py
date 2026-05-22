@@ -39,6 +39,7 @@ def test_phase4_admin_runtime_serves_pretrip_and_mock_assistant_on_lan_profile()
     assert health_payload["boundaries"]["phase1_field_runtime_started"] is False
     assert health_payload["boundaries"]["safety_api_mutation_allowed"] is False
     assert health_payload["boundaries"]["local_pretrip_workspace_write_allowed"] is True
+    assert health_payload["boundaries"]["debug_api_enabled"] is False
     assert health_payload["auth"]["required"] is False
     assert health_payload["auth"]["token_value_exposed"] is False
 
@@ -51,6 +52,46 @@ def test_phase4_admin_runtime_serves_pretrip_and_mock_assistant_on_lan_profile()
     assert status.status_code == 200
     assert status.json()["provider"] == "mock"
     assert status.json()["token_values_exposed"] is False
+
+
+def test_phase4_admin_runtime_mounts_debug_projection_when_explicitly_enabled() -> None:
+    app = create_phase4_admin_runtime_app(
+        environ={
+            "SCOUT_RUNTIME_PROFILE": "pi-phase4-admin-preview",
+            "SCOUT_ADMIN_AUTH_REQUIRED": "true",
+            "SCOUT_ADMIN_BASIC_USERNAME": "scout-admin",
+            "SCOUT_ADMIN_ACCESS_TOKEN": "test-token",
+            "SCOUT_DEBUG_API_ENABLED": "true",
+            "SCOUT_DEBUG_LOG_PATH": "/tmp/scout-phase4-admin-debug-test.jsonl",
+            "SCOUT_AI_ASSISTANT_ENABLED": "1",
+        }
+    )
+    client = TestClient(app)
+
+    health = client.get("/health")
+    assert health.status_code == 200
+    assert health.json()["routes"]["debug_admin"] == "/admin/debug"
+    assert health.json()["routes"]["debug_events"] == "/debug/events"
+    assert health.json()["boundaries"]["debug_api_enabled"] is True
+    assert health.json()["boundaries"]["debug_projection_clear_allowed"] is True
+    assert health.json()["boundaries"]["debug_projection_clear_mutates_runtime"] is False
+
+    unauthenticated = client.get("/admin/debug")
+    assert unauthenticated.status_code == 401
+
+    debug_page = client.get(
+        "/admin/debug",
+        headers={"Authorization": "Bearer test-token"},
+    )
+    assert debug_page.status_code == 200
+    assert "Scout Phase 3.5 Runtime Debug" in debug_page.text
+
+    debug_state = client.get(
+        "/debug/state",
+        headers={"Authorization": "Bearer test-token"},
+    )
+    assert debug_state.status_code == 200
+    assert debug_state.json()["debug_boundary"]["read_only"] is True
 
 
 def test_phase4_admin_runtime_can_require_basic_or_bearer_auth() -> None:
@@ -118,6 +159,8 @@ def test_phase4_hardware_admin_preview_plan_uses_lan_url_and_separate_port() -> 
     assert plan["status"] == "ready_to_deploy"
     assert plan["compose_file"] == "docker-compose.pi.admin.yml"
     assert plan["urls"]["pretrip_admin"] == "http://scout.local:9110/admin/pretrip"
+    assert plan["urls"]["debug_admin"] == "http://scout.local:9110/admin/debug"
+    assert plan["urls"]["debug_events"] == "http://scout.local:9110/debug/events"
     assert plan["urls"]["pretrip_admin_local_tiles"].endswith(
         "/admin/pretrip?tileSource=local"
     )
@@ -129,6 +172,9 @@ def test_phase4_hardware_admin_preview_plan_uses_lan_url_and_separate_port() -> 
     assert plan["boundaries"]["admin_token_value_embedded"] is False
     assert plan["boundaries"]["phase1_runtime_mutation_allowed"] is False
     assert plan["boundaries"]["phase2_writeback_allowed"] is False
+    assert plan["boundaries"]["debug_api_enabled"] is True
+    assert plan["boundaries"]["debug_projection_clear_mutates_runtime"] is False
+    assert plan["boundaries"]["debug_projection_log_path"] == "/data/scout/admin/debug/runtime-debug-events.jsonl"
     assert plan["tile_cache"]["capacity_limit_bytes"] == 10 * 1024 * 1024 * 1024
     assert plan["network_expectations"]["open_meteo_live_weather_enabled"] is False
 
@@ -155,6 +201,8 @@ def test_phase4_hardware_admin_preview_cli_outputs_json() -> None:
     assert payload["environment"]["SCOUT_SAFETY_ENABLED"] == "false"
     assert payload["environment"]["SCOUT_AI_ASSISTANT_PROVIDER"] == "mock"
     assert payload["environment"]["SCOUT_ADMIN_AUTH_REQUIRED"] == "true"
+    assert payload["environment"]["SCOUT_DEBUG_API_ENABLED"] == "true"
+    assert payload["environment"]["SCOUT_DEBUG_LOG_PATH"] == "/data/scout/admin/debug/runtime-debug-events.jsonl"
     assert "phase4-admin-token" in payload["operator_commands"]["create_token"]
 
 
@@ -170,6 +218,11 @@ def test_phase4_admin_dockerfile_runs_admin_app_not_field_runtime() -> None:
     assert "SCOUT_ADMIN_RASTER_TILE_CACHE_ROOT=/data/scout/raster-tiles" in source
     assert "SCOUT_ADMIN_AUTH_REQUIRED=true" in source
     assert "SCOUT_ADMIN_ACCESS_TOKEN_FILE=/data/scout/admin/secrets/phase4-admin-token" in source
+    assert "phase46_live_replay_debug_projector.py" in source
+    assert "debug_api.py" in source
+    assert "runtime_debug_log.py" in source
+    assert "runtime_debug_models.py" in source
+    assert "docs/admin/phase-3-5-runtime-debug.html" in source
     assert "phase4_admin_runtime.py" in source
     assert "docs/admin/phase4-pretrip-planning.html" in source
     assert "tests/fixtures/pretrip/projects/chilai_nanhua_day1/" in source
@@ -190,6 +243,9 @@ def test_phase4_admin_compose_keeps_runtime_9099_free_for_existing_service() -> 
     assert "SCOUT_ADMIN_RASTER_TILE_CACHE_ROOT: /data/scout/raster-tiles" in source
     assert 'SCOUT_ADMIN_AUTH_REQUIRED: "${SCOUT_ADMIN_AUTH_REQUIRED:-true}"' in source
     assert "SCOUT_ADMIN_ACCESS_TOKEN_FILE: /data/scout/admin/secrets/phase4-admin-token" in source
+    assert 'SCOUT_DEBUG_API_ENABLED: "${SCOUT_DEBUG_API_ENABLED:-true}"' in source
+    assert "SCOUT_DEBUG_LOG_PATH:" in source
+    assert "/data/scout/admin/debug/runtime-debug-events.jsonl" in source
     assert '- "9110:9099"' in source
     assert '- "9099:9099"' not in source
     assert "depends_on:" not in source
@@ -201,7 +257,11 @@ def test_phase4_admin_docker_context_whitelists_only_metadata_and_admin_assets()
     assert "!Dockerfile.pi.admin" in dockerignore
     assert "!requirements.pi.admin.txt" in dockerignore
     assert "!phase4_admin_runtime.py" in dockerignore
+    assert "!phase46_live_replay_debug_projector.py" in dockerignore
+    assert "!debug_api.py" in dockerignore
+    assert "!runtime_debug_log.py" in dockerignore
     assert "!admin_api.py" in dockerignore
+    assert "!docs/admin/phase-3-5-runtime-debug.html" in dockerignore
     assert "!docs/admin/phase4-pretrip-planning.html" in dockerignore
     assert "!tests/fixtures/pretrip/projects/chilai_nanhua_day1/**" in dockerignore
     assert "!*.py" not in dockerignore

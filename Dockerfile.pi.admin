@@ -42,6 +42,7 @@ COPY \
     checkpoint_manager.py \
     communication_provider.py \
     communication_tool.py \
+    debug_api.py \
     environment_provider.py \
     geo_utils.py \
     go_no_go.py \
@@ -53,6 +54,7 @@ COPY \
     offline_map.py \
     offline_map_models.py \
     pdr_fallback.py \
+    phase46_live_replay_debug_projector.py \
     phase4_admin_runtime.py \
     pretrip_admin_view.py \
     pretrip_expert_contribution.py \
@@ -77,11 +79,14 @@ COPY \
     route_matching.py \
     route_progress.py \
     runtime_artifact_resolution.py \
+    runtime_debug_log.py \
+    runtime_debug_models.py \
     safety_models.py \
     safety_state_machine.py \
     ./
 
 COPY docs/admin/phase1-after-action.html ./docs/admin/
+COPY docs/admin/phase-3-5-runtime-debug.html ./docs/admin/
 COPY docs/admin/phase4-pretrip-planning.html ./docs/admin/
 COPY docs/admin/scout-assistant-ui.js ./docs/admin/
 
