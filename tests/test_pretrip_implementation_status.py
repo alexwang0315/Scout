@@ -1483,12 +1483,17 @@ def test_manifest_is_metadata_only_and_names_expected_validation_commands():
     manifest = build_pretrip_implementation_status_manifest().to_dict()
 
     assert manifest["boundary"]["metadata_only"] is True
-    assert manifest["boundary"]["runtime_mutation_allowed"] is False
+    assert manifest["boundary"]["alpha_workable_mode"] is True
+    assert manifest["boundary"]["runtime_mutation_allowed"] is True
     assert manifest["boundary"]["runtime_export_write_allowed"] is True
+    assert manifest["boundary"]["runtime_activation_allowed_for_alpha"] is True
+    assert manifest["boundary"]["runtime_operator_confirmation_required"] is True
     assert manifest["boundary"]["phase1_live_runtime_touched"] is False
+    assert manifest["boundary"]["phase1_live_runtime_touch_allowed_for_alpha"] is True
     assert manifest["boundary"]["phase2_bridge_touched"] is False
+    assert manifest["boundary"]["phase2_bridge_allowed_for_alpha"] is True
     assert manifest["boundary"]["ui_scope_included"] is True
-    assert manifest["boundary"]["ui_scope"] == "fixture_backed_read_only_admin_preview"
+    assert manifest["boundary"]["ui_scope"] == "alpha_workable_admin"
 
     commands = manifest["validation_commands"]
     assert commands["phase4_focused_suite"].startswith(
@@ -1556,7 +1561,6 @@ def test_manifest_is_metadata_only_and_names_expected_validation_commands():
 
     serialized = json.dumps(manifest, sort_keys=True)
     for forbidden in [
-        '"runtime_mutation_allowed": true',
         '"phase1_live_runtime_touched": true',
         '"phase2_bridge_touched": true',
         "/safety/",

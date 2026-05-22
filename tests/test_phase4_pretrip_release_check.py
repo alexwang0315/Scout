@@ -29,10 +29,14 @@ def test_current_chilai_pretrip_release_check_passes():
     assert summary["checks"]["chilai_project_refs"]["project_id"] == "chilai_nanhua_day1"
     assert summary["checks"]["core_phase4_static_boundaries"]["violation_count"] == 0
     assert summary["checks"]["pretrip_admin_ui"]["view_project_id"] == "chilai_nanhua_day1"
-    assert summary["checks"]["pretrip_admin_ui"]["checkpoint_count"] == 11
-    assert summary["checks"]["pretrip_admin_ui"]["segment_count"] == 10
+    assert summary["checks"]["pretrip_admin_ui"]["checkpoint_count"] == 110
+    assert summary["checks"]["pretrip_admin_ui"]["segment_count"] == 109
     assert summary["checks"]["pretrip_admin_ui"]["raw_payloads_embedded"] is False
-    assert summary["checks"]["pretrip_admin_ui"]["ui_write_controls_disabled"] is True
+    assert summary["checks"]["pretrip_admin_ui"]["ui_write_controls_disabled"] is False
+    assert (
+        summary["checks"]["pretrip_admin_ui"]["ui_write_controls_enabled_for_alpha"]
+        is True
+    )
     assert summary["checks"]["admin_map_layer_stack"]["pretrip_imagery_bottom"] is True
     assert summary["checks"]["admin_map_layer_stack"][
         "pretrip_imagery_local_raster_manifest_supported"
@@ -249,7 +253,7 @@ def test_current_chilai_pretrip_release_check_passes():
     assert summary["checks"]["route_comparison"]["raw_source_versioned"] is False
     assert summary["checks"]["route_comparison"]["authoritative_for_mission"] is False
     assert summary["checks"]["route_comparison"]["compiled_into_mission_graph"] is False
-    assert summary["checks"]["dtm_metadata_only"]["candidate_tile_count"] == 10
+    assert summary["checks"]["dtm_metadata_only"]["candidate_tile_count"] == 48
     assert summary["checks"]["dtm_metadata_only"]["raw_payload_keys"] == []
     assert summary["checks"]["package_status"]["package_status"] == "candidate"
     assert summary["checks"]["package_status"]["reviewed_package_status"] == "reviewed"
@@ -2376,11 +2380,24 @@ def test_current_chilai_pretrip_release_check_passes():
         "4.5AS",
     ]
     assert summary["checks"]["pretrip_implementation_status"]["not_started_milestones"] == []
-    assert summary["checks"]["pretrip_implementation_status"]["runtime_mutation_allowed"] is False
+    assert summary["checks"]["pretrip_implementation_status"]["alpha_workable_mode"] is True
+    assert summary["checks"]["pretrip_implementation_status"]["runtime_mutation_allowed"] is True
     assert summary["checks"]["pretrip_implementation_status"]["runtime_export_write_allowed"] is True
+    assert (
+        summary["checks"]["pretrip_implementation_status"][
+            "runtime_activation_allowed_for_alpha"
+        ]
+        is True
+    )
+    assert (
+        summary["checks"]["pretrip_implementation_status"][
+            "runtime_operator_confirmation_required"
+        ]
+        is True
+    )
     assert summary["checks"]["pretrip_implementation_status"]["ui_scope_included"] is True
     assert summary["checks"]["pretrip_implementation_status"]["ui_scope"] == (
-        "fixture_backed_read_only_admin_preview"
+        "alpha_workable_admin"
     )
     assert summary["checks"]["pretrip_implementation_status"]["focused_suite_test_count"] == 94
     assert "source.joyhike.main_site" in summary["checks"]["pretrip_source_registry"]["source_ids"]
@@ -2389,18 +2406,30 @@ def test_current_chilai_pretrip_release_check_passes():
     assert summary["checks"]["pretrip_source_registry"]["ptt_calibration_scope"] == (
         "calibration_inputs_only"
     )
-    assert summary["checks"]["pretrip_decision_register"]["resolved_count"] == 14
+    assert summary["checks"]["pretrip_decision_register"]["resolved_count"] == 15
     assert summary["checks"]["pretrip_decision_register"]["open_question_count"] == 0
-    assert summary["checks"]["pretrip_decision_register"]["no_network"] is True
+    assert summary["checks"]["pretrip_decision_register"]["alpha_workable_mode"] is True
+    assert summary["checks"]["pretrip_decision_register"]["no_network"] is False
+    assert summary["checks"]["pretrip_decision_register"]["no_crawler"] is False
     assert summary["checks"]["pretrip_decision_register"]["ui_scope"] == (
-        "fixture_backed_read_only_admin_preview"
+        "alpha_workable_admin"
     )
-    assert summary["checks"]["pretrip_decision_register"]["no_runtime_effects"] is True
+    assert summary["checks"]["pretrip_decision_register"]["no_runtime_effects"] is False
+    assert (
+        summary["checks"]["pretrip_decision_register"][
+            "runtime_operator_confirmation_required"
+        ]
+        is True
+    )
     assert summary["checks"]["pretrip_fixture_hygiene"]["total_issues"] == 0
     assert summary["checks"]["pretrip_fixture_hygiene"]["raw_suffix_files"] == 0
     assert summary["checks"]["pretrip_fixture_hygiene"]["raw_route_suffix_files"] == 0
     assert summary["checks"]["pretrip_fixture_hygiene"]["oversized_files"] == 0
     assert summary["checks"]["pretrip_fixture_hygiene"]["forbidden_fragments"] == 0
+    assert (
+        summary["checks"]["fixture_boundary"]["large_evidence_allowed_for_alpha"]
+        is True
+    )
     assert summary["checks"]["artifact_manifest"]["missing_refs"] == 0
 
 

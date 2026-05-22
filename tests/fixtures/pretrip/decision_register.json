@@ -1,9 +1,10 @@
 {
   "artifact_kind": "pretrip_decision_register",
+  "alpha_workable_mode": true,
   "metadata_only": true,
-  "no_crawler": true,
-  "no_network": true,
-  "no_runtime_effects": true,
+  "no_crawler": false,
+  "no_network": false,
+  "no_runtime_effects": false,
   "notes": [
     "Metadata-only Phase 4 decision register.",
     "This artifact records planning policy decisions only; it does not call providers, crawl sources, change UI, or affect runtime safety behavior.",
@@ -12,6 +13,7 @@
   "open_questions": [],
   "phase": "phase_4_pretrip",
   "register_id": "pretrip.decision_register.phase4.v0",
+  "runtime_operator_confirmation_required": true,
   "resolved_decisions": [
     {
       "constraints": [
@@ -245,8 +247,26 @@
       "status": "resolved",
       "summary": "The previously open Phase 4 admin backlog policy questions are now recorded as resolved scope decisions.",
       "title": "Current backlog policy set closed"
+    },
+    {
+      "constraints": [
+        "Alpha boundaries are open for workable testing only through explicit operator actions.",
+        "Imported evidence, OSM/Overpass vectors, reference tracks, terrain summaries, weather, and edited waypoints remain labeled through provenance and review state.",
+        "Runtime activation, live provider send, and Phase 2 writeback require explicit alpha/operator confirmation instead of implicit page-load side effects."
+      ],
+      "decision_id": "phase4.decision.alpha.workable_boundaries_open",
+      "impact": "scope_boundary",
+      "refs": [
+        "docs/specs/pre-trip-planning-admin.md#alpha-release-policy",
+        "pretrip_implementation_status.py",
+        "phase4_pretrip_release_check.py"
+      ],
+      "resolution": "Open Phase 4 alpha product boundaries for a workable build: importer, layer preparation, workspace edits, live opt-in providers, runtime handoff/export/load tooling, and large deterministic evidence are allowed under explicit operator-triggered flows.",
+      "status": "resolved",
+      "summary": "Alpha is no longer a read-only preview; it is an operator-triggered workable planning and handoff build.",
+      "title": "Alpha workable boundaries open"
     }
   ],
   "schema_version": "0.1.0",
-  "ui_scope": "fixture_backed_read_only_admin_preview"
+  "ui_scope": "alpha_workable_admin"
 }

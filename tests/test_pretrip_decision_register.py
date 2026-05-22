@@ -27,17 +27,19 @@ def test_decision_register_fixture_captures_required_phase4_decisions():
     assert payload["artifact_kind"] == "pretrip_decision_register"
     assert payload["phase"] == "phase_4_pretrip"
     assert payload["metadata_only"] is True
-    assert payload["no_network"] is True
-    assert payload["no_crawler"] is True
-    assert payload["ui_scope"] == "fixture_backed_read_only_admin_preview"
-    assert payload["no_runtime_effects"] is True
+    assert payload["alpha_workable_mode"] is True
+    assert payload["no_network"] is False
+    assert payload["no_crawler"] is False
+    assert payload["ui_scope"] == "alpha_workable_admin"
+    assert payload["no_runtime_effects"] is False
+    assert payload["runtime_operator_confirmation_required"] is True
     assert {item["decision_id"] for item in payload["resolved_decisions"]} == (
         REQUIRED_RESOLVED_DECISION_IDS
     )
     assert {item["decision_id"] for item in payload["open_questions"]} == (
         REQUIRED_OPEN_QUESTION_IDS
     )
-    assert len(payload["resolved_decisions"]) == 14
+    assert len(payload["resolved_decisions"]) == 15
     assert len(payload["open_questions"]) == 0
     assert json.loads(register.to_json()) == payload
     assert register.to_json().endswith("\n")
@@ -131,6 +133,9 @@ def test_decision_register_records_expected_resolutions_and_open_backlog():
     ].resolution
     assert "derived-summary-only" in resolved[
         "phase4.decision.backlog.current_policy_set_closed"
+    ].resolution
+    assert "Open Phase 4 alpha product boundaries" in resolved[
+        "phase4.decision.alpha.workable_boundaries_open"
     ].resolution
     assert open_questions == {}
 
