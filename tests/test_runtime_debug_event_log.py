@@ -23,6 +23,17 @@ class RuntimeDebugEventLogTests(unittest.TestCase):
         self.assertEqual(log.list_events(since_sequence=1), [second])
         self.assertEqual(log.list_events(limit=1), [second])
 
+    def test_memory_log_accepts_voice_cue_debug_events(self):
+        log = MemoryRuntimeDebugEventLog()
+        queued = _event(sequence=1, kind="voice_cue_queued")
+        changed = _event(sequence=2, kind="voice_cue_state_changed")
+
+        log.append(queued)
+        log.append(changed)
+
+        self.assertEqual(log.list_events(kind="voice_cue_queued"), [queued])
+        self.assertEqual(log.list_events(kind="voice_cue_state_changed"), [changed])
+
     def test_file_log_appends_jsonl_and_reloads_events(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir) / "runtime-debug-events.jsonl"

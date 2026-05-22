@@ -22,6 +22,8 @@ RuntimeDebugEventKind = Literal[
     "skill_run_recorded",
     "outbound_message_queued",
     "outbound_message_state_changed",
+    "voice_cue_queued",
+    "voice_cue_state_changed",
     "debug_session_started",
     "debug_session_completed",
 ]

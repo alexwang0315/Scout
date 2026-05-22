@@ -145,6 +145,35 @@ JSONL 前驗證 `radio_counts` 與 Wi-Fi/BLE payload 一致。它是 Pi host-sid
 不送 outbound、不控制 hardware provider、不控制 Phase 1 safety decision；若某個 provider
 失敗，只會在 `provider_errors` 裡記錄。
 
+Scout repo also includes a local voice cue TTS dry-run tool:
+
+```bash
+python3 tools/pi_voice_tts_smoke.py \
+  "請停下確認方向。" \
+  --engine piper \
+  --output-jsonl /data/scout/providers/voice_cue/manual-smoke.jsonl
+```
+
+中文註釋：`pi_voice_tts_smoke.py` 預設只輸出 Piper/eSpeak NG/aplay command plan
+和 JSONL 記錄，不播放真音訊、不呼叫 `/safety/*`、不送 remote outbound、不控制硬體。
+只有加上 `--execute` 才會真的執行本機 TTS 與播放命令。
+
+Scout repo also includes a fixture-backed voice cue debug demo:
+
+```bash
+python3 tools/voice_cue_debug_demo.py \
+  --output-jsonl /data/scout/providers/voice_cue/debug-demo.jsonl
+```
+
+預期結果：固定 fixture 的 `VoiceCue` 會 dry-run 經過 `VoiceCuePolicy`、mock transport，
+並輸出 mock transport state 與 read-only `RuntimeDebugEvent` JSONL。這個 demo 只驗證
+VoiceCue -> policy -> mock transport -> RuntimeDebugEvent/JSONL 的觀察路徑，不呼叫
+`/safety/*`、不播放音訊、不送 remote outbound、不控制硬體，也不改 Phase 1 safety
+decision。
+
+中文註釋：`voice_cue_debug_demo.py` 是 debug projection demo，不是 TTS 播放測試、
+不是 real-device smoke、不是遠端告警測試，也不是 hardware control drill。
+
 確認 Pi host 可以產生 Wi-Fi RSSI evidence。`nmcli` 只能提供 signal percentage；
 若要真正 dBm RSSI，優先用 `iw`：
 
