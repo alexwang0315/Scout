@@ -218,4 +218,11 @@ def _control_rejection(controls: RuntimeStreamControlStore) -> dict[str, Any] | 
     return {
         "reason": reason,
         "control_status": controls.status.value,
+        "device_stream_semantics": "server_side_admission_gate_only",
+        "device_hardware_controlled": False,
+        "device_may_continue_local_collection": True,
+        "device_should_retry_after_resume": reason == "runtime_stream_paused",
+        "raw_payload_embedded": False,
+        "remote_notification_sent": False,
+        "phase2_writeback_performed": False,
     }

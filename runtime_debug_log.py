@@ -34,6 +34,11 @@ class MemoryRuntimeDebugEventLog:
                 error_message=str(exc),
             )
 
+    def clear(self) -> int:
+        cleared_count = len(self._events)
+        self._events.clear()
+        return cleared_count
+
     def list_events(
         self,
         *,
@@ -76,6 +81,12 @@ class FileRuntimeDebugEventLog:
                 error_type=type(exc).__name__,
                 error_message=str(exc),
             )
+
+    def clear(self) -> int:
+        cleared_count = len(self._read_events())
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.path.write_text("", encoding="utf-8")
+        return cleared_count
 
     def list_events(
         self,

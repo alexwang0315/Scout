@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Protocol
 
-from fastapi import APIRouter, FastAPI, Query
+from fastapi import APIRouter, FastAPI, HTTPException, Query
 from fastapi.responses import HTMLResponse, Response
 
 from runtime_debug_log import MemoryRuntimeDebugEventLog
@@ -22,6 +22,11 @@ class DebugEventLog(Protocol):
         since_sequence: int | None = None,
         limit: int | None = None,
     ) -> list[Any]:
+        ...
+
+
+class ClearableDebugEventLog(DebugEventLog, Protocol):
+    def clear(self) -> int:
         ...
 
 
@@ -120,6 +125,22 @@ def create_debug_router(
             "debug_boundary": _debug_boundary(),
         }
 
+    @router.post("/clear")
+    def clear_debug_projection(payload: dict[str, Any] | None = None) -> dict[str, Any]:
+        if not (payload or {}).get("confirm_debug_projection_clear"):
+            raise HTTPException(
+                status_code=400,
+                detail="confirm_debug_projection_clear=true is required",
+            )
+        if not hasattr(resolved_log, "clear"):
+            raise HTTPException(status_code=409, detail="debug log does not support clear")
+        cleared_count = resolved_log.clear()
+        return {
+            "status": "cleared",
+            "cleared_event_count": cleared_count,
+            "debug_boundary": _debug_clear_boundary(),
+        }
+
     return router
 
 
@@ -209,4 +230,16 @@ def _debug_boundary() -> dict[str, bool]:
         "phase1_mutation_allowed": False,
         "phase2_writeback_allowed": False,
         "real_outbound_transport_allowed": False,
+    }
+
+
+def _debug_clear_boundary() -> dict[str, bool]:
+    return {
+        "debug_projection_cleared": True,
+        "runtime_state_mutation_allowed": False,
+        "phase1_mutation_allowed": False,
+        "phase2_writeback_allowed": False,
+        "real_outbound_transport_allowed": False,
+        "incident_store_mutation_allowed": False,
+        "hardware_control_allowed": False,
     }

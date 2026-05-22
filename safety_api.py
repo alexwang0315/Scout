@@ -19,6 +19,7 @@ from runtime_input_admission import (
     empty_runtime_input_admission_state,
 )
 from runtime_observation_envelope import RuntimeObservationEnvelope
+from runtime_stream_device_identity import RuntimeStreamDeviceRegistry
 from runtime_stream_policy import (
     RuntimeStreamPolicyManifest,
     RuntimeStreamTransportKind,
@@ -65,6 +66,7 @@ class SafetyObservationAdmissionConfig:
     policy_manifest: RuntimeStreamPolicyManifest = field(
         default_factory=build_default_runtime_stream_policy_manifest
     )
+    device_registry: RuntimeStreamDeviceRegistry | None = None
     state: RuntimeInputAdmissionState = field(
         default_factory=empty_runtime_input_admission_state
     )
@@ -249,6 +251,7 @@ def ingest_safety_observation_body(
             secret_key=observation_admission_config.secret_key,
             policy_manifest=observation_admission_config.policy_manifest,
             state=observation_admission_config.state,
+            device_registry=observation_admission_config.device_registry,
             connected=signed_request.connected,
             retry_attempt=signed_request.retry_attempt,
         )
@@ -380,6 +383,10 @@ def _admission_summary(decision: RuntimeInputAdmissionDecision) -> dict[str, Any
         "policy_matched": decision.policy_matched,
         "transport_allowed": decision.transport_allowed,
         "token_scope_allowed": decision.token_scope_allowed,
+        "device_identity_matched": decision.device_identity_matched,
+        "device_identity_reason": decision.device_identity_reason,
+        "credential_ref": decision.credential_ref,
+        "secret_value_exposed": decision.secret_value_exposed,
         "queue_depth": decision.queue_depth,
     }
 

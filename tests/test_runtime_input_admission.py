@@ -6,6 +6,11 @@ from runtime_input_admission import (
     empty_runtime_input_admission_state,
 )
 from runtime_observation_envelope import build_signed_runtime_observation_envelope
+from runtime_stream_device_identity import (
+    RuntimeStreamDeviceCredentialRef,
+    RuntimeStreamDeviceIdentity,
+    RuntimeStreamDeviceRegistry,
+)
 from runtime_stream_policy import build_default_runtime_stream_policy_manifest
 
 
@@ -40,6 +45,24 @@ def _envelope(sequence_no: int, observed_at: str, **overrides):
     return build_signed_runtime_observation_envelope(**values)
 
 
+def _device_registry(device_id: str = "watch.alex.001"):
+    return RuntimeStreamDeviceRegistry(
+        registry_id="runtime_stream_device_registry.phase46.test",
+        identities=[
+            RuntimeStreamDeviceIdentity(
+                source_id="runtime_source.apple_watch.v0",
+                source_kind="apple_watch",
+                device_id=device_id,
+                display_name="Alex Apple Watch",
+                credential=RuntimeStreamDeviceCredentialRef(
+                    credential_ref="credential:watch.alex.001.runtime-observation",
+                    hmac_secret_ref="env:SCOUT_RUNTIME_STREAM_DEVICE_WATCH_SECRET",
+                ),
+            )
+        ],
+    )
+
+
 def test_runtime_input_admission_accepts_signed_allowed_source_without_forwarding():
     manifest = build_default_runtime_stream_policy_manifest()
     state = empty_runtime_input_admission_state()
@@ -59,6 +82,9 @@ def test_runtime_input_admission_accepts_signed_allowed_source_without_forwardin
     assert decision.policy_matched is True
     assert decision.transport_allowed is True
     assert decision.token_scope_allowed is True
+    assert decision.device_identity_matched is True
+    assert decision.device_identity_reason == "device_identity_registry_not_configured"
+    assert decision.secret_value_exposed is False
     assert decision.queue_depth == 0
     assert decision.state_after.last_sequence_by_stream == {
         "runtime_source.apple_watch.v0:watch.alex.001": 1
@@ -79,6 +105,53 @@ def test_runtime_input_admission_accepts_signed_allowed_source_without_forwardin
     assert "121.0" not in serialized
     assert "elevation_m" not in serialized
     assert "gps_horizontal_accuracy_m" not in serialized
+
+
+def test_runtime_input_admission_accepts_registered_real_device_identity():
+    manifest = build_default_runtime_stream_policy_manifest()
+    state = empty_runtime_input_admission_state()
+    envelope = _envelope(1, "2026-05-21T10:00:01.000+08:00")
+
+    decision = admit_runtime_observation_input(
+        envelope,
+        _payload(),
+        secret_key=SECRET_KEY,
+        policy_manifest=manifest,
+        state=state,
+        device_registry=_device_registry(),
+        connected=True,
+    )
+
+    assert decision.status == RuntimeInputAdmissionStatus.ADMITTED_NOT_FORWARDED
+    assert decision.device_identity_matched is True
+    assert decision.device_identity_reason == "device_identity_matched"
+    assert decision.credential_ref == "credential:watch.alex.001.runtime-observation"
+    assert decision.secret_value_exposed is False
+
+
+def test_runtime_input_admission_rejects_unregistered_real_device_before_runtime():
+    manifest = build_default_runtime_stream_policy_manifest()
+    envelope = _envelope(
+        1,
+        "2026-05-21T10:00:01.000+08:00",
+        device_id="watch.unknown.001",
+    )
+
+    decision = admit_runtime_observation_input(
+        envelope,
+        _payload(),
+        secret_key=SECRET_KEY,
+        policy_manifest=manifest,
+        state=empty_runtime_input_admission_state(),
+        device_registry=_device_registry(),
+    )
+
+    assert decision.status == RuntimeInputAdmissionStatus.REJECTED_SOURCE_POLICY
+    assert decision.reason == "device_identity_not_registered"
+    assert decision.device_identity_matched is False
+    assert decision.counts.rejected_count == 1
+    assert decision.counts.safety_api_call_count == 0
+    assert decision.state_after.seen_dedupe_keys == []
 
 
 def test_runtime_input_admission_rejects_tampered_payload_or_unknown_source():

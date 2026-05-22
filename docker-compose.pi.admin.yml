@@ -20,6 +20,8 @@ services:
       SCOUT_ADMIN_AUTH_REQUIRED: "${SCOUT_ADMIN_AUTH_REQUIRED:-true}"
       SCOUT_ADMIN_BASIC_USERNAME: "${SCOUT_ADMIN_BASIC_USERNAME:-scout-admin}"
       SCOUT_ADMIN_ACCESS_TOKEN_FILE: /data/scout/admin/secrets/phase4-admin-token
+      SCOUT_DEBUG_API_ENABLED: "${SCOUT_DEBUG_API_ENABLED:-true}"
+      SCOUT_DEBUG_LOG_PATH: "${SCOUT_DEBUG_LOG_PATH:-/data/scout/admin/debug/runtime-debug-events.jsonl}"
       SCOUT_AI_ASSISTANT_ENABLED: "1"
       SCOUT_AI_ASSISTANT_PROVIDER: mock
       SCOUT_WEATHER_API_ENABLED: "${SCOUT_WEATHER_API_ENABLED:-false}"

@@ -21,6 +21,7 @@
 !offline_map.py
 !offline_map_models.py
 !pdr_fallback.py
+!phase46_live_replay_debug_projector.py
 !phase4_admin_runtime.py
 !phase1_incident_bridge.py
 !phase1_phase2_adapter.py
@@ -85,6 +86,7 @@
 !admin_weather_overlay.py
 !assistant_models.py
 !assistant_provider.py
+!debug_api.py
 !pretrip_admin_view.py
 !pretrip_expert_contribution.py
 !pretrip_expert_contribution_apply_plan.py
@@ -101,9 +103,11 @@
 !pretrip_route_note_reviewed_assumptions.py
 !pretrip_workspace_project.py
 !runtime_artifact_resolution.py
+!runtime_debug_log.py
 !docs/
 !docs/admin/
 !docs/admin/phase1-after-action.html
+!docs/admin/phase-3-5-runtime-debug.html
 !docs/admin/phase4-pretrip-planning.html
 !docs/admin/scout-assistant-ui.js
 !tests/

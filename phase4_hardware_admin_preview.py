@@ -33,6 +33,8 @@ def prepare_phase4_hardware_admin_preview(
         "SCOUT_ADMIN_AUTH_REQUIRED": "true",
         "SCOUT_ADMIN_BASIC_USERNAME": "scout-admin",
         "SCOUT_ADMIN_ACCESS_TOKEN_FILE": "/data/scout/admin/secrets/phase4-admin-token",
+        "SCOUT_DEBUG_API_ENABLED": "true",
+        "SCOUT_DEBUG_LOG_PATH": "/data/scout/admin/debug/runtime-debug-events.jsonl",
     }
     return {
         "artifact_kind": "phase4_hardware_admin_preview_plan",
@@ -55,6 +57,8 @@ def prepare_phase4_hardware_admin_preview(
                 f"{base_url}/admin/pretrip/projects/chilai_nanhua_day1/weather-overlay"
             ),
             "assistant_status": f"{base_url}/assistant/status",
+            "debug_admin": f"{base_url}/admin/debug",
+            "debug_events": f"{base_url}/debug/events",
             "preview_status": f"{base_url}/phase4/admin-preview/status",
         },
         "operator_commands": {
@@ -91,6 +95,9 @@ def prepare_phase4_hardware_admin_preview(
             "phase2_writeback_allowed": False,
             "assistant_provider": "mock",
             "assistant_read_only": True,
+            "debug_api_enabled": True,
+            "debug_projection_log_path": "/data/scout/admin/debug/runtime-debug-events.jsonl",
+            "debug_projection_clear_mutates_runtime": False,
             "repo_fixture_write_allowed": False,
             "local_pretrip_workspace_write_allowed": True,
             "outbound_messages_allowed": False,

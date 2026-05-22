@@ -48,6 +48,33 @@ class DebugApiTests(unittest.TestCase):
         self.assertEqual(client.patch("/debug/state", json={}).status_code, 405)
         self.assertEqual(client.delete("/debug/messages").status_code, 405)
 
+    def test_debug_clear_clears_projection_only_with_explicit_confirmation(self):
+        log = MemoryRuntimeDebugEventLog()
+        log.append(_event(sequence=1, kind="debug_session_started"))
+        log.append(_event(sequence=2, kind="observation_ingested"))
+        client = TestClient(create_debug_app(debug_log=log))
+
+        rejected = client.post("/debug/clear", json={})
+        self.assertEqual(rejected.status_code, 400)
+        self.assertEqual(len(client.get("/debug/events").json()["events"]), 2)
+
+        response = client.post(
+            "/debug/clear",
+            json={"confirm_debug_projection_clear": True},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["status"], "cleared")
+        self.assertEqual(payload["cleared_event_count"], 2)
+        self.assertTrue(payload["debug_boundary"]["debug_projection_cleared"])
+        self.assertFalse(payload["debug_boundary"]["runtime_state_mutation_allowed"])
+        self.assertFalse(payload["debug_boundary"]["phase1_mutation_allowed"])
+        self.assertFalse(payload["debug_boundary"]["phase2_writeback_allowed"])
+        self.assertFalse(payload["debug_boundary"]["incident_store_mutation_allowed"])
+        self.assertFalse(payload["debug_boundary"]["hardware_control_allowed"])
+        self.assertEqual(client.get("/debug/events").json()["events"], [])
+
     def test_debug_events_support_since_sequence_and_limit_filters(self):
         log = MemoryRuntimeDebugEventLog()
         for sequence in range(1, 5):

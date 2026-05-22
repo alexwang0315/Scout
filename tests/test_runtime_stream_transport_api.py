@@ -298,6 +298,16 @@ class RuntimeStreamTransportApiTests(unittest.TestCase):
         self.assertEqual(pause.json()["snapshot_after"]["status"], "paused")
         self.assertEqual(paused_observation.status_code, 409)
         self.assertEqual(paused_observation.json()["detail"]["reason"], "runtime_stream_paused")
+        self.assertEqual(
+            paused_observation.json()["detail"]["device_stream_semantics"],
+            "server_side_admission_gate_only",
+        )
+        self.assertTrue(
+            paused_observation.json()["detail"]["device_may_continue_local_collection"]
+        )
+        self.assertFalse(paused_observation.json()["detail"]["device_hardware_controlled"])
+        self.assertTrue(paused_observation.json()["detail"]["device_should_retry_after_resume"])
+        self.assertFalse(paused_observation.json()["detail"]["raw_payload_embedded"])
         self.assertEqual(resume.status_code, 200)
         self.assertEqual(resume.json()["snapshot_after"]["status"], "observing")
         self.assertEqual(accepted.status_code, 200)
