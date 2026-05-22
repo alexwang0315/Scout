@@ -73,6 +73,7 @@ REQUIRED_RESOLVED_DECISION_IDS: frozenset[str] = frozenset(
         "phase4.decision.review_log.fixture_only_append_only",
         "phase4.decision.external_import_queue.url_request_only",
         "phase4.decision.backlog.current_policy_set_closed",
+        "phase4.decision.alpha.workable_boundaries_open",
     }
 )
 
@@ -87,12 +88,12 @@ class PreTripDecisionRegister(BaseModel):
     phase: Literal["phase_4_pretrip"] = "phase_4_pretrip"
     schema_version: str = "0.1.0"
     metadata_only: Literal[True] = True
-    no_network: Literal[True] = True
-    no_crawler: Literal[True] = True
-    ui_scope: Literal["fixture_backed_read_only_admin_preview"] = (
-        "fixture_backed_read_only_admin_preview"
-    )
-    no_runtime_effects: Literal[True] = True
+    alpha_workable_mode: bool = True
+    no_network: bool = False
+    no_crawler: bool = False
+    ui_scope: Literal["alpha_workable_admin"] = "alpha_workable_admin"
+    no_runtime_effects: bool = False
+    runtime_operator_confirmation_required: bool = True
     resolved_decisions: list[DecisionRecord]
     open_questions: list[DecisionRecord]
     notes: list[str] = Field(default_factory=list)

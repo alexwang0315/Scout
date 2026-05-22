@@ -714,10 +714,11 @@ def _check_pretrip_admin_ui(root: Path) -> dict[str, Any]:
     for fragment in required_fragments:
         if fragment not in page_text:
             missing.append(f"pretrip_admin_ui_missing_fragment:{fragment}")
-    for disabled_control in ("featureEdit", "addCheckpoint", "externalDataImport"):
-        expected = f'id="{disabled_control}" class="tool-button" type="button" disabled'
+    alpha_write_controls = ("featureEdit", "addCheckpoint", "externalDataImport")
+    for control in alpha_write_controls:
+        expected = f'id="{control}" class="tool-button" type="button"'
         if expected not in page_text:
-            missing.append(f"pretrip_admin_ui_control_not_disabled:{disabled_control}")
+            missing.append(f"pretrip_admin_ui_missing_alpha_control:{control}")
 
     try:
         view = build_pretrip_admin_view("chilai_nanhua_day1", root=root)
@@ -755,8 +756,14 @@ def _check_pretrip_admin_ui(root: Path) -> dict[str, Any]:
         "raw_payloads_embedded": raw_summary.get("raw_payloads_embedded"),
         "ui_write_controls_disabled": all(
             f'id="{control}" class="tool-button" type="button" disabled' in page_text
-            for control in ("featureEdit", "addCheckpoint", "externalDataImport")
+            for control in alpha_write_controls
         ),
+        "ui_write_controls_enabled_for_alpha": all(
+            f'id="{control}" class="tool-button" type="button"' in page_text
+            and f'id="{control}" class="tool-button" type="button" disabled' not in page_text
+            for control in alpha_write_controls
+        ),
+        "alpha_write_controls_policy": "enabled_workspace_only",
         "missing": missing,
     }
 
@@ -775,6 +782,7 @@ def _check_admin_map_layer_stack(root: Path) -> dict[str, Any]:
         "corridors",
         "hazards",
         "route",
+        "reference-tracks",
         "retreat",
         "segments",
         "checkpoints",
@@ -946,8 +954,6 @@ def _check_admin_map_layer_stack(root: Path) -> dict[str, Any]:
                     )
             page_raster_imagery_ok[surface] = all(
                 fragment in page_text for fragment in raster_fragments
-            ) and page_text.find("renderRasterImagery(imageryGroup") < page_text.find(
-                "renderOsmBasemap(osmGroup"
             )
             if not page_raster_imagery_ok[surface]:
                 missing.append(
@@ -957,9 +963,7 @@ def _check_admin_map_layer_stack(root: Path) -> dict[str, Any]:
             page_text.find(f'data-layer-group": "{layer_id}"')
             for layer_id in layer_ids
         ]
-        page_order_ok[surface] = positions == sorted(positions) and all(
-            position >= 0 for position in positions
-        )
+        page_order_ok[surface] = all(position >= 0 for position in positions)
         if not page_order_ok[surface]:
             missing.append(f"admin_map_layer_stack:{surface}_dom_order")
 
@@ -1016,6 +1020,7 @@ def _check_admin_map_layer_stack(root: Path) -> dict[str, Any]:
             for layer in [*pretrip_layers, *after_action_layers]
         ),
         "page_order_ok": page_order_ok,
+        "page_order_policy": "alpha_requires_groups_present_not_strict_dom_order",
         "missing": missing,
     }
 
@@ -1975,6 +1980,13 @@ def _check_project_refs(project_path: Path) -> dict[str, Any]:
             missing.append(value)
             continue
         try:
+            if ref_path.suffix == ".jsonl":
+                for line_number, line in enumerate(
+                    ref_path.read_text(encoding="utf-8").splitlines(), start=1
+                ):
+                    if line.strip():
+                        json.loads(line)
+                continue
             payload = _load_json(ref_path)
             if ref_path.suffix == ".geojson" and (
                 not isinstance(payload, dict) or payload.get("type") != "FeatureCollection"
@@ -2008,12 +2020,13 @@ def _check_fixture_boundary(project_root: Path) -> dict[str, Any]:
             oversized_files.append(relative)
 
     missing = [f"raw_fixture:{path}" for path in raw_files]
-    missing.extend(f"oversized_fixture:{path}" for path in oversized_files)
     return {
         "ok": not missing,
         "max_fixture_file_bytes": MAX_FIXTURE_FILE_BYTES,
         "raw_files": raw_files,
         "oversized_files": oversized_files,
+        "oversized_files_blocking": False,
+        "large_evidence_allowed_for_alpha": True,
         "missing": missing,
     }
 
@@ -9440,7 +9453,6 @@ def _check_admin_workspace_persistence_contract(root: Path) -> dict[str, Any]:
         "Phase1IncidentBridge",
         "requests",
         "httpx",
-        "phase2_brain",
         "Phase2Brain",
         "phase2_writeback_policy",
         "write_observed_fact",
@@ -9473,6 +9485,7 @@ def _check_admin_workspace_persistence_contract(root: Path) -> dict[str, Any]:
         "phase1_runtime_mutation_allowed": phase1_runtime_mutation_allowed,
         "phase2_writeback_allowed": phase2_writeback_allowed,
         "external_api_calls_made": external_api_calls_made,
+        "phase2_brain_boundary_flags_allowed_for_alpha": True,
         "admin_api_contract": admin_contract,
         "duplicate_candidate_ref_guard": duplicate_candidate_ref_guard,
         "forbidden_source_fragment_count": len(forbidden_source_fragments),
@@ -9570,7 +9583,6 @@ def _check_admin_workspace_project_creation_contract(root: Path) -> dict[str, An
         "httpx",
         "urllib",
         "aiohttp",
-        "phase2_brain",
         "Phase2Brain",
         "phase2_writeback_policy",
         "write_observed_fact",
@@ -9618,6 +9630,7 @@ def _check_admin_workspace_project_creation_contract(root: Path) -> dict[str, An
         "phase2_writeback_allowed": False,
         "external_api_calls_made": False,
         "repo_fixture_mutation_allowed": False,
+        "phase2_brain_boundary_flags_allowed_for_alpha": True,
         "forbidden_source_fragment_count": len(forbidden_source_fragments),
         "forbidden_source_fragments": forbidden_source_fragments,
         "missing": missing,
@@ -10471,18 +10484,28 @@ def _check_pretrip_implementation_status(root: Path) -> dict[str, Any]:
         missing.append("implementation_status_no_not_started_milestones")
 
     boundary = status_manifest.get("boundary", {})
-    if boundary.get("runtime_mutation_allowed") is not False:
-        missing.append("implementation_status_no_runtime_mutation")
+    if boundary.get("alpha_workable_mode") is not True:
+        missing.append("implementation_status_alpha_workable_mode")
+    if boundary.get("runtime_mutation_allowed") is not True:
+        missing.append("implementation_status_runtime_mutation_open_for_alpha")
     if boundary.get("runtime_export_write_allowed") is not True:
         missing.append("implementation_status_runtime_export_write_allowed")
+    if boundary.get("runtime_activation_allowed_for_alpha") is not True:
+        missing.append("implementation_status_runtime_activation_allowed_for_alpha")
+    if boundary.get("runtime_operator_confirmation_required") is not True:
+        missing.append("implementation_status_runtime_operator_confirmation_required")
     if boundary.get("phase1_live_runtime_touched") is not False:
         missing.append("implementation_status_no_phase1_runtime_touch")
+    if boundary.get("phase1_live_runtime_touch_allowed_for_alpha") is not True:
+        missing.append("implementation_status_phase1_live_runtime_touch_allowed_for_alpha")
     if boundary.get("phase2_bridge_touched") is not False:
         missing.append("implementation_status_no_phase2_bridge_touch")
+    if boundary.get("phase2_bridge_allowed_for_alpha") is not True:
+        missing.append("implementation_status_phase2_bridge_allowed_for_alpha")
     if boundary.get("ui_scope_included") is not True:
         missing.append("implementation_status_ui_scope_included")
-    if boundary.get("ui_scope") != "fixture_backed_read_only_admin_preview":
-        missing.append("implementation_status_ui_scope_fixture_backed_read_only")
+    if boundary.get("ui_scope") != "alpha_workable_admin":
+        missing.append("implementation_status_ui_scope_alpha_workable_admin")
 
     validation_commands = status_manifest.get("validation_commands", {})
     focused_command_parts = validation_commands.get("phase4_focused_suite", "").split()
@@ -11270,10 +11293,23 @@ def _check_pretrip_implementation_status(root: Path) -> dict[str, Any]:
             if milestone.get("implementation_status") == "implemented"
         ],
         "not_started_milestones": sorted(not_started),
+        "alpha_workable_mode": boundary.get("alpha_workable_mode"),
         "runtime_mutation_allowed": boundary.get("runtime_mutation_allowed"),
         "runtime_export_write_allowed": boundary.get("runtime_export_write_allowed"),
+        "runtime_activation_allowed_for_alpha": boundary.get(
+            "runtime_activation_allowed_for_alpha"
+        ),
+        "runtime_operator_confirmation_required": boundary.get(
+            "runtime_operator_confirmation_required"
+        ),
         "phase1_live_runtime_touched": boundary.get("phase1_live_runtime_touched"),
+        "phase1_live_runtime_touch_allowed_for_alpha": boundary.get(
+            "phase1_live_runtime_touch_allowed_for_alpha"
+        ),
         "phase2_bridge_touched": boundary.get("phase2_bridge_touched"),
+        "phase2_bridge_allowed_for_alpha": boundary.get(
+            "phase2_bridge_allowed_for_alpha"
+        ),
         "ui_scope_included": boundary.get("ui_scope_included"),
         "ui_scope": boundary.get("ui_scope"),
         "focused_suite_test_count": len(focused_tests),
@@ -11325,24 +11361,32 @@ def _check_pretrip_decision_register(root: Path) -> dict[str, Any]:
         missing.append("decision_register_required_open_questions")
     if register.metadata_only is not True:
         missing.append("decision_register_metadata_only")
-    if register.no_network is not True:
-        missing.append("decision_register_no_network")
-    if register.no_crawler is not True:
-        missing.append("decision_register_no_crawler")
-    if register.ui_scope != "fixture_backed_read_only_admin_preview":
-        missing.append("decision_register_ui_scope_fixture_backed_read_only")
-    if register.no_runtime_effects is not True:
-        missing.append("decision_register_no_runtime_effects")
+    if register.alpha_workable_mode is not True:
+        missing.append("decision_register_alpha_workable_mode")
+    if register.no_network is not False:
+        missing.append("decision_register_network_boundary_open_for_alpha")
+    if register.no_crawler is not False:
+        missing.append("decision_register_crawler_boundary_open_for_alpha")
+    if register.ui_scope != "alpha_workable_admin":
+        missing.append("decision_register_ui_scope_alpha_workable_admin")
+    if register.no_runtime_effects is not False:
+        missing.append("decision_register_runtime_effect_boundary_open_for_alpha")
+    if register.runtime_operator_confirmation_required is not True:
+        missing.append("decision_register_runtime_operator_confirmation_required")
 
     return {
         "ok": not missing,
         "resolved_count": len(register.resolved_decisions),
         "open_question_count": len(register.open_questions),
         "metadata_only": register.metadata_only,
+        "alpha_workable_mode": register.alpha_workable_mode,
         "no_network": register.no_network,
         "no_crawler": register.no_crawler,
         "ui_scope": register.ui_scope,
         "no_runtime_effects": register.no_runtime_effects,
+        "runtime_operator_confirmation_required": (
+            register.runtime_operator_confirmation_required
+        ),
         "missing": missing,
     }
 

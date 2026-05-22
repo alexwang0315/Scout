@@ -217,10 +217,53 @@ Initial planning skills:
   - accepts GPX, GeoJSON, pasted URLs, saved webpages, article text, route-guide
     images, conversations, and previous Scout exports;
   - writes normalized artifacts and source metadata.
+  - has a standalone importer contract in
+    `docs/specs/pretrip-standalone-importer.md` for turning a local GPX corpus
+    into a project workspace. **Standalone importer**（獨立匯入程式） means a
+    CLI/core path that can run without the browser UI. **Pi offline profile**
+    （Pi 離線模式） means it can run on Scout Pi from local files with no live
+    network and no Phase 1 runtime mutation.
+  - treats the selected route GPX as **golden route**（出發前選定的主參考路線）,
+    not as the user's already-walked track. In pretrip, the actual user track
+    does not exist yet; post-analysis（行後分析） may later import the actual
+    walked track to replace the pretrip golden route for admin review.
+  - requires **manual waypoint route**（手動畫航點路線） treatment for route
+    sections that have no prior track evidence. Such sections are allowed, but
+    must raise **danger review**（危險審查） warnings because they are previously
+    unobserved, including side forks from an otherwise known route.
+  - should also emit read-only projection artifacts for `/admin` and
+    `/admin/debug`. **Projection artifact**（投影資料） means an admin-readable
+    view of the import pipeline and route evidence; it is not a completed
+    mission replay, not an incident package, and not runtime state.
+  - exposes importer projections through
+    `/admin/pretrip/projects/{project_id}/admin-projection` and
+    `/admin/pretrip/projects/{project_id}/debug-projection-events`, while
+    `/admin/debug` can read the JSONL via `SCOUT_DEBUG_LOG_PATH`.
+  - opens the first admin UI entry point as **Import GPX**（匯入 GPX） in a
+    dedicated right-frame panel. Preview is read-only; confirmed run writes a
+    local project workspace through the standalone importer. The panel accepts
+    server-side paths for the golden route GPX, reference track directory,
+    workspace root, optional template root, checkpoint spacing, and reference
+    display limits. It does not upload files through the browser and does not
+    call `/safety/*`.
+  - accepts **Overpass Vector Evidence**（Overpass/OSM 向量證據；只能作為行前規劃候選資料）
+    from fixture-backed raw payloads or later audited downloads;
+  - preserves query body, bbox or route corridor, request timestamp, endpoint,
+    HTTP status, raw response hash, normalized artifact path, OSM object
+    identity, tags, geometry, conversion rule version, confidence, stale-risk
+    notes, and optional route/segment/checkpoint links;
+  - normalizes OSM node/way/relation objects into `trail_corridor_candidate`,
+    `hiking_route_candidate`, `shelter_candidate`, `water_source_candidate`,
+    `parking_candidate`, `peak_candidate`, and `terrain_risk_candidate`;
+  - may emit Scout map-context GeoJSON with existing `approved_corridor`,
+    `hazard_zone`, and `poi` feature types, but this remains
+    **pretrip candidate/evidence**（行前候選/證據） and must not become
+    **runtime safety truth**（現場安全判斷真值） without later human review and
+    compile gates.
 - `pretrip-route-synthesis`
   - compares GPX traces, OSM/Overpass corridors, route-guide topology, and
     previous field evidence;
-  - proposes primary route, alternate route, and uncertainty notes.
+  - proposes golden route, alternate route, and uncertainty notes.
 - `pretrip-cp-segment-suggest`
   - proposes CP points, segment splits, decision gates, and compression
     boundaries;
@@ -280,8 +323,32 @@ Pre-Trip Planning Admin should:
 - treat after-action findings as planning candidates until reviewed;
 - make each AI skill run replayable from project artifacts;
 - prefer fixture-backed proof before UI work;
-- keep small fixtures in `tests/fixtures/` and larger local datasets outside
-  normal regression paths.
+- keep regression fixtures deterministic. During alpha, bounded project
+  evidence such as Overpass vectors, reference-track geometry, terrain
+  summaries, and compiled planning packages may exceed the earlier small-file
+  target when they are needed to render the real project. Raw source datasets
+  should still stay under explicit data policy and provenance.
+
+### Alpha Release Policy
+
+`Alpha release policy`（Alpha 測試放寬政策） replaces the early proof-of-concept
+limits and opens the product boundaries needed for a workable alpha:
+
+- workspace edit/import controls may be enabled when they write only copied
+  workspace candidate artifacts;
+- large planning evidence is allowed when it remains deterministic and
+  referenced by project metadata;
+- JSONL projections such as admin debug timelines are valid project refs when
+  every line is parseable JSON;
+- map layer UI order is an interaction/detail choice; release checks require
+  declared layer groups and renderers to exist, not a fixed DOM order;
+- runtime handoff/export/load tooling, live opt-in provider calls, workspace
+  writes, and final mission compilation may be exercised for alpha when the
+  operator explicitly triggers them;
+- `/safety/*`, Phase 1 live runtime mutation, Phase 2 Brain writeback, final
+  `MissionGraph` generation, and external side effects are no longer release
+  blockers for alpha, but they must be explicit operator actions and labeled in
+  the produced artifact boundary metadata.
 
 ## Scout-Readable Outputs
 
@@ -446,8 +513,9 @@ Recommended approach:
 - convert relevant nodes/ways into POI candidates;
 - mark map-derived hazards as candidates unless the source semantics are
   explicit and reviewed;
-- keep large raw Overpass responses outside normal CI unless reduced fixtures
-  are generated.
+- keep live raw Overpass downloads out of runtime paths. During alpha, larger
+  fixture-backed Overpass evidence may live in the project fixture when it is
+  required to reproduce the admin map and candidate pipeline.
 
 Initial useful OSM tags:
 
@@ -1409,6 +1477,37 @@ Acceptance:
 - the admin UI exposes this as a workspace-only apply-result control and does
   not write repo fixtures, final `PreTripPackage`, final `MissionGraph`, Phase
   1 runtime, Phase 2 Brain state, crawler output, or raw external payloads.
+
+### Milestone 27: Workspace Edit Tools
+
+Goal: open the Phase 4 admin edit tools as copied-workspace candidate edits.
+**Workspace edit tools**（工作區編輯工具） are local planning controls for manual
+waypoints, trail-derived waypoints, retreat-route drafts, feature notes, and
+rectangle group selection. They are not a runtime safety source.
+
+Acceptance:
+
+- the UI enables `Feature`, `Add CP`, `Remove CP`, `Add retreat`, and
+  `Remove retreat`;
+- the UI writes only to
+  `POST /admin/pretrip/projects/{project_id}/workspace-edits`;
+- add/remove checkpoint and add/remove retreat operations may mutate only the
+  copied workspace candidate artifacts (`candidates/checkpoints.json` and
+  `candidates/retreat_routes.json`);
+- **selected trail generate waypoint**（選取路徑產生航點） creates a
+  needs-human-review waypoint candidate from selected map evidence or a typed
+  coordinate;
+- **rectangle group selection**（框選群組） is recorded in
+  `reviews/workspace_edit_log.json` for later reviewed apply/compile work;
+- every operation is also appended to `reviews/workspace_edit_log.json` with
+  reviewer, timestamp, target refs, payload summary, and conversion rule
+  version;
+- start and finish checkpoints cannot be removed by this tool;
+- the endpoint rejects repo fixture roots and requires a copied local
+  workspace;
+- no operation writes source fixtures, final `PreTripPackage`, final
+  `MissionGraph`, Phase 1 runtime, Phase 2 Brain state, `/safety/*`, live
+  network outputs, or raw GPX/large raw payloads.
 
 Layout direction:
 
