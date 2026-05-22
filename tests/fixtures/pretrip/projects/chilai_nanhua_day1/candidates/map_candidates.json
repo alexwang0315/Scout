@@ -1,146 +1,509 @@
 {
   "corridor_candidates": [
     {
-      "candidate_id": "map.corridor.chilai_nanhua_primary_corridor",
+      "candidate_id": "map.corridor.chilai_nanhua_day1.twmap_primary_cp_corridor",
       "corridor": {
         "coordinates": [
           {
-            "lat": 24.0532973,
-            "lon": 121.21036249036372
+            "lat": 24.0506539,
+            "lon": 121.215231
           },
           {
-            "lat": 24.0512,
-            "lon": 121.2455
+            "lat": 24.0468285,
+            "lon": 121.2232233
           },
           {
-            "lat": 24.045320698458436,
-            "lon": 121.28079717511966
+            "lat": 24.0520106,
+            "lon": 121.2279612
+          },
+          {
+            "lat": 24.0466234,
+            "lon": 121.2361776
+          },
+          {
+            "lat": 24.053557,
+            "lon": 121.2429771
+          },
+          {
+            "lat": 24.0447651,
+            "lon": 121.2511904
+          },
+          {
+            "lat": 24.0481843,
+            "lon": 121.2565664
+          },
+          {
+            "lat": 24.0458826,
+            "lon": 121.2656109
+          },
+          {
+            "lat": 24.0447786,
+            "lon": 121.2740553
+          },
+          {
+            "lat": 24.0462416,
+            "lon": 121.2808601
+          },
+          {
+            "lat": 24.0352543,
+            "lon": 121.2803993
+          },
+          {
+            "lat": 24.0246136,
+            "lon": 121.2770138
+          },
+          {
+            "lat": 24.0127487,
+            "lon": 121.2728255
+          },
+          {
+            "lat": 24.0017585,
+            "lon": 121.2663192
+          },
+          {
+            "lat": 23.9906035,
+            "lon": 121.2600508
+          },
+          {
+            "lat": 23.9782015,
+            "lon": 121.2634848
+          },
+          {
+            "lat": 23.9753836,
+            "lon": 121.2673978
+          },
+          {
+            "lat": 23.969046,
+            "lon": 121.2756228
+          },
+          {
+            "lat": 23.9597068,
+            "lon": 121.2752885
+          },
+          {
+            "lat": 23.948814,
+            "lon": 121.2720173
+          },
+          {
+            "lat": 23.9394041,
+            "lon": 121.2726363
+          },
+          {
+            "lat": 23.928284,
+            "lon": 121.2752822
+          },
+          {
+            "lat": 23.916252,
+            "lon": 121.2761628
+          },
+          {
+            "lat": 23.9074298,
+            "lon": 121.2742539
+          },
+          {
+            "lat": 23.8981124,
+            "lon": 121.2707216
+          },
+          {
+            "lat": 23.8895271,
+            "lon": 121.2643937
+          },
+          {
+            "lat": 23.8788118,
+            "lon": 121.2633486
+          },
+          {
+            "lat": 23.8771814,
+            "lon": 121.263915
+          },
+          {
+            "lat": 23.8837333,
+            "lon": 121.255426
+          },
+          {
+            "lat": 23.8857355,
+            "lon": 121.2478311
+          },
+          {
+            "lat": 23.8883544,
+            "lon": 121.2386533
+          },
+          {
+            "lat": 23.8889399,
+            "lon": 121.2271813
+          },
+          {
+            "lat": 23.8934631,
+            "lon": 121.2196772
+          },
+          {
+            "lat": 23.9004754,
+            "lon": 121.2186233
+          },
+          {
+            "lat": 23.9115165,
+            "lon": 121.2161464
+          },
+          {
+            "lat": 23.9229648,
+            "lon": 121.2110913
+          },
+          {
+            "lat": 23.9301298,
+            "lon": 121.2078795
+          },
+          {
+            "lat": 23.9405319,
+            "lon": 121.2044343
+          },
+          {
+            "lat": 23.943813,
+            "lon": 121.1929703
+          },
+          {
+            "lat": 23.9497764,
+            "lon": 121.1831888
+          },
+          {
+            "lat": 23.9781454,
+            "lon": 121.2642539
+          },
+          {
+            "lat": 23.9780687,
+            "lon": 121.2641609
+          },
+          {
+            "lat": 23.977948,
+            "lon": 121.2641028
+          },
+          {
+            "lat": 23.9778119,
+            "lon": 121.2641486
+          },
+          {
+            "lat": 23.9777154,
+            "lon": 121.26405
+          },
+          {
+            "lat": 23.9776229,
+            "lon": 121.263953
+          },
+          {
+            "lat": 23.9769114,
+            "lon": 121.2642838
+          },
+          {
+            "lat": 23.973139,
+            "lon": 121.2745873
+          },
+          {
+            "lat": 23.9628615,
+            "lon": 121.2762239
+          },
+          {
+            "lat": 23.9515139,
+            "lon": 121.2747312
+          },
+          {
+            "lat": 24.045314,
+            "lon": 121.2796066
+          },
+          {
+            "lat": 24.0452759,
+            "lon": 121.2796713
+          },
+          {
+            "lat": 24.0451944,
+            "lon": 121.2796108
+          },
+          {
+            "lat": 24.0452216,
+            "lon": 121.2797556
+          },
+          {
+            "lat": 24.0453877,
+            "lon": 121.2798427
+          },
+          {
+            "lat": 24.0456084,
+            "lon": 121.2798686
+          },
+          {
+            "lat": 24.0458704,
+            "lon": 121.2800223
+          },
+          {
+            "lat": 24.04466,
+            "lon": 121.2808649
+          },
+          {
+            "lat": 24.0339317,
+            "lon": 121.2802564
+          },
+          {
+            "lat": 24.0230978,
+            "lon": 121.2766968
+          },
+          {
+            "lat": 24.0116984,
+            "lon": 121.2716912
+          },
+          {
+            "lat": 24.0002192,
+            "lon": 121.2655042
+          },
+          {
+            "lat": 23.9890272,
+            "lon": 121.2604415
+          },
+          {
+            "lat": 23.9784406,
+            "lon": 121.2634329
+          },
+          {
+            "lat": 24.045314,
+            "lon": 121.2796066
+          },
+          {
+            "lat": 24.0452759,
+            "lon": 121.2796713
+          },
+          {
+            "lat": 24.0451944,
+            "lon": 121.2796108
+          },
+          {
+            "lat": 24.0452216,
+            "lon": 121.2797556
+          },
+          {
+            "lat": 24.0453877,
+            "lon": 121.2798427
+          },
+          {
+            "lat": 24.0430412,
+            "lon": 121.2804643
+          },
+          {
+            "lat": 24.0310599,
+            "lon": 121.2796349
+          },
+          {
+            "lat": 24.0202464,
+            "lon": 121.2769038
+          },
+          {
+            "lat": 24.0090245,
+            "lon": 121.2704348
+          },
+          {
+            "lat": 23.9977274,
+            "lon": 121.2639122
+          },
+          {
+            "lat": 23.9862802,
+            "lon": 121.2613306
+          },
+          {
+            "lat": 24.0506539,
+            "lon": 121.215231
+          },
+          {
+            "lat": 24.0506507,
+            "lon": 121.2152347
+          },
+          {
+            "lat": 24.0506491,
+            "lon": 121.2152365
+          },
+          {
+            "lat": 24.0506445,
+            "lon": 121.215238
+          },
+          {
+            "lat": 24.0506502,
+            "lon": 121.2152058
+          },
+          {
+            "lat": 24.0507973,
+            "lon": 121.2152955
+          },
+          {
+            "lat": 24.0509769,
+            "lon": 121.215471
+          },
+          {
+            "lat": 24.047144,
+            "lon": 121.2231255
+          },
+          {
+            "lat": 24.0518864,
+            "lon": 121.2276506
+          },
+          {
+            "lat": 24.0469132,
+            "lon": 121.2362015
+          },
+          {
+            "lat": 24.0537149,
+            "lon": 121.2426177
+          },
+          {
+            "lat": 24.0452386,
+            "lon": 121.2509222
+          },
+          {
+            "lat": 24.0481843,
+            "lon": 121.2565664
+          },
+          {
+            "lat": 24.046043,
+            "lon": 121.2653894
+          },
+          {
+            "lat": 24.0446136,
+            "lon": 121.2736514
+          },
+          {
+            "lat": 23.8895508,
+            "lon": 121.2643489
+          },
+          {
+            "lat": 23.8894932,
+            "lon": 121.2643705
+          },
+          {
+            "lat": 23.8894781,
+            "lon": 121.2643494
+          },
+          {
+            "lat": 23.8894704,
+            "lon": 121.2643722
+          },
+          {
+            "lat": 23.889426,
+            "lon": 121.2643356
+          },
+          {
+            "lat": 23.8893434,
+            "lon": 121.2642958
+          },
+          {
+            "lat": 23.8892689,
+            "lon": 121.2642596
+          },
+          {
+            "lat": 23.8891867,
+            "lon": 121.264263
+          },
+          {
+            "lat": 23.8890978,
+            "lon": 121.2643097
+          },
+          {
+            "lat": 23.8890017,
+            "lon": 121.2643475
+          },
+          {
+            "lat": 23.8889083,
+            "lon": 121.2643265
+          },
+          {
+            "lat": 23.8888157,
+            "lon": 121.2643371
+          },
+          {
+            "lat": 23.8829672,
+            "lon": 121.2648743
+          },
+          {
+            "lat": 23.8727293,
+            "lon": 121.2661048
+          },
+          {
+            "lat": 23.8825761,
+            "lon": 121.2607174
+          },
+          {
+            "lat": 23.8852789,
+            "lon": 121.2506358
+          },
+          {
+            "lat": 23.8855459,
+            "lon": 121.2427931
+          },
+          {
+            "lat": 23.8901583,
+            "lon": 121.23197
+          },
+          {
+            "lat": 23.8921702,
+            "lon": 121.2223192
+          },
+          {
+            "lat": 23.8931587,
+            "lon": 121.2194945
           }
         ],
         "corridor_half_width_m": 30.0,
-        "corridor_id": "chilai_nanhua_primary_corridor",
-        "name": "Chilai-Nanhua Day1 primary corridor candidate",
-        "route_level": "mountain_trail_candidate",
+        "corridor_id": "chilai_nanhua_day1.twmap_primary_cp_corridor",
+        "name": "Nengao-Andongjun primary CP corridor candidate",
+        "route_level": "planning_candidate",
         "source_metadata": {
-          "confidence": 0.6,
+          "confidence": 0.66,
           "known_staleness_risk": "medium",
-          "last_verified_at": "2026-05-14",
-          "source": "manual_pretrip_fixture",
+          "last_verified_at": null,
+          "source": "twmap_gpx_corpus_fixture",
           "source_version": "0.1.0"
         }
       },
-      "label": "Chilai-Nanhua Day1 primary corridor candidate",
+      "label": "Nengao-Andongjun primary CP corridor candidate",
       "notes": "Imported as candidate map data; human review required before compilation.",
       "provenance": [
         {
           "captured_at": null,
           "collected_at": null,
-          "license_note": "local fixture metadata only",
+          "license_note": "Derived fixture metadata from local TWMap GPX corpus; raw GPX is not copied into repo.",
           "method": "geojson_feature_collection_import",
-          "notes": "Small Phase 4 GeoJSON candidate fixture; not an external crawler output.",
+          "notes": "Map context（地圖脈絡）is a planning candidate display layer derived from CP coordinates; it is not runtime safety truth（現場安全真相）.",
           "source_kind": "other",
-          "source_ref": "map_context.chilai_nanhua_day1.manual",
-          "uri": "tests/fixtures/pretrip/projects/chilai_nanhua_day1/normalized/map/map_context.geojson"
+          "source_ref": "normalized/map/map_context.geojson",
+          "uri": "/Users/alexwang0315/scout-fusion/tests/fixtures/pretrip/projects/chilai_nanhua_day1/normalized/map/map_context.geojson"
         }
       ],
       "review_required": true,
       "review_state": "needs_review",
       "source_metadata": {
-        "confidence": 0.6,
+        "confidence": 0.66,
         "known_staleness_risk": "medium",
-        "last_verified_at": "2026-05-14",
-        "source": "manual_pretrip_fixture",
+        "last_verified_at": null,
+        "source": "twmap_gpx_corpus_fixture",
         "source_version": "0.1.0"
       },
       "source_refs": [
-        "map_context.chilai_nanhua_day1.manual"
+        "normalized/map/map_context.geojson"
       ]
     }
   ],
-  "hazard_candidates": [
-    {
-      "candidate_id": "map.hazard.deep_mountain_no_easy_exit",
-      "hazard": {
-        "hazard_id": "deep_mountain_no_easy_exit",
-        "hazard_type": "limited_retreat_options",
-        "l2_duration_s": 60.0,
-        "name": "Deep mountain section with limited retreat options",
-        "polygon": [
-          {
-            "lat": 24.058,
-            "lon": 121.238
-          },
-          {
-            "lat": 24.058,
-            "lon": 121.282
-          },
-          {
-            "lat": 24.042,
-            "lon": 121.282
-          },
-          {
-            "lat": 24.042,
-            "lon": 121.238
-          },
-          {
-            "lat": 24.058,
-            "lon": 121.238
-          }
-        ],
-        "source_metadata": {
-          "confidence": 0.6,
-          "known_staleness_risk": "medium",
-          "last_verified_at": "2026-05-14",
-          "source": "manual_pretrip_fixture",
-          "source_version": "0.1.0"
-        }
-      },
-      "label": "Deep mountain section with limited retreat options",
-      "notes": "Imported as candidate map data; human review required before compilation.",
-      "provenance": [
-        {
-          "captured_at": null,
-          "collected_at": null,
-          "license_note": "local fixture metadata only",
-          "method": "geojson_feature_collection_import",
-          "notes": "Small Phase 4 GeoJSON candidate fixture; not an external crawler output.",
-          "source_kind": "other",
-          "source_ref": "map_context.chilai_nanhua_day1.manual",
-          "uri": "tests/fixtures/pretrip/projects/chilai_nanhua_day1/normalized/map/map_context.geojson"
-        }
-      ],
-      "review_required": true,
-      "review_state": "needs_review",
-      "source_metadata": {
-        "confidence": 0.6,
-        "known_staleness_risk": "medium",
-        "last_verified_at": "2026-05-14",
-        "source": "manual_pretrip_fixture",
-        "source_version": "0.1.0"
-      },
-      "source_refs": [
-        "map_context.chilai_nanhua_day1.manual"
-      ]
-    }
-  ],
+  "hazard_candidates": [],
   "poi_candidates": [
     {
-      "candidate_id": "map.poi.trailhead_entry",
-      "label": "Entry / retreat return point",
+      "candidate_id": "map.poi.chilai_nanhua_day1.twmap_primary_start",
+      "label": "Primary GPX start candidate",
       "notes": "Imported as candidate map data; human review required before compilation.",
       "poi": {
         "coordinate": {
-          "lat": 24.0532973,
-          "lon": 121.21036249036372
+          "lat": 24.0506539,
+          "lon": 121.215231
         },
-        "name": "Entry / retreat return point",
-        "poi_id": "trailhead_entry",
+        "name": "Primary GPX start candidate",
+        "poi_id": "chilai_nanhua_day1.twmap_primary_start",
         "poi_type": "trailhead",
         "source_metadata": {
-          "confidence": 0.6,
+          "confidence": 0.66,
           "known_staleness_risk": "medium",
-          "last_verified_at": "2026-05-14",
-          "source": "manual_pretrip_fixture",
+          "last_verified_at": null,
+          "source": "twmap_gpx_corpus_fixture",
           "source_version": "0.1.0"
         }
       },
@@ -148,57 +511,102 @@
         {
           "captured_at": null,
           "collected_at": null,
-          "license_note": "local fixture metadata only",
+          "license_note": "Derived fixture metadata from local TWMap GPX corpus; raw GPX is not copied into repo.",
           "method": "geojson_feature_collection_import",
-          "notes": "Small Phase 4 GeoJSON candidate fixture; not an external crawler output.",
+          "notes": "Map context（地圖脈絡）is a planning candidate display layer derived from CP coordinates; it is not runtime safety truth（現場安全真相）.",
           "source_kind": "other",
-          "source_ref": "map_context.chilai_nanhua_day1.manual",
-          "uri": "tests/fixtures/pretrip/projects/chilai_nanhua_day1/normalized/map/map_context.geojson"
+          "source_ref": "normalized/map/map_context.geojson",
+          "uri": "/Users/alexwang0315/scout-fusion/tests/fixtures/pretrip/projects/chilai_nanhua_day1/normalized/map/map_context.geojson"
         }
       ],
       "review_required": true,
       "review_state": "needs_review",
       "source_metadata": {
-        "confidence": 0.6,
+        "confidence": 0.66,
         "known_staleness_risk": "medium",
-        "last_verified_at": "2026-05-14",
-        "source": "manual_pretrip_fixture",
+        "last_verified_at": null,
+        "source": "twmap_gpx_corpus_fixture",
         "source_version": "0.1.0"
       },
       "source_refs": [
-        "map_context.chilai_nanhua_day1.manual"
+        "normalized/map/map_context.geojson"
+      ]
+    },
+    {
+      "candidate_id": "map.poi.chilai_nanhua_day1.twmap_primary_finish",
+      "label": "Primary GPX finish candidate",
+      "notes": "Imported as candidate map data; human review required before compilation.",
+      "poi": {
+        "coordinate": {
+          "lat": 23.8931587,
+          "lon": 121.2194945
+        },
+        "name": "Primary GPX finish candidate",
+        "poi_id": "chilai_nanhua_day1.twmap_primary_finish",
+        "poi_type": "trailhead",
+        "source_metadata": {
+          "confidence": 0.66,
+          "known_staleness_risk": "medium",
+          "last_verified_at": null,
+          "source": "twmap_gpx_corpus_fixture",
+          "source_version": "0.1.0"
+        }
+      },
+      "provenance": [
+        {
+          "captured_at": null,
+          "collected_at": null,
+          "license_note": "Derived fixture metadata from local TWMap GPX corpus; raw GPX is not copied into repo.",
+          "method": "geojson_feature_collection_import",
+          "notes": "Map context（地圖脈絡）is a planning candidate display layer derived from CP coordinates; it is not runtime safety truth（現場安全真相）.",
+          "source_kind": "other",
+          "source_ref": "normalized/map/map_context.geojson",
+          "uri": "/Users/alexwang0315/scout-fusion/tests/fixtures/pretrip/projects/chilai_nanhua_day1/normalized/map/map_context.geojson"
+        }
+      ],
+      "review_required": true,
+      "review_state": "needs_review",
+      "source_metadata": {
+        "confidence": 0.66,
+        "known_staleness_risk": "medium",
+        "last_verified_at": null,
+        "source": "twmap_gpx_corpus_fixture",
+        "source_version": "0.1.0"
+      },
+      "source_refs": [
+        "normalized/map/map_context.geojson"
       ]
     }
   ],
   "source_artifact": {
-    "artifact_id": "geojson.map_context.chilai_nanhua_day1.manual",
+    "artifact_id": "geojson.normalizedmapmap_context.geojson",
     "kind": "other",
     "media_type": "application/geo+json",
     "metadata": {
       "candidate_layer": "pretrip_map",
       "review_required": true,
-      "source": "manual_pretrip_fixture",
+      "source": "twmap_gpx_corpus_fixture",
       "source_version": "0.1.0"
     },
     "provenance": {
       "captured_at": null,
       "collected_at": null,
-      "license_note": "local fixture metadata only",
+      "license_note": "Derived fixture metadata from local TWMap GPX corpus; raw GPX is not copied into repo.",
       "method": "geojson_feature_collection_import",
-      "notes": "Small Phase 4 GeoJSON candidate fixture; not an external crawler output.",
+      "notes": "Map context（地圖脈絡）is a planning candidate display layer derived from CP coordinates; it is not runtime safety truth（現場安全真相）.",
       "source_kind": "other",
-      "source_ref": "map_context.chilai_nanhua_day1.manual",
-      "uri": "tests/fixtures/pretrip/projects/chilai_nanhua_day1/normalized/map/map_context.geojson"
+      "source_ref": "normalized/map/map_context.geojson",
+      "uri": "/Users/alexwang0315/scout-fusion/tests/fixtures/pretrip/projects/chilai_nanhua_day1/normalized/map/map_context.geojson"
     },
-    "sha256": "f4d5d4eb5876c526cf81f5d7064ddd8e121bbfc1cc11434180cf7012dcee292d",
-    "size_bytes": 1287,
-    "uri": "tests/fixtures/pretrip/projects/chilai_nanhua_day1/normalized/map/map_context.geojson"
+    "sha256": "272a0dfbd899beda0a9ad46b3611e43009eac1376ecd0a0492c8d0569b6a0be9",
+    "size_bytes": 4449,
+    "uri": "/Users/alexwang0315/scout-fusion/tests/fixtures/pretrip/projects/chilai_nanhua_day1/normalized/map/map_context.geojson"
   },
   "source_metadata": {
-    "confidence": 0.6,
+    "confidence": 0.66,
     "known_staleness_risk": "medium",
-    "last_verified_at": "2026-05-14",
-    "source": "manual_pretrip_fixture",
+    "last_verified_at": "2026-05-21",
+    "source": "twmap_gpx_corpus_fixture",
     "source_version": "0.1.0"
   }
 }

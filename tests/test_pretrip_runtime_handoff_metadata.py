@@ -84,7 +84,7 @@ def test_runtime_handoff_metadata_refs_reviewed_graph_readiness_and_route_source
     assert manifest["route_refs"][0]["summary"]["artifact_id"] == (
         "artifact:gpx:chilai_nanhua_day1"
     )
-    assert manifest["route_refs"][0]["summary"]["point_count"] == 2211
+    assert manifest["route_refs"][0]["summary"]["point_count"] == 6909
     assert manifest["route_source_refs"] == [
         {
             "artifact_id": "artifact:gpx:chilai_nanhua_day1",

@@ -34,8 +34,8 @@ def test_matrix_summarizes_primary_mountain_and_field_regression_roles():
     assert chilai["refs"]["reviewed_package"] == (
         "tests/fixtures/pretrip/projects/chilai_nanhua_day1/outputs/pretrip_package.reviewed.json"
     )
-    assert chilai["candidate_counts"]["checkpoint"] == 11
-    assert chilai["candidate_counts"]["segment"] == 10
+    assert chilai["candidate_counts"]["checkpoint"] == 110
+    assert chilai["candidate_counts"]["segment"] == 109
     assert chilai["candidate_counts"]["retreat_route"] == 1
     assert chilai["release_check_boundary_flags"]["primary_mountain_calibration"] is True
     assert chilai["release_check_boundary_flags"]["field_data_to_fixtures_regression"] is False

@@ -48,16 +48,16 @@ def test_preserves_artifact_refs_paths_and_sha256_where_available():
     assert by_kind["route_comparison"]["classification"] == "comparison_only"
     assert by_kind["route_comparison"]["primary_route_name"] == "奇萊南華-能高越嶺步道Day1"
     assert by_kind["route_comparison"]["bbox_overlaps"] is True
-    assert by_kind["dtm_coverage_summary"]["candidate_tile_count"] == 10
-    assert by_kind["segment_dtm_coverage"]["segment_count"] == 10
+    assert by_kind["dtm_coverage_summary"]["candidate_tile_count"] == 48
+    assert by_kind["segment_dtm_coverage"]["segment_count"] == 109
     assert by_kind["segment_dtm_coverage"]["unlinked_segment_count"] == 0
-    assert by_kind["checkpoint_candidates"]["item_count"] == 11
-    assert by_kind["segment_candidates"]["item_count"] == 10
+    assert by_kind["checkpoint_candidates"]["item_count"] == 110
+    assert by_kind["segment_candidates"]["item_count"] == 109
     assert by_kind["retreat_route_candidates"]["item_count"] == 1
     assert by_kind["map_context_geojson"]["feature_count"] == 3
     assert by_kind["map_candidates"]["corridor_candidate_count"] == 1
-    assert by_kind["map_candidates"]["poi_candidate_count"] == 1
-    assert by_kind["map_candidates"]["hazard_candidate_count"] == 1
+    assert by_kind["map_candidates"]["poi_candidate_count"] == 2
+    assert by_kind["map_candidates"]["hazard_candidate_count"] == 0
     assert by_kind["planning_references"]["item_count"] == 3
     assert by_kind["route_guide_timing_candidates"]["item_count"] == 19
     assert by_kind["skill_config_manifest"]["scope"] == "pretrip_readiness"
@@ -376,7 +376,7 @@ def test_preserves_artifact_refs_paths_and_sha256_where_available():
     photo = source_artifacts["artifact.photo.g11_hiking"]
     assert gpx["artifact_kind"] == "gpx"
     assert gpx["path"].endswith(".gpx")
-    assert gpx["sha256"] == "3c1f4843ecea5cb2fc85f92934d3d1a220738c900576e4976d4c09975673956c"
+    assert gpx["sha256"] == "a270bbc769c9c521c4bb839a6230fb3760c37478c5b3ebe57f36f5d8755f6ee7"
     assert photo["artifact_kind"] == "photo"
     assert photo["path"].endswith(".jpg")
     assert photo["sha256"] == "ff28bf2fd66c6f8a63e759800fcdb8363862832ebe7b87dc900e849f1c7a058d"

@@ -1,8 +1,8 @@
 {
   "counts": {
-    "files_scanned": 57,
+    "files_scanned": 66,
     "forbidden_fragments": 0,
-    "json_files_scanned": 57,
+    "json_files_scanned": 66,
     "json_parse_errors": 0,
     "oversized_files": 0,
     "raw_route_suffix_files": 0,
@@ -19,11 +19,27 @@
   "manifest_id": "pretrip.fixture_hygiene.v0",
   "phase": "phase_4_pretrip_fixture_hygiene",
   "policy": {
+    "allowed_large_metadata_refs": [
+      "tests/fixtures/pretrip/projects/chilai_nanhua_day1/candidates/overpass_evidence.json",
+      "tests/fixtures/pretrip/projects/chilai_nanhua_day1/normalized/map/overpass_phase_a_raw.json",
+      "tests/fixtures/pretrip/projects/chilai_nanhua_day1/normalized/map/overpass_vector_evidence.geojson",
+      "tests/fixtures/pretrip/projects/chilai_nanhua_day1/normalized/terrain/segment_dtm_coverage.json",
+      "tests/fixtures/pretrip/projects/chilai_nanhua_day1/outputs/pretrip_package.json",
+      "tests/fixtures/pretrip/projects/chilai_nanhua_day1/outputs/reference_track_display_geometry.json",
+      "tests/fixtures/pretrip/projects/chilai_nanhua_day1/outputs/segment_display_geometry.json"
+    ],
     "allowed_map_payload_refs": [
       "tests/fixtures/pretrip/projects/chilai_nanhua_day1/candidates/map_candidates.json",
-      "tests/fixtures/pretrip/projects/chilai_nanhua_day1/normalized/map/map_context.geojson"
+      "tests/fixtures/pretrip/projects/chilai_nanhua_day1/candidates/overpass_evidence.json",
+      "tests/fixtures/pretrip/projects/chilai_nanhua_day1/normalized/map/map_context.geojson",
+      "tests/fixtures/pretrip/projects/chilai_nanhua_day1/normalized/map/overpass_vector_evidence.geojson",
+      "tests/fixtures/pretrip/projects/chilai_nanhua_day1/outputs/reference_track_display_geometry.json",
+      "tests/fixtures/pretrip/projects/chilai_nanhua_day1/outputs/segment_display_geometry.json"
     ],
     "fixture_only": true,
+    "ignored_metadata_filenames": [
+      ".DS_Store"
+    ],
     "max_file_bytes": 262144,
     "no_ui_or_runtime": true,
     "raw_binary_suffixes": [

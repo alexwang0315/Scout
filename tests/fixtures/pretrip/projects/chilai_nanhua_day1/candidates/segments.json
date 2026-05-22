@@ -2,9 +2,9 @@
   {
     "candidate_id": "seg.001",
     "confidence": "high",
-    "distance_m": 1502.260061203277,
-    "elevation_gain_m": 247.974853515625,
-    "elevation_loss_m": 57.236170613321065,
+    "distance_m": 1532.7609844414678,
+    "elevation_gain_m": 144.66999999999985,
+    "elevation_loss_m": 4.319999999999936,
     "from_candidate_id": "cp.start",
     "label": "Segment 001",
     "notes": "Generated between adjacent checkpoint candidates.",
@@ -17,11 +17,11 @@
         "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
         "source_kind": "gpx",
         "source_ref": "artifact.gpx.chilai_nanhua_day1",
-        "uri": "/Users/alexwang0315/downloads/奇萊南華-能高越嶺步道Day1.gpx"
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
       }
     ],
     "review_state": "proposed",
-    "route_point_end_index": 249,
+    "route_point_end_index": 64,
     "route_point_start_index": 0,
     "source_refs": [
       "artifact.gpx.chilai_nanhua_day1"
@@ -31,9 +31,9 @@
   {
     "candidate_id": "seg.002",
     "confidence": "high",
-    "distance_m": 1499.8485825235111,
-    "elevation_gain_m": 190.37841796875,
-    "elevation_loss_m": 89.03662109375,
+    "distance_m": 1472.6842273196944,
+    "elevation_gain_m": 130.74000000000024,
+    "elevation_loss_m": 0.0,
     "from_candidate_id": "cp.001",
     "label": "Segment 002",
     "notes": "Generated between adjacent checkpoint candidates.",
@@ -46,12 +46,12 @@
         "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
         "source_kind": "gpx",
         "source_ref": "artifact.gpx.chilai_nanhua_day1",
-        "uri": "/Users/alexwang0315/downloads/奇萊南華-能高越嶺步道Day1.gpx"
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
       }
     ],
     "review_state": "proposed",
-    "route_point_end_index": 490,
-    "route_point_start_index": 249,
+    "route_point_end_index": 108,
+    "route_point_start_index": 64,
     "source_refs": [
       "artifact.gpx.chilai_nanhua_day1"
     ],
@@ -60,9 +60,9 @@
   {
     "candidate_id": "seg.003",
     "confidence": "high",
-    "distance_m": 1503.391922289445,
-    "elevation_gain_m": 39.381103515625,
-    "elevation_loss_m": 219.71630859375,
+    "distance_m": 1507.550128724877,
+    "elevation_gain_m": 87.46999999999889,
+    "elevation_loss_m": 5.759999999998854,
     "from_candidate_id": "cp.002",
     "label": "Segment 003",
     "notes": "Generated between adjacent checkpoint candidates.",
@@ -75,12 +75,12 @@
         "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
         "source_kind": "gpx",
         "source_ref": "artifact.gpx.chilai_nanhua_day1",
-        "uri": "/Users/alexwang0315/downloads/奇萊南華-能高越嶺步道Day1.gpx"
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
       }
     ],
     "review_state": "proposed",
-    "route_point_end_index": 742,
-    "route_point_start_index": 490,
+    "route_point_end_index": 148,
+    "route_point_start_index": 108,
     "source_refs": [
       "artifact.gpx.chilai_nanhua_day1"
     ],
@@ -89,9 +89,9 @@
   {
     "candidate_id": "seg.004",
     "confidence": "high",
-    "distance_m": 1495.2180097809783,
-    "elevation_gain_m": 94.852294921875,
-    "elevation_loss_m": 44.881591796875,
+    "distance_m": 1504.84209864574,
+    "elevation_gain_m": 97.58000000000038,
+    "elevation_loss_m": 64.41000000000031,
     "from_candidate_id": "cp.003",
     "label": "Segment 004",
     "notes": "Generated between adjacent checkpoint candidates.",
@@ -104,12 +104,12 @@
         "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
         "source_kind": "gpx",
         "source_ref": "artifact.gpx.chilai_nanhua_day1",
-        "uri": "/Users/alexwang0315/downloads/奇萊南華-能高越嶺步道Day1.gpx"
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
       }
     ],
     "review_state": "proposed",
-    "route_point_end_index": 989,
-    "route_point_start_index": 742,
+    "route_point_end_index": 207,
+    "route_point_start_index": 148,
     "source_refs": [
       "artifact.gpx.chilai_nanhua_day1"
     ],
@@ -118,9 +118,9 @@
   {
     "candidate_id": "seg.005",
     "confidence": "high",
-    "distance_m": 1507.8692582540393,
-    "elevation_gain_m": 119.75830078125,
-    "elevation_loss_m": 74.332275390625,
+    "distance_m": 1536.4565078679639,
+    "elevation_gain_m": 142.76999999999998,
+    "elevation_loss_m": 7.700000000000273,
     "from_candidate_id": "cp.004",
     "label": "Segment 005",
     "notes": "Generated between adjacent checkpoint candidates.",
@@ -133,12 +133,12 @@
         "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
         "source_kind": "gpx",
         "source_ref": "artifact.gpx.chilai_nanhua_day1",
-        "uri": "/Users/alexwang0315/downloads/奇萊南華-能高越嶺步道Day1.gpx"
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
       }
     ],
     "review_state": "proposed",
-    "route_point_end_index": 1236,
-    "route_point_start_index": 989,
+    "route_point_end_index": 253,
+    "route_point_start_index": 207,
     "source_refs": [
       "artifact.gpx.chilai_nanhua_day1"
     ],
@@ -147,9 +147,9 @@
   {
     "candidate_id": "seg.006",
     "confidence": "high",
-    "distance_m": 1491.4228965500827,
-    "elevation_gain_m": 197.922607421875,
-    "elevation_loss_m": 53.842041015625,
+    "distance_m": 1445.7169620731238,
+    "elevation_gain_m": 112.47000000000025,
+    "elevation_loss_m": 0.9600000000000364,
     "from_candidate_id": "cp.005",
     "label": "Segment 006",
     "notes": "Generated between adjacent checkpoint candidates.",
@@ -162,12 +162,12 @@
         "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
         "source_kind": "gpx",
         "source_ref": "artifact.gpx.chilai_nanhua_day1",
-        "uri": "/Users/alexwang0315/downloads/奇萊南華-能高越嶺步道Day1.gpx"
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
       }
     ],
     "review_state": "proposed",
-    "route_point_end_index": 1480,
-    "route_point_start_index": 1236,
+    "route_point_end_index": 296,
+    "route_point_start_index": 253,
     "source_refs": [
       "artifact.gpx.chilai_nanhua_day1"
     ],
@@ -176,9 +176,9 @@
   {
     "candidate_id": "seg.007",
     "confidence": "high",
-    "distance_m": 1500.9652567188673,
-    "elevation_gain_m": 125.88720703125,
-    "elevation_loss_m": 35.05908203125,
+    "distance_m": 1520.430094803536,
+    "elevation_gain_m": 118.22999999999956,
+    "elevation_loss_m": 6.7199999999998,
     "from_candidate_id": "cp.006",
     "label": "Segment 007",
     "notes": "Generated between adjacent checkpoint candidates.",
@@ -191,12 +191,12 @@
         "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
         "source_kind": "gpx",
         "source_ref": "artifact.gpx.chilai_nanhua_day1",
-        "uri": "/Users/alexwang0315/downloads/奇萊南華-能高越嶺步道Day1.gpx"
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
       }
     ],
     "review_state": "proposed",
-    "route_point_end_index": 1727,
-    "route_point_start_index": 1480,
+    "route_point_end_index": 347,
+    "route_point_start_index": 296,
     "source_refs": [
       "artifact.gpx.chilai_nanhua_day1"
     ],
@@ -205,9 +205,9 @@
   {
     "candidate_id": "seg.008",
     "confidence": "high",
-    "distance_m": 2115.7255889030953,
-    "elevation_gain_m": 223.2724609375,
-    "elevation_loss_m": 35.953857421875,
+    "distance_m": 1498.0649586491284,
+    "elevation_gain_m": 67.30999999999949,
+    "elevation_loss_m": 6.749999999999545,
     "from_candidate_id": "cp.007",
     "label": "Segment 008",
     "notes": "Generated between adjacent checkpoint candidates.",
@@ -220,12 +220,12 @@
         "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
         "source_kind": "gpx",
         "source_ref": "artifact.gpx.chilai_nanhua_day1",
-        "uri": "/Users/alexwang0315/downloads/奇萊南華-能高越嶺步道Day1.gpx"
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
       }
     ],
     "review_state": "proposed",
-    "route_point_end_index": 1921,
-    "route_point_start_index": 1727,
+    "route_point_end_index": 399,
+    "route_point_start_index": 347,
     "source_refs": [
       "artifact.gpx.chilai_nanhua_day1"
     ],
@@ -234,9 +234,9 @@
   {
     "candidate_id": "seg.009",
     "confidence": "high",
-    "distance_m": 885.7631932362565,
-    "elevation_gain_m": 86.3603515625,
-    "elevation_loss_m": 32.103759765625,
+    "distance_m": 1488.869478467252,
+    "elevation_gain_m": 89.39000000000033,
+    "elevation_loss_m": 74.97000000000025,
     "from_candidate_id": "cp.008",
     "label": "Segment 009",
     "notes": "Generated between adjacent checkpoint candidates.",
@@ -249,12 +249,12 @@
         "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
         "source_kind": "gpx",
         "source_ref": "artifact.gpx.chilai_nanhua_day1",
-        "uri": "/Users/alexwang0315/downloads/奇萊南華-能高越嶺步道Day1.gpx"
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
       }
     ],
     "review_state": "proposed",
-    "route_point_end_index": 2067,
-    "route_point_start_index": 1921,
+    "route_point_end_index": 463,
+    "route_point_start_index": 399,
     "source_refs": [
       "artifact.gpx.chilai_nanhua_day1"
     ],
@@ -263,9 +263,9 @@
   {
     "candidate_id": "seg.010",
     "confidence": "high",
-    "distance_m": 1097.3201822394167,
-    "elevation_gain_m": 90.702392578125,
-    "elevation_loss_m": 109.90380859375,
+    "distance_m": 1509.3837884229677,
+    "elevation_gain_m": 27.41000000000031,
+    "elevation_loss_m": 30.769999999999982,
     "from_candidate_id": "cp.009",
     "label": "Segment 010",
     "notes": "Generated between adjacent checkpoint candidates.",
@@ -278,12 +278,2883 @@
         "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
         "source_kind": "gpx",
         "source_ref": "artifact.gpx.chilai_nanhua_day1",
-        "uri": "/Users/alexwang0315/downloads/奇萊南華-能高越嶺步道Day1.gpx"
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
       }
     ],
     "review_state": "proposed",
-    "route_point_end_index": 2210,
-    "route_point_start_index": 2067,
+    "route_point_end_index": 523,
+    "route_point_start_index": 463,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.010"
+  },
+  {
+    "candidate_id": "seg.011",
+    "confidence": "high",
+    "distance_m": 1497.8522266743664,
+    "elevation_gain_m": 62.02999999999929,
+    "elevation_loss_m": 89.9099999999994,
+    "from_candidate_id": "cp.010",
+    "label": "Segment 011",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 596,
+    "route_point_start_index": 523,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.011"
+  },
+  {
+    "candidate_id": "seg.012",
+    "confidence": "high",
+    "distance_m": 1489.6370887874987,
+    "elevation_gain_m": 227.34000000000106,
+    "elevation_loss_m": 59.590000000001055,
+    "from_candidate_id": "cp.011",
+    "label": "Segment 012",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 675,
+    "route_point_start_index": 596,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.012"
+  },
+  {
+    "candidate_id": "seg.013",
+    "confidence": "high",
+    "distance_m": 1497.5532381135292,
+    "elevation_gain_m": 202.3499999999999,
+    "elevation_loss_m": 104.76999999999998,
+    "from_candidate_id": "cp.012",
+    "label": "Segment 013",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 762,
+    "route_point_start_index": 675,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.013"
+  },
+  {
+    "candidate_id": "seg.014",
+    "confidence": "high",
+    "distance_m": 1504.3863882070914,
+    "elevation_gain_m": 349.43000000000075,
+    "elevation_loss_m": 185.05000000000064,
+    "from_candidate_id": "cp.013",
+    "label": "Segment 014",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 847,
+    "route_point_start_index": 762,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.014"
+  },
+  {
+    "candidate_id": "seg.015",
+    "confidence": "high",
+    "distance_m": 1496.9719696807733,
+    "elevation_gain_m": 26.909999999999854,
+    "elevation_loss_m": 247.5300000000002,
+    "from_candidate_id": "cp.014",
+    "label": "Segment 015",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 931,
+    "route_point_start_index": 847,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.015"
+  },
+  {
+    "candidate_id": "seg.016",
+    "confidence": "high",
+    "distance_m": 1497.3130541230908,
+    "elevation_gain_m": 261.9600000000005,
+    "elevation_loss_m": 289.3600000000001,
+    "from_candidate_id": "cp.015",
+    "label": "Segment 016",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 1021,
+    "route_point_start_index": 931,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.016"
+  },
+  {
+    "candidate_id": "seg.017",
+    "confidence": "high",
+    "distance_m": 1516.0028175123066,
+    "elevation_gain_m": 323.49000000000024,
+    "elevation_loss_m": 80.76000000000022,
+    "from_candidate_id": "cp.016",
+    "label": "Segment 017",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 1105,
+    "route_point_start_index": 1021,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.017"
+  },
+  {
+    "candidate_id": "seg.018",
+    "confidence": "high",
+    "distance_m": 1489.252741516981,
+    "elevation_gain_m": 151.41999999999962,
+    "elevation_loss_m": 397.02999999999975,
+    "from_candidate_id": "cp.017",
+    "label": "Segment 018",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 1254,
+    "route_point_start_index": 1105,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.018"
+  },
+  {
+    "candidate_id": "seg.019",
+    "confidence": "high",
+    "distance_m": 1496.419833560626,
+    "elevation_gain_m": 218.23999999999978,
+    "elevation_loss_m": 141.3399999999997,
+    "from_candidate_id": "cp.018",
+    "label": "Segment 019",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 1414,
+    "route_point_start_index": 1254,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.019"
+  },
+  {
+    "candidate_id": "seg.020",
+    "confidence": "high",
+    "distance_m": 1504.917999323198,
+    "elevation_gain_m": 223.0599999999995,
+    "elevation_loss_m": 213.4399999999996,
+    "from_candidate_id": "cp.019",
+    "label": "Segment 020",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 1581,
+    "route_point_start_index": 1414,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.020"
+  },
+  {
+    "candidate_id": "seg.021",
+    "confidence": "high",
+    "distance_m": 1498.7940883957106,
+    "elevation_gain_m": 48.06999999999971,
+    "elevation_loss_m": 345.1199999999999,
+    "from_candidate_id": "cp.020",
+    "label": "Segment 021",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 1736,
+    "route_point_start_index": 1581,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.021"
+  },
+  {
+    "candidate_id": "seg.022",
+    "confidence": "high",
+    "distance_m": 1500.7949872451427,
+    "elevation_gain_m": 168.69000000000096,
+    "elevation_loss_m": 50.45000000000073,
+    "from_candidate_id": "cp.021",
+    "label": "Segment 022",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 1894,
+    "route_point_start_index": 1736,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.022"
+  },
+  {
+    "candidate_id": "seg.023",
+    "confidence": "high",
+    "distance_m": 1497.3895190429794,
+    "elevation_gain_m": 266.7600000000002,
+    "elevation_loss_m": 62.48000000000047,
+    "from_candidate_id": "cp.022",
+    "label": "Segment 023",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 2056,
+    "route_point_start_index": 1894,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.023"
+  },
+  {
+    "candidate_id": "seg.024",
+    "confidence": "high",
+    "distance_m": 1499.455453809324,
+    "elevation_gain_m": 157.17000000000007,
+    "elevation_loss_m": 313.8699999999999,
+    "from_candidate_id": "cp.023",
+    "label": "Segment 024",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 2222,
+    "route_point_start_index": 2056,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.024"
+  },
+  {
+    "candidate_id": "seg.025",
+    "confidence": "high",
+    "distance_m": 1496.738162047061,
+    "elevation_gain_m": 95.66000000000122,
+    "elevation_loss_m": 189.38000000000102,
+    "from_candidate_id": "cp.024",
+    "label": "Segment 025",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 2374,
+    "route_point_start_index": 2222,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.025"
+  },
+  {
+    "candidate_id": "seg.026",
+    "confidence": "high",
+    "distance_m": 1507.8218470795107,
+    "elevation_gain_m": 198.9699999999998,
+    "elevation_loss_m": 178.30999999999995,
+    "from_candidate_id": "cp.025",
+    "label": "Segment 026",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 2526,
+    "route_point_start_index": 2374,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.026"
+  },
+  {
+    "candidate_id": "seg.027",
+    "confidence": "high",
+    "distance_m": 1496.018940417027,
+    "elevation_gain_m": 285.99999999999864,
+    "elevation_loss_m": 228.3199999999988,
+    "from_candidate_id": "cp.026",
+    "label": "Segment 027",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 2673,
+    "route_point_start_index": 2526,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.027"
+  },
+  {
+    "candidate_id": "seg.028",
+    "confidence": "high",
+    "distance_m": 1498.5957987003274,
+    "elevation_gain_m": 112.47000000000162,
+    "elevation_loss_m": 459.50000000000136,
+    "from_candidate_id": "cp.027",
+    "label": "Segment 028",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 2813,
+    "route_point_start_index": 2673,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.028"
+  },
+  {
+    "candidate_id": "seg.029",
+    "confidence": "high",
+    "distance_m": 1522.3068069638687,
+    "elevation_gain_m": 48.05000000000018,
+    "elevation_loss_m": 351.8300000000004,
+    "from_candidate_id": "cp.028",
+    "label": "Segment 029",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 2926,
+    "route_point_start_index": 2813,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.029"
+  },
+  {
+    "candidate_id": "seg.030",
+    "confidence": "high",
+    "distance_m": 1483.409399220072,
+    "elevation_gain_m": 25.470000000000027,
+    "elevation_loss_m": 348.95000000000005,
+    "from_candidate_id": "cp.029",
+    "label": "Segment 030",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 3029,
+    "route_point_start_index": 2926,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.030"
+  },
+  {
+    "candidate_id": "seg.031",
+    "confidence": "high",
+    "distance_m": 1507.9359004040016,
+    "elevation_gain_m": 112.00999999999954,
+    "elevation_loss_m": 210.06999999999948,
+    "from_candidate_id": "cp.030",
+    "label": "Segment 031",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 3136,
+    "route_point_start_index": 3029,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.031"
+  },
+  {
+    "candidate_id": "seg.032",
+    "confidence": "high",
+    "distance_m": 1492.23650227253,
+    "elevation_gain_m": 71.60999999999945,
+    "elevation_loss_m": 338.36999999999944,
+    "from_candidate_id": "cp.031",
+    "label": "Segment 032",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 3256,
+    "route_point_start_index": 3136,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.032"
+  },
+  {
+    "candidate_id": "seg.033",
+    "confidence": "high",
+    "distance_m": 1500.5205433178705,
+    "elevation_gain_m": 111.52000000000044,
+    "elevation_loss_m": 152.38000000000034,
+    "from_candidate_id": "cp.032",
+    "label": "Segment 033",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 3391,
+    "route_point_start_index": 3256,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.033"
+  },
+  {
+    "candidate_id": "seg.034",
+    "confidence": "high",
+    "distance_m": 1493.8888174109827,
+    "elevation_gain_m": 55.760000000000446,
+    "elevation_loss_m": 71.62000000000057,
+    "from_candidate_id": "cp.033",
+    "label": "Segment 034",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 3495,
+    "route_point_start_index": 3391,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.034"
+  },
+  {
+    "candidate_id": "seg.035",
+    "confidence": "high",
+    "distance_m": 1506.7905318842554,
+    "elevation_gain_m": 90.36999999999989,
+    "elevation_loss_m": 72.58999999999992,
+    "from_candidate_id": "cp.034",
+    "label": "Segment 035",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 3605,
+    "route_point_start_index": 3495,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.035"
+  },
+  {
+    "candidate_id": "seg.036",
+    "confidence": "high",
+    "distance_m": 1499.1364764918758,
+    "elevation_gain_m": 186.01000000000045,
+    "elevation_loss_m": 164.86000000000035,
+    "from_candidate_id": "cp.035",
+    "label": "Segment 036",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 3722,
+    "route_point_start_index": 3605,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.036"
+  },
+  {
+    "candidate_id": "seg.037",
+    "confidence": "high",
+    "distance_m": 1506.0946647261555,
+    "elevation_gain_m": 83.13999999999987,
+    "elevation_loss_m": 133.12999999999988,
+    "from_candidate_id": "cp.036",
+    "label": "Segment 037",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 3821,
+    "route_point_start_index": 3722,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.037"
+  },
+  {
+    "candidate_id": "seg.038",
+    "confidence": "high",
+    "distance_m": 1488.4369650589804,
+    "elevation_gain_m": 80.27000000000021,
+    "elevation_loss_m": 247.5300000000002,
+    "from_candidate_id": "cp.037",
+    "label": "Segment 038",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 3925,
+    "route_point_start_index": 3821,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.038"
+  },
+  {
+    "candidate_id": "seg.039",
+    "confidence": "high",
+    "distance_m": 1497.933713852775,
+    "elevation_gain_m": 12.980000000000018,
+    "elevation_loss_m": 131.23000000000002,
+    "from_candidate_id": "cp.038",
+    "label": "Segment 039",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 4032,
+    "route_point_start_index": 3925,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.039"
+  },
+  {
+    "candidate_id": "seg.040",
+    "confidence": "high",
+    "distance_m": 10341.999427859102,
+    "elevation_gain_m": 1735.18,
+    "elevation_loss_m": 49.99000000000024,
+    "from_candidate_id": "cp.039",
+    "label": "Segment 040",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 4118,
+    "route_point_start_index": 4032,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.040"
+  },
+  {
+    "candidate_id": "seg.041",
+    "confidence": "high",
+    "distance_m": 12.737321432669411,
+    "elevation_gain_m": 93.25,
+    "elevation_loss_m": 0.0,
+    "from_candidate_id": "cp.040",
+    "label": "Segment 041",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 4119,
+    "route_point_start_index": 4118,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.041"
+  },
+  {
+    "candidate_id": "seg.042",
+    "confidence": "high",
+    "distance_m": 14.652837091776338,
+    "elevation_gain_m": 4.329999999999927,
+    "elevation_loss_m": 0.0,
+    "from_candidate_id": "cp.041",
+    "label": "Segment 042",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 4120,
+    "route_point_start_index": 4119,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.042"
+  },
+  {
+    "candidate_id": "seg.043",
+    "confidence": "high",
+    "distance_m": 15.836670669638771,
+    "elevation_gain_m": 0.0,
+    "elevation_loss_m": 1.4399999999995998,
+    "from_candidate_id": "cp.042",
+    "label": "Segment 043",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 4121,
+    "route_point_start_index": 4120,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.043"
+  },
+  {
+    "candidate_id": "seg.044",
+    "confidence": "high",
+    "distance_m": 14.68153429169276,
+    "elevation_gain_m": 0.0,
+    "elevation_loss_m": 2.8900000000003274,
+    "from_candidate_id": "cp.043",
+    "label": "Segment 044",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 4122,
+    "route_point_start_index": 4121,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.044"
+  },
+  {
+    "candidate_id": "seg.045",
+    "confidence": "high",
+    "distance_m": 14.24625178782676,
+    "elevation_gain_m": 2.4100000000003092,
+    "elevation_loss_m": 0.0,
+    "from_candidate_id": "cp.044",
+    "label": "Segment 045",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 4123,
+    "route_point_start_index": 4122,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.045"
+  },
+  {
+    "candidate_id": "seg.046",
+    "confidence": "high",
+    "distance_m": 88.72382195278512,
+    "elevation_gain_m": 8.650000000000091,
+    "elevation_loss_m": 4.330000000000382,
+    "from_candidate_id": "cp.045",
+    "label": "Segment 046",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 4128,
+    "route_point_start_index": 4123,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.046"
+  },
+  {
+    "candidate_id": "seg.047",
+    "confidence": "high",
+    "distance_m": 1501.8006938430804,
+    "elevation_gain_m": 338.8700000000008,
+    "elevation_loss_m": 101.42000000000053,
+    "from_candidate_id": "cp.046",
+    "label": "Segment 047",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 4210,
+    "route_point_start_index": 4128,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.047"
+  },
+  {
+    "candidate_id": "seg.048",
+    "confidence": "high",
+    "distance_m": 1503.2346061385426,
+    "elevation_gain_m": 170.63999999999942,
+    "elevation_loss_m": 217.26999999999953,
+    "from_candidate_id": "cp.047",
+    "label": "Segment 048",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 4325,
+    "route_point_start_index": 4210,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.048"
+  },
+  {
+    "candidate_id": "seg.049",
+    "confidence": "high",
+    "distance_m": 1492.2750113353654,
+    "elevation_gain_m": 217.2800000000002,
+    "elevation_loss_m": 249.48000000000002,
+    "from_candidate_id": "cp.048",
+    "label": "Segment 049",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 4493,
+    "route_point_start_index": 4325,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.049"
+  },
+  {
+    "candidate_id": "seg.050",
+    "confidence": "high",
+    "distance_m": 11614.039212633106,
+    "elevation_gain_m": 20.179999999999836,
+    "elevation_loss_m": 372.5,
+    "from_candidate_id": "cp.049",
+    "label": "Segment 050",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 4574,
+    "route_point_start_index": 4493,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.050"
+  },
+  {
+    "candidate_id": "seg.051",
+    "confidence": "high",
+    "distance_m": 7.81542475108166,
+    "elevation_gain_m": 0.9600000000000364,
+    "elevation_loss_m": 0.0,
+    "from_candidate_id": "cp.050",
+    "label": "Segment 051",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 4575,
+    "route_point_start_index": 4574,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.051"
+  },
+  {
+    "candidate_id": "seg.052",
+    "confidence": "high",
+    "distance_m": 10.954639796806545,
+    "elevation_gain_m": 2.400000000000091,
+    "elevation_loss_m": 0.0,
+    "from_candidate_id": "cp.051",
+    "label": "Segment 052",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 4576,
+    "route_point_start_index": 4575,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.052"
+  },
+  {
+    "candidate_id": "seg.053",
+    "confidence": "high",
+    "distance_m": 15.008180506214547,
+    "elevation_gain_m": 0.4800000000000182,
+    "elevation_loss_m": 0.0,
+    "from_candidate_id": "cp.052",
+    "label": "Segment 053",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 4577,
+    "route_point_start_index": 4576,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.053"
+  },
+  {
+    "candidate_id": "seg.054",
+    "confidence": "high",
+    "distance_m": 20.484109264910924,
+    "elevation_gain_m": 0.0,
+    "elevation_loss_m": 0.4800000000000182,
+    "from_candidate_id": "cp.053",
+    "label": "Segment 054",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 4578,
+    "route_point_start_index": 4577,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.054"
+  },
+  {
+    "candidate_id": "seg.055",
+    "confidence": "high",
+    "distance_m": 24.679847439748777,
+    "elevation_gain_m": 1.919999999999618,
+    "elevation_loss_m": 0.0,
+    "from_candidate_id": "cp.054",
+    "label": "Segment 055",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 4579,
+    "route_point_start_index": 4578,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.055"
+  },
+  {
+    "candidate_id": "seg.056",
+    "confidence": "high",
+    "distance_m": 33.0451670904119,
+    "elevation_gain_m": 1.4400000000000546,
+    "elevation_loss_m": 0.0,
+    "from_candidate_id": "cp.055",
+    "label": "Segment 056",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 4580,
+    "route_point_start_index": 4579,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.056"
+  },
+  {
+    "candidate_id": "seg.057",
+    "confidence": "high",
+    "distance_m": 288.02020269826426,
+    "elevation_gain_m": 11.070000000000618,
+    "elevation_loss_m": 2.8900000000003274,
+    "from_candidate_id": "cp.056",
+    "label": "Segment 057",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 4592,
+    "route_point_start_index": 4580,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.057"
+  },
+  {
+    "candidate_id": "seg.058",
+    "confidence": "high",
+    "distance_m": 1487.317421012015,
+    "elevation_gain_m": 24.029999999999745,
+    "elevation_loss_m": 37.00999999999976,
+    "from_candidate_id": "cp.057",
+    "label": "Segment 058",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 4651,
+    "route_point_start_index": 4592,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.058"
+  },
+  {
+    "candidate_id": "seg.059",
+    "confidence": "high",
+    "distance_m": 1505.6563394784891,
+    "elevation_gain_m": 68.27999999999929,
+    "elevation_loss_m": 88.94999999999936,
+    "from_candidate_id": "cp.058",
+    "label": "Segment 059",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 4726,
+    "route_point_start_index": 4651,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.059"
+  },
+  {
+    "candidate_id": "seg.060",
+    "confidence": "high",
+    "distance_m": 1499.365317038302,
+    "elevation_gain_m": 270.6000000000008,
+    "elevation_loss_m": 54.780000000000655,
+    "from_candidate_id": "cp.059",
+    "label": "Segment 060",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 4809,
+    "route_point_start_index": 4726,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.060"
+  },
+  {
+    "candidate_id": "seg.061",
+    "confidence": "high",
+    "distance_m": 1507.6575097253703,
+    "elevation_gain_m": 236.9600000000005,
+    "elevation_loss_m": 201.40000000000055,
+    "from_candidate_id": "cp.060",
+    "label": "Segment 061",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 4896,
+    "route_point_start_index": 4809,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.061"
+  },
+  {
+    "candidate_id": "seg.062",
+    "confidence": "high",
+    "distance_m": 1496.3717906693084,
+    "elevation_gain_m": 266.27000000000044,
+    "elevation_loss_m": 114.86000000000058,
+    "from_candidate_id": "cp.061",
+    "label": "Segment 062",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 4978,
+    "route_point_start_index": 4896,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.062"
+  },
+  {
+    "candidate_id": "seg.063",
+    "confidence": "high",
+    "distance_m": 1492.0031465030513,
+    "elevation_gain_m": 38.44999999999936,
+    "elevation_loss_m": 230.22999999999956,
+    "from_candidate_id": "cp.062",
+    "label": "Segment 063",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 5064,
+    "route_point_start_index": 4978,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.063"
+  },
+  {
+    "candidate_id": "seg.064",
+    "confidence": "high",
+    "distance_m": 8276.60115843699,
+    "elevation_gain_m": 98.5300000000002,
+    "elevation_loss_m": 290.78999999999996,
+    "from_candidate_id": "cp.063",
+    "label": "Segment 064",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 5102,
+    "route_point_start_index": 5064,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.064"
+  },
+  {
+    "candidate_id": "seg.065",
+    "confidence": "high",
+    "distance_m": 7.81542475108166,
+    "elevation_gain_m": 0.9600000000000364,
+    "elevation_loss_m": 0.0,
+    "from_candidate_id": "cp.064",
+    "label": "Segment 065",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 5103,
+    "route_point_start_index": 5102,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.065"
+  },
+  {
+    "candidate_id": "seg.066",
+    "confidence": "high",
+    "distance_m": 10.954639796806545,
+    "elevation_gain_m": 2.400000000000091,
+    "elevation_loss_m": 0.0,
+    "from_candidate_id": "cp.065",
+    "label": "Segment 066",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 5104,
+    "route_point_start_index": 5103,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.066"
+  },
+  {
+    "candidate_id": "seg.067",
+    "confidence": "high",
+    "distance_m": 15.008180506214547,
+    "elevation_gain_m": 0.4800000000000182,
+    "elevation_loss_m": 0.0,
+    "from_candidate_id": "cp.066",
+    "label": "Segment 067",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 5105,
+    "route_point_start_index": 5104,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.067"
+  },
+  {
+    "candidate_id": "seg.068",
+    "confidence": "high",
+    "distance_m": 20.484109264910924,
+    "elevation_gain_m": 0.0,
+    "elevation_loss_m": 0.4800000000000182,
+    "from_candidate_id": "cp.067",
+    "label": "Segment 068",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 5106,
+    "route_point_start_index": 5105,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.068"
+  },
+  {
+    "candidate_id": "seg.069",
+    "confidence": "high",
+    "distance_m": 689.2210174111411,
+    "elevation_gain_m": 25.0,
+    "elevation_loss_m": 7.220000000000255,
+    "from_candidate_id": "cp.068",
+    "label": "Segment 069",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 5134,
+    "route_point_start_index": 5106,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.069"
+  },
+  {
+    "candidate_id": "seg.070",
+    "confidence": "high",
+    "distance_m": 1491.2637765087998,
+    "elevation_gain_m": 14.909999999999854,
+    "elevation_loss_m": 57.19999999999982,
+    "from_candidate_id": "cp.069",
+    "label": "Segment 070",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 5194,
+    "route_point_start_index": 5134,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.070"
+  },
+  {
+    "candidate_id": "seg.071",
+    "confidence": "high",
+    "distance_m": 1487.514880974319,
+    "elevation_gain_m": 84.11999999999989,
+    "elevation_loss_m": 89.88999999999987,
+    "from_candidate_id": "cp.070",
+    "label": "Segment 071",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 5271,
+    "route_point_start_index": 5194,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.071"
+  },
+  {
+    "candidate_id": "seg.072",
+    "confidence": "high",
+    "distance_m": 1510.0185664864855,
+    "elevation_gain_m": 305.7000000000003,
+    "elevation_loss_m": 50.95000000000027,
+    "from_candidate_id": "cp.071",
+    "label": "Segment 072",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 5356,
+    "route_point_start_index": 5271,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.072"
+  },
+  {
+    "candidate_id": "seg.073",
+    "confidence": "high",
+    "distance_m": 1505.1498843117718,
+    "elevation_gain_m": 219.17000000000098,
+    "elevation_loss_m": 208.1200000000008,
+    "from_candidate_id": "cp.072",
+    "label": "Segment 073",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 5442,
+    "route_point_start_index": 5356,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.073"
+  },
+  {
+    "candidate_id": "seg.074",
+    "confidence": "high",
+    "distance_m": 1490.5405136988059,
+    "elevation_gain_m": 233.59000000000015,
+    "elevation_loss_m": 144.6600000000003,
+    "from_candidate_id": "cp.073",
+    "label": "Segment 074",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 5524,
+    "route_point_start_index": 5442,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.074"
+  },
+  {
+    "candidate_id": "seg.075",
+    "confidence": "high",
+    "distance_m": 10524.197374334124,
+    "elevation_gain_m": 27.879999999999654,
+    "elevation_loss_m": 1161.2799999999997,
+    "from_candidate_id": "cp.074",
+    "label": "Segment 075",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 5586,
+    "route_point_start_index": 5524,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.075"
+  },
+  {
+    "candidate_id": "seg.076",
+    "confidence": "high",
+    "distance_m": 0.5218879157346248,
+    "elevation_gain_m": 0.0,
+    "elevation_loss_m": 0.0,
+    "from_candidate_id": "cp.075",
+    "label": "Segment 076",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 5587,
+    "route_point_start_index": 5586,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.076"
+  },
+  {
+    "candidate_id": "seg.077",
+    "confidence": "high",
+    "distance_m": 0.2516042054679458,
+    "elevation_gain_m": 0.0,
+    "elevation_loss_m": 0.0,
+    "from_candidate_id": "cp.076",
+    "label": "Segment 077",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 5588,
+    "route_point_start_index": 5587,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.077"
+  },
+  {
+    "candidate_id": "seg.078",
+    "confidence": "high",
+    "distance_m": 0.5350170089661134,
+    "elevation_gain_m": 0.0,
+    "elevation_loss_m": 0.0,
+    "from_candidate_id": "cp.077",
+    "label": "Segment 078",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 5589,
+    "route_point_start_index": 5588,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.078"
+  },
+  {
+    "candidate_id": "seg.079",
+    "confidence": "high",
+    "distance_m": 3.3291529650539133,
+    "elevation_gain_m": 0.0,
+    "elevation_loss_m": 1.9199999999998454,
+    "from_candidate_id": "cp.078",
+    "label": "Segment 079",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 5590,
+    "route_point_start_index": 5589,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.079"
+  },
+  {
+    "candidate_id": "seg.080",
+    "confidence": "high",
+    "distance_m": 18.721331510478866,
+    "elevation_gain_m": 1.9199999999998454,
+    "elevation_loss_m": 0.0,
+    "from_candidate_id": "cp.079",
+    "label": "Segment 080",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 5591,
+    "route_point_start_index": 5590,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.080"
+  },
+  {
+    "candidate_id": "seg.081",
+    "confidence": "high",
+    "distance_m": 26.76873560635881,
+    "elevation_gain_m": 2.880000000000109,
+    "elevation_loss_m": 0.0,
+    "from_candidate_id": "cp.080",
+    "label": "Segment 081",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 5592,
+    "route_point_start_index": 5591,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.081"
+  },
+  {
+    "candidate_id": "seg.082",
+    "confidence": "high",
+    "distance_m": 1446.1727823587466,
+    "elevation_gain_m": 137.95000000000027,
+    "elevation_loss_m": 2.400000000000091,
+    "from_candidate_id": "cp.081",
+    "label": "Segment 082",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 5649,
+    "route_point_start_index": 5592,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.082"
+  },
+  {
+    "candidate_id": "seg.083",
+    "confidence": "high",
+    "distance_m": 1474.7110125947077,
+    "elevation_gain_m": 131.2199999999998,
+    "elevation_loss_m": 0.0,
+    "from_candidate_id": "cp.082",
+    "label": "Segment 083",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 5693,
+    "route_point_start_index": 5649,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.083"
+  },
+  {
+    "candidate_id": "seg.084",
+    "confidence": "high",
+    "distance_m": 1509.5250297061023,
+    "elevation_gain_m": 60.0699999999988,
+    "elevation_loss_m": 5.759999999998854,
+    "from_candidate_id": "cp.083",
+    "label": "Segment 084",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 5732,
+    "route_point_start_index": 5693,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.084"
+  },
+  {
+    "candidate_id": "seg.085",
+    "confidence": "high",
+    "distance_m": 1493.5761726158357,
+    "elevation_gain_m": 123.54000000000042,
+    "elevation_loss_m": 64.41000000000031,
+    "from_candidate_id": "cp.084",
+    "label": "Segment 085",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 5791,
+    "route_point_start_index": 5732,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.085"
+  },
+  {
+    "candidate_id": "seg.086",
+    "confidence": "high",
+    "distance_m": 1520.8989058354236,
+    "elevation_gain_m": 135.07000000000016,
+    "elevation_loss_m": 7.700000000000273,
+    "from_candidate_id": "cp.085",
+    "label": "Segment 086",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 5838,
+    "route_point_start_index": 5791,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.086"
+  },
+  {
+    "candidate_id": "seg.087",
+    "confidence": "high",
+    "distance_m": 1504.9992767499907,
+    "elevation_gain_m": 123.05000000000018,
+    "elevation_loss_m": 0.9600000000000364,
+    "from_candidate_id": "cp.086",
+    "label": "Segment 087",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 5882,
+    "route_point_start_index": 5838,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.087"
+  },
+  {
+    "candidate_id": "seg.088",
+    "confidence": "high",
+    "distance_m": 1491.7197243853457,
+    "elevation_gain_m": 116.30999999999949,
+    "elevation_loss_m": 6.7199999999998,
+    "from_candidate_id": "cp.087",
+    "label": "Segment 088",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 5932,
+    "route_point_start_index": 5882,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.088"
+  },
+  {
+    "candidate_id": "seg.089",
+    "confidence": "high",
+    "distance_m": 1480.3692929329675,
+    "elevation_gain_m": 63.94999999999982,
+    "elevation_loss_m": 6.749999999999545,
+    "from_candidate_id": "cp.088",
+    "label": "Segment 089",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 5983,
+    "route_point_start_index": 5932,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.089"
+  },
+  {
+    "candidate_id": "seg.090",
+    "confidence": "high",
+    "distance_m": 18650.18588731162,
+    "elevation_gain_m": 80.74000000000024,
+    "elevation_loss_m": 74.01000000000022,
+    "from_candidate_id": "cp.089",
+    "label": "Segment 090",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 6038,
+    "route_point_start_index": 5983,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.090"
+  },
+  {
+    "candidate_id": "seg.091",
+    "confidence": "high",
+    "distance_m": 6.778784761350879,
+    "elevation_gain_m": 18.73999999999978,
+    "elevation_loss_m": 0.0,
+    "from_candidate_id": "cp.090",
+    "label": "Segment 091",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 6039,
+    "route_point_start_index": 6038,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.091"
+  },
+  {
+    "candidate_id": "seg.092",
+    "confidence": "high",
+    "distance_m": 2.725103455082278,
+    "elevation_gain_m": 0.0,
+    "elevation_loss_m": 0.9600000000000364,
+    "from_candidate_id": "cp.091",
+    "label": "Segment 092",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 6040,
+    "route_point_start_index": 6039,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.092"
+  },
+  {
+    "candidate_id": "seg.093",
+    "confidence": "high",
+    "distance_m": 2.4714373802479193,
+    "elevation_gain_m": 1.4400000000000546,
+    "elevation_loss_m": 0.0,
+    "from_candidate_id": "cp.092",
+    "label": "Segment 093",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 6041,
+    "route_point_start_index": 6040,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.093"
+  },
+  {
+    "candidate_id": "seg.094",
+    "confidence": "high",
+    "distance_m": 6.173641936937623,
+    "elevation_gain_m": 0.0,
+    "elevation_loss_m": 0.4800000000000182,
+    "from_candidate_id": "cp.093",
+    "label": "Segment 094",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 6042,
+    "route_point_start_index": 6041,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.094"
+  },
+  {
+    "candidate_id": "seg.095",
+    "confidence": "high",
+    "distance_m": 10.033227307475595,
+    "elevation_gain_m": 0.4800000000000182,
+    "elevation_loss_m": 0.0,
+    "from_candidate_id": "cp.094",
+    "label": "Segment 095",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 6043,
+    "route_point_start_index": 6042,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.095"
+  },
+  {
+    "candidate_id": "seg.096",
+    "confidence": "high",
+    "distance_m": 9.066733311740476,
+    "elevation_gain_m": 0.0,
+    "elevation_loss_m": 2.8799999999996544,
+    "from_candidate_id": "cp.095",
+    "label": "Segment 096",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 6044,
+    "route_point_start_index": 6043,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.096"
+  },
+  {
+    "candidate_id": "seg.097",
+    "confidence": "high",
+    "distance_m": 9.14983966246413,
+    "elevation_gain_m": 0.0,
+    "elevation_loss_m": 3.850000000000364,
+    "from_candidate_id": "cp.096",
+    "label": "Segment 097",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 6045,
+    "route_point_start_index": 6044,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.097"
+  },
+  {
+    "candidate_id": "seg.098",
+    "confidence": "high",
+    "distance_m": 10.968986700430143,
+    "elevation_gain_m": 0.0,
+    "elevation_loss_m": 0.0,
+    "from_candidate_id": "cp.097",
+    "label": "Segment 098",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 6046,
+    "route_point_start_index": 6045,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.098"
+  },
+  {
+    "candidate_id": "seg.099",
+    "confidence": "high",
+    "distance_m": 11.351436847463713,
+    "elevation_gain_m": 0.4800000000000182,
+    "elevation_loss_m": 0.0,
+    "from_candidate_id": "cp.098",
+    "label": "Segment 099",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 6047,
+    "route_point_start_index": 6046,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.099"
+  },
+  {
+    "candidate_id": "seg.100",
+    "confidence": "high",
+    "distance_m": 10.609926045047752,
+    "elevation_gain_m": 0.0,
+    "elevation_loss_m": 0.9600000000000364,
+    "from_candidate_id": "cp.099",
+    "label": "Segment 100",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 6048,
+    "route_point_start_index": 6047,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.100"
+  },
+  {
+    "candidate_id": "seg.101",
+    "confidence": "high",
+    "distance_m": 10.346317965099594,
+    "elevation_gain_m": 0.9600000000000364,
+    "elevation_loss_m": 0.0,
+    "from_candidate_id": "cp.100",
+    "label": "Segment 101",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 6049,
+    "route_point_start_index": 6048,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.101"
+  },
+  {
+    "candidate_id": "seg.102",
+    "confidence": "high",
+    "distance_m": 760.5503133368701,
+    "elevation_gain_m": 121.11999999999989,
+    "elevation_loss_m": 45.649999999999636,
+    "from_candidate_id": "cp.101",
+    "label": "Segment 102",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 6121,
+    "route_point_start_index": 6049,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.102"
+  },
+  {
+    "candidate_id": "seg.103",
+    "confidence": "high",
+    "distance_m": 1498.2684854242955,
+    "elevation_gain_m": 297.52999999999884,
+    "elevation_loss_m": 136.98999999999887,
+    "from_candidate_id": "cp.102",
+    "label": "Segment 103",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 6270,
+    "route_point_start_index": 6121,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.103"
+  },
+  {
+    "candidate_id": "seg.104",
+    "confidence": "high",
+    "distance_m": 1508.672391406502,
+    "elevation_gain_m": 145.14000000000033,
+    "elevation_loss_m": 367.2100000000005,
+    "from_candidate_id": "cp.103",
+    "label": "Segment 104",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 6417,
+    "route_point_start_index": 6270,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.104"
+  },
+  {
+    "candidate_id": "seg.105",
+    "confidence": "high",
+    "distance_m": 1495.465832100399,
+    "elevation_gain_m": 12.980000000000928,
+    "elevation_loss_m": 582.0800000000008,
+    "from_candidate_id": "cp.104",
+    "label": "Segment 105",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 6541,
+    "route_point_start_index": 6417,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.105"
+  },
+  {
+    "candidate_id": "seg.106",
+    "confidence": "high",
+    "distance_m": 1498.9954464133532,
+    "elevation_gain_m": 48.53999999999951,
+    "elevation_loss_m": 251.37999999999965,
+    "from_candidate_id": "cp.105",
+    "label": "Segment 106",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 6640,
+    "route_point_start_index": 6541,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.106"
+  },
+  {
+    "candidate_id": "seg.107",
+    "confidence": "high",
+    "distance_m": 1493.9882075357991,
+    "elevation_gain_m": 114.89000000000033,
+    "elevation_loss_m": 217.2700000000002,
+    "from_candidate_id": "cp.106",
+    "label": "Segment 107",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 6751,
+    "route_point_start_index": 6640,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.107"
+  },
+  {
+    "candidate_id": "seg.108",
+    "confidence": "high",
+    "distance_m": 1508.9103615931472,
+    "elevation_gain_m": 29.30999999999949,
+    "elevation_loss_m": 377.7799999999995,
+    "from_candidate_id": "cp.107",
+    "label": "Segment 108",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 6854,
+    "route_point_start_index": 6751,
+    "source_refs": [
+      "artifact.gpx.chilai_nanhua_day1"
+    ],
+    "to_candidate_id": "cp.108"
+  },
+  {
+    "candidate_id": "seg.109",
+    "confidence": "high",
+    "distance_m": 549.9514819589741,
+    "elevation_gain_m": 10.099999999999682,
+    "elevation_loss_m": 46.149999999999636,
+    "from_candidate_id": "cp.108",
+    "label": "Segment 109",
+    "notes": "Generated between adjacent checkpoint candidates.",
+    "provenance": [
+      {
+        "captured_at": null,
+        "collected_at": null,
+        "license_note": null,
+        "method": "pretrip_candidate_generation.generate_pretrip_candidates_from_gpx",
+        "notes": "Deterministic distance-spaced checkpoint and adjacent segment candidate generation.",
+        "source_kind": "gpx",
+        "source_ref": "artifact.gpx.chilai_nanhua_day1",
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+      }
+    ],
+    "review_state": "proposed",
+    "route_point_end_index": 6908,
+    "route_point_start_index": 6854,
     "source_refs": [
       "artifact.gpx.chilai_nanhua_day1"
     ],

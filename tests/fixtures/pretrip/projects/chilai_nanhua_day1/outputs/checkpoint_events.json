@@ -1,0 +1,2667 @@
+{
+  "artifact_kind": "pretrip_checkpoint_event_candidates",
+  "boundary": {
+    "candidate_events_only": true,
+    "live_network_required": false,
+    "raw_track_points_embedded": false,
+    "runtime_safety_truth": false
+  },
+  "event_count": 110,
+  "events": [
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.start",
+      "checkpoint_type": "start",
+      "elevation_m": 2007.85,
+      "event_id": "event.chilai_nanhua_day1.cp.start",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "Start",
+      "lat": 24.05065393075347,
+      "lon": 121.21523100882769,
+      "observed_at": "2013-10-08T02:58:50Z",
+      "progress_m": 0.0,
+      "route_point_index": 0,
+      "sequence": 1,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.001",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 2148.2,
+      "event_id": "event.chilai_nanhua_day1.cp.001",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 001",
+      "lat": 24.04682851396501,
+      "lon": 121.22322332113981,
+      "observed_at": "2013-10-08T03:56:18Z",
+      "progress_m": 1532.76,
+      "route_point_index": 64,
+      "sequence": 2,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.002",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 2278.94,
+      "event_id": "event.chilai_nanhua_day1.cp.002",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 002",
+      "lat": 24.052010625600815,
+      "lon": 121.22796119190753,
+      "observed_at": "2013-10-08T04:51:45Z",
+      "progress_m": 3005.45,
+      "route_point_index": 108,
+      "sequence": 3,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.003",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 2360.65,
+      "event_id": "event.chilai_nanhua_day1.cp.003",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 003",
+      "lat": 24.046623408794403,
+      "lon": 121.23617763631046,
+      "observed_at": "2013-10-08T05:37:18Z",
+      "progress_m": 4513.0,
+      "route_point_index": 148,
+      "sequence": 4,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.004",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 2393.82,
+      "event_id": "event.chilai_nanhua_day1.cp.004",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 004",
+      "lat": 24.053557002916932,
+      "lon": 121.24297711998224,
+      "observed_at": "2013-10-08T06:27:23Z",
+      "progress_m": 6017.84,
+      "route_point_index": 207,
+      "sequence": 5,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.005",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 2528.89,
+      "event_id": "event.chilai_nanhua_day1.cp.005",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 005",
+      "lat": 24.04476505704224,
+      "lon": 121.25119037926197,
+      "observed_at": "2013-10-08T07:24:07Z",
+      "progress_m": 7554.29,
+      "route_point_index": 253,
+      "sequence": 6,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.006",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 2640.4,
+      "event_id": "event.chilai_nanhua_day1.cp.006",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 006",
+      "lat": 24.048184286803007,
+      "lon": 121.25656644813716,
+      "observed_at": "2013-10-08T08:08:56Z",
+      "progress_m": 9000.01,
+      "route_point_index": 296,
+      "sequence": 7,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.007",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 2751.91,
+      "event_id": "event.chilai_nanhua_day1.cp.007",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 007",
+      "lat": 24.045882616192102,
+      "lon": 121.26561094075441,
+      "observed_at": "2013-10-08T08:49:54Z",
+      "progress_m": 10520.44,
+      "route_point_index": 347,
+      "sequence": 8,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.008",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 2812.47,
+      "event_id": "event.chilai_nanhua_day1.cp.008",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 008",
+      "lat": 24.044778551906347,
+      "lon": 121.27405528910458,
+      "observed_at": "2013-10-08T09:26:45Z",
+      "progress_m": 12018.51,
+      "route_point_index": 399,
+      "sequence": 9,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.009",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 2826.89,
+      "event_id": "event.chilai_nanhua_day1.cp.009",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 009",
+      "lat": 24.04624161310494,
+      "lon": 121.28086005337536,
+      "observed_at": "2013-10-08T22:07:39Z",
+      "progress_m": 13507.38,
+      "route_point_index": 463,
+      "sequence": 10,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.010",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 2823.53,
+      "event_id": "event.chilai_nanhua_day1.cp.010",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 010",
+      "lat": 24.03525427915156,
+      "lon": 121.28039930015802,
+      "observed_at": "2013-10-08T22:35:41Z",
+      "progress_m": 15016.76,
+      "route_point_index": 523,
+      "sequence": 11,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.011",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 2795.65,
+      "event_id": "event.chilai_nanhua_day1.cp.011",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 011",
+      "lat": 24.024613620713353,
+      "lon": 121.27701376564801,
+      "observed_at": "2013-10-08T23:25:04Z",
+      "progress_m": 16514.61,
+      "route_point_index": 596,
+      "sequence": 12,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.012",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 2963.4,
+      "event_id": "event.chilai_nanhua_day1.cp.012",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 012",
+      "lat": 24.012748701497912,
+      "lon": 121.27282549627125,
+      "observed_at": "2013-10-09T01:11:23Z",
+      "progress_m": 18004.25,
+      "route_point_index": 675,
+      "sequence": 13,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.013",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 3060.98,
+      "event_id": "event.chilai_nanhua_day1.cp.013",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 013",
+      "lat": 24.001758517697453,
+      "lon": 121.26631921157241,
+      "observed_at": "2013-10-09T03:17:32Z",
+      "progress_m": 19501.8,
+      "route_point_index": 762,
+      "sequence": 14,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.014",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 3225.36,
+      "event_id": "event.chilai_nanhua_day1.cp.014",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 014",
+      "lat": 23.990603545680642,
+      "lon": 121.26005080528557,
+      "observed_at": "2013-10-09T06:15:04Z",
+      "progress_m": 21006.19,
+      "route_point_index": 847,
+      "sequence": 15,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.015",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 3004.74,
+      "event_id": "event.chilai_nanhua_day1.cp.015",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 015",
+      "lat": 23.97820151410997,
+      "lon": 121.26348478719592,
+      "observed_at": "2013-10-09T07:25:25Z",
+      "progress_m": 22503.16,
+      "route_point_index": 931,
+      "sequence": 16,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.016",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 2977.34,
+      "event_id": "event.chilai_nanhua_day1.cp.016",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 016",
+      "lat": 23.97538360208273,
+      "lon": 121.26739779487252,
+      "observed_at": "2013-10-09T23:05:50Z",
+      "progress_m": 24000.47,
+      "route_point_index": 1021,
+      "sequence": 17,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.017",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 3220.07,
+      "event_id": "event.chilai_nanhua_day1.cp.017",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 017",
+      "lat": 23.969045961275697,
+      "lon": 121.27562278881669,
+      "observed_at": "2013-10-10T02:40:13Z",
+      "progress_m": 25516.48,
+      "route_point_index": 1105,
+      "sequence": 18,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.018",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 2974.46,
+      "event_id": "event.chilai_nanhua_day1.cp.018",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 018",
+      "lat": 23.959706844761968,
+      "lon": 121.27528851851821,
+      "observed_at": "2013-10-10T05:46:03Z",
+      "progress_m": 27005.73,
+      "route_point_index": 1254,
+      "sequence": 19,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.019",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 3051.36,
+      "event_id": "event.chilai_nanhua_day1.cp.019",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 019",
+      "lat": 23.94881397485733,
+      "lon": 121.27201731316745,
+      "observed_at": "2013-10-10T07:42:11Z",
+      "progress_m": 28502.15,
+      "route_point_index": 1414,
+      "sequence": 20,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.020",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 3060.98,
+      "event_id": "event.chilai_nanhua_day1.cp.020",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 020",
+      "lat": 23.939404115080833,
+      "lon": 121.27263631671667,
+      "observed_at": "2013-10-10T23:04:24Z",
+      "progress_m": 30007.07,
+      "route_point_index": 1581,
+      "sequence": 21,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.021",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 2763.93,
+      "event_id": "event.chilai_nanhua_day1.cp.021",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 021",
+      "lat": 23.928284011781216,
+      "lon": 121.27528223209083,
+      "observed_at": "2013-10-11T01:55:00Z",
+      "progress_m": 31505.86,
+      "route_point_index": 1736,
+      "sequence": 22,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.022",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 2882.17,
+      "event_id": "event.chilai_nanhua_day1.cp.022",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 022",
+      "lat": 23.916252041235566,
+      "lon": 121.276162751019,
+      "observed_at": "2013-10-11T03:06:17Z",
+      "progress_m": 33006.66,
+      "route_point_index": 1894,
+      "sequence": 23,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.023",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 3086.45,
+      "event_id": "event.chilai_nanhua_day1.cp.023",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 023",
+      "lat": 23.907429836690426,
+      "lon": 121.27425385639071,
+      "observed_at": "2013-10-11T05:03:23Z",
+      "progress_m": 34504.05,
+      "route_point_index": 2056,
+      "sequence": 24,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.024",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 2929.75,
+      "event_id": "event.chilai_nanhua_day1.cp.024",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 024",
+      "lat": 23.89811242930591,
+      "lon": 121.27072155475616,
+      "observed_at": "2013-10-11T06:44:05Z",
+      "progress_m": 36003.5,
+      "route_point_index": 2222,
+      "sequence": 25,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.025",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 2836.03,
+      "event_id": "event.chilai_nanhua_day1.cp.025",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 025",
+      "lat": 23.8895270973444,
+      "lon": 121.26439372077584,
+      "observed_at": "2013-10-11T08:01:06Z",
+      "progress_m": 37500.24,
+      "route_point_index": 2374,
+      "sequence": 26,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.026",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 2856.69,
+      "event_id": "event.chilai_nanhua_day1.cp.026",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 026",
+      "lat": 23.878811839967966,
+      "lon": 121.26334858126938,
+      "observed_at": "2013-10-11T23:14:47Z",
+      "progress_m": 39008.06,
+      "route_point_index": 2526,
+      "sequence": 27,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.027",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 2914.37,
+      "event_id": "event.chilai_nanhua_day1.cp.027",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 027",
+      "lat": 23.87718139216304,
+      "lon": 121.26391503028572,
+      "observed_at": "2013-10-12T00:25:18Z",
+      "progress_m": 40504.08,
+      "route_point_index": 2673,
+      "sequence": 28,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.028",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 2567.34,
+      "event_id": "event.chilai_nanhua_day1.cp.028",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 028",
+      "lat": 23.883733274415135,
+      "lon": 121.25542600639164,
+      "observed_at": "2013-10-12T02:11:56Z",
+      "progress_m": 42002.68,
+      "route_point_index": 2813,
+      "sequence": 29,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.029",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 2263.56,
+      "event_id": "event.chilai_nanhua_day1.cp.029",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 029",
+      "lat": 23.885735543444753,
+      "lon": 121.24783108010888,
+      "observed_at": "2013-10-12T04:48:02Z",
+      "progress_m": 43524.98,
+      "route_point_index": 2926,
+      "sequence": 30,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.030",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 1940.08,
+      "event_id": "event.chilai_nanhua_day1.cp.030",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 030",
+      "lat": 23.88835438527167,
+      "lon": 121.2386533152312,
+      "observed_at": "2013-10-12T06:24:08Z",
+      "progress_m": 45008.39,
+      "route_point_index": 3029,
+      "sequence": 31,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.031",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 1842.02,
+      "event_id": "event.chilai_nanhua_day1.cp.031",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 031",
+      "lat": 23.888939945027232,
+      "lon": 121.22718125581741,
+      "observed_at": "2013-10-12T07:54:36Z",
+      "progress_m": 46516.33,
+      "route_point_index": 3136,
+      "sequence": 32,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.032",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 1575.26,
+      "event_id": "event.chilai_nanhua_day1.cp.032",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 032",
+      "lat": 23.89346307143569,
+      "lon": 121.21967718936503,
+      "observed_at": "2013-10-12T22:14:27Z",
+      "progress_m": 48008.56,
+      "route_point_index": 3256,
+      "sequence": 33,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.033",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 1534.4,
+      "event_id": "event.chilai_nanhua_day1.cp.033",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 033",
+      "lat": 23.900475371629,
+      "lon": 121.21862333267927,
+      "observed_at": "2013-10-12T23:43:42Z",
+      "progress_m": 49509.08,
+      "route_point_index": 3391,
+      "sequence": 34,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.034",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 1518.54,
+      "event_id": "event.chilai_nanhua_day1.cp.034",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 034",
+      "lat": 23.91151651740074,
+      "lon": 121.21614639647305,
+      "observed_at": "2013-10-13T00:35:21Z",
+      "progress_m": 51002.97,
+      "route_point_index": 3495,
+      "sequence": 35,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.035",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 1536.32,
+      "event_id": "event.chilai_nanhua_day1.cp.035",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 035",
+      "lat": 23.922964772209525,
+      "lon": 121.2110912706703,
+      "observed_at": "2013-10-13T01:26:04Z",
+      "progress_m": 52509.76,
+      "route_point_index": 3605,
+      "sequence": 36,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.036",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 1557.47,
+      "event_id": "event.chilai_nanhua_day1.cp.036",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 036",
+      "lat": 23.93012979067862,
+      "lon": 121.20787949301302,
+      "observed_at": "2013-10-13T02:57:19Z",
+      "progress_m": 54008.9,
+      "route_point_index": 3722,
+      "sequence": 37,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.037",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 1507.48,
+      "event_id": "event.chilai_nanhua_day1.cp.037",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 037",
+      "lat": 23.940531900152564,
+      "lon": 121.20443427935243,
+      "observed_at": "2013-10-13T04:18:01Z",
+      "progress_m": 55515.0,
+      "route_point_index": 3821,
+      "sequence": 38,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.038",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 1340.22,
+      "event_id": "event.chilai_nanhua_day1.cp.038",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 038",
+      "lat": 23.943812996149063,
+      "lon": 121.19297026656568,
+      "observed_at": "2013-10-13T05:15:58Z",
+      "progress_m": 57003.43,
+      "route_point_index": 3925,
+      "sequence": 39,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.039",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 1221.97,
+      "event_id": "event.chilai_nanhua_day1.cp.039",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 039",
+      "lat": 23.949776384979486,
+      "lon": 121.18318883702159,
+      "observed_at": "2013-10-13T05:44:16Z",
+      "progress_m": 58501.37,
+      "route_point_index": 4032,
+      "sequence": 40,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.040",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 2907.16,
+      "event_id": "event.chilai_nanhua_day1.cp.040",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 040",
+      "lat": 23.97814543917775,
+      "lon": 121.26425391063094,
+      "observed_at": "2013-10-09T21:52:26Z",
+      "progress_m": 68843.37,
+      "route_point_index": 4118,
+      "sequence": 41,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.041",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 3000.41,
+      "event_id": "event.chilai_nanhua_day1.cp.041",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 041",
+      "lat": 23.9780686609447,
+      "lon": 121.26416087150574,
+      "observed_at": "2013-10-09T22:18:01Z",
+      "progress_m": 68856.1,
+      "route_point_index": 4119,
+      "sequence": 42,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.042",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 3004.74,
+      "event_id": "event.chilai_nanhua_day1.cp.042",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 042",
+      "lat": 23.977948045358062,
+      "lon": 121.26410278491676,
+      "observed_at": "2013-10-09T22:19:45Z",
+      "progress_m": 68870.76,
+      "route_point_index": 4120,
+      "sequence": 43,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.043",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 3003.3,
+      "event_id": "event.chilai_nanhua_day1.cp.043",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 043",
+      "lat": 23.977811923250556,
+      "lon": 121.2641486339271,
+      "observed_at": "2013-10-09T22:20:20Z",
+      "progress_m": 68886.59,
+      "route_point_index": 4121,
+      "sequence": 44,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.044",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 3000.41,
+      "event_id": "event.chilai_nanhua_day1.cp.044",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 044",
+      "lat": 23.97771544754505,
+      "lon": 121.26404997892678,
+      "observed_at": "2013-10-09T22:20:51Z",
+      "progress_m": 68901.27,
+      "route_point_index": 4122,
+      "sequence": 45,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.045",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 3002.82,
+      "event_id": "event.chilai_nanhua_day1.cp.045",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 045",
+      "lat": 23.977622911334038,
+      "lon": 121.26395300030708,
+      "observed_at": "2013-10-09T22:21:23Z",
+      "progress_m": 68915.52,
+      "route_point_index": 4123,
+      "sequence": 46,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.046",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 3007.14,
+      "event_id": "event.chilai_nanhua_day1.cp.046",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 046",
+      "lat": 23.976911371573806,
+      "lon": 121.26428383402526,
+      "observed_at": "2013-10-09T22:25:06Z",
+      "progress_m": 69004.24,
+      "route_point_index": 4128,
+      "sequence": 47,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.047",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 3244.59,
+      "event_id": "event.chilai_nanhua_day1.cp.047",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 047",
+      "lat": 23.973139012232423,
+      "lon": 121.27458728849888,
+      "observed_at": "2013-10-10T01:55:32Z",
+      "progress_m": 70506.04,
+      "route_point_index": 4210,
+      "sequence": 48,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.048",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 3197.96,
+      "event_id": "event.chilai_nanhua_day1.cp.048",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 048",
+      "lat": 23.962861457839608,
+      "lon": 121.27622393891215,
+      "observed_at": "2013-10-10T04:56:02Z",
+      "progress_m": 72009.28,
+      "route_point_index": 4325,
+      "sequence": 49,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.049",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 3165.76,
+      "event_id": "event.chilai_nanhua_day1.cp.049",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 049",
+      "lat": 23.951513869687915,
+      "lon": 121.27473120577633,
+      "observed_at": "2013-10-10T07:07:50Z",
+      "progress_m": 73501.55,
+      "route_point_index": 4493,
+      "sequence": 50,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.050",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 2813.44,
+      "event_id": "event.chilai_nanhua_day1.cp.050",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 050",
+      "lat": 24.045313987880945,
+      "lon": 121.27960662357509,
+      "observed_at": "2013-10-08T22:00:53Z",
+      "progress_m": 85115.59,
+      "route_point_index": 4574,
+      "sequence": 51,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.051",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 2814.4,
+      "event_id": "event.chilai_nanhua_day1.cp.051",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 051",
+      "lat": 24.045275934040546,
+      "lon": 121.27967133186758,
+      "observed_at": "2013-10-08T22:02:14Z",
+      "progress_m": 85123.41,
+      "route_point_index": 4575,
+      "sequence": 52,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.052",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 2816.8,
+      "event_id": "event.chilai_nanhua_day1.cp.052",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 052",
+      "lat": 24.045194378122687,
+      "lon": 121.27961081452668,
+      "observed_at": "2013-10-08T22:03:56Z",
+      "progress_m": 85134.36,
+      "route_point_index": 4576,
+      "sequence": 53,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.053",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 2817.28,
+      "event_id": "event.chilai_nanhua_day1.cp.053",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 053",
+      "lat": 24.045221619307995,
+      "lon": 121.27975556999445,
+      "observed_at": "2013-10-08T22:04:25Z",
+      "progress_m": 85149.37,
+      "route_point_index": 4577,
+      "sequence": 54,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.054",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 2816.8,
+      "event_id": "event.chilai_nanhua_day1.cp.054",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 054",
+      "lat": 24.045387748628855,
+      "lon": 121.27984274178743,
+      "observed_at": "2013-10-08T22:04:50Z",
+      "progress_m": 85169.86,
+      "route_point_index": 4578,
+      "sequence": 55,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.055",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 2818.72,
+      "event_id": "event.chilai_nanhua_day1.cp.055",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 055",
+      "lat": 24.04560844413936,
+      "lon": 121.2798685580492,
+      "observed_at": "2013-10-08T22:05:20Z",
+      "progress_m": 85194.54,
+      "route_point_index": 4579,
+      "sequence": 56,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.056",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 2820.16,
+      "event_id": "event.chilai_nanhua_day1.cp.056",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 056",
+      "lat": 24.045870378613472,
+      "lon": 121.28002228215337,
+      "observed_at": "2013-10-08T22:05:56Z",
+      "progress_m": 85227.58,
+      "route_point_index": 4580,
+      "sequence": 57,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.057",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 2828.34,
+      "event_id": "event.chilai_nanhua_day1.cp.057",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 057",
+      "lat": 24.0446600317955,
+      "lon": 121.2808649148792,
+      "observed_at": "2013-10-08T22:11:29Z",
+      "progress_m": 85515.6,
+      "route_point_index": 4592,
+      "sequence": 58,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.058",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 2815.36,
+      "event_id": "event.chilai_nanhua_day1.cp.058",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 058",
+      "lat": 24.03393169865012,
+      "lon": 121.28025638870895,
+      "observed_at": "2013-10-08T22:38:18Z",
+      "progress_m": 87002.92,
+      "route_point_index": 4651,
+      "sequence": 59,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.059",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 2794.69,
+      "event_id": "event.chilai_nanhua_day1.cp.059",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 059",
+      "lat": 24.02309775352478,
+      "lon": 121.27669676207006,
+      "observed_at": "2013-10-08T23:30:13Z",
+      "progress_m": 88508.57,
+      "route_point_index": 4726,
+      "sequence": 60,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.060",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 3010.51,
+      "event_id": "event.chilai_nanhua_day1.cp.060",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 060",
+      "lat": 24.011698365211487,
+      "lon": 121.27169117331505,
+      "observed_at": "2013-10-09T01:48:30Z",
+      "progress_m": 90007.94,
+      "route_point_index": 4809,
+      "sequence": 61,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.061",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 3046.07,
+      "event_id": "event.chilai_nanhua_day1.cp.061",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 061",
+      "lat": 24.00021918118,
+      "lon": 121.26550423912704,
+      "observed_at": "2013-10-09T04:09:21Z",
+      "progress_m": 91515.6,
+      "route_point_index": 4896,
+      "sequence": 62,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.062",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 3197.48,
+      "event_id": "event.chilai_nanhua_day1.cp.062",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 062",
+      "lat": 23.98902716115117,
+      "lon": 121.2604414857924,
+      "observed_at": "2013-10-09T06:22:02Z",
+      "progress_m": 93011.97,
+      "route_point_index": 4978,
+      "sequence": 63,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.063",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 3005.7,
+      "event_id": "event.chilai_nanhua_day1.cp.063",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 063",
+      "lat": 23.97844056598842,
+      "lon": 121.26343290321529,
+      "observed_at": "2013-10-09T07:48:36Z",
+      "progress_m": 94503.97,
+      "route_point_index": 5064,
+      "sequence": 64,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.064",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 2813.44,
+      "event_id": "event.chilai_nanhua_day1.cp.064",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 064",
+      "lat": 24.045313987880945,
+      "lon": 121.27960662357509,
+      "observed_at": "2013-10-08T22:00:53Z",
+      "progress_m": 102780.57,
+      "route_point_index": 5102,
+      "sequence": 65,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.065",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 2814.4,
+      "event_id": "event.chilai_nanhua_day1.cp.065",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 065",
+      "lat": 24.045275934040546,
+      "lon": 121.27967133186758,
+      "observed_at": "2013-10-08T22:02:14Z",
+      "progress_m": 102788.39,
+      "route_point_index": 5103,
+      "sequence": 66,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.066",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 2816.8,
+      "event_id": "event.chilai_nanhua_day1.cp.066",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 066",
+      "lat": 24.045194378122687,
+      "lon": 121.27961081452668,
+      "observed_at": "2013-10-08T22:03:56Z",
+      "progress_m": 102799.34,
+      "route_point_index": 5104,
+      "sequence": 67,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.067",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 2817.28,
+      "event_id": "event.chilai_nanhua_day1.cp.067",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 067",
+      "lat": 24.045221619307995,
+      "lon": 121.27975556999445,
+      "observed_at": "2013-10-08T22:04:25Z",
+      "progress_m": 102814.35,
+      "route_point_index": 5105,
+      "sequence": 68,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.068",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 2816.8,
+      "event_id": "event.chilai_nanhua_day1.cp.068",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 068",
+      "lat": 24.045387748628855,
+      "lon": 121.27984274178743,
+      "observed_at": "2013-10-08T22:04:50Z",
+      "progress_m": 102834.84,
+      "route_point_index": 5106,
+      "sequence": 69,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.069",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 2834.58,
+      "event_id": "event.chilai_nanhua_day1.cp.069",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 069",
+      "lat": 24.04304115101695,
+      "lon": 121.2804642599076,
+      "observed_at": "2013-10-08T22:18:10Z",
+      "progress_m": 103524.06,
+      "route_point_index": 5134,
+      "sequence": 70,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.070",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 2792.29,
+      "event_id": "event.chilai_nanhua_day1.cp.070",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 070",
+      "lat": 24.03105989098549,
+      "lon": 121.27963487058878,
+      "observed_at": "2013-10-08T22:45:33Z",
+      "progress_m": 105015.32,
+      "route_point_index": 5194,
+      "sequence": 71,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.071",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 2786.52,
+      "event_id": "event.chilai_nanhua_day1.cp.071",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 071",
+      "lat": 24.020246397703886,
+      "lon": 121.2769037950784,
+      "observed_at": "2013-10-08T23:44:25Z",
+      "progress_m": 106502.84,
+      "route_point_index": 5271,
+      "sequence": 72,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.072",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 3041.27,
+      "event_id": "event.chilai_nanhua_day1.cp.072",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 072",
+      "lat": 24.009024538099766,
+      "lon": 121.27043480984867,
+      "observed_at": "2013-10-09T02:07:33Z",
+      "progress_m": 108012.85,
+      "route_point_index": 5356,
+      "sequence": 73,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.073",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 3052.32,
+      "event_id": "event.chilai_nanhua_day1.cp.073",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 073",
+      "lat": 23.997727409005165,
+      "lon": 121.26391218043864,
+      "observed_at": "2013-10-09T04:27:03Z",
+      "progress_m": 109518.0,
+      "route_point_index": 5442,
+      "sequence": 74,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.074",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 3141.25,
+      "event_id": "event.chilai_nanhua_day1.cp.074",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 074",
+      "lat": 23.986280243843794,
+      "lon": 121.2613305542618,
+      "observed_at": "2013-10-09T06:34:52Z",
+      "progress_m": 111008.54,
+      "route_point_index": 5524,
+      "sequence": 75,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.075",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 2007.85,
+      "event_id": "event.chilai_nanhua_day1.cp.075",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 075",
+      "lat": 24.05065393075347,
+      "lon": 121.21523100882769,
+      "observed_at": "2013-10-08T02:58:50Z",
+      "progress_m": 121532.74,
+      "route_point_index": 5586,
+      "sequence": 76,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.076",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 2007.85,
+      "event_id": "event.chilai_nanhua_day1.cp.076",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 076",
+      "lat": 24.050650661811233,
+      "lon": 121.21523469686508,
+      "observed_at": "2013-10-08T02:58:51Z",
+      "progress_m": 121533.26,
+      "route_point_index": 5587,
+      "sequence": 77,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.077",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 2007.85,
+      "event_id": "event.chilai_nanhua_day1.cp.077",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 077",
+      "lat": 24.05064906924963,
+      "lon": 121.21523645706475,
+      "observed_at": "2013-10-08T02:58:52Z",
+      "progress_m": 121533.52,
+      "route_point_index": 5588,
+      "sequence": 78,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.078",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 2007.85,
+      "event_id": "event.chilai_nanhua_day1.cp.078",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 078",
+      "lat": 24.050644459202886,
+      "lon": 121.21523796580732,
+      "observed_at": "2013-10-08T02:58:54Z",
+      "progress_m": 121534.05,
+      "route_point_index": 5589,
+      "sequence": 79,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.079",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 2005.93,
+      "event_id": "event.chilai_nanhua_day1.cp.079",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 079",
+      "lat": 24.050650158897042,
+      "lon": 121.21520577929914,
+      "observed_at": "2013-10-08T03:09:17Z",
+      "progress_m": 121537.38,
+      "route_point_index": 5590,
+      "sequence": 80,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.080",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 2007.85,
+      "event_id": "event.chilai_nanhua_day1.cp.080",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 080",
+      "lat": 24.050797261297703,
+      "lon": 121.21529546566308,
+      "observed_at": "2013-10-08T03:10:36Z",
+      "progress_m": 121556.1,
+      "route_point_index": 5591,
+      "sequence": 81,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.081",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 2010.73,
+      "event_id": "event.chilai_nanhua_day1.cp.081",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 081",
+      "lat": 24.05097688548267,
+      "lon": 121.21547098271549,
+      "observed_at": "2013-10-08T03:11:07Z",
+      "progress_m": 121582.87,
+      "route_point_index": 5592,
+      "sequence": 82,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.082",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 2146.28,
+      "event_id": "event.chilai_nanhua_day1.cp.082",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 082",
+      "lat": 24.047144008800387,
+      "lon": 121.2231255043298,
+      "observed_at": "2013-10-08T03:55:26Z",
+      "progress_m": 123029.04,
+      "route_point_index": 5649,
+      "sequence": 83,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.083",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 2277.5,
+      "event_id": "event.chilai_nanhua_day1.cp.083",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 083",
+      "lat": 24.051886405795813,
+      "lon": 121.22765055857599,
+      "observed_at": "2013-10-08T04:51:05Z",
+      "progress_m": 124503.75,
+      "route_point_index": 5693,
+      "sequence": 84,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.084",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 2331.81,
+      "event_id": "event.chilai_nanhua_day1.cp.084",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 084",
+      "lat": 24.046913171187043,
+      "lon": 121.2362015247345,
+      "observed_at": "2013-10-08T05:25:59Z",
+      "progress_m": 126013.28,
+      "route_point_index": 5732,
+      "sequence": 85,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.085",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 2390.94,
+      "event_id": "event.chilai_nanhua_day1.cp.085",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 085",
+      "lat": 24.053714917972684,
+      "lon": 121.24261770397425,
+      "observed_at": "2013-10-08T06:25:57Z",
+      "progress_m": 127506.85,
+      "route_point_index": 5791,
+      "sequence": 86,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.086",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 2518.31,
+      "event_id": "event.chilai_nanhua_day1.cp.086",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 086",
+      "lat": 24.045238634571433,
+      "lon": 121.25092224217951,
+      "observed_at": "2013-10-08T07:21:19Z",
+      "progress_m": 129027.75,
+      "route_point_index": 5838,
+      "sequence": 87,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.087",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 2640.4,
+      "event_id": "event.chilai_nanhua_day1.cp.087",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 087",
+      "lat": 24.048184286803007,
+      "lon": 121.25656644813716,
+      "observed_at": "2013-10-08T08:08:56Z",
+      "progress_m": 130532.75,
+      "route_point_index": 5882,
+      "sequence": 88,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.088",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 2749.99,
+      "event_id": "event.chilai_nanhua_day1.cp.088",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 088",
+      "lat": 24.046043045818806,
+      "lon": 121.26538940705359,
+      "observed_at": "2013-10-08T08:49:14Z",
+      "progress_m": 132024.47,
+      "route_point_index": 5932,
+      "sequence": 89,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.089",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 2807.19,
+      "event_id": "event.chilai_nanhua_day1.cp.089",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 089",
+      "lat": 24.04461359605193,
+      "lon": 121.27365136519074,
+      "observed_at": "2013-10-08T09:25:42Z",
+      "progress_m": 133504.84,
+      "route_point_index": 5983,
+      "sequence": 90,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.090",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 2813.92,
+      "event_id": "event.chilai_nanhua_day1.cp.090",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 090",
+      "lat": 23.889550818130374,
+      "lon": 121.26434887759387,
+      "observed_at": "2013-10-11T21:36:24Z",
+      "progress_m": 152155.03,
+      "route_point_index": 6038,
+      "sequence": 91,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.091",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 2832.66,
+      "event_id": "event.chilai_nanhua_day1.cp.091",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 091",
+      "lat": 23.889493150636554,
+      "lon": 121.26437050290406,
+      "observed_at": "2013-10-11T21:45:31Z",
+      "progress_m": 152161.81,
+      "route_point_index": 6039,
+      "sequence": 92,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.092",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 2831.7,
+      "event_id": "event.chilai_nanhua_day1.cp.092",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 092",
+      "lat": 23.889478063210845,
+      "lon": 121.26434938050807,
+      "observed_at": "2013-10-11T22:05:57Z",
+      "progress_m": 152164.53,
+      "route_point_index": 6040,
+      "sequence": 93,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.093",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 2833.14,
+      "event_id": "event.chilai_nanhua_day1.cp.093",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 093",
+      "lat": 23.889470351859927,
+      "lon": 121.26437217928469,
+      "observed_at": "2013-10-11T22:09:35Z",
+      "progress_m": 152167.0,
+      "route_point_index": 6041,
+      "sequence": 94,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.094",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 2832.66,
+      "event_id": "event.chilai_nanhua_day1.cp.094",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 094",
+      "lat": 23.88942601159215,
+      "lon": 121.26433563418686,
+      "observed_at": "2013-10-11T22:10:22Z",
+      "progress_m": 152173.18,
+      "route_point_index": 6042,
+      "sequence": 95,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.095",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 2833.14,
+      "event_id": "event.chilai_nanhua_day1.cp.095",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 095",
+      "lat": 23.88934344984591,
+      "lon": 121.2642958201468,
+      "observed_at": "2013-10-11T22:10:59Z",
+      "progress_m": 152183.21,
+      "route_point_index": 6043,
+      "sequence": 96,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.096",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 2830.26,
+      "event_id": "event.chilai_nanhua_day1.cp.096",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 096",
+      "lat": 23.889268934726715,
+      "lon": 121.2642596103251,
+      "observed_at": "2013-10-11T22:11:40Z",
+      "progress_m": 152192.28,
+      "route_point_index": 6044,
+      "sequence": 97,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.097",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 2826.41,
+      "event_id": "event.chilai_nanhua_day1.cp.097",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 097",
+      "lat": 23.889186708256602,
+      "lon": 121.2642630469054,
+      "observed_at": "2013-10-11T22:11:55Z",
+      "progress_m": 152201.43,
+      "route_point_index": 6045,
+      "sequence": 98,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.098",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 2826.41,
+      "event_id": "event.chilai_nanhua_day1.cp.098",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 098",
+      "lat": 23.889097776263952,
+      "lon": 121.26430973410606,
+      "observed_at": "2013-10-11T22:12:06Z",
+      "progress_m": 152212.4,
+      "route_point_index": 6046,
+      "sequence": 99,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.099",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 2826.89,
+      "event_id": "event.chilai_nanhua_day1.cp.099",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 099",
+      "lat": 23.889001719653606,
+      "lon": 121.26434753648937,
+      "observed_at": "2013-10-11T22:12:19Z",
+      "progress_m": 152223.75,
+      "route_point_index": 6047,
+      "sequence": 100,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.100",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 2825.93,
+      "event_id": "event.chilai_nanhua_day1.cp.100",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 100",
+      "lat": 23.888908261433244,
+      "lon": 121.2643264979124,
+      "observed_at": "2013-10-11T22:12:30Z",
+      "progress_m": 152234.36,
+      "route_point_index": 6048,
+      "sequence": 101,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.101",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 2826.89,
+      "event_id": "event.chilai_nanhua_day1.cp.101",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 101",
+      "lat": 23.88881572522223,
+      "lon": 121.26433714292943,
+      "observed_at": "2013-10-11T22:12:42Z",
+      "progress_m": 152244.7,
+      "route_point_index": 6049,
+      "sequence": 102,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.102",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 2902.36,
+      "event_id": "event.chilai_nanhua_day1.cp.102",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 102",
+      "lat": 23.882967168465257,
+      "lon": 121.2648743391037,
+      "observed_at": "2013-10-11T22:46:08Z",
+      "progress_m": 153005.25,
+      "route_point_index": 6121,
+      "sequence": 103,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.103",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 3062.9,
+      "event_id": "event.chilai_nanhua_day1.cp.103",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 103",
+      "lat": 23.872729260474443,
+      "lon": 121.26610480248928,
+      "observed_at": "2013-10-11T23:57:37Z",
+      "progress_m": 154503.52,
+      "route_point_index": 6270,
+      "sequence": 104,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.104",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 2840.83,
+      "event_id": "event.chilai_nanhua_day1.cp.104",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 104",
+      "lat": 23.882576068863273,
+      "lon": 121.2607174180448,
+      "observed_at": "2013-10-12T01:02:04Z",
+      "progress_m": 156012.19,
+      "route_point_index": 6417,
+      "sequence": 105,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.105",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 2271.73,
+      "event_id": "event.chilai_nanhua_day1.cp.105",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 105",
+      "lat": 23.885278897359967,
+      "lon": 121.25063583254814,
+      "observed_at": "2013-10-12T03:48:31Z",
+      "progress_m": 157507.66,
+      "route_point_index": 6541,
+      "sequence": 106,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.106",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 2068.89,
+      "event_id": "event.chilai_nanhua_day1.cp.106",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 106",
+      "lat": 23.88554586097598,
+      "lon": 121.2427930533886,
+      "observed_at": "2013-10-12T05:45:37Z",
+      "progress_m": 159006.66,
+      "route_point_index": 6640,
+      "sequence": 107,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.107",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 1966.51,
+      "event_id": "event.chilai_nanhua_day1.cp.107",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 107",
+      "lat": 23.890158338472247,
+      "lon": 121.23197000473738,
+      "observed_at": "2013-10-12T07:26:34Z",
+      "progress_m": 160500.64,
+      "route_point_index": 6751,
+      "sequence": 108,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.108",
+      "checkpoint_type": "route_progress",
+      "elevation_m": 1618.04,
+      "event_id": "event.chilai_nanhua_day1.cp.108",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "CP 108",
+      "lat": 23.89217016287148,
+      "lon": 121.22231924906373,
+      "observed_at": "2013-10-12T08:35:08Z",
+      "progress_m": 162009.55,
+      "route_point_index": 6854,
+      "sequence": 109,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "runtime_mutation_allowed": false
+      },
+      "checkpoint_candidate_id": "cp.finish",
+      "checkpoint_type": "finish",
+      "elevation_m": 1581.99,
+      "event_id": "event.chilai_nanhua_day1.cp.finish",
+      "event_type": "checkpoint_candidate_reached",
+      "label": "Finish",
+      "lat": 23.89315872453153,
+      "lon": 121.21949454769492,
+      "observed_at": "2013-10-12T10:00:40Z",
+      "progress_m": 162559.51,
+      "route_point_index": 6908,
+      "sequence": 110,
+      "source_refs": [
+        "artifact.gpx.chilai_nanhua_day1",
+        "candidates/checkpoints.json"
+      ]
+    }
+  ],
+  "notes": [
+    "events（事件候選）由完整 primary GPX 的 CP route_point_index 對應產生。",
+    "不修剪、不抽樣 primary GPX 內部點位；event 檔只保存 CP 對應點，不保存全量 trkpt。"
+  ],
+  "project_id": "chilai_nanhua_day1",
+  "route_artifact_id": "artifact.gpx.chilai_nanhua_day1",
+  "schema_version": "0.1.0",
+  "source_gpx": {
+    "internal_points_preserved": true,
+    "point_count": 6909,
+    "sampling_performed": false,
+    "sha256": "a270bbc769c9c521c4bb839a6230fb3760c37478c5b3ebe57f36f5d8755f6ee7",
+    "trimming_performed": false,
+    "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+  }
+}

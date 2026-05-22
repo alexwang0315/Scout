@@ -1,0 +1,76 @@
+{
+  "after_action_surface": {
+    "after_action_style_projection": true,
+    "completed_mission_replay": false,
+    "incident_package_source": false,
+    "notes": "/admin uses this GPX set as map-first planning evidence, not as completed mission evidence.",
+    "pretrip_actual_user_track_available": false,
+    "pretrip_golden_route_replacement_expected_after_return": true
+  },
+  "artifact_kind": "pretrip_admin_surface_projection",
+  "boundary": {
+    "golden_route_is_reference_evidence": true,
+    "incident_store_mutation_allowed": false,
+    "mission_graph_compiled": false,
+    "phase1_runtime_mutation_allowed": false,
+    "phase2_brain_writeback_allowed": false,
+    "projection_only": true,
+    "real_outbound_transport_allowed": false
+  },
+  "candidate_counts": {
+    "checkpoint_candidate_count": 110,
+    "reference_track_count": 23,
+    "segment_candidate_count": 109
+  },
+  "debug_surface": {
+    "debug_projection_events_ref": "outputs/debug_projection_events.jsonl",
+    "file_runtime_debug_log_compatible": true,
+    "live_runtime_events": false
+  },
+  "import_stage": "pretrip",
+  "planning_semantics": {
+    "golden_route": {
+      "actual_user_track": false,
+      "meaning": "selected similar reference route before departure",
+      "runtime_safety_truth": false
+    },
+    "manual_waypoint_route_policy": {
+      "danger_review_required": true,
+      "manual_waypoints_required": true,
+      "notes": "Unwalked route sections（未曾發生的路徑區段）can be planned only through manually drawn waypoint candidates and must raise danger review.",
+      "unwalked_route_sections_allowed": true
+    },
+    "post_analysis_replacement_policy": {
+      "actual_track_may_replace_pretrip_golden_route": true,
+      "historical_planning_evidence_mutation_allowed": false
+    },
+    "pretrip_actual_user_track_exists": false
+  },
+  "pretrip_surface": {
+    "package_ref": "outputs/pretrip_package.json",
+    "project_ref": "project.json",
+    "reference_tracks_ref": "outputs/reference_tracks.json"
+  },
+  "project_id": "chilai_nanhua_day1",
+  "projection_only": true,
+  "route": {
+    "bbox_wgs84": {
+      "max_lat": 24.053969560191035,
+      "max_lon": 121.281699500978,
+      "min_lat": 23.872665725648403,
+      "min_lon": 121.17726685479283
+    },
+    "distance_m": 162559.51,
+    "map_context_ref": "normalized/map/map_context.geojson",
+    "point_count": 6909,
+    "route_name": "2013-10-08 10:58:50 每日記錄",
+    "route_role": "golden_route_reference",
+    "route_summary_ref": "normalized/routes/route_summary.json"
+  },
+  "schema_version": "0.1.0",
+  "surface_targets": [
+    "/admin",
+    "/admin/pretrip",
+    "/admin/debug"
+  ]
+}

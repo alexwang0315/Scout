@@ -31,11 +31,27 @@ RAW_BINARY_SUFFIXES = frozenset(
     }
 )
 RAW_ROUTE_SUFFIXES = frozenset({".fit", ".gpx", ".kml", ".kmz", ".tcx"})
-JSON_SUFFIXES = frozenset({".geojson", ".json"})
+JSON_SUFFIXES = frozenset({".geojson", ".json", ".jsonl"})
+IGNORED_METADATA_FILENAMES = frozenset({".DS_Store"})
 ALLOWED_MAP_PAYLOAD_REFS = frozenset(
     {
         "tests/fixtures/pretrip/projects/chilai_nanhua_day1/normalized/map/map_context.geojson",
         "tests/fixtures/pretrip/projects/chilai_nanhua_day1/candidates/map_candidates.json",
+        "tests/fixtures/pretrip/projects/chilai_nanhua_day1/candidates/overpass_evidence.json",
+        "tests/fixtures/pretrip/projects/chilai_nanhua_day1/normalized/map/overpass_vector_evidence.geojson",
+        "tests/fixtures/pretrip/projects/chilai_nanhua_day1/outputs/reference_track_display_geometry.json",
+        "tests/fixtures/pretrip/projects/chilai_nanhua_day1/outputs/segment_display_geometry.json",
+    }
+)
+ALLOWED_LARGE_METADATA_REFS = frozenset(
+    {
+        "tests/fixtures/pretrip/projects/chilai_nanhua_day1/candidates/overpass_evidence.json",
+        "tests/fixtures/pretrip/projects/chilai_nanhua_day1/normalized/map/overpass_phase_a_raw.json",
+        "tests/fixtures/pretrip/projects/chilai_nanhua_day1/normalized/map/overpass_vector_evidence.geojson",
+        "tests/fixtures/pretrip/projects/chilai_nanhua_day1/normalized/terrain/segment_dtm_coverage.json",
+        "tests/fixtures/pretrip/projects/chilai_nanhua_day1/outputs/pretrip_package.json",
+        "tests/fixtures/pretrip/projects/chilai_nanhua_day1/outputs/reference_track_display_geometry.json",
+        "tests/fixtures/pretrip/projects/chilai_nanhua_day1/outputs/segment_display_geometry.json",
     }
 )
 FORBIDDEN_PATH_FRAGMENTS = ("PdrSample", "raw_samples")
@@ -83,7 +99,11 @@ def build_pretrip_fixture_hygiene_manifest(
 ) -> PreTripFixtureHygieneManifest:
     root = Path(repo_root)
     fixture_root = root / fixture_root_ref
-    files = sorted(path for path in fixture_root.rglob("*") if path.is_file())
+    files = sorted(
+        path
+        for path in fixture_root.rglob("*")
+        if path.is_file() and path.name not in IGNORED_METADATA_FILENAMES
+    )
 
     issues: dict[str, list[dict[str, Any]]] = {
         "raw_suffix_files": [],
@@ -108,7 +128,7 @@ def build_pretrip_fixture_hygiene_manifest(
                 }
             )
 
-        if size_bytes > max_file_bytes:
+        if size_bytes > max_file_bytes and rel_ref not in ALLOWED_LARGE_METADATA_REFS:
             issues["oversized_files"].append(
                 {
                     "path": rel_ref,
@@ -132,7 +152,7 @@ def build_pretrip_fixture_hygiene_manifest(
 
         json_file_count += 1
         try:
-            payload = json.loads(path.read_text(encoding="utf-8"))
+            payloads = _load_json_payloads(path)
         except json.JSONDecodeError as exc:
             issues["json_parse_errors"].append(
                 {
@@ -144,9 +164,10 @@ def build_pretrip_fixture_hygiene_manifest(
             )
             continue
 
-        issues["forbidden_fragments"].extend(
-            _forbidden_json_fragment_issues(payload, rel_ref)
-        )
+        for payload in payloads:
+            issues["forbidden_fragments"].extend(
+                _forbidden_json_fragment_issues(payload, rel_ref)
+            )
 
     counts = {
         "files_scanned": len(files),
@@ -175,6 +196,8 @@ def build_pretrip_fixture_hygiene_manifest(
             "raw_binary_suffixes": sorted(RAW_BINARY_SUFFIXES),
             "raw_route_suffixes": sorted(RAW_ROUTE_SUFFIXES),
             "allowed_map_payload_refs": sorted(ALLOWED_MAP_PAYLOAD_REFS),
+            "allowed_large_metadata_refs": sorted(ALLOWED_LARGE_METADATA_REFS),
+            "ignored_metadata_filenames": sorted(IGNORED_METADATA_FILENAMES),
         },
         counts=counts,
         issues=issues,
@@ -199,6 +222,16 @@ def find_repo_fixture_workspace_output_artifacts(
         ):
             matches.append(_relative_ref(path, root))
     return matches
+
+
+def _load_json_payloads(path: Path) -> list[Any]:
+    if path.suffix.lower() != ".jsonl":
+        return [json.loads(path.read_text(encoding="utf-8"))]
+    return [
+        json.loads(line)
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
 
 
 def _forbidden_json_fragment_issues(payload: Any, rel_ref: str) -> list[dict[str, Any]]:

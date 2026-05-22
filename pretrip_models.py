@@ -11,6 +11,8 @@ class PreTripArtifactKind(StrEnum):
     PHOTO = "photo"
     DTM_TILE = "dtm_tile"
     DTM_COVERAGE_SUMMARY = "dtm_coverage_summary"
+    OVERPASS_RAW_PAYLOAD = "overpass_raw_payload"
+    OVERPASS_NORMALIZED_GEOJSON = "overpass_normalized_geojson"
     PRETRIP_PACKAGE = "pretrip_package"
     CHECKPOINT_CANDIDATES = "checkpoint_candidates"
     SEGMENT_CANDIDATES = "segment_candidates"

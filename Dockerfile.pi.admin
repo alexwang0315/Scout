@@ -57,9 +57,15 @@ COPY \
     phase46_live_replay_debug_projector.py \
     phase4_admin_runtime.py \
     pretrip_admin_view.py \
+    pretrip_candidate_generation.py \
     pretrip_expert_contribution.py \
     pretrip_expert_contribution_apply_plan.py \
+    pretrip_geojson_import.py \
+    pretrip_gpx_corpus.py \
+    pretrip_import.py \
+    pretrip_layer_preparation.py \
     pretrip_models.py \
+    pretrip_source_ingest.py \
     pretrip_review_decision_apply.py \
     pretrip_review_decision_apply_store.py \
     pretrip_review_decision_log.py \
@@ -70,6 +76,7 @@ COPY \
     pretrip_route_note_ln_proposals.py \
     pretrip_route_note_review_options.py \
     pretrip_route_note_reviewed_assumptions.py \
+    pretrip_workspace_edit.py \
     pretrip_workspace_project.py \
     provider_context.py \
     recording_policy_runtime.py \
