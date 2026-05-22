@@ -23,13 +23,19 @@ def test_pretrip_admin_page_contains_expected_layout_contract():
     assert 'id="jsonPane"' in html
     assert 'id="sectionList"' in html
     assert "grid-template-rows: auto minmax(180px, .95fr) minmax(260px, 1.05fr);" in html
-    assert "grid-template-columns: minmax(0, 1fr) minmax(300px, 360px) minmax(340px, 420px);" in html
+    assert "grid-template-columns: minmax(290px, 360px) minmax(640px, 1fr) minmax(340px, 420px);" in html
+    assert 'grid-template-areas: "features map detail";' in html
     assert "grid-template-rows: auto minmax(0, 1fr);" in html
     assert "grid-template-rows: auto minmax(240px, 1fr);" in html
     assert "overflow-y: auto;" in html
     assert "overscroll-behavior: contain;" in html
     assert "scrollbar-gutter: stable;" in html
     assert "min-height: 0;" in html
+    assert "grid-template-columns: 1fr;" in html
+    assert '"map"\n          "features"\n          "detail";' in html
+    assert "grid-template-columns: repeat(3, minmax(0, 1fr));" in html
+    assert "grid-template-columns: repeat(3, 24px);" in html
+    assert "grid-template-rows: repeat(3, 24px);" in html
     assert "#map { min-height: 420px; }" in html
     assert ".detail-body > *," in html
     assert ".tree > *," in html
@@ -41,7 +47,13 @@ def test_pretrip_admin_page_contains_expected_layout_contract():
     assert "CP / Segment Frame" in html
     assert "Pre-trip planning" in html
     assert "Post-analysis" in html
+    assert "Review , Workspace" in html
+    assert "Import GPX" in html
+    assert 'id="reviewWorkspacePanel"' in html
+    assert 'id="reviewWorkspaceTree"' in html
+    assert 'id="importGpxPanel"' in html
     assert "segment-overlay" in html
+    assert "reference-track" in html
     assert "map-highlight" in html
     assert "mapTargetsFor" in html
     assert "map_target_ids" in html
@@ -102,11 +114,146 @@ def test_pretrip_admin_page_has_read_only_toolbar_and_summary_raw_sample_contrac
     ):
         assert f'id="{control_id}"' in html
 
-    assert 'id="featureEdit" class="tool-button" type="button" disabled' in html
-    assert 'id="addCheckpoint" class="tool-button" type="button" disabled' in html
-    assert 'id="externalDataImport" class="tool-button" type="button" disabled' in html
+    for enabled_control in (
+        "featureEdit",
+        "addCheckpoint",
+        "removeCheckpoint",
+        "addRetreatRoute",
+        "removeRetreatRoute",
+    ):
+        assert f'id="{enabled_control}" class="tool-button" type="button" disabled' not in html
+        assert f'id="{enabled_control}" class="tool-button" type="button"' in html
+    assert 'id="externalDataImport" class="tool-button" type="button" title="Open Import GPX reference route flow" aria-label="Open Import GPX reference route flow">Import GPX</button>' in html
+    assert 'id="externalDataImport" class="tool-button" type="button" disabled' not in html
     assert "summary only" in html
     assert "raw_samples" not in html
+
+
+def test_pretrip_admin_page_groups_dense_controls_and_uses_short_labels():
+    html = PAGE.read_text(encoding="utf-8")
+
+    assert "toolbar-grid" in html
+    assert "assistant-drawer" in html
+    assert '<details class="assistant-drawer" open>' in html
+    assert '<summary aria-label="Open read-only assistant panel">Assistant</summary>' in html
+    assert 'id="assistantQuestionInput"' in html
+    assert 'id="assistantAskButton"' in html
+    assert 'id="readinessStripStatus">Loading…</strong>' in html
+    assert 'class="sr-only">Reviewed planning is not runtime activation.</small>' in html
+    assert 'aria-label="Map view controls"' in html
+    assert 'aria-label="Map layer controls"' in html
+    assert 'class="layer-menu"' in html
+    assert 'id="layerControl" title="Show layer controls" aria-label="Layer controls"' in html
+    assert 'id="layerEnabledCount"' in html
+    assert "layer-menu-panel" in html
+    assert "summary.textContent = `${enabled}/${layerInputs.length}`;" in html
+    assert "Workspace edit tools" in html
+    assert 'aria-label="Workspace edit tools">Edit</summary>' in html
+    assert "Planned edit tools" not in html
+    assert "<span>Features</span>" in html
+    assert "<span>Review</span>" in html
+    assert "<span>Workspace</span>" in html
+    assert 'class="action-menu workspace-menu"' in html
+    assert "Workspace actions" in html
+    assert 'aria-label="Local workspace menu actions"' in html
+    assert 'title="Add retreat route to workspace edit log" aria-label="Add retreat route to workspace edit log">Add retreat</button>' in html
+    assert 'title="Open Import GPX reference route flow" aria-label="Open Import GPX reference route flow">Import GPX</button>' in html
+    assert 'title="Route note layer"><input type="checkbox" data-layer="route-notes" checked> Notes</label>' in html
+    assert 'title="Weather API layer"><input type="checkbox" data-layer="weather-api" checked> Weather</label>' in html
+    assert 'aria-label="Move to next review item">Next</button>' in html
+    assert 'aria-label="Accept selected review">Accept</button>' in html
+    assert 'aria-label="Route-note reviewed assumptions">Assumptions</button>' in html
+    assert "function assistantQuestionLabel" in html
+
+
+def test_pretrip_admin_page_has_import_gpx_reference_route_panel():
+    html = PAGE.read_text(encoding="utf-8")
+
+    for control_id in (
+        "importGpxTab",
+        "importGpxPanel",
+        "importGpxForm",
+        "importGoldenRouteGpxPath",
+        "importReferenceDirectory",
+        "importWorkspaceRoot",
+        "importTemplateRoot",
+        "importCheckpointSpacingM",
+        "importMaxReferenceDisplayPoints",
+        "importOverwriteWorkspace",
+        "importGpxPreview",
+        "importGpxRun",
+        "importGpxStatus",
+        "importGpxResult",
+    ):
+        assert f'id="{control_id}"' in html
+
+    for function_name in (
+        "importGpxInputValue",
+        "optionalImportGpxInputValue",
+        "importGpxPositiveNumber",
+        "importGpxPayload",
+        "importGpxValidationErrors",
+        "setImportGpxStatus",
+        "setImportGpxBusy",
+        "setImportGpxResult",
+        "previewImportGpx",
+        "runImportGpx",
+        "prepareLayersPayload",
+        "prepareLayersValidationErrors",
+        "setPrepareLayersStatus",
+        "setPrepareLayersBusy",
+        "setPrepareLayersResult",
+        "previewPrepareLayers",
+        "runPrepareLayers",
+    ):
+        assert f"function {function_name}" in html
+
+    assert "Golden route GPX is a pre-trip reference route, not an actual walked user track." in html
+    assert "Actual walked track belongs to post-analysis after return." in html
+    assert "Golden route GPX path" in html
+    assert "Reference GPX directory" in html
+    assert "Workspace root" in html
+    assert "Optional when the admin runtime already has SCOUT_PRETRIP_WORKSPACE_ROOT." in html
+    assert "Template project root" in html
+    assert "Checkpoint spacing (m)" in html
+    assert "Max reference display points" in html
+    assert "Overwrite existing project workspace" in html
+    assert "Prepare Layers" in html
+    assert "LayerPreparationJob（圖層準備工作）" in html
+    assert "Layer ids" in html
+    assert "Route corridor (m)" in html
+    assert "Allow explicit network fetch" in html
+    assert "golden_route_gpx: importGpxInputValue" in html
+    assert "reference_dir: optionalImportGpxInputValue" in html
+    assert "workspace_root: optionalImportGpxInputValue" in html
+    assert "template_project_root: optionalImportGpxInputValue" in html
+    assert "checkpoint_spacing_m: importGpxPositiveNumber" in html
+    assert "max_reference_display_points: importGpxPositiveNumber" in html
+    assert "overwrite: document.getElementById(\"importOverwriteWorkspace\").checked" in html
+    assert "confirm_import: true" in html
+    assert "/admin/pretrip/projects/${PROJECT_ID}/import-gpx-preview" in html
+    assert "/admin/pretrip/projects/${PROJECT_ID}/import-gpx" in html
+    assert "/admin/pretrip/projects/${PROJECT_ID}/prepare-layers-preview" in html
+    assert "/admin/pretrip/projects/${PROJECT_ID}/prepare-layers" in html
+    assert "confirm_prepare: true" in html
+    assert "const DETAIL_TAB_IDS = new Set" in html
+    assert 'state.activeTab: initialActiveTab()' not in html
+    assert "activeTab: initialActiveTab()" in html
+    assert "function initialActiveTab" in html
+    assert 'params.get("tab")' in html
+    assert 'DETAIL_TAB_IDS.has(requested)' in html
+    assert "function syncActiveTabChrome" in html
+    assert "function syncActiveTabPanels" in html
+    assert 'document.getElementById("externalDataImport").addEventListener("click", () => setActiveTab("import_gpx"))' in html
+    assert 'document.getElementById("importGpxPreview").addEventListener("click", previewImportGpx)' in html
+    assert 'document.getElementById("importGpxRun").addEventListener("click", runImportGpx)' in html
+    assert 'document.getElementById("prepareLayersPreview").addEventListener("click", previewPrepareLayers)' in html
+    assert 'document.getElementById("prepareLayersRun").addEventListener("click", runPrepareLayers)' in html
+    assert 'document.getElementById("importGpxPanel").classList.toggle("is-active", tab === "import_gpx")' in html
+    assert "golden_route_role: \"pretrip reference route\"" in html
+    assert "actual_walked_track_surface: \"post-analysis\"" in html
+    assert "phase1_runtime_mutation_allowed: false" in html
+    assert "final MissionGraph" in html
 
 
 def test_pretrip_admin_page_fetches_fixture_backed_read_only_project_api():
@@ -123,6 +270,7 @@ def test_pretrip_admin_page_fetches_fixture_backed_read_only_project_api():
     assert 'data-layer="segments"' in html
     assert 'data-layer="retreat"' in html
     assert 'data-layer="hazards"' in html
+    assert 'data-layer="overpass"' in html
     assert 'data-layer="route-notes"' in html
     assert 'data-layer="weather-api"' in html
     assert "OSM_TILE_URL_TEMPLATE" in html
@@ -150,24 +298,55 @@ def test_pretrip_admin_page_fetches_fixture_backed_read_only_project_api():
     assert "function osmTileCoverage" in html
     assert 'el("image"' in html
     assert "class: \"osm-tile\"" in html
+    assert "function renderTerrainMetadata" in html
+    assert "segmentTerrainMetadata(view)" in html
     assert "function renderWeatherOverlay" in html
     assert "function weatherOverlayLabel" in html
     assert "weatherOverlayLabel(cards[0]?.summary || \"Weather evidence pending.\")" in html
     assert "/admin/pretrip/projects/${PROJECT_ID}/weather-overlay" in html
     assert "state.weatherOverlay" in html
     assert "Weather API overlay" in html
-    assert html.index('data-layer-group": "imagery"') < html.index(
-        'data-layer-group": "osm"'
-    )
-    assert html.index("renderRasterImagery(imageryGroup") < html.index(
-        "renderOsmBasemap(osmGroup"
-    )
     assert html.index('data-layer-group": "osm"') < html.index(
+        'data-layer-group": "imagery"'
+    )
+    assert html.index("renderOsmBasemap(osmGroup") < html.index(
+        "renderRasterImagery(imageryGroup"
+    )
+    assert html.index('data-layer-group": "imagery"') < html.index(
         'data-layer-group": "terrain"'
     )
     assert html.index('data-layer-group": "terrain"') < html.index(
+        'data-layer-group": "overpass"'
+    )
+    assert html.index('data-layer-group": "overpass"') < html.index(
         'data-layer-group": "weather-api"'
     )
+
+
+def test_pretrip_admin_page_renders_overpass_evidence_layer_and_tree():
+    html = PAGE.read_text(encoding="utf-8")
+    view = build_pretrip_admin_view("chilai_nanhua_day1", root=ROOT)
+
+    assert view["overpass_evidence"]["counts"]["candidates"] == 219
+    assert view["overpass_evidence"]["counts"]["skipped"] == 0
+    assert view["overpass_evidence"]["boundary"]["runtime_truth"] is False
+    assert view["overpass_evidence"]["boundary"]["live_network_required"] is False
+    assert "Overpass Vector Evidence" in {
+        section["title"]
+        for section in view["tabs"]["pre_trip_planning"]["sections"]
+    }
+    assert "overpass-corridor" in html
+    assert "overpass-hazard" in html
+    assert "overpass-poi" in html
+    assert "view.overpass_evidence?.corridor_candidates" in html
+    assert "view.overpass_evidence?.hazard_candidates" in html
+    assert "view.overpass_evidence?.poi_candidates" in html
+    assert 'treeGroup("Reference GPX"' in html
+    assert "candidate.corridor.coordinates" in html
+    assert "candidate.hazard.polygon" in html
+    assert "candidate.poi.coordinate" in html
+    assert "view.overpass_evidence?.counts?.candidates" in html
+    assert "fetch(`${apiBase()}/safety" not in html
 
 
 def test_pretrip_admin_page_has_round1_map_interaction_contract():
@@ -322,13 +501,66 @@ def test_pretrip_admin_page_has_local_workspace_write_controls_and_status():
         assert f"function {function_name}" in html
 
     assert "Workspace-only controls are closed to final handoff and runtime writes." in html
+    assert '<details class="action-menu workspace-menu">' in html
+    assert '<summary aria-label="Open local workspace action menu">Workspace actions</summary>' in html
     assert 'role="status" aria-live="polite"' in html
-    assert 'id="featureEdit" class="tool-button" type="button" disabled' in html
-    assert 'id="addCheckpoint" class="tool-button" type="button" disabled' in html
-    assert 'id="removeCheckpoint" class="tool-button" type="button" disabled' in html
-    assert 'id="addRetreatRoute" class="tool-button" type="button" disabled' in html
-    assert 'id="removeRetreatRoute" class="tool-button" type="button" disabled' in html
-    assert 'id="externalDataImport" class="tool-button" type="button" disabled' in html
+    for enabled_control in (
+        "featureEdit",
+        "addCheckpoint",
+        "removeCheckpoint",
+        "addRetreatRoute",
+        "removeRetreatRoute",
+    ):
+        assert f'id="{enabled_control}" class="tool-button" type="button" disabled' not in html
+    assert 'id="externalDataImport" class="tool-button" type="button" title="Open Import GPX reference route flow" aria-label="Open Import GPX reference route flow">Import GPX</button>' in html
+
+
+def test_pretrip_admin_page_has_enabled_workspace_edit_tools():
+    html = PAGE.read_text(encoding="utf-8")
+
+    for control_id in (
+        "featureEdit",
+        "addCheckpoint",
+        "removeCheckpoint",
+        "addRetreatRoute",
+        "removeRetreatRoute",
+    ):
+        assert f'id="{control_id}" class="tool-button" type="button" disabled' not in html
+        assert f'document.getElementById("{control_id}").addEventListener("click",' in html
+
+    for function_name in (
+        "coordinateFromMapPointerEvent",
+        "setSelectedMapCoordinate",
+        "selectedOrPromptCoordinate",
+        "promptRectangleSelection",
+        "workspaceEditPayload",
+        "postWorkspaceEditLogOperation",
+        "addCheckpointToWorkspace",
+        "removeSelectedCheckpointFromWorkspace",
+        "addRetreatRouteToWorkspace",
+        "removeSelectedRetreatRouteFromWorkspace",
+        "featureEditToWorkspace",
+    ):
+        assert f"function {function_name}" in html
+
+    assert "selectedMapCoordinate" in html
+    assert "Add CP coordinate as lat, lon. Uses selected map coordinate when available." in html
+    assert "Select a checkpoint before Remove CP." in html
+    assert "Select a checkpoint before Add retreat." in html
+    assert "finishCheckpointCandidate" in html
+    assert "Select a retreat route before Remove retreat." in html
+    assert "select_trail_generate_waypoint" in html
+    assert "rectangle_group_selection" in html
+    assert "manualCandidateId" in html
+    assert "selectedTargetRefs" in html
+    assert "persist_to_workspace: true" in html
+    assert "operation," in html
+    assert "candidate_id: manualCandidateId" in html
+    assert "target_ref: checkpoint.candidate_id" in html
+    assert "target_ref: retreat.candidate_id" in html
+    assert "bbox_wgs84" in html
+    assert "fetch(`${apiBase()}/admin/pretrip/projects/${PROJECT_ID}/workspace-edits`, {" in html
+    assert "fetch(`${apiBase()}/safety" not in html
 
 
 def test_pretrip_admin_page_posts_only_local_workspace_routes():
@@ -353,13 +585,23 @@ def test_pretrip_admin_page_posts_only_local_workspace_routes():
         "fetch(`${apiBase()}/admin/pretrip/projects/${PROJECT_ID}/expert-contribution-workspace-apply-result`, {"
         in html
     )
-    assert html.count('method: "POST"') == 8
+    assert "fetch(`${apiBase()}/admin/pretrip/projects/${PROJECT_ID}/workspace-edits`, {" in html
+    assert "fetch(`${apiBase()}/admin/pretrip/projects/${PROJECT_ID}/import-gpx-preview`, {" in html
+    assert "fetch(`${apiBase()}/admin/pretrip/projects/${PROJECT_ID}/import-gpx`, {" in html
+    assert "fetch(`${apiBase()}/admin/pretrip/projects/${PROJECT_ID}/prepare-layers-preview`, {" in html
+    assert "fetch(`${apiBase()}/admin/pretrip/projects/${PROJECT_ID}/prepare-layers`, {" in html
+    assert html.count('method: "POST"') == 13
     assert shared_script.count('method: "POST"') == 1
-    assert html.count("body: JSON.stringify({") == 4
-    assert html.count('headers: {"Content-Type": "application/json"}') == 4
+    assert html.count("body: JSON.stringify({") == 6
+    assert html.count("body: JSON.stringify(payload)") == 3
+    assert html.count("body: JSON.stringify({...payload, confirm_import: true})") == 1
+    assert html.count("body: JSON.stringify({...payload, confirm_prepare: true})") == 1
+    assert html.count("body: JSON.stringify(") == 9
+    assert html.count('headers: {"Content-Type": "application/json"}') == 9
     assert shared_script.count('headers: {"Content-Type": "application/json"}') == 1
     assert 'headers: {"Content-Type": "application/json"}' in html
     assert "body: JSON.stringify({" in html
+    assert "body: JSON.stringify(payload)" in html
     assert "candidate_ref: item.candidate_ref" in html
     assert 'decision: "accepted"' in html
     assert 'decision: "corrected"' in html
@@ -369,6 +611,8 @@ def test_pretrip_admin_page_posts_only_local_workspace_routes():
     assert "field_updates: {}" in html
     assert "replacement_ref_ids: []" in html
     assert "persist_to_workspace: true" in html
+    assert "persist_to_workspace: true" in html
+    assert "operation," in html
     assert "route_note_ref: option.source_route_note_candidate_id" in html
     assert "disposition: state.routeNoteDraftDisposition" in html
     assert "Select a route-note review item before saving a draft option." in html
@@ -500,12 +744,17 @@ def test_pretrip_admin_view_exposes_fixture_fields_used_by_readiness_strip():
 def test_pretrip_admin_page_fixture_sections_include_decision_log_and_import_queue():
     view = build_pretrip_admin_view("chilai_nanhua_day1", root=ROOT)
     planning_sections = view["tabs"]["pre_trip_planning"]["sections"]
+    review_sections = view["tabs"]["review_workspace"]["sections"]
     section_ids = {section["id"] for section in planning_sections}
     section_titles = {section["title"] for section in planning_sections}
+    review_section_ids = {section["id"] for section in review_sections}
+    review_section_titles = {section["title"] for section in review_sections}
 
-    assert "review_decision_log" in section_ids
-    assert "external_import_queue" in section_ids
-    assert "route_note_review_options" in section_ids
-    assert "Review Decision Log" in section_titles
-    assert "External Import Queue" in section_titles
-    assert "Route Note Review Options" in section_titles
+    assert "review_decision_log" in review_section_ids
+    assert "external_import_queue" in review_section_ids
+    assert "overpass_evidence" in section_ids
+    assert "route_note_review_options" in review_section_ids
+    assert "Review Decision Log" in review_section_titles
+    assert "External Import Queue" in review_section_titles
+    assert "Overpass Vector Evidence" in section_titles
+    assert "Route Note Review Options" in review_section_titles

@@ -19,13 +19,16 @@ class DebugPageTests(unittest.TestCase):
         html = PAGE_PATH.read_text(encoding="utf-8")
 
         self.assertIn("Scout Phase 3.5 Runtime Debug", html)
-        self.assertIn("Engineering read-only surface", html)
+        self.assertIn("Read-only engineering console", html)
+        self.assertIn("Runtime closed", html)
+        self.assertIn("No writeback", html)
+        self.assertIn("Mock only", html)
         self.assertIn("Current L0-L4 State", html)
         self.assertIn("Provider Degraded Status", html)
         self.assertIn("Ln And Skill Runs", html)
         self.assertIn("Outbound Queue", html)
         self.assertIn("Incident And Bridge Status", html)
-        self.assertIn("Runtime Map", html)
+        self.assertIn("Debug Evidence Map", html)
         self.assertIn("Runtime Details", html)
         self.assertIn("Timeline", html)
 
@@ -44,6 +47,32 @@ class DebugPageTests(unittest.TestCase):
         self.assertIn('id="panel-skill"', html)
         self.assertIn('id="panel-outbound"', html)
         self.assertIn('id="panel-boundary"', html)
+        self.assertIn('id="panel-api"', html)
+
+    def test_static_debug_page_renders_debug_endpoint_payload_windows(self):
+        html = PAGE_PATH.read_text(encoding="utf-8")
+
+        self.assertIn("Debug Endpoint Payloads", html)
+        self.assertIn("/debug/events、/debug/state、/debug/messages", html)
+        self.assertIn('id="debugEventsPayload"', html)
+        self.assertIn('id="debugStatePayload"', html)
+        self.assertIn('id="debugMessagesPayload"', html)
+        self.assertIn("endpointPayloadText", html)
+        self.assertIn("renderEndpointPayloads", html)
+        self.assertIn("JSON.stringify(payload || {}, null, 2)", html)
+        self.assertIn("Debug endpoint payload windows", html)
+
+    def test_static_debug_page_has_debug_projection_clear_button(self):
+        html = PAGE_PATH.read_text(encoding="utf-8")
+
+        self.assertIn('id="debugClearButton"', html)
+        self.assertIn("Clear projected debug events only", html)
+        self.assertIn("clearDebugProjection", html)
+        self.assertIn("bindDebugControls", html)
+        self.assertIn('postJson("/debug/clear"', html)
+        self.assertIn("confirm_debug_projection_clear: true", html)
+        self.assertIn("Runtime, safety, incidents, outbound, Brain, and hardware state will not be changed.", html)
+        self.assertIn("Debug projection cleared. Awaiting incoming replay events.", html)
 
     def test_static_debug_page_links_timeline_selection_to_runtime_map(self):
         html = PAGE_PATH.read_text(encoding="utf-8")
@@ -60,12 +89,21 @@ class DebugPageTests(unittest.TestCase):
         self.assertIn("timeline-column", html)
         self.assertIn("height: 100vh", html)
         self.assertIn("grid-template-rows: auto minmax(0, 1fr)", html)
-        self.assertIn("grid-template-rows: minmax(0, 1fr) minmax(0, 1fr)", html)
+        self.assertIn("grid-template-columns: minmax(300px, 360px) minmax(640px, 1fr) minmax(360px, 460px)", html)
+        self.assertIn('"timeline map details"', html)
+        self.assertIn('"timeline map assistant"', html)
+        self.assertIn("grid-area: timeline", html)
+        self.assertIn("grid-area: map", html)
+        self.assertIn("grid-area: details", html)
+        self.assertIn("grid-area: assistant", html)
         self.assertNotIn("position: fixed", html)
         self.assertNotIn("map-dock", html)
         self.assertIn('role="button"', html)
         self.assertIn('tabindex="0"', html)
-        self.assertIn('aria-label="Runtime event schematic map"', html)
+        self.assertIn('aria-label="chilai_nanhua_day1 debug evidence map"', html)
+        self.assertIn("renderDebugEvidenceMap", html)
+        self.assertIn("reference-track", html)
+        self.assertIn("overpass-corridor", html)
 
     def test_static_debug_page_makes_timeline_body_touchpad_scrollable(self):
         html = PAGE_PATH.read_text(encoding="utf-8")
@@ -86,6 +124,20 @@ class DebugPageTests(unittest.TestCase):
         self.assertIn("Scout 準備送出的 mock 訊息，可看狀態但不會真的發送。", html)
         self.assertIn("LABEL_HINTS", html)
         self.assertIn("EVENT_HINTS", html)
+
+    def test_static_debug_page_keeps_assistant_question_buttons_compact(self):
+        html = PAGE_PATH.read_text(encoding="utf-8")
+
+        self.assertIn("assistant-drawer", html)
+        self.assertIn('<details class="panel assistant-drawer" open>', html)
+        self.assertIn('aria-label="Open read-only debug assistant"', html)
+        self.assertIn('id="assistantQuestionInput"', html)
+        self.assertIn('id="assistantAskButton"', html)
+        self.assertIn(">Why L2?</button>", html)
+        self.assertIn(">Sources?</button>", html)
+        self.assertIn(">Missing?</button>", html)
+        self.assertIn("function assistantQuestionLabel", html)
+        self.assertIn('title="${escapeHtml(question)}"', html)
 
     def test_static_debug_page_links_timeline_selection_to_l0_l4_snapshot(self):
         html = PAGE_PATH.read_text(encoding="utf-8")
@@ -165,13 +217,26 @@ class DebugPageTests(unittest.TestCase):
         shared_script = ASSISTANT_UI_SCRIPT.read_text(encoding="utf-8")
         fetch_targets = set(re.findall(r'fetchJson\("([^"]+)"\)', html))
 
+        self.assertIn(
+            "/admin/pretrip/projects/chilai_nanhua_day1/debug-projection",
+            html,
+        )
+        self.assertIn(
+            "/admin/pretrip/projects/chilai_nanhua_day1/debug-projection-events",
+            html,
+        )
+        self.assertIn('const PRETRIP_PROJECT_ID = "chilai_nanhua_day1"', html)
+        self.assertIn("PRETRIP_DEBUG_PROJECTION_PATH", html)
+        self.assertIn("PRETRIP_DEBUG_PROJECTION_EVENTS_PATH", html)
+        self.assertIn("loadProjectedDebugEventPayload", html)
+        self.assertIn("stateWithProjectedEvents", html)
         self.assertEqual(
             {target.split("?", 1)[0] for target in fetch_targets},
             ALLOWED_DEBUG_ENDPOINTS,
         )
         self.assertNotIn("/safety/", html)
         post_targets = set(re.findall(r'postJson\("([^"]+)"', html))
-        self.assertEqual(post_targets, {"/assistant/query"})
+        self.assertEqual(post_targets, {"/assistant/query", "/debug/clear"})
         self.assertIn("scout-assistant-ui.js", html)
         self.assertEqual(shared_script.count('method: "POST"'), 1)
         self.assertIn("body: JSON.stringify(payload)", shared_script)

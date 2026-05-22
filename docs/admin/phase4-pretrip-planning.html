@@ -19,6 +19,8 @@
       --poi: #3a7d44;
       --hazard: #a44a3f;
       --review: #7251b5;
+      --overpass: #0f766e;
+      --reference: #7a5c12;
       --surface: #eef3f7;
       --danger: #b23a48;
       --warning: #9a6700;
@@ -39,12 +41,26 @@
       overflow: hidden;
     }
     button, input, select { font: inherit; }
+    button, input, select, summary {
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: rgba(40, 102, 110, .16);
+    }
+    button:hover, summary:hover {
+      border-color: #9fb0c3;
+    }
+    button:focus-visible,
+    input:focus-visible,
+    select:focus-visible,
+    summary:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
     .readiness-strip {
       display: grid;
-      grid-template-columns: minmax(230px, 1.35fr) repeat(4, minmax(116px, .75fr)) minmax(190px, 1fr) minmax(260px, 1.45fr);
-      gap: 8px;
+      grid-template-columns: minmax(160px, 1.1fr) repeat(6, minmax(76px, .7fr));
+      gap: 6px;
       align-items: stretch;
-      padding: 10px 14px;
+      padding: 6px 10px;
       border-bottom: 1px solid var(--line);
       background: var(--panel);
     }
@@ -52,30 +68,43 @@
       min-width: 0;
       border: 1px solid var(--line);
       border-left: 4px solid var(--accent);
-      border-radius: 8px;
+      border-radius: 6px;
       background: #fbfcfe;
-      padding: 8px 10px;
+      padding: 5px 7px;
     }
     .readiness-strip span,
     .readiness-strip small {
       display: block;
       color: var(--muted);
-      font-size: 12px;
+      font-size: 10px;
       overflow-wrap: anywhere;
+      text-transform: uppercase;
     }
     .readiness-strip strong {
       display: block;
-      margin-top: 2px;
-      font-size: 15px;
+      margin-top: 1px;
+      font-size: 14px;
       overflow-wrap: anywhere;
     }
     .readiness-strip [data-readiness-kind="blockers"] { border-left-color: var(--danger); }
     .readiness-strip [data-readiness-kind="warnings"] { border-left-color: var(--warning); }
     .readiness-strip [data-readiness-kind="review"] { border-left-color: var(--review); }
     .readiness-strip [data-readiness-kind="package"] { border-left-color: var(--ok); }
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
     .shell {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(300px, 360px) minmax(340px, 420px);
+      grid-template-columns: minmax(290px, 360px) minmax(640px, 1fr) minmax(340px, 420px);
+      grid-template-areas: "features map detail";
       height: 100%;
       min-height: 0;
       max-width: 100vw;
@@ -88,17 +117,53 @@
       overflow: hidden;
     }
     .map-pane {
+      grid-area: map;
       display: grid;
       grid-template-rows: auto minmax(0, 1fr);
+      min-height: 0;
+      border-left: 1px solid var(--line);
     }
     .toolbar {
       border-bottom: 1px solid var(--line);
-      padding: 12px 14px;
+      padding: 6px 10px;
       background: var(--panel);
+      overflow: visible;
+      min-height: 0;
+      position: relative;
+      z-index: 4;
+    }
+    .toolbar-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 6px;
+      align-items: start;
+    }
+    .control-group {
+      display: grid;
+      gap: 4px;
+      min-width: 0;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fbfcfe;
+      padding: 5px;
+    }
+    .control-group-header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 10px;
+      color: var(--muted);
+      font-size: 10px;
+      text-transform: uppercase;
+    }
+    .control-group-header span {
+      color: var(--ink);
+      font-weight: 700;
+      letter-spacing: .03em;
     }
     .toolbar-row {
       display: flex;
-      gap: 8px;
+      gap: 5px;
       align-items: center;
       flex-wrap: wrap;
     }
@@ -108,21 +173,27 @@
       align-items: baseline;
       gap: 12px;
       flex-wrap: wrap;
-      margin-bottom: 8px;
+      margin-bottom: 5px;
     }
     h1, h2, h3 { margin: 0; letter-spacing: 0; }
-    h1 { font-size: 18px; }
+    h1 { font-size: 15px; }
     h2 { font-size: 14px; }
     h3 { font-size: 13px; }
     .meta, .source, small { color: var(--muted); }
     .tool-button {
-      min-height: 30px;
+      min-height: 24px;
       border: 1px solid var(--line);
       border-radius: 6px;
       background: var(--surface);
       color: var(--ink);
-      padding: 5px 9px;
+      padding: 2px 7px;
       cursor: pointer;
+      font-size: 12px;
+    }
+    .tool-button.compact {
+      min-width: 30px;
+      padding-left: 0;
+      padding-right: 0;
     }
     .tool-button[disabled] {
       color: #8794a5;
@@ -130,28 +201,113 @@
       background: #f4f6f8;
     }
     .filters {
-      display: flex;
-      gap: 10px;
-      flex-wrap: wrap;
-      margin-top: 8px;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 3px;
       color: var(--muted);
+      font-size: 12px;
     }
     .filters label {
       display: inline-flex;
       align-items: center;
-      gap: 5px;
+      gap: 4px;
+      min-height: 22px;
+      border: 1px solid var(--line);
+      border-radius: 5px;
+      background: #fff;
+      padding: 1px 5px;
       white-space: nowrap;
+    }
+    .tool-disclosure {
+      border-top: 1px solid var(--line);
+      padding-top: 4px;
+    }
+    .tool-disclosure summary {
+      min-height: 24px;
+      display: flex;
+      align-items: center;
+      cursor: pointer;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+      list-style-position: inside;
+    }
+    .tool-disclosure .toolbar-row {
+      margin-top: 4px;
+    }
+    .layer-menu {
+      position: relative;
+    }
+    .layer-menu summary {
+      min-height: 24px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--surface);
+      color: var(--ink);
+      padding: 2px 7px;
+      cursor: pointer;
+      font-size: 12px;
+      list-style: none;
+    }
+    .layer-menu summary::-webkit-details-marker { display: none; }
+    .layer-menu summary::after {
+      content: "";
+      width: 6px;
+      height: 6px;
+      border-right: 1px solid var(--muted);
+      border-bottom: 1px solid var(--muted);
+      transform: rotate(45deg) translateY(-2px);
+    }
+    .layer-menu[open] summary::after {
+      transform: rotate(225deg) translateY(-1px);
+    }
+    .layer-menu summary strong {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .layer-menu-panel {
+      position: absolute;
+      top: calc(100% + 6px);
+      left: 0;
+      width: min(540px, calc(100vw - 28px));
+      max-height: 250px;
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      padding: 8px;
+      box-shadow: 0 12px 26px rgba(23, 32, 42, .18);
+      z-index: 8;
+    }
+    .layer-menu-header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 6px;
+      color: var(--muted);
+      font-size: 10px;
+      text-transform: uppercase;
+    }
+    .layer-menu-header span {
+      color: var(--ink);
+      font-weight: 700;
+      letter-spacing: .03em;
     }
     .map-pan-controls {
       display: inline-grid;
-      grid-template-columns: repeat(3, 30px);
-      grid-template-rows: repeat(3, 30px);
-      gap: 3px;
+      grid-template-columns: repeat(3, 24px);
+      grid-template-rows: repeat(3, 24px);
+      gap: 2px;
       align-items: center;
       justify-content: center;
     }
     .map-pan-controls .tool-button {
-      min-height: 30px;
+      min-height: 24px;
       padding: 0;
       line-height: 1;
     }
@@ -161,7 +317,7 @@
     .pan-down { grid-column: 2; grid-row: 3; }
     .map-wrap {
       min-height: 0;
-      padding: 12px;
+      padding: 10px;
       background: #edf2f6;
       overflow: hidden;
     }
@@ -178,9 +334,9 @@
       user-select: none;
     }
     #map.is-panning { cursor: grabbing; }
-    .layer-imagery { fill: #e5ebf1; }
+    .layer-imagery { fill: #e5ebf1; opacity: .42; }
     .layer-osm { fill: #f7fafc; opacity: .72; }
-    .raster-tile { opacity: .92; image-rendering: auto; }
+    .raster-tile { opacity: .46; image-rendering: auto; }
     .osm-tile { opacity: .86; image-rendering: auto; }
     .osm-attribution {
       fill: #405064;
@@ -192,9 +348,16 @@
     .terrain-line {
       fill: none;
       stroke: #8aa0b5;
-      stroke-width: 1.2;
-      stroke-dasharray: 8 10;
-      opacity: .35;
+      stroke-width: 5.5;
+      stroke-dasharray: 9 7;
+      opacity: .34;
+      stroke-linecap: round;
+      vector-effect: non-scaling-stroke;
+    }
+    .terrain-line.is-unlinked {
+      stroke: #c47f48;
+      stroke-dasharray: 3 6;
+      opacity: .28;
       vector-effect: non-scaling-stroke;
     }
     .corridor { fill: none; stroke: #718096; stroke-width: 9; opacity: .22; stroke-linecap: round; }
@@ -226,11 +389,16 @@
     .retreat-line { fill: none; stroke: var(--retreat); stroke-width: 3; stroke-dasharray: 9 6; }
     .hazard { fill: rgba(164, 74, 63, .16); stroke: var(--hazard); stroke-width: 2; }
     .poi { fill: var(--poi); stroke: white; stroke-width: 2; }
+    .overpass-corridor { fill: none; stroke: var(--overpass); stroke-width: 6; opacity: .48; stroke-linecap: round; stroke-dasharray: 12 7; }
+    .overpass-hazard { fill: rgba(15, 118, 110, .12); stroke: var(--overpass); stroke-width: 2; stroke-dasharray: 7 5; }
+    .overpass-poi { fill: var(--overpass); stroke: white; stroke-width: 2; }
+    .reference-track { fill: none; stroke: var(--reference); stroke-width: 2.2; opacity: .34; stroke-linecap: round; stroke-dasharray: 6 5; }
     .checkpoint { fill: var(--checkpoint); stroke: white; stroke-width: 2; }
     .route-note { fill: var(--review); stroke: white; stroke-width: 2; opacity: .88; }
     .map-highlight { filter: drop-shadow(0 0 7px rgba(40, 102, 110, .65)); opacity: 1; }
     [data-layer-hidden="true"] { display: none; }
     .route-pane {
+      grid-area: features;
       display: grid;
       grid-template-rows: auto minmax(240px, 1fr);
       overflow-y: auto;
@@ -238,9 +406,11 @@
       scrollbar-gutter: stable;
     }
     .detail-pane {
+      grid-area: detail;
       display: grid;
       grid-template-rows: auto minmax(180px, .95fr) minmax(260px, 1.05fr);
       min-height: 0;
+      border-right: 0;
     }
     .pane-head {
       padding: 12px 14px;
@@ -275,6 +445,9 @@
       color: var(--ink);
       padding: 7px 8px;
     }
+    .list-controls .control-group-header {
+      grid-column: 1 / -1;
+    }
     .list-controls input { grid-column: 1 / -1; }
     .review-controls {
       display: grid;
@@ -290,10 +463,51 @@
       padding-top: 10px;
       border-top: 1px solid var(--line);
     }
+    .action-menu {
+      position: relative;
+    }
+    .action-menu summary {
+      min-height: 34px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--surface);
+      color: var(--ink);
+      padding: 6px 10px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 700;
+      list-style-position: inside;
+    }
+    .action-menu summary::after {
+      content: "Menu";
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+    .action-menu[open] summary {
+      border-color: #9fb0c3;
+      background: #fff;
+    }
+    .action-menu-panel {
+      margin-top: 7px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      padding: 8px;
+    }
     .workspace-action-row {
-      display: flex;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 6px;
-      flex-wrap: wrap;
+    }
+    .workspace-action-row .tool-button {
+      width: 100%;
+      min-width: 0;
     }
     .write-status {
       min-height: 28px;
@@ -313,6 +527,78 @@
       border-color: #b8d8c0;
       background: #f1faf3;
       color: #26653a;
+    }
+    .import-gpx-panel {
+      display: none;
+      gap: 10px;
+      margin-bottom: 12px;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfcfe;
+    }
+    .import-gpx-panel.is-active {
+      display: grid;
+    }
+    .import-gpx-copy {
+      margin: 0;
+      color: var(--muted);
+      overflow-wrap: anywhere;
+    }
+    .import-gpx-form {
+      display: grid;
+      gap: 9px;
+    }
+    .import-gpx-field {
+      display: grid;
+      gap: 4px;
+      min-width: 0;
+    }
+    .import-gpx-field label,
+    .import-gpx-checkbox {
+      color: var(--ink);
+      font-weight: 700;
+      font-size: 12px;
+    }
+    .import-gpx-field small {
+      overflow-wrap: anywhere;
+    }
+    .import-gpx-field input {
+      min-width: 0;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fff;
+      color: var(--ink);
+      padding: 7px 8px;
+    }
+    .import-gpx-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .import-gpx-checkbox {
+      display: flex;
+      gap: 7px;
+      align-items: center;
+      min-height: 32px;
+    }
+    .import-gpx-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .import-gpx-result {
+      max-height: 220px;
+      overflow: auto;
+      margin: 0;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fff;
+      padding: 8px;
+      color: var(--ink);
+      font-size: 12px;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
     }
     .review-filter-row {
       display: grid;
@@ -352,6 +638,30 @@
       padding: 12px;
       min-height: 0;
       scrollbar-gutter: stable;
+    }
+    .review-workspace-panel {
+      display: none;
+      margin-bottom: 12px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--line);
+    }
+    .review-workspace-panel.is-active {
+      display: block;
+    }
+    .review-workspace-panel .review-controls,
+    .review-workspace-panel .workspace-controls {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfcfe;
+      padding: 10px;
+    }
+    .review-workspace-tree {
+      margin-top: 10px;
+      padding: 0;
+      max-height: 360px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
     }
     .tree details {
       border: 1px solid var(--line);
@@ -527,6 +837,34 @@
       border-top: 1px solid var(--line);
       background: #fbfcfe;
     }
+    .assistant-drawer {
+      border-top: 1px solid var(--line);
+      background: #fbfcfe;
+      overflow: auto;
+      overscroll-behavior: contain;
+      scrollbar-gutter: stable;
+    }
+    .assistant-drawer summary {
+      min-height: 38px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 9px 12px;
+      color: var(--ink);
+      cursor: pointer;
+      font-weight: 700;
+    }
+    .assistant-drawer summary::after {
+      content: "Read-only";
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+    .assistant-drawer .assistant-panel {
+      border-top: 1px solid var(--line);
+    }
     .assistant-head {
       display: flex;
       justify-content: space-between;
@@ -687,16 +1025,28 @@
     @media (max-width: 1100px) {
       body { display: block; overflow: auto; }
       .readiness-strip { grid-template-columns: 1fr 1fr; }
-      .shell { grid-template-columns: 1fr; grid-template-rows: auto auto auto; height: auto; overflow: visible; }
+      .shell {
+        grid-template-columns: 1fr;
+        grid-template-areas:
+          "map"
+          "features"
+          "detail";
+        grid-template-rows: auto auto auto;
+        height: auto;
+        overflow: visible;
+      }
       .map-pane, .route-pane, .detail-pane { min-height: 520px; border-right: 0; border-bottom: 1px solid var(--line); }
       #map { min-height: 420px; }
+      .toolbar-grid { grid-template-columns: 1fr; }
       .detail-pane { grid-template-rows: auto auto auto; }
       .assistant-panel { overflow-y: visible; }
     }
     @media (max-width: 640px) {
       .readiness-strip { grid-template-columns: 1fr; }
+      .workspace-action-row { grid-template-columns: 1fr; }
       .summary-list,
       .assistant-grid,
+      .import-gpx-grid,
       .review-filter-row,
       .list-controls {
         grid-template-columns: 1fr;
@@ -709,10 +1059,10 @@
 </head>
 <body>
   <header id="readinessStrip" class="readiness-strip" aria-label="Pre-trip readiness boundary">
-    <div data-readiness-kind="status">
+    <div data-readiness-kind="status" title="Reviewed planning is not runtime activation.">
       <span>Readiness</span>
-      <strong id="readinessStripStatus">Loading...</strong>
-      <small id="readinessStripBoundary">Reviewed planning is not runtime activation.</small>
+      <strong id="readinessStripStatus">Loading…</strong>
+      <small id="readinessStripBoundary" class="sr-only">Reviewed planning is not runtime activation.</small>
     </div>
     <div data-readiness-kind="blockers">
       <span>Blockers</span>
@@ -723,60 +1073,83 @@
       <strong id="readinessWarningCount">-</strong>
     </div>
     <div data-readiness-kind="review">
-      <span>Field verify / review</span>
+      <span>Review</span>
       <strong id="readinessFieldReviewCount">-</strong>
     </div>
     <div data-readiness-kind="package">
-      <span>Reviewed package</span>
+      <span>Package</span>
       <strong id="readinessReviewedPackageStatus">-</strong>
     </div>
     <div data-readiness-kind="departure">
-      <span>Departure gate</span>
-      <strong id="readinessDepartureGateBoundary">Phase 4.5 required</strong>
+      <span>Gate</span>
+      <strong id="readinessDepartureGateBoundary">P4.5</strong>
     </div>
     <div data-readiness-kind="runtime">
-      <span>Runtime handoff</span>
-      <strong id="readinessRuntimeHandoffBoundary">No runtime activation</strong>
+      <span>Runtime</span>
+      <strong id="readinessRuntimeHandoffBoundary">Closed</strong>
     </div>
   </header>
   <div class="shell">
     <main class="map-pane">
       <div class="toolbar">
         <div class="toolbar-title">
-          <h1>Scout Phase 4 Pre-Trip Planning</h1>
+          <h1>Pre-Trip Planning</h1>
           <code id="projectMeta">fixture-backed preview</code>
         </div>
-        <div class="toolbar-row" aria-label="Planning tools">
-          <button id="zoomIn" class="tool-button" type="button" title="Zoom in">+</button>
-          <button id="zoomOut" class="tool-button" type="button" title="Zoom out">-</button>
-          <button id="fitRoute" class="tool-button" type="button" title="Reset map view">Fit route</button>
-          <button id="layerControl" class="tool-button" type="button">Layers</button>
-          <div class="map-pan-controls" aria-label="Map pan controls">
-            <button id="panUp" class="tool-button pan-up" type="button" title="Pan up">&uarr;</button>
-            <button id="panLeft" class="tool-button pan-left" type="button" title="Pan left">&larr;</button>
-            <button id="panRight" class="tool-button pan-right" type="button" title="Pan right">&rarr;</button>
-            <button id="panDown" class="tool-button pan-down" type="button" title="Pan down">&darr;</button>
-          </div>
-          <button id="featureEdit" class="tool-button" type="button" disabled>Feature edit</button>
-          <button id="addCheckpoint" class="tool-button" type="button" disabled>Add CP</button>
-          <button id="removeCheckpoint" class="tool-button" type="button" disabled>Remove CP</button>
-          <button id="addRetreatRoute" class="tool-button" type="button" disabled>Add retreat route</button>
-          <button id="removeRetreatRoute" class="tool-button" type="button" disabled>Remove retreat route</button>
-          <button id="externalDataImport" class="tool-button" type="button" disabled>External data import</button>
-        </div>
-        <div class="filters" aria-label="Map layers">
-          <label><input type="checkbox" data-layer="imagery" checked> Imagery</label>
-          <label><input type="checkbox" data-layer="osm" checked> OSM</label>
-          <label><input type="checkbox" data-layer="terrain" checked> Terrain</label>
-          <label><input type="checkbox" data-layer="corridors" checked> Corridors</label>
-          <label><input type="checkbox" data-layer="route" checked> Route</label>
-          <label><input type="checkbox" data-layer="segments" checked> Segments</label>
-          <label><input type="checkbox" data-layer="checkpoints" checked> CP</label>
-          <label><input type="checkbox" data-layer="retreat" checked> Retreat</label>
-          <label><input type="checkbox" data-layer="pois" checked> POI</label>
-          <label><input type="checkbox" data-layer="hazards" checked> Hazards</label>
-          <label><input type="checkbox" data-layer="route-notes" checked> Route notes</label>
-          <label><input type="checkbox" data-layer="weather-api" checked> Weather API</label>
+        <div class="toolbar-grid">
+          <section class="control-group" aria-label="Map view controls">
+            <div class="control-group-header">
+              <span>Map</span>
+              <small>view</small>
+            </div>
+            <div class="toolbar-row" aria-label="Map tools">
+              <button id="zoomIn" class="tool-button compact" type="button" title="Zoom in" aria-label="Zoom in">+</button>
+              <button id="zoomOut" class="tool-button compact" type="button" title="Zoom out" aria-label="Zoom out">-</button>
+              <button id="fitRoute" class="tool-button" type="button" title="Reset map view" aria-label="Reset map view">Fit</button>
+              <details class="layer-menu">
+                <summary id="layerControl" title="Show layer controls" aria-label="Layer controls">Layers <strong id="layerEnabledCount">-</strong></summary>
+                <div class="layer-menu-panel" aria-label="Map layer controls">
+                  <div class="layer-menu-header">
+                    <span>Layers</span>
+                    <small>map evidence</small>
+                  </div>
+                  <div class="filters" aria-label="Map layers">
+                    <label title="Imagery layer"><input type="checkbox" data-layer="imagery" checked> Imagery</label>
+                    <label title="OpenStreetMap layer"><input type="checkbox" data-layer="osm" checked> OSM</label>
+                    <label title="Terrain layer"><input type="checkbox" data-layer="terrain" checked> Terrain</label>
+                    <label title="Corridor layer"><input type="checkbox" data-layer="corridors" checked> Corridors</label>
+                    <label title="Route layer"><input type="checkbox" data-layer="route" checked> Route</label>
+                    <label title="Reference GPX tracks"><input type="checkbox" data-layer="reference-tracks" checked> Ref GPX</label>
+                    <label title="Segment layer"><input type="checkbox" data-layer="segments" checked> Segments</label>
+                    <label title="Checkpoint layer"><input type="checkbox" data-layer="checkpoints" checked> CP</label>
+                    <label title="Retreat route layer"><input type="checkbox" data-layer="retreat" checked> Retreat</label>
+                    <label title="Point-of-interest layer"><input type="checkbox" data-layer="pois" checked> POI</label>
+                    <label title="Hazard layer"><input type="checkbox" data-layer="hazards" checked> Hazards</label>
+                    <label title="Overpass evidence layer"><input type="checkbox" data-layer="overpass" checked> Overpass</label>
+                    <label title="Route note layer"><input type="checkbox" data-layer="route-notes" checked> Notes</label>
+                    <label title="Weather API layer"><input type="checkbox" data-layer="weather-api" checked> Weather</label>
+                  </div>
+                </div>
+              </details>
+              <div class="map-pan-controls" aria-label="Map pan controls">
+                <button id="panUp" class="tool-button pan-up" type="button" title="Pan up">&uarr;</button>
+                <button id="panLeft" class="tool-button pan-left" type="button" title="Pan left">&larr;</button>
+                <button id="panRight" class="tool-button pan-right" type="button" title="Pan right">&rarr;</button>
+                <button id="panDown" class="tool-button pan-down" type="button" title="Pan down">&darr;</button>
+              </div>
+            </div>
+            <details class="tool-disclosure">
+              <summary title="Workspace edit tools" aria-label="Workspace edit tools">Edit</summary>
+              <div class="toolbar-row" aria-label="Workspace edit tools">
+                <button id="featureEdit" class="tool-button" type="button" title="Write feature selection to workspace edit log" aria-label="Write feature selection to workspace edit log">Feature</button>
+                <button id="addCheckpoint" class="tool-button" type="button" title="Add checkpoint to workspace edit log" aria-label="Add checkpoint to workspace edit log">Add CP</button>
+                <button id="removeCheckpoint" class="tool-button" type="button" title="Remove selected checkpoint in workspace edit log" aria-label="Remove selected checkpoint in workspace edit log">Remove CP</button>
+                <button id="addRetreatRoute" class="tool-button" type="button" title="Add retreat route to workspace edit log" aria-label="Add retreat route to workspace edit log">Add retreat</button>
+                <button id="removeRetreatRoute" class="tool-button" type="button" title="Remove selected retreat route in workspace edit log" aria-label="Remove selected retreat route in workspace edit log">Remove retreat</button>
+                <button id="externalDataImport" class="tool-button" type="button" title="Open Import GPX reference route flow" aria-label="Open Import GPX reference route flow">Import GPX</button>
+              </div>
+            </details>
+          </section>
         </div>
       </div>
       <div class="map-wrap">
@@ -786,8 +1159,8 @@
 
     <section class="route-pane">
       <div class="pane-head">
-        <h2>CP / Segment Frame</h2>
-        <p id="routeMeta" class="meta">Loading pre-trip route...</p>
+        <h2 title="CP / Segment Frame">Features</h2>
+        <p id="routeMeta" class="meta">Loading pre-trip route…</p>
         <div class="metric-grid">
           <div class="metric"><span>Readiness</span><strong id="readinessStatus">-</strong></div>
           <div class="metric"><span>Review Queue</span><strong id="reviewQueueCount">-</strong></div>
@@ -795,57 +1168,20 @@
           <div class="metric"><span>Segments</span><strong id="segmentCount">-</strong></div>
         </div>
         <div class="list-controls" aria-label="CP and segment filters">
-          <input id="cpSegmentSearch" type="search" placeholder="Search CP or segment" autocomplete="off">
+          <div class="control-group-header">
+            <span>Features</span>
+            <small>CP / segments</small>
+          </div>
+          <input id="cpSegmentSearch" type="search" placeholder="Search CP or segment…" autocomplete="off">
           <select id="featureCategoryFilter" aria-label="Feature category filter">
             <option value="all">All feature categories</option>
             <option value="checkpoint">Checkpoints</option>
             <option value="segment">Segments</option>
+            <option value="reference">Reference GPX</option>
           </select>
           <select id="featureStatusFilter" aria-label="Feature status filter">
             <option value="all">All statuses</option>
           </select>
-        </div>
-        <div class="review-controls" aria-label="Review queue filters">
-          <div class="review-filter-row">
-            <select id="reviewCategoryFilter" aria-label="Review queue category filter">
-              <option value="all">All review categories</option>
-            </select>
-            <select id="reviewSeverityFilter" aria-label="Review queue severity filter">
-              <option value="all">All severities</option>
-              <option value="blocker">Blocker</option>
-              <option value="warning">Warning</option>
-              <option value="review">Review</option>
-            </select>
-          </div>
-          <div class="review-quick-row" aria-label="Review queue quick filters">
-            <button id="reviewBlockerQuick" class="review-quick" type="button" data-review-severity="blocker">Blocker <strong id="reviewBlockerCount">-</strong></button>
-            <button id="reviewWarningQuick" class="review-quick" type="button" data-review-severity="warning">Warning <strong id="reviewWarningCount">-</strong></button>
-            <button id="reviewReviewQuick" class="review-quick" type="button" data-review-severity="review">Review <strong id="reviewReviewCount">-</strong></button>
-            <button id="reviewNextItem" class="tool-button" type="button">Next review</button>
-          </div>
-          <div class="review-filter-row" aria-label="Route note draft review options">
-            <select id="routeNoteDraftDisposition" aria-label="Route note draft disposition">
-              <option value="">Route-note draft option</option>
-              <option value="promote_hint">Promote hint</option>
-              <option value="promote_warning">Promote warning</option>
-              <option value="ignore">Ignore</option>
-              <option value="field_verify">Field verify</option>
-            </select>
-            <button id="routeNoteDraftPreview" class="tool-button" type="button">Preview option</button>
-            <button id="routeNoteDraftSave" class="tool-button" type="button">Save draft option</button>
-          </div>
-        </div>
-        <div class="workspace-controls" aria-label="Local workspace write actions">
-          <div class="workspace-action-row">
-            <button id="localWorkspaceCreate" class="tool-button" type="button">Create local workspace</button>
-            <button id="workspaceAcceptReview" class="tool-button" type="button">Accept selected review</button>
-            <button id="workspaceCorrectReview" class="tool-button" type="button">Correct selected review</button>
-            <button id="workspaceRejectReview" class="tool-button" type="button">Reject selected review</button>
-            <button id="workspaceRefreshApplyPlan" class="tool-button" type="button">Refresh apply plan</button>
-            <button id="routeNoteReviewedAssumptions" class="tool-button" type="button">Route-note reviewed assumptions</button>
-            <button id="expertContributionApplyResult" class="tool-button" type="button">Expert contribution apply result</button>
-          </div>
-          <div id="workspaceWriteStatus" class="write-status" role="status" aria-live="polite">Workspace-only controls are closed to final handoff and runtime writes.</div>
         </div>
       </div>
       <div id="evidenceTree" class="tree"></div>
@@ -853,16 +1189,170 @@
 
     <aside class="detail-pane">
       <div class="tabs" role="tablist" aria-label="Detail tabs">
-        <button id="preTripTab" class="tab-button is-active" type="button" role="tab" aria-selected="true" data-tab="pre_trip_planning">Pre-trip planning</button>
-        <button id="postAnalysisTab" class="tab-button" type="button" role="tab" aria-selected="false" data-tab="post_analysis">Post-analysis</button>
+        <button id="preTripTab" class="tab-button is-active" type="button" role="tab" aria-selected="true" data-tab="pre_trip_planning" title="Pre-trip planning" aria-label="Pre-trip planning">Plan</button>
+        <button id="postAnalysisTab" class="tab-button" type="button" role="tab" aria-selected="false" data-tab="post_analysis" title="Post-analysis" aria-label="Post-analysis">After</button>
+        <button id="reviewWorkspaceTab" class="tab-button" type="button" role="tab" aria-selected="false" data-tab="review_workspace" title="Review and workspace" aria-label="Review and workspace">Review</button>
+        <button id="importGpxTab" class="tab-button" type="button" role="tab" aria-selected="false" data-tab="import_gpx" title="Import GPX">Import</button>
       </div>
       <div id="jsonPane" class="detail-body">
         <h2 id="detailTitle">No selection</h2>
         <p id="detailSource" class="source">Select a planning candidate or map feature.</p>
         <div id="tabSummary" class="summary-list"></div>
+        <div id="importGpxPanel" class="import-gpx-panel" aria-label="Import GPX reference route panel">
+          <div class="control-group-header">
+            <span>Import GPX</span>
+            <small>server-side paths</small>
+          </div>
+          <p class="import-gpx-copy">Golden route GPX is a pre-trip reference route, not an actual walked user track. Actual walked track belongs to post-analysis after return.</p>
+          <form id="importGpxForm" class="import-gpx-form">
+            <div class="import-gpx-field">
+              <label for="importGoldenRouteGpxPath">Golden route GPX path</label>
+              <input id="importGoldenRouteGpxPath" type="text" autocomplete="off" placeholder="/data/scout/pretrip/inbox/similar_reference_route.gpx…">
+              <small>Server-side path to the selected reference route for planning.</small>
+            </div>
+            <div class="import-gpx-field">
+              <label for="importReferenceDirectory">Reference GPX directory</label>
+              <input id="importReferenceDirectory" type="text" autocomplete="off" placeholder="/data/scout/pretrip/inbox/reference_tracks…">
+              <small>Optional server-side directory of comparable GPX reference tracks.</small>
+            </div>
+            <div class="import-gpx-grid">
+              <div class="import-gpx-field">
+                <label for="importWorkspaceRoot">Workspace root</label>
+                <input id="importWorkspaceRoot" type="text" autocomplete="off" placeholder="/data/scout/pretrip/workspaces…">
+                <small>Optional when the admin runtime already has SCOUT_PRETRIP_WORKSPACE_ROOT.</small>
+              </div>
+              <div class="import-gpx-field">
+                <label for="importTemplateRoot">Template project root</label>
+                <input id="importTemplateRoot" type="text" autocomplete="off" placeholder="/Users/alexwang0315/scout-fusion/tests/fixtures/pretrip/projects/chilai_nanhua_day1…">
+              </div>
+            </div>
+            <div class="import-gpx-grid">
+              <div class="import-gpx-field">
+                <label for="importCheckpointSpacingM">Checkpoint spacing (m)</label>
+                <input id="importCheckpointSpacingM" type="number" min="1" step="1" value="1500">
+              </div>
+              <div class="import-gpx-field">
+                <label for="importMaxReferenceDisplayPoints">Max reference display points</label>
+                <input id="importMaxReferenceDisplayPoints" type="number" min="1" step="1" value="1000">
+              </div>
+            </div>
+            <label class="import-gpx-checkbox" for="importOverwriteWorkspace">
+              <input id="importOverwriteWorkspace" type="checkbox">
+              <span>Overwrite existing project workspace</span>
+            </label>
+            <div class="import-gpx-actions">
+              <button id="importGpxPreview" class="tool-button" type="button">Preview</button>
+              <button id="importGpxRun" class="tool-button" type="button">Run import</button>
+            </div>
+            <div id="importGpxStatus" class="write-status" role="status" aria-live="polite">Import writes only project workspace artifacts. It does not approve departure, compile a final MissionGraph, or mutate Phase 1 runtime.</div>
+            <pre id="importGpxResult" class="import-gpx-result">No Import GPX request sent.</pre>
+          </form>
+          <div class="control-group-header">
+            <span>Prepare Layers</span>
+            <small>workspace job</small>
+          </div>
+          <p class="import-gpx-copy">LayerPreparationJob（圖層準備工作）checks local map, OSM, Overpass, DEM, imagery, weather, and reference evidence for this pre-trip workspace.</p>
+          <form id="prepareLayersForm" class="import-gpx-form">
+            <div class="import-gpx-field">
+              <label for="prepareLayersList">Layer ids</label>
+              <input id="prepareLayersList" type="text" autocomplete="off" value="osm,overpass,terrain,imagery,weather,reference-tracks,route,segments,checkpoints">
+              <small>Comma-separated ids; aliases dem/dtm map to terrain.</small>
+            </div>
+            <div class="import-gpx-grid">
+              <div class="import-gpx-field">
+                <label for="prepareLayersWorkspaceRoot">Workspace root</label>
+                <input id="prepareLayersWorkspaceRoot" type="text" autocomplete="off" placeholder="/data/scout/pretrip/workspaces…">
+              </div>
+              <div class="import-gpx-field">
+                <label for="prepareRouteCorridorM">Route corridor (m)</label>
+                <input id="prepareRouteCorridorM" type="number" min="1" step="1" value="500">
+              </div>
+            </div>
+            <div class="import-gpx-grid">
+              <div class="import-gpx-field">
+                <label for="prepareLayersProfile">Profile</label>
+                <input id="prepareLayersProfile" type="text" autocomplete="off" value="pi-offline">
+              </div>
+              <div class="import-gpx-field">
+                <label for="prepareLayersNetworkMode">Network mode</label>
+                <input id="prepareLayersNetworkMode" type="text" autocomplete="off" value="no-network">
+              </div>
+            </div>
+            <label class="import-gpx-checkbox" for="prepareAllowNetworkFetch">
+              <input id="prepareAllowNetworkFetch" type="checkbox">
+              <span>Allow explicit network fetch</span>
+            </label>
+            <div class="import-gpx-actions">
+              <button id="prepareLayersPreview" class="tool-button" type="button">Preview layers</button>
+              <button id="prepareLayersRun" class="tool-button" type="button">Prepare layers</button>
+            </div>
+            <div id="prepareLayersStatus" class="write-status" role="status" aria-live="polite">Layer preparation writes only project workspace layer artifacts and debug projections.</div>
+            <pre id="prepareLayersResult" class="import-gpx-result">No layer preparation request sent.</pre>
+          </form>
+        </div>
+        <div id="reviewWorkspacePanel" class="review-workspace-panel" aria-label="Review and workspace tab panel">
+          <div class="review-controls" aria-label="Review queue filters">
+            <div class="control-group-header">
+              <span>Review</span>
+              <small>queue</small>
+            </div>
+            <div class="review-filter-row">
+              <select id="reviewCategoryFilter" aria-label="Review queue category filter">
+                <option value="all">All review categories</option>
+              </select>
+              <select id="reviewSeverityFilter" aria-label="Review queue severity filter">
+                <option value="all">All severities</option>
+                <option value="blocker">Blocker</option>
+                <option value="warning">Warning</option>
+                <option value="review">Review</option>
+              </select>
+            </div>
+            <div class="review-quick-row" aria-label="Review queue quick filters">
+              <button id="reviewBlockerQuick" class="review-quick" type="button" data-review-severity="blocker">Blocker <strong id="reviewBlockerCount">-</strong></button>
+              <button id="reviewWarningQuick" class="review-quick" type="button" data-review-severity="warning">Warning <strong id="reviewWarningCount">-</strong></button>
+              <button id="reviewReviewQuick" class="review-quick" type="button" data-review-severity="review">Review <strong id="reviewReviewCount">-</strong></button>
+              <button id="reviewNextItem" class="tool-button" type="button" title="Move to next review item" aria-label="Move to next review item">Next</button>
+            </div>
+            <div class="review-filter-row" aria-label="Route note draft review options">
+              <select id="routeNoteDraftDisposition" aria-label="Route note draft disposition">
+                <option value="">Route-note draft option</option>
+                <option value="promote_hint">Promote hint</option>
+                <option value="promote_warning">Promote warning</option>
+                <option value="ignore">Ignore</option>
+                <option value="field_verify">Field verify</option>
+              </select>
+              <button id="routeNoteDraftPreview" class="tool-button" type="button" title="Preview route-note draft option" aria-label="Preview route-note draft option">Preview</button>
+              <button id="routeNoteDraftSave" class="tool-button" type="button" title="Save route-note draft option" aria-label="Save route-note draft option">Save draft</button>
+            </div>
+          </div>
+          <div class="workspace-controls" aria-label="Local workspace write actions">
+            <div class="control-group-header">
+              <span>Workspace</span>
+              <small>local menu</small>
+            </div>
+            <details class="action-menu workspace-menu">
+              <summary aria-label="Open local workspace action menu">Workspace actions</summary>
+              <div class="action-menu-panel">
+                <div class="workspace-action-row" aria-label="Local workspace menu actions">
+                  <button id="localWorkspaceCreate" class="tool-button" type="button" title="Create local workspace" aria-label="Create local workspace">Create</button>
+                  <button id="workspaceAcceptReview" class="tool-button" type="button" title="Accept selected review" aria-label="Accept selected review">Accept</button>
+                  <button id="workspaceCorrectReview" class="tool-button" type="button" title="Correct selected review" aria-label="Correct selected review">Correct</button>
+                  <button id="workspaceRejectReview" class="tool-button" type="button" title="Reject selected review" aria-label="Reject selected review">Reject</button>
+                  <button id="workspaceRefreshApplyPlan" class="tool-button" type="button" title="Refresh apply plan" aria-label="Refresh apply plan">Refresh plan</button>
+                  <button id="routeNoteReviewedAssumptions" class="tool-button" type="button" title="Route-note reviewed assumptions" aria-label="Route-note reviewed assumptions">Assumptions</button>
+                  <button id="expertContributionApplyResult" class="tool-button" type="button" title="Expert contribution apply result" aria-label="Expert contribution apply result">Expert result</button>
+                </div>
+              </div>
+            </details>
+            <div id="workspaceWriteStatus" class="write-status" role="status" aria-live="polite">Workspace-only controls are closed to final handoff and runtime writes.</div>
+          </div>
+          <div id="reviewWorkspaceTree" class="tree review-workspace-tree" aria-label="Review workspace timeline"></div>
+        </div>
         <div id="sectionList" class="section-list" aria-label="Active tab sections"></div>
         <pre id="detailJson">{}</pre>
       </div>
+      <details class="assistant-drawer" open>
+        <summary aria-label="Open read-only assistant panel">Assistant</summary>
       <!-- assistant-shell:start -->
       <article id="assistantPanel" class="assistant-panel" data-assistant-surface="pretrip" data-assistant-boundary="read-only model interpretation" aria-label="Read-only pretrip assistant">
         <div class="assistant-head">
@@ -891,9 +1381,9 @@
           <h3>Suggested questions</h3>
           <p class="meta">Choose one question after selecting planning evidence; suggestions follow selected planning context.</p>
           <ul id="assistantPromptSuggestions" class="assistant-prompts" aria-label="Suggested assistant questions">
-            <li><button type="button" data-assistant-question="Why does this selected item need review?">Why does this selected item need review?</button></li>
-            <li><button type="button" data-assistant-question="What evidence is missing for this candidate?">What evidence is missing for this candidate?</button></li>
-            <li><button type="button" data-assistant-question="Could this block departure readiness?">Could this block departure readiness?</button></li>
+            <li><button type="button" data-assistant-question="Why does this selected item need review?" title="Why does this selected item need review?" aria-label="Why does this selected item need review?">Why review?</button></li>
+            <li><button type="button" data-assistant-question="What evidence is missing for this candidate?" title="What evidence is missing for this candidate?" aria-label="What evidence is missing for this candidate?">Missing evidence?</button></li>
+            <li><button type="button" data-assistant-question="Could this block departure readiness?" title="Could this block departure readiness?" aria-label="Could this block departure readiness?">Readiness impact?</button></li>
           </ul>
         </section>
         <section class="assistant-control" aria-label="Ask assistant">
@@ -943,6 +1433,7 @@
         </section>
       </article>
       <!-- assistant-shell:end -->
+      </details>
     </aside>
   </div>
   <div id="hoverHint" class="hover-hint is-hidden" role="status" aria-live="polite"></div>
@@ -962,15 +1453,17 @@
     const OSM_MAX_ZOOM = 20;
     const RASTER_LOCAL_TILE_URL_TEMPLATE = `${apiBase()}/admin/tiles/imagery/{project_id}/{layer_id}/{z}/{x}/{y}.png`;
     const OSM_ATTRIBUTION = "OpenStreetMap contributors";
+    const DETAIL_TAB_IDS = new Set(["pre_trip_planning", "post_analysis", "review_workspace", "import_gpx"]);
     const state = {
       view: null,
       selected: null,
-      activeTab: "pre_trip_planning",
+      activeTab: initialActiveTab(),
       selectedSectionId: "",
       zoom: 1,
       panX: 0,
       panY: 0,
       pointerPan: null,
+      selectedMapCoordinate: null,
       reviewQueueCursor: -1,
       routeNoteDraftDisposition: "",
       weatherOverlay: null
@@ -982,9 +1475,14 @@
       if (location.protocol === "file:") return "http://127.0.0.1:9099";
       return "";
     }
+    function initialActiveTab() {
+      const params = new URLSearchParams(location.search);
+      const requested = params.get("tab") || location.hash.replace(/^#/, "");
+      return DETAIL_TAB_IDS.has(requested) ? requested : "pre_trip_planning";
+    }
     function osmTileTemplate() {
       const params = new URLSearchParams(location.search);
-      const requested = params.get("tileSource") || params.get("tiles") || localStorage.getItem("scout.osmTileSource");
+      const requested = params.get("tileSource") || params.get("tiles");
       return requested === "local" ? OSM_LOCAL_TILE_URL_TEMPLATE : OSM_PUBLIC_TILE_URL_TEMPLATE;
     }
     function mapLayerById(view, layerId) {
@@ -1137,6 +1635,35 @@
       });
       group.appendChild(el("text", {x: width - 10, y: height - 10, "text-anchor": "end", class: "osm-attribution"}, OSM_ATTRIBUTION));
     }
+    function segmentTerrainMetadata(view) {
+      return view?.tabs?.post_analysis?.segment_terrain?.segment_metadata || [];
+    }
+    function renderTerrainMetadata(group, view, bounds) {
+      const terrainBySegment = new Map(
+        segmentTerrainMetadata(view).map(item => [item.segment_candidate_id, item])
+      );
+      view.segments.forEach(segment => {
+        const terrain = terrainBySegment.get(segment.candidate_id);
+        const from = view.checkpoints.find(item => item.candidate_id === segment.from_candidate_id);
+        const to = view.checkpoints.find(item => item.candidate_id === segment.to_candidate_id);
+        if (!from || !to || !terrain) return;
+        const linkedTileCount = terrain.candidate_tiles?.length || 0;
+        const path = el("path", {
+          d: pathFromCoords(bounds, [from, to]),
+          class: linkedTileCount ? "terrain-line" : "terrain-line is-unlinked",
+          "data-terrain-tile-count": linkedTileCount
+        });
+        attachEvidence(path, {
+          source_id: terrain.segment_candidate_id,
+          source_path: view.tabs.post_analysis.segment_terrain.source_path,
+          evidence_type: "pretrip_segment_dtm_coverage",
+          label: `DTM coverage ${terrain.from_candidate_id} -> ${terrain.to_candidate_id}`,
+          status: linkedTileCount ? `${linkedTileCount} candidate DEM tile(s)` : "no candidate DEM tile",
+          ...terrain
+        });
+        group.appendChild(path);
+      });
+    }
     function renderWeatherOverlay(group, overlay, width, height) {
       group.appendChild(el("rect", {x: 16, y: 16, width: width - 32, height: height - 32, rx: 10, class: "weather-api-frame"}));
       const cards = overlay?.cards || [];
@@ -1164,6 +1691,8 @@
         retreat: "var(--retreat)",
         poi: "var(--poi)",
         hazard: "var(--hazard)",
+        overpass: "var(--overpass)",
+        reference: "var(--reference)",
         review: "var(--review)"
       };
       return colors[category] || "var(--accent)";
@@ -1173,6 +1702,8 @@
       if (type.includes("checkpoint")) return "checkpoint";
       if (type.includes("segment")) return "segment";
       if (type.includes("retreat")) return "retreat";
+      if (type.includes("reference_track")) return "reference";
+      if (type.includes("overpass")) return "overpass";
       if (type.includes("poi")) return "poi";
       if (type.includes("hazard")) return "hazard";
       if (type.includes("review") || type.includes("queue")) return "review";
@@ -1213,8 +1744,12 @@
         view?.checkpoints || [],
         view?.segments || [],
         view?.retreat_routes || [],
+        view?.reference_tracks?.reference_tracks || [],
         view?.map_candidates?.poi_candidates || [],
         view?.map_candidates?.hazard_candidates || [],
+        view?.overpass_evidence?.corridor_candidates || [],
+        view?.overpass_evidence?.hazard_candidates || [],
+        view?.overpass_evidence?.poi_candidates || [],
         view?.route_notes?.candidates || [],
         view?.review_queue?.items || []
       ];
@@ -1244,6 +1779,9 @@
         item?.status,
         item?.category,
         item?.severity,
+        item?.candidate_type,
+        item?.osm_type,
+        item?.osm_id,
         item?.from_candidate_id,
         item?.to_candidate_id,
         item?.poi?.poi_type,
@@ -1253,32 +1791,36 @@
     function setText(id, value) {
       document.getElementById(id).textContent = value;
     }
+    function setTextWithTitle(id, label, title) {
+      const node = document.getElementById(id);
+      node.textContent = label;
+      node.title = title;
+      node.setAttribute("aria-label", title);
+    }
     function updateReadinessStrip(view) {
       const reviewCounts = view.review_queue?.counts || {};
       const departureBoundary = view.departure_bundle?.boundary || {};
       const runtimeBoundary = view.tabs?.post_analysis?.runtime_handoff?.boundary || {};
       const fieldVerifyCount = view.route_note_reviewed_assumptions?.counts?.field_verification_request_count || 0;
       const reviewCount = reviewCounts.review_count ?? 0;
-      const fieldReviewText = fieldVerifyCount > 0 ? `${fieldVerifyCount} field / ${reviewCount} review` : `${reviewCount} review`;
+      const fieldReviewText = fieldVerifyCount > 0 ? `${fieldVerifyCount}F / ${reviewCount}R` : `${reviewCount}R`;
+      const fieldReviewTitle = fieldVerifyCount > 0 ? `${fieldVerifyCount} field / ${reviewCount} review` : `${reviewCount} review`;
+      const status = view.readiness?.status || "unknown";
+      const departureTitle = departureBoundary.not_departure_approval && departureBoundary.human_review_required_before_departure
+        ? "Human review required; not departure approval."
+        : "Phase 4.5 departure gate required.";
+      const runtimeTitle = runtimeBoundary.safety_api_calls_allowed === false && runtimeBoundary.final_runtime_write_allowed === false
+        ? "Phase 4.5 owns handoff; no /safety calls or runtime writes."
+        : "Phase 4.5 owns runtime handoff.";
 
-      setText("readinessStripStatus", `${view.readiness?.status || "unknown"} planning package`);
+      setTextWithTitle("readinessStripStatus", status, `${status} planning package`);
       setText("readinessStripBoundary", "Reviewed planning package only; runtime activation remains closed.");
       setText("readinessBlockerCount", reviewCounts.blocker_count ?? 0);
       setText("readinessWarningCount", reviewCounts.warning_count ?? 0);
-      setText("readinessFieldReviewCount", fieldReviewText);
-      setText("readinessReviewedPackageStatus", view.departure_bundle?.package?.status || "candidate");
-      setText(
-        "readinessDepartureGateBoundary",
-        departureBoundary.not_departure_approval && departureBoundary.human_review_required_before_departure
-          ? "Human review required; not departure approval."
-          : "Phase 4.5 departure gate required."
-      );
-      setText(
-        "readinessRuntimeHandoffBoundary",
-        runtimeBoundary.safety_api_calls_allowed === false && runtimeBoundary.final_runtime_write_allowed === false
-          ? "Phase 4.5 owns handoff; no /safety calls or runtime writes."
-          : "Phase 4.5 owns runtime handoff."
-      );
+      setTextWithTitle("readinessFieldReviewCount", fieldReviewText, fieldReviewTitle);
+      setTextWithTitle("readinessReviewedPackageStatus", view.departure_bundle?.package?.status || "candidate", "Reviewed planning package status");
+      setTextWithTitle("readinessDepartureGateBoundary", departureBoundary.not_departure_approval ? "Review" : "Gate", departureTitle);
+      setTextWithTitle("readinessRuntimeHandoffBoundary", runtimeBoundary.safety_api_calls_allowed === false ? "Closed" : "Handoff", runtimeTitle);
     }
     function mapViewBox() {
       const width = MAP_WIDTH / state.zoom;
@@ -1367,12 +1909,16 @@
       highlightSectionCard();
     }
     function activeTabLabel(tabId = state.activeTab) {
-      return tabId === "post_analysis" ? "Post-analysis" : "Pre-trip planning";
+      if (tabId === "post_analysis") return "Post-analysis";
+      if (tabId === "review_workspace") return "Review , Workspace";
+      if (tabId === "import_gpx") return "Import GPX";
+      return "Pre-trip planning";
     }
     function activeTabSource(tabId = state.activeTab) {
-      return tabId === "post_analysis"
-        ? "post_analysis | read-only post-planning artifacts"
-        : "pre_trip_planning | fixture-backed planning workspace";
+      if (tabId === "post_analysis") return "post_analysis | read-only post-planning artifacts";
+      if (tabId === "review_workspace") return "review_workspace | review queue and local workspace controls";
+      if (tabId === "import_gpx") return "import_gpx | server-side reference route import";
+      return "pre_trip_planning | fixture-backed planning workspace";
     }
     function tabOverviewPayload(view, tabId = state.activeTab) {
       const tab = view?.tabs?.[tabId] || {};
@@ -1390,6 +1936,11 @@
           source_path: section.source_path || "no source path",
           boundary: section.boundary || {}
         })),
+        import_gpx_boundary: tabId === "import_gpx" ? {
+          golden_route_role: "pretrip reference route",
+          actual_walked_track_surface: "post-analysis",
+          phase1_runtime_mutation_allowed: false
+        } : null,
         runtime_handoff_status: tab?.runtime_handoff?.status || null,
         route_comparison_classification: tab?.route_comparison?.classification || null,
         brain_seed_counts: tab?.brain_seed ? {
@@ -1427,6 +1978,84 @@
       });
       return [...new Set(targets)];
     }
+    function coordinateFromEvidence(item) {
+      const lat = Number(item?.lat);
+      const lon = Number(item?.lon);
+      if (Number.isFinite(lat) && Number.isFinite(lon)) return {lat, lon};
+      const poiCoordinate = item?.poi?.coordinate;
+      if (poiCoordinate) {
+        const poiLat = Number(poiCoordinate.lat);
+        const poiLon = Number(poiCoordinate.lon);
+        if (Number.isFinite(poiLat) && Number.isFinite(poiLon)) return {lat: poiLat, lon: poiLon};
+      }
+      return null;
+    }
+    function formatCoordinate(coordinate) {
+      return `${Number(coordinate.lat).toFixed(6)}, ${Number(coordinate.lon).toFixed(6)}`;
+    }
+    function parseCoordinateInput(value) {
+      const parts = String(value || "").trim().split(/[,\s]+/).filter(Boolean);
+      if (parts.length < 2) return null;
+      const lat = Number(parts[0]);
+      const lon = Number(parts[1]);
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+      if (lat < -90 || lat > 90 || lon < -180 || lon > 180) return null;
+      return {lat, lon};
+    }
+    function promptEditCoordinate(message, fallback = null) {
+      const value = window.prompt(message, fallback ? formatCoordinate(fallback) : "");
+      if (value === null) return null;
+      return parseCoordinateInput(value);
+    }
+    function coordinateFromMapPoint(x, y) {
+      if (!state.view) return null;
+      const bounds = boundsFor(state.view);
+      const pad = MAP_VISUAL_PADDING / state.zoom;
+      const usableWidth = Math.max(MAP_WIDTH - pad * 2, 1);
+      const usableHeight = Math.max(MAP_HEIGHT - pad * 2, 1);
+      const lonSpan = Math.max(bounds.east - bounds.west, 0.000001);
+      const latSpan = Math.max(bounds.north - bounds.south, 0.000001);
+      const lon = bounds.west + clamp((x - pad) / usableWidth, 0, 1) * lonSpan;
+      const lat = bounds.south + clamp((MAP_HEIGHT - pad - y) / usableHeight, 0, 1) * latSpan;
+      return {lat, lon};
+    }
+    function coordinateFromMapPointerEvent(event) {
+      if (!state.view || !svg.getScreenCTM) return null;
+      const matrix = svg.getScreenCTM();
+      if (!matrix) return null;
+      const point = svg.createSVGPoint();
+      point.x = event.clientX;
+      point.y = event.clientY;
+      const local = point.matrixTransform(matrix.inverse());
+      return coordinateFromMapPoint(local.x, local.y);
+    }
+    function setSelectedMapCoordinate(coordinate, announce = true) {
+      if (!coordinate) return;
+      state.selectedMapCoordinate = coordinate;
+      if (announce) setWorkspaceStatus(`Selected map coordinate ${formatCoordinate(coordinate)} for workspace edit tools.`);
+    }
+    function selectedOrPromptCoordinate(message) {
+      return state.selectedMapCoordinate || promptEditCoordinate(message, coordinateFromEvidence(state.selected));
+    }
+    function parseRectangleInput(value) {
+      const corners = String(value || "").split(/[;\n]/).map(parseCoordinateInput).filter(Boolean);
+      if (corners.length !== 2) return null;
+      return {
+        north: Math.max(corners[0].lat, corners[1].lat),
+        south: Math.min(corners[0].lat, corners[1].lat),
+        east: Math.max(corners[0].lon, corners[1].lon),
+        west: Math.min(corners[0].lon, corners[1].lon),
+        corners
+      };
+    }
+    function promptRectangleSelection() {
+      const start = state.selectedMapCoordinate || coordinateFromEvidence(state.selected);
+      const finish = coordinateFromEvidence(finishCheckpointCandidate());
+      const fallback = start && finish ? `${formatCoordinate(start)}; ${formatCoordinate(finish)}` : "";
+      const value = window.prompt("Rectangle group selection corners as lat,lon; lat,lon", fallback);
+      if (value === null) return null;
+      return parseRectangleInput(value);
+    }
     function highlightTreeNode(item) {
       document.querySelectorAll(".tree button.is-selected").forEach(node => node.classList.remove("is-selected"));
       const id = selectorValue(evidenceSourceId(item));
@@ -1457,6 +2086,391 @@
       if (response.ok) return payload;
       const detail = payload.detail || payload.error || response.statusText || "request failed";
       throw new Error(Array.isArray(detail) ? JSON.stringify(detail) : String(detail));
+    }
+    function timestampToken() {
+      return new Date().toISOString().replace(/[^0-9A-Za-z]/g, "").slice(0, 17);
+    }
+    function manualCandidateId(prefix) {
+      return `${prefix}.manual.${PROJECT_ID}.${timestampToken()}`;
+    }
+    function selectedTargetRefs() {
+      const ids = new Set([evidenceSourceId(state.selected), ...(state.selected?.map_target_ids || [])].filter(Boolean));
+      return [...ids];
+    }
+    function workspaceEditPayload(operation, fields = {}) {
+      return {
+        operation,
+        reviewer_alias: "trip_leader",
+        created_at: new Date().toISOString(),
+        persist_to_workspace: true,
+        ...fields
+      };
+    }
+    async function postWorkspaceEditLogOperation(operation, fields, pendingMessage, successMessage) {
+      const payload = workspaceEditPayload(operation, fields);
+      setWorkspaceStatus(pendingMessage);
+      try {
+        await parseWriteResponse(await fetch(`${apiBase()}/admin/pretrip/projects/${PROJECT_ID}/workspace-edits`, {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify(payload)
+        }));
+        setWorkspaceStatus(successMessage, "success");
+        await reloadProjectView();
+      } catch (error) {
+        setWorkspaceStatus(`${successMessage} failed: ${error.message || error}`, "error");
+      }
+    }
+    function selectedCheckpointCandidate() {
+      return evidenceCategory(state.selected) === "checkpoint" ? state.selected : null;
+    }
+    function selectedRetreatRoute() {
+      return evidenceCategory(state.selected) === "retreat" ? state.selected : null;
+    }
+    function finishCheckpointCandidate() {
+      const checkpoints = state.view?.checkpoints || [];
+      return checkpoints.length ? checkpoints[checkpoints.length - 1] : null;
+    }
+    async function addCheckpointToWorkspace() {
+      const coordinate = selectedOrPromptCoordinate("Add CP coordinate as lat, lon. Uses selected map coordinate when available.");
+      if (!coordinate) {
+        setWorkspaceStatus("Add CP canceled: selected map coordinate or typed lat, lon is required.", "error");
+        return;
+      }
+      const label = String(window.prompt("Checkpoint label", `Admin waypoint ${formatCoordinate(coordinate)}`) || "").trim();
+      if (!label) {
+        setWorkspaceStatus("Add CP canceled: checkpoint label is required.", "error");
+        return;
+      }
+      await postWorkspaceEditLogOperation(
+        "add_checkpoint",
+        {
+          summary: `Add checkpoint ${label} from Phase 4 admin workspace edit tools.`,
+          candidate: {
+            candidate_id: manualCandidateId("cp"),
+            label,
+            lat: coordinate.lat,
+            lon: coordinate.lon,
+            checkpoint_type: "waypoint",
+            review_state: "needs_human_review"
+          },
+          source_refs: [state.selectedMapCoordinate ? "admin.pretrip.map_click" : "admin.pretrip.typed_coordinate"]
+        },
+        `Adding checkpoint ${label} to workspace edit log...`,
+        `Checkpoint ${label} written to workspace edit log.`
+      );
+    }
+    async function removeSelectedCheckpointFromWorkspace() {
+      const checkpoint = selectedCheckpointCandidate();
+      if (!checkpoint) {
+        setWorkspaceStatus("Select a checkpoint before Remove CP.", "error");
+        return;
+      }
+      const reason = String(window.prompt("Remove CP reason", `Remove ${checkpoint.candidate_id} from Phase 4 admin workspace`) || "").trim();
+      await postWorkspaceEditLogOperation(
+        "remove_checkpoint",
+        {
+          target_ref: checkpoint.candidate_id,
+          summary: reason || `Remove checkpoint ${checkpoint.candidate_id} from Phase 4 admin workspace edit tools.`
+        },
+        `Removing checkpoint ${checkpoint.candidate_id} in workspace edit log...`,
+        `Checkpoint ${checkpoint.candidate_id} removal written to workspace edit log.`
+      );
+    }
+    async function addRetreatRouteToWorkspace() {
+      const from = selectedCheckpointCandidate();
+      if (!from) {
+        setWorkspaceStatus("Select a checkpoint before Add retreat.", "error");
+        return;
+      }
+      const finish = finishCheckpointCandidate();
+      const targetCoordinate = state.selectedMapCoordinate || coordinateFromEvidence(finish);
+      if (!targetCoordinate) {
+        setWorkspaceStatus("Add retreat canceled: select a map coordinate or keep a finish checkpoint available.", "error");
+        return;
+      }
+      const label = String(window.prompt("Retreat route label", `Retreat from ${from.candidate_id}`) || "").trim();
+      if (!label) {
+        setWorkspaceStatus("Add retreat canceled: route label is required.", "error");
+        return;
+      }
+      await postWorkspaceEditLogOperation(
+        "add_retreat_route",
+        {
+          summary: `Add retreat route ${label} from selected checkpoint to selected or finish fallback.`,
+          candidate: {
+            candidate_id: manualCandidateId("retreat"),
+            label,
+            entry_checkpoint_candidate_id: from.candidate_id,
+            trigger_checkpoint_candidate_id: state.selectedMapCoordinate ? null : finish?.candidate_id || null,
+            target_coordinate: targetCoordinate,
+            retreat_type: "alternate_route",
+            expected_use: "retreat",
+            review_state: "needs_human_review"
+          },
+          source_refs: [from.candidate_id, state.selectedMapCoordinate ? "admin.pretrip.map_click" : finish?.candidate_id || "finish_checkpoint"]
+        },
+        `Adding retreat route from ${from.candidate_id} to workspace edit log...`,
+        `Retreat route from ${from.candidate_id} written to workspace edit log.`
+      );
+    }
+    async function removeSelectedRetreatRouteFromWorkspace() {
+      const retreat = selectedRetreatRoute();
+      if (!retreat) {
+        setWorkspaceStatus("Select a retreat route before Remove retreat.", "error");
+        return;
+      }
+      const reason = String(window.prompt("Remove retreat reason", `Remove ${retreat.candidate_id} from Phase 4 admin workspace`) || "").trim();
+      await postWorkspaceEditLogOperation(
+        "remove_retreat_route",
+        {
+          target_ref: retreat.candidate_id,
+          summary: reason || `Remove retreat route ${retreat.candidate_id} from Phase 4 admin workspace edit tools.`
+        },
+        `Removing retreat route ${retreat.candidate_id} in workspace edit log...`,
+        `Retreat route ${retreat.candidate_id} removal written to workspace edit log.`
+      );
+    }
+    async function featureEditToWorkspace() {
+      const mode = String(window.prompt("Feature workspace edit operation: waypoint or rectangle", "waypoint") || "").trim().toLowerCase();
+      if (!mode) {
+        setWorkspaceStatus("Feature edit canceled: choose waypoint or rectangle.", "error");
+        return;
+      }
+      if (mode.startsWith("rect")) {
+        const rectangle = promptRectangleSelection();
+        if (!rectangle) {
+          setWorkspaceStatus("Feature rectangle edit canceled: two corners are required.", "error");
+          return;
+        }
+        await postWorkspaceEditLogOperation(
+          "rectangle_group_selection",
+          {
+            target_refs: selectedTargetRefs(),
+            selection: {
+              bbox_wgs84: {
+                min_lat: rectangle.south,
+                min_lon: rectangle.west,
+                max_lat: rectangle.north,
+                max_lon: rectangle.east
+              },
+              corners: rectangle.corners
+            },
+            summary: "Record local rectangle group selection from Phase 4 admin workspace edit tools."
+          },
+          "Writing rectangle group selection to workspace edit log...",
+          "Rectangle group selection written to workspace edit log."
+        );
+        return;
+      }
+      const coordinate = selectedOrPromptCoordinate("Waypoint coordinate as lat, lon for selected trail feature.");
+      if (!coordinate) {
+        setWorkspaceStatus("Feature waypoint edit canceled: selected map coordinate or typed lat, lon is required.", "error");
+        return;
+      }
+      const label = String(window.prompt("Generated waypoint label", `Waypoint from ${hintTitle(state.selected)}`) || "").trim();
+      if (!label) {
+        setWorkspaceStatus("Feature waypoint edit canceled: waypoint label is required.", "error");
+        return;
+      }
+      await postWorkspaceEditLogOperation(
+        "select_trail_generate_waypoint",
+        {
+          target_ref: evidenceSourceId(state.selected) || "selected_trail_feature",
+          candidate: {
+            candidate_id: manualCandidateId("cp"),
+            label,
+            lat: coordinate.lat,
+            lon: coordinate.lon,
+            checkpoint_type: "generated_from_feature",
+            review_state: "needs_human_review"
+          },
+          summary: `Generate waypoint ${label} from selected trail feature.`
+        },
+        "Writing selected trail waypoint to workspace edit log...",
+        "Selected trail waypoint written to workspace edit log."
+      );
+    }
+    function importGpxInputValue(id) {
+      return document.getElementById(id).value.trim();
+    }
+    function optionalImportGpxInputValue(id) {
+      return importGpxInputValue(id) || null;
+    }
+    function importGpxPositiveNumber(id) {
+      return Number(document.getElementById(id).value);
+    }
+    function importGpxPayload() {
+      return {
+        golden_route_gpx: importGpxInputValue("importGoldenRouteGpxPath"),
+        reference_dir: optionalImportGpxInputValue("importReferenceDirectory"),
+        workspace_root: optionalImportGpxInputValue("importWorkspaceRoot"),
+        template_project_root: optionalImportGpxInputValue("importTemplateRoot"),
+        checkpoint_spacing_m: importGpxPositiveNumber("importCheckpointSpacingM"),
+        max_reference_display_points: importGpxPositiveNumber("importMaxReferenceDisplayPoints"),
+        overwrite: document.getElementById("importOverwriteWorkspace").checked
+      };
+    }
+    function importGpxValidationErrors(payload) {
+      const errors = [];
+      if (!payload.golden_route_gpx) errors.push("Golden route GPX path is required.");
+      if (!Number.isFinite(payload.checkpoint_spacing_m) || payload.checkpoint_spacing_m <= 0) {
+        errors.push("Checkpoint spacing must be greater than 0.");
+      }
+      if (!Number.isFinite(payload.max_reference_display_points) || payload.max_reference_display_points <= 0) {
+        errors.push("Max reference display points must be greater than 0.");
+      }
+      return errors;
+    }
+    function setImportGpxStatus(message, mode = "") {
+      const status = document.getElementById("importGpxStatus");
+      status.textContent = message;
+      status.classList.toggle("is-error", mode === "error");
+      status.classList.toggle("is-success", mode === "success");
+    }
+    function setImportGpxBusy(isBusy) {
+      document.getElementById("importGpxPreview").disabled = isBusy;
+      document.getElementById("importGpxRun").disabled = isBusy;
+    }
+    function setImportGpxResult(payload) {
+      document.getElementById("importGpxResult").textContent = JSON.stringify(payload, null, 2);
+    }
+    async function previewImportGpx() {
+      const payload = importGpxPayload();
+      const errors = importGpxValidationErrors(payload);
+      if (errors.length) {
+        setImportGpxStatus(errors.join(" "), "error");
+        setImportGpxResult({errors, payload});
+        return;
+      }
+      setImportGpxBusy(true);
+      setImportGpxStatus("Previewing Import GPX reference route...");
+      try {
+        const result = await parseWriteResponse(await fetch(`${apiBase()}/admin/pretrip/projects/${PROJECT_ID}/import-gpx-preview`, {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify(payload)
+        }));
+        setImportGpxResult(result);
+        setImportGpxStatus("Import GPX preview returned. Golden route remains pre-trip reference evidence only.", "success");
+      } catch (error) {
+        setImportGpxStatus(`Import GPX preview failed: ${error.message || error}`, "error");
+        setImportGpxResult({error: error.message || String(error), payload});
+      } finally {
+        setImportGpxBusy(false);
+      }
+    }
+    async function runImportGpx() {
+      const payload = importGpxPayload();
+      const errors = importGpxValidationErrors(payload);
+      if (errors.length) {
+        setImportGpxStatus(errors.join(" "), "error");
+        setImportGpxResult({errors, payload});
+        return;
+      }
+      setImportGpxBusy(true);
+      setImportGpxStatus("Running Import GPX into project workspace...");
+      try {
+        const result = await parseWriteResponse(await fetch(`${apiBase()}/admin/pretrip/projects/${PROJECT_ID}/import-gpx`, {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({...payload, confirm_import: true})
+        }));
+        setImportGpxResult(result);
+        setImportGpxStatus("Import GPX completed in the project workspace. Actual walked track still belongs to post-analysis.", "success");
+        await reloadProjectView();
+      } catch (error) {
+        setImportGpxStatus(`Import GPX failed: ${error.message || error}`, "error");
+        setImportGpxResult({error: error.message || String(error), payload});
+      } finally {
+        setImportGpxBusy(false);
+      }
+    }
+    function prepareLayersPayload() {
+      const layers = importGpxInputValue("prepareLayersList")
+        .split(",")
+        .map(layer => layer.trim())
+        .filter(Boolean);
+      return {
+        layers,
+        workspace_root: optionalImportGpxInputValue("prepareLayersWorkspaceRoot"),
+        profile: importGpxInputValue("prepareLayersProfile") || "pi-offline",
+        network_mode: importGpxInputValue("prepareLayersNetworkMode") || "no-network",
+        allow_network_fetch: document.getElementById("prepareAllowNetworkFetch").checked,
+        route_corridor_m: importGpxPositiveNumber("prepareRouteCorridorM")
+      };
+    }
+    function prepareLayersValidationErrors(payload) {
+      const errors = [];
+      if (!payload.layers.length) errors.push("At least one layer id is required.");
+      if (!Number.isFinite(payload.route_corridor_m) || payload.route_corridor_m <= 0) {
+        errors.push("Route corridor must be greater than 0.");
+      }
+      return errors;
+    }
+    function setPrepareLayersStatus(message, mode = "") {
+      const status = document.getElementById("prepareLayersStatus");
+      status.textContent = message;
+      status.classList.toggle("is-error", mode === "error");
+      status.classList.toggle("is-success", mode === "success");
+    }
+    function setPrepareLayersBusy(isBusy) {
+      document.getElementById("prepareLayersPreview").disabled = isBusy;
+      document.getElementById("prepareLayersRun").disabled = isBusy;
+    }
+    function setPrepareLayersResult(payload) {
+      document.getElementById("prepareLayersResult").textContent = JSON.stringify(payload, null, 2);
+    }
+    async function previewPrepareLayers() {
+      const payload = prepareLayersPayload();
+      const errors = prepareLayersValidationErrors(payload);
+      if (errors.length) {
+        setPrepareLayersStatus(errors.join(" "), "error");
+        setPrepareLayersResult({errors, payload});
+        return;
+      }
+      setPrepareLayersBusy(true);
+      setPrepareLayersStatus("Previewing layer preparation...");
+      try {
+        const result = await parseWriteResponse(await fetch(`${apiBase()}/admin/pretrip/projects/${PROJECT_ID}/prepare-layers-preview`, {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify(payload)
+        }));
+        setPrepareLayersResult(result);
+        setPrepareLayersStatus("Layer preparation preview returned without workspace writes.", "success");
+      } catch (error) {
+        setPrepareLayersStatus(`Layer preparation preview failed: ${error.message || error}`, "error");
+        setPrepareLayersResult({error: error.message || String(error), payload});
+      } finally {
+        setPrepareLayersBusy(false);
+      }
+    }
+    async function runPrepareLayers() {
+      const payload = prepareLayersPayload();
+      const errors = prepareLayersValidationErrors(payload);
+      if (errors.length) {
+        setPrepareLayersStatus(errors.join(" "), "error");
+        setPrepareLayersResult({errors, payload});
+        return;
+      }
+      setPrepareLayersBusy(true);
+      setPrepareLayersStatus("Preparing workspace layer artifacts...");
+      try {
+        const result = await parseWriteResponse(await fetch(`${apiBase()}/admin/pretrip/projects/${PROJECT_ID}/prepare-layers`, {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({...payload, confirm_prepare: true})
+        }));
+        setPrepareLayersResult(result);
+        setPrepareLayersStatus("Layer preparation completed in the project workspace.", "success");
+        await reloadProjectView();
+      } catch (error) {
+        setPrepareLayersStatus(`Layer preparation failed: ${error.message || error}`, "error");
+        setPrepareLayersResult({error: error.message || String(error), payload});
+      } finally {
+        setPrepareLayersBusy(false);
+      }
     }
     async function postJson(path, payload) {
       return window.ScoutAssistantUI.postJson(path, payload, {apiBase});
@@ -1512,6 +2526,14 @@
         "Could this block departure readiness?"
       ];
     }
+    function assistantQuestionLabel(question) {
+      if (question.startsWith("Why does ")) return "Why review?";
+      if (question.startsWith("Why is ")) return "Why important?";
+      if (question.startsWith("What evidence is missing")) return "Missing evidence?";
+      if (question.startsWith("What evidence supports")) return "Evidence?";
+      if (question.startsWith("Could this block")) return "Readiness impact?";
+      return "Ask";
+    }
     function renderAssistantPromptSuggestions(item) {
       const list = document.getElementById("assistantPromptSuggestions");
       list.textContent = "";
@@ -1520,7 +2542,9 @@
         const button = document.createElement("button");
         button.type = "button";
         button.dataset.assistantQuestion = question;
-        button.textContent = question;
+        button.title = question;
+        button.setAttribute("aria-label", question);
+        button.textContent = assistantQuestionLabel(question);
         li.appendChild(button);
         list.appendChild(li);
       });
@@ -1799,19 +2823,16 @@
       svg.setAttribute("viewBox", `0 0 ${MAP_WIDTH} ${MAP_HEIGHT}`);
       svg.replaceChildren();
 
-      const imageryGroup = el("g", {"data-layer-group": "imagery"});
-      renderRasterImagery(imageryGroup, view, bounds, MAP_WIDTH, MAP_HEIGHT);
-      svg.appendChild(imageryGroup);
-
       const osmGroup = el("g", {"data-layer-group": "osm"});
       renderOsmBasemap(osmGroup, bounds, MAP_WIDTH, MAP_HEIGHT);
       svg.appendChild(osmGroup);
 
+      const imageryGroup = el("g", {"data-layer-group": "imagery"});
+      renderRasterImagery(imageryGroup, view, bounds, MAP_WIDTH, MAP_HEIGHT);
+      svg.appendChild(imageryGroup);
+
       const terrainGroup = el("g", {"data-layer-group": "terrain"});
-      for (let row = 1; row <= 5; row += 1) {
-        const y = 88 + row * 88;
-        terrainGroup.appendChild(el("path", {d: `M40,${y} C210,${y - 34} 365,${y + 42} 535,${y + 4} S795,${y - 40} 960,${y + 12}`, class: "terrain-line"}));
-      }
+      renderTerrainMetadata(terrainGroup, view, bounds);
       svg.appendChild(terrainGroup);
 
       const corridorGroup = el("g", {"data-layer-group": "corridors"});
@@ -1830,11 +2851,40 @@
       });
       svg.appendChild(hazardGroup);
 
+      const overpassGroup = el("g", {"data-layer-group": "overpass"});
+      (view.overpass_evidence?.corridor_candidates || []).forEach(candidate => {
+        const path = el("path", {d: pathFromCoords(bounds, candidate.corridor.coordinates), class: "overpass-corridor"});
+        attachEvidence(path, candidate);
+        overpassGroup.appendChild(path);
+      });
+      (view.overpass_evidence?.hazard_candidates || []).forEach(candidate => {
+        const path = el("path", {d: pathFromCoords(bounds, candidate.hazard.polygon) + " Z", class: "overpass-hazard"});
+        attachEvidence(path, candidate);
+        overpassGroup.appendChild(path);
+      });
+      (view.overpass_evidence?.poi_candidates || []).forEach(candidate => {
+        const [x, y] = project(bounds, candidate.poi.coordinate.lat, candidate.poi.coordinate.lon);
+        const circle = el("circle", {cx: x, cy: y, r: 5, class: "overpass-poi"});
+        attachEvidence(circle, candidate);
+        overpassGroup.appendChild(circle);
+      });
+      svg.appendChild(overpassGroup);
+
       const routeGroup = el("g", {"data-layer-group": "route"});
       const routePath = el("path", {d: pathFromCoords(bounds, view.route.polyline), class: "route-line"});
       attachEvidence(routePath, view.route);
       routeGroup.appendChild(routePath);
       svg.appendChild(routeGroup);
+
+      const referenceTrackGroup = el("g", {"data-layer-group": "reference-tracks"});
+      (view.reference_tracks?.reference_tracks || []).forEach(track => {
+        const coords = track.display_geometry?.coordinates || [];
+        if (coords.length < 2) return;
+        const path = el("path", {d: pathFromCoords(bounds, coords), class: "reference-track"});
+        attachEvidence(path, track);
+        referenceTrackGroup.appendChild(path);
+      });
+      svg.appendChild(referenceTrackGroup);
 
       const retreatGroup = el("g", {"data-layer-group": "retreat"});
       view.retreat_routes.forEach(retreat => {
@@ -1850,7 +2900,10 @@
         const from = view.checkpoints.find(item => item.candidate_id === segment.from_candidate_id);
         const to = view.checkpoints.find(item => item.candidate_id === segment.to_candidate_id);
         if (!from || !to) return;
-        const path = el("path", {d: pathFromCoords(bounds, [from, to]), class: "segment-overlay"});
+        const segmentCoordinates = segment.display_geometry?.coordinates?.length >= 2
+          ? segment.display_geometry.coordinates
+          : [from, to];
+        const path = el("path", {d: pathFromCoords(bounds, segmentCoordinates), class: "segment-overlay"});
         attachEvidence(path, segment);
         segmentGroup.appendChild(path);
       });
@@ -1947,7 +3000,12 @@
     }
     function updateStatusFilterOptions(view) {
       const select = document.getElementById("featureStatusFilter");
-      const statuses = new Set([...view.checkpoints, ...view.segments].map(statusFor).filter(Boolean));
+      const statuses = new Set([
+        ...view.checkpoints,
+        ...view.segments,
+        ...view.retreat_routes,
+        ...(view.reference_tracks?.reference_tracks || [])
+      ].map(statusFor).filter(Boolean));
       [...select.querySelectorAll("option:not([value='all'])")].forEach(node => node.remove());
       [...statuses].sort().forEach(status => {
         const option = document.createElement("option");
@@ -1989,7 +3047,7 @@
       applyTreeFilters();
     }
     function visibleReviewButtons() {
-      const buttons = [...document.querySelectorAll('#evidenceTree button[data-tree-category="review"]')]
+      const buttons = [...document.querySelectorAll('#reviewWorkspaceTree button[data-tree-category="review"]')]
         .filter(button => !button.hidden);
       const undecidedButtons = buttons.filter(button => button.dataset.reviewDecisionState === "undecided");
       return undecidedButtons.length ? undecidedButtons : buttons;
@@ -2007,19 +3065,20 @@
       const reviewCategory = document.getElementById("reviewCategoryFilter").value;
       const reviewSeverity = document.getElementById("reviewSeverityFilter").value;
       document.querySelectorAll("#evidenceTree button[data-tree-source-id]").forEach(button => {
-        const isCpOrSegment = button.dataset.treeCategory === "checkpoint" || button.dataset.treeCategory === "segment";
-        const isReview = button.dataset.treeCategory === "review";
+        const isTimeline = ["checkpoint", "segment", "retreat", "reference"].includes(button.dataset.treeCategory);
         const isSelected = button.dataset.treeSourceId === evidenceSourceId(state.selected);
         const categoryMatch = category === "all" || button.dataset.treeCategory === category;
         const statusMatch = status === "all" || button.dataset.treeStatus === status;
         const queryMatch = !query || button.dataset.treeSearchText.includes(query);
+        button.hidden = isTimeline && !isSelected && !(categoryMatch && statusMatch && queryMatch);
+      });
+      document.querySelectorAll("#reviewWorkspaceTree button[data-tree-source-id]").forEach(button => {
+        const isSelected = button.dataset.treeSourceId === evidenceSourceId(state.selected);
         const reviewCategoryMatch = reviewCategory === "all" || button.dataset.reviewCategory === reviewCategory;
         const reviewSeverityMatch = reviewSeverity === "all" || button.dataset.reviewSeverity === reviewSeverity;
-        const cpSegmentHidden = isCpOrSegment && !isSelected && !(categoryMatch && statusMatch && queryMatch);
-        const reviewHidden = isReview && !isSelected && !(reviewCategoryMatch && reviewSeverityMatch);
-        button.hidden = cpSegmentHidden || reviewHidden;
+        button.hidden = !isSelected && !(reviewCategoryMatch && reviewSeverityMatch);
       });
-      document.querySelectorAll("#evidenceTree details").forEach(details => {
+      document.querySelectorAll("#evidenceTree details, #reviewWorkspaceTree details").forEach(details => {
         const buttons = [...details.querySelectorAll("button[data-tree-source-id]")];
         const hiddenCount = buttons.filter(button => button.hidden).length;
         details.dataset.filterEmpty = buttons.length > 0 && hiddenCount === buttons.length ? "true" : "false";
@@ -2043,34 +3102,55 @@
         label: item.label || item.candidate_id,
         sublabel: item.review_state || "candidate"
       }), true, "retreat"));
-      tree.appendChild(treeGroup("POI", view.map_candidates.poi_candidates, item => ({
+      tree.appendChild(treeGroup("Reference GPX", view.reference_tracks?.reference_tracks || [], item => ({
         label: item.label || item.candidate_id,
-        sublabel: item.poi.poi_type
-      }), false, "poi"));
-      tree.appendChild(treeGroup("Hazards", view.map_candidates.hazard_candidates, item => ({
-        label: item.label || item.candidate_id,
-        sublabel: item.hazard.hazard_type
-      }), false, "hazard"));
+        sublabel: `${Math.round((item.route?.distance_m || 0) / 1000)}km | ${item.route?.point_count || 0} pts`
+      }), false, "reference"));
+      renderReviewWorkspaceTree(view);
+      applyTreeFilters();
+    }
+    function renderReviewWorkspaceTree(view) {
+      const tree = document.getElementById("reviewWorkspaceTree");
+      tree.replaceChildren();
       tree.appendChild(treeGroup("Review Queue", view.review_queue.items, item => ({
         label: item.title,
         sublabel: `${item.severity} | ${item.category}`
       }), false, "review"));
-      applyTreeFilters();
     }
     function renderTabSummary(view) {
       const container = document.getElementById("tabSummary");
       const tab = view.tabs[state.activeTab];
-      const entries = state.activeTab === "pre_trip_planning" ? [
-        ["Target ETA", view.eta.target_eta],
-        ["Turn-back ETA", view.eta.turn_back_checkpoint_eta],
-        ["Weather", view.weather.status],
-        ["Raw samples", "summary only"]
-      ] : [
-        ["Runtime handoff", tab.runtime_handoff.status],
-        ["Route comparison", tab.route_comparison.classification],
-        ["Brain nodes", tab.brain_seed.node_count],
-        ["Observed facts", tab.brain_seed.observed_fact_count]
-      ];
+      const entries = state.activeTab === "pre_trip_planning"
+        ? [
+            ["Target ETA", view.eta.target_eta],
+            ["Turn-back ETA", view.eta.turn_back_checkpoint_eta],
+            ["Overpass", `${view.overpass_evidence?.counts?.candidates || 0} candidates`],
+            ["Reference GPX", `${view.reference_tracks?.reference_track_count || 0} tracks`],
+            ["Weather", view.weather.status],
+            ["Raw samples", "summary only"]
+          ]
+        : state.activeTab === "import_gpx"
+          ? [
+              ["Golden route", "reference route"],
+              ["Layer prep", "workspace job"],
+              ["Actual walked track", "post-analysis only"],
+              ["Workspace", "server-side paths"],
+              ["Runtime writes", "closed"]
+            ]
+        : state.activeTab === "review_workspace"
+          ? [
+              ["Review queue", `${view.review_queue?.counts?.item_count || 0} items`],
+              ["Warnings", view.review_queue?.counts?.warning_count ?? 0],
+              ["Draft actions", view.review_draft_log?.counts?.action_count ?? 0],
+              ["Decisions", view.review_decision_log?.counts?.action_count ?? 0],
+              ["Workspace", "local only"]
+            ]
+          : [
+              ["Runtime handoff", tab.runtime_handoff.status],
+              ["Route comparison", tab.route_comparison.classification],
+              ["Brain nodes", tab.brain_seed.node_count],
+              ["Observed facts", tab.brain_seed.observed_fact_count]
+            ];
       container.replaceChildren();
       entries.forEach(([label, value]) => {
         const box = document.createElement("div");
@@ -2131,23 +3211,37 @@
       updateReadinessStrip(view);
     }
     function updateLayers() {
-      document.querySelectorAll("[data-layer]").forEach(input => {
+      const layerInputs = [...document.querySelectorAll("[data-layer]")];
+      layerInputs.forEach(input => {
         const group = svg.querySelector(`[data-layer-group="${input.dataset.layer}"]`);
         if (group) group.dataset.layerHidden = input.checked ? "false" : "true";
       });
+      const summary = document.getElementById("layerEnabledCount");
+      if (summary) {
+        const enabled = layerInputs.filter(input => input.checked).length;
+        summary.textContent = `${enabled}/${layerInputs.length}`;
+      }
       highlightMapFor(state.selected);
       highlightTreeNode(state.selected);
     }
-    function setActiveTab(tab) {
-      state.activeTab = tab;
+    function syncActiveTabChrome(tab = state.activeTab) {
       document.querySelectorAll(".tab-button").forEach(button => {
         const active = button.dataset.tab === tab;
         button.classList.toggle("is-active", active);
         button.setAttribute("aria-selected", active ? "true" : "false");
       });
+    }
+    function syncActiveTabPanels(tab = state.activeTab) {
+      document.getElementById("importGpxPanel").classList.toggle("is-active", tab === "import_gpx");
+      document.getElementById("reviewWorkspacePanel").classList.toggle("is-active", tab === "review_workspace");
+    }
+    function setActiveTab(tab) {
+      state.activeTab = tab;
+      syncActiveTabChrome(tab);
       if (state.view) {
         renderTabSummary(state.view);
         renderSectionList(state.view);
+        syncActiveTabPanels(tab);
         setActiveTabDetail(state.view);
       }
     }
@@ -2188,14 +3282,29 @@
       document.getElementById("workspaceRefreshApplyPlan").addEventListener("click", refreshWorkspaceApplyPlan);
       document.getElementById("routeNoteReviewedAssumptions").addEventListener("click", generateRouteNoteReviewedAssumptionsForWorkspace);
       document.getElementById("expertContributionApplyResult").addEventListener("click", applyExpertContributionWorkspaceResult);
+      document.getElementById("featureEdit").addEventListener("click", featureEditToWorkspace);
+      document.getElementById("addCheckpoint").addEventListener("click", addCheckpointToWorkspace);
+      document.getElementById("removeCheckpoint").addEventListener("click", removeSelectedCheckpointFromWorkspace);
+      document.getElementById("addRetreatRoute").addEventListener("click", addRetreatRouteToWorkspace);
+      document.getElementById("removeRetreatRoute").addEventListener("click", removeSelectedRetreatRouteFromWorkspace);
+      document.getElementById("externalDataImport").addEventListener("click", () => setActiveTab("import_gpx"));
+      document.getElementById("importGpxForm").addEventListener("submit", event => event.preventDefault());
+      document.getElementById("importGpxPreview").addEventListener("click", previewImportGpx);
+      document.getElementById("importGpxRun").addEventListener("click", runImportGpx);
+      document.getElementById("prepareLayersForm").addEventListener("submit", event => event.preventDefault());
+      document.getElementById("prepareLayersPreview").addEventListener("click", previewPrepareLayers);
+      document.getElementById("prepareLayersRun").addEventListener("click", runPrepareLayers);
       svg.addEventListener("pointerdown", event => {
         if (event.button !== 0) return;
-        state.pointerPan = {x: event.clientX, y: event.clientY, panX: state.panX, panY: state.panY};
+        state.pointerPan = {x: event.clientX, y: event.clientY, panX: state.panX, panY: state.panY, moved: false};
         svg.classList.add("is-panning");
         svg.setPointerCapture(event.pointerId);
       });
       svg.addEventListener("pointermove", event => {
         if (!state.pointerPan) return;
+        if (Math.abs(state.pointerPan.x - event.clientX) > 3 || Math.abs(state.pointerPan.y - event.clientY) > 3) {
+          state.pointerPan.moved = true;
+        }
         const dx = (state.pointerPan.x - event.clientX) / state.zoom;
         const dy = (state.pointerPan.y - event.clientY) / state.zoom;
         state.panX = state.pointerPan.panX + dx;
@@ -2204,9 +3313,13 @@
         applyMapViewport();
       });
       svg.addEventListener("pointerup", event => {
+        const pointerPan = state.pointerPan;
         state.pointerPan = null;
         svg.classList.remove("is-panning");
         if (svg.hasPointerCapture(event.pointerId)) svg.releasePointerCapture(event.pointerId);
+        if (pointerPan && !pointerPan.moved) {
+          setSelectedMapCoordinate(coordinateFromMapPointerEvent(event));
+        }
       });
       svg.addEventListener("pointercancel", () => {
         state.pointerPan = null;
@@ -2225,6 +3338,8 @@
       renderEvidenceTree(view);
       renderTabSummary(view);
       renderSectionList(view);
+      syncActiveTabChrome();
+      syncActiveTabPanels();
       selectEvidence(findEvidenceBySourceId(view, selectedSourceId) || view.summary);
     }
     async function load() {
