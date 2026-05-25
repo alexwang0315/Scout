@@ -35,11 +35,13 @@ def test_extracts_gpx_waypoint_name_cmt_desc_as_route_note_candidates():
     assert payload["source_artifact_id"] == "source.comparison.rudy_like_gpx"
     assert payload["counts"]["waypoint_count"] == 81
     assert payload["counts"]["note_candidate_count"] == 81
-    assert payload["counts"]["hazard_hint_count"] == 2
-    assert payload["counts"]["route_condition_hint_count"] == 19
+    assert payload["counts"]["hazard_hint_count"] == 3
+    assert payload["counts"]["route_condition_hint_count"] == 20
     assert payload["counts"]["camp_or_water_hint_count"] == 8
     assert payload["counts"]["landmark_hint_count"] == 37
-    assert payload["counts"]["potential_ln_signal_count"] == 21
+    assert payload["counts"]["potential_ln_signal_count"] == 23
+    assert payload["counts"]["stale_route_note_count"] == 5
+    assert payload["counts"]["route_note_time_unknown_count"] == 0
 
     hazard = next(
         candidate
@@ -83,10 +85,59 @@ def test_route_note_candidates_remain_review_gated_model_interpretations():
         assert forbidden_source not in source
 
 
+def test_route_note_candidates_flag_stale_waypoint_times(tmp_path: Path):
+    gpx = tmp_path / "route-notes-with-time.gpx"
+    gpx.write_text(
+        "\n".join(
+            [
+                '<?xml version="1.0" encoding="UTF-8"?>',
+                '<gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1">',
+                '<wpt lat="24.001" lon="121.001">',
+                "<name>茂密林相</name><cmt>路跡較不明</cmt>",
+                "<time>2018-01-01T00:00:00Z</time>",
+                "</wpt>",
+                '<wpt lat="24.002" lon="121.002">',
+                "<name>新水源</name><cmt>需複查</cmt>",
+                "<time>2026-05-01T00:00:00Z</time>",
+                "</wpt>",
+                '<wpt lat="24.003" lon="121.003">',
+                "<name>高繞</name><cmt>崩塌地旁路線提示</cmt>",
+                "</wpt>",
+                "</gpx>",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    candidate_set = build_route_note_candidates_from_gpx(
+        gpx,
+        project_id="stale_route_notes",
+        source_key="fixture",
+        freshness_as_of="2026-05-22T00:00:00+00:00",
+    )
+    payload = candidate_set.model_dump(mode="json")
+
+    assert payload["counts"]["stale_route_note_count"] == 1
+    assert payload["counts"]["route_note_time_unknown_count"] == 1
+    stale = payload["candidates"][0]
+    recent = payload["candidates"][1]
+    unknown = payload["candidates"][2]
+    assert stale["route_note_freshness"] == "stale"
+    assert stale["stale_route_note"] is True
+    assert stale["route_note_age_days"] > 365 * 5
+    assert recent["route_note_freshness"] == "recent"
+    assert recent["stale_route_note"] is False
+    assert unknown["route_note_freshness"] == "unknown"
+    assert unknown["route_note_age_days"] is None
+    assert unknown["note_category"] == "route_condition_hint"
+
+
 def test_route_note_candidates_fixture_matches_builder_output():
     fixture_payload = FIXTURE_PATH.read_text(encoding="utf-8")
     fixture = load_route_note_candidates(FIXTURE_PATH)
-    regenerated = build_route_note_candidates_from_gpx()
+    regenerated = build_route_note_candidates_from_gpx(
+        freshness_as_of="2026-05-22T00:00:00+00:00"
+    )
 
     assert fixture == regenerated
     assert fixture_payload == route_note_candidates_to_json(regenerated)

@@ -9,6 +9,7 @@
     "notes": [
       "GPX waypoint name/cmt/desc fields are treated as route-note candidates.",
       "These notes can seed future Ln coverage after human review; they are not ObservedFact or runtime warnings in this slice.",
+      "Route note freshness（路線註記新鮮度）is flagged from waypoint time when available; old notes remain evidence but need stronger review.",
       "The fixture stores extracted note metadata only and does not version the raw GPX."
     ],
     "observed_fact_allowed": false,
@@ -41,6 +42,8 @@
       "potential_ln_signal": true,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 1369,
+      "route_note_freshness": "aging",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -48,6 +51,7 @@
         "desc"
       ],
       "source_waypoint_index": 0,
+      "stale_route_note": false,
       "time": "2022-08-21T21:06:06Z"
     },
     {
@@ -65,6 +69,8 @@
       "potential_ln_signal": true,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 1369,
+      "route_note_freshness": "aging",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -72,6 +78,7 @@
         "desc"
       ],
       "source_waypoint_index": 1,
+      "stale_route_note": false,
       "time": "2022-08-21T21:16:32Z"
     },
     {
@@ -89,6 +96,8 @@
       "potential_ln_signal": false,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 1370,
+      "route_note_freshness": "aging",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -96,6 +105,7 @@
         "desc"
       ],
       "source_waypoint_index": 2,
+      "stale_route_note": false,
       "time": "2022-08-20T01:41:49Z"
     },
     {
@@ -113,6 +123,8 @@
       "potential_ln_signal": false,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 2945,
+      "route_note_freshness": "stale",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -120,6 +132,7 @@
         "desc"
       ],
       "source_waypoint_index": 3,
+      "stale_route_note": true,
       "time": "2018-04-28T03:52:42Z"
     },
     {
@@ -137,6 +150,8 @@
       "potential_ln_signal": false,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 2945,
+      "route_note_freshness": "stale",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -144,6 +159,7 @@
         "desc"
       ],
       "source_waypoint_index": 4,
+      "stale_route_note": true,
       "time": "2018-04-28T04:31:15Z"
     },
     {
@@ -161,6 +177,8 @@
       "potential_ln_signal": false,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 1374,
+      "route_note_freshness": "aging",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -168,6 +186,7 @@
         "desc"
       ],
       "source_waypoint_index": 5,
+      "stale_route_note": false,
       "time": "2022-08-16T01:33:07Z"
     },
     {
@@ -185,6 +204,8 @@
       "potential_ln_signal": true,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 1374,
+      "route_note_freshness": "aging",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -192,6 +213,7 @@
         "desc"
       ],
       "source_waypoint_index": 6,
+      "stale_route_note": false,
       "time": "2022-08-16T01:33:07Z"
     },
     {
@@ -209,6 +231,8 @@
       "potential_ln_signal": false,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 1374,
+      "route_note_freshness": "aging",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -216,6 +240,7 @@
         "desc"
       ],
       "source_waypoint_index": 7,
+      "stale_route_note": false,
       "time": "2022-08-16T01:33:07Z"
     },
     {
@@ -233,6 +258,8 @@
       "potential_ln_signal": false,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 1370,
+      "route_note_freshness": "aging",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -240,6 +267,7 @@
         "desc"
       ],
       "source_waypoint_index": 8,
+      "stale_route_note": false,
       "time": "2022-08-20T03:52:47Z"
     },
     {
@@ -257,6 +285,8 @@
       "potential_ln_signal": false,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 1374,
+      "route_note_freshness": "aging",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -264,6 +294,7 @@
         "desc"
       ],
       "source_waypoint_index": 9,
+      "stale_route_note": false,
       "time": "2022-08-16T01:33:07Z"
     },
     {
@@ -281,6 +312,8 @@
       "potential_ln_signal": false,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 1374,
+      "route_note_freshness": "aging",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -288,6 +321,7 @@
         "desc"
       ],
       "source_waypoint_index": 10,
+      "stale_route_note": false,
       "time": "2022-08-16T01:33:07Z"
     },
     {
@@ -305,6 +339,8 @@
       "potential_ln_signal": false,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 1370,
+      "route_note_freshness": "aging",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -312,6 +348,7 @@
         "desc"
       ],
       "source_waypoint_index": 11,
+      "stale_route_note": false,
       "time": "2022-08-20T01:43:50Z"
     },
     {
@@ -329,6 +366,8 @@
       "potential_ln_signal": false,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 1370,
+      "route_note_freshness": "aging",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -336,6 +375,7 @@
         "desc"
       ],
       "source_waypoint_index": 12,
+      "stale_route_note": false,
       "time": "2022-08-20T06:13:44Z"
     },
     {
@@ -353,6 +393,8 @@
       "potential_ln_signal": false,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 1374,
+      "route_note_freshness": "aging",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -360,6 +402,7 @@
         "desc"
       ],
       "source_waypoint_index": 13,
+      "stale_route_note": false,
       "time": "2022-08-16T01:33:07Z"
     },
     {
@@ -377,6 +420,8 @@
       "potential_ln_signal": false,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 1374,
+      "route_note_freshness": "aging",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -384,6 +429,7 @@
         "desc"
       ],
       "source_waypoint_index": 14,
+      "stale_route_note": false,
       "time": "2022-08-16T01:33:07Z"
     },
     {
@@ -401,6 +447,8 @@
       "potential_ln_signal": false,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 1374,
+      "route_note_freshness": "aging",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -408,6 +456,7 @@
         "desc"
       ],
       "source_waypoint_index": 15,
+      "stale_route_note": false,
       "time": "2022-08-16T01:33:07Z"
     },
     {
@@ -425,6 +474,8 @@
       "potential_ln_signal": false,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 1374,
+      "route_note_freshness": "aging",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -432,6 +483,7 @@
         "desc"
       ],
       "source_waypoint_index": 16,
+      "stale_route_note": false,
       "time": "2022-08-16T01:33:07Z"
     },
     {
@@ -449,6 +501,8 @@
       "potential_ln_signal": false,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 1374,
+      "route_note_freshness": "aging",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -456,6 +510,7 @@
         "desc"
       ],
       "source_waypoint_index": 17,
+      "stale_route_note": false,
       "time": "2022-08-16T01:33:07Z"
     },
     {
@@ -473,6 +528,8 @@
       "potential_ln_signal": true,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 1370,
+      "route_note_freshness": "aging",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -480,6 +537,7 @@
         "desc"
       ],
       "source_waypoint_index": 18,
+      "stale_route_note": false,
       "time": "2022-08-20T02:15:04Z"
     },
     {
@@ -497,6 +555,8 @@
       "potential_ln_signal": true,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 1370,
+      "route_note_freshness": "aging",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -504,6 +564,7 @@
         "desc"
       ],
       "source_waypoint_index": 19,
+      "stale_route_note": false,
       "time": "2022-08-20T03:12:06Z"
     },
     {
@@ -521,6 +582,8 @@
       "potential_ln_signal": false,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 1370,
+      "route_note_freshness": "aging",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -528,6 +591,7 @@
         "desc"
       ],
       "source_waypoint_index": 20,
+      "stale_route_note": false,
       "time": "2022-08-20T02:29:44Z"
     },
     {
@@ -545,6 +609,8 @@
       "potential_ln_signal": false,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 1370,
+      "route_note_freshness": "aging",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -552,6 +618,7 @@
         "desc"
       ],
       "source_waypoint_index": 21,
+      "stale_route_note": false,
       "time": "2022-08-20T02:52:35Z"
     },
     {
@@ -569,6 +636,8 @@
       "potential_ln_signal": false,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 1370,
+      "route_note_freshness": "aging",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -576,6 +645,7 @@
         "desc"
       ],
       "source_waypoint_index": 22,
+      "stale_route_note": false,
       "time": "2022-08-20T23:49:01Z"
     },
     {
@@ -593,6 +663,8 @@
       "potential_ln_signal": false,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 1370,
+      "route_note_freshness": "aging",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -600,6 +672,7 @@
         "desc"
       ],
       "source_waypoint_index": 23,
+      "stale_route_note": false,
       "time": "2022-08-20T02:02:48Z"
     },
     {
@@ -617,6 +690,8 @@
       "potential_ln_signal": true,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 1370,
+      "route_note_freshness": "aging",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -624,6 +699,7 @@
         "desc"
       ],
       "source_waypoint_index": 24,
+      "stale_route_note": false,
       "time": "2022-08-20T01:16:51Z"
     },
     {
@@ -641,6 +717,8 @@
       "potential_ln_signal": false,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 1374,
+      "route_note_freshness": "aging",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -648,6 +726,7 @@
         "desc"
       ],
       "source_waypoint_index": 25,
+      "stale_route_note": false,
       "time": "2022-08-16T01:33:07Z"
     },
     {
@@ -665,6 +744,8 @@
       "potential_ln_signal": false,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 1370,
+      "route_note_freshness": "aging",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -672,6 +753,7 @@
         "desc"
       ],
       "source_waypoint_index": 26,
+      "stale_route_note": false,
       "time": "2022-08-20T02:54:10Z"
     },
     {
@@ -689,6 +771,8 @@
       "potential_ln_signal": true,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 1374,
+      "route_note_freshness": "aging",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -696,6 +780,7 @@
         "desc"
       ],
       "source_waypoint_index": 27,
+      "stale_route_note": false,
       "time": "2022-08-16T01:33:07Z"
     },
     {
@@ -713,6 +798,8 @@
       "potential_ln_signal": true,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 1376,
+      "route_note_freshness": "aging",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -720,6 +807,7 @@
         "desc"
       ],
       "source_waypoint_index": 28,
+      "stale_route_note": false,
       "time": "2022-08-14T04:33:37Z"
     },
     {
@@ -737,6 +825,8 @@
       "potential_ln_signal": false,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 1374,
+      "route_note_freshness": "aging",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -744,6 +834,7 @@
         "desc"
       ],
       "source_waypoint_index": 29,
+      "stale_route_note": false,
       "time": "2022-08-16T01:33:07Z"
     },
     {
@@ -761,6 +852,8 @@
       "potential_ln_signal": false,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 1452,
+      "route_note_freshness": "aging",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -768,6 +861,7 @@
         "desc"
       ],
       "source_waypoint_index": 30,
+      "stale_route_note": false,
       "time": "2022-05-30T07:40:02Z"
     },
     {
@@ -785,6 +879,8 @@
       "potential_ln_signal": false,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 1462,
+      "route_note_freshness": "aging",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -792,6 +888,7 @@
         "desc"
       ],
       "source_waypoint_index": 31,
+      "stale_route_note": false,
       "time": "2022-05-20T05:32:41Z"
     },
     {
@@ -809,6 +906,8 @@
       "potential_ln_signal": true,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 1370,
+      "route_note_freshness": "aging",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -816,6 +915,7 @@
         "desc"
       ],
       "source_waypoint_index": 32,
+      "stale_route_note": false,
       "time": "2022-08-20T22:50:53Z"
     },
     {
@@ -833,6 +933,8 @@
       "potential_ln_signal": false,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 1452,
+      "route_note_freshness": "aging",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -840,6 +942,7 @@
         "desc"
       ],
       "source_waypoint_index": 33,
+      "stale_route_note": false,
       "time": "2022-05-30T07:40:02Z"
     },
     {
@@ -857,6 +960,8 @@
       "potential_ln_signal": false,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 1370,
+      "route_note_freshness": "aging",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -864,6 +969,7 @@
         "desc"
       ],
       "source_waypoint_index": 34,
+      "stale_route_note": false,
       "time": "2022-08-20T01:11:49Z"
     },
     {
@@ -881,6 +987,8 @@
       "potential_ln_signal": false,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 1370,
+      "route_note_freshness": "aging",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -888,6 +996,7 @@
         "desc"
       ],
       "source_waypoint_index": 35,
+      "stale_route_note": false,
       "time": "2022-08-20T01:48:09Z"
     },
     {
@@ -905,6 +1014,8 @@
       "potential_ln_signal": true,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 1370,
+      "route_note_freshness": "aging",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -912,6 +1023,7 @@
         "desc"
       ],
       "source_waypoint_index": 36,
+      "stale_route_note": false,
       "time": "2022-08-20T01:47:46Z"
     },
     {
@@ -924,11 +1036,13 @@
       "lon": 121.244867994,
       "name": "崩壁上方，展望點",
       "normalized_note": "崩壁上方，展望點",
-      "note_category": "uncategorized_note",
+      "note_category": "hazard_hint",
       "observed_fact_candidate": false,
-      "potential_ln_signal": false,
+      "potential_ln_signal": true,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 1370,
+      "route_note_freshness": "aging",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -936,6 +1050,7 @@
         "desc"
       ],
       "source_waypoint_index": 37,
+      "stale_route_note": false,
       "time": "2022-08-20T01:31:45Z"
     },
     {
@@ -953,6 +1068,8 @@
       "potential_ln_signal": false,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 1370,
+      "route_note_freshness": "aging",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -960,6 +1077,7 @@
         "desc"
       ],
       "source_waypoint_index": 38,
+      "stale_route_note": false,
       "time": "2022-08-20T03:26:12Z"
     },
     {
@@ -977,6 +1095,8 @@
       "potential_ln_signal": false,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 1370,
+      "route_note_freshness": "aging",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -984,6 +1104,7 @@
         "desc"
       ],
       "source_waypoint_index": 39,
+      "stale_route_note": false,
       "time": "2022-08-20T22:52:47Z"
     },
     {
@@ -1001,6 +1122,8 @@
       "potential_ln_signal": true,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 1370,
+      "route_note_freshness": "aging",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -1008,6 +1131,7 @@
         "desc"
       ],
       "source_waypoint_index": 40,
+      "stale_route_note": false,
       "time": "2022-08-20T00:32:13Z"
     },
     {
@@ -1025,6 +1149,8 @@
       "potential_ln_signal": false,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 1370,
+      "route_note_freshness": "aging",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -1032,6 +1158,7 @@
         "desc"
       ],
       "source_waypoint_index": 41,
+      "stale_route_note": false,
       "time": "2022-08-20T00:30:08Z"
     },
     {
@@ -1049,6 +1176,8 @@
       "potential_ln_signal": false,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 1370,
+      "route_note_freshness": "aging",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -1056,6 +1185,7 @@
         "desc"
       ],
       "source_waypoint_index": 42,
+      "stale_route_note": false,
       "time": "2022-08-20T03:51:37Z"
     },
     {
@@ -1073,6 +1203,8 @@
       "potential_ln_signal": false,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 1374,
+      "route_note_freshness": "aging",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -1080,6 +1212,7 @@
         "desc"
       ],
       "source_waypoint_index": 43,
+      "stale_route_note": false,
       "time": "2022-08-16T01:33:07Z"
     },
     {
@@ -1097,6 +1230,8 @@
       "potential_ln_signal": false,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 3348,
+      "route_note_freshness": "stale",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -1104,6 +1239,7 @@
         "desc"
       ],
       "source_waypoint_index": 44,
+      "stale_route_note": true,
       "time": "2017-03-21T05:02:20Z"
     },
     {
@@ -1121,6 +1257,8 @@
       "potential_ln_signal": false,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 3348,
+      "route_note_freshness": "stale",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -1128,6 +1266,7 @@
         "desc"
       ],
       "source_waypoint_index": 45,
+      "stale_route_note": true,
       "time": "2017-03-21T05:41:26Z"
     },
     {
@@ -1145,6 +1284,8 @@
       "potential_ln_signal": false,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 3348,
+      "route_note_freshness": "stale",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -1152,6 +1293,7 @@
         "desc"
       ],
       "source_waypoint_index": 46,
+      "stale_route_note": true,
       "time": "2017-03-21T05:43:46Z"
     },
     {
@@ -1169,6 +1311,8 @@
       "potential_ln_signal": false,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 1374,
+      "route_note_freshness": "aging",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -1176,6 +1320,7 @@
         "desc"
       ],
       "source_waypoint_index": 47,
+      "stale_route_note": false,
       "time": "2022-08-16T01:33:07Z"
     },
     {
@@ -1193,6 +1338,8 @@
       "potential_ln_signal": false,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 1370,
+      "route_note_freshness": "aging",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -1200,6 +1347,7 @@
         "desc"
       ],
       "source_waypoint_index": 48,
+      "stale_route_note": false,
       "time": "2022-08-20T01:36:29Z"
     },
     {
@@ -1217,6 +1365,8 @@
       "potential_ln_signal": false,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 1370,
+      "route_note_freshness": "aging",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -1224,6 +1374,7 @@
         "desc"
       ],
       "source_waypoint_index": 49,
+      "stale_route_note": false,
       "time": "2022-08-20T01:40:55Z"
     },
     {
@@ -1241,6 +1392,8 @@
       "potential_ln_signal": false,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 1370,
+      "route_note_freshness": "aging",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -1248,6 +1401,7 @@
         "desc"
       ],
       "source_waypoint_index": 50,
+      "stale_route_note": false,
       "time": "2022-08-20T05:46:41Z"
     },
     {
@@ -1265,6 +1419,8 @@
       "potential_ln_signal": false,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 1369,
+      "route_note_freshness": "aging",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -1272,6 +1428,7 @@
         "desc"
       ],
       "source_waypoint_index": 51,
+      "stale_route_note": false,
       "time": "2022-08-21T00:35:33Z"
     },
     {
@@ -1289,6 +1446,8 @@
       "potential_ln_signal": false,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 1370,
+      "route_note_freshness": "aging",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -1296,6 +1455,7 @@
         "desc"
       ],
       "source_waypoint_index": 52,
+      "stale_route_note": false,
       "time": "2022-08-20T23:58:04Z"
     },
     {
@@ -1313,6 +1473,8 @@
       "potential_ln_signal": false,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 1370,
+      "route_note_freshness": "aging",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -1320,6 +1482,7 @@
         "desc"
       ],
       "source_waypoint_index": 53,
+      "stale_route_note": false,
       "time": "2022-08-20T23:51:40Z"
     },
     {
@@ -1337,6 +1500,8 @@
       "potential_ln_signal": false,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 1462,
+      "route_note_freshness": "aging",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -1344,6 +1509,7 @@
         "desc"
       ],
       "source_waypoint_index": 54,
+      "stale_route_note": false,
       "time": "2022-05-20T05:32:41Z"
     },
     {
@@ -1361,6 +1527,8 @@
       "potential_ln_signal": false,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 1374,
+      "route_note_freshness": "aging",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -1368,6 +1536,7 @@
         "desc"
       ],
       "source_waypoint_index": 55,
+      "stale_route_note": false,
       "time": "2022-08-16T01:33:07Z"
     },
     {
@@ -1385,6 +1554,8 @@
       "potential_ln_signal": false,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 1374,
+      "route_note_freshness": "aging",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -1392,6 +1563,7 @@
         "desc"
       ],
       "source_waypoint_index": 56,
+      "stale_route_note": false,
       "time": "2022-08-16T01:33:07Z"
     },
     {
@@ -1409,6 +1581,8 @@
       "potential_ln_signal": false,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 1370,
+      "route_note_freshness": "aging",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -1416,6 +1590,7 @@
         "desc"
       ],
       "source_waypoint_index": 57,
+      "stale_route_note": false,
       "time": "2022-08-20T21:37:51Z"
     },
     {
@@ -1433,6 +1608,8 @@
       "potential_ln_signal": false,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 1370,
+      "route_note_freshness": "aging",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -1440,6 +1617,7 @@
         "desc"
       ],
       "source_waypoint_index": 58,
+      "stale_route_note": false,
       "time": "2022-08-20T22:54:56Z"
     },
     {
@@ -1457,6 +1635,8 @@
       "potential_ln_signal": false,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 1368,
+      "route_note_freshness": "aging",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -1464,6 +1644,7 @@
         "desc"
       ],
       "source_waypoint_index": 59,
+      "stale_route_note": false,
       "time": "2022-08-22T01:40:53Z"
     },
     {
@@ -1481,6 +1662,8 @@
       "potential_ln_signal": false,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 1370,
+      "route_note_freshness": "aging",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -1488,6 +1671,7 @@
         "desc"
       ],
       "source_waypoint_index": 60,
+      "stale_route_note": false,
       "time": "2022-08-20T05:36:27Z"
     },
     {
@@ -1505,6 +1689,8 @@
       "potential_ln_signal": true,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 1370,
+      "route_note_freshness": "aging",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -1512,6 +1698,7 @@
         "desc"
       ],
       "source_waypoint_index": 61,
+      "stale_route_note": false,
       "time": "2022-08-20T00:49:09Z"
     },
     {
@@ -1529,6 +1716,8 @@
       "potential_ln_signal": true,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 1370,
+      "route_note_freshness": "aging",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -1536,6 +1725,7 @@
         "desc"
       ],
       "source_waypoint_index": 62,
+      "stale_route_note": false,
       "time": "2022-08-20T22:50:24Z"
     },
     {
@@ -1553,6 +1743,8 @@
       "potential_ln_signal": true,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 1370,
+      "route_note_freshness": "aging",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -1560,6 +1752,7 @@
         "desc"
       ],
       "source_waypoint_index": 63,
+      "stale_route_note": false,
       "time": "2022-08-20T06:07:45Z"
     },
     {
@@ -1577,6 +1770,8 @@
       "potential_ln_signal": true,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 1370,
+      "route_note_freshness": "aging",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -1584,6 +1779,7 @@
         "desc"
       ],
       "source_waypoint_index": 64,
+      "stale_route_note": false,
       "time": "2022-08-20T01:00:27Z"
     },
     {
@@ -1601,6 +1797,8 @@
       "potential_ln_signal": true,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 1370,
+      "route_note_freshness": "aging",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -1608,6 +1806,7 @@
         "desc"
       ],
       "source_waypoint_index": 65,
+      "stale_route_note": false,
       "time": "2022-08-20T05:34:54Z"
     },
     {
@@ -1625,6 +1824,8 @@
       "potential_ln_signal": false,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 1370,
+      "route_note_freshness": "aging",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -1632,6 +1833,7 @@
         "desc"
       ],
       "source_waypoint_index": 66,
+      "stale_route_note": false,
       "time": "2022-08-20T23:52:33Z"
     },
     {
@@ -1649,6 +1851,8 @@
       "potential_ln_signal": false,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 1370,
+      "route_note_freshness": "aging",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -1656,6 +1860,7 @@
         "desc"
       ],
       "source_waypoint_index": 67,
+      "stale_route_note": false,
       "time": "2022-08-20T02:55:02Z"
     },
     {
@@ -1673,6 +1878,8 @@
       "potential_ln_signal": false,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 1370,
+      "route_note_freshness": "aging",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -1680,6 +1887,7 @@
         "desc"
       ],
       "source_waypoint_index": 68,
+      "stale_route_note": false,
       "time": "2022-08-20T01:22:04Z"
     },
     {
@@ -1697,6 +1905,8 @@
       "potential_ln_signal": false,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 1370,
+      "route_note_freshness": "aging",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -1704,6 +1914,7 @@
         "desc"
       ],
       "source_waypoint_index": 69,
+      "stale_route_note": false,
       "time": "2022-08-20T01:28:09Z"
     },
     {
@@ -1721,6 +1932,8 @@
       "potential_ln_signal": true,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 1370,
+      "route_note_freshness": "aging",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -1728,6 +1941,7 @@
         "desc"
       ],
       "source_waypoint_index": 70,
+      "stale_route_note": false,
       "time": "2022-08-20T00:39:38Z"
     },
     {
@@ -1745,6 +1959,8 @@
       "potential_ln_signal": false,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 1370,
+      "route_note_freshness": "aging",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -1752,6 +1968,7 @@
         "desc"
       ],
       "source_waypoint_index": 71,
+      "stale_route_note": false,
       "time": "2022-08-20T23:49:09Z"
     },
     {
@@ -1769,6 +1986,8 @@
       "potential_ln_signal": false,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 1370,
+      "route_note_freshness": "aging",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -1776,6 +1995,7 @@
         "desc"
       ],
       "source_waypoint_index": 72,
+      "stale_route_note": false,
       "time": "2022-08-20T22:50:32Z"
     },
     {
@@ -1793,6 +2013,8 @@
       "potential_ln_signal": true,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 1370,
+      "route_note_freshness": "aging",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -1800,6 +2022,7 @@
         "desc"
       ],
       "source_waypoint_index": 73,
+      "stale_route_note": false,
       "time": "2022-08-20T23:19:21Z"
     },
     {
@@ -1817,6 +2040,8 @@
       "potential_ln_signal": false,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 1369,
+      "route_note_freshness": "aging",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -1824,6 +2049,7 @@
         "desc"
       ],
       "source_waypoint_index": 74,
+      "stale_route_note": false,
       "time": "2022-08-21T00:35:54Z"
     },
     {
@@ -1841,6 +2067,8 @@
       "potential_ln_signal": true,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 1370,
+      "route_note_freshness": "aging",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -1848,6 +2076,7 @@
         "desc"
       ],
       "source_waypoint_index": 75,
+      "stale_route_note": false,
       "time": "2022-08-20T03:34:38Z"
     },
     {
@@ -1865,6 +2094,8 @@
       "potential_ln_signal": true,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 1370,
+      "route_note_freshness": "aging",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -1872,6 +2103,7 @@
         "desc"
       ],
       "source_waypoint_index": 76,
+      "stale_route_note": false,
       "time": "2022-08-20T05:25:08Z"
     },
     {
@@ -1884,11 +2116,13 @@
       "lon": 121.238567987,
       "name": "路跡清楚",
       "normalized_note": "路跡清楚",
-      "note_category": "uncategorized_note",
+      "note_category": "route_condition_hint",
       "observed_fact_candidate": false,
-      "potential_ln_signal": false,
+      "potential_ln_signal": true,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 1370,
+      "route_note_freshness": "aging",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -1896,6 +2130,7 @@
         "desc"
       ],
       "source_waypoint_index": 77,
+      "stale_route_note": false,
       "time": "2022-08-20T00:34:01Z"
     },
     {
@@ -1913,6 +2148,8 @@
       "potential_ln_signal": true,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 1370,
+      "route_note_freshness": "aging",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -1920,6 +2157,7 @@
         "desc"
       ],
       "source_waypoint_index": 78,
+      "stale_route_note": false,
       "time": "2022-08-20T02:24:09Z"
     },
     {
@@ -1937,6 +2175,8 @@
       "potential_ln_signal": false,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 1370,
+      "route_note_freshness": "aging",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -1944,6 +2184,7 @@
         "desc"
       ],
       "source_waypoint_index": 79,
+      "stale_route_note": false,
       "time": "2022-08-20T22:56:57Z"
     },
     {
@@ -1961,6 +2202,8 @@
       "potential_ln_signal": false,
       "raw_gpx_embedded": false,
       "requires_human_review": true,
+      "route_note_age_days": 1370,
+      "route_note_freshness": "aging",
       "scout_interpretation": "ModelInterpretation",
       "source_fields_present": [
         "name",
@@ -1968,18 +2211,21 @@
         "desc"
       ],
       "source_waypoint_index": 80,
+      "stale_route_note": false,
       "time": "2022-08-20T03:23:39Z"
     }
   ],
   "counts": {
     "camp_or_water_hint_count": 8,
-    "hazard_hint_count": 2,
+    "hazard_hint_count": 3,
     "landmark_hint_count": 37,
     "note_candidate_count": 81,
     "observed_fact_count": 0,
-    "potential_ln_signal_count": 21,
+    "potential_ln_signal_count": 23,
     "raw_payload_count": 0,
-    "route_condition_hint_count": 19,
+    "route_condition_hint_count": 20,
+    "route_note_time_unknown_count": 0,
+    "stale_route_note_count": 5,
     "waypoint_count": 81
   },
   "notes": [

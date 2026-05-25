@@ -41,16 +41,16 @@ def test_builds_candidate_only_human_review_queue_manifest():
         "outputs/departure_bundle_manifest.json",
     ]
     assert payload["counts"] == {
-        "item_count": 42,
-        "warning_count": 9,
+        "item_count": 44,
+        "warning_count": 10,
         "blocker_count": 0,
-        "review_count": 33,
+        "review_count": 34,
         "source_ref_count": 8,
         "category_counts": {
             "contour_interpretation": 2,
             "departure_bundle": 1,
             "plan_validation": 6,
-            "route_note": 21,
+            "route_note": 23,
             "runtime_handoff": 1,
             "segment_policy": 10,
             "weather_daylight": 1,
@@ -93,8 +93,8 @@ def test_queue_items_are_review_pointers_without_accept_reject_decisions():
     route_note_items = [
         item for item in manifest.items if item.category.value == "route_note"
     ]
-    assert len(route_note_items) == 21
-    assert sum(1 for item in route_note_items if item.severity == "warning") == 2
+    assert len(route_note_items) == 23
+    assert sum(1 for item in route_note_items if item.severity == "warning") == 3
     assert any(
         "大崩塌勿右切" in item.summary
         and item.evidence_summary["note_category"] == "hazard_hint"

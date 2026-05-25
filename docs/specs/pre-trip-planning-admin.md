@@ -268,6 +268,25 @@ Initial planning skills:
   - proposes CP points, segment splits, decision gates, and compression
     boundaries;
   - links every suggestion to source evidence.
+- `pretrip-gis-perception`
+  - skill track for **GIS Perception Layer**（GIS 感知層）: a candidate-only
+    layer that reads GPX, OSM tags, web case evidence, and raster/tile labels
+    before proposing CPs, Ln coverage, or route-adjustment candidates;
+  - Phase A importer slice implements **GPX Perception**（GPX 感知） for local
+    GPX waypoint `name`/`cmt`/`desc` fields and stores route-note candidates,
+    route-note Ln proposal candidates, and GIS checkpoint candidates;
+  - uses Pydantic AI（結構化 AI 判斷器） only for semantic classification,
+    Ln proposal（Ln 等級建議候選）, and candidate explanation;
+  - must preserve source provenance, confidence, stale-risk notes, and review
+    status for every generated `checkpoint_candidate`, `ln_proposal`, or
+    `detour_route_candidate`; CP candidates carry `source_attribution`
+   （來源標註） so GPX route notes, Overpass tags, and historical-route
+    explanations can be shown as CP properties without merging evidence types;
+  - current implementation is deterministic and Pydantic-AI-schema-ready; live
+    model calls, web search, raster OCR, and OSM-tag semantic AI remain future
+    review-gated slices;
+  - must not call `/safety/*`, mutate Phase 1 runtime, write Phase 2 Brain
+    facts, or create runtime safety truth.
 - `pretrip-poi-hazard-suggest`
   - proposes water, camp, shelter, road access, signal, evacuation, hazard, and
     rendezvous candidates.
@@ -526,6 +545,108 @@ Initial useful OSM tags:
 - `amenity=shelter|drinking_water|parking|hospital`;
 - `emergency=access_point|phone`;
 - `surface`, `sac_scale`, `trail_visibility`, `incline`.
+
+### GIS Perception Layer
+
+**GIS Perception Layer**（GIS 感知層） is a Phase 4 planning capability, not a
+runtime safety source. Its first implemented slice reads local GPX route notes
+inside the standalone importer and routes them through a Pydantic AI
+structured judgement set（結構化判斷集合） before producing CP/Ln candidates.
+Future slices may reuse the same judgement layer over OSM tags, web case
+evidence, or raster/tile labels. It may recommend CP density, Ln coverage, or
+detour/route-adjustment candidates, but every output remains
+`ModelInterpretation` or planning candidate until human review and later
+compile gates.
+
+```mermaid
+flowchart LR
+  A["GPX notes / OSM tags / web cases / raster labels"] --> B["Source extractor<br/>來源抽取器"]
+  B --> C["Normalized GIS evidence<br/>標準化 GIS 證據"]
+  C --> D["Pydantic AI classifier<br/>結構化 AI 分類器"]
+  D --> E["checkpoint_candidate<br/>CP 候選"]
+  D --> F["ln_proposal<br/>Ln 等級建議候選"]
+  D --> G["detour_route_candidate<br/>繞路/改線候選"]
+  E --> H["HumanReview<br/>人工審核"]
+  F --> H
+  G --> H
+  H --> I["Reviewed Package / later Departure Gate<br/>審核後套件/後續出發門檻"]
+```
+
+Perception sources:
+
+- **GPX Perception**（GPX 感知） currently reads waypoint `name`, `cmt`, and
+  `desc` from the golden route and reference tracks in the importer. It emits
+  route-note candidates, `gis_perception_ai_judgements`（AI 中介判斷）,
+  route-note Ln proposal candidates, and GIS checkpoint candidates for hazard,
+  route-condition, and camp/water hints. Future GPX perception may add track
+  segment changes, stop-like clusters, route detours, elevation hints, and
+  timing gaps. Pydantic AI may classify communication points, water sources,
+  shelters, forks, exposure notes, collapse warnings, or scenic viewpoint risk
+  as CP/Ln candidates.
+- **OSM Tag Perception**（OSM tag 感知） reads normalized Overpass
+  node/way/relation tags. Tags such as `sac_scale`, `trail_visibility`,
+  `emergency`, `amenity`, `natural`, `tourism`, `incline`, and route relation
+  metadata may become CP/Ln candidates when source provenance and stale risk
+  are preserved. Overpass fetch planning is route-corridor based: the selected
+  golden route bbox is expanded by `route_corridor_m` before generating the
+  Overpass QL request. The current thin slice projects high-value Overpass
+  tags only: `water_source_candidate`, `shelter_candidate`,
+  `parking_candidate`, and `terrain_risk_candidate`. Trail corridors stay as
+  map evidence and are not mass-converted into CP review items.
+- **Web Case Perception**（網路案例感知） uses route-place keywords such as
+  `能高安東軍`, `富士見駐在所`, trailhead names, huts, peaks, and forks to find
+  incident, new-collapse, closure, road-access, or regulation evidence. Live
+  network search must be an explicit future slice. It must store query terms,
+  retrieved URL, retrieval timestamp, source snippet or hash, confidence,
+  stale-risk assessment, and review status.
+- **Raster Label Perception**（圖磚標註感知） uses OCR or vision over local map
+  tiles, imagery, or scanned route-guide references to detect labels such as
+  `通訊點`, `遠眺海馬僕富士山`, shelters, water, route names, or warnings. It
+  must preserve tile z/x/y, bbox, source image hash, OCR/vision confidence, and
+  label geometry before proposing CPs or Ln coverage.
+
+Required boundaries:
+
+- outputs are `checkpoint_candidate`, `route_note_candidate`, `ln_proposal`,
+  `terrain_risk_candidate`, or `detour_route_candidate`, never accepted runtime
+  facts;
+- unobserved or partially unobserved route sections must keep
+  `manual_waypoint_route` and `danger_review` semantics until reviewed;
+- no perception output may mutate `PreTripPackage`, compile final
+  `MissionGraph`, call `/safety/*`, write Phase 2 Brain `ObservedFact`, or
+  activate Phase 1 runtime warnings;
+- every candidate must link back to source artifact refs, extractor version,
+  Pydantic AI prompt/version, model output hash or summary, confidence, stale
+  risk, and review status.
+- `gis_perception_ai_judgements` is the explicit intermediary between
+  `route_note_candidates` and downstream CP/Ln artifacts; UI surfaces may show
+  its provider, model, prompt hash, counts, and preview judgements, but it is
+  still candidate-only.
+- CP points expose `source_attribution`（來源標註） as a repeatable property.
+  The first GPX slice writes `gpx_route_note`; later Overpass and historical
+  route explanation slices should append `overpass_candidate` or
+  `historical_route_explanation` entries rather than creating a separate CP
+  source model.
+- Historical routes are the base evidence for AI-assisted CP generation, but
+  repeated notes around the same place must be aggregated before they enter
+  the pretrip review timeline. The default aggregation is deterministic:
+  cluster by CP type, semantic aggregation key（語意聚合鍵）, and spatial
+  radius, merge source attribution, and keep the Pydantic AI judgement as
+  explanation only. Pydantic AI may help classify semantics such as `大崩壁` /
+  `崩塌地`, but it does not decide the final coordinate truth.
+- Semantically different nearby notes must not be forced into one point. For
+  example, `大崩壁`（collapse hazard） and `高繞`（technical detour / route
+  action） may describe the same damaged area, but the review timeline should
+  preserve both details unless a human explicitly merges or links them.
+- Nearby CP grouping（鄰近 CP 群組） is therefore a display/linking layer, not a
+  merge. Candidates within the grouping radius may share `nearby_group_id` and
+  `nearby_group_members`, but each CP remains an independent review item with
+  its own semantic key, source attribution, stale flag, and accept/reject path.
+- Route-note freshness（路線註記新鮮度） is part of the source metadata. When GPX
+  waypoint time is available, notes older than the freshness policy threshold
+  are flagged as stale route notes（過舊路線註記）. Seasonal or fast-changing
+  observations such as `茂密林相`, water, collapse debris, or temporary detours
+  must remain review-gated even when spatially close to newer notes.
 
 ### Known GPX / Known Case Imports
 
@@ -1439,6 +1560,27 @@ Acceptance:
 - the artifact does not mutate packages, compile `MissionGraph`, write Phase 2
   Brain state, call `/safety/*`, or activate Phase 1 runtime warnings.
 
+### Future Milestone: GIS Perception Layer Candidate Pipeline
+
+Goal: unify GPX notes, OSM tags, web case evidence, and raster/tile labels into
+one candidate-only GIS perception pipeline for a later version.
+
+Acceptance:
+
+- `pretrip-gis-perception` has fixture-backed tests for GPX and Overpass inputs
+  before any live web or raster OCR integration;
+- web search and raster label recognition remain optional adapters with stored
+  query/tile provenance, timestamps, confidence, stale-risk notes, and source
+  hashes;
+- Pydantic AI output is stored as `gis_perception_ai_judgements`
+ （AI 中介判斷） plus compact candidate records, not as `ObservedFact`,
+  `DerivedMeasurement`, runtime warning, or accepted planning assumption;
+- generated CP/Ln/detour candidates enter the admin review queue with source
+  links and cannot mutate `PreTripPackage`, final `MissionGraph`, Phase 1
+  runtime, Phase 2 Brain, or external network outputs;
+- the first implementation slice should be `gpx_osm_ai_ln_proposal_fixture`
+  before adding live web search or raster OCR.
+
 ### Milestone 25: Route Note Reviewed Assumptions Workspace Apply
 
 Goal: turn workspace route-note disposition logs into reviewed planning
@@ -1783,6 +1925,10 @@ Acceptance checks:
   is not versioned, redistributable fixture use is false unless reviewed, and
   comparison output is neither authoritative for the mission nor compiled into
   MissionGraph.
+- GIS Perception Layer remains a next-version candidate. Start with
+  fixture-backed GPX and OSM tag perception, then add explicit web-case search
+  and raster-label recognition adapters only after provenance, stale-risk, and
+  human-review boundaries are enforced.
 - Crawler/live import and live write-path behavior remain out of scope unless a
   separate approved decision and implementation slice explicitly opens that
   boundary.

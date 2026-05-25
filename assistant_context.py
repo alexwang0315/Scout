@@ -18,6 +18,7 @@ def create_assistant_context_resolver(
     debug_event_log: RuntimeDebugEventLog | None = None,
     debug_message_source: DebugMessageSource | None = None,
     hardware_provider_health: list[dict[str, Any]] | None = None,
+    hardware_interface_inventory: list[dict[str, Any]] | None = None,
     hardware_sample_replay_timeline: list[dict[str, Any]] | None = None,
     hardware_runtime_debug_events: list[dict[str, Any]] | None = None,
     hardware_mock_transport_queue: list[dict[str, Any]] | None = None,
@@ -28,6 +29,7 @@ def create_assistant_context_resolver(
             debug_event_log=debug_event_log,
             debug_message_source=debug_message_source,
             hardware_provider_health=hardware_provider_health,
+            hardware_interface_inventory=hardware_interface_inventory,
             hardware_sample_replay_timeline=hardware_sample_replay_timeline,
             hardware_runtime_debug_events=hardware_runtime_debug_events,
             hardware_mock_transport_queue=hardware_mock_transport_queue,
@@ -45,6 +47,7 @@ def build_assistant_context(
     debug_event_log: RuntimeDebugEventLog | None = None,
     debug_message_source: DebugMessageSource | None = None,
     hardware_provider_health: list[dict[str, Any]] | None = None,
+    hardware_interface_inventory: list[dict[str, Any]] | None = None,
     hardware_sample_replay_timeline: list[dict[str, Any]] | None = None,
     hardware_runtime_debug_events: list[dict[str, Any]] | None = None,
     hardware_mock_transport_queue: list[dict[str, Any]] | None = None,
@@ -72,17 +75,20 @@ def build_assistant_context(
                 )
         if query.surface == AssistantSurface.HARDWARE_READINESS:
             if (
-                hardware_provider_health is None
+                hardware_interface_inventory is None
+                and hardware_provider_health is None
                 and hardware_sample_replay_timeline is None
                 and hardware_runtime_debug_events is None
                 and hardware_mock_transport_queue is None
             ):
                 fixture = load_hardware_readiness_fixture()
+                hardware_interface_inventory = fixture["interface_inventory"]
                 hardware_provider_health = fixture["provider_health"]
                 hardware_sample_replay_timeline = fixture["sample_replay_timeline"]
                 hardware_runtime_debug_events = fixture["runtime_debug_events"]
                 hardware_mock_transport_queue = fixture["mock_transport_queue"]
             return build_hardware_readiness_assistant_context(
+                interface_inventory=hardware_interface_inventory,
                 provider_health=hardware_provider_health,
                 sample_replay_timeline=hardware_sample_replay_timeline,
                 runtime_debug_events=hardware_runtime_debug_events,

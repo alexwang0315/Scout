@@ -5,7 +5,7 @@
     "notes": [
       "Decision apply plan is a deterministic local planning artifact only.",
       "It records what the append-only review decisions point at without mutating source artifacts, PreTripPackage, runtime state, Phase 2 Brain state, or MissionGraph outputs.",
-      "Current decision candidate refs are contour, segment-policy, and POI-readiness candidates, not direct PreTripPackage candidate ids."
+      "Decision candidate refs may include fixture queue items, package candidate ids, or dynamic GIS perception CP pointers; all remain candidate-only planning evidence here."
     ],
     "package_mutation_allowed": false,
     "phase1_runtime_mutation_allowed": false,
@@ -26,6 +26,8 @@
   },
   "decisions": [
     {
+      "candidate_application_scope": "review_queue_pointer",
+      "candidate_only_review": true,
       "candidate_ref": "contour.g11.seg_001_003",
       "correction_summary": null,
       "decision": "accepted",
@@ -36,6 +38,7 @@
       ],
       "package_candidate_apply_count": 0,
       "package_candidate_matches": [],
+      "runtime_safety_truth": false,
       "source_refs": [
         "outputs/contour_interpretation_candidates.json"
       ],
@@ -48,6 +51,8 @@
       "would_apply_to_package": false
     },
     {
+      "candidate_application_scope": "review_queue_pointer",
+      "candidate_only_review": true,
       "candidate_ref": "policy_candidate.chilai_nanhua_day1.seg.001",
       "correction_summary": "Keep the conservative daylight and retreat flags, but require water status to remain reviewer-confirmed.",
       "decision": "corrected",
@@ -58,6 +63,7 @@
       ],
       "package_candidate_apply_count": 0,
       "package_candidate_matches": [],
+      "runtime_safety_truth": false,
       "source_refs": [
         "outputs/segment_policy_candidates.json"
       ],
@@ -68,6 +74,8 @@
       "would_apply_to_package": false
     },
     {
+      "candidate_application_scope": "review_queue_pointer",
+      "candidate_only_review": true,
       "candidate_ref": "poi_readiness_policy.chilai_nanhua_day1.route_corridor_poi_coverage",
       "correction_summary": null,
       "decision": "rejected",
@@ -78,6 +86,7 @@
       ],
       "package_candidate_apply_count": 0,
       "package_candidate_matches": [],
+      "runtime_safety_truth": false,
       "source_refs": [
         "outputs/poi_readiness_candidates.json"
       ],
@@ -90,7 +99,8 @@
   ],
   "notes": [
     "Package application count is based on direct decision candidate_ref matches in PreTripPackage candidate collections.",
-    "Decision target_ids remain recorded as review references and are not treated as package patches by this artifact."
+    "Decision target_ids remain recorded as review references and are not treated as package patches by this artifact.",
+    "GIS perception CP decisions are retained as workspace review pointers until a later reviewed planning artifact promotes them."
   ],
   "package_id": "pretrip.chilai_nanhua_day1.v0",
   "package_ref": "outputs/pretrip_package.json",

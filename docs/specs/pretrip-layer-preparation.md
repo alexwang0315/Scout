@@ -106,6 +106,30 @@ Adapters may include route geometry, reference tracks, local OSM tile cache,
 local raster imagery, terrain/DTM summaries, weather/daylight summaries, hazard
 or POI candidates, and review-state overlays.
 
+## Overpass Route-Corridor Fetch
+
+`Overpass Route-Corridor Fetch`（依路線走廊擷取 OSM 向量） is owned by
+`LayerPreparationJob`（圖層準備工作）, because the layer job knows the selected
+golden route, route bbox, route display geometry refs, and requested layer
+boundary. The adapter must not issue a route-independent Overpass query.
+
+Current behavior:
+
+- derive `route_bbox_wgs84` from the selected golden route summary;
+- expand it by `route_corridor_m` into `bbox_wgs84`, which is the actual query
+  bbox for OSM/Overpass evidence;
+- write a planned Overpass QL request at
+  `outputs/layers/plans/overpass_query.ql`;
+- in `no-network`, stop there and mark zero network calls;
+- in `explicit-fetch` plus `allow_network_fetch`, fetch the raw Overpass JSON,
+  store `normalized/map/overpass_phase_a_raw.json`, normalize it with
+  `pretrip_overpass_ingest`, and write `candidates/overpass_evidence.json` plus
+  `normalized/map/overpass_vector_evidence.geojson`.
+
+All Overpass outputs are **pretrip candidate evidence**（行前候選證據）. They
+can feed `/admin`, `/admin/pretrip`, and `/admin/debug`, but cannot become
+runtime safety truth（現場安全真值） or mutate Phase 1/Phase 2 state.
+
 ## Network Flag Boundary
 
 `network flag boundary`（網路旗標邊界） rules:

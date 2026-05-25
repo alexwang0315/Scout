@@ -26,6 +26,10 @@ def test_pretrip_import_core_writes_pretrip_admin_and_debug_projections(tmp_path
             (24.005, 121.005, 1010.0, "2026-05-01T00:10:00Z"),
             (24.01, 121.01, 1020.0, "2026-05-01T00:20:00Z"),
         ],
+        waypoints=[
+            (24.002, 121.002, "崩塌小心", "架繩通過", ""),
+            (24.006, 121.006, "水源", "需確認", ""),
+        ],
     )
     _write_gpx(
         references / "reference-a.gpx",
@@ -33,6 +37,9 @@ def test_pretrip_import_core_writes_pretrip_admin_and_debug_projections(tmp_path
         points=[
             (24.0, 121.0, 1000.0, "2026-05-01T00:00:00Z"),
             (24.02, 121.02, 1030.0, "2026-05-01T00:30:00Z"),
+        ],
+        waypoints=[
+            (24.011, 121.011, "路徑不明", "下切後有路", ""),
         ],
     )
     _write_gpx(
@@ -42,6 +49,7 @@ def test_pretrip_import_core_writes_pretrip_admin_and_debug_projections(tmp_path
             (24.001, 121.001, 1001.0, "2026-05-01T00:00:00Z"),
             (24.015, 121.015, 1015.0, "2026-05-01T00:20:00Z"),
         ],
+        waypoints=[],
     )
 
     manifest = run_pretrip_import(
@@ -64,6 +72,10 @@ def test_pretrip_import_core_writes_pretrip_admin_and_debug_projections(tmp_path
     route_summary = _load(project_root / "normalized" / "routes" / "route_summary.json")
     reference_tracks = _load(project_root / "outputs" / "reference_tracks.json")
     reference_display = _load(project_root / "outputs" / "reference_track_display_geometry.json")
+    route_notes = _load(project_root / "candidates" / "route_note_candidates.json")
+    gis_ai_judgements = _load(project_root / "outputs" / "gis_perception_ai_judgements.json")
+    route_note_ln_proposals = _load(project_root / "outputs" / "route_note_ln_proposals.json")
+    gis_perception = _load(project_root / "outputs" / "gis_perception_candidates.json")
     serialized_outputs = "\n".join(
         path.read_text(encoding="utf-8")
         for path in project_root.rglob("*.json")
@@ -74,6 +86,10 @@ def test_pretrip_import_core_writes_pretrip_admin_and_debug_projections(tmp_path
     assert manifest["network_policy"]["network_calls_allowed"] is False
     assert manifest["inputs"]["golden_route_gpx"]["role"] == "golden_route_reference"
     assert manifest["counts"]["reference_track_count"] == 2
+    assert manifest["counts"]["route_note_candidate_count"] == 3
+    assert manifest["counts"]["gis_perception_ai_judgement_count"] == 3
+    assert manifest["counts"]["route_note_ln_proposal_count"] == 2
+    assert manifest["counts"]["gis_perception_checkpoint_candidate_count"] == 3
     assert manifest["counts"]["debug_projection_event_count"] == 4
     assert manifest["boundary"]["actual_user_track_available"] is False
     assert manifest["boundary"]["unwalked_route_sections_require_manual_waypoints"] is True
@@ -84,6 +100,10 @@ def test_pretrip_import_core_writes_pretrip_admin_and_debug_projections(tmp_path
     assert project["import_manifest_ref"] == "outputs/import_manifest.json"
     assert project["admin_projection_ref"] == "outputs/admin_projection.json"
     assert project["debug_projection_events_ref"] == "outputs/debug_projection_events.jsonl"
+    assert project["route_note_candidates_ref"] == "candidates/route_note_candidates.json"
+    assert project["gis_perception_ai_judgements_ref"] == "outputs/gis_perception_ai_judgements.json"
+    assert project["route_note_ln_proposals_ref"] == "outputs/route_note_ln_proposals.json"
+    assert project["gis_perception_candidates_ref"] == "outputs/gis_perception_candidates.json"
     assert project["route_role"] == "golden_route"
     assert project["actual_user_track_available"] is False
     assert route_summary["route_name"] == "golden route import"
@@ -96,6 +116,12 @@ def test_pretrip_import_core_writes_pretrip_admin_and_debug_projections(tmp_path
         for track in reference_display["reference_tracks"]
     )
     assert admin_projection["surface_targets"] == ["/admin", "/admin/pretrip", "/admin/debug"]
+    assert admin_projection["candidate_counts"]["gis_perception_checkpoint_candidate_count"] == 3
+    assert admin_projection["candidate_counts"]["gis_perception_ai_judgement_count"] == 3
+    assert admin_projection["gis_perception"]["source_profile"] == "gpx_corpus_route_notes"
+    assert admin_projection["gis_perception"]["boundary"]["candidate_only"] is True
+    assert admin_projection["gis_perception"]["ai_judgements"]["judgement_count"] == 3
+    assert admin_projection["gis_perception"]["ai_judgements"]["network_calls_allowed"] is False
     assert admin_projection["route"]["route_role"] == "golden_route_reference"
     assert admin_projection["planning_semantics"]["pretrip_actual_user_track_exists"] is False
     assert (
@@ -107,6 +133,21 @@ def test_pretrip_import_core_writes_pretrip_admin_and_debug_projections(tmp_path
     assert admin_projection["after_action_surface"]["completed_mission_replay"] is False
     assert admin_projection["debug_surface"]["file_runtime_debug_log_compatible"] is True
     assert admin_projection["boundary"]["projection_only"] is True
+    assert route_notes["counts"]["note_candidate_count"] == 3
+    assert gis_ai_judgements["provider_kind"] == "pydantic_ai_test"
+    assert gis_ai_judgements["judgement_count"] == 3
+    assert all(
+        judgement["runtime_safety_truth"] is False
+        for judgement in gis_ai_judgements["judgements"]
+    )
+    assert route_note_ln_proposals["counts"]["proposal_count"] == 2
+    assert gis_perception["counts"]["checkpoint_candidate_count"] == 3
+    assert gis_perception["boundary"]["phase1_runtime_mutation_allowed"] is False
+    assert all(
+        candidate["source_attribution"]
+        and candidate["source_attribution"][0]["source_kind"] == "gpx_route_note"
+        for candidate in gis_perception["checkpoint_candidates"]
+    )
     assert "<gpx" not in serialized_outputs
     assert "<trkpt" not in serialized_outputs
 
@@ -261,9 +302,137 @@ def test_pretrip_import_template_workspace_feeds_admin_view_projection(tmp_path:
         "golden_route_reference"
     )
     assert view["reference_tracks"]["golden_route"]["pretrip_actual_user_track"] is False
+    assert view["gis_perception"]["status"] == "candidate_only"
+    assert view["gis_perception"]["counts"]["checkpoint_candidate_count"] == 0
     assert view["debug_projection"]["event_count"] == 4
     assert view["import_manifest"]["network_policy"]["network_calls_allowed"] is False
     assert {"import_manifest", "admin_surface_projection", "debug_projection"} <= post_sections
+
+
+def test_admin_view_projects_aggregated_gis_perception_cp_into_review_queue(
+    tmp_path: Path,
+) -> None:
+    golden_route = _write_gpx(
+        tmp_path / "golden-route.gpx",
+        name="aggregated gis cp golden route",
+        points=[
+            (24.0, 121.0, 1000.0, "2026-05-01T00:00:00Z"),
+            (24.004, 121.004, 1010.0, "2026-05-01T00:10:00Z"),
+            (24.008, 121.008, 1020.0, "2026-05-01T00:20:00Z"),
+        ],
+        waypoints=[
+            (24.00100, 121.00100, "大崩壁", "需要警戒", ""),
+        ],
+    )
+    reference = _write_gpx(
+        tmp_path / "reference-duplicate.gpx",
+        name="reference duplicate hazard",
+        points=[
+            (24.0, 121.0, 1000.0, "2026-05-01T00:00:00Z"),
+            (24.004, 121.004, 1010.0, "2026-05-01T00:10:00Z"),
+        ],
+            waypoints=[
+                (24.00125, 121.00125, "大崩壁崩塌地", "同一危險地形", ""),
+                (24.00135, 121.00135, "高繞", "同一崩塌區附近的繞路提示", ""),
+                (
+                    24.00140,
+                    121.00140,
+                    "茂密林相",
+                    "路跡不明需複查",
+                    "",
+                    "2018-01-01T00:00:00Z",
+                ),
+                (24.00600, 121.00600, "最後水源", "需人工確認", ""),
+            ],
+    )
+    template = (
+        ROOT
+        / "tests"
+        / "fixtures"
+        / "pretrip"
+        / "projects"
+        / "chilai_nanhua_day1"
+    )
+
+    run_pretrip_import(
+        PretripImportRequest(
+            project_id="aggregated_gis_cp_view",
+            primary_gpx=golden_route,
+            reference_gpx_paths=(reference,),
+            workspace_root=tmp_path / "workspaces",
+            template_project_root=template,
+            profile="pi-offline",
+            checkpoint_spacing_m=500.0,
+            import_timestamp="2026-05-21T00:00:00+00:00",
+        )
+    )
+
+    project_root = tmp_path / "workspaces" / "aggregated_gis_cp_view"
+    view = build_pretrip_admin_view("aggregated_gis_cp_view", project_root=project_root)
+    timeline = view["gis_perception_timeline"]
+    review_queue = view["review_queue"]
+    clustered_hazard = next(
+        candidate
+        for candidate in timeline["checkpoint_candidates"]
+        if candidate["checkpoint_type"] == "warning_review"
+    )
+
+    assert view["gis_perception"]["counts"]["checkpoint_candidate_count"] == 5
+    assert timeline["counts"]["gpx_checkpoint_candidate_count"] == 5
+    assert timeline["counts"]["overpass_checkpoint_candidate_count"] == 9
+    assert timeline["counts"]["raw_checkpoint_candidate_count"] == 14
+    assert timeline["counts"]["checkpoint_candidate_count"] == 13
+    assert timeline["counts"]["nearby_group_count"] == 1
+    assert timeline["aggregation"]["strategy"] == "type_semantic_then_spatial_radius"
+    assert timeline["aggregation"]["semantic_compatibility_required"] is True
+    assert clustered_hazard["aggregation"]["source_candidate_count"] == 2
+    assert clustered_hazard["source_attribution_count"] == 2
+    assert clustered_hazard["aggregation"]["semantic_aggregation_key"] == (
+        "hazard:collapse"
+    )
+    assert any(
+        "大崩壁" in summary
+        for summary in clustered_hazard["route_note_summaries"]
+    )
+    detour_hint = next(
+        candidate
+        for candidate in timeline["checkpoint_candidates"]
+        if candidate["checkpoint_type"] == "hint_review"
+        and candidate["aggregation"]["semantic_aggregation_key"] == "route:detour"
+    )
+    assert detour_hint["aggregation"]["semantic_aggregation_key"] == "route:detour"
+    assert detour_hint["aggregation"]["source_candidate_count"] == 1
+    vegetation_hint = next(
+        candidate
+        for candidate in timeline["checkpoint_candidates"]
+        if candidate["aggregation"]["semantic_aggregation_key"] == "route:vegetation"
+    )
+    assert vegetation_hint["stale_route_note"] is True
+    assert vegetation_hint["route_note_freshness"] == "stale"
+    assert clustered_hazard["nearby_group_id"] == detour_hint["nearby_group_id"]
+    assert clustered_hazard["nearby_group_id"] == vegetation_hint["nearby_group_id"]
+    assert clustered_hazard["nearby_group_size"] == 3
+    overpass_cps = [
+        candidate for candidate in timeline["checkpoint_candidates"]
+        if candidate.get("source_profile") == "overpass_osm_tags"
+    ]
+    assert len(overpass_cps) == 9
+    assert any(
+        attribution["source_kind"] == "overpass_candidate"
+        for candidate in overpass_cps
+        for attribution in candidate["source_attribution"]
+    )
+    assert review_queue["counts"]["category_counts"]["gis_perception_cp"] == 13
+    assert review_queue["counts"]["item_count"] == 57
+    gis_review_item = next(
+        item
+        for item in review_queue["items"]
+        if item["category"] == "gis_perception_cp"
+    )
+    assert gis_review_item["candidate_ref"].startswith("gis_cp_cluster.")
+    assert gis_review_item["accept_reject_allowed"] is True
+    assert gis_review_item["mutation_allowed"] is False
+    assert gis_review_item["evidence_summary"]["runtime_safety_truth"] is False
 
 
 def _load(path: Path) -> dict:
@@ -275,8 +444,20 @@ def _write_gpx(
     *,
     name: str,
     points: list[tuple[float, float, float, str]],
+    waypoints: list[tuple] | None = None,
 ) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
+    wpt_records = []
+    for waypoint in waypoints or []:
+        lat, lon, wpt_name, cmt, desc, *rest = waypoint
+        wpt_time = rest[0] if rest else ""
+        time_tag = f"<time>{wpt_time}</time>" if wpt_time else ""
+        wpt_records.append(
+            f'<wpt lat="{lat}" lon="{lon}">'
+            f"<name>{wpt_name}</name><cmt>{cmt}</cmt><desc>{desc}</desc>"
+            f"{time_tag}</wpt>"
+        )
+    wpts = "\n".join(wpt_records)
     trkpts = "\n".join(
         f'<trkpt lat="{lat}" lon="{lon}"><ele>{ele}</ele><time>{time}</time></trkpt>'
         for lat, lon, ele, time in points
@@ -287,6 +468,7 @@ def _write_gpx(
                 '<?xml version="1.0" encoding="UTF-8"?>',
                 '<gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1">',
                 f"<metadata><name>{name}</name></metadata>",
+                wpts,
                 "<trk><trkseg>",
                 trkpts,
                 "</trkseg></trk>",

@@ -401,6 +401,22 @@ def create_admin_router(
         debug_projection_events_path = (
             project_root / outputs.get("debug_projection_events_ref", "")
         )
+        route_note_candidates_path = project_root / outputs.get(
+            "route_note_candidates_ref",
+            "",
+        )
+        route_note_ln_proposals_path = project_root / outputs.get(
+            "route_note_ln_proposals_ref",
+            "",
+        )
+        gis_perception_ai_judgements_path = project_root / outputs.get(
+            "gis_perception_ai_judgements_ref",
+            "",
+        )
+        gis_perception_candidates_path = project_root / outputs.get(
+            "gis_perception_candidates_ref",
+            "",
+        )
         return {
             "project_id": project_id,
             "artifact_kind": "pretrip_import_gpx_result",
@@ -417,6 +433,16 @@ def create_admin_router(
                 "admin_projection_path": str(admin_projection_path),
                 "debug_projection_events": str(debug_projection_events_path),
                 "debug_projection_events_path": str(debug_projection_events_path),
+                "route_note_candidates": str(route_note_candidates_path),
+                "route_note_candidates_path": str(route_note_candidates_path),
+                "route_note_ln_proposals": str(route_note_ln_proposals_path),
+                "route_note_ln_proposals_path": str(route_note_ln_proposals_path),
+                "gis_perception_ai_judgements": str(gis_perception_ai_judgements_path),
+                "gis_perception_ai_judgements_path": str(
+                    gis_perception_ai_judgements_path
+                ),
+                "gis_perception_candidates": str(gis_perception_candidates_path),
+                "gis_perception_candidates_path": str(gis_perception_candidates_path),
             },
             "boundary": _pretrip_import_gpx_boundary(
                 request,
@@ -1452,6 +1478,10 @@ def _pretrip_import_output_paths(project_root: Path) -> dict[str, str]:
         "route_summary": "normalized/routes/route_summary.json",
         "checkpoints": "candidates/checkpoints.json",
         "segments": "candidates/segments.json",
+        "route_note_candidates": "candidates/route_note_candidates.json",
+        "gis_perception_ai_judgements": "outputs/gis_perception_ai_judgements.json",
+        "route_note_ln_proposals": "outputs/route_note_ln_proposals.json",
+        "gis_perception_candidates": "outputs/gis_perception_candidates.json",
     }
     return {
         key: str((project_root / ref).resolve())

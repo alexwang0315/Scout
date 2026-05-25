@@ -10,6 +10,7 @@ from typing import Any, Literal
 
 from pretrip_candidate_generation import generate_pretrip_candidates_from_gpx
 from pretrip_geojson_import import import_pretrip_geojson_candidates
+from pretrip_gis_perception import build_gpx_gis_perception
 from pretrip_gpx_corpus import (
     build_checkpoint_event_candidates,
     build_reference_track_display_geometry,
@@ -148,6 +149,12 @@ def run_pretrip_import(request: PretripImportRequest) -> dict[str, Any]:
         primary_artifact_id=primary_artifact_id,
         max_points_per_track=request.max_reference_display_points,
     )
+    gis_perception_result = build_gpx_gis_perception(
+        project_id=request.project_id,
+        primary_gpx_path=primary_gpx,
+        reference_gpx_paths=reference_paths,
+        primary_artifact_id=primary_artifact_id,
+    )
 
     output_refs = {
         "package_ref": "outputs/pretrip_package.json",
@@ -156,6 +163,10 @@ def run_pretrip_import(request: PretripImportRequest) -> dict[str, Any]:
         "map_candidates_ref": "candidates/map_candidates.json",
         "checkpoint_candidates_ref": "candidates/checkpoints.json",
         "segment_candidates_ref": "candidates/segments.json",
+        "route_note_candidates_ref": "candidates/route_note_candidates.json",
+        "gis_perception_ai_judgements_ref": "outputs/gis_perception_ai_judgements.json",
+        "route_note_ln_proposals_ref": "outputs/route_note_ln_proposals.json",
+        "gis_perception_candidates_ref": "outputs/gis_perception_candidates.json",
         "reference_tracks_ref": "outputs/reference_tracks.json",
         "reference_track_display_geometry_ref": "outputs/reference_track_display_geometry.json",
         "checkpoint_events_ref": "outputs/checkpoint_events.json",
@@ -174,6 +185,10 @@ def run_pretrip_import(request: PretripImportRequest) -> dict[str, Any]:
         route_summary=route_summary.model_dump(mode="json"),
         checkpoint_count=len(candidate_result.checkpoint_candidates),
         segment_count=len(candidate_result.segment_candidates),
+        gis_perception=gis_perception_result.gis_perception.model_dump(mode="json"),
+        gis_perception_ai_judgements=gis_perception_result.gis_perception_ai_judgements.model_dump(mode="json"),
+        route_note_candidates=gis_perception_result.route_note_candidates.model_dump(mode="json"),
+        route_note_ln_proposals=gis_perception_result.route_note_ln_proposals.model_dump(mode="json"),
     )
     admin_projection = _build_admin_projection(
         request=request,
@@ -182,6 +197,8 @@ def run_pretrip_import(request: PretripImportRequest) -> dict[str, Any]:
         reference_track_count=len(reference_paths),
         checkpoint_count=len(candidate_result.checkpoint_candidates),
         segment_count=len(candidate_result.segment_candidates),
+        gis_perception=gis_perception_result.gis_perception.model_dump(mode="json"),
+        gis_perception_ai_judgements=gis_perception_result.gis_perception_ai_judgements.model_dump(mode="json"),
     )
     debug_events = _build_debug_projection_events(
         request=request,
@@ -190,6 +207,8 @@ def run_pretrip_import(request: PretripImportRequest) -> dict[str, Any]:
         reference_track_count=len(reference_paths),
         checkpoint_count=len(candidate_result.checkpoint_candidates),
         segment_count=len(candidate_result.segment_candidates),
+        gis_perception=gis_perception_result.gis_perception.model_dump(mode="json"),
+        gis_perception_ai_judgements=gis_perception_result.gis_perception_ai_judgements.model_dump(mode="json"),
     )
     manifest["counts"]["debug_projection_event_count"] = len(debug_events)
 
@@ -204,6 +223,22 @@ def run_pretrip_import(request: PretripImportRequest) -> dict[str, Any]:
     write_json(
         project_root / output_refs["segment_candidates_ref"],
         [candidate.model_dump(mode="json") for candidate in candidate_result.segment_candidates],
+    )
+    write_json(
+        project_root / output_refs["route_note_candidates_ref"],
+        gis_perception_result.route_note_candidates.model_dump(mode="json"),
+    )
+    write_json(
+        project_root / output_refs["gis_perception_ai_judgements_ref"],
+        gis_perception_result.gis_perception_ai_judgements.model_dump(mode="json"),
+    )
+    write_json(
+        project_root / output_refs["route_note_ln_proposals_ref"],
+        gis_perception_result.route_note_ln_proposals.model_dump(mode="json"),
+    )
+    write_json(
+        project_root / output_refs["gis_perception_candidates_ref"],
+        gis_perception_result.gis_perception.model_dump(mode="json"),
     )
     write_json(project_root / output_refs["reference_tracks_ref"], reference_tracks)
     write_json(
@@ -223,6 +258,8 @@ def run_pretrip_import(request: PretripImportRequest) -> dict[str, Any]:
         reference_track_count=len(reference_paths),
         checkpoint_count=len(candidate_result.checkpoint_candidates),
         segment_count=len(candidate_result.segment_candidates),
+        gis_perception=gis_perception_result.gis_perception.model_dump(mode="json"),
+        gis_perception_ai_judgements=gis_perception_result.gis_perception_ai_judgements.model_dump(mode="json"),
         import_stage=request.import_stage,
     )
     write_json(project_root / "project.json", project_payload)
@@ -408,6 +445,10 @@ def _build_import_manifest(
     route_summary: dict[str, Any],
     checkpoint_count: int,
     segment_count: int,
+    gis_perception: dict[str, Any],
+    gis_perception_ai_judgements: dict[str, Any],
+    route_note_candidates: dict[str, Any],
+    route_note_ln_proposals: dict[str, Any],
 ) -> dict[str, Any]:
     return {
         "artifact_kind": "pretrip_import_manifest",
@@ -440,6 +481,17 @@ def _build_import_manifest(
             "reference_track_count": len(reference_paths),
             "checkpoint_candidate_count": checkpoint_count,
             "segment_candidate_count": segment_count,
+            "route_note_candidate_count": route_note_candidates["counts"]["note_candidate_count"],
+            "route_note_potential_ln_signal_count": route_note_candidates["counts"][
+                "potential_ln_signal_count"
+            ],
+            "route_note_ln_proposal_count": route_note_ln_proposals["counts"]["proposal_count"],
+            "gis_perception_ai_judgement_count": gis_perception_ai_judgements[
+                "judgement_count"
+            ],
+            "gis_perception_checkpoint_candidate_count": gis_perception["counts"][
+                "checkpoint_candidate_count"
+            ],
             "route_point_count": route_summary["point_count"],
         },
         "planning_semantics": _planning_semantics(request),
@@ -468,6 +520,8 @@ def _build_admin_projection(
     reference_track_count: int,
     checkpoint_count: int,
     segment_count: int,
+    gis_perception: dict[str, Any],
+    gis_perception_ai_judgements: dict[str, Any],
 ) -> dict[str, Any]:
     return {
         "artifact_kind": "pretrip_admin_surface_projection",
@@ -489,6 +543,45 @@ def _build_admin_projection(
             "checkpoint_candidate_count": checkpoint_count,
             "segment_candidate_count": segment_count,
             "reference_track_count": reference_track_count,
+            "route_note_candidate_count": gis_perception["counts"][
+                "gpx_route_note_candidate_count"
+            ],
+            "route_note_ln_proposal_count": gis_perception["counts"][
+                "gpx_ln_proposal_count"
+            ],
+            "gis_perception_ai_judgement_count": gis_perception_ai_judgements[
+                "judgement_count"
+            ],
+            "gis_perception_checkpoint_candidate_count": gis_perception["counts"][
+                "checkpoint_candidate_count"
+            ],
+        },
+        "gis_perception": {
+            "source_profile": gis_perception["source_profile"],
+            "status": gis_perception["status"],
+            "counts": gis_perception["counts"],
+            "classifier": gis_perception["classifier"],
+            "boundary": gis_perception["boundary"],
+            "ai_judgements": {
+                "artifact_kind": gis_perception_ai_judgements["artifact_kind"],
+                "provider_kind": gis_perception_ai_judgements["provider_kind"],
+                "model_name": gis_perception_ai_judgements["model_name"],
+                "prompt_sha256": gis_perception_ai_judgements["prompt_sha256"],
+                "input_count": gis_perception_ai_judgements["input_count"],
+                "judgement_count": gis_perception_ai_judgements["judgement_count"],
+                "live_model_call_performed": gis_perception_ai_judgements[
+                    "live_model_call_performed"
+                ],
+                "network_calls_allowed": gis_perception_ai_judgements[
+                    "network_calls_allowed"
+                ],
+            },
+            "gis_perception_candidates_ref": output_refs["gis_perception_candidates_ref"],
+            "gis_perception_ai_judgements_ref": output_refs[
+                "gis_perception_ai_judgements_ref"
+            ],
+            "route_note_candidates_ref": output_refs["route_note_candidates_ref"],
+            "route_note_ln_proposals_ref": output_refs["route_note_ln_proposals_ref"],
         },
         "pretrip_surface": {
             "project_ref": "project.json",
@@ -526,6 +619,8 @@ def _build_debug_projection_events(
     reference_track_count: int,
     checkpoint_count: int,
     segment_count: int,
+    gis_perception: dict[str, Any],
+    gis_perception_ai_judgements: dict[str, Any],
 ) -> list[dict[str, Any]]:
     session_id = f"debug_session.pretrip_import.{request.project_id}"
     base_payload = {
@@ -565,6 +660,15 @@ def _build_debug_projection_events(
             payload={
                 **base_payload,
                 "provider": "local_gpx_corpus",
+                "gis_perception_provider": gis_perception_ai_judgements[
+                    "provider_kind"
+                ],
+                "gis_perception_model_name": gis_perception_ai_judgements[
+                    "model_name"
+                ],
+                "gis_perception_prompt_sha256": gis_perception_ai_judgements[
+                    "prompt_sha256"
+                ],
                 "golden_route_count": 1,
                 "reference_track_count": reference_track_count,
                 "network_calls_allowed": False,
@@ -587,6 +691,18 @@ def _build_debug_projection_events(
                 "distance_m": route_summary["distance_m"],
                 "checkpoint_candidate_count": checkpoint_count,
                 "segment_candidate_count": segment_count,
+                "route_note_candidate_count": gis_perception["counts"][
+                    "gpx_route_note_candidate_count"
+                ],
+                "route_note_ln_proposal_count": gis_perception["counts"][
+                    "gpx_ln_proposal_count"
+                ],
+                "gis_perception_ai_judgement_count": gis_perception_ai_judgements[
+                    "judgement_count"
+                ],
+                "gis_perception_checkpoint_candidate_count": gis_perception["counts"][
+                    "checkpoint_candidate_count"
+                ],
             },
         ),
         RuntimeDebugEvent(
@@ -677,6 +793,8 @@ def _project_payload(
     reference_track_count: int,
     checkpoint_count: int,
     segment_count: int,
+    gis_perception: dict[str, Any],
+    gis_perception_ai_judgements: dict[str, Any],
     import_stage: ImportStage,
 ) -> dict[str, Any]:
     project_path = project_root / "project.json"
@@ -696,6 +814,19 @@ def _project_payload(
             "source_artifact_count": 1 + reference_track_count,
             "checkpoint_candidate_count": checkpoint_count,
             "segment_candidate_count": segment_count,
+            "route_note_candidate_count": gis_perception["counts"][
+                "gpx_route_note_candidate_count"
+            ],
+            "route_note_potential_ln_signal_count": gis_perception["counts"][
+                "gpx_potential_ln_signal_count"
+            ],
+            "route_note_ln_proposal_count": gis_perception["counts"]["gpx_ln_proposal_count"],
+            "gis_perception_ai_judgement_count": gis_perception_ai_judgements[
+                "judgement_count"
+            ],
+            "gis_perception_checkpoint_candidate_count": gis_perception["counts"][
+                "checkpoint_candidate_count"
+            ],
             "map_corridor_candidate_count": 1,
             "map_hazard_candidate_count": 0,
             "map_poi_candidate_count": 2,

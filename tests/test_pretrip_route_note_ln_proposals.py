@@ -44,11 +44,11 @@ def test_builds_ln_proposals_from_existing_route_note_fixture():
         "route_note_candidates.chilai_nanhua_day1.rudy_like_gpx.v0"
     )
     assert payload["counts"]["source_route_note_count"] == 81
-    assert payload["counts"]["source_potential_ln_signal_count"] == 21
-    assert payload["counts"]["proposal_count"] == 21
-    assert payload["counts"]["hint_coverage_proposal_count"] == 19
-    assert payload["counts"]["warning_coverage_proposal_count"] == 2
-    assert payload["counts"]["human_review_required_count"] == 21
+    assert payload["counts"]["source_potential_ln_signal_count"] == 23
+    assert payload["counts"]["proposal_count"] == 23
+    assert payload["counts"]["hint_coverage_proposal_count"] == 20
+    assert payload["counts"]["warning_coverage_proposal_count"] == 3
+    assert payload["counts"]["human_review_required_count"] == 23
 
     assert all(
         proposal["source_note_category"] in {"hazard_hint", "route_condition_hint"}

@@ -5,6 +5,7 @@ from typing import Any
 
 def build_hardware_readiness_assistant_context(
     *,
+    interface_inventory: list[dict[str, Any]] | None = None,
     provider_health: list[dict[str, Any]] | None = None,
     sample_replay_timeline: list[dict[str, Any]] | None = None,
     runtime_debug_events: list[dict[str, Any]] | None = None,
@@ -12,6 +13,10 @@ def build_hardware_readiness_assistant_context(
     selected_provider_ref: str | None = None,
     max_items: int = 20,
 ) -> dict[str, Any]:
+    interfaces = [
+        _interface_summary(item)
+        for item in list(interface_inventory or [])[:max_items]
+    ]
     providers = [
         _provider_summary(item)
         for item in list(provider_health or [])[:max_items]
@@ -31,6 +36,7 @@ def build_hardware_readiness_assistant_context(
     selected_provider = _selected_provider(providers, selected_provider_ref)
     sources = _dedupe_sources(
         [
+            *_source_refs(interfaces),
             *_source_refs(providers),
             *_source_refs(replay),
             *_source_refs(debug),
@@ -42,6 +48,10 @@ def build_hardware_readiness_assistant_context(
         for provider in providers
         if str(provider.get("status", "")).lower() in {"degraded", "failed", "unavailable"}
     ]
+    interface_statuses = {
+        str(item.get("status", "unknown")).lower()
+        for item in interfaces
+    }
     return {
         "surface": "hardware_readiness",
         "context_kind": "assistant_context",
@@ -50,6 +60,8 @@ def build_hardware_readiness_assistant_context(
         "auditable": True,
         "boundary": _boundary(),
         "summary": {
+            "interface_count": len(interfaces),
+            "interface_statuses": sorted(interface_statuses),
             "provider_count": len(providers),
             "degraded_provider_count": len(degraded),
             "sample_replay_event_count": len(replay),
@@ -58,6 +70,7 @@ def build_hardware_readiness_assistant_context(
             "selected_provider_ref": selected_provider_ref,
         },
         "selected_provider": selected_provider,
+        "interface_inventory": interfaces,
         "provider_health": providers,
         "sample_replay_timeline": replay,
         "runtime_debug_events": debug,
@@ -65,9 +78,57 @@ def build_hardware_readiness_assistant_context(
         "sources": sources,
         "limitations": [
             "Context is a bounded hardware-readiness projection.",
+            "Interface inventory is metadata-only unless a later lab/live probe explicitly records otherwise.",
             "Provider health and mock queue entries are explanatory only.",
             "No hardware provider, deployment target, or outbound transport is controlled.",
         ],
+    }
+
+
+def _interface_summary(item: dict[str, Any]) -> dict[str, Any]:
+    interface_ref = item.get("interface_ref") or item.get("source_id")
+    return {
+        "interface_ref": interface_ref,
+        "interface_type": item.get("interface_type"),
+        "status": item.get("status"),
+        "signal_activity": item.get("signal_activity"),
+        "last_seen_at": item.get("last_seen_at"),
+        "manual_drive_allowed": bool(item.get("manual_drive_allowed", False)),
+        "manual_read_allowed": bool(item.get("manual_read_allowed", False)),
+        "manual_write_allowed": bool(item.get("manual_write_allowed", False)),
+        "observed_lines": _compact_value(item.get("observed_lines", []), max_items=64),
+        "detected_addresses": _compact_value(item.get("detected_addresses", [])),
+        "paired_devices": _compact_value(item.get("paired_devices", [])),
+        "connected_devices": _compact_value(item.get("connected_devices", [])),
+        "devices": _compact_value(item.get("devices", [])),
+        "details": _compact_value(
+            {
+                key: value
+                for key, value in item.items()
+                if key
+                not in {
+                    "interface_ref",
+                    "interface_type",
+                    "status",
+                    "signal_activity",
+                    "last_seen_at",
+                    "manual_drive_allowed",
+                    "observed_lines",
+                    "detected_addresses",
+                    "paired_devices",
+                    "connected_devices",
+                    "devices",
+                    "boundary",
+                    "source_id",
+                    "source_path",
+                    "evidence_type",
+                }
+            }
+        ),
+        "boundary": _compact_value(item.get("boundary", {}), max_items=32),
+        "source_id": item.get("source_id") or interface_ref,
+        "source_path": item.get("source_path") or "hardware_readiness_interface_fixture",
+        "evidence_type": item.get("evidence_type") or "hardware_interface_inventory",
     }
 
 
@@ -204,5 +265,9 @@ def _boundary() -> dict[str, bool]:
         "real_sms_allowed": False,
         "real_satellite_allowed": False,
         "hardware_control_allowed": False,
+        "gpio_lab_mode_drive_policy_allowed": True,
+        "gpio_drive_requires_wiring_manifest": True,
+        "gpio_drive_implementation_enabled": False,
+        "gpio_drive_operator_confirmation_required": True,
         "provider_control_allowed": False,
     }

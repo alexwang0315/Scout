@@ -19,6 +19,11 @@ from pretrip_review_decision_log import (
 DEFAULT_CHILAI_PROJECT_REF = (
     "tests/fixtures/pretrip/projects/chilai_nanhua_day1/project.json"
 )
+CandidateApplicationScope = Literal[
+    "package_candidate",
+    "gis_perception_cp",
+    "review_queue_pointer",
+]
 
 
 class StrictDecisionApplyModel(BaseModel):
@@ -52,12 +57,15 @@ class ReviewDecisionApplyItem(StrictDecisionApplyModel):
     draft_action_id: str
     decision: ReviewDecision
     candidate_ref: str
+    candidate_application_scope: CandidateApplicationScope = "review_queue_pointer"
     target_ids: list[str] = Field(default_factory=list)
     source_refs: list[str] = Field(default_factory=list)
     package_candidate_matches: list[str] = Field(default_factory=list)
     package_candidate_apply_count: int = Field(ge=0)
     summary: str
     correction_summary: str | None = None
+    candidate_only_review: Literal[True] = True
+    runtime_safety_truth: Literal[False] = False
     would_apply_to_package: bool = False
     notes: list[str] = Field(default_factory=list)
 
@@ -89,6 +97,8 @@ class PreTripReviewDecisionApplyPlan(StrictDecisionApplyModel):
             item.package_candidate_apply_count for item in self.decisions
         ):
             raise ValueError("package_candidate_apply_count does not match decisions")
+        if any(item.runtime_safety_truth for item in self.decisions):
+            raise ValueError("review decision apply items must not be runtime truth")
         _assert_no_runtime_or_raw_payload_fragments(self.model_dump(mode="json"))
         return self
 
@@ -188,12 +198,13 @@ def build_review_decision_apply_plan(
             notes=[
                 "Decision apply plan is a deterministic local planning artifact only.",
                 "It records what the append-only review decisions point at without mutating source artifacts, PreTripPackage, runtime state, Phase 2 Brain state, or MissionGraph outputs.",
-                "Current decision candidate refs are contour, segment-policy, and POI-readiness candidates, not direct PreTripPackage candidate ids.",
+                "Decision candidate refs may include fixture queue items, package candidate ids, or dynamic GIS perception CP pointers; all remain candidate-only planning evidence here.",
             ],
         ),
         notes=[
             "Package application count is based on direct decision candidate_ref matches in PreTripPackage candidate collections.",
             "Decision target_ids remain recorded as review references and are not treated as package patches by this artifact.",
+            "GIS perception CP decisions are retained as workspace review pointers until a later reviewed planning artifact promotes them.",
         ],
     )
 
@@ -227,6 +238,10 @@ def _apply_item(
         if decision.candidate_ref in package_candidate_ids
         else []
     )
+    application_scope = _candidate_application_scope(
+        decision,
+        package_matches=package_matches,
+    )
     source_refs = sorted(
         {
             source_ref.source_ref
@@ -238,6 +253,7 @@ def _apply_item(
         draft_action_id=decision.draft_action_id,
         decision=decision.decision,
         candidate_ref=decision.candidate_ref,
+        candidate_application_scope=application_scope,
         target_ids=list(decision.target_ids),
         source_refs=source_refs,
         package_candidate_matches=package_matches,
@@ -247,12 +263,48 @@ def _apply_item(
             decision.correction.summary if decision.correction is not None else None
         ),
         would_apply_to_package=bool(package_matches),
-        notes=[
-            "No direct PreTripPackage candidate match; retained as a decision pointer only."
-            if not package_matches
-            else "Direct PreTripPackage candidate match detected; this artifact still does not mutate it."
-        ],
+        notes=_apply_item_notes(application_scope),
     )
+
+
+def _candidate_application_scope(
+    decision: ReviewDecisionRecord,
+    *,
+    package_matches: list[str],
+) -> CandidateApplicationScope:
+    if package_matches:
+        return "package_candidate"
+    if _is_gis_perception_candidate_ref(decision.candidate_ref):
+        return "gis_perception_cp"
+    if any(
+        "gis_perception" in source_ref.item_id
+        or "gis-perception" in source_ref.source_ref
+        for source_ref in decision.source_review_queue_item_refs
+    ):
+        return "gis_perception_cp"
+    return "review_queue_pointer"
+
+
+def _is_gis_perception_candidate_ref(candidate_ref: str) -> bool:
+    return (
+        candidate_ref.startswith("gis_cp_cluster.")
+        or candidate_ref.startswith("gis_cp.")
+        or ".gis_cp_" in candidate_ref
+    )
+
+
+def _apply_item_notes(scope: CandidateApplicationScope) -> list[str]:
+    if scope == "package_candidate":
+        return [
+            "Direct PreTripPackage candidate match detected; this artifact still does not mutate it."
+        ]
+    if scope == "gis_perception_cp":
+        return [
+            "GIS perception CP decision retained as workspace review metadata only; no checkpoints, package, or runtime artifacts are mutated."
+        ]
+    return [
+        "No direct PreTripPackage candidate match; retained as a decision pointer only."
+    ]
 
 
 def _package_candidate_ids(package: PreTripPackage) -> set[str]:

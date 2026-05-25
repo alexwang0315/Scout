@@ -127,26 +127,85 @@
       letter-spacing: 0;
     }
 
-    .filters {
+    .control-group {
       display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 6px;
+      gap: 4px;
       min-width: 0;
-      max-width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--panel);
+      padding: 5px;
     }
 
-    label {
+    .control-group-header {
       display: flex;
-      align-items: center;
-      gap: 8px;
-      min-width: 0;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 10px;
+      color: var(--muted);
+      font-size: 10px;
+      text-transform: uppercase;
+    }
+
+    .control-group-header span {
       color: var(--text);
+      font-weight: 700;
+      letter-spacing: .03em;
+    }
+
+    .toolbar-row {
+      display: flex;
+      gap: 5px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .tool-button {
+      min-height: 24px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--surface);
+      color: var(--text);
+      padding: 2px 7px;
+      cursor: pointer;
+      font-size: 12px;
+      font: inherit;
+    }
+
+    .tool-button.compact {
+      min-width: 30px;
+      padding-left: 0;
+      padding-right: 0;
+    }
+
+    .filters {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 3px;
+      min-width: 0;
+      max-width: 100%;
+      color: var(--muted);
       font-size: 12px;
     }
 
-    input[type="checkbox"] {
-      width: 16px;
-      height: 16px;
+    label {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      min-width: 0;
+      min-height: 22px;
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      background: var(--panel);
+      color: var(--text);
+      font-size: 12px;
+      padding: 1px 5px;
+      white-space: nowrap;
+    }
+
+    .filters input[type="checkbox"] {
+      width: 13px;
+      height: 13px;
       accent-color: var(--focus);
     }
     .layer-menu {
@@ -155,18 +214,17 @@
       max-width: 100%;
     }
     .layer-menu summary {
-      min-height: 32px;
+      min-height: 24px;
       display: inline-flex;
       align-items: center;
-      gap: 8px;
+      gap: 6px;
       border: 1px solid var(--border);
-      border-radius: 999px;
-      background: var(--panel);
+      border-radius: 6px;
+      background: var(--surface);
       color: var(--text);
-      padding: 5px 10px;
+      padding: 2px 7px;
       cursor: pointer;
       font-size: 12px;
-      font-weight: 650;
       list-style: none;
     }
     .layer-menu summary::-webkit-details-marker { display: none; }
@@ -181,20 +239,57 @@
     .layer-menu[open] summary::after {
       transform: rotate(225deg) translateY(-1px);
     }
+    .layer-menu summary strong {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+    }
     .layer-menu-panel {
       position: absolute;
-      top: calc(100% + 8px);
+      top: calc(100% + 6px);
       left: 0;
-      width: min(360px, calc(100vw - 32px));
-      max-height: 320px;
+      width: min(540px, calc(100vw - 28px));
+      max-height: 250px;
       overflow: auto;
       border: 1px solid var(--border);
-      border-radius: 10px;
+      border-radius: 8px;
       background: var(--surface);
-      padding: 10px;
+      padding: 8px;
       box-shadow: 0 18px 42px rgba(0, 0, 0, .28);
       z-index: 20;
     }
+    .layer-menu-header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 6px;
+      color: var(--muted);
+      font-size: 10px;
+      text-transform: uppercase;
+    }
+    .layer-menu-header span {
+      color: var(--text);
+      font-weight: 700;
+      letter-spacing: .03em;
+    }
+    .map-pan-controls {
+      display: inline-grid;
+      grid-template-columns: repeat(3, 24px);
+      grid-template-rows: repeat(3, 24px);
+      gap: 2px;
+      align-items: center;
+      justify-content: center;
+    }
+    .map-pan-controls .tool-button {
+      min-height: 24px;
+      padding: 0;
+      line-height: 1;
+    }
+    .pan-up { grid-column: 2; grid-row: 1; }
+    .pan-left { grid-column: 1; grid-row: 2; }
+    .pan-right { grid-column: 3; grid-row: 2; }
+    .pan-down { grid-column: 2; grid-row: 3; }
 
     .toolbar {
       display: flex;
@@ -864,21 +959,42 @@
             <div class="metric"><span>CP</span><strong id="checkpoints">-</strong></div>
             <div class="metric"><span>Incidents</span><strong id="incidents">-</strong></div>
           </div>
-          <details class="layer-menu">
-            <summary title="Map layer controls" aria-label="Map layer controls">Layers</summary>
-            <div class="layer-menu-panel">
-              <div class="filters" aria-label="Map layers">
-                <label><input type="checkbox" data-layer="imagery" checked> Imagery</label>
-                <label><input type="checkbox" data-layer="osm" checked> OSM</label>
-                <label><input type="checkbox" data-layer="corridors" checked> Corridors</label>
-                <label><input type="checkbox" data-layer="route" checked> Route</label>
-                <label><input type="checkbox" data-layer="checkpoints" checked> CP</label>
-                <label><input type="checkbox" data-layer="hazards" checked> Hazards</label>
-                <label><input type="checkbox" data-layer="events" checked> Ln</label>
-                <label><input type="checkbox" data-layer="weather-api"> Weather</label>
+          <section class="control-group" aria-label="Map view controls">
+            <div class="control-group-header">
+              <span>Map</span>
+              <small>view</small>
+            </div>
+            <div class="toolbar-row" aria-label="Map tools">
+              <button id="zoomIn" class="tool-button compact" type="button" title="Zoom in" aria-label="Zoom in">+</button>
+              <button id="zoomOut" class="tool-button compact" type="button" title="Zoom out" aria-label="Zoom out">-</button>
+              <button id="fitRoute" class="tool-button" type="button" title="Reset map view" aria-label="Reset map view">Fit</button>
+              <details class="layer-menu">
+                <summary id="layerControl" title="Show layer controls" aria-label="Layer controls">Layers <strong id="layerEnabledCount">-</strong></summary>
+                <div class="layer-menu-panel" aria-label="Map layer controls">
+                  <div class="layer-menu-header">
+                    <span>Layers</span>
+                    <small>map evidence</small>
+                  </div>
+                  <div class="filters" aria-label="Map layers">
+                    <label title="Imagery layer"><input type="checkbox" data-layer="imagery" checked> Imagery</label>
+                    <label title="OpenStreetMap layer"><input type="checkbox" data-layer="osm" checked> OSM</label>
+                    <label title="Corridor layer"><input type="checkbox" data-layer="corridors" checked> Corridors</label>
+                    <label title="Route layer"><input type="checkbox" data-layer="route" checked> Route</label>
+                    <label title="Checkpoint layer"><input type="checkbox" data-layer="checkpoints" checked> CP</label>
+                    <label title="Hazard layer"><input type="checkbox" data-layer="hazards" checked> Hazards</label>
+                    <label title="Event layer"><input type="checkbox" data-layer="events" checked> Ln</label>
+                    <label title="Weather API layer"><input type="checkbox" data-layer="weather-api"> Weather</label>
+                  </div>
+                </div>
+              </details>
+              <div class="map-pan-controls" aria-label="Map pan controls">
+                <button id="panUp" class="tool-button pan-up" type="button" title="Pan up" aria-label="Pan up">&uarr;</button>
+                <button id="panLeft" class="tool-button pan-left" type="button" title="Pan left" aria-label="Pan left">&larr;</button>
+                <button id="panRight" class="tool-button pan-right" type="button" title="Pan right" aria-label="Pan right">&rarr;</button>
+                <button id="panDown" class="tool-button pan-down" type="button" title="Pan down" aria-label="Pan down">&darr;</button>
               </div>
             </div>
-          </details>
+          </section>
         </div>
       </div>
       <div class="map-wrap">
@@ -1063,7 +1179,7 @@
         boundary: "reference tracks stay planning evidence only; not runtime safety truth"
       }
     ];
-    const state = { view: null, projected: null, selected: null };
+    const state = { view: null, projected: null, selected: null, zoom: 1, panX: 0, panY: 0 };
     const svg = document.getElementById("map");
     const hoverHint = document.getElementById("hoverHint");
     const layerInputs = document.querySelectorAll("[data-layer]");
@@ -1777,7 +1893,7 @@
 
     function renderMap(view) {
       const bounds = boundsWithMap(view);
-      svg.setAttribute("viewBox", "0 0 1000 720");
+      applyMapViewport();
       svg.replaceChildren();
 
       const imageryGroup = el("g", {"data-layer-group": "imagery"});
@@ -1862,6 +1978,7 @@
       svg.appendChild(weatherApiGroup);
 
       updateLayers();
+      applyMapViewport();
     }
 
     function treeButton(item, label, sublabel = "") {
@@ -2016,12 +2133,60 @@
       document.getElementById("mapMeta").textContent = `${meta.source} | confidence ${meta.confidence} | staleness ${meta.known_staleness_risk}`;
     }
 
+    function mapViewBox() {
+      const width = MAP_WIDTH / state.zoom;
+      const height = MAP_HEIGHT / state.zoom;
+      const minX = (MAP_WIDTH - width) / 2 + state.panX;
+      const minY = (MAP_HEIGHT - height) / 2 + state.panY;
+      return `${minX.toFixed(2)} ${minY.toFixed(2)} ${width.toFixed(2)} ${height.toFixed(2)}`;
+    }
+
+    function applyMapViewport() {
+      svg.setAttribute("viewBox", mapViewBox());
+    }
+
+    function clampMapPan() {
+      const limitX = Math.max(0, MAP_WIDTH * (state.zoom - 1) / (2 * state.zoom));
+      const limitY = Math.max(0, MAP_HEIGHT * (state.zoom - 1) / (2 * state.zoom));
+      state.panX = Math.max(-limitX, Math.min(limitX, state.panX));
+      state.panY = Math.max(-limitY, Math.min(limitY, state.panY));
+    }
+
+    function panMap(dx, dy) {
+      state.panX += dx / state.zoom;
+      state.panY += dy / state.zoom;
+      clampMapPan();
+      applyMapViewport();
+    }
+
+    function zoomMap(delta) {
+      state.zoom = Math.max(0.8, Math.min(1.8, state.zoom + delta));
+      clampMapPan();
+      applyMapViewport();
+      highlightMapFor(state.selected);
+    }
+
+    function resetMapView() {
+      state.zoom = 1;
+      state.panX = 0;
+      state.panY = 0;
+      applyMapViewport();
+      highlightMapFor(state.selected);
+    }
+
     function updateLayers() {
       layerInputs.forEach(input => {
         const group = svg.querySelector(`[data-layer-group="${input.dataset.layer}"]`);
         if (!group) return;
         group.classList.toggle("is-hidden", !input.checked);
       });
+      const summary = document.getElementById("layerEnabledCount");
+      if (summary) {
+        const inputs = [...layerInputs];
+        const enabled = inputs.filter(input => input.checked).length;
+        summary.textContent = `${enabled}/${inputs.length}`;
+      }
+      highlightMapFor(state.selected);
     }
 
     async function loadCase() {
@@ -2048,6 +2213,13 @@
     }
 
     layerInputs.forEach(input => input.addEventListener("change", updateLayers));
+    document.getElementById("zoomIn").addEventListener("click", () => zoomMap(0.1));
+    document.getElementById("zoomOut").addEventListener("click", () => zoomMap(-0.1));
+    document.getElementById("fitRoute").addEventListener("click", resetMapView);
+    document.getElementById("panUp").addEventListener("click", () => panMap(0, -70));
+    document.getElementById("panDown").addEventListener("click", () => panMap(0, 70));
+    document.getElementById("panLeft").addEventListener("click", () => panMap(-70, 0));
+    document.getElementById("panRight").addEventListener("click", () => panMap(70, 0));
     initSplitters();
     bindAssistantControls();
     loadAssistantStatus();

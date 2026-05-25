@@ -118,13 +118,13 @@ def test_departure_bundle_preserves_required_refs_and_checksums():
     assert bundle["artifact_manifest"]["source_artifact_count"] == 2
     assert bundle["artifact_manifest"]["total_artifact_count"] == 44
     assert bundle["artifact_manifest"]["source_checksum_summaries"] == [
-        {
-            "artifact_kind": "gpx",
-            "artifact_id": "artifact:gpx:chilai_nanhua_day1",
-            "sha256": "3c1f4843ecea5cb2fc85f92934d3d1a220738c900576e4976d4c09975673956c",
-            "media_type": "application/gpx+xml",
-            "size_bytes": 275392,
-        },
+            {
+                "artifact_kind": "gpx",
+                "artifact_id": "artifact:gpx:chilai_nanhua_day1",
+                "sha256": "a270bbc769c9c521c4bb839a6230fb3760c37478c5b3ebe57f36f5d8755f6ee7",
+                "media_type": "application/gpx+xml",
+                "size_bytes": 1186689,
+            },
         {
             "artifact_kind": "photo",
             "artifact_id": "artifact:photo:g11_hiking",

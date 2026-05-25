@@ -16,6 +16,7 @@ def load_hardware_readiness_fixture(
 ) -> dict[str, list[dict[str, Any]]]:
     payload = json.loads(Path(fixture_path).read_text(encoding="utf-8"))
     return {
+        "interface_inventory": list(payload.get("interface_inventory") or []),
         "provider_health": list(payload.get("provider_health") or []),
         "sample_replay_timeline": list(payload.get("sample_replay_timeline") or []),
         "runtime_debug_events": list(payload.get("runtime_debug_events") or []),
@@ -30,6 +31,7 @@ def build_hardware_readiness_admin_view(
 ) -> dict[str, Any]:
     fixture = load_hardware_readiness_fixture(fixture_path)
     context = build_hardware_readiness_assistant_context(
+        interface_inventory=fixture["interface_inventory"],
         provider_health=fixture["provider_health"],
         sample_replay_timeline=fixture["sample_replay_timeline"],
         runtime_debug_events=fixture["runtime_debug_events"],
@@ -43,6 +45,7 @@ def build_hardware_readiness_admin_view(
         "fixture_path": str(Path(fixture_path)),
         "summary": context["summary"],
         "selected_provider": context["selected_provider"],
+        "interface_inventory": context["interface_inventory"],
         "provider_health": context["provider_health"],
         "sample_replay_timeline": context["sample_replay_timeline"],
         "runtime_debug_events": context["runtime_debug_events"],
