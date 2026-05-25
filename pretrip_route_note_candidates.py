@@ -4,6 +4,7 @@ import hashlib
 import json
 import xml.etree.ElementTree as ET
 from collections import Counter
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
 
@@ -13,6 +14,8 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 DEFAULT_RUDY_LIKE_GPX = Path(
     "/Users/alexwang0315/downloads/6966d6fa4d9d9652b2da064c7345fb22_p.gpx"
 )
+ROUTE_NOTE_STALE_AFTER_DAYS = 365 * 5
+ROUTE_NOTE_AGING_AFTER_DAYS = 365 * 2
 
 
 class RouteNoteModel(BaseModel):
@@ -38,6 +41,9 @@ class RouteNoteCandidate(RouteNoteModel):
         "uncategorized_note",
     ]
     potential_ln_signal: bool = False
+    route_note_age_days: int | None = None
+    route_note_freshness: Literal["unknown", "recent", "aging", "stale"] = "unknown"
+    stale_route_note: bool = False
     scout_interpretation: Literal["ModelInterpretation"] = "ModelInterpretation"
     requires_human_review: Literal[True] = True
     observed_fact_candidate: Literal[False] = False
@@ -54,6 +60,8 @@ class RouteNoteCounts(RouteNoteModel):
     camp_or_water_hint_count: int = Field(ge=0)
     landmark_hint_count: int = Field(ge=0)
     potential_ln_signal_count: int = Field(ge=0)
+    route_note_time_unknown_count: int = Field(default=0, ge=0)
+    stale_route_note_count: int = Field(default=0, ge=0)
     observed_fact_count: Literal[0] = 0
     raw_payload_count: Literal[0] = 0
 
@@ -120,19 +128,32 @@ def build_route_note_candidates_from_gpx(
     *,
     project_id: str = "chilai_nanhua_day1",
     source_artifact_id: str = "source.comparison.rudy_like_gpx",
+    source_key: str = "rudy_like_gpx",
+    artifact_version: str = "v0",
+    freshness_as_of: str | datetime | None = None,
 ) -> RouteNoteCandidateSet:
     source_path = Path(gpx_path).expanduser()
     root = ET.parse(source_path).getroot()
     namespace = _namespace(root.tag)
     waypoints = root.findall(f".//{namespace}wpt")
+    as_of = _freshness_as_of(freshness_as_of)
     candidates = tuple(
         candidate
         for index, waypoint in enumerate(waypoints)
-        if (candidate := _route_note_candidate(index, waypoint, namespace)) is not None
+        if (
+            candidate := _route_note_candidate(
+                index,
+                waypoint,
+                namespace,
+                source_key,
+                freshness_as_of=as_of,
+            )
+        )
+        is not None
     )
     categories = Counter(candidate.note_category for candidate in candidates)
     return RouteNoteCandidateSet(
-        artifact_id=f"route_note_candidates.{project_id}.rudy_like_gpx.v0",
+        artifact_id=f"route_note_candidates.{project_id}.{source_key}.{artifact_version}",
         project_id=project_id,
         source_artifact_id=source_artifact_id,
         source_uri=source_path.as_posix(),
@@ -147,11 +168,19 @@ def build_route_note_candidates_from_gpx(
             potential_ln_signal_count=sum(
                 1 for candidate in candidates if candidate.potential_ln_signal
             ),
+            route_note_time_unknown_count=sum(
+                1 for candidate in candidates
+                if candidate.route_note_freshness == "unknown"
+            ),
+            stale_route_note_count=sum(
+                1 for candidate in candidates if candidate.stale_route_note
+            ),
         ),
         boundary=RouteNoteBoundary(
             notes=(
                 "GPX waypoint name/cmt/desc fields are treated as route-note candidates.",
                 "These notes can seed future Ln coverage after human review; they are not ObservedFact or runtime warnings in this slice.",
+                "Route note freshness（路線註記新鮮度）is flagged from waypoint time when available; old notes remain evidence but need stronger review.",
                 "The fixture stores extracted note metadata only and does not version the raw GPX.",
             ),
         ),
@@ -175,6 +204,9 @@ def _route_note_candidate(
     index: int,
     waypoint: ET.Element,
     namespace: str,
+    source_key: str,
+    *,
+    freshness_as_of: datetime,
 ) -> RouteNoteCandidate | None:
     name = _child_text(waypoint, namespace, "name")
     cmt = _child_text(waypoint, namespace, "cmt")
@@ -183,19 +215,24 @@ def _route_note_candidate(
     if not normalized_note:
         return None
     category = _classify_note(normalized_note)
+    waypoint_time = _child_text(waypoint, namespace, "time") or None
+    freshness = _route_note_freshness(waypoint_time, freshness_as_of=freshness_as_of)
     return RouteNoteCandidate(
-        candidate_id=f"route_note.rudy_like_gpx.wpt_{index:03d}",
+        candidate_id=f"route_note.{source_key}.wpt_{index:03d}",
         source_waypoint_index=index,
         lat=float(waypoint.attrib["lat"]),
         lon=float(waypoint.attrib["lon"]),
         ele_m=_optional_float(_child_text(waypoint, namespace, "ele")),
-        time=_child_text(waypoint, namespace, "time") or None,
+        time=waypoint_time,
         name=name,
         cmt=cmt,
         desc=desc,
         normalized_note=normalized_note,
         note_category=category,
         potential_ln_signal=category in {"hazard_hint", "route_condition_hint"},
+        route_note_age_days=freshness["age_days"],
+        route_note_freshness=freshness["freshness"],
+        stale_route_note=freshness["stale"],
         source_fields_present=tuple(
             field
             for field, value in (("name", name), ("cmt", cmt), ("desc", desc))
@@ -229,12 +266,33 @@ def _looks_like_datetime(value: str) -> bool:
 
 
 def _classify_note(note: str) -> str:
-    if any(token in note for token in ("危險", "崩塌", "勿", "小心", "架繩", "斷崖")):
+    if any(token in note for token in ("危險", "勿", "小心", "架繩", "斷崖")):
         return "hazard_hint"
     if any(token in note for token in ("營地", "C1", "水塘", "水源", "黑水")):
         return "camp_or_water_hint"
-    if any(token in note for token in ("有路", "路徑", "好走", "腰繞", "上切", "下切", "獸俓")):
+    if any(
+        token in note
+        for token in (
+            "有路",
+            "路跡",
+            "路徑",
+            "好走",
+            "茂密",
+            "林相",
+            "芒草",
+            "箭竹",
+            "腰繞",
+            "高繞",
+            "低繞",
+            "繞路",
+            "上切",
+            "下切",
+            "獸俓",
+        )
+    ):
         return "route_condition_hint"
+    if any(token in note for token in ("崩塌", "崩壁")):
+        return "hazard_hint"
     if any(token in note for token in ("峰", "山", "鞍", "岔", "稜")):
         return "landmark_hint"
     return "uncategorized_note"
@@ -245,6 +303,53 @@ def _optional_float(value: str) -> float | None:
         return None
     parsed = float(value)
     return parsed if parsed != 0.0 else None
+
+
+def _freshness_as_of(value: str | datetime | None) -> datetime:
+    if value is None:
+        return datetime.now(timezone.utc)
+    if isinstance(value, datetime):
+        parsed = value
+    else:
+        parsed = _parse_gpx_time(value)
+        if parsed is None:
+            raise ValueError(f"invalid freshness_as_of datetime: {value}")
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _route_note_freshness(
+    waypoint_time: str | None,
+    *,
+    freshness_as_of: datetime,
+) -> dict[str, object]:
+    parsed = _parse_gpx_time(waypoint_time)
+    if parsed is None:
+        return {"age_days": None, "freshness": "unknown", "stale": False}
+    age_days = max(0, (freshness_as_of - parsed).days)
+    if age_days >= ROUTE_NOTE_STALE_AFTER_DAYS:
+        return {"age_days": age_days, "freshness": "stale", "stale": True}
+    if age_days >= ROUTE_NOTE_AGING_AFTER_DAYS:
+        return {"age_days": age_days, "freshness": "aging", "stale": False}
+    return {"age_days": age_days, "freshness": "recent", "stale": False}
+
+
+def _parse_gpx_time(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    normalized = value.strip()
+    if not normalized:
+        return None
+    if normalized.endswith("Z"):
+        normalized = normalized[:-1] + "+00:00"
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
 
 def _sha256_file(path: Path) -> str:

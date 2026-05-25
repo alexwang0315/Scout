@@ -21,17 +21,17 @@
     "source_ln_proposals_only": true
   },
   "counts": {
-    "candidate_only_count": 21,
+    "candidate_only_count": 23,
     "decision_recorded_count": 0,
-    "draft_only_count": 21,
+    "draft_only_count": 23,
     "mission_graph_mutation_count": 0,
     "package_mutation_count": 0,
     "phase1_runtime_mutation_count": 0,
     "phase2_writeback_count": 0,
     "raw_gpx_payload_count": 0,
-    "review_option_count": 21,
+    "review_option_count": 23,
     "runtime_mutation_count": 0,
-    "source_proposal_count": 21
+    "source_proposal_count": 23
   },
   "notes": [
     "One review-options record is emitted for each route-note Ln proposal.",
@@ -309,6 +309,32 @@
       "decision_recorded": false,
       "draft_only": true,
       "mission_graph_mutation_candidate": false,
+      "option_id": "route_note_review_option.ln_proposal.route_note.rudy_like_gpx.wpt_037",
+      "package_mutation_candidate": false,
+      "phase1_runtime_mutation_candidate": false,
+      "phase2_writeback_candidate": false,
+      "proposal_kind": "warning_coverage",
+      "proposed_coverage_label": "route_note_warning_coverage",
+      "raw_gpx_embedded": false,
+      "route_note_summary": "崩壁上方，展望點",
+      "runtime_mutation_candidate": false,
+      "selected_admin_disposition": null,
+      "source_note_category": "hazard_hint",
+      "source_proposal_id": "ln_proposal.route_note.rudy_like_gpx.wpt_037",
+      "source_route_note_candidate_id": "route_note.rudy_like_gpx.wpt_037",
+      "source_waypoint_index": 37
+    },
+    {
+      "allowed_admin_dispositions": [
+        "promote_hint",
+        "promote_warning",
+        "ignore",
+        "field_verify"
+      ],
+      "candidate_only": true,
+      "decision_recorded": false,
+      "draft_only": true,
+      "mission_graph_mutation_candidate": false,
       "option_id": "route_note_review_option.ln_proposal.route_note.rudy_like_gpx.wpt_040",
       "package_mutation_candidate": false,
       "phase1_runtime_mutation_candidate": false,
@@ -557,6 +583,32 @@
       "source_proposal_id": "ln_proposal.route_note.rudy_like_gpx.wpt_076",
       "source_route_note_candidate_id": "route_note.rudy_like_gpx.wpt_076",
       "source_waypoint_index": 76
+    },
+    {
+      "allowed_admin_dispositions": [
+        "promote_hint",
+        "promote_warning",
+        "ignore",
+        "field_verify"
+      ],
+      "candidate_only": true,
+      "decision_recorded": false,
+      "draft_only": true,
+      "mission_graph_mutation_candidate": false,
+      "option_id": "route_note_review_option.ln_proposal.route_note.rudy_like_gpx.wpt_077",
+      "package_mutation_candidate": false,
+      "phase1_runtime_mutation_candidate": false,
+      "phase2_writeback_candidate": false,
+      "proposal_kind": "hint_coverage",
+      "proposed_coverage_label": "route_note_hint_coverage",
+      "raw_gpx_embedded": false,
+      "route_note_summary": "路跡清楚",
+      "runtime_mutation_candidate": false,
+      "selected_admin_disposition": null,
+      "source_note_category": "route_condition_hint",
+      "source_proposal_id": "ln_proposal.route_note.rudy_like_gpx.wpt_077",
+      "source_route_note_candidate_id": "route_note.rudy_like_gpx.wpt_077",
+      "source_waypoint_index": 77
     },
     {
       "allowed_admin_dispositions": [

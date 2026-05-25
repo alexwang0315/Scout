@@ -394,6 +394,9 @@
     .overpass-poi { fill: var(--overpass); stroke: white; stroke-width: 2; }
     .reference-track { fill: none; stroke: var(--reference); stroke-width: 2.2; opacity: .34; stroke-linecap: round; stroke-dasharray: 6 5; }
     .checkpoint { fill: var(--checkpoint); stroke: white; stroke-width: 2; }
+    .gis-perception-cp { fill: var(--review); stroke: white; stroke-width: 2.4; opacity: .92; }
+    .gis-perception-cp.is-stale { fill: var(--warning); stroke: var(--ink); }
+    .gis-nearby-group { fill: none; stroke: var(--review); stroke-width: 1.6; stroke-dasharray: 4 4; opacity: .62; }
     .route-note { fill: var(--review); stroke: white; stroke-width: 2; opacity: .88; }
     .map-highlight { filter: drop-shadow(0 0 7px rgba(40, 102, 110, .65)); opacity: 1; }
     [data-layer-hidden="true"] { display: none; }
@@ -1750,6 +1753,8 @@
         view?.overpass_evidence?.corridor_candidates || [],
         view?.overpass_evidence?.hazard_candidates || [],
         view?.overpass_evidence?.poi_candidates || [],
+        view?.gis_perception_timeline?.checkpoint_candidates || [],
+        view?.gis_perception_timeline?.nearby_groups || [],
         view?.route_notes?.candidates || [],
         view?.review_queue?.items || []
       ];
@@ -1782,6 +1787,12 @@
         item?.candidate_type,
         item?.osm_type,
         item?.osm_id,
+        item?.review_category,
+        item?.ai_reason_zh,
+        item?.nearby_group_id,
+        item?.route_note_freshness,
+        item?.semantic_aggregation_key,
+        item?.aggregation?.source_candidate_count,
         item?.from_candidate_id,
         item?.to_candidate_id,
         item?.poi?.poi_type,
@@ -2916,6 +2927,21 @@
         attachEvidence(circle, checkpoint);
         checkpointGroup.appendChild(circle);
       });
+      (view.gis_perception_timeline?.nearby_groups || []).forEach(group => {
+        const [x, y] = project(bounds, group.lat, group.lon);
+        const ring = el("circle", {cx: x, cy: y, r: 13, class: "gis-nearby-group"});
+        attachEvidence(ring, group);
+        checkpointGroup.appendChild(ring);
+      });
+      (view.gis_perception_timeline?.checkpoint_candidates || []).forEach(checkpoint => {
+        const [x, y] = project(bounds, checkpoint.lat, checkpoint.lon);
+        const className = checkpoint.stale_route_note
+          ? "gis-perception-cp is-stale"
+          : "gis-perception-cp";
+        const circle = el("circle", {cx: x, cy: y, r: 5.5, class: className});
+        attachEvidence(circle, checkpoint);
+        checkpointGroup.appendChild(circle);
+      });
       svg.appendChild(checkpointGroup);
 
       const poiGroup = el("g", {"data-layer-group": "pois"});
@@ -3004,6 +3030,7 @@
         ...view.checkpoints,
         ...view.segments,
         ...view.retreat_routes,
+        ...(view.gis_perception_timeline?.checkpoint_candidates || []),
         ...(view.reference_tracks?.reference_tracks || [])
       ].map(statusFor).filter(Boolean));
       [...select.querySelectorAll("option:not([value='all'])")].forEach(node => node.remove());
@@ -3094,6 +3121,14 @@
         label: item.label || item.candidate_id,
         sublabel: `${item.checkpoint_type} | ${item.review_state}`
       }), true, "checkpoint"));
+      tree.appendChild(treeGroup("AI GIS CP", view.gis_perception_timeline?.checkpoint_candidates || [], item => ({
+        label: item.route_note_summary || item.candidate_id,
+        sublabel: `${item.checkpoint_type} | group ${item.nearby_group_id || "-"} | ${item.route_note_freshness || "unknown"}`
+      }), false, "checkpoint"));
+      tree.appendChild(treeGroup("GIS CP Areas", view.gis_perception_timeline?.nearby_groups || [], item => ({
+        label: item.nearby_group_id,
+        sublabel: `${item.member_count} CP | ${item.semantic_keys?.join(", ") || "mixed"}`
+      }), false, "checkpoint"));
       tree.appendChild(treeGroup("Segments", view.segments, item => ({
         label: item.label || item.candidate_id,
         sublabel: `${item.from_candidate_id} -> ${item.to_candidate_id} | ${Math.round(item.distance_m)}m`
@@ -3125,6 +3160,8 @@
             ["Target ETA", view.eta.target_eta],
             ["Turn-back ETA", view.eta.turn_back_checkpoint_eta],
             ["Overpass", `${view.overpass_evidence?.counts?.candidates || 0} candidates`],
+            ["AI GIS CP", `${view.gis_perception_timeline?.counts?.checkpoint_candidate_count || 0} review`],
+            ["GIS CP Areas", `${view.gis_perception_timeline?.counts?.nearby_group_count || 0} groups`],
             ["Reference GPX", `${view.reference_tracks?.reference_track_count || 0} tracks`],
             ["Weather", view.weather.status],
             ["Raw samples", "summary only"]

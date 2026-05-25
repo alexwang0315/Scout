@@ -3,12 +3,17 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
+import urllib.parse
+import urllib.request
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
 
 from admin_basemap_tiles import build_osm_basemap_contract, normalize_bbox_wgs84
+from pretrip_models import RouteBBox
+from pretrip_overpass_ingest import import_overpass_evidence_candidates
 
 
 LAYER_PREPARATION_VERSION = "0.1.0"
@@ -84,6 +89,7 @@ class LayerPreparationRequest:
 
 
 def run_layer_preparation(request: LayerPreparationRequest) -> dict[str, Any]:
+    _maybe_fetch_overpass_evidence(request)
     manifest, project_root, project = _build_layer_preparation_manifest(
         request,
         workspace_file_mutation_allowed=True,
@@ -102,6 +108,7 @@ def run_layer_preparation(request: LayerPreparationRequest) -> dict[str, Any]:
     _write_json(project_root / outputs["layer_validation_report_ref"], manifest["validation"])
     _write_json(project_root / outputs["layer_map_projection_ref"], map_projection)
     _write_jsonl(project_root / outputs["layer_debug_projection_events_ref"], debug_events)
+    _write_layer_plan_files(project_root, manifest)
     _update_project_refs(project_root / "project.json", project, outputs, manifest["finished_at"])
     return manifest
 
@@ -119,6 +126,99 @@ def build_layer_preparation_preview(request: LayerPreparationRequest) -> dict[st
     }
 
 
+def _maybe_fetch_overpass_evidence(request: LayerPreparationRequest) -> None:
+    normalized_layers = _normalize_layer_ids(request.layers)
+    if "overpass" not in normalized_layers:
+        return
+    if request.network_mode != "explicit-fetch" or not request.allow_network_fetch:
+        return
+    project_root = _resolve_project_root(request)
+    _reject_fixture_fetch(project_root)
+    project_path = project_root / "project.json"
+    project = _load_json(project_path)
+    if project.get("overpass_evidence_ref"):
+        return
+    route_summary = _load_project_ref(
+        project_root,
+        project,
+        "route_summary_ref",
+        required=True,
+    )
+    route_bbox = normalize_bbox_wgs84(request.bbox or route_summary["bbox_wgs84"])
+    query_bbox = _expand_bbox_by_meters(route_bbox, request.route_corridor_m)
+    route_corridor = _route_corridor_record(
+        project=project,
+        route_summary=route_summary,
+        route_bbox=route_bbox,
+        query_bbox=query_bbox,
+        request=request,
+    )
+    planned_request = _planned_overpass_request(
+        bbox=query_bbox,
+        request=request,
+        route_corridor=route_corridor,
+    )
+    raw_bytes, http_status = _fetch_overpass_raw_payload(planned_request)
+    raw_payload = json.loads(raw_bytes.decode("utf-8"))
+    raw_ref = planned_request["raw_payload_target_ref"]
+    normalized_ref = planned_request["normalized_artifact_target_ref"]
+    evidence_ref = "candidates/overpass_evidence.json"
+    _write_bytes(project_root / raw_ref, raw_bytes)
+    result = import_overpass_evidence_candidates(
+        raw_payload,
+        query_body=planned_request["query_body"],
+        bbox_wgs84=RouteBBox(
+            min_lat=query_bbox["south"],
+            min_lon=query_bbox["west"],
+            max_lat=query_bbox["north"],
+            max_lon=query_bbox["east"],
+        ),
+        route_corridor=route_corridor,
+        request_timestamp=request.prepared_at or _utc_now(),
+        endpoint=planned_request["endpoint"],
+        http_status=http_status,
+        raw_payload_uri=raw_ref,
+        raw_response_sha256=hashlib.sha256(raw_bytes).hexdigest(),
+        normalized_artifact_path=normalized_ref,
+        source_ref=raw_ref,
+    )
+    _write_json(project_root / normalized_ref, result.normalized_geojson)
+    overpass_evidence = {
+        "source_artifact": result.source_artifact.model_dump(mode="json"),
+        "request": result.request.model_dump(mode="json"),
+        "object_evidence": [
+            item.model_dump(mode="json") for item in result.object_evidence
+        ],
+        "skipped_objects": [
+            item.model_dump(mode="json") for item in result.skipped_objects
+        ],
+        "candidates": [item.model_dump(mode="json") for item in result.candidates],
+        "counts": result.counts,
+        "normalized_geojson_ref": normalized_ref,
+        "boundary": {
+            "candidate_only": True,
+            "runtime_truth": False,
+            "runtime_safety_truth": False,
+            "live_network_required": True,
+            "network_mode": request.network_mode,
+            "phase1_runtime_mutation_allowed": False,
+            "phase2_brain_writeback_allowed": False,
+        },
+    }
+    _write_json(project_root / evidence_ref, overpass_evidence)
+    updated = {
+        **project,
+        "overpass_evidence_ref": evidence_ref,
+        "overpass_map_context_ref": normalized_ref,
+        "overpass_raw_payload_ref": raw_ref,
+        "overpass_query_ref": planned_request["query_body_ref"],
+        "overpass_candidate_count": result.counts["candidates"],
+        "overpass_skipped_object_count": result.counts["skipped"],
+        "overpass_fetched_at": request.prepared_at or _utc_now(),
+    }
+    _write_json(project_path, updated)
+
+
 def _build_layer_preparation_manifest(
     request: LayerPreparationRequest,
     *,
@@ -134,19 +234,27 @@ def _build_layer_preparation_manifest(
         "route_summary_ref",
         required=True,
     )
-    route_bbox = request.bbox or route_summary["bbox_wgs84"]
-    bbox = normalize_bbox_wgs84(route_bbox)
+    route_bbox = normalize_bbox_wgs84(request.bbox or route_summary["bbox_wgs84"])
+    bbox = _expand_bbox_by_meters(route_bbox, request.route_corridor_m)
     normalized_layers = _normalize_layer_ids(request.layers)
     prepared_at = request.prepared_at or _utc_now()
     job_id = f"layer_preparation.{request.project_id}.{_job_timestamp(prepared_at)}"
 
     source_refs = _project_source_refs(project_root, project)
+    route_corridor = _route_corridor_record(
+        project=project,
+        route_summary=route_summary,
+        route_bbox=route_bbox,
+        query_bbox=bbox,
+        request=request,
+    )
     layers = [
         _build_layer_record(
             layer_id,
             project_root=project_root,
             project=project,
             bbox=bbox,
+            route_corridor=route_corridor,
             route_summary=route_summary,
             request=request,
             source_refs=source_refs,
@@ -160,11 +268,13 @@ def _build_layer_preparation_manifest(
         workspace_file_mutation_allowed=workspace_file_mutation_allowed,
     )
     counts = _layer_counts(layers, validation)
+    network_calls_made = bool(project.get("overpass_fetched_at"))
     boundary = _boundary(
         request,
         workspace_file_mutation_allowed=workspace_file_mutation_allowed,
+        external_api_calls_made=network_calls_made,
     )
-    network_policy = _network_policy(request)
+    network_policy = _network_policy(request, network_calls_made=network_calls_made)
     stage_statuses = _stage_statuses(layers)
     outputs = dict(OUTPUT_REFS)
 
@@ -179,13 +289,9 @@ def _build_layer_preparation_manifest(
         "normalized_layers": normalized_layers,
         "started_at": prepared_at,
         "finished_at": prepared_at,
+        "route_bbox_wgs84": route_bbox,
         "bbox_wgs84": bbox,
-        "route_corridor": {
-            "route_ref": route_summary.get("artifact_id"),
-            "route_summary_ref": project.get("route_summary_ref"),
-            "corridor_m": request.route_corridor_m,
-            "bbox_boundary": bbox,
-        },
+        "route_corridor": route_corridor,
         "inputs": {
             "project_ref": "project.json",
             "source_refs": source_refs,
@@ -247,6 +353,13 @@ def build_layer_preparation_not_prepared_view(
         required=True,
     )
     bbox = normalize_bbox_wgs84(route_summary["bbox_wgs84"])
+    route_corridor = _route_corridor_record(
+        project=project,
+        route_summary=route_summary,
+        route_bbox=bbox,
+        query_bbox=_expand_bbox_by_meters(bbox, 500.0),
+        request=LayerPreparationRequest(project_id=project_id, project_root=project_root),
+    )
     return {
         "artifact_kind": "pretrip_layer_preparation_summary",
         "schema_version": LAYER_PREPARATION_VERSION,
@@ -255,7 +368,9 @@ def build_layer_preparation_not_prepared_view(
         "source_path": "project.json#layer-preparation-not-prepared",
         "evidence_type": "pretrip_layer_preparation_summary",
         "status": "not_prepared",
-        "bbox_wgs84": bbox,
+        "route_bbox_wgs84": bbox,
+        "bbox_wgs84": route_corridor["query_bbox_wgs84"],
+        "route_corridor": route_corridor,
         "counts": {
             "layer_count": 0,
             "ready_layer_count": 0,
@@ -344,6 +459,7 @@ def _build_layer_record(
     project_root: Path,
     project: dict[str, Any],
     bbox: dict[str, float],
+    route_corridor: dict[str, Any],
     route_summary: dict[str, Any],
     request: LayerPreparationRequest,
     source_refs: dict[str, dict[str, Any]],
@@ -353,6 +469,7 @@ def _build_layer_record(
         "adapter": f"pretrip_layer_preparation.{layer_id}",
         "adapter_version": LAYER_PREPARATION_VERSION,
         "bbox_wgs84": bbox,
+        "route_corridor": route_corridor,
         "route_corridor_m": request.route_corridor_m,
         "network_policy": _network_policy(request),
         "source_refs": [],
@@ -365,16 +482,12 @@ def _build_layer_record(
     if layer_id == "osm":
         return _osm_layer_record(common, bbox, request)
     if layer_id == "overpass":
-        return _project_ref_layer_record(
+        return _overpass_layer_record(
             common,
             project_root=project_root,
             project=project,
-            ref_key="overpass_evidence_ref",
-            status_if_missing="missing_source",
-            counts_from_payload=_overpass_counts,
-            stale_risk="medium",
-            output_refs={"normalized_geojson_ref": project.get("overpass_map_context_ref", "")},
-            missing_warning="Overpass evidence is not available in this workspace.",
+            request=request,
+            route_corridor=route_corridor,
         )
     if layer_id == "terrain":
         return _project_ref_layer_record(
@@ -537,6 +650,47 @@ def _imagery_layer_record(
         "stale_risk": "medium",
     }
     return _with_lifecycle(record)
+
+
+def _overpass_layer_record(
+    common: dict[str, Any],
+    *,
+    project_root: Path,
+    project: dict[str, Any],
+    request: LayerPreparationRequest,
+    route_corridor: dict[str, Any],
+) -> dict[str, Any]:
+    planned_request = _planned_overpass_request(
+        bbox=common["bbox_wgs84"],
+        request=request,
+        route_corridor=route_corridor,
+    )
+    record = _project_ref_layer_record(
+        common,
+        project_root=project_root,
+        project=project,
+        ref_key="overpass_evidence_ref",
+        status_if_missing="missing_source",
+        counts_from_payload=_overpass_counts,
+        stale_risk="medium",
+        output_refs={
+            "normalized_geojson_ref": project.get("overpass_map_context_ref", ""),
+            "planned_query_ref": planned_request["query_body_ref"],
+        },
+        missing_warning="Overpass evidence is not available in this workspace.",
+    )
+    record["planned_request"] = planned_request
+    record["route_corridor"] = route_corridor
+    if project.get("overpass_fetched_at"):
+        record["network_policy"] = _network_policy(request, network_calls_made=True)
+        record["lifecycle"]["fetch"]["status"] = "completed_live_fetch"
+        record["lifecycle"]["fetch"]["external_network_calls_made"] = True
+        record["lifecycle"]["fetch"]["fetched_at"] = project["overpass_fetched_at"]
+    record["lifecycle"]["fetch"]["planned_request_ref"] = planned_request[
+        "query_body_ref"
+    ]
+    record["lifecycle"]["fetch"]["route_corridor_source"] = "golden_route_bbox"
+    return record
 
 
 def _project_ref_layer_record(
@@ -837,6 +991,12 @@ def _validation_report(
                     ),
                 }
             )
+    network_calls_made = any(
+        layer.get("lifecycle", {})
+        .get("fetch", {})
+        .get("external_network_calls_made", False)
+        for layer in layers
+    )
     return {
         "artifact_kind": "pretrip_layer_validation_report",
         "schema_version": LAYER_PREPARATION_VERSION,
@@ -847,10 +1007,11 @@ def _validation_report(
         "blocker_count": len(blockers),
         "warnings": warnings,
         "blockers": blockers,
-        "network_policy": _network_policy(request),
+        "network_policy": _network_policy(request, network_calls_made=network_calls_made),
         "boundary": _boundary(
             request,
             workspace_file_mutation_allowed=workspace_file_mutation_allowed,
+            external_api_calls_made=network_calls_made,
         ),
     }
 
@@ -881,7 +1042,14 @@ def _stage_statuses(layers: list[dict[str, Any]]) -> dict[str, Any]:
                 1
                 for layer in layers
                 if layer["lifecycle"][stage]["status"]
-                in {"completed", "passed", "planned", "read_local_project_ref", "not_required_local_proxy"}
+                in {
+                    "completed",
+                    "completed_live_fetch",
+                    "passed",
+                    "planned",
+                    "read_local_project_ref",
+                    "not_required_local_proxy",
+                }
             ),
             "blocked_count": sum(
                 1
@@ -989,12 +1157,148 @@ def _generic_project_counts(layer_id: str, payload: Any) -> dict[str, Any]:
     return payload.get("counts") or {f"{layer_id.replace('-', '_')}_count": 1}
 
 
-def _network_policy(request: LayerPreparationRequest) -> dict[str, Any]:
+def _route_corridor_record(
+    *,
+    project: dict[str, Any],
+    route_summary: dict[str, Any],
+    route_bbox: dict[str, float],
+    query_bbox: dict[str, float],
+    request: LayerPreparationRequest,
+) -> dict[str, Any]:
+    route_geometry_refs = {
+        key: project[key]
+        for key in (
+            "segment_display_geometry_ref",
+            "map_context_ref",
+            "reference_track_display_geometry_ref",
+        )
+        if project.get(key)
+    }
     return {
+        "route_ref": route_summary.get("artifact_id"),
+        "route_summary_ref": project.get("route_summary_ref"),
+        "route_geometry_refs": route_geometry_refs,
+        "corridor_m": request.route_corridor_m,
+        "route_bbox_wgs84": route_bbox,
+        "query_bbox_wgs84": query_bbox,
+        "bbox_boundary": query_bbox,
+        "basis": "selected_golden_route_reference",
+        "notes": (
+            "Overpass evidence（OSM 向量證據）is planned from the selected "
+            "golden route corridor/bbox and remains candidate-only."
+        ),
+    }
+
+
+def _planned_overpass_request(
+    *,
+    bbox: dict[str, float],
+    request: LayerPreparationRequest,
+    route_corridor: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "source": "route_corridor_bbox",
+        "query_body_ref": "outputs/layers/plans/overpass_query.ql",
+        "query_body": _build_overpass_query_body(bbox),
+        "bbox_wgs84": bbox,
+        "route_corridor": route_corridor,
+        "endpoint": "https://overpass-api.de/api/interpreter",
         "network_mode": request.network_mode,
         "allow_network_fetch": request.allow_network_fetch,
         "network_calls_made": False,
-        "external_api_calls_made": False,
+        "live_fetch_stage": "fetch",
+        "raw_payload_target_ref": "normalized/map/overpass_phase_a_raw.json",
+        "normalized_artifact_target_ref": "normalized/map/overpass_vector_evidence.geojson",
+    }
+
+
+def _build_overpass_query_body(bbox: dict[str, float]) -> str:
+    south = bbox["south"]
+    west = bbox["west"]
+    north = bbox["north"]
+    east = bbox["east"]
+    bbox_expr = f"({south:.7f},{west:.7f},{north:.7f},{east:.7f})"
+    return "\n".join(
+        [
+            "[out:json][timeout:40];",
+            "(",
+            f'  way["highway"~"^(path|footway|track|steps|bridleway|pedestrian)$"]{bbox_expr};',
+            f'  relation["type"="route"]["route"="hiking"]{bbox_expr};',
+            f'  relation["route"="hiking"]{bbox_expr};',
+            f'  node["tourism"~"^(wilderness_hut|alpine_hut)$"]{bbox_expr};',
+            f'  node["amenity"~"^(shelter|drinking_water|parking)$"]{bbox_expr};',
+            f'  node["natural"~"^(spring|peak)$"]{bbox_expr};',
+            f'  way["natural"~"^(cliff|scree|bare_rock)$"]{bbox_expr};',
+            f'  way["geological"="landslide"]{bbox_expr};',
+            ");",
+            "out tags geom;",
+            "",
+        ]
+    )
+
+
+def _expand_bbox_by_meters(
+    bbox: dict[str, float],
+    corridor_m: float,
+) -> dict[str, float]:
+    mid_lat = (bbox["south"] + bbox["north"]) / 2.0
+    lat_delta = corridor_m / 111_320.0
+    lon_scale = max(math.cos(math.radians(mid_lat)), 0.01)
+    lon_delta = corridor_m / (111_320.0 * lon_scale)
+    return normalize_bbox_wgs84(
+        {
+            "south": max(-90.0, bbox["south"] - lat_delta),
+            "west": max(-180.0, bbox["west"] - lon_delta),
+            "north": min(90.0, bbox["north"] + lat_delta),
+            "east": min(180.0, bbox["east"] + lon_delta),
+        }
+    )
+
+
+def _write_layer_plan_files(project_root: Path, manifest: dict[str, Any]) -> None:
+    for layer in manifest.get("layers", []):
+        planned_request = layer.get("planned_request")
+        if not planned_request or layer.get("layer_id") != "overpass":
+            continue
+        _write_text(
+            project_root / planned_request["query_body_ref"],
+            planned_request["query_body"],
+        )
+
+
+def _fetch_overpass_raw_payload(planned_request: dict[str, Any]) -> tuple[bytes, int]:
+    encoded = urllib.parse.urlencode({"data": planned_request["query_body"]}).encode(
+        "utf-8"
+    )
+    request = urllib.request.Request(
+        planned_request["endpoint"],
+        data=encoded,
+        headers={
+            "Content-Type": "application/x-www-form-urlencoded; charset=utf-8",
+            "User-Agent": "Scout-Fusion-Pretrip-Alpha/0.1",
+        },
+        method="POST",
+    )
+    with urllib.request.urlopen(request, timeout=120) as response:
+        return response.read(), int(response.status)
+
+
+def _reject_fixture_fetch(project_root: Path) -> None:
+    normalized = project_root.resolve().as_posix()
+    if "/tests/fixtures/" in normalized:
+        raise ValueError("explicit Overpass fetch cannot write repo fixtures")
+
+
+def _network_policy(
+    request: LayerPreparationRequest,
+    *,
+    network_calls_made: bool = False,
+) -> dict[str, Any]:
+    return {
+        "network_mode": request.network_mode,
+        "allow_network_fetch": request.allow_network_fetch,
+        "network_calls_made": network_calls_made,
+        "external_api_calls_made": network_calls_made,
         "live_fetch_stage": "fetch",
         "explicit_fetch_requires_allow_network_fetch": True,
         "public_osm_bulk_tile_download_allowed": False,
@@ -1005,6 +1309,7 @@ def _boundary(
     request: LayerPreparationRequest,
     *,
     workspace_file_mutation_allowed: bool,
+    external_api_calls_made: bool = False,
 ) -> dict[str, Any]:
     return {
         "pretrip_candidate_evidence_only": True,
@@ -1027,7 +1332,7 @@ def _boundary(
             request.network_mode == "explicit-fetch"
             and request.allow_network_fetch
         ),
-        "external_api_calls_made": False,
+        "external_api_calls_made": external_api_calls_made,
     }
 
 
@@ -1114,6 +1419,16 @@ def _write_jsonl(path: Path, events: list[dict[str, Any]]) -> None:
         "".join(json.dumps(event, ensure_ascii=False, sort_keys=True) + "\n" for event in events),
         encoding="utf-8",
     )
+
+
+def _write_text(path: Path, payload: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(payload, encoding="utf-8")
+
+
+def _write_bytes(path: Path, payload: bytes) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(payload)
 
 
 def _sha256_file(path: Path) -> str:

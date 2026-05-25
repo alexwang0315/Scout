@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+import pretrip_layer_preparation
 from pretrip_layer_preparation import (
     LayerPreparationRequest,
     build_layer_preparation_preview,
@@ -44,6 +45,48 @@ def test_layer_preparation_preview_is_metadata_only_and_no_write(tmp_path: Path)
     assert "<trkpt" not in json.dumps(preview, ensure_ascii=False).lower()
 
 
+def test_layer_preparation_overpass_plan_uses_route_corridor_bbox(
+    tmp_path: Path,
+) -> None:
+    project_root = _copy_fixture_project(tmp_path)
+    route_summary = _load(project_root / "normalized" / "routes" / "route_summary.json")
+
+    preview = build_layer_preparation_preview(
+        LayerPreparationRequest(
+            project_id="chilai_nanhua_day1",
+            project_root=project_root,
+            layers=("overpass",),
+            route_corridor_m=1_000.0,
+            prepared_at="2026-05-22T00:00:00+00:00",
+        )
+    )
+    overpass_layer = preview["layers"][0]
+    route_bbox = preview["route_bbox_wgs84"]
+    query_bbox = preview["bbox_wgs84"]
+
+    assert route_bbox == {
+        "south": route_summary["bbox_wgs84"]["min_lat"],
+        "west": route_summary["bbox_wgs84"]["min_lon"],
+        "north": route_summary["bbox_wgs84"]["max_lat"],
+        "east": route_summary["bbox_wgs84"]["max_lon"],
+    }
+    assert query_bbox["south"] < route_bbox["south"]
+    assert query_bbox["west"] < route_bbox["west"]
+    assert query_bbox["north"] > route_bbox["north"]
+    assert query_bbox["east"] > route_bbox["east"]
+    assert preview["route_corridor"]["route_ref"] == route_summary["artifact_id"]
+    assert preview["route_corridor"]["corridor_m"] == 1_000.0
+    assert preview["route_corridor"]["route_geometry_refs"][
+        "segment_display_geometry_ref"
+    ] == "outputs/segment_display_geometry.json"
+    assert overpass_layer["route_corridor"] == preview["route_corridor"]
+    assert overpass_layer["planned_request"]["source"] == "route_corridor_bbox"
+    assert overpass_layer["planned_request"]["network_calls_made"] is False
+    assert "way[\"highway\"" in overpass_layer["planned_request"]["query_body"]
+    assert str(round(query_bbox["south"], 7)) in overpass_layer["planned_request"]["query_body"]
+    assert "<trkpt" not in json.dumps(preview, ensure_ascii=False).lower()
+
+
 def test_layer_preparation_run_writes_workspace_outputs_and_project_refs(
     tmp_path: Path,
 ) -> None:
@@ -78,6 +121,71 @@ def test_layer_preparation_run_writes_workspace_outputs_and_project_refs(
     assert "<trkpt" not in (project_root / project["layer_preparation_manifest_ref"]).read_text(
         encoding="utf-8"
     ).lower()
+
+
+def test_layer_preparation_explicit_fetch_normalizes_overpass_with_fixture_fetcher(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_root = _copy_fixture_project(tmp_path)
+    project_path = project_root / "project.json"
+    project = _load(project_path)
+    for key in (
+        "overpass_evidence_ref",
+        "overpass_map_context_ref",
+        "overpass_raw_payload_ref",
+        "overpass_candidate_count",
+        "overpass_skipped_object_count",
+    ):
+        project.pop(key, None)
+    project_path.write_text(
+        json.dumps(project, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    raw_fixture = ROOT / "tests" / "fixtures" / "maps" / "phase_a_overpass_raw.json"
+    captured: dict[str, str] = {}
+
+    def fixture_fetcher(planned_request: dict) -> tuple[bytes, int]:
+        captured["query_body"] = planned_request["query_body"]
+        captured["endpoint"] = planned_request["endpoint"]
+        return raw_fixture.read_bytes(), 200
+
+    monkeypatch.setattr(
+        pretrip_layer_preparation,
+        "_fetch_overpass_raw_payload",
+        fixture_fetcher,
+    )
+
+    manifest = run_layer_preparation(
+        LayerPreparationRequest(
+            project_id="chilai_nanhua_day1",
+            project_root=project_root,
+            layers=("overpass",),
+            network_mode="explicit-fetch",
+            allow_network_fetch=True,
+            route_corridor_m=1_000.0,
+            prepared_at="2026-05-22T00:00:00+00:00",
+        )
+    )
+    updated_project = _load(project_path)
+    overpass = manifest["layers"][0]
+    evidence = _load(project_root / updated_project["overpass_evidence_ref"])
+
+    assert captured["endpoint"] == "https://overpass-api.de/api/interpreter"
+    assert "way[\"highway\"" in captured["query_body"]
+    assert overpass["status"] == "ready_from_project_ref"
+    assert overpass["lifecycle"]["fetch"]["status"] == "completed_live_fetch"
+    assert overpass["lifecycle"]["fetch"]["external_network_calls_made"] is True
+    assert manifest["network_policy"]["network_calls_made"] is True
+    assert manifest["boundary"]["external_api_calls_made"] is True
+    assert evidence["counts"]["candidates"] == 8
+    assert evidence["request"]["route_corridor"]["route_ref"] == (
+        "artifact.gpx.chilai_nanhua_day1"
+    )
+    assert (project_root / updated_project["overpass_raw_payload_ref"]).is_file()
+    assert (project_root / updated_project["overpass_map_context_ref"]).is_file()
+    assert (project_root / "outputs" / "layers" / "plans" / "overpass_query.ql").is_file()
+    assert "<trkpt" not in json.dumps(evidence, ensure_ascii=False).lower()
 
 
 def test_layer_preparation_blocks_explicit_fetch_without_network_flag(

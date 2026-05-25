@@ -25,15 +25,15 @@
       "contour_interpretation": 2,
       "departure_bundle": 1,
       "plan_validation": 6,
-      "route_note": 21,
+      "route_note": 23,
       "runtime_handoff": 1,
       "segment_policy": 10,
       "weather_daylight": 1
     },
-    "item_count": 42,
-    "review_count": 33,
+    "item_count": 44,
+    "review_count": 34,
     "source_ref_count": 8,
-    "warning_count": 9
+    "warning_count": 10
   },
   "items": [
     {
@@ -572,6 +572,36 @@
     {
       "accept_reject_allowed": false,
       "candidate_only": true,
+      "candidate_ref": "route_note.rudy_like_gpx.wpt_037",
+      "category": "route_note",
+      "decision_recorded": false,
+      "evidence_summary": {
+        "lat": 24.055962022,
+        "lon": 121.244867994,
+        "note_category": "hazard_hint",
+        "potential_ln_signal": true,
+        "requires_human_review": true,
+        "scout_interpretation": "ModelInterpretation",
+        "source_waypoint_index": 37
+      },
+      "human_review_required": true,
+      "item_id": "review_queue.chilai_nanhua_day1.route_note.route_note.rudy_like_gpx.wpt_037",
+      "mutation_allowed": false,
+      "review_focus": [
+        "route_note_interpretation",
+        "ln_warning_candidate",
+        "accept_ignore_or_field_verify"
+      ],
+      "severity": "warning",
+      "source_artifact_kind": "pretrip_route_note_candidates",
+      "source_ref": "candidates/route_note_candidates.json",
+      "source_ref_key": "route_note_candidates_ref",
+      "summary": "崩壁上方，展望點",
+      "title": "Route note Ln proposal review: hazard_hint"
+    },
+    {
+      "accept_reject_allowed": false,
+      "candidate_only": true,
       "candidate_ref": "route_note.rudy_like_gpx.wpt_040",
       "category": "route_note",
       "decision_recorded": false,
@@ -867,6 +897,36 @@
       "source_ref": "candidates/route_note_candidates.json",
       "source_ref_key": "route_note_candidates_ref",
       "summary": "路徑清楚1",
+      "title": "Route note Ln proposal review: route_condition_hint"
+    },
+    {
+      "accept_reject_allowed": false,
+      "candidate_only": true,
+      "candidate_ref": "route_note.rudy_like_gpx.wpt_077",
+      "category": "route_note",
+      "decision_recorded": false,
+      "evidence_summary": {
+        "lat": 24.056900963,
+        "lon": 121.238567987,
+        "note_category": "route_condition_hint",
+        "potential_ln_signal": true,
+        "requires_human_review": true,
+        "scout_interpretation": "ModelInterpretation",
+        "source_waypoint_index": 77
+      },
+      "human_review_required": true,
+      "item_id": "review_queue.chilai_nanhua_day1.route_note.route_note.rudy_like_gpx.wpt_077",
+      "mutation_allowed": false,
+      "review_focus": [
+        "route_note_interpretation",
+        "ln_warning_candidate",
+        "accept_ignore_or_field_verify"
+      ],
+      "severity": "review",
+      "source_artifact_kind": "pretrip_route_note_candidates",
+      "source_ref": "candidates/route_note_candidates.json",
+      "source_ref_key": "route_note_candidates_ref",
+      "summary": "路跡清楚",
       "title": "Route note Ln proposal review: route_condition_hint"
     },
     {

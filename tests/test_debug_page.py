@@ -7,6 +7,7 @@ PAGE_PATH = Path("docs/admin/phase-3-5-runtime-debug.html")
 ASSISTANT_UI_SCRIPT = Path("docs/admin/scout-assistant-ui.js")
 MUTATION_METHODS = {"POST", "PATCH", "PUT", "DELETE"}
 ALLOWED_DEBUG_ENDPOINTS = {
+    "/admin/hardware-readiness/context",
     "/assistant/status",
     "/debug/events",
     "/debug/messages",
@@ -25,6 +26,7 @@ class DebugPageTests(unittest.TestCase):
         self.assertIn("Mock only", html)
         self.assertIn("Current L0-L4 State", html)
         self.assertIn("Provider Degraded Status", html)
+        self.assertIn("Hardware Readiness", html)
         self.assertIn("Ln And Skill Runs", html)
         self.assertIn("Outbound Queue", html)
         self.assertIn("Incident And Bridge Status", html)
@@ -43,6 +45,7 @@ class DebugPageTests(unittest.TestCase):
         self.assertIn("bindDebugTabs", html)
         self.assertIn('id="panel-state"', html)
         self.assertIn('id="panel-provider"', html)
+        self.assertIn('id="panel-hardware"', html)
         self.assertIn('id="panel-incident"', html)
         self.assertIn('id="panel-skill"', html)
         self.assertIn('id="panel-outbound"', html)
@@ -104,6 +107,43 @@ class DebugPageTests(unittest.TestCase):
         self.assertIn("renderDebugEvidenceMap", html)
         self.assertIn("reference-track", html)
         self.assertIn("overpass-corridor", html)
+        self.assertIn('aria-label="Map view controls"', html)
+        self.assertIn('id="zoomIn"', html)
+        self.assertIn('id="zoomOut"', html)
+        self.assertIn('id="fitRoute"', html)
+        self.assertIn('id="panUp"', html)
+        self.assertIn('id="panDown"', html)
+        self.assertIn('id="panLeft"', html)
+        self.assertIn('id="panRight"', html)
+        self.assertIn('id="layerControl" title="Show layer controls" aria-label="Layer controls"', html)
+        self.assertIn('id="layerEnabledCount"', html)
+        self.assertIn("grid-template-columns: repeat(3, minmax(0, 1fr))", html)
+        self.assertIn("grid-template-columns: repeat(3, 24px)", html)
+        self.assertIn("grid-template-rows: repeat(3, 24px)", html)
+        self.assertIn("grid-template-rows: auto minmax(0, 1fr) auto auto", html)
+        self.assertIn("function mapViewBox", html)
+        self.assertIn("function updateLayers", html)
+        self.assertIn("function panMap", html)
+        self.assertIn("function zoomMap", html)
+        self.assertIn("function resetMapView", html)
+        self.assertIn("OSM_TILE_URL_TEMPLATE", html)
+        self.assertIn("OSM_PUBLIC_TILE_URL_TEMPLATE", html)
+        self.assertIn("OSM_LOCAL_TILE_URL_TEMPLATE", html)
+        self.assertIn("https://tile.openstreetmap.org/{z}/{x}/{y}.png", html)
+        self.assertIn("/admin/tiles/osm/{z}/{x}/{y}.png", html)
+        self.assertIn("const OSM_TARGET_ZOOM = 17", html)
+        self.assertIn("const OSM_MAX_TILES = 64", html)
+        self.assertIn("function osmTileTemplate", html)
+        self.assertIn('params.get("tileSource")', html)
+        self.assertIn(
+            'return requested === "local" ? OSM_LOCAL_TILE_URL_TEMPLATE : OSM_TILE_URL_TEMPLATE',
+            html,
+        )
+        self.assertIn("const pad = MAP_VISUAL_PADDING / debugPageState.zoom", html)
+        self.assertLess(
+            html.index('data-layer-group": "imagery"'),
+            html.index('data-layer-group": "osm"'),
+        )
 
     def test_static_debug_page_makes_timeline_body_touchpad_scrollable(self):
         html = PAGE_PATH.read_text(encoding="utf-8")
@@ -156,16 +196,48 @@ class DebugPageTests(unittest.TestCase):
         self.assertIn("timelineWindowForEvent", html)
         self.assertIn("renderSelectedDetails", html)
         self.assertIn("renderProviderDetails", html)
+        self.assertIn("renderHardwareReadiness", html)
         self.assertIn("renderIncidentDetails", html)
         self.assertIn("renderSkillDetails", html)
         self.assertIn("renderMessageDetails", html)
         self.assertIn('id="providerSelectionContext"', html)
+        self.assertIn('id="hardwareSelectionContext"', html)
         self.assertIn('id="incidentSelectionContext"', html)
         self.assertIn('id="skillSelectionContext"', html)
         self.assertIn('id="messageSelectionContext"', html)
         self.assertIn('id="boundarySelectionContext"', html)
         self.assertIn("No incident or bridge events reached at this timeline node.", html)
         self.assertIn("No outbound mock messages reached at this timeline node.", html)
+
+    def test_static_debug_page_reads_hardware_readiness_context_for_hardware_tab(self):
+        html = PAGE_PATH.read_text(encoding="utf-8")
+
+        self.assertIn('id="tab-hardware"', html)
+        self.assertIn('id="panel-hardware"', html)
+        self.assertIn('const HARDWARE_READINESS_CONTEXT_PATH = "/admin/hardware-readiness/context"', html)
+        self.assertIn("loadHardwareReadinessContext", html)
+        self.assertIn("debugPageState.hardwareReadiness", html)
+        self.assertIn('id="hardwareProviderCount"', html)
+        self.assertIn('id="hardwareInterfaceCount"', html)
+        self.assertIn('id="hardwareDegradedCount"', html)
+        self.assertIn('id="hardwareDebugEventCount"', html)
+        self.assertIn('id="hardwareMockQueueCount"', html)
+        self.assertIn('id="hardwareInterfaceList"', html)
+        self.assertIn('id="hardwareProviderList"', html)
+        self.assertIn('id="hardwareBoundaryList"', html)
+        self.assertIn("hardwareInterfaceItem", html)
+        self.assertIn("Object.entries(interfaceItem.details || {}).slice(0, 5)", html)
+        self.assertIn("device=${text(device.id || device.label || \"usb\")}", html)
+        self.assertIn("rw_lines=${writable.length}", html)
+        self.assertIn("advanced=${advanced.map", html)
+        self.assertIn("gpioset_enabled=${boundary.gpioset_command_enabled", html)
+        self.assertIn("wiring_confirmed=${boundary.wiring_manifest_confirmed", html)
+        self.assertIn("drive_gate=wiring_manifest_required", html)
+        self.assertIn("GPIO 腳位狀態", html)
+        self.assertIn("GPIO/I2C/I2S/TTS/Bluetooth/UART/power/GNSS/IMU/USB/SSD inventory", html)
+        self.assertIn("debug 頁不應該直接拉 GPIO high/low 或控制硬體", html)
+        self.assertIn("read_only: true", html)
+        self.assertIn("provider_control_allowed: false", html)
 
     def test_static_debug_page_renders_l_state_badge_on_timeline_nodes(self):
         html = PAGE_PATH.read_text(encoding="utf-8")
@@ -252,11 +324,16 @@ class DebugPageTests(unittest.TestCase):
 
         self.assertIn('id="assistantAskButton"', html)
         self.assertIn('id="assistantQuestionInput"', html)
-        for tag in ("form", "input", "select"):
+        for tag in ("form", "select"):
             self.assertIsNone(
                 re.search(rf"<\s*{tag}\b", html, flags=re.IGNORECASE),
                 msg=f"Static debug page must not render <{tag}> controls.",
             )
+        layer_inputs = re.findall(r"<\s*input\b[^>]*>", html, flags=re.IGNORECASE)
+        self.assertTrue(layer_inputs)
+        for layer_input in layer_inputs:
+            self.assertIn('type="checkbox"', layer_input)
+            self.assertIn("data-layer=", layer_input)
 
 
 if __name__ == "__main__":

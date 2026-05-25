@@ -54,6 +54,9 @@ def test_pretrip_admin_page_contains_expected_layout_contract():
     assert 'id="importGpxPanel"' in html
     assert "segment-overlay" in html
     assert "reference-track" in html
+    assert "gis-perception-cp" in html
+    assert "gis-nearby-group" in html
+    assert "is-stale" in html
     assert "map-highlight" in html
     assert "mapTargetsFor" in html
     assert "map_target_ids" in html
@@ -63,6 +66,11 @@ def test_pretrip_admin_page_contains_expected_layout_contract():
     assert "data-tree-category" in html
     assert "data-tree-status" in html
     assert ".route-note" in html
+    assert "AI GIS CP" in html
+    assert "GIS CP Areas" in html
+    assert "nearby_group_id" in html
+    assert "route_note_freshness" in html
+    assert "view.gis_perception_timeline?.checkpoint_candidates" in html
 
 
 def test_pretrip_admin_page_has_top_level_readiness_strip_boundary_contract():
@@ -731,8 +739,8 @@ def test_pretrip_admin_view_exposes_fixture_fields_used_by_readiness_strip():
 
     assert view["readiness"]["status"] == "ready"
     assert view["review_queue"]["counts"]["blocker_count"] == 0
-    assert view["review_queue"]["counts"]["warning_count"] == 9
-    assert view["review_queue"]["counts"]["review_count"] == 33
+    assert view["review_queue"]["counts"]["warning_count"] == 10
+    assert view["review_queue"]["counts"]["review_count"] == 43
     assert view["departure_bundle"]["package"]["status"] == "reviewed"
     assert view["departure_bundle"]["boundary"]["human_review_required_before_departure"] is True
     assert view["departure_bundle"]["boundary"]["not_departure_approval"] is True

@@ -182,7 +182,7 @@ def test_pretrip_project_api_returns_read_only_view_model():
     assert payload["review_draft_log"]["counts"]["action_count"] == 3
     assert payload["review_draft_log"]["boundary"]["decisions_recorded"] is False
     assert payload["review_draft_log"]["boundary"]["package_mutation_allowed"] is False
-    assert payload["route_note_review_options"]["counts"]["review_option_count"] == 21
+    assert payload["route_note_review_options"]["counts"]["review_option_count"] == 23
     assert (
         payload["route_note_review_options"]["counts"]["decision_recorded_count"]
         == 0
@@ -1539,6 +1539,88 @@ def test_pretrip_review_decision_apply_plan_api_regenerates_tmp_workspace_only(t
         UNDECIDED_CONTOUR_TARGET_IDS
     )
     assert repo_fixture_payload["counts"]["decision_count"] == 3
+    assert REPO_REVIEW_DECISION_APPLY_PLAN.read_bytes() == original_apply_plan
+
+
+def test_pretrip_review_decision_api_persists_gis_cp_workspace_pointer(tmp_path):
+    original_review_log = REPO_REVIEW_DECISION_LOG.read_bytes()
+    original_apply_plan = REPO_REVIEW_DECISION_APPLY_PLAN.read_bytes()
+    workspace_root = tmp_path / "pretrip_workspace"
+    workspace_project_root = workspace_root / PROJECT_ID
+    workspace_review_log = (
+        workspace_project_root / "reviews" / "review_decision_log.json"
+    )
+    workspace_apply_plan = (
+        workspace_project_root / "outputs" / "review_decision_apply_plan.json"
+    )
+    client = TestClient(create_admin_app(pretrip_workspace_root=workspace_root))
+
+    workspace_response = client.post(f"/admin/pretrip/projects/{PROJECT_ID}/workspace")
+    project_response = client.get(f"/admin/pretrip/projects/{PROJECT_ID}")
+    project_payload = project_response.json()
+    gis_item = next(
+        item
+        for item in project_payload["review_queue"]["items"]
+        if item["category"] == "gis_perception_cp"
+    )
+    review_response = client.post(
+        f"/admin/pretrip/projects/{PROJECT_ID}/review-decisions",
+        json=_accepted_review_payload(
+            candidate_ref=gis_item["candidate_ref"],
+            summary="Accepted GIS CP as candidate-only workspace planning evidence.",
+            persist_to_workspace=True,
+        ),
+    )
+    apply_plan_response = client.post(
+        f"/admin/pretrip/projects/{PROJECT_ID}/review-decision-apply-plan"
+    )
+
+    assert workspace_response.status_code == 200
+    assert project_response.status_code == 200
+    assert review_response.status_code == 200
+    assert apply_plan_response.status_code == 200
+
+    review_payload = review_response.json()
+    apply_plan_payload = apply_plan_response.json()
+    assert review_payload["record"]["candidate_ref"] == gis_item["candidate_ref"]
+    assert review_payload["record"]["target_ids"] == gis_item["review_focus"]
+    assert review_payload["record"]["source_review_queue_item_refs"] == [
+        {
+            "review_queue_manifest_id": "review_queue.chilai_nanhua_day1.v0",
+            "item_id": gis_item["item_id"],
+            "source_ref": gis_item["source_ref"],
+            "candidate_ref": gis_item["candidate_ref"],
+        }
+    ]
+    assert review_payload["boundary"]["package_mutation_allowed"] is False
+    assert review_payload["boundary"]["runtime_mutation_allowed"] is False
+    assert review_payload["boundary"]["phase1_runtime_mutation_allowed"] is False
+    assert review_payload["boundary"]["phase2_writeback_allowed"] is False
+    assert apply_plan_payload["counts"]["decision_count"] == 4
+    assert apply_plan_payload["counts"]["accepted"] == 2
+    assert apply_plan_payload["counts"]["package_candidate_apply_count"] == 0
+    assert apply_plan_payload["counts"]["runtime_mutation_count"] == 0
+
+    workspace_review_payload = json.loads(
+        workspace_review_log.read_text(encoding="utf-8")
+    )
+    workspace_apply_payload = json.loads(
+        workspace_apply_plan.read_text(encoding="utf-8")
+    )
+    gis_decision = workspace_apply_payload["decisions"][-1]
+    assert workspace_review_payload["decisions"][-1]["candidate_ref"] == (
+        gis_item["candidate_ref"]
+    )
+    assert gis_decision["candidate_ref"] == gis_item["candidate_ref"]
+    assert gis_decision["target_ids"] == gis_item["review_focus"]
+    assert gis_decision["source_refs"] == [gis_item["source_ref"]]
+    assert gis_decision["candidate_application_scope"] == "gis_perception_cp"
+    assert gis_decision["candidate_only_review"] is True
+    assert gis_decision["runtime_safety_truth"] is False
+    assert gis_decision["would_apply_to_package"] is False
+    assert gis_decision["package_candidate_apply_count"] == 0
+    assert "GIS perception CP decision" in gis_decision["notes"][0]
+    assert REPO_REVIEW_DECISION_LOG.read_bytes() == original_review_log
     assert REPO_REVIEW_DECISION_APPLY_PLAN.read_bytes() == original_apply_plan
 
 

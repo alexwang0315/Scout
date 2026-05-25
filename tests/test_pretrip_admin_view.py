@@ -57,7 +57,7 @@ def test_builds_fixture_backed_pretrip_admin_view():
     assert view["readiness"]["status"] == "ready"
     assert view["eta"]["target_eta"] == "2026-05-03T15:25:35+08:00"
     assert view["route_notes"]["counts"]["note_candidate_count"] == 81
-    assert view["route_notes"]["counts"]["potential_ln_signal_count"] == 21
+    assert view["route_notes"]["counts"]["potential_ln_signal_count"] == 23
     assert view["route_notes"]["boundary"]["requires_human_review_before_ln_upgrade"] is True
     route_note_candidate = view["route_notes"]["candidates"][0]
     assert route_note_candidate["source_id"] == route_note_candidate["candidate_id"]
@@ -65,10 +65,10 @@ def test_builds_fixture_backed_pretrip_admin_view():
         "candidates/route_note_candidates.json"
     )
     assert route_note_candidate["evidence_type"] == "pretrip_route_note_candidate"
-    assert view["route_note_ln_proposals"]["counts"]["proposal_count"] == 21
+    assert view["route_note_ln_proposals"]["counts"]["proposal_count"] == 23
     assert (
         view["route_note_ln_proposals"]["counts"]["warning_coverage_proposal_count"]
-        == 2
+        == 3
     )
     assert (
         view["route_note_ln_proposals"]["boundary"][
@@ -76,14 +76,26 @@ def test_builds_fixture_backed_pretrip_admin_view():
         ]
         is True
     )
-    assert view["route_note_review_options"]["counts"]["review_option_count"] == 21
+    assert view["route_note_review_options"]["counts"]["review_option_count"] == 23
     assert (
         view["route_note_review_options"]["counts"]["decision_recorded_count"]
         == 0
     )
     assert view["route_note_review_options"]["boundary"]["draft_only"] is True
-    assert view["review_queue"]["counts"]["item_count"] == 42
-    assert view["review_queue"]["counts"]["category_counts"]["route_note"] == 21
+    assert view["gis_perception_timeline"]["counts"]["overpass_checkpoint_candidate_count"] == 9
+    assert view["gis_perception_timeline"]["counts"]["checkpoint_candidate_count"] == 9
+    assert all(
+        candidate["source_profile"] == "overpass_osm_tags"
+        for candidate in view["gis_perception_timeline"]["checkpoint_candidates"]
+    )
+    assert any(
+        attribution["source_kind"] == "overpass_candidate"
+        for candidate in view["gis_perception_timeline"]["checkpoint_candidates"]
+        for attribution in candidate["source_attribution"]
+    )
+    assert view["review_queue"]["counts"]["item_count"] == 53
+    assert view["review_queue"]["counts"]["category_counts"]["route_note"] == 23
+    assert view["review_queue"]["counts"]["category_counts"]["gis_perception_cp"] == 9
     assert view["review_draft_log"]["status"] == "draft_only"
     assert view["review_draft_log"]["counts"]["action_count"] == 3
     assert view["review_decision_log"]["counts"]["action_count"] == 3
@@ -311,6 +323,7 @@ def test_tabs_expose_compact_traceable_detail_sections():
         ("layer_preparation", "Layer Preparation"),
         ("weather", "Weather And Daylight"),
         ("overpass_evidence", "Overpass Vector Evidence"),
+        ("gis_perception_timeline", "GIS Perception CP Timeline"),
         ("route_notes", "Route Notes"),
         ("route_note_ln_proposals", "Route Note Ln Proposals"),
         ("reference_tracks", "Reference Tracks"),
@@ -358,7 +371,7 @@ def test_tabs_expose_compact_traceable_detail_sections():
         "hazard_note_count": 2,
         "source_ref_count": 2,
     }
-    assert sections_by_id["review_queue"]["counts"]["item_count"] == 42
+    assert sections_by_id["review_queue"]["counts"]["item_count"] == 53
     assert sections_by_id["review_draft_log"]["counts"]["action_count"] == 3
     assert sections_by_id["review_draft_log"]["summary"]["draft_only"] is True
     assert sections_by_id["review_draft_log"]["summary"]["decisions_recorded"] is False
@@ -429,15 +442,15 @@ def test_tabs_expose_compact_traceable_detail_sections():
     assert sections_by_id["external_import_queue"]["boundary"]["no_network"] is True
     assert sections_by_id["external_import_queue"]["boundary"]["no_crawler"] is True
     assert sections_by_id["route_notes"]["counts"]["note_candidate_count"] == 81
-    assert sections_by_id["route_notes"]["summary"]["hazard_hint_count"] == 2
-    assert sections_by_id["route_notes"]["summary"]["potential_ln_signal_count"] == 21
+    assert sections_by_id["route_notes"]["summary"]["hazard_hint_count"] == 3
+    assert sections_by_id["route_notes"]["summary"]["potential_ln_signal_count"] == 23
     assert sections_by_id["route_notes"]["boundary"]["raw_gpx_embedded"] is False
-    assert sections_by_id["route_note_ln_proposals"]["counts"]["proposal_count"] == 21
+    assert sections_by_id["route_note_ln_proposals"]["counts"]["proposal_count"] == 23
     assert (
         sections_by_id["route_note_ln_proposals"]["summary"][
             "warning_coverage_proposal_count"
         ]
-        == 2
+        == 3
     )
     assert (
         sections_by_id["route_note_ln_proposals"]["boundary"][
@@ -445,7 +458,7 @@ def test_tabs_expose_compact_traceable_detail_sections():
         ]
         is False
     )
-    assert sections_by_id["route_note_review_options"]["counts"]["review_option_count"] == 21
+    assert sections_by_id["route_note_review_options"]["counts"]["review_option_count"] == 23
     assert (
         sections_by_id["route_note_review_options"]["summary"][
             "allowed_admin_dispositions"

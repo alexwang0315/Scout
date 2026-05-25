@@ -64,6 +64,12 @@ def test_decision_apply_plan_records_decisions_without_package_application():
     assert all(decision.package_candidate_matches == [] for decision in plan.decisions)
     assert all(decision.package_candidate_apply_count == 0 for decision in plan.decisions)
     assert all(decision.would_apply_to_package is False for decision in plan.decisions)
+    assert all(
+        decision.candidate_application_scope == "review_queue_pointer"
+        for decision in plan.decisions
+    )
+    assert all(decision.candidate_only_review is True for decision in plan.decisions)
+    assert all(decision.runtime_safety_truth is False for decision in plan.decisions)
 
     accepted = decisions_by_candidate["contour.g11.seg_001_003"]
     assert accepted.decision == "accepted"
@@ -101,7 +107,7 @@ def test_review_decision_apply_plan_boundary_and_no_raw_payloads():
         "notes": [
             "Decision apply plan is a deterministic local planning artifact only.",
             "It records what the append-only review decisions point at without mutating source artifacts, PreTripPackage, runtime state, Phase 2 Brain state, or MissionGraph outputs.",
-            "Current decision candidate refs are contour, segment-policy, and POI-readiness candidates, not direct PreTripPackage candidate ids.",
+            "Decision candidate refs may include fixture queue items, package candidate ids, or dynamic GIS perception CP pointers; all remain candidate-only planning evidence here.",
         ],
     }
 
@@ -192,11 +198,81 @@ def test_builds_apply_plan_from_appended_local_decision_log(tmp_path):
     assert plan.counts.runtime_mutation_count == 0
     assert all(decision.package_candidate_apply_count == 0 for decision in plan.decisions)
     assert all(decision.would_apply_to_package is False for decision in plan.decisions)
+    assert plan.decisions[-1].candidate_application_scope == "review_queue_pointer"
     assert _file_hashes(protected_paths) == before
 
     fixture_payload = json.loads(APPLY_PLAN_PATH.read_text(encoding="utf-8"))
     regenerated_fixture = build_chilai_review_decision_apply_plan(FIXTURE_ROOT)
     assert fixture_payload == regenerated_fixture.model_dump(mode="json")
+
+
+def test_review_decision_apply_plan_classifies_gis_perception_cp_pointer(tmp_path):
+    tmp_log_path = tmp_path / "review_decision_log.json"
+    shutil.copy2(REVIEW_DECISION_LOG_PATH, tmp_log_path)
+    protected_paths = [
+        PACKAGE_PATH,
+        FIXTURE_ROOT / "outputs" / "pretrip_package.reviewed.json",
+        FIXTURE_ROOT / "outputs" / "compiled_mission_graph.candidate.json",
+        FIXTURE_ROOT / "outputs" / "compiled_mission_graph.reviewed.json",
+        APPLY_PLAN_PATH,
+    ]
+    before = _file_hashes(protected_paths)
+    candidate_ref = (
+        "gis_cp_cluster.0001."
+        "gis_cp_overpass_tag_overpass_shelter_candidate_node_3877551001"
+    )
+
+    append_review_decision(
+        tmp_log_path,
+        ReviewDecisionRecord(
+            decision_id=f"review_decision.chilai_nanhua_day1.accepted.{candidate_ref}",
+            draft_action_id=f"review_draft.chilai_nanhua_day1.api.{candidate_ref}",
+            decision=ReviewDecision.ACCEPTED,
+            candidate_ref=candidate_ref,
+            target_ids=[
+                "gis_cp.overpass_tag.overpass_shelter_candidate_node_3877551001",
+                "overpass.shelter_candidate.node.3877551001",
+            ],
+            source_review_queue_item_refs=[
+                {
+                    "review_queue_manifest_id": "review_queue.chilai_nanhua_day1.v0",
+                    "item_id": f"review_queue.gis_perception.{candidate_ref}",
+                    "source_ref": "project.json#gis-perception-timeline",
+                    "candidate_ref": candidate_ref,
+                }
+            ],
+            reviewer_alias="trip_leader",
+            decided_at="2026-05-15T10:20:00+08:00",
+            summary=(
+                "Accepted GIS perception CP as candidate-only planning evidence."
+            ),
+        ),
+    )
+
+    plan = build_review_decision_apply_plan_from_paths(
+        project_id="chilai_nanhua_day1",
+        review_decision_log_path=tmp_log_path,
+        package_path=PACKAGE_PATH,
+        review_decision_log_ref="tmp/review_decision_log.json",
+        package_ref="outputs/pretrip_package.json",
+    )
+
+    gis_decision = plan.decisions[-1]
+    assert plan.counts.decision_count == 4
+    assert plan.counts.accepted == 2
+    assert plan.counts.source_ref_count == 4
+    assert plan.counts.package_candidate_apply_count == 0
+    assert gis_decision.candidate_ref == candidate_ref
+    assert gis_decision.candidate_application_scope == "gis_perception_cp"
+    assert gis_decision.candidate_only_review is True
+    assert gis_decision.runtime_safety_truth is False
+    assert gis_decision.package_candidate_apply_count == 0
+    assert gis_decision.would_apply_to_package is False
+    assert gis_decision.source_refs == ["project.json#gis-perception-timeline"]
+    assert gis_decision.notes == [
+        "GIS perception CP decision retained as workspace review metadata only; no checkpoints, package, or runtime artifacts are mutated."
+    ]
+    assert _file_hashes(protected_paths) == before
 
 
 def test_decision_apply_builder_does_not_alter_package_or_mission_graph():

@@ -42,11 +42,18 @@ def test_phase4_admin_runtime_serves_pretrip_and_mock_assistant_on_lan_profile()
     assert health_payload["boundaries"]["debug_api_enabled"] is False
     assert health_payload["auth"]["required"] is False
     assert health_payload["auth"]["token_value_exposed"] is False
+    assert health_payload["routes"]["hardware_readiness"] == "/admin/hardware-readiness"
+    assert health_payload["routes"]["hardware_readiness_context"] == "/admin/hardware-readiness/context"
 
     pretrip = client.get("/admin/pretrip")
     assert pretrip.status_code == 200
     assert 'id="map"' in pretrip.text
     assert "/admin/pretrip/projects/${PROJECT_ID}" in pretrip.text
+
+    hardware_context = client.get("/admin/hardware-readiness/context")
+    assert hardware_context.status_code == 200
+    assert hardware_context.json()["surface"] == "hardware_readiness"
+    assert hardware_context.json()["boundary"]["provider_control_allowed"] is False
 
     status = client.get("/assistant/status")
     assert status.status_code == 200
@@ -92,6 +99,50 @@ def test_phase4_admin_runtime_mounts_debug_projection_when_explicitly_enabled() 
     )
     assert debug_state.status_code == 200
     assert debug_state.json()["debug_boundary"]["read_only"] is True
+
+
+def test_phase4_admin_runtime_can_point_hardware_readiness_at_live_probe_fixture(tmp_path: Path) -> None:
+    fixture_path = tmp_path / "hardware-live-probe.json"
+    fixture_path.write_text(
+        json.dumps(
+            {
+                "interface_inventory": [
+                    {
+                        "interface_ref": "storage.ssd.data_root",
+                        "interface_type": "ssd",
+                        "status": "available",
+                        "signal_activity": "mounted_root_observed",
+                        "last_seen_at": "2026-05-22T14:39:24+08:00",
+                        "disk_model": "KINGSTON SNV3S1000G",
+                        "source_id": "storage.ssd.data_root",
+                        "source_path": "tmp-live-probe",
+                        "evidence_type": "hardware_interface_inventory",
+                    }
+                ],
+                "provider_health": [],
+                "sample_replay_timeline": [],
+                "runtime_debug_events": [],
+                "mock_transport_queue": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    app = create_phase4_admin_runtime_app(
+        environ={
+            "SCOUT_RUNTIME_PROFILE": "pi-phase4-admin-preview",
+            "SCOUT_HARDWARE_READINESS_FIXTURE_PATH": str(fixture_path),
+            "SCOUT_AI_ASSISTANT_ENABLED": "1",
+        }
+    )
+    client = TestClient(app)
+
+    response = client.get("/admin/hardware-readiness/context")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["fixture_path"] == str(fixture_path)
+    assert payload["summary"]["interface_count"] == 1
+    assert payload["interface_inventory"][0]["details"]["disk_model"] == "KINGSTON SNV3S1000G"
 
 
 def test_phase4_admin_runtime_can_require_basic_or_bearer_auth() -> None:
@@ -220,11 +271,20 @@ def test_phase4_admin_dockerfile_runs_admin_app_not_field_runtime() -> None:
     assert "SCOUT_ADMIN_ACCESS_TOKEN_FILE=/data/scout/admin/secrets/phase4-admin-token" in source
     assert "phase46_live_replay_debug_projector.py" in source
     assert "debug_api.py" in source
+    assert "hardware_readiness_api.py" in source
+    assert "hardware_readiness_admin_view.py" in source
+    assert "hardware_readiness_assistant_context.py" in source
+    assert "scout_hardware_readiness_live_probe.py" in source
     assert "runtime_debug_log.py" in source
     assert "runtime_debug_models.py" in source
     assert "docs/admin/phase-3-5-runtime-debug.html" in source
+    assert "docs/admin/phase-3-6-hardware-readiness.html" in source
     assert "phase4_admin_runtime.py" in source
     assert "docs/admin/phase4-pretrip-planning.html" in source
+    assert "pretrip_overpass_ingest.py" in source
+    assert "pretrip_gis_perception.py" in source
+    assert "pretrip_route_comparison.py" in source
+    assert "tests/fixtures/hardware/readiness_context.json" in source
     assert "tests/fixtures/pretrip/projects/chilai_nanhua_day1/" in source
     assert 'CMD ["python", "-m", "uvicorn", "phase4_admin_runtime:app"' in source
     assert "scout_pi_runtime:app" not in source
@@ -259,10 +319,26 @@ def test_phase4_admin_docker_context_whitelists_only_metadata_and_admin_assets()
     assert "!phase4_admin_runtime.py" in dockerignore
     assert "!phase46_live_replay_debug_projector.py" in dockerignore
     assert "!debug_api.py" in dockerignore
+    assert "!hardware_readiness_api.py" in dockerignore
+    assert "!hardware_readiness_admin_view.py" in dockerignore
+    assert "!hardware_readiness_assistant_context.py" in dockerignore
+    assert "!pretrip_candidate_generation.py" in dockerignore
+    assert "!pretrip_geojson_import.py" in dockerignore
+    assert "!pretrip_gpx_corpus.py" in dockerignore
+    assert "!pretrip_import.py" in dockerignore
+    assert "!pretrip_layer_preparation.py" in dockerignore
+    assert "!pretrip_overpass_ingest.py" in dockerignore
+    assert "!pretrip_gis_perception.py" in dockerignore
+    assert "!pretrip_route_comparison.py" in dockerignore
+    assert "!pretrip_source_ingest.py" in dockerignore
+    assert "!pretrip_workspace_edit.py" in dockerignore
     assert "!runtime_debug_log.py" in dockerignore
+    assert "!scout_hardware_readiness_live_probe.py" in dockerignore
     assert "!admin_api.py" in dockerignore
     assert "!docs/admin/phase-3-5-runtime-debug.html" in dockerignore
+    assert "!docs/admin/phase-3-6-hardware-readiness.html" in dockerignore
     assert "!docs/admin/phase4-pretrip-planning.html" in dockerignore
+    assert "!tests/fixtures/hardware/readiness_context.json" in dockerignore
     assert "!tests/fixtures/pretrip/projects/chilai_nanhua_day1/**" in dockerignore
     assert "!*.py" not in dockerignore
     assert "!catographydata/" not in dockerignore

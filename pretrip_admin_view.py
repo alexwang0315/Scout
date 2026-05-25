@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import json
+import math
+import re
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +19,8 @@ EXPERT_CONTRIBUTION_WORKSPACE_APPLY_RESULT_REF = (
     "outputs/expert_contribution_workspace_apply_result.json"
 )
 ROUTE_NOTE_REVIEWED_ASSUMPTIONS_REF = "outputs/route_note_reviewed_assumptions.json"
+GIS_PERCEPTION_AGGREGATION_RADIUS_M = 80.0
+GIS_PERCEPTION_NEARBY_GROUP_RADIUS_M = 80.0
 
 
 def build_pretrip_admin_view(
@@ -43,6 +48,10 @@ def build_pretrip_admin_view(
     route_notes = _load_json(artifacts["route_notes"])
     overpass_evidence = _load_json(artifacts["overpass_evidence"])
     route_note_ln_proposals = _load_json(artifacts["route_note_ln_proposals"])
+    gis_perception = _load_optional_json(artifacts.get("gis_perception"))
+    gis_perception_ai_judgements = _load_optional_json(
+        artifacts.get("gis_perception_ai_judgements")
+    )
     route_note_review_options = _load_json(artifacts["route_note_review_options"])
     review_queue = _load_json(artifacts["review_queue"])
     review_draft_log = _load_json(artifacts["review_draft_log"])
@@ -176,6 +185,16 @@ def build_pretrip_admin_view(
             route_note_ln_proposals,
             source_refs["route_note_ln_proposals"],
         ),
+        "gis_perception": _debug_projection_gis_perception_summary(
+            project_id,
+            gis_perception,
+            source_refs.get("gis_perception", ""),
+            ai_judgements_payload=gis_perception_ai_judgements,
+            ai_judgements_source_path=source_refs.get(
+                "gis_perception_ai_judgements",
+                "",
+            ),
+        ),
         "route_note_review_options": _route_note_review_options_summary(
             route_note_review_options,
             source_refs["route_note_review_options"],
@@ -213,6 +232,15 @@ def build_pretrip_admin_view(
     planning_tab["map_layers"] = build_pretrip_map_layers(
         source_refs=source_refs,
         weather=planning_tab["weather"],
+    )
+    planning_tab["gis_perception_timeline"] = _gis_perception_timeline_summary(
+        project_id,
+        planning_tab["gis_perception"],
+        overpass_evidence=planning_tab["overpass_evidence"],
+    )
+    planning_tab["review_queue"] = _review_queue_with_gis_perception_items(
+        planning_tab["review_queue"],
+        planning_tab["gis_perception_timeline"],
     )
     if route_note_reviewed_assumptions is not None:
         planning_tab["route_note_reviewed_assumptions"] = (
@@ -330,6 +358,8 @@ def build_pretrip_admin_view(
         "checkpoint_events": planning_tab["checkpoint_events"],
         "layer_preparation": planning_tab["layer_preparation"],
         "overpass_evidence": planning_tab["overpass_evidence"],
+        "gis_perception": planning_tab["gis_perception"],
+        "gis_perception_timeline": planning_tab["gis_perception_timeline"],
         "route_note_ln_proposals": planning_tab["route_note_ln_proposals"],
         "route_note_review_options": planning_tab["route_note_review_options"],
         "route_note_reviewed_assumptions": planning_tab.get(
@@ -439,6 +469,8 @@ def resolve_pretrip_project_artifacts(
         "layer_debug_projection_events": "layer_debug_projection_events_ref",
         "admin_projection": "admin_projection_ref",
         "debug_projection_events": "debug_projection_events_ref",
+        "gis_perception": "gis_perception_candidates_ref",
+        "gis_perception_ai_judgements": "gis_perception_ai_judgements_ref",
     }.items():
         if project.get(project_ref_key):
             artifacts[artifact_key] = resolved_project_root / project[project_ref_key]
@@ -588,6 +620,12 @@ def load_pretrip_debug_projection_view(
     overpass_evidence_raw = _load_optional_json(
         optional_project_path("overpass_evidence_ref")
     )
+    gis_perception_raw = _load_optional_json(
+        optional_project_path("gis_perception_candidates_ref")
+    )
+    gis_perception_ai_judgements_raw = _load_optional_json(
+        optional_project_path("gis_perception_ai_judgements_ref")
+    )
     retreat_routes_raw = _load_optional_json(
         optional_project_path("retreat_routes_ref")
     )
@@ -613,6 +651,11 @@ def load_pretrip_debug_projection_view(
         "readiness": project.get("readiness_report_ref", ""),
         "segment_dtm": project.get("segment_dtm_coverage_ref", ""),
         "route_notes": project.get("route_note_candidates_ref", ""),
+        "gis_perception": project.get("gis_perception_candidates_ref", ""),
+        "gis_perception_ai_judgements": project.get(
+            "gis_perception_ai_judgements_ref",
+            "",
+        ),
         "weather_daylight": project.get("weather_daylight_evidence_ref", ""),
     }
     checkpoints = _candidate_list(
@@ -658,6 +701,13 @@ def load_pretrip_debug_projection_view(
             overpass_evidence_raw,
             source_refs["overpass_evidence"],
         ),
+        "gis_perception": _debug_projection_gis_perception_summary(
+            project_id,
+            gis_perception_raw,
+            source_refs["gis_perception"],
+            ai_judgements_payload=gis_perception_ai_judgements_raw,
+            ai_judgements_source_path=source_refs["gis_perception_ai_judgements"],
+        ),
         "reference_tracks": _reference_tracks_summary(
             reference_tracks_raw,
             source_refs["reference_tracks"],
@@ -688,6 +738,11 @@ def load_pretrip_debug_projection_view(
             include_keys=("status", "findings"),
         ),
     }
+    view["gis_perception_timeline"] = _gis_perception_timeline_summary(
+        project_id,
+        view["gis_perception"],
+        overpass_evidence=view["overpass_evidence"],
+    )
     lifecycle_events = load_pretrip_debug_projection_events(
         project_id,
         root=root,
@@ -717,6 +772,8 @@ def load_pretrip_debug_projection_view(
         "retreat_routes": view["retreat_routes"],
         "map_candidates": view["map_candidates"],
         "overpass_evidence": view["overpass_evidence"],
+        "gis_perception": view["gis_perception"],
+        "gis_perception_timeline": view["gis_perception_timeline"],
         "reference_tracks": view["reference_tracks"],
         "checkpoint_events": view["checkpoint_events"],
         "map_layers": view["map_layers"],
@@ -732,6 +789,12 @@ def load_pretrip_debug_projection_view(
                 "reference_track_count",
                 0,
             ),
+            "gis_perception_checkpoint_candidate_count": view[
+                "gis_perception"
+            ]["counts"].get("checkpoint_candidate_count", 0),
+            "gis_perception_timeline_checkpoint_count": view[
+                "gis_perception_timeline"
+            ]["counts"].get("checkpoint_candidate_count", 0),
             "timeline_event_count": len(timeline_events),
             "source_lifecycle_event_count": lifecycle_events.get("event_count", 0),
         },
@@ -965,6 +1028,793 @@ def _debug_projection_overpass_summary(
     }
 
 
+def _debug_projection_gis_perception_summary(
+    project_id: str,
+    payload: dict[str, Any] | None,
+    source_path: str,
+    *,
+    ai_judgements_payload: dict[str, Any] | None = None,
+    ai_judgements_source_path: str = "",
+) -> dict[str, Any]:
+    ai_judgement_summary = _gis_perception_ai_judgement_summary(
+        ai_judgements_payload,
+        ai_judgements_source_path,
+    )
+    if payload is None:
+        return {
+            "source_id": f"gis_perception.{project_id}",
+            "source_path": source_path,
+            "evidence_type": "pretrip_gis_perception_candidates",
+            "status": "not_available",
+            "source_profile": "gpx_corpus_route_notes",
+            "counts": {"checkpoint_candidate_count": 0},
+            "boundary": {
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+                "phase1_runtime_mutation_allowed": False,
+            },
+            "ai_judgements": ai_judgement_summary,
+            "checkpoint_candidates": [],
+        }
+    return {
+        "source_id": payload["artifact_id"],
+        "source_path": source_path,
+        "evidence_type": "pretrip_gis_perception_candidates",
+        "status": payload["status"],
+        "source_profile": payload["source_profile"],
+        "counts": payload["counts"],
+        "classifier": payload["classifier"],
+        "boundary": _summary_boundary(payload["boundary"]),
+        "ai_judgements": ai_judgement_summary,
+        "checkpoint_candidates": [
+            {
+                "candidate_id": candidate["candidate_id"],
+                "source_id": candidate["candidate_id"],
+                "source_path": source_path,
+                "evidence_type": "pretrip_gis_perception_checkpoint_candidate",
+                "checkpoint_type": candidate["checkpoint_type"],
+                "lat": candidate["lat"],
+                "lon": candidate["lon"],
+                "source_route_note_candidate_id": candidate[
+                    "source_route_note_candidate_id"
+                ],
+                "source_gpx_role": candidate["source_gpx_role"],
+                "source_note_category": candidate["source_note_category"],
+                "route_note_age_days": candidate.get("route_note_age_days"),
+                "route_note_freshness": candidate.get(
+                    "route_note_freshness",
+                    "unknown",
+                ),
+                "stale_route_note": candidate.get("stale_route_note", False),
+                "ai_source_signals": candidate.get("ai_source_signals", []),
+                "linked_ln_proposal_id": candidate.get("linked_ln_proposal_id"),
+                "proposed_ln_scope": candidate["proposed_ln_scope"],
+                "route_note_summary": candidate["route_note_summary"],
+                "source_attribution": candidate.get("source_attribution", []),
+                "human_review_required": candidate["human_review_required"],
+            }
+            for candidate in payload.get("checkpoint_candidates", [])
+        ],
+    }
+
+
+def _gis_perception_ai_judgement_summary(
+    payload: dict[str, Any] | None,
+    source_path: str,
+) -> dict[str, Any]:
+    if payload is None:
+        return {
+            "source_path": source_path,
+            "evidence_type": "pretrip_gis_perception_ai_judgements",
+            "status": "not_available",
+            "judgement_count": 0,
+            "candidate_only": True,
+            "runtime_safety_truth_count": 0,
+        }
+    return {
+        "source_id": payload["artifact_kind"],
+        "source_path": source_path,
+        "evidence_type": "pretrip_gis_perception_ai_judgements",
+        "provider_kind": payload["provider_kind"],
+        "model_name": payload["model_name"],
+        "prompt_sha256": payload["prompt_sha256"],
+        "input_count": payload["input_count"],
+        "judgement_count": payload["judgement_count"],
+        "live_model_call_performed": payload["live_model_call_performed"],
+        "network_calls_allowed": payload["network_calls_allowed"],
+        "runtime_safety_truth_count": sum(
+            1 for judgement in payload.get("judgements", [])
+            if judgement.get("runtime_safety_truth") is not False
+        ),
+        "cp_needed_count": sum(
+            1 for judgement in payload.get("judgements", [])
+            if judgement.get("cp_needed") is True
+        ),
+        "preview_judgements": payload.get("judgements", [])[:12],
+    }
+
+
+def _gis_perception_timeline_summary(
+    project_id: str,
+    gis_perception: dict[str, Any],
+    *,
+    overpass_evidence: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    source_path = (
+        gis_perception.get("source_path")
+        or "project.json#gis-perception-timeline"
+    )
+    gpx_raw_candidates = [
+        _gis_perception_timeline_checkpoint(candidate, source_path)
+        for candidate in gis_perception.get("checkpoint_candidates", [])
+    ]
+    overpass_raw_candidates = _overpass_gis_perception_timeline_checkpoints(
+        overpass_evidence
+    )
+    raw_candidates = [*gpx_raw_candidates, *overpass_raw_candidates]
+    aggregated_candidates = _aggregate_gis_perception_timeline_checkpoints(
+        raw_candidates,
+        radius_m=GIS_PERCEPTION_AGGREGATION_RADIUS_M,
+    )
+    candidates, nearby_groups = _apply_gis_perception_nearby_groups(
+        aggregated_candidates,
+        radius_m=GIS_PERCEPTION_NEARBY_GROUP_RADIUS_M,
+    )
+    warning_count = sum(
+        1 for candidate in candidates
+        if candidate.get("checkpoint_type") == "warning_review"
+    )
+    hint_count = sum(
+        1 for candidate in candidates
+        if candidate.get("checkpoint_type") == "hint_review"
+    )
+    water_or_camp_count = sum(
+        1 for candidate in candidates
+        if candidate.get("checkpoint_type") == "water_or_camp_review"
+    )
+    return {
+        "source_id": f"gis_perception_timeline.{project_id}",
+        "source_path": source_path,
+        "evidence_type": "pretrip_gis_perception_timeline",
+        "status": "candidate_only",
+        "counts": {
+            "raw_checkpoint_candidate_count": len(raw_candidates),
+            "gpx_checkpoint_candidate_count": len(gpx_raw_candidates),
+            "overpass_checkpoint_candidate_count": len(overpass_raw_candidates),
+            "checkpoint_candidate_count": len(candidates),
+            "warning_review_checkpoint_count": warning_count,
+            "hint_review_checkpoint_count": hint_count,
+            "water_or_camp_review_checkpoint_count": water_or_camp_count,
+            "review_queue_item_count": len(candidates),
+            "nearby_group_count": len(nearby_groups),
+            "nearby_grouped_checkpoint_count": sum(
+                group["member_count"] for group in nearby_groups
+            ),
+            "aggregated_source_candidate_count": sum(
+                candidate.get("aggregation", {}).get("source_candidate_count", 1)
+                for candidate in candidates
+            ),
+        },
+        "aggregation": {
+            "strategy": "type_semantic_then_spatial_radius",
+            "radius_m": GIS_PERCEPTION_AGGREGATION_RADIUS_M,
+            "semantic_compatibility_required": True,
+            "semantic_judgement_source": "pydantic_ai_structured_judgement",
+            "deterministic_coordinate_merge": True,
+            "pydantic_ai_sets_reason_not_final_truth": True,
+        },
+        "nearby_grouping": {
+            "strategy": "spatial_radius_preserve_semantic_detail",
+            "radius_m": GIS_PERCEPTION_NEARBY_GROUP_RADIUS_M,
+            "grouping_mutates_candidates": False,
+            "semantic_merge_allowed": False,
+        },
+        "nearby_groups": nearby_groups,
+        "checkpoint_candidates": candidates,
+        "boundary": {
+            "projection_only": True,
+            "candidate_only": True,
+            "human_review_required": True,
+            "runtime_safety_truth": False,
+            "mutates_checkpoint_candidates_json": False,
+            "aggregation_mutates_source_candidates": False,
+            "nearby_grouping_mutates_source_candidates": False,
+            "phase1_runtime_mutation_allowed": False,
+            "phase2_writeback_allowed": False,
+        },
+    }
+
+
+def _gis_perception_timeline_checkpoint(
+    candidate: dict[str, Any],
+    source_path: str,
+) -> dict[str, Any]:
+    map_target_ids = [
+        candidate["candidate_id"],
+        candidate.get("source_route_note_candidate_id"),
+        candidate.get("linked_ln_proposal_id"),
+    ]
+    return {
+        **candidate,
+        "source_id": candidate["candidate_id"],
+        "source_path": source_path,
+        "evidence_type": "pretrip_gis_perception_timeline_checkpoint_candidate",
+        "timeline_element_type": "checkpoint_candidate",
+        "status": "candidate_only",
+        "review_state": "needs_review",
+        "review_category": "gis_perception_cp",
+        "source_profile": candidate.get("source_profile", "gpx_corpus_route_notes"),
+        "semantic_aggregation_key": _gis_perception_semantic_aggregation_key(
+            candidate
+        ),
+        "map_target_ids": [target for target in map_target_ids if target],
+    }
+
+
+def _overpass_gis_perception_timeline_checkpoints(
+    overpass_evidence: dict[str, Any] | None,
+) -> list[dict[str, Any]]:
+    if not overpass_evidence:
+        return []
+    source_path = overpass_evidence.get("source_path") or "project.json#overpass"
+    candidates = [
+        *overpass_evidence.get("hazard_candidates", []),
+        *[
+            candidate
+            for candidate in overpass_evidence.get("poi_candidates", [])
+            if candidate.get("candidate_type")
+            in {
+                "shelter_candidate",
+                "water_source_candidate",
+                "parking_candidate",
+            }
+        ],
+    ]
+    projected: list[dict[str, Any]] = []
+    for index, candidate in enumerate(candidates, start=1):
+        coordinate = _overpass_candidate_coordinate(candidate)
+        if coordinate is None:
+            continue
+        checkpoint_type, proposed_ln_scope, review_action = (
+            _overpass_checkpoint_semantics(candidate)
+        )
+        ai_reason = _overpass_ai_reason_zh(candidate)
+        candidate_id = f"gis_cp.overpass_tag.{_safe_view_key(candidate['candidate_id'])}"
+        source_attribution = [
+            {
+                "source_kind": "overpass_candidate",
+                "source_profile": "overpass_osm_tags",
+                "source_candidate_id": candidate["candidate_id"],
+                "source_artifact_id": overpass_evidence.get("source_id", ""),
+                "source_role": "route_corridor_osm_evidence",
+                "source_label": candidate.get("label") or candidate["candidate_id"],
+                "evidence_type": candidate.get(
+                    "evidence_type",
+                    "pretrip_overpass_vector_evidence",
+                ),
+                "confidence": candidate.get("confidence", "low"),
+                "stale_risk": candidate.get("stale_risk", "medium"),
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+            }
+        ]
+        projected.append(
+            {
+                "candidate_id": candidate_id,
+                "source_id": candidate_id,
+                "source_path": source_path,
+                "evidence_type": "pretrip_gis_perception_timeline_checkpoint_candidate",
+                "timeline_element_type": "checkpoint_candidate",
+                "status": "candidate_only",
+                "review_state": "needs_review",
+                "review_category": "gis_perception_cp",
+                "source_profile": "overpass_osm_tags",
+                "checkpoint_type": checkpoint_type,
+                "lat": round(coordinate["lat"], 7),
+                "lon": round(coordinate["lon"], 7),
+                "source_route_note_candidate_id": None,
+                "source_gpx_key": None,
+                "source_gpx_role": None,
+                "source_note_category": None,
+                "route_note_age_days": None,
+                "route_note_freshness": "unknown",
+                "stale_route_note": False,
+                "ai_judgement_id": f"gis_ai_judgement.overpass_tag.fixture.{index:05d}",
+                "ai_reason_zh": ai_reason,
+                "ai_confidence": candidate.get("confidence", "low"),
+                "ai_stale_risk": candidate.get("stale_risk", "medium"),
+                "ai_source_signals": _overpass_ai_source_signals(candidate),
+                "linked_ln_proposal_id": None,
+                "proposed_ln_scope": proposed_ln_scope,
+                "route_note_summary": (
+                    f"OSM {candidate.get('candidate_type')}: "
+                    f"{candidate.get('label') or candidate['candidate_id']}"
+                ),
+                "recommended_review_action": review_action,
+                "source_attribution": source_attribution,
+                "source_attribution_count": len(source_attribution),
+                "candidate_only": True,
+                "human_review_required": True,
+                "runtime_safety_truth": False,
+                "raw_gpx_embedded": False,
+                "semantic_aggregation_key": _overpass_semantic_aggregation_key(
+                    candidate
+                ),
+                "map_target_ids": [candidate["candidate_id"], candidate_id],
+                "overpass_candidate_ref": candidate["candidate_id"],
+                "osm": {
+                    "osm_type": candidate.get("osm_type"),
+                    "osm_id": candidate.get("osm_id"),
+                    "tags": candidate.get("tags", {}),
+                    "candidate_type": candidate.get("candidate_type"),
+                    "conversion_rule_version": candidate.get(
+                        "conversion_rule_version"
+                    ),
+                },
+            }
+        )
+    return projected
+
+
+def _aggregate_gis_perception_timeline_checkpoints(
+    candidates: list[dict[str, Any]],
+    *,
+    radius_m: float,
+) -> list[dict[str, Any]]:
+    clusters: list[list[dict[str, Any]]] = []
+    for candidate in candidates:
+        for cluster in clusters:
+            if _gis_perception_same_cluster(candidate, cluster, radius_m=radius_m):
+                cluster.append(candidate)
+                break
+        else:
+            clusters.append([candidate])
+    return [
+        _merged_gis_perception_timeline_checkpoint(index, cluster, radius_m=radius_m)
+        for index, cluster in enumerate(clusters, start=1)
+    ]
+
+
+def _gis_perception_same_cluster(
+    candidate: dict[str, Any],
+    cluster: list[dict[str, Any]],
+    *,
+    radius_m: float,
+) -> bool:
+    if not cluster:
+        return False
+    if candidate.get("checkpoint_type") != cluster[0].get("checkpoint_type"):
+        return False
+    if candidate.get("semantic_aggregation_key") != cluster[0].get(
+        "semantic_aggregation_key"
+    ):
+        return False
+    if candidate.get("semantic_aggregation_key") == "other:preserve_detail":
+        return False
+    center_lat = sum(float(item["lat"]) for item in cluster) / len(cluster)
+    center_lon = sum(float(item["lon"]) for item in cluster) / len(cluster)
+    return _haversine_m(
+        float(candidate["lat"]),
+        float(candidate["lon"]),
+        center_lat,
+        center_lon,
+    ) <= radius_m
+
+
+def _merged_gis_perception_timeline_checkpoint(
+    index: int,
+    cluster: list[dict[str, Any]],
+    *,
+    radius_m: float,
+) -> dict[str, Any]:
+    representative = cluster[0]
+    lat = sum(float(item["lat"]) for item in cluster) / len(cluster)
+    lon = sum(float(item["lon"]) for item in cluster) / len(cluster)
+    merged_candidate_ids = [item["candidate_id"] for item in cluster]
+    source_attribution = _merge_source_attributions(cluster)
+    summaries = _unique_limited(
+        item.get("route_note_summary", "")
+        for item in cluster
+    )
+    map_target_ids = _unique_limited(
+        [
+            *merged_candidate_ids,
+            *[
+                target
+                for item in cluster
+                for target in item.get("map_target_ids", [])
+            ],
+        ],
+        limit=200,
+    )
+    return {
+        **representative,
+        "candidate_id": (
+            f"gis_cp_cluster.{index:04d}."
+            f"{_safe_view_key(representative['candidate_id'])}"
+        ),
+        "source_id": (
+            f"gis_cp_cluster.{index:04d}."
+            f"{_safe_view_key(representative['candidate_id'])}"
+        ),
+        "lat": round(lat, 7),
+        "lon": round(lon, 7),
+        "source_attribution": source_attribution,
+        "source_attribution_count": len(source_attribution),
+        "merged_candidate_ids": merged_candidate_ids,
+        "route_note_summaries": summaries,
+        "route_note_summary": (
+            representative.get("route_note_summary", "")
+            if len(cluster) == 1
+            else f"{len(cluster)} historical route notes clustered near this CP"
+        ),
+        "map_target_ids": map_target_ids,
+        "aggregation": {
+            "strategy": "type_semantic_then_spatial_radius",
+            "radius_m": radius_m,
+            "source_candidate_count": len(cluster),
+            "semantic_aggregation_key": representative.get(
+                "semantic_aggregation_key"
+            ),
+            "semantic_compatibility_required": True,
+            "representative_candidate_id": representative["candidate_id"],
+            "merged_candidate_ids": merged_candidate_ids,
+            "deterministic_coordinate_merge": "centroid",
+            "semantic_judgement_source": "pydantic_ai_structured_judgement",
+        },
+    }
+
+
+def _gis_perception_semantic_aggregation_key(candidate: dict[str, Any]) -> str:
+    if candidate.get("source_profile") == "overpass_osm_tags":
+        return _overpass_semantic_aggregation_key(candidate)
+    note = str(candidate.get("route_note_summary") or "")
+    signals = " ".join(str(signal) for signal in candidate.get("ai_source_signals", []))
+    text = f"{note} {signals}"
+    if any(token in text for token in ("高繞", "腰繞", "低繞", "繞路", "取右", "取左")):
+        return "route:detour"
+    if any(token in text for token in ("上切", "下切")):
+        return "route:cut"
+    if any(token in text for token in ("茂密", "林相", "芒草", "箭竹")):
+        return "route:vegetation"
+    if any(token in text for token in ("路徑不明", "路跡", "路徑", "有路", "好走", "獸俓")):
+        return "route:path_condition"
+    if any(token in text for token in ("崩塌", "崩壁", "坍方", "崩", "大崩壁")):
+        return "hazard:collapse"
+    if any(token in text for token in ("斷崖", "峭壁", "懸崖")):
+        return "hazard:cliff"
+    if any(token in text for token in ("架繩", "拉繩")):
+        return "hazard:rope"
+    if any(token in text for token in ("水源", "黑水", "水塘", "溪水")):
+        return "resource:water"
+    if any(token in text for token in ("營地", "山屋", "避難", "C1", "C2")):
+        return "resource:camp_or_shelter"
+    return "other:preserve_detail"
+
+
+def _overpass_candidate_coordinate(
+    candidate: dict[str, Any],
+) -> dict[str, float] | None:
+    geometry = candidate.get("geometry") or {}
+    geometry_type = geometry.get("type")
+    if geometry_type == "Point":
+        return _geojson_point_coordinate(geometry)
+    points = _geojson_geometry_points(geometry)
+    if not points:
+        return None
+    return {
+        "lat": sum(point["lat"] for point in points) / len(points),
+        "lon": sum(point["lon"] for point in points) / len(points),
+    }
+
+
+def _geojson_geometry_points(geometry: dict[str, Any]) -> list[dict[str, float]]:
+    geometry_type = geometry.get("type")
+    coordinates = geometry.get("coordinates") or []
+    if geometry_type == "LineString":
+        return [
+            {"lon": float(lon), "lat": float(lat)}
+            for lon, lat, *_ in coordinates
+        ]
+    if geometry_type == "Polygon":
+        return [
+            {"lon": float(lon), "lat": float(lat)}
+            for ring in coordinates
+            for lon, lat, *_ in ring
+        ]
+    if geometry_type == "MultiLineString":
+        return [
+            {"lon": float(lon), "lat": float(lat)}
+            for line in coordinates
+            for lon, lat, *_ in line
+        ]
+    return []
+
+
+def _overpass_checkpoint_semantics(
+    candidate: dict[str, Any],
+) -> tuple[str, str, str]:
+    candidate_type = candidate.get("candidate_type")
+    if candidate_type == "terrain_risk_candidate":
+        return "warning_review", "warning_coverage", "review_as_warning_cp"
+    if candidate_type in {"shelter_candidate", "water_source_candidate"}:
+        return "water_or_camp_review", "review_only", "review_as_water_or_camp_cp"
+    return "hint_review", "review_only", "review_as_hint_cp"
+
+
+def _overpass_ai_reason_zh(candidate: dict[str, Any]) -> str:
+    candidate_type = candidate.get("candidate_type")
+    label = candidate.get("label") or candidate.get("candidate_id")
+    if candidate_type == "water_source_candidate":
+        return f"OSM tag 顯示 {label} 可能是水源；水況會變動，需人工複核後才能當成補給 CP。"
+    if candidate_type == "shelter_candidate":
+        return f"OSM tag 顯示 {label} 可能是避難點或山屋；容量與開放狀態需人工複核。"
+    if candidate_type == "parking_candidate":
+        return f"OSM tag 顯示 {label} 可能是停車或道路接駁點；適合作為 pretrip 交通 CP 候選。"
+    if candidate_type == "terrain_risk_candidate":
+        return f"OSM tag 顯示 {label} 可能是地形風險；只能先進入警告 CP 候選並要求人工複核。"
+    return f"OSM tag 顯示 {label} 可能有路線規劃價值；先保留為 review-only CP 候選。"
+
+
+def _overpass_ai_source_signals(candidate: dict[str, Any]) -> list[str]:
+    tags = candidate.get("tags", {})
+    signals = [
+        "source_kind:overpass_candidate",
+        f"candidate_type:{candidate.get('candidate_type')}",
+        f"feature_type:{candidate.get('feature_type')}",
+    ]
+    for key in ("amenity", "tourism", "natural", "emergency", "hazard", "risk"):
+        if key in tags:
+            signals.append(f"osm_tag:{key}={tags[key]}")
+    return signals
+
+
+def _overpass_semantic_aggregation_key(candidate: dict[str, Any]) -> str:
+    candidate_type = candidate.get("candidate_type")
+    if candidate_type == "water_source_candidate":
+        return "resource:water"
+    if candidate_type == "shelter_candidate":
+        return "resource:camp_or_shelter"
+    if candidate_type == "terrain_risk_candidate":
+        return "hazard:terrain"
+    if candidate_type == "parking_candidate":
+        return "access:parking"
+    return "overpass:preserve_detail"
+
+
+def _apply_gis_perception_nearby_groups(
+    candidates: list[dict[str, Any]],
+    *,
+    radius_m: float,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    groups: list[list[dict[str, Any]]] = []
+    for candidate in candidates:
+        for group in groups:
+            if _gis_perception_nearby_group_member(
+                candidate,
+                group,
+                radius_m=radius_m,
+            ):
+                group.append(candidate)
+                break
+        else:
+            groups.append([candidate])
+
+    group_by_candidate_id: dict[str, dict[str, Any]] = {}
+    nearby_groups: list[dict[str, Any]] = []
+    for index, group in enumerate(groups, start=1):
+        if len(group) < 2:
+            continue
+        group_id = f"gis_cp_nearby_group.{index:04d}"
+        members = [
+            {
+                "candidate_id": item["candidate_id"],
+                "checkpoint_type": item.get("checkpoint_type"),
+                "semantic_aggregation_key": item.get("semantic_aggregation_key"),
+                "summary": item.get("route_note_summary") or item["candidate_id"],
+                "source_profile": item.get("source_profile"),
+                "stale_route_note": item.get("stale_route_note", False),
+                "route_note_freshness": item.get("route_note_freshness", "unknown"),
+            }
+            for item in group
+        ]
+        center_lat = sum(float(item["lat"]) for item in group) / len(group)
+        center_lon = sum(float(item["lon"]) for item in group) / len(group)
+        nearby_group = {
+            "nearby_group_id": group_id,
+            "source_id": group_id,
+            "candidate_id": group_id,
+            "evidence_type": "pretrip_gis_perception_nearby_group",
+            "source_path": "project.json#gis-perception-nearby-group",
+            "status": "candidate_only_grouping",
+            "member_count": len(group),
+            "lat": round(center_lat, 7),
+            "lon": round(center_lon, 7),
+            "radius_m": radius_m,
+            "semantic_merge_allowed": False,
+            "members": members,
+            "semantic_keys": sorted(
+                {
+                    str(item.get("semantic_aggregation_key"))
+                    for item in group
+                    if item.get("semantic_aggregation_key")
+                }
+            ),
+        }
+        nearby_groups.append(nearby_group)
+        for item in group:
+            group_by_candidate_id[item["candidate_id"]] = nearby_group
+
+    annotated: list[dict[str, Any]] = []
+    for candidate in candidates:
+        nearby_group = group_by_candidate_id.get(candidate["candidate_id"])
+        if nearby_group is None:
+            annotated.append(
+                {
+                    **candidate,
+                    "nearby_group_id": None,
+                    "nearby_group_size": 1,
+                    "nearby_group_members": [],
+                }
+            )
+            continue
+        annotated.append(
+            {
+                **candidate,
+                "nearby_group_id": nearby_group["nearby_group_id"],
+                "nearby_group_size": nearby_group["member_count"],
+                "nearby_group_members": nearby_group["members"],
+            }
+        )
+    return annotated, nearby_groups
+
+
+def _gis_perception_nearby_group_member(
+    candidate: dict[str, Any],
+    group: list[dict[str, Any]],
+    *,
+    radius_m: float,
+) -> bool:
+    center_lat = sum(float(item["lat"]) for item in group) / len(group)
+    center_lon = sum(float(item["lon"]) for item in group) / len(group)
+    return _haversine_m(
+        float(candidate["lat"]),
+        float(candidate["lon"]),
+        center_lat,
+        center_lon,
+    ) <= radius_m
+
+
+def _merge_source_attributions(
+    cluster: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    merged: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+    for item in cluster:
+        for attribution in item.get("source_attribution", []):
+            key = (
+                str(attribution.get("source_kind", "")),
+                str(attribution.get("source_candidate_id", "")),
+            )
+            if key in seen:
+                continue
+            seen.add(key)
+            merged.append(attribution)
+    return merged
+
+
+def _unique_limited(values, *, limit: int = 12) -> list[str]:
+    unique: list[str] = []
+    for value in values:
+        if not value or value in unique:
+            continue
+        unique.append(value)
+        if len(unique) >= limit:
+            break
+    return unique
+
+
+def _haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    earth_radius_m = 6_371_000.0
+    phi1 = math.radians(lat1)
+    phi2 = math.radians(lat2)
+    delta_phi = math.radians(lat2 - lat1)
+    delta_lambda = math.radians(lon2 - lon1)
+    a = (
+        math.sin(delta_phi / 2) ** 2
+        + math.cos(phi1) * math.cos(phi2) * math.sin(delta_lambda / 2) ** 2
+    )
+    return earth_radius_m * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+
+def _safe_view_key(value: str) -> str:
+    return re.sub(r"[^0-9A-Za-z_]+", "_", value).strip("_").lower()[:96] or "candidate"
+
+
+def _review_queue_with_gis_perception_items(
+    review_queue: dict[str, Any],
+    gis_timeline: dict[str, Any],
+) -> dict[str, Any]:
+    items = [
+        *review_queue.get("items", []),
+        *[
+            _gis_perception_review_queue_item(candidate, gis_timeline)
+            for candidate in gis_timeline.get("checkpoint_candidates", [])
+        ],
+    ]
+    category_counts = Counter(
+        item.get("category", "unknown")
+        for item in items
+    )
+    counts = {
+        **review_queue.get("counts", {}),
+        "item_count": len(items),
+        "category_counts": dict(sorted(category_counts.items())),
+        "gis_perception_cp_count": category_counts.get("gis_perception_cp", 0),
+        "warning_count": sum(1 for item in items if item.get("severity") == "warning"),
+        "review_count": sum(1 for item in items if item.get("severity") == "review"),
+        "blocker_count": sum(1 for item in items if item.get("severity") == "blocker"),
+    }
+    return {
+        **review_queue,
+        "counts": counts,
+        "items": items,
+        "projection_notes": [
+            *review_queue.get("projection_notes", []),
+            "GIS perception CP candidates are projected into the review queue; no checkpoints.json mutation is performed.",
+        ],
+    }
+
+
+def _gis_perception_review_queue_item(
+    candidate: dict[str, Any],
+    gis_timeline: dict[str, Any],
+) -> dict[str, Any]:
+    severity = (
+        "warning"
+        if candidate.get("checkpoint_type") == "warning_review"
+        else "review"
+    )
+    source_refs = {
+        attribution.get("source_kind", "unknown"): attribution.get("source_candidate_id")
+        for attribution in candidate.get("source_attribution", [])
+    }
+    return {
+        "item_id": f"review_queue.gis_perception.{candidate['candidate_id']}",
+        "candidate_ref": candidate["candidate_id"],
+        "category": "gis_perception_cp",
+        "severity": severity,
+        "title": f"GIS CP review: {candidate.get('checkpoint_type')}",
+        "summary": candidate.get("route_note_summary") or candidate["candidate_id"],
+        "source_artifact_kind": "pretrip_gis_perception_candidates",
+        "source_ref": gis_timeline.get("source_path", ""),
+        "source_ref_key": "gis_perception_candidates_ref",
+        "review_focus": candidate.get("map_target_ids", [candidate["candidate_id"]]),
+        "evidence_summary": {
+            "checkpoint_type": candidate.get("checkpoint_type"),
+            "proposed_ln_scope": candidate.get("proposed_ln_scope"),
+            "ai_reason_zh": candidate.get("ai_reason_zh"),
+            "ai_confidence": candidate.get("ai_confidence"),
+            "ai_stale_risk": candidate.get("ai_stale_risk"),
+            "source_attribution": candidate.get("source_attribution", []),
+            "source_candidate_refs": source_refs,
+            "aggregation": candidate.get("aggregation", {}),
+            "nearby_group_id": candidate.get("nearby_group_id"),
+            "nearby_group_size": candidate.get("nearby_group_size", 1),
+            "nearby_group_members": candidate.get("nearby_group_members", []),
+            "merged_candidate_ids": candidate.get("merged_candidate_ids", []),
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+        },
+        "accept_reject_allowed": True,
+        "candidate_only": True,
+        "human_review_required": True,
+        "decision_recorded": False,
+        "mutation_allowed": False,
+        "map_target_ids": candidate.get("map_target_ids", [candidate["candidate_id"]]),
+    }
+
+
 def _empty_reference_tracks(project_id: str, source_path: str) -> dict[str, Any]:
     return {
         "source_id": f"reference_tracks.{project_id}",
@@ -1163,7 +2013,32 @@ def _debug_projection_timeline_events(
                 "route_point_end_index": segment.get("route_point_end_index"),
                 "observation_count": segment.get("route_point_end_index", 0),
                 "safety_level": "L0_PRETRIP_PROJECTION",
-                "projection_event_type": "segment_candidate",
+            "projection_event_type": "segment_candidate",
+            },
+        )
+
+    for checkpoint in view.get("gis_perception_timeline", {}).get("checkpoint_candidates", []):
+        checkpoint_id = checkpoint.get("candidate_id", "")
+        append_event(
+            "gis_perception_checkpoint_projected",
+            (
+                f"Aggregated GIS perception checkpoint {checkpoint_id} is "
+                "visible for pretrip review."
+            ),
+            {
+                "subject_ref": checkpoint_id,
+                "map_target_ids": checkpoint.get("map_target_ids", [checkpoint_id]),
+                "checkpoint_id": checkpoint_id,
+                "checkpoint_type": checkpoint.get("checkpoint_type"),
+                "lat": checkpoint.get("lat"),
+                "lon": checkpoint.get("lon"),
+                "safety_level": "L0_PRETRIP_PROJECTION",
+                "projection_event_type": "gis_perception_checkpoint_candidate",
+                "source_attribution_count": checkpoint.get(
+                    "source_attribution_count",
+                    len(checkpoint.get("source_attribution", [])),
+                ),
+                "aggregation": checkpoint.get("aggregation", {}),
             },
         )
 
@@ -2168,6 +3043,7 @@ def _planning_sections(planning_tab: dict[str, Any]) -> list[dict[str, Any]]:
     layer_preparation = planning_tab["layer_preparation"]
     weather = planning_tab["weather"]
     overpass_evidence = planning_tab["overpass_evidence"]
+    gis_perception_timeline = planning_tab["gis_perception_timeline"]
     route_notes = planning_tab["route_notes"]
     reference_tracks = planning_tab.get("reference_tracks")
     checkpoint_events = planning_tab.get("checkpoint_events")
@@ -2300,6 +3176,35 @@ def _planning_sections(planning_tab: dict[str, Any]) -> list[dict[str, Any]]:
                 ),
             },
             boundary=overpass_evidence["boundary"],
+        ),
+        _section(
+            "gis_perception_timeline",
+            "GIS Perception CP Timeline",
+            gis_perception_timeline,
+            status=gis_perception_timeline["status"],
+            counts=gis_perception_timeline["counts"],
+            summary={
+                "checkpoint_candidate_count": gis_perception_timeline[
+                    "counts"
+                ].get("checkpoint_candidate_count"),
+                "raw_checkpoint_candidate_count": gis_perception_timeline[
+                    "counts"
+                ].get("raw_checkpoint_candidate_count"),
+                "aggregation_radius_m": gis_perception_timeline[
+                    "aggregation"
+                ].get("radius_m"),
+                "nearby_group_count": gis_perception_timeline["counts"].get(
+                    "nearby_group_count"
+                ),
+                "nearby_group_radius_m": gis_perception_timeline[
+                    "nearby_grouping"
+                ].get("radius_m"),
+                "nearby_groups": gis_perception_timeline["nearby_groups"][:12],
+                "checkpoint_candidates": gis_perception_timeline[
+                    "checkpoint_candidates"
+                ][:12],
+            },
+            boundary=gis_perception_timeline["boundary"],
         ),
         _section(
             "route_notes",

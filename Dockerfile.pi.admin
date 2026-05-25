@@ -46,6 +46,9 @@ COPY \
     environment_provider.py \
     geo_utils.py \
     go_no_go.py \
+    hardware_readiness_admin_view.py \
+    hardware_readiness_api.py \
+    hardware_readiness_assistant_context.py \
     incident_package.py \
     incident_store.py \
     mission_graph.py \
@@ -65,7 +68,10 @@ COPY \
     pretrip_import.py \
     pretrip_layer_preparation.py \
     pretrip_models.py \
+    pretrip_overpass_ingest.py \
+    pretrip_route_comparison.py \
     pretrip_source_ingest.py \
+    pretrip_gis_perception.py \
     pretrip_review_decision_apply.py \
     pretrip_review_decision_apply_store.py \
     pretrip_review_decision_log.py \
@@ -90,14 +96,17 @@ COPY \
     runtime_debug_models.py \
     safety_models.py \
     safety_state_machine.py \
+    scout_hardware_readiness_live_probe.py \
     ./
 
 COPY docs/admin/phase1-after-action.html ./docs/admin/
 COPY docs/admin/phase-3-5-runtime-debug.html ./docs/admin/
+COPY docs/admin/phase-3-6-hardware-readiness.html ./docs/admin/
 COPY docs/admin/phase4-pretrip-planning.html ./docs/admin/
 COPY docs/admin/scout-assistant-ui.js ./docs/admin/
 
 COPY tests/fixtures/pretrip/projects/chilai_nanhua_day1/ ./tests/fixtures/pretrip/projects/chilai_nanhua_day1/
+COPY tests/fixtures/hardware/readiness_context.json ./tests/fixtures/hardware/readiness_context.json
 COPY tests/fixtures/field_cases/scout_260512_golden.json ./tests/fixtures/field_cases/
 COPY tests/fixtures/maps/scout_260512_overpass_map_context.geojson ./tests/fixtures/maps/
 COPY tests/fixtures/mission_context/scout_260512_field_normal.json ./tests/fixtures/mission_context/

@@ -334,6 +334,7 @@
             <p class="hint">Fixture-backed Pi/provider dry-run visibility.</p>
           </div>
           <div class="summary-grid">
+            <div class="metric"><span>Interfaces</span><strong id="interfaceCount">0</strong></div>
             <div class="metric"><span>Providers</span><strong id="providerCount">0</strong></div>
             <div class="metric"><span>Degraded</span><strong id="degradedProviderCount">0</strong></div>
             <div class="metric"><span>Replay</span><strong id="replayEventCount">0</strong></div>
@@ -360,6 +361,17 @@
               <span id="selectedProviderLabel" class="pill">none selected</span>
             </div>
             <div id="providerGrid" class="provider-grid"></div>
+          </section>
+
+          <section class="panel" aria-label="Hardware interface inventory">
+            <div class="toolbar">
+              <div>
+                <h2>Interfaces</h2>
+                <p class="hint">GPIO, I2C, I2S/TTS, Bluetooth, UART, battery, GNSS, IMU, USB, and SSD metadata.</p>
+              </div>
+              <span class="pill">metadata-only</span>
+            </div>
+            <div id="interfaceGrid" class="provider-grid"></div>
           </section>
 
           <section class="panel" aria-label="Read-only readiness evidence">
@@ -491,6 +503,7 @@
     }
 
     function renderSummary(view) {
+      document.getElementById("interfaceCount").textContent = view.summary.interface_count || 0;
       document.getElementById("providerCount").textContent = view.summary.provider_count || 0;
       document.getElementById("degradedProviderCount").textContent = view.summary.degraded_provider_count || 0;
       document.getElementById("replayEventCount").textContent = view.summary.sample_replay_event_count || 0;
@@ -516,6 +529,62 @@
         grid.appendChild(button);
       });
       document.getElementById("selectedProviderLabel").textContent = state.selectedProviderRef || "none selected";
+    }
+
+    function interfaceDetail(interfaceItem) {
+      const boundary = interfaceItem.boundary || {};
+      const parts = [
+        `activity=${interfaceItem.signal_activity || "unknown"}`,
+        `last_seen=${interfaceItem.last_seen_at || "not reported"}`,
+        `manual_drive=${interfaceItem.manual_drive_allowed ? "allowed" : "blocked"}`
+      ];
+      const lines = interfaceItem.observed_lines || [];
+      if (lines.length) {
+        const writable = lines.filter(line => line.manual_read_allowed && line.manual_write_allowed);
+        const advanced = lines.filter(line => line.pull_control === "reserved_advanced_use");
+        parts.push(`gpio_lines=${lines.length}`);
+        parts.push(`rw_lines=${writable.length}`);
+        if (advanced.length) parts.push(`advanced=${advanced.map(line => line.header_label).join(", ")}`);
+        parts.push(`lines=${lines.map(line => `${line.line_ref}:${line.pull_state}`).join(", ")}`);
+      }
+      if (Object.prototype.hasOwnProperty.call(boundary, "gpioset_command_enabled")) {
+        parts.push(`gpioset_enabled=${boundary.gpioset_command_enabled ? "true" : "false"}`);
+      }
+      if (Object.prototype.hasOwnProperty.call(boundary, "wiring_manifest_confirmed")) {
+        parts.push(`wiring_confirmed=${boundary.wiring_manifest_confirmed ? "true" : "false"}`);
+      }
+      if (boundary.high_low_drive_deferred_until_wiring_confirmed) {
+        parts.push("drive_gate=wiring_manifest_required");
+      }
+      const addresses = interfaceItem.detected_addresses || [];
+      if (addresses.length) parts.push(`addresses=${addresses.join(", ")}`);
+      const connected = interfaceItem.connected_devices || [];
+      if (connected.length) parts.push(`connected=${connected.join(", ")}`);
+      const devices = interfaceItem.devices || [];
+      if (devices.length) {
+        parts.push(`devices=${devices.map(device => device.id || device.label || "device").join(", ")}`);
+      }
+      const details = interfaceItem.details || {};
+      Object.entries(details).slice(0, 5).forEach(([key, value]) => {
+        if (value !== null && value !== undefined && value !== "") parts.push(`${key}=${value}`);
+      });
+      return parts.join(" | ");
+    }
+
+    function renderInterfaces(view) {
+      const grid = document.getElementById("interfaceGrid");
+      grid.textContent = "";
+      (view.interface_inventory || []).forEach(interfaceItem => {
+        const node = document.createElement("div");
+        node.className = "provider-card";
+        node.innerHTML = `
+          <span>${interfaceItem.interface_type || "interface"}</span>
+          <strong>${interfaceItem.interface_ref}</strong>
+          <p class="${statusClass(interfaceItem.status)}">${interfaceItem.status || "unknown"}</p>
+          <p class="hint">${interfaceDetail(interfaceItem)}</p>
+        `;
+        grid.appendChild(node);
+      });
     }
 
     function renderEvidence(view) {
@@ -675,6 +744,7 @@
       state.selectedProviderRef = view.selected_provider?.provider_ref || view.provider_health?.[0]?.provider_ref || "";
       renderSummary(view);
       renderProviders(view);
+      renderInterfaces(view);
       renderEvidence(view);
       renderAssistantPromptSuggestions(selectedProvider());
     }
