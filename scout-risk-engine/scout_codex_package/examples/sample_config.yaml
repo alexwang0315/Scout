@@ -1,0 +1,14 @@
+default_sample_interval_m: 20
+dem_resolution: 20m
+outputs:
+  route_geojson: out/route_risk.geojson
+  route_csv: out/route_risk.csv
+safety_language:
+  avoid:
+    - safe
+  prefer:
+    - lower risk
+    - higher risk
+    - low tolerance terrain
+    - caution required
+

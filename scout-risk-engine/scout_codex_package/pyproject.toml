@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "scout-risk-engine"
+version = "0.1.0"
+description = "Scout pretrip terrain-risk engine MVP"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "numpy",
+  "pydantic>=2",
+  "typer",
+]
+
+[project.optional-dependencies]
+geo = [
+  "rasterio",
+  "pyproj",
+]
+test = [
+  "pytest",
+]
+
+[project.scripts]
+scout-risk = "scout_risk.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+scout_risk = ["configs/*.toml"]
