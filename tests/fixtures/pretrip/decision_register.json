@@ -132,6 +132,24 @@
     },
     {
       "constraints": [
+        "Long-trip review must not require one-by-one manual inspection as the primary workflow.",
+        "Filters, AI triage, group selection/deselection, and map zoom are review aids only; final candidate disposition remains human-reviewed.",
+        "Bulk actions and AI suggestions may create draft review intents or local workspace review records, but they must not directly compile Final MissionGraph, call /safety/*, or become runtime safety truth."
+      ],
+      "decision_id": "phase4.decision.ui.scale_assisted_review",
+      "impact": "ui_boundary",
+      "refs": [
+        "docs/specs/pre-trip-planning-admin.md#milestone-7-minimal-admin-ui",
+        "docs/specs/phase-4-5-departure-runtime-handoff.md#review-state-semantics",
+        "docs/admin/phase4-pretrip-planning.html"
+      ],
+      "resolution": "Use a scale-assisted pretrip review UI for long routes: default to filter-first, group-first, AI-assisted triage, and map-driven zoom/review flows instead of point-by-point inspection.",
+      "status": "resolved",
+      "summary": "Long-distance trip review is organized around filters, groups, AI triage, and map viewport workflows while preserving human review gates.",
+      "title": "Scale-assisted pretrip review UI"
+    },
+    {
+      "constraints": [
         "No POI category absence can become a blocker or warning.",
         "The policy remains candidate-only and does not mutate hard readiness."
       ],

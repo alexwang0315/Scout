@@ -12,6 +12,7 @@ from mission_graph import load_mission_graph
 from offline_map import load_offline_map_context
 from pretrip_admin_view import (
     CHILAI_NANHUA_DAY1_PROJECT_ID,
+    build_pretrip_admin_view,
     resolve_pretrip_project_artifacts,
     resolve_pretrip_project_root,
 )
@@ -287,6 +288,11 @@ def _build_pretrip_admin_case_view(
     )
     source_refs = _pretrip_artifact_refs(artifacts, project_root)
     project = _load_json(artifacts["project"])
+    pretrip_view = build_pretrip_admin_view(
+        case_id,
+        root=root,
+        project_root=project_root,
+    )
     route_summary = _load_json(artifacts["route_summary"])
     map_context = _load_json(artifacts["map_context"])
     checkpoints = _load_json(artifacts["checkpoints"])
@@ -420,13 +426,11 @@ def _build_pretrip_admin_case_view(
             "points": route_points,
         },
         "map": map_payload,
-        "map_layers": build_after_action_map_layers(
-            map_source_path=source_refs["map_context"],
-            map_metadata=map_metadata,
-            route_source_path=source_refs["segment_display_geometry"],
-            mission_graph_source_path=source_refs["package"],
-            incident_store_path=None,
-        ),
+        "map_layers": pretrip_view["map_layers"],
+        "risk_score": pretrip_view["risk_score"],
+        "risk_ribbon": pretrip_view["risk_ribbon"],
+        "risk_heatmap": pretrip_view["risk_heatmap"],
+        "risk_delta": pretrip_view["risk_delta"],
         "risk_rules": [],
         "replay": replay,
         "safety_timeline": _pretrip_safety_timeline(

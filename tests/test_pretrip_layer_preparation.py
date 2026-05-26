@@ -123,6 +123,51 @@ def test_layer_preparation_run_writes_workspace_outputs_and_project_refs(
     ).lower()
 
 
+def test_layer_preparation_syncs_scout_risk_score_outputs(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_root = _copy_fixture_project(tmp_path)
+    risk_source = tmp_path / "risk_out"
+    _write_risk_score_outputs(risk_source)
+    monkeypatch.setattr(
+        pretrip_layer_preparation,
+        "SCOUT_RISK_OUTPUT_SOURCES",
+        {"chilai_nanhua_day1": risk_source},
+    )
+
+    manifest = run_layer_preparation(
+        LayerPreparationRequest(
+            project_id="chilai_nanhua_day1",
+            project_root=project_root,
+            layers=("risk-score", "risk-ribbon"),
+            prepared_at="2026-05-22T00:00:00+00:00",
+        )
+    )
+    project = _load(project_root / "project.json")
+    layers = {layer["layer_id"]: layer for layer in manifest["layers"]}
+    layer = layers["risk-score"]
+    ribbon_layer = layers["risk-ribbon"]
+
+    assert layer["layer_id"] == "risk-score"
+    assert layer["status"] == "ready_from_project_ref"
+    assert layer["counts"]["point_count"] == 2
+    assert layer["counts"]["score_field"] == "pretrip_risk"
+    assert ribbon_layer["status"] == "ready_from_project_ref"
+    assert ribbon_layer["counts"]["segment_count"] == 1
+    assert ribbon_layer["counts"]["score_surface_type"] == "route_aligned_risk_ribbon"
+    assert project["risk_score_points_ref"] == "outputs/risk/risk_score_points.geojson"
+    assert project["risk_ribbon_ref"] == "outputs/risk/risk_ribbon.geojson"
+    assert project["risk_score_point_count"] == 2
+    assert project["risk_route_sample_count"] == 3
+    assert project["risk_ribbon_segment_count"] == 1
+    assert (project_root / project["risk_score_points_ref"]).is_file()
+    assert (project_root / project["risk_ribbon_ref"]).is_file()
+    assert (project_root / project["risk_route_profile_ref"]).is_file()
+    assert manifest["boundary"]["runtime_safety_truth"] is False
+    assert manifest["boundary"]["phase1_runtime_mutation_allowed"] is False
+
+
 def test_layer_preparation_explicit_fetch_normalizes_overpass_with_fixture_fetcher(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -269,3 +314,127 @@ def _copy_fixture_project(
 
 def _load(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _write_risk_score_outputs(directory: Path) -> None:
+    directory.mkdir(parents=True)
+    route_risk = {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "geometry": {"type": "Point", "coordinates": [121.2, 24.0]},
+                "properties": {
+                    "sample_id": "risk.sample.001",
+                    "pretrip_risk": 61.2,
+                    "risk_level": 4,
+                    "distance_m": 10.0,
+                    "teii_20m": 70.0,
+                },
+            }
+            for _ in range(3)
+        ],
+    }
+    score_points = {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "geometry": {"type": "Point", "coordinates": [121.2, 24.0]},
+                "properties": {
+                    "x": 250000.0,
+                    "y": 2650000.0,
+                    "rs": 61.2,
+                    "score_field": "pretrip_risk",
+                    "route_id": "fixture",
+                    "sample_id": "risk.sample.001",
+                    "distance_m": 10.0,
+                    "risk_level": 4,
+                    "teii_20m": 70.0,
+                    "tri": 20.0,
+                    "sri": 5.0,
+                    "lec": 60.0,
+                    "scp": 0.0,
+                },
+            },
+            {
+                "type": "Feature",
+                "geometry": {"type": "Point", "coordinates": [121.21, 24.01]},
+                "properties": {
+                    "x": 250020.0,
+                    "y": 2650020.0,
+                    "rs": 48.5,
+                    "score_field": "pretrip_risk",
+                    "route_id": "fixture",
+                    "sample_id": "risk.sample.002",
+                    "distance_m": 30.0,
+                    "risk_level": 3,
+                    "teii_20m": 55.0,
+                },
+            },
+        ],
+    }
+    files = {
+        "route_risk.geojson": route_risk,
+        "route_risk.metadata.json": {
+            "artifact_kind": "scout_risk_overpass_route_profile_metadata",
+            "route_risk_sample_count": 3,
+            "boundary": {"candidate_only": True, "runtime_safety_truth": False},
+        },
+        "risk_score_points.geojson": score_points,
+        "risk_score_points.metadata.json": {
+            "artifact_kind": "scout_risk_score_point_map",
+            "point_count": 2,
+            "source_feature_count": 3,
+            "score_field": "pretrip_risk",
+            "snap_grid_m": 20.0,
+            "boundary": {
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+                "route_aligned_samples_only": True,
+            },
+        },
+        "risk_ribbon.geojson": {
+            "type": "FeatureCollection",
+            "features": [
+                {
+                    "type": "Feature",
+                    "geometry": {
+                        "type": "LineString",
+                        "coordinates": [[121.2, 24.0], [121.21, 24.01]],
+                    },
+                    "properties": {
+                        "segment_id": "risk_ribbon.fixture.001",
+                        "rs": 61.2,
+                        "score_field": "pretrip_risk",
+                        "risk_bucket": "high",
+                        "style_class": "risk-ribbon-high",
+                        "candidate_only": True,
+                        "runtime_safety_truth": False,
+                    },
+                }
+            ],
+        },
+        "risk_ribbon.metadata.json": {
+            "artifact_kind": "scout_risk_route_ribbon",
+            "segment_count": 1,
+            "source_sample_count": 2,
+            "skipped_pair_count": 0,
+            "score_field": "pretrip_risk",
+            "score_surface_type": "route_aligned_risk_ribbon",
+            "boundary": {
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+                "interpolated_surface": False,
+                "route_aligned_samples_only": True,
+            },
+        },
+    }
+    for filename, payload in files.items():
+        (directory / filename).write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+    (directory / "route_risk.csv").write_text("sample_id,pretrip_risk\n", encoding="utf-8")
+    (directory / "risk_score_points.csv").write_text("x,y,rs\n", encoding="utf-8")
+    (directory / "risk_score_points.xyz").write_text("250000 2650000 61.2\n", encoding="utf-8")

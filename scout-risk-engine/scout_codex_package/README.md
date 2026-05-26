@@ -22,6 +22,7 @@ This package currently implements the pretrip core only:
 - GPX parser and route resampling
 - CP note parser and `SCP` scoring
 - Route risk profile with GeoJSON and CSV output
+- Route-aligned risk score point map（沿路徑風險數值點圖）with CSV/XYZ/GeoJSON output
 - Typer CLI
 - Calibration report placeholder
 
@@ -40,6 +41,11 @@ scout-risk overpass-route-profile \
   --reference-gpx ~/Downloads/twmap-gpx-yunhai/能高安東軍.gpx.gpx \
   --out out/chilai_overpass/route_risk.geojson \
   --csv-out out/chilai_overpass/route_risk.csv
+scout-risk risk-score-map \
+  --route-risk out/chilai_overpass/route_risk.geojson \
+  --csv-out out/chilai_overpass/risk_score_points.csv \
+  --xyz-out out/chilai_overpass/risk_score_points.xyz \
+  --geojson-out out/chilai_overpass/risk_score_points.geojson
 scout-risk calibration-report --out out/calibration_report.json
 ```
 
@@ -49,3 +55,8 @@ Outputs are candidate-only terrain-risk evidence. Do not treat them as runtime s
 route-profile base. The GPX path is only a weak alignment prior（弱對位參考）for
 choosing and ordering nearby OSM trail vertices; GPX points are not emitted as
 the route centerline.
+
+`risk-score-map` converts route risk point samples into a DTM-like numeric point
+file. CSV/XYZ coordinates are snapped TWD97 `EPSG:3826` x/y values and `rs`
+defaults to `pretrip_risk`. This is not an interpolated raster; it only emits
+route-aligned risk samples.

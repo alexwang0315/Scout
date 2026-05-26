@@ -136,6 +136,13 @@ def _corrected_review_payload(
     }
 
 
+def _batch_review_payload(*decisions: dict[str, object], persist_to_workspace: bool = False) -> dict[str, object]:
+    return {
+        "decisions": list(decisions),
+        "persist_to_workspace": persist_to_workspace,
+    }
+
+
 def test_pretrip_admin_page_serves_static_shell():
     client = TestClient(create_admin_app())
 
@@ -1426,8 +1433,107 @@ def test_pretrip_review_decision_api_rejects_duplicate_candidate_ref_append(tmp_
     assert persisted_log["counts"]["accepted_count"] == 2
     assert persisted_log["counts"]["rejected_count"] == 1
     assert persisted_log["decisions"][-1]["decision"] == "accepted"
-    assert persisted_log["decisions"][-1]["candidate_ref"] == UNDECIDED_CONTOUR_CANDIDATE_REF
-    assert persisted_log["decisions"][-1]["target_ids"] == UNDECIDED_CONTOUR_TARGET_IDS
+
+
+def test_pretrip_review_decision_batch_preview_is_no_write():
+    original_log = REPO_REVIEW_DECISION_LOG.read_bytes()
+    client = TestClient(create_admin_app())
+
+    response = client.post(
+        f"/admin/pretrip/projects/{PROJECT_ID}/review-decisions-batch",
+        json=_batch_review_payload(
+            _accepted_review_payload(
+                candidate_ref=UNDECIDED_CONTOUR_CANDIDATE_REF,
+                summary=UNDECIDED_CONTOUR_SUMMARY,
+            ),
+            _rejected_review_payload(
+                candidate_ref=UNDECIDED_DEPARTURE_BUNDLE_CANDIDATE_REF,
+                summary=UNDECIDED_DEPARTURE_BUNDLE_SUMMARY,
+            ),
+        ),
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["artifact_kind"] == "pretrip_review_decision_batch_preview"
+    assert payload["preview"] is True
+    assert payload["record_count"] == 2
+    assert payload["records"][0]["candidate_ref"] == UNDECIDED_CONTOUR_CANDIDATE_REF
+    assert payload["records"][1]["candidate_ref"] == UNDECIDED_DEPARTURE_BUNDLE_CANDIDATE_REF
+    assert payload["boundary"]["batch_atomic_validation"] is True
+    assert payload["boundary"]["admin_api_write_performed"] is False
+    assert payload["mutation"]["fixture_files_mutated"] is False
+    assert REPO_REVIEW_DECISION_LOG.read_bytes() == original_log
+
+
+def test_pretrip_review_decision_batch_persists_workspace_atomically(tmp_path):
+    original_log = REPO_REVIEW_DECISION_LOG.read_bytes()
+    workspace_root = _copy_pretrip_workspace(tmp_path)
+    workspace_log = workspace_root / PROJECT_ID / "reviews" / "review_decision_log.json"
+    client = TestClient(create_admin_app(pretrip_workspace_root=workspace_root))
+
+    response = client.post(
+        f"/admin/pretrip/projects/{PROJECT_ID}/review-decisions-batch",
+        json=_batch_review_payload(
+            _accepted_review_payload(
+                candidate_ref=UNDECIDED_CONTOUR_CANDIDATE_REF,
+                summary=UNDECIDED_CONTOUR_SUMMARY,
+            ),
+            _rejected_review_payload(
+                candidate_ref=UNDECIDED_DEPARTURE_BUNDLE_CANDIDATE_REF,
+                summary=UNDECIDED_DEPARTURE_BUNDLE_SUMMARY,
+            ),
+            persist_to_workspace=True,
+        ),
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["artifact_kind"] == "pretrip_review_decision_batch"
+    assert payload["preview"] is False
+    assert payload["persisted"] is True
+    assert payload["record_count"] == 2
+    assert payload["counts"]["action_count"] == 5
+    assert payload["counts"]["accepted_count"] == 2
+    assert payload["counts"]["rejected_count"] == 2
+    assert payload["boundary"]["workspace_file_mutation_allowed"] is True
+    assert payload["boundary"]["workspace_review_log_path"] == str(workspace_log)
+    assert payload["mutation"]["workspace_review_log_mutated"] is True
+
+    persisted_log = json.loads(workspace_log.read_text(encoding="utf-8"))
+    assert persisted_log["counts"]["action_count"] == 5
+    assert persisted_log["decisions"][-2]["candidate_ref"] == UNDECIDED_CONTOUR_CANDIDATE_REF
+    assert persisted_log["decisions"][-1]["candidate_ref"] == (
+        UNDECIDED_DEPARTURE_BUNDLE_CANDIDATE_REF
+    )
+    assert REPO_REVIEW_DECISION_LOG.read_bytes() == original_log
+
+
+def test_pretrip_review_decision_batch_rejects_duplicates_without_partial_write(tmp_path):
+    original_log = REPO_REVIEW_DECISION_LOG.read_bytes()
+    workspace_root = _copy_pretrip_workspace(tmp_path)
+    workspace_log = workspace_root / PROJECT_ID / "reviews" / "review_decision_log.json"
+    before_workspace_log = workspace_log.read_bytes()
+    client = TestClient(create_admin_app(pretrip_workspace_root=workspace_root))
+
+    response = client.post(
+        f"/admin/pretrip/projects/{PROJECT_ID}/review-decisions-batch",
+        json=_batch_review_payload(
+            _accepted_review_payload(
+                candidate_ref=UNDECIDED_CONTOUR_CANDIDATE_REF,
+                summary=UNDECIDED_CONTOUR_SUMMARY,
+            ),
+            _rejected_review_payload(
+                candidate_ref=UNDECIDED_CONTOUR_CANDIDATE_REF,
+                summary="Rejected duplicate candidate review decision.",
+            ),
+            persist_to_workspace=True,
+        ),
+    )
+
+    assert response.status_code == 409
+    assert "duplicate candidate_ref" in response.json()["detail"]
+    assert workspace_log.read_bytes() == before_workspace_log
     assert REPO_REVIEW_DECISION_LOG.read_bytes() == original_log
 
 
@@ -1974,6 +2080,137 @@ def test_pretrip_review_decision_apply_plan_api_rejects_missing_workspace_apply_
 
     assert response.status_code == 409
     assert "missing required review_decision_log_ref" in response.json()["detail"]
+
+
+def test_pretrip_departure_reviewed_candidates_api_rejects_without_workspace():
+    original_fixture_bytes = _repo_fixture_bytes()
+    client = TestClient(create_admin_app())
+
+    response = client.post(
+        f"/admin/pretrip/projects/{PROJECT_ID}/departure-reviewed-candidates"
+    )
+
+    assert response.status_code == 409
+    assert "pretrip_workspace_root" in response.json()["detail"]
+    assert _repo_fixture_bytes() == original_fixture_bytes
+
+
+def test_pretrip_departure_reviewed_candidates_api_writes_workspace_only(tmp_path):
+    original_fixture_bytes = _repo_fixture_bytes()
+    workspace_root = tmp_path / "pretrip_workspace"
+    workspace_project_root = workspace_root / PROJECT_ID
+    workspace_output = (
+        workspace_project_root / "outputs" / "departure_reviewed_candidates.json"
+    )
+    client = TestClient(create_admin_app(pretrip_workspace_root=workspace_root))
+
+    workspace_response = client.post(f"/admin/pretrip/projects/{PROJECT_ID}/workspace")
+    project_response = client.get(f"/admin/pretrip/projects/{PROJECT_ID}")
+    gis_item = next(
+        item
+        for item in project_response.json()["review_queue"]["items"]
+        if item["category"] == "gis_perception_cp"
+    )
+    review_response = client.post(
+        f"/admin/pretrip/projects/{PROJECT_ID}/review-decisions",
+        json=_accepted_review_payload(
+            candidate_ref=gis_item["candidate_ref"],
+            summary="Accepted GIS CP as departure addendum candidate evidence.",
+            persist_to_workspace=True,
+        ),
+    )
+    apply_plan_response = client.post(
+        f"/admin/pretrip/projects/{PROJECT_ID}/review-decision-apply-plan"
+    )
+    response = client.post(
+        f"/admin/pretrip/projects/{PROJECT_ID}/departure-reviewed-candidates"
+    )
+    project_after_response = client.get(f"/admin/pretrip/projects/{PROJECT_ID}")
+
+    assert workspace_response.status_code == 200
+    assert project_response.status_code == 200
+    assert review_response.status_code == 200
+    assert apply_plan_response.status_code == 200
+    assert response.status_code == 200
+    assert project_after_response.status_code == 200
+    payload = response.json()
+    assert payload["artifact_kind"] == "pretrip_departure_reviewed_candidates"
+    assert payload["persisted"] is True
+    assert payload["counts"] == {
+        "source_decision_count": 4,
+        "promoted_candidate_count": 3,
+        "accepted_count": 2,
+        "corrected_count": 1,
+        "rejected_audit_count": 1,
+        "runtime_truth_count": 0,
+    }
+    assert payload["boundary"]["source_mutation_allowed"] is False
+    assert payload["boundary"]["package_mutation_allowed"] is False
+    assert payload["boundary"]["mission_graph_mutation_allowed"] is False
+    assert payload["boundary"]["final_mission_graph_mutation_allowed"] is False
+    assert payload["boundary"]["runtime_mutation_allowed"] is False
+    assert payload["boundary"]["phase1_runtime_mutation_allowed"] is False
+    assert payload["boundary"]["phase2_writeback_allowed"] is False
+    assert payload["boundary"]["external_api_calls_made"] is False
+    assert payload["boundary"]["fixture_file_mutation_allowed"] is False
+    assert payload["boundary"]["workspace_file_mutation_allowed"] is True
+    assert payload["boundary"]["compiles_mission_graph"] is False
+    assert payload["boundary"]["raw_payloads_embedded"] is False
+    assert payload["boundary"]["not_departure_approval"] is True
+    assert payload["boundary"]["workspace_project_root"] == str(workspace_project_root)
+    assert payload["boundary"]["workspace_departure_reviewed_candidates_path"] == str(
+        workspace_output
+    )
+    assert payload["mutation"]["source_mutated"] is False
+    assert payload["mutation"]["package_mutated"] is False
+    assert payload["mutation"]["mission_graph_mutated"] is False
+    assert payload["mutation"]["final_mission_graph_mutated"] is False
+    assert payload["mutation"]["runtime_mutated"] is False
+    assert payload["mutation"]["phase1_runtime_mutated"] is False
+    assert payload["mutation"]["phase2_writeback_performed"] is False
+    assert payload["mutation"]["fixture_files_mutated"] is False
+    assert payload["mutation"]["workspace_files_mutated"] is True
+    assert payload["mutation"]["workspace_departure_reviewed_candidates_mutated"] is True
+
+    output_payload = json.loads(workspace_output.read_text(encoding="utf-8"))
+    gis_candidate = next(
+        candidate
+        for candidate in output_payload["candidates"]
+        if candidate["candidate_ref"] == gis_item["candidate_ref"]
+    )
+    assert output_payload["counts"]["promoted_candidate_count"] == 3
+    assert output_payload["boundary"]["not_departure_approval"] is True
+    assert output_payload["boundary"]["runtime_mutation_allowed"] is False
+    assert gis_candidate["promotion_scope"] == "departure_annotation_candidate"
+    assert gis_candidate["runtime_checkin_candidate"] is True
+    assert gis_candidate["candidate_only"] is True
+    assert gis_candidate["runtime_safety_truth"] is False
+    assert gis_candidate["human_review_required_before_runtime_use"] is True
+
+    project_after = project_after_response.json()
+    view_summary = project_after["departure_reviewed_candidates"]
+    review_section_ids = [
+        section["id"]
+        for section in project_after["tabs"]["review_workspace"]["sections"]
+    ]
+    assert view_summary["status"] == "package_addendum_candidate"
+    assert view_summary["counts"]["promoted_candidate_count"] == 3
+    assert view_summary["boundary"]["runtime_mutation_allowed"] is False
+    assert "departure_reviewed_candidates" in review_section_ids
+    assert _repo_fixture_bytes() == original_fixture_bytes
+
+
+def test_pretrip_departure_reviewed_candidates_api_rejects_missing_apply_plan(tmp_path):
+    workspace_root = _copy_pretrip_workspace(tmp_path)
+    (workspace_root / PROJECT_ID / "outputs" / "review_decision_apply_plan.json").unlink()
+    client = TestClient(create_admin_app(pretrip_workspace_root=workspace_root))
+
+    response = client.post(
+        f"/admin/pretrip/projects/{PROJECT_ID}/departure-reviewed-candidates"
+    )
+
+    assert response.status_code == 409
+    assert "missing required review_decision_apply_plan_ref" in response.json()["detail"]
 
 
 def test_pretrip_expert_contribution_apply_plan_api_rejects_without_workspace():

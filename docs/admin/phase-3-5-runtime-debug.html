@@ -29,6 +29,10 @@
       --reference: #9bd0ff;
       --overpass: #7dc2a5;
       --poi: #e6b16f;
+      --risk-low: #8fb7a1;
+      --risk-moderate: #eab308;
+      --risk-high: #f97316;
+      --risk-extreme: #dc2626;
     }
 
     * { box-sizing: border-box; }
@@ -704,6 +708,17 @@
       width: 100%;
       aspect-ratio: 16 / 9;
       min-height: 260px;
+      cursor: crosshair;
+      touch-action: none;
+      user-select: none;
+    }
+    .zoom-selection {
+      fill: rgba(125, 194, 165, .18);
+      stroke: #7dc2a5;
+      stroke-width: 2;
+      stroke-dasharray: 8 5;
+      vector-effect: non-scaling-stroke;
+      pointer-events: none;
     }
 
     .map-panel #runtimeMap {
@@ -839,6 +854,53 @@
       stroke-width: 2;
       vector-effect: non-scaling-stroke;
     }
+    .risk-score-point { stroke: #fff; stroke-width: 1.2; opacity: .42; vector-effect: non-scaling-stroke; }
+    .risk-score-point.risk-l1 { fill: #2f855a; }
+    .risk-score-point.risk-l2 { fill: #7aa95c; }
+    .risk-score-point.risk-l3 { fill: #d69e2e; }
+    .risk-score-point.risk-l4 { fill: #c05621; }
+    .risk-score-point.risk-l5 { fill: #9b2c2c; }
+    .risk-ribbon {
+      fill: none;
+      stroke-width: 7;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      opacity: .48;
+      vector-effect: non-scaling-stroke;
+    }
+    .risk-ribbon-low { stroke: var(--risk-low); }
+    .risk-ribbon-moderate { stroke: var(--risk-moderate); }
+    .risk-ribbon-high { stroke: var(--risk-high); }
+    .risk-ribbon-very_high { stroke: #fdae61; }
+    .risk-ribbon-extreme { stroke: var(--risk-extreme); }
+    .risk-heatmap {
+      fill: none;
+      stroke-width: 10;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      opacity: .72;
+      vector-effect: non-scaling-stroke;
+      mix-blend-mode: multiply;
+    }
+    .risk-heatmap-low { stroke: #2c7bb6; }
+    .risk-heatmap-moderate { stroke: #abd9e9; }
+    .risk-heatmap-high { stroke: #d6a800; }
+    .risk-heatmap-very_high { stroke: #fdae61; }
+    .risk-heatmap-extreme { stroke: #d7191c; }
+    .risk-delta {
+      fill: none;
+      stroke-width: 5;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      opacity: .86;
+      vector-effect: non-scaling-stroke;
+      stroke-dasharray: 9 5;
+    }
+    .risk-delta-calibrated_higher { stroke: #9333ea; }
+    .risk-delta-baseline_higher { stroke: #2563eb; }
+    .risk-delta-aligned_high { stroke: #7f1d1d; }
+    .risk-delta-minor_shift { stroke: #64748b; }
+    .risk-delta-aligned { stroke: #94a3b8; opacity: .28; }
 
     .map-highlight {
       opacity: 1 !important;
@@ -1343,6 +1405,10 @@
                     <div class="filters" aria-label="Map layers">
                       <label title="Imagery layer"><input type="checkbox" data-layer="imagery" checked> Imagery</label>
                       <label title="OpenStreetMap layer"><input type="checkbox" data-layer="osm" checked> OSM</label>
+                      <label title="Scout Risk Engine pretrip risk score point layer"><input type="checkbox" data-layer="risk-score"> Risk pts</label>
+                      <label title="Route-aligned baseline terrain risk layer"><input type="checkbox" data-layer="risk-ribbon" checked> Baseline</label>
+                      <label title="Route-specific calibrated heat map"><input type="checkbox" data-layer="risk-heatmap" checked> Calibrated</label>
+                      <label title="Difference between baseline risk and calibrated heat"><input type="checkbox" data-layer="risk-delta"> Delta</label>
                       <label title="Overpass evidence layer"><input type="checkbox" data-layer="overpass" checked> Overpass</label>
                       <label title="Reference GPX tracks"><input type="checkbox" data-layer="reference-tracks" checked> Ref GPX</label>
                       <label title="Route layer"><input type="checkbox" data-layer="route" checked> Route</label>
@@ -1489,6 +1555,12 @@
     const MAP_WIDTH = 1000;
     const MAP_HEIGHT = 720;
     const MAP_VISUAL_PADDING = 56;
+    const MAP_MIN_ZOOM = 0.6;
+    const MAP_MAX_ZOOM = 12000;
+    const FOCUS_POINT_VIEWPORT_M = 5;
+    const FOCUS_PATH_MAX_ZOOM = 4.4;
+    const FOCUS_POINT_BOX_THRESHOLD = 28;
+    const MAP_ZOOM_STEP_FACTOR = 1.25;
     const OSM_PUBLIC_TILE_URL_TEMPLATE = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
     const OSM_LOCAL_TILE_URL_TEMPLATE = `${apiBase()}/admin/tiles/osm/{z}/{x}/{y}.png`;
     const OSM_TILE_URL_TEMPLATE = OSM_PUBLIC_TILE_URL_TEMPLATE;
@@ -1512,7 +1584,8 @@
       projection: null,
       zoom: 1,
       panX: 0,
-      panY: 0
+      panY: 0,
+      zoomSelection: null
     };
     const runtimeMap = document.getElementById("runtimeMap");
     const EVENT_MAP_REFS = {
@@ -1854,6 +1927,15 @@
 
     function applyMapViewport() {
       runtimeMap.setAttribute("viewBox", mapViewBox());
+      syncMapMarkerScale();
+    }
+    function syncMapMarkerScale() {
+      const scale = Math.max(debugPageState.zoom, 1);
+      runtimeMap.querySelectorAll("circle").forEach(circle => {
+        if (!circle.dataset.baseRadius) circle.dataset.baseRadius = circle.getAttribute("r") || "4";
+        const baseRadius = Number(circle.dataset.baseRadius);
+        if (Number.isFinite(baseRadius)) circle.setAttribute("r", Math.max(baseRadius / scale, 0.001));
+      });
     }
 
     function clampMapPan() {
@@ -1870,8 +1952,9 @@
       applyMapViewport();
     }
 
-    function zoomMap(delta) {
-      debugPageState.zoom = Math.max(0.8, Math.min(1.8, debugPageState.zoom + delta));
+    function zoomMap(direction) {
+      const nextZoom = direction > 0 ? debugPageState.zoom * MAP_ZOOM_STEP_FACTOR : debugPageState.zoom / MAP_ZOOM_STEP_FACTOR;
+      debugPageState.zoom = Math.max(MAP_MIN_ZOOM, Math.min(MAP_MAX_ZOOM, nextZoom));
       clampMapPan();
       applyMapViewport();
       highlightMapForEvent(selectedMapEvent());
@@ -1883,6 +1966,11 @@
       debugPageState.panY = 0;
       applyMapViewport();
       highlightMapForEvent(selectedMapEvent());
+    }
+
+    function riskLevelClass(level) {
+      const normalized = Number(level || 0);
+      return normalized >= 5 ? "risk-l5" : normalized >= 4 ? "risk-l4" : normalized >= 3 ? "risk-l3" : normalized >= 2 ? "risk-l2" : "risk-l1";
     }
 
     function updateLayers() {
@@ -1974,6 +2062,62 @@
       attachMapEvidence(routePath, projection.route, "route route-progress");
       routeGroup.appendChild(routePath);
       runtimeMap.appendChild(routeGroup);
+
+      const riskRibbonGroup = svgEl("g", {"data-layer-group": "risk-ribbon"});
+      (projection.risk_ribbon?.segments || []).forEach(segment => {
+        const coords = segment.coordinates || [];
+        if (coords.length < 2) return;
+        const path = svgEl("path", {
+          d: pathFromCoords(bounds, coords),
+          class: `risk-ribbon ${segment.style_class || "risk-ribbon-moderate"}`
+        });
+        if (segment.stroke) path.style.stroke = segment.stroke;
+        attachMapEvidence(path, segment, `risk-ribbon ${segment.source_id || segment.segment_id || ""}`);
+        riskRibbonGroup.appendChild(path);
+      });
+      runtimeMap.appendChild(riskRibbonGroup);
+
+      const riskHeatmapGroup = svgEl("g", {"data-layer-group": "risk-heatmap"});
+      (projection.risk_heatmap?.segments || []).forEach(segment => {
+        const coords = segment.coordinates || [];
+        if (coords.length < 2) return;
+        const path = svgEl("path", {
+          d: pathFromCoords(bounds, coords),
+          class: `risk-heatmap ${segment.style_class || "risk-heatmap-low"}`
+        });
+        if (segment.stroke) path.style.stroke = segment.stroke;
+        attachMapEvidence(path, segment, `risk-heatmap ${segment.source_id || segment.segment_id || ""}`);
+        riskHeatmapGroup.appendChild(path);
+      });
+      runtimeMap.appendChild(riskHeatmapGroup);
+
+      const riskDeltaGroup = svgEl("g", {"data-layer-group": "risk-delta"});
+      (projection.risk_delta?.segments || []).forEach(segment => {
+        const coords = segment.coordinates || [];
+        if (coords.length < 2) return;
+        const path = svgEl("path", {
+          d: pathFromCoords(bounds, coords),
+          class: `risk-delta ${segment.style_class || "risk-delta-aligned"}`
+        });
+        if (segment.stroke) path.style.stroke = segment.stroke;
+        attachMapEvidence(path, segment, `risk-delta ${segment.source_id || segment.segment_id || ""}`);
+        riskDeltaGroup.appendChild(path);
+      });
+      runtimeMap.appendChild(riskDeltaGroup);
+
+      const riskScoreGroup = svgEl("g", {"data-layer-group": "risk-score"});
+      (projection.risk_score?.points || []).forEach(point => {
+        const [x, y] = projectPoint(bounds, point.lat, point.lon);
+        const circle = svgEl("circle", {
+          cx: x,
+          cy: y,
+          r: Math.max(3, Math.min(7, 2.5 + Number(point.risk_level || 1))),
+          class: `risk-score-point ${riskLevelClass(point.risk_level)}`
+        });
+        attachMapEvidence(circle, point, `risk-score ${point.source_id || point.sample_id || ""}`);
+        riskScoreGroup.appendChild(circle);
+      });
+      runtimeMap.appendChild(riskScoreGroup);
 
       const segmentGroup = svgEl("g", {"data-layer-group": "segments"});
       (projection.segments || []).forEach(segment => {
@@ -2671,6 +2815,275 @@
       return [...new Set(targets)];
     }
 
+    function preciseMapTargetsForEvent(event) {
+      const payload = event?.payload || {};
+      const refs = new Set([
+        ...(Array.isArray(payload.map_target_ids) ? payload.map_target_ids : []),
+        payload.segment_id,
+        payload.checkpoint_id,
+        payload.candidate_id,
+        payload.source_id
+      ].filter(Boolean));
+      const subjectCheckpoint = text(event?.subject_ref, "").match(/CP\d+/i)?.[0];
+      if (subjectCheckpoint) refs.add(subjectCheckpoint);
+      const targets = [];
+      refs.forEach(ref => {
+        const escaped = selectorValue(ref);
+        runtimeMap.querySelectorAll(`[data-source-id="${escaped}"]`).forEach(node => targets.push(node));
+        runtimeMap.querySelectorAll(`[data-source-id^="${escaped}."]`).forEach(node => targets.push(node));
+        runtimeMap.querySelectorAll("[data-map-ref]").forEach(node => {
+          const tokens = text(node.dataset.mapRef, "").split(/\s+/).filter(Boolean);
+          if (tokens.includes(ref)) targets.push(node);
+        });
+      });
+      return [...new Set(targets)];
+    }
+
+    function coordinateFromEvent(event) {
+      const payload = event?.payload || {};
+      const coordinatePairs = [
+        [payload.lat, payload.lon],
+        [payload.observation_lat, payload.observation_lon],
+        [payload.coordinate?.lat, payload.coordinate?.lon],
+        [payload.position?.lat, payload.position?.lon],
+        [payload.sample?.lat, payload.sample?.lon],
+        [payload.details?.lat, payload.details?.lon],
+        [payload.details?.observation_lat, payload.details?.observation_lon]
+      ];
+      for (const [latValue, lonValue] of coordinatePairs) {
+        const lat = Number(latValue);
+        const lon = Number(lonValue);
+        if (Number.isFinite(lat) && Number.isFinite(lon)) return {lat, lon};
+      }
+      const checkpointId = payload.checkpoint_id || text(event?.subject_ref, "").match(/CP\d+/i)?.[0];
+      if (checkpointId && debugPageState.projection?.checkpoints) {
+        const checkpoint = debugPageState.projection.checkpoints.find(candidate =>
+          [candidate.checkpoint_id, candidate.candidate_id, candidate.source_id].filter(Boolean).includes(checkpointId)
+        );
+        const lat = Number(checkpoint?.lat);
+        const lon = Number(checkpoint?.lon);
+        if (Number.isFinite(lat) && Number.isFinite(lon)) return {lat, lon};
+      }
+      return null;
+    }
+
+    function svgBoxFor(node) {
+      try {
+        const box = node.getBBox();
+        if (!Number.isFinite(box.x) || !Number.isFinite(box.y)) return null;
+        return {
+          x: box.x,
+          y: box.y,
+          width: Math.max(Number(box.width) || 0, 8),
+          height: Math.max(Number(box.height) || 0, 8)
+        };
+      } catch (_) {
+        return null;
+      }
+    }
+
+    function unionBoxes(boxes) {
+      const left = Math.min(...boxes.map(box => box.x));
+      const top = Math.min(...boxes.map(box => box.y));
+      const right = Math.max(...boxes.map(box => box.x + box.width));
+      const bottom = Math.max(...boxes.map(box => box.y + box.height));
+      return {x: left, y: top, width: right - left, height: bottom - top};
+    }
+
+    function pointBox(x, y, size = 18) {
+      return {x: x - size / 2, y: y - size / 2, width: size, height: size};
+    }
+
+    function metersBetween(lat1, lon1, lat2, lon2) {
+      const earthRadiusM = 6371000;
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLon = (lon2 - lon1) * Math.PI / 180;
+      const a = Math.sin(dLat / 2) ** 2
+        + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+      return 2 * earthRadiusM * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    }
+
+    function pointFocusZoom() {
+      if (!debugPageState.projection) return null;
+      const bounds = boundsForProjection(debugPageState.projection);
+      const centerLat = (bounds.north + bounds.south) / 2;
+      const centerLon = (bounds.east + bounds.west) / 2;
+      const widthMeters = metersBetween(centerLat, bounds.west, centerLat, bounds.east);
+      const heightMeters = metersBetween(bounds.south, centerLon, bounds.north, centerLon);
+      const drawableWidth = Math.max(MAP_WIDTH - MAP_VISUAL_PADDING * 2, 1);
+      const drawableHeight = Math.max(MAP_HEIGHT - MAP_VISUAL_PADDING * 2, 1);
+      const widthZoom = (MAP_WIDTH * (widthMeters / drawableWidth)) / FOCUS_POINT_VIEWPORT_M;
+      const heightZoom = (MAP_HEIGHT * (heightMeters / drawableHeight)) / FOCUS_POINT_VIEWPORT_M;
+      return Math.max(1.2, Math.min(MAP_MAX_ZOOM, Math.max(widthZoom, heightZoom)));
+    }
+
+    function focusZoomForBox(box, fitZoom) {
+      const isPointSized = box.width <= FOCUS_POINT_BOX_THRESHOLD && box.height <= FOCUS_POINT_BOX_THRESHOLD;
+      if (isPointSized) {
+        return pointFocusZoom() || Math.max(1.2, Math.min(MAP_MAX_ZOOM, fitZoom, FOCUS_PATH_MAX_ZOOM));
+      }
+      return Math.max(1.2, Math.min(MAP_MAX_ZOOM, fitZoom, FOCUS_PATH_MAX_ZOOM));
+    }
+
+    function mapBoxForEvent(event) {
+      const preciseBoxes = preciseMapTargetsForEvent(event).map(svgBoxFor).filter(Boolean);
+      if (preciseBoxes.length) return unionBoxes(preciseBoxes);
+      const coordinate = coordinateFromEvent(event);
+      if (coordinate && debugPageState.projection) {
+        const [x, y] = projectPoint(boundsForProjection(debugPageState.projection), coordinate.lat, coordinate.lon);
+        return pointBox(x, y);
+      }
+      const boxes = mapTargetsForEvent(event).map(svgBoxFor).filter(Boolean);
+      if (boxes.length) return unionBoxes(boxes);
+      return null;
+    }
+
+    function focusMapBox(box) {
+      if (!box) return false;
+      const paddedWidth = Math.max(box.width + 90, 1);
+      const paddedHeight = Math.max(box.height + 90, 1);
+      const fitZoom = Math.min(MAP_WIDTH / paddedWidth, MAP_HEIGHT / paddedHeight);
+      debugPageState.zoom = focusZoomForBox(box, fitZoom);
+      debugPageState.panX = box.x + box.width / 2 - MAP_WIDTH / 2;
+      debugPageState.panY = box.y + box.height / 2 - MAP_HEIGHT / 2;
+      clampMapPan();
+      applyMapViewport();
+      return true;
+    }
+
+    function focusMapForEvent(event) {
+      const focused = focusMapBox(mapBoxForEvent(event));
+      if (focused) highlightMapForEvent(event);
+      return focused;
+    }
+
+    function mapPointFromPointerEvent(event) {
+      if (!runtimeMap.getScreenCTM) return null;
+      const matrix = runtimeMap.getScreenCTM();
+      if (!matrix) return null;
+      const point = runtimeMap.createSVGPoint();
+      point.x = event.clientX;
+      point.y = event.clientY;
+      const local = point.matrixTransform(matrix.inverse());
+      return {x: local.x, y: local.y};
+    }
+
+    function boxFromPoints(start, end) {
+      const left = Math.min(start.x, end.x);
+      const top = Math.min(start.y, end.y);
+      const right = Math.max(start.x, end.x);
+      const bottom = Math.max(start.y, end.y);
+      return {x: left, y: top, width: right - left, height: bottom - top};
+    }
+
+    function updateZoomSelectionOverlay(box) {
+      let rect = runtimeMap.querySelector("#zoomSelection");
+      if (!rect) {
+        rect = svgEl("rect", {id: "zoomSelection", class: "zoom-selection"});
+        runtimeMap.appendChild(rect);
+      }
+      rect.setAttribute("x", box.x);
+      rect.setAttribute("y", box.y);
+      rect.setAttribute("width", Math.max(box.width, 0.001));
+      rect.setAttribute("height", Math.max(box.height, 0.001));
+    }
+
+    function clearZoomSelectionOverlay() {
+      runtimeMap.querySelector("#zoomSelection")?.remove();
+    }
+
+    function zoomMapToBox(box) {
+      if (!box || box.width <= 0 || box.height <= 0) return false;
+      const targetZoom = Math.max(MAP_MIN_ZOOM, Math.min(MAP_MAX_ZOOM, Math.min(MAP_WIDTH / box.width, MAP_HEIGHT / box.height)));
+      debugPageState.zoom = targetZoom;
+      debugPageState.panX = box.x + box.width / 2 - MAP_WIDTH / 2;
+      debugPageState.panY = box.y + box.height / 2 - MAP_HEIGHT / 2;
+      clampMapPan();
+      applyMapViewport();
+      highlightMapForEvent(selectedMapEvent());
+      return true;
+    }
+
+    function selectionZoomFactor(selection) {
+      const rect = runtimeMap.getBoundingClientRect();
+      const width = Math.abs(selection.screenX - eventScreenX(selection));
+      const height = Math.abs(selection.screenY - eventScreenY(selection));
+      if (!width || !height || !rect.width || !rect.height) return 1;
+      return Math.max(1, Math.min(rect.width / width, rect.height / height));
+    }
+
+    function eventScreenX(selection) {
+      return selection.currentScreenX ?? selection.screenX;
+    }
+
+    function eventScreenY(selection) {
+      return selection.currentScreenY ?? selection.screenY;
+    }
+
+    function zoomMapOutFromBox(box, zoomFactor = null) {
+      if (!box || box.width <= 0 || box.height <= 0) return false;
+      const rawFactor = zoomFactor || Math.max(1, Math.min(MAP_WIDTH / box.width, MAP_HEIGHT / box.height));
+      const factor = debugPageState.zoom > 1 ? Math.min(rawFactor, debugPageState.zoom) : rawFactor;
+      debugPageState.zoom = Math.max(1, Math.min(MAP_MAX_ZOOM, debugPageState.zoom / factor));
+      debugPageState.panX = box.x + box.width / 2 - MAP_WIDTH / 2;
+      debugPageState.panY = box.y + box.height / 2 - MAP_HEIGHT / 2;
+      clampMapPan();
+      applyMapViewport();
+      highlightMapForEvent(selectedMapEvent());
+      return true;
+    }
+
+    function isZoomOutDrag(selection) {
+      return selection.current.x < selection.start.x && selection.current.y < selection.start.y;
+    }
+
+    function beginMapRectangleZoom(event) {
+      if (event.button !== 0) return;
+      const start = mapPointFromPointerEvent(event);
+      if (!start) return;
+      debugPageState.zoomSelection = {
+        pointerId: event.pointerId,
+        screenX: event.clientX,
+        screenY: event.clientY,
+        start,
+        current: start,
+        moved: false
+      };
+      runtimeMap.classList.add("is-selecting");
+      runtimeMap.setPointerCapture(event.pointerId);
+    }
+
+    function updateMapRectangleZoom(event) {
+      const selection = debugPageState.zoomSelection;
+      if (!selection) return;
+      const current = mapPointFromPointerEvent(event);
+      if (!current) return;
+      selection.current = current;
+      selection.currentScreenX = event.clientX;
+      selection.currentScreenY = event.clientY;
+      selection.moved = Math.abs(selection.screenX - event.clientX) > 8 || Math.abs(selection.screenY - event.clientY) > 8;
+      if (selection.moved) updateZoomSelectionOverlay(boxFromPoints(selection.start, current));
+    }
+
+    function finishMapRectangleZoom(event) {
+      const selection = debugPageState.zoomSelection;
+      debugPageState.zoomSelection = null;
+      runtimeMap.classList.remove("is-selecting");
+      if (runtimeMap.hasPointerCapture(event.pointerId)) runtimeMap.releasePointerCapture(event.pointerId);
+      clearZoomSelectionOverlay();
+      if (selection?.moved) {
+        const box = boxFromPoints(selection.start, selection.current);
+        if (isZoomOutDrag(selection)) zoomMapOutFromBox(box, selectionZoomFactor(selection));
+        else zoomMapToBox(box);
+      }
+    }
+
+    function cancelMapRectangleZoom() {
+      debugPageState.zoomSelection = null;
+      runtimeMap.classList.remove("is-selecting");
+      clearZoomSelectionOverlay();
+    }
+
     function highlightMapForEvent(event) {
       runtimeMap.querySelectorAll(".map-highlight").forEach((node) => node.classList.remove("map-highlight"));
       const targets = mapTargetsForEvent(event);
@@ -2720,6 +3133,11 @@
         const index = Number(node.dataset.eventIndex || -1);
         const event = debugPageState.events[index];
         node.addEventListener("click", () => selectTimelineNode(event, index));
+        node.addEventListener("dblclick", (mouseEvent) => {
+          mouseEvent.preventDefault();
+          selectTimelineNode(event, index);
+          focusMapForEvent(event);
+        });
         node.addEventListener("keydown", (keyboardEvent) => {
           if (keyboardEvent.key === "Enter" || keyboardEvent.key === " ") {
             keyboardEvent.preventDefault();
@@ -2863,13 +3281,17 @@
     function bindDebugControls() {
       document.getElementById("debugClearButton").addEventListener("click", clearDebugProjection);
       document.querySelectorAll("[data-layer]").forEach(input => input.addEventListener("change", updateLayers));
-      document.getElementById("zoomIn").addEventListener("click", () => zoomMap(0.1));
-      document.getElementById("zoomOut").addEventListener("click", () => zoomMap(-0.1));
+      document.getElementById("zoomIn").addEventListener("click", () => zoomMap(1));
+      document.getElementById("zoomOut").addEventListener("click", () => zoomMap(-1));
       document.getElementById("fitRoute").addEventListener("click", resetMapView);
       document.getElementById("panUp").addEventListener("click", () => panMap(0, -70));
       document.getElementById("panDown").addEventListener("click", () => panMap(0, 70));
       document.getElementById("panLeft").addEventListener("click", () => panMap(-70, 0));
       document.getElementById("panRight").addEventListener("click", () => panMap(70, 0));
+      runtimeMap.addEventListener("pointerdown", beginMapRectangleZoom);
+      runtimeMap.addEventListener("pointermove", updateMapRectangleZoom);
+      runtimeMap.addEventListener("pointerup", finishMapRectangleZoom);
+      runtimeMap.addEventListener("pointercancel", cancelMapRectangleZoom);
     }
 
     const initialUrlSelection = readUrlSelection();

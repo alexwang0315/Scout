@@ -21,6 +21,10 @@
       --review: #7251b5;
       --overpass: #0f766e;
       --reference: #7a5c12;
+      --risk-low: #8fb7a1;
+      --risk-moderate: #eab308;
+      --risk-high: #f97316;
+      --risk-extreme: #dc2626;
       --surface: #eef3f7;
       --danger: #b23a48;
       --warning: #9a6700;
@@ -329,11 +333,19 @@
       background: #fbfcfe;
       border: 1px solid var(--line);
       border-radius: 8px;
-      cursor: grab;
+      cursor: crosshair;
       touch-action: none;
       user-select: none;
     }
-    #map.is-panning { cursor: grabbing; }
+    #map.is-selecting { cursor: crosshair; }
+    .zoom-selection {
+      fill: rgba(40, 102, 110, .16);
+      stroke: #28666e;
+      stroke-width: 2;
+      stroke-dasharray: 8 5;
+      vector-effect: non-scaling-stroke;
+      pointer-events: none;
+    }
     .layer-imagery { fill: #e5ebf1; opacity: .42; }
     .layer-osm { fill: #f7fafc; opacity: .72; }
     .raster-tile { opacity: .46; image-rendering: auto; }
@@ -393,6 +405,53 @@
     .overpass-hazard { fill: rgba(15, 118, 110, .12); stroke: var(--overpass); stroke-width: 2; stroke-dasharray: 7 5; }
     .overpass-poi { fill: var(--overpass); stroke: white; stroke-width: 2; }
     .reference-track { fill: none; stroke: var(--reference); stroke-width: 2.2; opacity: .34; stroke-linecap: round; stroke-dasharray: 6 5; }
+    .risk-score-point { stroke: white; stroke-width: 1.2; opacity: .42; }
+    .risk-score-point.risk-l1 { fill: #2f855a; }
+    .risk-score-point.risk-l2 { fill: #7aa95c; }
+    .risk-score-point.risk-l3 { fill: #d69e2e; }
+    .risk-score-point.risk-l4 { fill: #c05621; }
+    .risk-score-point.risk-l5 { fill: #9b2c2c; }
+    .risk-ribbon {
+      fill: none;
+      stroke-width: 7;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      opacity: .48;
+      vector-effect: non-scaling-stroke;
+    }
+    .risk-ribbon-low { stroke: var(--risk-low); }
+    .risk-ribbon-moderate { stroke: var(--risk-moderate); }
+    .risk-ribbon-high { stroke: var(--risk-high); }
+    .risk-ribbon-very_high { stroke: #fdae61; }
+    .risk-ribbon-extreme { stroke: var(--risk-extreme); }
+    .risk-heatmap {
+      fill: none;
+      stroke-width: 10;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      opacity: .72;
+      vector-effect: non-scaling-stroke;
+      mix-blend-mode: multiply;
+    }
+    .risk-heatmap-low { stroke: #2c7bb6; }
+    .risk-heatmap-moderate { stroke: #abd9e9; }
+    .risk-heatmap-high { stroke: #d6a800; }
+    .risk-heatmap-very_high { stroke: #fdae61; }
+    .risk-heatmap-extreme { stroke: #d7191c; }
+    .risk-delta {
+      fill: none;
+      stroke-width: 5;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      opacity: .86;
+      vector-effect: non-scaling-stroke;
+      stroke-dasharray: 9 5;
+    }
+    .risk-delta-calibrated_higher { stroke: #9333ea; }
+    .risk-delta-baseline_higher { stroke: #2563eb; }
+    .risk-delta-aligned_high { stroke: #7f1d1d; }
+    .risk-delta-minor_shift { stroke: #64748b; }
+    .risk-delta-aligned { stroke: #94a3b8; opacity: .28; }
     .checkpoint { fill: var(--checkpoint); stroke: white; stroke-width: 2; }
     .gis-perception-cp { fill: var(--review); stroke: white; stroke-width: 2.4; opacity: .92; }
     .gis-perception-cp.is-stale { fill: var(--warning); stroke: var(--ink); }
@@ -636,6 +695,27 @@
       background: #f1ecfb;
     }
     .review-quick strong { margin-left: 3px; }
+    .review-scale-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) repeat(5, auto);
+      gap: 6px;
+      align-items: center;
+    }
+    .review-selection-summary {
+      min-width: 0;
+      min-height: 24px;
+      display: flex;
+      align-items: center;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fff;
+      color: var(--muted);
+      padding: 3px 7px;
+      font-size: 11px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
     .tree, .detail-body {
       overflow: auto;
       padding: 12px;
@@ -706,6 +786,10 @@
       border-color: var(--accent);
       background: #edf7f8;
     }
+    .tree button.is-bulk-selected {
+      border-color: var(--review);
+      background: #f6f0ff;
+    }
     .tree-label {
       display: flex;
       align-items: center;
@@ -743,6 +827,7 @@
     }
     .badge-category { border-color: var(--category-color, var(--line)); color: var(--ink); }
     .badge-status { background: #eef7f0; color: #26653a; }
+    .badge-source { max-width: 100%; background: #fff; color: #405064; }
     .tabs {
       display: flex;
       flex-wrap: wrap;
@@ -1120,6 +1205,10 @@
                     <label title="Imagery layer"><input type="checkbox" data-layer="imagery" checked> Imagery</label>
                     <label title="OpenStreetMap layer"><input type="checkbox" data-layer="osm" checked> OSM</label>
                     <label title="Terrain layer"><input type="checkbox" data-layer="terrain" checked> Terrain</label>
+                    <label title="Scout Risk Engine pretrip risk score point layer"><input type="checkbox" data-layer="risk-score"> Risk pts</label>
+                    <label title="Route-aligned baseline terrain risk layer"><input type="checkbox" data-layer="risk-ribbon" checked> Baseline</label>
+                    <label title="Route-specific calibrated heat map"><input type="checkbox" data-layer="risk-heatmap" checked> Calibrated</label>
+                    <label title="Difference between baseline risk and calibrated heat"><input type="checkbox" data-layer="risk-delta"> Delta</label>
                     <label title="Corridor layer"><input type="checkbox" data-layer="corridors" checked> Corridors</label>
                     <label title="Route layer"><input type="checkbox" data-layer="route" checked> Route</label>
                     <label title="Reference GPX tracks"><input type="checkbox" data-layer="reference-tracks" checked> Ref GPX</label>
@@ -1316,6 +1405,14 @@
               <button id="reviewReviewQuick" class="review-quick" type="button" data-review-severity="review">Review <strong id="reviewReviewCount">-</strong></button>
               <button id="reviewNextItem" class="tool-button" type="button" title="Move to next review item" aria-label="Move to next review item">Next</button>
             </div>
+            <div class="review-scale-row" aria-label="Scale-assisted review selection">
+              <div id="reviewScaleSummary" class="review-selection-summary">0 selected / 0 visible / 0 bulk eligible</div>
+              <button id="reviewSelectVisible" class="tool-button" type="button" title="Select visible review-only items" aria-label="Select visible review-only items">Select visible</button>
+              <button id="reviewSelectViewport" class="tool-button" type="button" title="Select review-only items in current map viewport" aria-label="Select review-only items in current map viewport">Select map</button>
+              <button id="reviewClearSelection" class="tool-button" type="button" title="Clear review selection" aria-label="Clear review selection">Clear</button>
+              <button id="workspaceAcceptSelectedReviews" class="tool-button" type="button" title="Accept selected review-only items" aria-label="Accept selected review-only items">Accept selected</button>
+              <button id="workspaceRejectSelectedReviews" class="tool-button" type="button" title="Reject selected review-only items" aria-label="Reject selected review-only items">Reject selected</button>
+            </div>
             <div class="review-filter-row" aria-label="Route note draft review options">
               <select id="routeNoteDraftDisposition" aria-label="Route note draft disposition">
                 <option value="">Route-note draft option</option>
@@ -1342,6 +1439,7 @@
                   <button id="workspaceCorrectReview" class="tool-button" type="button" title="Correct selected review" aria-label="Correct selected review">Correct</button>
                   <button id="workspaceRejectReview" class="tool-button" type="button" title="Reject selected review" aria-label="Reject selected review">Reject</button>
                   <button id="workspaceRefreshApplyPlan" class="tool-button" type="button" title="Refresh apply plan" aria-label="Refresh apply plan">Refresh plan</button>
+                  <button id="departureReviewedCandidates" class="tool-button" type="button" title="Write reviewed candidate addendum" aria-label="Write reviewed candidate addendum">Reviewed CPs</button>
                   <button id="routeNoteReviewedAssumptions" class="tool-button" type="button" title="Route-note reviewed assumptions" aria-label="Route-note reviewed assumptions">Assumptions</button>
                   <button id="expertContributionApplyResult" class="tool-button" type="button" title="Expert contribution apply result" aria-label="Expert contribution apply result">Expert result</button>
                 </div>
@@ -1447,6 +1545,12 @@
     const MAP_WIDTH = 1000;
     const MAP_HEIGHT = 720;
     const MAP_VISUAL_PADDING = 56;
+    const MAP_MIN_ZOOM = 0.6;
+    const MAP_MAX_ZOOM = 12000;
+    const FOCUS_POINT_VIEWPORT_M = 5;
+    const FOCUS_PATH_MAX_ZOOM = 4.4;
+    const FOCUS_POINT_BOX_THRESHOLD = 28;
+    const MAP_ZOOM_STEP_FACTOR = 1.25;
     const OSM_PUBLIC_TILE_URL_TEMPLATE = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
     const OSM_LOCAL_TILE_URL_TEMPLATE = `${apiBase()}/admin/tiles/osm/{z}/{x}/{y}.png`;
     const OSM_TILE_URL_TEMPLATE = OSM_PUBLIC_TILE_URL_TEMPLATE;
@@ -1465,9 +1569,10 @@
       zoom: 1,
       panX: 0,
       panY: 0,
-      pointerPan: null,
+      zoomSelection: null,
       selectedMapCoordinate: null,
       reviewQueueCursor: -1,
+      selectedReviewCandidateRefs: new Set(),
       routeNoteDraftDisposition: "",
       weatherOverlay: null
     };
@@ -1696,12 +1801,19 @@
         hazard: "var(--hazard)",
         overpass: "var(--overpass)",
         reference: "var(--reference)",
-        review: "var(--review)"
+        risk: "var(--warning)",
+        review: "var(--review)",
+        review_group: "var(--review)"
       };
       return colors[category] || "var(--accent)";
     }
     function evidenceCategory(item) {
       const type = item?.evidence_type || "";
+      if (type.includes("risk_score")) return "risk";
+      if (type.includes("risk_ribbon")) return "risk";
+      if (type.includes("risk_heatmap")) return "risk";
+      if (type.includes("risk_delta")) return "risk";
+      if (type.includes("review_workbench")) return "review_group";
       if (type.includes("checkpoint")) return "checkpoint";
       if (type.includes("segment")) return "segment";
       if (type.includes("retreat")) return "retreat";
@@ -1722,6 +1834,29 @@
     function statusFor(item) {
       return item?.review_state || item?.status || item?.severity || "candidate";
     }
+    function riskLevelClass(level) {
+      const normalized = Number(level || 0);
+      return normalized >= 5 ? "risk-l5" : normalized >= 4 ? "risk-l4" : normalized >= 3 ? "risk-l3" : normalized >= 2 ? "risk-l2" : "risk-l1";
+    }
+    function riskRibbonClass(bucket, score) {
+      const normalizedBucket = String(bucket || "").toLowerCase();
+      if (["low", "moderate", "high", "very_high", "extreme"].includes(normalizedBucket)) return `risk-ribbon-${normalizedBucket}`;
+      const value = Number(score || 0);
+      if (value >= 80) return "risk-ribbon-extreme";
+      if (value >= 60) return "risk-ribbon-high";
+      if (value >= 40) return "risk-ribbon-moderate";
+      return "risk-ribbon-low";
+    }
+    function sourceLabelFor(item) {
+      const attribution = Array.isArray(item?.source_attribution) ? item.source_attribution[0] : null;
+      const profile = attribution?.source_profile || item?.source_profile || "";
+      const sourceLabel = attribution?.source_label || attribution?.source_candidate_id || "";
+      if (profile && sourceLabel) return `${profile}: ${sourceLabel}`;
+      if (profile) return profile;
+      const refs = Array.isArray(item?.source_refs) ? item.source_refs.filter(Boolean) : [];
+      if (refs.length) return refs[0];
+      return item?.evidence_type || item?.source_path || "source unknown";
+    }
     function reviewCategoryFor(item) {
       return item?.category || "";
     }
@@ -1739,6 +1874,79 @@
     function reviewDecisionStateFor(item, view = state.view) {
       if (evidenceCategory(item) !== "review" || !item?.candidate_ref) return "";
       return isCandidateRefDecided(item.candidate_ref, view) ? "decided" : "undecided";
+    }
+    function reviewItemByCandidateRef(candidateRef, view = state.view) {
+      if (!candidateRef) return null;
+      return (view?.review_queue?.items || []).find(item => item.candidate_ref === candidateRef) || null;
+    }
+    function isBulkReviewEligible(item, view = state.view) {
+      if (evidenceCategory(item) !== "review" || !item?.candidate_ref) return false;
+      if (isCandidateRefDecided(item.candidate_ref, view)) return false;
+      if (item.severity !== "review") return false;
+      return !["departure_bundle", "runtime_handoff"].includes(item.category);
+    }
+    function selectedBulkReviewItems(view = state.view) {
+      return [...state.selectedReviewCandidateRefs]
+        .map(candidateRef => reviewItemByCandidateRef(candidateRef, view))
+        .filter(item => isBulkReviewEligible(item, view));
+    }
+    function visibleBulkReviewItems(view = state.view) {
+      return visibleReviewButtons()
+        .map(button => reviewItemByCandidateRef(button.dataset.candidateRef, view))
+        .filter(item => isBulkReviewEligible(item, view));
+    }
+    function syncBulkReviewSelectionStyles() {
+      document.querySelectorAll('#reviewWorkspaceTree button[data-candidate-ref]').forEach(button => {
+        const selected = state.selectedReviewCandidateRefs.has(button.dataset.candidateRef);
+        button.classList.toggle("is-bulk-selected", selected);
+        button.dataset.bulkSelected = selected ? "true" : "false";
+      });
+    }
+    function updateReviewSelectionSummary(view = state.view) {
+      const node = document.getElementById("reviewScaleSummary");
+      if (!node) return;
+      const visibleButtons = visibleReviewButtons();
+      const visibleItems = visibleBulkReviewItems(view);
+      const selectedItems = selectedBulkReviewItems(view);
+      node.textContent = `${selectedItems.length} selected / ${visibleButtons.length} visible / ${visibleItems.length} bulk eligible`;
+      node.title = "Bulk actions apply only to undecided review-severity items. Warning, blocker, departure, and runtime handoff items remain single-review.";
+    }
+    function selectVisibleReviewItems() {
+      visibleBulkReviewItems().forEach(item => state.selectedReviewCandidateRefs.add(item.candidate_ref));
+      syncBulkReviewSelectionStyles();
+      updateReviewSelectionSummary();
+    }
+    function clearReviewSelection() {
+      state.selectedReviewCandidateRefs.clear();
+      syncBulkReviewSelectionStyles();
+      updateReviewSelectionSummary();
+    }
+    function currentMapViewportRect() {
+      const [x, y, width, height] = mapViewBox().split(/\s+/).map(Number);
+      return {x, y, width, height, right: x + width, bottom: y + height};
+    }
+    function nodeIntersectsViewport(node, viewport = currentMapViewportRect()) {
+      try {
+        const box = node.getBBox();
+        return box.x <= viewport.right
+          && box.x + box.width >= viewport.x
+          && box.y <= viewport.bottom
+          && box.y + box.height >= viewport.y;
+      } catch (_) {
+        return false;
+      }
+    }
+    function reviewItemInCurrentViewport(item) {
+      return mapTargetsFor(item).some(node => nodeIntersectsViewport(node));
+    }
+    function selectViewportReviewItems() {
+      const items = (state.view?.review_queue?.items || [])
+        .filter(item => isBulkReviewEligible(item))
+        .filter(reviewItemInCurrentViewport);
+      items.forEach(item => state.selectedReviewCandidateRefs.add(item.candidate_ref));
+      syncBulkReviewSelectionStyles();
+      updateReviewSelectionSummary();
+      setWorkspaceStatus(`Selected ${items.length} map-visible review-only items from the current viewport.`, items.length ? "success" : "error");
     }
     function findEvidenceBySourceId(view, sourceId) {
       if (!sourceId) return null;
@@ -1779,6 +1987,7 @@
         label,
         sublabel,
         evidenceSourceId(item),
+        sourceLabelFor(item),
         item?.checkpoint_type,
         item?.review_state,
         item?.status,
@@ -1842,6 +2051,15 @@
     }
     function applyMapViewport() {
       svg.setAttribute("viewBox", mapViewBox());
+      syncMapMarkerScale();
+    }
+    function syncMapMarkerScale() {
+      const scale = Math.max(state.zoom, 1);
+      svg.querySelectorAll("circle").forEach(circle => {
+        if (!circle.dataset.baseRadius) circle.dataset.baseRadius = circle.getAttribute("r") || "4";
+        const baseRadius = Number(circle.dataset.baseRadius);
+        if (Number.isFinite(baseRadius)) circle.setAttribute("r", Math.max(baseRadius / scale, 0.001));
+      });
     }
     function clampMapPan() {
       const limitX = Math.max(0, MAP_WIDTH * (state.zoom - 1) / (2 * state.zoom));
@@ -1855,8 +2073,9 @@
       clampMapPan();
       applyMapViewport();
     }
-    function zoomMap(delta) {
-      state.zoom = Math.max(0.8, Math.min(1.8, state.zoom + delta));
+    function zoomMap(direction) {
+      const nextZoom = direction > 0 ? state.zoom * MAP_ZOOM_STEP_FACTOR : state.zoom / MAP_ZOOM_STEP_FACTOR;
+      state.zoom = Math.max(MAP_MIN_ZOOM, Math.min(MAP_MAX_ZOOM, nextZoom));
       clampMapPan();
       applyMapViewport();
       highlightMapFor(state.selected);
@@ -2001,6 +2220,199 @@
       }
       return null;
     }
+    function svgBoxFor(node) {
+      try {
+        const box = node.getBBox();
+        if (!Number.isFinite(box.x) || !Number.isFinite(box.y)) return null;
+        return {
+          x: box.x,
+          y: box.y,
+          width: Math.max(Number(box.width) || 0, 8),
+          height: Math.max(Number(box.height) || 0, 8)
+        };
+      } catch (_) {
+        return null;
+      }
+    }
+    function unionBoxes(boxes) {
+      const left = Math.min(...boxes.map(box => box.x));
+      const top = Math.min(...boxes.map(box => box.y));
+      const right = Math.max(...boxes.map(box => box.x + box.width));
+      const bottom = Math.max(...boxes.map(box => box.y + box.height));
+      return {x: left, y: top, width: right - left, height: bottom - top};
+    }
+    function pointBox(x, y, size = 18) {
+      return {x: x - size / 2, y: y - size / 2, width: size, height: size};
+    }
+    function metersBetween(lat1, lon1, lat2, lon2) {
+      const earthRadiusM = 6371000;
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLon = (lon2 - lon1) * Math.PI / 180;
+      const a = Math.sin(dLat / 2) ** 2
+        + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+      return 2 * earthRadiusM * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    }
+    function pointFocusZoom() {
+      if (!state.view) return null;
+      const bounds = boundsFor(state.view);
+      const centerLat = (bounds.north + bounds.south) / 2;
+      const centerLon = (bounds.east + bounds.west) / 2;
+      const widthMeters = metersBetween(centerLat, bounds.west, centerLat, bounds.east);
+      const heightMeters = metersBetween(bounds.south, centerLon, bounds.north, centerLon);
+      const drawableWidth = Math.max(MAP_WIDTH - MAP_VISUAL_PADDING * 2, 1);
+      const drawableHeight = Math.max(MAP_HEIGHT - MAP_VISUAL_PADDING * 2, 1);
+      const widthZoom = (MAP_WIDTH * (widthMeters / drawableWidth)) / FOCUS_POINT_VIEWPORT_M;
+      const heightZoom = (MAP_HEIGHT * (heightMeters / drawableHeight)) / FOCUS_POINT_VIEWPORT_M;
+      return Math.max(1.2, Math.min(MAP_MAX_ZOOM, Math.max(widthZoom, heightZoom)));
+    }
+    function focusZoomForBox(box, fitZoom) {
+      const isPointSized = box.width <= FOCUS_POINT_BOX_THRESHOLD && box.height <= FOCUS_POINT_BOX_THRESHOLD;
+      if (isPointSized) {
+        return pointFocusZoom() || Math.max(1.2, Math.min(MAP_MAX_ZOOM, fitZoom, FOCUS_PATH_MAX_ZOOM));
+      }
+      return Math.max(1.2, Math.min(MAP_MAX_ZOOM, fitZoom, FOCUS_PATH_MAX_ZOOM));
+    }
+    function mapBoxFor(item) {
+      const boxes = mapTargetsFor(item).map(svgBoxFor).filter(Boolean);
+      if (boxes.length) return unionBoxes(boxes);
+      const coordinate = coordinateFromEvidence(item);
+      if (!coordinate || !state.view) return null;
+      const [x, y] = project(boundsFor(state.view), coordinate.lat, coordinate.lon);
+      return pointBox(x, y);
+    }
+    function focusMapBox(box) {
+      if (!box) return false;
+      const paddedWidth = Math.max(box.width + 90, 1);
+      const paddedHeight = Math.max(box.height + 90, 1);
+      const fitZoom = Math.min(MAP_WIDTH / paddedWidth, MAP_HEIGHT / paddedHeight);
+      state.zoom = focusZoomForBox(box, fitZoom);
+      state.panX = box.x + box.width / 2 - MAP_WIDTH / 2;
+      state.panY = box.y + box.height / 2 - MAP_HEIGHT / 2;
+      clampMapPan();
+      applyMapViewport();
+      return true;
+    }
+    function focusMapFor(item) {
+      const focused = focusMapBox(mapBoxFor(item));
+      if (focused) highlightMapFor(item);
+      return focused;
+    }
+    function mapPointFromPointerEvent(event) {
+      if (!svg.getScreenCTM) return null;
+      const matrix = svg.getScreenCTM();
+      if (!matrix) return null;
+      const point = svg.createSVGPoint();
+      point.x = event.clientX;
+      point.y = event.clientY;
+      const local = point.matrixTransform(matrix.inverse());
+      return {x: local.x, y: local.y};
+    }
+    function boxFromPoints(start, end) {
+      const left = Math.min(start.x, end.x);
+      const top = Math.min(start.y, end.y);
+      const right = Math.max(start.x, end.x);
+      const bottom = Math.max(start.y, end.y);
+      return {x: left, y: top, width: right - left, height: bottom - top};
+    }
+    function updateZoomSelectionOverlay(box) {
+      let rect = svg.querySelector("#zoomSelection");
+      if (!rect) {
+        rect = el("rect", {id: "zoomSelection", class: "zoom-selection"});
+        svg.appendChild(rect);
+      }
+      rect.setAttribute("x", box.x);
+      rect.setAttribute("y", box.y);
+      rect.setAttribute("width", Math.max(box.width, 0.001));
+      rect.setAttribute("height", Math.max(box.height, 0.001));
+    }
+    function clearZoomSelectionOverlay() {
+      svg.querySelector("#zoomSelection")?.remove();
+    }
+    function zoomMapToBox(box) {
+      if (!box || box.width <= 0 || box.height <= 0) return false;
+      const targetZoom = Math.max(MAP_MIN_ZOOM, Math.min(MAP_MAX_ZOOM, Math.min(MAP_WIDTH / box.width, MAP_HEIGHT / box.height)));
+      state.zoom = targetZoom;
+      state.panX = box.x + box.width / 2 - MAP_WIDTH / 2;
+      state.panY = box.y + box.height / 2 - MAP_HEIGHT / 2;
+      clampMapPan();
+      applyMapViewport();
+      highlightMapFor(state.selected);
+      return true;
+    }
+    function selectionZoomFactor(selection) {
+      const rect = svg.getBoundingClientRect();
+      const width = Math.abs(selection.screenX - eventScreenX(selection));
+      const height = Math.abs(selection.screenY - eventScreenY(selection));
+      if (!width || !height || !rect.width || !rect.height) return 1;
+      return Math.max(1, Math.min(rect.width / width, rect.height / height));
+    }
+    function eventScreenX(selection) {
+      return selection.currentScreenX ?? selection.screenX;
+    }
+    function eventScreenY(selection) {
+      return selection.currentScreenY ?? selection.screenY;
+    }
+    function zoomMapOutFromBox(box, zoomFactor = null) {
+      if (!box || box.width <= 0 || box.height <= 0) return false;
+      const rawFactor = zoomFactor || Math.max(1, Math.min(MAP_WIDTH / box.width, MAP_HEIGHT / box.height));
+      const factor = state.zoom > 1 ? Math.min(rawFactor, state.zoom) : rawFactor;
+      state.zoom = Math.max(1, Math.min(MAP_MAX_ZOOM, state.zoom / factor));
+      state.panX = box.x + box.width / 2 - MAP_WIDTH / 2;
+      state.panY = box.y + box.height / 2 - MAP_HEIGHT / 2;
+      clampMapPan();
+      applyMapViewport();
+      highlightMapFor(state.selected);
+      return true;
+    }
+    function isZoomOutDrag(selection) {
+      return selection.current.x < selection.start.x && selection.current.y < selection.start.y;
+    }
+    function beginMapRectangleZoom(event) {
+      if (event.button !== 0) return;
+      const start = mapPointFromPointerEvent(event);
+      if (!start) return;
+      state.zoomSelection = {
+        pointerId: event.pointerId,
+        screenX: event.clientX,
+        screenY: event.clientY,
+        start,
+        current: start,
+        moved: false
+      };
+      svg.classList.add("is-selecting");
+      svg.setPointerCapture(event.pointerId);
+    }
+    function updateMapRectangleZoom(event) {
+      const selection = state.zoomSelection;
+      if (!selection) return;
+      const current = mapPointFromPointerEvent(event);
+      if (!current) return;
+      selection.current = current;
+      selection.currentScreenX = event.clientX;
+      selection.currentScreenY = event.clientY;
+      selection.moved = Math.abs(selection.screenX - event.clientX) > 8 || Math.abs(selection.screenY - event.clientY) > 8;
+      if (selection.moved) updateZoomSelectionOverlay(boxFromPoints(selection.start, current));
+    }
+    function finishMapRectangleZoom(event, onClick = null) {
+      const selection = state.zoomSelection;
+      state.zoomSelection = null;
+      svg.classList.remove("is-selecting");
+      if (svg.hasPointerCapture(event.pointerId)) svg.releasePointerCapture(event.pointerId);
+      clearZoomSelectionOverlay();
+      if (!selection) return;
+      if (selection.moved) {
+        const box = boxFromPoints(selection.start, selection.current);
+        if (isZoomOutDrag(selection)) zoomMapOutFromBox(box, selectionZoomFactor(selection));
+        else zoomMapToBox(box);
+      } else if (onClick) {
+        onClick(event);
+      }
+    }
+    function cancelMapRectangleZoom() {
+      state.zoomSelection = null;
+      svg.classList.remove("is-selecting");
+      clearZoomSelectionOverlay();
+    }
     function formatCoordinate(coordinate) {
       return `${Number(coordinate.lat).toFixed(6)}, ${Number(coordinate.lon).toFixed(6)}`;
     }
@@ -2079,6 +2491,12 @@
     }
     function selectEvidence(item) {
       setDetail(item);
+      if (Array.isArray(item?.bulk_candidate_refs) && item.bulk_candidate_refs.length) {
+        state.selectedReviewCandidateRefs = new Set(item.bulk_candidate_refs);
+        syncBulkReviewSelectionStyles();
+        updateReviewSelectionSummary();
+        setWorkspaceStatus(`Selected review group ${hintTitle(item)} with ${item.bulk_candidate_refs.length} bulk-eligible items.`, "success");
+      }
       highlightMapFor(item);
       highlightTreeNode(item);
       renderAssistantPromptSuggestions(state.selected);
@@ -2651,6 +3069,62 @@
         setWorkspaceStatus(`Create local workspace failed: ${error.message || error}`, "error");
       }
     }
+    async function postReviewDecisionToWorkspace(payload) {
+      return parseWriteResponse(await fetch(`${apiBase()}/admin/pretrip/projects/${PROJECT_ID}/review-decisions`, {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify(payload)
+      }));
+    }
+    function reviewDecisionPayload(item, decision, summaryPrefix) {
+      return {
+        candidate_ref: item.candidate_ref,
+        decision,
+        summary: `${summaryPrefix} from Phase 4 admin local workspace: ${hintTitle(item)}`,
+        persist_to_workspace: true
+      };
+    }
+    async function postBulkReviewDecision(decision) {
+      const items = selectedBulkReviewItems();
+      if (!items.length) {
+        setWorkspaceStatus("Select visible review-only items before running a bulk workspace review action.", "error");
+        return;
+      }
+      const skippedCount = state.selectedReviewCandidateRefs.size - items.length;
+      const decisionLabel = decision === "accepted" ? "Accept" : "Reject";
+      const confirmed = window.confirm(`${decisionLabel} ${items.length} selected review-only items in the local workspace? Warning, blocker, departure, and runtime handoff items are skipped.`);
+      if (!confirmed) {
+        setWorkspaceStatus(`${decisionLabel} selected reviews canceled.`, "error");
+        return;
+      }
+      setWorkspaceStatus(`${decisionLabel}ing ${items.length} selected review-only items to local workspace...`);
+      try {
+        const payload = {
+          persist_to_workspace: true,
+          decisions: items.map(item => reviewDecisionPayload(
+            item,
+            decision,
+            decision === "accepted" ? "Accepted via scale-assisted review" : "Rejected via scale-assisted review"
+          ))
+        };
+        await parseWriteResponse(await fetch(`${apiBase()}/admin/pretrip/projects/${PROJECT_ID}/review-decisions-batch`, {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify(payload)
+        }));
+        state.selectedReviewCandidateRefs.clear();
+        setWorkspaceStatus(`${decisionLabel}ed ${items.length} selected review-only items to local workspace review log.${skippedCount ? ` ${skippedCount} non-eligible selected items skipped.` : ""}`, "success");
+        await reloadProjectView();
+      } catch (error) {
+        setWorkspaceStatus(`${decisionLabel} selected reviews failed: ${error.message || error}`, "error");
+      }
+    }
+    async function acceptSelectedReviewsToWorkspace() {
+      await postBulkReviewDecision("accepted");
+    }
+    async function rejectSelectedReviewsToWorkspace() {
+      await postBulkReviewDecision("rejected");
+    }
     async function acceptSelectedReviewToWorkspace() {
       if (!isSelectedReviewQueueItem()) {
         setWorkspaceStatus("Select a review queue item with candidate_ref before accepting to workspace.", "error");
@@ -2663,16 +3137,7 @@
       }
       setWorkspaceStatus(`Accepting ${item.candidate_ref} to local workspace...`);
       try {
-        await parseWriteResponse(await fetch(`${apiBase()}/admin/pretrip/projects/${PROJECT_ID}/review-decisions`, {
-          method: "POST",
-          headers: {"Content-Type": "application/json"},
-          body: JSON.stringify({
-            candidate_ref: item.candidate_ref,
-            decision: "accepted",
-            summary: `Accepted from Phase 4 admin local workspace: ${hintTitle(item)}`,
-            persist_to_workspace: true
-          })
-        }));
+        await postReviewDecisionToWorkspace(reviewDecisionPayload(item, "accepted", "Accepted"));
         setWorkspaceStatus(`Accepted ${item.candidate_ref} to local workspace review log.`, "success");
         await reloadProjectView();
       } catch (error) {
@@ -2726,10 +3191,7 @@
       }
       setWorkspaceStatus(`Correcting ${item.candidate_ref} in local workspace...`);
       try {
-        await parseWriteResponse(await fetch(`${apiBase()}/admin/pretrip/projects/${PROJECT_ID}/review-decisions`, {
-          method: "POST",
-          headers: {"Content-Type": "application/json"},
-          body: JSON.stringify({
+        await postReviewDecisionToWorkspace({
             candidate_ref: item.candidate_ref,
             decision: "corrected",
             summary: `Corrected from Phase 4 admin local workspace: ${hintTitle(item)}`,
@@ -2739,8 +3201,7 @@
               replacement_ref_ids: []
             },
             persist_to_workspace: true
-          })
-        }));
+          });
         setWorkspaceStatus(`Corrected ${item.candidate_ref} in local workspace review log.`, "success");
         await reloadProjectView();
       } catch (error) {
@@ -2759,16 +3220,12 @@
       }
       setWorkspaceStatus(`Rejecting ${item.candidate_ref} in local workspace...`);
       try {
-        await parseWriteResponse(await fetch(`${apiBase()}/admin/pretrip/projects/${PROJECT_ID}/review-decisions`, {
-          method: "POST",
-          headers: {"Content-Type": "application/json"},
-          body: JSON.stringify({
+        await postReviewDecisionToWorkspace({
             candidate_ref: item.candidate_ref,
             decision: "rejected",
             summary: `Rejected from Phase 4 admin local workspace: ${hintTitle(item)}`,
             persist_to_workspace: true
-          })
-        }));
+          });
         setWorkspaceStatus(`Rejected ${item.candidate_ref} in local workspace review log.`, "success");
         await reloadProjectView();
       } catch (error) {
@@ -2785,6 +3242,18 @@
         await reloadProjectView();
       } catch (error) {
         setWorkspaceStatus(`Refresh apply plan failed: ${error.message || error}`, "error");
+      }
+    }
+    async function generateDepartureReviewedCandidatesForWorkspace() {
+      setWorkspaceStatus("Generating reviewed candidates addendum in the local workspace only...");
+      try {
+        await parseWriteResponse(await fetch(`${apiBase()}/admin/pretrip/projects/${PROJECT_ID}/departure-reviewed-candidates`, {
+          method: "POST"
+        }));
+        setWorkspaceStatus("Departure reviewed candidates written to local workspace only. Departure Gate and runtime handoff remain closed.", "success");
+        await reloadProjectView();
+      } catch (error) {
+        setWorkspaceStatus(`Departure reviewed candidates failed: ${error.message || error}`, "error");
       }
     }
     async function generateRouteNoteReviewedAssumptionsForWorkspace() {
@@ -2897,6 +3366,62 @@
       });
       svg.appendChild(referenceTrackGroup);
 
+      const riskRibbonGroup = el("g", {"data-layer-group": "risk-ribbon"});
+      (view.risk_ribbon?.segments || []).forEach(segment => {
+        const coords = segment.coordinates || [];
+        if (coords.length < 2) return;
+        const path = el("path", {
+          d: pathFromCoords(bounds, coords),
+          class: `risk-ribbon ${segment.style_class || riskRibbonClass(segment.risk_bucket, segment.pretrip_risk)}`
+        });
+        if (segment.stroke) path.style.stroke = segment.stroke;
+        attachEvidence(path, segment);
+        riskRibbonGroup.appendChild(path);
+      });
+      svg.appendChild(riskRibbonGroup);
+
+      const riskHeatmapGroup = el("g", {"data-layer-group": "risk-heatmap"});
+      (view.risk_heatmap?.segments || []).forEach(segment => {
+        const coords = segment.coordinates || [];
+        if (coords.length < 2) return;
+        const path = el("path", {
+          d: pathFromCoords(bounds, coords),
+          class: `risk-heatmap ${segment.style_class || riskRibbonClass(segment.risk_bucket, segment.pretrip_risk)}`
+        });
+        if (segment.stroke) path.style.stroke = segment.stroke;
+        attachEvidence(path, segment);
+        riskHeatmapGroup.appendChild(path);
+      });
+      svg.appendChild(riskHeatmapGroup);
+
+      const riskDeltaGroup = el("g", {"data-layer-group": "risk-delta"});
+      (view.risk_delta?.segments || []).forEach(segment => {
+        const coords = segment.coordinates || [];
+        if (coords.length < 2) return;
+        const path = el("path", {
+          d: pathFromCoords(bounds, coords),
+          class: `risk-delta ${segment.style_class || "risk-delta-aligned"}`
+        });
+        if (segment.stroke) path.style.stroke = segment.stroke;
+        attachEvidence(path, segment);
+        riskDeltaGroup.appendChild(path);
+      });
+      svg.appendChild(riskDeltaGroup);
+
+      const riskScoreGroup = el("g", {"data-layer-group": "risk-score"});
+      (view.risk_score?.points || []).forEach(point => {
+        const [x, y] = project(bounds, point.lat, point.lon);
+        const circle = el("circle", {
+          cx: x,
+          cy: y,
+          r: Math.max(3, Math.min(7, 2.5 + Number(point.risk_level || 1))),
+          class: `risk-score-point ${riskLevelClass(point.risk_level)}`
+        });
+        attachEvidence(circle, point);
+        riskScoreGroup.appendChild(circle);
+      });
+      svg.appendChild(riskScoreGroup);
+
       const retreatGroup = el("g", {"data-layer-group": "retreat"});
       view.retreat_routes.forEach(retreat => {
         const points = [...view.checkpoints].reverse();
@@ -2978,9 +3503,14 @@
       button.setAttribute("data-tree-status", statusFor(item));
       button.setAttribute("data-review-category", reviewCategoryFor(item));
       button.setAttribute("data-review-severity", reviewSeverityFor(item));
+      button.setAttribute("data-tree-source-label", sourceLabelFor(item));
       if (item?.candidate_ref) button.setAttribute("data-candidate-ref", item.candidate_ref);
       const reviewDecisionState = reviewDecisionStateFor(item);
       if (reviewDecisionState) button.setAttribute("data-review-decision-state", reviewDecisionState);
+      if (item?.candidate_ref && state.selectedReviewCandidateRefs.has(item.candidate_ref)) {
+        button.classList.add("is-bulk-selected");
+        button.setAttribute("data-bulk-selected", "true");
+      }
       button.setAttribute("data-map-target-ids", (item?.map_target_ids || []).join(" "));
       button.setAttribute("data-tree-search-text", itemSearchText(item, label, sublabel));
       const labelRow = document.createElement("span");
@@ -2999,6 +3529,11 @@
       categoryBadge.className = "badge badge-category";
       categoryBadge.textContent = evidenceCategory(item);
       badgeRow.appendChild(categoryBadge);
+      const sourceBadge = document.createElement("span");
+      sourceBadge.className = "badge badge-source";
+      sourceBadge.textContent = sourceLabelFor(item);
+      sourceBadge.title = sourceLabelFor(item);
+      badgeRow.appendChild(sourceBadge);
       if (sublabel) {
         const small = document.createElement("small");
         small.textContent = sublabel;
@@ -3006,6 +3541,11 @@
       }
       button.appendChild(badgeRow);
       button.addEventListener("click", () => selectEvidence(item));
+      button.addEventListener("dblclick", event => {
+        event.preventDefault();
+        selectEvidence(item);
+        focusMapFor(item);
+      });
       return button;
     }
     function treeGroup(title, items, mapper, open = false, category = "route") {
@@ -3030,6 +3570,7 @@
         ...view.checkpoints,
         ...view.segments,
         ...view.retreat_routes,
+        ...(view.risk_score?.points || []),
         ...(view.gis_perception_timeline?.checkpoint_candidates || []),
         ...(view.reference_tracks?.reference_tracks || [])
       ].map(statusFor).filter(Boolean));
@@ -3092,7 +3633,7 @@
       const reviewCategory = document.getElementById("reviewCategoryFilter").value;
       const reviewSeverity = document.getElementById("reviewSeverityFilter").value;
       document.querySelectorAll("#evidenceTree button[data-tree-source-id]").forEach(button => {
-        const isTimeline = ["checkpoint", "segment", "retreat", "reference"].includes(button.dataset.treeCategory);
+        const isTimeline = ["checkpoint", "segment", "retreat", "reference", "risk"].includes(button.dataset.treeCategory);
         const isSelected = button.dataset.treeSourceId === evidenceSourceId(state.selected);
         const categoryMatch = category === "all" || button.dataset.treeCategory === category;
         const statusMatch = status === "all" || button.dataset.treeStatus === status;
@@ -3110,6 +3651,8 @@
         const hiddenCount = buttons.filter(button => button.hidden).length;
         details.dataset.filterEmpty = buttons.length > 0 && hiddenCount === buttons.length ? "true" : "false";
       });
+      syncBulkReviewSelectionStyles();
+      updateReviewSelectionSummary();
       highlightTreeNode(state.selected);
     }
     function renderEvidenceTree(view) {
@@ -3129,6 +3672,18 @@
         label: item.nearby_group_id,
         sublabel: `${item.member_count} CP | ${item.semantic_keys?.join(", ") || "mixed"}`
       }), false, "checkpoint"));
+      tree.appendChild(treeGroup("Risk Score", view.risk_score?.points || [], item => ({
+        label: `${item.score_field || "pretrip_risk"} ${Number(item.pretrip_risk || 0).toFixed(1)}`,
+        sublabel: `L${item.risk_level || "-"} | ${Math.round(item.distance_m || 0)}m${item.teii_20m == null ? "" : ` | TEII ${Number(item.teii_20m).toFixed(1)}`}`
+      }), false, "risk"));
+      tree.appendChild(treeGroup("Risk Heat", view.risk_heatmap?.segments || [], item => ({
+        label: `${item.risk_bucket || "heat"} ${Number(item.pretrip_risk || 0).toFixed(1)}`,
+        sublabel: `${item.score_field || "calibrated"} | ${Math.round(item.start_distance_m || 0)}-${Math.round(item.end_distance_m || 0)}m`
+      }), false, "risk"));
+      tree.appendChild(treeGroup("Risk Delta", view.risk_delta?.segments || [], item => ({
+        label: `${item.delta_bucket || "delta"} ${Number(item.delta_score || 0).toFixed(1)}`,
+        sublabel: `baseline ${Number(item.baseline_pretrip_risk || 0).toFixed(1)} | calibrated ${Number(item.calibrated_risk_candidate || 0).toFixed(1)}`
+      }), false, "risk"));
       tree.appendChild(treeGroup("Segments", view.segments, item => ({
         label: item.label || item.candidate_id,
         sublabel: `${item.from_candidate_id} -> ${item.to_candidate_id} | ${Math.round(item.distance_m)}m`
@@ -3147,10 +3702,20 @@
     function renderReviewWorkspaceTree(view) {
       const tree = document.getElementById("reviewWorkspaceTree");
       tree.replaceChildren();
+      tree.appendChild(treeGroup("Review Groups", view.review_workbench?.category_groups || [], item => ({
+        label: item.label,
+        sublabel: `${item.item_count} items | ${item.bulk_eligible_count} bulk | ${item.review_action}`
+      }), true, "review_group"));
       tree.appendChild(treeGroup("Review Queue", view.review_queue.items, item => ({
         label: item.title,
         sublabel: `${item.severity} | ${item.category}`
       }), false, "review"));
+      tree.appendChild(treeGroup("Departure Reviewed Candidates", view.departure_reviewed_candidates?.candidates || [], item => ({
+        label: item.candidate_ref,
+        sublabel: `${item.decision} | ${item.promotion_scope}`
+      }), false, "review"));
+      syncBulkReviewSelectionStyles();
+      updateReviewSelectionSummary(view);
     }
     function renderTabSummary(view) {
       const container = document.getElementById("tabSummary");
@@ -3160,6 +3725,10 @@
             ["Target ETA", view.eta.target_eta],
             ["Turn-back ETA", view.eta.turn_back_checkpoint_eta],
             ["Overpass", `${view.overpass_evidence?.counts?.candidates || 0} candidates`],
+            ["Risk Score", `${view.risk_score?.counts?.point_count || 0} pts / max ${view.risk_score?.counts?.max_pretrip_risk ?? "-"}`],
+            ["Baseline Risk", `${view.risk_ribbon?.counts?.segment_count || 0} segments`],
+            ["Calibrated Heat", `${view.risk_heatmap?.counts?.segment_count || 0} segments`],
+            ["Risk Delta", `${view.risk_delta?.counts?.segment_count || 0} segments`],
             ["AI GIS CP", `${view.gis_perception_timeline?.counts?.checkpoint_candidate_count || 0} review`],
             ["GIS CP Areas", `${view.gis_perception_timeline?.counts?.nearby_group_count || 0} groups`],
             ["Reference GPX", `${view.reference_tracks?.reference_track_count || 0} tracks`],
@@ -3180,6 +3749,7 @@
               ["Warnings", view.review_queue?.counts?.warning_count ?? 0],
               ["Draft actions", view.review_draft_log?.counts?.action_count ?? 0],
               ["Decisions", view.review_decision_log?.counts?.action_count ?? 0],
+              ["Reviewed CPs", view.departure_reviewed_candidates?.counts?.promoted_candidate_count ?? 0],
               ["Workspace", "local only"]
             ]
           : [
@@ -3286,8 +3856,8 @@
       bindAssistantControls();
       document.querySelectorAll("[data-layer]").forEach(input => input.addEventListener("change", updateLayers));
       document.querySelectorAll(".tab-button").forEach(button => button.addEventListener("click", () => setActiveTab(button.dataset.tab)));
-      document.getElementById("zoomIn").addEventListener("click", () => zoomMap(0.1));
-      document.getElementById("zoomOut").addEventListener("click", () => zoomMap(-0.1));
+      document.getElementById("zoomIn").addEventListener("click", () => zoomMap(1));
+      document.getElementById("zoomOut").addEventListener("click", () => zoomMap(-1));
       document.getElementById("fitRoute").addEventListener("click", resetMapView);
       document.getElementById("panUp").addEventListener("click", () => panMap(0, -70));
       document.getElementById("panDown").addEventListener("click", () => panMap(0, 70));
@@ -3309,6 +3879,9 @@
         button.addEventListener("click", () => setReviewSeverityFilter(button.dataset.reviewSeverity));
       });
       document.getElementById("reviewNextItem").addEventListener("click", jumpToNextReviewItem);
+      document.getElementById("reviewSelectVisible").addEventListener("click", selectVisibleReviewItems);
+      document.getElementById("reviewSelectViewport").addEventListener("click", selectViewportReviewItems);
+      document.getElementById("reviewClearSelection").addEventListener("click", clearReviewSelection);
       document.getElementById("routeNoteDraftDisposition").addEventListener("change", previewRouteNoteDraftDisposition);
       document.getElementById("routeNoteDraftPreview").addEventListener("click", previewRouteNoteDraftDisposition);
       document.getElementById("routeNoteDraftSave").addEventListener("click", saveRouteNoteDraftDispositionToWorkspace);
@@ -3316,7 +3889,10 @@
       document.getElementById("workspaceAcceptReview").addEventListener("click", acceptSelectedReviewToWorkspace);
       document.getElementById("workspaceCorrectReview").addEventListener("click", correctSelectedReviewToWorkspace);
       document.getElementById("workspaceRejectReview").addEventListener("click", rejectSelectedReviewToWorkspace);
+      document.getElementById("workspaceAcceptSelectedReviews").addEventListener("click", acceptSelectedReviewsToWorkspace);
+      document.getElementById("workspaceRejectSelectedReviews").addEventListener("click", rejectSelectedReviewsToWorkspace);
       document.getElementById("workspaceRefreshApplyPlan").addEventListener("click", refreshWorkspaceApplyPlan);
+      document.getElementById("departureReviewedCandidates").addEventListener("click", generateDepartureReviewedCandidatesForWorkspace);
       document.getElementById("routeNoteReviewedAssumptions").addEventListener("click", generateRouteNoteReviewedAssumptionsForWorkspace);
       document.getElementById("expertContributionApplyResult").addEventListener("click", applyExpertContributionWorkspaceResult);
       document.getElementById("featureEdit").addEventListener("click", featureEditToWorkspace);
@@ -3331,44 +3907,18 @@
       document.getElementById("prepareLayersForm").addEventListener("submit", event => event.preventDefault());
       document.getElementById("prepareLayersPreview").addEventListener("click", previewPrepareLayers);
       document.getElementById("prepareLayersRun").addEventListener("click", runPrepareLayers);
-      svg.addEventListener("pointerdown", event => {
-        if (event.button !== 0) return;
-        state.pointerPan = {x: event.clientX, y: event.clientY, panX: state.panX, panY: state.panY, moved: false};
-        svg.classList.add("is-panning");
-        svg.setPointerCapture(event.pointerId);
-      });
-      svg.addEventListener("pointermove", event => {
-        if (!state.pointerPan) return;
-        if (Math.abs(state.pointerPan.x - event.clientX) > 3 || Math.abs(state.pointerPan.y - event.clientY) > 3) {
-          state.pointerPan.moved = true;
-        }
-        const dx = (state.pointerPan.x - event.clientX) / state.zoom;
-        const dy = (state.pointerPan.y - event.clientY) / state.zoom;
-        state.panX = state.pointerPan.panX + dx;
-        state.panY = state.pointerPan.panY + dy;
-        clampMapPan();
-        applyMapViewport();
-      });
+      svg.addEventListener("pointerdown", beginMapRectangleZoom);
+      svg.addEventListener("pointermove", updateMapRectangleZoom);
       svg.addEventListener("pointerup", event => {
-        const pointerPan = state.pointerPan;
-        state.pointerPan = null;
-        svg.classList.remove("is-panning");
-        if (svg.hasPointerCapture(event.pointerId)) svg.releasePointerCapture(event.pointerId);
-        if (pointerPan && !pointerPan.moved) {
-          setSelectedMapCoordinate(coordinateFromMapPointerEvent(event));
-        }
+        finishMapRectangleZoom(event, clickEvent => setSelectedMapCoordinate(coordinateFromMapPointerEvent(clickEvent)));
       });
-      svg.addEventListener("pointercancel", () => {
-        state.pointerPan = null;
-        svg.classList.remove("is-panning");
-      });
+      svg.addEventListener("pointercancel", cancelMapRectangleZoom);
     }
     async function reloadProjectView() {
       const selectedSourceId = evidenceSourceId(state.selected);
       const response = await fetch(`${apiBase()}/admin/pretrip/projects/${PROJECT_ID}`);
       const view = await response.json();
-      const weatherOverlayResponse = await fetch(`${apiBase()}/admin/pretrip/projects/${PROJECT_ID}/weather-overlay`);
-      state.weatherOverlay = weatherOverlayResponse.ok ? await weatherOverlayResponse.json() : null;
+      state.weatherOverlay = null;
       state.view = view;
       updateMetrics(view);
       renderMap(view);
@@ -3378,6 +3928,9 @@
       syncActiveTabChrome();
       syncActiveTabPanels();
       selectEvidence(findEvidenceBySourceId(view, selectedSourceId) || view.summary);
+      const weatherOverlayResponse = await fetch(`${apiBase()}/admin/pretrip/projects/${PROJECT_ID}/weather-overlay`);
+      state.weatherOverlay = weatherOverlayResponse.ok ? await weatherOverlayResponse.json() : null;
+      renderMap(view);
     }
     async function load() {
       bindControls();

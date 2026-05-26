@@ -125,6 +125,11 @@ class DebugPageTests(unittest.TestCase):
         self.assertIn("function updateLayers", html)
         self.assertIn("function panMap", html)
         self.assertIn("function zoomMap", html)
+        self.assertIn("MAP_ZOOM_STEP_FACTOR = 1.25", html)
+        self.assertIn(
+            "Math.max(1, Math.min(MAP_MAX_ZOOM, debugPageState.zoom / factor))",
+            html,
+        )
         self.assertIn("function resetMapView", html)
         self.assertIn("OSM_TILE_URL_TEMPLATE", html)
         self.assertIn("OSM_PUBLIC_TILE_URL_TEMPLATE", html)

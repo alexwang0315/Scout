@@ -69,9 +69,9 @@ def _chilai_project(point_count: int = smoke.CHILAI_ROUTE_POINT_COUNT) -> dict:
             "counts": {
                 "blocked_layer_count": 0,
                 "blocker_count": 0,
-                "layer_count": 9,
+                "layer_count": 10,
                 "missing_layer_count": 0,
-                "ready_layer_count": 9,
+                "ready_layer_count": 10,
                 "warning_count": 2,
             },
         },

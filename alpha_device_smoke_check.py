@@ -497,7 +497,7 @@ def _validate_chilai_pretrip_project(payload: dict[str, Any]) -> list[str]:
         "reference_tracks": _has_reference_track_summary(reference_tracks),
         "layer_preparation_status": layer_preparation.get("status")
         in {"ready", "ready_with_warnings"},
-        "layer_preparation_ready": counts.get("ready_layer_count") == 9,
+        "layer_preparation_ready": counts.get("ready_layer_count", 0) >= 9,
         "layer_preparation_unblocked": counts.get("blocker_count") == 0
         and counts.get("blocked_layer_count") == 0,
     }

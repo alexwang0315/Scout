@@ -20,14 +20,22 @@ def append_review_decision(
     log_path: Path | str,
     record: ReviewDecisionRecord,
 ) -> PreTripReviewDecisionLog:
+    return append_review_decisions(log_path, [record])
+
+
+def append_review_decisions(
+    log_path: Path | str,
+    records: list[ReviewDecisionRecord],
+) -> PreTripReviewDecisionLog:
     path = Path(log_path)
     decision_log = load_review_decision_log(path)
-    _reject_duplicate_decision(decision_log, record)
-    _validate_append_record(decision_log, record)
+    for record in records:
+        _reject_duplicate_decision(decision_log, record)
+        _validate_append_record(decision_log, record)
 
     rebuilt = rebuild_review_decision_log(
         decision_log,
-        [*decision_log.decisions, record],
+        [*decision_log.decisions, *records],
     )
     _replace_json(path, rebuilt.to_json())
     return rebuilt

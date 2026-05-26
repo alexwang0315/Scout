@@ -66,6 +66,7 @@ REQUIRED_RESOLVED_DECISION_IDS: frozenset[str] = frozenset(
         "phase4.decision.sources.joyhike_ptt_reference_only",
         "phase4.decision.timing.optional_fields",
         "phase4.decision.ui.fixture_backed_read_only",
+        "phase4.decision.ui.scale_assisted_review",
         "phase4.decision.poi.corridor_coverage_policy",
         "phase4.decision.weather_daylight.quantitative_thresholds",
         "phase4.decision.contour.ai_assisted_admin_review",
