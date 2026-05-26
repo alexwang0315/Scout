@@ -1,8 +1,8 @@
 {
   "counts": {
-    "files_scanned": 66,
+    "files_scanned": 68,
     "forbidden_fragments": 0,
-    "json_files_scanned": 66,
+    "json_files_scanned": 68,
     "json_parse_errors": 0,
     "oversized_files": 0,
     "raw_route_suffix_files": 0,
@@ -26,6 +26,7 @@
       "tests/fixtures/pretrip/projects/chilai_nanhua_day1/normalized/terrain/segment_dtm_coverage.json",
       "tests/fixtures/pretrip/projects/chilai_nanhua_day1/outputs/pretrip_package.json",
       "tests/fixtures/pretrip/projects/chilai_nanhua_day1/outputs/reference_track_display_geometry.json",
+      "tests/fixtures/pretrip/projects/chilai_nanhua_day1/outputs/risk_ribbon.geojson",
       "tests/fixtures/pretrip/projects/chilai_nanhua_day1/outputs/segment_display_geometry.json"
     ],
     "allowed_map_payload_refs": [
@@ -34,6 +35,7 @@
       "tests/fixtures/pretrip/projects/chilai_nanhua_day1/normalized/map/map_context.geojson",
       "tests/fixtures/pretrip/projects/chilai_nanhua_day1/normalized/map/overpass_vector_evidence.geojson",
       "tests/fixtures/pretrip/projects/chilai_nanhua_day1/outputs/reference_track_display_geometry.json",
+      "tests/fixtures/pretrip/projects/chilai_nanhua_day1/outputs/risk_ribbon.geojson",
       "tests/fixtures/pretrip/projects/chilai_nanhua_day1/outputs/segment_display_geometry.json"
     ],
     "fixture_only": true,

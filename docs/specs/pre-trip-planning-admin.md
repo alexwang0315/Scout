@@ -1245,6 +1245,9 @@ Acceptance:
 
 - import route file;
 - inspect CP/POI/hazard candidates;
+- support scale-assisted review（大規模輔助審核） for long routes through
+  filters, AI triage, group selection/deselection, and map viewport workflows
+  instead of requiring point-by-point inspection;
 - generate draft UI review actions/logs for accepted/rejected/corrected review
   intent;
 - keep draft review actions out of accepted planning assumptions until the
@@ -1893,6 +1896,11 @@ Acceptance checks:
 - Review draft treatment: review queues may emit draft UI action logs, but
   those logs are not accepted planning assumptions until the resolver records a
   human-reviewed decision.
+- Scale-assisted review UI: long-distance trips should default to filter-first,
+  group-first, AI-assisted triage, and map-driven zoom/review flows. Bulk
+  selection may produce draft review intents or local workspace review records,
+  but it must not directly compile Final MissionGraph, call `/safety/*`, or
+  become runtime safety truth.
 - ETA assumptions: use explicit guide time, multiplier, planned start time, rest
   basis, and daylight source. If multiplier basis is unknown, use conservative
   total elapsed time including normal rest.

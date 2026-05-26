@@ -56,6 +56,10 @@ def test_pretrip_admin_page_contains_expected_layout_contract():
     assert "reference-track" in html
     assert "gis-perception-cp" in html
     assert "gis-nearby-group" in html
+    assert "risk-score-point" in html
+    assert "risk-ribbon" in html
+    assert "riskLevelClass" in html
+    assert "riskRibbonClass" in html
     assert "is-stale" in html
     assert "map-highlight" in html
     assert "mapTargetsFor" in html
@@ -68,6 +72,22 @@ def test_pretrip_admin_page_contains_expected_layout_contract():
     assert ".route-note" in html
     assert "AI GIS CP" in html
     assert "GIS CP Areas" in html
+    assert "Risk Score" in html
+    assert "view.risk_score?.points" in html
+    assert "Baseline Risk" in html
+    assert "Calibrated Heat" in html
+    assert "Risk Delta" in html
+    assert "view.risk_ribbon?.segments" in html
+    assert "focusMapFor" in html
+    assert "FOCUS_POINT_VIEWPORT_M = 5" in html
+    assert "MAP_ZOOM_STEP_FACTOR = 1.25" in html
+    assert "zoom-selection" in html
+    assert "beginMapRectangleZoom" in html
+    assert "zoomMapToBox" in html
+    assert "zoomMapOutFromBox" in html
+    assert "Math.max(1, Math.min(MAP_MAX_ZOOM, state.zoom / factor))" in html
+    assert "isZoomOutDrag" in html
+    assert 'addEventListener("dblclick"' in html
     assert "nearby_group_id" in html
     assert "route_note_freshness" in html
     assert "view.gis_perception_timeline?.checkpoint_candidates" in html
@@ -167,6 +187,10 @@ def test_pretrip_admin_page_groups_dense_controls_and_uses_short_labels():
     assert 'title="Add retreat route to workspace edit log" aria-label="Add retreat route to workspace edit log">Add retreat</button>' in html
     assert 'title="Open Import GPX reference route flow" aria-label="Open Import GPX reference route flow">Import GPX</button>' in html
     assert 'title="Route note layer"><input type="checkbox" data-layer="route-notes" checked> Notes</label>' in html
+    assert 'title="Scout Risk Engine pretrip risk score point layer"><input type="checkbox" data-layer="risk-score"> Risk pts</label>' in html
+    assert 'title="Route-aligned baseline terrain risk layer"><input type="checkbox" data-layer="risk-ribbon" checked> Baseline</label>' in html
+    assert 'title="Route-specific calibrated heat map"><input type="checkbox" data-layer="risk-heatmap" checked> Calibrated</label>' in html
+    assert 'title="Difference between baseline risk and calibrated heat"><input type="checkbox" data-layer="risk-delta"> Delta</label>' in html
     assert 'title="Weather API layer"><input type="checkbox" data-layer="weather-api" checked> Weather</label>' in html
     assert 'aria-label="Move to next review item">Next</button>' in html
     assert 'aria-label="Accept selected review">Accept</button>' in html
@@ -279,6 +303,7 @@ def test_pretrip_admin_page_fetches_fixture_backed_read_only_project_api():
     assert 'data-layer="retreat"' in html
     assert 'data-layer="hazards"' in html
     assert 'data-layer="overpass"' in html
+    assert 'data-layer="risk-ribbon"' in html
     assert 'data-layer="route-notes"' in html
     assert 'data-layer="weather-api"' in html
     assert "OSM_TILE_URL_TEMPLATE" in html
@@ -325,6 +350,12 @@ def test_pretrip_admin_page_fetches_fixture_backed_read_only_project_api():
     )
     assert html.index('data-layer-group": "terrain"') < html.index(
         'data-layer-group": "overpass"'
+    )
+    assert html.index('data-layer-group": "reference-tracks"') < html.index(
+        'data-layer-group": "risk-ribbon"'
+    )
+    assert html.index('data-layer-group": "risk-ribbon"') < html.index(
+        'data-layer-group": "risk-score"'
     )
     assert html.index('data-layer-group": "overpass"') < html.index(
         'data-layer-group": "weather-api"'
@@ -374,7 +405,8 @@ def test_pretrip_admin_page_has_round1_map_interaction_contract():
     assert "pointermove" in html
     assert "pointerup" in html
     assert "setPointerCapture" in html
-    assert "is-panning" in html
+    assert "is-selecting" in html
+    assert "finishMapRectangleZoom" in html
     assert "highlightMapFor(state.selected)" in html
     assert "highlightTreeNode(state.selected)" in html
 
@@ -391,6 +423,7 @@ def test_pretrip_admin_page_has_round1_cp_segment_panel_contract():
 
     for function_name in (
         "statusFor",
+        "sourceLabelFor",
         "itemSearchText",
         "updateStatusFilterOptions",
         "applyTreeFilters",
@@ -399,6 +432,9 @@ def test_pretrip_admin_page_has_round1_cp_segment_panel_contract():
 
     assert "badge badge-status" in html
     assert "badge badge-category" in html
+    assert "badge badge-source" in html
+    assert "data-tree-source-label" in html
+    assert "sourceLabelFor(item)" in html
     assert "tree-label" in html
     assert "data-filter-empty" in html
     assert "scrollIntoView" in html
@@ -416,6 +452,10 @@ def test_pretrip_admin_page_has_review_queue_navigation_and_filter_contract():
         "reviewBlockerCount",
         "reviewWarningCount",
         "reviewReviewCount",
+        "reviewScaleSummary",
+        "reviewSelectVisible",
+        "reviewSelectViewport",
+        "reviewClearSelection",
         "reviewNextItem",
         "routeNoteDraftDisposition",
         "routeNoteDraftPreview",
@@ -433,6 +473,18 @@ def test_pretrip_admin_page_has_review_queue_navigation_and_filter_contract():
         "decidedCandidateRefs",
         "isCandidateRefDecided",
         "reviewDecisionStateFor",
+        "reviewItemByCandidateRef",
+        "isBulkReviewEligible",
+        "selectedBulkReviewItems",
+        "visibleBulkReviewItems",
+        "syncBulkReviewSelectionStyles",
+        "updateReviewSelectionSummary",
+        "selectVisibleReviewItems",
+        "clearReviewSelection",
+        "currentMapViewportRect",
+        "nodeIntersectsViewport",
+        "reviewItemInCurrentViewport",
+        "selectViewportReviewItems",
         "findEvidenceBySourceId",
         "routeNoteReviewOptionFor",
         "selectedRouteNoteDraftOption",
@@ -457,6 +509,16 @@ def test_pretrip_admin_page_has_review_queue_navigation_and_filter_contract():
     assert "return undecidedButtons.length ? undecidedButtons : buttons;" in html
     assert 'data-map-target-ids' in html
     assert "state.reviewQueueCursor" in html
+    assert "selectedReviewCandidateRefs: new Set()" in html
+    assert "Bulk actions apply only to undecided review-severity items." in html
+    assert "Warning, blocker, departure, and runtime handoff items remain single-review." in html
+    assert "button.dataset.bulkSelected" in html
+    assert ".is-bulk-selected" in html
+    assert 'treeGroup("Review Groups", view.review_workbench?.category_groups || []' in html
+    assert "state.selectedReviewCandidateRefs = new Set(item.bulk_candidate_refs)" in html
+    assert "Selected review group" in html
+    assert "Selected ${items.length} map-visible review-only items from the current viewport." in html
+    assert "mapTargetsFor(item).some(node => nodeIntersectsViewport(node))" in html
     assert "state.routeNoteDraftDisposition" in html
     assert 'value="promote_hint"' in html
     assert 'value="promote_warning"' in html
@@ -488,6 +550,9 @@ def test_pretrip_admin_page_has_local_workspace_write_controls_and_status():
         "workspaceAcceptReview",
         "workspaceRejectReview",
         "workspaceRefreshApplyPlan",
+        "workspaceAcceptSelectedReviews",
+        "workspaceRejectSelectedReviews",
+        "departureReviewedCandidates",
         "routeNoteReviewedAssumptions",
         "expertContributionApplyResult",
         "workspaceWriteStatus",
@@ -499,9 +564,15 @@ def test_pretrip_admin_page_has_local_workspace_write_controls_and_status():
         "isSelectedReviewQueueItem",
         "parseWriteResponse",
         "createLocalWorkspace",
+        "postReviewDecisionToWorkspace",
+        "reviewDecisionPayload",
+        "postBulkReviewDecision",
+        "acceptSelectedReviewsToWorkspace",
+        "rejectSelectedReviewsToWorkspace",
         "acceptSelectedReviewToWorkspace",
         "rejectSelectedReviewToWorkspace",
         "refreshWorkspaceApplyPlan",
+        "generateDepartureReviewedCandidatesForWorkspace",
         "generateRouteNoteReviewedAssumptionsForWorkspace",
         "applyExpertContributionWorkspaceResult",
         "reloadProjectView",
@@ -577,12 +648,17 @@ def test_pretrip_admin_page_posts_only_local_workspace_routes():
 
     assert "fetch(`${apiBase()}/admin/pretrip/projects/${PROJECT_ID}/workspace`, {" in html
     assert "fetch(`${apiBase()}/admin/pretrip/projects/${PROJECT_ID}/review-decisions`, {" in html
+    assert "fetch(`${apiBase()}/admin/pretrip/projects/${PROJECT_ID}/review-decisions-batch`, {" in html
     assert (
         "fetch(`${apiBase()}/admin/pretrip/projects/${PROJECT_ID}/route-note-dispositions`, {"
         in html
     )
     assert (
         "fetch(`${apiBase()}/admin/pretrip/projects/${PROJECT_ID}/review-decision-apply-plan`, {"
+        in html
+    )
+    assert (
+        "fetch(`${apiBase()}/admin/pretrip/projects/${PROJECT_ID}/departure-reviewed-candidates`, {"
         in html
     )
     assert (
@@ -600,20 +676,23 @@ def test_pretrip_admin_page_posts_only_local_workspace_routes():
     assert "fetch(`${apiBase()}/admin/pretrip/projects/${PROJECT_ID}/prepare-layers`, {" in html
     assert html.count('method: "POST"') == 13
     assert shared_script.count('method: "POST"') == 1
-    assert html.count("body: JSON.stringify({") == 6
-    assert html.count("body: JSON.stringify(payload)") == 3
+    assert html.count("body: JSON.stringify({") == 3
+    assert html.count("body: JSON.stringify(payload)") == 5
     assert html.count("body: JSON.stringify({...payload, confirm_import: true})") == 1
     assert html.count("body: JSON.stringify({...payload, confirm_prepare: true})") == 1
-    assert html.count("body: JSON.stringify(") == 9
-    assert html.count('headers: {"Content-Type": "application/json"}') == 9
+    assert html.count("body: JSON.stringify(") == 8
+    assert html.count('headers: {"Content-Type": "application/json"}') == 8
     assert shared_script.count('headers: {"Content-Type": "application/json"}') == 1
     assert 'headers: {"Content-Type": "application/json"}' in html
     assert "body: JSON.stringify({" in html
     assert "body: JSON.stringify(payload)" in html
     assert "candidate_ref: item.candidate_ref" in html
-    assert 'decision: "accepted"' in html
+    assert 'reviewDecisionPayload(item, "accepted", "Accepted")' in html
+    assert 'postBulkReviewDecision("accepted")' in html
+    assert "decisions: items.map(item => reviewDecisionPayload(" in html
     assert 'decision: "corrected"' in html
-    assert 'decision: "rejected"' in html
+    assert "Rejected from Phase 4 admin local workspace" in html
+    assert 'postBulkReviewDecision("rejected")' in html
     assert "correctionSummaryFor(item)" in html
     assert "correction: {" in html
     assert "field_updates: {}" in html
@@ -626,12 +705,21 @@ def test_pretrip_admin_page_posts_only_local_workspace_routes():
     assert "Select a route-note review item before saving a draft option." in html
     assert "Select a route-note draft disposition before saving." in html
     assert "Saved route-note draft option" in html
+    assert "Departure reviewed candidates written to local workspace only." in html
+    assert "Departure Gate and runtime handoff remain closed." in html
+    assert "Departure Reviewed Candidates" in html
+    assert "view.departure_reviewed_candidates?.candidates || []" in html
+    assert "view.departure_reviewed_candidates?.counts?.promoted_candidate_count ?? 0" in html
     assert "Route-note reviewed assumptions written to local workspace only." in html
     assert "Runtime and final handoff remain closed." in html
     assert "Expert contribution workspace apply result written locally." in html
     assert "No final package, MissionGraph, runtime, or Brain writeback was opened." in html
+    assert "summaryPrefix} from Phase 4 admin local workspace" in html
     assert "Corrected from Phase 4 admin local workspace" in html
-    assert "Rejected from Phase 4 admin local workspace" in html
+    assert "Accepted via scale-assisted review" in html
+    assert "Rejected via scale-assisted review" in html
+    assert "window.confirm" in html
+    assert "Warning, blocker, departure, and runtime handoff items are skipped." in html
     assert "Select a review queue item with candidate_ref before accepting to workspace." in html
     assert "Select a review queue item with candidate_ref before correcting to workspace." in html
     assert "Select a review queue item with candidate_ref before rejecting to workspace." in html
@@ -658,7 +746,22 @@ def test_pretrip_admin_page_posts_only_local_workspace_routes():
         in html
     )
     assert (
+        'document.getElementById("workspaceAcceptSelectedReviews").addEventListener("click", acceptSelectedReviewsToWorkspace)'
+        in html
+    )
+    assert (
+        'document.getElementById("workspaceRejectSelectedReviews").addEventListener("click", rejectSelectedReviewsToWorkspace)'
+        in html
+    )
+    assert 'document.getElementById("reviewSelectVisible").addEventListener("click", selectVisibleReviewItems)' in html
+    assert 'document.getElementById("reviewSelectViewport").addEventListener("click", selectViewportReviewItems)' in html
+    assert 'document.getElementById("reviewClearSelection").addEventListener("click", clearReviewSelection)' in html
+    assert (
         'document.getElementById("routeNoteDraftSave").addEventListener("click", saveRouteNoteDraftDispositionToWorkspace)'
+        in html
+    )
+    assert (
+        'document.getElementById("departureReviewedCandidates").addEventListener("click", generateDepartureReviewedCandidatesForWorkspace)'
         in html
     )
     assert (
@@ -759,10 +862,12 @@ def test_pretrip_admin_page_fixture_sections_include_decision_log_and_import_que
     review_section_titles = {section["title"] for section in review_sections}
 
     assert "review_decision_log" in review_section_ids
+    assert "review_workbench" in review_section_ids
     assert "external_import_queue" in review_section_ids
     assert "overpass_evidence" in section_ids
     assert "route_note_review_options" in review_section_ids
     assert "Review Decision Log" in review_section_titles
+    assert "Review Workbench" in review_section_titles
     assert "External Import Queue" in review_section_titles
     assert "Overpass Vector Evidence" in section_titles
     assert "Route Note Review Options" in review_section_titles

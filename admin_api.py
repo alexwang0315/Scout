@@ -41,6 +41,10 @@ from pretrip_expert_contribution_apply_plan import (
     write_expert_contribution_apply_plan,
 )
 from pretrip_import import PretripImportRequest, run_pretrip_import
+from pretrip_departure_reviewed_candidates import (
+    DEFAULT_DEPARTURE_REVIEWED_CANDIDATES_REF,
+    write_departure_reviewed_candidates_for_workspace,
+)
 from pretrip_layer_preparation import (
     DEFAULT_LAYERS as DEFAULT_PRETRIP_LAYER_PREPARATION_LAYERS,
     LayerPreparationRequest,
@@ -51,7 +55,7 @@ from pretrip_review_decision_apply_store import (
     write_review_decision_apply_plan_for_workspace,
 )
 from pretrip_review_decision_log import ReviewDecisionCorrection, ReviewDecisionRecord
-from pretrip_review_decision_store import append_review_decision
+from pretrip_review_decision_store import append_review_decision, append_review_decisions
 from pretrip_route_note_disposition_store import append_route_note_disposition
 from pretrip_route_note_review_options import AdminDisposition
 from pretrip_route_note_reviewed_assumptions import (
@@ -99,6 +103,13 @@ class PreTripReviewDecisionRequest(BaseModel):
         if self.decision != "corrected" and self.correction is not None:
             raise ValueError("correction is only allowed for corrected decisions")
         return self
+
+
+class PreTripReviewDecisionBatchRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    decisions: list[PreTripReviewDecisionRequest] = Field(min_length=1, max_length=100)
+    persist_to_workspace: bool = False
 
 
 class PreTripRouteNoteDispositionRequest(BaseModel):
@@ -698,47 +709,8 @@ def create_admin_router(
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="Pre-trip project not found") from exc
 
-        queue_item = _find_review_queue_item(project, request.candidate_ref)
-        if queue_item is None:
-            raise HTTPException(status_code=422, detail="candidate_ref is not in the review queue")
-
-        draft_action = _find_review_draft_action(project, request.candidate_ref)
-        target_ids = (
-            request.target_ids
-            or queue_item.get("review_focus")
-            or queue_item.get("map_target_ids")
-            or [request.candidate_ref]
-        )
-        decided_at = request.decided_at or datetime.now(timezone.utc).isoformat()
-        draft_action_id = request.draft_action_id or (
-            draft_action["action_id"] if draft_action else f"review_draft.{project_id}.api.{request.candidate_ref}"
-        )
-        correction = (
-            ReviewDecisionCorrection(**request.correction.model_dump())
-            if request.correction is not None
-            else None
-        )
-
         try:
-            record = ReviewDecisionRecord(
-                decision_id=_review_decision_preview_id(project_id, request),
-                draft_action_id=draft_action_id,
-                decision=request.decision,
-                candidate_ref=request.candidate_ref,
-                target_ids=target_ids,
-                source_review_queue_item_refs=[
-                    {
-                        "review_queue_manifest_id": project["review_queue"]["source_id"],
-                        "item_id": queue_item["item_id"],
-                        "source_ref": queue_item["source_ref"],
-                        "candidate_ref": request.candidate_ref,
-                    }
-                ],
-                reviewer_alias=request.reviewer_alias,
-                decided_at=decided_at,
-                summary=request.summary,
-                correction=correction,
-            )
+            record = _build_review_decision_record(project_id, project, request)
         except ValidationError as exc:
             raise HTTPException(status_code=422, detail=exc.errors()) from exc
 
@@ -791,6 +763,89 @@ def create_admin_router(
             raise HTTPException(status_code=409, detail=str(exc)) from exc
 
         response["artifact_kind"] = "pretrip_review_decision"
+        response["preview"] = False
+        response["persisted"] = True
+        response["counts"] = decision_log.counts.model_dump(mode="json")
+        response["boundary"]["admin_api_write_performed"] = True
+        response["boundary"]["workspace_file_mutation_allowed"] = True
+        response["boundary"]["workspace_review_log_path"] = str(log_path)
+        response["mutation"]["workspace_files_mutated"] = True
+        response["mutation"]["workspace_review_log_mutated"] = True
+        return response
+
+    @router.post("/pretrip/projects/{project_id}/review-decisions-batch")
+    def pretrip_review_decision_batch(
+        project_id: str,
+        request: PreTripReviewDecisionBatchRequest,
+    ) -> dict[str, Any]:
+        project_root = _pretrip_workspace_project_root(
+            pretrip_workspace_root,
+            project_id=project_id,
+        )
+        try:
+            project = build_pretrip_admin_view(project_id, project_root=project_root)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="Pre-trip project not found") from exc
+
+        try:
+            records = [
+                _build_review_decision_record(project_id, project, decision_request)
+                for decision_request in request.decisions
+            ]
+        except ValidationError as exc:
+            raise HTTPException(status_code=422, detail=exc.errors()) from exc
+
+        response = {
+            "project_id": project_id,
+            "artifact_kind": "pretrip_review_decision_batch_preview",
+            "preview": True,
+            "append_only": True,
+            "record_count": len(records),
+            "records": [record.model_dump(mode="json") for record in records],
+            "boundary": {
+                "append_only": True,
+                "source_mutation_allowed": False,
+                "package_mutation_allowed": False,
+                "runtime_mutation_allowed": False,
+                "phase1_runtime_mutation_allowed": False,
+                "phase2_writeback_allowed": False,
+                "external_api_calls_made": False,
+                "admin_api_write_performed": False,
+                "fixture_file_mutation_allowed": False,
+                "compiles_mission_graph": False,
+                "raw_payloads_embedded": False,
+                "batch_atomic_validation": True,
+            },
+            "mutation": {
+                "source_mutated": False,
+                "package_mutated": False,
+                "runtime_mutated": False,
+                "phase1_runtime_mutated": False,
+                "phase2_writeback_performed": False,
+                "fixture_files_mutated": False,
+            },
+        }
+        if not request.persist_to_workspace:
+            return response
+
+        log_path = _pretrip_workspace_review_log_path(
+            pretrip_workspace_root,
+            project_id=project_id,
+        )
+        if log_path is None:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "persist_to_workspace requires create_admin_app("
+                    "pretrip_workspace_root=...) with a local workspace review log"
+                ),
+            )
+        try:
+            decision_log = append_review_decisions(log_path, records)
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+        response["artifact_kind"] = "pretrip_review_decision_batch"
         response["preview"] = False
         response["persisted"] = True
         response["counts"] = decision_log.counts.model_dump(mode="json")
@@ -969,6 +1024,70 @@ def create_admin_router(
                 "fixture_files_mutated": False,
                 "workspace_files_mutated": True,
                 "workspace_review_decision_apply_plan_mutated": True,
+            },
+        }
+
+    @router.post("/pretrip/projects/{project_id}/departure-reviewed-candidates")
+    def pretrip_departure_reviewed_candidates(project_id: str) -> dict[str, Any]:
+        try:
+            build_pretrip_admin_view(project_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="Pre-trip project not found") from exc
+
+        project_root = _pretrip_workspace_project_root(
+            pretrip_workspace_root,
+            project_id=project_id,
+        )
+        if project_root is None:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "departure reviewed candidates require "
+                    "create_admin_app(pretrip_workspace_root=...) with a local "
+                    "workspace project.json"
+                ),
+            )
+
+        try:
+            package = write_departure_reviewed_candidates_for_workspace(project_root)
+        except (FileNotFoundError, ValueError, ValidationError) as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+        output_path = project_root / DEFAULT_DEPARTURE_REVIEWED_CANDIDATES_REF
+        return {
+            "project_id": project_id,
+            "artifact_kind": package.artifact_kind,
+            "persisted": True,
+            "counts": package.counts.model_dump(mode="json"),
+            "boundary": {
+                "source_mutation_allowed": False,
+                "package_mutation_allowed": False,
+                "mission_graph_mutation_allowed": False,
+                "final_mission_graph_mutation_allowed": False,
+                "runtime_mutation_allowed": False,
+                "phase1_runtime_mutation_allowed": False,
+                "phase2_writeback_allowed": False,
+                "external_api_calls_made": False,
+                "admin_api_write_performed": True,
+                "fixture_file_mutation_allowed": False,
+                "workspace_file_mutation_allowed": True,
+                "compiles_mission_graph": False,
+                "raw_payloads_embedded": False,
+                "not_departure_approval": True,
+                "workspace_project_root": str(project_root),
+                "workspace_departure_reviewed_candidates_path": str(output_path),
+            },
+            "mutation": {
+                "source_mutated": False,
+                "package_mutated": False,
+                "mission_graph_mutated": False,
+                "final_mission_graph_mutated": False,
+                "runtime_mutated": False,
+                "phase1_runtime_mutated": False,
+                "phase2_writeback_performed": False,
+                "fixture_files_mutated": False,
+                "workspace_files_mutated": True,
+                "workspace_departure_reviewed_candidates_mutated": True,
             },
         }
 
@@ -1197,6 +1316,55 @@ def _find_review_draft_action(project: dict[str, Any], candidate_ref: str) -> di
         if action.get("candidate_ref") == candidate_ref:
             return action
     return None
+
+
+def _build_review_decision_record(
+    project_id: str,
+    project: dict[str, Any],
+    request: PreTripReviewDecisionRequest,
+) -> ReviewDecisionRecord:
+    queue_item = _find_review_queue_item(project, request.candidate_ref)
+    if queue_item is None:
+        raise HTTPException(status_code=422, detail="candidate_ref is not in the review queue")
+
+    draft_action = _find_review_draft_action(project, request.candidate_ref)
+    target_ids = (
+        request.target_ids
+        or queue_item.get("review_focus")
+        or queue_item.get("map_target_ids")
+        or [request.candidate_ref]
+    )
+    decided_at = request.decided_at or datetime.now(timezone.utc).isoformat()
+    draft_action_id = request.draft_action_id or (
+        draft_action["action_id"]
+        if draft_action
+        else f"review_draft.{project_id}.api.{request.candidate_ref}"
+    )
+    correction = (
+        ReviewDecisionCorrection(**request.correction.model_dump())
+        if request.correction is not None
+        else None
+    )
+
+    return ReviewDecisionRecord(
+        decision_id=_review_decision_preview_id(project_id, request),
+        draft_action_id=draft_action_id,
+        decision=request.decision,
+        candidate_ref=request.candidate_ref,
+        target_ids=target_ids,
+        source_review_queue_item_refs=[
+            {
+                "review_queue_manifest_id": project["review_queue"]["source_id"],
+                "item_id": queue_item["item_id"],
+                "source_ref": queue_item["source_ref"],
+                "candidate_ref": request.candidate_ref,
+            }
+        ],
+        reviewer_alias=request.reviewer_alias,
+        decided_at=decided_at,
+        summary=request.summary,
+        correction=correction,
+    )
 
 
 def _review_decision_preview_id(

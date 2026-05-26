@@ -40,6 +40,7 @@ ALLOWED_MAP_PAYLOAD_REFS = frozenset(
         "tests/fixtures/pretrip/projects/chilai_nanhua_day1/candidates/overpass_evidence.json",
         "tests/fixtures/pretrip/projects/chilai_nanhua_day1/normalized/map/overpass_vector_evidence.geojson",
         "tests/fixtures/pretrip/projects/chilai_nanhua_day1/outputs/reference_track_display_geometry.json",
+        "tests/fixtures/pretrip/projects/chilai_nanhua_day1/outputs/risk_ribbon.geojson",
         "tests/fixtures/pretrip/projects/chilai_nanhua_day1/outputs/segment_display_geometry.json",
     }
 )
@@ -51,6 +52,7 @@ ALLOWED_LARGE_METADATA_REFS = frozenset(
         "tests/fixtures/pretrip/projects/chilai_nanhua_day1/normalized/terrain/segment_dtm_coverage.json",
         "tests/fixtures/pretrip/projects/chilai_nanhua_day1/outputs/pretrip_package.json",
         "tests/fixtures/pretrip/projects/chilai_nanhua_day1/outputs/reference_track_display_geometry.json",
+        "tests/fixtures/pretrip/projects/chilai_nanhua_day1/outputs/risk_ribbon.geojson",
         "tests/fixtures/pretrip/projects/chilai_nanhua_day1/outputs/segment_display_geometry.json",
     }
 )

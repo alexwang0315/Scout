@@ -39,7 +39,7 @@ def test_decision_register_fixture_captures_required_phase4_decisions():
     assert {item["decision_id"] for item in payload["open_questions"]} == (
         REQUIRED_OPEN_QUESTION_IDS
     )
-    assert len(payload["resolved_decisions"]) == 15
+    assert len(payload["resolved_decisions"]) == 16
     assert len(payload["open_questions"]) == 0
     assert json.loads(register.to_json()) == payload
     assert register.to_json().endswith("\n")
@@ -95,6 +95,13 @@ def test_decision_register_records_expected_resolutions_and_open_backlog():
     assert "read-only" in resolved[
         "phase4.decision.ui.fixture_backed_read_only"
     ].resolution
+    assert resolved["phase4.decision.ui.scale_assisted_review"].impact == "ui_boundary"
+    assert "filter-first, group-first, AI-assisted triage" in resolved[
+        "phase4.decision.ui.scale_assisted_review"
+    ].resolution
+    assert "/safety/*" in resolved[
+        "phase4.decision.ui.scale_assisted_review"
+    ].constraints[2]
     assert "1000m corridor distance" in resolved[
         "phase4.decision.poi.corridor_coverage_policy"
     ].resolution

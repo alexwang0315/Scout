@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 import math
+import shutil
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
@@ -24,6 +25,8 @@ DEFAULT_LAYERS = (
     "osm",
     "overpass",
     "terrain",
+    "risk-score",
+    "risk-ribbon",
     "imagery",
     "weather",
     "reference-tracks",
@@ -55,10 +58,17 @@ ALLOWED_LAYERS = {
     "corridors",
     "retreat",
     "route-notes",
+    "risk-score",
+    "risk-ribbon",
 }
 LAYER_ALIASES = {
     "dem": "terrain",
     "dtm": "terrain",
+    "risk": "risk-score",
+    "route-risk": "risk-score",
+    "risk-score-map": "risk-score",
+    "risk-ribbon-map": "risk-ribbon",
+    "route-risk-ribbon": "risk-ribbon",
     "weather-api": "weather",
     "reference_tracks": "reference-tracks",
     "references": "reference-tracks",
@@ -72,6 +82,26 @@ READY_STATUSES = {
     "projection_ready",
 }
 HEAVY_LOCAL_LAYER_IDS = {"terrain", "imagery"}
+SCOUT_RISK_OUTPUT_SOURCES = {
+    "chilai_nanhua_day1": (
+        Path(__file__).resolve().parent
+        / "scout-risk-engine"
+        / "scout_codex_package"
+        / "out"
+        / "chilai_overpass"
+    )
+}
+SCOUT_RISK_OUTPUT_REFS = {
+    "risk_route_profile_ref": "outputs/risk/route_risk.geojson",
+    "risk_route_profile_csv_ref": "outputs/risk/route_risk.csv",
+    "risk_route_profile_metadata_ref": "outputs/risk/route_risk.metadata.json",
+    "risk_score_points_ref": "outputs/risk/risk_score_points.geojson",
+    "risk_score_points_csv_ref": "outputs/risk/risk_score_points.csv",
+    "risk_score_points_xyz_ref": "outputs/risk/risk_score_points.xyz",
+    "risk_score_points_metadata_ref": "outputs/risk/risk_score_points.metadata.json",
+    "risk_ribbon_ref": "outputs/risk/risk_ribbon.geojson",
+    "risk_ribbon_metadata_ref": "outputs/risk/risk_ribbon.metadata.json",
+}
 
 
 @dataclass(frozen=True)
@@ -239,6 +269,14 @@ def _build_layer_preparation_manifest(
     normalized_layers = _normalize_layer_ids(request.layers)
     prepared_at = request.prepared_at or _utc_now()
     job_id = f"layer_preparation.{request.project_id}.{_job_timestamp(prepared_at)}"
+    if workspace_file_mutation_allowed and (
+        "risk-score" in normalized_layers or "risk-ribbon" in normalized_layers
+    ):
+        project = _sync_scout_risk_outputs(
+            project_root=project_root,
+            project=project,
+            prepared_at=prepared_at,
+        )
 
     source_refs = _project_source_refs(project_root, project)
     route_corridor = _route_corridor_record(
@@ -500,6 +538,18 @@ def _build_layer_record(
             stale_risk="medium",
             missing_warning="Terrain/DTM coverage summary is missing.",
         )
+    if layer_id == "risk-score":
+        return _risk_score_layer_record(
+            common,
+            project_root=project_root,
+            project=project,
+        )
+    if layer_id == "risk-ribbon":
+        return _risk_ribbon_layer_record(
+            common,
+            project_root=project_root,
+            project=project,
+        )
     if layer_id == "imagery":
         return _imagery_layer_record(common, project)
     if layer_id == "weather":
@@ -648,6 +698,132 @@ def _imagery_layer_record(
         },
         "warnings": warnings,
         "stale_risk": "medium",
+    }
+    return _with_lifecycle(record)
+
+
+def _risk_score_layer_record(
+    common: dict[str, Any],
+    *,
+    project_root: Path,
+    project: dict[str, Any],
+) -> dict[str, Any]:
+    metadata_ref = project.get("risk_score_points_metadata_ref", "")
+    route_metadata_ref = project.get("risk_route_profile_metadata_ref", "")
+    score_ref = project.get("risk_score_points_ref", "")
+    route_ref = project.get("risk_route_profile_ref", "")
+    warnings: list[str] = []
+    source_refs: list[dict[str, Any]] = []
+    counts: dict[str, Any] = {}
+    status = "missing_source"
+
+    metadata_path = project_root / metadata_ref if metadata_ref else None
+    if metadata_path is not None and metadata_path.exists():
+        metadata = _load_json(metadata_path)
+        source_refs.append(
+            _source_ref(
+                metadata_ref,
+                metadata_path,
+                "risk_score_points_metadata_ref",
+            )
+        )
+        counts.update(_risk_score_counts(metadata))
+        status = "ready_from_project_ref"
+    else:
+        warnings.append(
+            "Scout Risk Engine risk-score metadata is missing; run layer preparation with risk-score after route risk generation."
+        )
+
+    for ref_key, ref in (
+        ("risk_score_points_ref", score_ref),
+        ("risk_route_profile_ref", route_ref),
+        ("risk_route_profile_metadata_ref", route_metadata_ref),
+    ):
+        if not ref:
+            continue
+        path = project_root / ref
+        if path.exists():
+            source_refs.append(_source_ref(ref, path, ref_key))
+        else:
+            warnings.append(f"{ref_key} points to a missing file: {ref}")
+
+    record = {
+        **common,
+        "status": status,
+        "source_refs": source_refs,
+        "output_refs": {
+            key: project.get(key, "")
+            for key in SCOUT_RISK_OUTPUT_REFS
+            if project.get(key)
+        },
+        "counts": counts,
+        "warnings": warnings,
+        "blockers": [],
+        "stale_risk": "medium",
+        "score_profile": project.get(
+            "risk_score_source_profile",
+            "scout_risk_engine_overpass_route_profile",
+        ),
+    }
+    return _with_lifecycle(record)
+
+
+def _risk_ribbon_layer_record(
+    common: dict[str, Any],
+    *,
+    project_root: Path,
+    project: dict[str, Any],
+) -> dict[str, Any]:
+    metadata_ref = project.get("risk_ribbon_metadata_ref", "")
+    ribbon_ref = project.get("risk_ribbon_ref", "")
+    warnings: list[str] = []
+    source_refs: list[dict[str, Any]] = []
+    counts: dict[str, Any] = {}
+    status = "missing_source"
+
+    metadata_path = project_root / metadata_ref if metadata_ref else None
+    if metadata_path is not None and metadata_path.exists():
+        metadata = _load_json(metadata_path)
+        source_refs.append(
+            _source_ref(
+                metadata_ref,
+                metadata_path,
+                "risk_ribbon_metadata_ref",
+            )
+        )
+        counts.update(_risk_ribbon_counts(metadata))
+        status = "ready_from_project_ref"
+    else:
+        warnings.append(
+            "Scout Risk Engine risk-ribbon metadata is missing; run layer preparation with risk-ribbon after route risk generation."
+        )
+
+    if ribbon_ref:
+        ribbon_path = project_root / ribbon_ref
+        if ribbon_path.exists():
+            source_refs.append(
+                _source_ref(ribbon_ref, ribbon_path, "risk_ribbon_ref")
+            )
+        else:
+            warnings.append(f"risk_ribbon_ref points to a missing file: {ribbon_ref}")
+
+    record = {
+        **common,
+        "status": status,
+        "source_refs": source_refs,
+        "output_refs": {
+            key: project.get(key, "")
+            for key in ("risk_ribbon_ref", "risk_ribbon_metadata_ref")
+            if project.get(key)
+        },
+        "counts": counts,
+        "warnings": warnings,
+        "blockers": [],
+        "stale_risk": "medium",
+        "score_profile": project.get(
+            "risk_score_source_profile",
+            "scout_risk_engine_overpass_route_profile",
+        ),
     }
     return _with_lifecycle(record)
 
@@ -1081,6 +1257,64 @@ def _update_project_refs(
     _write_json(project_path, updated)
 
 
+def _sync_scout_risk_outputs(
+    *,
+    project_root: Path,
+    project: dict[str, Any],
+    prepared_at: str,
+) -> dict[str, Any]:
+    source_root = SCOUT_RISK_OUTPUT_SOURCES.get(str(project.get("project_id", "")))
+    if source_root is None or not source_root.exists():
+        return project
+
+    required = (
+        "route_risk.geojson",
+        "route_risk.metadata.json",
+        "risk_score_points.geojson",
+        "risk_score_points.metadata.json",
+    )
+    if any(not (source_root / filename).exists() for filename in required):
+        return project
+
+    updated = dict(project)
+    for ref_key, ref in SCOUT_RISK_OUTPUT_REFS.items():
+        source_path = source_root / Path(ref).name
+        if not source_path.exists():
+            continue
+        destination = project_root / ref
+        if source_path.resolve() != destination.resolve():
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source_path, destination)
+        updated[ref_key] = ref
+
+    metadata_path = project_root / SCOUT_RISK_OUTPUT_REFS["risk_score_points_metadata_ref"]
+    route_metadata_path = project_root / SCOUT_RISK_OUTPUT_REFS[
+        "risk_route_profile_metadata_ref"
+    ]
+    ribbon_metadata_path = project_root / SCOUT_RISK_OUTPUT_REFS[
+        "risk_ribbon_metadata_ref"
+    ]
+    if metadata_path.exists():
+        metadata = _load_json(metadata_path)
+        updated["risk_score_point_count"] = int(metadata.get("point_count", 0))
+        updated["risk_score_source_feature_count"] = int(
+            metadata.get("source_feature_count", 0)
+        )
+    if route_metadata_path.exists():
+        route_metadata = _load_json(route_metadata_path)
+        route_samples = route_metadata.get("route_risk_sample_count")
+        if isinstance(route_samples, int):
+            updated["risk_route_sample_count"] = route_samples
+    if ribbon_metadata_path.exists():
+        ribbon_metadata = _load_json(ribbon_metadata_path)
+        ribbon_segments = ribbon_metadata.get("segment_count")
+        if isinstance(ribbon_segments, int):
+            updated["risk_ribbon_segment_count"] = ribbon_segments
+    updated["risk_score_source_profile"] = "scout_risk_engine_overpass_route_profile"
+    updated["risk_score_updated_at"] = prepared_at
+    return updated
+
+
 def _normalize_layer_ids(layers: tuple[str, ...]) -> list[str]:
     normalized: list[str] = []
     for raw in layers:
@@ -1155,6 +1389,28 @@ def _generic_project_counts(layer_id: str, payload: Any) -> dict[str, Any]:
             "poi_candidates": counts.get("poi_candidates", 0),
         }
     return payload.get("counts") or {f"{layer_id.replace('-', '_')}_count": 1}
+
+
+def _risk_score_counts(metadata: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "point_count": metadata.get("point_count", 0),
+        "source_feature_count": metadata.get("source_feature_count", 0),
+        "score_field": metadata.get("score_field", "pretrip_risk"),
+        "snap_grid_m": metadata.get("snap_grid_m", 0),
+    }
+
+
+def _risk_ribbon_counts(metadata: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "segment_count": metadata.get("segment_count", 0),
+        "source_sample_count": metadata.get("source_sample_count", 0),
+        "skipped_pair_count": metadata.get("skipped_pair_count", 0),
+        "score_field": metadata.get("score_field", "pretrip_risk"),
+        "score_surface_type": metadata.get(
+            "score_surface_type",
+            "route_aligned_risk_ribbon",
+        ),
+    }
 
 
 def _route_corridor_record(

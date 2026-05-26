@@ -155,6 +155,11 @@ class AdminAfterActionTests(unittest.TestCase):
         self.assertIn("function mapViewBox", response.text)
         self.assertIn("function panMap", response.text)
         self.assertIn("function zoomMap", response.text)
+        self.assertIn("MAP_ZOOM_STEP_FACTOR = 1.25", response.text)
+        self.assertIn(
+            "Math.max(1, Math.min(MAP_MAX_ZOOM, state.zoom / factor))",
+            response.text,
+        )
         self.assertIn("function resetMapView", response.text)
         self.assertIn("verticalResizer", response.text)
         self.assertIn("horizontalResizer", response.text)

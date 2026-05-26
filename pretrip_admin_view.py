@@ -19,8 +19,16 @@ EXPERT_CONTRIBUTION_WORKSPACE_APPLY_RESULT_REF = (
     "outputs/expert_contribution_workspace_apply_result.json"
 )
 ROUTE_NOTE_REVIEWED_ASSUMPTIONS_REF = "outputs/route_note_reviewed_assumptions.json"
+DEPARTURE_REVIEWED_CANDIDATES_REF = "outputs/departure_reviewed_candidates.json"
 GIS_PERCEPTION_AGGREGATION_RADIUS_M = 80.0
 GIS_PERCEPTION_NEARBY_GROUP_RADIUS_M = 80.0
+RISK_DELTA_COLORS = {
+    "calibrated_higher": "#9333ea",
+    "baseline_higher": "#2563eb",
+    "aligned_high": "#7f1d1d",
+    "minor_shift": "#64748b",
+    "aligned": "#94a3b8",
+}
 
 
 def build_pretrip_admin_view(
@@ -68,6 +76,9 @@ def build_pretrip_admin_view(
     route_note_reviewed_assumptions = _load_optional_json(
         artifacts["route_note_reviewed_assumptions"]
     )
+    departure_reviewed_candidates = _load_optional_json(
+        artifacts["departure_reviewed_candidates"]
+    )
     departure_bundle = _load_json(artifacts["departure_bundle"])
     resource_plan = _load_json(artifacts["resource_plan"])
     weather_daylight = _load_json(artifacts["weather_daylight"])
@@ -76,6 +87,22 @@ def build_pretrip_admin_view(
     route_comparison = _load_json(artifacts["route_comparison"])
     reference_tracks = _load_optional_json(artifacts.get("reference_tracks"))
     checkpoint_events = _load_optional_json(artifacts.get("checkpoint_events"))
+    risk_score_points = _load_optional_json(artifacts.get("risk_score_points"))
+    risk_score_points_metadata = _load_optional_json(
+        artifacts.get("risk_score_points_metadata")
+    )
+    risk_route_profile = _load_optional_json(artifacts.get("risk_route_profile"))
+    risk_route_profile_metadata = _load_optional_json(
+        artifacts.get("risk_route_profile_metadata")
+    )
+    risk_ribbon = _load_optional_json(artifacts.get("risk_ribbon"))
+    risk_ribbon_metadata = _load_optional_json(
+        artifacts.get("risk_ribbon_metadata")
+    )
+    risk_heatmap = _load_optional_json(artifacts.get("calibrated_risk_heatmap"))
+    risk_heatmap_metadata = _load_optional_json(
+        artifacts.get("calibrated_risk_heatmap_metadata")
+    )
     segment_display_geometry = _load_optional_json(
         artifacts.get("segment_display_geometry")
     )
@@ -177,6 +204,37 @@ def build_pretrip_admin_view(
             project_id=project_id,
             project_root=artifacts["project"].parent,
         ),
+        "risk_score": _risk_score_summary(
+            project_id,
+            risk_score_points,
+            risk_score_points_metadata,
+            risk_route_profile,
+            risk_route_profile_metadata,
+            source_path=source_refs.get("risk_score_points", ""),
+            metadata_source_path=source_refs.get("risk_score_points_metadata", ""),
+            route_source_path=source_refs.get("risk_route_profile", ""),
+            route_metadata_source_path=source_refs.get(
+                "risk_route_profile_metadata",
+                "",
+            ),
+        ),
+        "risk_ribbon": _risk_ribbon_summary(
+            project_id,
+            risk_ribbon,
+            risk_ribbon_metadata,
+            source_path=source_refs.get("risk_ribbon", ""),
+            metadata_source_path=source_refs.get("risk_ribbon_metadata", ""),
+        ),
+        "risk_heatmap": _risk_heatmap_summary(
+            project_id,
+            risk_heatmap,
+            risk_heatmap_metadata,
+            source_path=source_refs.get("calibrated_risk_heatmap", ""),
+            metadata_source_path=source_refs.get(
+                "calibrated_risk_heatmap_metadata",
+                "",
+            ),
+        ),
         "overpass_evidence": _overpass_evidence_summary(
             overpass_evidence,
             source_refs["overpass_evidence"],
@@ -229,6 +287,11 @@ def build_pretrip_admin_view(
         "contours": _contour_summary(contour, source_refs["contour"]),
         "remote_contacts": _remote_summary(remote_summary, source_refs["remote_summary"]),
     }
+    planning_tab["risk_delta"] = _risk_delta_summary(
+        project_id,
+        planning_tab["risk_ribbon"],
+        planning_tab["risk_heatmap"],
+    )
     planning_tab["map_layers"] = build_pretrip_map_layers(
         source_refs=source_refs,
         weather=planning_tab["weather"],
@@ -240,6 +303,11 @@ def build_pretrip_admin_view(
     )
     planning_tab["review_queue"] = _review_queue_with_gis_perception_items(
         planning_tab["review_queue"],
+        planning_tab["gis_perception_timeline"],
+    )
+    planning_tab["review_workbench"] = _review_workbench_summary(
+        planning_tab["review_queue"],
+        planning_tab["review_decision_log"],
         planning_tab["gis_perception_timeline"],
     )
     if route_note_reviewed_assumptions is not None:
@@ -263,9 +331,17 @@ def build_pretrip_admin_view(
                 source_refs["expert_contribution_workspace_apply_result"],
             )
         )
+    if departure_reviewed_candidates is not None:
+        planning_tab["departure_reviewed_candidates"] = (
+            _departure_reviewed_candidates_summary(
+                departure_reviewed_candidates,
+                source_refs["departure_reviewed_candidates"],
+            )
+        )
     planning_sections = _planning_sections(planning_tab)
     review_workspace_section_ids = {
         "review_queue",
+        "review_workbench",
         "route_note_review_options",
         "route_note_reviewed_assumptions",
         "review_draft_log",
@@ -275,6 +351,7 @@ def build_pretrip_admin_view(
         "expert_contributions",
         "expert_contribution_apply_plan",
         "expert_contribution_workspace_apply_result",
+        "departure_reviewed_candidates",
     }
     planning_tab["sections"] = [
         section
@@ -320,6 +397,7 @@ def build_pretrip_admin_view(
     post_analysis_tab["sections"] = _post_analysis_sections(post_analysis_tab)
     review_workspace_tab = {
         "review_queue": planning_tab["review_queue"],
+        "review_workbench": planning_tab["review_workbench"],
         "route_note_review_options": planning_tab["route_note_review_options"],
         "route_note_reviewed_assumptions": planning_tab.get(
             "route_note_reviewed_assumptions"
@@ -334,6 +412,9 @@ def build_pretrip_admin_view(
         ),
         "expert_contribution_workspace_apply_result": planning_tab.get(
             "expert_contribution_workspace_apply_result"
+        ),
+        "departure_reviewed_candidates": planning_tab.get(
+            "departure_reviewed_candidates"
         ),
     }
     review_workspace_tab["sections"] = [
@@ -357,6 +438,10 @@ def build_pretrip_admin_view(
         "reference_tracks": planning_tab["reference_tracks"],
         "checkpoint_events": planning_tab["checkpoint_events"],
         "layer_preparation": planning_tab["layer_preparation"],
+        "risk_score": planning_tab["risk_score"],
+        "risk_ribbon": planning_tab["risk_ribbon"],
+        "risk_heatmap": planning_tab["risk_heatmap"],
+        "risk_delta": planning_tab["risk_delta"],
         "overpass_evidence": planning_tab["overpass_evidence"],
         "gis_perception": planning_tab["gis_perception"],
         "gis_perception_timeline": planning_tab["gis_perception_timeline"],
@@ -366,6 +451,7 @@ def build_pretrip_admin_view(
             "route_note_reviewed_assumptions"
         ),
         "review_queue": planning_tab["review_queue"],
+        "review_workbench": planning_tab["review_workbench"],
         "review_draft_log": planning_tab["review_draft_log"],
         "review_decision_log": planning_tab["review_decision_log"],
         "review_decision_apply_plan": planning_tab["review_decision_apply_plan"],
@@ -376,6 +462,9 @@ def build_pretrip_admin_view(
         ),
         "expert_contribution_workspace_apply_result": planning_tab.get(
             "expert_contribution_workspace_apply_result"
+        ),
+        "departure_reviewed_candidates": planning_tab.get(
+            "departure_reviewed_candidates"
         ),
         "departure_bundle": planning_tab["departure_bundle"],
         "resources": planning_tab["resources"],
@@ -430,6 +519,8 @@ def resolve_pretrip_project_artifacts(
         / project["route_note_review_options_ref"],
         "route_note_reviewed_assumptions": resolved_project_root
         / ROUTE_NOTE_REVIEWED_ASSUMPTIONS_REF,
+        "departure_reviewed_candidates": resolved_project_root
+        / DEPARTURE_REVIEWED_CANDIDATES_REF,
         "review_queue": resolved_project_root / project["review_queue_manifest_ref"],
         "review_draft_log": resolved_project_root / project["review_draft_log_ref"],
         "review_decision_log": resolved_project_root / project["review_decision_log_ref"],
@@ -467,6 +558,14 @@ def resolve_pretrip_project_artifacts(
         "layer_validation_report": "layer_validation_report_ref",
         "layer_map_projection": "layer_map_projection_ref",
         "layer_debug_projection_events": "layer_debug_projection_events_ref",
+        "risk_route_profile": "risk_route_profile_ref",
+        "risk_route_profile_metadata": "risk_route_profile_metadata_ref",
+        "risk_ribbon": "risk_ribbon_ref",
+        "risk_ribbon_metadata": "risk_ribbon_metadata_ref",
+        "calibrated_risk_heatmap": "calibrated_risk_heatmap_ref",
+        "calibrated_risk_heatmap_metadata": "calibrated_risk_heatmap_metadata_ref",
+        "risk_score_points": "risk_score_points_ref",
+        "risk_score_points_metadata": "risk_score_points_metadata_ref",
         "admin_projection": "admin_projection_ref",
         "debug_projection_events": "debug_projection_events_ref",
         "gis_perception": "gis_perception_candidates_ref",
@@ -632,6 +731,28 @@ def load_pretrip_debug_projection_view(
     readiness_raw = _load_optional_json(
         optional_project_path("readiness_report_ref")
     )
+    risk_ribbon_raw = _load_optional_json(optional_project_path("risk_ribbon_ref"))
+    risk_ribbon_metadata_raw = _load_optional_json(
+        optional_project_path("risk_ribbon_metadata_ref")
+    )
+    risk_score_points_raw = _load_optional_json(
+        optional_project_path("risk_score_points_ref")
+    )
+    risk_score_points_metadata_raw = _load_optional_json(
+        optional_project_path("risk_score_points_metadata_ref")
+    )
+    risk_route_profile_raw = _load_optional_json(
+        optional_project_path("risk_route_profile_ref")
+    )
+    risk_route_profile_metadata_raw = _load_optional_json(
+        optional_project_path("risk_route_profile_metadata_ref")
+    )
+    risk_heatmap_raw = _load_optional_json(
+        optional_project_path("calibrated_risk_heatmap_ref")
+    )
+    risk_heatmap_metadata_raw = _load_optional_json(
+        optional_project_path("calibrated_risk_heatmap_metadata_ref")
+    )
     source_refs = {
         "project": "project.json",
         "route_summary": project["route_summary_ref"],
@@ -651,6 +772,17 @@ def load_pretrip_debug_projection_view(
         "readiness": project.get("readiness_report_ref", ""),
         "segment_dtm": project.get("segment_dtm_coverage_ref", ""),
         "route_notes": project.get("route_note_candidates_ref", ""),
+        "risk_route_profile": project.get("risk_route_profile_ref", ""),
+        "risk_route_profile_metadata": project.get("risk_route_profile_metadata_ref", ""),
+        "risk_score_points": project.get("risk_score_points_ref", ""),
+        "risk_score_points_metadata": project.get("risk_score_points_metadata_ref", ""),
+        "risk_ribbon": project.get("risk_ribbon_ref", ""),
+        "risk_ribbon_metadata": project.get("risk_ribbon_metadata_ref", ""),
+        "calibrated_risk_heatmap": project.get("calibrated_risk_heatmap_ref", ""),
+        "calibrated_risk_heatmap_metadata": project.get(
+            "calibrated_risk_heatmap_metadata_ref",
+            "",
+        ),
         "gis_perception": project.get("gis_perception_candidates_ref", ""),
         "gis_perception_ai_judgements": project.get(
             "gis_perception_ai_judgements_ref",
@@ -722,6 +854,31 @@ def load_pretrip_debug_projection_view(
         )
         if checkpoint_events_raw is not None
         else _empty_checkpoint_events(project_id, source_refs["checkpoint_events"]),
+        "risk_score": _risk_score_summary(
+            project_id,
+            risk_score_points_raw,
+            risk_score_points_metadata_raw,
+            risk_route_profile_raw,
+            risk_route_profile_metadata_raw,
+            source_path=source_refs["risk_score_points"],
+            metadata_source_path=source_refs["risk_score_points_metadata"],
+            route_source_path=source_refs["risk_route_profile"],
+            route_metadata_source_path=source_refs["risk_route_profile_metadata"],
+        ),
+        "risk_ribbon": _risk_ribbon_summary(
+            project_id,
+            risk_ribbon_raw,
+            risk_ribbon_metadata_raw,
+            source_path=source_refs["risk_ribbon"],
+            metadata_source_path=source_refs["risk_ribbon_metadata"],
+        ),
+        "risk_heatmap": _risk_heatmap_summary(
+            project_id,
+            risk_heatmap_raw,
+            risk_heatmap_metadata_raw,
+            source_path=source_refs["calibrated_risk_heatmap"],
+            metadata_source_path=source_refs["calibrated_risk_heatmap_metadata"],
+        ),
         "map_layers": build_pretrip_map_layers(
             source_refs=source_refs,
             weather={
@@ -742,6 +899,11 @@ def load_pretrip_debug_projection_view(
         project_id,
         view["gis_perception"],
         overpass_evidence=view["overpass_evidence"],
+    )
+    view["risk_delta"] = _risk_delta_summary(
+        project_id,
+        view["risk_ribbon"],
+        view["risk_heatmap"],
     )
     lifecycle_events = load_pretrip_debug_projection_events(
         project_id,
@@ -776,6 +938,10 @@ def load_pretrip_debug_projection_view(
         "gis_perception_timeline": view["gis_perception_timeline"],
         "reference_tracks": view["reference_tracks"],
         "checkpoint_events": view["checkpoint_events"],
+        "risk_score": view["risk_score"],
+        "risk_ribbon": view["risk_ribbon"],
+        "risk_heatmap": view["risk_heatmap"],
+        "risk_delta": view["risk_delta"],
         "map_layers": view["map_layers"],
         "readiness": view["readiness"],
         "timeline_events": timeline_events,
@@ -795,6 +961,18 @@ def load_pretrip_debug_projection_view(
             "gis_perception_timeline_checkpoint_count": view[
                 "gis_perception_timeline"
             ]["counts"].get("checkpoint_candidate_count", 0),
+            "risk_ribbon_segment_count": view["risk_ribbon"]["counts"].get(
+                "segment_count",
+                0,
+            ),
+            "risk_heatmap_segment_count": view["risk_heatmap"]["counts"].get(
+                "segment_count",
+                0,
+            ),
+            "risk_delta_segment_count": view["risk_delta"]["counts"].get(
+                "segment_count",
+                0,
+            ),
             "timeline_event_count": len(timeline_events),
             "source_lifecycle_event_count": lifecycle_events.get("event_count", 0),
         },
@@ -2332,6 +2510,173 @@ def _review_focus_map_aliases(targets: list[str]) -> list[str]:
     return aliases
 
 
+def _review_workbench_summary(
+    review_queue: dict[str, Any],
+    review_decision_log: dict[str, Any],
+    gis_perception_timeline: dict[str, Any],
+) -> dict[str, Any]:
+    items = review_queue.get("items", [])
+    decided_refs = {
+        decision.get("candidate_ref")
+        for decision in review_decision_log.get("decisions", [])
+        if decision.get("candidate_ref")
+    }
+    category_groups = [
+        _review_workbench_group(
+            group_id=f"review_group.category.{_safe_view_key(str(category))}",
+            group_type="category",
+            label=str(category).replace("_", " "),
+            items=group_items,
+            decided_refs=decided_refs,
+        )
+        for category, group_items in sorted(_group_by(items, "category").items())
+    ]
+    severity_groups = [
+        _review_workbench_group(
+            group_id=f"review_group.severity.{_safe_view_key(str(severity))}",
+            group_type="severity",
+            label=str(severity),
+            items=group_items,
+            decided_refs=decided_refs,
+        )
+        for severity, group_items in sorted(_group_by(items, "severity").items())
+    ]
+    gis_groups = [
+        {
+            "group_id": group.get("nearby_group_id"),
+            "group_type": "gis_nearby_group",
+            "label": group.get("nearby_group_id"),
+            "item_count": group.get("member_count", 0),
+            "candidate_refs": group.get("member_candidate_ids", []),
+            "semantic_keys": group.get("semantic_keys", []),
+            "review_action": "inspect_group_members",
+            "bulk_action_allowed": False,
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+        }
+        for group in gis_perception_timeline.get("nearby_groups", [])
+    ]
+    bulk_eligible_items = [
+        item
+        for item in items
+        if _is_review_workbench_bulk_eligible(item, decided_refs)
+    ]
+    single_review_items = [
+        item
+        for item in items
+        if item.get("candidate_ref") not in {bulk.get("candidate_ref") for bulk in bulk_eligible_items}
+    ]
+    return {
+        "source_id": f"{review_queue.get('source_id', 'review_queue')}.workbench",
+        "source_path": "project.json#review-workbench",
+        "evidence_type": "pretrip_review_workbench_projection",
+        "status": "projection_only",
+        "counts": {
+            "item_count": len(items),
+            "category_group_count": len(category_groups),
+            "severity_group_count": len(severity_groups),
+            "gis_nearby_group_count": len(gis_groups),
+            "bulk_eligible_count": len(bulk_eligible_items),
+            "single_review_required_count": len(single_review_items),
+            "decided_count": len(decided_refs),
+        },
+        "category_groups": category_groups,
+        "severity_groups": severity_groups,
+        "gis_nearby_groups": gis_groups,
+        "triage": {
+            "recommended_flow": [
+                "clear blocker and warning filters first",
+                "use category filters to select review-only repeated candidates",
+                "bulk accept/reject only low-friction review items",
+                "keep departure bundle and runtime handoff as single-review gates",
+            ],
+            "bulk_candidate_refs": [
+                item["candidate_ref"] for item in bulk_eligible_items
+            ],
+            "single_review_candidate_refs": [
+                item.get("candidate_ref")
+                for item in single_review_items
+                if item.get("candidate_ref")
+            ],
+        },
+        "boundary": {
+            "projection_only": True,
+            "candidate_only": True,
+            "ai_triage_is_review_aid": True,
+            "bulk_actions_require_workspace_review_log": True,
+            "package_mutation_allowed": False,
+            "runtime_mutation_allowed": False,
+            "phase1_runtime_mutation_allowed": False,
+            "phase2_writeback_allowed": False,
+            "runtime_safety_truth": False,
+        },
+    }
+
+
+def _group_by(items: list[dict[str, Any]], key: str) -> dict[str, list[dict[str, Any]]]:
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for item in items:
+        grouped.setdefault(str(item.get(key) or "unknown"), []).append(item)
+    return grouped
+
+
+def _review_workbench_group(
+    *,
+    group_id: str,
+    group_type: str,
+    label: str,
+    items: list[dict[str, Any]],
+    decided_refs: set[str],
+) -> dict[str, Any]:
+    severity_counts = Counter(str(item.get("severity") or "unknown") for item in items)
+    bulk_eligible = [
+        item for item in items if _is_review_workbench_bulk_eligible(item, decided_refs)
+    ]
+    return {
+        "group_id": group_id,
+        "source_id": group_id,
+        "source_path": "project.json#review-workbench",
+        "evidence_type": "pretrip_review_workbench_group",
+        "status": "projection_only",
+        "group_type": group_type,
+        "label": label,
+        "category": label.replace(" ", "_"),
+        "item_count": len(items),
+        "undecided_count": sum(
+            1
+            for item in items
+            if item.get("candidate_ref") and item.get("candidate_ref") not in decided_refs
+        ),
+        "bulk_eligible_count": len(bulk_eligible),
+        "severity_counts": dict(sorted(severity_counts.items())),
+        "candidate_refs": [
+            item["candidate_ref"] for item in items if item.get("candidate_ref")
+        ],
+        "bulk_candidate_refs": [
+            item["candidate_ref"] for item in bulk_eligible if item.get("candidate_ref")
+        ],
+        "review_action": (
+            "filter_select_visible"
+            if bulk_eligible
+            else "single_item_review_required"
+        ),
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+    }
+
+
+def _is_review_workbench_bulk_eligible(
+    item: dict[str, Any],
+    decided_refs: set[str],
+) -> bool:
+    candidate_ref = item.get("candidate_ref")
+    if not candidate_ref or candidate_ref in decided_refs:
+        return False
+    if item.get("severity") != "review":
+        return False
+    return item.get("category") not in {"departure_bundle", "runtime_handoff"}
+
+
 def _review_draft_log_summary(payload: dict[str, Any], source_path: str) -> dict[str, Any]:
     return {
         "source_id": payload["log_id"],
@@ -2544,6 +2889,318 @@ def _layer_preparation_summary(
     }
 
 
+def _risk_score_summary(
+    project_id: str,
+    score_payload: dict[str, Any] | None,
+    score_metadata: dict[str, Any] | None,
+    route_payload: dict[str, Any] | None,
+    route_metadata: dict[str, Any] | None,
+    *,
+    source_path: str,
+    metadata_source_path: str,
+    route_source_path: str,
+    route_metadata_source_path: str,
+) -> dict[str, Any]:
+    counts = {
+        "point_count": 0,
+        "route_sample_count": 0,
+        "source_feature_count": 0,
+        "risk_level_counts": {},
+    }
+    points: list[dict[str, Any]] = []
+    features = score_payload.get("features", []) if score_payload else []
+    route_sample_properties = {
+        str(feature.get("properties", {}).get("sample_id")): feature.get(
+            "properties",
+            {},
+        )
+        for feature in (route_payload or {}).get("features", [])
+        if feature.get("properties", {}).get("sample_id")
+    }
+    risk_values: list[float] = []
+    level_counts: Counter[int] = Counter()
+    for index, feature in enumerate(features):
+        geometry = feature.get("geometry", {})
+        coordinates = geometry.get("coordinates", [])
+        if geometry.get("type") != "Point" or len(coordinates) < 2:
+            continue
+        properties = feature.get("properties", {})
+        score = properties.get("rs")
+        if score is None:
+            continue
+        risk_level = properties.get("risk_level")
+        if isinstance(risk_level, int):
+            level_counts[risk_level] += 1
+        risk_value = float(score)
+        risk_values.append(risk_value)
+        sample_id = str(properties.get("sample_id") or f"risk_score.{index:04d}")
+        route_properties = route_sample_properties.get(sample_id, {})
+        points.append(
+            {
+                "candidate_id": f"risk_score_point.{_safe_view_key(sample_id)}",
+                "source_id": f"risk_score_point.{_safe_view_key(sample_id)}",
+                "source_path": source_path,
+                "evidence_type": "pretrip_risk_score_point",
+                "status": "candidate_only",
+                "source_profile": "scout_risk_engine",
+                "source_attribution": [
+                    {
+                        "source_kind": "scout_risk_engine_route_sample",
+                        "source_profile": "scout_risk_engine",
+                        "source_candidate_id": sample_id,
+                        "source_artifact_id": "scout_risk_score_point_map",
+                        "source_label": f"risk {risk_value:.1f}",
+                        "evidence_type": "pretrip_risk_score_point",
+                        "confidence": "medium",
+                        "stale_risk": "medium",
+                        "candidate_only": True,
+                        "runtime_safety_truth": False,
+                    }
+                ],
+                "lat": float(coordinates[1]),
+                "lon": float(coordinates[0]),
+                "x": properties.get("x"),
+                "y": properties.get("y"),
+                "pretrip_risk": risk_value,
+                "risk_level": risk_level,
+                "score_field": properties.get("score_field", "pretrip_risk"),
+                "route_id": properties.get("route_id"),
+                "sample_id": sample_id,
+                "distance_m": properties.get("distance_m"),
+                "elevation_m": route_properties.get("elevation_m"),
+                "teii_20m": properties.get("teii_20m", route_properties.get("teii_20m")),
+                "tri": properties.get("tri", route_properties.get("tri")),
+                "sri": properties.get("sri", route_properties.get("sri")),
+                "lec": properties.get("lec", route_properties.get("lec")),
+                "scp": properties.get("scp", route_properties.get("scp")),
+                "explanation": route_properties.get("explanation", []),
+                "source_sample_count": properties.get("source_sample_count"),
+                "source_sample_ids": properties.get("source_sample_ids", []),
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+            }
+        )
+
+    counts.update(
+        {
+            "point_count": len(points),
+            "route_sample_count": (
+                route_metadata or {}
+            ).get(
+                "route_risk_sample_count",
+                len(route_payload.get("features", [])) if route_payload else 0,
+            ),
+            "source_feature_count": (score_metadata or {}).get(
+                "source_feature_count",
+                len(features),
+            ),
+            "risk_level_counts": {
+                str(level): count for level, count in sorted(level_counts.items())
+            },
+        }
+    )
+    if risk_values:
+        counts["max_pretrip_risk"] = round(max(risk_values), 2)
+        counts["mean_pretrip_risk"] = round(sum(risk_values) / len(risk_values), 2)
+
+    metadata = score_metadata or {}
+    return {
+        "source_id": "scout_risk_score_points." + project_id,
+        "source_path": source_path or metadata_source_path or "project.json#risk-score",
+        "metadata_source_path": metadata_source_path,
+        "route_source_path": route_source_path,
+        "route_metadata_source_path": route_metadata_source_path,
+        "evidence_type": "pretrip_risk_score_points",
+        "artifact_kind": metadata.get("artifact_kind", "scout_risk_score_point_map"),
+        "status": "candidate_only" if points else "not_available",
+        "score_field": metadata.get("score_field", "pretrip_risk"),
+        "score_surface_type": metadata.get(
+            "score_surface_type",
+            "route_aligned_point_grid",
+        ),
+        "snap_grid_m": metadata.get("snap_grid_m"),
+        "counts": counts,
+        "points": points,
+        "boundary": _summary_boundary(
+            metadata.get(
+                "boundary",
+                {
+                    "candidate_only": True,
+                    "runtime_safety_truth": False,
+                    "route_aligned_samples_only": True,
+                },
+            )
+        ),
+    }
+
+
+def _risk_ribbon_summary(
+    project_id: str,
+    payload: dict[str, Any] | None,
+    metadata_payload: dict[str, Any] | None,
+    *,
+    source_path: str,
+    metadata_source_path: str,
+) -> dict[str, Any]:
+    payload_metadata = payload.get("metadata", {}) if payload else {}
+    metadata = {
+        **(payload_metadata if isinstance(payload_metadata, dict) else {}),
+        **(metadata_payload or {}),
+    }
+    score_field = str(metadata.get("score_field") or "pretrip_risk")
+    features = payload.get("features", []) if payload else []
+    segments: list[dict[str, Any]] = []
+    risk_values: list[float] = []
+    bucket_counts: Counter[str] = Counter()
+    for index, feature in enumerate(features):
+        geometry = feature.get("geometry", {})
+        if geometry.get("type") != "LineString":
+            continue
+        try:
+            coordinates = _geojson_line_coordinates(geometry)
+        except (TypeError, ValueError):
+            continue
+        if len(coordinates) < 2:
+            continue
+        properties = feature.get("properties", {})
+        score = _coerce_float(properties.get("rs", properties.get(score_field)))
+        if score is None:
+            continue
+        risk_values.append(score)
+        segment_id = str(properties.get("segment_id") or f"risk_ribbon.{index:04d}")
+        risk_bucket = str(properties.get("risk_bucket") or _risk_bucket(score))
+        bucket_counts[risk_bucket] += 1
+        start_distance_m = _coerce_float(properties.get("start_distance_m"))
+        end_distance_m = _coerce_float(properties.get("end_distance_m"))
+        segments.append(
+            {
+                "candidate_id": f"risk_ribbon.{_safe_view_key(segment_id)}",
+                "source_id": f"risk_ribbon.{_safe_view_key(segment_id)}",
+                "segment_id": segment_id,
+                "source_path": source_path,
+                "metadata_source_path": metadata_source_path,
+                "evidence_type": "pretrip_risk_ribbon_segment",
+                "status": "candidate_only",
+                "source_profile": "scout_risk_engine",
+                "source_attribution": [
+                    {
+                        "source_kind": "scout_risk_engine_route_ribbon",
+                        "source_profile": "scout_risk_engine",
+                        "source_candidate_id": segment_id,
+                        "source_artifact_id": metadata.get(
+                            "artifact_kind",
+                            "scout_risk_route_ribbon",
+                        ),
+                        "source_label": f"risk ribbon {score:.1f}",
+                        "evidence_type": "pretrip_risk_ribbon_segment",
+                        "confidence": "medium",
+                        "stale_risk": "medium",
+                        "candidate_only": True,
+                        "runtime_safety_truth": False,
+                    }
+                ],
+                "label": f"{risk_bucket} risk {score:.1f}",
+                "coordinates": coordinates,
+                "lat": coordinates[0]["lat"],
+                "lon": coordinates[0]["lon"],
+                "pretrip_risk": score,
+                "rs": score,
+                "score_field": properties.get("score_field", score_field),
+                "risk_level": properties.get("risk_level"),
+                "risk_bucket": risk_bucket,
+                "style_class": properties.get(
+                    "style_class",
+                    f"risk-ribbon-{risk_bucket}",
+                ),
+                "stroke": properties.get("stroke"),
+                "route_id": properties.get("route_id"),
+                "from_sample_id": properties.get("from_sample_id"),
+                "to_sample_id": properties.get("to_sample_id"),
+                "start_distance_m": start_distance_m,
+                "end_distance_m": end_distance_m,
+                "distance_m": start_distance_m,
+                "candidate_only": bool(properties.get("candidate_only", True)),
+                "runtime_safety_truth": bool(
+                    properties.get("runtime_safety_truth", False)
+                ),
+                "interpolated_surface": bool(
+                    properties.get("interpolated_surface", False)
+                ),
+                "route_aligned_samples_only": bool(
+                    properties.get("route_aligned_samples_only", True)
+                ),
+            }
+        )
+
+    counts: dict[str, Any] = {
+        "segment_count": len(segments),
+        "source_segment_count": _coerce_int(
+            metadata.get("segment_count"),
+            len(features) or 0,
+        ),
+        "source_sample_count": _coerce_int(metadata.get("source_sample_count"), 0),
+        "skipped_pair_count": _coerce_int(metadata.get("skipped_pair_count"), 0),
+        "risk_bucket_counts": {
+            bucket: count for bucket, count in sorted(bucket_counts.items())
+        },
+    }
+    if risk_values:
+        counts["max_pretrip_risk"] = round(max(risk_values), 2)
+        counts["mean_pretrip_risk"] = round(sum(risk_values) / len(risk_values), 2)
+
+    return {
+        "source_id": "scout_risk_ribbon." + project_id,
+        "source_path": source_path or metadata_source_path or "project.json#risk-ribbon",
+        "metadata_source_path": metadata_source_path,
+        "evidence_type": "pretrip_risk_ribbon",
+        "artifact_kind": metadata.get("artifact_kind", "scout_risk_route_ribbon"),
+        "status": "candidate_only" if segments else "not_available",
+        "score_field": score_field,
+        "score_surface_type": metadata.get(
+            "score_surface_type",
+            "route_aligned_risk_ribbon",
+        ),
+        "counts": counts,
+        "segments": segments,
+        "style": metadata.get("style", {}),
+        "boundary": _summary_boundary(
+            metadata.get(
+                "boundary",
+                {
+                    "candidate_only": True,
+                    "runtime_safety_truth": False,
+                    "interpolated_surface": False,
+                    "route_aligned_samples_only": True,
+                },
+            )
+        ),
+    }
+
+
+def _coerce_float(value: Any) -> float | None:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _coerce_int(value: Any, default: int = 0) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _risk_bucket(score: float) -> str:
+    if score >= 80:
+        return "extreme"
+    if score >= 60:
+        return "high"
+    if score >= 40:
+        return "moderate"
+    return "low"
+
+
 def _overpass_evidence_summary(payload: dict[str, Any], source_path: str) -> dict[str, Any]:
     candidates = payload.get("candidates", [])
     return {
@@ -2648,10 +3305,221 @@ def _overpass_map_payload(candidate: dict[str, Any], properties: dict[str, Any])
     }
 
 
+def _risk_heatmap_summary(
+    project_id: str,
+    payload: dict[str, Any] | None,
+    metadata_payload: dict[str, Any] | None,
+    *,
+    source_path: str,
+    metadata_source_path: str,
+) -> dict[str, Any]:
+    summary = _risk_ribbon_summary(
+        project_id,
+        payload,
+        metadata_payload,
+        source_path=source_path,
+        metadata_source_path=metadata_source_path,
+    )
+    summary["source_id"] = "scout_calibrated_risk_heatmap." + project_id
+    summary["evidence_type"] = "pretrip_calibrated_risk_heatmap"
+    for segment in summary.get("segments", []):
+        segment["evidence_type"] = "pretrip_calibrated_risk_heatmap_segment"
+        segment["source_profile"] = "scout_risk_engine_route_specific_calibration"
+        segment["label"] = (
+            f"{segment.get('risk_bucket', 'heat')} heat "
+            f"{segment.get('pretrip_risk', 0):.1f}"
+        )
+        segment["route_specific_calibration_candidate"] = True
+        segment["relative_bucket"] = segment.get("risk_bucket")
+        for attribution in segment.get("source_attribution", []):
+            attribution["source_kind"] = "scout_risk_engine_calibrated_heatmap"
+            attribution["source_profile"] = (
+                "scout_risk_engine_route_specific_calibration"
+            )
+            attribution["evidence_type"] = (
+                "pretrip_calibrated_risk_heatmap_segment"
+            )
+    summary["boundary"]["route_specific_calibration_candidate"] = True
+    return summary
+
+
+def _risk_delta_summary(
+    project_id: str,
+    baseline: dict[str, Any] | None,
+    calibrated: dict[str, Any] | None,
+) -> dict[str, Any]:
+    baseline_segments = (baseline or {}).get("segments", [])
+    calibrated_segments = (calibrated or {}).get("segments", [])
+    calibrated_by_key = {
+        _risk_segment_key(segment): segment
+        for segment in calibrated_segments
+        if _risk_segment_key(segment)
+    }
+    segments: list[dict[str, Any]] = []
+    delta_values: list[float] = []
+    bucket_counts: Counter[str] = Counter()
+    for index, baseline_segment in enumerate(baseline_segments):
+        key = _risk_segment_key(baseline_segment)
+        calibrated_segment = calibrated_by_key.get(key)
+        if calibrated_segment is None:
+            continue
+        baseline_score = _coerce_float(baseline_segment.get("pretrip_risk"))
+        calibrated_score = _coerce_float(calibrated_segment.get("pretrip_risk"))
+        if baseline_score is None or calibrated_score is None:
+            continue
+        delta = round(calibrated_score - baseline_score, 2)
+        bucket = _risk_delta_bucket(
+            baseline_score,
+            calibrated_score,
+            baseline_segment.get("risk_bucket"),
+            calibrated_segment.get("risk_bucket"),
+        )
+        bucket_counts[bucket] += 1
+        delta_values.append(delta)
+        coordinates = calibrated_segment.get("coordinates") or baseline_segment.get(
+            "coordinates",
+            [],
+        )
+        segment_id = (
+            f"risk_delta.{baseline_segment.get('from_sample_id', index)}."
+            f"{baseline_segment.get('to_sample_id', index)}"
+        )
+        segments.append(
+            {
+                "candidate_id": f"risk_delta.{_safe_view_key(segment_id)}",
+                "source_id": f"risk_delta.{_safe_view_key(segment_id)}",
+                "segment_id": segment_id,
+                "source_path": baseline_segment.get("source_path"),
+                "metadata_source_path": calibrated_segment.get("metadata_source_path"),
+                "evidence_type": "pretrip_risk_delta_segment",
+                "status": "candidate_only",
+                "source_profile": "scout_risk_engine_delta_comparison",
+                "source_attribution": [
+                    {
+                        "source_kind": "scout_risk_engine_delta_comparison",
+                        "source_profile": "scout_risk_engine_delta_comparison",
+                        "source_candidate_id": segment_id,
+                        "source_artifact_id": "scout_risk_delta_comparison",
+                        "source_label": f"delta {delta:+.1f}",
+                        "evidence_type": "pretrip_risk_delta_segment",
+                        "confidence": "medium",
+                        "stale_risk": "medium",
+                        "candidate_only": True,
+                        "runtime_safety_truth": False,
+                    }
+                ],
+                "label": f"{bucket.replace('_', ' ')} {delta:+.1f}",
+                "coordinates": coordinates,
+                "lat": coordinates[0]["lat"] if coordinates else None,
+                "lon": coordinates[0]["lon"] if coordinates else None,
+                "baseline_pretrip_risk": round(baseline_score, 2),
+                "calibrated_risk_candidate": round(calibrated_score, 2),
+                "pretrip_risk": abs(delta),
+                "rs": abs(delta),
+                "delta_score": delta,
+                "abs_delta_score": abs(delta),
+                "risk_bucket": bucket,
+                "delta_bucket": bucket,
+                "style_class": f"risk-delta-{bucket}",
+                "stroke": RISK_DELTA_COLORS[bucket],
+                "from_sample_id": baseline_segment.get("from_sample_id"),
+                "to_sample_id": baseline_segment.get("to_sample_id"),
+                "start_distance_m": baseline_segment.get("start_distance_m"),
+                "end_distance_m": baseline_segment.get("end_distance_m"),
+                "distance_m": baseline_segment.get("start_distance_m"),
+                "baseline_risk_bucket": baseline_segment.get("risk_bucket"),
+                "calibrated_risk_bucket": calibrated_segment.get("risk_bucket"),
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+                "comparison_only": True,
+            }
+        )
+
+    counts: dict[str, Any] = {
+        "segment_count": len(segments),
+        "baseline_segment_count": len(baseline_segments),
+        "calibrated_segment_count": len(calibrated_segments),
+        "risk_bucket_counts": {
+            bucket: count for bucket, count in sorted(bucket_counts.items())
+        },
+    }
+    if delta_values:
+        counts["max_abs_delta"] = round(max(abs(value) for value in delta_values), 2)
+        counts["mean_abs_delta"] = round(
+            sum(abs(value) for value in delta_values) / len(delta_values),
+            2,
+        )
+    return {
+        "source_id": "scout_risk_delta." + project_id,
+        "source_path": (
+            f"{(baseline or {}).get('source_path', '')} + "
+            f"{(calibrated or {}).get('source_path', '')}"
+        ).strip(" +"),
+        "metadata_source_path": (
+            f"{(baseline or {}).get('metadata_source_path', '')} + "
+            f"{(calibrated or {}).get('metadata_source_path', '')}"
+        ).strip(" +"),
+        "evidence_type": "pretrip_risk_delta",
+        "artifact_kind": "scout_risk_delta_comparison",
+        "status": "candidate_only" if segments else "not_available",
+        "score_field": "abs_delta_score",
+        "score_surface_type": "baseline_vs_calibrated_delta",
+        "counts": counts,
+        "segments": segments,
+        "style": {
+            bucket: {"stroke": color}
+            for bucket, color in RISK_DELTA_COLORS.items()
+        },
+        "boundary": _summary_boundary(
+            {
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+                "interpolated_surface": False,
+                "route_aligned_samples_only": True,
+                "comparison_only": True,
+                "baseline_source": "risk_ribbon",
+                "calibrated_source": "calibrated_risk_heatmap",
+            }
+        ),
+    }
+
+
+def _risk_segment_key(segment: dict[str, Any]) -> tuple[str, str] | None:
+    start = segment.get("from_sample_id")
+    end = segment.get("to_sample_id")
+    if start and end:
+        return str(start), str(end)
+    return None
+
+
+def _risk_delta_bucket(
+    baseline_score: float,
+    calibrated_score: float,
+    baseline_bucket: Any,
+    calibrated_bucket: Any,
+) -> str:
+    delta = calibrated_score - baseline_score
+    high_calibrated = str(calibrated_bucket) in {"high", "very_high", "extreme"}
+    high_baseline = baseline_score >= 80 or str(baseline_bucket) in {
+        "high",
+        "very_high",
+        "extreme",
+    }
+    if high_baseline and high_calibrated:
+        return "aligned_high"
+    if delta >= 15:
+        return "calibrated_higher"
+    if delta <= -15:
+        return "baseline_higher"
+    if abs(delta) >= 7.5:
+        return "minor_shift"
+    return "aligned"
+
+
 def _geojson_line_coordinates(geometry: dict[str, Any]) -> list[dict[str, float]]:
     return [
         {"lon": float(lon), "lat": float(lat)}
-        for lon, lat in geometry.get("coordinates", [])
+        for lon, lat, *_ in geometry.get("coordinates", [])
     ]
 
 
@@ -2743,6 +3611,41 @@ def _route_note_reviewed_assumptions_summary(
         "ln_expansion_candidates": payload.get("ln_expansion_candidates", []),
         "field_verification_requests": payload.get("field_verification_requests", []),
         "ignored_dispositions": payload.get("ignored_dispositions", []),
+    }
+
+
+def _departure_reviewed_candidates_summary(
+    payload: dict[str, Any],
+    source_path: str,
+) -> dict[str, Any]:
+    return {
+        "source_id": payload["artifact_id"],
+        "source_path": source_path,
+        "evidence_type": "pretrip_departure_reviewed_candidates",
+        "status": "package_addendum_candidate",
+        "project_id": payload["project_id"],
+        "source_apply_plan_ref": payload["source_apply_plan_ref"],
+        "counts": payload["counts"],
+        "boundary": _summary_boundary(payload["boundary"]),
+        "candidates": [
+            {
+                "candidate_ref": candidate["candidate_ref"],
+                "decision": candidate["decision"],
+                "promotion_scope": candidate["promotion_scope"],
+                "runtime_checkin_candidate": candidate["runtime_checkin_candidate"],
+                "candidate_only": candidate["candidate_only"],
+                "runtime_safety_truth": candidate["runtime_safety_truth"],
+                "human_review_required_before_runtime_use": candidate[
+                    "human_review_required_before_runtime_use"
+                ],
+                "target_ids": candidate.get("target_ids", []),
+                "source_refs": candidate.get("source_refs", []),
+                "summary": candidate["summary"],
+                "correction_summary": candidate.get("correction_summary"),
+            }
+            for candidate in payload.get("candidates", [])
+        ],
+        "rejected_audit_refs": payload.get("rejected_audit_refs", []),
     }
 
 
@@ -3041,6 +3944,10 @@ def _planning_sections(planning_tab: dict[str, Any]) -> list[dict[str, Any]]:
     readiness = planning_tab["readiness"]
     resources = planning_tab["resources"]
     layer_preparation = planning_tab["layer_preparation"]
+    risk_score = planning_tab["risk_score"]
+    risk_ribbon = planning_tab["risk_ribbon"]
+    risk_heatmap = planning_tab["risk_heatmap"]
+    risk_delta = planning_tab["risk_delta"]
     weather = planning_tab["weather"]
     overpass_evidence = planning_tab["overpass_evidence"]
     gis_perception_timeline = planning_tab["gis_perception_timeline"]
@@ -3053,6 +3960,7 @@ def _planning_sections(planning_tab: dict[str, Any]) -> list[dict[str, Any]]:
         "route_note_reviewed_assumptions"
     )
     review_queue = planning_tab["review_queue"]
+    review_workbench = planning_tab["review_workbench"]
     review_draft_log = planning_tab["review_draft_log"]
     review_decision_log = planning_tab["review_decision_log"]
     review_decision_apply_plan = planning_tab["review_decision_apply_plan"]
@@ -3062,6 +3970,7 @@ def _planning_sections(planning_tab: dict[str, Any]) -> list[dict[str, Any]]:
     expert_contribution_workspace_apply_result = planning_tab.get(
         "expert_contribution_workspace_apply_result"
     )
+    departure_reviewed_candidates = planning_tab.get("departure_reviewed_candidates")
     departure_bundle = planning_tab["departure_bundle"]
 
     sections = [
@@ -3135,6 +4044,92 @@ def _planning_sections(planning_tab: dict[str, Any]) -> list[dict[str, Any]]:
                 ],
             },
             boundary=layer_preparation["boundary"],
+        ),
+        _section(
+            "risk_score",
+            "Risk Score",
+            risk_score,
+            status=risk_score["status"],
+            counts=risk_score["counts"],
+            summary={
+                "score_field": risk_score["score_field"],
+                "point_count": risk_score["counts"].get("point_count", 0),
+                "route_sample_count": risk_score["counts"].get(
+                    "route_sample_count",
+                    0,
+                ),
+                "max_pretrip_risk": risk_score["counts"].get("max_pretrip_risk"),
+                "risk_level_counts": risk_score["counts"].get(
+                    "risk_level_counts",
+                    {},
+                ),
+            },
+            boundary=risk_score["boundary"],
+        ),
+        _section(
+            "risk_ribbon",
+            "Baseline Risk",
+            risk_ribbon,
+            status=risk_ribbon["status"],
+            counts=risk_ribbon["counts"],
+            summary={
+                "score_field": risk_ribbon["score_field"],
+                "score_surface_type": risk_ribbon["score_surface_type"],
+                "segment_count": risk_ribbon["counts"].get("segment_count", 0),
+                "source_sample_count": risk_ribbon["counts"].get(
+                    "source_sample_count",
+                    0,
+                ),
+                "max_pretrip_risk": risk_ribbon["counts"].get("max_pretrip_risk"),
+                "risk_bucket_counts": risk_ribbon["counts"].get(
+                    "risk_bucket_counts",
+                    {},
+                ),
+            },
+            boundary=risk_ribbon["boundary"],
+        ),
+        _section(
+            "risk_heatmap",
+            "Calibrated Heat",
+            risk_heatmap,
+            status=risk_heatmap["status"],
+            counts=risk_heatmap["counts"],
+            summary={
+                "score_field": risk_heatmap["score_field"],
+                "score_surface_type": risk_heatmap["score_surface_type"],
+                "segment_count": risk_heatmap["counts"].get("segment_count", 0),
+                "source_sample_count": risk_heatmap["counts"].get(
+                    "source_sample_count",
+                    0,
+                ),
+                "max_calibrated_risk": risk_heatmap["counts"].get(
+                    "max_pretrip_risk"
+                ),
+                "risk_bucket_counts": risk_heatmap["counts"].get(
+                    "risk_bucket_counts",
+                    {},
+                ),
+            },
+            boundary=risk_heatmap["boundary"],
+        ),
+        _section(
+            "risk_delta",
+            "Risk Delta",
+            risk_delta,
+            status=risk_delta["status"],
+            counts=risk_delta["counts"],
+            summary={
+                "score_field": risk_delta["score_field"],
+                "score_surface_type": risk_delta["score_surface_type"],
+                "segment_count": risk_delta["counts"].get("segment_count", 0),
+                "max_abs_delta": risk_delta["counts"].get("max_abs_delta"),
+                "mean_abs_delta": risk_delta["counts"].get("mean_abs_delta"),
+                "risk_bucket_counts": risk_delta["counts"].get(
+                    "risk_bucket_counts",
+                    {},
+                ),
+            },
+            boundary=risk_delta["boundary"],
         ),
         _section(
             "weather",
@@ -3326,7 +4321,7 @@ def _planning_sections(planning_tab: dict[str, Any]) -> list[dict[str, Any]]:
         )
     sections.extend(
         [
-            _section(
+        _section(
             "review_queue",
             "Review Queue",
             review_queue,
@@ -3338,6 +4333,28 @@ def _planning_sections(planning_tab: dict[str, Any]) -> list[dict[str, Any]]:
                 "decisions_recorded": review_queue["boundary"].get("decisions_recorded"),
             },
             boundary=review_queue["boundary"],
+        ),
+        _section(
+            "review_workbench",
+            "Review Workbench",
+            review_workbench,
+            status=review_workbench["status"],
+            counts=review_workbench["counts"],
+            summary={
+                "bulk_eligible_count": review_workbench["counts"].get(
+                    "bulk_eligible_count"
+                ),
+                "single_review_required_count": review_workbench["counts"].get(
+                    "single_review_required_count"
+                ),
+                "category_groups": review_workbench["category_groups"],
+                "severity_groups": review_workbench["severity_groups"],
+                "recommended_flow": review_workbench["triage"].get(
+                    "recommended_flow",
+                    [],
+                ),
+            },
+            boundary=review_workbench["boundary"],
         ),
         _section(
             "review_draft_log",
@@ -3509,6 +4526,35 @@ def _planning_sections(planning_tab: dict[str, Any]) -> list[dict[str, Any]]:
                     ),
                 },
                 boundary=expert_contribution_workspace_apply_result["boundary"],
+            )
+        )
+    if departure_reviewed_candidates is not None:
+        sections.append(
+            _section(
+                "departure_reviewed_candidates",
+                "Departure Reviewed Candidates",
+                departure_reviewed_candidates,
+                status=departure_reviewed_candidates["status"],
+                counts=departure_reviewed_candidates["counts"],
+                summary={
+                    "source_apply_plan_ref": departure_reviewed_candidates[
+                        "source_apply_plan_ref"
+                    ],
+                    "promoted_candidate_count": departure_reviewed_candidates[
+                        "counts"
+                    ].get("promoted_candidate_count"),
+                    "accepted_count": departure_reviewed_candidates["counts"].get(
+                        "accepted_count"
+                    ),
+                    "corrected_count": departure_reviewed_candidates["counts"].get(
+                        "corrected_count"
+                    ),
+                    "runtime_truth_count": departure_reviewed_candidates["counts"].get(
+                        "runtime_truth_count"
+                    ),
+                    "candidates": departure_reviewed_candidates["candidates"],
+                },
+                boundary=departure_reviewed_candidates["boundary"],
             )
         )
     sections.append(

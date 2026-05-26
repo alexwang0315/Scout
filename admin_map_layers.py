@@ -55,6 +55,44 @@ _LAYER_SPECS: dict[str, AdminMapLayerSpec] = {
         render_mode="svg_backdrop",
         source_kind="dtm_summary",
     ),
+    "risk-score": AdminMapLayerSpec(
+        layer_id="risk-score",
+        label="Risk score",
+        label_zh="風險分數圖層（Scout Risk Engine 候選分數）",
+        layer_kind="evidence",
+        z_index=59,
+        render_mode="svg_overlay",
+        source_kind="scout_risk_engine",
+        default_enabled=False,
+    ),
+    "risk-ribbon": AdminMapLayerSpec(
+        layer_id="risk-ribbon",
+        label="Risk ribbon",
+        label_zh="路徑風險色帶（Route Risk Ribbon，沿路徑分段顯示風險）",
+        layer_kind="evidence",
+        z_index=58,
+        render_mode="svg_overlay",
+        source_kind="scout_risk_engine",
+    ),
+    "risk-heatmap": AdminMapLayerSpec(
+        layer_id="risk-heatmap",
+        label="Risk heat",
+        label_zh="校準熱區圖層（Calibrated Heat Map，本 workspace 相對熱區）",
+        layer_kind="evidence",
+        z_index=59,
+        render_mode="svg_overlay",
+        source_kind="scout_risk_engine",
+    ),
+    "risk-delta": AdminMapLayerSpec(
+        layer_id="risk-delta",
+        label="Risk delta",
+        label_zh="風險差異圖層（Delta，比對 baseline 與 calibrated heat）",
+        layer_kind="evidence",
+        z_index=59,
+        render_mode="svg_overlay",
+        source_kind="scout_risk_engine",
+        default_enabled=False,
+    ),
     "corridors": AdminMapLayerSpec(
         layer_id="corridors",
         label="Corridors",
@@ -162,6 +200,10 @@ def build_pretrip_map_layers(
     source_refs: Mapping[str, str],
     weather: Mapping[str, Any],
 ) -> list[dict[str, Any]]:
+    risk_delta_source = source_refs.get("risk_delta") or _paired_source_ref(
+        source_refs.get("risk_ribbon"),
+        source_refs.get("calibrated_risk_heatmap"),
+    )
     sources = {
         "imagery": (
             "pretrip.map_layer.imagery",
@@ -169,6 +211,25 @@ def build_pretrip_map_layers(
         ),
         "osm": ("pretrip.map_layer.osm", source_refs.get("map_context")),
         "terrain": ("pretrip.map_layer.terrain", source_refs.get("segment_dtm")),
+        "risk-score": (
+            "pretrip.map_layer.risk_score",
+            source_refs.get("risk_score_points")
+            or source_refs.get("risk_score_points_metadata"),
+        ),
+        "risk-ribbon": (
+            "pretrip.map_layer.risk_ribbon",
+            source_refs.get("risk_ribbon")
+            or source_refs.get("risk_ribbon_metadata"),
+        ),
+        "risk-heatmap": (
+            "pretrip.map_layer.risk_heatmap",
+            source_refs.get("calibrated_risk_heatmap")
+            or source_refs.get("calibrated_risk_heatmap_metadata"),
+        ),
+        "risk-delta": (
+            "pretrip.map_layer.risk_delta",
+            risk_delta_source,
+        ),
         "corridors": ("pretrip.map_layer.corridors", source_refs.get("map_candidates")),
         "hazards": ("pretrip.map_layer.hazards", source_refs.get("map_candidates")),
         "route": ("pretrip.map_layer.route", source_refs.get("route_summary")),
@@ -187,22 +248,39 @@ def build_pretrip_map_layers(
             str(weather.get("source_path") or source_refs.get("weather_daylight") or ""),
         ),
     }
-    return _build_layers(
-        (
+    layer_order = [
             "imagery",
             "osm",
             "terrain",
+        ]
+    if sources["risk-score"][1]:
+        layer_order.append("risk-score")
+    layer_order.extend(
+        [
             "corridors",
             "hazards",
             "route",
             "reference-tracks",
             "retreat",
+        ]
+    )
+    if sources["risk-ribbon"][1]:
+        layer_order.append("risk-ribbon")
+    if sources["risk-heatmap"][1]:
+        layer_order.append("risk-heatmap")
+    if sources["risk-delta"][1]:
+        layer_order.append("risk-delta")
+    layer_order.extend(
+        [
             "segments",
             "checkpoints",
             "pois",
             "route-notes",
             "weather-api",
-        ),
+        ]
+    )
+    return _build_layers(
+        tuple(layer_order),
         sources=sources,
         external_api_calls_made={
             "weather-api": bool(weather.get("external_api_calls_made")),
@@ -217,11 +295,23 @@ def build_after_action_map_layers(
     route_source_path: str | None = None,
     mission_graph_source_path: str | None = None,
     incident_store_path: str | None = None,
+    risk_score_source_path: str | None = None,
+    risk_ribbon_source_path: str | None = None,
+    risk_heatmap_source_path: str | None = None,
+    risk_delta_source_path: str | None = None,
 ) -> list[dict[str, Any]]:
+    resolved_risk_delta_source = risk_delta_source_path or _paired_source_ref(
+        risk_ribbon_source_path,
+        risk_heatmap_source_path,
+    )
     map_source = str(map_metadata.get("source") or "map_context")
     sources = {
         "imagery": ("after_action.map_layer.imagery", map_source_path),
         "osm": ("after_action.map_layer.osm", map_source_path),
+        "risk-score": ("after_action.map_layer.risk_score", risk_score_source_path),
+        "risk-ribbon": ("after_action.map_layer.risk_ribbon", risk_ribbon_source_path),
+        "risk-heatmap": ("after_action.map_layer.risk_heatmap", risk_heatmap_source_path),
+        "risk-delta": ("after_action.map_layer.risk_delta", resolved_risk_delta_source),
         "corridors": ("after_action.map_layer.corridors", map_source_path),
         "hazards": ("after_action.map_layer.hazards", map_source_path),
         "route": ("after_action.map_layer.route", route_source_path),
@@ -229,20 +319,32 @@ def build_after_action_map_layers(
         "events": ("after_action.map_layer.events", incident_store_path),
         "weather-api": ("after_action.map_layer.weather_api", None),
     }
+    layer_order = ["imagery", "osm"]
+    if risk_score_source_path:
+        layer_order.append("risk-score")
+    layer_order.extend(["corridors", "hazards", "route"])
+    if risk_ribbon_source_path:
+        layer_order.append("risk-ribbon")
+    if risk_heatmap_source_path:
+        layer_order.append("risk-heatmap")
+    if resolved_risk_delta_source:
+        layer_order.append("risk-delta")
+    layer_order.extend(["checkpoints", "events", "weather-api"])
     layers = _build_layers(
-        (
-            "imagery",
-            "osm",
-            "corridors",
-            "hazards",
-            "route",
-            "checkpoints",
-            "events",
-            "weather-api",
-        ),
+        tuple(layer_order),
         sources=sources,
-        available={"weather-api": False},
-        default_enabled={"weather-api": False},
+        available={
+            "risk-score": bool(risk_score_source_path),
+            "risk-ribbon": bool(risk_ribbon_source_path),
+            "risk-heatmap": bool(risk_heatmap_source_path),
+            "risk-delta": bool(resolved_risk_delta_source),
+            "weather-api": False,
+        },
+        default_enabled={
+            "risk-score": False,
+            "risk-delta": False,
+            "weather-api": False,
+        },
     )
     return [
         {
@@ -257,6 +359,12 @@ def build_after_action_map_layers(
 
 def map_layer_ids(layers: list[dict[str, Any]]) -> list[str]:
     return [str(layer["layer_id"]) for layer in layers]
+
+
+def _paired_source_ref(first: str | None, second: str | None) -> str | None:
+    if first and second:
+        return f"{first} + {second}"
+    return None
 
 
 def _build_layers(

@@ -4,6 +4,8 @@ from pathlib import Path
 
 import pytest
 
+import pretrip_layer_preparation
+from pretrip_layer_preparation import LayerPreparationRequest, run_layer_preparation
 from pretrip_admin_view import (
     build_pretrip_admin_view,
     list_pretrip_admin_projects,
@@ -82,6 +84,19 @@ def test_builds_fixture_backed_pretrip_admin_view():
         == 0
     )
     assert view["route_note_review_options"]["boundary"]["draft_only"] is True
+    assert view["risk_ribbon"]["status"] == "candidate_only"
+    assert view["risk_ribbon"]["counts"]["segment_count"] == 841
+    assert view["risk_ribbon"]["counts"]["source_sample_count"] == 842
+    assert view["risk_ribbon"]["boundary"]["candidate_only"] is True
+    assert view["risk_ribbon"]["boundary"]["runtime_safety_truth"] is False
+    assert view["risk_ribbon"]["boundary"]["interpolated_surface"] is False
+    assert view["risk_ribbon"]["segments"][0]["evidence_type"] == (
+        "pretrip_risk_ribbon_segment"
+    )
+    assert view["risk_ribbon"]["segments"][0]["coordinates"][0] == {
+        "lon": 121.1749947,
+        "lat": 23.9536093,
+    }
     assert view["gis_perception_timeline"]["counts"]["overpass_checkpoint_candidate_count"] == 9
     assert view["gis_perception_timeline"]["counts"]["checkpoint_candidate_count"] == 9
     assert all(
@@ -96,6 +111,17 @@ def test_builds_fixture_backed_pretrip_admin_view():
     assert view["review_queue"]["counts"]["item_count"] == 53
     assert view["review_queue"]["counts"]["category_counts"]["route_note"] == 23
     assert view["review_queue"]["counts"]["category_counts"]["gis_perception_cp"] == 9
+    assert view["review_workbench"]["status"] == "projection_only"
+    assert view["review_workbench"]["counts"]["category_group_count"] == 8
+    assert view["review_workbench"]["counts"]["bulk_eligible_count"] == 39
+    assert view["review_workbench"]["counts"]["single_review_required_count"] == 14
+    assert view["review_workbench"]["boundary"]["ai_triage_is_review_aid"] is True
+    assert view["review_workbench"]["boundary"]["runtime_safety_truth"] is False
+    assert any(
+        group["group_id"] == "review_group.category.gis_perception_cp"
+        and group["bulk_eligible_count"] == 9
+        for group in view["review_workbench"]["category_groups"]
+    )
     assert view["review_draft_log"]["status"] == "draft_only"
     assert view["review_draft_log"]["counts"]["action_count"] == 3
     assert view["review_decision_log"]["counts"]["action_count"] == 3
@@ -129,6 +155,7 @@ def test_builds_fixture_backed_pretrip_admin_view():
         "route",
         "reference-tracks",
         "retreat",
+        "risk-ribbon",
         "segments",
         "checkpoints",
         "pois",
@@ -159,6 +186,7 @@ def test_loads_debug_projection_view_with_shared_map_and_dense_timeline():
     assert projection["counts"]["checkpoint_candidate_count"] == 110
     assert projection["counts"]["segment_candidate_count"] == 109
     assert projection["counts"]["reference_track_count"] == 23
+    assert projection["counts"]["risk_ribbon_segment_count"] == 841
     assert projection["counts"]["source_lifecycle_event_count"] == 4
     assert projection["route"]["point_count"] == 6909
     assert (
@@ -169,6 +197,7 @@ def test_loads_debug_projection_view_with_shared_map_and_dense_timeline():
     )
     assert projection["route"]["display_geometry"]["display_point_count"] > 6000
     assert projection["reference_tracks"]["reference_track_count"] == 23
+    assert projection["risk_ribbon"]["counts"]["segment_count"] == 841
     assert projection["overpass_evidence"]["counts"]["candidates"] == 219
     assert projection["boundary"]["phase1_runtime_mutation_allowed"] is False
     assert projection["boundary"]["runtime_safety_truth"] is False
@@ -227,6 +256,53 @@ def test_builds_admin_view_from_local_workspace_project_root(tmp_path):
     )
 
 
+def test_admin_view_exposes_workspace_risk_score_layer(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fixture_project_root = (
+        ROOT / "tests" / "fixtures" / "pretrip" / "projects" / PROJECT_ID
+    )
+    workspace_project_root = tmp_path / PROJECT_ID
+    shutil.copytree(fixture_project_root, workspace_project_root)
+    risk_source = tmp_path / "risk_out"
+    _write_risk_score_outputs(risk_source)
+    monkeypatch.setattr(
+        pretrip_layer_preparation,
+        "SCOUT_RISK_OUTPUT_SOURCES",
+        {PROJECT_ID: risk_source},
+    )
+    run_layer_preparation(
+        LayerPreparationRequest(
+            project_id=PROJECT_ID,
+            project_root=workspace_project_root,
+            layers=("risk-score",),
+            prepared_at="2026-05-22T00:00:00+00:00",
+        )
+    )
+
+    view = build_pretrip_admin_view(
+        PROJECT_ID,
+        root=ROOT,
+        project_root=workspace_project_root,
+    )
+
+    assert view["risk_score"]["status"] == "candidate_only"
+    assert view["risk_score"]["counts"]["point_count"] == 2
+    assert view["risk_score"]["counts"]["max_pretrip_risk"] == 61.2
+    assert view["risk_score"]["points"][0]["evidence_type"] == "pretrip_risk_score_point"
+    assert view["risk_score"]["points"][0]["pretrip_risk"] == 61.2
+    assert view["risk_score"]["boundary"]["runtime_safety_truth"] is False
+    risk_layer = next(layer for layer in view["map_layers"] if layer["layer_id"] == "risk-score")
+    assert risk_layer["default_enabled"] is False
+    sections = {
+        section["id"]: section
+        for section in view["tabs"]["pre_trip_planning"]["sections"]
+    }
+    assert sections["risk_score"]["counts"]["point_count"] == 2
+    assert sections["risk_score"]["summary"]["score_field"] == "pretrip_risk"
+
+
 def test_view_is_summary_only_and_has_traceable_source_refs():
     view = build_pretrip_admin_view(PROJECT_ID, root=ROOT)
 
@@ -237,6 +313,7 @@ def test_view_is_summary_only_and_has_traceable_source_refs():
         view["segments"][0],
         view["retreat_routes"][0],
         view["map_candidates"]["poi_candidates"][0],
+        view["risk_ribbon"],
         view["review_queue"],
         view["review_draft_log"],
         view["raw_sample_summary"],
@@ -321,6 +398,10 @@ def test_tabs_expose_compact_traceable_detail_sections():
         ("readiness", "Readiness"),
         ("resources", "Resources"),
         ("layer_preparation", "Layer Preparation"),
+        ("risk_score", "Risk Score"),
+        ("risk_ribbon", "Baseline Risk"),
+        ("risk_heatmap", "Calibrated Heat"),
+        ("risk_delta", "Risk Delta"),
         ("weather", "Weather And Daylight"),
         ("overpass_evidence", "Overpass Vector Evidence"),
         ("gis_perception_timeline", "GIS Perception CP Timeline"),
@@ -333,6 +414,7 @@ def test_tabs_expose_compact_traceable_detail_sections():
     assert [(section["id"], section["title"]) for section in review_sections] == [
         ("route_note_review_options", "Route Note Review Options"),
         ("review_queue", "Review Queue"),
+        ("review_workbench", "Review Workbench"),
         ("review_draft_log", "Review Draft Log"),
         ("review_decision_log", "Review Decision Log"),
         ("review_decision_apply_plan", "Review Decision Apply Plan"),
@@ -609,3 +691,98 @@ def test_list_pretrip_admin_projects_and_unknown_project():
     ]
     with pytest.raises(KeyError):
         build_pretrip_admin_view("missing", root=ROOT)
+
+
+def _write_risk_score_outputs(directory: Path) -> None:
+    directory.mkdir(parents=True)
+    route_risk = {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "geometry": {"type": "Point", "coordinates": [121.2, 24.0]},
+                "properties": {
+                    "sample_id": "risk.sample.001",
+                    "pretrip_risk": 61.2,
+                    "risk_level": 4,
+                    "distance_m": 10.0,
+                    "teii_20m": 70.0,
+                },
+            },
+            {
+                "type": "Feature",
+                "geometry": {"type": "Point", "coordinates": [121.21, 24.01]},
+                "properties": {
+                    "sample_id": "risk.sample.002",
+                    "pretrip_risk": 48.5,
+                    "risk_level": 3,
+                    "distance_m": 30.0,
+                    "teii_20m": 55.0,
+                },
+            },
+        ],
+    }
+    score_points = {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "geometry": {"type": "Point", "coordinates": [121.2, 24.0]},
+                "properties": {
+                    "x": 250000.0,
+                    "y": 2650000.0,
+                    "rs": 61.2,
+                    "score_field": "pretrip_risk",
+                    "route_id": "fixture",
+                    "sample_id": "risk.sample.001",
+                    "distance_m": 10.0,
+                    "risk_level": 4,
+                    "teii_20m": 70.0,
+                },
+            },
+            {
+                "type": "Feature",
+                "geometry": {"type": "Point", "coordinates": [121.21, 24.01]},
+                "properties": {
+                    "x": 250020.0,
+                    "y": 2650020.0,
+                    "rs": 48.5,
+                    "score_field": "pretrip_risk",
+                    "route_id": "fixture",
+                    "sample_id": "risk.sample.002",
+                    "distance_m": 30.0,
+                    "risk_level": 3,
+                    "teii_20m": 55.0,
+                },
+            },
+        ],
+    }
+    files = {
+        "route_risk.geojson": route_risk,
+        "route_risk.metadata.json": {
+            "artifact_kind": "scout_risk_overpass_route_profile_metadata",
+            "route_risk_sample_count": 2,
+            "boundary": {"candidate_only": True, "runtime_safety_truth": False},
+        },
+        "risk_score_points.geojson": score_points,
+        "risk_score_points.metadata.json": {
+            "artifact_kind": "scout_risk_score_point_map",
+            "point_count": 2,
+            "source_feature_count": 2,
+            "score_field": "pretrip_risk",
+            "snap_grid_m": 20.0,
+            "boundary": {
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+                "route_aligned_samples_only": True,
+            },
+        },
+    }
+    for filename, payload in files.items():
+        (directory / filename).write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+    (directory / "route_risk.csv").write_text("sample_id,pretrip_risk\n", encoding="utf-8")
+    (directory / "risk_score_points.csv").write_text("x,y,rs\n", encoding="utf-8")
+    (directory / "risk_score_points.xyz").write_text("250000 2650000 61.2\n", encoding="utf-8")

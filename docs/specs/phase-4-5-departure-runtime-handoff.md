@@ -372,6 +372,13 @@ Important distinction:
 - It does not mean accepted for runtime.
 - Runtime eligibility requires departure gate and handoff approval.
 
+Scale-assisted review（大規模輔助審核） may use filters, AI triage, group
+selection/deselection, and map viewport selection to reduce long-trip review
+load. These controls can create draft review intents or local review records,
+but they do not weaken the candidate state model: each accepted, corrected,
+rejected, or field-verification outcome still needs an auditable review record
+before it can enter a Reviewed Package.
+
 ## Reviewed Package Semantics
 
 `Reviewed Package` / 已審核規劃包 means the planning workspace has enough

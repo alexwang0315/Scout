@@ -15,6 +15,16 @@ from scout_risk.fusion.pretrip import (
     build_pretrip_route_profile,
 )
 from scout_risk.route.outputs import write_route_csv, write_route_geojson
+from scout_risk.route.risk_score_map import (
+    build_risk_ribbon_from_geojson,
+    build_risk_score_point_map_from_geojson,
+    write_risk_ribbon_geojson,
+    write_risk_ribbon_metadata,
+    write_risk_score_csv,
+    write_risk_score_geojson,
+    write_risk_score_metadata,
+    write_risk_score_xyz,
+)
 from scout_risk.terrain_config import load_terrain_risk_config
 
 
@@ -195,6 +205,59 @@ def overpass_route_profile(
     )
     typer.echo(
         f"wrote {len(profile.samples)} Overpass-based route risk samples to {out}; "
+        f"metadata {metadata_out}"
+    )
+
+
+@app.command("risk-score-map")
+def risk_score_map(
+    route_risk: Path = typer.Option(..., help="Input route_risk.geojson point samples"),
+    csv_out: Path = typer.Option(..., help="Output CSV with x/y/rs point values"),
+    xyz_out: Path | None = typer.Option(None, help="Optional XYZ output: x y rs"),
+    geojson_out: Path | None = typer.Option(None, help="Optional GeoJSON point output"),
+    metadata_out: Path | None = typer.Option(None, help="Optional metadata JSON output"),
+    score_field: str = typer.Option("pretrip_risk", help="Route risk property used as rs"),
+    snap_grid_m: float = typer.Option(
+        20.0,
+        help="TWD97 grid size in meters used to snap route risk points",
+    ),
+) -> None:
+    point_map = build_risk_score_point_map_from_geojson(
+        route_risk,
+        score_field=score_field,
+        snap_grid_m=snap_grid_m,
+    )
+    write_risk_score_csv(point_map, csv_out)
+    if xyz_out is not None:
+        write_risk_score_xyz(point_map, xyz_out)
+    if geojson_out is not None:
+        write_risk_score_geojson(point_map, geojson_out)
+    if metadata_out is None:
+        metadata_out = csv_out.with_suffix(csv_out.suffix + ".metadata.json")
+    write_risk_score_metadata(point_map, metadata_out)
+    typer.echo(
+        f"wrote {len(point_map.points)} route-aligned risk score points to {csv_out}; "
+        f"metadata {metadata_out}"
+    )
+
+
+@app.command("risk-ribbon")
+def risk_ribbon(
+    route_risk: Path = typer.Option(..., help="Input route_risk.geojson point samples"),
+    out: Path = typer.Option(..., help="Output route-aligned risk ribbon GeoJSON"),
+    metadata_out: Path | None = typer.Option(None, help="Optional metadata JSON output"),
+    score_field: str = typer.Option("pretrip_risk", help="Route risk property used as rs"),
+) -> None:
+    ribbon = build_risk_ribbon_from_geojson(
+        route_risk,
+        score_field=score_field,
+    )
+    write_risk_ribbon_geojson(ribbon, out)
+    if metadata_out is None:
+        metadata_out = out.with_suffix(out.suffix + ".metadata.json")
+    write_risk_ribbon_metadata(ribbon, metadata_out)
+    typer.echo(
+        f"wrote {len(ribbon.features)} route-aligned risk ribbon segments to {out}; "
         f"metadata {metadata_out}"
     )
 
