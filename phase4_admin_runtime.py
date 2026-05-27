@@ -115,6 +115,7 @@ def create_phase4_admin_runtime_app(
                 "pretrip_admin": "/admin/pretrip",
                 "pretrip_project": "/admin/pretrip/projects/chilai_nanhua_day1",
                 "wearable_inventory": "/admin/wearables",
+                "wearable_validate": "/admin/wearables/validate",
                 "wearable_import": "/admin/wearables/import",
                 "wearable_energy_refresh": "/admin/wearables/refresh-energy",
                 "pretrip_energy_projection_refresh": (
@@ -122,6 +123,9 @@ def create_phase4_admin_runtime_app(
                 ),
                 "pretrip_companion_match_refresh": (
                     "/admin/pretrip/projects/{project_id}/refresh-companion-match"
+                ),
+                "pretrip_energy_feedback_refresh": (
+                    "/admin/pretrip/projects/{project_id}/refresh-energy-feedback"
                 ),
                 "assistant_status": "/assistant/status" if assistant_enabled else None,
                 "hardware_readiness": "/admin/hardware-readiness",

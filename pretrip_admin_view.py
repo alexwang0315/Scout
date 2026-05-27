@@ -10,6 +10,7 @@ from typing import Any
 from admin_map_layers import build_pretrip_map_layers
 from post_analysis_capability import summarize_capability_artifacts
 from scout_companion_match_models import build_companion_capability_capsule_from_timeline
+from post_analysis_energy_feedback import POST_ANALYSIS_ENERGY_FEEDBACK_REF
 from pretrip_layer_preparation import build_layer_preparation_not_prepared_view
 from pretrip_energy_projection import DEFAULT_PRETRIP_ENERGY_PROJECTION_REF
 from pretrip_spatial_imprint_export import (
@@ -163,6 +164,9 @@ def build_pretrip_admin_view(
     )
     companion_match_review = _load_optional_json(
         artifacts.get("companion_match_review")
+    )
+    post_analysis_energy_feedback = _load_optional_json(
+        artifacts.get("post_analysis_energy_feedback")
     )
 
     source_refs = _source_refs(artifacts, root if project_root is None else project_root)
@@ -475,6 +479,13 @@ def build_pretrip_admin_view(
                 source_refs.get("companion_match_review", ""),
             )
         )
+    if post_analysis_energy_feedback is not None:
+        post_analysis_tab["post_analysis_energy_feedback"] = (
+            _post_analysis_energy_feedback_summary(
+                post_analysis_energy_feedback,
+                source_refs.get("post_analysis_energy_feedback", ""),
+            )
+        )
     if admin_surface_projection is not None:
         post_analysis_tab["admin_surface_projection"] = _admin_projection_summary(
             admin_surface_projection,
@@ -579,6 +590,9 @@ def build_pretrip_admin_view(
             "capability_timeline_import"
         ),
         "companion_match_review": post_analysis_tab.get("companion_match_review"),
+        "post_analysis_energy_feedback": post_analysis_tab.get(
+            "post_analysis_energy_feedback"
+        ),
         "raw_sample_summary": _raw_sample_summary(pretrip_package, segment_dtm, source_refs),
         "tabs": {
             "pre_trip_planning": planning_tab,
@@ -695,6 +709,7 @@ def resolve_pretrip_project_artifacts(
         "spatial_imprint_manifest": DEFAULT_SPATIAL_IMPRINT_MANIFEST_REF,
         "energy_projection": DEFAULT_PRETRIP_ENERGY_PROJECTION_REF,
         "companion_match_review": COMPANION_MATCH_REVIEW_REF,
+        "post_analysis_energy_feedback": POST_ANALYSIS_ENERGY_FEEDBACK_REF,
     }.items():
         artifacts.setdefault(artifact_key, resolved_project_root / default_ref)
     return artifacts
@@ -4518,6 +4533,74 @@ def _companion_match_review_summary(
     }
 
 
+def _post_analysis_energy_feedback_summary(
+    payload: dict[str, Any],
+    source_path: str,
+) -> dict[str, Any]:
+    privacy = payload.get("privacy", {})
+    boundary = payload.get("boundary", {})
+    return {
+        "source_id": "post_analysis.energy_reserve_feedback",
+        "source_provider": payload.get("source_provider"),
+        "source_path": source_path,
+        "sha256": payload.get("sha256"),
+        "evidence_type": "post_analysis_energy_reserve_feedback",
+        "status": "read_only_post_analysis_feedback",
+        "artifact_version": payload.get("artifact_version"),
+        "case_id": payload.get("case_id"),
+        "counts": {
+            "feedback_note_count": len(payload.get("feedback_notes", [])),
+            "has_predicted_depletion_checkpoint": int(
+                bool(payload.get("predicted_depletion_checkpoint_name"))
+            ),
+        },
+        "summary": {
+            "pretrip_projection_source_path": payload.get(
+                "pretrip_projection_source_path"
+            ),
+            "capability_timeline_source_path": payload.get(
+                "capability_timeline_source_path"
+            ),
+            "predicted_target_duration_minutes": payload.get(
+                "predicted_target_duration_minutes"
+            ),
+            "actual_elapsed_duration_minutes": payload.get(
+                "actual_elapsed_duration_minutes"
+            ),
+            "actual_moving_duration_minutes": payload.get(
+                "actual_moving_duration_minutes"
+            ),
+            "actual_vs_projected_elapsed_delta_minutes": payload.get(
+                "actual_vs_projected_elapsed_delta_minutes"
+            ),
+            "predicted_depletion_checkpoint_name": payload.get(
+                "predicted_depletion_checkpoint_name"
+            ),
+            "actual_rest_time_minutes": payload.get("actual_rest_time_minutes"),
+            "raw_track_shared": privacy.get("raw_track_shared"),
+            "exact_timestamps_shared": privacy.get("exact_timestamps_shared"),
+            "auto_applies_to_eta": False,
+        },
+        "feedback_notes": payload.get("feedback_notes", []),
+        "data_quality": payload.get("data_quality", {}),
+        "privacy": privacy,
+        "boundary": {
+            **boundary,
+            "read_only_import": True,
+            "planning_calibration_candidate_only": True,
+            "requires_human_review_before_use": True,
+            "workspace_mutation_allowed": False,
+            "pretrip_eta_autocalibration_allowed": False,
+            "mission_graph_compile_allowed": False,
+            "phase1_runtime_mutation_allowed": False,
+            "runtime_safety_truth": False,
+            "medical_diagnosis": False,
+            "phase1_runtime_safety_truth": False,
+            "safety_api_calls_allowed": False,
+        },
+    }
+
+
 def _brain_seed_summary(payload: dict[str, Any], source_path: str) -> dict[str, Any]:
     return {
         "source_id": "brain_seed_nodes.chilai_nanhua_day1",
@@ -5282,6 +5365,9 @@ def _post_analysis_sections(post_analysis_tab: dict[str, Any]) -> list[dict[str,
     after_action = post_analysis_tab["after_action_next_plan"]
     capability_timeline_import = post_analysis_tab.get("capability_timeline_import")
     companion_match_review = post_analysis_tab.get("companion_match_review")
+    post_analysis_energy_feedback = post_analysis_tab.get(
+        "post_analysis_energy_feedback"
+    )
     import_manifest = post_analysis_tab.get("import_manifest")
     admin_surface_projection = post_analysis_tab.get("admin_surface_projection")
     debug_projection = post_analysis_tab.get("debug_projection")
@@ -5423,6 +5509,37 @@ def _post_analysis_sections(post_analysis_tab: dict[str, Any]) -> list[dict[str,
                     ),
                 },
                 boundary=companion_match_review["boundary"],
+            )
+        )
+    if post_analysis_energy_feedback is not None:
+        sections.append(
+            _section(
+                "post_analysis_energy_feedback",
+                "Energy Feedback",
+                post_analysis_energy_feedback,
+                status=post_analysis_energy_feedback["status"],
+                counts=post_analysis_energy_feedback["counts"],
+                summary={
+                    "predicted_target_duration_minutes": post_analysis_energy_feedback[
+                        "summary"
+                    ].get("predicted_target_duration_minutes"),
+                    "actual_elapsed_duration_minutes": post_analysis_energy_feedback[
+                        "summary"
+                    ].get("actual_elapsed_duration_minutes"),
+                    "actual_vs_projected_elapsed_delta_minutes": post_analysis_energy_feedback[
+                        "summary"
+                    ].get("actual_vs_projected_elapsed_delta_minutes"),
+                    "predicted_depletion_checkpoint_name": post_analysis_energy_feedback[
+                        "summary"
+                    ].get("predicted_depletion_checkpoint_name"),
+                    "raw_track_shared": post_analysis_energy_feedback[
+                        "summary"
+                    ].get("raw_track_shared"),
+                    "auto_applies_to_eta": post_analysis_energy_feedback[
+                        "summary"
+                    ].get("auto_applies_to_eta"),
+                },
+                boundary=post_analysis_energy_feedback["boundary"],
             )
         )
     if import_manifest is not None:

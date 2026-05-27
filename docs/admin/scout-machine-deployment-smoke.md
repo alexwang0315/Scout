@@ -311,6 +311,30 @@ python3 tools/pi_gnss_nmea_smoke.py \
   --output-jsonl /data/scout/providers/gnss/manual-smoke.jsonl
 ```
 
+GNSS NMEA smoke with OLED + LED Bar status:
+
+```bash
+python3 tools/pi_gnss_nmea_smoke.py \
+  --port /dev/ttyUSB0 \
+  --baud 9600 \
+  --duration-seconds 60 \
+  --oled-status \
+  --oled-update-seconds 2 \
+  --led-status \
+  --led-port D16 \
+  --led-nofix-bit 1 \
+  --led-fix-bit 10 \
+  --led-update-seconds 2 \
+  --led-blink-count 2 \
+  --led-blink-seconds 0.25 \
+  --output-jsonl /data/scout/providers/gnss/manual-smoke.jsonl
+```
+
+中文註釋：Grove LED Bar v2.0 不是 RGB LED，單一燈段不能從紅色切成綠色。這裡的
+做法是把固定顏色的段位當狀態燈：預設 `NO FIX` 閃 LED1，`FIX OK` 閃 LED10。若實物
+方向和預期相反，直接對調 `--led-nofix-bit 10 --led-fix-bit 1`。LED 狀態仍只是
+diagnostic indicator，不可作為 safety decision source。
+
 中文註釋：OLED 會顯示 `SCOUT GPS`、`FIX OK` 或 `NO FIX`、最近的 NMEA sentence
 type/count、satellite/fix quality、checksum，以及有 fix 時的座標摘要。96x96 OLED 不適合
 顯示完整 `$GPGGA,...` 或 `$GPRMC,...` 原文，所以這裡顯示的是 NMEA signal summary。

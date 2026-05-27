@@ -14,6 +14,10 @@ from scout_energy_models import (
 )
 
 
+POST_ANALYSIS_ENERGY_FEEDBACK_FILENAME = "post_analysis_energy_reserve_feedback.json"
+POST_ANALYSIS_ENERGY_FEEDBACK_REF = f"outputs/{POST_ANALYSIS_ENERGY_FEEDBACK_FILENAME}"
+
+
 class PostAnalysisEnergyFeedback(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
