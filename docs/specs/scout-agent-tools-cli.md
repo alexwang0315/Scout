@@ -2,7 +2,8 @@
 
 ## Status
 
-Draft for the next alpha branch.
+Draft for the next alpha branch, with first local implementation slices now
+tracked in this checkout.
 
 This spec defines the next layer after the current read-only cross-surface
 assistant: a privileged local Scout agent that can use registered Scout
@@ -13,6 +14,21 @@ is not a generic chatbot, and it is not a web-search assistant. It is a local
 agent layer running on Scout hardware or a trusted Scout workstation, using the
 trip's local package, maps, route evidence, hardware state, and operator/user
 intent.
+
+Current alpha implementation snapshot:
+
+- user-facing facade: `python -m scout_cli ...`;
+- registered tool runner: `python -m scout_agent_cli tools ...`;
+- builtin deterministic tools: `python -m scout_agent_builtin_tools ...`;
+- registered manifests: JSON files under `tools/scout_agent_tool_manifests/`;
+- current manifest count: 39, including local evidence, release/readiness
+  checks, CP proposal/reviewed
+  delta, pretrip import/layer preparation/workspace edit, risk diagnostics,
+  map preparation wrappers, spatial imprint tools, hardware readiness summary,
+  review decision append,
+  advisory shelter direction, runtime dry-run/preflight, voice preview/mock
+  receipts, outbound mock receipts, reviewed-candidate package addendum,
+  metadata-only runtime handoff, runtime export, and mock-only SOS playbook run.
 
 ## Objective
 
@@ -147,6 +163,10 @@ This spec does not:
 The long-term user-facing command should be a single `scout` CLI with command
 groups. Existing standalone scripts can be wrapped incrementally.
 
+Until packaging is added, the alpha entrypoint is `python -m scout_cli` because
+the repository already has a `scout/` directory and should not add a same-name
+top-level executable file in-place.
+
 ```text
 scout tools list --json
 scout tools describe <tool-id> --json
@@ -175,7 +195,7 @@ scout hardware alarm-start --pattern sos --duration-seconds 30 --authorize-user-
 scout hardware alarm-stop --authorize-user-triggered --json
 
 scout safety-action shelter-direction --trip-root departure_package/ --position position.json --weather weather.json --dry-run --json
-scout sos playbook-run --sos-event sos_event.json --trace-log runtime-debug.jsonl --json
+scout sos playbook-run --sos-event sos_event.json --debug-log-path runtime-debug.jsonl --voice-log-path voice.jsonl --authorized-by sos.manual.button --json
 ```
 
 The first implementation does not need every command. It should establish the
@@ -329,6 +349,42 @@ The deterministic tool runner's responsibilities:
 - enforce mode/authorization gates;
 - emit structured success/failure results.
 
+## Model Provider Profiles
+
+Scout Agent planning uses the existing assistant model profile contract instead
+of embedding model credentials in tool calls.
+
+Chinese annotation / 中文註釋: `Model Provider Profile`（模型提供者設定檔）is the
+operator-managed record that selects a cloud or local model runner for turning
+user/operator intent into a `scout_agent_tool_plan`. It is not itself a Scout
+tool and it must not bypass the registered tool manifest boundary.
+
+Current alpha contract:
+
+- `assistant_model_config.py` defines `cloud_model`, `local_model`,
+  `active_profile`, timeout, context budget, and local fallback behavior.
+- `assistant_pydantic_provider.py` owns the Pydantic AI/OpenAI-compatible
+  runner, including optional `base_url` for local OpenAI-compatible servers.
+- `scout_agent_runtime.py` reuses that profile config for agent planning and
+  then executes only registered `scout_agent_tool_manifests`.
+- Cloud profile secrets are referenced by environment variable or operator
+  token id; raw token values must not appear in prompts, traces, tool results,
+  `/admin/debug`, or readiness output.
+- Local fallback may be used when the cloud runner fails, but fallback output is
+  still only a proposed tool plan. Deterministic Scout tools remain responsible
+  for all reads, writes, map/risk computation, voice/outbound receipts, and
+  hardware effects.
+
+Provider statuses should expose:
+
+- active profile;
+- cloud/local model names;
+- last runner profile;
+- failover count and reason;
+- token env var names only, never values;
+- boundary flags showing `live_safety_api_calls_allowed=false` and
+  `model_output_is_runtime_truth=false`.
+
 ## Local Evidence Query Flow
 
 Example: "目前氣候不好，我需要隱蔽，幫我指出方向."
@@ -432,6 +488,18 @@ sos activation event
 AI may summarize/prioritize the emergency message, but the send/retry/alarm
 order must come from a deterministic playbook.
 
+Alpha SOS slice:
+
+- `scout.sos.playbook_run` is `sos_delegated_emergency` mode;
+- non-dry-run execution requires explicit `--authorized-by`;
+- accepted activation sources are `physical_sos` and `explicit_sos_command`;
+- `operator_test` is blocked from delegated emergency mode;
+- dry-run performs no file writes;
+- authorized non-dry-run writes only runtime debug events, mock outbound
+  receipts, and mock voice receipts;
+- real SOS, SMS, satellite, hardware alarm, and live `/safety/*` mutation stay
+  closed.
+
 ## Information Injection Posture
 
 Scout should not run a blocking content audit for every action in the field.
@@ -455,7 +523,9 @@ scout_agent_tools.py                       # tool manifest loader and runner
 scout_agent_models.py                      # action/result/manifest models
 scout_agent_trace.py                       # action trace writer
 scout_agent_kb.py                          # local evidence index/query wrapper
-tools/scout_agent_tool_manifests/          # YAML manifests
+scout_sos_playbook.py                      # mock-only deterministic SOS playbook
+scout_cli.py                               # command-group facade for alpha use
+tools/scout_agent_tool_manifests/          # JSON manifests
 schemas/scout_agent/                       # JSON schemas for tool inputs/results
 tests/test_scout_agent_*.py                # focused contract tests
 docs/specs/scout-agent-tools-cli.md        # this spec
@@ -503,7 +573,7 @@ Minimum first-slice tests:
 Suggested command:
 
 ```text
-PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. venv/bin/python -m pytest -q tests/test_scout_agent_tools.py tests/test_scout_agent_cli.py
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. venv/bin/python -m pytest -q tests/test_scout_agent_tools.py tests/test_scout_agent_cli.py tests/test_scout_agent_builtin_manifests.py tests/test_scout_cli.py tests/test_scout_sos_playbook.py
 ```
 
 ## Boundaries
@@ -537,17 +607,23 @@ Never:
 
 ## First Slice Plan
 
-1. Add `scout_agent_models.py` with tool manifest, action mode, result envelope,
-   and trace event models.
-2. Add a manifest directory with read-only/proposal wrappers for:
-   - local evidence status/query placeholder;
-   - pretrip import preview;
-   - CP proposal add/delete;
-   - voice preview mock;
-   - action trace append.
-3. Add `scout_agent_cli.py tools list|describe|run`.
-4. Add `/admin/debug` projection for agent action traces.
-5. Add tests for mode gates, trace output, and mock Pydantic AI tool calls.
+1. Done: add `scout_agent_models.py` with tool manifest, action mode, result
+   envelope, authorization kind, and boundary models.
+2. Done: add JSON manifests and builtin wrappers for local evidence, CP
+   proposal/reviewed delta, pretrip import/layer/workspace edit, pretrip review
+   decision append, map preparation, voice preview, action trace append, risk
+   diagnostics, spatial imprints, hardware readiness summary,
+   reviewed-candidate package addendum, metadata-only runtime handoff, runtime
+   export, voice/outbound mock receipts, advisory shelter direction, and
+   mock-only SOS playbook.
+3. Done: add `scout_agent_cli.py tools list|describe|run`.
+4. Done: add `scout_cli.py` command-group facade for alpha use.
+5. Done: add `/admin/debug` projection for agent action traces and spatial
+   imprint/debug data.
+6. Done: add focused tests for mode gates, trace output, dry-run behavior,
+   authorization gates, and mock-only SOS boundary flags.
+7. Done: reuse assistant cloud/local model profile config for Scout Agent
+   planning, including local fallback status without exposing secret values.
 
 ## Success Criteria
 
@@ -558,15 +634,17 @@ Never:
 - A write/send/hardware command without proper authorization exits blocked.
 - `/admin/debug` can render agent action trace events.
 - No live `/safety/*` mutation path is introduced.
+- `scout.sos.playbook_run` can dry-run without writes and can run an authorized
+  mock-only playbook with debug/voice/mock outbound receipts.
 
 ## Open Questions
 
-- Should the first top-level command be `scout` or `python -m scout_agent_cli`
-  until packaging is ready?
+- Packaging question: should the installed command eventually be `scout`, while
+  source checkout usage remains `python -m scout_cli`?
 - Should action traces write into the existing runtime debug JSONL directly, or
   into a separate agent JSONL projected into `/admin/debug`?
-- Which SOS playbook channels are allowed in alpha on Scout hardware before
-  field testing?
+- Which real SOS/outbound channels, if any, are allowed in alpha hardware field
+  testing after the mock-only playbook passes lab review?
 - Should `voice.send` initially use only mock transport, local speaker, or one
   reviewed network destination?
 - What is the first stable local evidence index format: SQLite, JSONL, or a

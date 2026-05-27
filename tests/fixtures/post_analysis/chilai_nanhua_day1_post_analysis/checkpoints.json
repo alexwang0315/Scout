@@ -1,0 +1,44 @@
+{
+  "case_id": "chilai_nanhua_day1_post_analysis",
+  "route_family": "chilai_nanhua_day1",
+  "checkpoints": [
+    {
+      "checkpoint_id": "cp.start",
+      "name": "Trailhead",
+      "lat": 25.0,
+      "lon": 121.0,
+      "arrival_radius_m": 25,
+      "source_ref": "mission.checkpoint.cp.start"
+    },
+    {
+      "checkpoint_id": "cp.mid",
+      "name": "Mid ridge rest point",
+      "lat": 25.0,
+      "lon": 121.009,
+      "arrival_radius_m": 25,
+      "source_ref": "mission.checkpoint.cp.mid"
+    },
+    {
+      "checkpoint_id": "cp.finish",
+      "name": "Finish",
+      "lat": 25.009,
+      "lon": 121.009,
+      "arrival_radius_m": 25,
+      "source_ref": "mission.checkpoint.cp.finish"
+    }
+  ],
+  "segments": [
+    {
+      "segment_id": "seg.start_mid",
+      "from_checkpoint_id": "cp.start",
+      "to_checkpoint_id": "cp.mid",
+      "source_ref": "segment_capsule.seg.start_mid"
+    },
+    {
+      "segment_id": "seg.mid_finish",
+      "from_checkpoint_id": "cp.mid",
+      "to_checkpoint_id": "cp.finish",
+      "source_ref": "segment_capsule.seg.mid_finish"
+    }
+  ]
+}

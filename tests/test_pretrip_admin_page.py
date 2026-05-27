@@ -49,9 +49,11 @@ def test_pretrip_admin_page_contains_expected_layout_contract():
     assert "Post-analysis" in html
     assert "Review , Workspace" in html
     assert "Import GPX" in html
+    assert "Wearables" in html
     assert 'id="reviewWorkspacePanel"' in html
     assert 'id="reviewWorkspaceTree"' in html
     assert 'id="importGpxPanel"' in html
+    assert 'id="wearablesPanel"' in html
     assert "segment-overlay" in html
     assert "reference-track" in html
     assert "gis-perception-cp" in html
@@ -70,14 +72,22 @@ def test_pretrip_admin_page_contains_expected_layout_contract():
     assert "data-tree-category" in html
     assert "data-tree-status" in html
     assert ".route-note" in html
+    assert ".mcp-candidate" in html
     assert "AI GIS CP" in html
     assert "GIS CP Areas" in html
+    assert "Major Critical Points" in html
+    assert "view.major_critical_points?.candidates" in html
+    assert "item.cp_support_reconciliation?.support_status" in html
     assert "Risk Score" in html
     assert "view.risk_score?.points" in html
     assert "Baseline Risk" in html
     assert "Calibrated Heat" in html
     assert "Risk Delta" in html
     assert "view.risk_ribbon?.segments" in html
+    assert "Capability Timeline Import" in html
+    assert "Capability Timeline" in html
+    assert "view.capability_timeline_import?.edges" in html
+    assert "capability_timeline_import" in html
     assert "focusMapFor" in html
     assert "FOCUS_POINT_VIEWPORT_M = 5" in html
     assert "MAP_ZOOM_STEP_FACTOR = 1.25" in html
@@ -288,6 +298,57 @@ def test_pretrip_admin_page_has_import_gpx_reference_route_panel():
     assert "final MissionGraph" in html
 
 
+def test_pretrip_admin_page_has_wearable_inventory_energy_controls():
+    html = PAGE.read_text(encoding="utf-8")
+
+    for control_id in (
+        "wearablesTab",
+        "wearablesPanel",
+        "wearablesForm",
+        "wearableSourcePath",
+        "wearableDeleteActivityId",
+        "wearableReferenceDate",
+        "wearableCompanionCandidatePath",
+        "wearableOverwriteImport",
+        "wearableInventoryRefresh",
+        "wearableImportRun",
+        "wearableDeleteRun",
+        "wearableEnergyRefreshRun",
+        "wearablePretripProjectionRun",
+        "wearableCompanionMatchRun",
+        "wearableStatus",
+        "wearableResult",
+    ):
+        assert f'id="{control_id}"' in html
+
+    for function_name in (
+        "wearableInputValue",
+        "wearableReferenceDatePayload",
+        "setWearableStatus",
+        "setWearableBusy",
+        "setWearableResult",
+        "loadWearableInventory",
+        "importWearableSummary",
+        "deleteWearableSummary",
+        "refreshWearableEnergy",
+        "refreshPretripEnergyProjection",
+        "refreshCompanionMatchReview",
+    ):
+        assert f"function {function_name}" in html
+
+    assert 'DETAIL_TAB_IDS = new Set(["pre_trip_planning", "post_analysis", "review_workspace", "import_gpx", "wearables"])' in html
+    assert 'document.getElementById("wearablesPanel").classList.toggle("is-active", tab === "wearables")' in html
+    assert "/admin/wearables" in html
+    assert "/admin/wearables/import" in html
+    assert "/admin/wearables/refresh-energy" in html
+    assert "/admin/pretrip/projects/${PROJECT_ID}/refresh-energy-projection" in html
+    assert "/admin/pretrip/projects/${PROJECT_ID}/refresh-companion-match" in html
+    assert "candidate_capsule_paths" in html
+    assert "medical_diagnosis: false" in html
+    assert "phase1_runtime_safety_truth: false" in html
+    assert "raw_health_payload_shared: false" in html
+
+
 def test_pretrip_admin_page_fetches_fixture_backed_read_only_project_api():
     html = PAGE.read_text(encoding="utf-8")
 
@@ -333,6 +394,10 @@ def test_pretrip_admin_page_fetches_fixture_backed_read_only_project_api():
     assert "class: \"osm-tile\"" in html
     assert "function renderTerrainMetadata" in html
     assert "segmentTerrainMetadata(view)" in html
+    assert "post_analysis_capability_segment" in html
+    assert "pretrip_capability_timeline_import" in html
+    assert "auto_applies_to_eta" in html
+    assert "raw_track_shared" in html
     assert "function renderWeatherOverlay" in html
     assert "function weatherOverlayLabel" in html
     assert "weatherOverlayLabel(cards[0]?.summary || \"Weather evidence pending.\")" in html
@@ -674,14 +739,15 @@ def test_pretrip_admin_page_posts_only_local_workspace_routes():
     assert "fetch(`${apiBase()}/admin/pretrip/projects/${PROJECT_ID}/import-gpx`, {" in html
     assert "fetch(`${apiBase()}/admin/pretrip/projects/${PROJECT_ID}/prepare-layers-preview`, {" in html
     assert "fetch(`${apiBase()}/admin/pretrip/projects/${PROJECT_ID}/prepare-layers`, {" in html
-    assert html.count('method: "POST"') == 13
+    assert "fetch(`${apiBase()}/admin/pretrip/projects/${PROJECT_ID}/mcp-review-actions`, {" in html
+    assert html.count('method: "POST"') == 18
     assert shared_script.count('method: "POST"') == 1
     assert html.count("body: JSON.stringify({") == 3
-    assert html.count("body: JSON.stringify(payload)") == 5
+    assert html.count("body: JSON.stringify(payload)") == 9
     assert html.count("body: JSON.stringify({...payload, confirm_import: true})") == 1
     assert html.count("body: JSON.stringify({...payload, confirm_prepare: true})") == 1
-    assert html.count("body: JSON.stringify(") == 8
-    assert html.count('headers: {"Content-Type": "application/json"}') == 8
+    assert html.count("body: JSON.stringify(") == 13
+    assert html.count('headers: {"Content-Type": "application/json"}') == 13
     assert shared_script.count('headers: {"Content-Type": "application/json"}') == 1
     assert 'headers: {"Content-Type": "application/json"}' in html
     assert "body: JSON.stringify({" in html
@@ -699,6 +765,10 @@ def test_pretrip_admin_page_posts_only_local_workspace_routes():
     assert "replacement_ref_ids: []" in html
     assert "persist_to_workspace: true" in html
     assert "persist_to_workspace: true" in html
+    assert "mcpReviewPayload" in html
+    assert "Final MissionGraph and runtime remain closed." in html
+    assert 'document.getElementById("mcpAccept").addEventListener("click", acceptSelectedMcpToWorkspace)' in html
+    assert 'document.getElementById("mcpReject").addEventListener("click", rejectSelectedMcpToWorkspace)' in html
     assert "operation," in html
     assert "route_note_ref: option.source_route_note_candidate_id" in html
     assert "disposition: state.routeNoteDraftDisposition" in html

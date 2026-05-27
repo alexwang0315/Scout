@@ -41,6 +41,11 @@ from pretrip_expert_contribution_apply_plan import (
     write_expert_contribution_apply_plan,
 )
 from pretrip_import import PretripImportRequest, run_pretrip_import
+from pretrip_energy_projection import (
+    DEFAULT_PRETRIP_ENERGY_PROJECTION_REF,
+    write_pretrip_energy_reserve_projection,
+)
+from scout_companion_match_admin import refresh_companion_match_review_for_workspace
 from pretrip_departure_reviewed_candidates import (
     DEFAULT_DEPARTURE_REVIEWED_CANDIDATES_REF,
     write_departure_reviewed_candidates_for_workspace,
@@ -69,6 +74,15 @@ from pretrip_workspace_edit import (
     apply_pretrip_workspace_edit_to_workspace,
 )
 from pretrip_workspace_project import copy_pretrip_project_workspace
+from scout_wearable_admin import (
+    delete_wearable_activity_log,
+    import_wearable_activity_log,
+    list_wearable_inventory,
+    refresh_energy_reserve_from_inventory,
+    wearable_inventory_root,
+)
+from scout_energy_reserve import ENERGY_BASELINE_FILENAME
+from scout_wearable_validator import validate_wearable_activity_summary_contract
 
 
 DEFAULT_ADMIN_PAGE = ROOT / "docs" / "admin" / "phase1-after-action.html"
@@ -201,6 +215,27 @@ class PreTripPrepareLayersRunRequest(PreTripPrepareLayersRequest):
     confirm_prepare: bool = False
 
 
+class WearableImportRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    source_path: str = Field(min_length=1)
+    overwrite: bool = False
+
+
+class WearableEnergyRefreshRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reference_date: str | None = None
+
+
+class CompanionMatchRefreshRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    candidate_capsule_paths: list[str] = Field(default_factory=list)
+    candidate_profile_refs: list[str] | None = None
+    review_score_threshold: int = Field(default=75, ge=0, le=100)
+
+
 def create_admin_app(
     *,
     incident_store_path: Path | None = None,
@@ -223,6 +258,7 @@ def create_admin_router(
 ) -> APIRouter:
     router = APIRouter(prefix="/admin", tags=["admin"])
     resolved_incident_store_path = incident_store_path or _incident_store_from_env()
+    resolved_wearable_inventory_root = wearable_inventory_root(_data_root_from_env())
 
     @router.get("", response_class=HTMLResponse)
     def admin_page() -> str:
@@ -248,6 +284,89 @@ def create_admin_router(
     @router.get("/cases")
     def cases() -> dict[str, Any]:
         return {"cases": list_admin_cases()}
+
+    @router.get("/wearables")
+    def wearable_inventory() -> dict[str, Any]:
+        return list_wearable_inventory(
+            inventory_root=resolved_wearable_inventory_root,
+        ).model_dump(mode="json")
+
+    @router.post("/wearables/validate")
+    def wearable_validate(request: WearableImportRequest) -> dict[str, Any]:
+        try:
+            return validate_wearable_activity_summary_contract(
+                _path_from_admin_request(request.source_path),
+                root=ROOT,
+            ).model_dump(mode="json")
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (ValueError, OSError, ValidationError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @router.post("/wearables/import")
+    def wearable_import(request: WearableImportRequest) -> dict[str, Any]:
+        try:
+            return import_wearable_activity_log(
+                source_path=_path_from_admin_request(request.source_path),
+                inventory_root=resolved_wearable_inventory_root,
+                source_root=ROOT,
+                overwrite=request.overwrite,
+            )
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except FileExistsError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except (ValueError, OSError, ValidationError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @router.delete("/wearables/{activity_id}")
+    def wearable_delete(activity_id: str) -> dict[str, Any]:
+        return _delete_wearable_activity(
+            activity_id=activity_id,
+            inventory_root=resolved_wearable_inventory_root,
+        )
+
+    @router.post("/wearables/delete")
+    def wearable_delete_post(request: dict[str, str]) -> dict[str, Any]:
+        activity_id = request.get("activity_id")
+        if not activity_id:
+            raise HTTPException(status_code=422, detail="activity_id is required")
+        return _delete_wearable_activity(
+            activity_id=activity_id,
+            inventory_root=resolved_wearable_inventory_root,
+        )
+
+    def _delete_wearable_activity(
+        *,
+        activity_id: str,
+        inventory_root: Path,
+    ) -> dict[str, Any]:
+        try:
+            return delete_wearable_activity_log(
+                activity_id=activity_id,
+                inventory_root=inventory_root,
+            )
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except OSError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @router.post("/wearables/refresh-energy")
+    def wearable_refresh_energy(request: WearableEnergyRefreshRequest) -> dict[str, Any]:
+        try:
+            reference_date = (
+                datetime.fromisoformat(request.reference_date).date()
+                if request.reference_date
+                else None
+            )
+            return refresh_energy_reserve_from_inventory(
+                inventory_root=resolved_wearable_inventory_root,
+                reference_date=reference_date,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except OSError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     @router.get("/pretrip/projects")
     def pretrip_projects() -> dict[str, Any]:
@@ -601,6 +720,106 @@ def create_admin_router(
                 "workspace_files_mutated": True,
                 "workspace_layer_outputs_mutated": True,
             },
+        }
+
+    @router.post("/pretrip/projects/{project_id}/refresh-energy-projection")
+    def pretrip_refresh_energy_projection(
+        project_id: str,
+        request: WearableEnergyRefreshRequest,
+    ) -> dict[str, Any]:
+        try:
+            project_root = _pretrip_workspace_project_root(
+                pretrip_workspace_root,
+                project_id=project_id,
+            )
+            if project_root is None:
+                raise FileNotFoundError(
+                    "pretrip energy projection requires a local workspace project"
+                )
+            if _pretrip_project_root_is_repo_fixture(project_root):
+                raise ValueError("pretrip energy projection writes only project workspaces")
+            baseline_path = resolved_wearable_inventory_root / "outputs" / ENERGY_BASELINE_FILENAME
+            if not baseline_path.exists():
+                reference_date = (
+                    datetime.fromisoformat(request.reference_date).date()
+                    if request.reference_date
+                    else None
+                )
+                refresh_energy_reserve_from_inventory(
+                    inventory_root=resolved_wearable_inventory_root,
+                    reference_date=reference_date,
+                )
+            project = json.loads((project_root / "project.json").read_text(encoding="utf-8"))
+            eta_plan_path = project_root / project.get("planned_eta_ref", "outputs/planned_eta.json")
+            output_path = project_root / DEFAULT_PRETRIP_ENERGY_PROJECTION_REF
+            projection = write_pretrip_energy_reserve_projection(
+                eta_plan_path=eta_plan_path,
+                energy_baseline_path=baseline_path,
+                output_path=output_path,
+                project_root=project_root,
+            )
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (ValueError, OSError, ValidationError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+        return {
+            "project_id": project_id,
+            "artifact_kind": "pretrip_energy_projection_refresh_result",
+            "persisted": True,
+            "projection": projection.model_dump(mode="json"),
+            "paths": {
+                "project_root": str(project_root),
+                "eta_plan": str(eta_plan_path),
+                "energy_baseline": str(baseline_path),
+                "energy_projection": str(output_path),
+            },
+            "boundary": projection.boundary.model_dump(mode="json"),
+            "mutation": {
+                "workspace_energy_projection_written": True,
+                "project_source_mutated": False,
+                "mission_graph_mutated": False,
+                "runtime_mutated": False,
+                "phase1_runtime_mutated": False,
+                "safety_api_called": False,
+                "fixture_files_mutated": False,
+            },
+        }
+
+    @router.post("/pretrip/projects/{project_id}/refresh-companion-match")
+    def pretrip_refresh_companion_match(
+        project_id: str,
+        request: CompanionMatchRefreshRequest,
+    ) -> dict[str, Any]:
+        try:
+            project_root = _pretrip_workspace_project_root(
+                pretrip_workspace_root,
+                project_id=project_id,
+            )
+            if project_root is None:
+                raise FileNotFoundError(
+                    "companion match refresh requires a local workspace project"
+                )
+            if _pretrip_project_root_is_repo_fixture(project_root):
+                raise ValueError("companion match refresh writes only project workspaces")
+            result = refresh_companion_match_review_for_workspace(
+                inventory_root=resolved_wearable_inventory_root,
+                project_root=project_root,
+                candidate_capsule_paths=[
+                    _path_from_admin_request(path)
+                    for path in request.candidate_capsule_paths
+                ],
+                candidate_profile_refs=request.candidate_profile_refs,
+                review_score_threshold=request.review_score_threshold,
+            )
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (ValueError, OSError, ValidationError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+        return {
+            "project_id": project_id,
+            **result,
         }
 
     @router.get("/tiles/osm/{z}/{x}/{y}.png")
@@ -1902,6 +2121,11 @@ def _pretrip_workspace_apply_plan_path(project_root: Path) -> Path:
 def _incident_store_from_env() -> Path | None:
     value = os.getenv("SCOUT_SAFETY_INCIDENT_STORE")
     return Path(value).expanduser() if value else None
+
+
+def _data_root_from_env() -> Path:
+    value = os.getenv("SCOUT_DATA_ROOT")
+    return Path(value).expanduser() if value else Path("/data/scout")
 
 
 def _osm_tile_cache_root_from_env() -> Path:

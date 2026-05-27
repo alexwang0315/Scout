@@ -1,0 +1,42 @@
+{
+  "id": "scout.pretrip.decision_register",
+  "version": "0.1.0",
+  "description": "Read and summarize the Phase 4 pretrip decision register for local agent context.",
+  "command": {
+    "argv": [
+      "{python}",
+      "-m",
+      "scout_agent_builtin_tools",
+      "pretrip-decision-register",
+      "--input",
+      "{input}",
+      "--json"
+    ],
+    "dry_run_argument": null
+  },
+  "mode": "local_evidence_query",
+  "input_schema_ref": "schemas/scout_agent/pretrip_decision_register.request.json",
+  "output_schema_ref": "schemas/scout_agent/tool_result.json",
+  "allowed_reads": [
+    "docs.specs.pretrip",
+    "pretrip.decision_register"
+  ],
+  "allowed_writes": [],
+  "forbidden_writes": [
+    "phase1.runtime",
+    "phase2.brain.observed_facts",
+    "live.safety_api",
+    "pretrip.workspace"
+  ],
+  "requires_authorization": {
+    "kind": "none"
+  },
+  "trace": {
+    "required": true,
+    "event_kind": "agent_tool_invocation"
+  },
+  "metadata": {
+    "read_only": true,
+    "runtime_activation_allowed": false
+  }
+}

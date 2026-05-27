@@ -128,6 +128,230 @@ curl --max-time 5 http://scout.local:9099/runtime/status
 curl --max-time 5 http://scout.local:9099/providers/status
 ```
 
+## 4.1 Pi 5 + Grove HAT Manual Hardware Bring-Up
+
+以下命令只供 operator 在 Pi host 上手動執行。這些工具是 host-side
+diagnostic evidence tools，不呼叫 live `/safety/*` mutation、不送 outbound、不寫
+IncidentStore、不改 Phase 1 safety decision。
+
+Hot-plug warning:
+
+```text
+Do not hot-plug the Grove HAT / 40-pin HAT body.
+Power off the Pi before attaching or removing the HAT or ribbon connection.
+```
+
+中文註釋：之前在排線另一端熱插拔 Grove HAT 曾導致 Pi reboot。Grove HAT 本體與
+40-pin HAT 連線要視為不可熱插拔。
+
+Power / throttling check:
+
+```bash
+vcgencmd get_throttled
+```
+
+預期結果：`throttled=0x0`。若不是 `0x0`，先處理電源、溫度或供電線材，不要繼續
+做硬體 smoke。
+
+I2C scan:
+
+```bash
+i2cdetect -y 1
+```
+
+預期結果：Grove OLED Display 1.12 inch 在 I2C port 上可看到 `0x3c`。
+
+Grove LED Bar v2.0 on D16 smoke:
+
+```bash
+python3 tools/pi_grove_led_bar_smoke.py \
+  --port D16 \
+  --pattern status_bits \
+  --bits 0x003 \
+  --output-jsonl /data/scout/providers/grove_led_bar/manual-smoke.jsonl
+```
+
+中文註釋：LED Bar v2.0 使用 MY9221 protocol，不是單 GPIO high/low。已驗證 D16
+mapping 為 `data=GPIO16`、`clock=GPIO17`。
+
+OLED I2C smoke:
+
+```bash
+python3 tools/pi_oled_i2c_smoke.py \
+  --bus /dev/i2c-1 \
+  --address 0x3c \
+  --driver sh1107g \
+  --message "SCOUT\nI2C OK\n0x3C" \
+  --output-jsonl /data/scout/providers/oled_i2c/manual-smoke.jsonl
+```
+
+Visual feedback wrapper:
+
+```bash
+python3 tools/pi_smoke_visual_feedback.py \
+  --name oled \
+  --run-hold-seconds 1 \
+  --hold-seconds 3 \
+  --output-jsonl /data/scout/providers/visual_feedback/manual-smoke.jsonl \
+  -- \
+  python3 tools/pi_oled_i2c_smoke.py \
+    --bus /dev/i2c-1 \
+    --address 0x3c \
+    --driver sh1107g \
+    --message "SCOUT\nI2C OK\n0x3C" \
+    --output-jsonl /data/scout/providers/oled_i2c/manual-smoke.jsonl
+```
+
+中文註釋：`pi_smoke_visual_feedback.py` 是任意 Pi hardware smoke command 的外層
+目測確認工具。開始時 OLED 會顯示 `RUN`、LED Bar 亮前半段；`--run-hold-seconds`
+可讓 RUN 狀態先停留，方便肉眼確認。child smoke 成功時 OLED 顯示 `OK`、
+LED Bar 全亮；child smoke 失敗時 OLED 顯示 `FAIL`、LED Bar 顯示交錯燈號。
+它只做 diagnostic visual feedback，不呼叫 live `/safety/*` mutation、不送 outbound、
+不改 Phase 1 safety decision。若某個顯示元件故障，預設只會在 JSONL 記錄錯誤並保留
+child smoke 的 return code；若要把 OLED/LED 顯示也視為必測項，才加 `--require-visual`。
+
+這個外層工具的用途是讓操作者在接線、供電、匯流排、序列埠或感測器資料流測試時，
+不用只盯著終端機輸出，也能從機身上的顯示與燈號立刻知道測試正在執行、已經通過或
+已經失敗。它不是產品介面，也不是使用者警示語意；開發期可以用它快速排除接錯線、
+接觸不良、匯流排無回應、序列埠選錯、權限不足或測試命令本身失敗等問題。若顯示與
+燈號結果和終端機結果不一致，以終端機和寫入的紀錄檔為準，並先把顯示路徑當作另一個
+需要檢查的診斷項目處理，不可把燈號結果當成安全層級來源。
+
+範例：用同一個 wrapper 包 GNSS smoke：
+
+```bash
+python3 tools/pi_smoke_visual_feedback.py \
+  --name gnss \
+  --run-hold-seconds 1 \
+  --hold-seconds 3 \
+  --output-jsonl /data/scout/providers/visual_feedback/gnss-smoke.jsonl \
+  -- \
+  python3 tools/pi_gnss_nmea_smoke.py \
+    --port /dev/ttyUSB0 \
+    --baud 9600 \
+    --duration-seconds 10 \
+    --output-jsonl /data/scout/providers/gnss/manual-smoke.jsonl
+```
+
+如需在 Mac/PC 或無硬體環境先驗證 payload schema，可加 `--dry-run`：
+
+```bash
+python3 tools/pi_grove_led_bar_smoke.py --dry-run --port D16 --pattern status_bits --bits 0x003
+python3 tools/pi_oled_i2c_smoke.py --dry-run --driver auto --address 0x3c
+python3 tools/pi_smoke_visual_feedback.py --visual-dry-run --name oled --run-hold-seconds 0 --hold-seconds 0 -- python3 tools/pi_oled_i2c_smoke.py --dry-run
+```
+
+更多開發期燈號 mapping 請見：
+
+```text
+docs/specs/scout-dev-hardware-status-indicators.md
+```
+
+## 4.2 IMU / GNSS Manual Hardware Bring-Up
+
+以下命令只供 operator 在 Pi host 上手動執行。這些工具把 Hiwonder/WIT 類 IM10A、
+Grove GPS、Grove IMU 9DOF 視為 diagnostic evidence producers，不呼叫 live
+`/safety/*` mutation、不送 outbound、不寫 IncidentStore、不改 Phase 1 safety decision。
+
+Device discovery:
+
+```bash
+lsusb
+ls /dev/ttyUSB* /dev/ttyACM* 2>/dev/null
+python3 -m serial.tools.list_ports
+```
+
+若 `python3 -m serial.tools.list_ports` 不存在，先安裝 pyserial：
+
+```bash
+python3 -m pip install pyserial
+```
+
+Power / throttling check:
+
+```bash
+vcgencmd get_throttled
+```
+
+預期結果：`throttled=0x0`。若不是 `0x0`，先處理電源、溫度或供電線材，不要繼續
+做 IMU/GNSS smoke。
+
+Hiwonder/WIT IMU USB smoke:
+
+```bash
+python3 tools/pi_hiwonder_imu_usb_smoke.py \
+  --port /dev/ttyUSB0 \
+  --baud 9600 \
+  --duration-seconds 10 \
+  --output-jsonl /data/scout/providers/imu/manual-smoke.jsonl
+```
+
+GNSS NMEA smoke for raw timestamp/position evidence:
+
+```bash
+python3 tools/pi_gnss_nmea_smoke.py \
+  --port /dev/ttyUSB0 \
+  --baud 9600 \
+  --duration-seconds 10 \
+  --output-jsonl /data/scout/providers/gnss/manual-smoke.jsonl
+```
+
+GNSS NMEA smoke with OLED status:
+
+```bash
+python3 tools/pi_gnss_nmea_smoke.py \
+  --port /dev/ttyUSB0 \
+  --baud 9600 \
+  --duration-seconds 60 \
+  --oled-status \
+  --oled-bus /dev/i2c-1 \
+  --oled-address 0x3c \
+  --oled-driver sh1107g \
+  --oled-update-seconds 2 \
+  --output-jsonl /data/scout/providers/gnss/manual-smoke.jsonl
+```
+
+中文註釋：OLED 會顯示 `SCOUT GPS`、`FIX OK` 或 `NO FIX`、最近的 NMEA sentence
+type/count、satellite/fix quality、checksum，以及有 fix 時的座標摘要。96x96 OLED 不適合
+顯示完整 `$GPGGA,...` 或 `$GPRMC,...` 原文，所以這裡顯示的是 NMEA signal summary。
+這仍是 diagnostic display，不呼叫 live `/safety/*` mutation、不送 outbound、不改
+Phase 1 safety decision。
+
+判讀時先看是否有 NMEA count 持續增加；若 count 增加但顯示 `NO FIX`，代表序列資料路徑
+已通，只是衛星定位尚未完成。若長時間沒有 count 增加，才優先檢查接線、序列埠、baud
+rate、天線位置與供電。
+
+若 GPS 接 IMU D1 且依 vendor 文件設定為 `115200` baud，可另外測：
+
+```bash
+python3 tools/pi_gnss_nmea_smoke.py \
+  --port /dev/ttyUSB0 \
+  --baud 115200 \
+  --duration-seconds 10 \
+  --output-jsonl /data/scout/providers/gnss/manual-smoke-115200.jsonl
+```
+
+Vendor fusion classification smoke:
+
+```bash
+python3 tools/pi_imu_gnss_vendor_fusion_smoke.py \
+  --port /dev/ttyUSB0 \
+  --baud 9600 \
+  --duration-seconds 15 \
+  --output-jsonl /data/scout/providers/imu_gnss/vendor-fusion-classification.jsonl
+```
+
+中文註釋：`pi_imu_gnss_vendor_fusion_smoke.py` 只做觀察與分類，可能輸出
+`imu_only`、`gps_raw_only`、`imu_with_gps_fields`、`vendor_fused_only`、
+`imu_and_vendor_fused` 或 `unknown`。vendor fused output 不可直接取代 raw GNSS NMEA
+或 raw IMU frames。
+
+更多 IMU/GNSS provider boundary 請見：
+
+```text
+docs/specs/scout-imu-gnss-provider-bringup.md
+```
+
 Scout repo includes a unified host-side radio scan smoke tool:
 
 ```bash

@@ -36,6 +36,7 @@ def test_pretrip_map_layers_order_imagery_bottom_and_api_top():
         "checkpoints",
         "pois",
         "route-notes",
+        "mcp",
         "weather-api",
     ]
     assert [layer["z_index"] for layer in layers] == sorted(

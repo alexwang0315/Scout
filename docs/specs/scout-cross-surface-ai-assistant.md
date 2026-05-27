@@ -1260,6 +1260,10 @@ Milestone 10.2 Slice 11 hardware experiment assets are complete when:
   readiness checks, 不呼叫 `/safety/*` mutation, no Scout state writes, no
   outbound send, and no hardware/provider control.
 
+After Milestone 10.2 Slice 11, the hardware experiment assets remain optional
+operator-run evidence and must not be promoted into the assistant readiness
+gate without a separate spec decision.
+
 ## Resolved Implementation Choices
 
 - The first UI shell was embedded per page to match the current static admin

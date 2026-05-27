@@ -1,0 +1,47 @@
+{
+  "id": "scout.voice.mock_transition",
+  "version": "0.1.0",
+  "description": "Append a mock VoiceCue state transition receipt without real playback or hardware control.",
+  "command": {
+    "argv": [
+      "{python}",
+      "-m",
+      "scout_agent_builtin_tools",
+      "voice-mock-transition",
+      "--input",
+      "{input}",
+      "--json"
+    ],
+    "dry_run_argument": "--dry-run"
+  },
+  "mode": "outbound_preview",
+  "input_schema_ref": "schemas/scout_agent/voice_mock_transition.request.json",
+  "output_schema_ref": "schemas/scout_agent/tool_result.json",
+  "allowed_reads": [
+    "mock.voice_queue"
+  ],
+  "allowed_writes": [
+    "mock.voice_queue",
+    "runtime.debug_trace.voice_mock"
+  ],
+  "forbidden_writes": [
+    "phase1.runtime",
+    "phase2.brain.observed_facts",
+    "live.safety_api",
+    "real.voice_playback",
+    "real.outbound_transport",
+    "hardware.audio"
+  ],
+  "requires_authorization": {
+    "kind": "none"
+  },
+  "trace": {
+    "required": true,
+    "event_kind": "agent_tool_invocation"
+  },
+  "metadata": {
+    "audio_playback_allowed": false,
+    "remote_outbound_send_allowed": false,
+    "hardware_control_allowed": false
+  }
+}

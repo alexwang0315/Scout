@@ -1,0 +1,41 @@
+{
+  "id": "scout.cp.propose_delete",
+  "version": "0.1.0",
+  "description": "Create a reversible candidate-only CP delete proposal artifact without hard-deleting evidence.",
+  "command": {
+    "argv": [
+      "{python}",
+      "-m",
+      "scout_agent_builtin_tools",
+      "cp-propose-delete",
+      "--input",
+      "{input}",
+      "--output",
+      "{output}",
+      "--json"
+    ],
+    "dry_run_argument": "--dry-run"
+  },
+  "mode": "proposal_write",
+  "input_schema_ref": "schemas/scout_agent/cp_propose_delete.request.json",
+  "output_schema_ref": "schemas/scout_agent/tool_result.json",
+  "allowed_reads": [
+    "trip.local_evidence_index",
+    "pretrip.workspace.candidates"
+  ],
+  "allowed_writes": [
+    "pretrip.workspace.proposals"
+  ],
+  "forbidden_writes": [
+    "phase1.runtime",
+    "phase2.brain.observed_facts",
+    "live.safety_api"
+  ],
+  "requires_authorization": {
+    "kind": "none"
+  },
+  "trace": {
+    "required": true,
+    "event_kind": "agent_tool_invocation"
+  }
+}

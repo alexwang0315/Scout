@@ -253,19 +253,19 @@ def test_preserves_artifact_refs_paths_and_sha256_where_available():
         "source.ptt.sunriver_timing",
     ]
     assert by_kind["route_note_candidates"]["note_candidate_count"] == 81
-    assert by_kind["route_note_candidates"]["hazard_hint_count"] == 2
-    assert by_kind["route_note_candidates"]["route_condition_hint_count"] == 19
-    assert by_kind["route_note_candidates"]["potential_ln_signal_count"] == 21
+    assert by_kind["route_note_candidates"]["hazard_hint_count"] == 3
+    assert by_kind["route_note_candidates"]["route_condition_hint_count"] == 20
+    assert by_kind["route_note_candidates"]["potential_ln_signal_count"] == 23
     assert (
         by_kind["route_note_candidates"]["requires_human_review_before_ln_upgrade"]
         is True
     )
     assert by_kind["route_note_candidates"]["raw_gpx_embedded"] is False
     assert by_kind["route_note_ln_proposals"]["status"] == "candidate_only"
-    assert by_kind["route_note_ln_proposals"]["proposal_count"] == 21
-    assert by_kind["route_note_ln_proposals"]["hint_coverage_proposal_count"] == 19
-    assert by_kind["route_note_ln_proposals"]["warning_coverage_proposal_count"] == 2
-    assert by_kind["route_note_ln_proposals"]["human_review_required_count"] == 21
+    assert by_kind["route_note_ln_proposals"]["proposal_count"] == 23
+    assert by_kind["route_note_ln_proposals"]["hint_coverage_proposal_count"] == 20
+    assert by_kind["route_note_ln_proposals"]["warning_coverage_proposal_count"] == 3
+    assert by_kind["route_note_ln_proposals"]["human_review_required_count"] == 23
     assert by_kind["route_note_ln_proposals"]["observed_fact_count"] == 0
     assert by_kind["route_note_ln_proposals"]["runtime_mutation_count"] == 0
     assert (
@@ -276,9 +276,9 @@ def test_preserves_artifact_refs_paths_and_sha256_where_available():
     assert by_kind["route_note_review_options"]["status"] == (
         "candidate_only_draft_only"
     )
-    assert by_kind["route_note_review_options"]["review_option_count"] == 21
-    assert by_kind["route_note_review_options"]["candidate_only_count"] == 21
-    assert by_kind["route_note_review_options"]["draft_only_count"] == 21
+    assert by_kind["route_note_review_options"]["review_option_count"] == 23
+    assert by_kind["route_note_review_options"]["candidate_only_count"] == 23
+    assert by_kind["route_note_review_options"]["draft_only_count"] == 23
     assert by_kind["route_note_review_options"]["decision_recorded_count"] == 0
     assert by_kind["route_note_review_options"]["runtime_mutation_count"] == 0
     assert by_kind["route_note_review_options"]["candidate_only"] is True

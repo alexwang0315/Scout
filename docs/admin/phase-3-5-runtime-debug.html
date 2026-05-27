@@ -1185,8 +1185,9 @@
             <span class="pill info" id="runtimeProfile">runtime unknown</span>
           </div>
 
-          <div class="tab-list" role="tablist" aria-label="Runtime detail tabs" aria-orientation="horizontal">
+            <div class="tab-list" role="tablist" aria-label="Runtime detail tabs" aria-orientation="horizontal">
             <div class="tab is-active" role="tab" id="tab-state" tabindex="0" aria-selected="true" aria-controls="panel-state" data-tab-target="panel-state">L0-L4</div>
+            <div class="tab" role="tab" id="tab-monitor" tabindex="-1" aria-selected="false" aria-controls="panel-monitor" data-tab-target="panel-monitor">Monitor</div>
             <div class="tab" role="tab" id="tab-provider" tabindex="-1" aria-selected="false" aria-controls="panel-provider" data-tab-target="panel-provider">Provider</div>
             <div class="tab" role="tab" id="tab-hardware" tabindex="-1" aria-selected="false" aria-controls="panel-hardware" data-tab-target="panel-hardware">Hardware</div>
             <div class="tab" role="tab" id="tab-incident" tabindex="-1" aria-selected="false" aria-controls="panel-incident" data-tab-target="panel-incident">Incident</div>
@@ -1226,6 +1227,50 @@
                   <p class="hint">Phase 1 真正判出的安全事件。</p>
                 </div>
               </div>
+            </section>
+
+            <section class="tab-panel" role="tabpanel" id="panel-monitor" aria-labelledby="tab-monitor" hidden>
+              <div class="tab-panel-head">
+                <div class="item-line">
+                  <h2>Monitoring Center</h2>
+                  <span class="pill ok" id="monitorSummary">read only</span>
+                </div>
+                <p class="hint">Scout agent tools、map preparation、hardware-readiness、voice/outbound mock、spatial imprint 的跨域總攬。</p>
+              </div>
+              <p class="hint state-context" id="monitorSelectionContext">顯示目前 debug window 的整體狀態，不會觸發 live safety 或硬體控制。</p>
+              <div class="grid" style="margin-top: 10px;">
+                <div class="metric">
+                  <span>Agent tools</span>
+                  <strong id="monitorAgentToolCount">0</strong>
+                  <p class="hint">Pydantic AI 可呼叫的工具 action trace。</p>
+                </div>
+                <div class="metric">
+                  <span>Release checks</span>
+                  <strong id="monitorReleaseCheckCount">0</strong>
+                  <p class="hint">Phase 3.5 / Phase 4 gate 類工具。</p>
+                </div>
+                <div class="metric">
+                  <span>Map prep</span>
+                  <strong id="monitorMapPrepCount">0</strong>
+                  <p class="hint">map/raster/layer preparation 工具。</p>
+                </div>
+                <div class="metric">
+                  <span>Hardware interfaces</span>
+                  <strong id="monitorHardwareInterfaceCount">0</strong>
+                  <p class="hint">直接讀 hardware-readiness context。</p>
+                </div>
+                <div class="metric">
+                  <span>Voice / outbound</span>
+                  <strong id="monitorTransportCount">0</strong>
+                  <p class="hint">只讀 mock transport receipt。</p>
+                </div>
+                <div class="metric">
+                  <span>Spatial imprints</span>
+                  <strong id="monitorSpatialImprintCount">0</strong>
+                  <p class="hint">store / trigger dry-run 投影。</p>
+                </div>
+              </div>
+              <div class="list" id="monitorList" style="margin-top: 10px;"></div>
             </section>
 
             <section class="tab-panel" role="tabpanel" id="panel-provider" aria-labelledby="tab-provider" hidden>
@@ -1324,6 +1369,18 @@
                 <p class="hint">看 gate 是否放行、skill 是否真的跑過。</p>
               </div>
               <p class="hint state-context" id="skillSelectionContext">顯示目前 timeline 範圍內的 Ln gate / skill run。</p>
+              <div class="grid" style="margin-bottom: 10px;">
+                <div class="metric">
+                  <span>Agent tool calls</span>
+                  <strong id="agentToolCount">0</strong>
+                  <p class="hint">從 scout_agent_tool_result action trace 只讀投影。</p>
+                </div>
+                <div class="metric">
+                  <span>Spatial imprint events</span>
+                  <strong id="spatialImprintCount">0</strong>
+                  <p class="hint">從 runtime store / trigger dry-run artifact 只讀投影。</p>
+                </div>
+              </div>
               <div class="list" id="skillList"></div>
             </section>
 
@@ -1572,7 +1629,7 @@
     const OSM_ATTRIBUTION = "OpenStreetMap contributors";
     const LEVELS = ["L0", "L1", "L2", "L3", "L4"];
     const STATUS_BAD = new Set(["degraded", "failed", "unavailable", "offline", "error"]);
-    const DEBUG_TAB_IDS = ["panel-state", "panel-provider", "panel-hardware", "panel-incident", "panel-skill", "panel-outbound", "panel-boundary", "panel-api"];
+    const DEBUG_TAB_IDS = ["panel-state", "panel-monitor", "panel-provider", "panel-hardware", "panel-incident", "panel-skill", "panel-outbound", "panel-boundary", "panel-api"];
     const debugPageState = {
       events: [],
       chronologicalEvents: [],
@@ -1581,6 +1638,7 @@
       runtimeState: {},
       messages: [],
       hardwareReadiness: null,
+      monitoringCenter: null,
       projection: null,
       zoom: 1,
       panX: 0,
@@ -1603,6 +1661,10 @@
       phase3_bridge_result: ["bridge", "incident"],
       ln_activation_gate_evaluated: ["ln", "skill"],
       skill_run_recorded: ["skill", "ln"],
+      agent_tool_invocation: ["agent", "skill"],
+      spatial_imprint_store_updated: ["agent", "skill", "route-progress"],
+      spatial_imprint_trigger_event: ["agent", "skill", "route-progress"],
+      spatial_imprint_projection_error: ["agent", "skill"],
       provider_status_recorded: ["provider"],
       outbound_message_queued: ["outbound", "message"],
       outbound_message_state_changed: ["outbound", "message"]
@@ -1622,6 +1684,10 @@
       phase3_bridge_result: "Phase 3 bridge 嘗試把 incident 匯入下游。",
       ln_activation_gate_evaluated: "Ln gate 判斷 skill 這次能不能啟動。",
       skill_run_recorded: "某個 skill 的執行紀錄被觀察到。",
+      agent_tool_invocation: "Scout agent 透過登錄工具執行了一個 action trace。",
+      spatial_imprint_store_updated: "空間印記 runtime store 的人工授權變更被只讀投影。",
+      spatial_imprint_trigger_event: "空間印記 trigger dry-run 的判定結果被只讀投影。",
+      spatial_imprint_projection_error: "空間印記 debug artifact 無法讀取或驗證。",
       provider_status_recorded: "外部或本機 provider 狀態更新了。",
       outbound_message_queued: "Scout 想送出一則訊息，先放進 mock queue。",
       outbound_message_state_changed: "mock outbound 訊息狀態改變了。"
@@ -1647,7 +1713,8 @@
       gps: "定位來源目前是否穩定。",
       map: "離線地圖或 map evidence 是否可用。",
       brain: "Phase 2 Brain 只是下游觀察，不是安全裁決。",
-      model: "模型輸出只能輔助解讀，不能改安全事實。"
+      model: "模型輸出只能輔助解讀，不能改安全事實。",
+      spatial_imprint: "空間印記是提示與紀錄用 cue，不是 Phase 1 safety truth。"
     };
 
     async function fetchJson(path) {
@@ -2167,6 +2234,15 @@
       }
       if (payload.provider || payload.provider_name) refs.add("provider");
       if (payload.skill_id || payload.gate || payload.decision) refs.add("skill");
+      if (payload.tool_id || payload.action_id || event?.kind === "agent_tool_invocation") {
+        refs.add("agent");
+        refs.add("skill");
+      }
+      if ((event?.kind || "").startsWith("spatial_imprint_") || payload.imprint_id) {
+        refs.add("agent");
+        refs.add("skill");
+        refs.add("route-progress");
+      }
       return Array.from(refs);
     }
 
@@ -2219,20 +2295,59 @@
       return event?.payload || {};
     }
 
+    async function loadRuntimeDebugEventsPayload() {
+      try {
+        return await fetchJson("/debug/events?limit=200");
+      } catch (error) {
+        return {
+          events: [],
+          debug_boundary: {
+            read_only: true,
+            phase1_mutation_allowed: false,
+            phase2_writeback_allowed: false,
+            real_outbound_transport_allowed: false
+          },
+          unavailable: true,
+          error: error.message
+        };
+      }
+    }
+
+    function mergeDebugEvents(primaryEvents, secondaryEvents) {
+      const byId = new Map();
+      [...(primaryEvents || []), ...(secondaryEvents || [])].forEach((event) => {
+        if (!event) return;
+        byId.set(event.event_id || `${event.kind}:${event.sequence}:${event.timestamp}`, event);
+      });
+      return Array.from(byId.values()).sort((left, right) => eventSequence(left) - eventSequence(right));
+    }
+
     async function loadProjectedDebugEventPayload() {
       try {
-        const projection = await fetchJson(PRETRIP_DEBUG_PROJECTION_PATH);
+        const [projection, runtimeDebugPayload] = await Promise.all([
+          fetchJson(PRETRIP_DEBUG_PROJECTION_PATH),
+          loadRuntimeDebugEventsPayload()
+        ]);
         const sourceLifecycleEvents = projection.source_debug_projection_events || {};
+        const events = mergeDebugEvents(
+          projection.timeline_events || [],
+          runtimeDebugPayload.events || []
+        );
         return {
           payload: {
             artifact_kind: "pretrip_debug_projection_timeline",
             project_id: projection.project_id,
             source_path: projection.source_path,
             evidence_type: projection.evidence_type,
-            event_count: projection.event_count,
-            events: projection.timeline_events || [],
+            event_count: events.length,
+            events,
+            agent_tool_count: events.filter((event) => event.kind === "agent_tool_invocation").length,
             source_lifecycle_event_count: sourceLifecycleEvents.event_count || 0,
-            boundary: projection.boundary || {}
+            runtime_debug_event_count: (runtimeDebugPayload.events || []).length,
+            boundary: {
+              ...(projection.boundary || {}),
+              ...(runtimeDebugPayload.debug_boundary || {})
+            }
           },
           projection,
           projected: true
@@ -2242,11 +2357,12 @@
         try {
           payload = await fetchJson(PRETRIP_DEBUG_PROJECTION_EVENTS_PATH);
         } catch {
-          payload = await fetchJson("/debug/events?limit=200");
+          payload = await loadRuntimeDebugEventsPayload();
         }
         return {
           payload: {
             ...payload,
+            agent_tool_count: (payload.events || []).filter((event) => event.kind === "agent_tool_invocation").length,
             projection_fallback: {
               requested_project_id: PRETRIP_PROJECT_ID,
               error: projectionError.message
@@ -2282,11 +2398,33 @@
       }
     }
 
+    async function loadMonitoringCenter() {
+      try {
+        return await fetchJson("/debug/monitoring");
+      } catch (error) {
+        return {
+          artifact_kind: "scout_debug_monitoring_center",
+          status: "unavailable",
+          unavailable: true,
+          error: error.message,
+          counts: {},
+          sections: {},
+          debug_boundary: {
+            read_only: true,
+            phase1_mutation_allowed: false,
+            phase2_writeback_allowed: false,
+            real_outbound_transport_allowed: false
+          }
+        };
+      }
+    }
+
     function stateWithProjectedEvents(state, eventPayload) {
       const events = eventPayload.events || [];
       const latestCompleted = latestEventPayload(events, "debug_session_completed");
       const latestSafety = latestEventPayload(events, "safety_event_emitted");
       const latestProvider = latestEventPayload(events, "provider_status_recorded");
+      const latestAgentTool = latestEventPayload(events, "agent_tool_invocation");
       const latest = events[events.length - 1] || {};
       const boundary = {
         read_only: true,
@@ -2305,6 +2443,8 @@
         safety_level: latestCompleted.safety_level || latestSafety.safety_level || state.safety_level || "L0_NORMAL",
         observations_processed: latestCompleted.observations_processed ?? state.observations_processed,
         event_count: events.length || state.event_count || 0,
+        agent_tool_count: events.filter((event) => event.kind === "agent_tool_invocation").length,
+        latest_agent_tool: latestAgentTool.tool_id ? latestAgentTool : (state.latest_agent_tool || {}),
         provider_status: latestProvider.provider
           ? {[latestProvider.provider]: latestProvider.status || "available"}
           : (state.provider_status || {}),
@@ -2431,6 +2571,94 @@
       document.getElementById("providerList").innerHTML = providerEntries.length
         ? providerEntries.map(([name, record]) => metricItem(name, record.value, record.state)).join("")
         : empty("No provider status reported.");
+    }
+
+    function monitoringItem(title, status, summary, details = "") {
+      return `
+        <div class="item">
+          <div class="item-line">
+            <h3>${escapeHtml(title)}</h3>
+            <span class="${pillClass(status)}">${escapeHtml(text(status, "unknown"))}</span>
+          </div>
+          <p class="hint">${escapeHtml(summary)}</p>
+          ${details ? `<p class="summary mono">${escapeHtml(details)}</p>` : ""}
+        </div>
+      `;
+    }
+
+    function renderMonitoringCenter(events, selectedEvent) {
+      const monitoring = debugPageState.monitoringCenter || {};
+      const counts = monitoring.counts || {};
+      const sections = monitoring.sections || {};
+      const hardware = debugPageState.hardwareReadiness || {};
+      const hardwareSummary = hardware.summary || {};
+      const hardwareInterfaces = hardwareSummary.interface_count ?? (hardware.interface_inventory || []).length;
+      const transportCount = (counts.voice_event_count || 0) + (counts.mock_message_count || 0);
+      const attention = counts.agent_tool_attention_count || 0;
+
+      setText("monitorAgentToolCount", counts.agent_tool_count, "0");
+      setText("monitorReleaseCheckCount", counts.release_check_count, "0");
+      setText("monitorMapPrepCount", counts.map_preparation_count, "0");
+      setText("monitorHardwareInterfaceCount", hardwareInterfaces, "0");
+      setText("monitorTransportCount", transportCount, "0");
+      setText("monitorSpatialImprintCount", counts.spatial_imprint_event_count, "0");
+      document.getElementById("monitorSummary").textContent = monitoring.unavailable
+        ? "unavailable"
+        : (attention ? `${attention} attention` : "read only");
+      document.getElementById("monitorSummary").className = monitoring.unavailable
+        ? "pill bad"
+        : (attention ? "pill warn" : "pill ok");
+      document.getElementById("monitorSelectionContext").textContent = selectedWindowLabel(
+        selectedEvent,
+        "顯示 debug window 的整體狀態；此分頁只讀 /debug/monitoring 與 /admin/hardware-readiness/context。"
+      );
+
+      const latestAgent = (sections.agent_tools || {}).latest || {};
+      const latestRelease = (sections.release_checks || {}).latest || {};
+      const latestMap = (sections.map_preparation || {}).latest || {};
+      const latestProvider = ((sections.hardware_readiness || {}).latest_provider_status || {});
+      const latestVoice = (sections.voice || {}).latest || {};
+      const latestOutbound = (sections.outbound || {}).latest_message || {};
+      const latestSpatial = (sections.spatial_imprints || {}).latest || {};
+      const items = [
+        monitoringItem(
+          "Agent tools",
+          latestAgent.status || (counts.agent_tool_count ? "ok" : "not seen"),
+          "最新 agent tool action trace。",
+          latestAgent.tool_id ? `${latestAgent.tool_id} | ${text(latestAgent.mode)} | seq=${text(latestAgent.sequence)}` : ""
+        ),
+        monitoringItem(
+          "Release checks",
+          latestRelease.status || (counts.release_check_count ? "ok" : "not seen"),
+          "pretrip/runtime release gate 工具結果。",
+          latestRelease.tool_id ? `${latestRelease.tool_id} | returncode=${text(latestRelease.returncode, "n/a")}` : ""
+        ),
+        monitoringItem(
+          "Map preparation",
+          latestMap.status || (counts.map_preparation_count ? "ok" : "not seen"),
+          "map/raster/layer preparation tool trace。",
+          latestMap.tool_id ? `${latestMap.tool_id} | returncode=${text(latestMap.returncode, "n/a")}` : ""
+        ),
+        monitoringItem(
+          "Hardware readiness",
+          hardware.unavailable ? "unavailable" : (hardwareSummary.degraded_provider_count ? "warning" : "ok"),
+          "hardware-readiness 是 source of truth；debug 只 render summary。",
+          `interfaces=${text(hardwareInterfaces)} providers=${text(hardwareSummary.provider_count ?? 0)} degraded=${text(hardwareSummary.degraded_provider_count ?? 0)} latest=${text(latestProvider.provider_ref || "provider not seen")}`
+        ),
+        monitoringItem(
+          "Voice / outbound mock",
+          transportCount ? "queued" : "not seen",
+          "聲音與對外訊息目前只允許 mock receipt。",
+          `voice_events=${text(counts.voice_event_count || 0)} mock_messages=${text(counts.mock_message_count || 0)} latest=${text(latestVoice.cue_id || latestOutbound.message_id || "none")}`
+        ),
+        monitoringItem(
+          "Spatial imprint",
+          latestSpatial.status || (counts.spatial_imprint_event_count ? "ok" : "not seen"),
+          "空間印記 store/trigger dry-run 的只讀投影。",
+          latestSpatial.imprint_id ? `${latestSpatial.imprint_id} | ${text(latestSpatial.kind)} | seq=${text(latestSpatial.sequence)}` : ""
+        )
+      ];
+      document.getElementById("monitorList").innerHTML = items.join("");
     }
 
     function hardwareProviderItem(provider) {
@@ -2580,31 +2808,42 @@
 
     function renderSkillDetails(events, selectedEvent) {
       const skillEvents = events.filter((event) =>
-        event.kind === "ln_activation_gate_evaluated" || event.kind === "skill_run_recorded"
+        event.kind === "ln_activation_gate_evaluated" ||
+        event.kind === "skill_run_recorded" ||
+        event.kind === "agent_tool_invocation" ||
+        event.kind === "spatial_imprint_store_updated" ||
+        event.kind === "spatial_imprint_trigger_event" ||
+        event.kind === "spatial_imprint_projection_error"
       );
+      const agentToolEvents = skillEvents.filter((event) => event.kind === "agent_tool_invocation");
+      const spatialImprintEvents = skillEvents.filter((event) => (event.kind || "").startsWith("spatial_imprint_"));
       document.getElementById("skillSummary").textContent = `${skillEvents.length} records`;
+      document.getElementById("agentToolCount").textContent = String(agentToolEvents.length);
+      document.getElementById("spatialImprintCount").textContent = String(spatialImprintEvents.length);
       document.getElementById("skillSelectionContext").textContent = selectedWindowLabel(
         selectedEvent,
-        "顯示目前 timeline 範圍內的 Ln gate / skill run。"
+        "顯示目前 timeline 範圍內的 Ln gate / skill run / agent tool action trace。"
       );
       document.getElementById("skillList").innerHTML = skillEvents.length
         ? skillEvents.slice().reverse().map((event) => {
           const payload = event.payload || {};
+          const boundary = payload.boundary || {};
           return `
             <div class="item phase-${escapeHtml(event.phase)}">
               <div class="item-line">
-                <h3>${escapeHtml(payload.skill_id || payload.gate || event.kind)}</h3>
+                <h3>${escapeHtml(payload.tool_id || payload.skill_id || payload.gate || payload.imprint_id || event.kind)}</h3>
                 <span class="${pillClass(payload.status || payload.decision || event.severity)}">
                   ${escapeHtml(payload.status || payload.decision || event.severity)}
                 </span>
               </div>
               <p class="hint">${escapeHtml(hintForEvent(event))}</p>
               <p class="summary">${escapeHtml(event.summary)}</p>
-              <p class="summary mono">${escapeHtml(event.subject_ref || event.event_id)}</p>
+              <p class="summary mono">${escapeHtml(payload.mode || payload.action || "")} ${escapeHtml(payload.action_id || payload.imprint_id || event.subject_ref || event.event_id)}</p>
+              <p class="hint">live_safety_api_calls_allowed=${escapeHtml(String(boundary.live_safety_api_calls_allowed ?? false))} phase1_safety_mutation_allowed=${escapeHtml(String(boundary.phase1_safety_mutation_allowed ?? false))}</p>
             </div>
           `;
         }).join("")
-        : empty("No Ln activation or skill run events reached at this timeline node.");
+        : empty("No Ln activation, skill run, or agent tool action trace reached at this timeline node.");
     }
 
     function renderMessageDetails(events, selectedEvent) {
@@ -2792,6 +3031,7 @@
     function renderSelectedDetails(selectedEvent) {
       const events = timelineWindowForEvent(selectedEvent);
       renderSafetySnapshot(timelineSnapshotForEvent(selectedEvent));
+      renderMonitoringCenter(events, selectedEvent);
       renderProviderDetails(events, selectedEvent);
       renderHardwareReadiness(selectedEvent);
       renderIncidentDetails(events, selectedEvent);
@@ -3232,15 +3472,17 @@
 
     async function loadDebugSurface() {
       try {
-        const [eventResult, state, messagePayload, hardwareReadiness] = await Promise.all([
+        const [eventResult, state, messagePayload, hardwareReadiness, monitoringCenter] = await Promise.all([
           loadProjectedDebugEventPayload(),
           fetchJson("/debug/state"),
           fetchJson("/debug/messages"),
-          loadHardwareReadinessContext()
+          loadHardwareReadinessContext(),
+          loadMonitoringCenter()
         ]);
         const eventPayload = eventResult.payload || {};
         debugPageState.projection = eventResult.projection || null;
         debugPageState.hardwareReadiness = hardwareReadiness || null;
+        debugPageState.monitoringCenter = monitoringCenter || null;
         if (debugPageState.projection) renderDebugEvidenceMap(debugPageState.projection);
         const resolvedState = stateWithProjectedEvents(state || {}, eventPayload);
         renderEndpointPayloads(eventPayload || {}, resolvedState || {}, messagePayload || {});

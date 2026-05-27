@@ -7,6 +7,11 @@ from mock_outbound_transport import MockOutboundTransport
 from mock_voice_transport import MockVoiceTransport
 from runtime_debug_log import MemoryRuntimeDebugEventLog
 from runtime_debug_models import RuntimeDebugEvent
+from scout_agent_models import ScoutAgentToolResult
+from scout_agent_trace import append_agent_trace
+from spatial_imprint_store import plant_spatial_imprint, spatial_imprint_set_from_store
+from spatial_imprint_trigger import evaluate_spatial_imprints
+from tests.test_spatial_imprint_trigger import _context, _imprint
 from voice_cue_models import VoiceCue
 
 
@@ -113,6 +118,207 @@ class DebugApiTests(unittest.TestCase):
         self.assertEqual(events[0]["kind"], "voice_cue_queued")
         self.assertEqual(events[0]["payload"]["cue_id"], cue.cue_id)
         self.assertEqual(events[0]["payload"]["boundary"]["remote_outbound_allowed"], False)
+
+    def test_debug_api_projects_agent_tool_trace_as_read_only_event(self):
+        from tempfile import TemporaryDirectory
+
+        with TemporaryDirectory() as tmpdir:
+            trace_log = __import__("pathlib").Path(tmpdir) / "agent-trace.jsonl"
+            append_agent_trace(
+                trace_log,
+                ScoutAgentToolResult(
+                    tool_id="scout.cp.proposal_preview",
+                    tool_version="0.1.0",
+                    action_id="agent_action.debug.000001",
+                    agent_run_id="agent_run.debug.000001",
+                    status="completed",
+                    mode="proposal_write",
+                    started_at="2026-05-27T08:00:00Z",
+                    ended_at="2026-05-27T08:00:01Z",
+                    outputs={"artifact_refs": ["outputs/cp-proposal.preview.json"]},
+                ),
+            )
+            log = MemoryRuntimeDebugEventLog()
+            log.append(_event(sequence=1, kind="debug_session_started"))
+            client = TestClient(
+                create_debug_app(debug_log=log, agent_trace_log_path=trace_log)
+            )
+
+            events = client.get("/debug/events", params={"kind": "agent_tool_invocation"})
+            state = client.get("/debug/state")
+
+        self.assertEqual(events.status_code, 200)
+        event_payload = events.json()["events"][0]
+        self.assertEqual(event_payload["kind"], "agent_tool_invocation")
+        self.assertEqual(event_payload["sequence"], 2)
+        self.assertEqual(event_payload["payload"]["tool_id"], "scout.cp.proposal_preview")
+        self.assertFalse(event_payload["payload"]["live_safety_api_calls_allowed"])
+        self.assertFalse(event_payload["payload"]["phase1_safety_mutation_allowed"])
+        self.assertEqual(state.status_code, 200)
+        self.assertEqual(state.json()["agent_tool_count"], 1)
+        self.assertEqual(state.json()["latest_agent_tool"]["tool_id"], "scout.cp.proposal_preview")
+
+    def test_debug_api_projects_spatial_imprint_store_and_trigger_report(self):
+        from tempfile import TemporaryDirectory
+
+        with TemporaryDirectory() as tmpdir:
+            path_cls = __import__("pathlib").Path
+            store_path = path_cls(tmpdir) / "runtime-spatial-imprints.json"
+            report_path = path_cls(tmpdir) / "spatial-imprint-trigger-report.json"
+            store = plant_spatial_imprint(
+                store_path,
+                _imprint(
+                    imprint_id="spatial_imprint.debug.001",
+                    planting_source="operator_runtime",
+                ),
+                trip_id="chilai_nanhua_day1",
+                authorized_by="leader.alex",
+                planted_at="2026-05-27T08:00:00Z",
+                reason="Debug projection test.",
+            )
+            report = evaluate_spatial_imprints(
+                spatial_imprint_set_from_store(store),
+                _context(),
+            )
+            report_path.write_text(report.model_dump_json(), encoding="utf-8")
+            log = MemoryRuntimeDebugEventLog()
+            log.append(_event(sequence=1, kind="debug_session_started"))
+            client = TestClient(
+                create_debug_app(
+                    debug_log=log,
+                    spatial_imprint_store_path=store_path,
+                    spatial_imprint_trigger_report_path=report_path,
+                )
+            )
+
+            events = client.get("/debug/events")
+            trigger_events = client.get(
+                "/debug/events",
+                params={"kind": "spatial_imprint_trigger_event"},
+            )
+            state = client.get("/debug/state")
+            clear = client.post(
+                "/debug/clear",
+                json={"confirm_debug_projection_clear": True},
+            )
+            after_clear = client.get("/debug/events")
+
+        self.assertEqual(events.status_code, 200)
+        event_payloads = events.json()["events"]
+        self.assertEqual(
+            [event["kind"] for event in event_payloads],
+            [
+                "debug_session_started",
+                "spatial_imprint_store_updated",
+                "spatial_imprint_trigger_event",
+            ],
+        )
+        self.assertEqual([event["sequence"] for event in event_payloads], [1, 2, 3])
+        self.assertEqual(trigger_events.status_code, 200)
+        trigger_payload = trigger_events.json()["events"][0]["payload"]
+        self.assertEqual(trigger_payload["status"], "triggered")
+        self.assertEqual(trigger_payload["imprint_id"], "spatial_imprint.debug.001")
+        self.assertTrue(trigger_payload["matched_predicates"])
+        self.assertFalse(trigger_payload["live_safety_api_calls_allowed"])
+        self.assertFalse(trigger_payload["phase1_safety_mutation_allowed"])
+        self.assertEqual(state.status_code, 200)
+        self.assertEqual(state.json()["spatial_imprint_event_count"], 2)
+        self.assertEqual(
+            state.json()["latest_spatial_imprint"]["imprint_id"],
+            "spatial_imprint.debug.001",
+        )
+        self.assertEqual(clear.status_code, 200)
+        self.assertFalse(clear.json()["spatial_imprint_artifacts_cleared"])
+        self.assertEqual(
+            [event["kind"] for event in after_clear.json()["events"]],
+            ["spatial_imprint_store_updated", "spatial_imprint_trigger_event"],
+        )
+
+    def test_debug_monitoring_center_summarizes_agent_hardware_voice_and_spatial(self):
+        from tempfile import TemporaryDirectory
+        from pathlib import Path
+
+        with TemporaryDirectory() as tmpdir:
+            trace_log = Path(tmpdir) / "agent-trace.jsonl"
+            append_agent_trace(
+                trace_log,
+                ScoutAgentToolResult(
+                    tool_id="scout.checks.pretrip_release",
+                    tool_version="0.1.0",
+                    action_id="agent_action.debug.check.000001",
+                    agent_run_id="agent_run.debug.monitoring",
+                    status="completed",
+                    mode="local_evidence_query",
+                    started_at="2026-05-27T08:00:00Z",
+                    ended_at="2026-05-27T08:00:01Z",
+                    outputs={"returncode": 0},
+                ),
+            )
+            append_agent_trace(
+                trace_log,
+                ScoutAgentToolResult(
+                    tool_id="scout.map.tile_cache_plan",
+                    tool_version="0.1.0",
+                    action_id="agent_action.debug.map.000001",
+                    agent_run_id="agent_run.debug.monitoring",
+                    status="completed",
+                    mode="local_evidence_query",
+                    started_at="2026-05-27T08:01:00Z",
+                    ended_at="2026-05-27T08:01:01Z",
+                    outputs={"returncode": 0},
+                ),
+            )
+            log = MemoryRuntimeDebugEventLog()
+            log.append(
+                _event(
+                    sequence=1,
+                    kind="provider_status_recorded",
+                    payload={"provider_ref": "provider.gnss.primary", "status": "ok"},
+                )
+            )
+            transport = MockVoiceTransport(
+                debug_log=log,
+                session_id="debug_session.voice",
+                timestamp_factory=lambda: "2026-05-27T08:02:00Z",
+            )
+            transport.queue_voice_cue(
+                VoiceCue(
+                    cue_id="voice_cue.monitor.001",
+                    priority="info",
+                    category="team",
+                    text_zh="監控中心測試。",
+                    source_event_refs=[],
+                    confidence=1.0,
+                ),
+                engine="mock",
+            )
+            outbound = _transport(log)
+            outbound.queue_message(
+                category="checkin",
+                recipient_ref="remote_contact.primary",
+                body_preview="Monitoring center mock message.",
+            )
+            client = TestClient(
+                create_debug_app(debug_log=log, agent_trace_log_path=trace_log)
+            )
+
+            response = client.get("/debug/monitoring")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["artifact_kind"], "scout_debug_monitoring_center")
+        self.assertEqual(payload["counts"]["agent_tool_count"], 2)
+        self.assertEqual(payload["counts"]["release_check_count"], 1)
+        self.assertEqual(payload["counts"]["map_preparation_count"], 1)
+        self.assertEqual(payload["counts"]["provider_status_count"], 1)
+        self.assertEqual(payload["counts"]["voice_event_count"], 1)
+        self.assertEqual(payload["counts"]["mock_message_count"], 1)
+        self.assertEqual(
+            payload["sections"]["hardware_readiness"]["context_endpoint"],
+            "/admin/hardware-readiness/context",
+        )
+        self.assertTrue(payload["debug_boundary"]["read_only"])
+        self.assertFalse(payload["debug_boundary"]["phase1_mutation_allowed"])
 
     def test_debug_api_source_has_no_safety_or_brain_mutation_imports(self):
         source = __import__("pathlib").Path("debug_api.py").read_text(encoding="utf-8")

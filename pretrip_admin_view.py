@@ -8,7 +8,16 @@ from pathlib import Path
 from typing import Any
 
 from admin_map_layers import build_pretrip_map_layers
+from post_analysis_capability import summarize_capability_artifacts
+from scout_companion_match_models import build_companion_capability_capsule_from_timeline
 from pretrip_layer_preparation import build_layer_preparation_not_prepared_view
+from pretrip_energy_projection import DEFAULT_PRETRIP_ENERGY_PROJECTION_REF
+from pretrip_spatial_imprint_export import (
+    DEFAULT_SPATIAL_IMPRINT_CANDIDATES_REF,
+    DEFAULT_SPATIAL_IMPRINT_MANIFEST_REF,
+    DEFAULT_SPATIAL_IMPRINT_REVIEWS_REF,
+    DEFAULT_SPATIAL_IMPRINT_SET_REF,
+)
 
 
 ROOT = Path(__file__).resolve().parent
@@ -20,6 +29,7 @@ EXPERT_CONTRIBUTION_WORKSPACE_APPLY_RESULT_REF = (
 )
 ROUTE_NOTE_REVIEWED_ASSUMPTIONS_REF = "outputs/route_note_reviewed_assumptions.json"
 DEPARTURE_REVIEWED_CANDIDATES_REF = "outputs/departure_reviewed_candidates.json"
+COMPANION_MATCH_REVIEW_REF = "outputs/companion_match_review.json"
 GIS_PERCEPTION_AGGREGATION_RADIUS_M = 80.0
 GIS_PERCEPTION_NEARBY_GROUP_RADIUS_M = 80.0
 RISK_DELTA_COLORS = {
@@ -53,6 +63,7 @@ def build_pretrip_admin_view(
     pretrip_package = _load_json(artifacts["package"])
     readiness = _load_json(artifacts["readiness"])
     eta = _load_json(artifacts["eta"])
+    energy_projection = _load_optional_json(artifacts.get("energy_projection"))
     route_notes = _load_json(artifacts["route_notes"])
     overpass_evidence = _load_json(artifacts["overpass_evidence"])
     route_note_ln_proposals = _load_json(artifacts["route_note_ln_proposals"])
@@ -78,6 +89,28 @@ def build_pretrip_admin_view(
     )
     departure_reviewed_candidates = _load_optional_json(
         artifacts["departure_reviewed_candidates"]
+    )
+    mcp_named_point_evidence = _load_optional_json(
+        artifacts.get("mcp_named_point_evidence")
+    )
+    mcp_retrieval_plan = _load_optional_json(artifacts.get("mcp_retrieval_plan"))
+    mcp_ocr_labels = _load_optional_json(artifacts.get("mcp_ocr_labels"))
+    mcp_candidates = _load_optional_json(artifacts.get("mcp_candidates"))
+    mcp_cp_support_reconciliation = _load_optional_json(
+        artifacts.get("mcp_cp_support_reconciliation")
+    )
+    mcp_review_log = _load_optional_json(artifacts.get("mcp_review_log"))
+    spatial_imprint_candidates = _load_optional_json(
+        artifacts.get("spatial_imprint_candidates")
+    )
+    spatial_imprint_reviews = _load_optional_json(
+        artifacts.get("spatial_imprint_reviews")
+    )
+    spatial_imprint_set = _load_optional_json(
+        artifacts.get("spatial_imprint_set")
+    )
+    spatial_imprint_manifest = _load_optional_json(
+        artifacts.get("spatial_imprint_manifest")
     )
     departure_bundle = _load_json(artifacts["departure_bundle"])
     resource_plan = _load_json(artifacts["resource_plan"])
@@ -123,6 +156,14 @@ def build_pretrip_admin_view(
     runtime_audit = _load_json(artifacts["runtime_audit"])
     after_action = _load_json(artifacts["after_action"])
     brain_seed = _load_json(artifacts["brain_seed"])
+    capability_timeline_import = _load_capability_timeline_import(
+        project_id,
+        root=root,
+        project_root=artifacts["project"].parent,
+    )
+    companion_match_review = _load_optional_json(
+        artifacts.get("companion_match_review")
+    )
 
     source_refs = _source_refs(artifacts, root if project_root is None else project_root)
     route_points = _route_point_samples(route_summary, checkpoints)
@@ -182,6 +223,12 @@ def build_pretrip_admin_view(
             "turn_back_checkpoint_eta": eta["assumption"].get("turn_back_checkpoint_eta"),
             "estimate_count": len(eta.get("estimates", [])),
             "estimates": eta.get("estimates", []),
+            "energy_reserve_projection": _energy_projection_summary(
+                energy_projection,
+                source_refs.get("energy_projection", ""),
+            )
+            if energy_projection is not None
+            else None,
         },
         "route_notes": _route_note_summary(route_notes, source_refs["route_notes"]),
         "reference_tracks": _reference_tracks_summary(
@@ -305,6 +352,11 @@ def build_pretrip_admin_view(
         planning_tab["review_queue"],
         planning_tab["gis_perception_timeline"],
     )
+    if energy_projection is not None:
+        planning_tab["review_queue"] = _review_queue_with_energy_projection_item(
+            planning_tab["review_queue"],
+            planning_tab["eta"]["energy_reserve_projection"],
+        )
     planning_tab["review_workbench"] = _review_workbench_summary(
         planning_tab["review_queue"],
         planning_tab["review_decision_log"],
@@ -338,6 +390,39 @@ def build_pretrip_admin_view(
                 source_refs["departure_reviewed_candidates"],
             )
         )
+    if mcp_candidates is not None:
+        planning_tab["major_critical_points"] = _mcp_summary(
+            project_id=project_id,
+            mcp_candidates=mcp_candidates,
+            named_point_evidence=mcp_named_point_evidence,
+            retrieval_plan=mcp_retrieval_plan,
+            ocr_labels=mcp_ocr_labels,
+            cp_support_reconciliation=mcp_cp_support_reconciliation,
+            review_log=mcp_review_log,
+            source_refs=source_refs,
+        )
+    if mcp_review_log is not None:
+        planning_tab["mcp_review_actions"] = _mcp_review_actions_summary(
+            mcp_review_log,
+            source_refs["mcp_review_log"],
+        )
+    if any(
+        item is not None
+        for item in (
+            spatial_imprint_candidates,
+            spatial_imprint_reviews,
+            spatial_imprint_set,
+            spatial_imprint_manifest,
+        )
+    ):
+        planning_tab["spatial_imprints"] = _spatial_imprints_summary(
+            project_id=project_id,
+            candidates=spatial_imprint_candidates,
+            reviews=spatial_imprint_reviews,
+            imprint_set=spatial_imprint_set,
+            manifest=spatial_imprint_manifest,
+            source_refs=source_refs,
+        )
     planning_sections = _planning_sections(planning_tab)
     review_workspace_section_ids = {
         "review_queue",
@@ -352,6 +437,8 @@ def build_pretrip_admin_view(
         "expert_contribution_apply_plan",
         "expert_contribution_workspace_apply_result",
         "departure_reviewed_candidates",
+        "mcp_review_actions",
+        "spatial_imprints",
     }
     planning_tab["sections"] = [
         section
@@ -379,6 +466,15 @@ def build_pretrip_admin_view(
         "after_action_next_plan": _after_action_summary(after_action, source_refs["after_action"]),
         "brain_seed": _brain_seed_summary(brain_seed, source_refs["brain_seed"]),
     }
+    if capability_timeline_import is not None:
+        post_analysis_tab["capability_timeline_import"] = capability_timeline_import
+    if companion_match_review is not None:
+        post_analysis_tab["companion_match_review"] = (
+            _companion_match_review_summary(
+                companion_match_review,
+                source_refs.get("companion_match_review", ""),
+            )
+        )
     if admin_surface_projection is not None:
         post_analysis_tab["admin_surface_projection"] = _admin_projection_summary(
             admin_surface_projection,
@@ -416,6 +512,8 @@ def build_pretrip_admin_view(
         "departure_reviewed_candidates": planning_tab.get(
             "departure_reviewed_candidates"
         ),
+        "mcp_review_actions": planning_tab.get("mcp_review_actions"),
+        "spatial_imprints": planning_tab.get("spatial_imprints"),
     }
     review_workspace_tab["sections"] = [
         section
@@ -466,6 +564,9 @@ def build_pretrip_admin_view(
         "departure_reviewed_candidates": planning_tab.get(
             "departure_reviewed_candidates"
         ),
+        "major_critical_points": planning_tab.get("major_critical_points"),
+        "mcp_review_actions": planning_tab.get("mcp_review_actions"),
+        "spatial_imprints": planning_tab.get("spatial_imprints"),
         "departure_bundle": planning_tab["departure_bundle"],
         "resources": planning_tab["resources"],
         "weather": planning_tab["weather"],
@@ -474,6 +575,10 @@ def build_pretrip_admin_view(
         "import_manifest": post_analysis_tab.get("import_manifest"),
         "admin_surface_projection": post_analysis_tab.get("admin_surface_projection"),
         "debug_projection": post_analysis_tab.get("debug_projection"),
+        "capability_timeline_import": post_analysis_tab.get(
+            "capability_timeline_import"
+        ),
+        "companion_match_review": post_analysis_tab.get("companion_match_review"),
         "raw_sample_summary": _raw_sample_summary(pretrip_package, segment_dtm, source_refs),
         "tabs": {
             "pre_trip_planning": planning_tab,
@@ -570,9 +675,28 @@ def resolve_pretrip_project_artifacts(
         "debug_projection_events": "debug_projection_events_ref",
         "gis_perception": "gis_perception_candidates_ref",
         "gis_perception_ai_judgements": "gis_perception_ai_judgements_ref",
+        "mcp_named_point_evidence": "mcp_named_point_evidence_ref",
+        "mcp_retrieval_plan": "mcp_retrieval_plan_ref",
+        "mcp_ocr_labels": "mcp_ocr_labels_ref",
+        "mcp_candidates": "mcp_candidates_ref",
+        "mcp_cp_support_reconciliation": "mcp_cp_support_reconciliation_ref",
+        "mcp_review_log": "mcp_review_log_ref",
+        "spatial_imprint_candidates": "spatial_imprint_candidates_ref",
+        "spatial_imprint_reviews": "spatial_imprint_reviews_ref",
+        "spatial_imprint_set": "spatial_imprint_set_ref",
+        "spatial_imprint_manifest": "spatial_imprint_manifest_ref",
     }.items():
         if project.get(project_ref_key):
             artifacts[artifact_key] = resolved_project_root / project[project_ref_key]
+    for artifact_key, default_ref in {
+        "spatial_imprint_candidates": DEFAULT_SPATIAL_IMPRINT_CANDIDATES_REF,
+        "spatial_imprint_reviews": DEFAULT_SPATIAL_IMPRINT_REVIEWS_REF,
+        "spatial_imprint_set": DEFAULT_SPATIAL_IMPRINT_SET_REF,
+        "spatial_imprint_manifest": DEFAULT_SPATIAL_IMPRINT_MANIFEST_REF,
+        "energy_projection": DEFAULT_PRETRIP_ENERGY_PROJECTION_REF,
+        "companion_match_review": COMPANION_MATCH_REVIEW_REF,
+    }.items():
+        artifacts.setdefault(artifact_key, resolved_project_root / default_ref)
     return artifacts
 
 
@@ -1993,6 +2117,66 @@ def _gis_perception_review_queue_item(
     }
 
 
+def _review_queue_with_energy_projection_item(
+    review_queue: dict[str, Any],
+    energy_projection: dict[str, Any],
+) -> dict[str, Any]:
+    depletion_checkpoint = energy_projection.get("possible_depletion_checkpoint_name")
+    if not depletion_checkpoint:
+        return review_queue
+    item = {
+        "item_id": f"review_queue.energy_reserve.{_safe_view_key(depletion_checkpoint)}",
+        "candidate_ref": f"energy_reserve.depletion_checkpoint.{_safe_view_key(depletion_checkpoint)}",
+        "category": "energy_reserve",
+        "severity": "warning",
+        "title": f"Energy reserve review: {depletion_checkpoint}",
+        "summary": (
+            "Energy-adjusted ETA projection indicates this checkpoint may need "
+            "rest, pacing, or turnaround review before departure."
+        ),
+        "source_artifact_kind": "pretrip_energy_reserve_projection",
+        "source_ref": energy_projection.get("source_path", ""),
+        "source_ref_key": "energy_projection_ref",
+        "review_focus": [depletion_checkpoint],
+        "evidence_summary": {
+            "possible_depletion_checkpoint_name": depletion_checkpoint,
+            "reserve_start_score": energy_projection.get("reserve_start_score"),
+            "route_energy_multiplier": energy_projection.get("route_energy_multiplier"),
+            "projected_target_eta": energy_projection.get("projected_target_eta"),
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+            "medical_diagnosis": False,
+        },
+        "candidate_only": True,
+        "human_review_required": True,
+        "decision_recorded": False,
+        "accept_reject_allowed": False,
+        "mutation_allowed": False,
+        "source_id": f"review_queue.energy_reserve.{_safe_view_key(depletion_checkpoint)}",
+        "source_path": energy_projection.get("source_path", ""),
+        "evidence_type": "pretrip_review_queue_item",
+        "map_target_ids": [depletion_checkpoint],
+    }
+    items = [*review_queue.get("items", []), item]
+    category_counts = Counter(item.get("category", "unknown") for item in items)
+    counts = {
+        **review_queue.get("counts", {}),
+        "item_count": len(items),
+        "category_counts": dict(sorted(category_counts.items())),
+        "energy_reserve_count": category_counts.get("energy_reserve", 0),
+        "warning_count": sum(1 for entry in items if entry.get("severity") == "warning"),
+        "review_count": sum(1 for entry in items if entry.get("severity") == "review"),
+        "blocker_count": sum(1 for entry in items if entry.get("severity") == "blocker"),
+    }
+    return {
+        **review_queue,
+        "counts": counts,
+        "items": items,
+        "projection_notes": [
+            *review_queue.get("projection_notes", []),
+            "Energy reserve projection is added to review queue as advisory planning context only.",
+        ],
+    }
 def _empty_reference_tracks(project_id: str, source_path: str) -> dict[str, Any]:
     return {
         "source_id": f"reference_tracks.{project_id}",
@@ -3649,6 +3833,270 @@ def _departure_reviewed_candidates_summary(
     }
 
 
+def _mcp_summary(
+    *,
+    project_id: str,
+    mcp_candidates: dict[str, Any],
+    named_point_evidence: dict[str, Any] | None,
+    retrieval_plan: dict[str, Any] | None,
+    ocr_labels: dict[str, Any] | None,
+    cp_support_reconciliation: dict[str, Any] | None,
+    review_log: dict[str, Any] | None,
+    source_refs: dict[str, str],
+) -> dict[str, Any]:
+    candidates = list(mcp_candidates.get("mcp_candidates", []) or [])
+    retrieval_counts = retrieval_plan or {}
+    ocr_counts = ocr_labels or {}
+    support_rows = list((cp_support_reconciliation or {}).get("rows", []) or [])
+    support_by_mcp_id = {row.get("mcp_id"): row for row in support_rows}
+    review_actions = list((review_log or {}).get("actions", []) or [])
+    latest_review_by_mcp_id = _latest_mcp_review_by_mcp_id(review_actions)
+    counts = {
+        "mcp_candidate_count": mcp_candidates.get(
+            "mcp_candidate_count",
+            len(candidates),
+        ),
+        "dense_checkpoint_count": mcp_candidates.get("dense_checkpoint_count", 0),
+        "suppressed_point_count": mcp_candidates.get("suppressed_point_count", 0),
+        "retrieval_query_count": retrieval_counts.get("query_count", 0),
+        "accepted_evidence_page_count": (
+            (named_point_evidence or {})
+            .get("search_profile", {})
+            .get("accepted_evidence_page_count", 0)
+        ),
+        "ocr_label_count": ocr_counts.get("label_count", 0),
+        "review_required_ocr_label_count": ocr_counts.get("review_required_count", 0),
+        "review_action_count": len(review_actions),
+    }
+    if cp_support_reconciliation is not None:
+        counts["cp_support_supported_count"] = cp_support_reconciliation.get(
+            "supported_count",
+            0,
+        )
+        counts["cp_support_suggested_insertion_count"] = (
+            cp_support_reconciliation.get("suggested_insertion_count", 0)
+        )
+    return {
+        "source_id": f"mcp.{project_id}.v1",
+        "source_path": source_refs.get("mcp_candidates", "outputs/mcp/mcp_candidates.json"),
+        "evidence_type": "pretrip_major_critical_point_candidates",
+        "status": "candidate_only",
+        "project_id": project_id,
+        "counts": counts,
+        "policy": mcp_candidates.get("mcp_policy", {}),
+        "source_refs": {
+            "named_point_evidence": source_refs.get("mcp_named_point_evidence"),
+            "retrieval_plan": source_refs.get("mcp_retrieval_plan"),
+            "ocr_labels": source_refs.get("mcp_ocr_labels"),
+            "candidates": source_refs.get("mcp_candidates"),
+            "cp_support_reconciliation": source_refs.get(
+                "mcp_cp_support_reconciliation"
+            ),
+            "review_actions": source_refs.get("mcp_review_log"),
+        },
+        "retrieval": {
+            "artifact_kind": retrieval_counts.get("artifact_kind"),
+            "planner_kind": retrieval_counts.get("planner_kind"),
+            "pydantic_ai_responsibility": retrieval_counts.get(
+                "pydantic_ai_responsibility"
+            ),
+            "truth_decision_allowed": retrieval_counts.get(
+                "truth_decision_allowed",
+                False,
+            ),
+            "fixture_backed": retrieval_counts.get("fixture_backed", True),
+            "live_network_performed": retrieval_counts.get(
+                "live_network_performed",
+                False,
+            ),
+            "required_source_families": retrieval_counts.get(
+                "required_source_families",
+                [],
+            ),
+            "attempted_source_families": retrieval_counts.get(
+                "attempted_source_families",
+                [],
+            ),
+            "tool_contracts": retrieval_counts.get("tool_contracts", [])[:12],
+            "fetch_summary_count": retrieval_counts.get("fetch_summary_count", 0),
+            "fetch_summaries": retrieval_counts.get("fetch_summaries", [])[:12],
+            "queries": retrieval_counts.get("queries", [])[:12],
+        },
+        "ocr": {
+            "artifact_kind": ocr_counts.get("artifact_kind"),
+            "label_count": ocr_counts.get("label_count", 0),
+            "review_required_count": ocr_counts.get("review_required_count", 0),
+            "labels": ocr_counts.get("labels", [])[:12],
+        },
+        "cp_support_reconciliation": {
+            "artifact_kind": (cp_support_reconciliation or {}).get("artifact_kind"),
+            "support_radius_m": (cp_support_reconciliation or {}).get(
+                "support_radius_m",
+                mcp_candidates.get("mcp_policy", {}).get("scout_cp_support_radius_m"),
+            ),
+            "supported_count": (cp_support_reconciliation or {}).get(
+                "supported_count",
+                0,
+            ),
+            "suggested_insertion_count": (
+                cp_support_reconciliation or {}
+            ).get("suggested_insertion_count", 0),
+            "rows": support_rows[:12],
+        },
+        "candidates": [
+            {
+                **candidate,
+                "source_id": candidate.get("mcp_id"),
+                "source_path": source_refs.get(
+                    "mcp_candidates",
+                    "outputs/mcp/mcp_candidates.json",
+                ),
+                "evidence_type": "pretrip_major_critical_point_candidate",
+                "cp_support_reconciliation": support_by_mcp_id.get(
+                    candidate.get("mcp_id")
+                ),
+                "latest_review_action": latest_review_by_mcp_id.get(
+                    candidate.get("mcp_id")
+                ),
+            }
+            for candidate in candidates
+        ],
+        "boundary": _summary_boundary(mcp_candidates.get("boundary", {})),
+    }
+
+
+def _latest_mcp_review_by_mcp_id(actions: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    latest: dict[str, dict[str, Any]] = {}
+    for action in actions:
+        mcp_id = action.get("mcp_id")
+        if not mcp_id:
+            continue
+        latest[str(mcp_id)] = action
+    return latest
+
+
+def _mcp_review_actions_summary(
+    payload: dict[str, Any],
+    source_path: str,
+) -> dict[str, Any]:
+    actions = list(payload.get("actions", []) or [])
+    decision_counts = Counter(action.get("decision", "unknown") for action in actions)
+    return {
+        "source_id": f"mcp_review_actions.{payload.get('project_id', 'project')}",
+        "source_path": source_path,
+        "evidence_type": "pretrip_mcp_review_action_log",
+        "status": "workspace_local_review_log",
+        "project_id": payload.get("project_id"),
+        "source_candidate_set_ref": payload.get("source_candidate_set_ref"),
+        "counts": {
+            "action_count": payload.get("action_count", len(actions)),
+            "runtime_truth_count": 0,
+            "compile_count": 0,
+            "decision_counts": dict(sorted(decision_counts.items())),
+        },
+        "latest_by_mcp_id": _latest_mcp_review_by_mcp_id(actions),
+        "actions": actions,
+        "boundary": _summary_boundary(payload.get("boundary", {})),
+    }
+
+
+def _spatial_imprints_summary(
+    *,
+    project_id: str,
+    candidates: dict[str, Any] | None,
+    reviews: dict[str, Any] | None,
+    imprint_set: dict[str, Any] | None,
+    manifest: dict[str, Any] | None,
+    source_refs: dict[str, str],
+) -> dict[str, Any]:
+    candidate_items = list((candidates or {}).get("candidates", []) or [])
+    review_records = list((reviews or {}).get("records", []) or [])
+    reviewed_imprints = list((imprint_set or {}).get("imprints", []) or [])
+    counts = (
+        dict(manifest["counts"])
+        if manifest and isinstance(manifest.get("counts"), dict)
+        else {
+            "candidate_count": len(candidate_items),
+            "review_record_count": len(review_records),
+            "reviewed_imprint_count": len(reviewed_imprints),
+            "runtime_truth_count": 0,
+        }
+    )
+    source_path = (
+        source_refs.get("spatial_imprint_manifest")
+        or source_refs.get("spatial_imprint_set")
+        or source_refs.get("spatial_imprint_candidates")
+        or "project.json#spatial-imprints"
+    )
+    boundary = (
+        manifest.get("boundary")
+        if manifest and isinstance(manifest.get("boundary"), dict)
+        else (imprint_set or candidates or {}).get("boundary", {})
+    )
+    return {
+        "source_id": f"spatial_imprints.{project_id}.v0",
+        "source_path": source_path,
+        "evidence_type": "pretrip_spatial_imprints",
+        "status": (
+            "reviewed_pretrip_addendum"
+            if reviewed_imprints
+            else "candidate_review_workspace"
+        ),
+        "project_id": project_id,
+        "counts": counts,
+        "boundary": _summary_boundary(boundary),
+        "manifest_ref": source_refs.get("spatial_imprint_manifest"),
+        "spatial_imprint_set_ref": (
+            manifest.get("spatial_imprint_set_ref")
+            if manifest
+            else source_refs.get("spatial_imprint_set")
+        ),
+        "candidate_source_path": source_refs.get("spatial_imprint_candidates"),
+        "review_source_path": source_refs.get("spatial_imprint_reviews"),
+        "candidates": [_spatial_imprint_item_summary(item) for item in candidate_items],
+        "reviews": [
+            {
+                "review_id": record.get("review_id"),
+                "candidate_ref": record.get("candidate_ref"),
+                "decision": record.get("decision"),
+                "reviewed_by": record.get("reviewed_by"),
+                "reviewed_at": record.get("reviewed_at"),
+                "summary": record.get("summary"),
+            }
+            for record in review_records
+        ],
+        "reviewed_imprints": [
+            _spatial_imprint_item_summary(item) for item in reviewed_imprints
+        ],
+        "rejected_audit_refs": (manifest or {}).get("rejected_audit_refs", []),
+        "disabled_audit_refs": (manifest or {}).get("disabled_audit_refs", []),
+    }
+
+
+def _spatial_imprint_item_summary(item: dict[str, Any]) -> dict[str, Any]:
+    trigger = item.get("trigger", {})
+    predicates = list(trigger.get("predicates", []) or [])
+    return {
+        "imprint_id": item.get("imprint_id"),
+        "label": item.get("label"),
+        "kind": item.get("kind"),
+        "severity": item.get("severity"),
+        "planting_source": item.get("planting_source"),
+        "lifecycle_state": (item.get("lifecycle") or {}).get("state"),
+        "lifecycle_scope": (item.get("lifecycle") or {}).get("scope"),
+        "payload_type": (item.get("payload") or {}).get("payload_type"),
+        "text_zh": (item.get("payload") or {}).get("text_zh"),
+        "anchor_type": (item.get("anchor") or {}).get("anchor_type"),
+        "cp_ref": (item.get("anchor") or {}).get("cp_ref"),
+        "segment_ref": (item.get("anchor") or {}).get("segment_ref"),
+        "distance_m": (item.get("anchor") or {}).get("distance_m"),
+        "trigger_operator": trigger.get("operator"),
+        "predicate_types": [predicate.get("type") for predicate in predicates],
+        "source_refs": item.get("source_refs", []),
+        "boundary": _summary_boundary(item.get("boundary", {})),
+    }
+
+
 def _expert_contribution_summary(payload: dict[str, Any], source_path: str) -> dict[str, Any]:
     return {
         "source_id": payload["log_id"],
@@ -3925,6 +4373,151 @@ def _after_action_summary(payload: dict[str, Any], source_path: str) -> dict[str
     }
 
 
+def _load_capability_timeline_import(
+    project_id: str,
+    *,
+    root: Path,
+    project_root: Path,
+) -> dict[str, Any] | None:
+    candidate_roots = [
+        (project_root / "outputs", project_root),
+        (
+            root
+            / "tests"
+            / "fixtures"
+            / "post_analysis"
+            / f"{project_id}_post_analysis"
+            / "outputs",
+            root,
+        ),
+    ]
+    for output_dir, rel_root in candidate_roots:
+        timeline_path = output_dir / "capability_timeline.json"
+        capsule_path = output_dir / "capability_capsule.json"
+        if timeline_path.exists() and capsule_path.exists():
+            summary = summarize_capability_artifacts(
+                timeline_path=timeline_path,
+                capsule_path=capsule_path,
+                root=rel_root,
+            )
+            return _capability_timeline_import_summary(
+                summary,
+                timeline_payload=_load_json(timeline_path),
+            )
+    return None
+
+
+def _capability_timeline_import_summary(
+    summary: dict[str, Any],
+    *,
+    timeline_payload: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    capsule_preview = summary.get("capsule_preview", {})
+    boundary = summary.get("boundary", {})
+    companion_capsule = (
+        build_companion_capability_capsule_from_timeline(timeline_payload).model_dump(mode="json")
+        if timeline_payload is not None
+        else None
+    )
+    return {
+        **summary,
+        "source_id": "pretrip.imported_capability_timeline",
+        "evidence_type": "pretrip_capability_timeline_import",
+        "status": "read_only_post_analysis_import",
+        "counts": {
+            "edge_count": summary.get("edge_count", 0),
+            "rest_interval_count": summary.get("rest_interval_count", 0),
+        },
+        "planning_use": {
+            "candidate_pacing_reference_only": True,
+            "requires_human_review_before_eta_use": True,
+            "auto_applies_to_eta": False,
+            "auto_compiles_mission_graph": False,
+        },
+        "companion_capability_capsule": companion_capsule,
+        "privacy": {
+            "source_scope": capsule_preview.get("source_scope"),
+            "raw_track_shared": capsule_preview.get("raw_track_shared"),
+            "exact_timestamps_shared": capsule_preview.get("exact_timestamps_shared"),
+            "incident_details_shared": capsule_preview.get("incident_details_shared"),
+        },
+        "boundary": {
+            **boundary,
+            "read_only_import": True,
+            "planning_candidate_input_only": True,
+            "requires_human_review_before_use": True,
+            "workspace_mutation_allowed": False,
+            "pretrip_eta_autocalibration_allowed": False,
+            "mission_graph_compile_allowed": False,
+            "phase1_runtime_mutation_allowed": False,
+            "runtime_safety_truth": False,
+        },
+    }
+
+
+def _companion_match_review_summary(
+    payload: dict[str, Any],
+    source_path: str,
+) -> dict[str, Any]:
+    ranked_matches = payload.get("ranked_matches", [])
+    recommended_review_refs = payload.get("recommended_review_refs", [])
+    top_match = ranked_matches[0] if ranked_matches else {}
+    privacy = payload.get("privacy", {})
+    boundary = payload.get("boundary", {})
+    return {
+        "source_id": "pretrip.companion_match_review",
+        "source_provider": payload.get("source_provider"),
+        "source_path": source_path,
+        "sha256": payload.get("sha256"),
+        "evidence_type": "pretrip_companion_match_review",
+        "status": "read_only_companion_match_review",
+        "artifact_version": payload.get("artifact_version"),
+        "query_profile_ref": payload.get("query_profile_ref"),
+        "counts": {
+            "candidate_count": payload.get("candidate_count", 0),
+            "ranked_match_count": len(ranked_matches),
+            "recommended_review_count": len(recommended_review_refs),
+        },
+        "summary": {
+            "top_candidate_profile_ref": top_match.get("candidate_profile_ref"),
+            "top_match_score": top_match.get("match_score"),
+            "top_match_band": top_match.get("match_band"),
+            "recommended_review_refs": recommended_review_refs[:12],
+            "raw_health_payload_shared": privacy.get("raw_health_payload_shared"),
+            "raw_track_shared": privacy.get("raw_track_shared"),
+            "exact_timestamps_shared": privacy.get("exact_timestamps_shared"),
+            "auto_applies_to_eta": False,
+            "ranked_matches": [
+                {
+                    "candidate_profile_ref": match.get("candidate_profile_ref"),
+                    "match_score": match.get("match_score"),
+                    "match_band": match.get("match_band"),
+                    "mismatch_notes": match.get("mismatch_notes", [])[:4],
+                }
+                for match in ranked_matches[:12]
+            ],
+        },
+        "review_policy": payload.get("review_policy", {}),
+        "data_quality": payload.get("data_quality", {}),
+        "privacy": privacy,
+        "boundary": {
+            **boundary,
+            "read_only_import": True,
+            "planning_candidate_input_only": True,
+            "requires_human_review_before_use": True,
+            "workspace_mutation_allowed": False,
+            "pretrip_eta_autocalibration_allowed": False,
+            "mission_graph_compile_allowed": False,
+            "phase1_runtime_mutation_allowed": False,
+            "runtime_safety_truth": False,
+            "medical_diagnosis": False,
+            "phase1_runtime_safety_truth": False,
+            "safety_api_calls_allowed": False,
+        },
+        "limitations": payload.get("limitations", []),
+    }
+
+
 def _brain_seed_summary(payload: dict[str, Any], source_path: str) -> dict[str, Any]:
     return {
         "source_id": "brain_seed_nodes.chilai_nanhua_day1",
@@ -3951,10 +4544,12 @@ def _planning_sections(planning_tab: dict[str, Any]) -> list[dict[str, Any]]:
     weather = planning_tab["weather"]
     overpass_evidence = planning_tab["overpass_evidence"]
     gis_perception_timeline = planning_tab["gis_perception_timeline"]
+    major_critical_points = planning_tab.get("major_critical_points")
     route_notes = planning_tab["route_notes"]
     reference_tracks = planning_tab.get("reference_tracks")
     checkpoint_events = planning_tab.get("checkpoint_events")
     route_note_ln_proposals = planning_tab["route_note_ln_proposals"]
+    spatial_imprints = planning_tab.get("spatial_imprints")
     route_note_review_options = planning_tab["route_note_review_options"]
     route_note_reviewed_assumptions = planning_tab.get(
         "route_note_reviewed_assumptions"
@@ -3971,6 +4566,7 @@ def _planning_sections(planning_tab: dict[str, Any]) -> list[dict[str, Any]]:
         "expert_contribution_workspace_apply_result"
     )
     departure_reviewed_candidates = planning_tab.get("departure_reviewed_candidates")
+    mcp_review_actions = planning_tab.get("mcp_review_actions")
     departure_bundle = planning_tab["departure_bundle"]
 
     sections = [
@@ -4201,6 +4797,53 @@ def _planning_sections(planning_tab: dict[str, Any]) -> list[dict[str, Any]]:
             },
             boundary=gis_perception_timeline["boundary"],
         ),
+    ]
+    if major_critical_points is not None:
+        sections.append(
+            _section(
+                "major_critical_points",
+                "Major Critical Points",
+                major_critical_points,
+                status=major_critical_points["status"],
+                counts=major_critical_points["counts"],
+                summary={
+                    "mcp_candidate_count": major_critical_points["counts"].get(
+                        "mcp_candidate_count",
+                        0,
+                    ),
+                    "dense_checkpoint_count": major_critical_points["counts"].get(
+                        "dense_checkpoint_count",
+                        0,
+                    ),
+                    "suppressed_point_count": major_critical_points["counts"].get(
+                        "suppressed_point_count",
+                        0,
+                    ),
+                    "retrieval_query_count": major_critical_points["counts"].get(
+                        "retrieval_query_count",
+                        0,
+                    ),
+                    "ocr_label_count": major_critical_points["counts"].get(
+                        "ocr_label_count",
+                        0,
+                    ),
+                    "cp_support_supported_count": major_critical_points[
+                        "counts"
+                    ].get("cp_support_supported_count", 0),
+                    "cp_support_suggested_insertion_count": major_critical_points[
+                        "counts"
+                    ].get("cp_support_suggested_insertion_count", 0),
+                    "review_action_count": major_critical_points["counts"].get(
+                        "review_action_count",
+                        0,
+                    ),
+                    "candidates": major_critical_points["candidates"][:12],
+                },
+                boundary=major_critical_points["boundary"],
+            )
+        )
+    sections.extend(
+        [
         _section(
             "route_notes",
             "Route Notes",
@@ -4240,7 +4883,42 @@ def _planning_sections(planning_tab: dict[str, Any]) -> list[dict[str, Any]]:
             },
             boundary=route_note_ln_proposals["boundary"],
         ),
-        _section(
+        ]
+    )
+    if spatial_imprints is not None:
+        sections.append(
+            _section(
+                "spatial_imprints",
+                "Spatial Imprints",
+                spatial_imprints,
+                status=spatial_imprints["status"],
+                counts=spatial_imprints["counts"],
+                summary={
+                    "candidate_count": spatial_imprints["counts"].get(
+                        "candidate_count",
+                        0,
+                    ),
+                    "review_record_count": spatial_imprints["counts"].get(
+                        "review_record_count",
+                        0,
+                    ),
+                    "reviewed_imprint_count": spatial_imprints["counts"].get(
+                        "reviewed_imprint_count",
+                        0,
+                    ),
+                    "runtime_truth_count": spatial_imprints["counts"].get(
+                        "runtime_truth_count",
+                        0,
+                    ),
+                    "reviewed_imprints": spatial_imprints["reviewed_imprints"][:12],
+                    "reviews": spatial_imprints["reviews"][:12],
+                },
+                boundary=spatial_imprints["boundary"],
+            )
+        )
+    sections.extend(
+        [
+            _section(
             "route_note_review_options",
             "Route Note Review Options",
             route_note_review_options,
@@ -4262,8 +4940,9 @@ def _planning_sections(planning_tab: dict[str, Any]) -> list[dict[str, Any]]:
                 "options": route_note_review_options["options"][:12],
             },
             boundary=route_note_review_options["boundary"],
-        ),
-    ]
+            ),
+        ]
+    )
     if reference_tracks is not None:
         sections.append(
             _section(
@@ -4557,6 +5236,27 @@ def _planning_sections(planning_tab: dict[str, Any]) -> list[dict[str, Any]]:
                 boundary=departure_reviewed_candidates["boundary"],
             )
         )
+    if mcp_review_actions is not None:
+        sections.append(
+            _section(
+                "mcp_review_actions",
+                "MCP Review Actions",
+                mcp_review_actions,
+                status=mcp_review_actions["status"],
+                counts=mcp_review_actions["counts"],
+                summary={
+                    "action_count": mcp_review_actions["counts"].get(
+                        "action_count",
+                        0,
+                    ),
+                    "source_candidate_set_ref": mcp_review_actions.get(
+                        "source_candidate_set_ref"
+                    ),
+                    "actions": mcp_review_actions["actions"][:12],
+                },
+                boundary=mcp_review_actions["boundary"],
+            )
+        )
     sections.append(
         _section(
             "departure_bundle",
@@ -4580,6 +5280,8 @@ def _post_analysis_sections(post_analysis_tab: dict[str, Any]) -> list[dict[str,
     route_comparison = post_analysis_tab["route_comparison"]
     brain_seed = post_analysis_tab["brain_seed"]
     after_action = post_analysis_tab["after_action_next_plan"]
+    capability_timeline_import = post_analysis_tab.get("capability_timeline_import")
+    companion_match_review = post_analysis_tab.get("companion_match_review")
     import_manifest = post_analysis_tab.get("import_manifest")
     admin_surface_projection = post_analysis_tab.get("admin_surface_projection")
     debug_projection = post_analysis_tab.get("debug_projection")
@@ -4657,6 +5359,72 @@ def _post_analysis_sections(post_analysis_tab: dict[str, Any]) -> list[dict[str,
             },
         ),
     ]
+    if capability_timeline_import is not None:
+        sections.append(
+            _section(
+                "capability_timeline_import",
+                "Capability Timeline Import",
+                capability_timeline_import,
+                status=capability_timeline_import["status"],
+                counts=capability_timeline_import["counts"],
+                summary={
+                    "moving_time_s": capability_timeline_import["summary"].get(
+                        "moving_time_s"
+                    ),
+                    "elapsed_time_s": capability_timeline_import["summary"].get(
+                        "elapsed_time_s"
+                    ),
+                    "rest_time_s": capability_timeline_import["summary"].get(
+                        "rest_time_s"
+                    ),
+                    "distance_m": capability_timeline_import["summary"].get(
+                        "distance_m"
+                    ),
+                    "source_scope": capability_timeline_import["privacy"].get(
+                        "source_scope"
+                    ),
+                    "raw_track_shared": capability_timeline_import["privacy"].get(
+                        "raw_track_shared"
+                    ),
+                    "auto_applies_to_eta": capability_timeline_import[
+                        "planning_use"
+                    ].get("auto_applies_to_eta"),
+                    "edges": capability_timeline_import.get("edges", [])[:12],
+                },
+                boundary=capability_timeline_import["boundary"],
+            )
+        )
+    if companion_match_review is not None:
+        sections.append(
+            _section(
+                "companion_match_review",
+                "Companion Match Review",
+                companion_match_review,
+                status=companion_match_review["status"],
+                counts=companion_match_review["counts"],
+                summary={
+                    "top_candidate_profile_ref": companion_match_review[
+                        "summary"
+                    ].get("top_candidate_profile_ref"),
+                    "top_match_score": companion_match_review["summary"].get(
+                        "top_match_score"
+                    ),
+                    "top_match_band": companion_match_review["summary"].get(
+                        "top_match_band"
+                    ),
+                    "recommended_review_refs": companion_match_review[
+                        "summary"
+                    ].get("recommended_review_refs", []),
+                    "raw_health_payload_shared": companion_match_review[
+                        "summary"
+                    ].get("raw_health_payload_shared"),
+                    "auto_applies_to_eta": companion_match_review["summary"].get(
+                        "auto_applies_to_eta"
+                    ),
+                },
+                boundary=companion_match_review["boundary"],
+            )
+        )
     if import_manifest is not None:
         sections.append(
             _section(
@@ -4854,6 +5622,32 @@ def _raw_sample_summary(
 
 def _source_refs(artifacts: dict[str, Path], root: Path) -> dict[str, str]:
     return {key: _relpath(path, root) for key, path in artifacts.items()}
+
+
+def _energy_projection_summary(
+    projection: dict[str, Any],
+    source_path: str,
+) -> dict[str, Any]:
+    return {
+        "source_id": projection.get("artifact_kind", "pretrip_energy_reserve_projection"),
+        "source_path": source_path,
+        "evidence_type": "pretrip_energy_reserve_projection",
+        "source_provider": projection.get("source_provider"),
+        "baseline_source_path": projection.get("energy_baseline_source_path"),
+        "eta_plan_source_path": projection.get("eta_plan_source_path"),
+        "reserve_start_score": projection.get("reserve_start_score"),
+        "route_energy_multiplier": projection.get("route_energy_multiplier"),
+        "projected_target_eta": projection.get("projected_target_eta"),
+        "possible_depletion_checkpoint_name": projection.get(
+            "possible_depletion_checkpoint_name"
+        ),
+        "checkpoint_count": len(projection.get("checkpoints", [])),
+        "checkpoints": projection.get("checkpoints", []),
+        "data_quality": projection.get("data_quality", {}),
+        "privacy": projection.get("privacy", {}),
+        "boundary": projection.get("boundary", {}),
+        "notes": projection.get("notes", []),
+    }
 
 
 def _load_json(path: Path) -> Any:

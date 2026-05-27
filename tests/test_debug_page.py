@@ -11,6 +11,7 @@ ALLOWED_DEBUG_ENDPOINTS = {
     "/assistant/status",
     "/debug/events",
     "/debug/messages",
+    "/debug/monitoring",
     "/debug/state",
 }
 
@@ -28,6 +29,10 @@ class DebugPageTests(unittest.TestCase):
         self.assertIn("Provider Degraded Status", html)
         self.assertIn("Hardware Readiness", html)
         self.assertIn("Ln And Skill Runs", html)
+        self.assertIn("Agent tool calls", html)
+        self.assertIn("Spatial imprint events", html)
+        self.assertIn("agent_tool_invocation", html)
+        self.assertIn("spatial_imprint_trigger_event", html)
         self.assertIn("Outbound Queue", html)
         self.assertIn("Incident And Bridge Status", html)
         self.assertIn("Debug Evidence Map", html)
@@ -307,6 +312,9 @@ class DebugPageTests(unittest.TestCase):
         self.assertIn("PRETRIP_DEBUG_PROJECTION_EVENTS_PATH", html)
         self.assertIn("loadProjectedDebugEventPayload", html)
         self.assertIn("stateWithProjectedEvents", html)
+        self.assertIn("loadRuntimeDebugEventsPayload", html)
+        self.assertIn("mergeDebugEvents", html)
+        self.assertIn("agent_tool_count", html)
         self.assertEqual(
             {target.split("?", 1)[0] for target in fetch_targets},
             ALLOWED_DEBUG_ENDPOINTS,

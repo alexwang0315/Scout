@@ -1,0 +1,44 @@
+{
+  "id": "scout.evidence.sensorlog_to_gpx",
+  "version": "0.1.0",
+  "description": "Convert a local SensorLog JSON export into GPX for evidence import and pretrip review.",
+  "command": {
+    "argv": [
+      "{python}",
+      "-m",
+      "scout_agent_builtin_tools",
+      "evidence-sensorlog-to-gpx",
+      "--input",
+      "{input}",
+      "--output",
+      "{output}",
+      "--json"
+    ],
+    "dry_run_argument": "--dry-run"
+  },
+  "mode": "workspace_write",
+  "input_schema_ref": "schemas/scout_agent/evidence_sensorlog_to_gpx.request.json",
+  "output_schema_ref": "schemas/scout_agent/tool_result.json",
+  "allowed_reads": [
+    "local.sensorlog_json"
+  ],
+  "allowed_writes": [
+    "local.workspace.gpx"
+  ],
+  "forbidden_writes": [
+    "phase1.runtime",
+    "phase2.brain.observed_facts",
+    "live.safety_api"
+  ],
+  "requires_authorization": {
+    "kind": "user_or_operator"
+  },
+  "trace": {
+    "required": true,
+    "event_kind": "agent_tool_invocation"
+  },
+  "metadata": {
+    "runtime_safety_truth": false,
+    "raw_sensorlog_embedded": false
+  }
+}

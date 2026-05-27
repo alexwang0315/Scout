@@ -1,8 +1,8 @@
 {
   "counts": {
-    "files_scanned": 68,
+    "files_scanned": 78,
     "forbidden_fragments": 0,
-    "json_files_scanned": 68,
+    "json_files_scanned": 78,
     "json_parse_errors": 0,
     "oversized_files": 0,
     "raw_route_suffix_files": 0,

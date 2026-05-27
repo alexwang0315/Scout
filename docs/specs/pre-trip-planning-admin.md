@@ -129,6 +129,8 @@ what actually happened in previous field runs:
   too weak or too aggressive;
 - which segment capsules and incident packages contain reusable planning
   lessons;
+- which **Capability Timeline**（能力時間軸） and **Capability Capsule**（能力膠囊）
+  outputs from completed routes should seed future pacing assumptions;
 - which Phase 2 `DerivedMeasurement`, `HumanReview`, `DecisionOptionSet`, and
   `SkillRunRecord` nodes should seed the next pre-trip plan.
 
@@ -137,11 +139,17 @@ The key boundary is direction:
 ```text
 previous mission evidence
   -> after-action admin review
+  -> post-analysis capability timeline
   -> reviewed planning lessons
   -> next PreTripPackage candidates
   -> human review
   -> future MissionGraph compile
 ```
+
+The detailed post-analysis pacing plan lives in
+`docs/specs/post-analysis-capability-timeline.md`. Its moving-time（移動時間；
+扣除休息） output can become a reviewed pretrip pacing reference, but it must
+stay opt-in, privacy-preserving, and non-runtime truth.
 
 The after-action viewer may propose next-plan candidates, but it must not mutate
 the completed Phase 1 mission, rewrite incident packages, or change live safety
@@ -717,6 +725,16 @@ The segment time is especially important in Taiwan hiking practice. Many hikers
 compare their own field pace with the published Sunriver-style time and derive a
 personal or team multiplier, such as `1.2x Sunriver time`, `1.5x Sunriver time`,
 or `2.0x Sunriver time`. Phase 4 should model that explicitly.
+
+For completed trips, Scout should separate guide-time planning assumptions from
+post-analysis **moving time**（移動時間；扣除休息）. The post-analysis Capability
+Timeline（能力時間軸） spec defines how a returned user's actual track can produce
+both elapsed time（總時間；含休息） and moving-time capability metrics without
+sharing raw GPX by default:
+
+```text
+docs/specs/post-analysis-capability-timeline.md
+```
 
 A useful community explanation is the PTT Hiking article "登山(百岳)行程規劃-上河時間與步程計算".
 It frames the multiplier as actual total trip time divided by the sum of

@@ -1,0 +1,56 @@
+{
+  "artifact_kind": "pretrip_spatial_imprint_review_log",
+  "schema_version": "0.1.0",
+  "project_id": "chilai_nanhua_day1",
+  "records": [
+    {
+      "review_id": "spatial_imprint_review.chilai.collapse_wall.017",
+      "candidate_ref": "spatial_imprint.chilai.collapse_wall.017",
+      "decision": "accepted",
+      "reviewed_by": "reviewer:alpha_test",
+      "reviewed_at": "2026-05-26T11:00:00+08:00",
+      "summary": "Accept collapse-wall warning as a reviewed pretrip cue.",
+      "source_refs": [
+        "route_note.reviewed.018",
+        "risk_ribbon.segment_017"
+      ]
+    },
+    {
+      "review_id": "spatial_imprint_review.chilai.confusing_turn.042",
+      "candidate_ref": "spatial_imprint.chilai.confusing_turn.042",
+      "decision": "accepted",
+      "reviewed_by": "reviewer:alpha_test",
+      "reviewed_at": "2026-05-26T11:05:00+08:00",
+      "summary": "Accept confusing-turn cue for route-progress and heading assisted trigger.",
+      "source_refs": [
+        "route_note.ln_hint.042"
+      ]
+    },
+    {
+      "review_id": "spatial_imprint_review.chilai.high_risk_segment.061",
+      "candidate_ref": "spatial_imprint.chilai.high_risk_segment.061",
+      "decision": "accepted",
+      "reviewed_by": "reviewer:alpha_test",
+      "reviewed_at": "2026-05-26T11:10:00+08:00",
+      "summary": "Accept high-risk segment cue as advisory risk-layer context.",
+      "source_refs": [
+        "risk_heatmap.segment_061"
+      ]
+    },
+    {
+      "review_id": "spatial_imprint_review.chilai.rest_point.073",
+      "candidate_ref": "spatial_imprint.chilai.rest_point.073",
+      "decision": "disabled",
+      "reviewed_by": "reviewer:alpha_test",
+      "reviewed_at": "2026-05-26T11:15:00+08:00",
+      "summary": "Keep rest point as disabled candidate until field leader confirms it.",
+      "source_refs": [
+        "operator_seed.rest_point.073"
+      ]
+    }
+  ],
+  "notes": [
+    "Review log is append-only and does not activate runtime.",
+    "Disabled rest-point candidate remains visible for future operator review."
+  ]
+}
