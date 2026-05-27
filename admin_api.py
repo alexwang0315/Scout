@@ -51,6 +51,7 @@ from pretrip_layer_preparation import (
     build_layer_preparation_preview,
     run_layer_preparation,
 )
+from pretrip_mcp_review import append_mcp_review_action
 from pretrip_review_decision_apply_store import (
     write_review_decision_apply_plan_for_workspace,
 )
@@ -118,6 +119,20 @@ class PreTripRouteNoteDispositionRequest(BaseModel):
     route_note_ref: str = Field(min_length=1)
     disposition: AdminDisposition
     reviewer_alias: str = Field(default="trip_leader", min_length=1)
+    decided_at: str | None = None
+    persist_to_workspace: bool = False
+
+
+class PreTripMcpReviewActionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    mcp_id: str = Field(min_length=1)
+    decision: Literal["accepted", "linked", "split", "downgraded", "rejected"]
+    reviewer_alias: str = Field(default="trip_leader", min_length=1)
+    summary: str = Field(min_length=1)
+    linked_cp_candidate_id: str | None = Field(default=None, min_length=1)
+    split_target_ids: list[str] = Field(default_factory=list)
+    downgrade_reason: str | None = Field(default=None, min_length=1)
     decided_at: str | None = None
     persist_to_workspace: bool = False
 
@@ -936,6 +951,107 @@ def create_admin_router(
                 "fixture_files_mutated": False,
                 "workspace_files_mutated": True,
                 "workspace_route_note_disposition_log_mutated": True,
+            },
+        }
+
+    @router.post("/pretrip/projects/{project_id}/mcp-review-actions")
+    def pretrip_mcp_review_action(
+        project_id: str,
+        request: PreTripMcpReviewActionRequest,
+    ) -> dict[str, Any]:
+        if not request.persist_to_workspace:
+            return {
+                "project_id": project_id,
+                "artifact_kind": "pretrip_mcp_review_action_preview",
+                "preview": True,
+                "append_only": True,
+                "record": request.model_dump(mode="json"),
+                "boundary": {
+                    "candidate_only": True,
+                    "workspace_file_mutation_allowed": False,
+                    "source_mutation_allowed": False,
+                    "package_mutation_allowed": False,
+                    "runtime_mutation_allowed": False,
+                    "phase1_runtime_mutation_allowed": False,
+                    "phase2_writeback_allowed": False,
+                    "external_api_calls_made": False,
+                    "admin_api_write_performed": False,
+                    "fixture_file_mutation_allowed": False,
+                    "compiles_mission_graph": False,
+                },
+                "mutation": {
+                    "workspace_files_mutated": False,
+                    "runtime_mutated": False,
+                    "phase1_runtime_mutated": False,
+                    "phase2_writeback_performed": False,
+                    "fixture_files_mutated": False,
+                },
+            }
+
+        project_root = _pretrip_workspace_project_root(
+            pretrip_workspace_root,
+            project_id=project_id,
+        )
+        if project_root is None:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "MCP review persistence requires create_admin_app("
+                    "pretrip_workspace_root=...) with a local workspace project.json"
+                ),
+            )
+        if _pretrip_project_root_is_repo_fixture(project_root):
+            raise HTTPException(
+                status_code=409,
+                detail="MCP review actions write only local workspaces, not repo fixtures",
+            )
+        try:
+            log = append_mcp_review_action(
+                project_root,
+                mcp_id=request.mcp_id,
+                decision=request.decision,
+                summary=request.summary,
+                reviewer_alias=request.reviewer_alias,
+                decided_at=request.decided_at,
+                linked_cp_candidate_id=request.linked_cp_candidate_id,
+                split_target_ids=tuple(request.split_target_ids),
+                downgrade_reason=request.downgrade_reason,
+            )
+        except (FileNotFoundError, ValueError, ValidationError) as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+        return {
+            "project_id": project_id,
+            "artifact_kind": "pretrip_mcp_review_action",
+            "preview": False,
+            "persisted": True,
+            "append_only": True,
+            "counts": {
+                "action_count": log.action_count,
+                "runtime_truth_count": 0,
+                "compile_count": 0,
+            },
+            "boundary": {
+                "candidate_only": True,
+                "workspace_file_mutation_allowed": True,
+                "source_mutation_allowed": False,
+                "package_mutation_allowed": False,
+                "runtime_mutation_allowed": False,
+                "phase1_runtime_mutation_allowed": False,
+                "phase2_writeback_allowed": False,
+                "external_api_calls_made": False,
+                "admin_api_write_performed": True,
+                "fixture_file_mutation_allowed": False,
+                "compiles_mission_graph": False,
+                "workspace_project_root": str(project_root),
+            },
+            "mutation": {
+                "workspace_files_mutated": True,
+                "workspace_mcp_review_log_mutated": True,
+                "runtime_mutated": False,
+                "phase1_runtime_mutated": False,
+                "phase2_writeback_performed": False,
+                "fixture_files_mutated": False,
             },
         }
 

@@ -174,6 +174,15 @@ _LAYER_SPECS: dict[str, AdminMapLayerSpec] = {
         render_mode="svg_overlay",
         source_kind="route_note_candidate",
     ),
+    "mcp": AdminMapLayerSpec(
+        layer_id="mcp",
+        label="MCP",
+        label_zh="MCP 主要關鍵點圖層",
+        layer_kind="evidence",
+        z_index=82,
+        render_mode="svg_overlay",
+        source_kind="major_critical_point_candidate",
+    ),
     "events": AdminMapLayerSpec(
         layer_id="events",
         label="Ln events",
@@ -243,6 +252,7 @@ def build_pretrip_map_layers(
         "checkpoints": ("pretrip.map_layer.checkpoints", source_refs.get("checkpoints")),
         "pois": ("pretrip.map_layer.pois", source_refs.get("map_candidates")),
         "route-notes": ("pretrip.map_layer.route_notes", source_refs.get("route_notes")),
+        "mcp": ("pretrip.map_layer.mcp", source_refs.get("mcp_candidates")),
         "weather-api": (
             str(weather.get("source_id") or "pretrip.map_layer.weather_api"),
             str(weather.get("source_path") or source_refs.get("weather_daylight") or ""),
@@ -276,6 +286,7 @@ def build_pretrip_map_layers(
             "checkpoints",
             "pois",
             "route-notes",
+            "mcp",
             "weather-api",
         ]
     )

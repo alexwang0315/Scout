@@ -1,0 +1,502 @@
+{
+  "artifact_kind": "pretrip_major_critical_point_candidates",
+  "artifact_version": "mcp_candidates.v1",
+  "boundary": {
+    "candidate_only": true,
+    "compile_allowed": false,
+    "phase1_runtime_mutation_allowed": false,
+    "runtime_safety_truth": false,
+    "safety_api_calls_allowed": false
+  },
+  "candidate_only": true,
+  "compile_allowed": false,
+  "compressed_from_dense_cp": true,
+  "dense_checkpoint_count": 110,
+  "mcp_candidate_count": 6,
+  "mcp_candidates": [
+    {
+      "accepted_evidence_page_count": 12,
+      "boundary": {
+        "candidate_only": true,
+        "compile_allowed": false,
+        "phase1_runtime_mutation_allowed": false,
+        "runtime_safety_truth": false,
+        "safety_api_calls_allowed": false
+      },
+      "confidence": "medium",
+      "distance_m": 600.0,
+      "label": "舊林道叉路",
+      "lat": 24.05065393075347,
+      "linked_cp_candidates": [
+        "cp.start"
+      ],
+      "linked_named_points": [
+        "np.old_forest_fork"
+      ],
+      "linked_risk_segments": [],
+      "lon": 121.21523100882769,
+      "mcp_classes": [
+        "fork_junction"
+      ],
+      "mcp_id": "mcp.old_forest_fork.001",
+      "mention_ratio": 0.083,
+      "missing_source_gaps": [
+        "missing mandatory source family: hiking_biji",
+        "missing mandatory source family: sunriver_culture"
+      ],
+      "nearby_points_suppressed_by_spacing": [],
+      "nearest_scout_cp": {
+        "candidate_id": "cp.start",
+        "distance_m": 0.0,
+        "support_found": true,
+        "support_radius_m": 250.0
+      },
+      "promotion_reasons": [
+        "named point mention ratio 8.3%",
+        "accepted evidence page count 12",
+        "route-significant MCP class: fork_junction",
+        "nearby Scout CP within 0.0m",
+        "mandatory source-family gap: hiking_biji, sunriver_culture"
+      ],
+      "review_state": "needs_human_review",
+      "score_components": {
+        "coordinate_uncertainty_penalty": 3.0,
+        "named_point_support": 8.3,
+        "scout_cp_support": 15.0,
+        "source_family_diversity": 4.0,
+        "stale_source_penalty": 4.0,
+        "terrain_risk_support": 0.0,
+        "total": 45.3,
+        "type_weight": 25.0
+      },
+      "source_family_coverage": {
+        "mandatory_complete": false,
+        "missing_required": [
+          "hiking_biji",
+          "sunriver_culture"
+        ],
+        "present": [
+          "ptt_hiking"
+        ],
+        "required": [
+          "ptt_hiking",
+          "hiking_biji",
+          "sunriver_culture"
+        ]
+      },
+      "suggested_cp_insertion": null
+    },
+    {
+      "accepted_evidence_page_count": 12,
+      "boundary": {
+        "candidate_only": true,
+        "compile_allowed": false,
+        "phase1_runtime_mutation_allowed": false,
+        "runtime_safety_truth": false,
+        "safety_api_calls_allowed": false
+      },
+      "confidence": "high",
+      "distance_m": 2350.0,
+      "label": "黑水塘",
+      "lat": 24.052010625600815,
+      "linked_cp_candidates": [
+        "cp.002"
+      ],
+      "linked_named_points": [
+        "np.heishuitang",
+        "np.yunhai_station"
+      ],
+      "linked_risk_segments": [],
+      "lon": 121.22796119190753,
+      "mcp_classes": [
+        "water_source",
+        "camp_hut_structure"
+      ],
+      "mcp_id": "mcp.heishuitang.002",
+      "mention_ratio": 0.333,
+      "missing_source_gaps": [],
+      "nearby_points_suppressed_by_spacing": [
+        {
+          "distance_m": 1500.0,
+          "label": "雲海保線所",
+          "reason": "within primary MCP spacing window; preserved as linked suppressed point",
+          "score": 65.7,
+          "source_distance_m": 850.0,
+          "source_id": "np.yunhai_station",
+          "spacing_threshold_m": 1000.0
+        }
+      ],
+      "nearest_scout_cp": {
+        "candidate_id": "cp.002",
+        "distance_m": 0.0,
+        "support_found": true,
+        "support_radius_m": 250.0
+      },
+      "promotion_reasons": [
+        "named point mention ratio 33.3%",
+        "accepted evidence page count 12",
+        "route-significant MCP class: water_source, camp_hut_structure",
+        "nearby Scout CP within 0.0m"
+      ],
+      "review_state": "needs_human_review",
+      "score_components": {
+        "coordinate_uncertainty_penalty": 3.0,
+        "named_point_support": 25.0,
+        "scout_cp_support": 15.0,
+        "source_family_diversity": 20.0,
+        "stale_source_penalty": 0.0,
+        "terrain_risk_support": 0.0,
+        "total": 82.0,
+        "type_weight": 25.0
+      },
+      "source_family_coverage": {
+        "mandatory_complete": true,
+        "missing_required": [],
+        "present": [
+          "hiking_biji",
+          "ptt_hiking",
+          "public_web",
+          "sunriver_culture"
+        ],
+        "required": [
+          "ptt_hiking",
+          "hiking_biji",
+          "sunriver_culture"
+        ]
+      },
+      "suggested_cp_insertion": null
+    },
+    {
+      "accepted_evidence_page_count": 12,
+      "boundary": {
+        "candidate_only": true,
+        "compile_allowed": false,
+        "phase1_runtime_mutation_allowed": false,
+        "runtime_safety_truth": false,
+        "safety_api_calls_allowed": false
+      },
+      "confidence": "high",
+      "distance_m": 4100.0,
+      "label": "大崩壁",
+      "lat": 24.046623408794403,
+      "linked_cp_candidates": [
+        "cp.003"
+      ],
+      "linked_named_points": [
+        "np.major_collapse_wall",
+        "np.rope_bridge"
+      ],
+      "linked_risk_segments": [
+        "risk_ribbon.segment.0041"
+      ],
+      "lon": 121.23617763631046,
+      "mcp_classes": [
+        "extreme_terrain_hazard"
+      ],
+      "mcp_id": "mcp.major_collapse_wall.003",
+      "mention_ratio": 0.25,
+      "missing_source_gaps": [],
+      "nearby_points_suppressed_by_spacing": [
+        {
+          "distance_m": 4700.0,
+          "label": "固定繩橋段",
+          "reason": "within primary MCP spacing window; preserved as linked suppressed point",
+          "score": 62.7,
+          "source_distance_m": 600.0,
+          "source_id": "np.rope_bridge",
+          "spacing_threshold_m": 1000.0
+        }
+      ],
+      "nearest_scout_cp": {
+        "candidate_id": "cp.003",
+        "distance_m": 0.0,
+        "support_found": true,
+        "support_radius_m": 250.0
+      },
+      "promotion_reasons": [
+        "named point mention ratio 25.0%",
+        "accepted evidence page count 12",
+        "route-significant MCP class: extreme_terrain_hazard",
+        "nearby Scout CP within 0.0m",
+        "terrain/risk evidence linked"
+      ],
+      "review_state": "needs_human_review",
+      "score_components": {
+        "coordinate_uncertainty_penalty": 0.0,
+        "named_point_support": 25.0,
+        "scout_cp_support": 15.0,
+        "source_family_diversity": 16.0,
+        "stale_source_penalty": 0.0,
+        "terrain_risk_support": 8.0,
+        "total": 94.0,
+        "type_weight": 30.0
+      },
+      "source_family_coverage": {
+        "mandatory_complete": true,
+        "missing_required": [],
+        "present": [
+          "hiking_biji",
+          "ptt_hiking",
+          "sunriver_culture"
+        ],
+        "required": [
+          "ptt_hiking",
+          "hiking_biji",
+          "sunriver_culture"
+        ]
+      },
+      "suggested_cp_insertion": null
+    },
+    {
+      "accepted_evidence_page_count": 12,
+      "boundary": {
+        "candidate_only": true,
+        "compile_allowed": false,
+        "phase1_runtime_mutation_allowed": false,
+        "runtime_safety_truth": false,
+        "safety_api_calls_allowed": false
+      },
+      "confidence": "medium",
+      "distance_m": 6900.0,
+      "label": "隱蔽樹林區",
+      "lat": 24.04476505704224,
+      "linked_cp_candidates": [
+        "cp.005"
+      ],
+      "linked_named_points": [
+        "np.hidden_forest"
+      ],
+      "linked_risk_segments": [
+        "risk_ribbon.segment.0069"
+      ],
+      "lon": 121.25119037926197,
+      "mcp_classes": [
+        "hidden_forest_route_loss"
+      ],
+      "mcp_id": "mcp.hidden_forest.004",
+      "mention_ratio": 0.167,
+      "missing_source_gaps": [
+        "missing mandatory source family: sunriver_culture"
+      ],
+      "nearby_points_suppressed_by_spacing": [],
+      "nearest_scout_cp": {
+        "candidate_id": "cp.005",
+        "distance_m": 0.0,
+        "support_found": true,
+        "support_radius_m": 250.0
+      },
+      "promotion_reasons": [
+        "named point mention ratio 16.7%",
+        "accepted evidence page count 12",
+        "route-significant MCP class: hidden_forest_route_loss",
+        "nearby Scout CP within 0.0m",
+        "terrain/risk evidence linked",
+        "mandatory source-family gap: sunriver_culture"
+      ],
+      "review_state": "needs_human_review",
+      "score_components": {
+        "coordinate_uncertainty_penalty": 3.0,
+        "named_point_support": 16.7,
+        "scout_cp_support": 15.0,
+        "source_family_diversity": 8.0,
+        "stale_source_penalty": 0.0,
+        "terrain_risk_support": 8.0,
+        "total": 62.7,
+        "type_weight": 18.0
+      },
+      "source_family_coverage": {
+        "mandatory_complete": false,
+        "missing_required": [
+          "sunriver_culture"
+        ],
+        "present": [
+          "hiking_biji",
+          "ptt_hiking"
+        ],
+        "required": [
+          "ptt_hiking",
+          "hiking_biji",
+          "sunriver_culture"
+        ]
+      },
+      "suggested_cp_insertion": null
+    },
+    {
+      "accepted_evidence_page_count": 12,
+      "boundary": {
+        "candidate_only": true,
+        "compile_allowed": false,
+        "phase1_runtime_mutation_allowed": false,
+        "runtime_safety_truth": false,
+        "safety_api_calls_allowed": false
+      },
+      "confidence": "medium",
+      "distance_m": 8200.0,
+      "label": "稜線啞口觀景點",
+      "lat": 24.048184286803007,
+      "linked_cp_candidates": [
+        "cp.006"
+      ],
+      "linked_named_points": [
+        "np.ridge_pass_view"
+      ],
+      "linked_risk_segments": [],
+      "lon": 121.25656644813716,
+      "mcp_classes": [
+        "viewpoint_trailhead_pass"
+      ],
+      "mcp_id": "mcp.ridge_pass_view.005",
+      "mention_ratio": 0.167,
+      "missing_source_gaps": [
+        "missing mandatory source family: ptt_hiking",
+        "missing mandatory source family: hiking_biji"
+      ],
+      "nearby_points_suppressed_by_spacing": [],
+      "nearest_scout_cp": {
+        "candidate_id": "cp.006",
+        "distance_m": 0.0,
+        "support_found": true,
+        "support_radius_m": 250.0
+      },
+      "promotion_reasons": [
+        "named point mention ratio 16.7%",
+        "accepted evidence page count 12",
+        "route-significant MCP class: viewpoint_trailhead_pass",
+        "nearby Scout CP within 0.0m",
+        "mandatory source-family gap: ptt_hiking, hiking_biji"
+      ],
+      "review_state": "needs_human_review",
+      "score_components": {
+        "coordinate_uncertainty_penalty": 3.0,
+        "named_point_support": 16.7,
+        "scout_cp_support": 15.0,
+        "source_family_diversity": 8.0,
+        "stale_source_penalty": 0.0,
+        "terrain_risk_support": 0.0,
+        "total": 56.7,
+        "type_weight": 20.0
+      },
+      "source_family_coverage": {
+        "mandatory_complete": false,
+        "missing_required": [
+          "ptt_hiking",
+          "hiking_biji"
+        ],
+        "present": [
+          "public_web",
+          "sunriver_culture"
+        ],
+        "required": [
+          "ptt_hiking",
+          "hiking_biji",
+          "sunriver_culture"
+        ]
+      },
+      "suggested_cp_insertion": null
+    },
+    {
+      "accepted_evidence_page_count": 12,
+      "boundary": {
+        "candidate_only": true,
+        "compile_allowed": false,
+        "phase1_runtime_mutation_allowed": false,
+        "runtime_safety_truth": false,
+        "safety_api_calls_allowed": false
+      },
+      "confidence": "low",
+      "distance_m": 9500.0,
+      "label": "稜線通訊點",
+      "lat": 24.0,
+      "linked_cp_candidates": [
+        "cp.039"
+      ],
+      "linked_named_points": [
+        "np.mobile_reception_ridge"
+      ],
+      "linked_risk_segments": [],
+      "lon": 121.0,
+      "mcp_classes": [
+        "mobile_reception"
+      ],
+      "mcp_id": "mcp.mobile_reception_ridge.006",
+      "mention_ratio": 0.167,
+      "missing_source_gaps": [
+        "missing mandatory source family: sunriver_culture"
+      ],
+      "nearby_points_suppressed_by_spacing": [],
+      "nearest_scout_cp": {
+        "candidate_id": "cp.039",
+        "distance_m": 19432.025,
+        "support_found": false,
+        "support_radius_m": 250.0
+      },
+      "promotion_reasons": [
+        "named point mention ratio 16.7%",
+        "accepted evidence page count 12",
+        "route-significant MCP class: mobile_reception",
+        "no Scout CP support within policy radius",
+        "mandatory source-family gap: sunriver_culture"
+      ],
+      "review_state": "suggested_insertion_review_required",
+      "score_components": {
+        "coordinate_uncertainty_penalty": 8.0,
+        "named_point_support": 16.7,
+        "scout_cp_support": -10.0,
+        "source_family_diversity": 8.0,
+        "stale_source_penalty": 0.0,
+        "terrain_risk_support": 0.0,
+        "total": 24.7,
+        "type_weight": 18.0
+      },
+      "source_family_coverage": {
+        "mandatory_complete": false,
+        "missing_required": [
+          "sunriver_culture"
+        ],
+        "present": [
+          "hiking_biji",
+          "ptt_hiking"
+        ],
+        "required": [
+          "ptt_hiking",
+          "hiking_biji",
+          "sunriver_culture"
+        ]
+      },
+      "suggested_cp_insertion": {
+        "distance_m": 9500.0,
+        "lat": 24.0,
+        "lon": 121.0,
+        "reason": "No Scout CP support within policy radius; create suggested candidate insertion for human review.",
+        "review_required": true
+      }
+    }
+  ],
+  "mcp_policy": {
+    "min_spacing_m": 1000.0,
+    "np_min_accepted_evidence_pages": 11,
+    "np_min_mention_ratio": 0.05,
+    "required_source_families": [
+      "ptt_hiking",
+      "hiking_biji",
+      "sunriver_culture"
+    ],
+    "scout_cp_support_radius_m": 250.0,
+    "type_weights": {
+      "camp_hut_structure": 25.0,
+      "extreme_terrain_hazard": 30.0,
+      "fork_junction": 25.0,
+      "hidden_forest_route_loss": 18.0,
+      "mobile_reception": 18.0,
+      "technical_infrastructure": 22.0,
+      "viewpoint_trailhead_pass": 20.0,
+      "water_source": 25.0
+    }
+  },
+  "project_id": "chilai_nanhua_day1",
+  "runtime_safety_truth": false,
+  "source_refs": [
+    "tests/fixtures/pretrip/mcp/named_point_evidence.json"
+  ],
+  "suppressed_point_count": 2
+}

@@ -1,0 +1,499 @@
+{
+  "accepted_evidence_page_count": 12,
+  "artifact_kind": "pretrip_mcp_retrieval_plan",
+  "artifact_version": "mcp_retrieval_plan.v1",
+  "attempted_source_families": [
+    "ptt_hiking",
+    "hiking_biji",
+    "sunriver_culture"
+  ],
+  "boundary": {
+    "candidate_only": true,
+    "compile_allowed": false,
+    "phase1_runtime_mutation_allowed": false,
+    "runtime_safety_truth": false,
+    "safety_api_calls_allowed": false
+  },
+  "candidate_only": true,
+  "fetch_summaries": [
+    {
+      "accepted": true,
+      "extracted_named_point_ids": [
+        "np.major_collapse_wall"
+      ],
+      "fetch_id": "mcp.fetch.001.page.ptt.001",
+      "full_payload_embedded": false,
+      "live_network_performed": false,
+      "query_id": "mcp.query.011.np.mobile_reception_ridge",
+      "retrieved_at": "2026-05-27T00:00:00+08:00",
+      "route_relevance": "high",
+      "snippet_hash": "sha256:ptt001-route-summary",
+      "source_family": "ptt_hiking",
+      "source_page_id": "page.ptt.001",
+      "stale_risk": "low",
+      "title": "奇萊南華路線討論摘要",
+      "url": "https://www.ptt.cc/bbs/Hiking/M.0000000001.A.html"
+    },
+    {
+      "accepted": true,
+      "extracted_named_point_ids": [
+        "np.heishuitang"
+      ],
+      "fetch_id": "mcp.fetch.002.page.ptt.002",
+      "full_payload_embedded": false,
+      "live_network_performed": false,
+      "query_id": "mcp.query.011.np.mobile_reception_ridge",
+      "retrieved_at": "2026-05-27T00:00:00+08:00",
+      "route_relevance": "medium",
+      "snippet_hash": "sha256:ptt002-water-camp",
+      "source_family": "ptt_hiking",
+      "source_page_id": "page.ptt.002",
+      "stale_risk": "medium",
+      "title": "黑水塘補水與紮營摘要",
+      "url": "https://www.ptt.cc/bbs/Hiking/M.0000000002.A.html"
+    },
+    {
+      "accepted": true,
+      "extracted_named_point_ids": [
+        "np.yunhai_station",
+        "np.heishuitang"
+      ],
+      "fetch_id": "mcp.fetch.003.page.biji.003",
+      "full_payload_embedded": false,
+      "live_network_performed": false,
+      "query_id": "mcp.query.008.np.rope_bridge",
+      "retrieved_at": "2026-05-27T00:00:00+08:00",
+      "route_relevance": "high",
+      "snippet_hash": "sha256:biji003-heishuitang",
+      "source_family": "hiking_biji",
+      "source_page_id": "page.biji.003",
+      "stale_risk": "low",
+      "title": "黑水塘與雲海保線所行程摘要",
+      "url": "https://hiking.biji.co/index.php?q=review&act=info&id=fixture-003"
+    },
+    {
+      "accepted": true,
+      "extracted_named_point_ids": [
+        "np.yunhai_station",
+        "np.heishuitang",
+        "np.ridge_pass_view"
+      ],
+      "fetch_id": "mcp.fetch.004.page.sunriver.004",
+      "full_payload_embedded": false,
+      "live_network_performed": false,
+      "query_id": "mcp.query.010.np.ridge_pass_view",
+      "retrieved_at": "2026-05-27T00:00:00+08:00",
+      "route_relevance": "high",
+      "snippet_hash": "sha256:sunriver004-timing",
+      "source_family": "sunriver_culture",
+      "source_page_id": "page.sunriver.004",
+      "stale_risk": "low",
+      "title": "上河式步程摘要：雲海至天池",
+      "url": "https://www.sunriver.com.tw/fixture/chilai-nanhua-timing"
+    },
+    {
+      "accepted": true,
+      "extracted_named_point_ids": [
+        "np.major_collapse_wall",
+        "np.rope_bridge"
+      ],
+      "fetch_id": "mcp.fetch.005.page.biji.005",
+      "full_payload_embedded": false,
+      "live_network_performed": false,
+      "query_id": "mcp.query.008.np.rope_bridge",
+      "retrieved_at": "2026-05-27T00:00:00+08:00",
+      "route_relevance": "high",
+      "snippet_hash": "sha256:biji005-collapse",
+      "source_family": "hiking_biji",
+      "source_page_id": "page.biji.005",
+      "stale_risk": "low",
+      "title": "大崩壁與繩索段通過摘要",
+      "url": "https://hiking.biji.co/index.php?q=review&act=info&id=fixture-005"
+    },
+    {
+      "accepted": true,
+      "extracted_named_point_ids": [
+        "np.hidden_forest"
+      ],
+      "fetch_id": "mcp.fetch.006.page.ptt.006",
+      "full_payload_embedded": false,
+      "live_network_performed": false,
+      "query_id": "mcp.query.011.np.mobile_reception_ridge",
+      "retrieved_at": "2026-05-27T00:00:00+08:00",
+      "route_relevance": "high",
+      "snippet_hash": "sha256:ptt006-collapse",
+      "source_family": "ptt_hiking",
+      "source_page_id": "page.ptt.006",
+      "stale_risk": "low",
+      "title": "大崩壁高繞提醒摘要",
+      "url": "https://www.ptt.cc/bbs/Hiking/M.0000000006.A.html"
+    },
+    {
+      "accepted": true,
+      "extracted_named_point_ids": [
+        "np.rope_bridge"
+      ],
+      "fetch_id": "mcp.fetch.007.page.public.007",
+      "full_payload_embedded": false,
+      "live_network_performed": false,
+      "query_id": "mcp.query.001.ptt_hiking",
+      "retrieved_at": "2026-05-27T00:00:00+08:00",
+      "route_relevance": "medium",
+      "snippet_hash": "sha256:public007-rope",
+      "source_family": "public_web",
+      "source_page_id": "page.public.007",
+      "stale_risk": "medium",
+      "title": "固定繩與橋樑通過摘要",
+      "url": "https://example.local/scout/public-summary/rope-section"
+    },
+    {
+      "accepted": true,
+      "extracted_named_point_ids": [
+        "np.old_forest_fork"
+      ],
+      "fetch_id": "mcp.fetch.008.page.ptt.008",
+      "full_payload_embedded": false,
+      "live_network_performed": false,
+      "query_id": "mcp.query.011.np.mobile_reception_ridge",
+      "retrieved_at": "2026-05-27T00:00:00+08:00",
+      "route_relevance": "medium",
+      "snippet_hash": "sha256:ptt008-fork",
+      "source_family": "ptt_hiking",
+      "source_page_id": "page.ptt.008",
+      "stale_risk": "medium",
+      "title": "舊林道叉路辨識摘要",
+      "url": "https://www.ptt.cc/bbs/Hiking/M.0000000008.A.html"
+    },
+    {
+      "accepted": true,
+      "extracted_named_point_ids": [
+        "np.major_collapse_wall"
+      ],
+      "fetch_id": "mcp.fetch.009.page.sunriver.009",
+      "full_payload_embedded": false,
+      "live_network_performed": false,
+      "query_id": "mcp.query.010.np.ridge_pass_view",
+      "retrieved_at": "2026-05-27T00:00:00+08:00",
+      "route_relevance": "high",
+      "snippet_hash": "sha256:sunriver009-collapse",
+      "source_family": "sunriver_culture",
+      "source_page_id": "page.sunriver.009",
+      "stale_risk": "low",
+      "title": "崩塌地形與高繞步程摘要",
+      "url": "https://www.sunriver.com.tw/fixture/chilai-collapse"
+    },
+    {
+      "accepted": true,
+      "extracted_named_point_ids": [
+        "np.mobile_reception_ridge"
+      ],
+      "fetch_id": "mcp.fetch.010.page.ptt.010",
+      "full_payload_embedded": false,
+      "live_network_performed": false,
+      "query_id": "mcp.query.011.np.mobile_reception_ridge",
+      "retrieved_at": "2026-05-27T00:00:00+08:00",
+      "route_relevance": "medium",
+      "snippet_hash": "sha256:ptt010-mobile",
+      "source_family": "ptt_hiking",
+      "source_page_id": "page.ptt.010",
+      "stale_risk": "low",
+      "title": "稜線通訊點摘要",
+      "url": "https://www.ptt.cc/bbs/Hiking/M.0000000010.A.html"
+    },
+    {
+      "accepted": true,
+      "extracted_named_point_ids": [
+        "np.hidden_forest",
+        "np.mobile_reception_ridge"
+      ],
+      "fetch_id": "mcp.fetch.011.page.biji.011",
+      "full_payload_embedded": false,
+      "live_network_performed": false,
+      "query_id": "mcp.query.008.np.rope_bridge",
+      "retrieved_at": "2026-05-27T00:00:00+08:00",
+      "route_relevance": "medium",
+      "snippet_hash": "sha256:biji011-mobile-forest",
+      "source_family": "hiking_biji",
+      "source_page_id": "page.biji.011",
+      "stale_risk": "low",
+      "title": "隱蔽樹林與通訊點摘要",
+      "url": "https://hiking.biji.co/index.php?q=review&act=info&id=fixture-011"
+    },
+    {
+      "accepted": true,
+      "extracted_named_point_ids": [
+        "np.heishuitang",
+        "np.ridge_pass_view"
+      ],
+      "fetch_id": "mcp.fetch.012.page.public.012",
+      "full_payload_embedded": false,
+      "live_network_performed": false,
+      "query_id": "mcp.query.001.ptt_hiking",
+      "retrieved_at": "2026-05-27T00:00:00+08:00",
+      "route_relevance": "medium",
+      "snippet_hash": "sha256:public012-pass-view",
+      "source_family": "public_web",
+      "source_page_id": "page.public.012",
+      "stale_risk": "low",
+      "title": "啞口與大景觀景點摘要",
+      "url": "https://example.local/scout/public-summary/pass-view"
+    }
+  ],
+  "fetch_summary_count": 12,
+  "fixture_backed": true,
+  "generated_at": "2026-05-27T00:00:00+08:00",
+  "live_network_performed": false,
+  "planner_kind": "pydantic_ai_tool_orchestration_plan",
+  "project_id": "chilai_nanhua_day1",
+  "pydantic_ai_responsibility": "search_planning_tool_calls_structured_extraction_only",
+  "queries": [
+    {
+      "accepted_result_ids": [
+        "page.ptt.001",
+        "page.ptt.002",
+        "page.ptt.006",
+        "page.ptt.008",
+        "page.ptt.010"
+      ],
+      "generated_at": "2026-05-27T00:00:00+08:00",
+      "live_network_performed": false,
+      "query_id": "mcp.query.001.ptt_hiking",
+      "query_text": "site:ptt.cc/bbs/Hiking 奇萊南華 登山",
+      "rejected_reasons": {},
+      "rejected_result_ids": [],
+      "result_count": 5,
+      "source_family_target": "ptt_hiking",
+      "tool_provider_id": "pydantic_ai_fixture_tools.v1"
+    },
+    {
+      "accepted_result_ids": [
+        "page.biji.003",
+        "page.biji.005",
+        "page.biji.011"
+      ],
+      "generated_at": "2026-05-27T00:00:00+08:00",
+      "live_network_performed": false,
+      "query_id": "mcp.query.002.hiking_biji",
+      "query_text": "site:hiking.biji.co 奇萊南華 登山",
+      "rejected_reasons": {},
+      "rejected_result_ids": [],
+      "result_count": 3,
+      "source_family_target": "hiking_biji",
+      "tool_provider_id": "pydantic_ai_fixture_tools.v1"
+    },
+    {
+      "accepted_result_ids": [
+        "page.sunriver.004",
+        "page.sunriver.009"
+      ],
+      "generated_at": "2026-05-27T00:00:00+08:00",
+      "live_network_performed": false,
+      "query_id": "mcp.query.003.sunriver_culture",
+      "query_text": "site:sunriver.com.tw 奇萊南華 上河 步程",
+      "rejected_reasons": {},
+      "rejected_result_ids": [],
+      "result_count": 2,
+      "source_family_target": "sunriver_culture",
+      "tool_provider_id": "pydantic_ai_fixture_tools.v1"
+    },
+    {
+      "accepted_result_ids": [
+        "page.ptt.008"
+      ],
+      "generated_at": "2026-05-27T00:00:00+08:00",
+      "live_network_performed": false,
+      "query_id": "mcp.query.004.np.old_forest_fork",
+      "query_text": "奇萊南華 舊林道叉路 登山",
+      "rejected_reasons": {},
+      "rejected_result_ids": [],
+      "result_count": 1,
+      "source_family_target": "ptt_hiking",
+      "tool_provider_id": "pydantic_ai_fixture_tools.v1"
+    },
+    {
+      "accepted_result_ids": [
+        "page.biji.003",
+        "page.sunriver.004"
+      ],
+      "generated_at": "2026-05-27T00:00:00+08:00",
+      "live_network_performed": false,
+      "query_id": "mcp.query.005.np.yunhai_station",
+      "query_text": "奇萊南華 雲海保線所 登山",
+      "rejected_reasons": {},
+      "rejected_result_ids": [],
+      "result_count": 2,
+      "source_family_target": "hiking_biji",
+      "tool_provider_id": "pydantic_ai_fixture_tools.v1"
+    },
+    {
+      "accepted_result_ids": [
+        "page.ptt.002",
+        "page.biji.003",
+        "page.sunriver.004",
+        "page.public.012"
+      ],
+      "generated_at": "2026-05-27T00:00:00+08:00",
+      "live_network_performed": false,
+      "query_id": "mcp.query.006.np.heishuitang",
+      "query_text": "奇萊南華 黑水塘 登山",
+      "rejected_reasons": {},
+      "rejected_result_ids": [],
+      "result_count": 4,
+      "source_family_target": "ptt_hiking",
+      "tool_provider_id": "pydantic_ai_fixture_tools.v1"
+    },
+    {
+      "accepted_result_ids": [
+        "page.ptt.001",
+        "page.biji.005",
+        "page.sunriver.009"
+      ],
+      "generated_at": "2026-05-27T00:00:00+08:00",
+      "live_network_performed": false,
+      "query_id": "mcp.query.007.np.major_collapse_wall",
+      "query_text": "奇萊南華 大崩壁 登山",
+      "rejected_reasons": {},
+      "rejected_result_ids": [],
+      "result_count": 3,
+      "source_family_target": "ptt_hiking",
+      "tool_provider_id": "pydantic_ai_fixture_tools.v1"
+    },
+    {
+      "accepted_result_ids": [
+        "page.biji.005",
+        "page.public.007"
+      ],
+      "generated_at": "2026-05-27T00:00:00+08:00",
+      "live_network_performed": false,
+      "query_id": "mcp.query.008.np.rope_bridge",
+      "query_text": "奇萊南華 固定繩橋段 登山",
+      "rejected_reasons": {},
+      "rejected_result_ids": [],
+      "result_count": 2,
+      "source_family_target": "hiking_biji",
+      "tool_provider_id": "pydantic_ai_fixture_tools.v1"
+    },
+    {
+      "accepted_result_ids": [
+        "page.ptt.006",
+        "page.biji.011"
+      ],
+      "generated_at": "2026-05-27T00:00:00+08:00",
+      "live_network_performed": false,
+      "query_id": "mcp.query.009.np.hidden_forest",
+      "query_text": "奇萊南華 隱蔽樹林區 登山",
+      "rejected_reasons": {},
+      "rejected_result_ids": [],
+      "result_count": 2,
+      "source_family_target": "ptt_hiking",
+      "tool_provider_id": "pydantic_ai_fixture_tools.v1"
+    },
+    {
+      "accepted_result_ids": [
+        "page.sunriver.004",
+        "page.public.012"
+      ],
+      "generated_at": "2026-05-27T00:00:00+08:00",
+      "live_network_performed": false,
+      "query_id": "mcp.query.010.np.ridge_pass_view",
+      "query_text": "奇萊南華 稜線啞口觀景點 登山",
+      "rejected_reasons": {},
+      "rejected_result_ids": [],
+      "result_count": 2,
+      "source_family_target": "sunriver_culture",
+      "tool_provider_id": "pydantic_ai_fixture_tools.v1"
+    },
+    {
+      "accepted_result_ids": [
+        "page.ptt.010",
+        "page.biji.011"
+      ],
+      "generated_at": "2026-05-27T00:00:00+08:00",
+      "live_network_performed": false,
+      "query_id": "mcp.query.011.np.mobile_reception_ridge",
+      "query_text": "奇萊南華 稜線通訊點 登山",
+      "rejected_reasons": {},
+      "rejected_result_ids": [],
+      "result_count": 2,
+      "source_family_target": "ptt_hiking",
+      "tool_provider_id": "pydantic_ai_fixture_tools.v1"
+    }
+  ],
+  "query_count": 11,
+  "required_source_families": [
+    "ptt_hiking",
+    "hiking_biji",
+    "sunriver_culture"
+  ],
+  "route_name": "奇萊南華",
+  "source_profile_id": "taiwan_hiking_public_sources.v1",
+  "tool_contracts": [
+    {
+      "capability": "search_query_planning",
+      "fixture_backed": true,
+      "input_schema_name": "NamedPointEvidenceSet",
+      "live_network_allowed_in_tests": false,
+      "notes": [
+        "Pydantic AI（工具編排）may plan queries, but fixture tests do not call live search."
+      ],
+      "output_schema_name": "McpRetrievalPlan",
+      "runtime_truth_allowed": false,
+      "source_family_targets": [
+        "ptt_hiking",
+        "hiking_biji",
+        "sunriver_culture"
+      ],
+      "tool_id": "scout.mcp.search_query_planner.fixture.v1"
+    },
+    {
+      "capability": "web_search",
+      "fixture_backed": true,
+      "input_schema_name": "McpRetrievalQuery",
+      "live_network_allowed_in_tests": false,
+      "notes": [
+        "Search results are fixture summaries; no network is performed in unit tests."
+      ],
+      "output_schema_name": "McpFetchSummary",
+      "runtime_truth_allowed": false,
+      "source_family_targets": [
+        "ptt_hiking",
+        "hiking_biji",
+        "sunriver_culture"
+      ],
+      "tool_id": "scout.mcp.web_search.fixture.v1"
+    },
+    {
+      "capability": "web_fetch_summary",
+      "fixture_backed": true,
+      "input_schema_name": "McpRetrievalQuery",
+      "live_network_allowed_in_tests": false,
+      "notes": [
+        "Only short metadata/snippet hashes are stored; copyrighted payload bodies stay out of artifacts."
+      ],
+      "output_schema_name": "McpFetchSummary",
+      "runtime_truth_allowed": false,
+      "source_family_targets": [
+        "ptt_hiking",
+        "hiking_biji",
+        "sunriver_culture"
+      ],
+      "tool_id": "scout.mcp.fetch_summary.fixture.v1"
+    },
+    {
+      "capability": "ocr_label_normalization",
+      "fixture_backed": true,
+      "input_schema_name": "NamedPointOcrLabel",
+      "live_network_allowed_in_tests": false,
+      "notes": [
+        "OCR labels keep source image hash, bbox, confidence, and remain review-required."
+      ],
+      "output_schema_name": "McpOcrLabel",
+      "runtime_truth_allowed": false,
+      "source_family_targets": [
+        "offline_map_ocr"
+      ],
+      "tool_id": "scout.mcp.ocr_label_normalizer.fixture.v1"
+    }
+  ],
+  "truth_decision_allowed": false
+}

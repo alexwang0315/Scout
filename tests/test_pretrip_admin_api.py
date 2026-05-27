@@ -423,6 +423,84 @@ def test_pretrip_project_workspace_api_rejects_without_workspace_root():
     assert _repo_fixture_bytes() == original_fixture_bytes
 
 
+def test_pretrip_mcp_review_actions_write_only_workspace_log(tmp_path):
+    original_fixture_bytes = _repo_fixture_bytes()
+    workspace_root = _copy_pretrip_workspace(tmp_path)
+    workspace_project_root = workspace_root / PROJECT_ID
+    client = TestClient(create_admin_app(pretrip_workspace_root=workspace_root))
+
+    response = client.post(
+        f"/admin/pretrip/projects/{PROJECT_ID}/mcp-review-actions",
+        json={
+            "mcp_id": "mcp.heishuitang.002",
+            "decision": "linked",
+            "summary": "Link MCP to nearest Scout CP.",
+            "linked_cp_candidate_id": "cp.002",
+            "persist_to_workspace": True,
+            "decided_at": "2026-05-27T00:00:00+00:00",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["artifact_kind"] == "pretrip_mcp_review_action"
+    assert payload["counts"]["action_count"] == 1
+    assert payload["boundary"]["workspace_file_mutation_allowed"] is True
+    assert payload["boundary"]["runtime_mutation_allowed"] is False
+    assert payload["boundary"]["phase1_runtime_mutation_allowed"] is False
+    assert payload["boundary"]["compiles_mission_graph"] is False
+    assert payload["mutation"]["workspace_mcp_review_log_mutated"] is True
+    log_path = workspace_project_root / "outputs" / "mcp" / "mcp_review_actions.json"
+    assert log_path.is_file()
+    log = json.loads(log_path.read_text(encoding="utf-8"))
+    assert log["actions"][0]["decision"] == "linked"
+    assert log["actions"][0]["candidate_label"] == "黑水塘"
+    assert log["actions"][0]["support_status"] == "supported"
+    assert log["actions"][0]["runtime_safety_truth"] is False
+    assert _repo_fixture_bytes() == original_fixture_bytes
+
+
+def test_pretrip_mcp_review_action_preview_does_not_write_workspace(tmp_path):
+    workspace_root = _copy_pretrip_workspace(tmp_path)
+    workspace_project_root = workspace_root / PROJECT_ID
+    client = TestClient(create_admin_app(pretrip_workspace_root=workspace_root))
+
+    response = client.post(
+        f"/admin/pretrip/projects/{PROJECT_ID}/mcp-review-actions",
+        json={
+            "mcp_id": "mcp.heishuitang.002",
+            "decision": "accepted",
+            "summary": "Preview only.",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["artifact_kind"] == "pretrip_mcp_review_action_preview"
+    assert payload["preview"] is True
+    assert payload["mutation"]["workspace_files_mutated"] is False
+    assert not (workspace_project_root / "outputs" / "mcp" / "mcp_review_actions.json").exists()
+
+
+def test_pretrip_mcp_review_actions_reject_unknown_linked_cp(tmp_path):
+    workspace_root = _copy_pretrip_workspace(tmp_path)
+    client = TestClient(create_admin_app(pretrip_workspace_root=workspace_root))
+
+    response = client.post(
+        f"/admin/pretrip/projects/{PROJECT_ID}/mcp-review-actions",
+        json={
+            "mcp_id": "mcp.heishuitang.002",
+            "decision": "linked",
+            "summary": "Bad CP link.",
+            "linked_cp_candidate_id": "cp.missing",
+            "persist_to_workspace": True,
+        },
+    )
+
+    assert response.status_code == 409
+    assert "unknown Scout CP candidate" in response.json()["detail"]
+
+
 def test_pretrip_import_gpx_preview_validates_paths_without_writing(tmp_path):
     original_fixture_bytes = _repo_fixture_bytes()
     workspace_root = tmp_path / "pretrip_workspace"
