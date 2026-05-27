@@ -251,6 +251,9 @@ def test_loads_debug_projection_view_with_shared_map_and_dense_timeline():
     assert projection["counts"]["checkpoint_candidate_count"] == 110
     assert projection["counts"]["segment_candidate_count"] == 109
     assert projection["counts"]["reference_track_count"] == 23
+    assert projection["counts"]["mcp_candidate_count"] == 6
+    assert projection["counts"]["mcp_suppressed_point_count"] == 2
+    assert projection["counts"]["mcp_review_action_count"] == 0
     assert projection["counts"]["risk_ribbon_segment_count"] == 841
     assert projection["counts"]["source_lifecycle_event_count"] == 4
     assert projection["route"]["point_count"] == 6909
@@ -262,6 +265,22 @@ def test_loads_debug_projection_view_with_shared_map_and_dense_timeline():
     )
     assert projection["route"]["display_geometry"]["display_point_count"] > 6000
     assert projection["reference_tracks"]["reference_track_count"] == 23
+    assert projection["major_critical_points"]["status"] == "candidate_only"
+    assert projection["major_critical_points"]["counts"]["mcp_candidate_count"] == 6
+    assert (
+        projection["major_critical_points"]["boundary"]["runtime_safety_truth"]
+        is False
+    )
+    assert (
+        projection["major_critical_points"]["retrieval"]["live_network_performed"]
+        is False
+    )
+    assert any(
+        layer["layer_id"] == "mcp"
+        and layer["source_path"] == "outputs/mcp/mcp_candidates.json"
+        and layer["external_api_calls_made"] is False
+        for layer in projection["map_layers"]
+    )
     assert projection["risk_ribbon"]["counts"]["segment_count"] == 841
     assert projection["overpass_evidence"]["counts"]["candidates"] == 219
     assert projection["boundary"]["phase1_runtime_mutation_allowed"] is False

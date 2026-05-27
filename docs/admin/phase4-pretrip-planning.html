@@ -4030,7 +4030,7 @@
       }), false, "checkpoint"));
       tree.appendChild(treeGroup("Major Critical Points", view.major_critical_points?.candidates || [], item => ({
         label: item.label || item.mcp_id,
-        sublabel: `${item.confidence} | ${item.cp_support_reconciliation?.support_status || "support-review"} | ${Math.round(item.distance_m || 0)}m | ${Math.round((item.mention_ratio || 0) * 100)}% mentions`
+        sublabel: `${item.confidence} | ${item.cp_support_reconciliation?.support_status || "support-review"} | ${Math.round(item.distance_m || 0)}m | ${Math.round((item.mention_ratio || 0) * 100)}% / ${item.accepted_evidence_page_count || 0} pages | families ${(item.source_family_coverage?.present || []).join(", ") || "-"} | suppressed ${(item.nearby_points_suppressed_by_spacing || []).length}`
       }), true, "mcp"));
       tree.appendChild(treeGroup("Risk Score", view.risk_score?.points || [], item => ({
         label: `${item.score_field || "pretrip_risk"} ${Number(item.pretrip_risk || 0).toFixed(1)}`,

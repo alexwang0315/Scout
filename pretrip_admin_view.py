@@ -892,6 +892,18 @@ def load_pretrip_debug_projection_view(
     risk_heatmap_metadata_raw = _load_optional_json(
         optional_project_path("calibrated_risk_heatmap_metadata_ref")
     )
+    mcp_named_point_evidence_raw = _load_optional_json(
+        optional_project_path("mcp_named_point_evidence_ref")
+    )
+    mcp_retrieval_plan_raw = _load_optional_json(
+        optional_project_path("mcp_retrieval_plan_ref")
+    )
+    mcp_ocr_labels_raw = _load_optional_json(optional_project_path("mcp_ocr_labels_ref"))
+    mcp_candidates_raw = _load_optional_json(optional_project_path("mcp_candidates_ref"))
+    mcp_cp_support_reconciliation_raw = _load_optional_json(
+        optional_project_path("mcp_cp_support_reconciliation_ref")
+    )
+    mcp_review_log_raw = _load_optional_json(optional_project_path("mcp_review_log_ref"))
     source_refs = {
         "project": "project.json",
         "route_summary": project["route_summary_ref"],
@@ -927,6 +939,15 @@ def load_pretrip_debug_projection_view(
             "gis_perception_ai_judgements_ref",
             "",
         ),
+        "mcp_named_point_evidence": project.get("mcp_named_point_evidence_ref", ""),
+        "mcp_retrieval_plan": project.get("mcp_retrieval_plan_ref", ""),
+        "mcp_ocr_labels": project.get("mcp_ocr_labels_ref", ""),
+        "mcp_candidates": project.get("mcp_candidates_ref", ""),
+        "mcp_cp_support_reconciliation": project.get(
+            "mcp_cp_support_reconciliation_ref",
+            "",
+        ),
+        "mcp_review_log": project.get("mcp_review_log_ref", ""),
         "weather_daylight": project.get("weather_daylight_evidence_ref", ""),
     }
     checkpoints = _candidate_list(
@@ -1034,6 +1055,17 @@ def load_pretrip_debug_projection_view(
             include_keys=("status", "findings"),
         ),
     }
+    if mcp_candidates_raw is not None:
+        view["major_critical_points"] = _mcp_summary(
+            project_id=project_id,
+            mcp_candidates=mcp_candidates_raw,
+            named_point_evidence=mcp_named_point_evidence_raw,
+            retrieval_plan=mcp_retrieval_plan_raw,
+            ocr_labels=mcp_ocr_labels_raw,
+            cp_support_reconciliation=mcp_cp_support_reconciliation_raw,
+            review_log=mcp_review_log_raw,
+            source_refs=source_refs,
+        )
     view["gis_perception_timeline"] = _gis_perception_timeline_summary(
         project_id,
         view["gis_perception"],
@@ -1081,6 +1113,7 @@ def load_pretrip_debug_projection_view(
         "risk_ribbon": view["risk_ribbon"],
         "risk_heatmap": view["risk_heatmap"],
         "risk_delta": view["risk_delta"],
+        "major_critical_points": view.get("major_critical_points"),
         "map_layers": view["map_layers"],
         "readiness": view["readiness"],
         "timeline_events": timeline_events,
@@ -1111,6 +1144,21 @@ def load_pretrip_debug_projection_view(
             "risk_delta_segment_count": view["risk_delta"]["counts"].get(
                 "segment_count",
                 0,
+            ),
+            "mcp_candidate_count": (
+                view.get("major_critical_points", {})
+                .get("counts", {})
+                .get("mcp_candidate_count", 0)
+            ),
+            "mcp_suppressed_point_count": (
+                view.get("major_critical_points", {})
+                .get("counts", {})
+                .get("suppressed_point_count", 0)
+            ),
+            "mcp_review_action_count": (
+                view.get("major_critical_points", {})
+                .get("counts", {})
+                .get("review_action_count", 0)
             ),
             "timeline_event_count": len(timeline_events),
             "source_lifecycle_event_count": lifecycle_events.get("event_count", 0),

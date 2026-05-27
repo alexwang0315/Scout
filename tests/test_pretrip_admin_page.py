@@ -78,6 +78,9 @@ def test_pretrip_admin_page_contains_expected_layout_contract():
     assert "Major Critical Points" in html
     assert "view.major_critical_points?.candidates" in html
     assert "item.cp_support_reconciliation?.support_status" in html
+    assert "item.accepted_evidence_page_count" in html
+    assert "item.source_family_coverage?.present" in html
+    assert "item.nearby_points_suppressed_by_spacing" in html
     assert "Risk Score" in html
     assert "view.risk_score?.points" in html
     assert "Baseline Risk" in html
