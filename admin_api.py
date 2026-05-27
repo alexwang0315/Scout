@@ -45,6 +45,10 @@ from pretrip_energy_projection import (
     DEFAULT_PRETRIP_ENERGY_PROJECTION_REF,
     write_pretrip_energy_reserve_projection,
 )
+from post_analysis_energy_feedback import (
+    POST_ANALYSIS_ENERGY_FEEDBACK_REF,
+    write_post_analysis_energy_feedback,
+)
 from scout_companion_match_admin import refresh_companion_match_review_for_workspace
 from pretrip_departure_reviewed_candidates import (
     DEFAULT_DEPARTURE_REVIEWED_CANDIDATES_REF,
@@ -820,6 +824,65 @@ def create_admin_router(
         return {
             "project_id": project_id,
             **result,
+        }
+
+    @router.post("/pretrip/projects/{project_id}/refresh-energy-feedback")
+    def pretrip_refresh_energy_feedback(project_id: str) -> dict[str, Any]:
+        try:
+            project_root = _pretrip_workspace_project_root(
+                pretrip_workspace_root,
+                project_id=project_id,
+            )
+            if project_root is None:
+                raise FileNotFoundError(
+                    "energy feedback refresh requires a local workspace project"
+                )
+            if _pretrip_project_root_is_repo_fixture(project_root):
+                raise ValueError("energy feedback refresh writes only project workspaces")
+            pretrip_projection_path = project_root / DEFAULT_PRETRIP_ENERGY_PROJECTION_REF
+            capability_timeline_path = project_root / "outputs" / "capability_timeline.json"
+            output_path = project_root / POST_ANALYSIS_ENERGY_FEEDBACK_REF
+            feedback = write_post_analysis_energy_feedback(
+                pretrip_projection_path=pretrip_projection_path,
+                capability_timeline_path=capability_timeline_path,
+                output_path=output_path,
+                root=project_root,
+            )
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (ValueError, OSError, ValidationError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+        return {
+            "project_id": project_id,
+            "artifact_kind": "post_analysis_energy_feedback_refresh_result",
+            "persisted": True,
+            "post_analysis_energy_feedback": feedback.model_dump(mode="json"),
+            "paths": {
+                "project_root": str(project_root),
+                "pretrip_projection": str(pretrip_projection_path),
+                "capability_timeline": str(capability_timeline_path),
+                "post_analysis_energy_feedback": str(output_path),
+            },
+            "boundary": {
+                **feedback.boundary.model_dump(mode="json"),
+                "workspace_mutation_allowed": True,
+                "workspace_file_written": True,
+                "pretrip_eta_autocalibration_allowed": False,
+                "mission_graph_compile_allowed": False,
+                "runtime_safety_truth": False,
+            },
+            "mutation": {
+                "workspace_energy_feedback_written": True,
+                "project_source_mutated": False,
+                "mission_graph_mutated": False,
+                "runtime_mutated": False,
+                "phase1_runtime_mutated": False,
+                "safety_api_called": False,
+                "fixture_files_mutated": False,
+                "raw_health_payload_shared": False,
+                "raw_track_shared": False,
+            },
         }
 
     @router.get("/tiles/osm/{z}/{x}/{y}.png")

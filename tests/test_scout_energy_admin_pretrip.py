@@ -107,6 +107,7 @@ def test_admin_wearable_inventory_import_delete_and_refresh(tmp_path, monkeypatc
     assert imported.status_code == 200
     assert imported.json()["source_provider"] == "apple_health_export"
     assert imported.json()["boundary"]["medical_diagnosis"] is False
+    assert imported.json()["validation"]["valid"] is True
 
     second = client.post(
         "/admin/wearables/import",
@@ -136,6 +137,37 @@ def test_admin_wearable_inventory_import_delete_and_refresh(tmp_path, monkeypatc
     assert deleted.json()["mutation"]["inventory_file_deleted"] is True
     assert client.get("/admin/wearables").json()["activity_count"] == 1
     assert "/safety/" not in json.dumps(refreshed)
+
+
+def test_admin_validates_wearable_summary_before_import(tmp_path, monkeypatch):
+    monkeypatch.setenv("SCOUT_DATA_ROOT", str(tmp_path / "data"))
+    client = TestClient(create_admin_app())
+
+    validation = client.post(
+        "/admin/wearables/validate",
+        json={"source_path": str(WEARABLE_FIXTURES[0])},
+    )
+    assert validation.status_code == 200
+    payload = validation.json()
+    assert payload["valid"] is True
+    assert payload["privacy"]["raw_health_payload_shared"] is False
+    assert payload["boundary"]["phase1_runtime_safety_truth"] is False
+
+    bad_payload = json.loads(WEARABLE_FIXTURES[0].read_text(encoding="utf-8"))
+    bad_payload["raw_health_payload"] = {"forbidden": True}
+    bad_path = tmp_path / "bad_wearable_summary.json"
+    bad_path.write_text(json.dumps(bad_payload), encoding="utf-8")
+    bad = client.post(
+        "/admin/wearables/validate",
+        json={"source_path": str(bad_path)},
+    )
+    assert bad.status_code == 200
+    assert bad.json()["valid"] is False
+    imported = client.post(
+        "/admin/wearables/import",
+        json={"source_path": str(bad_path)},
+    )
+    assert imported.status_code == 422
 
 
 def test_admin_refreshes_pretrip_energy_projection_from_wearable_inventory(tmp_path, monkeypatch):
@@ -224,4 +256,60 @@ def test_admin_refreshes_companion_match_review_from_wearable_inventory(tmp_path
     assert companion["counts"]["candidate_count"] == 1
     assert companion["boundary"]["runtime_safety_truth"] is False
     assert companion["summary"]["auto_applies_to_eta"] is False
+    assert "/safety/" not in json.dumps(payload)
+
+
+def test_admin_refreshes_post_analysis_energy_feedback_from_workspace_outputs(tmp_path, monkeypatch):
+    monkeypatch.setenv("SCOUT_DATA_ROOT", str(tmp_path / "data"))
+    workspace_root = tmp_path / "workspaces"
+    workspace_project_root = workspace_root / "chilai_nanhua_day1"
+    shutil.copytree(PRETRIP_FIXTURE_ROOT, workspace_project_root)
+    shutil.copy2(
+        POST_ANALYSIS_OUTPUTS / "capability_timeline.json",
+        workspace_project_root / "outputs" / "capability_timeline.json",
+    )
+    client = TestClient(create_admin_app(pretrip_workspace_root=workspace_root))
+
+    for fixture in WEARABLE_FIXTURES:
+        response = client.post(
+            "/admin/wearables/import",
+            json={"source_path": str(fixture)},
+        )
+        assert response.status_code == 200
+    projection = client.post(
+        "/admin/pretrip/projects/chilai_nanhua_day1/refresh-energy-projection",
+        json={"reference_date": "2026-05-27"},
+    )
+    assert projection.status_code == 200
+
+    refresh = client.post(
+        "/admin/pretrip/projects/chilai_nanhua_day1/refresh-energy-feedback",
+        json={},
+    )
+
+    assert refresh.status_code == 200
+    payload = refresh.json()
+    assert payload["artifact_kind"] == "post_analysis_energy_feedback_refresh_result"
+    assert payload["post_analysis_energy_feedback"]["artifact_kind"] == (
+        "post_analysis_energy_reserve_feedback"
+    )
+    assert payload["post_analysis_energy_feedback"]["predicted_depletion_checkpoint_name"] == (
+        "雲海保線所"
+    )
+    assert payload["boundary"]["medical_diagnosis"] is False
+    assert payload["boundary"]["phase1_runtime_safety_truth"] is False
+    assert payload["boundary"]["safety_api_calls_allowed"] is False
+    assert payload["boundary"]["pretrip_eta_autocalibration_allowed"] is False
+    assert payload["boundary"]["mission_graph_compile_allowed"] is False
+    assert payload["mutation"]["workspace_energy_feedback_written"] is True
+    assert payload["mutation"]["raw_track_shared"] is False
+    assert Path(payload["paths"]["post_analysis_energy_feedback"]).exists()
+
+    view = client.get("/admin/pretrip/projects/chilai_nanhua_day1")
+    assert view.status_code == 200
+    feedback = view.json()["post_analysis_energy_feedback"]
+    assert feedback["summary"]["predicted_depletion_checkpoint_name"] == "雲海保線所"
+    assert feedback["summary"]["auto_applies_to_eta"] is False
+    assert feedback["boundary"]["runtime_safety_truth"] is False
+    assert "<trkpt" not in json.dumps(feedback)
     assert "/safety/" not in json.dumps(payload)

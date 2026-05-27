@@ -1492,11 +1492,13 @@
             </label>
             <div class="import-gpx-actions">
               <button id="wearableInventoryRefresh" class="tool-button" type="button">Load inventory</button>
+              <button id="wearableValidateRun" class="tool-button" type="button">Validate summary</button>
               <button id="wearableImportRun" class="tool-button" type="button">Import summary</button>
               <button id="wearableDeleteRun" class="tool-button" type="button">Delete summary</button>
               <button id="wearableEnergyRefreshRun" class="tool-button" type="button">Refresh reserve</button>
               <button id="wearablePretripProjectionRun" class="tool-button" type="button">Apply to ETA</button>
               <button id="wearableCompanionMatchRun" class="tool-button" type="button">Refresh match</button>
+              <button id="wearableEnergyFeedbackRun" class="tool-button" type="button">Energy feedback</button>
             </div>
             <div id="wearableStatus" class="write-status" role="status" aria-live="polite">Wearable controls write only local inventory artifacts and workspace pretrip energy projection.</div>
             <pre id="wearableResult" class="import-gpx-result">No wearable request sent.</pre>
@@ -3002,11 +3004,13 @@
     function setWearableBusy(isBusy) {
       [
         "wearableInventoryRefresh",
+        "wearableValidateRun",
         "wearableImportRun",
         "wearableDeleteRun",
         "wearableEnergyRefreshRun",
         "wearablePretripProjectionRun",
-        "wearableCompanionMatchRun"
+        "wearableCompanionMatchRun",
+        "wearableEnergyFeedbackRun"
       ].forEach(id => {
         const node = document.getElementById(id);
         if (node) node.disabled = isBusy;
@@ -3054,6 +3058,31 @@
         await loadWearableInventory();
       } catch (error) {
         setWearableStatus(`Wearable import failed: ${error.message || error}`, "error");
+        setWearableResult({error: error.message || String(error), payload});
+      } finally {
+        setWearableBusy(false);
+      }
+    }
+    async function validateWearableSummary() {
+      const sourcePath = wearableInputValue("wearableSourcePath");
+      if (!sourcePath) {
+        setWearableStatus("Wearable activity summary path is required.", "error");
+        setWearableResult({error: "missing source_path"});
+        return;
+      }
+      const payload = {source_path: sourcePath};
+      setWearableBusy(true);
+      setWearableStatus("Validating wearable activity summary...");
+      try {
+        const result = await parseWriteResponse(await fetch(`${apiBase()}/admin/wearables/validate`, {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify(payload)
+        }));
+        setWearableResult(result);
+        setWearableStatus(result.valid ? "Wearable summary contract is valid." : "Wearable summary contract failed validation.", result.valid ? "success" : "error");
+      } catch (error) {
+        setWearableStatus(`Wearable validation failed: ${error.message || error}`, "error");
         setWearableResult({error: error.message || String(error), payload});
       } finally {
         setWearableBusy(false);
@@ -3138,6 +3167,25 @@
       } catch (error) {
         setWearableStatus(`Companion match refresh failed: ${error.message || error}`, "error");
         setWearableResult({error: error.message || String(error), payload});
+      } finally {
+        setWearableBusy(false);
+      }
+    }
+    async function refreshPostAnalysisEnergyFeedback() {
+      setWearableBusy(true);
+      setWearableStatus("Refreshing post-analysis energy feedback artifact...");
+      try {
+        const result = await parseWriteResponse(await fetch(`${apiBase()}/admin/pretrip/projects/${PROJECT_ID}/refresh-energy-feedback`, {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({})
+        }));
+        setWearableResult(result);
+        setWearableStatus("Post-analysis energy feedback refreshed in the project workspace.", "success");
+        await reloadProjectView();
+      } catch (error) {
+        setWearableStatus(`Energy feedback refresh failed: ${error.message || error}`, "error");
+        setWearableResult({error: error.message || String(error)});
       } finally {
         setWearableBusy(false);
       }
@@ -4247,11 +4295,13 @@
       document.getElementById("prepareLayersRun").addEventListener("click", runPrepareLayers);
       document.getElementById("wearablesForm").addEventListener("submit", event => event.preventDefault());
       document.getElementById("wearableInventoryRefresh").addEventListener("click", loadWearableInventory);
+      document.getElementById("wearableValidateRun").addEventListener("click", validateWearableSummary);
       document.getElementById("wearableImportRun").addEventListener("click", importWearableSummary);
       document.getElementById("wearableDeleteRun").addEventListener("click", deleteWearableSummary);
       document.getElementById("wearableEnergyRefreshRun").addEventListener("click", refreshWearableEnergy);
       document.getElementById("wearablePretripProjectionRun").addEventListener("click", refreshPretripEnergyProjection);
       document.getElementById("wearableCompanionMatchRun").addEventListener("click", refreshCompanionMatchReview);
+      document.getElementById("wearableEnergyFeedbackRun").addEventListener("click", refreshPostAnalysisEnergyFeedback);
       svg.addEventListener("pointerdown", beginMapRectangleZoom);
       svg.addEventListener("pointermove", updateMapRectangleZoom);
       svg.addEventListener("pointerup", event => {

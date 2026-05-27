@@ -311,11 +311,13 @@ def test_pretrip_admin_page_has_wearable_inventory_energy_controls():
         "wearableCompanionCandidatePath",
         "wearableOverwriteImport",
         "wearableInventoryRefresh",
+        "wearableValidateRun",
         "wearableImportRun",
         "wearableDeleteRun",
         "wearableEnergyRefreshRun",
         "wearablePretripProjectionRun",
         "wearableCompanionMatchRun",
+        "wearableEnergyFeedbackRun",
         "wearableStatus",
         "wearableResult",
     ):
@@ -328,21 +330,25 @@ def test_pretrip_admin_page_has_wearable_inventory_energy_controls():
         "setWearableBusy",
         "setWearableResult",
         "loadWearableInventory",
+        "validateWearableSummary",
         "importWearableSummary",
         "deleteWearableSummary",
         "refreshWearableEnergy",
         "refreshPretripEnergyProjection",
         "refreshCompanionMatchReview",
+        "refreshPostAnalysisEnergyFeedback",
     ):
         assert f"function {function_name}" in html
 
     assert 'DETAIL_TAB_IDS = new Set(["pre_trip_planning", "post_analysis", "review_workspace", "import_gpx", "wearables"])' in html
     assert 'document.getElementById("wearablesPanel").classList.toggle("is-active", tab === "wearables")' in html
     assert "/admin/wearables" in html
+    assert "/admin/wearables/validate" in html
     assert "/admin/wearables/import" in html
     assert "/admin/wearables/refresh-energy" in html
     assert "/admin/pretrip/projects/${PROJECT_ID}/refresh-energy-projection" in html
     assert "/admin/pretrip/projects/${PROJECT_ID}/refresh-companion-match" in html
+    assert "/admin/pretrip/projects/${PROJECT_ID}/refresh-energy-feedback" in html
     assert "candidate_capsule_paths" in html
     assert "medical_diagnosis: false" in html
     assert "phase1_runtime_safety_truth: false" in html
@@ -740,14 +746,16 @@ def test_pretrip_admin_page_posts_only_local_workspace_routes():
     assert "fetch(`${apiBase()}/admin/pretrip/projects/${PROJECT_ID}/prepare-layers-preview`, {" in html
     assert "fetch(`${apiBase()}/admin/pretrip/projects/${PROJECT_ID}/prepare-layers`, {" in html
     assert "fetch(`${apiBase()}/admin/pretrip/projects/${PROJECT_ID}/mcp-review-actions`, {" in html
-    assert html.count('method: "POST"') == 18
+    assert "fetch(`${apiBase()}/admin/pretrip/projects/${PROJECT_ID}/refresh-companion-match`, {" in html
+    assert "fetch(`${apiBase()}/admin/pretrip/projects/${PROJECT_ID}/refresh-energy-feedback`, {" in html
+    assert html.count('method: "POST"') == 20
     assert shared_script.count('method: "POST"') == 1
-    assert html.count("body: JSON.stringify({") == 3
-    assert html.count("body: JSON.stringify(payload)") == 9
+    assert html.count("body: JSON.stringify({") == 4
+    assert html.count("body: JSON.stringify(payload)") == 10
     assert html.count("body: JSON.stringify({...payload, confirm_import: true})") == 1
     assert html.count("body: JSON.stringify({...payload, confirm_prepare: true})") == 1
-    assert html.count("body: JSON.stringify(") == 13
-    assert html.count('headers: {"Content-Type": "application/json"}') == 13
+    assert html.count("body: JSON.stringify(") == 15
+    assert html.count('headers: {"Content-Type": "application/json"}') == 15
     assert shared_script.count('headers: {"Content-Type": "application/json"}') == 1
     assert 'headers: {"Content-Type": "application/json"}' in html
     assert "body: JSON.stringify({" in html
