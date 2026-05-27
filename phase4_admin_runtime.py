@@ -38,6 +38,9 @@ def create_phase4_admin_runtime_app(
     assistant_enabled = _is_true_like(env.get("SCOUT_AI_ASSISTANT_ENABLED", "1"))
     debug_enabled = _is_true_like(env.get("SCOUT_DEBUG_API_ENABLED"))
     debug_log_path = env.get("SCOUT_DEBUG_LOG_PATH")
+    agent_trace_log_path = env.get("SCOUT_AGENT_TRACE_LOG_PATH")
+    spatial_imprint_store_path = env.get("SCOUT_SPATIAL_IMPRINT_STORE_PATH")
+    spatial_imprint_trigger_report_path = env.get("SCOUT_SPATIAL_IMPRINT_TRIGGER_REPORT_PATH")
     hardware_readiness_fixture_path = env.get("SCOUT_HARDWARE_READINESS_FIXTURE_PATH")
     auth_config = _admin_auth_config(env)
     provider = MockAssistantProvider()
@@ -86,7 +89,14 @@ def create_phase4_admin_runtime_app(
     app.include_router(create_hardware_readiness_router(**hardware_router_kwargs))
     if debug_enabled:
         debug_log = FileRuntimeDebugEventLog(debug_log_path) if debug_log_path else None
-        app.include_router(create_debug_router(debug_log=debug_log))
+        app.include_router(
+            create_debug_router(
+                debug_log=debug_log,
+                agent_trace_log_path=agent_trace_log_path,
+                spatial_imprint_store_path=spatial_imprint_store_path,
+                spatial_imprint_trigger_report_path=spatial_imprint_trigger_report_path,
+            )
+        )
         app.include_router(create_debug_page_router())
 
     @app.get("/health")
@@ -104,11 +114,29 @@ def create_phase4_admin_runtime_app(
             "routes": {
                 "pretrip_admin": "/admin/pretrip",
                 "pretrip_project": "/admin/pretrip/projects/chilai_nanhua_day1",
+                "wearable_inventory": "/admin/wearables",
+                "wearable_import": "/admin/wearables/import",
+                "wearable_energy_refresh": "/admin/wearables/refresh-energy",
+                "pretrip_energy_projection_refresh": (
+                    "/admin/pretrip/projects/{project_id}/refresh-energy-projection"
+                ),
+                "pretrip_companion_match_refresh": (
+                    "/admin/pretrip/projects/{project_id}/refresh-companion-match"
+                ),
                 "assistant_status": "/assistant/status" if assistant_enabled else None,
                 "hardware_readiness": "/admin/hardware-readiness",
                 "hardware_readiness_context": "/admin/hardware-readiness/context",
                 "debug_admin": "/admin/debug" if debug_enabled else None,
                 "debug_events": "/debug/events" if debug_enabled else None,
+                "agent_trace_log": str(agent_trace_log_path) if agent_trace_log_path else None,
+                "spatial_imprint_store": (
+                    str(spatial_imprint_store_path) if spatial_imprint_store_path else None
+                ),
+                "spatial_imprint_trigger_report": (
+                    str(spatial_imprint_trigger_report_path)
+                    if spatial_imprint_trigger_report_path
+                    else None
+                ),
             },
             "auth": _admin_auth_status(auth_config),
             "boundaries": _runtime_boundaries(

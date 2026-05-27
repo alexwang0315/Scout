@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx xmlns="http://www.topografix.com/GPX/1/1" version="1.1" creator="Scout post-analysis fixture">
+  <trk>
+    <name>post-analysis capability fixture</name>
+    <trkseg>
+      <trkpt lat="25.0000000" lon="121.0000000">
+        <ele>100</ele>
+        <time>2026-05-01T00:00:00Z</time>
+      </trkpt>
+      <trkpt lat="25.0000000" lon="121.0030000">
+        <ele>130</ele>
+        <time>2026-05-01T00:05:00Z</time>
+      </trkpt>
+      <trkpt lat="25.0000000" lon="121.0060000">
+        <ele>160</ele>
+        <time>2026-05-01T00:10:00Z</time>
+      </trkpt>
+      <trkpt lat="25.0000000" lon="121.0090000">
+        <ele>220</ele>
+        <time>2026-05-01T00:15:00Z</time>
+      </trkpt>
+      <trkpt lat="25.0000100" lon="121.0090100">
+        <ele>220</ele>
+        <time>2026-05-01T00:18:00Z</time>
+      </trkpt>
+      <trkpt lat="24.9999900" lon="121.0089900">
+        <ele>220</ele>
+        <time>2026-05-01T00:22:00Z</time>
+      </trkpt>
+      <trkpt lat="25.0030000" lon="121.0090000">
+        <ele>250</ele>
+        <time>2026-05-01T00:27:00Z</time>
+      </trkpt>
+      <trkpt lat="25.0060000" lon="121.0090000">
+        <ele>280</ele>
+        <time>2026-05-01T00:32:00Z</time>
+      </trkpt>
+      <trkpt lat="25.0090000" lon="121.0090000">
+        <ele>260</ele>
+        <time>2026-05-01T00:37:00Z</time>
+      </trkpt>
+    </trkseg>
+  </trk>
+</gpx>

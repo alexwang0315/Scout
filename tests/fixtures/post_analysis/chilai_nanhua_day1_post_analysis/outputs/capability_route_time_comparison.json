@@ -1,0 +1,59 @@
+{
+  "artifact_kind": "post_analysis_route_time_comparison",
+  "artifact_version": "route_time_comparison.v1",
+  "boundary": {
+    "incident_package_rewrite_allowed": false,
+    "mission_graph_rewrite_allowed": false,
+    "phase1_runtime_mutation_allowed": false,
+    "post_analysis_only": true,
+    "raw_track_shared_by_default": false,
+    "runtime_safety_truth": false,
+    "safety_api_calls_allowed": false
+  },
+  "case_id": "chilai_nanhua_day1_post_analysis",
+  "comparison_basis": "moving_time",
+  "route_family": "chilai_nanhua_day1",
+  "route_time_source": "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/route_time_entries.json",
+  "segments": [
+    {
+      "comparison_basis": "moving_time",
+      "comparison_id": "route_time.cp.start_to_cp.mid",
+      "confidence": "medium",
+      "delta_vs_guide_moving_min": -5,
+      "edge_id": "cp.start_to_cp.mid",
+      "guide_time_min": 20,
+      "route_time_source": "guide.seg.start_mid",
+      "segment_id": "seg.start_mid",
+      "source_refs": [
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/route_time_entries.json",
+        "guide.fixture.start_mid"
+      ],
+      "user_elapsed_time_min": 15,
+      "user_moving_time_min": 15
+    },
+    {
+      "comparison_basis": "moving_time",
+      "comparison_id": "route_time.cp.mid_to_cp.finish",
+      "confidence": "medium",
+      "delta_vs_guide_moving_min": -3,
+      "edge_id": "cp.mid_to_cp.finish",
+      "guide_time_min": 18,
+      "route_time_source": "guide.seg.mid_finish",
+      "segment_id": "seg.mid_finish",
+      "source_refs": [
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/route_time_entries.json",
+        "guide.fixture.mid_finish"
+      ],
+      "user_elapsed_time_min": 22,
+      "user_moving_time_min": 15
+    }
+  ],
+  "summary": {
+    "comparison_count": 2,
+    "faster_than_guide_count": 2,
+    "fastest_relative_delta_min": -5,
+    "informational_only": true,
+    "slower_than_guide_count": 0,
+    "slowest_relative_delta_min": -3
+  }
+}

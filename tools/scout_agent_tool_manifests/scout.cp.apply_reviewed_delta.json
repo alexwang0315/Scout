@@ -1,0 +1,54 @@
+{
+  "id": "scout.cp.apply_reviewed_delta",
+  "version": "0.1.0",
+  "description": "Write a reversible candidate-only CP reviewed delta artifact from the local review decision apply plan without mutating package, MissionGraph, or runtime state.",
+  "command": {
+    "argv": [
+      "{python}",
+      "-m",
+      "scout_agent_builtin_tools",
+      "cp-apply-reviewed-delta",
+      "--input",
+      "{input}",
+      "--json"
+    ],
+    "dry_run_argument": "--dry-run"
+  },
+  "mode": "workspace_write",
+  "input_schema_ref": "schemas/scout_agent/cp_apply_reviewed_delta.request.json",
+  "output_schema_ref": "schemas/scout_agent/tool_result.json",
+  "allowed_reads": [
+    "pretrip.workspace.project",
+    "pretrip.review_decision_apply_plan"
+  ],
+  "allowed_writes": [
+    "pretrip.workspace.cp_reviewed_delta"
+  ],
+  "forbidden_writes": [
+    "pretrip.source_artifacts",
+    "pretrip.workspace.checkpoint_candidates",
+    "pretrip.package",
+    "pretrip.mission_graph",
+    "phase1.runtime",
+    "phase2.brain.observed_facts",
+    "live.safety_api",
+    "runtime.session"
+  ],
+  "supports_dry_run": true,
+  "requires_authorization": {
+    "kind": "user_or_operator"
+  },
+  "trace": {
+    "required": true,
+    "event_kind": "agent_tool_invocation"
+  },
+  "metadata": {
+    "candidate_only": true,
+    "delta_artifact_only": true,
+    "reversible": true,
+    "package_mutation_allowed": false,
+    "runtime_mutation_allowed": false,
+    "phase1_runtime_mutation_allowed": false,
+    "live_safety_api_calls_allowed": false
+  }
+}

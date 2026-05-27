@@ -105,3 +105,45 @@ def test_runbook_documents_local_admin_assistant_prototype_gate() -> None:
         "不控制硬體 provider",
     ):
         assert token in source
+
+
+def test_runbook_documents_pi_smoke_visual_feedback_wrapper() -> None:
+    source = read_runbook()
+
+    for token in (
+        "tools/pi_smoke_visual_feedback.py",
+        "diagnostic visual feedback",
+        "OLED 會顯示 `RUN`",
+        "LED Bar 亮前半段",
+        "--run-hold-seconds",
+        "可讓 RUN 狀態先停留",
+        "OLED 顯示 `OK`",
+        "LED Bar 全亮",
+        "OLED 顯示 `FAIL`",
+        "LED Bar 顯示交錯燈號",
+        "--require-visual",
+        "--visual-dry-run",
+        "不呼叫 live `/safety/*` mutation",
+        "不送 outbound",
+        "不改 Phase 1 safety decision",
+    ):
+        assert token in source
+
+
+def test_runbook_documents_gnss_oled_status_summary() -> None:
+    source = read_runbook()
+
+    for token in (
+        "GNSS NMEA smoke with OLED status",
+        "--oled-status",
+        "--oled-update-seconds 2",
+        "OLED 會顯示 `SCOUT GPS`",
+        "`FIX OK` 或 `NO FIX`",
+        "NMEA sentence",
+        "satellite/fix quality",
+        "NMEA signal summary",
+        "不呼叫 live `/safety/*` mutation",
+        "不送 outbound",
+        "不改 Phase 1 safety decision",
+    ):
+        assert token in source

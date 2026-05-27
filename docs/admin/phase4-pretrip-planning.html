@@ -19,6 +19,7 @@
       --poi: #3a7d44;
       --hazard: #a44a3f;
       --review: #7251b5;
+      --mcp: #0b5d4c;
       --overpass: #0f766e;
       --reference: #7a5c12;
       --risk-low: #8fb7a1;
@@ -456,6 +457,8 @@
     .gis-perception-cp { fill: var(--review); stroke: white; stroke-width: 2.4; opacity: .92; }
     .gis-perception-cp.is-stale { fill: var(--warning); stroke: var(--ink); }
     .gis-nearby-group { fill: none; stroke: var(--review); stroke-width: 1.6; stroke-dasharray: 4 4; opacity: .62; }
+    .mcp-candidate { fill: var(--mcp); stroke: white; stroke-width: 2.8; opacity: .96; }
+    .mcp-candidate.is-review-required { stroke: var(--warning); stroke-width: 3.4; }
     .route-note { fill: var(--review); stroke: white; stroke-width: 2; opacity: .88; }
     .map-highlight { filter: drop-shadow(0 0 7px rgba(40, 102, 110, .65)); opacity: 1; }
     [data-layer-hidden="true"] { display: none; }
@@ -1218,6 +1221,7 @@
                     <label title="Point-of-interest layer"><input type="checkbox" data-layer="pois" checked> POI</label>
                     <label title="Hazard layer"><input type="checkbox" data-layer="hazards" checked> Hazards</label>
                     <label title="Overpass evidence layer"><input type="checkbox" data-layer="overpass" checked> Overpass</label>
+                    <label title="Major Critical Point layer"><input type="checkbox" data-layer="mcp" checked> MCP</label>
                     <label title="Route note layer"><input type="checkbox" data-layer="route-notes" checked> Notes</label>
                     <label title="Weather API layer"><input type="checkbox" data-layer="weather-api" checked> Weather</label>
                   </div>
@@ -1285,6 +1289,7 @@
         <button id="postAnalysisTab" class="tab-button" type="button" role="tab" aria-selected="false" data-tab="post_analysis" title="Post-analysis" aria-label="Post-analysis">After</button>
         <button id="reviewWorkspaceTab" class="tab-button" type="button" role="tab" aria-selected="false" data-tab="review_workspace" title="Review and workspace" aria-label="Review and workspace">Review</button>
         <button id="importGpxTab" class="tab-button" type="button" role="tab" aria-selected="false" data-tab="import_gpx" title="Import GPX">Import</button>
+        <button id="wearablesTab" class="tab-button" type="button" role="tab" aria-selected="false" data-tab="wearables" title="Wearable logs">Wearables</button>
       </div>
       <div id="jsonPane" class="detail-body">
         <h2 id="detailTitle">No selection</h2>
@@ -1440,6 +1445,11 @@
                   <button id="workspaceRejectReview" class="tool-button" type="button" title="Reject selected review" aria-label="Reject selected review">Reject</button>
                   <button id="workspaceRefreshApplyPlan" class="tool-button" type="button" title="Refresh apply plan" aria-label="Refresh apply plan">Refresh plan</button>
                   <button id="departureReviewedCandidates" class="tool-button" type="button" title="Write reviewed candidate addendum" aria-label="Write reviewed candidate addendum">Reviewed CPs</button>
+                  <button id="mcpAccept" class="tool-button" type="button" title="Accept selected MCP in workspace log" aria-label="Accept selected MCP in workspace log">MCP accept</button>
+                  <button id="mcpLink" class="tool-button" type="button" title="Link selected MCP to CP in workspace log" aria-label="Link selected MCP to CP in workspace log">MCP link</button>
+                  <button id="mcpSplit" class="tool-button" type="button" title="Split selected MCP in workspace log" aria-label="Split selected MCP in workspace log">MCP split</button>
+                  <button id="mcpDowngrade" class="tool-button" type="button" title="Downgrade selected MCP in workspace log" aria-label="Downgrade selected MCP in workspace log">MCP down</button>
+                  <button id="mcpReject" class="tool-button" type="button" title="Reject selected MCP in workspace log" aria-label="Reject selected MCP in workspace log">MCP reject</button>
                   <button id="routeNoteReviewedAssumptions" class="tool-button" type="button" title="Route-note reviewed assumptions" aria-label="Route-note reviewed assumptions">Assumptions</button>
                   <button id="expertContributionApplyResult" class="tool-button" type="button" title="Expert contribution apply result" aria-label="Expert contribution apply result">Expert result</button>
                 </div>
@@ -1448,6 +1458,49 @@
             <div id="workspaceWriteStatus" class="write-status" role="status" aria-live="polite">Workspace-only controls are closed to final handoff and runtime writes.</div>
           </div>
           <div id="reviewWorkspaceTree" class="tree review-workspace-tree" aria-label="Review workspace timeline"></div>
+        </div>
+        <div id="wearablesPanel" class="import-gpx-panel" aria-label="Wearable inventory and energy refresh panel">
+          <div class="control-group-header">
+            <span>Wearables</span>
+            <small>inventory</small>
+          </div>
+          <p class="import-gpx-copy">Wearable summaries are local advisory evidence. Refreshing energy reserve does not diagnose health, approve departure, or mutate Phase 1 runtime.</p>
+          <form id="wearablesForm" class="import-gpx-form">
+            <div class="import-gpx-field">
+              <label for="wearableSourcePath">Wearable activity summary path</label>
+              <input id="wearableSourcePath" type="text" autocomplete="off" placeholder="/data/scout/wearables/activity-summary.json…">
+              <small>Server-side path to a normalized wearable activity summary, not a raw HealthKit/Garmin payload.</small>
+            </div>
+            <div class="import-gpx-grid">
+              <div class="import-gpx-field">
+                <label for="wearableDeleteActivityId">Activity id to delete</label>
+                <input id="wearableDeleteActivityId" type="text" autocomplete="off" placeholder="fixture.apple_health.clean_hike.001">
+              </div>
+              <div class="import-gpx-field">
+                <label for="wearableReferenceDate">Reference date</label>
+                <input id="wearableReferenceDate" type="date" autocomplete="off">
+              </div>
+            </div>
+            <div class="import-gpx-field">
+              <label for="wearableCompanionCandidatePath">Companion candidate capsule path</label>
+              <input id="wearableCompanionCandidatePath" type="text" autocomplete="off" placeholder="outputs/scout_companion_capability_capsule.json">
+              <small>Optional workspace-relative capsule path. If blank, Scout uses the workspace capability timeline when present.</small>
+            </div>
+            <label class="import-gpx-checkbox" for="wearableOverwriteImport">
+              <input id="wearableOverwriteImport" type="checkbox">
+              <span>Overwrite existing imported activity summary</span>
+            </label>
+            <div class="import-gpx-actions">
+              <button id="wearableInventoryRefresh" class="tool-button" type="button">Load inventory</button>
+              <button id="wearableImportRun" class="tool-button" type="button">Import summary</button>
+              <button id="wearableDeleteRun" class="tool-button" type="button">Delete summary</button>
+              <button id="wearableEnergyRefreshRun" class="tool-button" type="button">Refresh reserve</button>
+              <button id="wearablePretripProjectionRun" class="tool-button" type="button">Apply to ETA</button>
+              <button id="wearableCompanionMatchRun" class="tool-button" type="button">Refresh match</button>
+            </div>
+            <div id="wearableStatus" class="write-status" role="status" aria-live="polite">Wearable controls write only local inventory artifacts and workspace pretrip energy projection.</div>
+            <pre id="wearableResult" class="import-gpx-result">No wearable request sent.</pre>
+          </form>
         </div>
         <div id="sectionList" class="section-list" aria-label="Active tab sections"></div>
         <pre id="detailJson">{}</pre>
@@ -1560,7 +1613,7 @@
     const OSM_MAX_ZOOM = 20;
     const RASTER_LOCAL_TILE_URL_TEMPLATE = `${apiBase()}/admin/tiles/imagery/{project_id}/{layer_id}/{z}/{x}/{y}.png`;
     const OSM_ATTRIBUTION = "OpenStreetMap contributors";
-    const DETAIL_TAB_IDS = new Set(["pre_trip_planning", "post_analysis", "review_workspace", "import_gpx"]);
+    const DETAIL_TAB_IDS = new Set(["pre_trip_planning", "post_analysis", "review_workspace", "import_gpx", "wearables"]);
     const state = {
       view: null,
       selected: null,
@@ -1789,7 +1842,7 @@
       return text.length > maxChars ? `${text.slice(0, maxChars - 3)}...` : text;
     }
     function evidenceSourceId(item) {
-      return item?.source_id || item?.candidate_id || item?.segment_id || item?.poi_id || item?.hazard_id || "";
+      return item?.source_id || item?.mcp_id || item?.candidate_id || item?.segment_id || item?.poi_id || item?.hazard_id || "";
     }
     function categoryColor(category) {
       const colors = {
@@ -1800,6 +1853,7 @@
         poi: "var(--poi)",
         hazard: "var(--hazard)",
         overpass: "var(--overpass)",
+        mcp: "var(--mcp)",
         reference: "var(--reference)",
         risk: "var(--warning)",
         review: "var(--review)",
@@ -1809,10 +1863,12 @@
     }
     function evidenceCategory(item) {
       const type = item?.evidence_type || "";
+      if (type.includes("capability")) return "reference";
       if (type.includes("risk_score")) return "risk";
       if (type.includes("risk_ribbon")) return "risk";
       if (type.includes("risk_heatmap")) return "risk";
       if (type.includes("risk_delta")) return "risk";
+      if (type.includes("major_critical_point") || type.includes("mcp_")) return "mcp";
       if (type.includes("review_workbench")) return "review_group";
       if (type.includes("checkpoint")) return "checkpoint";
       if (type.includes("segment")) return "segment";
@@ -1828,6 +1884,12 @@
       return item?.label || item?.title || item?.candidate_id || item?.source_id || item?.evidence_type || "evidence";
     }
     function hintSummary(item) {
+      if (item?.evidence_type === "pretrip_capability_timeline_import") {
+        return `${item.counts?.edge_count || 0} segments | read-only post-analysis`;
+      }
+      if (item?.evidence_type === "post_analysis_capability_segment") {
+        return `${Math.round(item.moving_time_s || 0)}s moving | ${Math.round(item.rest_time_s || 0)}s rest`;
+      }
       if (item?.distance_m) return `${Math.round(item.distance_m)}m | ${item.review_state || item.status || "candidate"}`;
       return item?.source_path || item?.status || "candidate evidence";
     }
@@ -1963,7 +2025,10 @@
         view?.overpass_evidence?.poi_candidates || [],
         view?.gis_perception_timeline?.checkpoint_candidates || [],
         view?.gis_perception_timeline?.nearby_groups || [],
+        view?.major_critical_points?.candidates || [],
         view?.route_notes?.candidates || [],
+        [view?.capability_timeline_import],
+        view?.capability_timeline_import?.edges || [],
         view?.review_queue?.items || []
       ];
       return groups.flat().find(item => evidenceSourceId(item) === sourceId) || null;
@@ -1999,9 +2064,15 @@
         item?.review_category,
         item?.ai_reason_zh,
         item?.nearby_group_id,
+        item?.mcp_id,
+        item?.source_family_coverage?.present?.join?.(" "),
+        item?.source_family_coverage?.missing_required?.join?.(" "),
         item?.route_note_freshness,
         item?.semantic_aggregation_key,
         item?.aggregation?.source_candidate_count,
+        item?.edge_id,
+        item?.from_node_id,
+        item?.to_node_id,
         item?.from_candidate_id,
         item?.to_candidate_id,
         item?.poi?.poi_type,
@@ -2142,12 +2213,14 @@
       if (tabId === "post_analysis") return "Post-analysis";
       if (tabId === "review_workspace") return "Review , Workspace";
       if (tabId === "import_gpx") return "Import GPX";
+      if (tabId === "wearables") return "Wearables";
       return "Pre-trip planning";
     }
     function activeTabSource(tabId = state.activeTab) {
       if (tabId === "post_analysis") return "post_analysis | read-only post-planning artifacts";
       if (tabId === "review_workspace") return "review_workspace | review queue and local workspace controls";
       if (tabId === "import_gpx") return "import_gpx | server-side reference route import";
+      if (tabId === "wearables") return "wearables | local wearable inventory and energy reserve refresh";
       return "pre_trip_planning | fixture-backed planning workspace";
     }
     function tabOverviewPayload(view, tabId = state.activeTab) {
@@ -2171,11 +2244,23 @@
           actual_walked_track_surface: "post-analysis",
           phase1_runtime_mutation_allowed: false
         } : null,
+        wearables_boundary: tabId === "wearables" ? {
+          medical_diagnosis: false,
+          phase1_runtime_safety_truth: false,
+          raw_health_payload_shared: false,
+          refresh_target: "local inventory and workspace projection"
+        } : null,
         runtime_handoff_status: tab?.runtime_handoff?.status || null,
         route_comparison_classification: tab?.route_comparison?.classification || null,
         brain_seed_counts: tab?.brain_seed ? {
           node_count: tab.brain_seed.node_count,
           observed_fact_count: tab.brain_seed.observed_fact_count
+        } : null,
+        capability_timeline_import: tab?.capability_timeline_import ? {
+          edge_count: tab.capability_timeline_import.counts?.edge_count || 0,
+          moving_time_s: tab.capability_timeline_import.summary?.moving_time_s || 0,
+          raw_track_shared: tab.capability_timeline_import.privacy?.raw_track_shared,
+          auto_applies_to_eta: tab.capability_timeline_import.planning_use?.auto_applies_to_eta
         } : null
       };
     }
@@ -2901,6 +2986,162 @@
         setPrepareLayersBusy(false);
       }
     }
+    function wearableInputValue(id) {
+      return document.getElementById(id).value.trim();
+    }
+    function wearableReferenceDatePayload() {
+      const value = wearableInputValue("wearableReferenceDate");
+      return value ? {reference_date: value} : {};
+    }
+    function setWearableStatus(message, mode = "") {
+      const status = document.getElementById("wearableStatus");
+      status.textContent = message;
+      status.classList.toggle("is-error", mode === "error");
+      status.classList.toggle("is-success", mode === "success");
+    }
+    function setWearableBusy(isBusy) {
+      [
+        "wearableInventoryRefresh",
+        "wearableImportRun",
+        "wearableDeleteRun",
+        "wearableEnergyRefreshRun",
+        "wearablePretripProjectionRun",
+        "wearableCompanionMatchRun"
+      ].forEach(id => {
+        const node = document.getElementById(id);
+        if (node) node.disabled = isBusy;
+      });
+    }
+    function setWearableResult(payload) {
+      document.getElementById("wearableResult").textContent = JSON.stringify(payload, null, 2);
+      document.getElementById("detailJson").textContent = JSON.stringify(payload, null, 2);
+    }
+    async function loadWearableInventory() {
+      setWearableBusy(true);
+      setWearableStatus("Loading wearable inventory...");
+      try {
+        const result = await parseWriteResponse(await fetch(`${apiBase()}/admin/wearables`, {cache: "no-store"}));
+        setWearableResult(result);
+        setWearableStatus(`Wearable inventory loaded: ${result.activity_count || 0} summaries.`, "success");
+      } catch (error) {
+        setWearableStatus(`Wearable inventory failed: ${error.message || error}`, "error");
+        setWearableResult({error: error.message || String(error)});
+      } finally {
+        setWearableBusy(false);
+      }
+    }
+    async function importWearableSummary() {
+      const sourcePath = wearableInputValue("wearableSourcePath");
+      if (!sourcePath) {
+        setWearableStatus("Wearable activity summary path is required.", "error");
+        setWearableResult({error: "missing source_path"});
+        return;
+      }
+      const payload = {
+        source_path: sourcePath,
+        overwrite: document.getElementById("wearableOverwriteImport").checked
+      };
+      setWearableBusy(true);
+      setWearableStatus("Importing wearable activity summary...");
+      try {
+        const result = await parseWriteResponse(await fetch(`${apiBase()}/admin/wearables/import`, {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify(payload)
+        }));
+        setWearableResult(result);
+        setWearableStatus("Wearable summary imported into local inventory.", "success");
+        await loadWearableInventory();
+      } catch (error) {
+        setWearableStatus(`Wearable import failed: ${error.message || error}`, "error");
+        setWearableResult({error: error.message || String(error), payload});
+      } finally {
+        setWearableBusy(false);
+      }
+    }
+    async function deleteWearableSummary() {
+      const activityId = wearableInputValue("wearableDeleteActivityId");
+      if (!activityId) {
+        setWearableStatus("Activity id is required for delete.", "error");
+        setWearableResult({error: "missing activity_id"});
+        return;
+      }
+      setWearableBusy(true);
+      setWearableStatus("Deleting wearable activity summary...");
+      try {
+        const result = await parseWriteResponse(await postJson("/admin/wearables/delete", {
+          activity_id: activityId
+        }));
+        setWearableResult(result);
+        setWearableStatus("Wearable summary deleted from local inventory.", "success");
+        await loadWearableInventory();
+      } catch (error) {
+        setWearableStatus(`Wearable delete failed: ${error.message || error}`, "error");
+        setWearableResult({error: error.message || String(error), activity_id: activityId});
+      } finally {
+        setWearableBusy(false);
+      }
+    }
+    async function refreshWearableEnergy() {
+      const payload = wearableReferenceDatePayload();
+      setWearableBusy(true);
+      setWearableStatus("Refreshing Scout Energy Reserve from inventory...");
+      try {
+        const result = await parseWriteResponse(await fetch(`${apiBase()}/admin/wearables/refresh-energy`, {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify(payload)
+        }));
+        setWearableResult(result);
+        setWearableStatus("Energy reserve refreshed from local wearable inventory.", "success");
+      } catch (error) {
+        setWearableStatus(`Energy refresh failed: ${error.message || error}`, "error");
+        setWearableResult({error: error.message || String(error), payload});
+      } finally {
+        setWearableBusy(false);
+      }
+    }
+    async function refreshPretripEnergyProjection() {
+      const payload = wearableReferenceDatePayload();
+      setWearableBusy(true);
+      setWearableStatus("Applying energy reserve projection to pre-trip ETA...");
+      try {
+        const result = await parseWriteResponse(await fetch(`${apiBase()}/admin/pretrip/projects/${PROJECT_ID}/refresh-energy-projection`, {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify(payload)
+        }));
+        setWearableResult(result);
+        setWearableStatus("Pre-trip energy projection refreshed in the project workspace.", "success");
+        await reloadProjectView();
+      } catch (error) {
+        setWearableStatus(`Pre-trip energy projection failed: ${error.message || error}`, "error");
+        setWearableResult({error: error.message || String(error), payload});
+      } finally {
+        setWearableBusy(false);
+      }
+    }
+    async function refreshCompanionMatchReview() {
+      const candidatePath = wearableInputValue("wearableCompanionCandidatePath");
+      const payload = candidatePath ? {candidate_capsule_paths: [candidatePath]} : {};
+      setWearableBusy(true);
+      setWearableStatus("Refreshing companion match review artifact...");
+      try {
+        const result = await parseWriteResponse(await fetch(`${apiBase()}/admin/pretrip/projects/${PROJECT_ID}/refresh-companion-match`, {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify(payload)
+        }));
+        setWearableResult(result);
+        setWearableStatus("Companion match review refreshed in the project workspace.", "success");
+        await reloadProjectView();
+      } catch (error) {
+        setWearableStatus(`Companion match refresh failed: ${error.message || error}`, "error");
+        setWearableResult({error: error.message || String(error), payload});
+      } finally {
+        setWearableBusy(false);
+      }
+    }
     async function postJson(path, payload) {
       return window.ScoutAssistantUI.postJson(path, payload, {apiBase});
     }
@@ -3280,6 +3521,60 @@
         setWorkspaceStatus(`Expert contribution apply result failed: ${error.message || error}`, "error");
       }
     }
+    function selectedMcpCandidate() {
+      if (evidenceCategory(state.selected) !== "mcp" || !state.selected?.mcp_id) return null;
+      return state.selected;
+    }
+    function mcpReviewPayload(candidate, decision, extra = {}) {
+      return {
+        mcp_id: candidate.mcp_id,
+        decision,
+        summary: `${decision} MCP from Phase 4 admin local workspace: ${candidate.label || candidate.mcp_id}`,
+        persist_to_workspace: true,
+        ...extra
+      };
+    }
+    async function postMcpReviewAction(decision, extra = {}) {
+      const candidate = selectedMcpCandidate();
+      if (!candidate) {
+        setWorkspaceStatus("Select an MCP candidate before writing an MCP review action.", "error");
+        return;
+      }
+      setWorkspaceStatus(`Writing MCP ${decision} action for ${candidate.mcp_id} to local workspace only...`);
+      try {
+        await parseWriteResponse(await fetch(`${apiBase()}/admin/pretrip/projects/${PROJECT_ID}/mcp-review-actions`, {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify(mcpReviewPayload(candidate, decision, extra))
+        }));
+        setWorkspaceStatus(`MCP ${decision} action written locally. Final MissionGraph and runtime remain closed.`, "success");
+        await reloadProjectView();
+      } catch (error) {
+        setWorkspaceStatus(`MCP ${decision} action failed: ${error.message || error}`, "error");
+      }
+    }
+    async function acceptSelectedMcpToWorkspace() {
+      await postMcpReviewAction("accepted");
+    }
+    async function linkSelectedMcpToWorkspace() {
+      const cp = window.prompt("Link selected MCP to CP candidate id", state.selected?.nearest_scout_cp?.candidate_id || "");
+      if (!cp) return setWorkspaceStatus("MCP link canceled: CP candidate id is required.", "error");
+      await postMcpReviewAction("linked", {linked_cp_candidate_id: cp});
+    }
+    async function splitSelectedMcpToWorkspace() {
+      const targets = window.prompt("Split selected MCP into target ids, comma-separated", state.selected?.linked_named_points?.join(",") || "");
+      const splitTargetIds = String(targets || "").split(",").map(value => value.trim()).filter(Boolean);
+      if (!splitTargetIds.length) return setWorkspaceStatus("MCP split canceled: target ids are required.", "error");
+      await postMcpReviewAction("split", {split_target_ids: splitTargetIds});
+    }
+    async function downgradeSelectedMcpToWorkspace() {
+      const reason = window.prompt("Downgrade reason for selected MCP", "Needs additional source-family or field review.");
+      if (!reason) return setWorkspaceStatus("MCP downgrade canceled: reason is required.", "error");
+      await postMcpReviewAction("downgraded", {downgrade_reason: reason});
+    }
+    async function rejectSelectedMcpToWorkspace() {
+      await postMcpReviewAction("rejected");
+    }
     function attachEvidence(node, item) {
       const id = evidenceSourceId(item);
       if (id) node.setAttribute("data-source-id", id);
@@ -3487,6 +3782,18 @@
       });
       svg.appendChild(routeNoteGroup);
 
+      const mcpGroup = el("g", {"data-layer-group": "mcp"});
+      (view.major_critical_points?.candidates || []).forEach(candidate => {
+        const [x, y] = project(bounds, candidate.lat, candidate.lon);
+        const className = candidate.review_state === "suggested_insertion_review_required"
+          ? "mcp-candidate is-review-required"
+          : "mcp-candidate";
+        const circle = el("circle", {cx: x, cy: y, r: 7, class: className});
+        attachEvidence(circle, candidate);
+        mcpGroup.appendChild(circle);
+      });
+      svg.appendChild(mcpGroup);
+
       const weatherApiGroup = el("g", {"data-layer-group": "weather-api"});
       renderWeatherOverlay(weatherApiGroup, state.weatherOverlay, MAP_WIDTH, MAP_HEIGHT);
       svg.appendChild(weatherApiGroup);
@@ -3572,6 +3879,7 @@
         ...view.retreat_routes,
         ...(view.risk_score?.points || []),
         ...(view.gis_perception_timeline?.checkpoint_candidates || []),
+        ...(view.major_critical_points?.candidates || []),
         ...(view.reference_tracks?.reference_tracks || [])
       ].map(statusFor).filter(Boolean));
       [...select.querySelectorAll("option:not([value='all'])")].forEach(node => node.remove());
@@ -3672,6 +3980,10 @@
         label: item.nearby_group_id,
         sublabel: `${item.member_count} CP | ${item.semantic_keys?.join(", ") || "mixed"}`
       }), false, "checkpoint"));
+      tree.appendChild(treeGroup("Major Critical Points", view.major_critical_points?.candidates || [], item => ({
+        label: item.label || item.mcp_id,
+        sublabel: `${item.confidence} | ${item.cp_support_reconciliation?.support_status || "support-review"} | ${Math.round(item.distance_m || 0)}m | ${Math.round((item.mention_ratio || 0) * 100)}% mentions`
+      }), true, "mcp"));
       tree.appendChild(treeGroup("Risk Score", view.risk_score?.points || [], item => ({
         label: `${item.score_field || "pretrip_risk"} ${Number(item.pretrip_risk || 0).toFixed(1)}`,
         sublabel: `L${item.risk_level || "-"} | ${Math.round(item.distance_m || 0)}m${item.teii_20m == null ? "" : ` | TEII ${Number(item.teii_20m).toFixed(1)}`}`
@@ -3696,6 +4008,10 @@
         label: item.label || item.candidate_id,
         sublabel: `${Math.round((item.route?.distance_m || 0) / 1000)}km | ${item.route?.point_count || 0} pts`
       }), false, "reference"));
+      tree.appendChild(treeGroup("Capability Timeline", view.capability_timeline_import?.edges || [], item => ({
+        label: item.edge_id || item.source_id,
+        sublabel: `${item.from_node_id || "-"} -> ${item.to_node_id || "-"} | ${Math.round(item.moving_time_s || 0)}s moving | ${Math.round(item.rest_time_s || 0)}s rest`
+      }), false, "reference"));
       renderReviewWorkspaceTree(view);
       applyTreeFilters();
     }
@@ -3714,6 +4030,10 @@
         label: item.candidate_ref,
         sublabel: `${item.decision} | ${item.promotion_scope}`
       }), false, "review"));
+      tree.appendChild(treeGroup("MCP Review Actions", view.mcp_review_actions?.actions || [], item => ({
+        label: item.mcp_id,
+        sublabel: `${item.decision} | ${item.reviewer_alias}`
+      }), false, "review"));
       syncBulkReviewSelectionStyles();
       updateReviewSelectionSummary(view);
     }
@@ -3731,6 +4051,7 @@
             ["Risk Delta", `${view.risk_delta?.counts?.segment_count || 0} segments`],
             ["AI GIS CP", `${view.gis_perception_timeline?.counts?.checkpoint_candidate_count || 0} review`],
             ["GIS CP Areas", `${view.gis_perception_timeline?.counts?.nearby_group_count || 0} groups`],
+            ["MCP", `${view.major_critical_points?.counts?.mcp_candidate_count || 0} critical / ${view.major_critical_points?.counts?.dense_checkpoint_count || 0} dense CP`],
             ["Reference GPX", `${view.reference_tracks?.reference_track_count || 0} tracks`],
             ["Weather", view.weather.status],
             ["Raw samples", "summary only"]
@@ -3750,11 +4071,22 @@
               ["Draft actions", view.review_draft_log?.counts?.action_count ?? 0],
               ["Decisions", view.review_decision_log?.counts?.action_count ?? 0],
               ["Reviewed CPs", view.departure_reviewed_candidates?.counts?.promoted_candidate_count ?? 0],
+              ["MCP actions", view.mcp_review_actions?.counts?.action_count ?? 0],
               ["Workspace", "local only"]
+            ]
+        : state.activeTab === "wearables"
+          ? [
+              ["Inventory", "local summaries"],
+              ["Energy reserve", "baseline-relative"],
+              ["Pretrip ETA", "advisory projection"],
+              ["Medical diagnosis", "false"],
+              ["Runtime safety truth", "false"]
             ]
           : [
               ["Runtime handoff", tab.runtime_handoff.status],
               ["Route comparison", tab.route_comparison.classification],
+              ["Capability Timeline Import", tab.capability_timeline_import ? `${tab.capability_timeline_import.counts.edge_count} segments` : "not imported"],
+              ["Moving time", tab.capability_timeline_import ? `${Math.round(tab.capability_timeline_import.summary.moving_time_s || 0)}s` : "-"],
               ["Brain nodes", tab.brain_seed.node_count],
               ["Observed facts", tab.brain_seed.observed_fact_count]
             ];
@@ -3841,6 +4173,7 @@
     function syncActiveTabPanels(tab = state.activeTab) {
       document.getElementById("importGpxPanel").classList.toggle("is-active", tab === "import_gpx");
       document.getElementById("reviewWorkspacePanel").classList.toggle("is-active", tab === "review_workspace");
+      document.getElementById("wearablesPanel").classList.toggle("is-active", tab === "wearables");
     }
     function setActiveTab(tab) {
       state.activeTab = tab;
@@ -3893,6 +4226,11 @@
       document.getElementById("workspaceRejectSelectedReviews").addEventListener("click", rejectSelectedReviewsToWorkspace);
       document.getElementById("workspaceRefreshApplyPlan").addEventListener("click", refreshWorkspaceApplyPlan);
       document.getElementById("departureReviewedCandidates").addEventListener("click", generateDepartureReviewedCandidatesForWorkspace);
+      document.getElementById("mcpAccept").addEventListener("click", acceptSelectedMcpToWorkspace);
+      document.getElementById("mcpLink").addEventListener("click", linkSelectedMcpToWorkspace);
+      document.getElementById("mcpSplit").addEventListener("click", splitSelectedMcpToWorkspace);
+      document.getElementById("mcpDowngrade").addEventListener("click", downgradeSelectedMcpToWorkspace);
+      document.getElementById("mcpReject").addEventListener("click", rejectSelectedMcpToWorkspace);
       document.getElementById("routeNoteReviewedAssumptions").addEventListener("click", generateRouteNoteReviewedAssumptionsForWorkspace);
       document.getElementById("expertContributionApplyResult").addEventListener("click", applyExpertContributionWorkspaceResult);
       document.getElementById("featureEdit").addEventListener("click", featureEditToWorkspace);
@@ -3907,6 +4245,13 @@
       document.getElementById("prepareLayersForm").addEventListener("submit", event => event.preventDefault());
       document.getElementById("prepareLayersPreview").addEventListener("click", previewPrepareLayers);
       document.getElementById("prepareLayersRun").addEventListener("click", runPrepareLayers);
+      document.getElementById("wearablesForm").addEventListener("submit", event => event.preventDefault());
+      document.getElementById("wearableInventoryRefresh").addEventListener("click", loadWearableInventory);
+      document.getElementById("wearableImportRun").addEventListener("click", importWearableSummary);
+      document.getElementById("wearableDeleteRun").addEventListener("click", deleteWearableSummary);
+      document.getElementById("wearableEnergyRefreshRun").addEventListener("click", refreshWearableEnergy);
+      document.getElementById("wearablePretripProjectionRun").addEventListener("click", refreshPretripEnergyProjection);
+      document.getElementById("wearableCompanionMatchRun").addEventListener("click", refreshCompanionMatchReview);
       svg.addEventListener("pointerdown", beginMapRectangleZoom);
       svg.addEventListener("pointermove", updateMapRectangleZoom);
       svg.addEventListener("pointerup", event => {

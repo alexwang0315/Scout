@@ -69,6 +69,11 @@ SCOUT_PHASE2_ADMIN_API_ENABLED = os.getenv("SCOUT_PHASE2_ADMIN_API_ENABLED", "fa
 SCOUT_PHASE2_BRAIN_STORE_ROOT = os.getenv("SCOUT_PHASE2_BRAIN_STORE_ROOT")
 SCOUT_DEBUG_API_ENABLED = os.getenv("SCOUT_DEBUG_API_ENABLED", "false")
 SCOUT_DEBUG_LOG_PATH = os.getenv("SCOUT_DEBUG_LOG_PATH")
+SCOUT_AGENT_TRACE_LOG_PATH = os.getenv("SCOUT_AGENT_TRACE_LOG_PATH")
+SCOUT_SPATIAL_IMPRINT_STORE_PATH = os.getenv("SCOUT_SPATIAL_IMPRINT_STORE_PATH")
+SCOUT_SPATIAL_IMPRINT_TRIGGER_REPORT_PATH = os.getenv(
+    "SCOUT_SPATIAL_IMPRINT_TRIGGER_REPORT_PATH"
+)
 SCOUT_AI_ASSISTANT_ENABLED = os.getenv("SCOUT_AI_ASSISTANT_ENABLED", "false")
 SCOUT_AI_ASSISTANT_PROVIDER = os.getenv("SCOUT_AI_ASSISTANT_PROVIDER", "mock")
 SCOUT_AI_ASSISTANT_CONFIG_PATH = os.getenv("SCOUT_AI_ASSISTANT_CONFIG_PATH")
@@ -218,9 +223,22 @@ def _include_debug_router(app: FastAPI) -> None:
         return
 
     debug_log = FileRuntimeDebugEventLog(SCOUT_DEBUG_LOG_PATH) if SCOUT_DEBUG_LOG_PATH else None
-    app.include_router(create_debug_router(debug_log=debug_log))
+    app.include_router(
+        create_debug_router(
+            debug_log=debug_log,
+            agent_trace_log_path=SCOUT_AGENT_TRACE_LOG_PATH,
+            spatial_imprint_store_path=SCOUT_SPATIAL_IMPRINT_STORE_PATH,
+            spatial_imprint_trigger_report_path=SCOUT_SPATIAL_IMPRINT_TRIGGER_REPORT_PATH,
+        )
+    )
     app.include_router(create_debug_page_router())
-    logger.info("Phase 3.5 debug API enabled%s", f": {SCOUT_DEBUG_LOG_PATH}" if SCOUT_DEBUG_LOG_PATH else "")
+    logger.info(
+        "Phase 3.5 debug API enabled%s%s%s%s",
+        f": {SCOUT_DEBUG_LOG_PATH}" if SCOUT_DEBUG_LOG_PATH else "",
+        f" with agent trace {SCOUT_AGENT_TRACE_LOG_PATH}" if SCOUT_AGENT_TRACE_LOG_PATH else "",
+        f" with spatial imprint store {SCOUT_SPATIAL_IMPRINT_STORE_PATH}" if SCOUT_SPATIAL_IMPRINT_STORE_PATH else "",
+        f" with spatial imprint trigger report {SCOUT_SPATIAL_IMPRINT_TRIGGER_REPORT_PATH}" if SCOUT_SPATIAL_IMPRINT_TRIGGER_REPORT_PATH else "",
+    )
 
 
 def _include_assistant_router(app: FastAPI) -> None:

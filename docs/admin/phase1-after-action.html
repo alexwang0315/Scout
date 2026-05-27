@@ -741,6 +741,138 @@
       font-size: 12px;
     }
 
+    .capability-panel {
+      display: grid;
+      gap: 10px;
+      margin-top: 16px;
+      padding-top: 14px;
+      border-top: 1px solid var(--border);
+    }
+
+    .capability-panel.is-empty {
+      display: none;
+    }
+
+    .capability-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .capability-head strong {
+      color: var(--text);
+      font-size: 13px;
+      overflow-wrap: anywhere;
+    }
+
+    .capability-head span {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .capability-metrics {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .capability-svg {
+      width: 100%;
+      min-height: 150px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: #171b20;
+    }
+
+    .capability-svg text {
+      font-size: 11px;
+      fill: var(--muted);
+    }
+
+    .capability-node {
+      fill: #252b32;
+      stroke: var(--cat-timeline);
+      stroke-width: 2;
+    }
+
+    .capability-edge {
+      stroke: var(--cat-timeline);
+      stroke-width: 5;
+      stroke-linecap: round;
+      cursor: pointer;
+    }
+
+    .capability-edge-medium { stroke: var(--warning); }
+    .capability-edge-low { stroke: var(--danger); }
+    .capability-edge.is-selected { stroke-width: 8; }
+    .capability-rest-marker { fill: var(--warning); stroke: #11161c; stroke-width: 2; }
+
+    .capability-metric {
+      min-width: 0;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px 10px;
+      background: #171b20;
+    }
+
+    .capability-metric span {
+      display: block;
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .capability-metric strong {
+      display: block;
+      margin-top: 3px;
+      font-size: 13px;
+      font-weight: 650;
+      overflow-wrap: anywhere;
+    }
+
+    .capability-list {
+      display: grid;
+      gap: 7px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .capability-list li {
+      border: 1px solid var(--border);
+      border-left: 4px solid var(--cat-timeline);
+      border-radius: 6px;
+      padding: 8px 10px;
+      background: #171b20;
+      overflow-wrap: anywhere;
+    }
+
+    .capability-list strong {
+      display: block;
+      font-size: 12px;
+      font-weight: 650;
+    }
+
+    .capability-list span {
+      display: block;
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .capability-share-preview {
+      display: grid;
+      gap: 7px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 9px 10px;
+      background: #171b20;
+      color: var(--muted);
+      font-size: 12px;
+      overflow-wrap: anywhere;
+    }
+
     .next-plan-panel {
       display: grid;
       gap: 10px;
@@ -1002,6 +1134,7 @@
       .tree-pane { border-bottom: 1px solid var(--border); }
       .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .narrative-facts { grid-template-columns: 1fr; }
+      .capability-metrics { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -1086,6 +1219,21 @@
           <div id="narrativeFacts" class="narrative-facts"></div>
           <p id="narrativeReadOnlyNote" class="read-only-note">chilai_nanhua_day1 is shown as read-only GPX projection evidence. It is not Phase 1 runtime safety truth.</p>
         </div>
+        <section id="capabilityPanel" class="capability-panel is-empty" aria-label="Capability Timeline read-only projection">
+          <div class="capability-head">
+            <div>
+              <h2>Capability Timeline</h2>
+              <strong id="capabilityTitle">No capability artifact</strong>
+            </div>
+            <span id="capabilityConfidence">confidence -</span>
+          </div>
+          <div id="capabilityMetrics" class="capability-metrics"></div>
+          <svg id="capabilityTimelineSvg" class="capability-svg" viewBox="0 0 720 170" role="img" aria-label="Capability Timeline SVG"></svg>
+          <ul id="capabilitySegments" class="capability-list"></ul>
+          <ul id="capabilitySourceRefs" class="capability-list"></ul>
+          <div id="capabilitySharePreview" class="capability-share-preview"></div>
+          <p id="capabilityPrivacy" class="read-only-note">Read-only post-analysis evidence. No raw GPX, exact timestamps, or incident details are shared here.</p>
+        </section>
         <section id="nextPlanCandidatePanel" class="next-plan-panel" aria-label="Phase 4 next-plan candidate projection">
           <div class="next-plan-head">
             <div>
@@ -1449,6 +1597,7 @@
       document.getElementById("detailSource").textContent = `${item.evidence_type || "evidence"} | ${item.source_path || "no source path"}`;
       document.getElementById("narrativeSummary").textContent = narrativeSummary(item);
       renderNarrativeFacts(item);
+      renderCapabilityPanel(item);
       renderNextPlanCandidates(item);
       document.getElementById("detailJson").textContent = JSON.stringify(item, null, 2);
     }
@@ -1462,6 +1611,13 @@
       const number = Number(value);
       if (!Number.isFinite(number)) return String(value);
       return `${Math.round(number).toLocaleString()}${suffix}`;
+    }
+
+    function formatOneDecimal(value, suffix = "") {
+      if (value === null || value === undefined || value === "") return "-";
+      const number = Number(value);
+      if (!Number.isFinite(number)) return String(value);
+      return `${number.toLocaleString(undefined, {maximumFractionDigits: 1})}${suffix}`;
     }
 
     function narrativeSummary(item) {
@@ -1482,6 +1638,12 @@
       }
       if (item.evidence_type === "segment_capsule") {
         return `Scout sealed this segment capsule for ${item.segment_id || item.capsule?.segment_id || "-"} as after-action evidence from ${item.start_checkpoint_id || item.capsule?.start_checkpoint_id || "-"} to ${item.end_checkpoint_id || item.capsule?.end_checkpoint_id || "-"}.`;
+      }
+      if (item.evidence_type === "post_analysis_capability") {
+        return `Capability Timeline is read-only post-analysis evidence with ${formatNumber(item.edge_count)} checkpoint segments, ${formatNumber(item.rest_interval_count)} detected rest intervals, and ${formatNumber(item.summary?.moving_time_s, "s")} moving time.`;
+      }
+      if (item.evidence_type === "post_analysis_capability_segment") {
+        return `This completed checkpoint segment measured ${formatNumber(item.moving_time_s, "s")} moving time, ${formatNumber(item.elapsed_time_s, "s")} elapsed time, and ${formatNumber(item.rest_time_s, "s")} rest time.`;
       }
       if (item.evidence_type === "runtime_decision") {
         return item.reason || `Runtime decision evidence recorded ${item.from_level || "-"} to ${item.to_level || item.label || "-"}.`;
@@ -1557,6 +1719,22 @@
           ["To", item.end_checkpoint_id || item.capsule?.end_checkpoint_id || "-"]
         ];
       }
+      if (item.evidence_type === "post_analysis_capability") {
+        return [
+          ["Segments", formatNumber(item.edge_count)],
+          ["Moving", formatNumber(item.summary?.moving_time_s, "s")],
+          ["Rest", formatNumber(item.summary?.rest_time_s, "s")],
+          ["Raw GPX shared", String(item.capsule_preview?.raw_track_shared === true)]
+        ];
+      }
+      if (item.evidence_type === "post_analysis_capability_segment") {
+        return [
+          ["Edge", item.edge_id],
+          ["Moving", formatNumber(item.moving_time_s, "s")],
+          ["Elapsed", formatNumber(item.elapsed_time_s, "s")],
+          ["Rest", formatNumber(item.rest_time_s, "s")]
+        ];
+      }
       if (item.evidence_type === "runtime_decision") {
         return [
           ["Time", item.timestamp === null || item.timestamp === undefined ? "-" : `t=${Number(item.timestamp).toFixed(0)}`],
@@ -1601,6 +1779,208 @@
         fact.appendChild(valueNode);
         facts.appendChild(fact);
       });
+    }
+
+    function capabilityArtifactForSelection(item) {
+      const artifact = state.view?.capability_timeline || null;
+      if (!artifact) return null;
+      if (String(item?.evidence_type || "").startsWith("post_analysis_capability")) return artifact;
+      return artifact;
+    }
+
+    function selectedCapabilityEdge(item, artifact) {
+      if (!artifact || item?.evidence_type !== "post_analysis_capability_segment") return null;
+      return (artifact.edges || []).find(edge => edge.edge_id === item.edge_id) || item;
+    }
+
+    function capabilityMetric(label, value) {
+      const node = document.createElement("div");
+      node.className = "capability-metric";
+      const labelNode = document.createElement("span");
+      labelNode.textContent = label;
+      const valueNode = document.createElement("strong");
+      valueNode.textContent = value === null || value === undefined || value === "" ? "-" : String(value);
+      node.appendChild(labelNode);
+      node.appendChild(valueNode);
+      return node;
+    }
+
+    function appendCapabilityListItem(list, title, summary) {
+      const item = document.createElement("li");
+      const strong = document.createElement("strong");
+      strong.textContent = title;
+      const span = document.createElement("span");
+      span.textContent = summary;
+      item.appendChild(strong);
+      item.appendChild(span);
+      list.appendChild(item);
+    }
+
+    function capabilityComparisonForEdge(edge, artifact) {
+      return (artifact?.route_time_comparison?.segments || [])
+        .find(segment => segment.edge_id === edge?.edge_id || segment.segment_id === edge?.segment_id) || null;
+    }
+
+    function renderCapabilityTimelineSvg(artifact, selectedEdge) {
+      const node = document.getElementById("capabilityTimelineSvg");
+      node.replaceChildren();
+      const edges = artifact?.edges || [];
+      const nodes = artifact?.nodes || [];
+      if (!edges.length || !nodes.length) {
+        node.appendChild(el("text", {x: 24, y: 82}, "Capability timeline artifact has no segment edges."));
+        return;
+      }
+      const width = 720;
+      const nodeY = 92;
+      const left = 42;
+      const right = width - 42;
+      const nodeOrder = nodes.map(item => item.node_id);
+      const nodeX = new Map(nodeOrder.map((nodeId, index) => {
+        const x = nodeOrder.length <= 1 ? width / 2 : left + (index / (nodeOrder.length - 1)) * (right - left);
+        return [nodeId, x];
+      }));
+      node.appendChild(el("text", {x: 18, y: 24}, "moving / elapsed; rest marker shown in yellow"));
+      edges.forEach(edge => {
+        const x1 = nodeX.get(edge.from_node_id) ?? left;
+        const x2 = nodeX.get(edge.to_node_id) ?? right;
+        const y = edge.direction === "return" ? 118 : 68;
+        const line = el("line", {
+          x1: x1.toFixed(1),
+          y1: y,
+          x2: x2.toFixed(1),
+          y2: y,
+          class: `capability-edge capability-edge-${edge.confidence || "medium"}${selectedEdge?.edge_id === edge.edge_id ? " is-selected" : ""}`,
+          "data-source-id": edge.edge_id
+        });
+        line.addEventListener("click", () => selectEvidence(edge));
+        node.appendChild(line);
+        const mid = (x1 + x2) / 2;
+        node.appendChild(el("text", {x: mid.toFixed(1), y: y - 16, "text-anchor": "middle"}, `${edge.direction || "outbound"} ${formatNumber(edge.moving_time_s, "s")} moving`));
+        node.appendChild(el("text", {x: mid.toFixed(1), y: y + 24, "text-anchor": "middle"}, `${formatNumber(edge.elapsed_time_s, "s")} elapsed`));
+        if ((edge.rest_time_s || 0) > 0) {
+          node.appendChild(el("circle", {cx: mid.toFixed(1), cy: y, r: 7, class: "capability-rest-marker"}));
+          node.appendChild(el("text", {x: mid.toFixed(1), y: y + 42, "text-anchor": "middle"}, `rest ${formatNumber(edge.rest_time_s, "s")}`));
+        }
+        const comparison = capabilityComparisonForEdge(edge, artifact);
+        if (comparison) {
+          node.appendChild(el("text", {x: mid.toFixed(1), y: y - 32, "text-anchor": "middle"}, `guide delta ${comparison.delta_vs_guide_moving_min}m`));
+        }
+      });
+      nodes.forEach(item => {
+        const x = nodeX.get(item.node_id) ?? left;
+        node.appendChild(el("circle", {cx: x.toFixed(1), cy: nodeY, r: 13, class: "capability-node"}));
+        node.appendChild(el("text", {x: x.toFixed(1), y: nodeY + 68, "text-anchor": "middle"}, item.label || item.node_id));
+      });
+    }
+
+    function renderCapabilitySharePreview(artifact) {
+      const node = document.getElementById("capabilitySharePreview");
+      node.replaceChildren();
+      const preview = artifact?.share_preview || null;
+      if (!preview) {
+        node.textContent = "No share preview artifact available.";
+        return;
+      }
+      const included = Object.keys(preview.included_fields || {}).join(", ");
+      const excluded = Object.keys(preview.excluded_fields || {})
+        .filter(key => preview.excluded_fields[key])
+        .join(", ");
+      [
+        `Share preview requires confirmation: ${preview.export_requires_confirmation === true}`,
+        `Included: ${included || "-"}`,
+        `Excluded: ${excluded || "-"}`,
+        "No export is performed from this read-only admin panel."
+      ].forEach(text => {
+        const line = document.createElement("div");
+        line.textContent = text;
+        node.appendChild(line);
+      });
+    }
+
+    function renderCapabilityPanel(item) {
+      const panel = document.getElementById("capabilityPanel");
+      const metrics = document.getElementById("capabilityMetrics");
+      const segments = document.getElementById("capabilitySegments");
+      const sourceRefs = document.getElementById("capabilitySourceRefs");
+      const svgNode = document.getElementById("capabilityTimelineSvg");
+      const sharePreview = document.getElementById("capabilitySharePreview");
+      metrics.replaceChildren();
+      segments.replaceChildren();
+      sourceRefs.replaceChildren();
+      svgNode.replaceChildren();
+      sharePreview.replaceChildren();
+      const artifact = capabilityArtifactForSelection(item);
+      if (!artifact) {
+        panel.classList.add("is-empty");
+        return;
+      }
+      panel.classList.remove("is-empty");
+      const edge = selectedCapabilityEdge(item, artifact);
+      const summary = artifact.summary || {};
+      const capsule = artifact.capsule_preview || {};
+      document.getElementById("capabilityTitle").textContent = edge
+        ? `${edge.from_node_id || "-"} -> ${edge.to_node_id || "-"}`
+        : `${artifact.route_family || artifact.case_id} capability artifact`;
+      document.getElementById("capabilityConfidence").textContent = edge
+        ? `confidence ${edge.confidence || "-"}`
+        : `confidence ${capsule.confidence || "-"}`;
+
+      const metricRows = edge ? [
+        ["Moving", formatNumber(edge.moving_time_s, "s")],
+        ["Elapsed", formatNumber(edge.elapsed_time_s, "s")],
+        ["Rest", formatNumber(edge.rest_time_s, "s")],
+        ["Distance", formatOneDecimal(edge.distance_m, "m")],
+        ["Ascent", formatOneDecimal(edge.ascent_m, "m")],
+        ["Descent", formatOneDecimal(edge.descent_m, "m")]
+      ] : [
+        ["Moving", formatNumber(summary.moving_time_s, "s")],
+        ["Elapsed", formatNumber(summary.elapsed_time_s, "s")],
+        ["Rest", formatNumber(summary.rest_time_s, "s")],
+        ["Distance", formatOneDecimal(summary.distance_m, "m")],
+        ["Ascent", formatOneDecimal(summary.ascent_m, "m")],
+        ["Moving ratio", summary.moving_ratio === undefined ? "-" : String(summary.moving_ratio)]
+      ];
+      metricRows.forEach(([label, value]) => metrics.appendChild(capabilityMetric(label, value)));
+      renderCapabilityTimelineSvg(artifact, edge);
+      renderCapabilitySharePreview(artifact);
+
+      if (edge) {
+        const comparison = capabilityComparisonForEdge(edge, artifact);
+        appendCapabilityListItem(
+          segments,
+          edge.edge_id || "selected capability segment",
+          `${formatNumber(edge.moving_time_s, "s")} moving | ${formatNumber(edge.elapsed_time_s, "s")} elapsed | ${formatNumber(edge.rest_time_s, "s")} rest`
+        );
+        if (comparison) {
+          appendCapabilityListItem(
+            segments,
+            `guide comparison ${comparison.route_time_source}`,
+            `${comparison.user_moving_time_min}m moving vs ${comparison.guide_time_min}m guide | delta ${comparison.delta_vs_guide_moving_min}m`
+          );
+        }
+      } else {
+        (artifact.edges || []).slice(0, 4).forEach(capabilityEdge => {
+          const comparison = capabilityComparisonForEdge(capabilityEdge, artifact);
+          appendCapabilityListItem(
+            segments,
+            capabilityEdge.edge_id,
+            `${capabilityEdge.from_node_id} -> ${capabilityEdge.to_node_id} | ${formatNumber(capabilityEdge.moving_time_s, "s")} moving | ${formatNumber(capabilityEdge.rest_time_s, "s")} rest${comparison ? ` | guide delta ${comparison.delta_vs_guide_moving_min}m` : ""}`
+          );
+        });
+      }
+
+      const refs = edge
+        ? edge.source_refs || []
+        : [artifact.timeline_source_path, artifact.capsule_source_path].filter(Boolean);
+      refs.slice(0, 6).forEach((ref, index) => {
+        appendCapabilityListItem(sourceRefs, `source_ref ${index + 1}`, ref);
+      });
+      document.getElementById("capabilityPrivacy").textContent = [
+        `raw GPX shared: ${capsule.raw_track_shared === true}`,
+        `exact timestamps shared: ${capsule.exact_timestamps_shared === true}`,
+        `incident details shared: ${capsule.incident_details_shared === true}`,
+        "read-only post-analysis evidence; no export or runtime mutation"
+      ].join(" | ");
     }
 
     function nextPlanCandidatesFor(item) {
@@ -1652,6 +2032,7 @@
       if (item.evidence_type === "mission_checkpoint" || item.checkpoint_id) return "checkpoint";
       if (item.evidence_type === "mission_segment") return "segment";
       if (item.evidence_type === "segment_capsule") return "capsule";
+      if (String(item.evidence_type || "").startsWith("post_analysis_capability")) return "timeline";
       if (item.evidence_type === "runtime_decision" || item.evidence_type === "replay_checkpoint") return "timeline";
       if (item.evidence_type === "risk_rule") return "risk";
       if (String(item.evidence_type || "").includes("risk_")) return "risk";
@@ -1703,6 +2084,12 @@
       if (item.evidence_type === "segment_capsule") {
         const capsule = item.capsule || item;
         return `${capsule.segment_id || item.capsule_id} | ${capsule.start_checkpoint_id || "-"} -> ${capsule.end_checkpoint_id || "-"}`;
+      }
+      if (item.evidence_type === "post_analysis_capability") {
+        return `${item.edge_count || 0} segments | moving ${formatNumber(item.summary?.moving_time_s, "s")} | rest ${formatNumber(item.summary?.rest_time_s, "s")}`;
+      }
+      if (item.evidence_type === "post_analysis_capability_segment") {
+        return `${item.from_node_id || "-"} -> ${item.to_node_id || "-"} | moving ${formatNumber(item.moving_time_s, "s")} | confidence ${item.confidence || "-"}`;
       }
       if (item.evidence_type === "device_observation") {
         return `progress ${Math.round(item.total_progress_m || item.progress_m || 0)}m | points ${item.point_count || item.index || "-"}`;
@@ -2403,6 +2790,16 @@
         label: item.capsule_id,
         sublabel: `${item.segment_id || "-"} | ${item.start_checkpoint_id || "-"} -> ${item.end_checkpoint_id || "-"}`
       }), false, "capsule"));
+      if (view.capability_timeline) {
+        tree.appendChild(treeGroup("Capability Timeline", [view.capability_timeline], item => ({
+          label: item.route_family || item.case_id,
+          sublabel: `${item.edge_count} segments | moving ${formatNumber(item.summary?.moving_time_s, "s")} | rest ${formatNumber(item.summary?.rest_time_s, "s")}`
+        }), false, "timeline"));
+        tree.appendChild(treeGroup("Capability Segments", view.capability_timeline.edges || [], item => ({
+          label: item.edge_id,
+          sublabel: `${formatNumber(item.moving_time_s, "s")} moving | ${formatNumber(item.elapsed_time_s, "s")} elapsed | ${item.confidence}`
+        }), false, "timeline"));
+      }
       tree.appendChild(treeGroup("Timeline", view.safety_timeline, item => ({
         label: item.label || item.to_level || item.evidence_type,
         sublabel: `${item.timestamp === null || item.timestamp === undefined ? "" : `t=${Number(item.timestamp).toFixed(0)} | `}${item.reason || item.evidence_type}`

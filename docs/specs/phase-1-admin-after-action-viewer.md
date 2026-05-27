@@ -190,6 +190,14 @@ artifact ids, map evidence ids, checkpoint ids, segment ids, segment capsule
 ids, incident ids, and reviewer notes. They may include proposed changes, but
 they must not mutate the completed mission or produce live safety decisions.
 
+The post-analysis **Capability Timeline**（能力時間軸） is the pacing and
+personal-capability extension of this same boundary. See
+`docs/specs/post-analysis-capability-timeline.md`. It may read completed track,
+checkpoint, segment, and after-action evidence to produce moving-time（移動時間）
+and rest-time（休息時間） summaries, but the result remains read-only
+post-analysis evidence until a human explicitly exports it into a future
+planning workspace.
+
 ## Open Questions
 
 - Should first UI render use SVG/Canvas projection, or should we add Leaflet/MapLibre for better map interaction?

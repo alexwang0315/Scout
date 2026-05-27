@@ -2,7 +2,8 @@
 
 ## Status
 
-Draft for the next alpha branch.
+Draft for the next alpha branch, with first fixture-backed alpha slices now
+tracked in this checkout.
 
 `Spatial Imprint`（空間印記）replaces the narrower "LBS geostamp" framing.
 Scout needs a triggerable spatial annotation system that is not limited to flat
@@ -27,6 +28,20 @@ IMU/PDR 狀態等條件觸發語音或提示。
   state mutations.
 - Permanent imprints are allowed by the product model, but the first alpha slice
   can keep them trip-local until admin deletion.
+
+Current alpha implementation snapshot:
+
+- Pydantic models: `spatial_imprint_models.py`;
+- deterministic trigger evaluation: `spatial_imprint_trigger.py`;
+- trip-local runtime store with TTL/tombstones: `spatial_imprint_store.py`;
+- pretrip reviewed export: `pretrip_spatial_imprint_export.py`;
+- CLI/tool wrappers: `spatial_imprint_cli.py`,
+  `scout.imprint.trigger_dry_run`, `scout.imprint.export_pretrip`,
+  `scout.imprint.store_list`, `scout.imprint.plant`,
+  `scout.imprint.expire`, `scout.imprint.delete`;
+- debug projection: `spatial_imprint_debug_projection.py`;
+- Chilai fixture includes spatial candidates, review records, reviewed
+  `spatial_imprint_set.json`, and manifest refs.
 
 ## Objective
 
@@ -440,7 +455,8 @@ explicitly sets `admin_persistent`.
 
 ## CLI Contract
 
-Future `scout` CLI commands:
+Long-term `scout` CLI commands. In the current checkout, use
+`python -m scout_cli ...` until packaging installs a real `scout` executable:
 
 ```text
 scout imprint list --trip-root runtime_exports/chilai --json
@@ -460,7 +476,9 @@ scout tools run scout.imprint.trigger_dry_run --input dry_run_request.json
 
 CLI commands that plant, expire, delete, or activate imprints must emit the
 standard `scout_agent_tool_result` envelope from
-`docs/specs/scout-agent-tools-cli.md`.
+`docs/specs/scout-agent-tools-cli.md`. The current registered tool wrappers
+already enforce dry-run/write authorization gates for mutating store/export
+operations.
 
 ## Admin Surfaces
 
@@ -590,21 +608,23 @@ First-slice tests should be fixture-backed and network-free:
 Suggested command:
 
 ```text
-PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. venv/bin/python -m pytest -q tests/test_spatial_imprint_models.py tests/test_spatial_imprint_trigger.py tests/test_spatial_imprint_cli.py tests/test_pretrip_spatial_imprint_export.py
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. venv/bin/python -m pytest -q tests/test_spatial_imprint_models.py tests/test_spatial_imprint_trigger.py tests/test_spatial_imprint_cli.py tests/test_spatial_imprint_store.py tests/test_spatial_imprint_debug_projection.py tests/test_pretrip_spatial_imprint_export.py tests/test_pretrip_admin_view.py
 ```
 
 ## First Slice Plan
 
-1. Add `spatial_imprint_models.py` with Pydantic models for imprint, trigger
-   context, trigger event, lifecycle, audience, and predicates.
-2. Add `spatial_imprint_trigger.py` with deterministic fixture-backed predicate
-   evaluation.
-3. Add `spatial_imprint_cli.py trigger-dry-run` that reads an imprint set and
-   trigger context and emits JSON.
-4. Add 3-5 Chilai fixture imprints covering collapse wall, confusing turn,
-   high-risk segment, rest point, and risk-score threshold.
-5. Add voice cue mapping without live playback.
-6. Add tests for schema, trigger, suppression, TTL, and boundary flags.
+1. Done: add `spatial_imprint_models.py` with Pydantic models for imprint,
+   trigger context, trigger event, lifecycle, audience, and predicates.
+2. Done: add `spatial_imprint_trigger.py` with deterministic fixture-backed
+   predicate evaluation.
+3. Done: add `spatial_imprint_cli.py trigger-dry-run` that reads an imprint set
+   and trigger context and emits JSON.
+4. Done: add Chilai fixture imprints for collapse wall, confusing turn,
+   high-risk/risk-score context, and a disabled/review-boundary example.
+5. Done: add voice cue mapping without live playback.
+6. Done: add runtime store list/plant/expire/delete and pretrip export tools.
+7. Done: add tests for schema, trigger, suppression, TTL, store lifecycle,
+   pretrip export, debug projection, and boundary flags.
 
 ## Success Criteria
 

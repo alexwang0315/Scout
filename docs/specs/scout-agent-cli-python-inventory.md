@@ -2,7 +2,8 @@
 
 ## Status
 
-Initial inventory for the Scout Agent Tools CLI spec.
+Initial inventory for the Scout Agent Tools CLI spec, updated with the current
+alpha wrapper implementation state.
 
 Method:
 
@@ -13,9 +14,11 @@ rg -l "argparse|typer|if __name__ == ['\"]__main__['\"]" -g '*.py' | rg -v '(^te
 
 Snapshot from this checkout:
 
-- Non-test Python units: 274.
-- Python units with direct CLI markers: 58.
+- Non-test Python units: 310.
+- Python units with direct CLI markers: 69.
 - Existing Scout skill manifests: 9 under `skills/scout/*.yaml`.
+- Registered Scout agent tool manifests: 39 under
+  `tools/scout_agent_tool_manifests/*.json`.
 
 This is a capability inventory, not a final implementation plan. It favors
 units that can be safely wrapped for Pydantic AI through registered CLI tools.
@@ -46,7 +49,8 @@ Do not expose a unit directly when:
 | Local evidence | offline trip evidence search/query | `scout kb ...` |
 | Pretrip workspace | import, prepare, edit, review, package | `scout pretrip ...` |
 | CP/SCP actions | propose/add/delete/merge/apply CP changes | `scout cp ...` |
-| Risk/map analysis | terrain risk, route risk, heat maps | `scout risk ...` |
+| Risk analysis | terrain risk, route risk, heat maps | `scout risk ...` |
+| Map preparation | raster source metadata, raster tiles, tile cache plans | `scout map ...` |
 | Runtime/debug trace | replay, trace append, debug projection | `scout debug ...` |
 | Voice/outbound | TTS preview/send, provider send intents | `scout voice ...`, `scout outbound ...` |
 | Hardware | readiness, GPIO/alarm/audio/radio probes | `scout hardware ...` |
@@ -86,7 +90,7 @@ can be wrapped first.
 | `runtime_stream_real_device_policy_drill.py` | argparse real-device policy drill | `scout runtime-stream policy-drill` | `operator_triggered_tool` |
 | `admin_local_raster_source.py` | argparse local raster source metadata | `scout map raster-source` | `local_evidence_query` |
 | `admin_local_raster_tiles.py` | argparse local raster tiles | `scout map raster-tiles` | `workspace_write` |
-| `admin_tile_cache_builder.py` | argparse OSM tile cache plan | `scout map tile-cache-plan` | `workspace_write` |
+| `admin_tile_cache_builder.py` | argparse OSM tile cache plan | `scout map tile-cache-plan` | `local_evidence_query` |
 | `sensorlog_to_gpx.py` | argparse SensorLog to GPX conversion | `scout evidence sensorlog-to-gpx` | `workspace_write` |
 | `phase1_replay_demo.py` | argparse Phase 1 replay demo | `scout debug phase1-replay` | `decision_support` |
 | `phase2_import_phase1_incident.py` | argparse incident import | `scout phase2 import-incident` | `operator_triggered_tool` |
@@ -98,6 +102,10 @@ can be wrapped first.
 | `assistant_readiness_check.py` | argparse assistant readiness gate | `scout checks assistant-readiness` | `local_evidence_query` |
 | `alpha_device_smoke_check.py` | argparse alpha device smoke | `scout checks alpha-device-smoke` | `local_evidence_query` |
 | `local_artifact_hygiene_check.py` | argparse local artifact hygiene | `scout checks artifact-hygiene` | `local_evidence_query` |
+| `scout_cli.py` | argparse command-group facade for registered tools | `python -m scout_cli ...` | mixed by manifest |
+| `scout_agent_cli.py` | argparse registered tool list/describe/run and agent plan runner | `python -m scout_agent_cli tools ...` | mixed by manifest |
+| `scout_agent_builtin_tools.py` | argparse deterministic builtin wrapper host | manifest command target | mixed by subcommand |
+| `spatial_imprint_cli.py` | argparse spatial imprint trigger dry-run | `scout imprint trigger-dry-run` | `decision_support` |
 
 Development/fixture CLIs such as `generate_pretrip_chilai_fixture.py`,
 `generate_phase1_fixtures.py`, `generate_field_golden_case.py`,
@@ -137,6 +145,7 @@ direct CLI. They are strong candidates for small wrappers.
 | `voice_tts_provider.py` | `TTSCommandPlan`, `execute_command_plan` | `scout voice preview`, future `scout voice play-local` | `outbound_preview` / `hardware_action` |
 | `voice_cue_policy.py` | `VoiceCuePolicy.choose_next` | `scout voice choose-next` | `decision_support` |
 | `mock_outbound_transport.py` | `MockOutboundTransport` | `scout outbound mock-queue`, `scout outbound mock-deliver` | `outbound_preview` |
+| `scout_sos_playbook.py` | `run_mock_sos_playbook`, `ScoutSosActivationEvent`, mock voice/outbound/debug receipts | `scout sos playbook-run` | `sos_delegated_emergency` |
 | `hardware_control_events.py` | `HardwareControlEvent`, `project_hardware_control_event` | `scout hardware event-project` | `local_evidence_query` |
 | `skill_registry.py` / `skill_runtime.py` | manifest load/list, `record_mock_skill_run` | `scout skills list`, `scout skills record-run` | `local_evidence_query` / `workspace_write` |
 
@@ -158,20 +167,76 @@ failure policy, control surface, and audit settings.
 | `beacon-trend-mock` | beacon | operator approved | `scout skills run beacon-trend-mock` |
 | `team-rendezvous-beacon` | beacon | operator approved | `scout skills run team-rendezvous-beacon` |
 
-## New Capabilities Not Fully Present Yet
+## Current Registered Alpha Tool Set
+
+The current manifest directory exposes these 39 registered tools:
+
+```text
+scout.checks.pretrip_release
+scout.checks.runtime_readiness
+scout.cp.proposal_preview
+scout.cp.propose_add
+scout.cp.propose_delete
+scout.cp.apply_reviewed_delta
+scout.debug.trace_tail
+scout.imprint.delete
+scout.imprint.expire
+scout.imprint.export_pretrip
+scout.imprint.plant
+scout.imprint.store_list
+scout.imprint.trigger_dry_run
+scout.kb.hardware_readiness_summary
+scout.kb.pretrip_view_summary
+scout.kb.query
+scout.local_evidence.status
+scout.map.raster_source
+scout.map.raster_tiles
+scout.map.tile_cache_plan
+scout.note.append_flight_recorder
+scout.outbound.mock_queue
+scout.outbound.mock_transition
+scout.pretrip.import_gpx
+scout.pretrip.prepare_layers
+scout.pretrip.departure_reviewed_candidates
+scout.pretrip.review_append_decisions
+scout.pretrip.runtime_handoff
+scout.pretrip.runtime_export
+scout.pretrip.workspace_edit
+scout.risk.attribution
+scout.risk.heatmap
+scout.runtime.activation_preflight
+scout.runtime.load_dry_run
+scout.safety_action.shelter_direction
+scout.sos.playbook_run
+scout.voice.mock_queue
+scout.voice.mock_transition
+scout.voice.preview
+```
+
+These wrappers establish the first useful path for Pydantic AI: read local
+evidence, summarize hardware readiness without control, propose or write
+bounded workspace changes under authorization, create reversible reviewed CP
+deltas, run release/readiness checks as read-only reports, prepare local map
+metadata/tile cache plans, append review decisions, create candidate-only risk/safety-action
+outputs, plant/expire/delete advisory spatial imprints, promote reviewed
+candidates into a package addendum, write a metadata-only runtime handoff, write
+an immutable runtime export, record voice/outbound mock receipts, and run a
+mock-only SOS playbook after explicit SOS activation.
+
+## Remaining Capabilities Not Fully Present Yet
 
 These are central to the user's desired Scout Agent behavior, but they need new
 composition code rather than a thin wrapper.
 
 | Needed capability | Current building blocks | Gap |
 | --- | --- | --- |
-| `scout kb build/query` | pretrip/admin/debug context adapters, project refs, source registry, artifact manifest | no unified offline local evidence index yet |
-| `scout safety-action shelter-direction` | route/risk/heatmap outputs, reviewed CP/SCP, weather overlay, route matching | no deterministic shelter candidate ranker yet |
-| `scout note append-flight-recorder` | `runtime_debug_log.py`, `RuntimeDebugEvent` | no generic agent action event kind or note append CLI yet |
-| `scout cp apply-reviewed-delta` | workspace edits, review decisions, departure reviewed candidates | no agent delta schema/result envelope yet |
-| `scout voice preview/send` | voice cue models, TTS provider, mock voice transport, provider send CLIs | no unified preview/send manifest with receipts yet |
-| `scout hardware alarm-start/stop` | hardware readiness, GPIO projection, voice/smoke tools | no real alarm hardware action implementation yet |
-| `scout sos playbook-run` | runtime remote provider policy/send queue, Telegram send CLI, mock outbound, voice cue, runtime debug log | no deterministic emergency playbook orchestrator yet |
+| `scout kb build/query` | `scout_agent_kb.py`, pretrip/admin/debug context adapters, project refs, source registry, artifact manifest | project-root/index query exists; persistent indexed build command still needed |
+| `scout safety-action shelter-direction` | `scout_safety_action.py`, local evidence index, route/risk/reviewed refs | first deterministic advisory ranker exists; needs richer weather/terrain/route semantics |
+| `scout note append-flight-recorder` | `runtime_debug_log.py`, `RuntimeDebugEvent`, `agent_note_appended` | first append CLI exists; needs richer note taxonomy and retention policy |
+| `scout cp apply-reviewed-delta` | workspace edits, review decisions, departure reviewed candidates | reversible CP delta artifact exists; direct checkpoint candidate mutation remains closed |
+| `scout voice preview/send` | voice cue models, TTS provider, mock voice transport, provider send CLIs | preview and mock receipts exist; real local speaker/network send requires reviewed boundary |
+| `scout hardware alarm-start/stop` | hardware readiness, GPIO projection, voice/smoke tools | readiness summary exists; no real alarm hardware action implementation yet |
+| `scout sos playbook-run` | `scout_sos_playbook.py`, mock outbound, mock voice, runtime debug log | mock-only orchestrator exists; real SOS/SMS/satellite/hardware alarm channels remain closed |
 
 ## Not Recommended As Direct Agent Tools
 
@@ -188,20 +253,15 @@ Expose these through higher-level wrappers or dry-run/replay commands instead:
 - Fixture generators and release checks: useful for operators and CI, but
   should not be routine autonomous agent tools.
 
-## Recommended First Wrapper Set
+## Recommended Next Wrapper Set
 
-The smallest useful set for the next branch:
+The first wrapper set is now implemented in the manifest directory. The next
+pragmatic wrapper set should focus on package promotion and operational
+visibility:
 
-1. `scout tools list|describe|run`
-2. `scout debug trace-tail`
-3. `scout note append-flight-recorder`
-4. `scout kb pretrip-view-summary`
-5. `scout cp propose-add`
-6. `scout cp propose-delete`
-7. `scout voice preview`
-8. `scout risk attribution`
-9. `scout risk heatmap`
+1. `scout evidence sensorlog-to-gpx`
+2. `scout pretrip artifact-manifest/readiness/decision-register`
 
-This set proves Pydantic AI can use Scout resources to read evidence, propose a
-critical planning change, generate a voice/action preview, and write an
-auditable trace without opening live safety mutation.
+This next set would let the agent assist the reviewed-candidate to package
+handoff path and make `/admin/debug` richer without opening live safety
+mutation, real outbound sends, or hardware drive.

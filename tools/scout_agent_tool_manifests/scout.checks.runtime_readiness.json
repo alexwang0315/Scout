@@ -1,0 +1,46 @@
+{
+  "id": "scout.checks.runtime_readiness",
+  "version": "0.1.0",
+  "description": "Run the Phase 3.5 runtime/debug readiness check as a read-only report for operator/agent inspection.",
+  "command": {
+    "argv": [
+      "{python}",
+      "-m",
+      "scout_agent_builtin_tools",
+      "checks-runtime-readiness",
+      "--input",
+      "{input}",
+      "--json"
+    ],
+    "dry_run_argument": null
+  },
+  "mode": "local_evidence_query",
+  "input_schema_ref": "schemas/scout_agent/checks_runtime_readiness.request.json",
+  "output_schema_ref": "schemas/scout_agent/tool_result.json",
+  "allowed_reads": [
+    "repo.release_check.phase35_runtime_readiness",
+    "runtime.debug_readiness",
+    "docs.specs.phase35",
+    "admin.debug_surface"
+  ],
+  "allowed_writes": [],
+  "forbidden_writes": [
+    "phase1.runtime",
+    "phase2.brain.observed_facts",
+    "live.safety_api",
+    "runtime.activation",
+    "hardware.provider_control"
+  ],
+  "requires_authorization": {
+    "kind": "none"
+  },
+  "trace": {
+    "required": true,
+    "event_kind": "agent_tool_invocation"
+  },
+  "metadata": {
+    "read_only": true,
+    "runtime_activation_allowed": false,
+    "gate_failure_exit_code": 0
+  }
+}

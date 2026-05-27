@@ -1,0 +1,36 @@
+{
+  "id": "scout.runtime.activation_preflight",
+  "version": "0.1.0",
+  "description": "Read an immutable runtime export bundle and build a preflight report without activating runtime.",
+  "command": {
+    "argv": [
+      "{python}",
+      "-m",
+      "scout_agent_builtin_tools",
+      "runtime-activation-preflight",
+      "--input",
+      "{input}",
+      "--json"
+    ],
+    "dry_run_argument": null
+  },
+  "mode": "decision_support",
+  "input_schema_ref": "schemas/scout_agent/runtime_activation_preflight.request.json",
+  "output_schema_ref": "schemas/scout_agent/tool_result.json",
+  "allowed_reads": [
+    "runtime.export_bundle"
+  ],
+  "allowed_writes": [],
+  "forbidden_writes": [
+    "phase1.runtime",
+    "phase2.brain.observed_facts",
+    "live.safety_api"
+  ],
+  "requires_authorization": {
+    "kind": "none"
+  },
+  "trace": {
+    "required": true,
+    "event_kind": "agent_tool_invocation"
+  }
+}

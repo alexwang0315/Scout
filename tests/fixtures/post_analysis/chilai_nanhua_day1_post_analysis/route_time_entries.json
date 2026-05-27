@@ -1,0 +1,20 @@
+[
+  {
+    "candidate_id": "guide.seg.start_mid",
+    "confidence": "medium",
+    "route_guide_segment_time_minutes": 20,
+    "segment_candidate_id": "seg.start_mid",
+    "source_refs": [
+      "guide.fixture.start_mid"
+    ]
+  },
+  {
+    "candidate_id": "guide.seg.mid_finish",
+    "confidence": "medium",
+    "route_guide_segment_time_minutes": 18,
+    "segment_candidate_id": "seg.mid_finish",
+    "source_refs": [
+      "guide.fixture.mid_finish"
+    ]
+  }
+]

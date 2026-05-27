@@ -1,0 +1,48 @@
+{
+  "artifact_kind": "post_analysis_capability_share_preview",
+  "artifact_version": "capability_share_preview.v1",
+  "boundary": {
+    "incident_package_rewrite_allowed": false,
+    "mission_graph_rewrite_allowed": false,
+    "phase1_runtime_mutation_allowed": false,
+    "post_analysis_only": true,
+    "raw_track_shared_by_default": false,
+    "runtime_safety_truth": false,
+    "safety_api_calls_allowed": false
+  },
+  "case_id": "chilai_nanhua_day1_post_analysis",
+  "excluded_fields": {
+    "exact_coordinates": true,
+    "exact_timestamps": true,
+    "home_work_traces": true,
+    "incident_package_details": true,
+    "private_notes": true,
+    "raw_gpx": true
+  },
+  "export_requires_confirmation": true,
+  "included_fields": {
+    "ascent_m": 180.0,
+    "confidence": "high",
+    "descent_m": 20.0,
+    "distance_km": 1.91,
+    "elapsed_time_min": 37,
+    "limitations": [
+      "rest detection is deterministic and rule-based",
+      "weather, pack weight, and team waiting are not normalized",
+      "capability capsule excludes raw GPX, exact timestamps, and incident details"
+    ],
+    "moving_pace_min_per_km": 15.68,
+    "moving_time_min": 30,
+    "rest_time_min": 7,
+    "route_family": "chilai_nanhua_day1",
+    "source_scope": "completed_run_summary_only"
+  },
+  "limitations": [
+    "export requires explicit confirmation",
+    "shared capsule is advisory context, not a safety guarantee",
+    "rest detection is deterministic and rule-based",
+    "weather, pack weight, and team waiting are not normalized",
+    "capability capsule excludes raw GPX, exact timestamps, and incident details"
+  ],
+  "route_family": "chilai_nanhua_day1"
+}

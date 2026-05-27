@@ -10,6 +10,7 @@ from admin_map_layers import build_after_action_map_layers
 from incident_store import IncidentStore
 from mission_graph import load_mission_graph
 from offline_map import load_offline_map_context
+from post_analysis_capability import summarize_capability_artifacts
 from pretrip_admin_view import (
     CHILAI_NANHUA_DAY1_PROJECT_ID,
     build_pretrip_admin_view,
@@ -236,6 +237,7 @@ def build_admin_case_view(
         "replay": _replay_summary(replay_result, artifacts, root),
         "safety_timeline": _safety_timeline(replay_result, incidents, artifacts, root),
         "segment_capsules": _segment_capsules(replay_result, incidents, artifacts, root),
+        "capability_timeline": _load_capability_summary_for_case(case_id, root=root),
         "incident_packages": [
             {
                 "incident_id": package.incident_id,
@@ -439,6 +441,7 @@ def _build_pretrip_admin_case_view(
             debug_projection_ref=debug_projection_ref,
         ),
         "segment_capsules": _pretrip_segment_capsules(mission_segments, source_refs),
+        "capability_timeline": _load_capability_summary_for_case(case_id, root=root),
         "incident_packages": [],
         "admin_surface_projection": {
             **admin_projection,
@@ -717,6 +720,19 @@ def _load_jsonl(path: Path) -> list[dict[str, Any]]:
         for line in path.read_text(encoding="utf-8").splitlines()
         if line.strip()
     ]
+
+
+def _load_capability_summary_for_case(case_id: str, *, root: Path) -> dict[str, Any] | None:
+    output_dir = root / "tests" / "fixtures" / "post_analysis" / f"{case_id}_post_analysis" / "outputs"
+    timeline_path = output_dir / "capability_timeline.json"
+    capsule_path = output_dir / "capability_capsule.json"
+    if not timeline_path.exists() or not capsule_path.exists():
+        return None
+    return summarize_capability_artifacts(
+        timeline_path=timeline_path,
+        capsule_path=capsule_path,
+        root=root,
+    )
 
 
 def _synthetic_pretrip_admin_projection(

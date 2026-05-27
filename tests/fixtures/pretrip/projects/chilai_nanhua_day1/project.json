@@ -66,7 +66,8 @@
     "Route note candidates extract GPX waypoint name/cmt/desc field knowledge as review-gated ModelInterpretation inputs for future Ln coverage.",
     "Route note candidates with potential Ln signals are queued for admin review before any warning or Ln upgrade.",
     "Route note Ln proposals are downstream candidate-only hint/warning coverage proposals and do not activate runtime warnings.",
-    "Route note review options expose draft-only admin dispositions and record no final decision."
+    "Route note review options expose draft-only admin dispositions and record no final decision.",
+    "Spatial Imprint candidates are reviewed pretrip cue addenda and remain advisory until departure/runtime handoff."
   ],
   "overpass_candidate_count": 8,
   "overpass_evidence_ref": "candidates/overpass_evidence.json",
@@ -136,6 +137,13 @@
   "segment_policy_candidates_ref": "outputs/segment_policy_candidates.json",
   "skill_config_manifest_ref": "candidates/skill_config_manifest.json",
   "source_artifact_count": 2,
+  "spatial_imprint_candidate_count": 4,
+  "spatial_imprint_candidates_ref": "candidates/spatial_imprints.json",
+  "spatial_imprint_manifest_ref": "outputs/spatial_imprint_manifest.json",
+  "spatial_imprint_review_record_count": 4,
+  "spatial_imprint_reviewed_count": 3,
+  "spatial_imprint_reviews_ref": "reviews/spatial_imprint_reviews.json",
+  "spatial_imprint_set_ref": "outputs/spatial_imprint_set.json",
   "timing_measurement_count": 18,
   "timing_measurements_ref": "outputs/timing_measurements.json",
   "weather_daylight_evidence_count": 1,

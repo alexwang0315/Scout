@@ -788,6 +788,7 @@ def _check_admin_map_layer_stack(root: Path) -> dict[str, Any]:
         "checkpoints",
         "pois",
         "route-notes",
+        "mcp",
         "weather-api",
     ]
     expected_after_action = [

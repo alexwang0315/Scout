@@ -6,15 +6,31 @@ import pytest
 
 import pretrip_layer_preparation
 from pretrip_layer_preparation import LayerPreparationRequest, run_layer_preparation
+from pretrip_spatial_imprint_export import (
+    write_pretrip_spatial_imprint_export_for_workspace,
+)
+from scout_companion_match_models import (
+    build_companion_capability_capsule,
+    build_companion_match_review_artifact,
+    write_companion_match_review_artifact,
+)
+from scout_energy_models import load_wearable_activity_summaries
 from pretrip_admin_view import (
     build_pretrip_admin_view,
     list_pretrip_admin_projects,
     load_pretrip_debug_projection_view,
 )
+from tests.test_pretrip_spatial_imprint_export import _candidate_set, _review_log
 
 
 ROOT = Path(__file__).resolve().parents[1]
 PROJECT_ID = "chilai_nanhua_day1"
+WEARABLE_FIXTURE_ROOT = ROOT / "tests" / "fixtures" / "wearables"
+WEARABLE_FIXTURES = [
+    WEARABLE_FIXTURE_ROOT / "apple_health_clean_activity.json",
+    WEARABLE_FIXTURE_ROOT / "apple_health_missing_hr_interval.json",
+    WEARABLE_FIXTURE_ROOT / "garmin_body_battery_provider_values.json",
+]
 
 
 def test_builds_fixture_backed_pretrip_admin_view():
@@ -99,6 +115,36 @@ def test_builds_fixture_backed_pretrip_admin_view():
     }
     assert view["gis_perception_timeline"]["counts"]["overpass_checkpoint_candidate_count"] == 9
     assert view["gis_perception_timeline"]["counts"]["checkpoint_candidate_count"] == 9
+    assert view["major_critical_points"]["status"] == "candidate_only"
+    assert view["major_critical_points"]["counts"]["mcp_candidate_count"] == 6
+    assert view["major_critical_points"]["counts"]["dense_checkpoint_count"] == 110
+    assert view["major_critical_points"]["counts"]["suppressed_point_count"] == 2
+    assert view["major_critical_points"]["counts"]["retrieval_query_count"] == 11
+    assert view["major_critical_points"]["counts"]["ocr_label_count"] == 1
+    assert view["major_critical_points"]["counts"]["cp_support_supported_count"] == 5
+    assert (
+        view["major_critical_points"]["counts"]["cp_support_suggested_insertion_count"]
+        == 1
+    )
+    assert view["major_critical_points"]["retrieval"]["planner_kind"] == (
+        "pydantic_ai_tool_orchestration_plan"
+    )
+    assert view["major_critical_points"]["retrieval"]["truth_decision_allowed"] is False
+    assert view["major_critical_points"]["retrieval"]["fetch_summary_count"] == 12
+    assert view["major_critical_points"]["retrieval"]["live_network_performed"] is False
+    assert (
+        view["major_critical_points"]["cp_support_reconciliation"][
+            "suggested_insertion_count"
+        ]
+        == 1
+    )
+    assert view["major_critical_points"]["boundary"]["runtime_safety_truth"] is False
+    assert view["major_critical_points"]["boundary"]["compile_allowed"] is False
+    assert any(
+        candidate["label"] == "黑水塘"
+        and candidate["source_family_coverage"]["mandatory_complete"] is True
+        for candidate in view["major_critical_points"]["candidates"]
+    )
     assert all(
         candidate["source_profile"] == "overpass_osm_tags"
         for candidate in view["gis_perception_timeline"]["checkpoint_candidates"]
@@ -160,6 +206,7 @@ def test_builds_fixture_backed_pretrip_admin_view():
         "checkpoints",
         "pois",
         "route-notes",
+        "mcp",
         "weather-api",
     ]
     assert view["map_layers"][0]["label_zh"].startswith("影像圖層")
@@ -170,11 +217,29 @@ def test_builds_fixture_backed_pretrip_admin_view():
     assert view["map_layers"][0]["external_network_required"] is False
     assert view["map_layers"][-1]["label_zh"].startswith("氣象 API")
     assert view["map_layers"][-1]["external_api_calls_made"] is False
+    mcp_layer = next(layer for layer in view["map_layers"] if layer["layer_id"] == "mcp")
+    assert mcp_layer["source_kind"] == "major_critical_point_candidate"
+    assert mcp_layer["external_api_calls_made"] is False
     assert view["tabs"]["pre_trip_planning"]["map_layers"] == view["map_layers"]
     assert view["layer_preparation"]["status"] == "not_prepared"
     assert view["layer_preparation"]["network_policy"]["network_calls_made"] is False
     assert view["layer_preparation"]["boundary"]["phase1_runtime_mutation_allowed"] is False
     assert view["layer_preparation"]["boundary"]["workspace_file_mutation_allowed"] is False
+    capability = view["capability_timeline_import"]
+    assert capability["evidence_type"] == "pretrip_capability_timeline_import"
+    assert capability["status"] == "read_only_post_analysis_import"
+    assert capability["counts"] == {"edge_count": 2, "rest_interval_count": 1}
+    assert capability["summary"]["moving_time_s"] == 1800
+    assert capability["summary"]["rest_time_s"] == 420
+    assert capability["privacy"]["raw_track_shared"] is False
+    assert capability["privacy"]["exact_timestamps_shared"] is False
+    assert capability["privacy"]["incident_details_shared"] is False
+    assert capability["planning_use"]["candidate_pacing_reference_only"] is True
+    assert capability["planning_use"]["auto_applies_to_eta"] is False
+    assert capability["planning_use"]["auto_compiles_mission_graph"] is False
+    assert capability["boundary"]["runtime_safety_truth"] is False
+    assert capability["boundary"]["phase1_runtime_mutation_allowed"] is False
+    assert capability["boundary"]["mission_graph_compile_allowed"] is False
 
 
 def test_loads_debug_projection_view_with_shared_map_and_dense_timeline():
@@ -254,6 +319,104 @@ def test_builds_admin_view_from_local_workspace_project_root(tmp_path):
     assert view["review_decision_log"]["decisions"][-1]["candidate_ref"] == (
         "workspace.local.extra"
     )
+
+
+def test_pretrip_imports_workspace_local_capability_timeline_export(tmp_path: Path):
+    fixture_project_root = (
+        ROOT / "tests" / "fixtures" / "pretrip" / "projects" / PROJECT_ID
+    )
+    workspace_project_root = tmp_path / PROJECT_ID
+    shutil.copytree(fixture_project_root, workspace_project_root)
+    workspace_outputs = workspace_project_root / "outputs"
+    workspace_outputs.mkdir(exist_ok=True)
+    post_analysis_outputs = (
+        ROOT
+        / "tests"
+        / "fixtures"
+        / "post_analysis"
+        / f"{PROJECT_ID}_post_analysis"
+        / "outputs"
+    )
+    shutil.copy2(post_analysis_outputs / "capability_timeline.json", workspace_outputs)
+    shutil.copy2(post_analysis_outputs / "capability_capsule.json", workspace_outputs)
+
+    view = build_pretrip_admin_view(
+        PROJECT_ID,
+        root=ROOT,
+        project_root=workspace_project_root,
+    )
+
+    capability = view["capability_timeline_import"]
+    assert capability["source_path"] == "outputs/capability_timeline.json"
+    assert capability["capsule_source_path"] == "outputs/capability_capsule.json"
+    assert capability["counts"] == {"edge_count": 2, "rest_interval_count": 1}
+    assert capability["planning_use"]["auto_applies_to_eta"] is False
+    assert capability["boundary"]["workspace_mutation_allowed"] is False
+    assert capability["boundary"]["mission_graph_compile_allowed"] is False
+
+
+def test_pretrip_imports_workspace_local_companion_match_review(tmp_path: Path):
+    fixture_project_root = (
+        ROOT / "tests" / "fixtures" / "pretrip" / "projects" / PROJECT_ID
+    )
+    workspace_project_root = tmp_path / PROJECT_ID
+    shutil.copytree(fixture_project_root, workspace_project_root)
+    workspace_outputs = workspace_project_root / "outputs"
+    workspace_outputs.mkdir(exist_ok=True)
+    activities = load_wearable_activity_summaries(WEARABLE_FIXTURES, root=ROOT)
+    query = build_companion_capability_capsule(
+        activities,
+        owner_profile_ref="local_user.private",
+    )
+    candidate = build_companion_capability_capsule(
+        activities,
+        owner_profile_ref="shared_capsule.fixture",
+    )
+    artifact = build_companion_match_review_artifact(
+        query,
+        [candidate],
+        query_profile_ref="local_user.private",
+        candidate_profile_refs=["shared_capsule.fixture"],
+    )
+    write_companion_match_review_artifact(
+        artifact,
+        workspace_outputs / "companion_match_review.json",
+    )
+
+    view = build_pretrip_admin_view(
+        PROJECT_ID,
+        root=ROOT,
+        project_root=workspace_project_root,
+    )
+
+    companion = view["companion_match_review"]
+    assert companion["source_path"] == "outputs/companion_match_review.json"
+    assert companion["evidence_type"] == "pretrip_companion_match_review"
+    assert companion["counts"] == {
+        "candidate_count": 1,
+        "ranked_match_count": 1,
+        "recommended_review_count": 0,
+    }
+    assert companion["summary"]["top_candidate_profile_ref"] == "shared_capsule.fixture"
+    assert companion["summary"]["top_match_score"] == 100
+    assert companion["summary"]["raw_health_payload_shared"] is False
+    assert companion["summary"]["auto_applies_to_eta"] is False
+    assert companion["boundary"]["medical_diagnosis"] is False
+    assert companion["boundary"]["phase1_runtime_safety_truth"] is False
+    assert companion["boundary"]["safety_api_calls_allowed"] is False
+    assert companion["boundary"]["workspace_mutation_allowed"] is False
+    assert companion["boundary"]["mission_graph_compile_allowed"] is False
+    assert companion["boundary"]["pretrip_eta_autocalibration_allowed"] is False
+    assert companion["boundary"]["runtime_safety_truth"] is False
+    post_sections = {
+        section["id"]: section
+        for section in view["tabs"]["post_analysis"]["sections"]
+    }
+    assert post_sections["companion_match_review"]["counts"] == companion["counts"]
+    sections_json = json.dumps(post_sections["companion_match_review"])
+    assert "<trkpt" not in sections_json
+    assert "raw_samples" not in sections_json
+    assert "2013-10-08T" not in sections_json
 
 
 def test_admin_view_exposes_workspace_risk_score_layer(
@@ -379,11 +542,17 @@ def test_view_exposes_planning_and_post_analysis_tabs():
         review_workspace["review_decision_apply_plan"]["boundary"]["compiles_mission_graph"]
         is False
     )
+    assert review_workspace["spatial_imprints"]["counts"]["candidate_count"] == 4
+    assert review_workspace["spatial_imprints"]["counts"]["reviewed_imprint_count"] == 3
+    assert review_workspace["spatial_imprints"]["boundary"]["runtime_safety_truth"] is False
     assert planning["resources"]["raw_payloads_embedded"] is False
     assert planning["weather"]["external_api_calls_made"] is False
     assert post["runtime_handoff"]["boundary"]["phase1_runtime_mutation_allowed"] is False
     assert post["after_action_next_plan"]["historical_evidence_mutation_allowed"] is False
     assert post["brain_seed"]["observed_fact_count"] == 0
+    assert post["capability_timeline_import"]["counts"]["edge_count"] == 2
+    assert post["capability_timeline_import"]["planning_use"]["auto_applies_to_eta"] is False
+    assert post["capability_timeline_import"]["boundary"]["runtime_safety_truth"] is False
 
 
 def test_tabs_expose_compact_traceable_detail_sections():
@@ -405,6 +574,7 @@ def test_tabs_expose_compact_traceable_detail_sections():
         ("weather", "Weather And Daylight"),
         ("overpass_evidence", "Overpass Vector Evidence"),
         ("gis_perception_timeline", "GIS Perception CP Timeline"),
+        ("major_critical_points", "Major Critical Points"),
         ("route_notes", "Route Notes"),
         ("route_note_ln_proposals", "Route Note Ln Proposals"),
         ("reference_tracks", "Reference Tracks"),
@@ -412,6 +582,7 @@ def test_tabs_expose_compact_traceable_detail_sections():
         ("departure_bundle", "Departure Bundle"),
     ]
     assert [(section["id"], section["title"]) for section in review_sections] == [
+        ("spatial_imprints", "Spatial Imprints"),
         ("route_note_review_options", "Route Note Review Options"),
         ("review_queue", "Review Queue"),
         ("review_workbench", "Review Workbench"),
@@ -426,6 +597,7 @@ def test_tabs_expose_compact_traceable_detail_sections():
         ("route_comparison", "Route Comparison"),
         ("brain_seed", "Brain Seed"),
         ("after_action_next_plan", "After-Action Next Plan"),
+        ("capability_timeline_import", "Capability Timeline Import"),
         ("admin_surface_projection", "Admin Surface Projection"),
         ("debug_projection", "Debug Projection"),
     ]
@@ -553,6 +725,48 @@ def test_tabs_expose_compact_traceable_detail_sections():
         ]
         is False
     )
+    assert sections_by_id["major_critical_points"]["counts"] == {
+        "accepted_evidence_page_count": 12,
+        "cp_support_suggested_insertion_count": 1,
+        "cp_support_supported_count": 5,
+        "dense_checkpoint_count": 110,
+        "mcp_candidate_count": 6,
+        "ocr_label_count": 1,
+        "retrieval_query_count": 11,
+        "review_required_ocr_label_count": 1,
+        "review_action_count": 0,
+        "suppressed_point_count": 2,
+    }
+    assert (
+        sections_by_id["major_critical_points"]["boundary"][
+            "phase1_runtime_mutation_allowed"
+        ]
+        is False
+    )
+    assert sections_by_id["spatial_imprints"]["counts"] == {
+        "accepted_count": 3,
+        "candidate_count": 4,
+        "corrected_count": 0,
+        "disabled_count": 1,
+        "hardware_control_count": 0,
+        "phase1_runtime_mutation_count": 0,
+        "rejected_count": 0,
+        "remote_outbound_send_count": 0,
+        "review_record_count": 4,
+        "reviewed_imprint_count": 3,
+        "runtime_truth_count": 0,
+        "safety_api_call_count": 0,
+    }
+    assert (
+        sections_by_id["spatial_imprints"]["summary"]["reviewed_imprint_count"]
+        == 3
+    )
+    assert (
+        sections_by_id["spatial_imprints"]["boundary"][
+            "phase1_runtime_mutation_allowed"
+        ]
+        is False
+    )
     assert sections_by_id["expert_contributions"]["counts"]["contribution_count"] == 3
     assert sections_by_id["expert_contributions"]["summary"]["candidate_set_edit_count"] == 2
     assert sections_by_id["expert_contributions"]["summary"]["external_import_edit_count"] == 1
@@ -571,6 +785,29 @@ def test_tabs_expose_compact_traceable_detail_sections():
     assert sections_by_id["route_comparison"]["counts"]["point_count_delta"] == -1275
     assert sections_by_id["brain_seed"]["counts"]["observed_fact_count"] == 0
     assert sections_by_id["after_action_next_plan"]["counts"]["candidate_count"] == 3
+    assert sections_by_id["capability_timeline_import"]["counts"] == {
+        "edge_count": 2,
+        "rest_interval_count": 1,
+    }
+    assert sections_by_id["capability_timeline_import"]["summary"]["moving_time_s"] == 1800
+    assert sections_by_id["capability_timeline_import"]["summary"]["raw_track_shared"] is False
+    assert sections_by_id["capability_timeline_import"]["summary"]["auto_applies_to_eta"] is False
+    assert (
+        sections_by_id["capability_timeline_import"]["boundary"][
+            "raw_track_shared_by_default"
+        ]
+        is False
+    )
+    assert (
+        sections_by_id["capability_timeline_import"]["boundary"][
+            "phase1_runtime_mutation_allowed"
+        ]
+        is False
+    )
+    assert (
+        sections_by_id["capability_timeline_import"]["boundary"]["runtime_safety_truth"]
+        is False
+    )
     assert sections_by_id["admin_surface_projection"]["counts"] == {
         "checkpoint_candidate_count": 110,
         "reference_track_count": 23,
@@ -602,6 +839,59 @@ def test_tabs_expose_compact_traceable_detail_sections():
     )
 
 
+def test_view_exposes_optional_spatial_imprint_review_workspace(tmp_path):
+    source_project_root = (
+        ROOT / "tests" / "fixtures" / "pretrip" / "projects" / PROJECT_ID
+    )
+    project_root = tmp_path / PROJECT_ID
+    shutil.copytree(source_project_root, project_root)
+    project_path = project_root / "project.json"
+    project = json.loads(project_path.read_text(encoding="utf-8"))
+    project.update(
+        {
+            "spatial_imprint_candidates_ref": "candidates/spatial_imprints.json",
+            "spatial_imprint_reviews_ref": "reviews/spatial_imprint_reviews.json",
+            "spatial_imprint_set_ref": "outputs/spatial_imprint_set.json",
+            "spatial_imprint_manifest_ref": "outputs/spatial_imprint_manifest.json",
+        }
+    )
+    project_path.write_text(
+        json.dumps(project, ensure_ascii=False, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+    (project_root / "candidates" / "spatial_imprints.json").write_text(
+        _candidate_set().model_dump_json(),
+        encoding="utf-8",
+    )
+    (project_root / "reviews" / "spatial_imprint_reviews.json").write_text(
+        _review_log().model_dump_json(),
+        encoding="utf-8",
+    )
+    write_pretrip_spatial_imprint_export_for_workspace(project_root)
+
+    view = build_pretrip_admin_view(PROJECT_ID, root=ROOT, project_root=project_root)
+    spatial = view["spatial_imprints"]
+    review_sections = {
+        section["id"]: section
+        for section in view["tabs"]["review_workspace"]["sections"]
+    }
+
+    assert spatial["status"] == "reviewed_pretrip_addendum"
+    assert spatial["counts"]["candidate_count"] == 4
+    assert spatial["counts"]["reviewed_imprint_count"] == 2
+    assert spatial["boundary"]["runtime_activation_allowed"] is False
+    assert spatial["reviewed_imprints"][0]["planting_source"] == "pretrip_reviewed"
+    assert spatial["reviewed_imprints"][0]["payload_type"] == "voice_cue"
+    assert "spatial_imprints" in review_sections
+    assert review_sections["spatial_imprints"]["counts"]["runtime_truth_count"] == 0
+    assert (
+        review_sections["spatial_imprints"]["boundary"][
+            "phase1_runtime_mutation_allowed"
+        ]
+        is False
+    )
+
+
 def test_tab_detail_sections_do_not_embed_raw_payload_fragments():
     view = build_pretrip_admin_view(PROJECT_ID, root=ROOT)
     sections_json = json.dumps(
@@ -620,6 +910,8 @@ def test_tab_detail_sections_do_not_embed_raw_payload_fragments():
     assert "proposed_fields" not in sections_json
     assert "reviewer_prompt" not in sections_json
     assert "confidence_after_review" not in sections_json
+    assert "<trkpt" not in sections_json
+    assert "2013-10-08T" not in sections_json
 
 
 def test_review_draft_log_is_read_only_summary_without_raw_payloads():

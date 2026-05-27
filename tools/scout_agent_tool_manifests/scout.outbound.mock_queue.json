@@ -1,0 +1,51 @@
+{
+  "id": "scout.outbound.mock_queue",
+  "version": "0.1.0",
+  "description": "Queue a mock outbound message receipt without real SMS, satellite, webhook, SOS, or network send.",
+  "command": {
+    "argv": [
+      "{python}",
+      "-m",
+      "scout_agent_builtin_tools",
+      "outbound-mock-queue",
+      "--input",
+      "{input}",
+      "--json"
+    ],
+    "dry_run_argument": "--dry-run"
+  },
+  "mode": "outbound_preview",
+  "input_schema_ref": "schemas/scout_agent/outbound_mock_queue.request.json",
+  "output_schema_ref": "schemas/scout_agent/tool_result.json",
+  "allowed_reads": [
+    "outbound.message_preview",
+    "runtime.debug_trace"
+  ],
+  "allowed_writes": [
+    "mock.outbound_queue",
+    "runtime.debug_trace.outbound_mock"
+  ],
+  "forbidden_writes": [
+    "phase1.runtime",
+    "phase2.brain.observed_facts",
+    "live.safety_api",
+    "real.sos",
+    "real.sms",
+    "real.satellite",
+    "real.webhook",
+    "real.network_send"
+  ],
+  "requires_authorization": {
+    "kind": "none"
+  },
+  "trace": {
+    "required": true,
+    "event_kind": "agent_tool_invocation"
+  },
+  "metadata": {
+    "mock_outbound_only": true,
+    "real_sos_sent": false,
+    "real_sms_sent": false,
+    "real_satellite_sent": false
+  }
+}

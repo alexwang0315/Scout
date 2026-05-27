@@ -2140,9 +2140,9 @@ def test_current_chilai_pretrip_release_check_passes():
     assert summary["checks"]["route_note_candidates"]["status"] == "candidate_only"
     assert summary["checks"]["route_note_candidates"]["waypoint_count"] == 81
     assert summary["checks"]["route_note_candidates"]["note_candidate_count"] == 81
-    assert summary["checks"]["route_note_candidates"]["hazard_hint_count"] == 2
-    assert summary["checks"]["route_note_candidates"]["route_condition_hint_count"] == 19
-    assert summary["checks"]["route_note_candidates"]["potential_ln_signal_count"] == 21
+    assert summary["checks"]["route_note_candidates"]["hazard_hint_count"] == 3
+    assert summary["checks"]["route_note_candidates"]["route_condition_hint_count"] == 20
+    assert summary["checks"]["route_note_candidates"]["potential_ln_signal_count"] == 23
     assert summary["checks"]["route_note_candidates"]["observed_fact_count"] == 0
     assert summary["checks"]["route_note_candidates"]["raw_payload_count"] == 0
     assert summary["checks"]["route_note_candidates"]["candidate_only"] is True
@@ -2158,24 +2158,24 @@ def test_current_chilai_pretrip_release_check_passes():
     assert summary["checks"]["route_note_candidates"]["runtime_mutation_allowed"] is False
     assert summary["checks"]["route_note_candidates"]["phase2_writeback_allowed"] is False
     assert summary["checks"]["route_note_ln_proposals"]["status"] == "candidate_only"
-    assert summary["checks"]["route_note_ln_proposals"]["proposal_count"] == 21
+    assert summary["checks"]["route_note_ln_proposals"]["proposal_count"] == 23
     assert (
         summary["checks"]["route_note_ln_proposals"][
             "hint_coverage_proposal_count"
         ]
-        == 19
+        == 20
     )
     assert (
         summary["checks"]["route_note_ln_proposals"][
             "warning_coverage_proposal_count"
         ]
-        == 2
+        == 3
     )
     assert (
         summary["checks"]["route_note_ln_proposals"][
             "human_review_required_count"
         ]
-        == 21
+        == 23
     )
     assert summary["checks"]["route_note_ln_proposals"]["observed_fact_count"] == 0
     assert summary["checks"]["route_note_ln_proposals"]["runtime_mutation_count"] == 0
@@ -2194,9 +2194,9 @@ def test_current_chilai_pretrip_release_check_passes():
     assert summary["checks"]["route_note_review_options"]["status"] == (
         "candidate_only_draft_only"
     )
-    assert summary["checks"]["route_note_review_options"]["review_option_count"] == 21
-    assert summary["checks"]["route_note_review_options"]["candidate_only_count"] == 21
-    assert summary["checks"]["route_note_review_options"]["draft_only_count"] == 21
+    assert summary["checks"]["route_note_review_options"]["review_option_count"] == 23
+    assert summary["checks"]["route_note_review_options"]["candidate_only_count"] == 23
+    assert summary["checks"]["route_note_review_options"]["draft_only_count"] == 23
     assert summary["checks"]["route_note_review_options"]["decision_recorded_count"] == 0
     assert summary["checks"]["route_note_review_options"]["runtime_mutation_count"] == 0
     assert summary["checks"]["route_note_review_options"]["candidate_only"] is True
@@ -2406,7 +2406,7 @@ def test_current_chilai_pretrip_release_check_passes():
     assert summary["checks"]["pretrip_source_registry"]["ptt_calibration_scope"] == (
         "calibration_inputs_only"
     )
-    assert summary["checks"]["pretrip_decision_register"]["resolved_count"] == 15
+    assert summary["checks"]["pretrip_decision_register"]["resolved_count"] == 16
     assert summary["checks"]["pretrip_decision_register"]["open_question_count"] == 0
     assert summary["checks"]["pretrip_decision_register"]["alpha_workable_mode"] is True
     assert summary["checks"]["pretrip_decision_register"]["no_network"] is False

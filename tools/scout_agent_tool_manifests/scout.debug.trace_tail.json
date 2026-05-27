@@ -1,0 +1,37 @@
+{
+  "id": "scout.debug.trace_tail",
+  "version": "0.1.0",
+  "description": "Read the tail of a runtime debug or agent action trace JSONL without mutating Scout state.",
+  "command": {
+    "argv": [
+      "{python}",
+      "-m",
+      "scout_agent_builtin_tools",
+      "debug-trace-tail",
+      "--input",
+      "{input}",
+      "--json"
+    ],
+    "dry_run_argument": null
+  },
+  "mode": "local_evidence_query",
+  "input_schema_ref": "schemas/scout_agent/debug_trace_tail.request.json",
+  "output_schema_ref": "schemas/scout_agent/tool_result.json",
+  "allowed_reads": [
+    "runtime.debug_trace",
+    "agent.action_trace"
+  ],
+  "allowed_writes": [],
+  "forbidden_writes": [
+    "phase1.runtime",
+    "phase2.brain.observed_facts",
+    "live.safety_api"
+  ],
+  "requires_authorization": {
+    "kind": "none"
+  },
+  "trace": {
+    "required": true,
+    "event_kind": "agent_tool_invocation"
+  }
+}
