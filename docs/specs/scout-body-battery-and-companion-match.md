@@ -2,7 +2,94 @@
 
 ## Status
 
-Draft for the next alpha branch.
+Alpha slice implemented for fixture-backed wearable summary import, 7/28/90-day
+baseline building, provider-value preservation, companion capability capsules,
+companion match review artifacts, post-analysis feedback, and the read-only
+pretrip/admin projection.
+
+Implemented adapter scope: sanitized Apple Health and Garmin summary envelopes,
+plus GPX/FIT/TCX file-derived summary envelopes, can normalize into the
+provider-neutral `WearableActivitySummary` contract without storing raw health
+payloads, raw tracks, exact timestamps, or home/work traces.
+
+Implemented raw-file parser scope: local Apple Health export XML and Garmin
+Connect JSON exports can be summarized one activity at a time or as deterministic
+local batches, provider export directories/zips can be inspected into
+privacy-preserving manifests, multiple supported Garmin activity JSON members in
+one archive can be summarized together, Garmin FIT archive members can be parsed
+directly from archive bytes without extraction, FIT session-summary files
+and FIT lap-summary files without track points can fall back to sanitized
+duration/distance/ascent/HR summary fields, and local GPX, TCX, and minimal FIT
+files can be summarized into sanitized import envelopes without committing or
+embedding raw health payloads, raw tracks, coordinates, exact timestamps, or
+source payloads. Tests generate raw Apple Health XML, Garmin JSON, zip archives,
+and GPX/TCX/FIT content in temporary directories rather than committing raw
+health/track files.
+
+Implemented provider API contract scope: offline Garmin Health API and Apple
+HealthKit-style fixture transports can summarize account-authorized response
+fixtures into sanitized imports only after explicit consent. They record
+redacted authorization metadata, never expose token values, and perform no live
+provider API or network call.
+
+Implemented baseline/match policy scope: local route-family profiles are emitted
+when at least two activities classify into the same route family, and public
+companion-match display requires at least three local query activities. Lower
+history counts may still produce review-only artifacts.
+
+Implemented local companion pool scope: privacy-preserving companion capability
+capsules can be added to a local-only consent pool only after explicit consent,
+matched locally, withdrawn locally, and packaged for manual local exchange.
+Raw tracks, raw health payloads, exact timestamps, route-family names, and
+remote upload remain excluded.
+
+Implemented community publish dry-run scope: explicit-consent local pool entries
+can be projected into a community publish dry-run artifact without private owner
+refs, local consent metadata, route-family names, remote upload, or network
+transport. This is a preflight contract, not a remote community service.
+
+Implemented lifecycle scope: local admin APIs can export a coarse energy/capsule
+bundle only with explicit local consent, and can delete generated baseline,
+explanation, capsule, refresh, and export artifacts without deleting activity
+summaries or source files.
+
+Implemented Daily/Home scope: local admin API can write a
+`scout_wearable_daily_energy_overview` artifact with current reserve band,
+7/28/90-day trend, recent-load explanation, and a non-medical next-day soft cue.
+It can also derive a local mobile-style `scout_wearable_daily_home_preview`
+JSON artifact plus static HTML preview through
+`POST /admin/wearables/daily-home-preview` and
+`GET /admin/wearables/daily-home-preview`. This remains a local preview surface,
+not a networked production consumer mobile app integration.
+
+Implemented mobile handoff scope: local Daily/Home preview and optional
+companion match review artifacts can be packaged into
+`scout_mobile_energy_companion_handoff` through
+`POST /admin/wearables/mobile-handoff` or `python -m scout_mobile_handoff build`.
+The package is local-only, performs no network sync, carries no mobile runtime
+authority, and cannot mutate Phase 1 safety state.
+
+Implemented field cue scope: sanitized local wearable observations can be
+combined with the personal baseline to produce deterministic
+`scout_energy_field_advisory_cue` artifacts and local voice cues. This is a
+fixture-backed contract, not live provider streaming.
+
+Implemented stream-admission scope: local fixture-batch wearable stream
+admission can dry-run sanitized observations into field cue artifacts while
+rejecting network fetch, remote provider APIs, and runtime ingest.
+
+Implemented live-frame fixture normalization scope: local Apple/Garmin
+live-like frame fixtures can be normalized into sanitized
+`scout_wearable_field_observation` artifacts for the existing stream-admission
+dry-run path. Exact timestamps, token refs, raw frame/sample arrays, provider
+payload fields, network calls, and runtime ingest remain excluded from output.
+
+Still deferred: live account-authorized Apple/Garmin provider API transport,
+production provider archive mapping beyond the local
+manifest/multi-Garmin-JSON/FIT-member slice, real remote/community pool
+service, broader production FIT coverage beyond the local minimal parser, live
+wearable streaming, networked production consumer mobile app integration, and
+any medical or Phase 1 safety interpretation.
 
 This spec defines two related but separate capabilities:
 
@@ -332,6 +419,16 @@ time-windowed:
 - 90-day stable baseline;
 - route-family-specific baseline when enough data exists.
 
+Alpha policy:
+
+- route-family profiles are local-only baseline context;
+- first supported route families are deterministic coarse buckets such as
+  `local_walk`, `light_outdoor_activity`, `local_day_hike`, and
+  `mountain_hike`;
+- a route-family profile is emitted only when at least two local activities fit
+  that family;
+- route-family names are not shared publicly without explicit consent.
+
 ### Route-Effort Baseline（路線耗能基準）
 
 The estimated effort of a route or segment independent of a specific user's
@@ -367,6 +464,20 @@ Supported input categories:
 - Scout completed route and Capability Timeline artifacts;
 - manual self-rated exertion and fatigue check-ins.
 
+Alpha adapter boundary: raw provider files are not committed.
+`scout_wearable_adapters.py` accepts sanitized summary envelopes or
+file-derived summary envelopes and writes only provider-neutral activity
+summaries.
+
+Alpha raw-file boundary: `scout_wearable_raw_importers.py` can summarize local
+Apple Health export XML and Garmin Connect JSON exports as single activities or
+as deterministic local batches, can discover provider export files inside local
+directories/zips, and can summarize GPX/FIT/TCX files into sanitized envelopes.
+The raw source is never embedded in outputs or extracted into the workspace.
+Exact timestamps are used only transiently to derive `activity_date`, relative
+duration, and heart-rate summary windows. Garmin Body Battery and stress values
+remain provider source values only.
+
 ### Live Field Input
 
 Potential live inputs:
@@ -399,6 +510,10 @@ Every record should preserve:
 
 ### Activity Summary
 
+The implemented alpha fixture contract uses `activity_date` instead of exact
+`started_at` timestamps so committed fixtures and shared artifacts do not expose
+precise private timelines.
+
 ```json
 {
   "artifact_kind": "scout_wearable_activity_summary",
@@ -407,7 +522,7 @@ Every record should preserve:
   "source_path": "imports/apple_health/workout_2026_05_01.json",
   "sha256": "...",
   "activity_type": "hiking",
-  "started_at": "2026-05-01T00:10:00Z",
+  "activity_date": "2026-05-01",
   "duration_s": 21600,
   "moving_time_s": 18000,
   "distance_m": 12200,
@@ -454,10 +569,12 @@ Every record should preserve:
   "route_family_profiles": [
     {
       "route_family": "local_day_hike",
+      "activity_count": 12,
       "route_effort_units_p50": 120.5,
       "moving_time_per_effort_p50": 1.08,
       "heart_rate_load_per_effort_p50": 0.94,
-      "late_activity_fatigue_decay_p50": 0.12
+      "late_activity_fatigue_decay_p50": 0.12,
+      "confidence": "medium"
     }
   ],
   "reserve_trend": {
@@ -600,6 +717,14 @@ Show:
 - next suggested easy/rest/training day as a soft cue;
 - no medical language.
 
+Alpha implementation:
+
+- `POST /admin/wearables/daily-energy` writes
+  `outputs/daily_energy_overview.json`;
+- the overview is local admin evidence only and is not a consumer mobile home
+  screen yet;
+- soft cues are advisory trend language and never Phase 1 runtime safety truth.
+
 ### Post-Analysis Surface
 
 Extend Capability Timeline with:
@@ -630,6 +755,24 @@ For each candidate:
 - missing-data confidence;
 - privacy scope.
 
+Alpha visibility policy:
+
+- `minimum_activity_count_for_public_match` is 3 local query activities;
+- fewer local query activities may still generate review-only artifacts for
+  private planning/debug review;
+- timeline-derived candidate capsules can be compared, but one-route candidates
+  are flagged as review-only evidence;
+- `scout_companion_consent_pool` is local-only and requires explicit consent per
+  capsule before matching against pool entries;
+- pool withdrawal deletes the local pool entry without deleting the source
+  capsule or imported activity summaries;
+- `scout_companion_pool_exchange_package` supports manual local exchange of
+  explicit-consent pool entries without remote upload;
+- `scout_companion_community_publish_dry_run` projects eligible public pool
+  entries into a dry-run package without private owner refs, local consent
+  metadata, raw data, route-family names, network transport, or upload;
+- no match score is a safety guarantee.
+
 Use neutral wording:
 
 - good: "similar rhythm", "similar ascent profile", "rests less often";
@@ -649,39 +792,183 @@ Each cue must be logged as advisory evidence only.
 
 ## Commands
 
-Proposed import command:
+Implemented alpha normalization command for sanitized provider/file-derived
+envelopes:
 
 ```bash
 python -m scout_energy_reserve \
-  import-activities \
-  --input-dir /data/scout/wearables/imports \
+  normalize \
+  --input tests/fixtures/wearables/adapters/apple_health_sanitized_workout.json \
+  --input tests/fixtures/wearables/adapters/garmin_connect_sanitized_activity.json \
+  --input tests/fixtures/wearables/adapters/gpx_derived_summary.json \
   --output-dir /data/scout/energy/normalized \
-  --provider apple_health_export
+  --root /Users/alexwang0315/scout-fusion
 ```
 
-Proposed baseline command:
+Implemented alpha raw Apple Health export XML, Garmin Connect JSON, and
+GPX/FIT/TCX summarization command:
 
 ```bash
 python -m scout_energy_reserve \
-  build-baseline \
-  --activity-dir /data/scout/energy/normalized \
-  --capability-timeline-dir /data/scout/post-analysis \
-  --output /data/scout/energy/baseline.json \
-  --baseline-window-days 90 \
-  --acute-window-days 7
+  summarize-raw \
+  --input /data/scout/local/garmin_activity.json \
+  --source-format garmin_connect_export \
+  --output-dir /data/scout/energy/sanitized-imports \
+  --activity-id local.garmin.activity.001
 ```
 
-Proposed companion match command:
+Implemented alpha local export batch summarization command:
+
+```bash
+python -m scout_energy_reserve \
+  summarize-raw-batch \
+  --input /data/scout/local/garmin_activities.json \
+  --source-format garmin_connect_export \
+  --output-dir /data/scout/energy/sanitized-imports \
+  --activity-id-prefix local.garmin.batch
+```
+
+Implemented alpha local provider archive discovery command:
+
+```bash
+python -m scout_energy_reserve \
+  inspect-provider-archive \
+  --input /data/scout/local/garmin-export.zip \
+  --source-format garmin_connect_export
+
+python -m scout_energy_reserve \
+  summarize-provider-archive \
+  --input /data/scout/local/garmin-export.zip \
+  --source-format garmin_connect_export \
+  --output-dir /data/scout/energy/sanitized-imports \
+  --activity-id-prefix archive.garmin
+```
+
+Implemented alpha offline provider API fixture command:
+
+```bash
+python -m scout_energy_reserve \
+  summarize-provider-api-fixture \
+  --input /data/scout/local/garmin-api-response.json \
+  --provider garmin_health_api \
+  --output-dir /data/scout/energy/sanitized-imports \
+  --activity-id-prefix api.garmin \
+  --scope activity:read \
+  --explicit-consent
+
+python -m scout_energy_reserve \
+  summarize-provider-api-fixture \
+  --input /data/scout/local/apple-healthkit-response.json \
+  --provider apple_healthkit_api \
+  --output-dir /data/scout/energy/sanitized-imports \
+  --activity-id-prefix api.apple \
+  --scope HKWorkoutType \
+  --scope HKQuantityTypeIdentifierHeartRate \
+  --explicit-consent
+```
+
+Implemented alpha local live-frame fixture normalization command:
+
+```bash
+python -m scout_energy_reserve \
+  summarize-live-frame-fixture \
+  --input /data/scout/local/apple-live-frame-fixture.json \
+  --provider apple_healthkit_live_fixture \
+  --output-dir /data/scout/energy/field-observations \
+  --stream-id stream.apple.fixture.001 \
+  --route-segment-ref segment.local.climb \
+  --expected-baseline-bpm 136
+```
+
+Implemented alpha command for provider-neutral wearable summary fixtures:
+
+```bash
+python -m scout_energy_reserve \
+  build \
+  --activity tests/fixtures/wearables/apple_health_clean_activity.json \
+  --activity tests/fixtures/wearables/apple_health_missing_hr_interval.json \
+  --activity tests/fixtures/wearables/garmin_body_battery_provider_values.json \
+  --output-dir /data/scout/energy/local \
+  --reference-date 2026-05-27 \
+  --root /Users/alexwang0315/scout-fusion
+```
+
+Implemented alpha companion match command:
 
 ```bash
 python -m scout_companion_match \
   score \
   --query-capsule /data/scout/energy/capsules/me.json \
   --candidate-capsule /data/scout/energy/capsules/candidate.json \
+  --candidate-profile-ref shared_capsule.local_candidate \
   --output /data/scout/energy/match-results/candidate.match.json
 ```
 
-Proposed tests:
+Implemented alpha local companion consent pool commands:
+
+```bash
+python -m scout_companion_match \
+  pool-build \
+  --capsule /data/scout/energy/capsules/candidate.json \
+  --public-profile-ref pool.local_candidate \
+  --explicit-consent \
+  --output /data/scout/energy/pools/local_pool.json
+
+python -m scout_companion_match \
+  pool-score \
+  --query-capsule /data/scout/energy/capsules/me.json \
+  --pool /data/scout/energy/pools/local_pool.json \
+  --output /data/scout/energy/match-results/local_pool.match.json
+
+python -m scout_companion_match \
+  pool-export-package \
+  --pool /data/scout/energy/pools/local_pool.json \
+  --public-profile-ref pool.local_candidate \
+  --output /data/scout/energy/pools/local_pool.exchange.json
+
+python -m scout_companion_match \
+  pool-import-package \
+  --package /data/scout/energy/pools/local_pool.exchange.json \
+  --output /data/scout/energy/pools/imported_pool.json
+
+python -m scout_companion_match \
+  community-publish-dry-run \
+  --pool /data/scout/energy/pools/local_pool.json \
+  --public-profile-ref pool.local_candidate \
+  --community-ref community.taiwan.local_hikes \
+  --explicit-community-consent \
+  --output /data/scout/energy/pools/community_publish_dry_run.json
+```
+
+Implemented alpha local admin lifecycle APIs:
+
+```text
+POST /admin/wearables/export-energy
+  explicit_consent=true
+  include_reserve_summary=false|true
+
+POST /admin/wearables/delete-energy
+  include_exports=true
+
+POST /admin/wearables/daily-energy
+  reference_date=YYYY-MM-DD
+
+POST /admin/wearables/mobile-handoff
+  reference_date=YYYY-MM-DD
+  companion_match_review_path=/data/scout/energy/match-results/local.match.json
+```
+
+Implemented alpha local mobile handoff command:
+
+```bash
+python -m scout_mobile_handoff \
+  build \
+  --daily-home-preview /data/scout/energy/outputs/daily_home_preview.json \
+  --companion-match-review /data/scout/energy/match-results/local.match.json \
+  --output /data/scout/mobile/mobile_energy_companion_handoff.json
+```
+
+Alpha verification commands:
 
 ```bash
 ./venv/bin/python -m pytest tests/test_scout_energy_reserve.py
@@ -691,27 +978,64 @@ Proposed tests:
 
 ## Project Structure
 
-Planned files:
+Implemented alpha files:
 
 ```text
 scout_energy_reserve.py
-  CLI and orchestration for wearable import and baseline building.
+  CLI and orchestration for fixture-backed wearable summary baseline building.
 
 scout_energy_models.py
   Pydantic models for activity summaries, baseline profiles, reserve trend,
   and field cue evidence.
 
+scout_energy_field_cue.py
+  Sanitized local wearable observation to advisory field cue and voice cue
+  artifact builder.
+
+scout_wearable_stream_admission.py
+  Local fixture-batch stream admission dry-run for sanitized observations.
+
+scout_wearable_live_frames.py
+  Local Apple/Garmin live-like frame fixture normalization into sanitized field
+  observations for stream-admission dry-runs.
+
 scout_energy_baseline.py
   Rolling baseline, acute/recent/stable window calculations, and confidence.
 
+scout_wearable_adapters.py
+  Sanitized Apple/Garmin and GPX/FIT/TCX file-derived summary normalization
+  into provider-neutral wearable summaries.
+
+scout_wearable_raw_importers.py
+  Local Apple Health export XML, Garmin Connect JSON, and GPX/FIT/TCX raw-file
+  single/batch/archive manifest and summarization into sanitized import
+  envelopes without embedding raw health payloads, raw tracks, or exact
+  timestamps.
+
+scout_wearable_admin.py
+  Local inventory import/delete, energy refresh, explicit-consent export, and
+  generated-artifact deletion lifecycle helpers, plus local Daily/Home overview
+  generation.
+
+scout_wearable_daily_home.py
+  Local Daily/Home preview JSON and static HTML renderer derived from the
+  wearable daily overview artifact.
+
+scout_mobile_handoff.py
+  Local mobile Energy Reserve / Companion Match handoff package builder for
+  future app integration without network sync or runtime authority.
+
 scout_companion_match.py
-  Capsule vector normalization and companion similarity scoring.
+  CLI for local capsule scoring, consent-pool building/scoring, and match review
+  artifact writing.
 
 scout_companion_match_models.py
-  Capsule, match request, match result, and privacy contracts.
+  Capsule vector normalization, match result, review artifact, local consent
+  pool, community publish dry-run, and privacy contracts.
 
-admin_after_action.py
-  Read-only projection of reserve and match summaries into post-analysis.
+post_analysis_energy_feedback.py
+  Read-only post-analysis feedback from reserve baseline, explanation, and
+  companion capsule artifacts.
 
 pretrip_admin_view.py
   Optional pretrip projection of reviewed baseline context.
@@ -720,28 +1044,43 @@ docs/admin/phase1-after-action.html
   Post-analysis body reserve and capability match panels.
 
 docs/admin/phase4-pretrip-planning.html
-  Read-only route feasibility and companion match preview.
+  Read-only route feasibility, companion match preview, and local Daily/Home
+  preview control.
 
 tests/test_scout_energy_reserve.py
 tests/test_scout_companion_match.py
+tests/test_scout_energy_admin_pretrip.py
+tests/test_scout_energy_feedback_voice.py
+tests/test_scout_wearable_adapters.py
+tests/test_scout_wearable_validator.py
 tests/fixtures/wearables/
+tests/fixtures/wearables/adapters/
 ```
 
 ## Implementation Plan
 
 ### Slice 1: Spec And Fixture Contract
 
-- Add this spec.
-- Define minimal wearable activity summary fixture.
-- Define minimal capability capsule fixture.
+- Status: implemented for local fixture-backed alpha.
+- Added provider-neutral wearable activity summary fixtures.
+- Capability capsule is produced deterministically from fixture summaries.
 - Acceptance:
   - fixtures carry privacy and boundary metadata;
   - no raw Apple/Garmin payload is committed.
 
 ### Slice 2: Activity Normalization
 
-- Normalize fixture-backed Apple Health/Garmin-like summaries into Scout
-  activity summaries.
+- Status: implemented for provider-neutral summaries that preserve source path
+  and sha256.
+- Sanitized provider/file-derived adapter envelopes are implemented for Apple
+  Health, Garmin Connect, GPX, FIT, and TCX summary inputs.
+- Local Apple Health export XML and Garmin Connect JSON single/batch
+  summarizers, local provider archive directory/zip manifest inspection,
+  multi-member Garmin activity JSON archive import, Garmin FIT archive member
+  import, FIT session-summary and lap-summary fallbacks, plus GPX, TCX, and
+  minimal FIT raw-file summarizers, are implemented and emit sanitized envelopes
+  for the existing normalization path.
+- Remote provider APIs and broader production FIT coverage remain deferred.
 - Acceptance:
   - heart-rate missingness and confidence are explicit;
   - provider-specific body battery/stress values are passed through as source
@@ -749,8 +1088,11 @@ tests/fixtures/wearables/
 
 ### Slice 3: Baseline Builder
 
-- Build 7/28/90-day personal baseline.
-- Emit `scout_energy_reserve_baseline`.
+- Status: implemented.
+- Builds 7/28/90-day personal baseline and emits
+  `scout_energy_reserve_baseline`.
+- Emits local route-family profiles when a deterministic family has at least two
+  activities.
 - Acceptance:
   - baseline is user-local by default;
   - reserve bands are explainable;
@@ -758,37 +1100,182 @@ tests/fixtures/wearables/
 
 ### Slice 4: Capability Vector
 
-- Convert Capability Timeline outputs into companion capability vectors.
+- Status: implemented for wearable summaries and post-analysis Capability
+  Timeline artifacts.
 - Acceptance:
   - vector excludes raw GPX and exact timestamps;
   - moving time and rest rhythm are represented separately.
 
 ### Slice 5: Companion Match Score
 
-- Implement weighted similarity scoring.
-- Emit match result with explanation and confidence.
+- Status: implemented.
+- Emits ranked companion match review artifacts with explanations and
+  confidence.
+- Public match display is gated by a minimum of three local query activities;
+  below that threshold, artifacts remain review-only.
+- Local companion consent pool artifacts can be built and scored without remote
+  upload.
 - Acceptance:
   - score is symmetric when weights are symmetric;
   - missing features lower confidence rather than crashing;
   - language stays neutral.
+  - pool entries require explicit consent and support local withdrawal;
 
 ### Slice 6: Admin UI Read-Only Projection
 
-- Show post-analysis reserve trend and match capsule preview.
-- Add optional pretrip companion match preview.
+- Status: implemented for `/admin/pretrip` wearables controls and optional
+  post-analysis sections.
 - Acceptance:
-  - no write endpoints are added;
+  - write endpoints only create local reviewed artifacts under workspace paths;
   - no `/safety/*` calls;
   - privacy exclusions are visible.
 
 ### Slice 7: Field Advisory Cue
 
-- Use live wearable observations and route progress to emit advisory fatigue
-  cues.
+- Status: implemented for deterministic sanitized observation artifacts and
+  voice cue output; live wearable streaming remains deferred.
+- Emits `scout_energy_field_advisory_cue` from a
+  `scout_wearable_field_observation` plus baseline.
+- `scout_wearable_stream_admission.py` can dry-run local fixture-batch stream
+  admission into cue artifacts without runtime ingest.
 - Acceptance:
   - cues are logged as advisory evidence only;
+  - sanitized observations reject exact timestamps and raw payload fields;
+  - stream admission rejects network/provider API/runtime ingest modes;
   - user can silence or dismiss;
   - no Phase 1 safety mutation occurs.
+
+### Slice 8: Local Export And Delete Lifecycle
+
+- Status: implemented for local admin APIs.
+- `POST /admin/wearables/export-energy` requires explicit local consent before
+  writing a coarse `scout_wearable_energy_export_bundle`.
+- `POST /admin/wearables/delete-energy` deletes generated outputs while keeping
+  imported activity summaries and source files untouched.
+- Acceptance:
+  - no remote upload or community pool write occurs;
+  - raw health payloads, raw tracks, exact timestamps, and route-family names
+    are not exported by default;
+  - deleting generated artifacts does not delete activity summaries;
+  - no `/safety/*` calls or Phase 1 runtime mutation occur.
+
+### Slice 9: Local Daily/Home Overview
+
+- Status: implemented for local admin artifact/API.
+- `POST /admin/wearables/daily-energy` writes
+  `scout_wearable_daily_energy_overview`.
+- Acceptance:
+  - includes current reserve band;
+  - includes 7/28/90-day trend fields;
+  - includes recent load/recovery explanation;
+  - includes a next-day soft cue;
+  - does not use medical language as product guidance;
+  - remains advisory-only and not Phase 1 runtime safety truth.
+
+### Slice 10: Local Daily/Home Preview Surface
+
+- Status: implemented for local admin preview artifact/API.
+- `POST /admin/wearables/daily-home-preview` writes
+  `scout_wearable_daily_home_preview` plus a static HTML preview.
+- `GET /admin/wearables/daily-home-preview` serves the local HTML preview.
+- Acceptance:
+  - derives only from `scout_wearable_daily_energy_overview`;
+  - includes current reserve band, reserve score, 7/28/90 trend cards,
+    recent-load explanation, and next-day soft cue;
+  - embeds source provider, source path, sha256, data quality, privacy, and
+    boundary metadata;
+  - exposes no raw heart-rate samples, raw health payloads, raw tracks, exact
+    timestamps, or home/work traces;
+  - performs no network fetch, remote upload, `/safety/*` call, or Phase 1
+    runtime mutation.
+
+### Slice 11: Provider Archive Manifest
+
+- Status: implemented for local Apple/Garmin archive directories/zips.
+- `python -m scout_energy_reserve inspect-provider-archive` emits a
+  `scout_wearable_provider_archive_manifest` without writing sanitized imports.
+- `summarize-provider-archive` can summarize multiple supported Garmin activity
+  JSON members plus supported Garmin FIT members from one archive.
+- Acceptance:
+  - manifest includes source provider, source path, sha256, member sha256,
+    data quality, privacy, and boundary metadata;
+  - hidden `__MACOSX`/dot members are ignored;
+  - wellness/non-activity JSON members are not imported as activity truth;
+  - FIT archive members are parsed from archive bytes without extracting raw
+    payloads into the workspace;
+  - FIT session-summary and lap-summary members without track points can be
+    summarized without exposing raw FIT records or exact timestamps;
+  - no raw provider records, raw track geometry, exact timestamps, network fetch,
+    remote upload, `/safety/*` call, or Phase 1 mutation occurs.
+
+### Slice 12: Offline Provider API Fixture Import
+
+- Status: implemented for Garmin Health API response fixtures and Apple
+  HealthKit-style workout response fixtures.
+- `python -m scout_energy_reserve summarize-provider-api-fixture` writes
+  sanitized import envelopes from a local provider API fixture.
+- Acceptance:
+  - explicit consent is required before any output is written;
+  - authorization metadata includes provider, scopes, network mode, and token
+    ref hash, but never exposes token values;
+  - network mode is `offline_fixture` and no real provider API call occurs;
+  - Apple HealthKit fixture scopes are normalized to coarse read scopes before
+    output, so raw HealthKit type identifiers are not shared;
+  - output uses the same sanitized import path as local provider exports;
+  - raw provider response fields, exact timestamps, raw tracks, remote upload,
+    `/safety/*` calls, and Phase 1 mutation remain excluded.
+
+### Slice 13: Local Live-Frame Fixture Normalization
+
+- Status: implemented for Apple HealthKit-style and Garmin-style local live
+  frame fixtures.
+- `python -m scout_energy_reserve summarize-live-frame-fixture` writes
+  sanitized `scout_wearable_field_observation` artifacts from local live-like
+  fixture frames for the existing stream-admission dry-run path.
+- Acceptance:
+  - raw fixture timestamps are used only transiently to derive `offset_s`;
+  - output includes source provider, source path, sha256, data quality, privacy,
+    and boundary metadata;
+  - token refs, raw frame/sample arrays, raw provider field names, exact
+    timestamps, and provider body battery/stress source fields are not embedded;
+  - no network request, live provider API call, runtime ingest, `/safety/*`
+    call, or Phase 1 mutation occurs;
+  - generated observations can feed stream-admission dry-run without changing
+    Phase 1 safety truth.
+
+### Slice 14: Community Publish Dry-Run Contract
+
+- Status: implemented for local explicit-consent pool entries.
+- `python -m scout_companion_match community-publish-dry-run` writes a
+  `scout_companion_community_publish_dry_run` artifact for future community
+  service preflight review.
+- Acceptance:
+  - explicit community consent is required before output;
+  - only public-profile refs and coarse capability vectors are projected;
+  - private owner refs, local consent metadata, route-family names, raw tracks,
+    exact timestamps, and raw health payloads are excluded;
+  - output records `remote_upload_allowed=false`,
+    `remote_upload_performed=false`, and `network_request_performed=false`;
+  - no `/safety/*` call, Phase 1 mutation, medical assessment, or fitness
+    ranking occurs.
+
+### Slice 15: Local Mobile Handoff Contract
+
+- Status: implemented for local Daily/Home preview plus optional companion match
+  review artifacts.
+- `python -m scout_mobile_handoff build` and
+  `POST /admin/wearables/mobile-handoff` write
+  `scout_mobile_energy_companion_handoff`.
+- Acceptance:
+  - handoff includes current reserve hero, 7/28/90 trend cards, next-day soft
+    cue, and optional companion ranked-match summary;
+  - source provider, source path, sha256, data quality, privacy, and boundary
+    metadata are preserved;
+  - output records `network_sync_allowed=false`,
+    `network_sync_performed=false`, `mobile_runtime_authority=false`, and
+    `phase1_safety_state_authority=false`;
+  - raw samples, raw health payloads, raw tracks, exact timestamps, medical
+    guidance, `/safety/*` calls, and Phase 1 runtime truth remain excluded.
 
 ## Testing Strategy
 
@@ -799,11 +1286,63 @@ Test cases:
 - clean activity import with heart-rate series;
 - activity import with missing heart-rate intervals;
 - Garmin-like body battery values are preserved as provider source values;
+- sanitized Apple Health and Garmin adapter envelopes normalize into
+  provider-neutral summaries;
+- GPX/FIT/TCX file-derived summary envelopes normalize without storing raw
+  route geometry;
+- local Apple Health XML, Garmin Connect JSON, and GPX/TCX/FIT raw files can be
+  summarized into sanitized envelopes without committing raw fixtures or
+  embedding raw records, provider payloads, trackpoints, or timestamps;
+- FIT files with session summary but no track points can still produce
+  sanitized duration, moving time, distance, ascent/descent, and average HR;
+- FIT files with lap summary but no track points or session summary can still
+  produce sanitized duration, moving time, distance, ascent/descent, and average
+  HR;
+- local Apple Health XML and Garmin Connect JSON batch exports can be expanded
+  into multiple sanitized envelopes for the existing normalization path;
+- local Apple Health and Garmin provider export directories/zips can be
+  discovered without extracting raw payloads into the workspace;
+- Garmin provider export archives can be inspected into a manifest that maps
+  supported activity JSON members, unsupported wellness/non-activity members,
+  and supported FIT members without embedding raw payloads;
+- supported multi-member Garmin activity JSON/FIT archives can be summarized
+  into multiple sanitized envelopes;
+- offline Garmin Health API and Apple HealthKit-style response fixtures can be
+  imported only with explicit consent, redacted token metadata, no raw HealthKit
+  type leakage, and no live provider API call;
+- route-family profiles are emitted only after a deterministic family has at
+  least two activities;
 - baseline with acute load above normal produces `watch` or `rest_suggested`;
 - post-analysis capability timeline produces a shareable capability vector;
 - two similar vectors produce high match score;
 - ascent mismatch lowers score with explanation;
 - missing HRV does not block matching;
+- companion public display is gated until the query capsule has at least three
+  local activities;
+- local companion pool entries require explicit consent and remain capsule-only;
+- local companion pool matching does not upload or publish entries remotely;
+- local companion pool exchange packages are manual/local and preserve the same
+  capsule-only privacy boundary;
+- local companion community publish dry-run requires explicit community consent,
+  projects public entries without private owner refs or consent metadata, and
+  performs no network request or upload;
+- explicit-consent local export writes only coarse capsule/summary evidence;
+- generated energy artifacts can be deleted without deleting imported activity
+  summaries;
+- local Daily/Home overview artifact includes current band, 7/28/90 trend,
+  recent-load explanation, and soft cue;
+- local Daily/Home preview renders overview-derived trend cards without raw
+  sample sharing, medical guidance, or safety truth;
+- local mobile handoff packages Daily/Home and companion match review artifacts
+  without network sync, mobile runtime authority, raw sample sharing, medical
+  guidance, or safety truth;
+- sanitized field observations produce advisory-only field cue and voice cue
+  artifacts;
+- local stream-admission dry-run can batch sanitized observations into cue
+  artifacts without network or runtime ingest;
+- local Apple/Garmin live-like frame fixtures can be normalized into sanitized
+  field observations and then admitted through stream dry-run without raw
+  timestamp, token, provider-field, network, runtime, or safety-state leakage;
 - privacy capsule excludes raw GPX, exact timestamps, and raw health samples.
 
 Browser tests later:
@@ -819,7 +1358,7 @@ Always:
 - store raw wearable imports locally by default;
 - share only coarse capsules unless user explicitly exports more;
 - include confidence and limitations;
-- let users delete baseline and capsules;
+- let users delete generated baseline, capsule, refresh, and export artifacts;
 - separate identity from capability vector.
 
 Ask first:
@@ -867,12 +1406,88 @@ Never:
 ## Success Criteria
 
 - Scout can import wearable activity summaries into a provider-neutral schema.
+- Scout can summarize local Apple Health export XML, Garmin Connect JSON, and
+  GPX/FIT/TCX files into sanitized wearable import envelopes without storing raw
+  health payloads or raw tracks.
+- Scout can summarize minimal FIT session-summary files without track points
+  into sanitized import envelopes.
+- Scout can summarize minimal FIT lap-summary files without track points or
+  session summaries into sanitized import envelopes.
+- Scout can expand local Apple Health XML and Garmin Connect JSON export batches
+  into multiple sanitized envelopes without storing raw health payloads or raw
+  tracks.
+- Scout can discover local Apple Health and Garmin provider export
+  directories/zips and summarize supported members without extracting raw
+  payloads into the workspace.
+- Scout can inspect provider archives into a privacy-preserving manifest before
+  import, and can import multiple supported Garmin activity JSON/FIT members
+  from one archive.
+- Scout can exercise the account-authorized provider API import contract through
+  offline Garmin Health and Apple HealthKit-style fixture transports without
+  exposing token values or calling a live provider API.
 - Scout can build a local 7/28/90-day energy reserve baseline.
 - Scout can convert completed-route Capability Timeline artifacts into a
   privacy-preserving capability vector.
 - Scout can score companion similarity across different route histories.
+- Scout can build and score a local explicit-consent companion pool using only
+  privacy-preserving capability capsules.
+- Scout can export/import a manual local companion pool exchange package without
+  remote upload or raw data sharing.
+- Scout can build a community publish dry-run package from eligible
+  explicit-consent pool entries without private owner refs, network transport,
+  remote upload, or raw data sharing.
 - Match results explain both similarity and mismatch.
 - Field cues remain advisory-only and are never Phase 1 safety truth.
+- Scout can build deterministic field advisory cue artifacts from sanitized
+  local wearable observations without live provider streaming.
+- Scout can dry-run wearable stream admission locally before any live provider
+  transport is allowed.
+- Scout can normalize local Apple/Garmin live-like frame fixtures into sanitized
+  field observations for stream-admission dry-run without live provider
+  streaming.
+- Scout can export coarse local energy/capsule bundles only after explicit local
+  consent.
+- Scout can delete generated energy artifacts without deleting imported activity
+  summaries.
+- Scout can build a local Daily/Home overview artifact without live provider
+  data or medical language.
+- Scout can render a local Daily/Home preview HTML artifact without live
+  provider data, medical guidance, raw sample sharing, or Phase 1 safety truth.
+- Scout can build a local mobile Energy Reserve / Companion Match handoff
+  artifact without network sync, mobile runtime authority, raw sample sharing,
+  medical guidance, or Phase 1 safety truth.
+
+## Alpha Slice Evidence
+
+Verified locally on 2026-05-28 with fixture-backed tests only:
+
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. ./venv/bin/python -m pytest tests/test_scout_wearable_adapters.py -q`
+  passed with 6 tests.
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. ./venv/bin/python -m pytest tests/test_scout_wearable_raw_importers.py -q`
+  passed with 25 tests.
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. ./venv/bin/python -m pytest tests/test_scout_energy_reserve.py -q`
+  passed with 6 tests.
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. ./venv/bin/python -m pytest tests/test_scout_companion_match.py -q`
+  passed with 14 tests.
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. ./venv/bin/python -m pytest tests/test_scout_energy_feedback_voice.py -q`
+  passed with 4 tests.
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. ./venv/bin/python -m pytest tests/test_scout_wearable_stream_admission.py -q`
+  passed with 2 tests.
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. ./venv/bin/python -m pytest tests/test_scout_wearable_live_frames.py -q`
+  passed with 4 tests.
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. ./venv/bin/python -m pytest tests/test_scout_energy_admin_pretrip.py -q`
+  passed with 9 tests.
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. ./venv/bin/python -m pytest tests/test_scout_wearable_daily_home.py -q`
+  passed with 2 tests.
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. ./venv/bin/python -m pytest tests/test_scout_mobile_handoff.py -q`
+  passed with 3 tests.
+- Related regression set passed with 107 tests across wearable adapters, raw importers, energy reserve, companion
+  match, pretrip admin, energy feedback voice, wearable validator, admin page,
+  and hardware admin preview coverage.
+- Browser smoke rendered `/tmp/scout-daily-home-preview/admin/wearables/outputs/daily_home_preview.html`
+  at 390x844 with `Scout Daily`, reserve band, and 3 trend cards visible.
+- Boundary grep over the energy/companion Python files found no `/safety/` calls
+  and no medical diagnosis or Phase 1 runtime safety truth flags set to true.
 
 ## Source Notes
 
@@ -891,9 +1506,10 @@ Scout can diagnose readiness:
 
 ## Open Questions
 
-- What is the minimum activity count before Scout should show companion match?
-- Should matching be local-only first, or should a community pool be designed
-  immediately with consent and privacy controls?
+- Should the alpha `minimum_activity_count_for_public_match=3` become
+  route-family-specific once there is more local history?
+- What remote/community pool service design should build on top of the local
+  explicit-consent pool contract?
 - Should Garmin Body Battery be imported as provider value only, or should Scout
   display it beside Scout Energy Reserve?
 - Which first wearable fixture should be used: Apple Health export, Garmin FIT,

@@ -30,6 +30,16 @@ class CompanionCapabilityVector(BaseModel):
     heart_rate_load_per_effort_unit: float
 
 
+class CompanionMatchVisibilityPolicy(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    minimum_activity_count: int = Field(default=3, ge=1)
+    activity_count: int = Field(ge=0)
+    public_match_display_allowed: bool
+    review_only: bool
+    reasons: list[str] = Field(default_factory=list)
+
+
 class CompanionCapabilityCapsule(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -43,7 +53,16 @@ class CompanionCapabilityCapsule(BaseModel):
     raw_track_shared: bool = False
     raw_health_payload_shared: bool = False
     exact_timestamps_shared: bool = False
+    activity_count: int = Field(default=0, ge=0)
     capability_vector: CompanionCapabilityVector
+    match_visibility: CompanionMatchVisibilityPolicy = Field(
+        default_factory=lambda: CompanionMatchVisibilityPolicy(
+            activity_count=0,
+            public_match_display_allowed=False,
+            review_only=True,
+            reasons=["legacy capsule missing activity-count evidence; review only"],
+        )
+    )
     confidence: Confidence
     data_quality: ScoutEnergyDataQuality
     privacy: ScoutEnergyPrivacy = Field(default_factory=ScoutEnergyPrivacy)
@@ -89,6 +108,117 @@ class CompanionMatchReviewArtifact(BaseModel):
     limitations: list[str]
 
 
+class CompanionPoolConsentPolicy(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    explicit_consent: bool
+    consent_scope: Literal["local_companion_pool"] = "local_companion_pool"
+    allow_public_match_display: bool
+    route_family_names_shared: bool = False
+    raw_track_shared: bool = False
+    raw_health_payload_shared: bool = False
+    exact_timestamps_shared: bool = False
+    remote_upload_allowed: bool = False
+    withdrawal_supported: bool = True
+    consent_version: str = "companion_pool_consent.v1"
+
+
+class CompanionPoolEntry(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    artifact_kind: str = "scout_companion_pool_entry"
+    artifact_version: str = "companion_pool_entry.v1"
+    source_provider: str = "companion_capability_capsule"
+    source_path: str
+    sha256: str
+    owner_profile_ref: str
+    public_profile_ref: str
+    capsule: CompanionCapabilityCapsule
+    consent: CompanionPoolConsentPolicy
+    match_visibility: CompanionMatchVisibilityPolicy
+    data_quality: ScoutEnergyDataQuality
+    privacy: ScoutEnergyPrivacy = Field(default_factory=ScoutEnergyPrivacy)
+    boundary: ScoutEnergyBoundary = Field(default_factory=ScoutEnergyBoundary)
+    limitations: list[str]
+
+
+class CompanionConsentPoolArtifact(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    artifact_kind: str = "scout_companion_consent_pool"
+    artifact_version: str = "companion_consent_pool.v1"
+    source_provider: str = "local_companion_consent_pool"
+    source_path: str
+    sha256: str
+    pool_scope: Literal["local_only"] = "local_only"
+    entry_count: int = Field(ge=0)
+    entries: list[CompanionPoolEntry]
+    data_quality: ScoutEnergyDataQuality
+    privacy: ScoutEnergyPrivacy = Field(default_factory=ScoutEnergyPrivacy)
+    boundary: ScoutEnergyBoundary = Field(default_factory=ScoutEnergyBoundary)
+    limitations: list[str]
+
+
+class CompanionPoolExchangePackage(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    artifact_kind: str = "scout_companion_pool_exchange_package"
+    artifact_version: str = "companion_pool_exchange_package.v1"
+    source_provider: str = "local_companion_pool_exchange"
+    source_path: str
+    sha256: str
+    package_scope: Literal["manual_local_exchange"] = "manual_local_exchange"
+    remote_upload_allowed: bool = False
+    entry_count: int = Field(ge=0)
+    entries: list[CompanionPoolEntry]
+    data_quality: ScoutEnergyDataQuality
+    privacy: ScoutEnergyPrivacy = Field(default_factory=ScoutEnergyPrivacy)
+    boundary: ScoutEnergyBoundary = Field(default_factory=ScoutEnergyBoundary)
+    limitations: list[str]
+
+
+class CompanionCommunityPublishEntry(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    artifact_kind: str = "scout_companion_community_publish_entry"
+    artifact_version: str = "companion_community_publish_entry.v1"
+    public_profile_ref: str
+    sha256: str
+    source_pool_entry_sha256: str
+    source_provider: str
+    source_scope: str
+    activity_count: int = Field(ge=0)
+    capability_vector: CompanionCapabilityVector
+    match_visibility: CompanionMatchVisibilityPolicy
+    confidence: Confidence
+    data_quality: ScoutEnergyDataQuality
+    privacy: ScoutEnergyPrivacy = Field(default_factory=ScoutEnergyPrivacy)
+    boundary: ScoutEnergyBoundary = Field(default_factory=ScoutEnergyBoundary)
+    limitations: list[str]
+
+
+class CompanionCommunityPublishDryRun(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    artifact_kind: str = "scout_companion_community_publish_dry_run"
+    artifact_version: str = "companion_community_publish_dry_run.v1"
+    source_provider: str = "local_companion_community_publish_dry_run"
+    source_path: str
+    sha256: str
+    community_ref: str
+    publish_mode: Literal["dry_run_only"] = "dry_run_only"
+    explicit_community_consent: bool
+    remote_upload_allowed: bool = False
+    remote_upload_performed: bool = False
+    network_request_performed: bool = False
+    entry_count: int = Field(ge=0)
+    entries: list[CompanionCommunityPublishEntry]
+    data_quality: ScoutEnergyDataQuality
+    privacy: ScoutEnergyPrivacy = Field(default_factory=ScoutEnergyPrivacy)
+    boundary: ScoutEnergyBoundary = Field(default_factory=ScoutEnergyBoundary)
+    limitations: list[str]
+
+
 def build_companion_capability_capsule(
     activities: list[WearableActivitySummary],
     *,
@@ -104,7 +234,9 @@ def build_companion_capability_capsule(
         source_provider=_aggregate_provider(activities),
         source_path=_aggregate_source_path(activities),
         sha256=aggregate_sha256([activity.sha256 for activity in activities]),
+        activity_count=len(activities),
         capability_vector=vector,
+        match_visibility=_match_visibility_policy(len(activities)),
         confidence=confidence,
         data_quality=data_quality,
         limitations=[
@@ -162,7 +294,15 @@ def build_companion_capability_capsule_from_timeline(
         source_path=source_track["source_path"],
         sha256=source_track["sha256"],
         source_scope="coarse_completed_route_summary",
+        activity_count=1,
         capability_vector=vector,
+        match_visibility=_match_visibility_policy(
+            1,
+            reasons=[
+                "timeline-derived capsule represents one completed route",
+                "public companion display requires broader local history",
+            ],
+        ),
         confidence=confidence,
         data_quality=data_quality,
         limitations=[
@@ -284,6 +424,18 @@ def build_companion_match_review_artifact(
         review_policy={
             "score_threshold": review_score_threshold,
             "ranking": "match_score_desc_then_candidate_ref",
+            "minimum_activity_count_for_public_match": 3,
+            "query_activity_count": query.activity_count,
+            "query_public_match_display_allowed": query.match_visibility.public_match_display_allowed,
+            "candidate_activity_counts": {
+                ref: candidate.activity_count
+                for ref, candidate in zip(refs, candidates)
+            },
+            "candidate_review_only_refs": [
+                ref
+                for ref, candidate in zip(refs, candidates)
+                if candidate.match_visibility.review_only
+            ],
             "human_review_required_for_mismatch": True,
             "planning_use_only_after_review": True,
             "auto_departure_approval_allowed": False,
@@ -308,6 +460,321 @@ def write_companion_match_review_artifact(
         encoding="utf-8",
     )
     return artifact
+
+
+def build_companion_pool_entry(
+    capsule: CompanionCapabilityCapsule,
+    *,
+    public_profile_ref: str,
+    explicit_consent: bool,
+    allow_public_match_display: bool | None = None,
+) -> CompanionPoolEntry:
+    if not explicit_consent:
+        raise ValueError("explicit consent is required before adding a capsule to the companion pool")
+    _assert_pool_capsule_boundary(capsule)
+    resolved_public_display = (
+        capsule.match_visibility.public_match_display_allowed
+        if allow_public_match_display is None
+        else allow_public_match_display and capsule.match_visibility.public_match_display_allowed
+    )
+    consent = CompanionPoolConsentPolicy(
+        explicit_consent=True,
+        allow_public_match_display=resolved_public_display,
+    )
+    visibility = CompanionMatchVisibilityPolicy(
+        minimum_activity_count=capsule.match_visibility.minimum_activity_count,
+        activity_count=capsule.activity_count,
+        public_match_display_allowed=resolved_public_display,
+        review_only=not resolved_public_display,
+        reasons=[
+            *capsule.match_visibility.reasons,
+            "capsule entered local companion pool only after explicit consent",
+            "remote upload is not allowed by this local alpha consent policy",
+        ],
+    )
+    source_sha = aggregate_sha256(
+        [
+            {
+                "capsule_sha256": capsule.sha256,
+                "public_profile_ref": public_profile_ref,
+                "consent": consent.model_dump(mode="json"),
+                "visibility": visibility.model_dump(mode="json"),
+            }
+        ]
+    )
+    return CompanionPoolEntry(
+        source_path=capsule.source_path,
+        sha256=source_sha,
+        owner_profile_ref=capsule.owner_profile_ref,
+        public_profile_ref=public_profile_ref,
+        capsule=capsule,
+        consent=consent,
+        match_visibility=visibility,
+        data_quality=capsule.data_quality,
+        limitations=[
+            "local consent pool stores privacy-preserving capability capsules only",
+            "raw tracks, exact timestamps, raw health payloads, route-family names, and remote upload are excluded",
+            "pool presence is not a safety guarantee or medical assessment",
+        ],
+    )
+
+
+def build_companion_consent_pool(
+    entries: list[CompanionPoolEntry],
+    *,
+    source_path: str = "local_companion_consent_pool",
+) -> CompanionConsentPoolArtifact:
+    unique_refs = {entry.public_profile_ref for entry in entries}
+    if len(unique_refs) != len(entries):
+        raise ValueError("public_profile_ref values must be unique in a companion consent pool")
+    return CompanionConsentPoolArtifact(
+        source_path=source_path,
+        sha256=aggregate_sha256(
+            [
+                {
+                    "source_path": source_path,
+                    "entry_sha256": [entry.sha256 for entry in entries],
+                    "entry_refs": [entry.public_profile_ref for entry in entries],
+                }
+            ]
+        ),
+        entry_count=len(entries),
+        entries=entries,
+        data_quality=_combine_pool_entry_data_quality(entries),
+        limitations=[
+            "local-only pool artifact; no remote or community upload is performed",
+            "entries require explicit consent and may be withdrawn locally",
+            "matching uses coarse capability capsules only",
+        ],
+    )
+
+
+def withdraw_companion_pool_entry(
+    pool: CompanionConsentPoolArtifact,
+    *,
+    public_profile_ref: str,
+) -> CompanionConsentPoolArtifact:
+    remaining = [entry for entry in pool.entries if entry.public_profile_ref != public_profile_ref]
+    if len(remaining) == len(pool.entries):
+        raise ValueError(f"companion pool entry not found: {public_profile_ref}")
+    return build_companion_consent_pool(remaining, source_path=pool.source_path)
+
+
+def build_companion_match_review_from_pool(
+    query: CompanionCapabilityCapsule,
+    pool: CompanionConsentPoolArtifact,
+    *,
+    query_profile_ref: str = "local_user.private",
+    include_review_only: bool = False,
+    review_score_threshold: int = 75,
+) -> CompanionMatchReviewArtifact:
+    entries = [
+        entry
+        for entry in pool.entries
+        if include_review_only or entry.match_visibility.public_match_display_allowed
+    ]
+    artifact = build_companion_match_review_artifact(
+        query,
+        [entry.capsule for entry in entries],
+        query_profile_ref=query_profile_ref,
+        candidate_profile_refs=[entry.public_profile_ref for entry in entries],
+        review_score_threshold=review_score_threshold,
+    )
+    artifact.review_policy.update(
+        {
+            "source_pool_ref": pool.source_path,
+            "source_pool_sha256": pool.sha256,
+            "pool_entry_count": pool.entry_count,
+            "pool_remote_upload_allowed": False,
+            "include_review_only_pool_entries": include_review_only,
+            "withdrawal_supported": True,
+        }
+    )
+    artifact.limitations.append("candidate capsules came from a local explicit-consent pool")
+    return artifact
+
+
+def write_companion_consent_pool_artifact(
+    artifact: CompanionConsentPoolArtifact,
+    output_path: Path,
+) -> CompanionConsentPoolArtifact:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(
+        json.dumps(artifact.model_dump(mode="json"), ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    return artifact
+
+
+def build_companion_pool_exchange_package(
+    pool: CompanionConsentPoolArtifact,
+    *,
+    public_profile_refs: list[str] | None = None,
+    source_path: str = "local_companion_pool_exchange_package",
+) -> CompanionPoolExchangePackage:
+    refs = set(public_profile_refs or [])
+    entries = [
+        entry
+        for entry in pool.entries
+        if public_profile_refs is None or entry.public_profile_ref in refs
+    ]
+    if public_profile_refs is not None and len(entries) != len(refs):
+        found = {entry.public_profile_ref for entry in entries}
+        missing = sorted(refs - found)
+        raise ValueError(f"companion pool entries not found for exchange package: {missing}")
+    for entry in entries:
+        _assert_pool_entry_boundary(entry)
+    return CompanionPoolExchangePackage(
+        source_path=source_path,
+        sha256=aggregate_sha256(
+            [
+                {
+                    "source_pool_sha256": pool.sha256,
+                    "source_path": source_path,
+                    "entry_sha256": [entry.sha256 for entry in entries],
+                    "entry_refs": [entry.public_profile_ref for entry in entries],
+                    "package_scope": "manual_local_exchange",
+                }
+            ]
+        ),
+        entry_count=len(entries),
+        entries=entries,
+        data_quality=_combine_pool_entry_data_quality(entries),
+        limitations=[
+            "manual local exchange package only; no remote upload is performed",
+            "package contains explicit-consent pool entries and privacy-preserving capsules only",
+            "receiver import still creates a local-only consent pool artifact",
+        ],
+    )
+
+
+def import_companion_pool_exchange_package(
+    package: CompanionPoolExchangePackage,
+    *,
+    existing_pool: CompanionConsentPoolArtifact | None = None,
+    source_path: str = "imported_local_companion_consent_pool",
+) -> CompanionConsentPoolArtifact:
+    if package.remote_upload_allowed:
+        raise ValueError("remote-upload companion exchange packages are not supported")
+    for entry in package.entries:
+        _assert_pool_entry_boundary(entry)
+    entries = list(existing_pool.entries) if existing_pool else []
+    existing_refs = {entry.public_profile_ref for entry in entries}
+    for entry in package.entries:
+        if entry.public_profile_ref in existing_refs:
+            raise ValueError(f"duplicate companion pool entry: {entry.public_profile_ref}")
+        entries.append(entry)
+        existing_refs.add(entry.public_profile_ref)
+    return build_companion_consent_pool(entries, source_path=source_path)
+
+
+def build_companion_community_publish_dry_run(
+    pool: CompanionConsentPoolArtifact,
+    *,
+    public_profile_refs: list[str] | None = None,
+    community_ref: str,
+    explicit_community_consent: bool,
+    source_path: str = "companion_community_publish_dry_run",
+) -> CompanionCommunityPublishDryRun:
+    if not explicit_community_consent:
+        raise ValueError("explicit community consent is required before community publish dry-run")
+    refs = set(public_profile_refs or [])
+    entries = [
+        entry
+        for entry in pool.entries
+        if public_profile_refs is None or entry.public_profile_ref in refs
+    ]
+    if public_profile_refs is not None and len(entries) != len(refs):
+        found = {entry.public_profile_ref for entry in entries}
+        missing = sorted(refs - found)
+        raise ValueError(f"companion pool entries not found for community dry-run: {missing}")
+    for entry in entries:
+        _assert_pool_entry_boundary(entry)
+        if not entry.match_visibility.public_match_display_allowed:
+            raise ValueError(f"companion pool entry is review-only and cannot be community-publishable: {entry.public_profile_ref}")
+    publish_entries = [_community_publish_entry_from_pool_entry(entry) for entry in entries]
+    return CompanionCommunityPublishDryRun(
+        source_path=source_path,
+        sha256=aggregate_sha256(
+            [
+                {
+                    "source_pool_sha256": pool.sha256,
+                    "source_path": source_path,
+                    "community_ref": community_ref,
+                    "entry_sha256": [entry.sha256 for entry in publish_entries],
+                    "entry_refs": [entry.public_profile_ref for entry in publish_entries],
+                    "publish_mode": "dry_run_only",
+                    "network_request_performed": False,
+                    "remote_upload_performed": False,
+                }
+            ]
+        ),
+        community_ref=community_ref,
+        explicit_community_consent=True,
+        entry_count=len(publish_entries),
+        entries=publish_entries,
+        data_quality=_combine_pool_entry_data_quality(entries),
+        limitations=[
+            "community publish dry-run only; no remote upload is performed",
+            "network transport and remote community service are not implemented in this artifact",
+            "entries remain privacy-preserving capability capsules without raw tracks, exact timestamps, raw health payloads, or route-family names",
+            "community publication is not a safety guarantee, medical assessment, or fitness ranking",
+        ],
+    )
+
+
+def _community_publish_entry_from_pool_entry(entry: CompanionPoolEntry) -> CompanionCommunityPublishEntry:
+    source_sha = aggregate_sha256(
+        [
+            {
+                "public_profile_ref": entry.public_profile_ref,
+                "source_pool_entry_sha256": entry.sha256,
+                "capability_vector": entry.capsule.capability_vector.model_dump(mode="json"),
+                "activity_count": entry.capsule.activity_count,
+                "match_visibility": entry.match_visibility.model_dump(mode="json"),
+            }
+        ]
+    )
+    return CompanionCommunityPublishEntry(
+        public_profile_ref=entry.public_profile_ref,
+        sha256=source_sha,
+        source_pool_entry_sha256=entry.sha256,
+        source_provider=entry.capsule.source_provider,
+        source_scope=entry.capsule.source_scope,
+        activity_count=entry.capsule.activity_count,
+        capability_vector=entry.capsule.capability_vector,
+        match_visibility=entry.match_visibility,
+        confidence=entry.capsule.confidence,
+        data_quality=entry.data_quality,
+        limitations=[
+            "community dry-run publish entry is projected from a local explicit-consent pool entry",
+            "private owner profile refs, local consent metadata, raw tracks, raw health payloads, exact timestamps, and route-family names are excluded",
+        ],
+    )
+
+
+def write_companion_community_publish_dry_run(
+    artifact: CompanionCommunityPublishDryRun,
+    output_path: Path,
+) -> CompanionCommunityPublishDryRun:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(
+        json.dumps(artifact.model_dump(mode="json"), ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    return artifact
+
+
+def write_companion_pool_exchange_package(
+    package: CompanionPoolExchangePackage,
+    output_path: Path,
+) -> CompanionPoolExchangePackage:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(
+        json.dumps(package.model_dump(mode="json"), ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    return package
 
 
 def _capability_vector(activities: list[WearableActivitySummary]) -> CompanionCapabilityVector:
@@ -339,6 +806,29 @@ def _capability_vector(activities: list[WearableActivitySummary]) -> CompanionCa
         median_rest_duration_min=round(_median(rest_durations), 2),
         late_activity_fatigue_decay=round(_mean(fatigue_values), 3),
         heart_rate_load_per_effort_unit=round(hr_load_per_effort, 3),
+    )
+
+
+def _match_visibility_policy(
+    activity_count: int,
+    *,
+    minimum_activity_count: int = 3,
+    reasons: list[str] | None = None,
+) -> CompanionMatchVisibilityPolicy:
+    public_allowed = activity_count >= minimum_activity_count
+    resolved_reasons = list(reasons or [])
+    if public_allowed:
+        resolved_reasons.append("minimum local activity count satisfied for alpha companion match display")
+    else:
+        resolved_reasons.append(
+            f"needs at least {minimum_activity_count} local activities before public companion match display"
+        )
+    return CompanionMatchVisibilityPolicy(
+        minimum_activity_count=minimum_activity_count,
+        activity_count=activity_count,
+        public_match_display_allowed=public_allowed,
+        review_only=not public_allowed,
+        reasons=resolved_reasons,
     )
 
 
@@ -419,6 +909,65 @@ def _combine_capsule_data_quality(
             }
         ),
     )
+
+
+def _combine_pool_entry_data_quality(
+    entries: list[CompanionPoolEntry],
+) -> ScoutEnergyDataQuality:
+    if not entries:
+        return ScoutEnergyDataQuality(
+            limitations=["empty local companion consent pool"],
+        )
+    order = {"low": 0, "medium": 1, "high": 2}
+    return ScoutEnergyDataQuality(
+        heart_rate_confidence=min(
+            (entry.data_quality.heart_rate_confidence for entry in entries),
+            key=order.get,
+        ),
+        gps_confidence=min(
+            (entry.data_quality.gps_confidence for entry in entries),
+            key=order.get,
+        ),
+        missing_hr_seconds=sum(entry.data_quality.missing_hr_seconds for entry in entries),
+        provider_value_confidence=min(
+            (entry.data_quality.provider_value_confidence for entry in entries),
+            key=order.get,
+        ),
+        limitations=sorted(
+            {
+                limitation
+                for entry in entries
+                for limitation in entry.data_quality.limitations
+            }
+        ),
+    )
+
+
+def _assert_pool_capsule_boundary(capsule: CompanionCapabilityCapsule) -> None:
+    if capsule.raw_track_shared or capsule.raw_health_payload_shared or capsule.exact_timestamps_shared:
+        raise ValueError("companion pool entries cannot share raw tracks, raw health payloads, or exact timestamps")
+    if capsule.privacy.raw_track_shared or capsule.privacy.raw_health_payload_shared:
+        raise ValueError("companion pool entries cannot share raw privacy-sensitive payloads")
+    if capsule.privacy.exact_timestamps_shared or capsule.privacy.home_work_trace_shared:
+        raise ValueError("companion pool entries cannot share exact timestamps or home/work traces")
+    if capsule.boundary.medical_diagnosis:
+        raise ValueError("companion pool entries cannot be medical diagnosis")
+    if capsule.boundary.phase1_runtime_safety_truth or capsule.boundary.safety_api_calls_allowed:
+        raise ValueError("companion pool entries cannot be Phase 1 safety truth or allow safety API calls")
+
+
+def _assert_pool_entry_boundary(entry: CompanionPoolEntry) -> None:
+    if not entry.consent.explicit_consent:
+        raise ValueError("companion pool exchange entries require explicit consent")
+    if entry.consent.remote_upload_allowed:
+        raise ValueError("companion pool exchange entries cannot allow remote upload")
+    if entry.consent.route_family_names_shared:
+        raise ValueError("companion pool exchange entries cannot share route-family names")
+    if entry.consent.raw_track_shared or entry.consent.raw_health_payload_shared:
+        raise ValueError("companion pool exchange entries cannot share raw tracks or raw health payloads")
+    if entry.consent.exact_timestamps_shared:
+        raise ValueError("companion pool exchange entries cannot share exact timestamps")
+    _assert_pool_capsule_boundary(entry.capsule)
 
 
 def _match_explanations(

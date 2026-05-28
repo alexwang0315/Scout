@@ -58,6 +58,32 @@ class PostAnalysisCapabilityTimelineTests(unittest.TestCase):
         self.assertEqual(rests[0].end_index, 5)
         self.assertEqual(rests[0].confidence, "high")
 
+    def test_slow_walking_is_not_rest_when_radius_keeps_growing(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            gpx_path = Path(tempdir) / "slow_walk.gpx"
+            _write_gpx(
+                gpx_path,
+                [
+                    (25.0, 121.00000, "2026-05-01T00:00:00Z"),
+                    (25.0, 121.00015, "2026-05-01T00:02:00Z"),
+                    (25.0, 121.00030, "2026-05-01T00:04:00Z"),
+                    (25.0, 121.00045, "2026-05-01T00:06:00Z"),
+                ],
+            )
+            route = load_gpx_route(gpx_path)
+
+            rests = detect_rest_intervals(
+                route.points,
+                policy=RestDetectionPolicy(
+                    rest_speed_threshold_kmh=0.5,
+                    rest_radius_m=20,
+                    min_rest_duration_s=180,
+                ),
+                source_ref=str(gpx_path),
+            )
+
+        self.assertEqual(rests, [])
+
     def test_slices_completed_gpx_into_checkpoint_segments(self):
         route = load_gpx_route(FIXTURE_ROOT / "completed_track.gpx")
         definitions = json.loads((FIXTURE_ROOT / "checkpoints.json").read_text(encoding="utf-8"))

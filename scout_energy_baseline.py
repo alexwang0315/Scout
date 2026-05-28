@@ -6,6 +6,7 @@ from datetime import date, timedelta
 from scout_energy_models import (
     Confidence,
     EnergyWindowSummary,
+    RouteFamilyBaselineProfile,
     ScoutEnergyDataQuality,
     ScoutEnergyReserveBaseline,
     ScoutEnergyReserveTrend,
@@ -21,6 +22,8 @@ ZONE_WEIGHTS = {
     "z4": 4.0,
     "z5": 5.0,
 }
+
+MIN_ROUTE_FAMILY_ACTIVITY_COUNT = 2
 
 
 def build_energy_reserve_baseline(
@@ -52,6 +55,7 @@ def build_energy_reserve_baseline(
         acute_7_day_load=acute,
         recent_28_day_baseline=recent,
         stable_90_day_baseline=stable,
+        route_family_profiles=_route_family_profiles(sorted_activities),
         reserve_trend=trend,
         data_quality=data_quality,
     )
@@ -173,6 +177,94 @@ def _aggregate_data_quality(activities: list[WearableActivitySummary]) -> ScoutE
         provider_value_confidence=provider_confidence,
         limitations=limitations,
     )
+
+
+def _route_family_profiles(
+    activities: list[WearableActivitySummary],
+) -> list[RouteFamilyBaselineProfile]:
+    grouped: dict[str, list[WearableActivitySummary]] = {}
+    for activity in activities:
+        grouped.setdefault(_route_family(activity), []).append(activity)
+    profiles = [
+        _route_family_profile(route_family, family_activities)
+        for route_family, family_activities in sorted(grouped.items())
+        if len(family_activities) >= MIN_ROUTE_FAMILY_ACTIVITY_COUNT
+    ]
+    return profiles
+
+
+def _route_family_profile(
+    route_family: str,
+    activities: list[WearableActivitySummary],
+) -> RouteFamilyBaselineProfile:
+    effort_units = [_route_effort_units(activity) for activity in activities]
+    moving_time_per_effort = [
+        (activity.moving_time_s / 60.0) / effort
+        for activity, effort in zip(activities, effort_units)
+        if effort > 0
+    ]
+    hr_load_per_effort = [
+        internal_load_score(activity) / effort
+        for activity, effort in zip(activities, effort_units)
+        if effort > 0
+    ]
+    fatigue_decay = [
+        activity.late_activity_fatigue_decay
+        for activity in activities
+        if activity.late_activity_fatigue_decay is not None
+    ]
+    return RouteFamilyBaselineProfile(
+        route_family=route_family,
+        activity_count=len(activities),
+        route_effort_units_p50=round(_median(effort_units), 3),
+        moving_time_per_effort_p50=round(_median(moving_time_per_effort), 3),
+        heart_rate_load_per_effort_p50=round(_median(hr_load_per_effort), 3),
+        late_activity_fatigue_decay_p50=round(_median(fatigue_decay), 3),
+        confidence=_route_family_confidence(activities),
+        limitations=[
+            "route-family profile is local baseline context, not a public capability label",
+            f"minimum activity count for this alpha profile is {MIN_ROUTE_FAMILY_ACTIVITY_COUNT}",
+        ],
+    )
+
+
+def _route_family_confidence(activities: list[WearableActivitySummary]) -> Confidence:
+    if len(activities) >= 5 and all(activity.data_quality.gps_confidence != "low" for activity in activities):
+        return "high"
+    if len(activities) >= MIN_ROUTE_FAMILY_ACTIVITY_COUNT:
+        return "medium"
+    return "low"
+
+
+def _route_family(activity: WearableActivitySummary) -> str:
+    if activity.route_family:
+        return activity.route_family
+    effort = _route_effort_units(activity)
+    if activity.activity_type in {"hike", "hiking"}:
+        if activity.ascent_m >= 800 or effort >= 18:
+            return "mountain_hike"
+        return "local_day_hike"
+    if activity.activity_type in {"walk", "walking"} and activity.ascent_m < 150 and effort < 8:
+        return "local_walk"
+    if activity.ascent_m >= 800 or effort >= 18:
+        return "mountain_hike"
+    if activity.ascent_m >= 250 or effort >= 8:
+        return "local_day_hike"
+    return "light_outdoor_activity"
+
+
+def _route_effort_units(activity: WearableActivitySummary) -> float:
+    return activity.distance_m / 1000.0 + activity.ascent_m / 100.0 + activity.descent_m / 200.0
+
+
+def _median(values: list[float]) -> float:
+    if not values:
+        return 0.0
+    ordered = sorted(values)
+    midpoint = len(ordered) // 2
+    if len(ordered) % 2:
+        return ordered[midpoint]
+    return (ordered[midpoint - 1] + ordered[midpoint]) / 2.0
 
 
 def _min_confidence(values) -> Confidence:

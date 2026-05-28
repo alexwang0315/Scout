@@ -139,6 +139,119 @@ def test_admin_wearable_inventory_import_delete_and_refresh(tmp_path, monkeypatc
     assert "/safety/" not in json.dumps(refreshed)
 
 
+def test_admin_exports_and_deletes_wearable_energy_artifacts_with_consent(tmp_path, monkeypatch):
+    monkeypatch.setenv("SCOUT_DATA_ROOT", str(tmp_path / "data"))
+    client = TestClient(create_admin_app())
+
+    for fixture in WEARABLE_FIXTURES:
+        imported = client.post(
+            "/admin/wearables/import",
+            json={"source_path": str(fixture)},
+        )
+        assert imported.status_code == 200
+    refresh = client.post(
+        "/admin/wearables/refresh-energy",
+        json={"reference_date": "2026-05-27"},
+    )
+    assert refresh.status_code == 200
+    baseline_path = Path(refresh.json()["baseline_path"])
+    capsule_path = Path(refresh.json()["companion_capsule_path"])
+    assert baseline_path.exists()
+    assert capsule_path.exists()
+
+    rejected = client.post(
+        "/admin/wearables/export-energy",
+        json={"explicit_consent": False},
+    )
+    assert rejected.status_code == 422
+
+    exported = client.post(
+        "/admin/wearables/export-energy",
+        json={
+            "explicit_consent": True,
+            "include_reserve_summary": True,
+        },
+    )
+    assert exported.status_code == 200
+    export_payload = exported.json()
+    export_path = Path(export_payload["export_path"])
+    export_bundle = export_payload["export"]
+    assert export_path.exists()
+    assert export_bundle["artifact_kind"] == "scout_wearable_energy_export_bundle"
+    assert export_bundle["consent"]["explicit_local_export"] is True
+    assert export_bundle["consent"]["remote_share_allowed"] is False
+    assert export_bundle["consent"]["community_pool_upload_allowed"] is False
+    assert export_bundle["consent"]["raw_health_payload_shared"] is False
+    assert export_bundle["consent"]["raw_track_shared"] is False
+    assert export_bundle["consent"]["exact_timestamps_shared"] is False
+    assert export_bundle["consent"]["route_family_names_shared"] is False
+    assert export_bundle["privacy"]["shareable_by_default"] is False
+    assert export_bundle["boundary"]["medical_diagnosis"] is False
+    assert export_bundle["boundary"]["phase1_runtime_safety_truth"] is False
+    assert "companion_capability_capsule" in export_bundle["artifacts"]
+    reserve_summary = export_bundle["artifacts"]["energy_reserve_summary"]
+    assert reserve_summary["route_family_profiles_shared"] is False
+    reserve_summary_text = json.dumps(reserve_summary)
+    assert '"route_family_profiles":' not in reserve_summary_text
+    assert "local_day_hike" not in reserve_summary_text
+
+    deleted = client.post(
+        "/admin/wearables/delete-energy",
+        json={"include_exports": True},
+    )
+    assert deleted.status_code == 200
+    delete_payload = deleted.json()
+    assert delete_payload["artifact_kind"] == "scout_wearable_energy_delete_result"
+    assert delete_payload["activity_summaries_deleted"] is False
+    assert delete_payload["mutation"]["safety_api_called"] is False
+    assert not baseline_path.exists()
+    assert not capsule_path.exists()
+    assert not export_path.exists()
+    assert client.get("/admin/wearables").json()["activity_count"] == 3
+    assert "/safety/" not in json.dumps(export_payload)
+
+
+def test_admin_builds_daily_home_energy_overview(tmp_path, monkeypatch):
+    monkeypatch.setenv("SCOUT_DATA_ROOT", str(tmp_path / "data"))
+    client = TestClient(create_admin_app())
+
+    for fixture in WEARABLE_FIXTURES:
+        imported = client.post(
+            "/admin/wearables/import",
+            json={"source_path": str(fixture)},
+        )
+        assert imported.status_code == 200
+
+    response = client.post(
+        "/admin/wearables/daily-energy",
+        json={"reference_date": "2026-05-27"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    overview = payload["overview"]
+    overview_path = Path(payload["overview_path"])
+    assert payload["artifact_kind"] == "scout_wearable_daily_energy_overview_result"
+    assert overview_path.exists()
+    assert overview["artifact_kind"] == "scout_wearable_daily_energy_overview"
+    assert overview["surface"] == "daily_home"
+    assert overview["current_reserve_band"] == "rest_suggested"
+    assert overview["trend_vs_baseline"]["acute_7_day_load"]["activity_count"] == 1
+    assert overview["trend_vs_baseline"]["recent_28_day_baseline"]["activity_count"] == 2
+    assert overview["trend_vs_baseline"]["stable_90_day_baseline"]["activity_count"] == 3
+    assert overview["next_day_soft_cue"]["cue_type"] == "rest_or_easy_day"
+    assert overview["next_day_soft_cue"]["medical_language"] is False
+    assert overview["next_day_soft_cue"]["phase1_runtime_safety_truth"] is False
+    assert overview["display_language_policy"]["medical_language_allowed"] is False
+    assert overview["display_language_policy"]["runtime_safety_truth"] is False
+    assert overview["boundary"]["medical_diagnosis"] is False
+    assert overview["boundary"]["phase1_runtime_safety_truth"] is False
+    assert overview["boundary"]["safety_api_calls_allowed"] is False
+    assert payload["mutation"]["safety_api_called"] is False
+    assert payload["privacy"]["raw_health_payload_shared"] is False
+    assert "/safety/" not in json.dumps(payload)
+
+
 def test_admin_validates_wearable_summary_before_import(tmp_path, monkeypatch):
     monkeypatch.setenv("SCOUT_DATA_ROOT", str(tmp_path / "data"))
     client = TestClient(create_admin_app())
