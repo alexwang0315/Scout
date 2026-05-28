@@ -95,6 +95,7 @@ class WearableActivitySummary(BaseModel):
     source_path: str
     sha256: str
     activity_type: str
+    route_family: str | None = None
     activity_date: date
     duration_s: int = Field(ge=0)
     moving_time_s: int = Field(ge=0)
@@ -122,6 +123,19 @@ class EnergyWindowSummary(BaseModel):
     daily_average_load: float
     start_date: date
     end_date: date
+
+
+class RouteFamilyBaselineProfile(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    route_family: str
+    activity_count: int = Field(ge=0)
+    route_effort_units_p50: float
+    moving_time_per_effort_p50: float
+    heart_rate_load_per_effort_p50: float
+    late_activity_fatigue_decay_p50: float
+    confidence: Confidence
+    limitations: list[str] = Field(default_factory=list)
 
 
 class ScoutEnergyReserveTrend(BaseModel):
@@ -167,6 +181,7 @@ class ScoutEnergyReserveBaseline(BaseModel):
     acute_7_day_load: EnergyWindowSummary
     recent_28_day_baseline: EnergyWindowSummary
     stable_90_day_baseline: EnergyWindowSummary
+    route_family_profiles: list[RouteFamilyBaselineProfile] = Field(default_factory=list)
     reserve_trend: ScoutEnergyReserveTrend
     data_quality: ScoutEnergyDataQuality
     privacy: ScoutEnergyPrivacy = Field(default_factory=ScoutEnergyPrivacy)

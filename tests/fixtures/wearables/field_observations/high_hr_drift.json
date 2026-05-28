@@ -1,0 +1,23 @@
+{
+  "artifact_kind": "scout_wearable_field_observation",
+  "artifact_version": "wearable_field_observation.v1",
+  "observation_id": "field_observation.energy.high_hr_drift.001",
+  "source_provider": "apple_watch_local_summary",
+  "offset_s": 5400,
+  "route_segment_ref": "segment.local.fixture.climb",
+  "movement_state": "moving",
+  "heart_rate_bpm": 162,
+  "expected_baseline_bpm": 138,
+  "data_quality": {
+    "heart_rate_confidence": "medium",
+    "gps_confidence": "low",
+    "missing_hr_seconds": 0,
+    "missing_hr_intervals": [],
+    "sample_cadence_s": 60,
+    "provider_value_confidence": "low",
+    "limitations": [
+      "sanitized local field observation fixture",
+      "offset-only observation; no exact timestamp"
+    ]
+  }
+}

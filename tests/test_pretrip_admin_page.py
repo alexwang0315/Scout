@@ -318,6 +318,7 @@ def test_pretrip_admin_page_has_wearable_inventory_energy_controls():
         "wearableImportRun",
         "wearableDeleteRun",
         "wearableEnergyRefreshRun",
+        "wearableDailyHomePreviewRun",
         "wearablePretripProjectionRun",
         "wearableCompanionMatchRun",
         "wearableEnergyFeedbackRun",
@@ -337,6 +338,7 @@ def test_pretrip_admin_page_has_wearable_inventory_energy_controls():
         "importWearableSummary",
         "deleteWearableSummary",
         "refreshWearableEnergy",
+        "refreshDailyHomePreview",
         "refreshPretripEnergyProjection",
         "refreshCompanionMatchReview",
         "refreshPostAnalysisEnergyFeedback",
@@ -349,6 +351,7 @@ def test_pretrip_admin_page_has_wearable_inventory_energy_controls():
     assert "/admin/wearables/validate" in html
     assert "/admin/wearables/import" in html
     assert "/admin/wearables/refresh-energy" in html
+    assert "/admin/wearables/daily-home-preview" in html
     assert "/admin/pretrip/projects/${PROJECT_ID}/refresh-energy-projection" in html
     assert "/admin/pretrip/projects/${PROJECT_ID}/refresh-companion-match" in html
     assert "/admin/pretrip/projects/${PROJECT_ID}/refresh-energy-feedback" in html

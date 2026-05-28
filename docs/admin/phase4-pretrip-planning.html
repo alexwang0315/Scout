@@ -1464,7 +1464,7 @@
             <span>Wearables</span>
             <small>inventory</small>
           </div>
-          <p class="import-gpx-copy">Wearable summaries are local advisory evidence. Refreshing energy reserve does not diagnose health, approve departure, or mutate Phase 1 runtime.</p>
+          <p class="import-gpx-copy">Wearable summaries are local advisory evidence. Energy reserve stays baseline-relative and does not approve departure or mutate Phase 1 runtime.</p>
           <form id="wearablesForm" class="import-gpx-form">
             <div class="import-gpx-field">
               <label for="wearableSourcePath">Wearable activity summary path</label>
@@ -1496,6 +1496,7 @@
               <button id="wearableImportRun" class="tool-button" type="button">Import summary</button>
               <button id="wearableDeleteRun" class="tool-button" type="button">Delete summary</button>
               <button id="wearableEnergyRefreshRun" class="tool-button" type="button">Refresh reserve</button>
+              <button id="wearableDailyHomePreviewRun" class="tool-button" type="button">Daily preview</button>
               <button id="wearablePretripProjectionRun" class="tool-button" type="button">Apply to ETA</button>
               <button id="wearableCompanionMatchRun" class="tool-button" type="button">Refresh match</button>
               <button id="wearableEnergyFeedbackRun" class="tool-button" type="button">Energy feedback</button>
@@ -3008,6 +3009,7 @@
         "wearableImportRun",
         "wearableDeleteRun",
         "wearableEnergyRefreshRun",
+        "wearableDailyHomePreviewRun",
         "wearablePretripProjectionRun",
         "wearableCompanionMatchRun",
         "wearableEnergyFeedbackRun"
@@ -3125,6 +3127,21 @@
         setWearableStatus("Energy reserve refreshed from local wearable inventory.", "success");
       } catch (error) {
         setWearableStatus(`Energy refresh failed: ${error.message || error}`, "error");
+        setWearableResult({error: error.message || String(error), payload});
+      } finally {
+        setWearableBusy(false);
+      }
+    }
+    async function refreshDailyHomePreview() {
+      const payload = wearableReferenceDatePayload();
+      setWearableBusy(true);
+      setWearableStatus("Writing Daily/Home preview from local wearable overview...");
+      try {
+        const result = await parseWriteResponse(await postJson("/admin/wearables/daily-home-preview", payload));
+        setWearableResult(result);
+        setWearableStatus(`Daily/Home preview written: ${result.html_path || "local HTML artifact"}.`, "success");
+      } catch (error) {
+        setWearableStatus(`Daily/Home preview failed: ${error.message || error}`, "error");
         setWearableResult({error: error.message || String(error), payload});
       } finally {
         setWearableBusy(false);
@@ -4299,6 +4316,7 @@
       document.getElementById("wearableImportRun").addEventListener("click", importWearableSummary);
       document.getElementById("wearableDeleteRun").addEventListener("click", deleteWearableSummary);
       document.getElementById("wearableEnergyRefreshRun").addEventListener("click", refreshWearableEnergy);
+      document.getElementById("wearableDailyHomePreviewRun").addEventListener("click", refreshDailyHomePreview);
       document.getElementById("wearablePretripProjectionRun").addEventListener("click", refreshPretripEnergyProjection);
       document.getElementById("wearableCompanionMatchRun").addEventListener("click", refreshCompanionMatchReview);
       document.getElementById("wearableEnergyFeedbackRun").addEventListener("click", refreshPostAnalysisEnergyFeedback);

@@ -79,13 +79,18 @@ from pretrip_workspace_edit import (
 )
 from pretrip_workspace_project import copy_pretrip_project_workspace
 from scout_wearable_admin import (
+    build_daily_energy_overview,
+    delete_wearable_energy_artifacts,
     delete_wearable_activity_log,
+    export_wearable_energy_artifacts,
     import_wearable_activity_log,
     list_wearable_inventory,
     refresh_energy_reserve_from_inventory,
     wearable_inventory_root,
 )
 from scout_energy_reserve import ENERGY_BASELINE_FILENAME
+from scout_mobile_handoff import DEFAULT_MOBILE_HANDOFF_FILENAME, build_mobile_energy_companion_handoff
+from scout_wearable_daily_home import build_daily_home_preview
 from scout_wearable_validator import validate_wearable_activity_summary_contract
 
 
@@ -232,6 +237,27 @@ class WearableEnergyRefreshRequest(BaseModel):
     reference_date: str | None = None
 
 
+class WearableEnergyExportRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    explicit_consent: bool = False
+    output_path: str | None = None
+    include_reserve_summary: bool = False
+
+
+class WearableEnergyDeleteRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    include_exports: bool = True
+
+
+class WearableMobileHandoffRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reference_date: str | None = None
+    companion_match_review_path: str | None = None
+
+
 class CompanionMatchRefreshRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -369,6 +395,110 @@ def create_admin_router(
             )
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except OSError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @router.post("/wearables/daily-energy")
+    def wearable_daily_energy(request: WearableEnergyRefreshRequest) -> dict[str, Any]:
+        try:
+            reference_date = (
+                datetime.fromisoformat(request.reference_date).date()
+                if request.reference_date
+                else None
+            )
+            return build_daily_energy_overview(
+                inventory_root=resolved_wearable_inventory_root,
+                reference_date=reference_date,
+                write_artifact=True,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except OSError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @router.post("/wearables/daily-home-preview")
+    def wearable_daily_home_preview(request: WearableEnergyRefreshRequest) -> dict[str, Any]:
+        try:
+            reference_date = (
+                datetime.fromisoformat(request.reference_date).date()
+                if request.reference_date
+                else None
+            )
+            return build_daily_home_preview(
+                inventory_root=resolved_wearable_inventory_root,
+                reference_date=reference_date,
+                write_artifact=True,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except OSError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @router.get("/wearables/daily-home-preview", response_class=HTMLResponse)
+    def wearable_daily_home_preview_page() -> str:
+        try:
+            result = build_daily_home_preview(
+                inventory_root=resolved_wearable_inventory_root,
+                write_artifact=True,
+            )
+            return Path(result["html_path"]).read_text(encoding="utf-8")
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except OSError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @router.post("/wearables/mobile-handoff")
+    def wearable_mobile_handoff(request: WearableMobileHandoffRequest) -> dict[str, Any]:
+        try:
+            reference_date = (
+                datetime.fromisoformat(request.reference_date).date()
+                if request.reference_date
+                else None
+            )
+            daily_result = build_daily_home_preview(
+                inventory_root=resolved_wearable_inventory_root,
+                reference_date=reference_date,
+                write_artifact=True,
+            )
+            return build_mobile_energy_companion_handoff(
+                daily_home_preview_path=Path(daily_result["preview_path"]),
+                companion_match_review_path=_optional_path_from_admin_request(
+                    request.companion_match_review_path
+                ),
+                output_path=(
+                    resolved_wearable_inventory_root
+                    / "outputs"
+                    / DEFAULT_MOBILE_HANDOFF_FILENAME
+                ),
+            )
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (ValueError, OSError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @router.post("/wearables/export-energy")
+    def wearable_export_energy(request: WearableEnergyExportRequest) -> dict[str, Any]:
+        try:
+            return export_wearable_energy_artifacts(
+                inventory_root=resolved_wearable_inventory_root,
+                explicit_consent=request.explicit_consent,
+                output_path=_optional_path_from_admin_request(request.output_path),
+                include_reserve_summary=request.include_reserve_summary,
+            )
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (ValueError, OSError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @router.post("/wearables/delete-energy")
+    def wearable_delete_energy(request: WearableEnergyDeleteRequest) -> dict[str, Any]:
+        try:
+            return delete_wearable_energy_artifacts(
+                inventory_root=resolved_wearable_inventory_root,
+                include_exports=request.include_exports,
+            )
         except OSError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 

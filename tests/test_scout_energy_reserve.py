@@ -1,4 +1,7 @@
 import json
+import subprocess
+import sys
+import tempfile
 import unittest
 from datetime import date
 from pathlib import Path
@@ -53,6 +56,13 @@ class ScoutEnergyReserveTests(unittest.TestCase):
         self.assertEqual(baseline.acute_7_day_load.activity_count, 1)
         self.assertEqual(baseline.recent_28_day_baseline.activity_count, 2)
         self.assertEqual(baseline.stable_90_day_baseline.activity_count, 3)
+        self.assertEqual(len(baseline.route_family_profiles), 1)
+        route_family = baseline.route_family_profiles[0]
+        self.assertEqual(route_family.route_family, "local_day_hike")
+        self.assertEqual(route_family.activity_count, 3)
+        self.assertGreater(route_family.route_effort_units_p50, 0)
+        self.assertGreater(route_family.moving_time_per_effort_p50, 0)
+        self.assertEqual(route_family.confidence, "medium")
         self.assertEqual(baseline.reserve_trend.current_band, "rest_suggested")
         self.assertGreater(baseline.reserve_trend.acute_load_ratio, 1.5)
         self.assertEqual(baseline.data_quality.missing_hr_seconds, 900)
@@ -60,8 +70,16 @@ class ScoutEnergyReserveTests(unittest.TestCase):
         self.assertFalse(payload["boundary"]["phase1_runtime_safety_truth"])
         self.assertFalse(payload["boundary"]["provider_values_are_scout_truth"])
         self.assertFalse(payload["privacy"]["raw_samples_embedded"])
+        self.assertIn("route_family_profiles", payload)
         self.assertNotIn("/safety/", json.dumps(payload))
         self.assertNotIn("<trkpt", json.dumps(payload))
+
+    def test_route_family_profiles_require_minimum_family_history(self):
+        activity = load_wearable_activity_summary(FIXTURES[0], root=ROOT)
+        baseline = build_energy_reserve_baseline([activity], reference_date=date(2026, 5, 27))
+
+        self.assertEqual(baseline.activity_count, 1)
+        self.assertEqual(baseline.route_family_profiles, [])
 
     def test_garmin_provider_values_remain_source_values_not_scout_truth(self):
         garmin = load_wearable_activity_summary(FIXTURES[2], root=ROOT)
@@ -70,6 +88,61 @@ class ScoutEnergyReserveTests(unittest.TestCase):
         self.assertEqual(garmin.body_energy_provider_values.garmin_stress_avg, 62)
         self.assertTrue(garmin.body_energy_provider_values.source_value_only)
         self.assertFalse(garmin.body_energy_provider_values.scout_truth)
+
+    def test_energy_reserve_cli_builds_fixture_backed_artifacts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output_dir = Path(tmp) / "energy"
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "scout_energy_reserve",
+                    "build",
+                    "--activity",
+                    str(FIXTURES[0]),
+                    "--activity",
+                    str(FIXTURES[1]),
+                    "--activity",
+                    str(FIXTURES[2]),
+                    "--output-dir",
+                    str(output_dir),
+                    "--reference-date",
+                    "2026-05-27",
+                    "--root",
+                    str(ROOT),
+                ],
+                cwd=ROOT,
+                text=True,
+                capture_output=True,
+                check=True,
+            )
+
+            payload = json.loads(completed.stdout)
+            baseline_path = Path(payload["baseline_path"])
+            explanation_path = Path(payload["explanation_path"])
+            capsule_path = Path(payload["companion_capsule_path"])
+            baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
+            self.assertTrue(baseline_path.is_file())
+            self.assertTrue(explanation_path.is_file())
+            self.assertTrue(capsule_path.is_file())
+
+        self.assertEqual(payload["artifact_kind"], "scout_energy_reserve_artifact_export")
+        self.assertEqual(payload["source_provider"], "mixed_wearable_activity_summaries")
+        self.assertEqual(payload["source_path"], "aggregate:tests/fixtures/wearables")
+        self.assertEqual(len(payload["sha256"]), 64)
+        self.assertEqual(payload["data_quality"]["missing_hr_seconds"], 900)
+        self.assertFalse(payload["privacy"]["raw_samples_embedded"])
+        self.assertFalse(payload["boundary"]["medical_diagnosis"])
+        self.assertEqual(baseline["source_provider"], "mixed_wearable_activity_summaries")
+        self.assertEqual(baseline["source_path"], "aggregate:tests/fixtures/wearables")
+        self.assertEqual(baseline["route_family_profiles"][0]["route_family"], "local_day_hike")
+        self.assertEqual(len(baseline["sha256"]), 64)
+        self.assertEqual(baseline["reserve_trend"]["current_band"], "rest_suggested")
+        self.assertFalse(baseline["boundary"]["medical_diagnosis"])
+        self.assertFalse(baseline["boundary"]["phase1_runtime_safety_truth"])
+        self.assertFalse(baseline["boundary"]["safety_api_calls_allowed"])
+        self.assertFalse(baseline["privacy"]["raw_samples_embedded"])
+        self.assertNotIn("/safety/", json.dumps(payload))
 
 
 if __name__ == "__main__":

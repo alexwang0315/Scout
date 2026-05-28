@@ -1,0 +1,52 @@
+{
+  "artifact_kind": "scout_wearable_sanitized_import",
+  "artifact_version": "wearable_sanitized_import.v1",
+  "source_format": "fit_derived_summary",
+  "activity_id": "adapter.fit.summary.001",
+  "activity_type": "hiking",
+  "activity_date": "2026-04-20",
+  "duration_s": 5100,
+  "moving_time_s": 4700,
+  "distance_m": 5300,
+  "ascent_m": 310,
+  "descent_m": 300,
+  "rest_event_count": 1,
+  "rest_duration_min": [6],
+  "late_activity_fatigue_decay": 0.13,
+  "session_rpe": 5.5,
+  "heart_rate": {
+    "sample_count": 3,
+    "avg_bpm": 124,
+    "p90_bpm": 139,
+    "zone_minutes": {
+      "z1": 18,
+      "z2": 42,
+      "z3": 18,
+      "z4": 0,
+      "z5": 0
+    },
+    "samples": [
+      {"offset_s": 0, "bpm": 96, "quality": "medium"},
+      {"offset_s": 2400, "bpm": 131, "quality": "medium"},
+      {"offset_s": 4700, "bpm": 116, "quality": "medium"}
+    ]
+  },
+  "body_energy_provider_values": {
+    "garmin_body_battery_start": null,
+    "garmin_body_battery_end": null,
+    "garmin_stress_avg": null,
+    "source_value_only": true,
+    "scout_truth": false
+  },
+  "data_quality": {
+    "heart_rate_confidence": "medium",
+    "gps_confidence": "medium",
+    "missing_hr_seconds": 0,
+    "missing_hr_intervals": [],
+    "sample_cadence_s": 2400,
+    "provider_value_confidence": "low",
+    "limitations": [
+      "derived from sanitized FIT summary; record stream is not stored"
+    ]
+  }
+}
