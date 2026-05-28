@@ -10,10 +10,10 @@ from pathlib import Path
 from typing import Any
 
 try:
-    from tools.pi_grove_led_bar_smoke import PORT_DEFAULTS, clear_led_bar, make_gpio_writer, write_led_bar_bits
+    from tools.pi_grove_led_bar_smoke import DEFAULT_PORT, PORT_DEFAULTS, clear_led_bar, make_gpio_writer, write_led_bar_bits
     from tools.pi_oled_i2c_smoke import parse_address, write_display
 except ImportError:  # pragma: no cover - used when executed directly from tools/ on a Pi.
-    from pi_grove_led_bar_smoke import PORT_DEFAULTS, clear_led_bar, make_gpio_writer, write_led_bar_bits
+    from pi_grove_led_bar_smoke import DEFAULT_PORT, PORT_DEFAULTS, clear_led_bar, make_gpio_writer, write_led_bar_bits
     from pi_oled_i2c_smoke import parse_address, write_display
 
 
@@ -233,7 +233,7 @@ def main(argv: list[str] | None = None) -> int:
         description="Run a Pi hardware smoke command with OLED + LED Bar visual feedback."
     )
     parser.add_argument("--name", required=True, help="Short smoke name shown on the OLED.")
-    parser.add_argument("--led-port", choices=sorted(PORT_DEFAULTS), default="D16")
+    parser.add_argument("--led-port", choices=sorted(PORT_DEFAULTS), default=DEFAULT_PORT)
     parser.add_argument("--led-data-gpio", type=int)
     parser.add_argument("--led-clock-gpio", type=int)
     parser.add_argument("--oled-bus", type=Path, default=Path("/dev/i2c-1"))

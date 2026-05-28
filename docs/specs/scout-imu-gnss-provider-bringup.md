@@ -160,6 +160,23 @@ Grove GPS + Grove IMU 9DOF 的價值：
 - 適合作 raw evidence baseline；
 - 有助於比對 IM10A 的 vendor fusion 是否真的改善 latency、功耗或穩定性。
 
+## Grove IMU 9DOF I2C Smoke
+
+Grove IMU 9DOF `ICM20600 + AK09918` 第一階段走 Linux I2C，不依賴 vendor daemon
+或 ROS。實機確認地址：
+
+- ICM20600: `0x69`, `WHOAMI=0x11`
+- AK09918 magnetometer: `0x0c`, `WIA=0x480c`
+
+smoke output 只保留 raw accel/gyro/mag sample 和固定 scale assumption：
+
+- accel: `+/-2g`, `16384 LSB/g`
+- gyro: `+/-250dps`, `131 LSB/dps`
+
+中文註釋：Grove IMU 9DOF 是 motion evidence baseline，不是 safety decision source。
+工具 payload 必須固定 `primary_truth_allowed=false`、
+`phase1_safety_decision_change_allowed=false`、`remote_outbound_allowed=false`。
+
 ## Smoke Tooling
 
 Pi 上的最小 smoke 命令：
@@ -170,6 +187,16 @@ python3 tools/pi_hiwonder_imu_usb_smoke.py \
   --baud 9600 \
   --duration-seconds 10 \
   --output-jsonl /data/scout/providers/imu/manual-smoke.jsonl
+```
+
+```bash
+python3 tools/pi_grove_imu_9dof_smoke.py \
+  --bus /dev/i2c-1 \
+  --imu-address 0x69 \
+  --mag-address 0x0c \
+  --sample-count 5 \
+  --sample-interval-ms 100 \
+  --output-jsonl /data/scout/providers/imu/grove-9dof-manual-smoke.jsonl
 ```
 
 ```bash

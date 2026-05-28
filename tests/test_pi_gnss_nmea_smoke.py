@@ -3,7 +3,14 @@ import subprocess
 import sys
 from pathlib import Path
 
-from tools.pi_gnss_nmea_smoke import gnss_led_bit, gnss_oled_message, parse_nmea_sentence, parse_raw_nmea
+from tools.pi_gnss_nmea_smoke import (
+    _termios_baud_constant,
+    build_gnss_stream_status_payload,
+    gnss_led_bit,
+    gnss_oled_message,
+    parse_nmea_sentence,
+    parse_raw_nmea,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -100,12 +107,43 @@ def test_gnss_oled_message_summarizes_non_fix_state() -> None:
     assert "SEARCH SKY" in message
 
 
+def test_gnss_oled_message_summarizes_waiting_and_no_stream() -> None:
+    waiting = build_gnss_stream_status_payload(state="waiting", device_port="/dev/serial0", baud=9600)
+    no_stream = build_gnss_stream_status_payload(state="no_stream", device_port="/dev/serial0", baud=9600)
+
+    waiting_message = gnss_oled_message(waiting, sentence_count=0)
+    no_stream_message = gnss_oled_message(no_stream, sentence_count=0)
+
+    assert "WAIT UART" in waiting_message
+    assert "NMEA 0" in waiting_message
+    assert "9600 BAUD" in waiting_message
+    assert "LISTENING" in waiting_message
+    assert "NO STREAM" in no_stream_message
+    assert "CHECK UART" in no_stream_message
+
+
 def test_gnss_led_bit_maps_non_fix_and_fix_segments() -> None:
     nofix_payload = parse_raw_nmea(NON_FIX_GGA, device_port="/dev/ttyUSB0", baud=9600)[0]
     fix_payload = parse_raw_nmea(GGA, device_port="/dev/ttyUSB0", baud=9600)[0]
 
     assert gnss_led_bit(nofix_payload, fix_bit=10, nofix_bit=1) == 0x001
     assert gnss_led_bit(fix_payload, fix_bit=10, nofix_bit=1) == 0x200
+    assert (
+        gnss_led_bit(
+            build_gnss_stream_status_payload(state="waiting", device_port="/dev/serial0", baud=9600),
+            fix_bit=10,
+            nofix_bit=1,
+        )
+        == 0x003
+    )
+    assert (
+        gnss_led_bit(
+            build_gnss_stream_status_payload(state="no_stream", device_port="/dev/serial0", baud=9600),
+            fix_bit=10,
+            nofix_bit=1,
+        )
+        == 0x001
+    )
 
 
 def test_gnss_smoke_cli_raw_nmea_can_dry_run_oled_status(tmp_path: Path) -> None:
@@ -173,6 +211,9 @@ def test_gnss_smoke_cli_raw_nmea_can_dry_run_led_status() -> None:
     second_update = stdout_payload["led_status_updates"][1]
     assert first_update["source"] == "pi_gnss_nmea_led_status"
     assert first_update["write_status"] == "dry_run"
+    assert first_update["port"] == "D5"
+    assert first_update["data_gpio"] == 5
+    assert first_update["clock_gpio"] == 6
     assert first_update["gnss_fix_state"] == "no_fix"
     assert first_update["bits"] == "0x001"
     assert first_update["nofix_led_bit"] == 1
@@ -182,3 +223,36 @@ def test_gnss_smoke_cli_raw_nmea_can_dry_run_led_status() -> None:
     assert second_update["gnss_fix_state"] == "fix"
     assert second_update["bits"] == "0x200"
     assert second_update["fix_led_bit"] == 10
+
+
+def test_gnss_smoke_cli_empty_raw_nmea_still_updates_oled_and_led() -> None:
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--raw-nmea",
+            "",
+            "--oled-status",
+            "--oled-dry-run",
+            "--led-status",
+            "--led-dry-run",
+        ],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    stdout_payload = json.loads(result.stdout)
+    assert stdout_payload["sentence_count"] == 0
+    assert stdout_payload["oled_status_updates"][0]["gnss_fix_state"] == "no_stream"
+    assert "NO STREAM" in stdout_payload["oled_status_updates"][0]["message"]
+    assert stdout_payload["led_status_updates"][0]["gnss_fix_state"] == "no_stream"
+    assert stdout_payload["led_status_updates"][0]["bits"] == "0x001"
+    assert stdout_payload["led_status_updates"][0]["phase1_safety_decision_change_allowed"] is False
+
+
+def test_gnss_stdlib_serial_fallback_supports_common_baud() -> None:
+    assert isinstance(_termios_baud_constant(9600), int)
+    assert isinstance(_termios_baud_constant(115200), int)

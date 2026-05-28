@@ -56,9 +56,9 @@ def test_visual_feedback_wraps_successful_smoke_and_writes_boundary_payload(tmp_
     assert payload["visual_dry_run"] is True
     assert payload["led_enabled"] is True
     assert payload["oled_enabled"] is True
-    assert payload["led_port"] == "D16"
-    assert payload["data_gpio"] == 16
-    assert payload["clock_gpio"] == 17
+    assert payload["led_port"] == "D5"
+    assert payload["data_gpio"] == 5
+    assert payload["clock_gpio"] == 6
     assert payload["oled_address"] == "0x3c"
     assert payload["run_visual_statuses"][0]["bits"] == "0x01f"
     assert payload["run_visual_statuses"][1]["message"] == "SCOUT\nOLED\nRUN"

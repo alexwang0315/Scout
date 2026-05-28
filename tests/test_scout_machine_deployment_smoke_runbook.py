@@ -158,3 +158,26 @@ def test_runbook_documents_gnss_oled_status_summary() -> None:
         "不改 Phase 1 safety decision",
     ):
         assert token in source
+
+
+def test_runbook_documents_keypad_4x4_diagnostic_smoke() -> None:
+    source = read_runbook()
+
+    for token in (
+        "tools/pi_keypad_4x4_smoke.py",
+        "4x4 matrix keypad",
+        "--grove-ports D16,D18,D24,D26",
+        "--active-high",
+        "rows `16,17,18,19`",
+        "cols `24,25,26,27`",
+        "active-high",
+        "--simulate-keys 1,A,#",
+        "不接 VCC、不接 GND",
+        "`R1 R2 R3 R4 C1 C2 C3 C4` 八條線接到 GPIO",
+        "避開 I2C、UART、LED Bar D5",
+        "OLED 顯示 `SCOUT KEY / KEY A`",
+        "`sos_arm_candidate`",
+        "不可直接當成 SOS",
+        "不可接 live `/safety/*`",
+    ):
+        assert token in source

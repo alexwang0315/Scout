@@ -13,6 +13,7 @@ PORT_DEFAULTS = {
     "D16": {"data_gpio": 16, "clock_gpio": 17},
     "D5": {"data_gpio": 5, "clock_gpio": 6},
 }
+DEFAULT_PORT = "D5"
 
 PATTERN_BITS = {
     "all_on": 0x3FF,
@@ -180,7 +181,7 @@ def _parse_int(value: str) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Smoke-test a Grove LED Bar v2.0 through MY9221 bit-bang.")
-    parser.add_argument("--port", choices=sorted(PORT_DEFAULTS), default="D16")
+    parser.add_argument("--port", choices=sorted(PORT_DEFAULTS), default=DEFAULT_PORT)
     parser.add_argument("--data-gpio", type=int)
     parser.add_argument("--clock-gpio", type=int)
     parser.add_argument(

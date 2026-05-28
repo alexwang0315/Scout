@@ -14,9 +14,9 @@ except ImportError:  # pragma: no cover - used when executed directly from tools
     from pi_oled_i2c_smoke import parse_address, write_display
 
 try:
-    from tools.pi_grove_led_bar_smoke import PORT_DEFAULTS, clear_led_bar, make_gpio_writer, write_led_bar_bits
+    from tools.pi_grove_led_bar_smoke import DEFAULT_PORT, PORT_DEFAULTS, clear_led_bar, make_gpio_writer, write_led_bar_bits
 except ImportError:  # pragma: no cover - used when executed directly from tools/ on a Pi.
-    from pi_grove_led_bar_smoke import PORT_DEFAULTS, clear_led_bar, make_gpio_writer, write_led_bar_bits
+    from pi_grove_led_bar_smoke import DEFAULT_PORT, PORT_DEFAULTS, clear_led_bar, make_gpio_writer, write_led_bar_bits
 
 
 def nmea_checksum_valid(sentence: str) -> bool:
@@ -68,6 +68,36 @@ def build_gnss_payload(parsed: dict[str, Any], *, device_port: str, baud: int) -
     }
 
 
+def build_gnss_stream_status_payload(*, state: str, device_port: str, baud: int) -> dict[str, Any]:
+    if state not in {"waiting", "no_stream"}:
+        raise ValueError(f"unsupported GNSS stream status: {state}")
+    return {
+        "captured_at": datetime.now(timezone.utc).isoformat(),
+        "source": "pi_gnss_nmea_stream_status",
+        "hardware_kind": "serial_gnss_nmea",
+        "device_port": device_port,
+        "baud": baud,
+        "sentence_type": "NONE",
+        "gnss_time_utc": None,
+        "position": {"lat": None, "lon": None, "altitude_m": None},
+        "fix_quality": {
+            "status": None,
+            "valid": False,
+            "quality": None,
+            "satellites": None,
+            "hdop": None,
+        },
+        "raw_sentence": None,
+        "checksum_valid": None,
+        "nmea_stream_state": state,
+        "primary_truth_allowed": False,
+        "primary_truth_scope": "diagnostic_stream_status_only",
+        "phase1_safety_decision_change_allowed": False,
+        "remote_outbound_allowed": False,
+        "hardware_control_scope": "diagnostic_capture_only",
+    }
+
+
 def parse_raw_nmea(raw_nmea: str, *, device_port: str, baud: int) -> list[dict[str, Any]]:
     payloads: list[dict[str, Any]] = []
     for line in raw_nmea.splitlines():
@@ -86,10 +116,13 @@ def read_serial_nmea(
 ) -> list[str]:
     try:
         import serial  # type: ignore
-    except ImportError as exc:  # pragma: no cover - depends on Pi environment.
-        raise RuntimeError(
-            "pyserial is required for live GNSS serial smoke: python3 -m pip install pyserial"
-        ) from exc
+    except ImportError:
+        return _read_serial_nmea_stdlib(
+            port=port,
+            baud=baud,
+            duration_seconds=duration_seconds,
+            on_line=on_line,
+        )
 
     lines: list[str] = []
     deadline = time.monotonic() + duration_seconds
@@ -104,6 +137,71 @@ def read_serial_nmea(
     return lines
 
 
+def _read_serial_nmea_stdlib(
+    *,
+    port: str,
+    baud: int,
+    duration_seconds: float,
+    on_line: Any | None = None,
+) -> list[str]:
+    import os
+    import select
+    import termios
+
+    baud_constant = _termios_baud_constant(baud)
+    lines: list[str] = []
+    buffer = b""
+    deadline = time.monotonic() + duration_seconds
+    fd = os.open(port, os.O_RDWR | os.O_NOCTTY | os.O_NONBLOCK)
+    try:
+        attrs = termios.tcgetattr(fd)
+        attrs[0] = termios.IGNPAR
+        attrs[1] = 0
+        attrs[2] = baud_constant | termios.CS8 | termios.CLOCAL | termios.CREAD
+        attrs[3] = 0
+        attrs[4] = baud_constant
+        attrs[5] = baud_constant
+        attrs[6][termios.VMIN] = 0
+        attrs[6][termios.VTIME] = 2
+        termios.tcsetattr(fd, termios.TCSANOW, attrs)
+        termios.tcflush(fd, termios.TCIOFLUSH)
+
+        while time.monotonic() < deadline:
+            timeout = max(0.0, min(0.2, deadline - time.monotonic()))
+            readable, _, _ = select.select([fd], [], [], timeout)
+            if not readable:
+                continue
+            chunk = os.read(fd, 256)
+            if not chunk:
+                continue
+            buffer += chunk
+            while b"\n" in buffer:
+                raw_line, buffer = buffer.split(b"\n", 1)
+                line = raw_line.decode("ascii", errors="replace").strip()
+                if line:
+                    lines.append(line)
+                    if on_line is not None:
+                        on_line(line, len(lines))
+
+        remaining = buffer.decode("ascii", errors="replace").strip()
+        if remaining:
+            lines.append(remaining)
+            if on_line is not None:
+                on_line(remaining, len(lines))
+        return lines
+    finally:
+        os.close(fd)
+
+
+def _termios_baud_constant(baud: int) -> int:
+    import termios
+
+    constant_name = f"B{baud}"
+    if not hasattr(termios, constant_name):
+        raise RuntimeError(f"unsupported serial baud rate for stdlib fallback: {baud}")
+    return getattr(termios, constant_name)
+
+
 def append_jsonl(payloads: list[dict[str, Any]], output_path: Path | None) -> None:
     if output_path is None:
         return
@@ -114,6 +212,22 @@ def append_jsonl(payloads: list[dict[str, Any]], output_path: Path | None) -> No
 
 
 def gnss_oled_message(payload: dict[str, Any], *, sentence_count: int) -> str:
+    stream_state = payload.get("nmea_stream_state")
+    if stream_state in {"waiting", "no_stream"}:
+        port = Path(str(payload.get("device_port") or "")).name.upper()[:10]
+        baud = payload.get("baud") or "--"
+        state_label = "WAIT UART" if stream_state == "waiting" else "NO STREAM"
+        hint = "LISTENING" if stream_state == "waiting" else "CHECK UART"
+        lines = [
+            "SCOUT GPS",
+            state_label,
+            f"NMEA {sentence_count}",
+            f"PORT {port}",
+            f"{baud} BAUD",
+            hint,
+        ]
+        return "\n".join(line[:16] for line in lines)
+
     fix_quality = payload.get("fix_quality") or {}
     position = payload.get("position") or {}
     sentence_type = str(payload.get("sentence_type") or "NMEA")[-3:]
@@ -151,7 +265,11 @@ def build_oled_status_payload(
     error: str | None = None,
 ) -> dict[str, Any]:
     fix_quality = gnss_payload.get("fix_quality") or {}
-    sentence_type = str(gnss_payload.get("sentence_type") or "NMEA")[-3:]
+    stream_state = gnss_payload.get("nmea_stream_state")
+    sentence_type = "NONE" if stream_state else str(gnss_payload.get("sentence_type") or "NMEA")[-3:]
+    fix_state = stream_state if stream_state in {"waiting", "no_stream"} else (
+        "fix" if fix_quality.get("valid") else "no_fix"
+    )
     payload = {
         "captured_at": datetime.now(timezone.utc).isoformat(),
         "source": "pi_gnss_nmea_oled_status",
@@ -163,7 +281,8 @@ def build_oled_status_payload(
         "write_status": write_status,
         "dry_run": dry_run,
         "message": gnss_oled_message(gnss_payload, sentence_count=sentence_count),
-        "gnss_fix_state": "fix" if fix_quality.get("valid") else "no_fix",
+        "gnss_fix_state": fix_state,
+        "nmea_stream_state": stream_state,
         "nmea_sentence_type": sentence_type,
         "nmea_sentence_count": sentence_count,
         "phase1_safety_decision_change_allowed": False,
@@ -176,6 +295,11 @@ def build_oled_status_payload(
 
 
 def gnss_led_bit(payload: dict[str, Any], *, fix_bit: int, nofix_bit: int) -> int:
+    stream_state = payload.get("nmea_stream_state")
+    if stream_state == "waiting":
+        return 0x003
+    if stream_state == "no_stream":
+        return 1 << (nofix_bit - 1)
     fix_quality = payload.get("fix_quality") or {}
     bit_number = fix_bit if fix_quality.get("valid") else nofix_bit
     if not 1 <= bit_number <= 10:
@@ -199,6 +323,10 @@ def build_led_status_payload(
     error: str | None = None,
 ) -> dict[str, Any]:
     fix_quality = gnss_payload.get("fix_quality") or {}
+    stream_state = gnss_payload.get("nmea_stream_state")
+    fix_state = stream_state if stream_state in {"waiting", "no_stream"} else (
+        "fix" if fix_quality.get("valid") else "no_fix"
+    )
     bits = gnss_led_bit(gnss_payload, fix_bit=fix_bit, nofix_bit=nofix_bit)
     payload = {
         "captured_at": datetime.now(timezone.utc).isoformat(),
@@ -208,8 +336,9 @@ def build_led_status_payload(
         "data_gpio": data_gpio,
         "clock_gpio": clock_gpio,
         "bits": f"0x{bits:03x}",
-        "gnss_fix_state": "fix" if fix_quality.get("valid") else "no_fix",
-        "nmea_sentence_type": str(gnss_payload.get("sentence_type") or "NMEA")[-3:],
+        "gnss_fix_state": fix_state,
+        "nmea_stream_state": stream_state,
+        "nmea_sentence_type": "NONE" if stream_state else str(gnss_payload.get("sentence_type") or "NMEA")[-3:],
         "nmea_sentence_count": sentence_count,
         "fix_led_bit": fix_bit,
         "nofix_led_bit": nofix_bit,
@@ -461,7 +590,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--oled-update-seconds", type=float, default=2.0)
     parser.add_argument("--oled-dry-run", action="store_true")
     parser.add_argument("--led-status", action="store_true")
-    parser.add_argument("--led-port", choices=sorted(PORT_DEFAULTS), default="D16")
+    parser.add_argument("--led-port", choices=sorted(PORT_DEFAULTS), default=DEFAULT_PORT)
     parser.add_argument("--led-data-gpio", type=int)
     parser.add_argument("--led-clock-gpio", type=int)
     parser.add_argument("--led-fix-bit", type=int, default=10)
@@ -541,25 +670,46 @@ def main(argv: list[str] | None = None) -> int:
         last_led_update = now
         update_led_from_payload(build_gnss_payload(parsed, device_port=args.port, baud=args.baud), sentence_count)
 
+    def append_visual_status(gnss_payload: dict[str, Any], sentence_count: int) -> None:
+        if args.oled_status:
+            oled_updates.append(
+                write_gnss_oled_status(
+                    gnss_payload=gnss_payload,
+                    sentence_count=sentence_count,
+                    bus=args.oled_bus,
+                    address=args.oled_address,
+                    driver=args.oled_driver,
+                    dry_run=args.oled_dry_run,
+                )
+            )
+        if args.led_status:
+            update_led_from_payload(gnss_payload, sentence_count)
+
     try:
         if args.raw_nmea is not None:
             payloads = parse_raw_nmea(args.raw_nmea, device_port=args.port, baud=args.baud)
             if args.oled_status or args.led_status:
                 for sentence_count, payload in enumerate(payloads, start=1):
-                    if args.oled_status:
-                        oled_updates.append(
-                            write_gnss_oled_status(
-                                gnss_payload=payload,
-                                sentence_count=sentence_count,
-                                bus=args.oled_bus,
-                                address=args.oled_address,
-                                driver=args.oled_driver,
-                                dry_run=args.oled_dry_run,
-                            )
-                        )
-                    if args.led_status:
-                        update_led_from_payload(payload, sentence_count)
+                    append_visual_status(payload, sentence_count)
+                if not payloads:
+                    append_visual_status(
+                        build_gnss_stream_status_payload(
+                            state="no_stream",
+                            device_port=args.port,
+                            baud=args.baud,
+                        ),
+                        0,
+                    )
         else:
+            if args.oled_status or args.led_status:
+                append_visual_status(
+                    build_gnss_stream_status_payload(
+                        state="waiting",
+                        device_port=args.port,
+                        baud=args.baud,
+                    ),
+                    0,
+                )
             payloads = parse_raw_nmea(
                 "\n".join(
                     read_serial_nmea(
@@ -575,6 +725,15 @@ def main(argv: list[str] | None = None) -> int:
                 device_port=args.port,
                 baud=args.baud,
             )
+            if (args.oled_status or args.led_status) and not payloads:
+                append_visual_status(
+                    build_gnss_stream_status_payload(
+                        state="no_stream",
+                        device_port=args.port,
+                        baud=args.baud,
+                    ),
+                    0,
+                )
     except Exception as exc:
         print(f"{type(exc).__name__}: {exc}", file=sys.stderr)
         return 2

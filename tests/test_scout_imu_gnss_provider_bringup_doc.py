@@ -37,10 +37,29 @@ def test_machine_smoke_runbook_links_imu_gnss_tools() -> None:
     text = SMOKE_DOC.read_text(encoding="utf-8")
 
     assert "pi_hiwonder_imu_usb_smoke.py" in text
+    assert "pi_grove_imu_9dof_smoke.py" in text
     assert "pi_gnss_nmea_smoke.py" in text
     assert "pi_imu_gnss_vendor_fusion_smoke.py" in text
+    assert "--imu-address 0x69" in text
+    assert "--mag-address 0x0c" in text
+    assert "WHOAMI=0x11" in text
+    assert "WIA=0x480c" in text
     assert "lsusb" in text
     assert "ls /dev/ttyUSB* /dev/ttyACM*" in text
     assert "python3 -m serial.tools.list_ports" in text
     assert "vcgencmd get_throttled" in text
     assert "scout-imu-gnss-provider-bringup.md" in text
+
+
+def test_imu_gnss_bringup_doc_documents_grove_imu_9dof_i2c_smoke() -> None:
+    text = BRINGUP_DOC.read_text(encoding="utf-8")
+
+    assert "Grove IMU 9DOF I2C Smoke" in text
+    assert "ICM20600" in text
+    assert "AK09918" in text
+    assert "WHOAMI=0x11" in text
+    assert "WIA=0x480c" in text
+    assert "pi_grove_imu_9dof_smoke.py" in text
+    assert "primary_truth_allowed=false" in text
+    assert "phase1_safety_decision_change_allowed=false" in text
+    assert "remote_outbound_allowed=false" in text
