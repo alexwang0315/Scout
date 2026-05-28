@@ -26,6 +26,13 @@ def test_shelter_direction_ranks_local_candidate_targets_without_runtime_truth()
     assert result["recommended_target"]["target_id"]
     assert result["recommended_target"]["distance_m"] > 0
     assert result["recommended_target"]["relative_direction"]
+    assert result["recommended_target"]["risk_context"]["source_ref"] == "outputs/risk_ribbon.geojson"
+    assert result["recommended_target"]["risk_context"]["runtime_safety_truth"] is False
+    assert result["recommended_target"]["route_context"]["route_source_ref"] == "normalized/routes/route_summary.json"
+    assert "risk_penalty_m" in result["recommended_target"]["rank_components"]
+    assert result["evidence_summary"]["weather"]["source_ref"] == "outputs/weather_daylight_evidence.json"
+    assert result["evidence_summary"]["risk_ribbon"]["segment_count"] > 0
+    assert "outputs/risk_ribbon.geojson" in result["source_refs"]
     assert result["ttl_seconds"] == 300
     assert result["text_zh"].startswith("建議往")
     assert result["boundary"]["runtime_safety_truth"] is False

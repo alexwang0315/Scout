@@ -87,6 +87,20 @@ def load_local_evidence_index(path: Path | str) -> ScoutAgentKbIndex:
     return ScoutAgentKbIndex.model_validate_json(Path(path).read_text(encoding="utf-8"))
 
 
+def write_local_evidence_index(
+    project_root: Path | str,
+    output_path: Path | str,
+) -> ScoutAgentKbIndex:
+    index = build_local_evidence_index(project_root)
+    destination = Path(output_path)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text(
+        json.dumps(index.model_dump(mode="json"), ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    return index
+
+
 def query_local_evidence_index(
     index: ScoutAgentKbIndex,
     *,

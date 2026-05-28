@@ -20,6 +20,7 @@ def test_scout_tools_list_uses_default_manifest_dir() -> None:
 
     assert exit_code == 0
     tool_ids = {tool["id"] for tool in payload["tools"]}
+    assert "scout.kb.build" in tool_ids
     assert "scout.kb.query" in tool_ids
     assert "scout.safety_action.shelter_direction" in tool_ids
     assert payload["boundary"]["live_safety_api_calls_allowed"] is False
@@ -51,6 +52,84 @@ def test_scout_kb_query_facade_runs_registered_tool(tmp_path: Path) -> None:
     assert output["boundary"]["local_evidence_only"] is True
     assert output["query_result"]["result_count"] >= 1
     assert load_agent_trace(trace_log)[0].tool_id == "scout.kb.query"
+
+
+def test_scout_kb_build_facade_persists_index_for_query(tmp_path: Path) -> None:
+    trace_log = tmp_path / "agent-trace.jsonl"
+    index_path = tmp_path / "outputs" / "kb" / "local-evidence-index.json"
+
+    dry_exit, dry_payload = run_scout_cli(
+        [
+            "--trace-log",
+            str(trace_log),
+            "kb",
+            "build",
+            "--project-root",
+            str(CHILAI_PROJECT),
+            "--out",
+            str(index_path),
+            "--dry-run",
+            "--json",
+        ]
+    )
+    blocked_exit, blocked_payload = run_scout_cli(
+        [
+            "kb",
+            "build",
+            "--project-root",
+            str(CHILAI_PROJECT),
+            "--out",
+            str(index_path),
+            "--json",
+        ]
+    )
+    exit_code, payload = run_scout_cli(
+        [
+            "--trace-log",
+            str(trace_log),
+            "kb",
+            "build",
+            "--project-root",
+            str(CHILAI_PROJECT),
+            "--out",
+            str(index_path),
+            "--authorized-by",
+            "operator.alex",
+            "--json",
+        ]
+    )
+    query_exit, query_payload = run_scout_cli(
+        [
+            "kb",
+            "query",
+            "--index-path",
+            str(index_path),
+            "--query",
+            "大崩壁",
+            "--limit",
+            "1",
+            "--json",
+        ]
+    )
+
+    assert dry_exit == 0
+    dry_output = json.loads(dry_payload["outputs"]["stdout"])
+    assert dry_output["index"]["project_id"] == "chilai_nanhua_day1"
+    assert dry_output["boundary"]["workspace_file_mutation_allowed"] is False
+    assert blocked_exit == 2
+    assert blocked_payload["status"] == "blocked"
+    assert exit_code == 0
+    output = json.loads(payload["outputs"]["stdout"])
+    assert output["artifact_kind"] == "scout_kb_build_tool_output"
+    assert output["artifact_refs"] == [str(index_path)]
+    assert index_path.is_file()
+    assert query_exit == 0
+    query_output = json.loads(query_payload["outputs"]["stdout"])
+    assert query_output["query_result"]["result_count"] == 1
+    assert [entry.tool_id for entry in load_agent_trace(trace_log)] == [
+        "scout.kb.build",
+        "scout.kb.build",
+    ]
 
 
 def test_scout_hardware_readiness_summary_facade_is_read_only(tmp_path: Path) -> None:
@@ -385,9 +464,57 @@ def test_scout_safety_action_shelter_direction_facade_is_advisory(tmp_path: Path
     output = json.loads(payload["outputs"]["stdout"])
     assert output["artifact_kind"] == "scout_safety_action_shelter_direction"
     assert output["ttl_seconds"] == 300
+    assert output["evidence_summary"]["risk_ribbon"]["source_ref"] == "outputs/risk_ribbon.geojson"
+    assert output["recommended_target"]["risk_context"]["candidate_only"] is True
+    assert output["recommended_target"]["route_context"]["route_source_ref"] == "normalized/routes/route_summary.json"
     assert output["boundary"]["runtime_safety_truth"] is False
     assert output["boundary"]["phase1_safety_mutation_allowed"] is False
     assert load_agent_trace(trace_log)[0].mode == "ephemeral_safety_action"
+
+
+def test_scout_note_append_facade_records_taxonomy_and_retention(tmp_path: Path) -> None:
+    trace_log = tmp_path / "agent-trace.jsonl"
+    runtime_log = tmp_path / "runtime-debug.jsonl"
+
+    blocked_exit, blocked_payload = run_scout_cli(
+        [
+            "note",
+            "append-flight-recorder",
+            "--debug-log-path",
+            str(runtime_log),
+            "--text",
+            "領隊決定先等雨勢變小。",
+            "--note-kind",
+            "operator_decision",
+            "--json",
+        ]
+    )
+    exit_code, payload = run_scout_cli(
+        [
+            "--trace-log",
+            str(trace_log),
+            "note",
+            "append-flight-recorder",
+            "--debug-log-path",
+            str(runtime_log),
+            "--text",
+            "領隊決定先等雨勢變小。",
+            "--note-kind",
+            "operator_decision",
+            "--authorized-by",
+            "operator.alex",
+            "--json",
+        ]
+    )
+
+    assert blocked_exit == 2
+    assert blocked_payload["status"] == "blocked"
+    assert exit_code == 0
+    output = json.loads(payload["outputs"]["stdout"])
+    assert output["note_taxonomy"]["selected_category"] == "operator_decision"
+    assert output["retention_policy"]["profile"] == "audit_extended"
+    assert output["boundary"]["phase2_observed_fact_write_allowed"] is False
+    assert load_agent_trace(trace_log)[0].tool_id == "scout.note.append_flight_recorder"
 
 
 def test_scout_imprint_trigger_dry_run_facade(tmp_path: Path) -> None:

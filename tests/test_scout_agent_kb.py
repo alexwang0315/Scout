@@ -10,6 +10,7 @@ from scout_agent_kb import (
     load_local_evidence_index,
     query_local_evidence_index,
     query_project_local_evidence,
+    write_local_evidence_index,
 )
 
 
@@ -69,6 +70,19 @@ def test_local_evidence_index_round_trips_as_json(tmp_path: Path) -> None:
     assert loaded.record_count == index.record_count
     assert result.result_count == 1
     assert "獸俓" in result.results[0]["snippet"]
+
+
+def test_local_evidence_index_writer_persists_offline_index(tmp_path: Path) -> None:
+    index_path = tmp_path / "outputs" / "kb" / "local-evidence-index.json"
+
+    index = write_local_evidence_index(PROJECT_ROOT, index_path)
+    loaded = load_local_evidence_index(index_path)
+
+    assert index_path.is_file()
+    assert loaded.record_count == index.record_count
+    assert loaded.boundary.local_evidence_only is True
+    assert loaded.boundary.live_safety_api_calls_allowed is False
+    assert "<trkpt" not in index_path.read_text(encoding="utf-8").lower()
 
 
 def test_local_evidence_query_finds_reviewed_spatial_imprint() -> None:
