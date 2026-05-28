@@ -17,7 +17,7 @@ Snapshot from this checkout:
 - Non-test Python units: 310.
 - Python units with direct CLI markers: 69.
 - Existing Scout skill manifests: 9 under `skills/scout/*.yaml`.
-- Registered Scout agent tool manifests: 39 under
+- Registered Scout agent tool manifests: 44 under
   `tools/scout_agent_tool_manifests/*.json`.
 
 This is a capability inventory, not a final implementation plan. It favors
@@ -169,7 +169,7 @@ failure policy, control surface, and audit settings.
 
 ## Current Registered Alpha Tool Set
 
-The current manifest directory exposes these 39 registered tools:
+The current manifest directory exposes these 44 registered tools:
 
 ```text
 scout.checks.pretrip_release
@@ -185,6 +185,7 @@ scout.imprint.export_pretrip
 scout.imprint.plant
 scout.imprint.store_list
 scout.imprint.trigger_dry_run
+scout.kb.build
 scout.kb.hardware_readiness_summary
 scout.kb.pretrip_view_summary
 scout.kb.query
@@ -230,9 +231,9 @@ composition code rather than a thin wrapper.
 
 | Needed capability | Current building blocks | Gap |
 | --- | --- | --- |
-| `scout kb build/query` | `scout_agent_kb.py`, pretrip/admin/debug context adapters, project refs, source registry, artifact manifest | project-root/index query exists; persistent indexed build command still needed |
-| `scout safety-action shelter-direction` | `scout_safety_action.py`, local evidence index, route/risk/reviewed refs | first deterministic advisory ranker exists; needs richer weather/terrain/route semantics |
-| `scout note append-flight-recorder` | `runtime_debug_log.py`, `RuntimeDebugEvent`, `agent_note_appended` | first append CLI exists; needs richer note taxonomy and retention policy |
+| `scout kb build/query` | `scout_agent_kb.py`, pretrip/admin/debug context adapters, project refs, source registry, artifact manifest | persistent JSON index build/query exists; richer refresh policy and source adapters can follow later |
+| `scout safety-action shelter-direction` | `scout_safety_action.py`, local evidence index, route/risk/reviewed refs | deterministic advisory ranker now includes local weather, route bbox, and risk ribbon context; richer terrain semantics can follow later |
+| `scout note append-flight-recorder` | `runtime_debug_log.py`, `RuntimeDebugEvent`, `agent_note_appended` | append CLI now records note taxonomy, retention profile, replay priority, and closed safety/write boundaries |
 | `scout cp apply-reviewed-delta` | workspace edits, review decisions, departure reviewed candidates | reversible CP delta artifact exists; direct checkpoint candidate mutation remains closed |
 | `scout voice preview/send` | voice cue models, TTS provider, mock voice transport, provider send CLIs | preview and mock receipts exist; real local speaker/network send requires reviewed boundary |
 | `scout hardware alarm-start/stop` | hardware readiness, GPIO projection, voice/smoke tools | readiness summary exists; no real alarm hardware action implementation yet |
@@ -253,15 +254,15 @@ Expose these through higher-level wrappers or dry-run/replay commands instead:
 - Fixture generators and release checks: useful for operators and CI, but
   should not be routine autonomous agent tools.
 
-## Recommended Next Wrapper Set
+## Recently Completed Wrapper Set
 
-The first wrapper set is now implemented in the manifest directory. The next
-pragmatic wrapper set should focus on package promotion and operational
-visibility:
+The first wrapper set and the follow-up operational visibility wrappers are now
+implemented in the manifest directory:
 
 1. `scout evidence sensorlog-to-gpx`
-2. `scout pretrip artifact-manifest/readiness/decision-register`
+2. `scout kb build`
+3. `scout pretrip artifact-manifest/readiness/decision-register`
 
-This next set would let the agent assist the reviewed-candidate to package
-handoff path and make `/admin/debug` richer without opening live safety
-mutation, real outbound sends, or hardware drive.
+This set lets the agent assist the reviewed-candidate to package handoff path,
+persist a reusable local evidence index, and make `/admin/debug` richer without
+opening live safety mutation, real outbound sends, or hardware drive.

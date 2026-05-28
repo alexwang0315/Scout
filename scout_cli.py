@@ -101,6 +101,12 @@ def _add_evidence_group(subparsers: argparse._SubParsersAction) -> None:
 def _add_kb_group(subparsers: argparse._SubParsersAction) -> None:
     kb_parser = subparsers.add_parser("kb")
     kb_sub = kb_parser.add_subparsers(dest="kb_command", required=True)
+    build = kb_sub.add_parser("build")
+    build.add_argument("--project-root", "--trip-root", dest="project_root", type=Path, required=True)
+    build.add_argument("--out", "--output", dest="output", type=Path, required=True)
+    build.add_argument("--dry-run", action="store_true")
+    build.add_argument("--authorized-by", default=None)
+    build.add_argument("--json", action="store_true")
     query = kb_sub.add_parser("query")
     query.add_argument("--project-root", type=Path, default=None)
     query.add_argument("--index-path", type=Path, default=None)
@@ -508,6 +514,11 @@ def _tool_request_for_args(args: argparse.Namespace) -> tuple[str, dict[str, Any
         if args.max_horizontal_accuracy is not None:
             request["max_horizontal_accuracy"] = args.max_horizontal_accuracy
         return "scout.evidence.sensorlog_to_gpx", request
+    if group == "kb" and args.kb_command == "build":
+        return "scout.kb.build", {
+            "project_root": str(args.project_root),
+            "output_path": str(args.output),
+        }
     if group == "kb" and args.kb_command == "query":
         request = {
             "query": args.query,

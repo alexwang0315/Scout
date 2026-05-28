@@ -21,11 +21,10 @@ Current alpha implementation snapshot:
 - registered tool runner: `python -m scout_agent_cli tools ...`;
 - builtin deterministic tools: `python -m scout_agent_builtin_tools ...`;
 - registered manifests: JSON files under `tools/scout_agent_tool_manifests/`;
-- current manifest count: 39, including local evidence, release/readiness
-  checks, CP proposal/reviewed
-  delta, pretrip import/layer preparation/workspace edit, risk diagnostics,
-  map preparation wrappers, spatial imprint tools, hardware readiness summary,
-  review decision append,
+- current manifest count: 44, including local evidence, persistent KB build,
+  release/readiness checks, CP proposal/reviewed delta, pretrip import/layer
+  preparation/workspace edit, risk diagnostics, map preparation wrappers,
+  spatial imprint tools, hardware readiness summary, review decision append,
   advisory shelter direction, runtime dry-run/preflight, voice preview/mock
   receipts, outbound mock receipts, reviewed-candidate package addendum,
   metadata-only runtime handoff, runtime export, and mock-only SOS playbook run.
@@ -609,10 +608,10 @@ Never:
 
 1. Done: add `scout_agent_models.py` with tool manifest, action mode, result
    envelope, authorization kind, and boundary models.
-2. Done: add JSON manifests and builtin wrappers for local evidence, CP
-   proposal/reviewed delta, pretrip import/layer/workspace edit, pretrip review
-   decision append, map preparation, voice preview, action trace append, risk
-   diagnostics, spatial imprints, hardware readiness summary,
+2. Done: add JSON manifests and builtin wrappers for local evidence, persistent
+   KB build/query, CP proposal/reviewed delta, pretrip import/layer/workspace
+   edit, pretrip review decision append, map preparation, voice preview,
+   action trace append, risk diagnostics, spatial imprints, hardware readiness summary,
    reviewed-candidate package addendum, metadata-only runtime handoff, runtime
    export, voice/outbound mock receipts, advisory shelter direction, and
    mock-only SOS playbook.
@@ -628,6 +627,10 @@ Never:
 ## Success Criteria
 
 - `scout tools list --json` shows registered capabilities and action modes.
+- `scout kb build --trip-root ... --out ...` writes a reusable local evidence
+  index only after explicit authorization; dry-run writes nothing.
+- `scout note append-flight-recorder` records a bounded note taxonomy and
+  retention profile without creating ObservedFact or Phase 1 runtime truth.
 - At least one read-only evidence tool and one CP proposal tool can be called by
   a deterministic/mock Pydantic AI flow.
 - Every tool call writes a trace event with source refs and boundary metadata.

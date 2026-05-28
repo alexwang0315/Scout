@@ -11,6 +11,52 @@ from runtime_debug_models import RuntimeDebugEvent
 from scout_agent_trace import load_agent_trace
 
 
+NOTE_TAXONOMY: dict[str, dict[str, Any]] = {
+    "agent_note": {
+        "category": "agent_context",
+        "retention_profile": "debug_trace_standard",
+        "ttl_days": 90,
+        "replay_priority": "normal",
+    },
+    "user_report": {
+        "category": "field_user_report",
+        "retention_profile": "field_report_extended",
+        "ttl_days": 365,
+        "replay_priority": "high",
+    },
+    "operator_decision": {
+        "category": "operator_decision",
+        "retention_profile": "audit_extended",
+        "ttl_days": 730,
+        "replay_priority": "high",
+    },
+    "safety_advisory": {
+        "category": "advisory_decision_support",
+        "retention_profile": "safety_advisory_audit",
+        "ttl_days": 365,
+        "replay_priority": "high",
+    },
+    "environment_observation": {
+        "category": "local_environment_observation",
+        "retention_profile": "evidence_standard",
+        "ttl_days": 180,
+        "replay_priority": "normal",
+    },
+    "hardware_observation": {
+        "category": "hardware_readiness_observation",
+        "retention_profile": "debug_trace_standard",
+        "ttl_days": 90,
+        "replay_priority": "normal",
+    },
+    "system_diagnostic": {
+        "category": "system_diagnostic",
+        "retention_profile": "debug_trace_short",
+        "ttl_days": 30,
+        "replay_priority": "low",
+    },
+}
+
+
 def run_builtin_tool(argv: Sequence[str] | None = None) -> tuple[int, dict[str, Any]]:
     parser = _build_parser()
     args = parser.parse_args(argv)
@@ -34,6 +80,8 @@ def run_builtin_tool(argv: Sequence[str] | None = None) -> tuple[int, dict[str, 
         return _kb_pretrip_view_summary(args)
     if args.command == "kb-hardware-readiness-summary":
         return _kb_hardware_readiness_summary(args)
+    if args.command == "kb-build":
+        return _kb_build(args)
     if args.command == "kb-query":
         return _kb_query(args)
     if args.command == "note-append-flight-recorder":
@@ -159,6 +207,12 @@ def _build_parser() -> argparse.ArgumentParser:
     kb_query_parser = subparsers.add_parser("kb-query")
     kb_query_parser.add_argument("--input", type=Path, required=True)
     kb_query_parser.add_argument("--json", action="store_true")
+
+    kb_build_parser = subparsers.add_parser("kb-build")
+    kb_build_parser.add_argument("--input", type=Path, required=True)
+    kb_build_parser.add_argument("--output", type=Path, default=None)
+    kb_build_parser.add_argument("--dry-run", action="store_true")
+    kb_build_parser.add_argument("--json", action="store_true")
 
     note_parser = subparsers.add_parser("note-append-flight-recorder")
     note_parser.add_argument("--input", type=Path, required=True)
@@ -678,12 +732,69 @@ def _kb_query(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
     )
 
 
+def _kb_build(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
+    from scout_agent_kb import build_local_evidence_index, write_local_evidence_index
+
+    request = _load_json(args.input)
+    project_root = request.get("project_root") or request.get("trip_root")
+    if not project_root:
+        return 2, _error_payload("kb build requires project_root or trip_root")
+    output_path = args.output or _optional_path(request.get("output_path"))
+    if output_path is None and not args.dry_run:
+        return 2, _error_payload("kb build requires output_path or --output unless dry-run")
+    try:
+        if args.dry_run:
+            index = build_local_evidence_index(project_root)
+        else:
+            index = write_local_evidence_index(project_root, output_path)
+    except Exception as exc:  # noqa: BLE001 - CLI wrapper returns structured failures.
+        return 2, _error_payload(str(exc))
+
+    return (
+        0,
+        {
+            "artifact_kind": "scout_kb_build_tool_output",
+            "status": "completed",
+            "dry_run": args.dry_run,
+            "index": {
+                "artifact_kind": index.artifact_kind,
+                "schema_version": index.schema_version,
+                "project_id": index.project_id,
+                "record_count": index.record_count,
+                "source_root": index.source_root,
+                "evidence_types": sorted({record.evidence_type for record in index.records}),
+            },
+            "artifact_refs": [] if args.dry_run or output_path is None else [str(output_path)],
+            "boundary": {
+                **_closed_boundary(),
+                "offline_only": True,
+                "local_evidence_only": True,
+                "workspace_file_mutation_allowed": not args.dry_run,
+                "raw_payloads_embedded": False,
+                "runtime_activation_allowed": False,
+            },
+        },
+    )
+
+
 def _note_append_flight_recorder(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
     request = _load_json(args.input)
     debug_log_path = request.get("debug_log_path")
     text = request.get("text")
     if not debug_log_path or not text:
         return 2, _error_payload("flight recorder note requires debug_log_path and text")
+    note_kind = str(request.get("note_kind", "agent_note"))
+    taxonomy = NOTE_TAXONOMY.get(note_kind)
+    if taxonomy is None:
+        return 2, _error_payload(
+            f"unsupported note_kind: {note_kind}; expected one of {sorted(NOTE_TAXONOMY)}"
+        )
+    retention_policy = {
+        "profile": request.get("retention_profile") or taxonomy["retention_profile"],
+        "ttl_days": int(request.get("retention_ttl_days", taxonomy["ttl_days"])),
+        "delete_after_export": bool(request.get("delete_after_export", False)),
+        "policy_scope": "flight_recorder_debug_trace",
+    }
     event = RuntimeDebugEvent(
         event_id=request.get("event_id", "debug_event.agent_note.000001"),
         session_id=request.get("session_id", "agent_note_session.local"),
@@ -698,8 +809,11 @@ def _note_append_flight_recorder(args: argparse.Namespace) -> tuple[int, dict[st
         correlation_refs=list(request.get("correlation_refs", []) or []),
         summary=str(text)[:280],
         payload={
-            "note_kind": request.get("note_kind", "agent_note"),
+            "note_kind": note_kind,
+            "note_category": taxonomy["category"],
             "text": text,
+            "retention_policy": retention_policy,
+            "replay_priority": taxonomy["replay_priority"],
             "source_refs": list(request.get("source_refs", []) or []),
             "boundary": _closed_boundary(),
         },
@@ -712,7 +826,17 @@ def _note_append_flight_recorder(args: argparse.Namespace) -> tuple[int, dict[st
             "status": "completed",
             "event": event.model_dump(mode="json"),
             "debug_log_path": str(debug_log_path),
-            "boundary": _closed_boundary(),
+            "note_taxonomy": {
+                "supported_note_kinds": sorted(NOTE_TAXONOMY),
+                "selected_note_kind": note_kind,
+                "selected_category": taxonomy["category"],
+            },
+            "retention_policy": retention_policy,
+            "boundary": {
+                **_closed_boundary(),
+                "phase1_runtime_mutation_allowed": False,
+                "phase2_observed_fact_write_allowed": False,
+            },
         },
     )
 

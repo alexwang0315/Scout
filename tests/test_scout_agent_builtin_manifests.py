@@ -40,6 +40,7 @@ def test_builtin_manifest_directory_lists_read_and_proposal_tools() -> None:
     assert "scout.outbound.mock_transition" in tool_ids
     assert "scout.kb.pretrip_view_summary" in tool_ids
     assert "scout.kb.hardware_readiness_summary" in tool_ids
+    assert "scout.kb.build" in tool_ids
     assert "scout.kb.query" in tool_ids
     assert "scout.risk.attribution" in tool_ids
     assert "scout.risk.heatmap" in tool_ids
@@ -96,6 +97,81 @@ def test_builtin_read_tool_runs_with_trace(tmp_path: Path) -> None:
     assert output["offline_only"] is True
     assert output["boundary"]["live_safety_api_calls_allowed"] is False
     assert load_agent_trace(trace_log)[0].tool_id == "scout.local_evidence.status"
+
+
+def test_builtin_kb_build_persists_index_with_authorization(tmp_path: Path) -> None:
+    request = tmp_path / "kb-build.request.json"
+    index_path = tmp_path / "outputs" / "kb" / "local-evidence-index.json"
+    trace_log = tmp_path / "agent-trace.jsonl"
+    request.write_text(
+        json.dumps({"project_root": str(REPO_ROOT / "tests" / "fixtures" / "pretrip" / "projects" / "chilai_nanhua_day1")}),
+        encoding="utf-8",
+    )
+
+    dry_exit, dry_payload = run_scout_agent_cli(
+        [
+            "tools",
+            "run",
+            "scout.kb.build",
+            "--manifest-dir",
+            str(MANIFEST_DIR),
+            "--input",
+            str(request),
+            "--output",
+            str(index_path),
+            "--dry-run",
+            "--json",
+        ]
+    )
+    blocked_exit, blocked_payload = run_scout_agent_cli(
+        [
+            "tools",
+            "run",
+            "scout.kb.build",
+            "--manifest-dir",
+            str(MANIFEST_DIR),
+            "--input",
+            str(request),
+            "--output",
+            str(index_path),
+            "--json",
+        ]
+    )
+    assert dry_exit == 0
+    dry_output = json.loads(dry_payload["outputs"]["stdout"])
+    assert dry_output["artifact_kind"] == "scout_kb_build_tool_output"
+    assert dry_output["boundary"]["workspace_file_mutation_allowed"] is False
+    assert dry_output["index"]["record_count"] > 100
+    assert blocked_exit == 2
+    assert blocked_payload["status"] == "blocked"
+    assert not index_path.exists()
+
+    exit_code, payload = run_scout_agent_cli(
+        [
+            "tools",
+            "run",
+            "scout.kb.build",
+            "--manifest-dir",
+            str(MANIFEST_DIR),
+            "--input",
+            str(request),
+            "--output",
+            str(index_path),
+            "--trace-log",
+            str(trace_log),
+            "--authorized-by",
+            "operator.alex",
+            "--json",
+        ]
+    )
+
+    assert exit_code == 0
+    assert payload["effects"]["workspace_write_count"] == 1
+    output = json.loads(payload["outputs"]["stdout"])
+    assert output["artifact_refs"] == [str(index_path)]
+    assert output["boundary"]["raw_payloads_embedded"] is False
+    assert index_path.is_file()
+    assert load_agent_trace(trace_log)[0].tool_id == "scout.kb.build"
 
 
 def test_builtin_cp_proposal_preview_writes_candidate_only_artifact(tmp_path: Path) -> None:
@@ -357,6 +433,9 @@ def test_builtin_safety_action_shelter_direction_is_candidate_only(tmp_path: Pat
     output = json.loads(payload["outputs"]["stdout"])
     assert output["artifact_kind"] == "scout_safety_action_shelter_direction"
     assert output["recommended_target"]["target_id"]
+    assert output["recommended_target"]["risk_context"]["runtime_safety_truth"] is False
+    assert output["recommended_target"]["route_context"]["route_source_ref"] == "normalized/routes/route_summary.json"
+    assert output["evidence_summary"]["weather"]["external_api_calls_made"] is False
     assert output["boundary"]["candidate_only"] is True
     assert output["boundary"]["live_safety_api_calls_allowed"] is False
     trace = load_agent_trace(trace_log)[0]
@@ -1102,7 +1181,43 @@ def test_builtin_note_append_requires_authorization_and_writes_debug_event(tmp_p
     assert payload["effects"]["workspace_write_count"] == 1
     events = FileRuntimeDebugEventLog(runtime_log).list_events()
     assert events[0].kind == "agent_note_appended"
+    assert events[0].payload["note_category"] == "field_user_report"
+    assert events[0].payload["retention_policy"]["profile"] == "field_report_extended"
+    assert events[0].payload["retention_policy"]["ttl_days"] == 365
+    assert events[0].payload["replay_priority"] == "high"
     assert events[0].payload["boundary"]["live_safety_api_calls_allowed"] is False
+    output = json.loads(payload["outputs"]["stdout"])
+    assert output["note_taxonomy"]["selected_note_kind"] == "user_report"
+    assert output["boundary"]["phase2_observed_fact_write_allowed"] is False
+
+    invalid_request = tmp_path / "invalid-note.request.json"
+    invalid_request.write_text(
+        json.dumps(
+            {
+                "debug_log_path": str(runtime_log),
+                "text": "bad kind",
+                "note_kind": "raw_runtime_truth",
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    invalid_exit, invalid_payload = run_scout_agent_cli(
+        [
+            "tools",
+            "run",
+            "scout.note.append_flight_recorder",
+            "--manifest-dir",
+            str(MANIFEST_DIR),
+            "--input",
+            str(invalid_request),
+            "--authorized-by",
+            "operator.alex",
+            "--json",
+        ]
+    )
+    assert invalid_exit == 1
+    assert invalid_payload["status"] == "failed"
 
 
 def test_builtin_voice_preview_builds_tts_plan_without_playback(tmp_path: Path) -> None:
