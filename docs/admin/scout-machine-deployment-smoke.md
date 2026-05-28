@@ -161,18 +161,19 @@ i2cdetect -y 1
 
 預期結果：Grove OLED Display 1.12 inch 在 I2C port 上可看到 `0x3c`。
 
-Grove LED Bar v2.0 on D16 smoke:
+Grove LED Bar v2.0 on D5 smoke:
 
 ```bash
 python3 tools/pi_grove_led_bar_smoke.py \
-  --port D16 \
+  --port D5 \
   --pattern status_bits \
   --bits 0x003 \
   --output-jsonl /data/scout/providers/grove_led_bar/manual-smoke.jsonl
 ```
 
 中文註釋：LED Bar v2.0 使用 MY9221 protocol，不是單 GPIO high/low。已驗證 D16
-mapping 為 `data=GPIO16`、`clock=GPIO17`。
+mapping 為 `data=GPIO16`、`clock=GPIO17`；目前為了保留 4x4 keypad 的 8 條 GPIO，
+Scout bench layout 已把 LED Bar 移到 D5，也就是 `data=GPIO5`、`clock=GPIO6`。
 
 OLED I2C smoke:
 
@@ -236,7 +237,7 @@ python3 tools/pi_smoke_visual_feedback.py \
 如需在 Mac/PC 或無硬體環境先驗證 payload schema，可加 `--dry-run`：
 
 ```bash
-python3 tools/pi_grove_led_bar_smoke.py --dry-run --port D16 --pattern status_bits --bits 0x003
+python3 tools/pi_grove_led_bar_smoke.py --dry-run --port D5 --pattern status_bits --bits 0x003
 python3 tools/pi_oled_i2c_smoke.py --dry-run --driver auto --address 0x3c
 python3 tools/pi_smoke_visual_feedback.py --visual-dry-run --name oled --run-hold-seconds 0 --hold-seconds 0 -- python3 tools/pi_oled_i2c_smoke.py --dry-run
 ```
@@ -246,6 +247,41 @@ python3 tools/pi_smoke_visual_feedback.py --visual-dry-run --name oled --run-hol
 ```text
 docs/specs/scout-dev-hardware-status-indicators.md
 ```
+
+4x4 matrix keypad diagnostic smoke:
+
+```bash
+python3 tools/pi_keypad_4x4_smoke.py \
+  --grove-ports D16,D18,D24,D26 \
+  --duration-seconds 30 \
+  --active-high \
+  --oled-status \
+  --led-status \
+  --output-jsonl /data/scout/providers/keypad/keypad-4x4-manual-smoke.jsonl
+```
+
+無實體接線時可先 dry-run：
+
+```bash
+python3 tools/pi_keypad_4x4_smoke.py \
+  --dry-run \
+  --simulate-keys 1,A,# \
+  --oled-status \
+  --oled-dry-run \
+  --led-status \
+  --led-dry-run
+```
+
+中文註釋：4x4 matrix keypad 是 16 個開關組成的矩陣，通常不接 VCC、不接 GND，只把
+`R1 R2 R3 R4 C1 C2 C3 C4` 八條線接到 GPIO。Scout 目前把 keypad 接到 Grove digital
+ports `D16,D18,D24,D26`；工具會展開成 rows `16,17,18,19`、cols `24,25,26,27`。
+這個配置避開 I2C、UART、LED Bar D5 以及 HAT ID pins。2026-05-28 實測時，
+這組接法需要 `active-high` 才能穩定捕捉按鍵事件；`active-low` 沒有捕捉到事件。
+程式會把 rows 當 output、cols 當 input 掃描；在目前 `active-high` 模式下 cols 使用
+pull-down。按鍵事件只輸出 diagnostic
+JSONL，OLED 顯示 `SCOUT KEY / KEY A` 之類的狀態，LED Bar 閃對應段位。任何按鍵，
+包含 `A` 的 `sos_arm_candidate`，都不可直接當成 SOS，也不可接 live `/safety/*`
+mutation。
 
 ## 4.2 IMU / GNSS Manual Hardware Bring-Up
 
@@ -260,6 +296,23 @@ lsusb
 ls /dev/ttyUSB* /dev/ttyACM* 2>/dev/null
 python3 -m serial.tools.list_ports
 ```
+
+Pi 5 + Grove HAT UART note:
+
+```bash
+python3 tools/pi_gnss_nmea_smoke.py \
+  --port /dev/ttyAMA0 \
+  --baud 9600 \
+  --duration-seconds 20 \
+  --oled-status \
+  --led-status \
+  --output-jsonl /data/scout/providers/gnss/manual-smoke.jsonl
+```
+
+中文註釋：2026-05-28 實機測試時，Grove GPS 的 NMEA stream 出現在
+`/dev/ttyAMA0`，不是 `/dev/serial0`。`/dev/serial0 -> ttyAMA10` 可以存在且
+GPIO14/GPIO15 也可以是 UART mode，但該 port 不一定是 Grove HAT UART 上實際收到
+GPS TX 的 device。若 `/dev/serial0` 顯示 `NO STREAM`，先改測 `/dev/ttyAMA0`。
 
 若 `python3 -m serial.tools.list_ports` 不存在，先安裝 pyserial：
 
@@ -285,6 +338,27 @@ python3 tools/pi_hiwonder_imu_usb_smoke.py \
   --duration-seconds 10 \
   --output-jsonl /data/scout/providers/imu/manual-smoke.jsonl
 ```
+
+Grove IMU 9DOF I2C smoke:
+
+```bash
+python3 tools/pi_grove_imu_9dof_smoke.py \
+  --bus /dev/i2c-1 \
+  --imu-address 0x69 \
+  --mag-address 0x0c \
+  --sample-count 5 \
+  --sample-interval-ms 100 \
+  --output-jsonl /data/scout/providers/imu/grove-9dof-manual-smoke.jsonl
+```
+
+中文註釋：2026-05-28 實機測試時，Grove IMU 9DOF 的 ICM20600 回應
+`0x69 WHOAMI=0x11`，AK09918 magnetometer 回應 `0x0c WIA=0x480c`。這支工具只讀
+raw accel/gyro/mag sample，標記 `primary_truth_allowed=false`，不呼叫 live
+`/safety/*` mutation，也不改 Phase 1 safety decision。
+
+判讀時先確認 `read_status=ok`、`raw_imu_present=true`、`raw_magnetometer_present=true`。
+若加速度、角速度或磁力計數值會隨著輕微轉動模組而變化，代表感測器資料路徑已通。
+這些數值目前只作診斷與日後重放稽核，不作即時危險判斷。
 
 GNSS NMEA smoke for raw timestamp/position evidence:
 
@@ -321,7 +395,7 @@ python3 tools/pi_gnss_nmea_smoke.py \
   --oled-status \
   --oled-update-seconds 2 \
   --led-status \
-  --led-port D16 \
+  --led-port D5 \
   --led-nofix-bit 1 \
   --led-fix-bit 10 \
   --led-update-seconds 2 \

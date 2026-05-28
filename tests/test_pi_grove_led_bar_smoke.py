@@ -3,7 +3,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from tools.pi_grove_led_bar_smoke import bit_values_from_10bit, write_led_bar_bits
+from tools.pi_grove_led_bar_smoke import DEFAULT_PORT, bit_values_from_10bit, write_led_bar_bits
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -20,13 +20,11 @@ def run_cli(*args: str) -> subprocess.CompletedProcess[str]:
     )
 
 
-def test_led_bar_d16_dry_run_writes_boundary_payload(tmp_path: Path) -> None:
+def test_led_bar_d5_default_dry_run_writes_boundary_payload(tmp_path: Path) -> None:
     output = tmp_path / "led.jsonl"
 
     result = run_cli(
         "--dry-run",
-        "--port",
-        "D16",
         "--pattern",
         "status_bits",
         "--bits",
@@ -41,9 +39,9 @@ def test_led_bar_d16_dry_run_writes_boundary_payload(tmp_path: Path) -> None:
     assert payload == persisted
     assert payload["source"] == "pi_grove_led_bar_smoke"
     assert payload["hardware_kind"] == "grove_led_bar_v2_my9221"
-    assert payload["port"] == "D16"
-    assert payload["data_gpio"] == 16
-    assert payload["clock_gpio"] == 17
+    assert payload["port"] == DEFAULT_PORT
+    assert payload["data_gpio"] == 5
+    assert payload["clock_gpio"] == 6
     assert payload["pattern"] == "status_bits"
     assert payload["bits"] == "0x155"
     assert payload["write_status"] == "dry_run"
@@ -52,7 +50,7 @@ def test_led_bar_d16_dry_run_writes_boundary_payload(tmp_path: Path) -> None:
     assert payload["hardware_control_scope"] == "diagnostic_indicator_only"
 
 
-def test_led_bar_d5_default_mapping_and_pattern_bits() -> None:
+def test_led_bar_d5_mapping_and_pattern_bits() -> None:
     result = run_cli("--dry-run", "--port", "D5", "--pattern", "even")
 
     assert result.returncode == 0, result.stderr
@@ -61,6 +59,17 @@ def test_led_bar_d5_default_mapping_and_pattern_bits() -> None:
     assert payload["data_gpio"] == 5
     assert payload["clock_gpio"] == 6
     assert payload["bits"] == "0x2aa"
+
+
+def test_led_bar_d16_mapping_remains_available() -> None:
+    result = run_cli("--dry-run", "--port", "D16", "--pattern", "first_half")
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["port"] == "D16"
+    assert payload["data_gpio"] == 16
+    assert payload["clock_gpio"] == 17
+    assert payload["bits"] == "0x01f"
 
 
 def test_led_bar_custom_gpio_overrides_port_defaults() -> None:

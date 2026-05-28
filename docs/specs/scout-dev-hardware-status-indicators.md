@@ -22,7 +22,8 @@ Validated hardware:
 
 - Raspberry Pi 5;
 - Grove HAT connected through the 40-pin ribbon/header path;
-- Grove LED Bar v2.0 on `D16`;
+- Grove LED Bar v2.0 on `D5` in the current bench layout;
+- 4x4 matrix keypad on Grove digital ports `D16,D18,D24,D26`;
 - Grove OLED Display 1.12 inch on the I2C port.
 
 Observed facts:
@@ -31,9 +32,23 @@ Observed facts:
 - Hot-plugging the Grove HAT at the ribbon end previously rebooted the Pi.
 - `vcgencmd get_throttled` reported `0x0` after later testing.
 - Grove LED Bar v2.0 uses the MY9221 protocol, not single GPIO high/low.
-- D16 LED Bar mapping that worked:
+- Current D5 LED Bar mapping:
+  - data: `GPIO5`;
+  - clock: `GPIO6`.
+- Historical D16 LED Bar mapping that also worked:
   - data: `GPIO16`;
   - clock: `GPIO17`.
+- LED Bar moved from D16 to D5 to reserve eight non-I2C/non-UART GPIO lines
+  for the 4x4 matrix keypad smoke tool.
+- Current keypad mapping from Grove ports:
+  - `D16`: `GPIO16`, `GPIO17`;
+  - `D18`: `GPIO18`, `GPIO19`;
+  - `D24`: `GPIO24`, `GPIO25`;
+  - `D26`: `GPIO26`, `GPIO27`;
+  - default rows: `16,17,18,19`;
+  - default cols: `24,25,26,27`.
+- Current keypad scan mode is `active-high`; 2026-05-28 post-rewire smoke
+  captured key events in `active-high`, while `active-low` captured none.
 - Grove OLED scanned at `0x3c` on `/dev/i2c-1`.
 - OLED SH1107G initialization path has displayed a test pattern.
 
@@ -121,7 +136,7 @@ LED Bar:
 
 ```bash
 python3 tools/pi_grove_led_bar_smoke.py \
-  --port D16 \
+  --port D5 \
   --pattern status_bits \
   --bits 0x003 \
   --output-jsonl /data/scout/providers/grove_led_bar/manual-smoke.jsonl
@@ -141,7 +156,7 @@ python3 tools/pi_oled_i2c_smoke.py \
 Dry-run from a workstation or non-Pi host:
 
 ```bash
-python3 tools/pi_grove_led_bar_smoke.py --dry-run --port D16 --pattern status_bits --bits 0x003
+python3 tools/pi_grove_led_bar_smoke.py --dry-run --port D5 --pattern status_bits --bits 0x003
 python3 tools/pi_oled_i2c_smoke.py --dry-run --driver auto --address 0x3c
 ```
 
