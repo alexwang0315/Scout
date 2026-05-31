@@ -88,9 +88,47 @@ from scout_wearable_admin import (
     refresh_energy_reserve_from_inventory,
     wearable_inventory_root,
 )
-from scout_energy_reserve import ENERGY_BASELINE_FILENAME
+from scout_energy_reserve import (
+    ENERGY_BASELINE_FILENAME,
+    write_energy_reserve_artifacts_from_provider_sync_package,
+    write_provider_live_executor_rehearsal,
+    write_provider_live_executor_response_inbox_batch_receipt,
+    write_provider_live_executor_response_inbox_batch_consumption,
+    write_provider_live_executor_response_inbox_consumption,
+    write_provider_live_executor_response_inbox_status_snapshot,
+    write_provider_live_executor_pickup_response_consumption_receipt,
+    write_provider_live_executor_pickup_response_consumption,
+    write_provider_live_executor_pickup_status_snapshot,
+    write_provider_live_executor_lifecycle_audit,
+    write_provider_live_executor_production_readiness_gate,
+    write_provider_live_executor_response_consumption,
+)
 from scout_mobile_handoff import DEFAULT_MOBILE_HANDOFF_FILENAME, build_mobile_energy_companion_handoff
 from scout_wearable_daily_home import build_daily_home_preview
+from scout_wearable_provider_transport import (
+    write_provider_live_connector_reference,
+    write_provider_live_credential_vault_reference,
+    write_provider_live_network_policy_reference,
+    write_provider_live_phase1_safety_boundary_reference,
+    write_provider_live_runtime_ingest_boundary_reference,
+    write_provider_live_executor_fixture_replay,
+    write_provider_live_executor_handoff_package,
+    write_provider_live_executor_handoff_outbox_index,
+    write_provider_live_executor_handoff_pickup_manifest,
+    write_provider_live_executor_handoff_fixture_replay,
+    write_provider_live_executor_pickup_response_manifest,
+    write_provider_live_executor_registration,
+    write_provider_live_executor_readiness,
+    write_provider_live_executor_response_inbox_index,
+    write_provider_live_executor_response_manifest,
+    write_provider_live_transport_materialization,
+    write_provider_live_transport_response_admission_from_executor_response_manifest,
+    write_provider_live_transport_response_admission_from_fixture_replay,
+    write_provider_live_transport_preflight,
+    write_provider_live_transport_response_admission,
+    write_provider_live_transport_request_plan,
+    write_provider_live_transport_sync_package,
+)
 from scout_wearable_validator import validate_wearable_activity_summary_contract
 
 
@@ -256,6 +294,343 @@ class WearableMobileHandoffRequest(BaseModel):
 
     reference_date: str | None = None
     companion_match_review_path: str | None = None
+
+
+class WearableProviderLivePreflightRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    provider: Literal["apple_healthkit_live", "garmin_health_api_live"]
+    account_ref: str = Field(min_length=1)
+    device_ref: str | None = None
+    auth_token_ref: str = Field(min_length=1)
+    scopes: list[str] = Field(min_length=1)
+    capabilities: list[str] = Field(min_length=1)
+    explicit_consent: bool = False
+
+
+class WearableProviderLiveCredentialVaultReferenceRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    provider: Literal["apple_healthkit_live", "garmin_health_api_live"]
+    vault_ref: str = Field(min_length=1)
+    account_ref: str = Field(min_length=1)
+    device_ref: str | None = None
+    token_ref: str = Field(min_length=1)
+    scopes: list[str] = Field(min_length=1)
+    capabilities: list[str] = Field(min_length=1)
+    explicit_consent: bool = False
+    output_dir: str | None = None
+
+
+class WearableProviderLiveConnectorReferenceRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    provider: Literal["apple_healthkit_live", "garmin_health_api_live"]
+    connector_kind: Literal[
+        "apple_healthkit_local_bridge_connector",
+        "garmin_health_api_connector",
+    ]
+    connector_ref: str = Field(min_length=1)
+    connector_version: str = Field(min_length=1)
+    connector_binary_ref: str | None = None
+    capabilities: list[str] = Field(min_length=1)
+    explicit_consent: bool = False
+    output_dir: str | None = None
+
+
+class WearableProviderLiveNetworkPolicyReferenceRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    provider: Literal["apple_healthkit_live", "garmin_health_api_live"]
+    policy_ref: str = Field(min_length=1)
+    endpoint_ref: str = Field(min_length=1)
+    egress_profile_ref: str | None = None
+    tls_profile_ref: str | None = None
+    capabilities: list[str] = Field(min_length=1)
+    explicit_consent: bool = False
+    output_dir: str | None = None
+
+
+class WearableProviderLiveRuntimeIngestBoundaryReferenceRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    provider: Literal["apple_healthkit_live", "garmin_health_api_live"]
+    runtime_boundary_ref: str = Field(min_length=1)
+    runtime_channel_ref: str = Field(min_length=1)
+    artifact_kinds: list[str] = Field(min_length=1)
+    handoff_mode: Literal[
+        "post_analysis_reference_only",
+        "advisory_energy_reference_only",
+    ] = "post_analysis_reference_only"
+    explicit_consent: bool = False
+    output_dir: str | None = None
+
+
+class WearableProviderLivePhase1SafetyBoundaryReferenceRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    provider: Literal["apple_healthkit_live", "garmin_health_api_live"]
+    phase1_boundary_ref: str = Field(min_length=1)
+    phase1_state_ref: str = Field(min_length=1)
+    advisory_channel_ref: str = Field(min_length=1)
+    artifact_kinds: list[str] = Field(min_length=1)
+    handoff_mode: Literal[
+        "advisory_reference_only",
+        "post_analysis_reference_only",
+        "advisory_energy_reference_only",
+    ] = "advisory_reference_only"
+    explicit_consent: bool = False
+    output_dir: str | None = None
+
+
+class WearableProviderLiveRequestPlanRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    preflight_path: str | None = None
+    window_start_date: str = Field(min_length=1)
+    window_end_date: str = Field(min_length=1)
+    capabilities: list[str] = Field(min_length=1)
+
+
+class WearableProviderLiveResponseAdmissionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    request_plan_path: str = Field(min_length=1)
+    response_fixture_path: str = Field(min_length=1)
+    activity_id_prefix: str = Field(min_length=1)
+    capabilities: list[str] = Field(min_length=1)
+    activity_type: str = "hiking"
+    overwrite: bool = False
+
+
+class WearableProviderLiveExecutorReadinessRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    request_plan_path: str = Field(min_length=1)
+    executor_registration_path: str | None = None
+    output_dir: str | None = None
+
+
+class WearableProviderLiveExecutorRegistrationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    preflight_path: str = Field(min_length=1)
+    executor_kind: Literal["apple_healthkit_local_bridge", "garmin_health_api_client"]
+    executor_ref: str = Field(min_length=1)
+    capabilities: list[str] = Field(min_length=1)
+    output_dir: str | None = None
+
+
+class WearableProviderLiveExecutorRehearsalRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    request_plan_path: str = Field(min_length=1)
+    executor_registration_path: str = Field(min_length=1)
+    response_fixture_path: str = Field(min_length=1)
+    activity_id_prefix: str = Field(min_length=1)
+    capabilities: list[str] = Field(min_length=1)
+    output_dir: str | None = None
+    reference_date: str | None = None
+    activity_type: str = "hiking"
+    overwrite: bool = False
+
+
+class WearableProviderLiveFixtureReplayRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    request_plan_path: str = Field(min_length=1)
+    executor_registration_path: str = Field(min_length=1)
+    response_fixture_path: str = Field(min_length=1)
+    output_dir: str | None = None
+
+
+class WearableProviderLiveExecutorHandoffRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    request_plan_path: str = Field(min_length=1)
+    executor_registration_path: str = Field(min_length=1)
+    output_dir: str | None = None
+
+
+class WearableProviderLiveExecutorHandoffOutboxIndexRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    outbox_dir: str = Field(min_length=1)
+    output_dir: str | None = None
+
+
+class WearableProviderLiveExecutorHandoffPickupManifestRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    outbox_index_path: str = Field(min_length=1)
+    handoff_source_path: str | None = None
+    output_dir: str | None = None
+
+
+class WearableProviderLiveHandoffFixtureReplayRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    executor_handoff_path: str = Field(min_length=1)
+    response_fixture_path: str = Field(min_length=1)
+    output_dir: str | None = None
+
+
+class WearableProviderLiveExecutorResponseManifestRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    executor_handoff_path: str = Field(min_length=1)
+    response_payload_path: str = Field(min_length=1)
+    output_dir: str | None = None
+
+
+class WearableProviderLiveExecutorPickupResponseManifestRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    pickup_manifest_path: str = Field(min_length=1)
+    response_payload_path: str = Field(min_length=1)
+    output_dir: str | None = None
+
+
+class WearableProviderLiveExecutorResponseInboxIndexRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    inbox_dir: str = Field(min_length=1)
+    output_dir: str | None = None
+
+
+class WearableProviderLiveExecutorResponseAdmissionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    executor_response_manifest_path: str = Field(min_length=1)
+    activity_id_prefix: str = Field(min_length=1)
+    capabilities: list[str] = Field(min_length=1)
+    output_dir: str | None = None
+    activity_type: str = "hiking"
+    overwrite: bool = False
+
+
+class WearableProviderLiveExecutorResponseConsumptionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    executor_response_manifest_path: str = Field(min_length=1)
+    activity_id_prefix: str = Field(min_length=1)
+    capabilities: list[str] = Field(min_length=1)
+    output_dir: str | None = None
+    reference_date: str | None = None
+    activity_type: str = "hiking"
+    overwrite: bool = False
+
+
+class WearableProviderLiveExecutorPickupResponseConsumptionReceiptRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    pickup_response_consumption_path: str = Field(min_length=1)
+    output_dir: str | None = None
+
+
+class WearableProviderLiveExecutorPickupStatusSnapshotRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    pickup_manifest_path: str = Field(min_length=1)
+    executor_response_manifest_path: str | None = None
+    pickup_response_consumption_path: str | None = None
+    pickup_response_receipt_path: str | None = None
+    output_dir: str | None = None
+
+
+class WearableProviderLiveExecutorLifecycleAuditRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    pickup_status_snapshot_path: str = Field(min_length=1)
+    inbox_status_snapshot_path: str | None = None
+    output_dir: str | None = None
+
+
+class WearableProviderLiveExecutorProductionReadinessGateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    lifecycle_audit_path: str = Field(min_length=1)
+    connector_reference_path: str | None = None
+    credential_vault_reference_path: str | None = None
+    network_policy_reference_path: str | None = None
+    runtime_ingest_boundary_reference_path: str | None = None
+    phase1_safety_boundary_reference_path: str | None = None
+    output_dir: str | None = None
+
+
+class WearableProviderLiveExecutorResponseInboxConsumptionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    inbox_index_path: str = Field(min_length=1)
+    activity_id_prefix: str = Field(min_length=1)
+    capabilities: list[str] = Field(min_length=1)
+    manifest_source_path: str | None = None
+    output_dir: str | None = None
+    reference_date: str | None = None
+    activity_type: str = "hiking"
+    overwrite: bool = False
+
+
+class WearableProviderLiveExecutorResponseInboxBatchConsumptionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    inbox_index_path: str = Field(min_length=1)
+    activity_id_prefix: str = Field(min_length=1)
+    capabilities: list[str] = Field(min_length=1)
+    output_dir: str | None = None
+    reference_date: str | None = None
+    activity_type: str = "hiking"
+    overwrite: bool = False
+
+
+class WearableProviderLiveExecutorResponseInboxBatchReceiptRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    batch_consumption_path: str = Field(min_length=1)
+    output_dir: str | None = None
+
+
+class WearableProviderLiveExecutorResponseInboxStatusSnapshotRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    inbox_index_path: str = Field(min_length=1)
+    batch_consumption_path: str | None = None
+    batch_receipt_path: str | None = None
+    output_dir: str | None = None
+
+
+class WearableProviderLiveReplayAdmissionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    fixture_replay_path: str = Field(min_length=1)
+    activity_id_prefix: str = Field(min_length=1)
+    capabilities: list[str] = Field(min_length=1)
+    output_dir: str | None = None
+    activity_type: str = "hiking"
+    overwrite: bool = False
+
+
+class WearableProviderLiveMaterializationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    admission_path: str = Field(min_length=1)
+    output_dir: str | None = None
+    overwrite: bool = False
+
+
+class WearableProviderLiveSyncPackageRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    materialization_path: str = Field(min_length=1)
+    output_dir: str | None = None
+
+
+class WearableProviderLiveEnergyBuildRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    sync_package_path: str = Field(min_length=1)
+    output_dir: str | None = None
+    reference_date: str | None = None
 
 
 class CompanionMatchRefreshRequest(BaseModel):
@@ -472,6 +847,877 @@ def create_admin_router(
                     / "outputs"
                     / DEFAULT_MOBILE_HANDOFF_FILENAME
                 ),
+            )
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (ValueError, OSError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @router.post("/wearables/provider-live-preflight")
+    def wearable_provider_live_preflight(request: WearableProviderLivePreflightRequest) -> dict[str, Any]:
+        try:
+            output_path = (
+                resolved_wearable_inventory_root
+                / "outputs"
+                / f"{request.provider}_preflight.json"
+            )
+            return write_provider_live_transport_preflight(
+                provider=request.provider,
+                output_path=output_path,
+                explicit_consent=request.explicit_consent,
+                account_ref=request.account_ref,
+                device_ref=request.device_ref,
+                auth_token_ref=request.auth_token_ref,
+                scopes=request.scopes,
+                requested_capabilities=request.capabilities,
+            )
+        except (ValueError, OSError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @router.post("/wearables/provider-live-credential-vault-reference")
+    def wearable_provider_live_credential_vault_reference(
+        request: WearableProviderLiveCredentialVaultReferenceRequest,
+    ) -> dict[str, Any]:
+        try:
+            output_dir = _provider_live_output_dir(
+                request.output_dir,
+                root=resolved_wearable_inventory_root,
+                default=resolved_wearable_inventory_root / "outputs" / "provider-live-credential-vault-references",
+            )
+            return write_provider_live_credential_vault_reference(
+                provider=request.provider,
+                output_path=output_dir / "provider_live_credential_vault_reference.json",
+                explicit_consent=request.explicit_consent,
+                vault_ref=request.vault_ref,
+                account_ref=request.account_ref,
+                device_ref=request.device_ref,
+                token_ref=request.token_ref,
+                scopes=request.scopes,
+                capabilities=request.capabilities,
+            )
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (ValueError, OSError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @router.post("/wearables/provider-live-connector-reference")
+    def wearable_provider_live_connector_reference(
+        request: WearableProviderLiveConnectorReferenceRequest,
+    ) -> dict[str, Any]:
+        try:
+            output_dir = _provider_live_output_dir(
+                request.output_dir,
+                root=resolved_wearable_inventory_root,
+                default=resolved_wearable_inventory_root / "outputs" / "provider-live-connector-references",
+            )
+            return write_provider_live_connector_reference(
+                provider=request.provider,
+                output_path=output_dir / "provider_live_connector_reference.json",
+                explicit_consent=request.explicit_consent,
+                connector_kind=request.connector_kind,
+                connector_ref=request.connector_ref,
+                connector_version=request.connector_version,
+                connector_binary_ref=request.connector_binary_ref,
+                supported_capabilities=request.capabilities,
+            )
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (ValueError, OSError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @router.post("/wearables/provider-live-network-policy-reference")
+    def wearable_provider_live_network_policy_reference(
+        request: WearableProviderLiveNetworkPolicyReferenceRequest,
+    ) -> dict[str, Any]:
+        try:
+            output_dir = _provider_live_output_dir(
+                request.output_dir,
+                root=resolved_wearable_inventory_root,
+                default=resolved_wearable_inventory_root / "outputs" / "provider-live-network-policy-references",
+            )
+            return write_provider_live_network_policy_reference(
+                provider=request.provider,
+                output_path=output_dir / "provider_live_network_policy_reference.json",
+                explicit_consent=request.explicit_consent,
+                policy_ref=request.policy_ref,
+                endpoint_ref=request.endpoint_ref,
+                egress_profile_ref=request.egress_profile_ref,
+                tls_profile_ref=request.tls_profile_ref,
+                allowed_capabilities=request.capabilities,
+            )
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (ValueError, OSError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @router.post("/wearables/provider-live-runtime-ingest-boundary-reference")
+    def wearable_provider_live_runtime_ingest_boundary_reference(
+        request: WearableProviderLiveRuntimeIngestBoundaryReferenceRequest,
+    ) -> dict[str, Any]:
+        try:
+            output_dir = _provider_live_output_dir(
+                request.output_dir,
+                root=resolved_wearable_inventory_root,
+                default=resolved_wearable_inventory_root / "outputs" / "provider-live-runtime-ingest-boundary-references",
+            )
+            return write_provider_live_runtime_ingest_boundary_reference(
+                provider=request.provider,
+                output_path=output_dir / "provider_live_runtime_ingest_boundary_reference.json",
+                explicit_consent=request.explicit_consent,
+                runtime_boundary_ref=request.runtime_boundary_ref,
+                runtime_channel_ref=request.runtime_channel_ref,
+                allowed_artifact_kinds=request.artifact_kinds,
+                handoff_mode=request.handoff_mode,
+            )
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (ValueError, OSError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @router.post("/wearables/provider-live-phase1-safety-boundary-reference")
+    def wearable_provider_live_phase1_safety_boundary_reference(
+        request: WearableProviderLivePhase1SafetyBoundaryReferenceRequest,
+    ) -> dict[str, Any]:
+        try:
+            output_dir = _provider_live_output_dir(
+                request.output_dir,
+                root=resolved_wearable_inventory_root,
+                default=resolved_wearable_inventory_root / "outputs" / "provider-live-phase1-safety-boundary-references",
+            )
+            return write_provider_live_phase1_safety_boundary_reference(
+                provider=request.provider,
+                output_path=output_dir / "provider_live_phase1_safety_boundary_reference.json",
+                explicit_consent=request.explicit_consent,
+                phase1_boundary_ref=request.phase1_boundary_ref,
+                phase1_state_ref=request.phase1_state_ref,
+                advisory_channel_ref=request.advisory_channel_ref,
+                allowed_artifact_kinds=request.artifact_kinds,
+                handoff_mode=request.handoff_mode,
+            )
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (ValueError, OSError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @router.post("/wearables/provider-live-request-plan")
+    def wearable_provider_live_request_plan(request: WearableProviderLiveRequestPlanRequest) -> dict[str, Any]:
+        try:
+            preflight_path = _optional_path_from_admin_request(request.preflight_path)
+            if preflight_path is None:
+                preflight_candidates = sorted(
+                    (resolved_wearable_inventory_root / "outputs").glob("*_preflight.json")
+                )
+                if not preflight_candidates:
+                    raise FileNotFoundError("provider live preflight artifact not found")
+                if len(preflight_candidates) > 1:
+                    raise ValueError("preflight_path is required when multiple provider preflight artifacts exist")
+                preflight_path = preflight_candidates[0]
+            preflight_payload = json.loads(preflight_path.read_text(encoding="utf-8"))
+            provider = preflight_payload.get("source_provider", "provider")
+            output_path = (
+                resolved_wearable_inventory_root
+                / "outputs"
+                / f"{provider}_request_plan.json"
+            )
+            return write_provider_live_transport_request_plan(
+                preflight_path=preflight_path,
+                output_path=output_path,
+                window_start_date=request.window_start_date,
+                window_end_date=request.window_end_date,
+                requested_capabilities=request.capabilities,
+            )
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (ValueError, OSError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @router.post("/wearables/provider-live-response-admit")
+    def wearable_provider_live_response_admit(
+        request: WearableProviderLiveResponseAdmissionRequest,
+    ) -> dict[str, Any]:
+        try:
+            output_root = resolved_wearable_inventory_root / "outputs" / "provider-response-admissions"
+            admission_output_path = output_root / f"{request.activity_id_prefix}.response_admission.json"
+            return write_provider_live_transport_response_admission(
+                request_plan_path=_path_from_admin_request(request.request_plan_path),
+                response_fixture_path=_path_from_admin_request(request.response_fixture_path),
+                output_dir=output_root / "sanitized-imports",
+                activity_id_prefix=request.activity_id_prefix,
+                admitted_capabilities=request.capabilities,
+                admission_output_path=admission_output_path,
+                activity_type=request.activity_type,
+                overwrite=request.overwrite,
+            )
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except FileExistsError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except (ValueError, OSError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @router.post("/wearables/provider-live-executor-readiness")
+    def wearable_provider_live_executor_readiness(
+        request: WearableProviderLiveExecutorReadinessRequest,
+    ) -> dict[str, Any]:
+        try:
+            output_dir = _provider_live_output_dir(
+                request.output_dir,
+                root=resolved_wearable_inventory_root,
+                default=resolved_wearable_inventory_root / "outputs" / "provider-executor-readiness",
+            )
+            output_path = output_dir / "provider_live_executor_readiness.json"
+            return write_provider_live_executor_readiness(
+                request_plan_path=_path_from_admin_request(request.request_plan_path),
+                executor_registration_path=_optional_path_from_admin_request(request.executor_registration_path),
+                output_path=output_path,
+            )
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (ValueError, OSError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @router.post("/wearables/provider-live-register-executor")
+    def wearable_provider_live_register_executor(
+        request: WearableProviderLiveExecutorRegistrationRequest,
+    ) -> dict[str, Any]:
+        try:
+            output_dir = _provider_live_output_dir(
+                request.output_dir,
+                root=resolved_wearable_inventory_root,
+                default=resolved_wearable_inventory_root / "outputs" / "provider-executor-readiness",
+            )
+            output_path = output_dir / "provider_live_executor_registration.json"
+            return write_provider_live_executor_registration(
+                preflight_path=_path_from_admin_request(request.preflight_path),
+                output_path=output_path,
+                executor_kind=request.executor_kind,
+                executor_ref=request.executor_ref,
+                supported_capabilities=request.capabilities,
+            )
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (ValueError, OSError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @router.post("/wearables/provider-live-rehearse-executor")
+    def wearable_provider_live_rehearse_executor(
+        request: WearableProviderLiveExecutorRehearsalRequest,
+    ) -> dict[str, Any]:
+        try:
+            reference_date = (
+                datetime.fromisoformat(request.reference_date).date()
+                if request.reference_date
+                else None
+            )
+            output_dir = _provider_live_output_dir(
+                request.output_dir,
+                root=resolved_wearable_inventory_root,
+                default=resolved_wearable_inventory_root / "outputs" / "provider-executor-rehearsal",
+            )
+            return write_provider_live_executor_rehearsal(
+                request_plan_path=_path_from_admin_request(request.request_plan_path),
+                executor_registration_path=_path_from_admin_request(request.executor_registration_path),
+                response_fixture_path=_path_from_admin_request(request.response_fixture_path),
+                output_dir=output_dir,
+                activity_id_prefix=request.activity_id_prefix,
+                admitted_capabilities=request.capabilities,
+                reference_date=reference_date,
+                root=resolved_wearable_inventory_root,
+                activity_type=request.activity_type,
+                overwrite=request.overwrite,
+            )
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except FileExistsError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except (ValueError, OSError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @router.post("/wearables/provider-live-fixture-replay")
+    def wearable_provider_live_fixture_replay(
+        request: WearableProviderLiveFixtureReplayRequest,
+    ) -> dict[str, Any]:
+        try:
+            output_dir = _provider_live_output_dir(
+                request.output_dir,
+                root=resolved_wearable_inventory_root,
+                default=resolved_wearable_inventory_root / "outputs" / "provider-executor-rehearsal",
+            )
+            output_path = output_dir / "provider_live_executor_fixture_replay.json"
+            return write_provider_live_executor_fixture_replay(
+                request_plan_path=_path_from_admin_request(request.request_plan_path),
+                executor_registration_path=_path_from_admin_request(request.executor_registration_path),
+                response_fixture_path=_path_from_admin_request(request.response_fixture_path),
+                output_path=output_path,
+            )
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (ValueError, OSError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @router.post("/wearables/provider-live-executor-handoff")
+    def wearable_provider_live_executor_handoff(
+        request: WearableProviderLiveExecutorHandoffRequest,
+    ) -> dict[str, Any]:
+        try:
+            output_dir = _provider_live_output_dir(
+                request.output_dir,
+                root=resolved_wearable_inventory_root,
+                default=resolved_wearable_inventory_root / "outputs" / "provider-executor-rehearsal",
+            )
+            output_path = output_dir / "provider_live_executor_handoff.json"
+            return write_provider_live_executor_handoff_package(
+                request_plan_path=_path_from_admin_request(request.request_plan_path),
+                executor_registration_path=_path_from_admin_request(request.executor_registration_path),
+                output_path=output_path,
+            )
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (ValueError, OSError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @router.post("/wearables/provider-live-index-executor-handoff-outbox")
+    def wearable_provider_live_index_executor_handoff_outbox(
+        request: WearableProviderLiveExecutorHandoffOutboxIndexRequest,
+    ) -> dict[str, Any]:
+        try:
+            output_dir = _provider_live_output_dir(
+                request.output_dir,
+                root=resolved_wearable_inventory_root,
+                default=resolved_wearable_inventory_root / "outputs" / "provider-executor-handoff-outbox-index",
+            )
+            return write_provider_live_executor_handoff_outbox_index(
+                outbox_dir=_path_from_admin_request(request.outbox_dir),
+                output_path=output_dir / "provider_live_executor_handoff_outbox_index.json",
+            )
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (ValueError, OSError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @router.post("/wearables/provider-live-executor-handoff-pickup-manifest")
+    def wearable_provider_live_executor_handoff_pickup_manifest(
+        request: WearableProviderLiveExecutorHandoffPickupManifestRequest,
+    ) -> dict[str, Any]:
+        try:
+            output_dir = _provider_live_output_dir(
+                request.output_dir,
+                root=resolved_wearable_inventory_root,
+                default=resolved_wearable_inventory_root / "outputs" / "provider-executor-handoff-pickup-manifests",
+            )
+            return write_provider_live_executor_handoff_pickup_manifest(
+                outbox_index_path=_path_from_admin_request(request.outbox_index_path),
+                output_path=output_dir / "provider_live_executor_handoff_pickup_manifest.json",
+                handoff_source_path=_optional_path_from_admin_request(
+                    request.handoff_source_path
+                ),
+            )
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (ValueError, OSError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @router.post("/wearables/provider-live-handoff-fixture-replay")
+    def wearable_provider_live_handoff_fixture_replay(
+        request: WearableProviderLiveHandoffFixtureReplayRequest,
+    ) -> dict[str, Any]:
+        try:
+            output_dir = _provider_live_output_dir(
+                request.output_dir,
+                root=resolved_wearable_inventory_root,
+                default=resolved_wearable_inventory_root / "outputs" / "provider-executor-rehearsal",
+            )
+            output_path = output_dir / "provider_live_handoff_fixture_replay.json"
+            return write_provider_live_executor_handoff_fixture_replay(
+                handoff_package_path=_path_from_admin_request(request.executor_handoff_path),
+                response_fixture_path=_path_from_admin_request(request.response_fixture_path),
+                output_path=output_path,
+            )
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (ValueError, OSError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @router.post("/wearables/provider-live-executor-pickup-response-manifest")
+    def wearable_provider_live_executor_pickup_response_manifest(
+        request: WearableProviderLiveExecutorPickupResponseManifestRequest,
+    ) -> dict[str, Any]:
+        try:
+            output_dir = _provider_live_output_dir(
+                request.output_dir,
+                root=resolved_wearable_inventory_root,
+                default=resolved_wearable_inventory_root / "outputs" / "provider-executor-pickup-response-manifests",
+            )
+            return write_provider_live_executor_pickup_response_manifest(
+                pickup_manifest_path=_path_from_admin_request(request.pickup_manifest_path),
+                response_payload_path=_path_from_admin_request(request.response_payload_path),
+                output_path=output_dir / "provider_live_executor_pickup_response_manifest.json",
+            )
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (ValueError, OSError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @router.post("/wearables/provider-live-executor-response-manifest")
+    def wearable_provider_live_executor_response_manifest(
+        request: WearableProviderLiveExecutorResponseManifestRequest,
+    ) -> dict[str, Any]:
+        try:
+            output_dir = _provider_live_output_dir(
+                request.output_dir,
+                root=resolved_wearable_inventory_root,
+                default=resolved_wearable_inventory_root / "outputs" / "provider-executor-rehearsal",
+            )
+            output_path = output_dir / "provider_live_executor_response_manifest.json"
+            return write_provider_live_executor_response_manifest(
+                handoff_package_path=_path_from_admin_request(request.executor_handoff_path),
+                response_payload_path=_path_from_admin_request(request.response_payload_path),
+                output_path=output_path,
+            )
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (ValueError, OSError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @router.post("/wearables/provider-live-index-executor-response-inbox")
+    def wearable_provider_live_index_executor_response_inbox(
+        request: WearableProviderLiveExecutorResponseInboxIndexRequest,
+    ) -> dict[str, Any]:
+        try:
+            output_dir = _provider_live_output_dir(
+                request.output_dir,
+                root=resolved_wearable_inventory_root,
+                default=resolved_wearable_inventory_root / "outputs" / "provider-executor-response-inbox",
+            )
+            output_path = output_dir / "provider_live_executor_response_inbox_index.json"
+            return write_provider_live_executor_response_inbox_index(
+                inbox_dir=_path_from_admin_request(request.inbox_dir),
+                output_path=output_path,
+            )
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (ValueError, OSError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @router.post("/wearables/provider-live-executor-response-admit")
+    def wearable_provider_live_executor_response_admit(
+        request: WearableProviderLiveExecutorResponseAdmissionRequest,
+    ) -> dict[str, Any]:
+        try:
+            output_dir = _provider_live_output_dir(
+                request.output_dir,
+                root=resolved_wearable_inventory_root,
+                default=resolved_wearable_inventory_root / "outputs" / "provider-executor-rehearsal",
+            )
+            admission_output_path = output_dir / f"{request.activity_id_prefix}.executor_response_admission.json"
+            return write_provider_live_transport_response_admission_from_executor_response_manifest(
+                executor_response_manifest_path=_path_from_admin_request(
+                    request.executor_response_manifest_path
+                ),
+                output_dir=output_dir / "executor-response-sanitized-imports",
+                activity_id_prefix=request.activity_id_prefix,
+                admitted_capabilities=request.capabilities,
+                admission_output_path=admission_output_path,
+                activity_type=request.activity_type,
+                overwrite=request.overwrite,
+            )
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except FileExistsError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except (ValueError, OSError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @router.post("/wearables/provider-live-consume-executor-response")
+    def wearable_provider_live_consume_executor_response(
+        request: WearableProviderLiveExecutorResponseConsumptionRequest,
+    ) -> dict[str, Any]:
+        try:
+            reference_date = (
+                datetime.fromisoformat(request.reference_date).date()
+                if request.reference_date
+                else None
+            )
+            output_dir = _provider_live_output_dir(
+                request.output_dir,
+                root=resolved_wearable_inventory_root,
+                default=resolved_wearable_inventory_root / "outputs" / "provider-executor-response-consumption",
+            )
+            return write_provider_live_executor_response_consumption(
+                executor_response_manifest_path=_path_from_admin_request(
+                    request.executor_response_manifest_path
+                ),
+                output_dir=output_dir,
+                activity_id_prefix=request.activity_id_prefix,
+                admitted_capabilities=request.capabilities,
+                reference_date=reference_date,
+                root=resolved_wearable_inventory_root,
+                activity_type=request.activity_type,
+                overwrite=request.overwrite,
+            )
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except FileExistsError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except (ValueError, OSError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @router.post("/wearables/provider-live-consume-executor-pickup-response")
+    def wearable_provider_live_consume_executor_pickup_response(
+        request: WearableProviderLiveExecutorResponseConsumptionRequest,
+    ) -> dict[str, Any]:
+        try:
+            reference_date = (
+                datetime.fromisoformat(request.reference_date).date()
+                if request.reference_date
+                else None
+            )
+            output_dir = _provider_live_output_dir(
+                request.output_dir,
+                root=resolved_wearable_inventory_root,
+                default=resolved_wearable_inventory_root / "outputs" / "provider-executor-pickup-response-consumption",
+            )
+            return write_provider_live_executor_pickup_response_consumption(
+                executor_response_manifest_path=_path_from_admin_request(
+                    request.executor_response_manifest_path
+                ),
+                output_dir=output_dir,
+                activity_id_prefix=request.activity_id_prefix,
+                admitted_capabilities=request.capabilities,
+                reference_date=reference_date,
+                root=resolved_wearable_inventory_root,
+                activity_type=request.activity_type,
+                overwrite=request.overwrite,
+            )
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except FileExistsError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except (ValueError, OSError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @router.post("/wearables/provider-live-executor-pickup-response-consumption-receipt")
+    def wearable_provider_live_executor_pickup_response_consumption_receipt(
+        request: WearableProviderLiveExecutorPickupResponseConsumptionReceiptRequest,
+    ) -> dict[str, Any]:
+        try:
+            output_dir = _provider_live_output_dir(
+                request.output_dir,
+                root=resolved_wearable_inventory_root,
+                default=resolved_wearable_inventory_root / "outputs" / "provider-executor-pickup-response-consumption-receipts",
+            )
+            return write_provider_live_executor_pickup_response_consumption_receipt(
+                pickup_response_consumption_path=_path_from_admin_request(
+                    request.pickup_response_consumption_path
+                ),
+                output_path=output_dir
+                / "provider_live_executor_pickup_response_consumption_receipt.json",
+            )
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except FileExistsError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except (ValueError, OSError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @router.post("/wearables/provider-live-executor-pickup-status-snapshot")
+    def wearable_provider_live_executor_pickup_status_snapshot(
+        request: WearableProviderLiveExecutorPickupStatusSnapshotRequest,
+    ) -> dict[str, Any]:
+        try:
+            output_dir = _provider_live_output_dir(
+                request.output_dir,
+                root=resolved_wearable_inventory_root,
+                default=resolved_wearable_inventory_root / "outputs" / "provider-executor-pickup-status-snapshots",
+            )
+            return write_provider_live_executor_pickup_status_snapshot(
+                pickup_manifest_path=_path_from_admin_request(request.pickup_manifest_path),
+                executor_response_manifest_path=_optional_path_from_admin_request(
+                    request.executor_response_manifest_path
+                ),
+                pickup_response_consumption_path=_optional_path_from_admin_request(
+                    request.pickup_response_consumption_path
+                ),
+                pickup_response_receipt_path=_optional_path_from_admin_request(
+                    request.pickup_response_receipt_path
+                ),
+                output_path=output_dir / "provider_live_executor_pickup_status_snapshot.json",
+            )
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except FileExistsError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except (ValueError, OSError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @router.post("/wearables/provider-live-executor-lifecycle-audit")
+    def wearable_provider_live_executor_lifecycle_audit(
+        request: WearableProviderLiveExecutorLifecycleAuditRequest,
+    ) -> dict[str, Any]:
+        try:
+            output_dir = _provider_live_output_dir(
+                request.output_dir,
+                root=resolved_wearable_inventory_root,
+                default=resolved_wearable_inventory_root / "outputs" / "provider-executor-lifecycle-audits",
+            )
+            return write_provider_live_executor_lifecycle_audit(
+                pickup_status_snapshot_path=_path_from_admin_request(
+                    request.pickup_status_snapshot_path
+                ),
+                inbox_status_snapshot_path=_optional_path_from_admin_request(
+                    request.inbox_status_snapshot_path
+                ),
+                output_path=output_dir / "provider_live_executor_lifecycle_audit.json",
+            )
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except FileExistsError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except (ValueError, OSError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @router.post("/wearables/provider-live-executor-production-readiness-gate")
+    def wearable_provider_live_executor_production_readiness_gate(
+        request: WearableProviderLiveExecutorProductionReadinessGateRequest,
+    ) -> dict[str, Any]:
+        try:
+            output_dir = _provider_live_output_dir(
+                request.output_dir,
+                root=resolved_wearable_inventory_root,
+                default=resolved_wearable_inventory_root / "outputs" / "provider-executor-production-readiness-gates",
+            )
+            return write_provider_live_executor_production_readiness_gate(
+                lifecycle_audit_path=_path_from_admin_request(
+                    request.lifecycle_audit_path
+                ),
+                connector_reference_path=_optional_path_from_admin_request(
+                    request.connector_reference_path
+                ),
+                credential_vault_reference_path=_optional_path_from_admin_request(
+                    request.credential_vault_reference_path
+                ),
+                network_policy_reference_path=_optional_path_from_admin_request(
+                    request.network_policy_reference_path
+                ),
+                runtime_ingest_boundary_reference_path=_optional_path_from_admin_request(
+                    request.runtime_ingest_boundary_reference_path
+                ),
+                phase1_safety_boundary_reference_path=_optional_path_from_admin_request(
+                    request.phase1_safety_boundary_reference_path
+                ),
+                output_path=output_dir / "provider_live_executor_production_readiness_gate.json",
+            )
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except FileExistsError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except (ValueError, OSError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @router.post("/wearables/provider-live-consume-executor-response-inbox")
+    def wearable_provider_live_consume_executor_response_inbox(
+        request: WearableProviderLiveExecutorResponseInboxConsumptionRequest,
+    ) -> dict[str, Any]:
+        try:
+            reference_date = (
+                datetime.fromisoformat(request.reference_date).date()
+                if request.reference_date
+                else None
+            )
+            output_dir = _provider_live_output_dir(
+                request.output_dir,
+                root=resolved_wearable_inventory_root,
+                default=resolved_wearable_inventory_root / "outputs" / "provider-executor-response-inbox-consumption",
+            )
+            return write_provider_live_executor_response_inbox_consumption(
+                inbox_index_path=_path_from_admin_request(request.inbox_index_path),
+                output_dir=output_dir,
+                activity_id_prefix=request.activity_id_prefix,
+                admitted_capabilities=request.capabilities,
+                manifest_source_path=_optional_path_from_admin_request(request.manifest_source_path),
+                reference_date=reference_date,
+                root=resolved_wearable_inventory_root,
+                activity_type=request.activity_type,
+                overwrite=request.overwrite,
+            )
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except FileExistsError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except (ValueError, OSError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @router.post("/wearables/provider-live-consume-executor-response-inbox-batch")
+    def wearable_provider_live_consume_executor_response_inbox_batch(
+        request: WearableProviderLiveExecutorResponseInboxBatchConsumptionRequest,
+    ) -> dict[str, Any]:
+        try:
+            reference_date = (
+                datetime.fromisoformat(request.reference_date).date()
+                if request.reference_date
+                else None
+            )
+            output_dir = _provider_live_output_dir(
+                request.output_dir,
+                root=resolved_wearable_inventory_root,
+                default=resolved_wearable_inventory_root / "outputs" / "provider-executor-response-inbox-batch-consumption",
+            )
+            return write_provider_live_executor_response_inbox_batch_consumption(
+                inbox_index_path=_path_from_admin_request(request.inbox_index_path),
+                output_dir=output_dir,
+                activity_id_prefix=request.activity_id_prefix,
+                admitted_capabilities=request.capabilities,
+                reference_date=reference_date,
+                root=resolved_wearable_inventory_root,
+                activity_type=request.activity_type,
+                overwrite=request.overwrite,
+            )
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except FileExistsError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except (ValueError, OSError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @router.post("/wearables/provider-live-executor-response-inbox-batch-receipt")
+    def wearable_provider_live_executor_response_inbox_batch_receipt(
+        request: WearableProviderLiveExecutorResponseInboxBatchReceiptRequest,
+    ) -> dict[str, Any]:
+        try:
+            output_dir = _provider_live_output_dir(
+                request.output_dir,
+                root=resolved_wearable_inventory_root,
+                default=resolved_wearable_inventory_root / "outputs" / "provider-executor-response-inbox-batch-receipts",
+            )
+            return write_provider_live_executor_response_inbox_batch_receipt(
+                batch_consumption_path=_path_from_admin_request(request.batch_consumption_path),
+                output_path=output_dir / "provider_live_executor_response_inbox_batch_receipt.json",
+            )
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except FileExistsError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except (ValueError, OSError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @router.post("/wearables/provider-live-executor-response-inbox-status-snapshot")
+    def wearable_provider_live_executor_response_inbox_status_snapshot(
+        request: WearableProviderLiveExecutorResponseInboxStatusSnapshotRequest,
+    ) -> dict[str, Any]:
+        try:
+            output_dir = _provider_live_output_dir(
+                request.output_dir,
+                root=resolved_wearable_inventory_root,
+                default=resolved_wearable_inventory_root / "outputs" / "provider-executor-response-inbox-status-snapshots",
+            )
+            return write_provider_live_executor_response_inbox_status_snapshot(
+                inbox_index_path=_path_from_admin_request(request.inbox_index_path),
+                batch_consumption_path=_optional_path_from_admin_request(
+                    request.batch_consumption_path
+                ),
+                batch_receipt_path=_optional_path_from_admin_request(request.batch_receipt_path),
+                output_path=output_dir / "provider_live_executor_response_inbox_status_snapshot.json",
+            )
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except FileExistsError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except (ValueError, OSError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @router.post("/wearables/provider-live-replay-admit")
+    def wearable_provider_live_replay_admit(
+        request: WearableProviderLiveReplayAdmissionRequest,
+    ) -> dict[str, Any]:
+        try:
+            output_dir = _provider_live_output_dir(
+                request.output_dir,
+                root=resolved_wearable_inventory_root,
+                default=resolved_wearable_inventory_root / "outputs" / "provider-executor-rehearsal",
+            )
+            admission_output_path = output_dir / f"{request.activity_id_prefix}.replay_admission.json"
+            return write_provider_live_transport_response_admission_from_fixture_replay(
+                fixture_replay_path=_path_from_admin_request(request.fixture_replay_path),
+                output_dir=output_dir / "replay-sanitized-imports",
+                activity_id_prefix=request.activity_id_prefix,
+                admitted_capabilities=request.capabilities,
+                admission_output_path=admission_output_path,
+                activity_type=request.activity_type,
+                overwrite=request.overwrite,
+            )
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except FileExistsError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except (ValueError, OSError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @router.post("/wearables/provider-live-materialize")
+    def wearable_provider_live_materialize(
+        request: WearableProviderLiveMaterializationRequest,
+    ) -> dict[str, Any]:
+        try:
+            output_dir = _provider_live_output_dir(
+                request.output_dir,
+                root=resolved_wearable_inventory_root,
+                default=resolved_wearable_inventory_root / "outputs" / "provider-response-materialized",
+            )
+            materialization_output_path = output_dir / "provider_live_materialization.json"
+            return write_provider_live_transport_materialization(
+                admission_path=_path_from_admin_request(request.admission_path),
+                output_dir=output_dir / "normalized",
+                materialization_output_path=materialization_output_path,
+                root=resolved_wearable_inventory_root,
+                overwrite=request.overwrite,
+            )
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except FileExistsError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except (ValueError, OSError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @router.post("/wearables/provider-live-sync-package")
+    def wearable_provider_live_sync_package(
+        request: WearableProviderLiveSyncPackageRequest,
+    ) -> dict[str, Any]:
+        try:
+            output_dir = _provider_live_output_dir(
+                request.output_dir,
+                root=resolved_wearable_inventory_root,
+                default=resolved_wearable_inventory_root / "outputs" / "provider-response-materialized",
+            )
+            package_output_path = output_dir / "provider_live_sync_package.json"
+            return write_provider_live_transport_sync_package(
+                materialization_path=_path_from_admin_request(request.materialization_path),
+                package_output_path=package_output_path,
+                root=resolved_wearable_inventory_root,
+            )
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (ValueError, OSError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @router.post("/wearables/provider-live-build-energy")
+    def wearable_provider_live_build_energy(
+        request: WearableProviderLiveEnergyBuildRequest,
+    ) -> dict[str, Any]:
+        try:
+            reference_date = (
+                datetime.fromisoformat(request.reference_date).date()
+                if request.reference_date
+                else None
+            )
+            output_dir = _provider_live_output_dir(
+                request.output_dir,
+                root=resolved_wearable_inventory_root,
+                default=resolved_wearable_inventory_root / "outputs" / "provider-sync-energy",
+            )
+            return write_energy_reserve_artifacts_from_provider_sync_package(
+                _path_from_admin_request(request.sync_package_path),
+                output_dir=output_dir,
+                reference_date=reference_date,
+                root=resolved_wearable_inventory_root,
             )
         except FileNotFoundError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -2152,6 +3398,21 @@ def _path_from_admin_request(value: str) -> Path:
 
 def _optional_path_from_admin_request(value: str | None) -> Path | None:
     return _path_from_admin_request(value) if value else None
+
+
+def _provider_live_output_dir(value: str | None, *, root: Path, default: Path) -> Path:
+    if not value:
+        return default
+    output_root = (root / "outputs").resolve()
+    requested = _path_from_admin_request(value)
+    if requested.is_absolute():
+        raise ValueError("provider-live output_dir must be relative to the wearable output root")
+    if any(part == ".." for part in requested.parts):
+        raise ValueError("provider-live output_dir cannot contain parent traversal")
+    resolved = (output_root / requested).resolve()
+    if resolved != output_root and output_root not in resolved.parents:
+        raise ValueError("provider-live output_dir must stay under the wearable output root")
+    return resolved
 
 
 def _pretrip_import_source_record(path: Path, *, role: str) -> dict[str, Any]:

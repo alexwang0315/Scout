@@ -1,9 +1,13 @@
 import json
+import os
+import pty
 import subprocess
 import sys
+import threading
+import time
 from pathlib import Path
 
-from tools.pi_imu_gnss_vendor_fusion_smoke import classify_vendor_fusion_stream
+from tools.pi_imu_gnss_vendor_fusion_smoke import _read_serial_bytes_stdlib, classify_vendor_fusion_stream
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -88,6 +92,26 @@ def test_vendor_fusion_cli_raw_text_writes_jsonl(tmp_path: Path) -> None:
     assert payload["phase1_safety_decision_change_allowed"] is False
     assert payload["remote_outbound_allowed"] is False
     assert payload["hardware_control_scope"] == "diagnostic_capture_only"
+
+
+def test_vendor_fusion_stdlib_serial_fallback_reads_bytes() -> None:
+    master_fd, slave_fd = pty.openpty()
+    slave_name = os.ttyname(slave_fd)
+
+    def writer() -> None:
+        time.sleep(0.05)
+        os.write(master_fd, RMC)
+
+    thread = threading.Thread(target=writer)
+    thread.start()
+    try:
+        data = _read_serial_bytes_stdlib(port=slave_name, baud=115200, duration_seconds=0.25)
+    finally:
+        thread.join(timeout=1.0)
+        os.close(master_fd)
+        os.close(slave_fd)
+
+    assert RMC.strip() in data
 
 
 def _wit_frame(frame_type: int, values: list[int]) -> bytes:

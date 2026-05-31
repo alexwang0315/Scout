@@ -33,7 +33,7 @@ def test_poi_readiness_outputs_candidate_only_route_corridor_coverage_policy():
         "finding_candidate_count": 0,
         "warning_candidate_count": 0,
         "blocker_candidate_count": 0,
-        "route_corridor_poi_count": 1,
+        "route_corridor_poi_count": 2,
     }
     assert len(report.policy_candidates) == 1
     policy = report.policy_candidates[0]
@@ -50,7 +50,7 @@ def test_poi_readiness_warns_only_when_route_corridor_has_too_few_pois():
         category=PoiReadinessCategory.ROUTE_CORRIDOR_POI_COVERAGE,
         severity=PoiReadinessSeverity.WARNING,
         corridor_distance_m=1.0,
-        minimum_poi_count=2,
+        minimum_poi_count=3,
         message="Route corridor has too few nearby POI candidates.",
     )
 
@@ -65,16 +65,19 @@ def test_poi_readiness_warns_only_when_route_corridor_has_too_few_pois():
         "finding_candidate_count": 1,
         "warning_candidate_count": 1,
         "blocker_candidate_count": 0,
-        "route_corridor_poi_count": 1,
+        "route_corridor_poi_count": 2,
     }
     finding = report.findings[0]
     assert finding.category == PoiReadinessCategory.ROUTE_CORRIDOR_POI_COVERAGE
     assert finding.severity == PoiReadinessSeverity.WARNING
     assert finding.evidence == {
         "corridor_distance_m": 1.0,
-        "minimum_poi_count": 2,
-        "matched_poi_count": 1,
-        "matched_poi_refs": ["map.poi.trailhead_entry"],
+        "minimum_poi_count": 3,
+        "matched_poi_count": 2,
+        "matched_poi_refs": [
+            "map.poi.chilai_nanhua_day1.twmap_primary_finish",
+            "map.poi.chilai_nanhua_day1.twmap_primary_start",
+        ],
         "nearest_poi_distance_to_corridor_m": 0.0,
     }
 

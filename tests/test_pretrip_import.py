@@ -423,7 +423,7 @@ def test_admin_view_projects_aggregated_gis_perception_cp_into_review_queue(
         for attribution in candidate["source_attribution"]
     )
     assert review_queue["counts"]["category_counts"]["gis_perception_cp"] == 13
-    assert review_queue["counts"]["item_count"] == 57
+    assert review_queue["counts"]["item_count"] == 156
     gis_review_item = next(
         item
         for item in review_queue["items"]

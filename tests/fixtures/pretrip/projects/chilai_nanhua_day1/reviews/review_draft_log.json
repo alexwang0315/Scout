@@ -73,7 +73,7 @@
         "current_finding_count": 0,
         "minimum_poi_count": 1,
         "review_state_after_edit": "proposed",
-        "route_corridor_poi_count": 1,
+        "route_corridor_poi_count": 2,
         "severity": "warning"
       },
       "reviewer_prompt": "Review the POI corridor distance/count parameters as draft fields only; do not turn missing POI categories into blockers.",

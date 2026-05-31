@@ -258,13 +258,13 @@ def test_current_chilai_pretrip_release_check_passes():
     assert summary["checks"]["package_status"]["package_status"] == "candidate"
     assert summary["checks"]["package_status"]["reviewed_package_status"] == "reviewed"
     assert summary["checks"]["mission_graphs"]["graphs"]["candidate"]["checkpoint_count"] == 11
-    assert summary["checks"]["mission_graphs"]["graphs"]["reviewed"]["segment_count"] == 10
+    assert summary["checks"]["mission_graphs"]["graphs"]["reviewed"]["segment_count"] == 109
     assert summary["checks"]["readiness"]["status"] == "ready"
     assert summary["checks"]["timing_measurements"]["measurement_count"] == 18
     assert summary["checks"]["remote_contact_summary"]["audience"] == "remote_contacts"
     assert summary["checks"]["remote_contact_summary"]["readiness_status"] == "ready"
-    assert summary["checks"]["remote_contact_summary"]["planned_start"] == "2026-05-03T08:55:35+08:00"
-    assert summary["checks"]["remote_contact_summary"]["day1_target_eta"] == "2026-05-03T15:25:35+08:00"
+    assert summary["checks"]["remote_contact_summary"]["planned_start"] == "2013-10-08T11:58:50+08:00"
+    assert summary["checks"]["remote_contact_summary"]["day1_target_eta"] == "2013-10-08T18:28:50+08:00"
     assert summary["checks"]["remote_contact_summary"]["forbidden_fragment_count"] == 0
     assert summary["checks"]["weather_daylight_evidence"]["status"] == "candidate_only"
     assert summary["checks"]["weather_daylight_evidence"]["validation_status"] == (
@@ -312,16 +312,16 @@ def test_current_chilai_pretrip_release_check_passes():
     assert summary["checks"]["poi_readiness_candidates"]["policy_categories"] == [
         "route_corridor_poi_coverage"
     ]
-    assert summary["checks"]["poi_readiness_candidates"]["route_corridor_poi_count"] == 1
+    assert summary["checks"]["poi_readiness_candidates"]["route_corridor_poi_count"] == 2
     assert summary["checks"]["poi_readiness_candidates"]["corridor_distance_m"] == 1000.0
     assert summary["checks"]["poi_readiness_candidates"]["minimum_poi_count"] == 1
     assert summary["checks"]["poi_readiness_candidates"]["policy_severity"] == "warning"
     assert summary["checks"]["poi_readiness_candidates"]["candidate_only"] is True
     assert summary["checks"]["segment_policy_candidates"]["status"] == "candidate_only"
-    assert summary["checks"]["segment_policy_candidates"]["candidate_count"] == 10
-    assert summary["checks"]["segment_policy_candidates"]["expected_count"] == 10
-    assert summary["checks"]["segment_policy_candidates"]["human_review_required_count"] == 10
-    assert summary["checks"]["segment_policy_candidates"]["requires_daylight_count"] == 10
+    assert summary["checks"]["segment_policy_candidates"]["candidate_count"] == 109
+    assert summary["checks"]["segment_policy_candidates"]["expected_count"] == 109
+    assert summary["checks"]["segment_policy_candidates"]["human_review_required_count"] == 109
+    assert summary["checks"]["segment_policy_candidates"]["requires_daylight_count"] == 109
     assert summary["checks"]["segment_policy_candidates"]["raw_payload_keys"] == []
     assert summary["checks"]["plan_validation_candidates"]["status"] == "candidate_only"
     assert summary["checks"]["plan_validation_candidates"]["finding_candidate_count"] == 6
@@ -445,13 +445,13 @@ def test_current_chilai_pretrip_release_check_passes():
         summary["checks"]["phase45_departure_runtime_handoff"][
             "final_mission_graph_checkpoint_count"
         ]
-        == 11
+        == 110
     )
     assert (
         summary["checks"]["phase45_departure_runtime_handoff"][
             "final_mission_graph_segment_count"
         ]
-        == 10
+        == 109
     )
     assert (
         summary["checks"]["phase45_departure_runtime_handoff"][
@@ -648,10 +648,10 @@ def test_current_chilai_pretrip_release_check_passes():
     ] == 2
     assert summary["checks"]["phase45_departure_runtime_handoff"][
         "runtime_load_dry_run_checkpoint_count"
-    ] == 11
+    ] == 110
     assert summary["checks"]["phase45_departure_runtime_handoff"][
         "runtime_load_dry_run_segment_count"
-    ] == 10
+    ] == 109
     assert summary["checks"]["phase45_departure_runtime_handoff"][
         "runtime_load_dry_run_duplicate_id_count"
     ] == 0

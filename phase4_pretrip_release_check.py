@@ -3439,9 +3439,9 @@ def _check_phase45_departure_runtime_handoff(root: Path) -> dict[str, Any]:
         missing.append("phase45_final_mission_graph_uses_resolved_approval")
     if final_mission_graph.mission_graph.route_source != "artifact:gpx:chilai_nanhua_day1":
         missing.append("phase45_final_mission_graph_sanitized_route_source")
-    if final_mission_graph.counts.checkpoint_count != 11:
+    if final_mission_graph.counts.checkpoint_count != 110:
         missing.append("phase45_final_mission_graph_checkpoint_count")
-    if final_mission_graph.counts.segment_count != 10:
+    if final_mission_graph.counts.segment_count != 109:
         missing.append("phase45_final_mission_graph_segment_count")
     if final_mission_graph.counts.diversion_point_count != 1:
         missing.append("phase45_final_mission_graph_diversion_point_count")

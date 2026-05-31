@@ -19,7 +19,7 @@ def test_chilai_review_log_resolves_reviewed_package_without_mutating_candidate_
     resolved = resolve_pretrip_reviewed_package(original_payload, list(review_log.reviews))
     resolved_payload = resolved.model_copy(update={"status": "reviewed"}).model_dump(mode="json")
 
-    assert len(review_log.reviews) == 47
+    assert len(review_log.reviews) == 245
     assert resolved_payload == reviewed_fixture
     assert original_payload["checkpoint_candidates"][0]["review_state"] == "proposed"
     assert reviewed_fixture["checkpoint_candidates"][0]["review_state"] == "accepted"

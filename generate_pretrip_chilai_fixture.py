@@ -51,6 +51,7 @@ from pretrip_weather_daylight import (
     DaylightEvidenceWindow,
     PreTripWeatherDaylightEvidence,
     WeatherDaylightSourceRef,
+    WeatherDaylightThresholdPolicy,
     WeatherDaylightValidation,
     WeatherWindowSummary,
 )
@@ -430,9 +431,15 @@ def _weather_daylight_evidence(package: PreTripPackage, eta_plan) -> PreTripWeat
                 "window before go/no-go use."
             ),
         ),
+        threshold_policy=WeatherDaylightThresholdPolicy(
+            rainfall={"source_refs": ["cwa.weather_warning_thresholds"]},
+            dense_fog={"source_refs": ["cwa.weather_warning_thresholds"]},
+            strong_wind={"source_refs": ["cwa.weather_warning_thresholds"]},
+        ),
         source_refs=[
             "outputs/planned_eta.json",
             "normalized/routes/route_summary.json",
+            "cwa.weather_warning_thresholds",
         ],
         source_details=[
             WeatherDaylightSourceRef(

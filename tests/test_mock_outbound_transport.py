@@ -1,6 +1,8 @@
 import unittest
 from pathlib import Path
 
+from pydantic import ValidationError
+
 from mock_outbound_transport import MockOutboundTransport
 from runtime_debug_log import MemoryRuntimeDebugEventLog
 
@@ -89,6 +91,24 @@ class MockOutboundTransportTests(unittest.TestCase):
             self.assertEqual(event.payload["boundary"]["real_sos_sent"], False)
             self.assertEqual(event.payload["boundary"]["real_sms_sent"], False)
             self.assertEqual(event.payload["boundary"]["real_satellite_sent"], False)
+
+    def test_transition_rejects_invalid_timestamp_provenance(self):
+        log = MemoryRuntimeDebugEventLog()
+        timestamps = iter(["2026-05-18T12:00:01Z", "not-a-time"])
+        transport = MockOutboundTransport(
+            session_id="debug_session.off_route_deviation.20260518T120000Z",
+            mission_id="mission.normal_climb",
+            debug_log=log,
+            timestamp_factory=lambda: next(timestamps),
+        )
+        message = transport.queue_message(
+            category="checkin",
+            recipient_ref="remote_contact.primary",
+            body_preview="Scout would send check-in.",
+        )
+
+        with self.assertRaises(ValidationError):
+            transport.mark_mock_delivered(message.message_id)
 
     def test_module_has_no_real_network_or_provider_transport_imports(self):
         source = Path("mock_outbound_transport.py").read_text(encoding="utf-8")

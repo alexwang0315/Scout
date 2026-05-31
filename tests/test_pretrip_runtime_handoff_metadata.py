@@ -53,9 +53,9 @@ def test_runtime_handoff_metadata_refs_reviewed_graph_readiness_and_route_source
     assert graph_ref["ref"] == "outputs/compiled_mission_graph.reviewed.json"
     assert graph_ref["summary"] == {
         "mission_id": "mission.chilai_nanhua_day1.0.1.0",
-        "name": "奇萊南華-能高越嶺步道Day1",
-        "checkpoint_count": 11,
-        "segment_count": 10,
+        "name": "2013-10-08 10:58:50 每日記錄",
+        "checkpoint_count": 110,
+        "segment_count": 109,
         "diversion_point_count": 1,
         "route_source": "artifact:gpx:chilai_nanhua_day1",
     }
@@ -89,9 +89,9 @@ def test_runtime_handoff_metadata_refs_reviewed_graph_readiness_and_route_source
         {
             "artifact_id": "artifact:gpx:chilai_nanhua_day1",
             "kind": "gpx",
-            "sha256": "3c1f4843ecea5cb2fc85f92934d3d1a220738c900576e4976d4c09975673956c",
+            "sha256": "a270bbc769c9c521c4bb839a6230fb3760c37478c5b3ebe57f36f5d8755f6ee7",
             "media_type": "application/gpx+xml",
-            "size_bytes": 275392,
+            "size_bytes": 1186689,
             "source_ref": "artifact:gpx:chilai_nanhua_day1",
         }
     ]

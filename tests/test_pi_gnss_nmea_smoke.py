@@ -10,6 +10,8 @@ from tools.pi_gnss_nmea_smoke import (
     gnss_oled_message,
     parse_nmea_sentence,
     parse_raw_nmea,
+    summarize_gnss_fix,
+    summarize_gnss_signal,
 )
 
 
@@ -17,6 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "tools" / "pi_gnss_nmea_smoke.py"
 RMC = "$GPRMC,092751.000,A,5321.6802,N,00630.3372,W,0.06,31.66,280511,,,A*46"
 GGA = "$GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,*47"
+GSV = "$GPGSV,2,1,05,01,40,083,42,02,17,308,30,03,12,120,,04,08,044,18*7D"
 NON_FIX_GGA_BODY = "GPGGA,123520,,,,,0,00,99.9,,,,,,"
 NON_FIX_GGA = f"${NON_FIX_GGA_BODY}*76"
 
@@ -47,6 +50,29 @@ def test_parse_gga_minimum_fix_quality_altitude_and_hdop() -> None:
     assert parsed["fix_quality"]["hdop"] == 0.9
 
 
+def test_parse_gsv_preserves_satellite_signal_and_cno_values() -> None:
+    parsed = parse_nmea_sentence(GSV)
+
+    assert parsed is not None
+    assert parsed["sentence_type"] == "GPGSV"
+    assert parsed["position"] == {"lat": None, "lon": None, "altitude_m": None}
+    assert parsed["fix_quality"]["valid"] is False
+    assert parsed["fix_quality"]["satellites"] == 5
+    assert parsed["satellite_signal"]["talker"] == "GP"
+    assert parsed["satellite_signal"]["reported_visible_satellites"] == 5
+    assert parsed["satellite_signal"]["parsed_satellites"] == 4
+    assert parsed["satellite_signal"]["nonzero_cno_count"] == 3
+    assert parsed["satellite_signal"]["max_cno_dbhz"] == 42
+    assert parsed["satellite_signal"]["satellites"][0] == {
+        "talker": "GP",
+        "svid": 1,
+        "elevation_deg": 40,
+        "azimuth_deg": 83,
+        "cno_dbhz": 42,
+    }
+    assert parsed["checksum_valid"] is True
+
+
 def test_gnss_payload_primary_truth_scope_is_raw_gnss_only() -> None:
     payloads = parse_raw_nmea(f"{RMC}\n{GGA}", device_port="/dev/ttyUSB0", baud=9600)
 
@@ -55,7 +81,99 @@ def test_gnss_payload_primary_truth_scope_is_raw_gnss_only() -> None:
     assert all(payload["hardware_kind"] == "serial_gnss_nmea" for payload in payloads)
     assert all(payload["primary_truth_allowed"] is True for payload in payloads)
     assert all(payload["primary_truth_scope"] == "raw_gnss_observation_only" for payload in payloads)
+    assert all(payload["capture_mode"] == "serial_device" for payload in payloads)
     assert all(payload["phase1_safety_decision_change_allowed"] is False for payload in payloads)
+
+
+def test_gnss_signal_summary_rolls_up_gsv_cno_evidence() -> None:
+    payloads = parse_raw_nmea(
+        "\n".join(
+            [
+                "$GPGSV,1,1,00,0*65",
+                GSV,
+                "$GLGSV,1,1,01,70,,,30,0*7C",
+            ]
+        ),
+        device_port="/dev/ttyUSB0",
+        baud=115200,
+    )
+
+    summary = summarize_gnss_signal(payloads)
+
+    assert [payload["sentence_type"] for payload in payloads] == ["GPGSV", "GPGSV", "GLGSV"]
+    assert summary["gsv_sentence_count"] == 3
+    assert summary["reported_visible_satellites"] == 5
+    assert summary["parsed_satellites"] == 5
+    assert summary["nonzero_cno_count"] == 4
+    assert summary["max_cno_dbhz"] == 42
+    assert summary["gps_nonzero_cno_count"] == 3
+    assert summary["gps_max_cno_dbhz"] == 42
+    assert summary["talker_counts"] == {"GP": 2, "GL": 1}
+    assert summary["talker_signal_summary"]["GP"] == {
+        "gsv_sentence_count": 2,
+        "reported_visible_satellites": 5,
+        "parsed_satellites": 4,
+        "nonzero_cno_count": 3,
+        "max_cno_dbhz": 42,
+        "rf_signal_observed": True,
+    }
+    assert summary["talker_signal_summary"]["GL"] == {
+        "gsv_sentence_count": 1,
+        "reported_visible_satellites": 1,
+        "parsed_satellites": 1,
+        "nonzero_cno_count": 1,
+        "max_cno_dbhz": 30,
+        "rf_signal_observed": True,
+    }
+    assert summary["talkers_with_cno"] == [
+        {"talker": "GP", "max_cno_dbhz": 42, "nonzero_cno_count": 3},
+        {"talker": "GL", "max_cno_dbhz": 30, "nonzero_cno_count": 1},
+    ]
+    assert summary["best_talker"] == "GP"
+    assert summary["best_talker_cno_dbhz"] == 42
+
+
+def test_gnss_fix_summary_rolls_up_fix_quality_and_latest_position() -> None:
+    payloads = parse_raw_nmea(
+        "\n".join(
+            [
+                NON_FIX_GGA,
+                GGA,
+                RMC,
+                "$GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,*00",
+                GSV,
+            ]
+        ),
+        device_port="/dev/ttyUSB0",
+        baud=115200,
+    )
+
+    summary = summarize_gnss_fix(payloads)
+
+    assert summary["payload_count"] == 5
+    assert summary["has_valid_fix"] is True
+    assert summary["valid_fix_count"] == 2
+    assert summary["checksum_valid_count"] == 4
+    assert summary["checksum_invalid_count"] == 1
+    assert summary["sentence_type_counts"] == {"GPGGA": 3, "GPRMC": 1, "GPGSV": 1}
+    assert summary["quality_counts"]["0"] == 1
+    assert summary["quality_counts"]["1"] == 2
+    assert summary["quality_counts"]["null"] == 2
+    assert summary["status_counts"]["A"] == 1
+    assert summary["latest_valid_fix"]["sentence_type"] == "GPRMC"
+    assert summary["latest_valid_fix"]["position"]["lat"] == 53.36133667
+
+
+def test_gnss_payload_with_invalid_checksum_is_diagnostic_only() -> None:
+    payload = parse_raw_nmea(
+        "$GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,*00",
+        device_port="/dev/ttyUSB0",
+        baud=9600,
+    )[0]
+
+    assert payload["checksum_valid"] is False
+    assert payload["primary_truth_allowed"] is False
+    assert payload["primary_truth_scope"] == "invalid_gnss_checksum_diagnostic_only"
 
 
 def test_gnss_smoke_cli_raw_nmea_writes_jsonl(tmp_path: Path) -> None:
@@ -66,7 +184,7 @@ def test_gnss_smoke_cli_raw_nmea_writes_jsonl(tmp_path: Path) -> None:
             sys.executable,
             str(SCRIPT),
             "--raw-nmea",
-            f"{RMC}\n{GGA}",
+            f"{RMC}\n{GGA}\n{GSV}",
             "--output-jsonl",
             str(output),
         ],
@@ -79,8 +197,18 @@ def test_gnss_smoke_cli_raw_nmea_writes_jsonl(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stderr
     stdout_payload = json.loads(result.stdout)
     persisted = [json.loads(line) for line in output.read_text().splitlines()]
-    assert stdout_payload["sentence_count"] == 2
-    assert [item["sentence_type"] for item in persisted] == ["GPRMC", "GPGGA"]
+    assert stdout_payload["sentence_count"] == 3
+    assert stdout_payload["gnss_fix_summary"]["valid_fix_count"] == 2
+    assert stdout_payload["gnss_fix_summary"]["has_valid_fix"] is True
+    assert stdout_payload["gnss_signal_summary"]["max_cno_dbhz"] == 42
+    assert [item["sentence_type"] for item in persisted] == ["GPRMC", "GPGGA", "GPGSV"]
+    assert [item["capture_mode"] for item in persisted] == [
+        "raw_nmea_argument",
+        "raw_nmea_argument",
+        "raw_nmea_argument",
+    ]
+    assert all(item["primary_truth_allowed"] is False for item in persisted)
+    assert all(item["primary_truth_scope"] == "diagnostic_replayed_nmea_only" for item in persisted)
 
 
 def test_gnss_oled_message_summarizes_fix_state_and_nmea_signal() -> None:

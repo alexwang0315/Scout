@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Callable, Literal, Protocol
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from runtime_debug_models import RuntimeDebugEvent
 
@@ -52,6 +52,12 @@ class MockOutboundMessage(BaseModel):
     body_preview: str = Field(min_length=1)
     payload: dict[str, Any] = Field(default_factory=dict)
     boundary: MockOutboundBoundary = Field(default_factory=MockOutboundBoundary)
+
+    @field_validator("created_at", "updated_at")
+    @classmethod
+    def validate_timestamp(cls, value: str) -> str:
+        _parse_timestamp(value)
+        return value
 
 
 class MockOutboundTransport:
@@ -131,7 +137,9 @@ class MockOutboundTransport:
     ) -> MockOutboundMessage:
         current = self._messages[message_id]
         timestamp = self.timestamp_factory()
-        updated = current.model_copy(update={"state": state, "updated_at": timestamp})
+        updated = MockOutboundMessage.model_validate(
+            {**current.model_dump(mode="json"), "state": state, "updated_at": timestamp}
+        )
         self._messages[message_id] = updated
         self._append_debug_event(
             kind="outbound_message_state_changed",
@@ -186,3 +194,7 @@ class MockOutboundTransport:
 
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _parse_timestamp(value: str) -> datetime:
+    return datetime.fromisoformat(value.replace("Z", "+00:00"))

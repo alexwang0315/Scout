@@ -298,6 +298,88 @@ class RouteProgressEvaluatorTests(unittest.TestCase):
         self.assertEqual(sustained.event_type, SafetyEventType.WEAK_GPS)
         self.assertGreaterEqual(sustained.details["duration_s"], 60.0)
 
+    def test_dead_reckoning_source_counts_as_weak_gps_for_sustained_movement(self):
+        runtime = MissionGraphRuntime(load_mission_graph(MISSION_PATH))
+        route = load_gpx_route(ROUTE_PATH)
+        evaluator = RouteProgressEvaluator(
+            runtime,
+            route,
+            RouteProgressConfig(
+                weak_gps_accuracy_threshold_m=50.0,
+                min_weak_gps_duration_s=60.0,
+                min_weak_gps_movement_m=20.0,
+            ),
+        )
+
+        first = evaluator.observe(
+            RouteProgressSample(
+                timestamp=0.0,
+                progress_m=100.0,
+                lat=route.points[10].lat,
+                lon=route.points[10].lon,
+                estimate_source="dead_reckoning",
+                estimate_confidence=0.7,
+            ),
+            expected_checkpoint_id=None,
+        )
+        sustained = evaluator.observe(
+            RouteProgressSample(
+                timestamp=61.0,
+                progress_m=140.0,
+                lat=route.points[20].lat,
+                lon=route.points[20].lon,
+                estimate_source="dead_reckoning",
+                estimate_confidence=0.55,
+            ),
+            expected_checkpoint_id=None,
+        )
+
+        self.assertIsNone(first)
+        self.assertIsNotNone(sustained)
+        self.assertEqual(sustained.event_type, SafetyEventType.WEAK_GPS)
+        self.assertEqual(sustained.details["estimate_source"], "dead_reckoning")
+        self.assertIsNone(sustained.details["gps_horizontal_accuracy_m"])
+
+    def test_dead_reckoning_from_route_start_counts_sustained_movement(self):
+        runtime = MissionGraphRuntime(load_mission_graph(MISSION_PATH))
+        route = load_gpx_route(ROUTE_PATH)
+        evaluator = RouteProgressEvaluator(
+            runtime,
+            route,
+            RouteProgressConfig(
+                weak_gps_accuracy_threshold_m=50.0,
+                min_weak_gps_duration_s=60.0,
+                min_weak_gps_movement_m=20.0,
+            ),
+        )
+
+        first = evaluator.observe(
+            RouteProgressSample(
+                timestamp=0.0,
+                progress_m=0.0,
+                lat=route.points[0].lat,
+                lon=route.points[0].lon,
+                estimate_source="dead_reckoning",
+                estimate_confidence=0.7,
+            ),
+            expected_checkpoint_id=None,
+        )
+        sustained = evaluator.observe(
+            RouteProgressSample(
+                timestamp=61.0,
+                progress_m=25.0,
+                lat=route.points[1].lat,
+                lon=route.points[1].lon,
+                estimate_source="dead_reckoning",
+                estimate_confidence=0.55,
+            ),
+            expected_checkpoint_id=None,
+        )
+
+        self.assertIsNone(first)
+        self.assertIsNotNone(sustained)
+        self.assertEqual(sustained.event_type, SafetyEventType.WEAK_GPS)
+
     def test_backtracking_requires_sustained_route_progress_regression(self):
         runtime = MissionGraphRuntime(load_mission_graph(MISSION_PATH))
         route = load_gpx_route(ROUTE_PATH)

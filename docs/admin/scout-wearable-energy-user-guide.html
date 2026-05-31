@@ -1,0 +1,721 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Scout 體能儲備與同行匹配說明書</title>
+  <style>
+    :root {
+      --ink: #17211d;
+      --muted: #5a6861;
+      --line: #d9e1dc;
+      --panel: #ffffff;
+      --bg: #f7faf8;
+      --soft: #eef5f1;
+      --green: #176b4d;
+      --green-soft: #dceee7;
+      --blue: #245e8f;
+      --blue-soft: #e2eef8;
+      --amber: #94610e;
+      --amber-soft: #f8ecd8;
+      --red: #95312b;
+      --red-soft: #f6dfdc;
+      --shadow: 0 16px 40px rgba(23, 33, 29, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.75;
+    }
+
+    a {
+      color: var(--blue);
+      text-decoration: none;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+
+    code {
+      border: 1px solid #d7e1dc;
+      border-radius: 5px;
+      background: #eef3f0;
+      color: #14231d;
+      padding: 1px 5px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      font-size: 0.92em;
+    }
+
+    pre {
+      overflow-x: auto;
+      border: 1px solid #cbd8d1;
+      border-radius: 8px;
+      background: #102019;
+      color: #edf6f1;
+      padding: 15px;
+      line-height: 1.55;
+      font-size: 13px;
+    }
+
+    pre code {
+      border: 0;
+      background: transparent;
+      color: inherit;
+      padding: 0;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 260px minmax(0, 1fr);
+      min-height: 100vh;
+    }
+
+    aside {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+      border-right: 1px solid var(--line);
+      background: #fbfcfb;
+      padding: 28px 22px;
+    }
+
+    .brand {
+      margin-bottom: 24px;
+    }
+
+    .brand span {
+      display: block;
+      color: var(--green);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .brand strong {
+      display: block;
+      margin-top: 6px;
+      font-size: 22px;
+      line-height: 1.22;
+    }
+
+    .brand small {
+      display: block;
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    nav ul {
+      display: grid;
+      gap: 4px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    nav a {
+      display: block;
+      border-radius: 6px;
+      color: #2f3f37;
+      padding: 8px 9px;
+      font-size: 14px;
+    }
+
+    nav a:hover {
+      background: var(--soft);
+      text-decoration: none;
+    }
+
+    main {
+      min-width: 0;
+    }
+
+    .hero {
+      border-bottom: 1px solid var(--line);
+      background: linear-gradient(135deg, #dceee7, #e2eef8);
+      padding: 56px 7vw 46px;
+    }
+
+    .hero h1 {
+      max-width: 900px;
+      margin: 0;
+      font-size: clamp(34px, 5vw, 60px);
+      line-height: 1.08;
+      letter-spacing: 0;
+    }
+
+    .hero p {
+      max-width: 820px;
+      margin: 18px 0 0;
+      color: #314139;
+      font-size: 18px;
+    }
+
+    .badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 24px;
+    }
+
+    .badge {
+      border: 1px solid rgba(23, 107, 77, 0.26);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.76);
+      padding: 5px 12px;
+      font-size: 13px;
+      font-weight: 750;
+    }
+
+    .content {
+      max-width: 1060px;
+      margin: 0 auto;
+      padding: 38px 7vw 72px;
+    }
+
+    section {
+      margin-top: 40px;
+    }
+
+    h2 {
+      margin: 0 0 14px;
+      font-size: 28px;
+      line-height: 1.25;
+      letter-spacing: 0;
+    }
+
+    h3 {
+      margin: 28px 0 10px;
+      font-size: 19px;
+      line-height: 1.35;
+      letter-spacing: 0;
+    }
+
+    p {
+      margin: 0 0 14px;
+    }
+
+    ul,
+    ol {
+      margin: 0 0 16px;
+      padding-left: 24px;
+    }
+
+    li {
+      margin: 5px 0;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 15px;
+    }
+
+    th,
+    td {
+      border-bottom: 1px solid var(--line);
+      padding: 12px;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      background: var(--soft);
+    }
+
+    .panel {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+      padding: 18px;
+    }
+
+    .notice {
+      border: 1px solid #e4cfae;
+      border-left: 5px solid var(--amber);
+      border-radius: 8px;
+      background: var(--amber-soft);
+      padding: 16px 18px;
+      color: #4d3516;
+    }
+
+    .notice strong {
+      color: #3c270d;
+    }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+      margin-top: 16px;
+    }
+
+    .card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      padding: 16px;
+      min-height: 138px;
+    }
+
+    .card span {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .card strong {
+      display: block;
+      margin-top: 8px;
+      font-size: 19px;
+      line-height: 1.3;
+    }
+
+    .card p {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .steps {
+      counter-reset: step;
+      display: grid;
+      gap: 10px;
+      padding: 0;
+      list-style: none;
+    }
+
+    .steps li {
+      counter-increment: step;
+      display: grid;
+      grid-template-columns: 34px minmax(0, 1fr);
+      gap: 12px;
+      align-items: start;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      padding: 13px;
+    }
+
+    .steps li::before {
+      content: counter(step);
+      display: grid;
+      place-items: center;
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      background: var(--green-soft);
+      color: var(--green);
+      font-weight: 850;
+    }
+
+    .flow {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+
+    .svg-title {
+      font: 750 14px ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      fill: #1d2b25;
+    }
+
+    .svg-note {
+      font: 12px ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      fill: #52635b;
+    }
+
+    .result-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .result {
+      display: grid;
+      grid-template-columns: 170px minmax(0, 1fr);
+      gap: 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      padding: 13px;
+    }
+
+    .result strong {
+      color: #24342d;
+    }
+
+    .band-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .band {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      padding: 14px;
+    }
+
+    .band strong {
+      display: block;
+      margin-bottom: 5px;
+    }
+
+    .band.normal strong {
+      color: var(--green);
+    }
+
+    .band.watch strong {
+      color: var(--blue);
+    }
+
+    .band.rest strong {
+      color: var(--amber);
+    }
+
+    .band.stop strong {
+      color: var(--red);
+    }
+
+    details {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      padding: 14px 16px;
+    }
+
+    summary {
+      cursor: pointer;
+      color: #26362f;
+      font-weight: 800;
+    }
+
+    .footer {
+      margin-top: 48px;
+      border-top: 1px solid var(--line);
+      padding-top: 22px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    @media (max-width: 920px) {
+      .layout {
+        grid-template-columns: 1fr;
+      }
+
+      aside {
+        position: static;
+        height: auto;
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+      }
+
+      nav ul {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .cards,
+      .band-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .result {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 560px) {
+      .hero,
+      .content {
+        padding-left: 20px;
+        padding-right: 20px;
+      }
+
+      nav ul {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <aside aria-label="文件導覽">
+      <div class="brand">
+        <span>Scout Guide</span>
+        <strong>體能儲備與同行匹配</strong>
+        <small>一般使用者說明書<br>2026-05-28</small>
+      </div>
+      <nav>
+        <ul>
+          <li><a href="#what">這是什麼</a></li>
+          <li><a href="#why">可以幫你什麼</a></li>
+          <li><a href="#prepare">使用前準備</a></li>
+          <li><a href="#use-ui">畫面操作</a></li>
+          <li><a href="#read">怎麼看結果</a></li>
+          <li><a href="#share">同行與交接</a></li>
+          <li><a href="#safe">安全邊界</a></li>
+          <li><a href="#helper">給協助者</a></li>
+        </ul>
+      </nav>
+    </aside>
+
+    <main>
+      <header class="hero">
+        <h1>Scout 體能儲備與同行匹配說明書</h1>
+        <p>這個功能把你的近期活動紀錄整理成「現在適不適合這趟行程」的參考，也能協助比較同行者的行走節奏是否接近。它是出發前討論與行程後回顧的輔助工具，不會替你做安全決定。</p>
+        <div class="badges">
+          <span class="badge">體能趨勢</span>
+          <span class="badge">同行匹配</span>
+          <span class="badge">每日預覽</span>
+          <span class="badge">出發前 package</span>
+        </div>
+      </header>
+
+      <div class="content">
+        <section id="what">
+          <h2>這是什麼</h2>
+          <p>Scout 會讀取你已整理過的活動紀錄，例如手錶、運動裝置、GPX 路線或 Scout 完成紀錄，整理出近期體能狀態、活動負荷與同行節奏參考。</p>
+          <div class="notice">
+            <strong>先講清楚：</strong>這不是醫療診斷，不是保證安全，也不會自動決定你能不能出發。它只是把資料整理成比較容易理解的提醒，最後仍由你、領隊或操作員判斷。
+          </div>
+
+          <div class="panel" style="margin-top: 18px;">
+            <svg class="flow" viewBox="0 0 920 260" role="img" aria-labelledby="flow-title flow-desc">
+              <title id="flow-title">功能流程</title>
+              <desc id="flow-desc">活動紀錄進入 Scout 後，產生體能狀態、同行匹配、每日預覽與出發前封包。</desc>
+              <defs>
+                <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+                  <path d="M0,0 L0,6 L9,3 z" fill="#66766e"></path>
+                </marker>
+              </defs>
+              <rect x="22" y="92" width="148" height="66" rx="8" fill="#e2eef8" stroke="#9fbed9"></rect>
+              <text x="96" y="120" text-anchor="middle" class="svg-title">活動紀錄</text>
+              <text x="96" y="141" text-anchor="middle" class="svg-note">手錶 / GPX / Scout</text>
+
+              <rect x="226" y="92" width="148" height="66" rx="8" fill="#dceee7" stroke="#a8d1bd"></rect>
+              <text x="300" y="120" text-anchor="middle" class="svg-title">Scout 整理</text>
+              <text x="300" y="141" text-anchor="middle" class="svg-note">只保留必要摘要</text>
+
+              <rect x="430" y="28" width="150" height="66" rx="8" fill="#fff7e8" stroke="#e0c08d"></rect>
+              <text x="505" y="56" text-anchor="middle" class="svg-title">體能狀態</text>
+              <text x="505" y="77" text-anchor="middle" class="svg-note">今天是否偏累</text>
+
+              <rect x="430" y="112" width="150" height="66" rx="8" fill="#eef3f0" stroke="#b8c9c1"></rect>
+              <text x="505" y="140" text-anchor="middle" class="svg-title">同行匹配</text>
+              <text x="505" y="161" text-anchor="middle" class="svg-note">節奏是否接近</text>
+
+              <rect x="430" y="196" width="150" height="46" rx="8" fill="#e2eef8" stroke="#9fbed9"></rect>
+              <text x="505" y="224" text-anchor="middle" class="svg-title">每日預覽</text>
+
+              <rect x="696" y="92" width="170" height="66" rx="8" fill="#f8ecd8" stroke="#d3ab72"></rect>
+              <text x="781" y="120" text-anchor="middle" class="svg-title">出發前 package</text>
+              <text x="781" y="141" text-anchor="middle" class="svg-note">給手機或 Scout 使用</text>
+
+              <path d="M170 125 H226" stroke="#66766e" stroke-width="2" marker-end="url(#arrow)"></path>
+              <path d="M374 125 C398 108 407 78 430 63" stroke="#66766e" stroke-width="2" fill="none" marker-end="url(#arrow)"></path>
+              <path d="M374 132 H430" stroke="#66766e" stroke-width="2" marker-end="url(#arrow)"></path>
+              <path d="M374 144 C404 170 402 199 430 218" stroke="#66766e" stroke-width="2" fill="none" marker-end="url(#arrow)"></path>
+              <path d="M580 61 C640 70 660 96 696 111" stroke="#66766e" stroke-width="2" fill="none" marker-end="url(#arrow)"></path>
+              <path d="M580 145 C640 144 660 136 696 128" stroke="#66766e" stroke-width="2" fill="none" marker-end="url(#arrow)"></path>
+            </svg>
+          </div>
+        </section>
+
+        <section id="why">
+          <h2>可以幫你什麼</h2>
+          <div class="cards">
+            <div class="card">
+              <span>出發前</span>
+              <strong>知道自己最近是否偏累</strong>
+              <p>用近期活動紀錄看出目前體能大致落在哪個狀態，避免只靠感覺判斷。</p>
+            </div>
+            <div class="card">
+              <span>同行者</span>
+              <strong>比較行走節奏是否接近</strong>
+              <p>幫助隊伍討論速度、休息頻率、分工與撤退策略。</p>
+            </div>
+            <div class="card">
+              <span>行程後</span>
+              <strong>回顧預估和實際差異</strong>
+              <p>看出哪一段開始疲勞、休息是否足夠，下次規劃更準確。</p>
+            </div>
+          </div>
+        </section>
+
+        <section id="prepare">
+          <h2>使用前準備</h2>
+          <p>一般使用者不需要理解資料格式，只要準備「已整理過的活動摘要」。這些摘要可以由 Scout、操作員或匯入工具從 Apple Watch、Garmin、GPX、FIT、TCX 等資料整理出來。</p>
+          <div class="result-list">
+            <div class="result">
+              <strong>你需要提供</strong>
+              <span>近期幾筆活動紀錄摘要。越多筆越能看出個人趨勢。</span>
+            </div>
+            <div class="result">
+              <strong>Scout 會產生</strong>
+              <span>體能儲備狀態、每日預覽、同行匹配資料，以及出發前可使用的本地 package。</span>
+            </div>
+            <div class="result">
+              <strong>Scout 不需要</strong>
+              <span>完整原始健康資料、完整軌跡、住家位置、精確時間戳或帳號密碼。</span>
+            </div>
+          </div>
+        </section>
+
+        <section id="use-ui">
+          <h2>畫面操作</h2>
+          <p>打開 Scout admin 的 pretrip 畫面，進入 <code>Wearables</code> 分頁。若你不是操作員，只需要知道每個按鈕大概做什麼；實際檔案位置可以由操作員協助填入。</p>
+
+          <ol class="steps">
+            <li><span>在 <strong>Wearable activity summary path</strong> 填入活動摘要檔案位置。</span></li>
+            <li><span>按 <strong>Validate summary</strong>，確認這份活動摘要可以被 Scout 使用。</span></li>
+            <li><span>按 <strong>Import summary</strong>，把這筆活動加入 Scout 的本地紀錄。</span></li>
+            <li><span>按 <strong>Load inventory</strong>，確認已匯入的活動數量與來源。</span></li>
+            <li><span>選擇 <strong>Reference date</strong>，通常用今天或出發前的檢查日期。</span></li>
+            <li><span>按 <strong>Refresh reserve</strong>，更新體能儲備狀態。</span></li>
+            <li><span>按 <strong>Daily preview</strong>，查看像手機首頁一樣的摘要畫面。</span></li>
+            <li><span>若正在做出發前規劃，按 <strong>Apply to ETA</strong>，把體能狀態放進這趟行程的 review。</span></li>
+            <li><span>若有同行者資料，按 <strong>Refresh match</strong>，比較同行節奏是否接近。</span></li>
+            <li><span>行程後可以按 <strong>Energy feedback</strong>，回顧出發前預估與實際行程表現。</span></li>
+          </ol>
+        </section>
+
+        <section id="read">
+          <h2>怎麼看結果</h2>
+          <p>最重要的是兩個結果：體能儲備狀態與同行匹配結果。</p>
+
+          <h3>體能儲備狀態</h3>
+          <div class="band-grid">
+            <div class="band normal">
+              <strong>Normal</strong>
+              <span>接近你近期平常狀態。仍然需要依天氣、路況與隊伍狀況判斷。</span>
+            </div>
+            <div class="band watch">
+              <strong>Watch</strong>
+              <span>比平常低一些。建議保守看待速度、休息與負重。</span>
+            </div>
+            <div class="band rest">
+              <strong>Rest Suggested</strong>
+              <span>Scout 建議多休息或降低行程強度。出發前應認真討論調整。</span>
+            </div>
+            <div class="band stop">
+              <strong>Stop And Check</strong>
+              <span>需要停下來確認身體狀態。這是提醒，不是自動安全判定。</span>
+            </div>
+          </div>
+
+          <h3>同行匹配結果</h3>
+          <p>匹配分數不是誰比較強，而是「節奏是否接近」。高分代表行走、爬升、下降與休息習慣比較接近；低分代表隊伍更需要事先討論速度、等候點、分隊方式或撤退條件。</p>
+        </section>
+
+        <section id="share">
+          <h2>同行與出發前交接</h2>
+          <p>Scout 可以把每日預覽與同行匹配結果整理成一份本地 package，未來可交給手機或 Scout device 使用。這份 package 的目的是讓出發前 review 更完整，不是把資料上傳到雲端。</p>
+          <div class="cards">
+            <div class="card">
+              <span>Daily Preview</span>
+              <strong>今天狀態摘要</strong>
+              <p>顯示目前體能儲備、近期負荷與下一步建議。</p>
+            </div>
+            <div class="card">
+              <span>Companion Review</span>
+              <strong>同行節奏參考</strong>
+              <p>協助領隊或隊員事先看出可能的速度差距。</p>
+            </div>
+            <div class="card">
+              <span>Handoff Package</span>
+              <strong>出發前資料包</strong>
+              <p>把這些摘要整理起來，供後續 Scout 或手機端使用。</p>
+            </div>
+          </div>
+        </section>
+
+        <section id="safe">
+          <h2>隱私與安全邊界</h2>
+          <div class="notice">
+            <strong>請把它當成輔助判斷，不要當成安全保證。</strong> 真正是否出發、是否撤退、是否加休息點，仍由使用者、領隊或現場操作員決定。
+          </div>
+          <div class="cards">
+            <div class="card">
+              <span>隱私</span>
+              <strong>不需要原始健康資料</strong>
+              <p>Scout 只使用整理後的摘要，不應分享完整健康資料、完整軌跡或精確時間。</p>
+            </div>
+            <div class="card">
+              <span>安全</span>
+              <strong>不會自動改變安全狀態</strong>
+              <p>這個功能不會自動發警報、不會呼叫救援流程，也不會替你批准出發。</p>
+            </div>
+            <div class="card">
+              <span>解讀</span>
+              <strong>不是醫療診斷</strong>
+              <p>它看的是趨勢和負荷，不是疾病、健康風險或醫療建議。</p>
+            </div>
+          </div>
+        </section>
+
+        <section id="helper">
+          <h2>給協助者：需要時才用 CLI</h2>
+          <p>一般使用者不需要使用命令列。若 UI 還沒有完全串好，或操作員要重跑資料，可以使用下面三類命令。這一段是給協助者，不是日常使用者必讀內容。</p>
+
+          <details>
+            <summary>展開 CLI 範例</summary>
+            <h3>建立體能儲備</h3>
+            <pre><code>cd /Users/alexwang0315/scout-fusion
+PYTHONPATH=. venv/bin/python -m scout_energy_reserve build \
+  --activity tests/fixtures/wearables/apple_health_clean_activity.json \
+  --activity tests/fixtures/wearables/garmin_body_battery_provider_values.json \
+  --activity tests/fixtures/wearables/apple_health_missing_hr_interval.json \
+  --output-dir /tmp/scout-wearable-demo/outputs \
+  --reference-date 2026-05-27 \
+  --root /Users/alexwang0315/scout-fusion</code></pre>
+
+            <h3>比對同行者</h3>
+            <pre><code>PYTHONPATH=. venv/bin/python -m scout_companion_match score \
+  --query-capsule /tmp/scout-wearable-demo/outputs/scout_companion_capability_capsule.json \
+  --candidate-capsule /tmp/scout-wearable-demo/outputs/scout_companion_capability_capsule.json \
+  --candidate-profile-ref candidate.local.demo \
+  --output /tmp/scout-wearable-demo/outputs/companion_match_review.json</code></pre>
+
+            <h3>建立出發前交接 package</h3>
+            <pre><code>PYTHONPATH=. venv/bin/python -m scout_mobile_handoff build \
+  --daily-home-preview /tmp/scout-wearable-demo/admin/wearables/outputs/daily_home_preview.json \
+  --companion-match-review /tmp/scout-wearable-demo/outputs/companion_match_review.json \
+  --output /tmp/scout-wearable-demo/outputs/mobile_energy_companion_handoff.json</code></pre>
+          </details>
+        </section>
+
+        <section>
+          <h2>最短操作路徑</h2>
+          <div class="panel">
+            <p><strong>一般使用者：</strong>匯入活動摘要 -> 更新體能儲備 -> 看每日預覽。</p>
+            <p><strong>出發前：</strong>更新體能儲備 -> 套用到行程評估 -> 檢查同行匹配 -> 人工決定。</p>
+            <p><strong>行程後：</strong>產生 energy feedback -> 回顧哪裡和預估不同。</p>
+          </div>
+        </section>
+
+        <div class="footer">
+          <p>文件位置：<code>docs/admin/scout-wearable-energy-user-guide.html</code>。較技術的補充版仍保留在 <code>docs/admin/scout-wearable-energy-user-guide.md</code>。</p>
+        </div>
+      </div>
+    </main>
+  </div>
+</body>
+</html>

@@ -30,6 +30,8 @@ COPY \
     go_no_go.py \
     incident_package.py \
     incident_store.py \
+    ins_dr_input_adapter.py \
+    ins_dr_navigation.py \
     mission_graph.py \
     mission_models.py \
     mission_progress.py \

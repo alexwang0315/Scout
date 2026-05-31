@@ -155,14 +155,13 @@ def test_chilai_map_fixture_can_compile_only_when_unreviewed_is_explicitly_allow
     validated = PreTripMapCompileResult.model_validate(result.model_dump(mode="json"))
 
     assert validated.counts == {
-        "diversion_points": 1,
+        "diversion_points": 2,
         "trail_corridors": 1,
-        "hazard_zones": 1,
+        "hazard_zones": 0,
         "compiled_candidates": 3,
         "skipped_candidates": 0,
     }
-    assert validated.trail_corridors[0].corridor_id == "chilai_nanhua_primary_corridor"
-    assert validated.hazard_zones[0].hazard_type == "limited_retreat_options"
+    assert validated.trail_corridors[0].corridor_id == "chilai_nanhua_day1.twmap_primary_cp_corridor"
     assert validated.diversion_points[0].diversion_type == "trailhead"
 
 

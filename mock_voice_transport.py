@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Literal, Protocol
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from runtime_debug_models import RuntimeDebugEvent
 from voice_cue_models import VoiceCue, VoiceCueBoundary
@@ -37,6 +37,14 @@ class MockVoiceTransportRecord(BaseModel):
     source_event_refs: list[str] = Field(default_factory=list)
     failure_reason: str | None = None
     boundary: VoiceCueBoundary = Field(default_factory=VoiceCueBoundary)
+
+    @field_validator("queued_at", "rendered_at", "played_at", "failed_at")
+    @classmethod
+    def validate_timestamp(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        _parse_timestamp(value)
+        return value
 
 
 class MockVoiceTransport:
@@ -94,14 +102,15 @@ class MockVoiceTransport:
         audio_file: str | None = None,
     ) -> MockVoiceTransportRecord:
         current = self._records[cue_id]
-        record = current.model_copy(
-            update={
+        record = _validated_record_update(
+            current,
+            {
                 "engine": engine or current.engine,
                 "audio_file": audio_file if audio_file is not None else current.audio_file,
                 "rendered_at": self.timestamp_factory(),
                 "state": "rendered",
                 "failure_reason": None,
-            }
+            },
         )
         self._records[cue_id] = record
         self._append(record)
@@ -114,12 +123,13 @@ class MockVoiceTransport:
 
     def mark_played(self, cue_id: str) -> MockVoiceTransportRecord:
         current = self._records[cue_id]
-        record = current.model_copy(
-            update={
+        record = _validated_record_update(
+            current,
+            {
                 "played_at": self.timestamp_factory(),
                 "state": "played",
                 "failure_reason": None,
-            }
+            },
         )
         self._records[cue_id] = record
         self._append(record)
@@ -132,12 +142,13 @@ class MockVoiceTransport:
 
     def mark_failed(self, cue_id: str, *, reason: str) -> MockVoiceTransportRecord:
         current = self._records[cue_id]
-        record = current.model_copy(
-            update={
+        record = _validated_record_update(
+            current,
+            {
                 "failed_at": self.timestamp_factory(),
                 "state": "failed",
                 "failure_reason": reason,
-            }
+            },
         )
         self._records[cue_id] = record
         self._append(record)
@@ -213,3 +224,16 @@ class MockVoiceTransport:
 
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _validated_record_update(
+    current: MockVoiceTransportRecord,
+    update: dict[str, object],
+) -> MockVoiceTransportRecord:
+    return MockVoiceTransportRecord.model_validate(
+        {**current.model_dump(mode="json"), **update}
+    )
+
+
+def _parse_timestamp(value: str) -> datetime:
+    return datetime.fromisoformat(value.replace("Z", "+00:00"))

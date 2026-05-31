@@ -41,10 +41,10 @@ def test_builds_candidate_only_human_review_queue_manifest():
         "outputs/departure_bundle_manifest.json",
     ]
     assert payload["counts"] == {
-        "item_count": 44,
+        "item_count": 143,
         "warning_count": 10,
         "blocker_count": 0,
-        "review_count": 34,
+        "review_count": 133,
         "source_ref_count": 8,
         "category_counts": {
             "contour_interpretation": 2,
@@ -52,7 +52,7 @@ def test_builds_candidate_only_human_review_queue_manifest():
             "plan_validation": 6,
             "route_note": 23,
             "runtime_handoff": 1,
-            "segment_policy": 10,
+            "segment_policy": 109,
             "weather_daylight": 1,
         },
     }

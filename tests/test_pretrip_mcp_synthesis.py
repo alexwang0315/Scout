@@ -242,6 +242,27 @@ def test_mcp_review_actions_validate_candidate_and_cp_targets(tmp_path):
         raise AssertionError("unknown CP candidate was accepted")
 
 
+def test_mcp_review_actions_validate_decided_at(tmp_path):
+    workspace_project_root = tmp_path / PROJECT_ROOT.name
+    subprocess.run(
+        ["cp", "-R", PROJECT_ROOT.as_posix(), workspace_project_root.as_posix()],
+        check=True,
+    )
+
+    try:
+        append_mcp_review_action(
+            workspace_project_root,
+            mcp_id="mcp.heishuitang.002",
+            decision="accepted",
+            summary="invalid timestamp should fail validation",
+            decided_at="not-a-time",
+        )
+    except ValueError as exc:
+        assert "decided_at" in str(exc)
+    else:
+        raise AssertionError("invalid decided_at was accepted")
+
+
 def test_np_promotion_requires_more_than_ten_accepted_pages():
     payload = json.loads(FIXTURE.read_text(encoding="utf-8"))
     for page in payload["evidence_pages"][-2:]:

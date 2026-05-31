@@ -47,8 +47,8 @@ def test_builds_final_mission_graph_only_after_departure_gate_passes():
     assert len(payload["source_mission_graph_ref"]["sha256"]) == 64
     assert len(payload["final_mission_graph_sha256"]) == 64
     assert payload["counts"] == {
-        "checkpoint_count": 11,
-        "segment_count": 10,
+        "checkpoint_count": 110,
+        "segment_count": 109,
         "diversion_point_count": 1,
         "unresolved_warning_count": 0,
         "blocker_count": 0,
@@ -60,8 +60,8 @@ def test_builds_final_mission_graph_only_after_departure_gate_passes():
     graph = MissionGraph.model_validate(payload["mission_graph"])
     assert graph.mission_id == payload["mission_graph_version"]
     assert graph.route_source == "artifact:gpx:chilai_nanhua_day1"
-    assert len(graph.checkpoints) == 11
-    assert len(graph.segments) == 10
+    assert len(graph.checkpoints) == 110
+    assert len(graph.segments) == 109
     assert all(".gpx" not in checkpoint.source for checkpoint in graph.checkpoints)
     assert all("/Users/" not in checkpoint.source for checkpoint in graph.checkpoints)
     assert artifact.to_json().endswith("\n")

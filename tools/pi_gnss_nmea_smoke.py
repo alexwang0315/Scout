@@ -44,24 +44,42 @@ def parse_nmea_sentence(sentence: str) -> dict[str, Any] | None:
         return _parse_rmc(fields, stripped)
     if sentence_type == "GGA":
         return _parse_gga(fields, stripped)
+    if sentence_type == "GSV":
+        return _parse_gsv(fields, stripped)
     return None
 
 
-def build_gnss_payload(parsed: dict[str, Any], *, device_port: str, baud: int) -> dict[str, Any]:
+def build_gnss_payload(
+    parsed: dict[str, Any],
+    *,
+    device_port: str,
+    baud: int,
+    capture_mode: str = "serial_device",
+) -> dict[str, Any]:
+    replayed = capture_mode != "serial_device"
+    checksum_valid = parsed["checksum_valid"] is True
     return {
         "captured_at": datetime.now(timezone.utc).isoformat(),
         "source": "pi_gnss_nmea_smoke",
         "hardware_kind": "serial_gnss_nmea",
         "device_port": device_port,
         "baud": baud,
+        "capture_mode": capture_mode,
         "sentence_type": parsed["sentence_type"],
         "gnss_time_utc": parsed.get("gnss_time_utc"),
         "position": parsed.get("position"),
         "fix_quality": parsed.get("fix_quality"),
+        "satellite_signal": parsed.get("satellite_signal"),
         "raw_sentence": parsed["raw_sentence"],
         "checksum_valid": parsed["checksum_valid"],
-        "primary_truth_allowed": True,
-        "primary_truth_scope": "raw_gnss_observation_only",
+        "primary_truth_allowed": not replayed and checksum_valid,
+        "primary_truth_scope": (
+            "diagnostic_replayed_nmea_only"
+            if replayed
+            else "raw_gnss_observation_only"
+            if checksum_valid
+            else "invalid_gnss_checksum_diagnostic_only"
+        ),
         "phase1_safety_decision_change_allowed": False,
         "remote_outbound_allowed": False,
         "hardware_control_scope": "diagnostic_capture_only",
@@ -98,13 +116,182 @@ def build_gnss_stream_status_payload(*, state: str, device_port: str, baud: int)
     }
 
 
-def parse_raw_nmea(raw_nmea: str, *, device_port: str, baud: int) -> list[dict[str, Any]]:
+def parse_raw_nmea(
+    raw_nmea: str,
+    *,
+    device_port: str,
+    baud: int,
+    capture_mode: str = "serial_device",
+) -> list[dict[str, Any]]:
     payloads: list[dict[str, Any]] = []
     for line in raw_nmea.splitlines():
         parsed = parse_nmea_sentence(line)
         if parsed is not None:
-            payloads.append(build_gnss_payload(parsed, device_port=device_port, baud=baud))
+            payloads.append(
+                build_gnss_payload(
+                    parsed,
+                    device_port=device_port,
+                    baud=baud,
+                    capture_mode=capture_mode,
+                )
+            )
     return payloads
+
+
+def summarize_gnss_signal(payloads: list[dict[str, Any]]) -> dict[str, Any]:
+    gsv_payloads = [
+        payload
+        for payload in payloads
+        if isinstance(payload.get("satellite_signal"), dict)
+    ]
+    satellites: list[dict[str, Any]] = []
+    reported_visible_values: list[int] = []
+    talker_counts: dict[str, int] = {}
+    talker_signal_summary: dict[str, dict[str, Any]] = {}
+    for payload in gsv_payloads:
+        signal = payload["satellite_signal"]
+        talker = str(signal.get("talker") or "")
+        if talker:
+            talker_counts[talker] = talker_counts.get(talker, 0) + 1
+            bucket = talker_signal_summary.setdefault(
+                talker,
+                {
+                    "gsv_sentence_count": 0,
+                    "reported_visible_satellites": None,
+                    "parsed_satellites": 0,
+                    "nonzero_cno_count": 0,
+                    "max_cno_dbhz": None,
+                },
+            )
+            bucket["gsv_sentence_count"] += 1
+            bucket["parsed_satellites"] += int(signal.get("parsed_satellites") or 0)
+            bucket["nonzero_cno_count"] += int(signal.get("nonzero_cno_count") or 0)
+            if (visible := _int_or_none(signal.get("reported_visible_satellites"))) is not None:
+                bucket["reported_visible_satellites"] = max(int(bucket["reported_visible_satellites"] or 0), visible)
+            if (max_cno := _int_or_none(signal.get("max_cno_dbhz"))) is not None:
+                bucket["max_cno_dbhz"] = max(int(bucket["max_cno_dbhz"] or 0), max_cno)
+        reported_visible = _int_or_none(signal.get("reported_visible_satellites"))
+        if reported_visible is not None:
+            reported_visible_values.append(reported_visible)
+        for satellite in signal.get("satellites") or []:
+            if isinstance(satellite, dict):
+                satellites.append(satellite)
+    for summary in talker_signal_summary.values():
+        summary["rf_signal_observed"] = int(summary.get("nonzero_cno_count") or 0) > 0
+
+    cno_values = [
+        value
+        for satellite in satellites
+        if (value := _int_or_none(satellite.get("cno_dbhz"))) is not None
+    ]
+    gps_cno_values = [
+        value
+        for satellite in satellites
+        if str(satellite.get("talker") or "") == "GP"
+        if (value := _int_or_none(satellite.get("cno_dbhz"))) is not None
+    ]
+    talkers_with_cno = _talkers_with_cno(talker_signal_summary)
+    best_talker = talkers_with_cno[0] if talkers_with_cno else None
+    return {
+        "gsv_sentence_count": len(gsv_payloads),
+        "reported_visible_satellites": max(reported_visible_values) if reported_visible_values else None,
+        "parsed_satellites": len(satellites),
+        "nonzero_cno_count": sum(1 for value in cno_values if value > 0),
+        "max_cno_dbhz": max(cno_values) if cno_values else None,
+        "gps_nonzero_cno_count": sum(1 for value in gps_cno_values if value > 0),
+        "gps_max_cno_dbhz": max(gps_cno_values) if gps_cno_values else None,
+        "talker_counts": talker_counts,
+        "talker_signal_summary": talker_signal_summary,
+        "talkers_with_cno": talkers_with_cno,
+        "best_talker": best_talker["talker"] if best_talker else None,
+        "best_talker_cno_dbhz": best_talker["max_cno_dbhz"] if best_talker else None,
+        "satellites_sample": satellites[:12],
+    }
+
+
+def _talkers_with_cno(talker_signal_summary: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
+    talkers: list[dict[str, Any]] = []
+    for talker, summary in talker_signal_summary.items():
+        if int(summary.get("nonzero_cno_count") or 0) <= 0:
+            continue
+        talkers.append(
+            {
+                "talker": talker,
+                "max_cno_dbhz": summary.get("max_cno_dbhz"),
+                "nonzero_cno_count": summary.get("nonzero_cno_count"),
+            }
+        )
+    return sorted(talkers, key=lambda item: (int(item.get("max_cno_dbhz") or 0), item["talker"]), reverse=True)
+
+
+def summarize_gnss_fix(payloads: list[dict[str, Any]]) -> dict[str, Any]:
+    sentence_type_counts: dict[str, int] = {}
+    quality_counts: dict[str, int] = {}
+    status_counts: dict[str, int] = {}
+    valid_fix_count = 0
+    checksum_valid_count = 0
+    checksum_invalid_count = 0
+    latest_valid_payload: dict[str, Any] | None = None
+
+    for payload in payloads:
+        sentence_type = str(payload.get("sentence_type") or "UNKNOWN")
+        sentence_type_counts[sentence_type] = sentence_type_counts.get(sentence_type, 0) + 1
+        if payload.get("checksum_valid") is True:
+            checksum_valid_count += 1
+        elif payload.get("checksum_valid") is False:
+            checksum_invalid_count += 1
+
+        fix_quality = payload.get("fix_quality") if isinstance(payload.get("fix_quality"), dict) else {}
+        quality_key = _summary_key(fix_quality.get("quality"))
+        status_key = _summary_key(fix_quality.get("status"))
+        quality_counts[quality_key] = quality_counts.get(quality_key, 0) + 1
+        status_counts[status_key] = status_counts.get(status_key, 0) + 1
+
+        if _payload_has_valid_fix(payload):
+            valid_fix_count += 1
+            latest_valid_payload = payload
+
+    return {
+        "payload_count": len(payloads),
+        "valid_fix_count": valid_fix_count,
+        "has_valid_fix": valid_fix_count > 0,
+        "checksum_valid_count": checksum_valid_count,
+        "checksum_invalid_count": checksum_invalid_count,
+        "sentence_type_counts": sentence_type_counts,
+        "quality_counts": quality_counts,
+        "status_counts": status_counts,
+        "latest_valid_fix": _latest_valid_fix_summary(latest_valid_payload),
+    }
+
+
+def _payload_has_valid_fix(payload: dict[str, Any]) -> bool:
+    if payload.get("checksum_valid") is False:
+        return False
+    fix_quality = payload.get("fix_quality") if isinstance(payload.get("fix_quality"), dict) else {}
+    if fix_quality.get("valid") is not True:
+        return False
+    position = payload.get("position") if isinstance(payload.get("position"), dict) else {}
+    return _float_or_none(position.get("lat")) is not None and _float_or_none(position.get("lon")) is not None
+
+
+def _latest_valid_fix_summary(payload: dict[str, Any] | None) -> dict[str, Any] | None:
+    if payload is None:
+        return None
+    fix_quality = payload.get("fix_quality") if isinstance(payload.get("fix_quality"), dict) else {}
+    position = payload.get("position") if isinstance(payload.get("position"), dict) else {}
+    return {
+        "sentence_type": payload.get("sentence_type"),
+        "gnss_time_utc": payload.get("gnss_time_utc"),
+        "position": position,
+        "quality": fix_quality.get("quality"),
+        "status": fix_quality.get("status"),
+        "satellites": fix_quality.get("satellites"),
+        "hdop": fix_quality.get("hdop"),
+    }
+
+
+def _summary_key(value: Any) -> str:
+    return "null" if value in (None, "") else str(value)
 
 
 def read_serial_nmea(
@@ -528,6 +715,56 @@ def _parse_gga(fields: list[str], raw_sentence: str) -> dict[str, Any]:
     }
 
 
+def _parse_gsv(fields: list[str], raw_sentence: str) -> dict[str, Any]:
+    talker = fields[0][:-3]
+    reported_visible = _int_or_none(fields[3]) if len(fields) > 3 else None
+    satellites = []
+    for offset in range(4, len(fields), 4):
+        if len(fields) < offset + 4:
+            break
+        svid = _int_or_none(fields[offset])
+        if svid is None:
+            continue
+        satellites.append(
+            {
+                "talker": talker,
+                "svid": svid,
+                "elevation_deg": _int_or_none(fields[offset + 1]),
+                "azimuth_deg": _int_or_none(fields[offset + 2]),
+                "cno_dbhz": _int_or_none(fields[offset + 3]),
+            }
+        )
+    cno_values = [
+        value
+        for satellite in satellites
+        if (value := _int_or_none(satellite.get("cno_dbhz"))) is not None
+    ]
+    return {
+        "sentence_type": fields[0],
+        "gnss_time_utc": None,
+        "position": {"lat": None, "lon": None, "altitude_m": None},
+        "fix_quality": {
+            "status": None,
+            "valid": False,
+            "quality": None,
+            "satellites": reported_visible,
+            "hdop": None,
+        },
+        "satellite_signal": {
+            "talker": talker,
+            "total_messages": _int_or_none(fields[1]) if len(fields) > 1 else None,
+            "message_number": _int_or_none(fields[2]) if len(fields) > 2 else None,
+            "reported_visible_satellites": reported_visible,
+            "parsed_satellites": len(satellites),
+            "nonzero_cno_count": sum(1 for value in cno_values if value > 0),
+            "max_cno_dbhz": max(cno_values) if cno_values else None,
+            "satellites": satellites,
+        },
+        "raw_sentence": raw_sentence,
+        "checksum_valid": nmea_checksum_valid(raw_sentence),
+    }
+
+
 def _parse_lat_lon(value: str, hemisphere: str) -> float | None:
     if not value or not hemisphere:
         return None
@@ -562,14 +799,14 @@ def _format_time(time_value: str) -> str:
     return f"{hours}:{minutes}:{seconds}"
 
 
-def _int_or_none(value: str) -> int | None:
+def _int_or_none(value: Any) -> int | None:
     try:
         return int(value)
     except (TypeError, ValueError):
         return None
 
 
-def _float_or_none(value: str) -> float | None:
+def _float_or_none(value: Any) -> float | None:
     try:
         return float(value)
     except (TypeError, ValueError):
@@ -629,7 +866,12 @@ def main(argv: list[str] | None = None) -> int:
         if now - last_oled_update < args.oled_update_seconds:
             return
         last_oled_update = now
-        gnss_payload = build_gnss_payload(parsed, device_port=args.port, baud=args.baud)
+        gnss_payload = build_gnss_payload(
+            parsed,
+            device_port=args.port,
+            baud=args.baud,
+            capture_mode="serial_device",
+        )
         oled_updates.append(
             write_gnss_oled_status(
                 gnss_payload=gnss_payload,
@@ -668,7 +910,15 @@ def main(argv: list[str] | None = None) -> int:
         if now - last_led_update < args.led_update_seconds:
             return
         last_led_update = now
-        update_led_from_payload(build_gnss_payload(parsed, device_port=args.port, baud=args.baud), sentence_count)
+        update_led_from_payload(
+            build_gnss_payload(
+                parsed,
+                device_port=args.port,
+                baud=args.baud,
+                capture_mode="serial_device",
+            ),
+            sentence_count,
+        )
 
     def append_visual_status(gnss_payload: dict[str, Any], sentence_count: int) -> None:
         if args.oled_status:
@@ -687,7 +937,12 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         if args.raw_nmea is not None:
-            payloads = parse_raw_nmea(args.raw_nmea, device_port=args.port, baud=args.baud)
+            payloads = parse_raw_nmea(
+                args.raw_nmea,
+                device_port=args.port,
+                baud=args.baud,
+                capture_mode="raw_nmea_argument",
+            )
             if args.oled_status or args.led_status:
                 for sentence_count, payload in enumerate(payloads, start=1):
                     append_visual_status(payload, sentence_count)
@@ -724,6 +979,7 @@ def main(argv: list[str] | None = None) -> int:
                 ),
                 device_port=args.port,
                 baud=args.baud,
+                capture_mode="serial_device",
             )
             if (args.oled_status or args.led_status) and not payloads:
                 append_visual_status(
@@ -739,11 +995,15 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     append_jsonl(payloads, args.output_jsonl)
+    gnss_fix_summary = summarize_gnss_fix(payloads)
+    gnss_signal_summary = summarize_gnss_signal(payloads)
     print(
         json.dumps(
             {
                 "sentences": payloads,
                 "sentence_count": len(payloads),
+                "gnss_fix_summary": gnss_fix_summary,
+                "gnss_signal_summary": gnss_signal_summary,
                 "oled_status_updates": oled_updates,
                 "led_status_updates": led_updates,
             },

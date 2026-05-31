@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Scout Agent And CLI Admin Guide</title>
+  <style>
+    :root {
+      --ink: #17211d;
+      --muted: #57665f;
+      --line: #d8e1dc;
+      --bg: #f7faf8;
+      --panel: #ffffff;
+      --soft: #edf4f1;
+      --green: #176b4d;
+      --blue: #245e8f;
+      --amber: #9a5d0d;
+      --shadow: 0 16px 40px rgba(23, 33, 29, 0.08);
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.7;
+    }
+    a { color: var(--blue); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    code {
+      border: 1px solid #d5dfda;
+      border-radius: 5px;
+      background: #eef3f0;
+      padding: 1px 5px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      font-size: 0.92em;
+    }
+    pre {
+      overflow-x: auto;
+      border: 1px solid #cbd8d1;
+      border-radius: 8px;
+      background: #102019;
+      color: #edf6f1;
+      padding: 15px;
+      line-height: 1.55;
+      font-size: 13px;
+    }
+    pre code { border: 0; background: transparent; color: inherit; padding: 0; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th, td { border-bottom: 1px solid var(--line); padding: 10px 11px; text-align: left; vertical-align: top; }
+    th { background: var(--soft); }
+    .layout { display: grid; grid-template-columns: 280px minmax(0, 1fr); min-height: 100vh; }
+    aside {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+      border-right: 1px solid var(--line);
+      background: #fbfcfb;
+      padding: 28px 22px;
+    }
+    .brand span { color: var(--green); font-size: 12px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; }
+    .brand strong { display: block; margin-top: 6px; font-size: 22px; line-height: 1.2; }
+    .brand small { display: block; margin-top: 8px; color: var(--muted); font-size: 13px; }
+    nav ul { display: grid; gap: 4px; margin: 24px 0 0; padding: 0; list-style: none; }
+    nav a { display: block; border-radius: 6px; color: #314139; padding: 8px 9px; font-size: 14px; }
+    nav a:hover { background: var(--soft); text-decoration: none; }
+    .hero {
+      border-bottom: 1px solid var(--line);
+      background: linear-gradient(135deg, #dceee7, #e2eef8);
+      padding: 56px 7vw 44px;
+    }
+    .hero h1 { max-width: 980px; margin: 0; font-size: clamp(34px, 5vw, 60px); line-height: 1.06; letter-spacing: 0; }
+    .hero p { max-width: 880px; margin: 18px 0 0; color: #314139; font-size: 18px; }
+    .badges { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 24px; }
+    .badge { border: 1px solid rgba(23, 107, 77, 0.28); border-radius: 999px; background: rgba(255,255,255,0.78); padding: 5px 12px; font-size: 13px; font-weight: 750; }
+    .content { max-width: 1120px; margin: 0 auto; padding: 38px 7vw 72px; }
+    section { margin-top: 40px; }
+    h2 { margin: 0 0 14px; font-size: 27px; line-height: 1.25; letter-spacing: 0; }
+    h3 { margin: 28px 0 10px; font-size: 19px; line-height: 1.35; letter-spacing: 0; }
+    p { margin: 0 0 14px; }
+    ul, ol { margin: 0 0 16px; padding-left: 24px; }
+    .panel { border: 1px solid var(--line); border-radius: 8px; background: var(--panel); box-shadow: var(--shadow); padding: 18px; }
+    .notice { border: 1px solid #e4cfae; border-left: 5px solid var(--amber); border-radius: 8px; background: #f8ecd8; padding: 16px 18px; color: #4d3516; }
+    .cards { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 14px; margin-top: 16px; }
+    .card { border: 1px solid var(--line); border-radius: 8px; background: #fff; padding: 16px; min-height: 132px; }
+    .card span { color: var(--muted); font-size: 12px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; }
+    .card strong { display: block; margin-top: 8px; font-size: 18px; }
+    .card p { margin-top: 8px; color: var(--muted); font-size: 14px; }
+    .flow { width: 100%; height: auto; display: block; }
+    .svg-title { font: 750 14px ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #1d2b25; }
+    .svg-note { font: 12px ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #52635b; }
+    .footer { margin-top: 48px; border-top: 1px solid var(--line); padding-top: 22px; color: var(--muted); font-size: 13px; }
+    @media (max-width: 940px) {
+      .layout { grid-template-columns: 1fr; }
+      aside { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--line); }
+      nav ul { grid-template-columns: repeat(2, minmax(0,1fr)); }
+      .cards { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 560px) {
+      .hero, .content { padding-left: 20px; padding-right: 20px; }
+      nav ul { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <aside>
+      <div class="brand">
+        <span>Scout Admin</span>
+        <strong>Agent And CLI Guide</strong>
+        <small>Advanced user / administrator<br>2026-05-28</small>
+      </div>
+      <nav>
+        <ul>
+          <li><a href="#summary">Summary</a></li>
+          <li><a href="#ui">UI</a></li>
+          <li><a href="#map">Interface Map</a></li>
+          <li><a href="#tools">Tool Inventory</a></li>
+          <li><a href="#commands">Core Commands</a></li>
+          <li><a href="#checks">Operational Checks</a></li>
+          <li><a href="#failures">Failures</a></li>
+        </ul>
+      </nav>
+    </aside>
+
+    <main>
+      <header class="hero">
+        <h1>Scout Agent And CLI Admin Guide</h1>
+        <p>Scout Agent/CLI is the local tool layer that lets operators and Pydantic AI call deterministic Scout resources: evidence search, pretrip workspace tools, CP review, risk diagnostics, voice/outbound mock queues, SBM tools, runtime export checks, and mock-only SOS playbooks.</p>
+        <div class="badges">
+          <span class="badge">44 registered tools</span>
+          <span class="badge">local evidence</span>
+          <span class="badge">workspace/package actions</span>
+          <span class="badge">no live safety mutation</span>
+        </div>
+      </header>
+
+      <div class="content">
+        <section id="summary">
+          <h2>Executive Summary</h2>
+          <p>Scout Agent is not just a chat layer. It is a local resource runner that calls registered Scout tools against the current trip package, map evidence, pretrip workspace, hardware readiness evidence, voice/outbound mock queues, runtime export bundles, and debug traces.</p>
+          <div class="notice"><strong>Boundary:</strong> model output does not become runtime truth. Deterministic tools perform reads and writes, and every agent-callable action should return structured JSON and boundary metadata.</div>
+          <div class="cards">
+            <div class="card"><span>Primary CLI</span><strong><code>python -m scout_cli</code></strong><p>Main operator-facing command facade.</p></div>
+            <div class="card"><span>Tool runner</span><strong><code>python -m scout_agent_cli tools</code></strong><p>List, describe, and run registered tools.</p></div>
+            <div class="card"><span>UI audit</span><strong><code>/admin/debug</code></strong><p>Read-only monitoring for action traces and debug projections.</p></div>
+          </div>
+        </section>
+
+        <section id="ui">
+          <h2>UI Operation</h2>
+          <h3><code>/admin/debug</code></h3>
+          <p>Use this as the monitoring surface. The Monitoring Center and timeline show latest agent tool action traces, spatial imprint events, voice/outbound mock events, release/readiness gate traces, and boundary flags.</p>
+          <h3><code>/admin/pretrip</code></h3>
+          <p>Use this as the human review and workspace surface. Agent/CLI actions produce artifacts that appear here: imported route workspaces, layer manifests, CP proposals, risk diagnostics, reviewed-candidate addenda, and runtime handoff/export files.</p>
+          <h3><code>/admin/hardware-readiness</code></h3>
+          <p>Hardware readiness is available to agent tools as read-only evidence. Current alpha tools summarize readiness but do not control hardware providers.</p>
+        </section>
+
+        <section id="map">
+          <h2>Interface Map</h2>
+          <div class="panel">
+            <svg class="flow" viewBox="0 0 940 270" role="img" aria-label="Scout Agent CLI interface map">
+              <defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L9,3 z" fill="#66766e"></path></marker></defs>
+              <rect x="22" y="96" width="150" height="66" rx="8" fill="#e2eef8" stroke="#9fbed9"></rect>
+              <text x="97" y="124" text-anchor="middle" class="svg-title">Operator / AI</text>
+              <text x="97" y="145" text-anchor="middle" class="svg-note">intent + request</text>
+              <rect x="222" y="96" width="150" height="66" rx="8" fill="#dceee7" stroke="#a8d1bd"></rect>
+              <text x="297" y="124" text-anchor="middle" class="svg-title">scout_cli</text>
+              <text x="297" y="145" text-anchor="middle" class="svg-note">facade</text>
+              <rect x="422" y="96" width="150" height="66" rx="8" fill="#eef3f0" stroke="#b8c9c1"></rect>
+              <text x="497" y="124" text-anchor="middle" class="svg-title">Tool manifest</text>
+              <text x="497" y="145" text-anchor="middle" class="svg-note">allowlist + mode</text>
+              <rect x="622" y="96" width="150" height="66" rx="8" fill="#fff7e8" stroke="#e0c08d"></rect>
+              <text x="697" y="124" text-anchor="middle" class="svg-title">Deterministic tool</text>
+              <text x="697" y="145" text-anchor="middle" class="svg-note">read/write artifact</text>
+              <rect x="786" y="28" width="130" height="58" rx="8" fill="#e2eef8" stroke="#9fbed9"></rect>
+              <text x="851" y="62" text-anchor="middle" class="svg-title">/admin/debug</text>
+              <rect x="786" y="172" width="130" height="58" rx="8" fill="#dceee7" stroke="#a8d1bd"></rect>
+              <text x="851" y="206" text-anchor="middle" class="svg-title">/admin/pretrip</text>
+              <path d="M172 129 H222" stroke="#66766e" stroke-width="2" marker-end="url(#arrow)"></path>
+              <path d="M372 129 H422" stroke="#66766e" stroke-width="2" marker-end="url(#arrow)"></path>
+              <path d="M572 129 H622" stroke="#66766e" stroke-width="2" marker-end="url(#arrow)"></path>
+              <path d="M772 118 C810 100 820 82 786 63" stroke="#66766e" stroke-width="2" fill="none" marker-end="url(#arrow)"></path>
+              <path d="M772 142 C810 160 820 182 786 199" stroke="#66766e" stroke-width="2" fill="none" marker-end="url(#arrow)"></path>
+            </svg>
+          </div>
+        </section>
+
+        <section id="tools">
+          <h2>Registered Tool Inventory</h2>
+          <p>Current manifest count: 44.</p>
+          <div class="panel">
+            <table>
+              <thead><tr><th>Group</th><th>Tool IDs</th><th>Primary use</th></tr></thead>
+              <tbody>
+                <tr><td>checks</td><td><code>scout.checks.pretrip_release</code>, <code>scout.checks.runtime_readiness</code></td><td>Release/readiness reports</td></tr>
+                <tr><td>kb</td><td><code>scout.kb.build</code>, <code>scout.kb.query</code>, <code>scout.kb.pretrip_view_summary</code>, <code>scout.kb.hardware_readiness_summary</code></td><td>Offline evidence index and summaries</td></tr>
+                <tr><td>pretrip</td><td><code>import_gpx</code>, <code>prepare_layers</code>, <code>review_append_decisions</code>, <code>runtime_handoff</code>, <code>runtime_export</code></td><td>Workspace, review, package handoff</td></tr>
+                <tr><td>cp/risk/map</td><td><code>scout.cp.*</code>, <code>scout.risk.*</code>, <code>scout.map.*</code></td><td>Candidate CP, route risk, local map artifacts</td></tr>
+                <tr><td>imprint</td><td><code>scout.imprint.export_pretrip</code>, <code>store_list</code>, <code>plant</code>, <code>expire</code>, <code>delete</code>, <code>trigger_dry_run</code></td><td>SBM / Spatial Imprint management</td></tr>
+                <tr><td>voice/outbound</td><td><code>scout.voice.*</code>, <code>scout.outbound.*</code></td><td>Preview and mock receipts only</td></tr>
+                <tr><td>runtime/safety/sos</td><td><code>scout.runtime.*</code>, <code>scout.safety_action.shelter_direction</code>, <code>scout.sos.playbook_run</code></td><td>Dry-run/preflight, advisory direction, mock-only SOS</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="commands">
+          <h2>Core Commands</h2>
+          <h3>List and describe tools</h3>
+          <pre><code>cd /Users/alexwang0315/scout-fusion
+PYTHONPATH=. venv/bin/python -m scout_cli tools list --json
+PYTHONPATH=. venv/bin/python -m scout_cli tools describe scout.kb.query --json</code></pre>
+
+          <h3>Build and query local evidence</h3>
+          <pre><code>PYTHONPATH=. venv/bin/python -m scout_cli kb build \
+  --project-root /tmp/scout-pretrip-alpha/chilai_nanhua_day1 \
+  --out /tmp/scout-pretrip-alpha/chilai_nanhua_day1/outputs/local_evidence_index.json \
+  --authorized-by operator.alex \
+  --json
+
+PYTHONPATH=. venv/bin/python -m scout_cli kb query \
+  --project-root /tmp/scout-pretrip-alpha/chilai_nanhua_day1 \
+  --query "附近有可休息或避雨的位置嗎" \
+  --limit 5 \
+  --json</code></pre>
+
+          <h3>Pretrip import and layer preparation</h3>
+          <pre><code>PYTHONPATH=. venv/bin/python -m scout_cli pretrip import-gpx \
+  --project-id chilai_nanhua_day1 \
+  --golden-route-gpx /data/scout/routes/chilai_nanhua_day1.gpx \
+  --workspace-root /data/scout/pretrip \
+  --authorized-by operator.alex \
+  --json
+
+PYTHONPATH=. venv/bin/python -m scout_cli pretrip prepare-layers \
+  --project-root /data/scout/pretrip/chilai_nanhua_day1 \
+  --layers osm,terrain,risk-score,risk-ribbon \
+  --authorized-by operator.alex \
+  --json</code></pre>
+
+          <h3>Flight recorder, voice, and advisory direction</h3>
+          <pre><code>PYTHONPATH=. venv/bin/python -m scout_cli note append-flight-recorder \
+  --debug-log-path /data/scout/runtime/runtime-debug.jsonl \
+  --note-kind operator_decision \
+  --source operator \
+  --text "領隊決定把休息點提前到下一個開闊地。" \
+  --authorized-by leader.alex \
+  --json
+
+PYTHONPATH=. venv/bin/python -m scout_cli voice preview \
+  --text "前方路徑不明顯，請停下確認隊伍位置。" \
+  --out /tmp/scout-voice-preview.wav \
+  --json
+
+PYTHONPATH=. venv/bin/python -m scout_cli safety-action shelter-direction \
+  --project-root /data/scout/pretrip/chilai_nanhua_day1 \
+  --lat 24.0301 \
+  --lon 121.2842 \
+  --query "天候變差，找可暫避位置" \
+  --ttl-seconds 900 \
+  --json</code></pre>
+        </section>
+
+        <section id="checks">
+          <h2>Operational Checks</h2>
+          <ol>
+            <li>Confirm the tool id and authority mode are expected.</li>
+            <li>Use <code>--dry-run</code> first where supported.</li>
+            <li>Use <code>--trace-log</code> for operator-triggered alpha flows.</li>
+            <li>Open <code>/admin/debug</code> and confirm the latest action trace.</li>
+            <li>Confirm boundary flags: <code>runtime_safety_truth=false</code>, <code>phase1_safety_mutation_allowed=false</code>, <code>live_safety_api_calls_allowed=false</code>.</li>
+          </ol>
+        </section>
+
+        <section id="failures">
+          <h2>Failure Handling</h2>
+          <div class="panel">
+            <table>
+              <thead><tr><th>Symptom</th><th>Likely cause</th><th>Operator action</th></tr></thead>
+              <tbody>
+                <tr><td>exit code 2</td><td>Missing artifact, validation failure, missing authorization</td><td>Inspect JSON error and fix input path or approval</td></tr>
+                <tr><td>No event in debug UI</td><td>Missing trace log or debug path mismatch</td><td>Rerun with trace log or configure debug path</td></tr>
+                <tr><td>Workspace output not visible</td><td>Wrong project/workspace root</td><td>Confirm <code>project.json</code> and root path</td></tr>
+                <tr><td>SOS only produced mock receipts</td><td>Expected current alpha behavior</td><td>Real SOS remains outside this guide</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <div class="footer">
+          <p>Markdown source: <code>docs/admin/scout-agent-cli-admin-guide.md</code>.</p>
+        </div>
+      </div>
+    </main>
+  </div>
+</body>
+</html>

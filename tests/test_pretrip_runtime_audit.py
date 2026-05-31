@@ -59,12 +59,12 @@ def test_runtime_audit_manifest_declares_expected_comparison_axes_only():
         RuntimeAuditAxis.READINESS_VALIDATION,
     ]
     assert axes[RuntimeAuditAxis.CHECKPOINT_ETA].planned_item_count == 4
-    assert axes[RuntimeAuditAxis.ROUTE_PROGRESS_CORRIDOR].planned_item_count == 2211
+    assert axes[RuntimeAuditAxis.ROUTE_PROGRESS_CORRIDOR].planned_item_count == 6909
     assert axes[RuntimeAuditAxis.RETREAT_DECISION].planned_item_count == 1
-    assert axes[RuntimeAuditAxis.SEGMENT_POLICY].planned_item_count == 10
+    assert axes[RuntimeAuditAxis.SEGMENT_POLICY].planned_item_count == 109
     assert axes[RuntimeAuditAxis.WEATHER_DAYLIGHT].planned_item_count == 1
     assert axes[RuntimeAuditAxis.RESOURCE_REMOTE_SUMMARY].planned_item_count == 9
-    assert axes[RuntimeAuditAxis.BRAIN_SEED_RUN_RECORDS].planned_item_count == 102
+    assert axes[RuntimeAuditAxis.BRAIN_SEED_RUN_RECORDS].planned_item_count == 300
     assert axes[RuntimeAuditAxis.READINESS_VALIDATION].planned_item_count == 6
 
     for axis in manifest.axes:

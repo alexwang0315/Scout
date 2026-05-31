@@ -7,12 +7,19 @@ from checkpoint_manager import CheckpointArrival, CheckpointManager
 from go_no_go import GoNoGoEvaluation, GoNoGoEvaluator, MissionContext
 from incident_package import IncidentPackageBuilder
 from incident_store import IncidentStore
+from ins_dr_input_adapter import (
+    InsDrInputState,
+    dead_reckoning_delta_from_route_point,
+    gnss_fix_from_route_point,
+    position_estimate_from_ins_dr,
+)
+from ins_dr_navigation import ScoutInsDrNavigator
 from mission_graph import MissionGraphRuntime, load_mission_graph
 from mission_progress import MissionProgressTracker, MissionProgressUpdate
 from mission_models import SegmentCapsule
 from offline_map import OfflineMapContext, load_offline_map_context
 from offline_map_models import CorridorEvidence
-from pdr_fallback import PdrFallbackEstimator, PositionEstimate
+from pdr_fallback import PositionEstimate
 from provider_context import (
     MissionProviderBundle,
     load_fixture_provider_bundle,
@@ -22,7 +29,13 @@ from provider_context import (
 from recording_policy_runtime import RecordingPolicyDecision, RecordingPolicyRuntime
 from risk_rules import RiskRuleEvaluator, load_risk_rules
 from route_matching import GpxRoute, RoutePoint, load_gpx_route
-from route_progress import RouteProgressConfig, RouteProgressEvaluator, RouteProgressSample, load_route_progress_config
+from route_progress import (
+    DEAD_RECKONING_ESTIMATE_SOURCES,
+    RouteProgressConfig,
+    RouteProgressEvaluator,
+    RouteProgressSample,
+    load_route_progress_config,
+)
 from runtime_artifact_resolution import resolve_runtime_route_source
 from safety_models import IncidentPackage, Observation, SafetyEvent, SafetyState
 from safety_state_machine import SafetyStateMachine
@@ -65,7 +78,8 @@ def replay_route(
         route_progress_config = load_route_progress_config(route_progress_config_path)
     go_no_go_evaluator = GoNoGoEvaluator()
     incident_store = IncidentStore(incident_store_path) if incident_store_path is not None else None
-    pdr_fallback = PdrFallbackEstimator(planned_route)
+    ins_dr_navigator = ScoutInsDrNavigator(planned_route)
+    ins_dr_input_state = InsDrInputState()
     recording_policy_runtime = RecordingPolicyRuntime(runtime)
     checkpoint_manager = CheckpointManager(runtime)
     progress_tracker = MissionProgressTracker(runtime)
@@ -86,11 +100,20 @@ def replay_route(
     matched_route_index: int | None = None
     go_no_go_evaluated = False
     for index, point in enumerate(route.points):
-        position_estimate = pdr_fallback.estimate(
-            timestamp=float(index),
-            point=point,
-            previous_route_index=matched_route_index,
+        ins_dr_estimate = ins_dr_navigator.observe(
+            gnss_fix=gnss_fix_from_route_point(
+                timestamp_s=float(index),
+                point=point,
+                raw_evidence_ref=f"{route_path}:{index}",
+            ),
+            dr_delta=dead_reckoning_delta_from_route_point(
+                timestamp_s=float(index),
+                point=point,
+                state=ins_dr_input_state,
+                raw_evidence_ref=f"{route_path}:{index}:pdr",
+            ),
         )
+        position_estimate = position_estimate_from_ins_dr(ins_dr_estimate)
         matched_route_index = position_estimate.route_index
         progress_sample = _route_progress_sample(
             timestamp=float(index),
@@ -116,6 +139,10 @@ def replay_route(
                     "confidence": position_estimate.confidence,
                     "pdr_delta_m": position_estimate.pdr_delta_m,
                     "gps_reanchor_correction_m": position_estimate.gps_reanchor_correction_m,
+                    "primary_truth_source": ins_dr_estimate.primary_truth_source,
+                    "degraded": ins_dr_estimate.degraded,
+                    "degradation_reasons": list(ins_dr_estimate.degradation_reasons),
+                    "raw_evidence_refs": list(ins_dr_estimate.raw_evidence_refs),
                 },
                 "map_evidence": {
                     "corridor": {
@@ -422,7 +449,7 @@ def _corridor_evidence(
     if offline_map_context is None:
         return None
 
-    if position_estimate.source == "pdr_fallback":
+    if position_estimate.source in DEAD_RECKONING_ESTIMATE_SOURCES:
         estimate_point = planned_route.points[position_estimate.route_index]
         return offline_map_context.corridor_evidence(estimate_point.lat, estimate_point.lon)
 
@@ -444,7 +471,7 @@ def _hazard_evidence(
     if offline_map_context is None:
         return None
 
-    if position_estimate.source == "pdr_fallback":
+    if position_estimate.source in DEAD_RECKONING_ESTIMATE_SOURCES:
         estimate_point = planned_route.points[position_estimate.route_index]
         hazards = offline_map_context.hazards_at(estimate_point.lat, estimate_point.lon)
     else:

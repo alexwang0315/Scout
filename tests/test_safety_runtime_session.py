@@ -2,6 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from ins_dr_navigation import route_heading_deg
 from observation_adapter import sensorlog_record_to_observation
 from route_matching import RoutePoint, load_gpx_route
 from safety_models import Observation, SafetyEventType
@@ -52,9 +53,86 @@ class SafetyRuntimeSessionTests(unittest.TestCase):
         self.assertIsNotNone(update.route_progress_sample)
         self.assertEqual(update.safety_state.level, "L0_NORMAL")
         self.assertEqual(update.safety_events, [])
-        self.assertEqual(update.observation.raw["position_estimate"]["source"], "gps")
+        self.assertEqual(update.observation.raw["position_estimate"]["source"], "gnss")
+        self.assertEqual(update.observation.raw["position_estimate"]["primary_truth_source"], "raw_gnss")
         self.assertEqual(update.observation.raw["map_evidence"]["corridor"]["inside"], True)
         self.assertEqual(update.observation.raw["capabilities"]["wifi_rssi"]["status"], "unavailable_by_platform")
+
+    def test_dr_only_sensorlog_observation_continues_after_gnss_anchor(self):
+        route = load_gpx_route(ROUTE_PATH)
+        anchor = route.points[100]
+        session = SafetyRuntimeSession(MISSION_PATH)
+        anchor_update = session.observe(
+            sensorlog_record_to_observation(
+                {
+                    "loggingTime": "2026-05-11T08:52:12.450+08:00",
+                    "locationLatitude": str(anchor.lat),
+                    "locationLongitude": str(anchor.lon),
+                    "locationHorizontalAccuracy": "6.0",
+                    "pedometerDistance": "100.0",
+                }
+            )
+        )
+        dr_only = sensorlog_record_to_observation(
+            {
+                "loggingTime": "2026-05-11T08:52:22.450+08:00",
+                "pedometerDistance": "128.0",
+            }
+        )
+
+        update = session.observe(dr_only)
+
+        self.assertIsNotNone(anchor_update.route_progress_sample)
+        self.assertIsNotNone(update.route_progress_sample)
+        self.assertIsNone(update.observation.lat)
+        self.assertIsNone(update.observation.lon)
+        self.assertEqual(update.observation.raw["position_estimate"]["source"], "dead_reckoning")
+        self.assertEqual(update.observation.raw["position_estimate"]["primary_truth_source"], "raw_gnss+dead_reckoning")
+        self.assertEqual(update.observation.raw["position_estimate"]["pdr_delta_m"], 28.0)
+        assert update.route_progress_sample is not None
+        assert anchor_update.route_progress_sample is not None
+        self.assertGreater(update.route_progress_sample.progress_m, anchor_update.route_progress_sample.progress_m)
+        self.assertTrue(update.observation.raw["map_evidence"]["corridor"]["inside"])
+
+    def test_dr_only_odometry_observation_continues_after_gnss_anchor(self):
+        route = load_gpx_route(ROUTE_PATH)
+        anchor = route.points[100]
+        heading = route_heading_deg(route, anchor.progress_m)
+        session = SafetyRuntimeSession(MISSION_PATH)
+        anchor_update = session.observe(
+            Observation(
+                timestamp=10.0,
+                source="pi_gnss_nmea_smoke",
+                lat=anchor.lat,
+                lon=anchor.lon,
+                gps_horizontal_accuracy_m=6.0,
+                raw={"sentence_type": "GPGGA"},
+            )
+        )
+        dr_only = Observation(
+            timestamp=11.0,
+            source="wheel_odometry",
+            raw={
+                "odometry": {
+                    "distance_delta_m": 3.0,
+                    "heading_deg": heading,
+                }
+            },
+        )
+
+        update = session.observe(dr_only)
+
+        self.assertIsNotNone(anchor_update.route_progress_sample)
+        self.assertIsNotNone(update.route_progress_sample)
+        self.assertIsNone(update.observation.lat)
+        self.assertIsNone(update.observation.lon)
+        position_estimate = update.observation.raw["position_estimate"]
+        self.assertEqual(position_estimate["source"], "dead_reckoning")
+        self.assertEqual(position_estimate["primary_truth_source"], "raw_gnss+dead_reckoning")
+        self.assertEqual(position_estimate["pdr_delta_m"], 3.0)
+        assert update.route_progress_sample is not None
+        assert anchor_update.route_progress_sample is not None
+        self.assertGreater(update.route_progress_sample.progress_m, anchor_update.route_progress_sample.progress_m)
 
     def test_provider_context_flows_into_live_go_no_go(self):
         point = load_gpx_route(ROUTE_PATH).points[0]

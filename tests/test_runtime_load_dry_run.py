@@ -46,8 +46,8 @@ def test_runtime_load_dry_run_passes_without_live_session(tmp_path):
     assert payload["route_artifact_runtime_ref"] == "route_artifacts/chilai_nanhua_day1.gpx"
     assert payload["route_point_count"] == 2
     assert payload["mission_graph_index"] == {
-        "checkpoint_count": 11,
-        "segment_count": 10,
+        "checkpoint_count": 110,
+        "segment_count": 109,
         "control_zone_count": 1,
         "recording_policy_count": 1,
         "first_checkpoint_id": "cp.start",
@@ -60,8 +60,8 @@ def test_runtime_load_dry_run_passes_without_live_session(tmp_path):
         "present_file_count": 5,
         "missing_file_count": 0,
         "route_point_count": 2,
-        "checkpoint_count": 11,
-        "segment_count": 10,
+        "checkpoint_count": 110,
+        "segment_count": 109,
         "control_zone_count": 1,
         "recording_policy_count": 1,
         "duplicate_id_count": 0,

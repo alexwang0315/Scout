@@ -164,6 +164,12 @@ class SpatialImprintPredicate(SpatialImprintBaseModel):
             _require(self.client_group_ref is not None, "client_group_match requires client_group_ref")
         elif self.type in {"all", "any"}:
             _require(bool(self.predicates), f"{self.type} requires predicates")
+            for index, predicate in enumerate(self.predicates):
+                _require(isinstance(predicate, dict), f"{self.type} predicate {index} must be an object")
+                try:
+                    SpatialImprintPredicate.model_validate(predicate)
+                except ValueError as exc:
+                    raise ValueError(f"{self.type} predicate {index} invalid: {exc}") from exc
         return self
 
     @field_validator("starts_at", "ends_at")

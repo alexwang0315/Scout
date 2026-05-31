@@ -65,10 +65,8 @@ def classify_vendor_fusion_stream(data: bytes) -> dict[str, Any]:
 def read_serial_bytes(*, port: str, baud: int, duration_seconds: float) -> bytes:
     try:
         import serial  # type: ignore
-    except ImportError as exc:  # pragma: no cover - depends on Pi environment.
-        raise RuntimeError(
-            "pyserial is required for live IMU/GNSS serial smoke: python3 -m pip install pyserial"
-        ) from exc
+    except ImportError:
+        return _read_serial_bytes_stdlib(port=port, baud=baud, duration_seconds=duration_seconds)
 
     chunks: list[bytes] = []
     deadline = time.monotonic() + duration_seconds
@@ -78,6 +76,50 @@ def read_serial_bytes(*, port: str, baud: int, duration_seconds: float) -> bytes
             if chunk:
                 chunks.append(chunk)
     return b"".join(chunks)
+
+
+def _read_serial_bytes_stdlib(*, port: str, baud: int, duration_seconds: float) -> bytes:
+    import os
+    import select
+    import termios
+
+    baud_constant = _termios_baud_constant(baud)
+    chunks: list[bytes] = []
+    deadline = time.monotonic() + duration_seconds
+    fd = os.open(port, os.O_RDWR | os.O_NOCTTY | os.O_NONBLOCK)
+    try:
+        attrs = termios.tcgetattr(fd)
+        attrs[0] = termios.IGNPAR
+        attrs[1] = 0
+        attrs[2] = baud_constant | termios.CS8 | termios.CLOCAL | termios.CREAD
+        attrs[3] = 0
+        attrs[4] = baud_constant
+        attrs[5] = baud_constant
+        attrs[6][termios.VMIN] = 0
+        attrs[6][termios.VTIME] = 1
+        termios.tcsetattr(fd, termios.TCSANOW, attrs)
+        termios.tcflush(fd, termios.TCIOFLUSH)
+
+        while time.monotonic() < deadline:
+            timeout = max(0.0, min(0.1, deadline - time.monotonic()))
+            readable, _, _ = select.select([fd], [], [], timeout)
+            if not readable:
+                continue
+            chunk = os.read(fd, 512)
+            if chunk:
+                chunks.append(chunk)
+        return b"".join(chunks)
+    finally:
+        os.close(fd)
+
+
+def _termios_baud_constant(baud: int) -> int:
+    import termios
+
+    constant_name = f"B{baud}"
+    if not hasattr(termios, constant_name):
+        raise RuntimeError(f"unsupported serial baud rate for stdlib fallback: {baud}")
+    return getattr(termios, constant_name)
 
 
 def append_jsonl(payload: dict[str, Any], output_path: Path | None) -> None:

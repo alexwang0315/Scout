@@ -63,10 +63,10 @@
       "candidate_id": "plan_validation.chilai_nanhua_day1.segment_policy.human_review_required",
       "candidate_only": true,
       "evidence_summary": {
-        "candidate_count": 10,
-        "candidate_only_count": 10,
+        "candidate_count": 109,
+        "candidate_only_count": 109,
         "compile_boundary": "candidate_only_not_runtime",
-        "human_review_required_count": 10
+        "human_review_required_count": 109
       },
       "hard_readiness_mutation_allowed": false,
       "message": "Segment policy candidates require human review before compile-time use.",
@@ -82,8 +82,8 @@
       "candidate_id": "plan_validation.chilai_nanhua_day1.segment_policy.daylight_review",
       "candidate_only": true,
       "evidence_summary": {
-        "candidate_count": 10,
-        "requires_daylight_count": 10,
+        "candidate_count": 109,
+        "requires_daylight_count": 109,
         "retreat_available_count": 2,
         "signal_expected_count": 1
       },

@@ -504,6 +504,18 @@ Only after Pi 5 + Docker runtime is stable:
 
 中文註釋：Jetson、Coral、衛星、event bus 都應該由量測或明確需求推動，不要成為第一步。
 
+LoRa / LoRaWAN / SX1303 gateway planning has been promoted to a dedicated
+mainline communication and search-and-rescue evidence spec:
+
+```text
+docs/specs/scout-lora-lorawan-sx1303-plan.md
+```
+
+This does not change Step 1. The LoRa track starts with read-only diagnostics,
+Taiwan frequency-plan validation, gateway packet evidence, and OLED/LED
+operator feedback. It remains outside live `/safety/*` mutation until a
+separate provider contract and replayable fixture path are implemented.
+
 ## Open Questions
 
 - Is Pi 5 + phone bridge enough for the first field trial, or is a separate
@@ -708,6 +720,9 @@ prep pass.
 
 Deliverables:
 
+- stabilize host-side radio scan provider evidence;
+- separate read-only provider slice;
+- stabilize Phase 4 dirty worktree groups;
 - radio scan evidence remains host-side and read-only;
 - radio scan evidence does not call `/safety/observations`;
 - radio scan evidence does not write IncidentStore, ObservedFact, or Phase 2

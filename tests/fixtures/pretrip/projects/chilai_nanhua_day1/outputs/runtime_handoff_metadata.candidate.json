@@ -54,12 +54,12 @@
       "exists": true,
       "ref": "outputs/pretrip_package.reviewed.json",
       "ref_key": "reviewed_package_ref",
-      "sha256": "2f3e8d3784f54e58c78a57fa3ceb6b6538277bff1050c936fb8b4ae9d269b68e",
+      "sha256": "0a90965f216de5699b9c932f4dab7cd13c482b785b23fff69b3ae1ec0b958fee",
       "status": "reviewed",
       "summary": {
-        "checkpoint_candidate_count": 11,
+        "checkpoint_candidate_count": 110,
         "package_id": "pretrip.chilai_nanhua_day1.v0",
-        "segment_candidate_count": 10,
+        "segment_candidate_count": 109,
         "source_artifact_count": 2,
         "status": "reviewed",
         "version": "0.1.0"
@@ -88,7 +88,7 @@
       "exists": true,
       "ref": "outputs/plan_validation_candidates.json",
       "ref_key": "plan_validation_candidates_ref",
-      "sha256": "256de699fa6254ee9afbcfaff7e5e839b99f124f9ee81621375c5d8546f738ad",
+      "sha256": "3aa2b16f0eaf2973cb89e671f7708f147175ba81e25ec713c464e5215a89c20a",
       "status": "candidate_only",
       "summary": {
         "finding_count": 6,
@@ -102,7 +102,7 @@
       "exists": true,
       "ref": "outputs/poi_readiness_candidates.json",
       "ref_key": "poi_readiness_candidates_ref",
-      "sha256": "4a29819ee5dc15e9dff056bf9c5672ea4fae1a2db7ebc9adaf62421576e8dc16",
+      "sha256": "5a5b24dcb6b3cfe2bb668b5e10949d7940cb4e17ff2dc059e303c583bfa7b302",
       "status": "candidate_only",
       "summary": {
         "blocker_candidate_count": 0,
@@ -116,15 +116,15 @@
     "exists": true,
     "ref": "outputs/compiled_mission_graph.reviewed.json",
     "ref_key": "compiled_mission_graph_reviewed_ref",
-    "sha256": "c2b42fee4feffbf7bca18d0262cc38a07b629df83e9dc8b4ac166bdf10a3015e",
+    "sha256": "d9e32c51fad625e6ff96d6d1283dcb1540f5b5a789d68e2c2ce45549dd83d957",
     "status": null,
     "summary": {
-      "checkpoint_count": 11,
+      "checkpoint_count": 110,
       "diversion_point_count": 1,
       "mission_id": "mission.chilai_nanhua_day1.0.1.0",
-      "name": "奇萊南華-能高越嶺步道Day1",
+      "name": "2013-10-08 10:58:50 每日記錄",
       "route_source": "artifact:gpx:chilai_nanhua_day1",
-      "segment_count": 10
+      "segment_count": 109
     }
   },
   "route_refs": [
@@ -184,8 +184,8 @@
       "artifact_id": "artifact:gpx:chilai_nanhua_day1",
       "kind": "gpx",
       "media_type": "application/gpx+xml",
-      "sha256": "3c1f4843ecea5cb2fc85f92934d3d1a220738c900576e4976d4c09975673956c",
-      "size_bytes": 275392,
+      "sha256": "a270bbc769c9c521c4bb839a6230fb3760c37478c5b3ebe57f36f5d8755f6ee7",
+      "size_bytes": 1186689,
       "source_ref": "artifact:gpx:chilai_nanhua_day1"
     }
   ],
