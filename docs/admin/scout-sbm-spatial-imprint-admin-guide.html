@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Scout SBM Spatial Imprint Admin Guide</title>
+  <style>
+    :root {
+      --ink: #17211d;
+      --muted: #57665f;
+      --line: #d8e1dc;
+      --bg: #f7faf8;
+      --panel: #ffffff;
+      --soft: #edf4f1;
+      --green: #176b4d;
+      --blue: #245e8f;
+      --amber: #9a5d0d;
+      --red: #94322c;
+      --shadow: 0 16px 40px rgba(23, 33, 29, 0.08);
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body { margin: 0; background: var(--bg); color: var(--ink); font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; line-height: 1.72; }
+    a { color: var(--blue); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    code { border: 1px solid #d5dfda; border-radius: 5px; background: #eef3f0; padding: 1px 5px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; font-size: 0.92em; }
+    pre { overflow-x: auto; border: 1px solid #cbd8d1; border-radius: 8px; background: #102019; color: #edf6f1; padding: 15px; line-height: 1.55; font-size: 13px; }
+    pre code { border: 0; background: transparent; color: inherit; padding: 0; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th, td { border-bottom: 1px solid var(--line); padding: 10px 11px; text-align: left; vertical-align: top; }
+    th { background: var(--soft); }
+    .layout { display: grid; grid-template-columns: 280px minmax(0,1fr); min-height: 100vh; }
+    aside { position: sticky; top: 0; height: 100vh; overflow-y: auto; border-right: 1px solid var(--line); background: #fbfcfb; padding: 28px 22px; }
+    .brand span { color: var(--green); font-size: 12px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; }
+    .brand strong { display: block; margin-top: 6px; font-size: 22px; line-height: 1.2; }
+    .brand small { display: block; margin-top: 8px; color: var(--muted); font-size: 13px; }
+    nav ul { display: grid; gap: 4px; margin: 24px 0 0; padding: 0; list-style: none; }
+    nav a { display: block; border-radius: 6px; color: #314139; padding: 8px 9px; font-size: 14px; }
+    nav a:hover { background: var(--soft); text-decoration: none; }
+    .hero { border-bottom: 1px solid var(--line); background: linear-gradient(135deg, #dceee7, #f8ecd8); padding: 56px 7vw 44px; }
+    .hero h1 { max-width: 980px; margin: 0; font-size: clamp(34px, 5vw, 60px); line-height: 1.06; letter-spacing: 0; }
+    .hero p { max-width: 880px; margin: 18px 0 0; color: #314139; font-size: 18px; }
+    .badges { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 24px; }
+    .badge { border: 1px solid rgba(23, 107, 77, 0.28); border-radius: 999px; background: rgba(255,255,255,0.78); padding: 5px 12px; font-size: 13px; font-weight: 750; }
+    .content { max-width: 1120px; margin: 0 auto; padding: 38px 7vw 72px; }
+    section { margin-top: 40px; }
+    h2 { margin: 0 0 14px; font-size: 27px; line-height: 1.25; letter-spacing: 0; }
+    h3 { margin: 28px 0 10px; font-size: 19px; line-height: 1.35; letter-spacing: 0; }
+    p { margin: 0 0 14px; }
+    ul, ol { margin: 0 0 16px; padding-left: 24px; }
+    .panel { border: 1px solid var(--line); border-radius: 8px; background: var(--panel); box-shadow: var(--shadow); padding: 18px; }
+    .notice { border: 1px solid #e4cfae; border-left: 5px solid var(--amber); border-radius: 8px; background: #f8ecd8; padding: 16px 18px; color: #4d3516; }
+    .cards { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 14px; margin-top: 16px; }
+    .card { border: 1px solid var(--line); border-radius: 8px; background: #fff; padding: 16px; min-height: 132px; }
+    .card span { color: var(--muted); font-size: 12px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; }
+    .card strong { display: block; margin-top: 8px; font-size: 18px; }
+    .card p { margin-top: 8px; color: var(--muted); font-size: 14px; }
+    .flow { width: 100%; height: auto; display: block; }
+    .svg-title { font: 750 14px ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #1d2b25; }
+    .svg-note { font: 12px ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #52635b; }
+    .footer { margin-top: 48px; border-top: 1px solid var(--line); padding-top: 22px; color: var(--muted); font-size: 13px; }
+    @media (max-width: 940px) {
+      .layout { grid-template-columns: 1fr; }
+      aside { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--line); }
+      nav ul { grid-template-columns: repeat(2, minmax(0,1fr)); }
+      .cards { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 560px) {
+      .hero, .content { padding-left: 20px; padding-right: 20px; }
+      nav ul { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <aside>
+      <div class="brand">
+        <span>Scout Admin</span>
+        <strong>SBM Spatial Imprint</strong>
+        <small>Advanced user / administrator<br>2026-05-28</small>
+      </div>
+      <nav>
+        <ul>
+          <li><a href="#what">What SBM Does</a></li>
+          <li><a href="#lifecycle">Lifecycle</a></li>
+          <li><a href="#ui">UI</a></li>
+          <li><a href="#cli">CLI</a></li>
+          <li><a href="#plant">Plant</a></li>
+          <li><a href="#revoke">Expire / Delete</a></li>
+          <li><a href="#field">Field Effects</a></li>
+          <li><a href="#boundary">Boundary</a></li>
+        </ul>
+      </nav>
+    </aside>
+
+    <main>
+      <header class="hero">
+        <h1>Scout SBM / Spatial Imprint Admin Guide</h1>
+        <p>SBM means Spatial Based Marking. Scout's implemented name is Spatial Imprint. It plants route-aware, sensor-aware cues that can trigger for registered trip clients before a hazard, confusing turn, rest point, or risk zone.</p>
+        <div class="badges">
+          <span class="badge">location + route progress</span>
+          <span class="badge">altitude / heading</span>
+          <span class="badge">TTL / tombstone</span>
+          <span class="badge">advisory cue only</span>
+        </div>
+      </header>
+
+      <div class="content">
+        <section id="what">
+          <h2>What SBM Does</h2>
+          <p>SBM / Spatial Imprint lets Scout plant an instruction, warning, note, or coordination cue into the trip's spatial context. It can trigger from route distance, GPS radius, altitude, heading, segment/CP, risk zone, risk score, and client group.</p>
+          <div class="notice"><strong>Boundary:</strong> SBM is an awareness cue. It is not a CP, not SOS, not Phase 1 safety state, and not runtime safety truth.</div>
+          <div class="cards">
+            <div class="card"><span>Hazard</span><strong>Collapse wall warning</strong><p>Trigger a voice cue before the team reaches exposed terrain.</p></div>
+            <div class="card"><span>Navigation</span><strong>Confusing turn</strong><p>Warn stretched-out members before a non-obvious route change.</p></div>
+            <div class="card"><span>Coordination</span><strong>Temporary rest point</strong><p>Leader plants a short-lived cue during the mission.</p></div>
+          </div>
+        </section>
+
+        <section id="lifecycle">
+          <h2>Lifecycle</h2>
+          <div class="panel">
+            <svg class="flow" viewBox="0 0 980 270" role="img" aria-label="SBM lifecycle">
+              <defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L9,3 z" fill="#66766e"></path></marker></defs>
+              <rect x="22" y="100" width="138" height="60" rx="8" fill="#e2eef8" stroke="#9fbed9"></rect>
+              <text x="91" y="126" text-anchor="middle" class="svg-title">Candidate</text>
+              <text x="91" y="146" text-anchor="middle" class="svg-note">note / risk / leader</text>
+              <rect x="210" y="100" width="138" height="60" rx="8" fill="#fff7e8" stroke="#e0c08d"></rect>
+              <text x="279" y="126" text-anchor="middle" class="svg-title">Review</text>
+              <text x="279" y="146" text-anchor="middle" class="svg-note">authorize</text>
+              <rect x="398" y="100" width="138" height="60" rx="8" fill="#dceee7" stroke="#a8d1bd"></rect>
+              <text x="467" y="126" text-anchor="middle" class="svg-title">Plant</text>
+              <text x="467" y="146" text-anchor="middle" class="svg-note">active store</text>
+              <rect x="586" y="36" width="138" height="60" rx="8" fill="#e2eef8" stroke="#9fbed9"></rect>
+              <text x="655" y="62" text-anchor="middle" class="svg-title">Trigger</text>
+              <text x="655" y="82" text-anchor="middle" class="svg-note">voice/UI cue</text>
+              <rect x="586" y="166" width="138" height="60" rx="8" fill="#f8ecd8" stroke="#d3ab72"></rect>
+              <text x="655" y="192" text-anchor="middle" class="svg-title">Expire</text>
+              <text x="655" y="212" text-anchor="middle" class="svg-note">stop triggering</text>
+              <rect x="790" y="166" width="138" height="60" rx="8" fill="#f6dfdc" stroke="#dfa5a0"></rect>
+              <text x="859" y="192" text-anchor="middle" class="svg-title">Tombstone</text>
+              <text x="859" y="212" text-anchor="middle" class="svg-note">audit retained</text>
+              <path d="M160 130 H210" stroke="#66766e" stroke-width="2" marker-end="url(#arrow)"></path>
+              <path d="M348 130 H398" stroke="#66766e" stroke-width="2" marker-end="url(#arrow)"></path>
+              <path d="M536 120 C570 100 575 82 586 70" stroke="#66766e" stroke-width="2" fill="none" marker-end="url(#arrow)"></path>
+              <path d="M536 140 C570 160 575 182 586 196" stroke="#66766e" stroke-width="2" fill="none" marker-end="url(#arrow)"></path>
+              <path d="M724 196 H790" stroke="#66766e" stroke-width="2" marker-end="url(#arrow)"></path>
+            </svg>
+          </div>
+          <div class="panel" style="margin-top: 16px;">
+            <table>
+              <thead><tr><th>State</th><th>Meaning</th><th>Trigger behavior</th></tr></thead>
+              <tbody>
+                <tr><td><code>active</code></td><td>Can trigger if predicates match</td><td>active</td></tr>
+                <tr><td><code>ttl_scoped</code></td><td>Valid until TTL or expiry time</td><td>active before expiry</td></tr>
+                <tr><td><code>trip_scoped</code></td><td>Valid for this trip/session</td><td>active for trip</td></tr>
+                <tr><td><code>admin_persistent</code></td><td>Kept until admin deletion</td><td>requires explicit admin allowance</td></tr>
+                <tr><td><code>deleted_tombstone</code></td><td>Deleted with audit retained</td><td>inactive</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="ui">
+          <h2>UI Operation</h2>
+          <h3><code>/admin/pretrip</code></h3>
+          <p>Use this to review pretrip-generated spatial imprint candidates. Accepted candidates can be exported to <code>spatial_imprint_set.json</code> and <code>spatial_imprint_manifest.json</code>. Disable uncertain cues rather than deleting evidence.</p>
+          <h3><code>/admin/debug</code></h3>
+          <p>Use this to observe store updates and trigger dry-run projections: <code>spatial_imprint_store_updated</code>, <code>spatial_imprint_trigger_event</code>, matched predicates, latest imprint id, and boundary flags.</p>
+        </section>
+
+        <section id="cli">
+          <h2>CLI Surfaces</h2>
+          <div class="panel">
+            <table>
+              <thead><tr><th>CLI</th><th>Use</th></tr></thead>
+              <tbody>
+                <tr><td><code>python -m scout_cli imprint ...</code></td><td>Agent facade with registered tool compatibility</td></tr>
+                <tr><td><code>python -m spatial_imprint_cli ...</code></td><td>Standalone store/trigger utility for debugging</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <h3>Export reviewed pretrip imprints</h3>
+          <pre><code>PYTHONPATH=. venv/bin/python -m scout_cli imprint export-pretrip \
+  --project-root /data/scout/pretrip/chilai_nanhua_day1 \
+  --authorized-by operator.alex \
+  --json</code></pre>
+          <h3>List active imprints</h3>
+          <pre><code>PYTHONPATH=. venv/bin/python -m scout_cli imprint list \
+  --store-path /data/scout/runtime/runtime_spatial_imprints.json \
+  --trip-id chilai_nanhua_day1 \
+  --json</code></pre>
+          <h3>Trigger dry-run</h3>
+          <pre><code>PYTHONPATH=. venv/bin/python -m scout_cli imprint trigger-dry-run \
+  --imprint-set /data/scout/pretrip/chilai_nanhua_day1/outputs/spatial_imprint_set.json \
+  --context /tmp/client-trigger-context.json \
+  --json</code></pre>
+        </section>
+
+        <section id="plant">
+          <h2>Plant A Runtime Imprint</h2>
+          <p>Create a request file containing <code>store_path</code>, <code>trip_id</code>, <code>actor_ref</code>, and an <code>imprint</code> object. Prefer TTL for temporary field instructions.</p>
+          <pre><code>{
+  "store_path": "/data/scout/runtime/runtime_spatial_imprints.json",
+  "trip_id": "chilai_nanhua_day1",
+  "actor_ref": "leader.alex",
+  "reason": "Leader moved rest point to the next open area.",
+  "imprint": {
+    "imprint_id": "spatial_imprint.runtime.rest_point.001",
+    "label": "臨時休息點",
+    "kind": "team_coordination",
+    "severity": "info",
+    "planting_source": "operator_runtime",
+    "anchor": {"anchor_type": "route_progress", "distance_m": 18420.0, "trigger_before_m": 100.0},
+    "payload": {"payload_type": "voice_cue", "text_zh": "前方約一百公尺為臨時休息點，請隊伍在開闊處集合。"},
+    "lifecycle": {"state": "active", "scope": "ttl_scoped", "ttl_seconds": 3600}
+  }
+}</code></pre>
+          <pre><code>PYTHONPATH=. venv/bin/python -m scout_cli imprint plant \
+  --input /tmp/plant-rest-imprint.json \
+  --dry-run \
+  --json
+
+PYTHONPATH=. venv/bin/python -m scout_cli imprint plant \
+  --input /tmp/plant-rest-imprint.json \
+  --authorized-by leader.alex \
+  --json</code></pre>
+          <p>Output includes <code>scout_spatial_imprint_plant_tool_output</code>, updated store, audit log, and boundary metadata.</p>
+        </section>
+
+        <section id="revoke">
+          <h2>Expire / Delete</h2>
+          <p>Use expire when a cue was correct but no longer relevant. Use delete/tombstone when the cue was wrong, duplicated, or superseded.</p>
+          <h3>Expire</h3>
+          <pre><code>{
+  "store_path": "/data/scout/runtime/runtime_spatial_imprints.json",
+  "imprint_id": "spatial_imprint.runtime.rest_point.001",
+  "actor_ref": "leader.alex",
+  "expired_at": "2026-05-28T11:10:00+08:00",
+  "reason": "Team already passed the temporary rest point."
+}</code></pre>
+          <pre><code>PYTHONPATH=. venv/bin/python -m scout_cli imprint expire \
+  --input /tmp/expire-imprint.json \
+  --authorized-by leader.alex \
+  --json</code></pre>
+          <h3>Delete tombstone</h3>
+          <pre><code>{
+  "store_path": "/data/scout/runtime/runtime_spatial_imprints.json",
+  "imprint_id": "spatial_imprint.runtime.rest_point.001",
+  "actor_ref": "leader.alex",
+  "deleted_at": "2026-05-28T11:15:00+08:00",
+  "reason": "Incorrect cue location; replaced by a new imprint."
+}</code></pre>
+          <pre><code>PYTHONPATH=. venv/bin/python -m scout_cli imprint delete \
+  --input /tmp/delete-imprint.json \
+  --authorized-by leader.alex \
+  --json</code></pre>
+        </section>
+
+        <section id="field">
+          <h2>Climbing And Wilderness Effects</h2>
+          <div class="panel">
+            <table>
+              <thead><tr><th>Scenario</th><th>Effect</th></tr></thead>
+              <tbody>
+                <tr><td>Collapse wall or exposed terrain</td><td>Members receive warning before reaching the hazard</td></tr>
+                <tr><td>Confusing turn</td><td>Stretched-out teams can regroup before the turn</td></tr>
+                <tr><td>Temporary rest point</td><td>Late members receive updated rest instruction without radio relay</td></tr>
+                <tr><td>High-risk segment</td><td>Scout reminds the group to shorten spacing or slow down</td></tr>
+                <tr><td>Altitude/heading disambiguation</td><td>Reduces GPS-only false positives near switchbacks or cliffs</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="boundary">
+          <h2>Boundary Checklist</h2>
+          <ul>
+            <li>Advisory cue only.</li>
+            <li>No Phase 1 safety mutation.</li>
+            <li>No live <code>/safety/*</code> mutation call.</li>
+            <li>No model-output-as-trigger-truth.</li>
+            <li>Plant, expire, and delete all retain audit history.</li>
+          </ul>
+        </section>
+
+        <div class="footer">
+          <p>Markdown source: <code>docs/admin/scout-sbm-spatial-imprint-admin-guide.md</code>.</p>
+        </div>
+      </div>
+    </main>
+  </div>
+</body>
+</html>

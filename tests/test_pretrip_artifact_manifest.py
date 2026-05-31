@@ -62,27 +62,27 @@ def test_preserves_artifact_refs_paths_and_sha256_where_available():
     assert by_kind["route_guide_timing_candidates"]["item_count"] == 19
     assert by_kind["skill_config_manifest"]["scope"] == "pretrip_readiness"
     assert by_kind["readiness_report"]["status"] == "ready"
-    assert by_kind["human_review_log"]["review_count"] == 47
+    assert by_kind["human_review_log"]["review_count"] == 245
     assert by_kind["reviewed_pretrip_package"]["status"] == "reviewed"
     assert by_kind["compiled_mission_graph_candidate"]["checkpoint_count"] == 11
     assert by_kind["compiled_mission_graph_candidate"]["segment_count"] == 10
     assert by_kind["compiled_mission_graph_candidate"]["diversion_point_count"] == 1
-    assert by_kind["compiled_mission_graph_reviewed"]["checkpoint_count"] == 11
-    assert by_kind["compiled_mission_graph_reviewed"]["segment_count"] == 10
+    assert by_kind["compiled_mission_graph_reviewed"]["checkpoint_count"] == 110
+    assert by_kind["compiled_mission_graph_reviewed"]["segment_count"] == 109
     assert by_kind["compiled_mission_graph_reviewed"]["diversion_point_count"] == 1
     assert by_kind["timing_measurements"]["measurement_candidate_count"] == 18
     assert by_kind["planned_eta"]["estimate_count"] == 4
-    assert by_kind["planned_eta"]["planned_start_time"] == "2026-05-03T08:55:35+08:00"
+    assert by_kind["planned_eta"]["planned_start_time"] == "2013-10-08T11:58:50+08:00"
     assert by_kind["planned_eta"]["turn_back_checkpoint_node_name"] == "雲海保線所"
     assert by_kind["planned_eta"]["day1_target_node_name"] == "天池山莊"
-    assert by_kind["planned_eta"]["target_eta"] == "2026-05-03T15:25:35+08:00"
+    assert by_kind["planned_eta"]["target_eta"] == "2013-10-08T18:28:50+08:00"
     assert by_kind["planned_eta"]["team_multiplier_status"] == "not_derived_no_human_stats"
     assert by_kind["brain_seed_nodes"]["artifact_count"] == 13
-    assert by_kind["brain_seed_nodes"]["human_review_count"] == 47
+    assert by_kind["brain_seed_nodes"]["human_review_count"] == 245
     assert by_kind["brain_seed_nodes"]["derived_measurement_count"] == 31
     assert by_kind["brain_seed_nodes"]["model_interpretation_count"] == 6
     assert by_kind["brain_seed_nodes"]["observed_fact_count"] == 0
-    assert by_kind["brain_seed_nodes"]["node_count"] == 97
+    assert by_kind["brain_seed_nodes"]["node_count"] == 295
     assert by_kind["planning_skill_audit"]["record_count"] == 5
     assert by_kind["planning_skill_audit"]["node_types"] == ["SkillRunRecord"]
     assert by_kind["planning_skill_audit"]["skill_ids"] == [
@@ -100,13 +100,13 @@ def test_preserves_artifact_refs_paths_and_sha256_where_available():
     assert by_kind["poi_readiness_candidates"]["finding_candidate_count"] == 0
     assert by_kind["poi_readiness_candidates"]["warning_candidate_count"] == 0
     assert by_kind["poi_readiness_candidates"]["blocker_candidate_count"] == 0
-    assert by_kind["poi_readiness_candidates"]["route_corridor_poi_count"] == 1
+    assert by_kind["poi_readiness_candidates"]["route_corridor_poi_count"] == 2
     assert by_kind["poi_readiness_candidates"]["finding_severities"] == []
     assert by_kind["segment_policy_candidates"]["status"] == "candidate_only"
-    assert by_kind["segment_policy_candidates"]["candidate_count"] == 10
-    assert by_kind["segment_policy_candidates"]["candidate_only_count"] == 10
-    assert by_kind["segment_policy_candidates"]["human_review_required_count"] == 10
-    assert by_kind["segment_policy_candidates"]["requires_daylight_count"] == 10
+    assert by_kind["segment_policy_candidates"]["candidate_count"] == 109
+    assert by_kind["segment_policy_candidates"]["candidate_only_count"] == 109
+    assert by_kind["segment_policy_candidates"]["human_review_required_count"] == 109
+    assert by_kind["segment_policy_candidates"]["requires_daylight_count"] == 109
     assert by_kind["segment_policy_candidates"]["retreat_available_count"] == 2
     assert by_kind["segment_policy_candidates"]["signal_expected_count"] == 1
     assert by_kind["plan_validation_candidates"]["status"] == "candidate_only"
@@ -301,14 +301,14 @@ def test_preserves_artifact_refs_paths_and_sha256_where_available():
         "remote_contact_summary.chilai_nanhua_day1.v0"
     )
     assert by_kind["remote_contact_summary"]["audience"] == "remote_contacts"
-    assert by_kind["remote_contact_summary"]["route_name"] == "奇萊南華-能高越嶺步道Day1"
-    assert by_kind["remote_contact_summary"]["planned_start"] == "2026-05-03T08:55:35+08:00"
-    assert by_kind["remote_contact_summary"]["day1_target_eta"] == "2026-05-03T15:25:35+08:00"
+    assert by_kind["remote_contact_summary"]["route_name"] == "2013-10-08 10:58:50 每日記錄"
+    assert by_kind["remote_contact_summary"]["planned_start"] == "2013-10-08T11:58:50+08:00"
+    assert by_kind["remote_contact_summary"]["day1_target_eta"] == "2013-10-08T18:28:50+08:00"
     assert by_kind["remote_contact_summary"]["turn_back_checkpoint_eta"] == (
-        "2026-05-03T11:55:35+08:00"
+        "2013-10-08T14:58:50+08:00"
     )
     assert by_kind["remote_contact_summary"]["return_to_entry_eta"] == (
-        "2026-05-03T13:35:35+08:00"
+        "2013-10-08T16:38:50+08:00"
     )
     assert by_kind["remote_contact_summary"]["readiness_status"] == "ready"
     assert by_kind["remote_contact_summary"]["source_package_version"] == "0.1.0"
@@ -329,10 +329,10 @@ def test_preserves_artifact_refs_paths_and_sha256_where_available():
     assert by_kind["departure_bundle_manifest"]["audit_ref_count"] == 6
     assert by_kind["departure_bundle_manifest"]["not_departure_approval"] is True
     assert by_kind["weather_daylight_evidence"]["evidence_id"] == (
-        "weather_daylight.chilai_nanhua_day1.2026-05-03.v0"
+        "weather_daylight.chilai_nanhua_day1.2013-10-08.v0"
     )
     assert by_kind["weather_daylight_evidence"]["status"] == "candidate_only"
-    assert by_kind["weather_daylight_evidence"]["date"] == "2026-05-03"
+    assert by_kind["weather_daylight_evidence"]["date"] == "2013-10-08"
     assert by_kind["weather_daylight_evidence"]["route_ref"] == (
         "normalized/routes/route_summary.json"
     )

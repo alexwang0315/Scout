@@ -24,7 +24,7 @@ def build_imu_payload(
     device_port: str,
     baud: int,
 ) -> dict[str, Any]:
-    raw_imu_present = frame.frame_type in {"acceleration", "gyro", "angle"}
+    raw_imu_present = frame.frame_type in {"acceleration", "gyro", "angle"} and frame.checksum_valid
     parsed = frame.to_dict()
     return {
         "captured_at": datetime.now(timezone.utc).isoformat(),
@@ -33,6 +33,7 @@ def build_imu_payload(
         "device_port": device_port,
         "baud": baud,
         "frame_type": frame.frame_type,
+        "checksum_valid": frame.checksum_valid,
         "parsed": parsed,
         "raw_bytes_hex": frame.raw_bytes_hex,
         "vendor_fusion_mode_observed": "imu_raw_frames" if raw_imu_present else "unknown_frame",
@@ -62,10 +63,10 @@ def append_jsonl(payloads: list[dict[str, Any]], output_path: Path | None) -> No
 def read_serial_frames(*, port: str, baud: int, duration_seconds: float) -> list[HiwonderImuFrame]:
     try:
         import serial  # type: ignore
-    except ImportError as exc:  # pragma: no cover - depends on Pi environment.
-        raise RuntimeError(
-            "pyserial is required for live serial smoke: python3 -m pip install pyserial"
-        ) from exc
+    except ImportError:
+        return parse_hiwonder_imu_frames(
+            _read_serial_bytes_stdlib(port=port, baud=baud, duration_seconds=duration_seconds)
+        )
 
     parser = HiwonderImuStreamParser()
     frames: list[HiwonderImuFrame] = []
@@ -76,6 +77,50 @@ def read_serial_frames(*, port: str, baud: int, duration_seconds: float) -> list
             if chunk:
                 frames.extend(parser.feed(chunk))
     return frames
+
+
+def _read_serial_bytes_stdlib(*, port: str, baud: int, duration_seconds: float) -> bytes:
+    import os
+    import select
+    import termios
+
+    baud_constant = _termios_baud_constant(baud)
+    chunks: list[bytes] = []
+    deadline = time.monotonic() + duration_seconds
+    fd = os.open(port, os.O_RDWR | os.O_NOCTTY | os.O_NONBLOCK)
+    try:
+        attrs = termios.tcgetattr(fd)
+        attrs[0] = termios.IGNPAR
+        attrs[1] = 0
+        attrs[2] = baud_constant | termios.CS8 | termios.CLOCAL | termios.CREAD
+        attrs[3] = 0
+        attrs[4] = baud_constant
+        attrs[5] = baud_constant
+        attrs[6][termios.VMIN] = 0
+        attrs[6][termios.VTIME] = 1
+        termios.tcsetattr(fd, termios.TCSANOW, attrs)
+        termios.tcflush(fd, termios.TCIOFLUSH)
+
+        while time.monotonic() < deadline:
+            timeout = max(0.0, min(0.1, deadline - time.monotonic()))
+            readable, _, _ = select.select([fd], [], [], timeout)
+            if not readable:
+                continue
+            chunk = os.read(fd, 256)
+            if chunk:
+                chunks.append(chunk)
+        return b"".join(chunks)
+    finally:
+        os.close(fd)
+
+
+def _termios_baud_constant(baud: int) -> int:
+    import termios
+
+    constant_name = f"B{baud}"
+    if not hasattr(termios, constant_name):
+        raise RuntimeError(f"unsupported serial baud rate for stdlib fallback: {baud}")
+    return getattr(termios, constant_name)
 
 
 def parse_raw_hex_frames(raw_hex: str) -> list[HiwonderImuFrame]:

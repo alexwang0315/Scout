@@ -27,7 +27,7 @@
         "route_comparison_classification=comparison_only"
       ],
       "observed_item_count": 0,
-      "planned_item_count": 2211,
+      "planned_item_count": 6909,
       "planned_refs": [
         "normalized/routes/route_summary.json",
         "outputs/route_comparison.json",
@@ -68,7 +68,7 @@
       "comparison_method": "compare candidate segment requirements and recording policy with the policy metadata preserved by runtime artifacts",
       "notes": [],
       "observed_item_count": 0,
-      "planned_item_count": 10,
+      "planned_item_count": 109,
       "planned_refs": [
         "outputs/segment_policy_candidates.json",
         "outputs/compiled_mission_graph.reviewed.json"
@@ -130,7 +130,7 @@
         "planning_skill_run_count=5"
       ],
       "observed_item_count": 0,
-      "planned_item_count": 102,
+      "planned_item_count": 300,
       "planned_refs": [
         "outputs/brain_seed_nodes.json",
         "outputs/planning_skill_audit.json"

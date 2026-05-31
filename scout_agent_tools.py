@@ -180,7 +180,7 @@ def _build_result(
     boundary = ScoutAgentToolBoundary(
         operator_or_user_triggered=bool(authorized_by),
         remote_outbound_send_allowed=False,
-        hardware_control_allowed=False,
+        hardware_control_allowed=effects.hardware_action_count > 0,
     )
     inputs: dict[str, object] = {
         "dry_run": dry_run,

@@ -32,8 +32,8 @@ def test_chilai_fixture_segments_link_to_dtm_metadata_without_rasters():
 
     assert summary.summary_id == "terrain_summary.chilai_nanhua_day1.test"
     assert summary.route_artifact_id == coverage.route_artifact_id
-    assert summary.segment_count == 10
-    assert summary.candidate_tile_count == 10
+    assert summary.segment_count == 109
+    assert summary.candidate_tile_count == 48
     assert summary.unlinked_segment_ids == []
     assert [item.segment_candidate_id for item in summary.segment_metadata] == [
         segment.candidate_id for segment in segments
@@ -54,10 +54,10 @@ def test_chilai_segment_dtm_coverage_fixture_validates():
         json.loads((FIXTURE_ROOT / "normalized" / "terrain" / "dtm_coverage_summary.json").read_text())
     )
 
-    assert payload["summary_id"] == "terrain_summary.chilai_nanhua_day1.20m"
+    assert payload["summary_id"] == "terrain_summary.chilai_nanhua_day1.twmap_20m_dem"
     assert payload["dtm_coverage_summary_id"] == coverage.summary_id
-    assert payload["segment_count"] == 10
-    assert payload["candidate_tile_count"] == 10
+    assert payload["segment_count"] == 109
+    assert payload["candidate_tile_count"] == 48
     assert payload["unlinked_segment_ids"] == []
     assert "header_uri" not in json.dumps(payload)
     assert "grid_uri" not in json.dumps(payload)

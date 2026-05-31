@@ -1,9 +1,13 @@
 import json
+import os
+import pty
 import subprocess
 import sys
+import threading
+import time
 from pathlib import Path
 
-from tools.pi_hiwonder_imu_usb_smoke import build_imu_payload, parse_raw_hex_frames
+from tools.pi_hiwonder_imu_usb_smoke import _read_serial_bytes_stdlib, build_imu_payload, parse_raw_hex_frames
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -69,6 +73,27 @@ def test_imu_smoke_cli_invalid_raw_hex_fails_cleanly() -> None:
 
     assert result.returncode == 2
     assert "ValueError" in result.stderr
+
+
+def test_stdlib_serial_fallback_reads_imu_bytes() -> None:
+    master_fd, slave_fd = pty.openpty()
+    slave_name = os.ttyname(slave_fd)
+    frame = bytes.fromhex(_wit_frame_hex(0x53, [0, 0, 16384, 0]))
+
+    def writer() -> None:
+        time.sleep(0.05)
+        os.write(master_fd, frame)
+
+    thread = threading.Thread(target=writer)
+    thread.start()
+    try:
+        data = _read_serial_bytes_stdlib(port=slave_name, baud=9600, duration_seconds=0.25)
+    finally:
+        thread.join(timeout=1.0)
+        os.close(master_fd)
+        os.close(slave_fd)
+
+    assert frame in data
 
 
 def _wit_frame_hex(frame_type: int, values: list[int]) -> str:

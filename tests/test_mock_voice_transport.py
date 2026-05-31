@@ -3,6 +3,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+from pydantic import ValidationError
+
 from mock_voice_transport import MockVoiceTransport
 from runtime_debug_log import MemoryRuntimeDebugEventLog
 from voice_cue_models import VoiceCue
@@ -63,6 +66,21 @@ def test_mock_voice_transport_records_failure_without_playing_audio(tmp_path) ->
     assert failed.engine == "espeak"
     assert failed.failure_reason == "mock renderer unavailable"
     assert failed.played_at is None
+
+
+def test_mock_voice_transport_rejects_invalid_transition_timestamp(tmp_path) -> None:
+    output_path = tmp_path / "voice_cues.jsonl"
+    timestamps = iter(["2026-05-21T10:00:00Z", "not-a-time"])
+    transport = MockVoiceTransport(
+        output_jsonl=output_path,
+        timestamp_factory=lambda: next(timestamps),
+    )
+    cue = _cue()
+
+    transport.queue_voice_cue(cue, engine="mock")
+
+    with pytest.raises(ValidationError):
+        transport.mark_played(cue.cue_id)
 
 
 def test_mock_voice_transport_optionally_records_runtime_debug_events() -> None:

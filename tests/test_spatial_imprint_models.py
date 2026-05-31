@@ -29,6 +29,26 @@ def test_spatial_imprint_rejects_boundary_mutation() -> None:
     assert "runtime_safety_truth" in str(exc_info.value)
 
 
+def test_spatial_imprint_rejects_invalid_nested_predicate() -> None:
+    payload = _imprint().model_dump(mode="json")
+    payload["trigger"]["predicates"] = [
+        {
+            "type": "all",
+            "predicates": [
+                {
+                    "type": "route_progress_window",
+                    "start_distance_m": 8370.0,
+                }
+            ],
+        }
+    ]
+
+    with pytest.raises(ValidationError) as exc_info:
+        SpatialImprint.model_validate(payload)
+
+    assert "all predicate 0 invalid" in str(exc_info.value)
+
+
 def test_spatial_imprint_set_accepts_trip_local_imprints() -> None:
     imprint_set = SpatialImprintSet(trip_id="chilai_nanhua_day1", imprints=[_imprint()])
 

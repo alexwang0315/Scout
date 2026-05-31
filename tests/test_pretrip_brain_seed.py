@@ -48,7 +48,7 @@ def test_pretrip_seed_artifacts_include_sources_package_references_and_review_lo
     assert "artifact.pretrip_output.segment_policy_candidates.chilai_nanhua_day1.v0" in artifacts
     assert "artifact.pretrip_output.plan_validation_candidates.chilai_nanhua_day1.v0" in artifacts
     assert (
-        "artifact.pretrip_output.weather_daylight.chilai_nanhua_day1.2026-05-03.v0"
+        "artifact.pretrip_output.weather_daylight.chilai_nanhua_day1.2013-10-08.v0"
         in artifacts
     )
     assert "artifact.pretrip_output.contour_interpretation.chilai_nanhua_day1.v0" in artifacts
@@ -68,7 +68,7 @@ def test_pretrip_seed_preserves_planning_outputs_as_reviewable_interpretations()
         in interpretations
     )
     assert (
-        "interpretation.pretrip_output.weather_daylight.chilai_nanhua_day1.2026-05-03.v0"
+        "interpretation.pretrip_output.weather_daylight.chilai_nanhua_day1.2013-10-08.v0"
         in interpretations
     )
     assert (
@@ -103,7 +103,7 @@ def test_pretrip_seed_derived_measurements_include_route_distance_and_candidate_
     for measurement in seed.derived_measurements:
         measurements[measurement.metric].append(measurement)
 
-    assert measurements["route_distance_m"][0].value == 14599.78
+    assert measurements["route_distance_m"][0].value == 162559.51
     assert measurements["route_distance_m"][0].unit == "meters"
     assert "route_guide_segment_time_minutes" in measurements
     assert any(

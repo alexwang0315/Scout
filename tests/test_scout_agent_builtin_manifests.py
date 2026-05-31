@@ -38,6 +38,7 @@ def test_builtin_manifest_directory_lists_read_and_proposal_tools() -> None:
     assert "scout.voice.mock_transition" in tool_ids
     assert "scout.outbound.mock_queue" in tool_ids
     assert "scout.outbound.mock_transition" in tool_ids
+    assert "scout.hardware.keypad_command_bridge" in tool_ids
     assert "scout.kb.pretrip_view_summary" in tool_ids
     assert "scout.kb.hardware_readiness_summary" in tool_ids
     assert "scout.kb.build" in tool_ids
@@ -97,6 +98,84 @@ def test_builtin_read_tool_runs_with_trace(tmp_path: Path) -> None:
     assert output["offline_only"] is True
     assert output["boundary"]["live_safety_api_calls_allowed"] is False
     assert load_agent_trace(trace_log)[0].tool_id == "scout.local_evidence.status"
+
+
+def test_builtin_hardware_keypad_bridge_runs_in_dry_run_with_trace(tmp_path: Path) -> None:
+    request = tmp_path / "keypad-agent.request.json"
+    output = tmp_path / "keypad-agent.summary.json"
+    events_jsonl = tmp_path / "keypad-agent.events.jsonl"
+    trace_log = tmp_path / "agent-trace.jsonl"
+    request.write_text(
+        json.dumps(
+            {
+                "simulate_keys": ["S4", "S15"],
+                "output_jsonl": str(events_jsonl),
+                "oled_status": True,
+                "oled_dry_run": True,
+                "led_status": True,
+                "led_dry_run": True,
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    blocked_exit, blocked_payload = run_scout_agent_cli(
+        [
+            "tools",
+            "run",
+            "scout.hardware.keypad_command_bridge",
+            "--manifest-dir",
+            str(MANIFEST_DIR),
+            "--input",
+            str(request),
+            "--output",
+            str(output),
+            "--json",
+        ]
+    )
+    assert blocked_exit == 2
+    assert blocked_payload["status"] == "blocked"
+    assert "requires explicit authorization" in blocked_payload["warnings"][0]
+    assert not output.exists()
+
+    exit_code, payload = run_scout_agent_cli(
+        [
+            "tools",
+            "run",
+            "scout.hardware.keypad_command_bridge",
+            "--manifest-dir",
+            str(MANIFEST_DIR),
+            "--input",
+            str(request),
+            "--output",
+            str(output),
+            "--trace-log",
+            str(trace_log),
+            "--dry-run",
+            "--json",
+        ]
+    )
+
+    assert exit_code == 0
+    assert payload["status"] == "completed"
+    assert payload["effects"]["hardware_action_count"] == 0
+    result = json.loads(payload["outputs"]["stdout"])
+    assert result["artifact_kind"] == "scout_agent_keypad_command_bridge"
+    assert result["dry_run"] is True
+    assert [event["candidate_status"] for event in result["events"]] == [
+        "blocked",
+        "blocked",
+    ]
+    assert result["events"][0]["mapped_command"] == "safety_l4_direct_trigger"
+    assert result["events"][0]["block_reason"] == "l4_direct_trigger_blocked"
+    assert result["events"][1]["mapped_command"] == "confirm_pending"
+    assert result["events"][1]["block_reason"] == "no_pending_candidate"
+    assert result["phase1_safety_decision_change_allowed"] is False
+    assert result["live_safety_api_called"] is False
+    assert output.exists()
+    assert events_jsonl.exists()
+    assert load_agent_trace(trace_log)[0].tool_id == "scout.hardware.keypad_command_bridge"
 
 
 def test_builtin_kb_build_persists_index_with_authorization(tmp_path: Path) -> None:
@@ -1352,6 +1431,38 @@ def test_builtin_voice_mock_queue_and_transition_write_mock_receipts(tmp_path: P
     events = FileRuntimeDebugEventLog(debug_log).list_events()
     assert any(event.kind == "voice_cue_state_changed" for event in events)
 
+    bad_transition_request = tmp_path / "voice-mock-transition-bad-time.request.json"
+    bad_transition_request.write_text(
+        json.dumps(
+            {
+                "voice_log_path": str(voice_log),
+                "debug_log_path": str(debug_log),
+                "cue_id": "voice_cue.agent.mock.001",
+                "state": "played",
+                "transitioned_at": "not-a-time",
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    bad_exit, bad_payload = run_scout_agent_cli(
+        [
+            "tools",
+            "run",
+            "scout.voice.mock_transition",
+            "--manifest-dir",
+            str(MANIFEST_DIR),
+            "--input",
+            str(bad_transition_request),
+            "--json",
+        ]
+    )
+    assert bad_exit == 1
+    assert bad_payload["status"] == "failed"
+    bad_output = json.loads(bad_payload["outputs"]["stdout"])
+    assert bad_output["artifact_kind"] == "scout_agent_builtin_tool_error"
+    assert "invalid voice mock transition provenance" in bad_output["error"]
+
 
 def test_builtin_outbound_mock_queue_and_transition_never_send_real_network(
     tmp_path: Path,
@@ -1443,6 +1554,38 @@ def test_builtin_outbound_mock_queue_and_transition_never_send_real_network(
     assert transition_output["boundary"]["real_outbound_send_allowed"] is False
     events = FileRuntimeDebugEventLog(debug_log).list_events()
     assert any(event.kind == "outbound_message_state_changed" for event in events)
+
+    bad_transition_request = tmp_path / "outbound-mock-transition-bad-time.request.json"
+    bad_transition_request.write_text(
+        json.dumps(
+            {
+                "outbound_log_path": str(outbound_log),
+                "debug_log_path": str(debug_log),
+                "message_id": message_id,
+                "state": "mock-delivered",
+                "transitioned_at": "not-a-time",
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    bad_exit, bad_payload = run_scout_agent_cli(
+        [
+            "tools",
+            "run",
+            "scout.outbound.mock_transition",
+            "--manifest-dir",
+            str(MANIFEST_DIR),
+            "--input",
+            str(bad_transition_request),
+            "--json",
+        ]
+    )
+    assert bad_exit == 1
+    assert bad_payload["status"] == "failed"
+    bad_output = json.loads(bad_payload["outputs"]["stdout"])
+    assert bad_output["artifact_kind"] == "scout_agent_builtin_tool_error"
+    assert "invalid outbound mock transition provenance" in bad_output["error"]
 
 
 def test_builtin_risk_attribution_writes_candidate_only_diagnostic(tmp_path: Path) -> None:

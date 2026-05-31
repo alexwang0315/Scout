@@ -33,11 +33,11 @@ def test_write_pretrip_seed_bundle_to_brain_file_store_with_strict_artifact_refs
         assert result.counts_by_node_type == {
             "Artifact": 13,
             "DerivedMeasurement": 31,
-            "HumanReview": 47,
+            "HumanReview": 245,
             "ModelInterpretation": 6,
         }
-        assert len(result.node_ids) == 97
-        assert len(result.paths) == 97
+        assert len(result.node_ids) == 295
+        assert len(result.paths) == 295
         assert result.node_ids[0] == "artifact.gpx.chilai_nanhua_day1"
         assert "artifact.photo.g11_hiking" in result.node_ids[:13]
         assert "artifact.pretrip_package.chilai_nanhua_day1" in result.node_ids[:13]

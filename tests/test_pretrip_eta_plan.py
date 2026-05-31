@@ -18,7 +18,7 @@ def _package() -> PreTripPackage:
 def test_planned_start_is_gpx_first_point_time_plus_one_hour_in_taipei():
     eta_plan = build_chilai_day1_eta_plan(_package())
 
-    assert eta_plan.assumption.planned_start_time == "2026-05-03T08:55:35+08:00"
+    assert eta_plan.assumption.planned_start_time == "2013-10-08T11:58:50+08:00"
     assert eta_plan.assumption.planned_start_source == "route_summary.started_at_plus_offset"
     assert eta_plan.assumption.planned_start_offset_minutes == 60
 
@@ -36,11 +36,11 @@ def test_chilai_day1_target_and_turnback_eta_use_route_guide_timing():
         "雲海保線所",
         "天池山莊",
     ]
-    assert eta_plan.assumption.turn_back_checkpoint_eta == "2026-05-03T11:55:35+08:00"
-    assert eta_plan.assumption.target_eta == "2026-05-03T15:25:35+08:00"
+    assert eta_plan.assumption.turn_back_checkpoint_eta == "2013-10-08T14:58:50+08:00"
+    assert eta_plan.assumption.target_eta == "2013-10-08T18:28:50+08:00"
     assert (
         eta_plan.assumption.return_to_entry_eta_if_turn_back_at_checkpoint
-        == "2026-05-03T13:35:35+08:00"
+        == "2013-10-08T16:38:50+08:00"
     )
     assert eta_plan.assumption.daylight_policy_status == "not_evaluated_requires_sun_window"
 

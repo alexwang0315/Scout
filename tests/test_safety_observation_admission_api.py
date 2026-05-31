@@ -54,6 +54,10 @@ class SafetyObservationAdmissionApiTests(unittest.TestCase):
         self.assertEqual(body["ingest_surface"], "safety_api_direct")
         self.assertEqual(body["admission_transport"], "http_push")
         self.assertEqual(body["admission"]["status"], "admitted_not_forwarded")
+        self.assertEqual(body["runtime_handoff"]["status"], "handed_to_safety_runtime")
+        self.assertEqual(body["runtime_handoff"]["admission_status"], "admitted_not_forwarded")
+        self.assertEqual(body["runtime_handoff"]["observations_handed_to_runtime"], 1)
+        self.assertTrue(body["runtime_handoff"]["safety_runtime_observe_called"])
         self.assertEqual(body["admission"]["source_id"], "runtime_source.apple_watch.v0")
         self.assertEqual(body["admission"]["device_id"], "watch.api.001")
         self.assertEqual(body["admission"]["sequence_no"], 1)
@@ -126,8 +130,67 @@ class SafetyObservationAdmissionApiTests(unittest.TestCase):
         )
         self.assertEqual(session.snapshot().observations_processed, 1)
 
+    def test_signed_runtime_observation_backpressure_does_not_handoff_to_runtime(self):
+        point = load_gpx_route(ROUTE_PATH).points[0]
+        payload = _sensorlog_record_from_point(point)
+        secret_key = "api-admission-secret"
+        admission_config = SafetyObservationAdmissionConfig(secret_key=secret_key)
+        session = SafetyRuntimeSession(MISSION_PATH)
+        client = TestClient(
+            create_safety_app(
+                SafetyApiSnapshot(safety_state=SafetyState()),
+                runtime_session=session,
+                observation_admission_config=admission_config,
+            )
+        )
+        first_envelope = _signed_envelope(
+            payload,
+            secret_key=secret_key,
+            sequence_no=1,
+            observed_at="2026-05-19T08:00:01.000+08:00",
+        )
+        second_envelope = _signed_envelope(
+            payload,
+            secret_key=secret_key,
+            sequence_no=2,
+            observed_at="2026-05-19T08:00:01.050+08:00",
+        )
 
-def _signed_envelope(payload: dict, *, secret_key: str, sequence_no: int):
+        first = client.post(
+            "/safety/observations",
+            json={
+                "envelope": first_envelope.model_dump(mode="json"),
+                "payload": payload,
+                "device": "apple_watch",
+                "source": "runtime_signed_sensorlog",
+                "received_at": 1.0,
+            },
+        )
+        backpressured = client.post(
+            "/safety/observations",
+            json={
+                "envelope": second_envelope.model_dump(mode="json"),
+                "payload": payload,
+                "device": "apple_watch",
+                "source": "runtime_signed_sensorlog",
+                "received_at": 1.05,
+            },
+        )
+
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(backpressured.status_code, 202)
+        self.assertEqual(backpressured.json()["detail"]["status"], "queued_backpressure")
+        self.assertEqual(session.snapshot().observations_processed, 1)
+
+
+def _signed_envelope(
+    payload: dict,
+    *,
+    secret_key: str,
+    sequence_no: int,
+    observed_at: str | None = None,
+):
+    observed_at = observed_at or f"2026-05-19T08:00:0{sequence_no}+08:00"
     return build_signed_runtime_observation_envelope(
         payload,
         secret_key=secret_key,
@@ -137,8 +200,8 @@ def _signed_envelope(payload: dict, *, secret_key: str, sequence_no: int):
         transport="http_push",
         device_id="watch.api.001",
         sequence_no=sequence_no,
-        observed_at=f"2026-05-19T08:00:0{sequence_no}+08:00",
-        received_at=f"2026-05-19T08:00:0{sequence_no}+08:00",
+        observed_at=observed_at,
+        received_at=observed_at,
     )
 
 

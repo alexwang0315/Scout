@@ -87,6 +87,23 @@ def test_workspace_tool_dry_run_has_no_write_effects() -> None:
     assert result.effects.workspace_write_count == 0
 
 
+def test_authorized_hardware_tool_records_hardware_boundary() -> None:
+    manifest = ScoutAgentToolManifest.model_validate(
+        _manifest_payload(
+            mode="hardware_action",
+            allowed_writes=["hardware.local_diagnostic"],
+            requires_authorization={"kind": "user_or_operator"},
+        )
+    )
+
+    result = run_registered_tool(manifest, authorized_by="operator.local")
+
+    assert result.status == "completed"
+    assert result.effects.hardware_action_count == 1
+    assert result.boundary.operator_or_user_triggered is True
+    assert result.boundary.hardware_control_allowed is True
+
+
 def test_json_manifest_loader(tmp_path: Path) -> None:
     manifest_path = tmp_path / "scout.local_evidence.status.json"
     manifest_path.write_text(json.dumps(_manifest_payload()), encoding="utf-8")

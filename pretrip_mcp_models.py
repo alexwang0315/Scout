@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 SourceFamily = Literal[
@@ -529,6 +530,12 @@ class McpReviewAction(McpModel):
     candidate_only: Literal[True] = True
     runtime_safety_truth: Literal[False] = False
     compile_allowed: Literal[False] = False
+
+    @field_validator("decided_at")
+    @classmethod
+    def validate_decided_at(cls, value: str) -> str:
+        datetime.fromisoformat(value.replace("Z", "+00:00"))
+        return value
 
     @model_validator(mode="after")
     def _enforce_decision_detail(self) -> "McpReviewAction":

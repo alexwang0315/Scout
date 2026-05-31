@@ -25,13 +25,13 @@ def test_weather_daylight_fixture_serializes_as_json():
     evidence = load_weather_daylight_evidence(WEATHER_DAYLIGHT)
     payload = evidence.model_dump(mode="json")
 
-    assert payload["evidence_id"] == "weather_daylight.chilai_nanhua_day1.2026-05-03.v0"
+    assert payload["evidence_id"] == "weather_daylight.chilai_nanhua_day1.2013-10-08.v0"
     assert payload["status"] == "candidate_only"
-    assert payload["date"] == "2026-05-03"
+    assert payload["date"] == "2013-10-08"
     assert payload["route_ref"] == "normalized/routes/route_summary.json"
     assert payload["daylight"]["date"] == payload["date"]
-    assert payload["weather_window"]["window_start"] == "2026-05-03T08:55:35+08:00"
-    assert payload["weather_window"]["window_end"] == "2026-05-03T15:25:35+08:00"
+    assert payload["weather_window"]["window_start"] == "2013-10-08T11:58:50+08:00"
+    assert payload["weather_window"]["window_end"] == "2013-10-08T18:28:50+08:00"
     assert evidence.to_json().endswith("\n")
     assert json.loads(evidence.to_json()) == payload
 

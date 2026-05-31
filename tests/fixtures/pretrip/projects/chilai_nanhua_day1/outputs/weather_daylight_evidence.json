@@ -1,23 +1,23 @@
 {
   "authoritative_weather_computed": false,
   "bbox_wgs84": {
-    "max_lat": 24.057907788530006,
-    "max_lon": 121.28079717511966,
-    "min_lat": 24.043338071400207,
-    "min_lon": 121.21036249036372
+    "max_lat": 24.053969560191035,
+    "max_lon": 121.281699500978,
+    "min_lat": 23.872665725648403,
+    "min_lon": 121.17726685479283
   },
-  "date": "2026-05-03",
+  "date": "2013-10-08",
   "daylight": {
     "civil_twilight_begin": null,
     "civil_twilight_end": null,
-    "date": "2026-05-03",
+    "date": "2013-10-08",
     "notes": "Placeholder only. Human review must replace or verify sunrise, sunset, and twilight fields before use in go/no-go planning.",
     "source_status": "manual_placeholder",
     "sunrise": null,
     "sunset": null,
     "timezone": "Asia/Taipei"
   },
-  "evidence_id": "weather_daylight.chilai_nanhua_day1.2026-05-03.v0",
+  "evidence_id": "weather_daylight.chilai_nanhua_day1.2013-10-08.v0",
   "external_api_calls_made": false,
   "human_review_required": true,
   "location_name": "奇萊南華-能高越嶺步道Day1 corridor",
@@ -42,13 +42,6 @@
       "source_ref": "normalized/routes/route_summary.json",
       "title": "Chilai Day 1 route summary fixture",
       "uri": "normalized/routes/route_summary.json"
-    },
-    {
-      "collected_at": null,
-      "notes": "Reference threshold values only. This fixture does not fetch CWA data or compute authoritative weather status.",
-      "source_ref": "cwa.weather_warning_thresholds",
-      "title": "CWA-style heavy rain, dense fog, and strong wind warning thresholds",
-      "uri": "https://www.cwa.gov.tw/"
     }
   ],
   "source_refs": [
@@ -63,24 +56,19 @@
       "civil_twilight_blocker_candidate_enabled": true,
       "configurable": true,
       "dark_arrival_warning_margin_min": 60,
-      "notes": "Reference-only planning thresholds. They may create warning/blocker candidates, but this fixture remains unreviewed.",
+      "notes": "",
       "severe_weather_warning_candidate_enabled": true,
-      "source_refs": [
-        "outputs/planned_eta.json"
-      ]
+      "source_refs": []
     },
     "dense_fog": {
       "dense_fog_visibility_m": 200.0,
-      "notes": "CWA-style dense fog reference threshold; no observed or forecast visibility is evaluated here.",
+      "notes": "",
       "source_refs": [
         "cwa.weather_warning_thresholds"
       ],
       "visibility_comparator": "<"
     },
-    "notes": [
-      "Policy thresholds are optional/reference fields for candidate planning evidence.",
-      "Presence of thresholds does not mean weather or daylight has been reviewed, fetched, or authoritatively computed."
-    ],
+    "notes": [],
     "policy_id": "cwa_style_mountain_weather_daylight_reference.v0",
     "policy_status": "reference_only",
     "rainfall": {
@@ -89,14 +77,14 @@
       "extremely_heavy_rain_3h_mm": 100.0,
       "heavy_rain_1h_mm": 40.0,
       "heavy_rain_24h_mm": 80.0,
-      "notes": "CWA-style rainfall reference thresholds; no observed or forecast precipitation is evaluated here.",
+      "notes": "",
       "source_refs": [
         "cwa.weather_warning_thresholds"
       ]
     },
     "strong_wind": {
       "comparator": ">=",
-      "notes": "CWA-style strong wind reference thresholds; no observed or forecast wind is evaluated here.",
+      "notes": "",
       "orange_avg_wind_mps": 20.8,
       "orange_gust_mps": 28.5,
       "source_refs": [
@@ -130,7 +118,7 @@
     "temperature_range_c": null,
     "thunderstorm_risk": null,
     "wind_summary": null,
-    "window_end": "2026-05-03T15:25:35+08:00",
-    "window_start": "2026-05-03T08:55:35+08:00"
+    "window_end": "2013-10-08T18:28:50+08:00",
+    "window_start": "2013-10-08T11:58:50+08:00"
   }
 }

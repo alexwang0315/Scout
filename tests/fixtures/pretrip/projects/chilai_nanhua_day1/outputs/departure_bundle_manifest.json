@@ -239,25 +239,25 @@
         "exists": true,
         "ref": "reviews/human_reviews.json",
         "ref_key": "human_reviews_ref",
-        "sha256": "e8ab656c2172c7133a0eb18ef049ab1b569fce7d5b0059d4986aa076a2e75c65",
+        "sha256": "456b9a85780ed52aa780c86cbad28dd196165fa874faa5007dfa4323ea918c84",
         "status": null,
         "summary": {
           "log_id": "review_log.chilai_nanhua_day1.v0",
-          "review_count": 47
+          "review_count": 245
         }
       },
       {
         "exists": true,
         "ref": "outputs/pretrip_package.reviewed.json",
         "ref_key": "reviewed_package_ref",
-        "sha256": "2f3e8d3784f54e58c78a57fa3ceb6b6538277bff1050c936fb8b4ae9d269b68e",
+        "sha256": "0a90965f216de5699b9c932f4dab7cd13c482b785b23fff69b3ae1ec0b958fee",
         "status": "reviewed",
         "summary": {
-          "checkpoint_candidate_count": 11,
+          "checkpoint_candidate_count": 110,
           "package_id": "pretrip.chilai_nanhua_day1.v0",
           "project_id": "chilai_nanhua_day1",
           "retreat_route_candidate_count": 1,
-          "segment_candidate_count": 10,
+          "segment_candidate_count": 109,
           "status": "reviewed",
           "version": "0.1.0"
         }
@@ -280,14 +280,14 @@
         "exists": true,
         "ref": "outputs/compiled_mission_graph.reviewed.json",
         "ref_key": "compiled_mission_graph_reviewed_ref",
-        "sha256": "c2b42fee4feffbf7bca18d0262cc38a07b629df83e9dc8b4ac166bdf10a3015e",
+        "sha256": "d9e32c51fad625e6ff96d6d1283dcb1540f5b5a789d68e2c2ce45549dd83d957",
         "status": null,
         "summary": {
-          "checkpoint_count": 11,
+          "checkpoint_count": 110,
           "diversion_point_count": 1,
           "mission_id": "mission.chilai_nanhua_day1.0.1.0",
-          "name": "奇萊南華-能高越嶺步道Day1",
-          "segment_count": 10
+          "name": "2013-10-08 10:58:50 每日記錄",
+          "segment_count": 109
         }
       },
       {
@@ -304,16 +304,16 @@
         "exists": true,
         "ref": "outputs/planned_eta.json",
         "ref_key": "planned_eta_ref",
-        "sha256": "23f2c6034d309d08720cb200d14efd50391c82d6c890979380f973739997ca61",
+        "sha256": "fa8d4eba6c4c64b354b942aded98b77f22e1d7fa65a02416153282eea4de31ec",
         "status": null,
         "summary": {
           "day1_target_node_name": "天池山莊",
           "estimate_count": 4,
           "plan_id": "eta_plan.chilai_nanhua_day1.day1.v0",
-          "planned_start_time": "2026-05-03T08:55:35+08:00",
-          "target_eta": "2026-05-03T15:25:35+08:00",
+          "planned_start_time": "2013-10-08T11:58:50+08:00",
+          "target_eta": "2013-10-08T18:28:50+08:00",
           "team_multiplier_status": "not_derived_no_human_stats",
-          "turn_back_checkpoint_eta": "2026-05-03T11:55:35+08:00",
+          "turn_back_checkpoint_eta": "2013-10-08T14:58:50+08:00",
           "turn_back_checkpoint_node_name": "雲海保線所"
         }
       },
@@ -321,14 +321,14 @@
         "exists": true,
         "ref": "outputs/brain_seed_nodes.json",
         "ref_key": "brain_seed_nodes_ref",
-        "sha256": "e703ce2ba48a6006ccd19158a567ffc61ac820a4978c8b032deada1981a71ced",
+        "sha256": "56db626a86e6643f025925a8b9dbb5e455962a471b04eb333b274c071294c8d6",
         "status": null,
         "summary": {
           "artifact_count": 13,
           "derived_measurement_count": 31,
-          "human_review_count": 47,
+          "human_review_count": 245,
           "model_interpretation_count": 6,
-          "node_count": 97,
+          "node_count": 295,
           "observed_fact_count": 0
         }
       },
@@ -380,7 +380,7 @@
         "exists": true,
         "ref": "outputs/poi_readiness_candidates.json",
         "ref_key": "poi_readiness_candidates_ref",
-        "sha256": "4a29819ee5dc15e9dff056bf9c5672ea4fae1a2db7ebc9adaf62421576e8dc16",
+        "sha256": "5a5b24dcb6b3cfe2bb668b5e10949d7940cb4e17ff2dc059e303c583bfa7b302",
         "status": "candidate_only",
         "summary": {
           "artifact_id": "poi_readiness_candidates.chilai_nanhua_day1.v0",
@@ -392,7 +392,7 @@
             "route_corridor_poi_coverage"
           ],
           "project_id": "chilai_nanhua_day1",
-          "route_corridor_poi_count": 1,
+          "route_corridor_poi_count": 2,
           "status": "candidate_only",
           "warning_candidate_count": 0
         }
@@ -401,15 +401,15 @@
         "exists": true,
         "ref": "outputs/segment_policy_candidates.json",
         "ref_key": "segment_policy_candidates_ref",
-        "sha256": "12b36c24cb815648edc905d319e03ae6b1ba86a4b7907d328ac37a94cd6b1a4c",
+        "sha256": "75b9265f1586e1905241517544f3610255906f4fdd35505aa9b1ff13d75cf2c5",
         "status": "candidate_only",
         "summary": {
           "artifact_id": "segment_policy_candidates.chilai_nanhua_day1.v0",
-          "candidate_count": 10,
-          "candidate_only_count": 10,
-          "human_review_required_count": 10,
+          "candidate_count": 109,
+          "candidate_only_count": 109,
+          "human_review_required_count": 109,
           "project_id": "chilai_nanhua_day1",
-          "requires_daylight_count": 10,
+          "requires_daylight_count": 109,
           "retreat_available_count": 2,
           "signal_expected_count": 1,
           "status": "candidate_only"
@@ -419,7 +419,7 @@
         "exists": true,
         "ref": "outputs/plan_validation_candidates.json",
         "ref_key": "plan_validation_candidates_ref",
-        "sha256": "256de699fa6254ee9afbcfaff7e5e839b99f124f9ee81621375c5d8546f738ad",
+        "sha256": "3aa2b16f0eaf2973cb89e671f7708f147175ba81e25ec713c464e5215a89c20a",
         "status": "candidate_only",
         "summary": {
           "artifact_id": "plan_validation_candidates.chilai_nanhua_day1.v0",
@@ -442,7 +442,7 @@
         "exists": true,
         "ref": "outputs/runtime_audit_manifest.json",
         "ref_key": "runtime_audit_manifest_ref",
-        "sha256": "ca777997116b5b80a2e6a0725a1ae9dc051ce475dd5fb31f272156c8b2659100",
+        "sha256": "82dd5cdb210633604b19ccb64f74ba9f3030708c7c956992b9f7e89903944fad",
         "status": "candidate_only",
         "summary": {
           "axis_names": [
@@ -472,7 +472,7 @@
         "exists": true,
         "ref": "outputs/runtime_handoff_metadata.candidate.json",
         "ref_key": "runtime_handoff_metadata_ref",
-        "sha256": "76240ece637751cd4b563e8a74722e552d1aad636486b0034bda122c3abd4dc6",
+        "sha256": "37295fde8073b75d7fd0f94a59f4752e5453d4913a179a205e45b730a3d20fb2",
         "status": "candidate_metadata_only",
         "summary": {
           "bridge_mutation_allowed": false,
@@ -523,7 +523,7 @@
         "exists": true,
         "ref": "outputs/review_queue_manifest.json",
         "ref_key": "review_queue_manifest_ref",
-        "sha256": "93c976bfba95b27a29ee76d56eb71a72eb12db509ad9ea675213c2b52d1260ae",
+        "sha256": "65f66f146f5f53b56b8f3e92fabbbd1eb2901ba3379a9a97f148a293c1328746",
         "status": "candidate_review_queue_only",
         "summary": {
           "accepts_candidates": false,
@@ -535,11 +535,11 @@
             "plan_validation": 6,
             "route_note": 23,
             "runtime_handoff": 1,
-            "segment_policy": 10,
+            "segment_policy": 109,
             "weather_daylight": 1
           },
           "decisions_recorded": false,
-          "item_count": 44,
+          "item_count": 143,
           "manifest_id": "review_queue.chilai_nanhua_day1.v0",
           "package_mutation_allowed": false,
           "phase1_runtime_mutation_allowed": false,
@@ -548,7 +548,7 @@
           "queue_artifact_kind": "pretrip_review_queue_manifest",
           "raw_payloads_embedded": false,
           "rejects_candidates": false,
-          "review_count": 34,
+          "review_count": 133,
           "review_log_mutation_allowed": false,
           "source_ref_count": 8,
           "status": "candidate_review_queue_only",
@@ -560,7 +560,7 @@
         "exists": true,
         "ref": "reviews/review_draft_log.json",
         "ref_key": "review_draft_log_ref",
-        "sha256": "82b0179eaffc50396e6898aa79b9da8e22d0b69cb9900e227f8c7078dcebdfd9",
+        "sha256": "e84f178ddcf72812b6d9d0c75537964a78353036a3b1c7268054f51854354287",
         "status": "draft_only",
         "summary": {
           "action_count": 3,
@@ -690,20 +690,20 @@
         "exists": true,
         "ref": "outputs/remote_contact_summary.json",
         "ref_key": "remote_contact_summary_ref",
-        "sha256": "a9ad143692cca951eb4c8fb2fe0130fea43d0df026a8ba5ebfabc80e3744532e",
+        "sha256": "725798a9f4511350a0fc415749de3359cf7676184229d3da22b1723e1835e065",
         "status": null,
         "summary": {
           "audience": "remote_contacts",
           "conservative_note_count": 3,
-          "day1_target_eta": "2026-05-03T15:25:35+08:00",
-          "planned_start": "2026-05-03T08:55:35+08:00",
+          "day1_target_eta": "2013-10-08T18:28:50+08:00",
+          "planned_start": "2013-10-08T11:58:50+08:00",
           "project_id": "chilai_nanhua_day1",
           "readiness_status": "ready",
-          "return_to_entry_eta": "2026-05-03T13:35:35+08:00",
-          "route_name": "奇萊南華-能高越嶺步道Day1",
+          "return_to_entry_eta": "2013-10-08T16:38:50+08:00",
+          "route_name": "2013-10-08 10:58:50 每日記錄",
           "source_package_version": "0.1.0",
           "summary_id": "remote_contact_summary.chilai_nanhua_day1.v0",
-          "turn_back_checkpoint_eta": "2026-05-03T11:55:35+08:00"
+          "turn_back_checkpoint_eta": "2013-10-08T14:58:50+08:00"
         }
       },
       {
@@ -732,15 +732,15 @@
         "exists": true,
         "ref": "outputs/weather_daylight_evidence.json",
         "ref_key": "weather_daylight_evidence_ref",
-        "sha256": "f9185793acc58afacd0b8dffd2b6068c06b8d629cc32ae536b2df6e06773662f",
+        "sha256": "77079b817df91ef5804f925a5367052861ad7c36ddd25d2d7f22e66fab1a0c7d",
         "status": "candidate_only",
         "summary": {
           "authoritative_weather_computed": false,
           "confidence": "unknown",
           "dark_arrival_warning_margin_min": 60,
-          "date": "2026-05-03",
+          "date": "2013-10-08",
           "daylight_source_status": "manual_placeholder",
-          "evidence_id": "weather_daylight.chilai_nanhua_day1.2026-05-03.v0",
+          "evidence_id": "weather_daylight.chilai_nanhua_day1.2013-10-08.v0",
           "external_api_calls_made": false,
           "human_review_required": true,
           "project_id": "chilai_nanhua_day1",
@@ -795,18 +795,18 @@
       "exists": true,
       "ref": "reviews/human_reviews.json",
       "ref_key": "human_reviews_ref",
-      "sha256": "e8ab656c2172c7133a0eb18ef049ab1b569fce7d5b0059d4986aa076a2e75c65",
+      "sha256": "456b9a85780ed52aa780c86cbad28dd196165fa874faa5007dfa4323ea918c84",
       "status": null,
       "summary": {
         "log_id": "review_log.chilai_nanhua_day1.v0",
-        "review_count": 47
+        "review_count": 245
       }
     },
     {
       "exists": true,
       "ref": "reviews/review_draft_log.json",
       "ref_key": "review_draft_log_ref",
-      "sha256": "82b0179eaffc50396e6898aa79b9da8e22d0b69cb9900e227f8c7078dcebdfd9",
+      "sha256": "e84f178ddcf72812b6d9d0c75537964a78353036a3b1c7268054f51854354287",
       "status": "draft_only",
       "summary": {
         "action_count": 3,
@@ -860,7 +860,7 @@
       "exists": true,
       "ref": "outputs/runtime_audit_manifest.json",
       "ref_key": "runtime_audit_manifest_ref",
-      "sha256": "ca777997116b5b80a2e6a0725a1ae9dc051ce475dd5fb31f272156c8b2659100",
+      "sha256": "82dd5cdb210633604b19ccb64f74ba9f3030708c7c956992b9f7e89903944fad",
       "status": "candidate_only",
       "summary": {
         "axis_names": [
@@ -913,14 +913,14 @@
       "exists": true,
       "ref": "outputs/brain_seed_nodes.json",
       "ref_key": "brain_seed_nodes_ref",
-      "sha256": "e703ce2ba48a6006ccd19158a567ffc61ac820a4978c8b032deada1981a71ced",
+      "sha256": "56db626a86e6643f025925a8b9dbb5e455962a471b04eb333b274c071294c8d6",
       "status": null,
       "summary": {
         "artifact_count": 13,
         "derived_measurement_count": 31,
-        "human_review_count": 47,
+        "human_review_count": 245,
         "model_interpretation_count": 6,
-        "node_count": 97,
+        "node_count": 295,
         "observed_fact_count": 0
       }
     }
@@ -954,12 +954,12 @@
     "terrain_ref_count": 3
   },
   "package": {
-    "checkpoint_candidate_count": 11,
+    "checkpoint_candidate_count": 110,
     "package_id": "pretrip.chilai_nanhua_day1.v0",
     "project_id": "chilai_nanhua_day1",
     "retreat_route_candidate_count": 1,
     "reviewed_package_ref": "outputs/pretrip_package.reviewed.json",
-    "segment_candidate_count": 10,
+    "segment_candidate_count": 109,
     "source_artifact_count": 2,
     "status": "reviewed",
     "version": "0.1.0"
@@ -981,7 +981,7 @@
       "exists": true,
       "ref": "outputs/plan_validation_candidates.json",
       "ref_key": "plan_validation_candidates_ref",
-      "sha256": "256de699fa6254ee9afbcfaff7e5e839b99f124f9ee81621375c5d8546f738ad",
+      "sha256": "3aa2b16f0eaf2973cb89e671f7708f147175ba81e25ec713c464e5215a89c20a",
       "status": "candidate_only",
       "summary": {
         "artifact_id": "plan_validation_candidates.chilai_nanhua_day1.v0",
@@ -1004,7 +1004,7 @@
       "exists": true,
       "ref": "outputs/poi_readiness_candidates.json",
       "ref_key": "poi_readiness_candidates_ref",
-      "sha256": "4a29819ee5dc15e9dff056bf9c5672ea4fae1a2db7ebc9adaf62421576e8dc16",
+      "sha256": "5a5b24dcb6b3cfe2bb668b5e10949d7940cb4e17ff2dc059e303c583bfa7b302",
       "status": "candidate_only",
       "summary": {
         "artifact_id": "poi_readiness_candidates.chilai_nanhua_day1.v0",
@@ -1016,7 +1016,7 @@
           "route_corridor_poi_coverage"
         ],
         "project_id": "chilai_nanhua_day1",
-        "route_corridor_poi_count": 1,
+        "route_corridor_poi_count": 2,
         "status": "candidate_only",
         "warning_candidate_count": 0
       }
@@ -1025,15 +1025,15 @@
       "exists": true,
       "ref": "outputs/segment_policy_candidates.json",
       "ref_key": "segment_policy_candidates_ref",
-      "sha256": "12b36c24cb815648edc905d319e03ae6b1ba86a4b7907d328ac37a94cd6b1a4c",
+      "sha256": "75b9265f1586e1905241517544f3610255906f4fdd35505aa9b1ff13d75cf2c5",
       "status": "candidate_only",
       "summary": {
         "artifact_id": "segment_policy_candidates.chilai_nanhua_day1.v0",
-        "candidate_count": 10,
-        "candidate_only_count": 10,
-        "human_review_required_count": 10,
+        "candidate_count": 109,
+        "candidate_only_count": 109,
+        "human_review_required_count": 109,
         "project_id": "chilai_nanhua_day1",
-        "requires_daylight_count": 10,
+        "requires_daylight_count": 109,
         "retreat_available_count": 2,
         "signal_expected_count": 1,
         "status": "candidate_only"
@@ -1043,15 +1043,15 @@
       "exists": true,
       "ref": "outputs/weather_daylight_evidence.json",
       "ref_key": "weather_daylight_evidence_ref",
-      "sha256": "f9185793acc58afacd0b8dffd2b6068c06b8d629cc32ae536b2df6e06773662f",
+      "sha256": "77079b817df91ef5804f925a5367052861ad7c36ddd25d2d7f22e66fab1a0c7d",
       "status": "candidate_only",
       "summary": {
         "authoritative_weather_computed": false,
         "confidence": "unknown",
         "dark_arrival_warning_margin_min": 60,
-        "date": "2026-05-03",
+        "date": "2013-10-08",
         "daylight_source_status": "manual_placeholder",
-        "evidence_id": "weather_daylight.chilai_nanhua_day1.2026-05-03.v0",
+        "evidence_id": "weather_daylight.chilai_nanhua_day1.2013-10-08.v0",
         "external_api_calls_made": false,
         "human_review_required": true,
         "project_id": "chilai_nanhua_day1",
@@ -1076,20 +1076,20 @@
     "exists": true,
     "ref": "outputs/remote_contact_summary.json",
     "ref_key": "remote_contact_summary_ref",
-    "sha256": "a9ad143692cca951eb4c8fb2fe0130fea43d0df026a8ba5ebfabc80e3744532e",
+    "sha256": "725798a9f4511350a0fc415749de3359cf7676184229d3da22b1723e1835e065",
     "status": null,
     "summary": {
       "audience": "remote_contacts",
       "conservative_note_count": 3,
-      "day1_target_eta": "2026-05-03T15:25:35+08:00",
-      "planned_start": "2026-05-03T08:55:35+08:00",
+      "day1_target_eta": "2013-10-08T18:28:50+08:00",
+      "planned_start": "2013-10-08T11:58:50+08:00",
       "project_id": "chilai_nanhua_day1",
       "readiness_status": "ready",
-      "return_to_entry_eta": "2026-05-03T13:35:35+08:00",
-      "route_name": "奇萊南華-能高越嶺步道Day1",
+      "return_to_entry_eta": "2013-10-08T16:38:50+08:00",
+      "route_name": "2013-10-08 10:58:50 每日記錄",
       "source_package_version": "0.1.0",
       "summary_id": "remote_contact_summary.chilai_nanhua_day1.v0",
-      "turn_back_checkpoint_eta": "2026-05-03T11:55:35+08:00"
+      "turn_back_checkpoint_eta": "2013-10-08T14:58:50+08:00"
     }
   },
   "resource_plan": {
@@ -1118,14 +1118,14 @@
     "exists": true,
     "ref": "outputs/compiled_mission_graph.reviewed.json",
     "ref_key": "compiled_mission_graph_reviewed_ref",
-    "sha256": "c2b42fee4feffbf7bca18d0262cc38a07b629df83e9dc8b4ac166bdf10a3015e",
+    "sha256": "d9e32c51fad625e6ff96d6d1283dcb1540f5b5a789d68e2c2ce45549dd83d957",
     "status": null,
     "summary": {
-      "checkpoint_count": 11,
+      "checkpoint_count": 110,
       "diversion_point_count": 1,
       "mission_id": "mission.chilai_nanhua_day1.0.1.0",
-      "name": "奇萊南華-能高越嶺步道Day1",
-      "segment_count": 10
+      "name": "2013-10-08 10:58:50 每日記錄",
+      "segment_count": 109
     }
   },
   "route_refs": [

@@ -147,6 +147,18 @@ Candidates:
 - LoRa or LoRaWAN for long-range low-rate beacon/check-in;
 - UWB only if precise nearby ranging becomes a real requirement.
 
+LoRa / LoRaWAN / SX1303 gateway work is now tracked as a dedicated Scout
+mainline planning spec:
+
+```text
+docs/specs/scout-lora-lorawan-sx1303-plan.md
+```
+
+That direction treats LoRa as communication and location evidence for reducing
+the blank after disconnection. It does not allow radio reception, radio loss,
+gateway metadata, Meshtastic messages, or SX1303 geolocation experiments to
+directly change Phase 1 L0-L4 safety decisions.
+
 ### Wide Area Cellular
 
 Use for:
@@ -779,7 +791,8 @@ Acceptance:
 | Pi event bus | Event-driven field runtime | Pi 5 + MQTT/NATS | Optional event architecture |
 | Pi tiny inference | Local interpretation experiment | Pi 5 CPU + Ollama `qwen2.5:0.5b` / `qwen2.5:1.5b` | Accepted prototype baseline for low-frequency offline fallback |
 | Pi Coral TPU | Low-power inference accelerator | Pi 5 + Coral TPU | Measure power/latency tradeoff |
-| LoRa team beacon | Nearby low-rate backup | Field logger + LoRa | Phase 2 team awareness |
+| LoRa team beacon | Nearby low-rate backup | Field logger + LoRa | Phase 2 team awareness; see `docs/specs/scout-lora-lorawan-sx1303-plan.md` |
+| SX1303 LoRaWAN gateway | Team/camp/trailhead radio evidence | Pi 5 + SX1303 915M HAT configured for Taiwan-compatible AS923 | Last-heard evidence, gateway metadata, future multi-gateway TDOA research |
 | Cellular telemetry unit | Remote check-in | LTE-M/NB-IoT/Cat-1 + eSIM | Remote status provider |
 | Edge base node | Team/camp/vehicle hub | Jetson/Mac mini + 5G/Wi-Fi | Optional Phase 2/3 hub |
 | Jetson node | GPU-class edge compute | Jetson Orin | Only after measured Pi bottleneck |

@@ -13,6 +13,10 @@ from route_matching import GpxRoute, RoutePoint
 from safety_models import SafetyEvent, SafetyEventType, SafetyLevel
 
 
+DEAD_RECKONING_ESTIMATE_SOURCES = {"pdr_fallback", "dead_reckoning", "dead_reckoning_expired"}
+GNSS_REANCHOR_ESTIMATE_SOURCES = {"gps_reanchor", "gnss_reanchor"}
+
+
 @dataclass(frozen=True)
 class RouteProgressConfig:
     dense_checkpoint_spacing_m: float = 30.0
@@ -95,7 +99,7 @@ class RouteProgressEvaluator:
             if missed is not None:
                 return missed
 
-        if sample.estimate_source == "gps_reanchor":
+        if sample.estimate_source in GNSS_REANCHOR_ESTIMATE_SOURCES:
             if self.high_water_progress_m is not None and sample.progress_m < self.high_water_progress_m:
                 self.suppress_regression_until_progress_m = self.high_water_progress_m
             self._reset_regression(sample.progress_m)
@@ -265,7 +269,7 @@ class RouteProgressEvaluator:
         ]
         map_confidence = min(map_confidences) if map_confidences else 0.0
         weak_gps = (
-            sample.estimate_source == "pdr_fallback"
+            sample.estimate_source in DEAD_RECKONING_ESTIMATE_SOURCES
             or (
                 sample.gps_horizontal_accuracy_m is not None
                 and sample.gps_horizontal_accuracy_m > self.config.weak_gps_accuracy_threshold_m
@@ -312,7 +316,9 @@ class RouteProgressEvaluator:
 
     def _weak_gps_event(self, sample: RouteProgressSample) -> SafetyEvent | None:
         accuracy = sample.gps_horizontal_accuracy_m
-        if accuracy is None or accuracy <= self.config.weak_gps_accuracy_threshold_m:
+        dead_reckoning_source = sample.estimate_source in DEAD_RECKONING_ESTIMATE_SOURCES
+        weak_accuracy = accuracy is not None and accuracy > self.config.weak_gps_accuracy_threshold_m
+        if not dead_reckoning_source and not weak_accuracy:
             self.weak_gps_started_at = None
             self.weak_gps_start_progress_m = None
             return None
@@ -323,7 +329,12 @@ class RouteProgressEvaluator:
             return None
 
         duration_s = sample.timestamp - self.weak_gps_started_at
-        movement_m = abs(sample.progress_m - (self.weak_gps_start_progress_m or sample.progress_m))
+        start_progress_m = (
+            self.weak_gps_start_progress_m
+            if self.weak_gps_start_progress_m is not None
+            else sample.progress_m
+        )
+        movement_m = abs(sample.progress_m - start_progress_m)
         if duration_s < self.config.min_weak_gps_duration_s:
             return None
         if movement_m < self.config.min_weak_gps_movement_m:

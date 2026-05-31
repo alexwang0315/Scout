@@ -85,6 +85,73 @@ class ObservationAdapterTests(unittest.TestCase):
         self.assertEqual([observation.lat for observation in observations], [25.0, 25.1])
         self.assertEqual([observation.timestamp for observation in observations], [99.0, 99.0])
 
+    def test_runtime_gnss_payload_converts_to_raw_gnss_observation(self):
+        observations = sensorlog_payload_to_observations(
+            {
+                "source": "pi_gnss_nmea_smoke",
+                "timestamp_s": 10.0,
+                "sentence_type": "GPGGA",
+                "position": {"lat": 24.1, "lon": 121.2, "altitude_m": 300.0},
+                "fix_quality": {"quality": 1, "valid": True, "satellites": 9, "hdop": 0.8},
+            },
+            device="scout_pi",
+        )
+
+        self.assertEqual(len(observations), 1)
+        observation = observations[0]
+        self.assertEqual(observation.source, "pi_gnss_nmea_smoke")
+        self.assertEqual(observation.timestamp, 10.0)
+        self.assertEqual(observation.lat, 24.1)
+        self.assertEqual(observation.lon, 121.2)
+        self.assertEqual(observation.elevation_m, 300.0)
+        self.assertEqual(observation.gps_horizontal_accuracy_m, 4.0)
+        self.assertEqual(observation.raw["capabilities"]["gps"]["status"], CapabilityStatus.AVAILABLE)
+        self.assertEqual(observation.raw["raw_payload"]["sentence_type"], "GPGGA")
+
+    def test_runtime_dr_delta_payload_converts_without_faking_gps_position(self):
+        observations = sensorlog_payload_to_observations(
+            {
+                "source": "wheel_odometry",
+                "timestamp_s": 11.0,
+                "odometry": {"distance_delta_m": 3.0, "heading_deg": 87.5},
+            },
+            device="scout_pi",
+        )
+
+        observation = observations[0]
+        self.assertEqual(observation.source, "wheel_odometry")
+        self.assertIsNone(observation.lat)
+        self.assertIsNone(observation.lon)
+        self.assertEqual(observation.raw["odometry"]["distance_delta_m"], 3.0)
+        self.assertEqual(
+            observation.raw["capabilities"]["dead_reckoning_delta"]["status"],
+            CapabilityStatus.AVAILABLE,
+        )
+
+    def test_payloads_list_converts_runtime_provider_batch(self):
+        observations = sensorlog_payload_to_observations(
+            {
+                "payloads": [
+                    {
+                        "source": "pi_gnss_nmea_smoke",
+                        "timestamp_s": 10.0,
+                        "position": {"lat": 24.1, "lon": 121.2},
+                    },
+                    {
+                        "source": "wheel_odometry",
+                        "timestamp_s": 11.0,
+                        "distance_delta_m": 2.0,
+                    },
+                ]
+            },
+            device="scout_pi",
+        )
+
+        self.assertEqual([observation.source for observation in observations], ["pi_gnss_nmea_smoke", "wheel_odometry"])
+        self.assertEqual(observations[0].lat, 24.1)
+        self.assertIsNone(observations[1].lat)
+        self.assertEqual(observations[1].raw["distance_delta_m"], 2.0)
+
     def test_missing_gps_still_yields_observation_with_unavailable_gps(self):
         observation = sensorlog_record_to_observation(
             {"heartRateBPM": "102", "accelerometerAccelerationX": "0.1"},

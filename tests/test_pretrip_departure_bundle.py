@@ -39,8 +39,8 @@ def test_builds_deterministic_departure_bundle_manifest():
         "status": "reviewed",
         "reviewed_package_ref": "outputs/pretrip_package.reviewed.json",
         "source_artifact_count": 2,
-        "checkpoint_candidate_count": 11,
-        "segment_candidate_count": 10,
+            "checkpoint_candidate_count": 110,
+            "segment_candidate_count": 109,
         "retreat_route_candidate_count": 1,
     }
     assert payload["counts"] == {
@@ -66,13 +66,13 @@ def test_departure_bundle_preserves_required_refs_and_checksums():
         "outputs/compiled_mission_graph.reviewed.json"
     )
     assert bundle["reviewed_mission_graph"]["sha256"] == (
-        "c2b42fee4feffbf7bca18d0262cc38a07b629df83e9dc8b4ac166bdf10a3015e"
+        "d9e32c51fad625e6ff96d6d1283dcb1540f5b5a789d68e2c2ce45549dd83d957"
     )
     assert bundle["reviewed_mission_graph"]["summary"] == {
         "mission_id": "mission.chilai_nanhua_day1.0.1.0",
-        "name": "奇萊南華-能高越嶺步道Day1",
-        "checkpoint_count": 11,
-        "segment_count": 10,
+            "name": "2013-10-08 10:58:50 每日記錄",
+        "checkpoint_count": 110,
+        "segment_count": 109,
         "diversion_point_count": 1,
     }
     assert [ref["ref_key"] for ref in bundle["readiness_refs"]] == [

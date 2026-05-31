@@ -33,16 +33,29 @@ def sensorlog_payload_to_observations(
     received_at: float | None = None,
     server_signal_snapshot: dict[str, Any] | None = None,
 ) -> list[Observation]:
-    return [
-        sensorlog_record_to_observation(
-            record,
-            device=device,
-            source=source,
-            received_at=received_at,
-            server_signal_snapshot=server_signal_snapshot,
-        )
-        for record in _records_from_payload(payload)
-    ]
+    observations = []
+    for record in _records_from_payload(payload):
+        if _looks_like_runtime_observation_record(record):
+            observations.append(
+                runtime_record_to_observation(
+                    record,
+                    device=device,
+                    source=source,
+                    received_at=received_at,
+                    server_signal_snapshot=server_signal_snapshot,
+                )
+            )
+        else:
+            observations.append(
+                sensorlog_record_to_observation(
+                    record,
+                    device=device,
+                    source=source,
+                    received_at=received_at,
+                    server_signal_snapshot=server_signal_snapshot,
+                )
+            )
+    return observations
 
 
 def sensorlog_record_to_observation(
@@ -70,6 +83,38 @@ def sensorlog_record_to_observation(
             "server_signal_snapshot": server_signal_snapshot,
             "raw_payload": record,
         },
+    )
+
+
+def runtime_record_to_observation(
+    record: dict[str, Any],
+    *,
+    device: str = "scout_pi",
+    source: str = "runtime_provider_evidence",
+    received_at: float | None = None,
+    server_signal_snapshot: dict[str, Any] | None = None,
+) -> Observation:
+    record_raw = record.get("raw") if isinstance(record.get("raw"), dict) else {}
+    raw_evidence = {**record, **record_raw}
+    raw_evidence.update(
+        {
+            "device": device,
+            "capabilities": {
+                name: capability.model_dump(mode="json")
+                for name, capability in _runtime_capabilities(record).items()
+            },
+            "server_signal_snapshot": server_signal_snapshot,
+            "raw_payload": record,
+        }
+    )
+    return Observation(
+        timestamp=_runtime_timestamp_seconds(record, received_at=received_at),
+        source=str(record.get("source") or source),
+        lat=_runtime_lat(record),
+        lon=_runtime_lon(record),
+        elevation_m=_runtime_elevation_m(record),
+        gps_horizontal_accuracy_m=_runtime_horizontal_accuracy_m(record),
+        raw=raw_evidence,
     )
 
 
@@ -127,6 +172,10 @@ def _sensorlog_evidence(record: dict[str, Any]) -> dict[str, Any]:
         "pedometerNumberofSteps",
         "pedometerCurrentPace",
         "pedometerCurrentCadence",
+        "locationCourse",
+        "locationTrueHeading",
+        "locationMagneticHeading",
+        "motionHeading",
         "batteryLevel",
         "batteryState",
         "accelerometerAccelerationX",
@@ -174,6 +223,24 @@ def _server_wifi_scan_capability(server_signal_snapshot: dict[str, Any] | None) 
     )
 
 
+def _runtime_capabilities(record: dict[str, Any]) -> dict[str, ObservationCapability]:
+    return {
+        "gps": _available_if(_runtime_lat(record) is not None and _runtime_lon(record) is not None, "runtime GNSS lat/lon"),
+        "gps_horizontal_accuracy": _available_if(
+            _runtime_horizontal_accuracy_m(record) is not None,
+            "runtime GNSS horizontal accuracy",
+        ),
+        "dead_reckoning_delta": _available_if(
+            _runtime_distance_delta_m(record) is not None,
+            "runtime distance_delta_m",
+        ),
+        "heading": _available_if(
+            _runtime_heading_deg(record) is not None,
+            "runtime heading_deg",
+        ),
+    }
+
+
 def _records_from_payload(payload: Any) -> list[dict[str, Any]]:
     if isinstance(payload, list):
         return [item for item in payload if isinstance(item, dict)]
@@ -181,8 +248,26 @@ def _records_from_payload(payload: Any) -> list[dict[str, Any]]:
         imu_data = payload.get("imu_data")
         if isinstance(imu_data, list):
             return [item for item in imu_data if isinstance(item, dict)]
+        observations = payload.get("observations")
+        if isinstance(observations, list):
+            return [item for item in observations if isinstance(item, dict)]
+        payloads = payload.get("payloads")
+        if isinstance(payloads, list):
+            return [item for item in payloads if isinstance(item, dict)]
         return [payload]
     raise ValueError("SensorLog payload must be a dict, list, or dict with imu_data list")
+
+
+def _looks_like_runtime_observation_record(record: dict[str, Any]) -> bool:
+    if isinstance(record.get("position"), dict):
+        return True
+    if isinstance(record.get("odometry"), dict) or isinstance(record.get("dr"), dict):
+        return True
+    if any(key in record for key in ("timestamp_s", "distance_delta_m", "heading_deg", "sentence_type")):
+        return True
+    if any(key in record for key in ("lat", "lon", "latitude", "longitude")):
+        return True
+    return False
 
 
 def _timestamp_seconds(record: dict[str, Any], *, received_at: float | None) -> float:
@@ -198,6 +283,73 @@ def _timestamp_seconds(record: dict[str, Any], *, received_at: float | None) -> 
             pass
 
     return received_at if received_at is not None else 0.0
+
+
+def _runtime_timestamp_seconds(record: dict[str, Any], *, received_at: float | None) -> float:
+    for key in ("timestamp_s", "timestamp", "loggingTimestamp_s"):
+        value = _to_float(record.get(key))
+        if value is not None:
+            return value
+
+    for key in ("captured_at", "observed_at", "received_at"):
+        raw = record.get(key)
+        if isinstance(raw, str) and raw and raw != "null":
+            try:
+                return datetime.fromisoformat(raw.replace("Z", "+00:00")).astimezone(timezone.utc).timestamp()
+            except ValueError:
+                pass
+    return received_at if received_at is not None else 0.0
+
+
+def _runtime_lat(record: dict[str, Any]) -> float | None:
+    position = record.get("position") if isinstance(record.get("position"), dict) else {}
+    return _first_float(record, position, keys=("lat", "latitude"))
+
+
+def _runtime_lon(record: dict[str, Any]) -> float | None:
+    position = record.get("position") if isinstance(record.get("position"), dict) else {}
+    return _first_float(record, position, keys=("lon", "longitude"))
+
+
+def _runtime_elevation_m(record: dict[str, Any]) -> float | None:
+    position = record.get("position") if isinstance(record.get("position"), dict) else {}
+    return _first_float(record, position, keys=("elevation_m", "altitude_m", "altitude"))
+
+
+def _runtime_horizontal_accuracy_m(record: dict[str, Any]) -> float | None:
+    position = record.get("position") if isinstance(record.get("position"), dict) else {}
+    value = _first_float(
+        record,
+        position,
+        keys=("horizontal_accuracy_m", "gps_horizontal_accuracy_m", "accuracy_m"),
+    )
+    if value is not None:
+        return value
+
+    fix_quality = record.get("fix_quality") if isinstance(record.get("fix_quality"), dict) else {}
+    hdop = _to_float(fix_quality.get("hdop"))
+    return hdop * 5.0 if hdop is not None else None
+
+
+def _runtime_distance_delta_m(record: dict[str, Any]) -> float | None:
+    odometry = record.get("odometry") if isinstance(record.get("odometry"), dict) else {}
+    dr = record.get("dr") if isinstance(record.get("dr"), dict) else {}
+    return _first_float(record, odometry, dr, keys=("distance_delta_m",))
+
+
+def _runtime_heading_deg(record: dict[str, Any]) -> float | None:
+    odometry = record.get("odometry") if isinstance(record.get("odometry"), dict) else {}
+    dr = record.get("dr") if isinstance(record.get("dr"), dict) else {}
+    return _first_float(record, odometry, dr, keys=("heading_deg", "motionHeading", "locationCourse"))
+
+
+def _first_float(*mappings: dict[str, Any], keys: tuple[str, ...]) -> float | None:
+    for mapping in mappings:
+        for key in keys:
+            value = _to_float(mapping.get(key))
+            if value is not None:
+                return value
+    return None
 
 
 def _to_float(value: Any) -> float | None:

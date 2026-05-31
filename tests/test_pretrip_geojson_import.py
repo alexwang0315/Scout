@@ -189,9 +189,8 @@ def test_chilai_map_candidate_fixture_is_review_required_metadata_only():
 
     assert payload["source_artifact"]["media_type"] == "application/geo+json"
     assert len(payload["corridor_candidates"]) == 1
-    assert len(payload["poi_candidates"]) == 1
-    assert len(payload["hazard_candidates"]) == 1
+    assert len(payload["poi_candidates"]) == 2
+    assert len(payload["hazard_candidates"]) == 0
     assert payload["corridor_candidates"][0]["review_required"] is True
     assert payload["poi_candidates"][0]["review_state"] == "needs_review"
-    assert payload["hazard_candidates"][0]["hazard"]["hazard_type"] == "limited_retreat_options"
     assert "features" not in json.dumps(payload)

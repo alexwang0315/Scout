@@ -7,6 +7,10 @@ a **Capability Timeline**（能力時間軸） similar in spirit to a Sunriver-s
 route-time diagram（上河式步程圖）, but grounded in the user's actual completed
 track and Scout evidence.
 
+User-facing guides（一般使用者說明）:
+`docs/admin/post-analysis-capability-timeline-user-guide.html`
+and `docs/admin/post-analysis-capability-timeline-user-guide.md`
+
 The feature should show two time concepts for each checkpoint-to-checkpoint
 segment:
 

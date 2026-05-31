@@ -318,6 +318,7 @@ def ingest_safety_observation_body(
             for path in update.stored_incident_paths
         ],
         "latest_capabilities": _latest_capabilities(updates),
+        "latest_position_estimate": _latest_position_estimate(updates),
         "snapshot": {
             "observations_processed": runtime_snapshot.observations_processed,
             "checkpoint_hits": len(runtime_snapshot.checkpoint_hits),
@@ -326,6 +327,13 @@ def ingest_safety_observation_body(
             "stored_incidents": len(runtime_snapshot.stored_incident_paths),
         },
         "ingest_surface": ingest_surface,
+        "runtime_handoff": {
+            "status": "handed_to_safety_runtime",
+            "observations_handed_to_runtime": len(observations),
+            "safety_runtime_observe_called": bool(observations),
+            "admission_status": admission_summary["status"] if admission_summary is not None else None,
+            "handoff_surface": ingest_surface,
+        },
     }
     if admission_summary is not None:
         response["admission"] = admission_summary
@@ -396,6 +404,14 @@ def _latest_capabilities(updates: list[SafetyRuntimeUpdate]) -> dict[str, Any]:
         return {}
     capabilities = updates[-1].observation.raw.get("capabilities")
     return capabilities if isinstance(capabilities, dict) else {}
+
+
+def _latest_position_estimate(updates: list[SafetyRuntimeUpdate]) -> dict[str, Any] | None:
+    for update in reversed(updates):
+        position_estimate = update.observation.raw.get("position_estimate")
+        if isinstance(position_estimate, dict):
+            return position_estimate
+    return None
 
 
 def _current_snapshot(

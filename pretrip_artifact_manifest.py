@@ -746,7 +746,7 @@ def _project_artifact_summary(artifact_kind: str, payload: Any) -> dict[str, Any
         validation = payload.get("validation", {})
         daylight = payload.get("daylight", {})
         weather_window = payload.get("weather_window", {})
-        threshold_policy = payload.get("threshold_policy", {})
+        threshold_policy = payload.get("threshold_policy") or {}
         return {
             "evidence_id": payload.get("evidence_id"),
             "project_id": payload.get("project_id"),

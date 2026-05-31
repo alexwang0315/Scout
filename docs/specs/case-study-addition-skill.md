@@ -290,6 +290,35 @@ Example Scout implication:
 }
 ```
 
+### Pre-Trip Readiness and Route Workload
+
+Case-study additions may also use non-incident references when they help Scout reason about pre-trip readiness. Training, pacing, nutrition, hydration, sleep, and route workload articles should be treated as policy/reference sources, not as field incidents.
+
+When a source discusses whether a hiker can safely handle a route, the draft should propose Scout hooks such as:
+
+- `pretrip_readiness.fitness_baseline`
+- `pretrip_readiness.route_workload`
+- `pretrip_readiness.pace_buffer`
+- `pretrip_readiness.hydration_margin`
+- `pretrip_readiness.nutrition_plan_tested`
+- `pretrip_readiness.fatigue_attention_margin`
+
+The skill should separate route workload from medical claims. It may identify readiness warnings such as high mileage, total ascent, pack weight, insufficient pace buffer, untested nutrition, likely hydration margin, poor sleep, or attention decline from fatigue, but it must not diagnose illness or fitness.
+
+RaceON's "百岳練習生" training article is an initial policy/reference source for this class. It supports pre-trip questions such as whether the user's fitness can handle the route, whether the planned pace has enough margin beyond guide time, and whether nutrition/hydration practices have been tested before the major trip.
+
+Example Scout implication:
+
+```json
+{
+  "phase": "phase_4_pretrip_planning",
+  "hook": "pretrip_readiness.fitness_baseline",
+  "type": "existing_spec_support",
+  "summary": "Scout should compare route workload with user fitness baseline, pace buffer, hydration margin, and tested nutrition before departure.",
+  "confidence": "assumption"
+}
+```
+
 ## Testing Strategy
 
 The future implementation should be tested as a document-generation and schema-validation workflow, not as Phase 1 or Phase 2 runtime behavior.
@@ -392,6 +421,12 @@ The first implementation should support the taxonomy surfaced from the current H
 - `precision_navigation_l3`
 - `gnss_imu_pdr_fusion_research`
 - `drone_first_search_handoff`
+- `pretrip_fitness_readiness`
+- `pace_buffer_required`
+- `workload_route_matching`
+- `hydration_margin`
+- `attention_decline_from_fatigue`
+- `nutrition_plan_tested`
 
 These are seeds, not final product APIs. The skill may propose new keys, but each new key must include a short definition and a reason it is not covered by an existing key.
 

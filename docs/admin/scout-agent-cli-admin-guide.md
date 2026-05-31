@@ -1,0 +1,411 @@
+# Scout Agent And CLI Admin Guide
+
+Date: 2026-05-28
+
+Audience: advanced Scout users, Scout administrators, field operators, and developers who need to run or audit Scout agent/tool actions.
+
+This guide explains the current Scout Agent and CLI interface: what it is for, what it can and cannot do, where it appears in the UI, which CLI groups exist, what inputs are expected, and what outputs are produced.
+
+## Executive Summary
+
+Scout Agent is not just a chat layer. It is a local resource runner that lets an AI assistant or human operator call registered Scout tools against the current trip package, map evidence, pretrip workspace, hardware readiness evidence, voice/outbound mock queues, runtime export bundles, and debug traces.
+
+The important boundary is that the model does not become runtime truth. Deterministic tools perform reads/writes, and every agent-callable action should return structured JSON and boundary metadata.
+
+Current alpha entrypoints:
+
+| Entrypoint | Role |
+| --- | --- |
+| `python -m scout_cli ...` | Main operator-facing CLI facade |
+| `python -m scout_agent_cli tools ...` | Registered tool list/describe/run interface |
+| `python -m scout_agent_builtin_tools ...` | Lower-level builtin implementation runner |
+| `/admin/debug` | Read-only monitoring surface for agent action traces, spatial imprint events, voice/outbound mock events |
+| `/admin/pretrip` | Human review/workspace surface that consumes outputs from import, layer prep, review, map/risk, wearable, and package tools |
+
+## What It Is For
+
+Scout Agent/CLI is designed to let Scout use its own local resources:
+
+- Build and query an offline evidence index for the trip.
+- Import GPX and prepare pretrip layers.
+- Review, propose, and apply CP candidate changes through auditable workspace artifacts.
+- Build risk attribution and heatmap diagnostics.
+- Append notes to the flight recorder.
+- Preview voice messages and queue mock outbound receipts.
+- Plant, expire, delete, and dry-run SBM / Spatial Imprints.
+- Build runtime handoff/export artifacts without activating runtime.
+- Run advisory shelter-direction ranking from local pretrip evidence.
+- Run a mock-only SOS delegated playbook after explicit SOS activation.
+
+It should not:
+
+- silently mutate Phase 1 safety state;
+- call live `/safety/*` mutation endpoints;
+- perform real SMS, satellite, webhook, SOS, or hardware action unless a later audited mode explicitly authorizes it;
+- make model text the final source of runtime truth.
+
+## UI Operation
+
+### `/admin/debug`
+
+Use `/admin/debug` as the operator monitoring surface. The Monitoring Center and timeline show:
+
+- latest agent tool action trace;
+- agent tool count;
+- spatial imprint store/trigger events;
+- voice/outbound mock events;
+- release/readiness gate traces;
+- debug boundary flags.
+
+This page is read-only. It is for confirming what happened, not for directly editing runtime state.
+
+Suggested operator workflow:
+
+1. Run a CLI action with `--trace-log`.
+2. Open `/admin/debug`.
+3. Check Monitoring Center counts and latest action summary.
+4. Open the timeline node for `agent_tool_invocation`, `spatial_imprint_store_updated`, or `spatial_imprint_trigger_event`.
+5. Confirm `runtime_safety_truth=false`, `phase1_safety_mutation_allowed=false`, and `live_safety_api_calls_allowed=false`.
+
+### `/admin/pretrip`
+
+Use `/admin/pretrip` as the human review and workspace operation surface. It is where pretrip package artifacts, map/layer preparation, CP review decisions, risk projections, and wearable/energy projections become visible to operators.
+
+The agent/CLI is useful here because it can produce the artifacts that `/admin/pretrip` renders or reviews:
+
+- imported route workspace;
+- layer preparation manifest;
+- local evidence index;
+- CP proposals and reviewed deltas;
+- risk attribution / heatmap outputs;
+- reviewed-candidate addendum;
+- runtime handoff/export artifacts.
+
+### `/admin/hardware-readiness` And Debug Hardware Summary
+
+Hardware readiness summaries are exposed to agent tools as read-only evidence. In the current alpha, the agent can summarize hardware readiness, but cannot control hardware providers through this interface.
+
+## Interface Map
+
+```mermaid
+flowchart LR
+  U["Operator / Pydantic AI"] --> C["python -m scout_cli"]
+  C --> R["registered tool manifest"]
+  R --> B["builtin deterministic tool"]
+  B --> O["JSON result + artifacts"]
+  O --> T["trace log / debug projection"]
+  O --> P["/admin/pretrip workspace"]
+  T --> D["/admin/debug monitoring"]
+```
+
+## Authority Modes
+
+| Mode | Meaning | Typical tools |
+| --- | --- | --- |
+| `local_evidence_query` | Read local evidence only | release checks, KB query, debug trace tail |
+| `decision_support` | Compute advice without writing runtime truth | readiness, trigger dry-run, shelter direction |
+| `proposal_write` | Write candidate-only proposals | CP add/delete proposal preview |
+| `workspace_write` | Write local workspace or trace artifacts | import GPX, prepare layers, append note, plant imprint |
+| `package_write` | Write package/handoff artifacts without runtime activation | reviewed candidates, runtime export/handoff |
+| `outbound_preview` | Preview or mock outbound/voice only | voice preview, mock queue |
+| `ephemeral_safety_action` | Short-lived advisory action | shelter direction |
+| `sos_delegated_emergency` | Mock-only SOS delegated playbook in this alpha | SOS playbook run |
+
+## Registered Tool Inventory
+
+Current manifest count: 44.
+
+| Group | Tool IDs | Primary use |
+| --- | --- | --- |
+| checks | `scout.checks.pretrip_release`, `scout.checks.runtime_readiness` | Read-only release/readiness reports |
+| kb | `scout.kb.build`, `scout.kb.query`, `scout.kb.pretrip_view_summary`, `scout.kb.hardware_readiness_summary` | Offline evidence index and summaries |
+| local evidence | `scout.local_evidence.status` | Local trip state summary |
+| pretrip | `scout.pretrip.import_gpx`, `scout.pretrip.prepare_layers`, `scout.pretrip.artifact_manifest`, `scout.pretrip.readiness`, `scout.pretrip.decision_register`, `scout.pretrip.workspace_edit`, `scout.pretrip.review_append_decisions`, `scout.pretrip.departure_reviewed_candidates`, `scout.pretrip.runtime_handoff`, `scout.pretrip.runtime_export` | Pretrip workspace, review, handoff/export |
+| cp | `scout.cp.proposal_preview`, `scout.cp.propose_add`, `scout.cp.propose_delete`, `scout.cp.apply_reviewed_delta` | CP proposal and reviewed deltas |
+| risk | `scout.risk.attribution`, `scout.risk.heatmap` | Candidate-only risk diagnostics |
+| map | `scout.map.raster_source`, `scout.map.raster_tiles`, `scout.map.tile_cache_plan` | Local raster/tile planning and cache prep |
+| imprint | `scout.imprint.export_pretrip`, `scout.imprint.store_list`, `scout.imprint.plant`, `scout.imprint.expire`, `scout.imprint.delete`, `scout.imprint.trigger_dry_run` | SBM / Spatial Imprint management |
+| debug | `scout.debug.trace_tail` | Read debug/action trace tail |
+| note | `scout.note.append_flight_recorder` | Append audit notes |
+| voice | `scout.voice.preview`, `scout.voice.mock_queue`, `scout.voice.mock_transition` | Voice preview/mock lifecycle |
+| outbound | `scout.outbound.mock_queue`, `scout.outbound.mock_transition` | Mock outbound receipts only |
+| runtime | `scout.runtime.activation_preflight`, `scout.runtime.load_dry_run` | Runtime export validation without activation |
+| safety action | `scout.safety_action.shelter_direction` | Advisory shelter/rest direction from local evidence |
+| sos | `scout.sos.playbook_run` | Mock-only SOS delegated playbook after explicit SOS activation |
+| evidence | `scout.evidence.sensorlog_to_gpx` | Convert local SensorLog export to GPX |
+
+## Common CLI Pattern
+
+Use JSON whenever the command will be consumed by another tool or by an operator audit.
+
+```bash
+cd /Users/alexwang0315/scout-fusion
+
+PYTHONPATH=. venv/bin/python -m scout_cli \
+  --trace-log /tmp/scout-agent-trace.jsonl \
+  --agent-run-id agent_run.local.manual \
+  --action-id agent_action.local.001 \
+  <group> <command> \
+  --json
+```
+
+Common output shape:
+
+```json
+{
+  "artifact_kind": "scout_agent_tool_result",
+  "tool_id": "scout.kb.query",
+  "status": "completed",
+  "mode": "local_evidence_query",
+  "inputs": {},
+  "outputs": {},
+  "effects": {},
+  "boundary": {
+    "runtime_safety_truth": false,
+    "phase1_safety_mutation_allowed": false,
+    "live_safety_api_calls_allowed": false
+  }
+}
+```
+
+## Core Commands
+
+### List And Describe Tools
+
+Input: no trip data required.
+
+```bash
+PYTHONPATH=. venv/bin/python -m scout_cli tools list --json
+```
+
+Output:
+
+- `artifact_kind=scout_agent_tool_list`
+- `tools[]` with `id`, `version`, `description`, `mode`, `requires_authorization`
+- top-level `boundary`
+
+Describe one tool:
+
+```bash
+PYTHONPATH=. venv/bin/python -m scout_cli tools describe scout.kb.query --json
+```
+
+### Run A Registered Tool Directly
+
+Input: JSON request file matching the selected tool.
+
+```bash
+PYTHONPATH=. venv/bin/python -m scout_cli tools run scout.kb.query \
+  --input /tmp/kb-query.json \
+  --trace-log /tmp/scout-agent-trace.jsonl \
+  --agent-run-id agent_run.local.manual \
+  --action-id agent_action.local.kb_query \
+  --json
+```
+
+Output:
+
+- tool result envelope;
+- optional artifact paths;
+- optional trace event appended to `--trace-log`.
+
+### Build Local Evidence Index
+
+Input:
+
+- local pretrip project root;
+- output index path.
+
+```bash
+PYTHONPATH=. venv/bin/python -m scout_cli kb build \
+  --project-root /tmp/scout-pretrip-alpha/chilai_nanhua_day1 \
+  --out /tmp/scout-pretrip-alpha/chilai_nanhua_day1/outputs/local_evidence_index.json \
+  --authorized-by operator.alex \
+  --json
+```
+
+Output:
+
+- local evidence index JSON;
+- indexed evidence refs;
+- provenance and boundary metadata.
+
+### Query Local Evidence
+
+Input:
+
+- project root or index path;
+- natural-language query;
+- optional evidence type filter.
+
+```bash
+PYTHONPATH=. venv/bin/python -m scout_cli kb query \
+  --project-root /tmp/scout-pretrip-alpha/chilai_nanhua_day1 \
+  --query "附近有可休息或避雨的位置嗎" \
+  --limit 5 \
+  --json
+```
+
+Output:
+
+- ranked local evidence matches;
+- source refs;
+- limitations;
+- no network search.
+
+### Import GPX Into A Pretrip Workspace
+
+Input:
+
+- project id;
+- GPX route;
+- workspace root;
+- optional reference GPX directory.
+
+```bash
+PYTHONPATH=. venv/bin/python -m scout_cli pretrip import-gpx \
+  --project-id chilai_nanhua_day1 \
+  --golden-route-gpx /data/scout/routes/chilai_nanhua_day1.gpx \
+  --workspace-root /data/scout/pretrip \
+  --authorized-by operator.alex \
+  --json
+```
+
+Output:
+
+- normalized route artifacts;
+- candidate artifacts;
+- workspace project files;
+- boundary flags showing no runtime mutation.
+
+### Prepare Layers
+
+Input:
+
+- project root, or project id plus workspace root;
+- layer list.
+
+```bash
+PYTHONPATH=. venv/bin/python -m scout_cli pretrip prepare-layers \
+  --project-root /data/scout/pretrip/chilai_nanhua_day1 \
+  --layers osm,terrain,risk-score,risk-ribbon \
+  --authorized-by operator.alex \
+  --json
+```
+
+Output:
+
+- layer manifest;
+- layer projection/debug projection;
+- local map/risk evidence references.
+
+### Append A Flight Recorder Note
+
+Input:
+
+- debug log path;
+- note text;
+- note kind and source.
+
+```bash
+PYTHONPATH=. venv/bin/python -m scout_cli note append-flight-recorder \
+  --debug-log-path /data/scout/runtime/runtime-debug.jsonl \
+  --note-kind operator_decision \
+  --source operator \
+  --text "領隊決定把休息點提前到下一個開闊地。" \
+  --authorized-by leader.alex \
+  --json
+```
+
+Output:
+
+- appended JSONL event;
+- note taxonomy and retention metadata;
+- no Phase 1 safety state mutation.
+
+### Voice Preview
+
+Input: text and optional output audio path.
+
+```bash
+PYTHONPATH=. venv/bin/python -m scout_cli voice preview \
+  --text "前方路徑不明顯，請停下確認隊伍位置。" \
+  --out /tmp/scout-voice-preview.wav \
+  --json
+```
+
+Output:
+
+- voice preview command plan;
+- preview artifact metadata;
+- no real playback or outbound send in this alpha path.
+
+### Advisory Shelter Direction
+
+Input:
+
+- project/trip root;
+- current position or lat/lon;
+- optional query and TTL.
+
+```bash
+PYTHONPATH=. venv/bin/python -m scout_cli safety-action shelter-direction \
+  --project-root /data/scout/pretrip/chilai_nanhua_day1 \
+  --lat 24.0301 \
+  --lon 121.2842 \
+  --query "天候變差，找可暫避位置" \
+  --ttl-seconds 900 \
+  --json
+```
+
+Output:
+
+- ranked candidate shelter/rest/retreat targets;
+- reasoning components;
+- TTL;
+- advisory-only boundary metadata.
+
+## Scout Agent And SBM
+
+SBM / Spatial Imprint tools are exposed through the same agent/CLI layer:
+
+```bash
+PYTHONPATH=. venv/bin/python -m scout_cli imprint export-pretrip \
+  --project-root /data/scout/pretrip/chilai_nanhua_day1 \
+  --authorized-by operator.alex \
+  --json
+```
+
+For detailed SBM operation, see:
+
+- `docs/admin/scout-sbm-spatial-imprint-admin-guide.md`
+- `docs/admin/scout-sbm-spatial-imprint-admin-guide.html`
+
+## Operational Checks
+
+Before trusting an agent/tool run:
+
+1. Confirm the tool id and mode are expected.
+2. Confirm `requires_authorization` for write/package/SOS-like actions.
+3. Prefer `--dry-run` first where supported.
+4. Always set `--trace-log` for operator-triggered alpha flows.
+5. Open `/admin/debug` and confirm the latest action trace.
+6. Confirm boundary fields:
+   - `runtime_safety_truth=false`
+   - `phase1_safety_mutation_allowed=false`
+   - `live_safety_api_calls_allowed=false`
+   - `remote_outbound_send_allowed=false` unless a future audited send mode is explicitly enabled.
+
+## Failure Handling
+
+| Symptom | Likely cause | Operator action |
+| --- | --- | --- |
+| exit code `2` | missing artifact, validation failure, missing authorization | inspect JSON error, fix input path or approval |
+| no event in `/admin/debug` | missing `--trace-log`, debug projection not pointed at the same log | rerun with trace log or configure debug path |
+| workspace output not visible in `/admin/pretrip` | wrong project root or workspace root | confirm `project.json` and workspace path |
+| write happened but runtime unchanged | expected for alpha package/workspace tools | confirm boundary and handoff/export chain |
+| SOS tool only produced mock receipts | expected current alpha behavior | real SOS remains outside this guide |
+
+## Boundary Statement
+
+Scout Agent/CLI enables powerful local actions, but the current alpha deliberately keeps safety and outbound boundaries closed. Use it to prepare, inspect, propose, package, and dry-run. Do not treat model output or pretrip candidate evidence as runtime safety truth.

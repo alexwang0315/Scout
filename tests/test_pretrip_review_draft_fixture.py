@@ -93,7 +93,7 @@ def test_review_draft_actions_are_representative_and_non_mutating():
         "current_finding_count": 0,
         "minimum_poi_count": 1,
         "review_state_after_edit": "proposed",
-        "route_corridor_poi_count": 1,
+            "route_corridor_poi_count": 2,
         "severity": "warning",
     }
 

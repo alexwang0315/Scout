@@ -6,7 +6,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Callable, Protocol
 
 try:
     from tools.pi_grove_led_bar_smoke import DEFAULT_PORT, PORT_DEFAULTS, clear_led_bar, make_gpio_writer, write_led_bar_bits
@@ -33,6 +33,7 @@ KEYMAP = [
     ["7", "8", "9", "C"],
     ["*", "0", "#", "D"],
 ]
+PHYSICAL_LABEL_LAYOUT = "row_major_left_to_right_top_to_bottom_s1_s16"
 KEY_ROLES = {
     "A": "sos_arm_candidate",
     "B": "ack_i_am_ok_candidate",
@@ -206,14 +207,43 @@ def parse_positive_float(value: str) -> float:
 def parse_simulated_keys(value: str) -> list[str]:
     keys = [part.strip().upper() for part in value.split(",") if part.strip()]
     valid = {key for row in KEYMAP for key in row}
+    valid.update(f"S{index}" for index in range(1, 17))
     invalid = [key for key in keys if key not in valid]
     if invalid:
         raise argparse.ArgumentTypeError(f"unsupported keypad key(s): {', '.join(invalid)}")
     return keys
 
 
+def physical_label_for_position(row_index: int, col_index: int) -> str:
+    return f"S{row_index * 4 + col_index + 1}"
+
+
+def key_position_for_physical_label(label: str) -> tuple[int, int] | None:
+    normalized = label.upper()
+    if not normalized.startswith("S"):
+        return None
+    try:
+        index = int(normalized[1:])
+    except ValueError:
+        return None
+    if not 1 <= index <= 16:
+        return None
+    zero_based = index - 1
+    return zero_based // 4, zero_based % 4
+
+
 def key_press_for_key(key: str, *, rows: list[int], cols: list[int]) -> KeyPress:
     normalized = key.upper()
+    position = key_position_for_physical_label(normalized)
+    if position is not None:
+        row_index, col_index = position
+        return KeyPress(
+            key=KEYMAP[row_index][col_index],
+            row_index=row_index,
+            col_index=col_index,
+            row_gpio=rows[row_index],
+            col_gpio=cols[col_index],
+        )
     for row_index, row in enumerate(KEYMAP):
         if normalized in row:
             col_index = row.index(normalized)
@@ -244,6 +274,8 @@ def build_key_payload(
         "hardware_kind": "matrix_keypad_4x4",
         "event": "press",
         "key": key_press.key,
+        "physical_label": physical_label_for_position(key_press.row_index, key_press.col_index),
+        "physical_label_layout": PHYSICAL_LABEL_LAYOUT,
         "sequence": sequence,
         "row_index": key_press.row_index,
         "col_index": key_press.col_index,
@@ -264,10 +296,11 @@ def build_key_payload(
 
 
 def keypad_oled_message(key_press: KeyPress) -> str:
+    physical_label = physical_label_for_position(key_press.row_index, key_press.col_index)
     return "\n".join(
         [
             "SCOUT KEY",
-            f"KEY {key_press.key}",
+            f"{physical_label} KEY {key_press.key}",
             f"R{key_press.row_index + 1} C{key_press.col_index + 1}",
             "DIAG ONLY",
         ]
@@ -404,24 +437,26 @@ def scan_keypad_events(
     dry_run: bool,
     simulated_keys: list[str],
     visual_options: dict[str, Any],
+    event_callback: Callable[[dict[str, Any]], None] | None = None,
 ) -> list[dict[str, Any]]:
     if dry_run:
         events: list[dict[str, Any]] = []
         for sequence, key in enumerate(simulated_keys):
             key_press = key_press_for_key(key, rows=rows, cols=cols)
             visual_updates = write_visual_feedback(key_press=key_press, **visual_options)
-            events.append(
-                build_key_payload(
-                    key_press=key_press,
-                    rows=rows,
-                    cols=cols,
-                    grove_ports=grove_ports,
-                    active_low=active_low,
-                    dry_run=True,
-                    sequence=sequence,
-                    visual_updates=visual_updates,
-                )
+            event = build_key_payload(
+                key_press=key_press,
+                rows=rows,
+                cols=cols,
+                grove_ports=grove_ports,
+                active_low=active_low,
+                dry_run=True,
+                sequence=sequence,
+                visual_updates=visual_updates,
             )
+            events.append(event)
+            if event_callback is not None:
+                event_callback(event)
         return events
 
     scanner = make_keypad_scanner(rows=rows, cols=cols, active_low=active_low)
@@ -442,18 +477,19 @@ def scan_keypad_events(
                 if now - last_event_at.get(key_id, 0.0) < debounce_ms / 1000.0:
                     continue
                 visual_updates = write_visual_feedback(key_press=key_press, **visual_options)
-                events.append(
-                    build_key_payload(
-                        key_press=key_press,
-                        rows=rows,
-                        cols=cols,
-                        grove_ports=grove_ports,
-                        active_low=active_low,
-                        dry_run=False,
-                        sequence=sequence,
-                        visual_updates=visual_updates,
-                    )
+                event = build_key_payload(
+                    key_press=key_press,
+                    rows=rows,
+                    cols=cols,
+                    grove_ports=grove_ports,
+                    active_low=active_low,
+                    dry_run=False,
+                    sequence=sequence,
+                    visual_updates=visual_updates,
                 )
+                events.append(event)
+                if event_callback is not None:
+                    event_callback(event)
                 sequence += 1
                 last_event_at[key_id] = now
             pressed_previous = pressed_now
@@ -480,6 +516,7 @@ def build_summary(
         "rows": rows,
         "cols": cols,
         "grove_ports": grove_ports,
+        "physical_label_layout": PHYSICAL_LABEL_LAYOUT,
         "active_mode": "active_low" if active_low else "active_high",
         "duration_seconds": duration_seconds,
         "dry_run": dry_run,

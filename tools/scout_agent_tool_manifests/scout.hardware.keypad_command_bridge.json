@@ -1,0 +1,52 @@
+{
+  "id": "scout.hardware.keypad_command_bridge",
+  "version": "0.3.0",
+  "description": "Capture Scout development keypad events as auditable local command candidates with confirmation, expiration, blocking, optional local diagnostic dispatch evidence, and diagnostic OLED/LED feedback without mutating safety state.",
+  "command": {
+    "argv": [
+      "{python}",
+      "tools/pi_scout_agent_keypad_command.py",
+      "--input",
+      "{input}",
+      "--output",
+      "{output}",
+      "--json"
+    ],
+    "dry_run_argument": "--dry-run"
+  },
+  "mode": "hardware_action",
+  "input_schema_ref": "schemas/scout_agent/hardware_keypad_command_bridge.request.json",
+  "output_schema_ref": "schemas/scout_agent/tool_result.json",
+  "allowed_reads": [
+    "hardware.keypad_4x4",
+    "hardware.grove_hat"
+  ],
+  "allowed_writes": [
+    "hardware.diagnostic_oled",
+    "hardware.diagnostic_led_bar",
+    "agent.command_candidate_jsonl",
+    "agent.command_candidate_evidence_jsonl",
+    "agent.local_diagnostic_command_dispatch_jsonl"
+  ],
+  "forbidden_writes": [
+    "phase1.runtime",
+    "phase1.safety",
+    "phase2.brain.observed_facts",
+    "live.safety_api",
+    "real.outbound_transport"
+  ],
+  "supports_dry_run": true,
+  "requires_authorization": {
+    "kind": "user_or_operator"
+  },
+  "trace": {
+    "required": true,
+    "event_kind": "agent_tool_invocation"
+  },
+  "metadata": {
+    "alpha_scope": "diagnostic_local_command_candidate_and_dispatch_evidence_only",
+    "phase1_safety_decision_change_allowed": false,
+    "live_safety_api_called": false,
+    "remote_outbound_allowed": false
+  }
+}

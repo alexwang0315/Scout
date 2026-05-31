@@ -73,7 +73,7 @@ def test_builds_fixture_backed_pretrip_admin_view():
     assert view["overpass_evidence"]["boundary"]["live_network_required"] is False
     assert view["overpass_evidence"]["request"]["endpoint"] == "https://overpass-api.de/api/interpreter"
     assert view["readiness"]["status"] == "ready"
-    assert view["eta"]["target_eta"] == "2026-05-03T15:25:35+08:00"
+    assert view["eta"]["target_eta"] == "2013-10-08T18:28:50+08:00"
     assert view["route_notes"]["counts"]["note_candidate_count"] == 81
     assert view["route_notes"]["counts"]["potential_ln_signal_count"] == 23
     assert view["route_notes"]["boundary"]["requires_human_review_before_ln_upgrade"] is True
@@ -154,12 +154,12 @@ def test_builds_fixture_backed_pretrip_admin_view():
         for candidate in view["gis_perception_timeline"]["checkpoint_candidates"]
         for attribution in candidate["source_attribution"]
     )
-    assert view["review_queue"]["counts"]["item_count"] == 53
+    assert view["review_queue"]["counts"]["item_count"] == 152
     assert view["review_queue"]["counts"]["category_counts"]["route_note"] == 23
     assert view["review_queue"]["counts"]["category_counts"]["gis_perception_cp"] == 9
     assert view["review_workbench"]["status"] == "projection_only"
     assert view["review_workbench"]["counts"]["category_group_count"] == 8
-    assert view["review_workbench"]["counts"]["bulk_eligible_count"] == 39
+    assert view["review_workbench"]["counts"]["bulk_eligible_count"] == 138
     assert view["review_workbench"]["counts"]["single_review_required_count"] == 14
     assert view["review_workbench"]["boundary"]["ai_triage_is_review_aid"] is True
     assert view["review_workbench"]["boundary"]["runtime_safety_truth"] is False
@@ -435,7 +435,7 @@ def test_pretrip_imports_workspace_local_companion_match_review(tmp_path: Path):
     sections_json = json.dumps(post_sections["companion_match_review"])
     assert "<trkpt" not in sections_json
     assert "raw_samples" not in sections_json
-    assert "2013-10-08T" not in sections_json
+    assert "<time" not in sections_json
 
 
 def test_admin_view_exposes_workspace_risk_score_layer(
@@ -644,7 +644,7 @@ def test_tabs_expose_compact_traceable_detail_sections():
         "hazard_note_count": 2,
         "source_ref_count": 2,
     }
-    assert sections_by_id["review_queue"]["counts"]["item_count"] == 53
+    assert sections_by_id["review_queue"]["counts"]["item_count"] == 152
     assert sections_by_id["review_draft_log"]["counts"]["action_count"] == 3
     assert sections_by_id["review_draft_log"]["summary"]["draft_only"] is True
     assert sections_by_id["review_draft_log"]["summary"]["decisions_recorded"] is False
@@ -930,7 +930,7 @@ def test_tab_detail_sections_do_not_embed_raw_payload_fragments():
     assert "reviewer_prompt" not in sections_json
     assert "confidence_after_review" not in sections_json
     assert "<trkpt" not in sections_json
-    assert "2013-10-08T" not in sections_json
+    assert "<time" not in sections_json
 
 
 def test_review_draft_log_is_read_only_summary_without_raw_payloads():

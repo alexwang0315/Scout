@@ -57,7 +57,7 @@ class ReplayRunnerTests(unittest.TestCase):
         self.assertEqual(summary["event"]["event_type"], "route_deviation")
         self.assertEqual(summary["map_evidence"]["hazard_ids"], ["hazard_off_route_slope"])
         self.assertEqual(summary["mission_context"]["recording_profile"], "raw_lock")
-        self.assertEqual(summary["route_evidence"]["position_estimate"]["source"], "gps")
+        self.assertEqual(summary["route_evidence"]["position_estimate"]["source"], "gnss")
         self.assertEqual(
             result.incident_packages[0].raw_window_start,
             result.incident_packages[0].triggered_at - trigger_sample["raw"]["recording_policy"]["raw_ring_seconds"],
@@ -84,7 +84,7 @@ class ReplayRunnerTests(unittest.TestCase):
         event_types = [event.event_type for event in result.safety_events]
         self.assertIn(SafetyEventType.WEAK_GPS, event_types)
         weak_gps_event = next(event for event in result.safety_events if event.event_type == SafetyEventType.WEAK_GPS)
-        self.assertEqual(weak_gps_event.details["estimate_source"], "pdr_fallback")
+        self.assertEqual(weak_gps_event.details["estimate_source"], "dead_reckoning")
         self.assertGreater(weak_gps_event.details["pdr_delta_m"], 0.0)
         self.assertEqual(result.safety_state.level, "L2_CONCERN")
         self.assertEqual(len(result.incident_packages), 1)

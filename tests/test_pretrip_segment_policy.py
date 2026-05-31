@@ -22,10 +22,10 @@ def test_chilai_segment_policy_candidates_are_candidate_only_review_boundary():
     assert report.artifact_kind == "segment_policy_candidates"
     assert report.status == "candidate_only"
     assert report.counts == {
-        "segment_policy_candidate_count": 10,
-        "candidate_only_count": 10,
-        "human_review_required_count": 10,
-        "requires_daylight_count": 10,
+        "segment_policy_candidate_count": 109,
+        "candidate_only_count": 109,
+        "human_review_required_count": 109,
+        "requires_daylight_count": 109,
         "retreat_available_count": 2,
         "signal_expected_count": 1,
     }
@@ -57,9 +57,9 @@ def test_chilai_segment_policy_candidate_fields_are_deterministic():
 
     first = by_segment_id["seg.001"]
     middle = by_segment_id["seg.005"]
-    last = by_segment_id["seg.010"]
+    last = by_segment_id["seg.109"]
 
-    assert first.requirement.expected_duration_seconds == 2504
+    assert first.requirement.expected_duration_seconds == 2555
     assert first.expected_duration_source == "route_geometry_distance_fallback"
     assert first.expected_duration_source_ref == "seg.001"
     assert first.requirement.retreat_available is True
@@ -72,7 +72,7 @@ def test_chilai_segment_policy_candidate_fields_are_deterministic():
 
     assert last.requirement.retreat_available is True
     assert last.requirement.signal_expected is False
-    assert last.recording_policy.policy_id == "policy.chilai_nanhua_day1.seg.010.candidate"
+    assert last.recording_policy.policy_id == "policy.chilai_nanhua_day1.seg.109.candidate"
 
 
 def test_chilai_segment_policy_fixture_matches_builder_output():

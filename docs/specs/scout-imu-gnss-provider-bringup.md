@@ -100,6 +100,21 @@ GPS 接 IMU D1 時，不可假設一定同時取得 IMU raw、GPS raw、vendor f
 IMU manual 指出 GPS 接 D1 可以形成 GPS-IMU integrated navigation unit，但如果啟用
 `GPS Raw`，模組可能只輸出 GPS raw information，其他 IMU data 不輸出。
 
+D1 mode is not a GNSS RF/acquisition debug path. 中文註釋：D1 只改變 GPS NMEA
+進入 IMU vendor firmware 的資料路徑，不會改善 GPS antenna、RF front-end、C/N0、
+`GPGSV=0` 或 no-fix 問題。若 raw receiver 端仍是 `GPGSV=0`、C/N0 全 0、`GGA`
+fix quality 0，接到 D1 後 IMU 也只會收到沒有衛星/沒有 fix 的 NMEA。
+
+因此 RF/天線 bring-up 階段固定使用 direct GNSS debug path：
+
+```text
+GPS receiver -> Scout host serial/USB -> raw NMEA/UBX/PUBX diagnostics
+```
+
+只有在 GPS 本體已能看到 `GPGSV` GPS C/N0 或 valid fix 後，才把 D1 作為 vendor
+fusion review mode。D1 output 可用來比較低算力 vendor estimate，但不可取代 direct
+raw GNSS evidence。
+
 bring-up smoke 必須區分四種可能：
 
 1. `imu_with_gps_fields`: IMU 一般輸出 + GPS 欄位。可視為 vendor fused navigation
@@ -141,6 +156,357 @@ Scout 不可以使用它取代：
 
 若 vendor INS 與 raw GNSS/IMU 的 lightweight consistency check 明顯不一致，Scout
 應產生 degraded/uncertain evidence，而不是直接採信 vendor INS。
+
+## Host INS/DR Navigation MVP
+
+Scout 主控端的第一個可用 INS/DR slice 固定在 `ins_dr_navigation.py`。它不是高階
+tightly-coupled GNSS/INS，也不引入 ROS runtime dependency；它是 route-aligned
+dead reckoning（沿既定路線的航位推算）核心，用來在 GNSS degraded / no-fix gap
+期間維持可重放的導航估測。
+
+資料輸入固定分三類：
+
+- `GnssFix`: raw GNSS position/timestamp evidence。可作 anchor / re-anchor。
+- `DeadReckoningDelta`: raw IMU、pedometer、wheel odom 或 host-side motion parser
+  轉出的 distance delta + optional heading。
+- `VendorFusionEstimate`: Hiwonder/WIT vendor fused result。只能作 comparison
+  evidence，不可作 primary truth。
+
+`ScoutInsDrNavigator` 輸出 `InsDrEstimate`，必須包含：
+
+- `source`: `gnss`、`gnss_reanchor`、`dead_reckoning`、
+  `dead_reckoning_expired`、`weak_gnss` 或 `vendor_fusion_reference_only`。
+- route-aligned `lat/lon`、`progress_m`、`route_index`、`route_distance_m`。
+- `confidence`、`degraded`、`degradation_reasons`。
+- `primary_truth_source` 與 `raw_evidence_refs`。
+- `vendor_fusion_used_as_primary_truth=false`。
+
+行為邊界：
+
+- reliable raw GNSS 先 anchor；GNSS 回來時用 `gnss_reanchor` 回報
+  `gps_reanchor_correction_m`。
+- GNSS degraded 時，DR 只能從最近一次 raw GNSS anchor 推進，不能無 anchor 產生
+  可用位置。
+- DR confidence 會隨 `max_dead_reckoning_seconds` 與
+  `max_dead_reckoning_distance_m` 衰減，超限時 source 變成
+  `dead_reckoning_expired`。
+- heading 與 route bearing 明顯相反時，progress 允許回退並標記
+  `heading_opposes_route`。
+- vendor fusion 若與 host estimate 超過 `vendor_disagreement_threshold_m`，只標記
+  `vendor_fusion_disagreement`，不得覆蓋 raw GNSS + DR estimate。
+
+`route_progress.py` 已把 `dead_reckoning` / `dead_reckoning_expired` 視為 weak-GNSS
+navigation source，因此後續 safety evaluator 可以看見「GNSS 不可靠但 Scout 仍在靠
+INS/DR 前進」的狀態；這仍不代表 live `/safety/*` mutation 被啟用。
+
+`ins_dr_input_adapter.py` 是 raw evidence adapter：
+
+- `pi_gnss_nmea_smoke.py` 的 JSONL 會轉成 `GnssFix`。
+- SensorLog / pedometer cumulative distance、step count、wheel odometry
+  `distance_delta_m` 會轉成 `DeadReckoningDelta`。
+- Hiwonder angle frame 可更新 heading state，讓下一筆 wheel / pedometer delta 使用
+  最新姿態方向。
+
+`tools/ins_dr_navigation_smoke.py` 可在 Pi 或 Mac 上離線驗證：
+
+```bash
+python3 tools/ins_dr_navigation_smoke.py \
+  --route tests/fixtures/routes/normal_climb.gpx \
+  --input-jsonl /data/scout/providers/gnss/manual-smoke.jsonl \
+  --input-jsonl /data/scout/providers/imu/manual-smoke.jsonl \
+  --output-jsonl /data/scout/providers/ins_dr/navigation-estimates.jsonl \
+  --pretty
+```
+
+這支工具只輸出 diagnostic navigation estimate，固定
+`phase1_safety_decision_change_allowed=false`、`remote_outbound_allowed=false`、
+`hardware_control_scope=diagnostic_navigation_estimate_only`。
+
+`tools/ins_dr_runtime_smoke.py` 會把同一批 GNSS/DR JSONL 送進
+`SafetyRuntimeSession`，用來驗證 runtime route progress、map evidence、
+recording policy 與 safety event projection 是否能看見 INS/DR estimate：
+
+```bash
+python3 tools/ins_dr_runtime_smoke.py \
+  --mission-graph tests/fixtures/mission_graph/normal_climb_mission.json \
+  --input-jsonl /data/scout/providers/gnss/manual-smoke.jsonl \
+  --input-jsonl /data/scout/providers/odometry/manual-dr-delta.jsonl \
+  --output-jsonl /data/scout/providers/ins_dr/runtime-updates.jsonl \
+  --pretty
+```
+
+這支工具不呼叫 live `/safety/*` endpoint，也不控制硬體；它只在本機建立
+`SafetyRuntimeSession` 做 diagnostic replay，固定
+`phase1_live_safety_decision_change_allowed=false`、
+`remote_outbound_allowed=false`、
+`hardware_control_scope=diagnostic_runtime_ingest_replay_only`。
+
+`tools/ins_dr_field_evidence_check.py` 是 field proof gate。它讀取
+`ins_dr_runtime_smoke.py` 產生的 runtime updates JSONL，檢查：
+
+- raw GNSS anchor 是否出現；
+- anchor 之後是否有 `dead_reckoning`；
+- DR-only update 是否保持 `observation_lat=null` / `observation_lon=null`；
+- DR update 是否都有 route progress；
+- raw GNSS anchor、DR estimate 與 re-anchor 是否仍在 mission map corridor 內；
+- raw GNSS anchor 與 re-anchor 的 NMEA checksum 是否有效；
+- DR progress 是否至少前進 `--min-dr-progress-m`；
+- 若加 `--require-reanchor`，是否在 DR 後看到 `gnss_reanchor`。
+
+```bash
+python3 tools/ins_dr_field_evidence_check.py \
+  --runtime-updates-jsonl /data/scout/providers/ins_dr/runtime-updates.jsonl \
+  --require-reanchor \
+  --pretty
+```
+
+這支 checker 是 completion evidence reviewer，不是導航執行器；固定
+`phase1_safety_decision_change_allowed=false`、`remote_outbound_allowed=false`、
+`hardware_control_scope=diagnostic_field_evidence_review_only`。只有當它回報
+`field_proof_status=passed` 時，該組實機資料才足以支持「Scout 已看到可用的
+raw GNSS + no-fix DR + optional re-anchor evidence」。
+若 `route_corridor_inside_for_navigation` 失敗，代表這組 GNSS/DR 雖然可被解析，
+但沒有證明它適用於目前 mission graph 的路線與 map corridor，不能視為可用導航。
+若 `raw_gnss_checksum_valid_for_navigation` 失敗，代表 raw GNSS NMEA checksum 無效；
+這類 payload 只可保留為 diagnostic evidence，並應標成
+`invalid_gnss_checksum_diagnostic_only`，不可作 raw GNSS primary truth。
+若 `gnss_field_capture_not_replayed_fixture` 失敗，代表 anchor/re-anchor 來自
+`--raw-nmea`、`raw_nmea_argument` 或其他 replay fixture；這只能作 rehearsal/debug，
+不可作 field completion proof。這類 payload 會標成
+`primary_truth_scope=diagnostic_replayed_nmea_only`。
+
+實機驗證時建議使用 `tools/ins_dr_field_proof_pipeline.py` 串接 runtime replay 與 field
+evidence check，避免 operator 漏跑其中一段：
+
+```bash
+python3 tools/ins_dr_field_proof_pipeline.py \
+  --mission-graph tests/fixtures/mission_graph/normal_climb_mission.json \
+  --input-jsonl /data/scout/providers/gnss/manual-smoke.jsonl \
+  --input-jsonl /data/scout/providers/odometry/manual-dr-delta.jsonl \
+  --runtime-updates-jsonl /data/scout/providers/ins_dr/runtime-updates.jsonl \
+  --field-report-json /data/scout/providers/ins_dr/field-report.json \
+  --proof-manifest-json /data/scout/providers/ins_dr/proof-manifest.json \
+  --require-reanchor \
+  --pretty
+```
+
+pipeline 固定 `hardware_control_scope=diagnostic_field_proof_pipeline_only`，
+並同時輸出 runtime updates、field report 與 `ins_dr_field_proof_manifest`。
+proof manifest 會記錄 mission graph、input JSONL、runtime updates、field report 的
+`sha256`，並固定 `hardware_control_scope=diagnostic_field_proof_manifest_only`。
+若 pipeline process exit code 非 0、`field_proof_status=failed`，或 proof manifest
+缺任一 `sha256`，該組資料不能作為完成證據。
+
+pipeline 產生 manifest 後，還必須用 `tools/ins_dr_proof_manifest_check.py` 獨立反查
+檔案是否仍存在、`sha256` 是否與 manifest 一致、field report 是否仍是 passed、runtime
+updates 是否真的包含 `dead_reckoning`，以及 `--require-reanchor` 時是否真的有
+`gnss_reanchor`：
+
+```bash
+python3 tools/ins_dr_proof_manifest_check.py \
+  --proof-manifest-json /data/scout/providers/ins_dr/proof-manifest.json \
+  --require-reanchor \
+  --pretty
+```
+
+這支 verifier 固定
+`hardware_control_scope=diagnostic_field_proof_manifest_verification_only`；只有
+`proof_manifest_status=passed` 且 `completion_ready=true` 時，才接受該 manifest 作為
+Scout INS/DR field completion evidence。
+
+若 operator 要跑最終 field gate，優先使用
+`tools/ins_dr_field_completion_gate.py`，一次完成 runtime replay、field evidence
+review、proof manifest 產生與 manifest verifier。這支工具會覆寫本次指定的 runtime
+updates / report / manifest / verification report，避免舊 JSONL 被 append 混入本次
+證據：
+
+```bash
+python3 tools/ins_dr_field_completion_gate.py \
+  --mission-graph tests/fixtures/mission_graph/normal_climb_mission.json \
+  --input-jsonl /data/scout/providers/gnss/manual-smoke.jsonl \
+  --input-jsonl /data/scout/providers/odometry/manual-dr-delta.jsonl \
+  --runtime-updates-jsonl /data/scout/providers/ins_dr/runtime-updates.jsonl \
+  --field-report-json /data/scout/providers/ins_dr/field-report.json \
+  --proof-manifest-json /data/scout/providers/ins_dr/proof-manifest.json \
+  --verification-report-json /data/scout/providers/ins_dr/verification-report.json \
+  --require-reanchor \
+  --pretty
+```
+
+它固定 `hardware_control_scope=diagnostic_field_completion_gate_only`；只有
+`scout_ins_dr_navigation_status=field_ready`、`proof_manifest_status=passed`、
+`completion_ready=true` 同時成立，才可宣稱 Scout INS/DR field evidence 已達到可用
+導航門檻。
+
+現場採集前，若測試地點不是既有 mission graph 的 route corridor，先用
+`tools/ins_dr_diagnostic_route_scaffold.py` 建立 diagnostic GPX、mission graph 與 map
+corridor。這避免把目前 GNSS capture 硬套到 `normal_climb` 之類不相干 fixture：
+
+```bash
+python3 tools/ins_dr_diagnostic_route_scaffold.py \
+  --output-dir /data/scout/providers/ins_dr/manual-field-run-001 \
+  --mission-id manual_field_run_001 \
+  --anchor-jsonl /data/scout/providers/gnss/manual-smoke.jsonl \
+  --heading-deg 87.5 \
+  --distance-m 3.0 \
+  --corridor-half-width-m 6.0 \
+  --pretty
+```
+
+`ins_dr_diagnostic_route_scaffold.py` 固定
+`hardware_control_scope=diagnostic_route_scaffold_only`、`primary_truth_allowed=false`。
+它產生的 route 只是 field proof fixture，不可升格成正式 navigation plan。
+
+跑 manual field run 以前，先用 `tools/ins_dr_field_readiness_check.py` 做 preflight：
+
+```bash
+python3 tools/ins_dr_field_readiness_check.py \
+  --mission-graph /data/scout/providers/ins_dr/manual-field-run-001/mission_graph/manual_field_run_001_mission.json \
+  --gnss-port auto \
+  --output-dir /data/scout/providers/ins_dr/manual-field-run-001/field-run \
+  --pretty
+```
+
+這支 checker 固定 `hardware_control_scope=diagnostic_field_readiness_check_only`，
+不讀 serial、不呼叫 live `/safety/*` mutation、不送 outbound。它只確認 mission graph、
+route GPX 與 map corridor 能由 `SafetyRuntimeSession` 載入、`gnss_serial_port_exists`
+通過、output dir 可寫，且沒有既有 proof artifacts 污染本次 field run。只有
+`field_run_readiness_status=ready` 才可進下一步。`--gnss-port auto` 只列舉 serial
+候選，不會打開 port；若只有一個候選，report 會給 `selected_gnss_port`，manual run
+應優先使用 `/dev/serial/by-id/` stable path。若出現 `ambiguous_serial_candidates`，
+代表 USB hub 上有多個 serial device，operator 必須先確認哪一條是 GPS，不可猜
+`/dev/ttyUSB0`。若要覆寫既有
+`anchor-gnss.jsonl`、`field-report.json` 或 `proof-manifest.json`，operator 必須明確加
+`--allow-overwrite`，否則這次 run 應換新 output dir。
+
+接著用 `tools/ins_dr_manual_field_run.py` 串接 anchor GNSS、operator-entered DR
+distance delta 與 re-anchor GNSS：
+
+```bash
+python3 tools/ins_dr_manual_field_run.py \
+  --mission-graph /data/scout/providers/ins_dr/manual-field-run-001/mission_graph/manual_field_run_001_mission.json \
+  --output-dir /data/scout/providers/ins_dr/manual-field-run-001/field-run \
+  --gnss-port /dev/serial/by-id/usb-u-blox_GNSS-if00-port0 \
+  --gnss-baud 9600 \
+  --anchor-duration-seconds 10 \
+  --distance-delta-m 3.0 \
+  --heading-deg 87.5 \
+  --movement-window-seconds 30 \
+  --reanchor-duration-seconds 10 \
+  --pretty
+```
+
+這支工具固定 `hardware_control_scope=diagnostic_manual_field_run_only`，只讀 GNSS
+serial 與記錄 operator 明確輸入的 DR delta，不控制 Scout 導航、不呼叫 live
+`/safety/*` mutation。它輸出的 `anchor-gnss.jsonl`、`dr-delta.jsonl`、
+`reanchor-gnss.jsonl` 會立即交給 completion gate；因此若缺 re-anchor、缺 DR、
+或 corridor check 失敗，最終仍會是 `scout_ins_dr_navigation_status=not_field_ready`。
+CLI 的 `--raw-anchor-nmea` / `--raw-reanchor-nmea` 只允許做 parser 與流程 rehearsal；
+它們會被標成 `capture_mode=raw_nmea_argument`，completion gate 必須拒絕把這種資料
+當成 field proof。
+`--movement-window-seconds` 是 anchor 與 re-anchor 之間留給 operator 移動與停車的時間，
+report 會保留 `movement_window_seconds` 供事後稽核；若沒有設定，工具會立刻嘗試
+re-anchor，通常只適合 rehearsal，不適合真實移動測試。
+
+若現場沒有先抓 anchor JSONL，operator 可以直接使用
+`tools/ins_dr_live_field_proof.py`，由工具先讀 GNSS anchor，再用 anchor 產生
+diagnostic route/corridor，最後串接 DR delta、re-anchor 與 completion gate：
+
+```bash
+python3 tools/ins_dr_live_field_proof.py \
+  --output-dir /data/scout/providers/ins_dr/live-field-run-001 \
+  --mission-id live_field_run_001 \
+  --gnss-port auto \
+  --gnss-baud 9600 \
+  --anchor-duration-seconds 10 \
+  --distance-delta-m 3.0 \
+  --heading-deg 87.5 \
+  --movement-window-seconds 30 \
+  --reanchor-duration-seconds 10 \
+  --corridor-half-width-m 6.0 \
+  --pretty
+```
+
+這支 wrapper 固定 `hardware_control_scope=diagnostic_live_field_proof_only`，仍不控制
+Scout 導航、不呼叫 live `/safety/*` mutation、不送 outbound。它會寫
+`route-scaffold-report.json`、`live-field-proof-report.json`、`operator-events.jsonl`、
+diagnostic route/mission/map，
+以及 field-run 目錄下的 `anchor-gnss.jsonl`、`dr-delta.jsonl`、`reanchor-gnss.jsonl`、
+`field-report.json`、`proof-manifest.json` 和 `verification-report.json`。正式完成仍需
+GNSS payload 是 `capture_mode=serial_device`；若用 `--raw-anchor-nmea` /
+`--raw-reanchor-nmea` 演練，serial resolution 會標成
+`raw_nmea_rehearsal_no_serial_required`，completion gate 必須拒絕把它當成 field proof。
+執行過程會將 anchor、movement window、re-anchor 與 completion gate 階段印到 stderr，
+並用 `diagnostic_live_field_proof_operator_guidance_only` 寫入 `operator-events.jsonl`，
+方便事後確認 operator 是否在正確階段移動與停車。
+
+Replay 與 live `SafetyRuntimeSession` 的 route position evidence 已改用
+`ScoutInsDrNavigator`，但仍透過既有 `PositionEstimate` 相容層餵給 route progress、
+map corridor 與 incident raw evidence，避免把 INS/DR 直接升級成 safety decision source。
+
+Live no-fix 行為：
+
+- 若 observation 有 raw GNSS lat/lon，Scout 使用 raw GNSS anchor 或 `gnss_reanchor`。
+- 若 observation 沒有 lat/lon，但已有前一次 reliable GNSS anchor，且 SensorLog /
+  wheel odometry 提供 pedometer distance、step count 或 `distance_delta_m`，Scout 仍會
+  產生 `dead_reckoning` route-aligned estimate。
+- DR-only observation 不會把原始 observation 的 `lat/lon` 偽裝成 GPS；它只在
+  `position_estimate` 與 route-progress/map evidence 中使用估測位置。
+- 若尚未有 raw GNSS anchor，DR-only observation 只能標成
+  `unanchored_dead_reckoning`，不能產生可用導航位置。
+
+### DR Distance Source Contract
+
+中文註釋：姿態角、加速度與角速度是 motion evidence，不等於可直接使用的 dead
+reckoning distance。Hiwonder angle frame 可以提供 heading baseline；若沒有
+`distance_delta_m`、cumulative pedometer distance / steps、wheel encoder 或其他明確
+位移來源，Scout 不應宣稱已完成 DR/INS 推進。
+
+Scout host-side DR input 接受以下 evidence 形狀：
+
+```json
+{"source":"wheel_odometry","timestamp_s":11.0,"distance_delta_m":3.0,"heading_deg":87.5}
+```
+
+live `SafetyRuntimeSession` 也接受 observation raw 裡的 nested block：
+
+```json
+{"odometry":{"distance_delta_m":3.0,"heading_deg":87.5}}
+```
+
+或：
+
+```json
+{"dr":{"distance_delta_m":3.0,"heading_deg":87.5}}
+```
+
+`tools/pi_dr_delta_smoke.py` 可在沒有 encoder driver 前，先產生 operator-entered /
+fixture-backed distance delta JSONL：
+
+```bash
+python3 tools/pi_dr_delta_smoke.py \
+  --distance-delta-m 3.0 \
+  --heading-deg 87.5 \
+  --timestamp-s 11.0 \
+  --source wheel_odometry \
+  --output-jsonl /data/scout/providers/odometry/manual-dr-delta.jsonl
+```
+
+這支工具只產生 diagnostic odometry delta evidence，固定
+`phase1_safety_decision_change_allowed=false`、`remote_outbound_allowed=false`、
+`primary_truth_allowed=false`、`hardware_control_scope=diagnostic_odometry_delta_only`。
+
+`/safety/observations` 的 direct ingest adapter 也可接受 GNSS/DR provider payload
+batch，例如：
+
+```json
+{"payloads":[{"source":"pi_gnss_nmea_smoke","timestamp_s":10.0,"position":{"lat":24.1,"lon":121.2}},{"source":"wheel_odometry","timestamp_s":11.0,"odometry":{"distance_delta_m":3.0,"heading_deg":87.5}}]}
+```
+
+API response 會回傳 `latest_position_estimate`，讓 operator 能看到
+`source=dead_reckoning`、`primary_truth_source=raw_gnss+dead_reckoning` 與
+`pdr_delta_m`。這只是 runtime ingest / diagnostic projection，仍需 operator 手動呼叫，
+不可由 preflight 或 assistant 自動觸發 live `/safety/*` mutation。
 
 ## Procurement Value Decision
 

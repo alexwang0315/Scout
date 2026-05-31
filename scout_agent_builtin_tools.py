@@ -6,6 +6,8 @@ import json
 from pathlib import Path
 from typing import Any, Sequence
 
+from pydantic import ValidationError
+
 from runtime_debug_log import FileRuntimeDebugEventLog, MemoryRuntimeDebugEventLog
 from runtime_debug_models import RuntimeDebugEvent
 from scout_agent_trace import load_agent_trace
@@ -1073,7 +1075,12 @@ def _voice_mock_transition(args: argparse.Namespace) -> tuple[int, dict[str, Any
     else:
         update["failed_at"] = timestamp
         update["failure_reason"] = request.get("reason", "mock voice transition failed")
-    record = current.model_copy(update=update)
+    try:
+        record = MockVoiceTransportRecord.model_validate(
+            {**current.model_dump(mode="json"), **update}
+        )
+    except ValidationError as exc:
+        return 2, _error_payload(f"invalid voice mock transition provenance: {exc}")
     if args.dry_run:
         return (
             0,
@@ -1200,7 +1207,12 @@ def _outbound_mock_transition(args: argparse.Namespace) -> tuple[int, dict[str, 
         _latest_jsonl_record(Path(str(outbound_log_path)), "message_id", str(message_id))
     )
     timestamp = request.get("transitioned_at", _utc_now())
-    message = current.model_copy(update={"state": state, "updated_at": timestamp})
+    try:
+        message = MockOutboundMessage.model_validate(
+            {**current.model_dump(mode="json"), "state": state, "updated_at": timestamp}
+        )
+    except ValidationError as exc:
+        return 2, _error_payload(f"invalid outbound mock transition provenance: {exc}")
     if args.dry_run:
         return (
             0,
