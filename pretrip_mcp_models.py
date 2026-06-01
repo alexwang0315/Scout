@@ -389,6 +389,15 @@ class McpCandidate(McpModel):
     lat: float
     lon: float
     confidence: Confidence
+    source_refs: tuple[str, ...]
+    source_attribution: tuple[dict[str, object], ...]
+    extractor_version: str
+    pydantic_ai_prompt_version: str
+    model_output_sha256: str
+    model_output_summary: str
+    stale_risk: StaleRisk
+    candidate_only: Literal[True] = True
+    runtime_safety_truth: Literal[False] = False
     score_components: McpScoreComponents
     mention_ratio: float = Field(ge=0, le=1)
     accepted_evidence_page_count: int = Field(ge=0)

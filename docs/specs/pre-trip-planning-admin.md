@@ -231,6 +231,11 @@ Initial planning skills:
     CLI/core path that can run without the browser UI. **Pi offline profile**
     （Pi 離線模式） means it can run on Scout Pi from local files with no live
     network and no Phase 1 runtime mutation.
+  - has a historical/open-download GPX importer contract in
+    `docs/specs/pretrip-historical-gpx-importer.md`. **Historical GPX Importer**
+    （歷史/開放下載 GPX 匯入器） preserves source attribution, golden/reference
+    route roles, note freshness, and writes `route_evidence_bundle.json` for
+    route-corridor map preparation.
   - treats the selected route GPX as **golden route**（出發前選定的主參考路線）,
     not as the user's already-walked track. In pretrip, the actual user track
     does not exist yet; post-analysis（行後分析） may later import the actual
@@ -280,6 +285,11 @@ Initial planning skills:
   - skill track for **GIS Perception Layer**（GIS 感知層）: a candidate-only
     layer that reads GPX, OSM tags, web case evidence, and raster/tile labels
     before proposing CPs, Ln coverage, or route-adjustment candidates;
+  - route-corridor map preparation is specified in
+    `docs/specs/pretrip-route-corridor-map-preparation.md`. It must consume the
+    importer `route_evidence_bundle.json`, use bbox as the acquisition boundary,
+    use along-track corridors as semantic precision filters, and pass only
+    route-relevant OSM/GIS/web/raster evidence into Pydantic AI judgement;
   - Phase A importer slice implements **GPX Perception**（GPX 感知） for local
     GPX waypoint `name`/`cmt`/`desc` fields and stores route-note candidates,
     route-note Ln proposal candidates, and GIS checkpoint candidates;
@@ -1674,6 +1684,8 @@ Acceptance:
 
 Layout direction:
 
+- follow `docs/specs/admin-gis-map-operations.md` for shared GIS map controls,
+  layer menu, zoom/focus, rectangle gestures, and cross-surface behavior;
 - reuse the after-action admin mental model;
 - left/main map frame for route, terrain, map, weather, communication, POI, and
   hazard layers;

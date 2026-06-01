@@ -9,9 +9,19 @@
       "media_type": "application/json",
       "metadata": {
         "artifact_kind": "pretrip_package",
+        "departure_approval_granted": false,
+        "departure_gate_required_before_runtime": true,
+        "human_review_count": 245,
         "package_id": "pretrip.chilai_nanhua_day1.v0",
         "phase": "phase4_pretrip",
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_brain_writeback_allowed": false,
+        "pretrip_candidate_evidence_only": true,
         "project_id": "chilai_nanhua_day1",
+        "review_status_source": "human_review_log",
+        "reviewed_package_is_not_departure_approval": true,
+        "reviewed_planning_material_only": true,
+        "safety_api_calls_allowed": false,
         "status": "reviewed",
         "version": "0.1.0"
       },
@@ -195,9 +205,14 @@
       "media_type": "application/json",
       "metadata": {
         "artifact_kind": "human_review_log",
+        "departure_approval_granted": false,
+        "departure_gate_required_before_runtime": true,
         "log_id": "review_log.chilai_nanhua_day1.v0",
         "phase": "phase4_pretrip",
-        "review_count": 245
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_brain_writeback_allowed": false,
+        "review_count": 245,
+        "reviewed_package_is_not_departure_approval": true
       },
       "mission_id": "mission.chilai_nanhua_day1.0.1.0",
       "sha256": null,
@@ -5052,9 +5067,19 @@
       "media_type": "application/json",
       "metadata": {
         "artifact_kind": "pretrip_package",
+        "departure_approval_granted": false,
+        "departure_gate_required_before_runtime": true,
+        "human_review_count": 245,
         "package_id": "pretrip.chilai_nanhua_day1.v0",
         "phase": "phase4_pretrip",
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_brain_writeback_allowed": false,
+        "pretrip_candidate_evidence_only": true,
         "project_id": "chilai_nanhua_day1",
+        "review_status_source": "human_review_log",
+        "reviewed_package_is_not_departure_approval": true,
+        "reviewed_planning_material_only": true,
+        "safety_api_calls_allowed": false,
         "status": "reviewed",
         "version": "0.1.0"
       },
@@ -5238,9 +5263,14 @@
       "media_type": "application/json",
       "metadata": {
         "artifact_kind": "human_review_log",
+        "departure_approval_granted": false,
+        "departure_gate_required_before_runtime": true,
         "log_id": "review_log.chilai_nanhua_day1.v0",
         "phase": "phase4_pretrip",
-        "review_count": 245
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_brain_writeback_allowed": false,
+        "review_count": 245,
+        "reviewed_package_is_not_departure_approval": true
       },
       "mission_id": "mission.chilai_nanhua_day1.0.1.0",
       "sha256": null,

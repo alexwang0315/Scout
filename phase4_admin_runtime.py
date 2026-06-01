@@ -10,8 +10,8 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from admin_api import create_admin_router
+from assistant_api import create_assistant_provider_from_env, create_assistant_provider_status
 from assistant_models import AssistantSourceRef, ScoutAssistantQuery, ScoutAssistantResponse
-from assistant_provider import MockAssistantProvider
 from debug_api import create_debug_page_router, create_debug_router
 from hardware_readiness_api import create_hardware_readiness_router
 from runtime_debug_log import FileRuntimeDebugEventLog
@@ -43,7 +43,8 @@ def create_phase4_admin_runtime_app(
     spatial_imprint_trigger_report_path = env.get("SCOUT_SPATIAL_IMPRINT_TRIGGER_REPORT_PATH")
     hardware_readiness_fixture_path = env.get("SCOUT_HARDWARE_READINESS_FIXTURE_PATH")
     auth_config = _admin_auth_config(env)
-    provider = MockAssistantProvider()
+    provider = create_assistant_provider_from_env(env)
+    provider_status = create_assistant_provider_status(provider=provider, environ=env)
 
     app = FastAPI(
         title="Scout Phase 4 Admin LAN Preview",
@@ -185,28 +186,7 @@ def create_phase4_admin_runtime_app(
 
         @app.get("/assistant/status")
         def assistant_status() -> dict[str, Any]:
-            return {
-                "read_only": True,
-                "model_interpretation": True,
-                "provider": "mock",
-                "provider_class": type(provider).__name__,
-                "runtime_profile": env.get(
-                    "SCOUT_RUNTIME_PROFILE",
-                    "pi-phase4-admin-preview",
-                ),
-                "startup_connection_status": "not_checked",
-                "config_path_configured": False,
-                "config_loaded": False,
-                "cloud_only": False,
-                "local_fallback_enabled": False,
-                "local_fallback_mode": "disabled",
-                "manual_verification_required": False,
-                "local_fallback_max_concurrency": 1,
-                "readiness_starts_local_model": False,
-                "local_model_listener_required_for_readiness": False,
-                "status_model_switch_allowed": False,
-                "token_values_exposed": False,
-            }
+            return dict(provider_status)
 
         @app.post("/assistant/query")
         def assistant_query(query: ScoutAssistantQuery) -> ScoutAssistantResponse:
@@ -231,7 +211,11 @@ def _runtime_boundaries(
         "outbound_messages_allowed": False,
         "hardware_control_allowed": False,
         "assistant_enabled": assistant_enabled,
-        "assistant_provider": "mock" if assistant_enabled else "disabled",
+        "assistant_provider": (
+            env.get("SCOUT_AI_ASSISTANT_PROVIDER", "mock").strip().lower()
+            if assistant_enabled
+            else "disabled"
+        ),
         "assistant_read_only": assistant_enabled,
         "debug_api_enabled": debug_enabled,
         "debug_projection_clear_allowed": debug_enabled,

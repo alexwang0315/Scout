@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import json
+import hashlib
 from collections import Counter
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -56,8 +57,19 @@ class RouteNoteLnProposal(RouteNoteLnProposalModel):
     proposed_ln_record_kind: Literal["ln_proposal_candidate"] = "ln_proposal_candidate"
     proposed_coverage_label: str
     route_note_summary: str
+    source_refs: tuple[str, ...] = Field(default_factory=tuple)
+    source_attribution: tuple[dict[str, Any], ...] = Field(default_factory=tuple)
+    extractor_version: str = "pretrip_route_note_ln_proposals.v0"
+    extractor_method: str = "pretrip_route_note_ln_proposals.build_route_note_ln_proposals"
+    pydantic_ai_prompt_version: str = "deterministic_schema_ready.no_live_model.v0"
+    model_output_sha256: str = "manual_fixture_no_model_hash"
+    model_output_summary: str = "manual fixture route-note Ln proposal"
+    confidence: Literal["low", "medium", "high", "unknown"] = "medium"
+    stale_risk: Literal["unknown", "low", "medium", "high"] = "unknown"
+    review_state: Literal["needs_review"] = "needs_review"
     human_review_required: Literal[True] = True
     candidate_only: Literal[True] = True
+    runtime_safety_truth: Literal[False] = False
     scout_interpretation: Literal["ModelInterpretation"] = "ModelInterpretation"
     observed_fact_candidate: Literal[False] = False
     derived_measurement_candidate: Literal[False] = False
@@ -189,4 +201,39 @@ def _proposal_from_route_note(candidate) -> RouteNoteLnProposal:
         proposal_kind=proposal_kind,
         proposed_coverage_label=proposed_coverage_label,
         route_note_summary=candidate.normalized_note,
+        source_refs=(candidate.candidate_id, *tuple(candidate.source_refs)),
+        source_attribution=(
+            {
+                "source_kind": "route_note_candidate",
+                "source_ref": candidate.candidate_id,
+                "source_artifact_refs": tuple(candidate.source_refs),
+                "source_waypoint_index": candidate.source_waypoint_index,
+                "extractor_version": "pretrip_route_note_ln_proposals.v0",
+                "extractor_method": "pretrip_route_note_ln_proposals.build_route_note_ln_proposals",
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+            },
+        ),
+        model_output_sha256=_sha256_text(
+            json.dumps(
+                {
+                    "source_route_note_candidate_id": candidate.candidate_id,
+                    "source_note_category": candidate.note_category,
+                    "proposal_kind": proposal_kind,
+                    "proposed_coverage_label": proposed_coverage_label,
+                },
+                ensure_ascii=False,
+                sort_keys=True,
+            )
+        ),
+        model_output_summary=(
+            f"{candidate.note_category} -> {proposal_kind}; "
+            f"coverage={proposed_coverage_label}"
+        ),
+        confidence=candidate.confidence,
+        stale_risk=candidate.stale_risk,
     )
+
+
+def _sha256_text(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()

@@ -211,8 +211,12 @@ def create_debug_page_router(
     resolved_assistant_ui_script_path = Path(assistant_ui_script_path)
 
     @router.get("/debug", response_class=HTMLResponse)
-    def debug_page() -> str:
-        return resolved_debug_page_path.read_text(encoding="utf-8")
+    def debug_page() -> Response:
+        return Response(
+            resolved_debug_page_path.read_text(encoding="utf-8"),
+            media_type="text/html",
+            headers={"Cache-Control": "no-store"},
+        )
 
     @router.get("/scout-assistant-ui.js")
     def assistant_ui_script() -> Response:

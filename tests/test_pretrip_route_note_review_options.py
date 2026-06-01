@@ -49,6 +49,12 @@ def test_builds_one_review_options_record_per_ln_proposal():
         tuple(option["allowed_admin_dispositions"]) == ALLOWED_ADMIN_DISPOSITIONS
         for option in payload["options"]
     )
+    assert all(option["source_refs"] for option in payload["options"])
+    assert all(option["source_attribution"] for option in payload["options"])
+    assert all(option["extractor_version"] == "pretrip_route_note_review_options.v0" for option in payload["options"])
+    assert all(option["model_output_sha256"] for option in payload["options"])
+    assert all(option["review_state"] == "draft" for option in payload["options"])
+    assert all(option["runtime_safety_truth"] is False for option in payload["options"])
 
 
 def test_review_options_are_candidate_drafts_without_recorded_decisions_or_writeback():
@@ -68,6 +74,7 @@ def test_review_options_are_candidate_drafts_without_recorded_decisions_or_write
     assert payload["boundary"]["crawler_or_network_source_allowed"] is False
 
     assert all(option["candidate_only"] is True for option in payload["options"])
+    assert all(option["runtime_safety_truth"] is False for option in payload["options"])
     assert all(option["draft_only"] is True for option in payload["options"])
     assert all(option["decision_recorded"] is False for option in payload["options"])
     assert all(option["selected_admin_disposition"] is None for option in payload["options"])

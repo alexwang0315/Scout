@@ -8,6 +8,7 @@ from pretrip_readiness import (
     evaluate_pretrip_readiness,
     load_skill_config_manifest,
 )
+from generate_pretrip_chilai_fixture import _write_skill_config_manifest
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -126,3 +127,30 @@ def test_chilai_project_references_independent_manifest_and_readiness_report():
     assert project["route_guide_timing_ref"] == "candidates/route_guide_timing.json"
     assert report["status"] == "ready"
     assert report["findings"] == []
+
+
+def test_clean_base_generator_writes_readiness_manifest_into_empty_output(tmp_path: Path):
+    manifest_path = _write_skill_config_manifest(
+        tmp_path,
+        project_id="chilai_nanhua_day1",
+        manifest_ref="candidates/skill_config_manifest.json",
+    )
+
+    manifest = load_skill_config_manifest(manifest_path)
+    report = evaluate_pretrip_readiness(
+        {
+            "route_id": "chilai_nanhua_day1",
+            "route_days": 2,
+            "route_kind": "traverse",
+            "distance_m": 28000,
+            "retreat_routes": [{"route_ref": "retreat.tunyuan"}],
+        },
+        skill_config_manifest=manifest,
+    )
+
+    assert manifest["manifest_id"] == "skill_config_manifest.chilai_nanhua_day1.pretrip_readiness.v0"
+    assert manifest["project_id"] == "chilai_nanhua_day1"
+    assert manifest["config"]["eta_policy"]["default_when_multiplier_basis_unknown"] == (
+        "total_elapsed_time_including_normal_rest"
+    )
+    assert report.status == ReadinessStatus.READY

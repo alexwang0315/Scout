@@ -33,6 +33,7 @@ def build_local_raster_source_manifest(
     project_id: str = DEFAULT_PROJECT_ID,
     layer_id: str = DEFAULT_LAYER_ID,
     recommended_cache_root: Path | str = DEFAULT_LOCAL_RASTER_CACHE_ROOT,
+    runtime_source_path: Path | str | None = None,
 ) -> dict[str, Any]:
     path = Path(source_geotiff).expanduser()
     if not path.exists():
@@ -44,6 +45,7 @@ def build_local_raster_source_manifest(
     georef = _extract_wgs84_georeference(image_metadata)
     file_stat = path.stat()
     placement = _placement_advice(path)
+    source_path = Path(runtime_source_path).expanduser() if runtime_source_path else path
 
     return {
         "artifact_kind": "admin_local_raster_source_manifest",
@@ -55,13 +57,20 @@ def build_local_raster_source_manifest(
         "render_mode": "local_geotiff_source_manifest",
         "source_kind": "local_geotiff",
         "source_file": {
-            "path": str(path),
+            "path": str(source_path),
             "filename": path.name,
             "size_bytes": file_stat.st_size,
             "sha256": _sha256(path),
-            "storage_scope": "local_cache_only",
+            "storage_scope": (
+                "mac_to_scout_handoff" if runtime_source_path else "local_cache_only"
+            ),
             "repo_fixture_write_allowed": False,
             "raw_raster_committed_to_repo_allowed": False,
+            **(
+                {"mac_build_path": str(path)}
+                if runtime_source_path and Path(runtime_source_path).expanduser() != path
+                else {}
+            ),
         },
         "image": {
             "format": image_metadata["format"],
@@ -249,6 +258,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--source-geotiff", type=Path, required=True)
     parser.add_argument("--project-id", default=DEFAULT_PROJECT_ID)
     parser.add_argument("--layer-id", default=DEFAULT_LAYER_ID)
+    parser.add_argument("--runtime-source-path", type=Path)
     parser.add_argument("--write-manifest", type=Path, required=True)
     args = parser.parse_args(argv)
 
@@ -256,6 +266,7 @@ def main(argv: list[str] | None = None) -> int:
         args.source_geotiff,
         project_id=args.project_id,
         layer_id=args.layer_id,
+        runtime_source_path=args.runtime_source_path,
     )
     output_path = write_local_raster_source_manifest(manifest, args.write_manifest)
     print(

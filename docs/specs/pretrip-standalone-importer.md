@@ -14,6 +14,16 @@ Nenggao-Andongjun sample:
 - optional project-template metadata for admin display;
 - optional local-only terrain/map evidence that can be added by later slices.
 
+Detailed source-attribution, freshness, and route-bundle rules for
+historical/open-download GPX corpora are specified in
+`docs/specs/pretrip-historical-gpx-importer.md`. Downstream map preparation
+must consume that route bundle before collecting along-route OSM/GIS/web/raster
+evidence; see `docs/specs/pretrip-route-corridor-map-preparation.md`.
+That historical importer spec also owns the **GPX five filter mechanisms**
+（GPX 五大過濾/診斷機制）: absolute speed outliers, relative speed spikes, resume
+gap diagnostics, route-note protection exemptions, and low-speed dense
+rest/camp cluster candidates.
+
 Pretrip（出發前規劃）has no actual user track yet. The route used to generate CP,
 segments, and display geometry is a selected reference route, not proof that the
 user has already walked it. After safe return, post-analysis（行後分析）may import

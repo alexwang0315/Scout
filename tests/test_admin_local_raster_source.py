@@ -68,6 +68,27 @@ def test_writes_small_json_descriptor_without_copying_raster(tmp_path):
     assert source.exists()
 
 
+def test_manifest_can_point_to_scout_runtime_source_path(tmp_path):
+    source = tmp_path / "sample_wgs84.tiff"
+    _write_sample_geotiff(source)
+
+    manifest = build_local_raster_source_manifest(
+        source,
+        runtime_source_path=(
+            "/data/scout/raster-sources/chilai_nanhua_day1/sample_wgs84.tiff"
+        ),
+    )
+
+    assert manifest["source_file"]["path"] == (
+        "/data/scout/raster-sources/chilai_nanhua_day1/sample_wgs84.tiff"
+    )
+    assert manifest["source_file"]["mac_build_path"] == str(source)
+    assert manifest["source_file"]["storage_scope"] == "mac_to_scout_handoff"
+    assert manifest["source_file"]["sha256"]
+    assert manifest["external_network_required"] is False
+    assert manifest["source_file"]["repo_fixture_write_allowed"] is False
+
+
 def _write_sample_geotiff(path: Path) -> None:
     try:
         from PIL import Image, TiffImagePlugin

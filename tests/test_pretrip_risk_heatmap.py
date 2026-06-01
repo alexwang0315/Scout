@@ -5,6 +5,7 @@ from pretrip_risk_heatmap import (
     build_calibrated_risk_heatmap,
     heat_bucket,
     heat_thresholds,
+    update_workspace_project_refs,
 )
 
 
@@ -133,6 +134,49 @@ def test_heat_buckets_use_workspace_relative_thresholds() -> None:
     assert heat_bucket(thresholds["p75"], thresholds) == "high"
     assert heat_bucket(thresholds["p90"], thresholds) == "very_high"
     assert heat_bucket(thresholds["p95"], thresholds) == "extreme"
+
+
+def test_workspace_refs_do_not_require_preview_png(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "project.json").write_text(
+        json.dumps(
+            {
+                "project_id": "fixture",
+                "calibrated_risk_heatmap_preview_ref": "outputs/risk/stale.png",
+            }
+        ),
+        encoding="utf-8",
+    )
+    heatmap_path = workspace / "outputs/risk/calibrated_risk_heatmap.geojson"
+    metadata_path = workspace / "outputs/risk/calibrated_risk_heatmap.metadata.json"
+    heatmap_path.parent.mkdir(parents=True)
+    heatmap_path.write_text("{}", encoding="utf-8")
+    metadata_path.write_text("{}", encoding="utf-8")
+
+    update_workspace_project_refs(
+        workspace=workspace,
+        heatmap_path=heatmap_path,
+        metadata_path=metadata_path,
+        preview_path=None,
+        heatmap={
+            "metadata": {
+                "segment_count": 2,
+                "warning_cp_overlay_count": 1,
+            }
+        },
+    )
+
+    project = json.loads((workspace / "project.json").read_text(encoding="utf-8"))
+    assert project["calibrated_risk_heatmap_ref"] == (
+        "outputs/risk/calibrated_risk_heatmap.geojson"
+    )
+    assert project["calibrated_risk_heatmap_metadata_ref"] == (
+        "outputs/risk/calibrated_risk_heatmap.metadata.json"
+    )
+    assert "calibrated_risk_heatmap_preview_ref" not in project
+    assert project["calibrated_risk_heatmap_segment_count"] == 2
+    assert project["calibrated_risk_heatmap_warning_cp_overlay_count"] == 1
 
 
 def _route_risk_feature(

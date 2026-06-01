@@ -147,6 +147,10 @@ def build_admin_case_view(case_id: str, *, root: Path = ROOT) -> dict[str, Any]:
   - route, corridors, checkpoints, and layer toggles render.
   - hover/click shows item detail.
 
+Shared map navigation, layer menu, focus, and rectangle gesture behavior should
+follow `docs/specs/admin-gis-map-operations.md` so `/admin` stays aligned with
+`/admin/debug` and `/admin/pretrip`.
+
 ## Boundaries
 
 - Always:

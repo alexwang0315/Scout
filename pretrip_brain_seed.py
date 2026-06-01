@@ -145,6 +145,19 @@ def export_pretrip_brain_seed(
             "version": package.version,
             "status": package.status,
             "artifact_kind": PreTripArtifactKind.PRETRIP_PACKAGE.value,
+            "pretrip_candidate_evidence_only": True,
+            "reviewed_planning_material_only": package.status == "reviewed",
+            "reviewed_package_is_not_departure_approval": True,
+            "departure_approval_granted": False,
+            "departure_gate_required_before_runtime": True,
+            "phase1_runtime_mutation_allowed": False,
+            "phase2_brain_writeback_allowed": False,
+            "safety_api_calls_allowed": False,
+            "human_review_count": len(review_log.reviews) if review_log is not None else 0,
+            "review_status_source": package.metadata.get(
+                "review_status_source",
+                "human_review_log" if review_log and review_log.reviews else "package_status",
+            ),
         },
     )
 
@@ -173,6 +186,11 @@ def export_pretrip_brain_seed(
                 "log_id": review_log.log_id,
                 "review_count": len(review_log.reviews),
                 "artifact_kind": "human_review_log",
+                "reviewed_package_is_not_departure_approval": True,
+                "departure_approval_granted": False,
+                "departure_gate_required_before_runtime": True,
+                "phase1_runtime_mutation_allowed": False,
+                "phase2_brain_writeback_allowed": False,
             },
         )
         artifacts.append(review_artifact)

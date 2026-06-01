@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -34,6 +35,8 @@ DEFAULT_OUTPUT_NAME = "mcp_candidates.json"
 DEFAULT_RETRIEVAL_PLAN_OUTPUT_NAME = "mcp_retrieval_plan.json"
 DEFAULT_OCR_LABEL_OUTPUT_NAME = "mcp_ocr_labels.json"
 DEFAULT_CP_SUPPORT_RECONCILIATION_OUTPUT_NAME = "mcp_cp_support_reconciliation.json"
+MCP_SYNTHESIS_EXTRACTOR_VERSION = "pretrip_mcp_synthesis.v1"
+MCP_SYNTHESIS_PROMPT_VERSION = "fixture_backed_pydantic_ai_tool_plan.v1"
 
 
 @dataclass(frozen=True)
@@ -66,6 +69,7 @@ def synthesize_mcp_candidates(
     )
     checkpoints = _load_scout_checkpoints(project_root)
     accepted_page_count = evidence_set.search_profile.accepted_evidence_page_count
+    source_ref_tuple = tuple(source_refs or (evidence_set.source_path,))
     scored = [
         scored_candidate
         for named_point in evidence_set.named_points
@@ -86,6 +90,7 @@ def synthesize_mcp_candidates(
             scored_candidate,
             accepted_page_count=accepted_page_count,
             policy=effective_policy,
+            source_refs=source_ref_tuple,
             suppressed=suppressed_by_primary_id.get(
                 scored_candidate.named_point.named_point_id,
                 (),
@@ -96,7 +101,6 @@ def synthesize_mcp_candidates(
             start=1,
         )
     )
-    source_ref_tuple = tuple(source_refs or (evidence_set.source_path,))
     return McpCandidateSet(
         project_id=evidence_set.project_id,
         source_refs=source_ref_tuple,
@@ -479,6 +483,7 @@ def _to_mcp_candidate(
     *,
     accepted_page_count: int,
     policy: McpPolicy,
+    source_refs: Sequence[str],
     suppressed: Sequence[McpSpacingSuppression],
 ) -> McpCandidate:
     named_point = scored.named_point
@@ -490,6 +495,20 @@ def _to_mcp_candidate(
         (scored.nearest_scout_cp.candidate_id,)
         if scored.nearest_scout_cp.candidate_id
         else ()
+    )
+    candidate_source_refs = tuple(
+        dict.fromkeys(
+            [
+                *source_refs,
+                *named_point.mention_page_ids,
+                *named_point.terrain_risk_refs,
+            ]
+        )
+    )
+    model_output_summary = (
+        "Fixture-backed MCP synthesis compressed named-point, source-family, "
+        "Scout CP support, and terrain-risk evidence into a review-gated major "
+        "critical point candidate; candidate-only evidence."
     )
     return McpCandidate(
         mcp_id=f"mcp.{named_point.named_point_id.removeprefix('np.')}.{index:03d}",
@@ -511,12 +530,77 @@ def _to_mcp_candidate(
         linked_risk_segments=named_point.terrain_risk_refs,
         nearby_points_suppressed_by_spacing=tuple(suppressed),
         suggested_cp_insertion=scored.suggested_cp_insertion,
+        source_refs=candidate_source_refs,
+        source_attribution=(
+            {
+                "source_kind": "named_point_evidence",
+                "source_artifact_id": source_refs[0] if source_refs else "",
+                "source_role": "mcp_named_point_synthesis_input",
+                "named_point_id": named_point.named_point_id,
+                "mention_page_ids": list(named_point.mention_page_ids),
+                "source_families": list(named_point.source_families),
+                "confidence": scored.confidence,
+                "stale_risk": named_point.stale_risk,
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+            },
+            {
+                "source_kind": "scout_generated_cp",
+                "source_role": "nearest_cp_support",
+                "candidate_id": scored.nearest_scout_cp.candidate_id,
+                "distance_m": scored.nearest_scout_cp.distance_m,
+                "support_found": scored.nearest_scout_cp.support_found,
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+            },
+        ),
+        extractor_version=MCP_SYNTHESIS_EXTRACTOR_VERSION,
+        pydantic_ai_prompt_version=MCP_SYNTHESIS_PROMPT_VERSION,
+        model_output_sha256=_mcp_candidate_hash(
+            named_point=named_point,
+            policy=policy,
+            linked_named_points=linked_named_points,
+            linked_cp_candidates=linked_cp_candidates,
+        ),
+        model_output_summary=model_output_summary,
+        stale_risk=named_point.stale_risk,
+        candidate_only=True,
+        runtime_safety_truth=False,
         review_state=(
             "suggested_insertion_review_required"
             if scored.suggested_cp_insertion is not None
             else "needs_human_review"
         ),
     )
+
+
+def _mcp_candidate_hash(
+    *,
+    named_point: NamedPoint,
+    policy: McpPolicy,
+    linked_named_points: Sequence[str],
+    linked_cp_candidates: Sequence[str],
+) -> str:
+    payload = {
+        "named_point_id": named_point.named_point_id,
+        "canonical_name": named_point.canonical_name,
+        "point_class": list(named_point.point_class),
+        "mention_page_ids": list(named_point.mention_page_ids),
+        "source_families": list(named_point.source_families),
+        "stale_risk": named_point.stale_risk,
+        "route_position": named_point.route_position.model_dump(mode="json"),
+        "terrain_risk_refs": list(named_point.terrain_risk_refs),
+        "linked_named_points": list(linked_named_points),
+        "linked_cp_candidates": list(linked_cp_candidates),
+        "policy": policy.model_dump(mode="json"),
+    }
+    encoded = json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def _source_family_coverage(named_point: NamedPoint, policy: McpPolicy) -> dict[str, Any]:

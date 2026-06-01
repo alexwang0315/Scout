@@ -73,10 +73,18 @@ class OverpassPlanningCandidate(BaseModel):
     feature_type: ScoutMapFeatureType
     geojson_feature: dict[str, Any]
     source_refs: list[str] = Field(default_factory=list)
+    source_attribution: list[dict[str, Any]] = Field(default_factory=list)
     provenance: list[PreTripProvenance] = Field(default_factory=list)
+    extractor_version: str = CONVERSION_RULE_VERSION
+    pydantic_ai_prompt_version: str = "not_applicable_deterministic_overpass_ingest"
+    model_output_sha256: str = ""
+    model_output_summary: str = ""
     conversion_rule_version: str = CONVERSION_RULE_VERSION
     confidence: Confidence = "unknown"
     stale_risk: StaleRisk = "medium"
+    review_state: Literal["needs_review"] = "needs_review"
+    candidate_only: Literal[True] = True
+    runtime_safety_truth: Literal[False] = False
     linked_route_ref: str | None = None
     linked_segment_ref: str | None = None
     linked_checkpoint_ref: str | None = None
@@ -281,8 +289,51 @@ def _candidate_from_element(
         request=request,
         source_ref=source_ref,
     )
+    candidate_id = feature["properties"]["id"]
+    source_attribution = [
+        {
+            "source_kind": "overpass_osm_vector",
+            "source_ref": source_ref,
+            "source_candidate_id": candidate_id,
+            "source_artifact_id": source_ref,
+            "source_label": feature["properties"]["name"],
+            "evidence_type": "pretrip_overpass_vector_candidate",
+            "confidence": rule["confidence"],
+            "stale_risk": rule["stale_risk"],
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+        }
+    ]
+    provenance_hash = _payload_sha256(
+        {
+            "candidate_id": candidate_id,
+            "osm_type": osm_type,
+            "osm_id": osm_id,
+            "source_ref": source_ref,
+            "raw_response_sha256": request.raw_response_sha256,
+            "conversion_rule_version": request.conversion_rule_version,
+        }
+    )
+    feature["properties"].update(
+        {
+            "source_refs": [source_ref],
+            "source_attribution": source_attribution,
+            "extractor_version": CONVERSION_RULE_VERSION,
+            "pydantic_ai_prompt_version": (
+                "not_applicable_deterministic_overpass_ingest"
+            ),
+            "model_output_sha256": provenance_hash,
+            "model_output_summary": (
+                "Deterministic Overpass/OSM vector normalization produced a "
+                "pretrip planning candidate; not runtime safety truth."
+            ),
+            "review_state": "needs_review",
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+        }
+    )
     candidate = OverpassPlanningCandidate(
-        candidate_id=feature["properties"]["id"],
+        candidate_id=candidate_id,
         candidate_type=rule["candidate_type"],
         label=feature["properties"]["name"],
         osm_type=osm_type,
@@ -292,7 +343,13 @@ def _candidate_from_element(
         feature_type=rule["feature_type"],
         geojson_feature=feature,
         source_refs=[source_ref],
+        source_attribution=source_attribution,
         provenance=[provenance],
+        model_output_sha256=provenance_hash,
+        model_output_summary=(
+            "Deterministic Overpass/OSM vector normalization produced a "
+            "pretrip planning candidate; not runtime safety truth."
+        ),
         confidence=rule["confidence"],
         stale_risk=rule["stale_risk"],
     )

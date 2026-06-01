@@ -33,6 +33,24 @@ def test_osm_tile_proxy_serves_generated_offline_fallback_without_cache(tmp_path
     assert b"OSM offline 1/1/1" in payload.body
     assert payload.body_sha256 == hashlib.sha256(payload.body).hexdigest()
     assert payload.headers()["X-Scout-Tile-Source"] == "offline_fallback"
+    assert payload.headers()["Cache-Control"] == "no-store"
+
+
+def test_osm_tile_proxy_can_serve_transparent_ui_fallback_without_cache(tmp_path):
+    payload = load_or_build_osm_tile_payload(
+        1,
+        1,
+        1,
+        cache_root=tmp_path,
+        fallback_style="transparent",
+    )
+
+    assert payload.media_type == "image/png"
+    assert payload.source == "transparent_fallback"
+    assert payload.cache_path == tmp_path / "1" / "1" / "1.png"
+    assert b"OSM offline" not in payload.body
+    assert payload.body.startswith(b"\x89PNG\r\n\x1a\n")
+    assert payload.headers()["Cache-Control"] == "no-store"
 
 
 def test_osm_tile_proxy_serves_cached_png_when_present(tmp_path):
@@ -46,6 +64,7 @@ def test_osm_tile_proxy_serves_cached_png_when_present(tmp_path):
     assert payload.source == "local_cache"
     assert payload.cache_path == cached_path
     assert payload.body == cached_path.read_bytes()
+    assert payload.headers()["Cache-Control"] == "no-cache, max-age=0, must-revalidate"
 
 
 def test_osm_tile_proxy_rejects_invalid_coordinates_and_missing_cache(tmp_path):

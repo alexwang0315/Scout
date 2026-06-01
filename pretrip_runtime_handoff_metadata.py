@@ -32,6 +32,10 @@ class HandoffPackageVersion(StrictHandoffModel):
     project_id: str
     version: str
     status: Literal["reviewed"]
+    human_review_count: int = Field(ge=0)
+    reviewed_package_is_not_departure_approval: Literal[True] = True
+    departure_approval_granted: Literal[False] = False
+    departure_gate_required_before_runtime: Literal[True] = True
     package_ref: HandoffRef
     reviewed_package_ref: HandoffRef
 
@@ -47,6 +51,10 @@ class HandoffRouteSource(StrictHandoffModel):
 
 class HandoffBoundary(StrictHandoffModel):
     candidate_metadata_only: Literal[True] = True
+    reviewed_package_is_not_departure_approval: Literal[True] = True
+    departure_approval_granted: Literal[False] = False
+    departure_gate_required_before_runtime: Literal[True] = True
+    runtime_handoff_operator_trigger_required: Literal[True] = True
     phase1_runtime_mutation_allowed: Literal[False] = False
     safety_api_calls_allowed: Literal[False] = False
     bridge_mutation_allowed: Literal[False] = False
@@ -63,6 +71,7 @@ class HandoffCounts(StrictHandoffModel):
     readiness_ref_count: int = Field(ge=0)
     route_ref_count: int = Field(ge=0)
     route_source_count: int = Field(ge=0)
+    human_review_count: int = Field(ge=0)
     runtime_write_count: Literal[0] = 0
     safety_call_count: Literal[0] = 0
     bridge_mutation_count: Literal[0] = 0
@@ -121,6 +130,7 @@ def build_chilai_runtime_handoff_metadata(
         artifact_kind="reviewed_pretrip_package",
     )
     reviewed_package = _load_json(fixture_root / reviewed_package_ref.ref)
+    human_review_count = _human_review_count(fixture_root, project)
 
     readiness_refs = [
         _required_ref(
@@ -190,6 +200,7 @@ def build_chilai_runtime_handoff_metadata(
             project_id=reviewed_package["project_id"],
             version=reviewed_package["version"],
             status=reviewed_package["status"],
+            human_review_count=human_review_count,
             package_ref=package_ref,
             reviewed_package_ref=reviewed_package_ref,
         ),
@@ -200,6 +211,7 @@ def build_chilai_runtime_handoff_metadata(
         boundary=HandoffBoundary(
             notes=[
                 "Candidate metadata handoff only; no Phase 1 runtime state is mutated.",
+                "Reviewed package metadata is not departure approval; the departure gate remains required.",
                 "No safety endpoint is called and no Phase 3 bridge behavior is changed.",
                 "No final runtime manifest or MissionGraph write is performed by this builder.",
             ],
@@ -208,6 +220,7 @@ def build_chilai_runtime_handoff_metadata(
             readiness_ref_count=len(readiness_refs),
             route_ref_count=len(route_refs),
             route_source_count=len(route_sources),
+            human_review_count=human_review_count,
         ),
         integration_notes=[
             "Main integration can later register this as a project artifact and release-check input.",
@@ -253,6 +266,8 @@ def _summary_for_artifact(artifact_kind: str, payload: Any) -> dict[str, Any]:
         return {"item_count": len(payload)} if isinstance(payload, list) else {}
 
     if artifact_kind in {"pretrip_package", "reviewed_pretrip_package"}:
+        metadata = payload.get("metadata") or {}
+        boundary = payload.get("boundary") or {}
         return {
             "package_id": payload.get("package_id"),
             "version": payload.get("version"),
@@ -260,6 +275,17 @@ def _summary_for_artifact(artifact_kind: str, payload: Any) -> dict[str, Any]:
             "source_artifact_count": len(payload.get("source_artifacts", [])),
             "checkpoint_candidate_count": len(payload.get("checkpoint_candidates", [])),
             "segment_candidate_count": len(payload.get("segment_candidates", [])),
+            "human_review_count": metadata.get("human_review_count"),
+            "reviewed_package_is_not_departure_approval": (
+                metadata.get("reviewed_package_is_not_departure_approval")
+                if metadata.get("reviewed_package_is_not_departure_approval") is not None
+                else boundary.get("reviewed_package_is_not_departure_approval")
+            ),
+            "departure_approval_granted": (
+                metadata.get("departure_approval_granted")
+                if metadata.get("departure_approval_granted") is not None
+                else boundary.get("departure_approval_granted")
+            ),
         }
 
     if artifact_kind == "compiled_mission_graph_reviewed":
@@ -331,6 +357,19 @@ def _route_source_ref(source: dict[str, Any]) -> HandoffRouteSource:
         size_bytes=source.get("size_bytes"),
         source_ref=_sanitize_source_ref(provenance.get("source_ref")),
     )
+
+
+def _human_review_count(fixture_root: Path, project: dict[str, Any]) -> int:
+    ref = project.get("human_reviews_ref")
+    if not ref:
+        return 0
+    path = fixture_root / ref
+    if not path.exists():
+        return 0
+    payload = _load_json(path)
+    if not isinstance(payload, dict):
+        return 0
+    return len(payload.get("reviews", []))
 
 
 def _resolve_chilai_project_path(path: Path) -> Path:

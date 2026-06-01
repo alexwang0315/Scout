@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from enum import StrEnum
 from typing import Any, Literal
 
@@ -27,6 +29,14 @@ class SegmentPolicyCandidate(BaseModel):
     candidate_only: bool = True
     human_review_required: bool = True
     source_refs: list[str] = Field(default_factory=list)
+    source_attribution: list[dict[str, Any]] = Field(default_factory=list)
+    extractor_version: str = "pretrip_segment_policy.v0.1"
+    pydantic_ai_prompt_version: str = "not_applicable_deterministic_segment_policy"
+    model_output_sha256: str = ""
+    model_output_summary: str = ""
+    confidence: Literal["low", "medium", "high", "unknown"] = "medium"
+    stale_risk: Literal["low", "medium", "high", "unknown"] = "medium"
+    runtime_safety_truth: Literal[False] = False
     requirement: SegmentRequirement
     expected_duration_source: Literal[
         "route_guide_timing_candidate",
@@ -118,6 +128,27 @@ def _build_segment_policy_candidate(
         to_candidate_id=segment.to_candidate_id,
         review_state=CandidateReviewState.PROPOSED,
         source_refs=segment.source_refs,
+        source_attribution=[
+            {
+                "source_kind": "pretrip_segment_candidate",
+                "source_candidate_id": segment.candidate_id,
+                "source_refs": segment.source_refs,
+                "method": "pretrip_segment_policy.build_chilai_segment_policy_candidates",
+                "evidence_type": "pretrip_segment_policy_candidate",
+                "confidence": segment.confidence,
+                "stale_risk": segment.stale_risk,
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+            }
+        ],
+        model_output_sha256=_segment_policy_hash(package, segment),
+        model_output_summary=(
+            "Deterministic segment policy candidate generated from a pretrip "
+            "segment candidate; requires human review before compilation."
+        ),
+        confidence=segment.confidence,
+        stale_risk=segment.stale_risk,
+        runtime_safety_truth=False,
         requirement=requirement,
         expected_duration_source=duration_source,
         expected_duration_source_ref=duration_ref,
@@ -135,6 +166,22 @@ def _build_segment_policy_candidate(
         ],
         notes="Human review must accept or edit this candidate before it can be used as compile input.",
     )
+
+
+def _segment_policy_hash(
+    package: PreTripPackage,
+    segment: PreTripSegmentCandidate,
+) -> str:
+    material = {
+        "project_id": package.project_id,
+        "segment_candidate_id": segment.candidate_id,
+        "from_candidate_id": segment.from_candidate_id,
+        "to_candidate_id": segment.to_candidate_id,
+        "source_refs": segment.source_refs,
+    }
+    return hashlib.sha256(
+        json.dumps(material, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    ).hexdigest()
 
 
 def _expected_duration_seconds(

@@ -137,6 +137,7 @@ class AdminAfterActionTests(unittest.TestCase):
         response = client.get("/admin")
 
         self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["cache-control"], "no-store")
         self.assertIn("Scout Phase 1 Admin", response.text)
         self.assertIn(f"/admin/cases/${{CASE_ID}}", response.text)
         self.assertIn("hoverHint", response.text)
@@ -155,6 +156,10 @@ class AdminAfterActionTests(unittest.TestCase):
         self.assertIn('id="zoomIn"', response.text)
         self.assertIn('id="zoomOut"', response.text)
         self.assertIn('id="fitRoute"', response.text)
+        self.assertIn('id="boxZoomMode"', response.text)
+        self.assertIn('id="zoomLevel"', response.text)
+        self.assertIn('aria-label="Rectangle drag zoom"', response.text)
+        self.assertIn("function updateMapZoomIndicator", response.text)
         self.assertIn('id="panUp"', response.text)
         self.assertIn('id="panDown"', response.text)
         self.assertIn('id="panLeft"', response.text)
@@ -228,6 +233,10 @@ class AdminAfterActionTests(unittest.TestCase):
         self.assertIn("segmentCapsules", response.text)
         self.assertIn("--cat-checkpoint", response.text)
         self.assertIn("checkpoint-start", response.text)
+        self.assertIn("FOCUS_POINT_VIEWPORT_M = 50", response.text)
+        self.assertIn("pointFocusItemFor", response.text)
+        self.assertIn("findPointFocusEvidenceByRef", response.text)
+        self.assertIn('button.addEventListener("click", () => {\n        selectEvidence(item);\n        focusMapFor(item);', response.text)
         self.assertIn("evidenceCategory", response.text)
         self.assertIn("categoryColor", response.text)
         self.assertIn("map-highlight", response.text)
@@ -242,17 +251,30 @@ class AdminAfterActionTests(unittest.TestCase):
         self.assertIn("OSM_LOCAL_TILE_URL_TEMPLATE", response.text)
         self.assertIn("const OSM_TARGET_ZOOM = 17", response.text)
         self.assertIn("const OSM_MAX_TILES = 64", response.text)
+        self.assertIn("const RASTER_MAX_TILES = 64", response.text)
         self.assertIn("RASTER_LOCAL_TILE_URL_TEMPLATE", response.text)
+        self.assertIn("RASTER_TILE_CACHE_BUST", response.text)
+        self.assertIn("function rasterTileCacheBustedUrl", response.text)
         self.assertIn("/admin/tiles/osm/{z}/{x}/{y}.png", response.text)
+        self.assertIn("/admin/tiles/osm/{z}/{x}/{y}.png?fallback=transparent", response.text)
         self.assertIn(
             "/admin/tiles/imagery/{project_id}/{layer_id}/{z}/{x}/{y}.png",
             response.text,
         )
         self.assertIn("function osmTileTemplate", response.text)
+        self.assertIn("function isLocalOsmTileMode", response.text)
+        self.assertIn(
+            'return requested === "public" ? OSM_PUBLIC_TILE_URL_TEMPLATE : OSM_LOCAL_TILE_URL_TEMPLATE',
+            response.text,
+        )
         self.assertIn("function tileRangeForZoom", response.text)
         self.assertIn("function tileCountForZoom", response.text)
         self.assertIn("tileCountForZoom(bounds, zoom) > maxTiles", response.text)
         self.assertIn("function rasterTileTemplate", response.text)
+        self.assertIn("function rasterZoomRangeFor", response.text)
+        self.assertIn("function chooseRasterZoom", response.text)
+        self.assertIn("const z = zoom ?? chooseRasterZoom(view, bounds)", response.text)
+        self.assertIn('params.get("osmSource")', response.text)
         self.assertIn("https://tile.openstreetmap.org/{z}/{x}/{y}.png", response.text)
         self.assertIn("function renderRasterImagery", response.text)
         self.assertIn("function rasterTileCoverage", response.text)
@@ -260,18 +282,23 @@ class AdminAfterActionTests(unittest.TestCase):
         self.assertIn("data-raster-tile", response.text)
         self.assertIn("local_raster_tile_url_template", response.text)
         self.assertIn("function renderOsmBasemap", response.text)
+        self.assertIn("if (!isLocalOsmTileMode())", response.text)
         self.assertIn("function osmTileCoverage", response.text)
         self.assertIn('el("image"', response.text)
         self.assertIn('class: "osm-tile"', response.text)
         self.assertIn("function renderWeatherOverlayPlaceholder", response.text)
         self.assertIn("Weather API overlay", response.text)
         self.assertLess(
-            response.text.index('data-layer-group": "imagery"'),
             response.text.index('data-layer-group": "osm"'),
+            response.text.index('data-layer-group": "imagery"'),
         )
         self.assertLess(
-            response.text.index("renderRasterImagery(imageryGroup"),
             response.text.index("renderOsmBasemap(osmGroup"),
+            response.text.index("renderRasterImagery(imageryGroup"),
+        )
+        self.assertLess(
+            response.text.index('data-layer-group": "imagery"'),
+            response.text.index('data-layer-group": "weather-api"'),
         )
         self.assertLess(
             response.text.index('data-layer-group": "osm"'),

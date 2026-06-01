@@ -25,6 +25,11 @@ DEFAULT_RASTER_TILE_MAX_ZOOM = 20
 DEFAULT_RASTER_TILE_SIZE = 256
 DEFAULT_ESTIMATED_RASTER_TILE_BYTES = 64 * 1024
 WEB_MERCATOR_MAX_LAT = 85.05112878
+TRANSPARENT_PNG_TILE = bytes.fromhex(
+    "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489"
+    "0000000d49444154789c6360606060000000050001a5f645400000000049454e44"
+    "ae426082"
+)
 
 
 @dataclass(frozen=True)
@@ -36,8 +41,13 @@ class AdminRasterTilePayload:
     body_sha256: str
 
     def headers(self) -> dict[str, str]:
+        cache_control = (
+            "no-store"
+            if self.source.endswith("_fallback")
+            else "no-cache, max-age=0, must-revalidate"
+        )
         return {
-            "Cache-Control": "public, max-age=86400",
+            "Cache-Control": cache_control,
             "X-Scout-Tile-Source": self.source,
             "X-Scout-Tile-Hash": self.body_sha256,
         }
@@ -323,11 +333,11 @@ def load_or_build_raster_tile_payload(
     if not fallback_enabled:
         raise FileNotFoundError(str(cache_path))
 
-    tile = validate_osm_tile_coords(z, x, y)
-    body = _transparent_svg_tile(tile["z"], tile["x"], tile["y"])
+    validate_osm_tile_coords(z, x, y)
+    body = _transparent_png_tile()
     return AdminRasterTilePayload(
         body=body,
-        media_type="image/svg+xml",
+        media_type="image/png",
         source="transparent_fallback",
         cache_path=cache_path,
         body_sha256=hashlib.sha256(body).hexdigest(),
@@ -506,13 +516,8 @@ def _safe_identifier(value: Any, field_name: str) -> str:
     return text
 
 
-def _transparent_svg_tile(z: int, x: int, y: int) -> bytes:
-    svg = f"""<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
-  <rect width="256" height="256" fill="none"/>
-  <text x="128" y="238" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="14" fill="#5b6761" opacity="0.72">Raster offline {z}/{x}/{y}</text>
-</svg>
-"""
-    return svg.encode("utf-8")
+def _transparent_png_tile() -> bytes:
+    return TRANSPARENT_PNG_TILE
 
 
 def _tile_y_to_lat(y: int, z: int) -> float:

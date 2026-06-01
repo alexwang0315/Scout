@@ -96,6 +96,18 @@ def generate_checkpoint_candidates(
                 lon=point.lon,
                 route_point_index=route_index,
                 checkpoint_type=checkpoint_type,
+                source_attribution=[
+                    {
+                        "source_kind": "gpx_route",
+                        "source_ref": effective_source_ref,
+                        "method": (
+                            "pretrip_candidate_generation."
+                            "generate_checkpoint_candidates"
+                        ),
+                        "candidate_only": True,
+                        "runtime_safety_truth": False,
+                    }
+                ],
             )
         )
 

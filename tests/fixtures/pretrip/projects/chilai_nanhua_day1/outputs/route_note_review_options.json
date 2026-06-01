@@ -46,23 +46,53 @@
         "field_verify"
       ],
       "candidate_only": true,
+      "confidence": "medium",
       "decision_recorded": false,
       "draft_only": true,
+      "extractor_method": "pretrip_route_note_review_options.build_route_note_review_options",
+      "extractor_version": "pretrip_route_note_review_options.v0",
       "mission_graph_mutation_candidate": false,
+      "model_output_sha256": "afedbb64a81fb0944277f2c175f0031470810ea72bbe228fcf91cc07309f3ca7",
+      "model_output_summary": "draft review dispositions for hint_coverage: promote_hint, promote_warning, ignore, field_verify",
       "option_id": "route_note_review_option.ln_proposal.route_note.rudy_like_gpx.wpt_000",
       "package_mutation_candidate": false,
       "phase1_runtime_mutation_candidate": false,
       "phase2_writeback_candidate": false,
       "proposal_kind": "hint_coverage",
       "proposed_coverage_label": "route_note_hint_coverage",
+      "pydantic_ai_prompt_version": "deterministic_schema_ready.no_live_model.v0",
       "raw_gpx_embedded": false,
+      "review_state": "draft",
       "route_note_summary": "024西門、阿凡找到獸俓及當時記錄上切點",
       "runtime_mutation_candidate": false,
+      "runtime_safety_truth": false,
       "selected_admin_disposition": null,
+      "source_attribution": [
+        {
+          "candidate_only": true,
+          "draft_only": true,
+          "extractor_method": "pretrip_route_note_review_options.build_route_note_review_options",
+          "extractor_version": "pretrip_route_note_review_options.v0",
+          "runtime_safety_truth": false,
+          "source_artifact_refs": [
+            "route_note.rudy_like_gpx.wpt_000",
+            "source.comparison.rudy_like_gpx"
+          ],
+          "source_kind": "route_note_ln_proposal",
+          "source_ref": "ln_proposal.route_note.rudy_like_gpx.wpt_000",
+          "source_waypoint_index": 0
+        }
+      ],
       "source_note_category": "route_condition_hint",
       "source_proposal_id": "ln_proposal.route_note.rudy_like_gpx.wpt_000",
+      "source_refs": [
+        "ln_proposal.route_note.rudy_like_gpx.wpt_000",
+        "route_note.rudy_like_gpx.wpt_000",
+        "source.comparison.rudy_like_gpx"
+      ],
       "source_route_note_candidate_id": "route_note.rudy_like_gpx.wpt_000",
-      "source_waypoint_index": 0
+      "source_waypoint_index": 0,
+      "stale_risk": "medium"
     },
     {
       "allowed_admin_dispositions": [
@@ -72,23 +102,53 @@
         "field_verify"
       ],
       "candidate_only": true,
+      "confidence": "medium",
       "decision_recorded": false,
       "draft_only": true,
+      "extractor_method": "pretrip_route_note_review_options.build_route_note_review_options",
+      "extractor_version": "pretrip_route_note_review_options.v0",
       "mission_graph_mutation_candidate": false,
+      "model_output_sha256": "0211c2f6f7889ff156a2e7972612d29e54803748767206ffecd53ec3d48a57f3",
+      "model_output_summary": "draft review dispositions for hint_coverage: promote_hint, promote_warning, ignore, field_verify",
       "option_id": "route_note_review_option.ln_proposal.route_note.rudy_like_gpx.wpt_001",
       "package_mutation_candidate": false,
       "phase1_runtime_mutation_candidate": false,
       "phase2_writeback_candidate": false,
       "proposal_kind": "hint_coverage",
       "proposed_coverage_label": "route_note_hint_coverage",
+      "pydantic_ai_prompt_version": "deterministic_schema_ready.no_live_model.v0",
       "raw_gpx_embedded": false,
+      "review_state": "draft",
       "route_note_summary": "026出箭竹林，有展望，繼續上切上稜",
       "runtime_mutation_candidate": false,
+      "runtime_safety_truth": false,
       "selected_admin_disposition": null,
+      "source_attribution": [
+        {
+          "candidate_only": true,
+          "draft_only": true,
+          "extractor_method": "pretrip_route_note_review_options.build_route_note_review_options",
+          "extractor_version": "pretrip_route_note_review_options.v0",
+          "runtime_safety_truth": false,
+          "source_artifact_refs": [
+            "route_note.rudy_like_gpx.wpt_001",
+            "source.comparison.rudy_like_gpx"
+          ],
+          "source_kind": "route_note_ln_proposal",
+          "source_ref": "ln_proposal.route_note.rudy_like_gpx.wpt_001",
+          "source_waypoint_index": 1
+        }
+      ],
       "source_note_category": "route_condition_hint",
       "source_proposal_id": "ln_proposal.route_note.rudy_like_gpx.wpt_001",
+      "source_refs": [
+        "ln_proposal.route_note.rudy_like_gpx.wpt_001",
+        "route_note.rudy_like_gpx.wpt_001",
+        "source.comparison.rudy_like_gpx"
+      ],
       "source_route_note_candidate_id": "route_note.rudy_like_gpx.wpt_001",
-      "source_waypoint_index": 1
+      "source_waypoint_index": 1,
+      "stale_risk": "medium"
     },
     {
       "allowed_admin_dispositions": [
@@ -98,23 +158,53 @@
         "field_verify"
       ],
       "candidate_only": true,
+      "confidence": "medium",
       "decision_recorded": false,
       "draft_only": true,
+      "extractor_method": "pretrip_route_note_review_options.build_route_note_review_options",
+      "extractor_version": "pretrip_route_note_review_options.v0",
       "mission_graph_mutation_candidate": false,
+      "model_output_sha256": "f6fe7e321cc9da2d023a1511d4413ff3861412e005377e7bdd612a29e2932cb9",
+      "model_output_summary": "draft review dispositions for warning_coverage: promote_hint, promote_warning, ignore, field_verify",
       "option_id": "route_note_review_option.ln_proposal.route_note.rudy_like_gpx.wpt_006",
       "package_mutation_candidate": false,
       "phase1_runtime_mutation_candidate": false,
       "phase2_writeback_candidate": false,
       "proposal_kind": "warning_coverage",
       "proposed_coverage_label": "route_note_warning_coverage",
+      "pydantic_ai_prompt_version": "deterministic_schema_ready.no_live_model.v0",
       "raw_gpx_embedded": false,
+      "review_state": "draft",
       "route_note_summary": "2638大崩塌勿右切/架繩取左小徑",
       "runtime_mutation_candidate": false,
+      "runtime_safety_truth": false,
       "selected_admin_disposition": null,
+      "source_attribution": [
+        {
+          "candidate_only": true,
+          "draft_only": true,
+          "extractor_method": "pretrip_route_note_review_options.build_route_note_review_options",
+          "extractor_version": "pretrip_route_note_review_options.v0",
+          "runtime_safety_truth": false,
+          "source_artifact_refs": [
+            "route_note.rudy_like_gpx.wpt_006",
+            "source.comparison.rudy_like_gpx"
+          ],
+          "source_kind": "route_note_ln_proposal",
+          "source_ref": "ln_proposal.route_note.rudy_like_gpx.wpt_006",
+          "source_waypoint_index": 6
+        }
+      ],
       "source_note_category": "hazard_hint",
       "source_proposal_id": "ln_proposal.route_note.rudy_like_gpx.wpt_006",
+      "source_refs": [
+        "ln_proposal.route_note.rudy_like_gpx.wpt_006",
+        "route_note.rudy_like_gpx.wpt_006",
+        "source.comparison.rudy_like_gpx"
+      ],
       "source_route_note_candidate_id": "route_note.rudy_like_gpx.wpt_006",
-      "source_waypoint_index": 6
+      "source_waypoint_index": 6,
+      "stale_risk": "medium"
     },
     {
       "allowed_admin_dispositions": [
@@ -124,23 +214,53 @@
         "field_verify"
       ],
       "candidate_only": true,
+      "confidence": "medium",
       "decision_recorded": false,
       "draft_only": true,
+      "extractor_method": "pretrip_route_note_review_options.build_route_note_review_options",
+      "extractor_version": "pretrip_route_note_review_options.v0",
       "mission_graph_mutation_candidate": false,
+      "model_output_sha256": "19f4549188624de6c1b833e6f6af0d1be6b582898b123ca51e9adb24a5852474",
+      "model_output_summary": "draft review dispositions for hint_coverage: promote_hint, promote_warning, ignore, field_verify",
       "option_id": "route_note_review_option.ln_proposal.route_note.rudy_like_gpx.wpt_018",
       "package_mutation_candidate": false,
       "phase1_runtime_mutation_candidate": false,
       "phase2_writeback_candidate": false,
       "proposal_kind": "hint_coverage",
       "proposed_coverage_label": "route_note_hint_coverage",
+      "pydantic_ai_prompt_version": "deterministic_schema_ready.no_live_model.v0",
       "raw_gpx_embedded": false,
+      "review_state": "draft",
       "route_note_summary": "上切點(好走)",
       "runtime_mutation_candidate": false,
+      "runtime_safety_truth": false,
       "selected_admin_disposition": null,
+      "source_attribution": [
+        {
+          "candidate_only": true,
+          "draft_only": true,
+          "extractor_method": "pretrip_route_note_review_options.build_route_note_review_options",
+          "extractor_version": "pretrip_route_note_review_options.v0",
+          "runtime_safety_truth": false,
+          "source_artifact_refs": [
+            "route_note.rudy_like_gpx.wpt_018",
+            "source.comparison.rudy_like_gpx"
+          ],
+          "source_kind": "route_note_ln_proposal",
+          "source_ref": "ln_proposal.route_note.rudy_like_gpx.wpt_018",
+          "source_waypoint_index": 18
+        }
+      ],
       "source_note_category": "route_condition_hint",
       "source_proposal_id": "ln_proposal.route_note.rudy_like_gpx.wpt_018",
+      "source_refs": [
+        "ln_proposal.route_note.rudy_like_gpx.wpt_018",
+        "route_note.rudy_like_gpx.wpt_018",
+        "source.comparison.rudy_like_gpx"
+      ],
       "source_route_note_candidate_id": "route_note.rudy_like_gpx.wpt_018",
-      "source_waypoint_index": 18
+      "source_waypoint_index": 18,
+      "stale_risk": "medium"
     },
     {
       "allowed_admin_dispositions": [
@@ -150,23 +270,53 @@
         "field_verify"
       ],
       "candidate_only": true,
+      "confidence": "medium",
       "decision_recorded": false,
       "draft_only": true,
+      "extractor_method": "pretrip_route_note_review_options.build_route_note_review_options",
+      "extractor_version": "pretrip_route_note_review_options.v0",
       "mission_graph_mutation_candidate": false,
+      "model_output_sha256": "b5af264fdc73b175634ad4feef395dea3ac7d411bda26b1a47c81b01f6a61ecd",
+      "model_output_summary": "draft review dispositions for hint_coverage: promote_hint, promote_warning, ignore, field_verify",
       "option_id": "route_note_review_option.ln_proposal.route_note.rudy_like_gpx.wpt_019",
       "package_mutation_candidate": false,
       "phase1_runtime_mutation_candidate": false,
       "phase2_writeback_candidate": false,
       "proposal_kind": "hint_coverage",
       "proposed_coverage_label": "route_note_hint_coverage",
+      "pydantic_ai_prompt_version": "deterministic_schema_ready.no_live_model.v0",
       "raw_gpx_embedded": false,
+      "review_state": "draft",
       "route_note_summary": "上稜(路徑算清楚)",
       "runtime_mutation_candidate": false,
+      "runtime_safety_truth": false,
       "selected_admin_disposition": null,
+      "source_attribution": [
+        {
+          "candidate_only": true,
+          "draft_only": true,
+          "extractor_method": "pretrip_route_note_review_options.build_route_note_review_options",
+          "extractor_version": "pretrip_route_note_review_options.v0",
+          "runtime_safety_truth": false,
+          "source_artifact_refs": [
+            "route_note.rudy_like_gpx.wpt_019",
+            "source.comparison.rudy_like_gpx"
+          ],
+          "source_kind": "route_note_ln_proposal",
+          "source_ref": "ln_proposal.route_note.rudy_like_gpx.wpt_019",
+          "source_waypoint_index": 19
+        }
+      ],
       "source_note_category": "route_condition_hint",
       "source_proposal_id": "ln_proposal.route_note.rudy_like_gpx.wpt_019",
+      "source_refs": [
+        "ln_proposal.route_note.rudy_like_gpx.wpt_019",
+        "route_note.rudy_like_gpx.wpt_019",
+        "source.comparison.rudy_like_gpx"
+      ],
       "source_route_note_candidate_id": "route_note.rudy_like_gpx.wpt_019",
-      "source_waypoint_index": 19
+      "source_waypoint_index": 19,
+      "stale_risk": "medium"
     },
     {
       "allowed_admin_dispositions": [
@@ -176,23 +326,53 @@
         "field_verify"
       ],
       "candidate_only": true,
+      "confidence": "medium",
       "decision_recorded": false,
       "draft_only": true,
+      "extractor_method": "pretrip_route_note_review_options.build_route_note_review_options",
+      "extractor_version": "pretrip_route_note_review_options.v0",
       "mission_graph_mutation_candidate": false,
+      "model_output_sha256": "9780e123fd8f7885ab93c8780216fcc4bfa23772bc29f3b0e1b5cd55b7ee80b1",
+      "model_output_summary": "draft review dispositions for hint_coverage: promote_hint, promote_warning, ignore, field_verify",
       "option_id": "route_note_review_option.ln_proposal.route_note.rudy_like_gpx.wpt_024",
       "package_mutation_candidate": false,
       "phase1_runtime_mutation_candidate": false,
       "phase2_writeback_candidate": false,
       "proposal_kind": "hint_coverage",
       "proposed_coverage_label": "route_note_hint_coverage",
+      "pydantic_ai_prompt_version": "deterministic_schema_ready.no_live_model.v0",
       "raw_gpx_embedded": false,
+      "review_state": "draft",
       "route_note_summary": "上稜之後下稜 有路徑",
       "runtime_mutation_candidate": false,
+      "runtime_safety_truth": false,
       "selected_admin_disposition": null,
+      "source_attribution": [
+        {
+          "candidate_only": true,
+          "draft_only": true,
+          "extractor_method": "pretrip_route_note_review_options.build_route_note_review_options",
+          "extractor_version": "pretrip_route_note_review_options.v0",
+          "runtime_safety_truth": false,
+          "source_artifact_refs": [
+            "route_note.rudy_like_gpx.wpt_024",
+            "source.comparison.rudy_like_gpx"
+          ],
+          "source_kind": "route_note_ln_proposal",
+          "source_ref": "ln_proposal.route_note.rudy_like_gpx.wpt_024",
+          "source_waypoint_index": 24
+        }
+      ],
       "source_note_category": "route_condition_hint",
       "source_proposal_id": "ln_proposal.route_note.rudy_like_gpx.wpt_024",
+      "source_refs": [
+        "ln_proposal.route_note.rudy_like_gpx.wpt_024",
+        "route_note.rudy_like_gpx.wpt_024",
+        "source.comparison.rudy_like_gpx"
+      ],
       "source_route_note_candidate_id": "route_note.rudy_like_gpx.wpt_024",
-      "source_waypoint_index": 24
+      "source_waypoint_index": 24,
+      "stale_risk": "medium"
     },
     {
       "allowed_admin_dispositions": [
@@ -202,23 +382,53 @@
         "field_verify"
       ],
       "candidate_only": true,
+      "confidence": "medium",
       "decision_recorded": false,
       "draft_only": true,
+      "extractor_method": "pretrip_route_note_review_options.build_route_note_review_options",
+      "extractor_version": "pretrip_route_note_review_options.v0",
       "mission_graph_mutation_candidate": false,
+      "model_output_sha256": "9199d4faf1276020798fbde6a8762548de406440a364d51d7a72203dfc0b6c3d",
+      "model_output_summary": "draft review dispositions for hint_coverage: promote_hint, promote_warning, ignore, field_verify",
       "option_id": "route_note_review_option.ln_proposal.route_note.rudy_like_gpx.wpt_027",
       "package_mutation_candidate": false,
       "phase1_runtime_mutation_candidate": false,
       "phase2_writeback_candidate": false,
       "proposal_kind": "hint_coverage",
       "proposed_coverage_label": "route_note_hint_coverage",
+      "pydantic_ai_prompt_version": "deterministic_schema_ready.no_live_model.v0",
       "raw_gpx_embedded": false,
+      "review_state": "draft",
       "route_note_summary": "南華會師大岩可腰繞",
       "runtime_mutation_candidate": false,
+      "runtime_safety_truth": false,
       "selected_admin_disposition": null,
+      "source_attribution": [
+        {
+          "candidate_only": true,
+          "draft_only": true,
+          "extractor_method": "pretrip_route_note_review_options.build_route_note_review_options",
+          "extractor_version": "pretrip_route_note_review_options.v0",
+          "runtime_safety_truth": false,
+          "source_artifact_refs": [
+            "route_note.rudy_like_gpx.wpt_027",
+            "source.comparison.rudy_like_gpx"
+          ],
+          "source_kind": "route_note_ln_proposal",
+          "source_ref": "ln_proposal.route_note.rudy_like_gpx.wpt_027",
+          "source_waypoint_index": 27
+        }
+      ],
       "source_note_category": "route_condition_hint",
       "source_proposal_id": "ln_proposal.route_note.rudy_like_gpx.wpt_027",
+      "source_refs": [
+        "ln_proposal.route_note.rudy_like_gpx.wpt_027",
+        "route_note.rudy_like_gpx.wpt_027",
+        "source.comparison.rudy_like_gpx"
+      ],
       "source_route_note_candidate_id": "route_note.rudy_like_gpx.wpt_027",
-      "source_waypoint_index": 27
+      "source_waypoint_index": 27,
+      "stale_risk": "medium"
     },
     {
       "allowed_admin_dispositions": [
@@ -228,23 +438,53 @@
         "field_verify"
       ],
       "candidate_only": true,
+      "confidence": "medium",
       "decision_recorded": false,
       "draft_only": true,
+      "extractor_method": "pretrip_route_note_review_options.build_route_note_review_options",
+      "extractor_version": "pretrip_route_note_review_options.v0",
       "mission_graph_mutation_candidate": false,
+      "model_output_sha256": "90ac8ca037bcecda5408b6145fa18d3ef3e474fd6b81fc28b4c4b8e31bdd5a16",
+      "model_output_summary": "draft review dispositions for warning_coverage: promote_hint, promote_warning, ignore, field_verify",
       "option_id": "route_note_review_option.ln_proposal.route_note.rudy_like_gpx.wpt_028",
       "package_mutation_candidate": false,
       "phase1_runtime_mutation_candidate": false,
       "phase2_writeback_candidate": false,
       "proposal_kind": "warning_coverage",
       "proposed_coverage_label": "route_note_warning_coverage",
+      "pydantic_ai_prompt_version": "deterministic_schema_ready.no_live_model.v0",
       "raw_gpx_embedded": false,
+      "review_state": "draft",
       "route_note_summary": "危險轉彎處(?",
       "runtime_mutation_candidate": false,
+      "runtime_safety_truth": false,
       "selected_admin_disposition": null,
+      "source_attribution": [
+        {
+          "candidate_only": true,
+          "draft_only": true,
+          "extractor_method": "pretrip_route_note_review_options.build_route_note_review_options",
+          "extractor_version": "pretrip_route_note_review_options.v0",
+          "runtime_safety_truth": false,
+          "source_artifact_refs": [
+            "route_note.rudy_like_gpx.wpt_028",
+            "source.comparison.rudy_like_gpx"
+          ],
+          "source_kind": "route_note_ln_proposal",
+          "source_ref": "ln_proposal.route_note.rudy_like_gpx.wpt_028",
+          "source_waypoint_index": 28
+        }
+      ],
       "source_note_category": "hazard_hint",
       "source_proposal_id": "ln_proposal.route_note.rudy_like_gpx.wpt_028",
+      "source_refs": [
+        "ln_proposal.route_note.rudy_like_gpx.wpt_028",
+        "route_note.rudy_like_gpx.wpt_028",
+        "source.comparison.rudy_like_gpx"
+      ],
       "source_route_note_candidate_id": "route_note.rudy_like_gpx.wpt_028",
-      "source_waypoint_index": 28
+      "source_waypoint_index": 28,
+      "stale_risk": "medium"
     },
     {
       "allowed_admin_dispositions": [
@@ -254,23 +494,53 @@
         "field_verify"
       ],
       "candidate_only": true,
+      "confidence": "medium",
       "decision_recorded": false,
       "draft_only": true,
+      "extractor_method": "pretrip_route_note_review_options.build_route_note_review_options",
+      "extractor_version": "pretrip_route_note_review_options.v0",
       "mission_graph_mutation_candidate": false,
+      "model_output_sha256": "5d4f2c6c0bef60e9a5692cad346abd458128dc60d4251f9e9b95946e0f404a3d",
+      "model_output_summary": "draft review dispositions for hint_coverage: promote_hint, promote_warning, ignore, field_verify",
       "option_id": "route_note_review_option.ln_proposal.route_note.rudy_like_gpx.wpt_032",
       "package_mutation_candidate": false,
       "phase1_runtime_mutation_candidate": false,
       "phase2_writeback_candidate": false,
       "proposal_kind": "hint_coverage",
       "proposed_coverage_label": "route_note_hint_coverage",
+      "pydantic_ai_prompt_version": "deterministic_schema_ready.no_live_model.v0",
       "raw_gpx_embedded": false,
+      "review_state": "draft",
       "route_note_summary": "小腰繞再上切",
       "runtime_mutation_candidate": false,
+      "runtime_safety_truth": false,
       "selected_admin_disposition": null,
+      "source_attribution": [
+        {
+          "candidate_only": true,
+          "draft_only": true,
+          "extractor_method": "pretrip_route_note_review_options.build_route_note_review_options",
+          "extractor_version": "pretrip_route_note_review_options.v0",
+          "runtime_safety_truth": false,
+          "source_artifact_refs": [
+            "route_note.rudy_like_gpx.wpt_032",
+            "source.comparison.rudy_like_gpx"
+          ],
+          "source_kind": "route_note_ln_proposal",
+          "source_ref": "ln_proposal.route_note.rudy_like_gpx.wpt_032",
+          "source_waypoint_index": 32
+        }
+      ],
       "source_note_category": "route_condition_hint",
       "source_proposal_id": "ln_proposal.route_note.rudy_like_gpx.wpt_032",
+      "source_refs": [
+        "ln_proposal.route_note.rudy_like_gpx.wpt_032",
+        "route_note.rudy_like_gpx.wpt_032",
+        "source.comparison.rudy_like_gpx"
+      ],
       "source_route_note_candidate_id": "route_note.rudy_like_gpx.wpt_032",
-      "source_waypoint_index": 32
+      "source_waypoint_index": 32,
+      "stale_risk": "medium"
     },
     {
       "allowed_admin_dispositions": [
@@ -280,23 +550,53 @@
         "field_verify"
       ],
       "candidate_only": true,
+      "confidence": "medium",
       "decision_recorded": false,
       "draft_only": true,
+      "extractor_method": "pretrip_route_note_review_options.build_route_note_review_options",
+      "extractor_version": "pretrip_route_note_review_options.v0",
       "mission_graph_mutation_candidate": false,
+      "model_output_sha256": "a8df13bc355c3bca22ade278bc9a4dee5458c428a55ebaa584348d455f6b6e44",
+      "model_output_summary": "draft review dispositions for hint_coverage: promote_hint, promote_warning, ignore, field_verify",
       "option_id": "route_note_review_option.ln_proposal.route_note.rudy_like_gpx.wpt_036",
       "package_mutation_candidate": false,
       "phase1_runtime_mutation_candidate": false,
       "phase2_writeback_candidate": false,
       "proposal_kind": "hint_coverage",
       "proposed_coverage_label": "route_note_hint_coverage",
+      "pydantic_ai_prompt_version": "deterministic_schema_ready.no_live_model.v0",
       "raw_gpx_embedded": false,
+      "review_state": "draft",
       "route_note_summary": "山老鼠路腰繞起點",
       "runtime_mutation_candidate": false,
+      "runtime_safety_truth": false,
       "selected_admin_disposition": null,
+      "source_attribution": [
+        {
+          "candidate_only": true,
+          "draft_only": true,
+          "extractor_method": "pretrip_route_note_review_options.build_route_note_review_options",
+          "extractor_version": "pretrip_route_note_review_options.v0",
+          "runtime_safety_truth": false,
+          "source_artifact_refs": [
+            "route_note.rudy_like_gpx.wpt_036",
+            "source.comparison.rudy_like_gpx"
+          ],
+          "source_kind": "route_note_ln_proposal",
+          "source_ref": "ln_proposal.route_note.rudy_like_gpx.wpt_036",
+          "source_waypoint_index": 36
+        }
+      ],
       "source_note_category": "route_condition_hint",
       "source_proposal_id": "ln_proposal.route_note.rudy_like_gpx.wpt_036",
+      "source_refs": [
+        "ln_proposal.route_note.rudy_like_gpx.wpt_036",
+        "route_note.rudy_like_gpx.wpt_036",
+        "source.comparison.rudy_like_gpx"
+      ],
       "source_route_note_candidate_id": "route_note.rudy_like_gpx.wpt_036",
-      "source_waypoint_index": 36
+      "source_waypoint_index": 36,
+      "stale_risk": "medium"
     },
     {
       "allowed_admin_dispositions": [
@@ -306,23 +606,53 @@
         "field_verify"
       ],
       "candidate_only": true,
+      "confidence": "medium",
       "decision_recorded": false,
       "draft_only": true,
+      "extractor_method": "pretrip_route_note_review_options.build_route_note_review_options",
+      "extractor_version": "pretrip_route_note_review_options.v0",
       "mission_graph_mutation_candidate": false,
+      "model_output_sha256": "585488b39def3b8bafedf4317fb219840c85cbbb89cf4e22fb31ea17e80e8f6d",
+      "model_output_summary": "draft review dispositions for warning_coverage: promote_hint, promote_warning, ignore, field_verify",
       "option_id": "route_note_review_option.ln_proposal.route_note.rudy_like_gpx.wpt_037",
       "package_mutation_candidate": false,
       "phase1_runtime_mutation_candidate": false,
       "phase2_writeback_candidate": false,
       "proposal_kind": "warning_coverage",
       "proposed_coverage_label": "route_note_warning_coverage",
+      "pydantic_ai_prompt_version": "deterministic_schema_ready.no_live_model.v0",
       "raw_gpx_embedded": false,
+      "review_state": "draft",
       "route_note_summary": "崩壁上方，展望點",
       "runtime_mutation_candidate": false,
+      "runtime_safety_truth": false,
       "selected_admin_disposition": null,
+      "source_attribution": [
+        {
+          "candidate_only": true,
+          "draft_only": true,
+          "extractor_method": "pretrip_route_note_review_options.build_route_note_review_options",
+          "extractor_version": "pretrip_route_note_review_options.v0",
+          "runtime_safety_truth": false,
+          "source_artifact_refs": [
+            "route_note.rudy_like_gpx.wpt_037",
+            "source.comparison.rudy_like_gpx"
+          ],
+          "source_kind": "route_note_ln_proposal",
+          "source_ref": "ln_proposal.route_note.rudy_like_gpx.wpt_037",
+          "source_waypoint_index": 37
+        }
+      ],
       "source_note_category": "hazard_hint",
       "source_proposal_id": "ln_proposal.route_note.rudy_like_gpx.wpt_037",
+      "source_refs": [
+        "ln_proposal.route_note.rudy_like_gpx.wpt_037",
+        "route_note.rudy_like_gpx.wpt_037",
+        "source.comparison.rudy_like_gpx"
+      ],
       "source_route_note_candidate_id": "route_note.rudy_like_gpx.wpt_037",
-      "source_waypoint_index": 37
+      "source_waypoint_index": 37,
+      "stale_risk": "medium"
     },
     {
       "allowed_admin_dispositions": [
@@ -332,23 +662,53 @@
         "field_verify"
       ],
       "candidate_only": true,
+      "confidence": "medium",
       "decision_recorded": false,
       "draft_only": true,
+      "extractor_method": "pretrip_route_note_review_options.build_route_note_review_options",
+      "extractor_version": "pretrip_route_note_review_options.v0",
       "mission_graph_mutation_candidate": false,
+      "model_output_sha256": "2e3b57b26239e2c42d4cae37108ed56286eb1602e415c4258f3606cfdf83f4b5",
+      "model_output_summary": "draft review dispositions for hint_coverage: promote_hint, promote_warning, ignore, field_verify",
       "option_id": "route_note_review_option.ln_proposal.route_note.rudy_like_gpx.wpt_040",
       "package_mutation_candidate": false,
       "phase1_runtime_mutation_candidate": false,
       "phase2_writeback_candidate": false,
       "proposal_kind": "hint_coverage",
       "proposed_coverage_label": "route_note_hint_coverage",
+      "pydantic_ai_prompt_version": "deterministic_schema_ready.no_live_model.v0",
       "raw_gpx_embedded": false,
+      "review_state": "draft",
       "route_note_summary": "左邊低繞好走",
       "runtime_mutation_candidate": false,
+      "runtime_safety_truth": false,
       "selected_admin_disposition": null,
+      "source_attribution": [
+        {
+          "candidate_only": true,
+          "draft_only": true,
+          "extractor_method": "pretrip_route_note_review_options.build_route_note_review_options",
+          "extractor_version": "pretrip_route_note_review_options.v0",
+          "runtime_safety_truth": false,
+          "source_artifact_refs": [
+            "route_note.rudy_like_gpx.wpt_040",
+            "source.comparison.rudy_like_gpx"
+          ],
+          "source_kind": "route_note_ln_proposal",
+          "source_ref": "ln_proposal.route_note.rudy_like_gpx.wpt_040",
+          "source_waypoint_index": 40
+        }
+      ],
       "source_note_category": "route_condition_hint",
       "source_proposal_id": "ln_proposal.route_note.rudy_like_gpx.wpt_040",
+      "source_refs": [
+        "ln_proposal.route_note.rudy_like_gpx.wpt_040",
+        "route_note.rudy_like_gpx.wpt_040",
+        "source.comparison.rudy_like_gpx"
+      ],
       "source_route_note_candidate_id": "route_note.rudy_like_gpx.wpt_040",
-      "source_waypoint_index": 40
+      "source_waypoint_index": 40,
+      "stale_risk": "medium"
     },
     {
       "allowed_admin_dispositions": [
@@ -358,23 +718,53 @@
         "field_verify"
       ],
       "candidate_only": true,
+      "confidence": "medium",
       "decision_recorded": false,
       "draft_only": true,
+      "extractor_method": "pretrip_route_note_review_options.build_route_note_review_options",
+      "extractor_version": "pretrip_route_note_review_options.v0",
       "mission_graph_mutation_candidate": false,
+      "model_output_sha256": "baafe44c9936808efbc6c6e5b9237f256568ef37bd1e35221b35eda69c1faea6",
+      "model_output_summary": "draft review dispositions for hint_coverage: promote_hint, promote_warning, ignore, field_verify",
       "option_id": "route_note_review_option.ln_proposal.route_note.rudy_like_gpx.wpt_061",
       "package_mutation_candidate": false,
       "phase1_runtime_mutation_candidate": false,
       "phase2_writeback_candidate": false,
       "proposal_kind": "hint_coverage",
       "proposed_coverage_label": "route_note_hint_coverage",
+      "pydantic_ai_prompt_version": "deterministic_schema_ready.no_live_model.v0",
       "raw_gpx_embedded": false,
+      "review_state": "draft",
       "route_note_summary": "繼續腰繞",
       "runtime_mutation_candidate": false,
+      "runtime_safety_truth": false,
       "selected_admin_disposition": null,
+      "source_attribution": [
+        {
+          "candidate_only": true,
+          "draft_only": true,
+          "extractor_method": "pretrip_route_note_review_options.build_route_note_review_options",
+          "extractor_version": "pretrip_route_note_review_options.v0",
+          "runtime_safety_truth": false,
+          "source_artifact_refs": [
+            "route_note.rudy_like_gpx.wpt_061",
+            "source.comparison.rudy_like_gpx"
+          ],
+          "source_kind": "route_note_ln_proposal",
+          "source_ref": "ln_proposal.route_note.rudy_like_gpx.wpt_061",
+          "source_waypoint_index": 61
+        }
+      ],
       "source_note_category": "route_condition_hint",
       "source_proposal_id": "ln_proposal.route_note.rudy_like_gpx.wpt_061",
+      "source_refs": [
+        "ln_proposal.route_note.rudy_like_gpx.wpt_061",
+        "route_note.rudy_like_gpx.wpt_061",
+        "source.comparison.rudy_like_gpx"
+      ],
       "source_route_note_candidate_id": "route_note.rudy_like_gpx.wpt_061",
-      "source_waypoint_index": 61
+      "source_waypoint_index": 61,
+      "stale_risk": "medium"
     },
     {
       "allowed_admin_dispositions": [
@@ -384,23 +774,53 @@
         "field_verify"
       ],
       "candidate_only": true,
+      "confidence": "medium",
       "decision_recorded": false,
       "draft_only": true,
+      "extractor_method": "pretrip_route_note_review_options.build_route_note_review_options",
+      "extractor_version": "pretrip_route_note_review_options.v0",
       "mission_graph_mutation_candidate": false,
+      "model_output_sha256": "4c0daf1edd12973c48a79f69cc3d5677feee920ff71d1f53acefbfcaf7f74d3c",
+      "model_output_summary": "draft review dispositions for hint_coverage: promote_hint, promote_warning, ignore, field_verify",
       "option_id": "route_note_review_option.ln_proposal.route_note.rudy_like_gpx.wpt_062",
       "package_mutation_candidate": false,
       "phase1_runtime_mutation_candidate": false,
       "phase2_writeback_candidate": false,
       "proposal_kind": "hint_coverage",
       "proposed_coverage_label": "route_note_hint_coverage",
+      "pydantic_ai_prompt_version": "deterministic_schema_ready.no_live_model.v0",
       "raw_gpx_embedded": false,
+      "review_state": "draft",
       "route_note_summary": "腰繞再上切",
       "runtime_mutation_candidate": false,
+      "runtime_safety_truth": false,
       "selected_admin_disposition": null,
+      "source_attribution": [
+        {
+          "candidate_only": true,
+          "draft_only": true,
+          "extractor_method": "pretrip_route_note_review_options.build_route_note_review_options",
+          "extractor_version": "pretrip_route_note_review_options.v0",
+          "runtime_safety_truth": false,
+          "source_artifact_refs": [
+            "route_note.rudy_like_gpx.wpt_062",
+            "source.comparison.rudy_like_gpx"
+          ],
+          "source_kind": "route_note_ln_proposal",
+          "source_ref": "ln_proposal.route_note.rudy_like_gpx.wpt_062",
+          "source_waypoint_index": 62
+        }
+      ],
       "source_note_category": "route_condition_hint",
       "source_proposal_id": "ln_proposal.route_note.rudy_like_gpx.wpt_062",
+      "source_refs": [
+        "ln_proposal.route_note.rudy_like_gpx.wpt_062",
+        "route_note.rudy_like_gpx.wpt_062",
+        "source.comparison.rudy_like_gpx"
+      ],
       "source_route_note_candidate_id": "route_note.rudy_like_gpx.wpt_062",
-      "source_waypoint_index": 62
+      "source_waypoint_index": 62,
+      "stale_risk": "medium"
     },
     {
       "allowed_admin_dispositions": [
@@ -410,23 +830,53 @@
         "field_verify"
       ],
       "candidate_only": true,
+      "confidence": "medium",
       "decision_recorded": false,
       "draft_only": true,
+      "extractor_method": "pretrip_route_note_review_options.build_route_note_review_options",
+      "extractor_version": "pretrip_route_note_review_options.v0",
       "mission_graph_mutation_candidate": false,
+      "model_output_sha256": "c336177c7a9b0fe291d3d8307c6705cac9f08f221f273f570ba8d27393747207",
+      "model_output_summary": "draft review dispositions for hint_coverage: promote_hint, promote_warning, ignore, field_verify",
       "option_id": "route_note_review_option.ln_proposal.route_note.rudy_like_gpx.wpt_063",
       "package_mutation_candidate": false,
       "phase1_runtime_mutation_candidate": false,
       "phase2_writeback_candidate": false,
       "proposal_kind": "hint_coverage",
       "proposed_coverage_label": "route_note_hint_coverage",
+      "pydantic_ai_prompt_version": "deterministic_schema_ready.no_live_model.v0",
       "raw_gpx_embedded": false,
+      "review_state": "draft",
       "route_note_summary": "腰繞大石頭右邊",
       "runtime_mutation_candidate": false,
+      "runtime_safety_truth": false,
       "selected_admin_disposition": null,
+      "source_attribution": [
+        {
+          "candidate_only": true,
+          "draft_only": true,
+          "extractor_method": "pretrip_route_note_review_options.build_route_note_review_options",
+          "extractor_version": "pretrip_route_note_review_options.v0",
+          "runtime_safety_truth": false,
+          "source_artifact_refs": [
+            "route_note.rudy_like_gpx.wpt_063",
+            "source.comparison.rudy_like_gpx"
+          ],
+          "source_kind": "route_note_ln_proposal",
+          "source_ref": "ln_proposal.route_note.rudy_like_gpx.wpt_063",
+          "source_waypoint_index": 63
+        }
+      ],
       "source_note_category": "route_condition_hint",
       "source_proposal_id": "ln_proposal.route_note.rudy_like_gpx.wpt_063",
+      "source_refs": [
+        "ln_proposal.route_note.rudy_like_gpx.wpt_063",
+        "route_note.rudy_like_gpx.wpt_063",
+        "source.comparison.rudy_like_gpx"
+      ],
       "source_route_note_candidate_id": "route_note.rudy_like_gpx.wpt_063",
-      "source_waypoint_index": 63
+      "source_waypoint_index": 63,
+      "stale_risk": "medium"
     },
     {
       "allowed_admin_dispositions": [
@@ -436,23 +886,53 @@
         "field_verify"
       ],
       "candidate_only": true,
+      "confidence": "medium",
       "decision_recorded": false,
       "draft_only": true,
+      "extractor_method": "pretrip_route_note_review_options.build_route_note_review_options",
+      "extractor_version": "pretrip_route_note_review_options.v0",
       "mission_graph_mutation_candidate": false,
+      "model_output_sha256": "09f352c6c1bd58c0f25e79db5a643c24bae5d194aafa87548ce5c942f8eb6a81",
+      "model_output_summary": "draft review dispositions for hint_coverage: promote_hint, promote_warning, ignore, field_verify",
       "option_id": "route_note_review_option.ln_proposal.route_note.rudy_like_gpx.wpt_064",
       "package_mutation_candidate": false,
       "phase1_runtime_mutation_candidate": false,
       "phase2_writeback_candidate": false,
       "proposal_kind": "hint_coverage",
       "proposed_coverage_label": "route_note_hint_coverage",
+      "pydantic_ai_prompt_version": "deterministic_schema_ready.no_live_model.v0",
       "raw_gpx_embedded": false,
+      "review_state": "draft",
       "route_note_summary": "腰繞好走",
       "runtime_mutation_candidate": false,
+      "runtime_safety_truth": false,
       "selected_admin_disposition": null,
+      "source_attribution": [
+        {
+          "candidate_only": true,
+          "draft_only": true,
+          "extractor_method": "pretrip_route_note_review_options.build_route_note_review_options",
+          "extractor_version": "pretrip_route_note_review_options.v0",
+          "runtime_safety_truth": false,
+          "source_artifact_refs": [
+            "route_note.rudy_like_gpx.wpt_064",
+            "source.comparison.rudy_like_gpx"
+          ],
+          "source_kind": "route_note_ln_proposal",
+          "source_ref": "ln_proposal.route_note.rudy_like_gpx.wpt_064",
+          "source_waypoint_index": 64
+        }
+      ],
       "source_note_category": "route_condition_hint",
       "source_proposal_id": "ln_proposal.route_note.rudy_like_gpx.wpt_064",
+      "source_refs": [
+        "ln_proposal.route_note.rudy_like_gpx.wpt_064",
+        "route_note.rudy_like_gpx.wpt_064",
+        "source.comparison.rudy_like_gpx"
+      ],
       "source_route_note_candidate_id": "route_note.rudy_like_gpx.wpt_064",
-      "source_waypoint_index": 64
+      "source_waypoint_index": 64,
+      "stale_risk": "medium"
     },
     {
       "allowed_admin_dispositions": [
@@ -462,23 +942,53 @@
         "field_verify"
       ],
       "candidate_only": true,
+      "confidence": "medium",
       "decision_recorded": false,
       "draft_only": true,
+      "extractor_method": "pretrip_route_note_review_options.build_route_note_review_options",
+      "extractor_version": "pretrip_route_note_review_options.v0",
       "mission_graph_mutation_candidate": false,
+      "model_output_sha256": "47607477c0de6d53bbb9c0e3ee79ab4dc1bfb3d5a4412f3f9a2033e3ac3aa91c",
+      "model_output_summary": "draft review dispositions for hint_coverage: promote_hint, promote_warning, ignore, field_verify",
       "option_id": "route_note_review_option.ln_proposal.route_note.rudy_like_gpx.wpt_065",
       "package_mutation_candidate": false,
       "phase1_runtime_mutation_candidate": false,
       "phase2_writeback_candidate": false,
       "proposal_kind": "hint_coverage",
       "proposed_coverage_label": "route_note_hint_coverage",
+      "pydantic_ai_prompt_version": "deterministic_schema_ready.no_live_model.v0",
       "raw_gpx_embedded": false,
+      "review_state": "draft",
       "route_note_summary": "腰繞好走1",
       "runtime_mutation_candidate": false,
+      "runtime_safety_truth": false,
       "selected_admin_disposition": null,
+      "source_attribution": [
+        {
+          "candidate_only": true,
+          "draft_only": true,
+          "extractor_method": "pretrip_route_note_review_options.build_route_note_review_options",
+          "extractor_version": "pretrip_route_note_review_options.v0",
+          "runtime_safety_truth": false,
+          "source_artifact_refs": [
+            "route_note.rudy_like_gpx.wpt_065",
+            "source.comparison.rudy_like_gpx"
+          ],
+          "source_kind": "route_note_ln_proposal",
+          "source_ref": "ln_proposal.route_note.rudy_like_gpx.wpt_065",
+          "source_waypoint_index": 65
+        }
+      ],
       "source_note_category": "route_condition_hint",
       "source_proposal_id": "ln_proposal.route_note.rudy_like_gpx.wpt_065",
+      "source_refs": [
+        "ln_proposal.route_note.rudy_like_gpx.wpt_065",
+        "route_note.rudy_like_gpx.wpt_065",
+        "source.comparison.rudy_like_gpx"
+      ],
       "source_route_note_candidate_id": "route_note.rudy_like_gpx.wpt_065",
-      "source_waypoint_index": 65
+      "source_waypoint_index": 65,
+      "stale_risk": "medium"
     },
     {
       "allowed_admin_dispositions": [
@@ -488,23 +998,53 @@
         "field_verify"
       ],
       "candidate_only": true,
+      "confidence": "medium",
       "decision_recorded": false,
       "draft_only": true,
+      "extractor_method": "pretrip_route_note_review_options.build_route_note_review_options",
+      "extractor_version": "pretrip_route_note_review_options.v0",
       "mission_graph_mutation_candidate": false,
+      "model_output_sha256": "ae460ad89c34098dc6c860181759485542e759f44380920861692c1f5aa81292",
+      "model_output_summary": "draft review dispositions for hint_coverage: promote_hint, promote_warning, ignore, field_verify",
       "option_id": "route_note_review_option.ln_proposal.route_note.rudy_like_gpx.wpt_070",
       "package_mutation_candidate": false,
       "phase1_runtime_mutation_candidate": false,
       "phase2_writeback_candidate": false,
       "proposal_kind": "hint_coverage",
       "proposed_coverage_label": "route_note_hint_coverage",
+      "pydantic_ai_prompt_version": "deterministic_schema_ready.no_live_model.v0",
       "raw_gpx_embedded": false,
+      "review_state": "draft",
       "route_note_summary": "走左腰繞",
       "runtime_mutation_candidate": false,
+      "runtime_safety_truth": false,
       "selected_admin_disposition": null,
+      "source_attribution": [
+        {
+          "candidate_only": true,
+          "draft_only": true,
+          "extractor_method": "pretrip_route_note_review_options.build_route_note_review_options",
+          "extractor_version": "pretrip_route_note_review_options.v0",
+          "runtime_safety_truth": false,
+          "source_artifact_refs": [
+            "route_note.rudy_like_gpx.wpt_070",
+            "source.comparison.rudy_like_gpx"
+          ],
+          "source_kind": "route_note_ln_proposal",
+          "source_ref": "ln_proposal.route_note.rudy_like_gpx.wpt_070",
+          "source_waypoint_index": 70
+        }
+      ],
       "source_note_category": "route_condition_hint",
       "source_proposal_id": "ln_proposal.route_note.rudy_like_gpx.wpt_070",
+      "source_refs": [
+        "ln_proposal.route_note.rudy_like_gpx.wpt_070",
+        "route_note.rudy_like_gpx.wpt_070",
+        "source.comparison.rudy_like_gpx"
+      ],
       "source_route_note_candidate_id": "route_note.rudy_like_gpx.wpt_070",
-      "source_waypoint_index": 70
+      "source_waypoint_index": 70,
+      "stale_risk": "medium"
     },
     {
       "allowed_admin_dispositions": [
@@ -514,23 +1054,53 @@
         "field_verify"
       ],
       "candidate_only": true,
+      "confidence": "medium",
       "decision_recorded": false,
       "draft_only": true,
+      "extractor_method": "pretrip_route_note_review_options.build_route_note_review_options",
+      "extractor_version": "pretrip_route_note_review_options.v0",
       "mission_graph_mutation_candidate": false,
+      "model_output_sha256": "7f1062217ff0cec34b990fb1ef1a496ac9c4e2bb72c38f2d0c7cf7e7c4eb13b8",
+      "model_output_summary": "draft review dispositions for hint_coverage: promote_hint, promote_warning, ignore, field_verify",
       "option_id": "route_note_review_option.ln_proposal.route_note.rudy_like_gpx.wpt_073",
       "package_mutation_candidate": false,
       "phase1_runtime_mutation_candidate": false,
       "phase2_writeback_candidate": false,
       "proposal_kind": "hint_coverage",
       "proposed_coverage_label": "route_note_hint_coverage",
+      "pydantic_ai_prompt_version": "deterministic_schema_ready.no_live_model.v0",
       "raw_gpx_embedded": false,
+      "review_state": "draft",
       "route_note_summary": "走稜有路",
       "runtime_mutation_candidate": false,
+      "runtime_safety_truth": false,
       "selected_admin_disposition": null,
+      "source_attribution": [
+        {
+          "candidate_only": true,
+          "draft_only": true,
+          "extractor_method": "pretrip_route_note_review_options.build_route_note_review_options",
+          "extractor_version": "pretrip_route_note_review_options.v0",
+          "runtime_safety_truth": false,
+          "source_artifact_refs": [
+            "route_note.rudy_like_gpx.wpt_073",
+            "source.comparison.rudy_like_gpx"
+          ],
+          "source_kind": "route_note_ln_proposal",
+          "source_ref": "ln_proposal.route_note.rudy_like_gpx.wpt_073",
+          "source_waypoint_index": 73
+        }
+      ],
       "source_note_category": "route_condition_hint",
       "source_proposal_id": "ln_proposal.route_note.rudy_like_gpx.wpt_073",
+      "source_refs": [
+        "ln_proposal.route_note.rudy_like_gpx.wpt_073",
+        "route_note.rudy_like_gpx.wpt_073",
+        "source.comparison.rudy_like_gpx"
+      ],
       "source_route_note_candidate_id": "route_note.rudy_like_gpx.wpt_073",
-      "source_waypoint_index": 73
+      "source_waypoint_index": 73,
+      "stale_risk": "medium"
     },
     {
       "allowed_admin_dispositions": [
@@ -540,23 +1110,53 @@
         "field_verify"
       ],
       "candidate_only": true,
+      "confidence": "medium",
       "decision_recorded": false,
       "draft_only": true,
+      "extractor_method": "pretrip_route_note_review_options.build_route_note_review_options",
+      "extractor_version": "pretrip_route_note_review_options.v0",
       "mission_graph_mutation_candidate": false,
+      "model_output_sha256": "32fc3d44271ab0a5110731e5021680118fc26844ebdd42af0bc858a399ba5e97",
+      "model_output_summary": "draft review dispositions for hint_coverage: promote_hint, promote_warning, ignore, field_verify",
       "option_id": "route_note_review_option.ln_proposal.route_note.rudy_like_gpx.wpt_075",
       "package_mutation_candidate": false,
       "phase1_runtime_mutation_candidate": false,
       "phase2_writeback_candidate": false,
       "proposal_kind": "hint_coverage",
       "proposed_coverage_label": "route_note_hint_coverage",
+      "pydantic_ai_prompt_version": "deterministic_schema_ready.no_live_model.v0",
       "raw_gpx_embedded": false,
+      "review_state": "draft",
       "route_note_summary": "路徑清楚",
       "runtime_mutation_candidate": false,
+      "runtime_safety_truth": false,
       "selected_admin_disposition": null,
+      "source_attribution": [
+        {
+          "candidate_only": true,
+          "draft_only": true,
+          "extractor_method": "pretrip_route_note_review_options.build_route_note_review_options",
+          "extractor_version": "pretrip_route_note_review_options.v0",
+          "runtime_safety_truth": false,
+          "source_artifact_refs": [
+            "route_note.rudy_like_gpx.wpt_075",
+            "source.comparison.rudy_like_gpx"
+          ],
+          "source_kind": "route_note_ln_proposal",
+          "source_ref": "ln_proposal.route_note.rudy_like_gpx.wpt_075",
+          "source_waypoint_index": 75
+        }
+      ],
       "source_note_category": "route_condition_hint",
       "source_proposal_id": "ln_proposal.route_note.rudy_like_gpx.wpt_075",
+      "source_refs": [
+        "ln_proposal.route_note.rudy_like_gpx.wpt_075",
+        "route_note.rudy_like_gpx.wpt_075",
+        "source.comparison.rudy_like_gpx"
+      ],
       "source_route_note_candidate_id": "route_note.rudy_like_gpx.wpt_075",
-      "source_waypoint_index": 75
+      "source_waypoint_index": 75,
+      "stale_risk": "medium"
     },
     {
       "allowed_admin_dispositions": [
@@ -566,23 +1166,53 @@
         "field_verify"
       ],
       "candidate_only": true,
+      "confidence": "medium",
       "decision_recorded": false,
       "draft_only": true,
+      "extractor_method": "pretrip_route_note_review_options.build_route_note_review_options",
+      "extractor_version": "pretrip_route_note_review_options.v0",
       "mission_graph_mutation_candidate": false,
+      "model_output_sha256": "28f0b2fbc5f256b92006dbe0dd20589616733d751d682d8320bdcb5076495819",
+      "model_output_summary": "draft review dispositions for hint_coverage: promote_hint, promote_warning, ignore, field_verify",
       "option_id": "route_note_review_option.ln_proposal.route_note.rudy_like_gpx.wpt_076",
       "package_mutation_candidate": false,
       "phase1_runtime_mutation_candidate": false,
       "phase2_writeback_candidate": false,
       "proposal_kind": "hint_coverage",
       "proposed_coverage_label": "route_note_hint_coverage",
+      "pydantic_ai_prompt_version": "deterministic_schema_ready.no_live_model.v0",
       "raw_gpx_embedded": false,
+      "review_state": "draft",
       "route_note_summary": "路徑清楚1",
       "runtime_mutation_candidate": false,
+      "runtime_safety_truth": false,
       "selected_admin_disposition": null,
+      "source_attribution": [
+        {
+          "candidate_only": true,
+          "draft_only": true,
+          "extractor_method": "pretrip_route_note_review_options.build_route_note_review_options",
+          "extractor_version": "pretrip_route_note_review_options.v0",
+          "runtime_safety_truth": false,
+          "source_artifact_refs": [
+            "route_note.rudy_like_gpx.wpt_076",
+            "source.comparison.rudy_like_gpx"
+          ],
+          "source_kind": "route_note_ln_proposal",
+          "source_ref": "ln_proposal.route_note.rudy_like_gpx.wpt_076",
+          "source_waypoint_index": 76
+        }
+      ],
       "source_note_category": "route_condition_hint",
       "source_proposal_id": "ln_proposal.route_note.rudy_like_gpx.wpt_076",
+      "source_refs": [
+        "ln_proposal.route_note.rudy_like_gpx.wpt_076",
+        "route_note.rudy_like_gpx.wpt_076",
+        "source.comparison.rudy_like_gpx"
+      ],
       "source_route_note_candidate_id": "route_note.rudy_like_gpx.wpt_076",
-      "source_waypoint_index": 76
+      "source_waypoint_index": 76,
+      "stale_risk": "medium"
     },
     {
       "allowed_admin_dispositions": [
@@ -592,23 +1222,53 @@
         "field_verify"
       ],
       "candidate_only": true,
+      "confidence": "medium",
       "decision_recorded": false,
       "draft_only": true,
+      "extractor_method": "pretrip_route_note_review_options.build_route_note_review_options",
+      "extractor_version": "pretrip_route_note_review_options.v0",
       "mission_graph_mutation_candidate": false,
+      "model_output_sha256": "fb38ca7bfc2740453930d83aa2d343806c51647165444bb431b900d35064a273",
+      "model_output_summary": "draft review dispositions for hint_coverage: promote_hint, promote_warning, ignore, field_verify",
       "option_id": "route_note_review_option.ln_proposal.route_note.rudy_like_gpx.wpt_077",
       "package_mutation_candidate": false,
       "phase1_runtime_mutation_candidate": false,
       "phase2_writeback_candidate": false,
       "proposal_kind": "hint_coverage",
       "proposed_coverage_label": "route_note_hint_coverage",
+      "pydantic_ai_prompt_version": "deterministic_schema_ready.no_live_model.v0",
       "raw_gpx_embedded": false,
+      "review_state": "draft",
       "route_note_summary": "路跡清楚",
       "runtime_mutation_candidate": false,
+      "runtime_safety_truth": false,
       "selected_admin_disposition": null,
+      "source_attribution": [
+        {
+          "candidate_only": true,
+          "draft_only": true,
+          "extractor_method": "pretrip_route_note_review_options.build_route_note_review_options",
+          "extractor_version": "pretrip_route_note_review_options.v0",
+          "runtime_safety_truth": false,
+          "source_artifact_refs": [
+            "route_note.rudy_like_gpx.wpt_077",
+            "source.comparison.rudy_like_gpx"
+          ],
+          "source_kind": "route_note_ln_proposal",
+          "source_ref": "ln_proposal.route_note.rudy_like_gpx.wpt_077",
+          "source_waypoint_index": 77
+        }
+      ],
       "source_note_category": "route_condition_hint",
       "source_proposal_id": "ln_proposal.route_note.rudy_like_gpx.wpt_077",
+      "source_refs": [
+        "ln_proposal.route_note.rudy_like_gpx.wpt_077",
+        "route_note.rudy_like_gpx.wpt_077",
+        "source.comparison.rudy_like_gpx"
+      ],
       "source_route_note_candidate_id": "route_note.rudy_like_gpx.wpt_077",
-      "source_waypoint_index": 77
+      "source_waypoint_index": 77,
+      "stale_risk": "medium"
     },
     {
       "allowed_admin_dispositions": [
@@ -618,23 +1278,53 @@
         "field_verify"
       ],
       "candidate_only": true,
+      "confidence": "medium",
       "decision_recorded": false,
       "draft_only": true,
+      "extractor_method": "pretrip_route_note_review_options.build_route_note_review_options",
+      "extractor_version": "pretrip_route_note_review_options.v0",
       "mission_graph_mutation_candidate": false,
+      "model_output_sha256": "b8d3a45b97055e22e93ad3e0b306686844fee0693709347b2277386109216499",
+      "model_output_summary": "draft review dispositions for hint_coverage: promote_hint, promote_warning, ignore, field_verify",
       "option_id": "route_note_review_option.ln_proposal.route_note.rudy_like_gpx.wpt_078",
       "package_mutation_candidate": false,
       "phase1_runtime_mutation_candidate": false,
       "phase2_writeback_candidate": false,
       "proposal_kind": "hint_coverage",
       "proposed_coverage_label": "route_note_hint_coverage",
+      "pydantic_ai_prompt_version": "deterministic_schema_ready.no_live_model.v0",
       "raw_gpx_embedded": false,
+      "review_state": "draft",
       "route_note_summary": "這也有一個上切點（粉色布條）",
       "runtime_mutation_candidate": false,
+      "runtime_safety_truth": false,
       "selected_admin_disposition": null,
+      "source_attribution": [
+        {
+          "candidate_only": true,
+          "draft_only": true,
+          "extractor_method": "pretrip_route_note_review_options.build_route_note_review_options",
+          "extractor_version": "pretrip_route_note_review_options.v0",
+          "runtime_safety_truth": false,
+          "source_artifact_refs": [
+            "route_note.rudy_like_gpx.wpt_078",
+            "source.comparison.rudy_like_gpx"
+          ],
+          "source_kind": "route_note_ln_proposal",
+          "source_ref": "ln_proposal.route_note.rudy_like_gpx.wpt_078",
+          "source_waypoint_index": 78
+        }
+      ],
       "source_note_category": "route_condition_hint",
       "source_proposal_id": "ln_proposal.route_note.rudy_like_gpx.wpt_078",
+      "source_refs": [
+        "ln_proposal.route_note.rudy_like_gpx.wpt_078",
+        "route_note.rudy_like_gpx.wpt_078",
+        "source.comparison.rudy_like_gpx"
+      ],
       "source_route_note_candidate_id": "route_note.rudy_like_gpx.wpt_078",
-      "source_waypoint_index": 78
+      "source_waypoint_index": 78,
+      "stale_risk": "medium"
     }
   ],
   "project_id": "chilai_nanhua_day1",

@@ -31,6 +31,9 @@ The map is Scout's bridge to the real world. Nearly every meaningful Scout
 message is about geography, terrain, route position, timing, or what happened
 to a person in a place. The map must therefore act as the shared semantic
 coordinate system across admin surfaces, not as a decorative preview panel.
+The detailed cross-surface **GIS Map Operations**（GIS 地圖操作） contract for
+`/admin`, `/admin/debug`, and `/admin/pretrip` is defined in
+`docs/specs/admin-gis-map-operations.md`.
 
 Design implications:
 
