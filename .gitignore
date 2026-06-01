@@ -73,6 +73,7 @@ Scout/
 # Scout local captures and heavyweight map data
 PdrSample/
 catographydata/
+tmp/
 trajectory_map.png
 
 # Local operator setup helpers
