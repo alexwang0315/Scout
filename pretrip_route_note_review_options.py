@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import json
+import hashlib
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -70,8 +71,19 @@ class RouteNoteReviewOption(RouteNoteReviewOptionsModel):
     proposal_kind: Literal["warning_coverage", "hint_coverage"]
     proposed_coverage_label: str
     route_note_summary: str
+    source_refs: tuple[str, ...] = Field(default_factory=tuple)
+    source_attribution: tuple[dict[str, Any], ...] = Field(default_factory=tuple)
+    extractor_version: str = "pretrip_route_note_review_options.v0"
+    extractor_method: str = "pretrip_route_note_review_options.build_route_note_review_options"
+    pydantic_ai_prompt_version: str = "deterministic_schema_ready.no_live_model.v0"
+    model_output_sha256: str = "manual_fixture_no_model_hash"
+    model_output_summary: str = "manual fixture route-note review options"
+    confidence: Literal["low", "medium", "high", "unknown"] = "medium"
+    stale_risk: Literal["unknown", "low", "medium", "high"] = "unknown"
+    review_state: Literal["draft"] = "draft"
     allowed_admin_dispositions: tuple[AdminDisposition, ...] = ALLOWED_ADMIN_DISPOSITIONS
     candidate_only: Literal[True] = True
+    runtime_safety_truth: Literal[False] = False
     draft_only: Literal[True] = True
     decision_recorded: Literal[False] = False
     selected_admin_disposition: None = None
@@ -183,4 +195,39 @@ def _review_option_from_proposal(proposal) -> RouteNoteReviewOption:
         proposal_kind=proposal.proposal_kind,
         proposed_coverage_label=proposal.proposed_coverage_label,
         route_note_summary=proposal.route_note_summary,
+        source_refs=(proposal.proposal_id, *tuple(proposal.source_refs)),
+        source_attribution=(
+            {
+                "source_kind": "route_note_ln_proposal",
+                "source_ref": proposal.proposal_id,
+                "source_artifact_refs": tuple(proposal.source_refs),
+                "source_waypoint_index": proposal.source_waypoint_index,
+                "extractor_version": "pretrip_route_note_review_options.v0",
+                "extractor_method": "pretrip_route_note_review_options.build_route_note_review_options",
+                "candidate_only": True,
+                "draft_only": True,
+                "runtime_safety_truth": False,
+            },
+        ),
+        model_output_sha256=_sha256_text(
+            json.dumps(
+                {
+                    "source_proposal_id": proposal.proposal_id,
+                    "allowed_admin_dispositions": ALLOWED_ADMIN_DISPOSITIONS,
+                    "proposal_kind": proposal.proposal_kind,
+                },
+                ensure_ascii=False,
+                sort_keys=True,
+            )
+        ),
+        model_output_summary=(
+            f"draft review dispositions for {proposal.proposal_kind}: "
+            f"{', '.join(ALLOWED_ADMIN_DISPOSITIONS)}"
+        ),
+        confidence=proposal.confidence,
+        stale_risk=proposal.stale_risk,
     )
+
+
+def _sha256_text(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()

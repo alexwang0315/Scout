@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
+from copy import deepcopy
 from dataclasses import asdict
 from pathlib import Path
 
@@ -13,6 +16,7 @@ from pretrip_models import (
     PreTripRetreatRouteCandidate,
     PreTripRouteGuideTimingCandidate,
     PreTripArtifactKind,
+    RouteBBox,
 )
 from pretrip_after_action_candidates import build_scout_260512_after_action_next_plan_candidates
 from pretrip_contour_interpretation import (
@@ -32,21 +36,41 @@ from pretrip_review_models import (
 )
 from pretrip_review_resolver import resolve_pretrip_reviewed_package
 from pretrip_review_queue import build_chilai_review_queue_manifest
+from pretrip_review_draft_fixture import build_chilai_review_draft_log
+from pretrip_review_decision_apply import build_chilai_review_decision_apply_plan
+from pretrip_review_decision_log import build_chilai_review_decision_log
 from pretrip_remote_summary import build_remote_contact_summary
 from pretrip_resource_plan import build_chilai_resource_plan
-from pretrip_readiness import evaluate_pretrip_readiness, load_skill_config_manifest
+from pretrip_readiness import (
+    DEFAULT_SKILL_CONFIG_MANIFEST,
+    evaluate_pretrip_readiness,
+    load_skill_config_manifest,
+)
 from pretrip_plan_validation import build_chilai_plan_validation_report
 from pretrip_route_comparison import DEFAULT_SIMILAR_GPX, build_chilai_route_comparison
+from pretrip_route_note_candidates import build_route_note_candidates_from_gpx
+from pretrip_route_note_ln_proposals import build_route_note_ln_proposals
+from pretrip_route_note_review_options import build_route_note_review_options
 from pretrip_runtime_handoff_metadata import build_chilai_runtime_handoff_metadata
 from pretrip_runtime_audit import build_chilai_runtime_audit_manifest
 from pretrip_segment_policy import build_chilai_segment_policy_candidates
 from pretrip_source_ingest import build_pretrip_package, write_json
 from pretrip_skill_audit import build_pretrip_skill_audit_bundle
 from pretrip_skill_manifest_catalog import build_chilai_skill_manifest_catalog
+from pretrip_external_import_queue import build_chilai_external_import_queue
+from pretrip_expert_contribution import build_chilai_expert_contribution_log
 from pretrip_terrain_summary import summarize_segment_terrain_metadata
 from pretrip_timing_calibration import generate_timing_measurement_candidates
 from pretrip_poi_readiness import evaluate_poi_readiness_candidates
 from pretrip_departure_bundle import build_chilai_departure_bundle
+from pretrip_overpass_ingest import import_overpass_evidence_candidates
+from pretrip_import import (
+    DEFAULT_RESUME_SEGMENT_GAP_M,
+    _annotate_resume_segment_candidates,
+    _build_resume_segment_report,
+    _gpx_filter_manifest_payload,
+    _prepare_speed_filtered_gpx,
+)
 from pretrip_weather_daylight import (
     DaylightEvidenceWindow,
     PreTripWeatherDaylightEvidence,
@@ -55,6 +79,7 @@ from pretrip_weather_daylight import (
     WeatherDaylightValidation,
     WeatherWindowSummary,
 )
+from route_matching import load_gpx_route
 
 
 ROOT = Path(__file__).resolve().parent
@@ -74,14 +99,26 @@ def main() -> None:
     parser.add_argument("--image", type=Path, default=DEFAULT_IMAGE)
     parser.add_argument("--dtm-dir", type=Path, action="append", default=None)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
+    parser.add_argument("--max-reasonable-gpx-speed-kmh", type=float, default=120.0)
     args = parser.parse_args()
+
+    output_dir = args.output_dir
+    gpx_filter = _prepare_speed_filtered_gpx(
+        project_root=output_dir,
+        primary_gpx=args.gpx.expanduser().resolve(),
+        reference_paths=[args.similar_gpx.expanduser().resolve()],
+        max_reasonable_speed_kmh=args.max_reasonable_gpx_speed_kmh,
+    )
+    filtered_primary_gpx = gpx_filter["primary"]["filtered_path"]
+    filtered_similar_gpx = gpx_filter["references"][0]["filtered_path"]
+    gpx_filter_report = _gpx_filter_manifest_payload(gpx_filter)
 
     dtm_dirs = args.dtm_dir if args.dtm_dir is not None else DEFAULT_DTM_DIRS
     package = build_pretrip_package(
         package_id="pretrip.chilai_nanhua_day1.v0",
         project_id="chilai_nanhua_day1",
         version="0.1.0",
-        gpx_path=args.gpx,
+        gpx_path=filtered_primary_gpx,
         image_path=args.image,
         dtm_dirs=dtm_dirs,
         planning_references=_planning_references(),
@@ -95,13 +132,28 @@ def main() -> None:
                 candidate.route_point_end_index = finish_index
             if candidate.distance_m == 0.0:
                 candidate.distance_m = package.route_summary.distance_m
+    filtered_route = load_gpx_route(filtered_primary_gpx)
+    resume_segment_report = _build_resume_segment_report(
+        route=filtered_route,
+        segment_candidates=package.segment_candidates,
+        max_gap_m=DEFAULT_RESUME_SEGMENT_GAP_M,
+    )
+    package = package.model_copy(
+        update={
+            "segment_candidates": _annotate_resume_segment_candidates(
+                package.segment_candidates,
+                resume_segment_report=resume_segment_report,
+            )
+        }
+    )
 
-    output_dir = args.output_dir
     write_json(output_dir / "outputs" / "pretrip_package.json", package.model_dump(mode="json"))
     write_json(output_dir / "normalized" / "routes" / "route_summary.json", package.route_summary.model_dump(mode="json"))
+    write_json(output_dir / "outputs" / "gpx_speed_filter_report.json", gpx_filter_report)
+    write_json(output_dir / "outputs" / "resume_segments.json", resume_segment_report)
     route_comparison = build_chilai_route_comparison(
-        primary_gpx_path=args.gpx,
-        similar_gpx_path=args.similar_gpx,
+        primary_gpx_path=filtered_primary_gpx,
+        similar_gpx_path=filtered_similar_gpx,
     )
     write_json(output_dir / "outputs" / "route_comparison.json", route_comparison)
     write_json(
@@ -155,23 +207,25 @@ def main() -> None:
             terrain_summary.model_dump(mode="json"),
         )
     skill_config_manifest_ref = "candidates/skill_config_manifest.json"
-    skill_config_manifest_path = output_dir / skill_config_manifest_ref
-    readiness_payload = {"status": "unknown", "findings": []}
-    if skill_config_manifest_path.exists():
-        readiness_report = evaluate_pretrip_readiness(
-            {
-                "route_id": package.project_id,
-                "route_days": 2,
-                "route_kind": "traverse",
-                "distance_m": package.route_summary.distance_m,
-                "retreat_routes": [
-                    candidate.model_dump(mode="json") for candidate in package.retreat_route_candidates
-                ],
-            },
-            skill_config_manifest=load_skill_config_manifest(skill_config_manifest_path),
-        )
-        readiness_payload = asdict(readiness_report)
-        write_json(output_dir / "outputs" / "readiness_report.json", readiness_payload)
+    skill_config_manifest_path = _write_skill_config_manifest(
+        output_dir,
+        project_id=package.project_id,
+        manifest_ref=skill_config_manifest_ref,
+    )
+    readiness_report = evaluate_pretrip_readiness(
+        {
+            "route_id": package.project_id,
+            "route_days": 2,
+            "route_kind": "traverse",
+            "distance_m": package.route_summary.distance_m,
+            "retreat_routes": [
+                candidate.model_dump(mode="json") for candidate in package.retreat_route_candidates
+            ],
+        },
+        skill_config_manifest=load_skill_config_manifest(skill_config_manifest_path),
+    )
+    readiness_payload = asdict(readiness_report)
+    write_json(output_dir / "outputs" / "readiness_report.json", readiness_payload)
     compiled_mission_graph = compile_pretrip_mission_graph(package, allow_unreviewed=True)
     write_json(
         output_dir / "outputs" / "compiled_mission_graph.candidate.json",
@@ -214,11 +268,44 @@ def main() -> None:
         output_dir / "outputs" / "contour_interpretation_candidates.json",
         contour_interpretation_candidates.model_dump(mode="json"),
     )
+    route_note_candidates = build_route_note_candidates_from_gpx(
+        filtered_similar_gpx,
+        project_id=package.project_id,
+        source_artifact_id="artifact.gpx.reference_route_notes",
+        source_key="reference_route_notes",
+    )
+    write_json(
+        output_dir / "candidates" / "route_note_candidates.json",
+        route_note_candidates.model_dump(mode="json"),
+    )
+    route_note_ln_proposals = build_route_note_ln_proposals(route_note_candidates)
+    write_json(
+        output_dir / "outputs" / "route_note_ln_proposals.json",
+        route_note_ln_proposals.model_dump(mode="json"),
+    )
+    route_note_review_options = build_route_note_review_options(route_note_ln_proposals)
+    write_json(
+        output_dir / "outputs" / "route_note_review_options.json",
+        route_note_review_options.model_dump(mode="json"),
+    )
+    external_import_queue = build_chilai_external_import_queue()
+    write_json(
+        output_dir / "outputs" / "external_import_queue.json",
+        external_import_queue.model_dump(mode="json"),
+    )
+    expert_contribution_log = build_chilai_expert_contribution_log()
+    write_json(
+        output_dir / "outputs" / "expert_contribution_log.json",
+        expert_contribution_log.model_dump(mode="json"),
+    )
+    overpass_counts = _write_empty_overpass_evidence(output_dir, package)
     project_payload = {
             "project_id": package.project_id,
             "package_ref": "outputs/pretrip_package.json",
             "route_summary_ref": "normalized/routes/route_summary.json",
             "route_comparison_ref": "outputs/route_comparison.json",
+            "gpx_speed_filter_report_ref": "outputs/gpx_speed_filter_report.json",
+            "resume_segment_report_ref": "outputs/resume_segments.json",
             "dtm_coverage_summary_ref": "normalized/terrain/dtm_coverage_summary.json",
             "segment_dtm_coverage_ref": "normalized/terrain/segment_dtm_coverage.json",
             "checkpoint_candidates_ref": "candidates/checkpoints.json",
@@ -226,6 +313,9 @@ def main() -> None:
             "retreat_routes_ref": "candidates/retreat_routes.json",
             "map_context_ref": "normalized/map/map_context.geojson",
             "map_candidates_ref": "candidates/map_candidates.json",
+            "overpass_evidence_ref": "candidates/overpass_evidence.json",
+            "overpass_map_context_ref": "normalized/map/overpass_vector_evidence.geojson",
+            "overpass_raw_payload_ref": "normalized/map/overpass_phase_a_raw.json",
             "planning_references_ref": "candidates/planning_references.json",
             "route_guide_timing_ref": "candidates/route_guide_timing.json",
             "skill_config_manifest_ref": skill_config_manifest_ref,
@@ -248,9 +338,17 @@ def main() -> None:
             "review_queue_manifest_ref": "outputs/review_queue_manifest.json",
             "weather_daylight_evidence_ref": "outputs/weather_daylight_evidence.json",
             "contour_interpretation_candidates_ref": "outputs/contour_interpretation_candidates.json",
+            "route_note_candidates_ref": "candidates/route_note_candidates.json",
+            "route_note_ln_proposals_ref": "outputs/route_note_ln_proposals.json",
+            "route_note_review_options_ref": "outputs/route_note_review_options.json",
             "remote_contact_summary_ref": "outputs/remote_contact_summary.json",
             "resource_plan_ref": "outputs/resource_plan.json",
             "departure_bundle_manifest_ref": "outputs/departure_bundle_manifest.json",
+            "review_draft_log_ref": "reviews/review_draft_log.json",
+            "review_decision_log_ref": "reviews/review_decision_log.json",
+            "review_decision_apply_plan_ref": "outputs/review_decision_apply_plan.json",
+            "external_import_queue_ref": "outputs/external_import_queue.json",
+            "expert_contribution_log_ref": "outputs/expert_contribution_log.json",
             "source_artifact_count": len(package.source_artifacts),
             "planning_reference_count": len(package.planning_references),
             "checkpoint_candidate_count": len(package.checkpoint_candidates),
@@ -259,9 +357,21 @@ def main() -> None:
             "map_corridor_candidate_count": len(map_candidates.corridor_candidates),
             "map_poi_candidate_count": len(map_candidates.poi_candidates),
             "map_hazard_candidate_count": len(map_candidates.hazard_candidates),
+            "overpass_candidate_count": overpass_counts["candidates"],
+            "overpass_skipped_object_count": overpass_counts["skipped"],
             "human_review_count": len(review_log.reviews),
             "route_guide_timing_candidate_count": len(package.route_guide_timing_candidates),
             "route_comparison_count": 1,
+            "gpx_speed_filter_original_track_point_count": (
+                gpx_filter_report["primary"]["original_track_point_count"]
+            ),
+            "gpx_speed_filter_filtered_track_point_count": (
+                gpx_filter_report["primary"]["filtered_track_point_count"]
+            ),
+            "gpx_speed_filter_removed_track_point_count": (
+                gpx_filter_report["primary"]["removed_track_point_count"]
+            ),
+            "resume_segment_count": resume_segment_report["resume_segment_count"],
             "timing_measurement_count": len(timing_measurements),
             "planned_eta_estimate_count": len(eta_plan.estimates),
             "brain_seed_node_count": 0,
@@ -282,6 +392,27 @@ def main() -> None:
             "contour_interpretation_candidate_count": len(
                 contour_interpretation_candidates.candidates
             ),
+            "route_note_candidate_count": route_note_candidates.counts.note_candidate_count,
+            "route_note_potential_ln_signal_count": (
+                route_note_candidates.counts.potential_ln_signal_count
+            ),
+            "route_note_ln_proposal_count": route_note_ln_proposals.counts.proposal_count,
+            "route_note_ln_hint_coverage_proposal_count": (
+                route_note_ln_proposals.counts.hint_coverage_proposal_count
+            ),
+            "route_note_ln_warning_coverage_proposal_count": (
+                route_note_ln_proposals.counts.warning_coverage_proposal_count
+            ),
+            "route_note_review_option_count": (
+                route_note_review_options.counts.review_option_count
+            ),
+            "external_import_request_count": external_import_queue.counts.request_count,
+            "expert_contribution_count": len(expert_contribution_log.records),
+            "expert_contribution_memory_seed_candidate_count": (
+                expert_contribution_log.counts.memory_seed_candidate_count
+            ),
+            "review_draft_action_count": 0,
+            "review_decision_action_count": 0,
             "notes": [
                 "Fixture stores only source metadata, route summary, and DTM tile coverage summary.",
                 "Large GPX/photo/DTM source files remain outside repo fixtures.",
@@ -337,6 +468,16 @@ def main() -> None:
         output_dir / "outputs" / "plan_validation_candidates.json",
         plan_validation.model_dump(mode="json"),
     )
+    brain_seed = export_chilai_pretrip_brain_seed(
+        output_dir,
+        reviewed=True,
+        mission_id=reviewed_mission_graph.mission_id,
+        package_uri="outputs/pretrip_package.reviewed.json",
+        review_log_uri="reviews/human_reviews.json",
+    )
+    project_payload["brain_seed_node_count"] = len(brain_seed.nodes)
+    write_json(output_dir / "outputs" / "brain_seed_nodes.json", brain_seed.model_dump())
+    write_json(output_dir / "project.json", project_payload)
     runtime_audit = build_chilai_runtime_audit_manifest(output_dir)
     project_payload["runtime_audit_axis_count"] = len(runtime_audit.axes)
     write_json(
@@ -364,21 +505,43 @@ def main() -> None:
         runtime_handoff_metadata.model_dump(mode="json"),
     )
     write_json(output_dir / "project.json", project_payload)
-    brain_seed = export_chilai_pretrip_brain_seed(
-        output_dir,
-        reviewed=True,
-        mission_id=reviewed_mission_graph.mission_id,
-        package_uri="outputs/pretrip_package.reviewed.json",
-        review_log_uri="reviews/human_reviews.json",
-    )
-    project_payload["brain_seed_node_count"] = len(brain_seed.nodes)
-    write_json(output_dir / "outputs" / "brain_seed_nodes.json", brain_seed.model_dump())
-    write_json(output_dir / "project.json", project_payload)
     skill_manifest_catalog = build_chilai_skill_manifest_catalog(output_dir)
     project_payload["planning_skill_manifest_count"] = len(skill_manifest_catalog.manifests)
     write_json(
         output_dir / "outputs" / "planning_skill_manifest_catalog.json",
         skill_manifest_catalog.model_dump(mode="json"),
+    )
+    write_json(output_dir / "project.json", project_payload)
+    review_draft_log = build_chilai_review_draft_log(output_dir)
+    project_payload["review_draft_action_count"] = len(review_draft_log.actions)
+    write_json(
+        output_dir / "reviews" / "review_draft_log.json",
+        review_draft_log.model_dump(mode="json"),
+    )
+    write_json(
+        output_dir / "outputs" / "departure_bundle_manifest.json",
+        _provisional_departure_bundle_for_review_queue(package.project_id),
+    )
+    write_json(output_dir / "project.json", project_payload)
+    review_queue_manifest = build_chilai_review_queue_manifest(output_dir)
+    project_payload["review_queue_item_count"] = review_queue_manifest.counts.item_count
+    write_json(
+        output_dir / "outputs" / "review_queue_manifest.json",
+        review_queue_manifest.model_dump(mode="json"),
+    )
+    review_decision_log = build_chilai_review_decision_log(output_dir)
+    project_payload["review_decision_action_count"] = review_decision_log.counts.action_count
+    write_json(
+        output_dir / "reviews" / "review_decision_log.json",
+        review_decision_log.model_dump(mode="json"),
+    )
+    review_decision_apply_plan = build_chilai_review_decision_apply_plan(output_dir)
+    project_payload["review_decision_apply_action_count"] = (
+        review_decision_apply_plan.counts.decision_count
+    )
+    write_json(
+        output_dir / "outputs" / "review_decision_apply_plan.json",
+        review_decision_apply_plan.model_dump(mode="json"),
     )
     write_json(output_dir / "project.json", project_payload)
     departure_bundle = build_chilai_departure_bundle(output_dir)
@@ -390,13 +553,106 @@ def main() -> None:
         departure_bundle.model_dump(mode="json"),
     )
     write_json(output_dir / "project.json", project_payload)
-    review_queue_manifest = build_chilai_review_queue_manifest(output_dir)
-    project_payload["review_queue_item_count"] = review_queue_manifest.counts.item_count
-    write_json(
-        output_dir / "outputs" / "review_queue_manifest.json",
-        review_queue_manifest.model_dump(mode="json"),
+
+
+def _skill_config_manifest(project_id: str) -> dict:
+    manifest = deepcopy(DEFAULT_SKILL_CONFIG_MANIFEST)
+    manifest["manifest_id"] = f"skill_config_manifest.{project_id}.pretrip_readiness.v0"
+    manifest["project_id"] = project_id
+    manifest.setdefault("config", {}).setdefault(
+        "eta_policy",
+        {
+            "default_when_multiplier_basis_unknown": "total_elapsed_time_including_normal_rest",
+            "timing_calculation_required_in_first_slice": False,
+        },
     )
-    write_json(output_dir / "project.json", project_payload)
+    return manifest
+
+
+def _write_skill_config_manifest(output_dir: Path, *, project_id: str, manifest_ref: str) -> Path:
+    manifest_path = output_dir / manifest_ref
+    write_json(manifest_path, _skill_config_manifest(project_id))
+    return manifest_path
+
+
+def _provisional_departure_bundle_for_review_queue(project_id: str) -> dict:
+    return {
+        "bundle_id": f"departure_bundle.{project_id}.v0",
+        "artifact_kind": "pretrip_departure_bundle_manifest",
+        "project_id": project_id,
+        "status": "frozen_candidate",
+        "counts": {
+            "required_ref_count": 24,
+        },
+        "boundary": {
+            "human_review_required_before_departure": True,
+            "not_departure_approval": True,
+            "phase1_runtime_mutation_allowed": False,
+            "phase2_writeback_allowed": False,
+        },
+    }
+
+
+def _write_empty_overpass_evidence(output_dir: Path, package: PreTripPackage) -> dict[str, int]:
+    raw_ref = "normalized/map/overpass_phase_a_raw.json"
+    normalized_ref = "normalized/map/overpass_vector_evidence.geojson"
+    evidence_ref = "candidates/overpass_evidence.json"
+    raw_payload = {
+        "version": 0.6,
+        "generator": "scout-clean-base-generator",
+        "osm3s": {"timestamp_osm_base": None, "copyright": "OSM data not fetched"},
+        "elements": [],
+    }
+    raw_bytes = (
+        json.dumps(raw_payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    )
+    bbox = RouteBBox.model_validate(package.route_summary.bbox_wgs84)
+    bbox_dict = bbox.model_dump(mode="json")
+    result = import_overpass_evidence_candidates(
+        raw_payload,
+        query_body="/* clean base generator placeholder: no live Overpass fetch */",
+        bbox_wgs84=bbox,
+        route_corridor={
+            "route_id": package.project_id,
+            "route_ref": "normalized/routes/route_summary.json",
+            "bbox_wgs84": bbox_dict,
+        },
+        request_timestamp="2026-06-01T00:00:00Z",
+        endpoint="offline://clean-base/overpass-placeholder",
+        http_status=204,
+        raw_payload_uri=raw_ref,
+        raw_response_sha256=hashlib.sha256(raw_bytes).hexdigest(),
+        normalized_artifact_path=normalized_ref,
+        source_ref=raw_ref,
+    )
+    write_json(output_dir / raw_ref, raw_payload)
+    write_json(output_dir / normalized_ref, result.normalized_geojson)
+    write_json(
+        output_dir / evidence_ref,
+        {
+            "source_artifact": result.source_artifact.model_dump(mode="json"),
+            "request": result.request.model_dump(mode="json"),
+            "object_evidence": [
+                item.model_dump(mode="json") for item in result.object_evidence
+            ],
+            "skipped_objects": [
+                item.model_dump(mode="json") for item in result.skipped_objects
+            ],
+            "candidates": [item.model_dump(mode="json") for item in result.candidates],
+            "counts": result.counts,
+            "normalized_geojson_ref": normalized_ref,
+            "boundary": {
+                "candidate_only": True,
+                "runtime_truth": False,
+                "runtime_safety_truth": False,
+                "live_network_required": False,
+                "network_mode": "offline-clean-base-placeholder",
+                "phase1_runtime_mutation_allowed": False,
+                "phase2_brain_writeback_allowed": False,
+            },
+        },
+    )
+    return result.counts
 
 
 def _weather_daylight_evidence(package: PreTripPackage, eta_plan) -> PreTripWeatherDaylightEvidence:
@@ -492,6 +748,7 @@ def _contour_interpretation_candidates(package: PreTripPackage) -> ContourInterp
             ContourInterpretationCandidate(
                 candidate_id="contour.g11.seg_001_003",
                 interpretation_mode="manual",
+                candidate_origin="manual_baseline",
                 source_artifact_refs=source_refs,
                 target_refs=ContourTargetRefs(
                     route_artifact_ref="artifact.gpx.chilai_nanhua_day1",
@@ -515,6 +772,7 @@ def _contour_interpretation_candidates(package: PreTripPackage) -> ContourInterp
             ContourInterpretationCandidate(
                 candidate_id="contour.g11.seg_006_008",
                 interpretation_mode="ai_assisted",
+                candidate_origin="ai_assisted_model",
                 source_artifact_refs=source_refs,
                 target_refs=ContourTargetRefs(
                     route_artifact_ref="artifact.gpx.chilai_nanhua_day1",

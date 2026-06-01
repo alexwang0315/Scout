@@ -6,7 +6,7 @@ import xml.etree.ElementTree as ET
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -41,6 +41,18 @@ class RouteNoteCandidate(RouteNoteModel):
         "uncategorized_note",
     ]
     potential_ln_signal: bool = False
+    source_refs: tuple[str, ...] = Field(default_factory=tuple)
+    source_attribution: tuple[dict[str, Any], ...] = Field(default_factory=tuple)
+    extractor_version: str = "pretrip_route_note_candidates.v0"
+    extractor_method: str = "pretrip_route_note_candidates.build_route_note_candidates_from_gpx"
+    pydantic_ai_prompt_version: str = "deterministic_schema_ready.no_live_model.v0"
+    model_output_sha256: str = "manual_fixture_no_model_hash"
+    model_output_summary: str = "manual fixture route-note classification"
+    confidence: Literal["low", "medium", "high", "unknown"] = "medium"
+    stale_risk: Literal["unknown", "low", "medium", "high"] = "unknown"
+    review_state: Literal["needs_review"] = "needs_review"
+    candidate_only: Literal[True] = True
+    runtime_safety_truth: Literal[False] = False
     route_note_age_days: int | None = None
     route_note_freshness: Literal["unknown", "recent", "aging", "stale"] = "unknown"
     stale_route_note: bool = False
@@ -112,6 +124,15 @@ class RouteNoteCandidateSet(RouteNoteModel):
         ln_count = sum(1 for candidate in self.candidates if candidate.potential_ln_signal)
         if self.counts.potential_ln_signal_count != ln_count:
             raise ValueError("potential_ln_signal_count must match candidates")
+        unknown_count = sum(
+            1 for candidate in self.candidates
+            if candidate.route_note_freshness == "unknown"
+        )
+        if self.counts.route_note_time_unknown_count != unknown_count:
+            raise ValueError("route_note_time_unknown_count must match candidates")
+        stale_count = sum(1 for candidate in self.candidates if candidate.stale_route_note)
+        if self.counts.stale_route_note_count != stale_count:
+            raise ValueError("stale_route_note_count must match candidates")
         return self
 
     def to_json(self) -> str:
@@ -137,6 +158,7 @@ def build_route_note_candidates_from_gpx(
     namespace = _namespace(root.tag)
     waypoints = root.findall(f".//{namespace}wpt")
     as_of = _freshness_as_of(freshness_as_of)
+    source_sha256 = _sha256_file(source_path)
     candidates = tuple(
         candidate
         for index, waypoint in enumerate(waypoints)
@@ -146,6 +168,8 @@ def build_route_note_candidates_from_gpx(
                 waypoint,
                 namespace,
                 source_key,
+                source_artifact_id=source_artifact_id,
+                source_sha256=source_sha256,
                 freshness_as_of=as_of,
             )
         )
@@ -157,7 +181,7 @@ def build_route_note_candidates_from_gpx(
         project_id=project_id,
         source_artifact_id=source_artifact_id,
         source_uri=source_path.as_posix(),
-        source_sha256=_sha256_file(source_path),
+        source_sha256=source_sha256,
         counts=RouteNoteCounts(
             waypoint_count=len(waypoints),
             note_candidate_count=len(candidates),
@@ -206,6 +230,8 @@ def _route_note_candidate(
     namespace: str,
     source_key: str,
     *,
+    source_artifact_id: str,
+    source_sha256: str,
     freshness_as_of: datetime,
 ) -> RouteNoteCandidate | None:
     name = _child_text(waypoint, namespace, "name")
@@ -217,8 +243,20 @@ def _route_note_candidate(
     category = _classify_note(normalized_note)
     waypoint_time = _child_text(waypoint, namespace, "time") or None
     freshness = _route_note_freshness(waypoint_time, freshness_as_of=freshness_as_of)
+    source_fields_present = tuple(
+        field
+        for field, value in (("name", name), ("cmt", cmt), ("desc", desc))
+        if value
+    )
+    candidate_id = f"route_note.{source_key}.wpt_{index:03d}"
+    confidence = _route_note_confidence(category, source_fields_present)
+    stale_risk = _stale_risk_from_freshness(freshness["freshness"])
+    model_output_summary = (
+        f"{category}; potential_ln_signal={category in {'hazard_hint', 'route_condition_hint'}}; "
+        f"freshness={freshness['freshness']}"
+    )
     return RouteNoteCandidate(
-        candidate_id=f"route_note.{source_key}.wpt_{index:03d}",
+        candidate_id=candidate_id,
         source_waypoint_index=index,
         lat=float(waypoint.attrib["lat"]),
         lon=float(waypoint.attrib["lon"]),
@@ -230,14 +268,42 @@ def _route_note_candidate(
         normalized_note=normalized_note,
         note_category=category,
         potential_ln_signal=category in {"hazard_hint", "route_condition_hint"},
+        source_refs=(source_artifact_id,),
+        source_attribution=(
+            {
+                "source_kind": "gpx_route_note",
+                "source_ref": source_artifact_id,
+                "source_sha256": source_sha256,
+                "source_key": source_key,
+                "source_waypoint_index": index,
+                "source_fields_present": source_fields_present,
+                "extractor_version": "pretrip_route_note_candidates.v0",
+                "extractor_method": "pretrip_route_note_candidates.build_route_note_candidates_from_gpx",
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+            },
+        ),
+        model_output_sha256=_sha256_text(
+            json.dumps(
+                {
+                    "candidate_id": candidate_id,
+                    "normalized_note": normalized_note,
+                    "note_category": category,
+                    "potential_ln_signal": category
+                    in {"hazard_hint", "route_condition_hint"},
+                    "route_note_freshness": freshness["freshness"],
+                },
+                ensure_ascii=False,
+                sort_keys=True,
+            )
+        ),
+        model_output_summary=model_output_summary,
+        confidence=confidence,
+        stale_risk=stale_risk,
         route_note_age_days=freshness["age_days"],
         route_note_freshness=freshness["freshness"],
         stale_route_note=freshness["stale"],
-        source_fields_present=tuple(
-            field
-            for field, value in (("name", name), ("cmt", cmt), ("desc", desc))
-            if value
-        ),
+        source_fields_present=source_fields_present,
     )
 
 
@@ -335,6 +401,24 @@ def _route_note_freshness(
     return {"age_days": age_days, "freshness": "recent", "stale": False}
 
 
+def _route_note_confidence(category: str, source_fields_present: tuple[str, ...]) -> str:
+    if category == "uncategorized_note":
+        return "low"
+    if len(source_fields_present) >= 2:
+        return "medium"
+    return "low"
+
+
+def _stale_risk_from_freshness(freshness: str) -> str:
+    if freshness == "stale":
+        return "high"
+    if freshness == "aging":
+        return "medium"
+    if freshness == "recent":
+        return "low"
+    return "unknown"
+
+
 def _parse_gpx_time(value: str | None) -> datetime | None:
     if not value:
         return None
@@ -358,3 +442,7 @@ def _sha256_file(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _sha256_text(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()

@@ -54,6 +54,12 @@ def test_builds_ln_proposals_from_existing_route_note_fixture():
         proposal["source_note_category"] in {"hazard_hint", "route_condition_hint"}
         for proposal in payload["proposals"]
     )
+    assert all(proposal["source_refs"] for proposal in payload["proposals"])
+    assert all(proposal["source_attribution"] for proposal in payload["proposals"])
+    assert all(proposal["extractor_version"] == "pretrip_route_note_ln_proposals.v0" for proposal in payload["proposals"])
+    assert all(proposal["model_output_sha256"] for proposal in payload["proposals"])
+    assert all(proposal["review_state"] == "needs_review" for proposal in payload["proposals"])
+    assert all(proposal["runtime_safety_truth"] is False for proposal in payload["proposals"])
     assert {
         proposal["proposal_kind"] for proposal in payload["proposals"]
     } == {"hint_coverage", "warning_coverage"}
@@ -78,6 +84,7 @@ def test_ln_proposals_remain_review_gated_candidates_without_writeback():
 
     assert all(proposal["human_review_required"] is True for proposal in payload["proposals"])
     assert all(proposal["candidate_only"] is True for proposal in payload["proposals"])
+    assert all(proposal["runtime_safety_truth"] is False for proposal in payload["proposals"])
     assert all(
         proposal["scout_interpretation"] == "ModelInterpretation"
         for proposal in payload["proposals"]
@@ -222,6 +229,8 @@ def _fixture_free_route_note_candidate_set() -> RouteNoteCandidateSet:
             camp_or_water_hint_count=1,
             landmark_hint_count=0,
             potential_ln_signal_count=2,
+            route_note_time_unknown_count=3,
+            stale_route_note_count=0,
         ),
         boundary=RouteNoteBoundary(),
         candidates=candidates,

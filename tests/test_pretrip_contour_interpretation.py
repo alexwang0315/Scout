@@ -12,6 +12,7 @@ from pretrip_contour_interpretation import (
     ContourInterpretationCandidateSet,
     load_contour_interpretation_candidate_set,
 )
+from generate_pretrip_chilai_fixture import _contour_interpretation_candidates
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -70,6 +71,20 @@ def test_ai_assisted_contour_candidates_require_admin_review_before_use():
         assert candidate.review_lifecycle.lifecycle_status == "admin_review_pending"
         assert candidate.review_lifecycle.review_decision is None
         assert candidate.review_lifecycle.human_review_ref is None
+
+
+def test_clean_base_generator_contour_candidates_include_schema_origins():
+    package = type("Package", (), {"project_id": "chilai_nanhua_day1"})()
+    candidate_set = _contour_interpretation_candidates(package)
+
+    origins = {
+        candidate.interpretation_mode: candidate.candidate_origin
+        for candidate in candidate_set.candidates
+    }
+    assert origins == {
+        "manual": "manual_baseline",
+        "ai_assisted": "ai_assisted_model",
+    }
 
 
 def test_contour_interpretation_fixture_does_not_embed_raw_image_or_payloads():

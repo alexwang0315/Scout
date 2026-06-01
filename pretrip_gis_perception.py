@@ -164,6 +164,23 @@ class GisPerceptionCounts(GisPerceptionModel):
     raw_gpx_payload_count: Literal[0] = 0
 
 
+class GisPerceptionAIJudgementCounts(GisPerceptionModel):
+    input_count: int = Field(ge=0)
+    judgement_count: int = Field(ge=0)
+    source_ref_count: int = Field(ge=0)
+    candidate_only_count: int = Field(ge=0)
+    human_review_required_count: int = Field(ge=0)
+    runtime_safety_truth_count: Literal[0] = 0
+    observed_fact_count: Literal[0] = 0
+    derived_measurement_count: Literal[0] = 0
+    package_mutation_count: Literal[0] = 0
+    mission_graph_mutation_count: Literal[0] = 0
+    runtime_mutation_count: Literal[0] = 0
+    phase1_runtime_mutation_count: Literal[0] = 0
+    phase2_writeback_count: Literal[0] = 0
+    raw_model_output_count: Literal[0] = 0
+
+
 class GisPerceptionSourceAttribution(GisPerceptionModel):
     source_kind: Literal[
         "gpx_route_note",
@@ -217,7 +234,15 @@ class GisPerceptionCheckpointCandidate(GisPerceptionModel):
         "review_as_hint_cp",
         "review_as_water_or_camp_cp",
     ]
+    source_refs: tuple[str, ...] = Field(default_factory=tuple)
     source_attribution: tuple[GisPerceptionSourceAttribution, ...]
+    extractor_version: str = GIS_PERCEPTION_VERSION
+    pydantic_ai_prompt_version: str = GIS_PERCEPTION_PROMPT_VERSION
+    model_output_sha256: str
+    model_output_summary: str
+    confidence: Literal["low", "medium", "high"]
+    stale_risk: Literal["low", "medium", "high"]
+    review_state: Literal["needs_review"] = "needs_review"
     candidate_only: Literal[True] = True
     human_review_required: Literal[True] = True
     runtime_safety_truth: Literal[False] = False
@@ -282,7 +307,16 @@ class GpxGisPerceptionResult(GisPerceptionModel):
 class GisPerceptionAIJudgement(GisPerceptionModel):
     judgement_id: str
     source_candidate_id: str
+    source_refs: tuple[str, ...] = Field(default_factory=tuple)
     source_kind: Literal["gpx_route_note", "overpass_candidate"]
+    extractor_version: str = GIS_PERCEPTION_VERSION
+    pydantic_ai_prompt_version: str = GIS_PERCEPTION_PROMPT_VERSION
+    prompt_version: str = GIS_PERCEPTION_PROMPT_VERSION
+    prompt_sha256: str
+    provider_kind: GisAIProviderKind
+    model_name: str
+    model_output_sha256: str
+    model_output_summary: str
     cp_needed: bool
     checkpoint_type: Literal[
         "none",
@@ -302,6 +336,7 @@ class GisPerceptionAIJudgement(GisPerceptionModel):
     stale_risk: Literal["low", "medium", "high"]
     reason_zh: str
     source_signals: tuple[str, ...] = Field(default_factory=tuple)
+    review_state: Literal["needs_review"] = "needs_review"
     human_review_required: Literal[True] = True
     candidate_only: Literal[True] = True
     runtime_safety_truth: Literal[False] = False
@@ -338,9 +373,12 @@ class GisPerceptionAIJudgementSet(GisPerceptionModel):
     provider_kind: GisAIProviderKind
     model_name: str
     source_profile: str
+    source_refs: tuple[str, ...] = Field(default_factory=tuple)
     prompt_sha256: str
     input_count: int = Field(ge=0)
     judgement_count: int = Field(ge=0)
+    counts: GisPerceptionAIJudgementCounts | None = None
+    boundary: GisPerceptionBoundary = Field(default_factory=GisPerceptionBoundary)
     pydantic_ai_invoked: Literal[True] = True
     live_model_call_performed: bool
     network_calls_allowed: bool
@@ -348,9 +386,30 @@ class GisPerceptionAIJudgementSet(GisPerceptionModel):
     judgements: tuple[GisPerceptionAIJudgement, ...]
 
     @model_validator(mode="after")
-    def _enforce_judgement_count(self) -> "GisPerceptionAIJudgementSet":
+    def _enforce_judgement_boundary(self) -> "GisPerceptionAIJudgementSet":
         if self.judgement_count != len(self.judgements):
             raise ValueError("judgement_count must match judgements")
+        source_refs = _unique_source_refs_from_judgements(self.judgements)
+        if not self.source_refs:
+            self.source_refs = source_refs
+        elif self.source_refs != source_refs:
+            raise ValueError("source_refs must match judgement source refs")
+        counts = self.counts or _ai_judgement_counts(
+            input_count=self.input_count,
+            judgements=self.judgements,
+            source_refs=self.source_refs,
+        )
+        if counts.input_count != self.input_count:
+            raise ValueError("counts.input_count must match input_count")
+        if counts.judgement_count != self.judgement_count:
+            raise ValueError("counts.judgement_count must match judgement_count")
+        if counts.source_ref_count != len(self.source_refs):
+            raise ValueError("counts.source_ref_count must match source_refs")
+        if counts.candidate_only_count != self.judgement_count:
+            raise ValueError("all GIS AI judgements must be candidate-only")
+        if counts.human_review_required_count != self.judgement_count:
+            raise ValueError("all GIS AI judgements must require human review")
+        self.counts = counts
         return self
 
     def to_json(self) -> str:
@@ -381,6 +440,41 @@ class GisPerceptionAIProvider(Protocol):
         ...
 
 
+def _unique_source_refs_from_judgements(
+    judgements: Sequence[GisPerceptionAIJudgement],
+) -> tuple[str, ...]:
+    refs: list[str] = []
+    seen: set[str] = set()
+    for judgement in judgements:
+        for ref in judgement.source_refs:
+            if ref in seen:
+                continue
+            seen.add(ref)
+            refs.append(ref)
+    return tuple(refs)
+
+
+def _ai_judgement_counts(
+    *,
+    input_count: int,
+    judgements: Sequence[GisPerceptionAIJudgement],
+    source_refs: Sequence[str],
+) -> GisPerceptionAIJudgementCounts:
+    if any(not judgement.candidate_only for judgement in judgements):
+        raise ValueError("GIS AI judgement cannot opt out of candidate_only")
+    if any(not judgement.human_review_required for judgement in judgements):
+        raise ValueError("GIS AI judgement cannot bypass human review")
+    if any(judgement.runtime_safety_truth for judgement in judgements):
+        raise ValueError("GIS AI judgement cannot be runtime safety truth")
+    return GisPerceptionAIJudgementCounts(
+        input_count=input_count,
+        judgement_count=len(judgements),
+        source_ref_count=len(tuple(source_refs)),
+        candidate_only_count=len(judgements),
+        human_review_required_count=len(judgements),
+    )
+
+
 class PydanticAITestGisPerceptionProvider:
     provider_kind: GisAIProviderKind = "pydantic_ai_test"
     model_name = "pydantic-ai-test"
@@ -392,6 +486,7 @@ class PydanticAITestGisPerceptionProvider:
         candidates: Sequence[RouteNoteCandidate],
     ) -> GisPerceptionAIJudgementSet:
         output = self._run_test_agent(candidates)
+        prompt_sha256 = _route_note_prompt_sha256(candidates)
         judgement_by_id = {
             judgement.source_candidate_id: judgement
             for judgement in output.judgements
@@ -402,6 +497,9 @@ class PydanticAITestGisPerceptionProvider:
                 candidate,
                 judgement_by_id[candidate.candidate_id],
                 provider_suffix="test",
+                provider_kind=self.provider_kind,
+                model_name=self.model_name,
+                prompt_sha256=prompt_sha256,
             )
             for index, candidate in enumerate(candidates)
             if candidate.candidate_id in judgement_by_id
@@ -410,7 +508,7 @@ class PydanticAITestGisPerceptionProvider:
             provider_kind=self.provider_kind,
             model_name=self.model_name,
             source_profile="gpx_route_notes",
-            prompt_sha256=_route_note_prompt_sha256(candidates),
+            prompt_sha256=prompt_sha256,
             input_count=len(candidates),
             judgement_count=len(judgements),
             live_model_call_performed=self.live_model_call_performed,
@@ -512,6 +610,9 @@ class PydanticAICloudGisPerceptionProvider:
                 candidate,
                 judgement_by_id[candidate.candidate_id],
                 provider_suffix="cloud",
+                provider_kind=self.provider_kind,
+                model_name=self.model_name,
+                prompt_sha256=prompt_sha256,
             )
             for index, candidate in enumerate(candidates)
             if candidate.candidate_id in judgement_by_id
@@ -720,12 +821,20 @@ def _combined_route_notes(
             camp_or_water_hint_count=categories["camp_or_water_hint"],
             landmark_hint_count=categories["landmark_hint"],
             potential_ln_signal_count=sum(1 for candidate in candidates if candidate.potential_ln_signal),
+            route_note_time_unknown_count=sum(
+                1 for candidate in candidates
+                if candidate.route_note_freshness == "unknown"
+            ),
+            stale_route_note_count=sum(
+                1 for candidate in candidates if candidate.stale_route_note
+            ),
         ),
         boundary=RouteNoteBoundary(
             notes=(
                 "GPX waypoint name/cmt/desc fields from the selected corpus are treated as route-note candidates.",
                 "This combined artifact stores derived notes only; raw GPX and trkpt payloads are not embedded.",
                 "Human review is required before any candidate can become a planning assumption or future Ln expansion.",
+                "Route note freshness is preserved per candidate and counted at corpus level.",
             ),
         ),
         candidates=candidates,
@@ -846,6 +955,7 @@ def _checkpoint_candidate(
         proposed_ln_scope=proposed_ln_scope,
         route_note_summary=candidate.normalized_note,
         recommended_review_action=recommended_review_action,
+        source_refs=tuple(candidate.source_refs),
         source_attribution=(
             GisPerceptionSourceAttribution(
                 source_kind=judgement.source_kind,
@@ -859,6 +969,20 @@ def _checkpoint_candidate(
                 stale_risk=judgement.stale_risk,
             ),
         ),
+        model_output_sha256=_json_sha256(
+            {
+                "candidate_id": candidate.candidate_id,
+                "judgement_id": judgement.judgement_id,
+                "suggested_checkpoint_type": checkpoint_type,
+                "source_refs": candidate.source_refs,
+            }
+        ),
+        model_output_summary=(
+            "Pydantic AI GIS perception judgement converted a GPX route note "
+            "into a review-gated checkpoint candidate; candidate-only evidence."
+        ),
+        confidence=judgement.confidence,
+        stale_risk=judgement.stale_risk,
     )
 
 
@@ -933,6 +1057,9 @@ def _route_note_judgement_from_output(
     output: _CloudRouteNoteJudgement,
     *,
     provider_suffix: str,
+    provider_kind: GisAIProviderKind,
+    model_name: str,
+    prompt_sha256: str,
 ) -> GisPerceptionAIJudgement:
     checkpoint_type: Literal[
         "none",
@@ -949,7 +1076,27 @@ def _route_note_judgement_from_output(
     return GisPerceptionAIJudgement(
         judgement_id=f"gis_ai_judgement.gpx_route_note.{provider_suffix}.{index:05d}",
         source_candidate_id=candidate.candidate_id,
+        source_refs=tuple(candidate.source_refs),
         source_kind="gpx_route_note",
+        provider_kind=provider_kind,
+        model_name=model_name,
+        prompt_sha256=prompt_sha256,
+        model_output_sha256=_json_sha256(
+            {
+                "source_candidate_id": candidate.candidate_id,
+                "source_refs": candidate.source_refs,
+                "cp_needed": output.cp_needed,
+                "checkpoint_type": checkpoint_type,
+                "suggested_ln_scope": output.suggested_ln_scope,
+                "confidence": output.confidence,
+                "stale_risk": output.stale_risk,
+                "source_signals": output.source_signals,
+            }
+        ),
+        model_output_summary=(
+            f"{output.checkpoint_type}; cp_needed={output.cp_needed}; "
+            f"ln_scope={output.suggested_ln_scope}; candidate-only GIS judgement."
+        ),
         cp_needed=output.cp_needed,
         checkpoint_type=checkpoint_type,
         suggested_ln_scope=output.suggested_ln_scope,

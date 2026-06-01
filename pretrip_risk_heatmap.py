@@ -338,7 +338,7 @@ def update_workspace_project_refs(
     workspace: Path,
     heatmap_path: Path,
     metadata_path: Path,
-    preview_path: Path,
+    preview_path: Path | None,
     heatmap: dict[str, Any],
 ) -> None:
     project_path = workspace / "project.json"
@@ -350,10 +350,13 @@ def update_workspace_project_refs(
         workspace,
         metadata_path,
     )
-    project["calibrated_risk_heatmap_preview_ref"] = _workspace_ref(
-        workspace,
-        preview_path,
-    )
+    if preview_path is not None and preview_path.exists():
+        project["calibrated_risk_heatmap_preview_ref"] = _workspace_ref(
+            workspace,
+            preview_path,
+        )
+    else:
+        project.pop("calibrated_risk_heatmap_preview_ref", None)
     project["calibrated_risk_heatmap_segment_count"] = heatmap["metadata"][
         "segment_count"
     ]
@@ -433,17 +436,26 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     write_heatmap_geojson(heatmap, out_path)
     write_heatmap_metadata(heatmap, metadata_path)
-    write_heatmap_preview_png(heatmap, preview_path)
+    preview_written = False
+    try:
+        write_heatmap_preview_png(heatmap, preview_path)
+        preview_written = True
+    except ModuleNotFoundError as exc:
+        if exc.name != "matplotlib":
+            raise
     update_workspace_project_refs(
         workspace=args.workspace,
         heatmap_path=out_path,
         metadata_path=metadata_path,
-        preview_path=preview_path,
+        preview_path=preview_path if preview_written else None,
         heatmap=heatmap,
     )
     print(f"wrote calibrated heat map to {out_path}")
     print(f"wrote calibrated heat map metadata to {metadata_path}")
-    print(f"wrote calibrated heat map preview to {preview_path}")
+    if preview_written:
+        print(f"wrote calibrated heat map preview to {preview_path}")
+    else:
+        print("skipped calibrated heat map preview; matplotlib is not installed")
     print(
         json.dumps(
             {

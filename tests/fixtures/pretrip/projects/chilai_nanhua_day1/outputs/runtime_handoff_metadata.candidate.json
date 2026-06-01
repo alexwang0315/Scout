@@ -3,22 +3,28 @@
   "boundary": {
     "bridge_mutation_allowed": false,
     "candidate_metadata_only": true,
+    "departure_approval_granted": false,
+    "departure_gate_required_before_runtime": true,
     "external_api_calls_made": false,
     "final_runtime_write_allowed": false,
     "incident_package_imported": false,
     "live_runtime_read_allowed": false,
     "notes": [
       "Candidate metadata handoff only; no Phase 1 runtime state is mutated.",
+      "Reviewed package metadata is not departure approval; the departure gate remains required.",
       "No safety endpoint is called and no Phase 3 bridge behavior is changed.",
       "No final runtime manifest or MissionGraph write is performed by this builder."
     ],
     "phase1_runtime_mutation_allowed": false,
     "phase2_writeback_allowed": false,
     "raw_payloads_embedded": false,
+    "reviewed_package_is_not_departure_approval": true,
+    "runtime_handoff_operator_trigger_required": true,
     "safety_api_calls_allowed": false
   },
   "counts": {
     "bridge_mutation_count": 0,
+    "human_review_count": 245,
     "readiness_ref_count": 3,
     "route_ref_count": 4,
     "route_source_count": 1,
@@ -31,6 +37,9 @@
   ],
   "manifest_id": "runtime_handoff_metadata.chilai_nanhua_day1.v0",
   "package": {
+    "departure_approval_granted": false,
+    "departure_gate_required_before_runtime": true,
+    "human_review_count": 245,
     "package_id": "pretrip.chilai_nanhua_day1.v0",
     "package_ref": {
       "artifact_kind": "pretrip_package",
@@ -41,7 +50,10 @@
       "status": "candidate",
       "summary": {
         "checkpoint_candidate_count": 110,
+        "departure_approval_granted": null,
+        "human_review_count": null,
         "package_id": "pretrip.chilai_nanhua_day1.v0",
+        "reviewed_package_is_not_departure_approval": null,
         "segment_candidate_count": 109,
         "source_artifact_count": 2,
         "status": "candidate",
@@ -49,6 +61,7 @@
       }
     },
     "project_id": "chilai_nanhua_day1",
+    "reviewed_package_is_not_departure_approval": true,
     "reviewed_package_ref": {
       "artifact_kind": "reviewed_pretrip_package",
       "exists": true,
@@ -58,7 +71,10 @@
       "status": "reviewed",
       "summary": {
         "checkpoint_candidate_count": 110,
+        "departure_approval_granted": null,
+        "human_review_count": null,
         "package_id": "pretrip.chilai_nanhua_day1.v0",
+        "reviewed_package_is_not_departure_approval": null,
         "segment_candidate_count": 109,
         "source_artifact_count": 2,
         "status": "reviewed",

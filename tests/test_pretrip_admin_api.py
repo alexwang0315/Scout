@@ -149,6 +149,7 @@ def test_pretrip_admin_page_serves_static_shell():
     response = client.get("/admin/pretrip")
 
     assert response.status_code == 200
+    assert response.headers["cache-control"] == "no-store"
     assert "Scout Phase 4 Pre-Trip Planning" in response.text
     assert "/admin/pretrip/projects/${PROJECT_ID}" in response.text
     assert "evidenceTree" in response.text
@@ -279,16 +280,57 @@ def test_pretrip_project_weather_overlay_api_can_use_live_open_meteo_summary(
     assert "request_url" not in payload["live_weather_snapshot"]
 
 
-def test_admin_osm_tile_proxy_api_returns_local_offline_fallback_tile():
+def test_admin_osm_tile_proxy_api_returns_transparent_fallback_by_default():
     client = TestClient(create_admin_app())
 
     response = client.get("/admin/tiles/osm/1/1/1.png")
 
     assert response.status_code == 200
+    assert response.headers["content-type"].startswith("image/png")
+    assert response.headers["x-scout-tile-source"] == "transparent_fallback"
+    assert response.headers["cache-control"] == "no-store"
+    assert response.headers["x-scout-tile-hash"]
+    assert b"OSM offline" not in response.content
+    assert response.content.startswith(b"\x89PNG\r\n\x1a\n")
+
+
+def test_admin_osm_tile_proxy_api_can_return_explicit_local_offline_fallback_tile():
+    client = TestClient(create_admin_app())
+
+    response = client.get("/admin/tiles/osm/1/1/1.png?fallback=offline")
+
+    assert response.status_code == 200
     assert response.headers["content-type"].startswith("image/svg+xml")
     assert response.headers["x-scout-tile-source"] == "offline_fallback"
+    assert response.headers["cache-control"] == "no-store"
     assert response.headers["x-scout-tile-hash"]
     assert b"OSM offline 1/1/1" in response.content
+
+
+def test_admin_osm_tile_proxy_api_can_return_transparent_ui_fallback_tile():
+    client = TestClient(create_admin_app())
+
+    response = client.get("/admin/tiles/osm/1/1/1.png?fallback=transparent")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("image/png")
+    assert response.headers["x-scout-tile-source"] == "transparent_fallback"
+    assert response.headers["cache-control"] == "no-store"
+    assert b"OSM offline" not in response.content
+    assert response.content.startswith(b"\x89PNG\r\n\x1a\n")
+
+
+def test_admin_osm_tile_proxy_api_treats_transparent_cache_bust_as_ui_fallback():
+    client = TestClient(create_admin_app())
+
+    response = client.get("/admin/tiles/osm/1/1/1.png?v=transparent-fallback-v5")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("image/png")
+    assert response.headers["x-scout-tile-source"] == "transparent_fallback"
+    assert response.headers["cache-control"] == "no-store"
+    assert b"OSM offline" not in response.content
+    assert response.content.startswith(b"\x89PNG\r\n\x1a\n")
 
 
 def test_admin_osm_tile_proxy_api_rejects_invalid_coords():
@@ -319,6 +361,7 @@ def test_admin_imagery_tile_proxy_api_returns_cached_png(monkeypatch, tmp_path):
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("image/png")
     assert response.headers["x-scout-tile-source"] == "local_cache"
+    assert response.headers["cache-control"] == "no-cache, max-age=0, must-revalidate"
     assert response.content == cached_path.read_bytes()
 
 
@@ -329,9 +372,11 @@ def test_admin_imagery_tile_proxy_api_returns_transparent_fallback(monkeypatch, 
     response = client.get("/admin/tiles/imagery/chilai_nanhua_day1/imagery/5/26/13.png")
 
     assert response.status_code == 200
-    assert response.headers["content-type"].startswith("image/svg+xml")
+    assert response.headers["content-type"].startswith("image/png")
     assert response.headers["x-scout-tile-source"] == "transparent_fallback"
-    assert b"Raster offline 5/26/13" in response.content
+    assert response.headers["cache-control"] == "no-store"
+    assert b"Raster offline" not in response.content
+    assert response.content.startswith(b"\x89PNG\r\n\x1a\n")
 
 
 def test_admin_imagery_tile_proxy_api_rejects_invalid_identity():

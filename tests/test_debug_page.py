@@ -116,6 +116,10 @@ class DebugPageTests(unittest.TestCase):
         self.assertIn('id="zoomIn"', html)
         self.assertIn('id="zoomOut"', html)
         self.assertIn('id="fitRoute"', html)
+        self.assertIn('id="boxZoomMode"', html)
+        self.assertIn('id="zoomLevel"', html)
+        self.assertIn('aria-label="Rectangle drag zoom"', html)
+        self.assertIn("function updateMapZoomIndicator", html)
         self.assertIn('id="panUp"', html)
         self.assertIn('id="panDown"', html)
         self.assertIn('id="panLeft"', html)
@@ -141,18 +145,30 @@ class DebugPageTests(unittest.TestCase):
         self.assertIn("OSM_LOCAL_TILE_URL_TEMPLATE", html)
         self.assertIn("https://tile.openstreetmap.org/{z}/{x}/{y}.png", html)
         self.assertIn("/admin/tiles/osm/{z}/{x}/{y}.png", html)
+        self.assertIn("/admin/tiles/osm/{z}/{x}/{y}.png?fallback=transparent", html)
         self.assertIn("const OSM_TARGET_ZOOM = 17", html)
         self.assertIn("const OSM_MAX_TILES = 64", html)
+        self.assertIn("const RASTER_MAX_TILES = 64", html)
+        self.assertIn("RASTER_TILE_CACHE_BUST", html)
+        self.assertIn("function rasterTileCacheBustedUrl", html)
         self.assertIn("function osmTileTemplate", html)
-        self.assertIn('params.get("tileSource")', html)
+        self.assertIn("function isLocalOsmTileMode", html)
+        self.assertIn('params.get("osmSource")', html)
+        self.assertIn('params.get("tiles")', html)
         self.assertIn(
-            'return requested === "local" ? OSM_LOCAL_TILE_URL_TEMPLATE : OSM_TILE_URL_TEMPLATE',
+            'return requested === "public" ? OSM_PUBLIC_TILE_URL_TEMPLATE : OSM_LOCAL_TILE_URL_TEMPLATE',
             html,
         )
-        self.assertIn("const pad = MAP_VISUAL_PADDING / debugPageState.zoom", html)
+        self.assertIn("function rasterZoomRangeFor", html)
+        self.assertIn("function chooseRasterZoom", html)
+        self.assertIn("function rasterTileCoverage", html)
+        self.assertIn("const tiles = isImagery ? rasterTileCoverage(projection, bounds) : tileCoverage(bounds)", html)
+        self.assertIn("if (!isImagery && !isLocalOsmTileMode())", html)
+        self.assertIn("const pad = MAP_VISUAL_PADDING;", html)
+        self.assertNotIn("const pad = MAP_VISUAL_PADDING / debugPageState.zoom", html)
         self.assertLess(
-            html.index('data-layer-group": "imagery"'),
             html.index('data-layer-group": "osm"'),
+            html.index('data-layer-group": "imagery"'),
         )
 
     def test_static_debug_page_makes_timeline_body_touchpad_scrollable(self):
@@ -253,6 +269,12 @@ class DebugPageTests(unittest.TestCase):
         html = PAGE_PATH.read_text(encoding="utf-8")
 
         self.assertIn("timeline-meta", html)
+        self.assertIn("grid-template-columns: minmax(0, 1fr) auto;", html)
+        self.assertIn(".gis-perception-cp", html)
+        self.assertIn("specificMapTargets", html)
+        self.assertIn("if (!isPointFocusEvent(event)) clampMapPan();", html)
+        self.assertIn('node.addEventListener("click", () => {\n          selectTimelineNode(event, index);\n          focusMapForEvent(event);', html)
+        self.assertIn("focusMapForEvent(event);\n            return;", html)
         self.assertIn("level-badge", html)
         self.assertIn("levelBadgeForEvent", html)
         self.assertIn("levelBadgeClassForEvent", html)

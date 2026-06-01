@@ -482,7 +482,10 @@
     };
 
     function apiBase() {
-      if (location.protocol === "file:") return "http://127.0.0.1:9099";
+      const params = new URLSearchParams(location.search);
+      const override = params.get("apiBase") || localStorage.getItem("scout.adminApiBase");
+      if (override) return override.replace(/\/$/, "");
+      if (location.protocol === "file:") return "http://scout.local:9100";
       return "";
     }
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import re
@@ -40,6 +41,210 @@ RISK_DELTA_COLORS = {
     "minor_shift": "#64748b",
     "aligned": "#94a3b8",
 }
+READY_LAYER_STATUSES = {
+    "ready",
+    "ready_from_project_ref",
+    "ready_with_fallback",
+    "projection_ready",
+}
+EMPTY_PRETRIP_BOUNDARY = {
+    "pretrip_candidate_evidence_only": True,
+    "projection_only": True,
+    "phase1_runtime_mutation_allowed": False,
+    "phase2_brain_writeback_allowed": False,
+    "runtime_safety_truth": False,
+}
+
+
+def _missing_artifact_status(artifact_key: str) -> dict[str, Any]:
+    return {
+        "status": "missing_source",
+        "counts": {},
+        "boundary": dict(EMPTY_PRETRIP_BOUNDARY),
+        "warnings": [f"{artifact_key} is not present in this standalone workspace."],
+    }
+
+
+def _default_pretrip_artifact(
+    artifact_key: str,
+    *,
+    project_id: str,
+    project: dict[str, Any],
+    route_summary: dict[str, Any] | None = None,
+    pretrip_package: dict[str, Any] | None = None,
+) -> Any:
+    route_summary = route_summary or {}
+    pretrip_package = pretrip_package or {}
+    boundary = dict(EMPTY_PRETRIP_BOUNDARY)
+    if artifact_key == "retreat_routes":
+        return []
+    if artifact_key == "readiness":
+        return {
+            "report_id": f"readiness.{project_id}.missing",
+            "status": "missing_source",
+            "findings": [],
+            "boundary": boundary,
+        }
+    if artifact_key == "eta":
+        return {
+            "plan_id": f"eta.{project_id}.missing",
+            "status": "missing_source",
+            "assumption": {},
+            "estimates": [],
+            "boundary": boundary,
+        }
+    if artifact_key == "overpass_evidence":
+        return {
+            "source_artifact": {"artifact_id": f"overpass.{project_id}.missing"},
+            "status": "missing_source",
+            "counts": {"candidates": 0},
+            "boundary": boundary,
+            "request": {
+                "endpoint": "",
+                "raw_response_sha256": "",
+                "conversion_rule_version": "not_available",
+            },
+            "normalized_geojson_ref": "",
+            "candidates": [],
+            "skipped_objects": [],
+        }
+    if artifact_key == "review_draft_log":
+        return {
+            "log_id": f"review_draft.{project_id}.missing",
+            "status": "missing_source",
+            "counts": {"action_count": 0, "category_counts": {}},
+            "boundary": boundary,
+            "actions": [],
+        }
+    if artifact_key == "review_decision_log":
+        return {
+            "log_id": f"review_decisions.{project_id}.missing",
+            "status": "missing_source",
+            "counts": {"decision_count": 0},
+            "apply_summary": {},
+            "boundary": boundary,
+            "decisions": [],
+        }
+    if artifact_key == "review_decision_apply_plan":
+        return {
+            "plan_id": f"review_apply.{project_id}.missing",
+            "project_id": project_id,
+            "package_id": pretrip_package.get("package_id", f"package.{project_id}"),
+            "package_status": pretrip_package.get("status", "candidate_only"),
+            "package_ref": project.get("package_ref", ""),
+            "review_decision_log_ref": project.get("review_decision_log_ref", ""),
+            "counts": {"decision_count": 0},
+            "boundary": boundary,
+            "decisions": [],
+        }
+    if artifact_key == "external_import_queue":
+        return {
+            "queue_id": f"external_import.{project_id}.missing",
+            "status": "missing_source",
+            "counts": {"request_count": 0},
+            "boundary": boundary,
+            "requests": [],
+        }
+    if artifact_key == "expert_contribution_log":
+        return {
+            "log_id": f"expert_contribution.{project_id}.missing",
+            "status": "missing_source",
+            "counts": {"contribution_count": 0},
+            "boundary": boundary,
+            "contributions": [],
+        }
+    if artifact_key == "departure_bundle":
+        return {
+            "bundle_id": f"departure_bundle.{project_id}.missing",
+            "status": "missing_source",
+            "counts": {"route_ref_count": 0, "terrain_ref_count": 0},
+            "boundary": boundary,
+            "package": {},
+            "route_refs": [],
+            "terrain_refs": [],
+        }
+    if artifact_key == "resource_plan":
+        return {
+            "plan_id": f"resource_plan.{project_id}.missing",
+            "status": "missing_source",
+            "raw_payloads_embedded": False,
+            "external_api_calls_made": False,
+            "devices": [],
+            "equipment": [],
+            "team_members": [],
+            "departure_readiness_context": {},
+        }
+    if artifact_key == "weather_daylight":
+        return {
+            "evidence_id": f"weather_daylight.{project_id}.missing",
+            "status": "missing_source",
+            "external_api_calls_made": False,
+            "authoritative_weather_computed": False,
+            "location_name": route_summary.get("route_name", project_id),
+            "date": "",
+            "timezone": "",
+            "daylight": {},
+            "weather_window": {},
+        }
+    if artifact_key == "contour":
+        return {
+            "artifact_id": f"contour.{project_id}.missing",
+            "status": "missing_source",
+            "candidates": [],
+            "not_observed_fact": True,
+            "raw_payloads_embedded": False,
+        }
+    if artifact_key == "remote_summary":
+        return {
+            "summary_id": f"remote_contacts.{project_id}.missing",
+            "audience": "operator",
+            "readiness": "missing_source",
+            "route": route_summary.get("route_name", project_id),
+            "retreat_route_summary": "not_available",
+            "conservative_notes": [],
+        }
+    if artifact_key == "route_comparison":
+        return {
+            "comparison_id": f"route_comparison.{project_id}.missing",
+            "classification": "missing_source",
+            "distance_delta_m": None,
+            "point_count_delta": None,
+            "bbox_comparison": {},
+        }
+    if artifact_key == "segment_dtm":
+        return {
+            "dtm_coverage_summary_id": f"segment_dtm.{project_id}.missing",
+            "route_artifact_id": route_summary.get("artifact_id", project_id),
+            "segment_count": project.get("segment_candidate_count", 0),
+            "candidate_tile_count": 0,
+            "notes": ["segment DTM coverage is not present in this standalone workspace."],
+            "segment_metadata": [],
+        }
+    if artifact_key == "runtime_handoff":
+        return {
+            "manifest_id": f"runtime_handoff.{project_id}.missing",
+            "status": "missing_source",
+            "counts": {},
+            "boundary": boundary,
+        }
+    if artifact_key == "runtime_audit":
+        return {
+            "manifest_id": f"runtime_audit.{project_id}.missing",
+            "status": "missing_source",
+            "counts": {},
+            "axes": [],
+            "boundary": boundary,
+        }
+    if artifact_key == "after_action":
+        return {
+            "artifact_id": f"after_action.{project_id}.missing",
+            "status": "missing_source",
+            "counts": {},
+            "raw_payloads_embedded": False,
+            "observed_fact_writeback_allowed": False,
+            "historical_evidence_mutation_allowed": False,
+        }
+    return _missing_artifact_status(artifact_key)
 
 
 def build_pretrip_admin_view(
@@ -59,14 +264,40 @@ def build_pretrip_admin_view(
     map_context = _load_json(artifacts["map_context"])
     checkpoints = _load_json(artifacts["checkpoints"])
     segments = _load_json(artifacts["segments"])
-    retreat_routes = _load_json(artifacts["retreat_routes"])
+    retreat_routes = _load_optional_json(artifacts.get("retreat_routes"))
+    if retreat_routes is None:
+        retreat_routes = _default_pretrip_artifact(
+            "retreat_routes",
+            project_id=project_id,
+            project=project,
+            route_summary=route_summary,
+        )
     map_candidates = _load_json(artifacts["map_candidates"])
     pretrip_package = _load_json(artifacts["package"])
-    readiness = _load_json(artifacts["readiness"])
-    eta = _load_json(artifacts["eta"])
+    readiness = _load_optional_json(
+        artifacts.get("readiness")
+    ) or _default_pretrip_artifact(
+        "readiness",
+        project_id=project_id,
+        project=project,
+        route_summary=route_summary,
+    )
+    eta = _load_optional_json(artifacts.get("eta")) or _default_pretrip_artifact(
+        "eta",
+        project_id=project_id,
+        project=project,
+        route_summary=route_summary,
+    )
     energy_projection = _load_optional_json(artifacts.get("energy_projection"))
     route_notes = _load_json(artifacts["route_notes"])
-    overpass_evidence = _load_json(artifacts["overpass_evidence"])
+    overpass_evidence = _load_optional_json(
+        artifacts.get("overpass_evidence")
+    ) or _default_pretrip_artifact(
+        "overpass_evidence",
+        project_id=project_id,
+        project=project,
+        route_summary=route_summary,
+    )
     route_note_ln_proposals = _load_json(artifacts["route_note_ln_proposals"])
     gis_perception = _load_optional_json(artifacts.get("gis_perception"))
     gis_perception_ai_judgements = _load_optional_json(
@@ -74,11 +305,47 @@ def build_pretrip_admin_view(
     )
     route_note_review_options = _load_json(artifacts["route_note_review_options"])
     review_queue = _load_json(artifacts["review_queue"])
-    review_draft_log = _load_json(artifacts["review_draft_log"])
-    review_decision_log = _load_json(artifacts["review_decision_log"])
-    review_decision_apply_plan = _load_json(artifacts["review_decision_apply_plan"])
-    external_import_queue = _load_json(artifacts["external_import_queue"])
-    expert_contribution_log = _load_json(artifacts["expert_contribution_log"])
+    review_draft_log = _load_optional_json(
+        artifacts.get("review_draft_log")
+    ) or _default_pretrip_artifact(
+        "review_draft_log",
+        project_id=project_id,
+        project=project,
+        route_summary=route_summary,
+    )
+    review_decision_log = _load_optional_json(
+        artifacts.get("review_decision_log")
+    ) or _default_pretrip_artifact(
+        "review_decision_log",
+        project_id=project_id,
+        project=project,
+        route_summary=route_summary,
+    )
+    review_decision_apply_plan = _load_optional_json(
+        artifacts.get("review_decision_apply_plan")
+    ) or _default_pretrip_artifact(
+        "review_decision_apply_plan",
+        project_id=project_id,
+        project=project,
+        route_summary=route_summary,
+        pretrip_package=pretrip_package,
+    )
+    external_import_queue = _load_optional_json(
+        artifacts.get("external_import_queue")
+    ) or _default_pretrip_artifact(
+        "external_import_queue",
+        project_id=project_id,
+        project=project,
+        route_summary=route_summary,
+    )
+    expert_contribution_log = _load_optional_json(
+        artifacts.get("expert_contribution_log")
+    ) or _default_pretrip_artifact(
+        "expert_contribution_log",
+        project_id=project_id,
+        project=project,
+        route_summary=route_summary,
+    )
     expert_contribution_apply_plan = _load_optional_json(
         artifacts["expert_contribution_apply_plan"]
     )
@@ -113,12 +380,55 @@ def build_pretrip_admin_view(
     spatial_imprint_manifest = _load_optional_json(
         artifacts.get("spatial_imprint_manifest")
     )
-    departure_bundle = _load_json(artifacts["departure_bundle"])
-    resource_plan = _load_json(artifacts["resource_plan"])
-    weather_daylight = _load_json(artifacts["weather_daylight"])
-    contour = _load_json(artifacts["contour"])
-    remote_summary = _load_json(artifacts["remote_summary"])
-    route_comparison = _load_json(artifacts["route_comparison"])
+    departure_bundle = _load_optional_json(
+        artifacts.get("departure_bundle")
+    ) or _default_pretrip_artifact(
+        "departure_bundle",
+        project_id=project_id,
+        project=project,
+        route_summary=route_summary,
+        pretrip_package=pretrip_package,
+    )
+    resource_plan = _load_optional_json(
+        artifacts.get("resource_plan")
+    ) or _default_pretrip_artifact(
+        "resource_plan",
+        project_id=project_id,
+        project=project,
+        route_summary=route_summary,
+    )
+    weather_daylight = _load_optional_json(
+        artifacts.get("weather_daylight")
+    ) or _default_pretrip_artifact(
+        "weather_daylight",
+        project_id=project_id,
+        project=project,
+        route_summary=route_summary,
+    )
+    contour = _load_optional_json(
+        artifacts.get("contour")
+    ) or _default_pretrip_artifact(
+        "contour",
+        project_id=project_id,
+        project=project,
+        route_summary=route_summary,
+    )
+    remote_summary = _load_optional_json(
+        artifacts.get("remote_summary")
+    ) or _default_pretrip_artifact(
+        "remote_summary",
+        project_id=project_id,
+        project=project,
+        route_summary=route_summary,
+    )
+    route_comparison = _load_optional_json(
+        artifacts.get("route_comparison")
+    ) or _default_pretrip_artifact(
+        "route_comparison",
+        project_id=project_id,
+        project=project,
+        route_summary=route_summary,
+    )
     reference_tracks = _load_optional_json(artifacts.get("reference_tracks"))
     checkpoint_events = _load_optional_json(artifacts.get("checkpoint_events"))
     risk_score_points = _load_optional_json(artifacts.get("risk_score_points"))
@@ -151,12 +461,46 @@ def build_pretrip_admin_view(
     debug_projection_events = _load_optional_jsonl(
         artifacts.get("debug_projection_events")
     )
-    segment_dtm = _load_json(artifacts["segment_dtm"])
+    segment_dtm = _load_optional_json(
+        artifacts.get("segment_dtm")
+    ) or _default_pretrip_artifact(
+        "segment_dtm",
+        project_id=project_id,
+        project=project,
+        route_summary=route_summary,
+    )
     human_reviews = _load_json(artifacts["human_reviews"])
-    runtime_handoff = _load_json(artifacts["runtime_handoff"])
-    runtime_audit = _load_json(artifacts["runtime_audit"])
-    after_action = _load_json(artifacts["after_action"])
+    runtime_handoff = _load_optional_json(
+        artifacts.get("runtime_handoff")
+    ) or _default_pretrip_artifact(
+        "runtime_handoff",
+        project_id=project_id,
+        project=project,
+        route_summary=route_summary,
+    )
+    runtime_audit = _load_optional_json(
+        artifacts.get("runtime_audit")
+    ) or _default_pretrip_artifact(
+        "runtime_audit",
+        project_id=project_id,
+        project=project,
+        route_summary=route_summary,
+    )
+    after_action = _load_optional_json(
+        artifacts.get("after_action")
+    ) or _default_pretrip_artifact(
+        "after_action",
+        project_id=project_id,
+        project=project,
+        route_summary=route_summary,
+    )
     brain_seed = _load_json(artifacts["brain_seed"])
+    planning_skill_audit = _load_optional_json(
+        artifacts.get("planning_skill_audit")
+    )
+    planning_skill_manifest_catalog = _load_optional_json(
+        artifacts.get("planning_skill_manifest_catalog")
+    )
     capability_timeline_import = _load_capability_timeline_import(
         project_id,
         root=root,
@@ -347,6 +691,17 @@ def build_pretrip_admin_view(
         source_refs=source_refs,
         weather=planning_tab["weather"],
     )
+    planning_tab["map_layers"] = _map_layers_with_local_raster_metadata(
+        planning_tab["map_layers"],
+        local_raster_manifest=_load_optional_json(
+            artifacts.get("local_raster_manifest")
+        ),
+        raster_tile_manifest=_load_optional_json(
+            artifacts.get("raster_tile_manifest")
+        ),
+        local_raster_source_path=source_refs.get("local_raster_manifest", ""),
+        raster_tile_source_path=source_refs.get("raster_tile_manifest", ""),
+    )
     planning_tab["gis_perception_timeline"] = _gis_perception_timeline_summary(
         project_id,
         planning_tab["gis_perception"],
@@ -470,6 +825,18 @@ def build_pretrip_admin_view(
         "after_action_next_plan": _after_action_summary(after_action, source_refs["after_action"]),
         "brain_seed": _brain_seed_summary(brain_seed, source_refs["brain_seed"]),
     }
+    if planning_skill_audit is not None:
+        post_analysis_tab["planning_skill_audit"] = _planning_skill_audit_summary(
+            planning_skill_audit,
+            source_refs.get("planning_skill_audit", ""),
+        )
+    if planning_skill_manifest_catalog is not None:
+        post_analysis_tab["planning_skill_manifest_catalog"] = (
+            _planning_skill_manifest_catalog_summary(
+                planning_skill_manifest_catalog,
+                source_refs.get("planning_skill_manifest_catalog", ""),
+            )
+        )
     if capability_timeline_import is not None:
         post_analysis_tab["capability_timeline_import"] = capability_timeline_import
     if companion_match_review is not None:
@@ -531,6 +898,9 @@ def build_pretrip_admin_view(
         for section in planning_sections
         if section["id"] in review_workspace_section_ids
     ]
+    _decorate_admin_summary_metadata(planning_tab)
+    _decorate_admin_summary_metadata(post_analysis_tab)
+    _decorate_admin_summary_metadata(review_workspace_tab)
 
     return {
         "project_id": project_id,
@@ -586,6 +956,11 @@ def build_pretrip_admin_view(
         "import_manifest": post_analysis_tab.get("import_manifest"),
         "admin_surface_projection": post_analysis_tab.get("admin_surface_projection"),
         "debug_projection": post_analysis_tab.get("debug_projection"),
+        "segment_terrain": post_analysis_tab["segment_terrain"],
+        "planning_skill_audit": post_analysis_tab.get("planning_skill_audit"),
+        "planning_skill_manifest_catalog": post_analysis_tab.get(
+            "planning_skill_manifest_catalog"
+        ),
         "capability_timeline_import": post_analysis_tab.get(
             "capability_timeline_import"
         ),
@@ -615,23 +990,31 @@ def resolve_pretrip_project_artifacts(
     )
     project_path = resolved_project_root / "project.json"
     project = _load_json(project_path)
+    def project_ref_path(
+        project_ref_key: str,
+        *,
+        default_ref: str | None = None,
+    ) -> Path:
+        ref = project.get(project_ref_key) or default_ref
+        if not ref:
+            ref = f"outputs/missing/{project_ref_key.removesuffix('_ref')}.json"
+        return resolved_project_root / str(ref)
+
     artifacts = {
         "project": project_path,
         "route_summary": resolved_project_root / project["route_summary_ref"],
         "map_context": resolved_project_root / project["map_context_ref"],
         "checkpoints": resolved_project_root / project["checkpoint_candidates_ref"],
         "segments": resolved_project_root / project["segment_candidates_ref"],
-        "retreat_routes": resolved_project_root / project["retreat_routes_ref"],
+        "retreat_routes": project_ref_path("retreat_routes_ref"),
         "map_candidates": resolved_project_root / project["map_candidates_ref"],
         "package": resolved_project_root / project["package_ref"],
-        "readiness": resolved_project_root / project["readiness_report_ref"],
-        "eta": resolved_project_root / project["planned_eta_ref"],
+        "readiness": project_ref_path("readiness_report_ref"),
+        "eta": project_ref_path("planned_eta_ref"),
         "route_notes": resolved_project_root / project["route_note_candidates_ref"],
-        "overpass_evidence": resolved_project_root / project["overpass_evidence_ref"],
-        "overpass_map_context": resolved_project_root
-        / project["overpass_map_context_ref"],
-        "overpass_raw_payload": resolved_project_root
-        / project["overpass_raw_payload_ref"],
+        "overpass_evidence": project_ref_path("overpass_evidence_ref"),
+        "overpass_map_context": project_ref_path("overpass_map_context_ref"),
+        "overpass_raw_payload": project_ref_path("overpass_raw_payload_ref"),
         "route_note_ln_proposals": resolved_project_root
         / project["route_note_ln_proposals_ref"],
         "route_note_review_options": resolved_project_root
@@ -641,30 +1024,35 @@ def resolve_pretrip_project_artifacts(
         "departure_reviewed_candidates": resolved_project_root
         / DEPARTURE_REVIEWED_CANDIDATES_REF,
         "review_queue": resolved_project_root / project["review_queue_manifest_ref"],
-        "review_draft_log": resolved_project_root / project["review_draft_log_ref"],
-        "review_decision_log": resolved_project_root / project["review_decision_log_ref"],
+        "review_draft_log": project_ref_path("review_draft_log_ref"),
+        "review_decision_log": project_ref_path("review_decision_log_ref"),
         "review_decision_apply_plan": resolved_project_root
-        / project["review_decision_apply_plan_ref"],
-        "external_import_queue": resolved_project_root / project["external_import_queue_ref"],
-        "expert_contribution_log": resolved_project_root / project["expert_contribution_log_ref"],
+        / str(
+            project.get("review_decision_apply_plan_ref")
+            or "outputs/missing/review_decision_apply_plan.json"
+        ),
+        "external_import_queue": project_ref_path("external_import_queue_ref"),
+        "expert_contribution_log": project_ref_path("expert_contribution_log_ref"),
         "expert_contribution_apply_plan": resolved_project_root
         / EXPERT_CONTRIBUTION_APPLY_PLAN_REF,
         "expert_contribution_workspace_apply_result": resolved_project_root
         / EXPERT_CONTRIBUTION_WORKSPACE_APPLY_RESULT_REF,
-        "departure_bundle": resolved_project_root / project["departure_bundle_manifest_ref"],
-        "resource_plan": resolved_project_root / project["resource_plan_ref"],
-        "weather_daylight": resolved_project_root / project["weather_daylight_evidence_ref"],
-        "contour": resolved_project_root / project["contour_interpretation_candidates_ref"],
-        "remote_summary": resolved_project_root / project["remote_contact_summary_ref"],
-        "route_comparison": resolved_project_root / project["route_comparison_ref"],
-        "segment_dtm": resolved_project_root / project["segment_dtm_coverage_ref"],
+        "departure_bundle": project_ref_path("departure_bundle_manifest_ref"),
+        "resource_plan": project_ref_path("resource_plan_ref"),
+        "weather_daylight": project_ref_path("weather_daylight_evidence_ref"),
+        "contour": project_ref_path("contour_interpretation_candidates_ref"),
+        "remote_summary": project_ref_path("remote_contact_summary_ref"),
+        "route_comparison": project_ref_path("route_comparison_ref"),
+        "segment_dtm": project_ref_path("segment_dtm_coverage_ref"),
         "human_reviews": resolved_project_root / project["human_reviews_ref"],
-        "runtime_handoff": resolved_project_root / project["runtime_handoff_metadata_ref"],
-        "runtime_audit": resolved_project_root / project["runtime_audit_manifest_ref"],
-        "after_action": resolved_project_root / project["after_action_next_plan_candidates_ref"],
+        "runtime_handoff": project_ref_path("runtime_handoff_metadata_ref"),
+        "runtime_audit": project_ref_path("runtime_audit_manifest_ref"),
+        "after_action": project_ref_path("after_action_next_plan_candidates_ref"),
         "brain_seed": resolved_project_root / project["brain_seed_nodes_ref"],
     }
     for artifact_key, project_ref_key in {
+        "planning_skill_audit": "planning_skill_audit_ref",
+        "planning_skill_manifest_catalog": "planning_skill_manifest_catalog_ref",
         "reference_tracks": "reference_tracks_ref",
         "reference_track_display_geometry": "reference_track_display_geometry_ref",
         "checkpoint_events": "checkpoint_events_ref",
@@ -699,6 +1087,8 @@ def resolve_pretrip_project_artifacts(
         "spatial_imprint_reviews": "spatial_imprint_reviews_ref",
         "spatial_imprint_set": "spatial_imprint_set_ref",
         "spatial_imprint_manifest": "spatial_imprint_manifest_ref",
+        "local_raster_manifest": "local_raster_manifest_ref",
+        "raster_tile_manifest": "raster_tile_manifest_ref",
     }.items():
         if project.get(project_ref_key):
             artifacts[artifact_key] = resolved_project_root / project[project_ref_key]
@@ -1055,6 +1445,17 @@ def load_pretrip_debug_projection_view(
             include_keys=("status", "findings"),
         ),
     }
+    view["map_layers"] = _map_layers_with_local_raster_metadata(
+        view["map_layers"],
+        local_raster_manifest=_load_optional_json(
+            optional_project_path("local_raster_manifest_ref")
+        ),
+        raster_tile_manifest=_load_optional_json(
+            optional_project_path("raster_tile_manifest_ref")
+        ),
+        local_raster_source_path=project.get("local_raster_manifest_ref", ""),
+        raster_tile_source_path=project.get("raster_tile_manifest_ref", ""),
+    )
     if mcp_candidates_raw is not None:
         view["major_critical_points"] = _mcp_summary(
             project_id=project_id,
@@ -1457,6 +1858,12 @@ def _debug_projection_gis_perception_summary(
                 "route_note_summary": candidate["route_note_summary"],
                 "source_attribution": candidate.get("source_attribution", []),
                 "human_review_required": candidate["human_review_required"],
+                **_gis_perception_candidate_provenance(
+                    candidate,
+                    source_path=source_path,
+                    classifier=payload.get("classifier", {}),
+                    evidence_type="pretrip_gis_perception_checkpoint_candidate",
+                ),
             }
             for candidate in payload.get("checkpoint_candidates", [])
         ],
@@ -1468,34 +1875,143 @@ def _gis_perception_ai_judgement_summary(
     source_path: str,
 ) -> dict[str, Any]:
     if payload is None:
+        unavailable_ref = source_path or "outputs/gis_perception_ai_judgements.json"
         return {
+            "source_id": "pretrip_gis_perception_ai_judgements.not_available",
             "source_path": source_path,
             "evidence_type": "pretrip_gis_perception_ai_judgements",
             "status": "not_available",
+            **_projection_record_metadata(
+                {
+                    "candidate_id": "gis_perception_ai_judgements.not_available",
+                    "source_refs": [unavailable_ref],
+                },
+                source_path=unavailable_ref,
+                evidence_type="pretrip_gis_perception_ai_judgements",
+                source_kind="gis_perception_ai_judgements",
+                identity_keys=("candidate_id", "source_refs"),
+                review_state="not_available",
+                confidence="low",
+                stale_risk="unknown",
+                extractor_version="pretrip_gis_perception_ai_judgement.projection.v1",
+                prompt_version="scout.gis_perception.structured_judgement.v0",
+                summary=(
+                    "GIS perception AI judgement summary is unavailable; no "
+                    "runtime safety truth or Brain writeback is produced."
+                ),
+            ),
             "judgement_count": 0,
+            "source_ref_count": 0,
+            "source_refs": [unavailable_ref],
+            "counts": {
+                "input_count": 0,
+                "judgement_count": 0,
+                "source_ref_count": 0,
+                "candidate_only_count": 0,
+                "human_review_required_count": 0,
+                "runtime_safety_truth_count": 0,
+                "package_mutation_count": 0,
+                "mission_graph_mutation_count": 0,
+                "runtime_mutation_count": 0,
+                "phase1_runtime_mutation_count": 0,
+                "phase2_writeback_count": 0,
+                "raw_model_output_count": 0,
+            },
+            "boundary": {
+                "candidate_only": True,
+                "package_mutation_allowed": False,
+                "mission_graph_mutation_allowed": False,
+                "runtime_mutation_allowed": False,
+                "phase1_runtime_mutation_allowed": False,
+                "phase2_writeback_allowed": False,
+                "raw_gpx_embedded": False,
+            },
             "candidate_only": True,
+            "runtime_safety_truth": False,
             "runtime_safety_truth_count": 0,
         }
+    counts = payload.get("counts") or {}
+    boundary = payload.get("boundary") or {}
+    source_refs = list(payload.get("source_refs") or [])
+    runtime_safety_truth_count = counts.get(
+        "runtime_safety_truth_count",
+        sum(
+            1 for judgement in payload.get("judgements", [])
+            if judgement.get("runtime_safety_truth") is not False
+        ),
+    )
     return {
         "source_id": payload["artifact_kind"],
         "source_path": source_path,
         "evidence_type": "pretrip_gis_perception_ai_judgements",
+        **_projection_record_metadata(
+            {
+                "candidate_id": payload["artifact_kind"],
+                "source_refs": source_refs,
+                "prompt_sha256": payload.get("prompt_sha256"),
+            },
+            source_path=source_path,
+            evidence_type="pretrip_gis_perception_ai_judgements",
+            source_kind="gis_perception_ai_judgements",
+            identity_keys=("candidate_id", "source_refs", "prompt_sha256"),
+            review_state="model_interpretation_summary",
+            confidence="medium",
+            stale_risk="medium",
+            extractor_version="pretrip_gis_perception_ai_judgement.projection.v1",
+            prompt_version=payload.get(
+                "prompt_version",
+                "scout.gis_perception.structured_judgement.v0",
+            ),
+            summary=(
+                "GIS perception AI judgement summary; ModelInterpretation "
+                "projection only, not ObservedFact and not runtime safety truth."
+            ),
+        ),
         "provider_kind": payload["provider_kind"],
         "model_name": payload["model_name"],
         "prompt_sha256": payload["prompt_sha256"],
         "input_count": payload["input_count"],
         "judgement_count": payload["judgement_count"],
+        "source_ref_count": len(source_refs),
+        "source_refs": source_refs,
+        "counts": counts,
+        "boundary": _summary_boundary(boundary),
         "live_model_call_performed": payload["live_model_call_performed"],
         "network_calls_allowed": payload["network_calls_allowed"],
-        "runtime_safety_truth_count": sum(
-            1 for judgement in payload.get("judgements", [])
-            if judgement.get("runtime_safety_truth") is not False
-        ),
+        "candidate_only": boundary.get("candidate_only", True),
+        "runtime_safety_truth_count": runtime_safety_truth_count,
         "cp_needed_count": sum(
             1 for judgement in payload.get("judgements", [])
             if judgement.get("cp_needed") is True
         ),
-        "preview_judgements": payload.get("judgements", [])[:12],
+        "preview_judgements": [
+            {
+                **judgement,
+                **_projection_record_metadata(
+                    {
+                        **judgement,
+                        "source_refs": source_refs,
+                    },
+                    source_path=source_path,
+                    evidence_type="pretrip_gis_perception_ai_preview_judgement",
+                    source_kind="gis_perception_ai_judgement",
+                    identity_keys=("judgement_id", "candidate_id", "source_refs"),
+                    review_state="model_interpretation_preview",
+                    confidence=judgement.get("confidence", "medium"),
+                    stale_risk=judgement.get("stale_risk", "medium"),
+                    extractor_version="pretrip_gis_perception_ai_judgement.projection.v1",
+                    prompt_version=payload.get(
+                        "prompt_version",
+                        "scout.gis_perception.structured_judgement.v0",
+                    ),
+                    summary=(
+                        "GIS perception AI preview judgement; ModelInterpretation "
+                        "only, not runtime safety truth."
+                    ),
+                ),
+            }
+            for judgement in payload.get("judgements", [])[:12]
+        ],
     }
 
 
@@ -1613,6 +2129,11 @@ def _gis_perception_timeline_checkpoint(
             candidate
         ),
         "map_target_ids": [target for target in map_target_ids if target],
+        **_gis_perception_candidate_provenance(
+            candidate,
+            source_path=source_path,
+            evidence_type="pretrip_gis_perception_timeline_checkpoint_candidate",
+        ),
     }
 
 
@@ -1716,6 +2237,25 @@ def _overpass_gis_perception_timeline_checkpoints(
                         "conversion_rule_version"
                     ),
                 },
+                **_gis_perception_candidate_provenance(
+                    {
+                        **candidate,
+                        "candidate_id": candidate_id,
+                        "route_note_summary": (
+                            f"OSM {candidate.get('candidate_type')}: "
+                            f"{candidate.get('label') or candidate['candidate_id']}"
+                        ),
+                        "source_attribution": source_attribution,
+                        "human_review_required": True,
+                    },
+                    source_path=source_path,
+                    evidence_type=(
+                        "pretrip_gis_perception_timeline_checkpoint_candidate"
+                    ),
+                    default_prompt_version=(
+                        "not_applicable_deterministic_overpass_projection"
+                    ),
+                ),
             }
         )
     return projected
@@ -1792,6 +2332,22 @@ def _merged_gis_perception_timeline_checkpoint(
         ],
         limit=200,
     )
+    source_refs = _unique_limited(
+        [
+            *[
+                ref
+                for item in cluster
+                for ref in item.get("source_refs", [])
+            ],
+            *merged_candidate_ids,
+        ],
+        limit=240,
+    )
+    stale_risk = (
+        "high"
+        if any(item.get("stale_risk") == "high" for item in cluster)
+        else representative.get("stale_risk", "medium")
+    )
     return {
         **representative,
         "candidate_id": (
@@ -1806,6 +2362,32 @@ def _merged_gis_perception_timeline_checkpoint(
         "lon": round(lon, 7),
         "source_attribution": source_attribution,
         "source_attribution_count": len(source_attribution),
+        "source_refs": source_refs,
+        "confidence": representative.get("confidence", "medium"),
+        "stale_risk": stale_risk,
+        "review_state": "needs_review",
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+        "extractor_version": representative.get(
+            "extractor_version",
+            "pretrip_gis_perception.projection.v1",
+        ),
+        "pydantic_ai_prompt_version": representative.get(
+            "pydantic_ai_prompt_version"
+        ),
+        "model_output_sha256": _stable_projection_hash(
+            {
+                "candidate_ids": merged_candidate_ids,
+                "source_refs": source_refs,
+                "semantic_aggregation_key": representative.get(
+                    "semantic_aggregation_key"
+                ),
+            }
+        ),
+        "model_output_summary": (
+            "GIS perception timeline aggregate candidate; source candidates "
+            "remain independent review items and runtime safety truth is false."
+        ),
         "merged_candidate_ids": merged_candidate_ids,
         "route_note_summaries": summaries,
         "route_note_summary": (
@@ -1855,6 +2437,101 @@ def _gis_perception_semantic_aggregation_key(candidate: dict[str, Any]) -> str:
     if any(token in text for token in ("營地", "山屋", "避難", "C1", "C2")):
         return "resource:camp_or_shelter"
     return "other:preserve_detail"
+
+
+def _gis_perception_candidate_provenance(
+    candidate: dict[str, Any],
+    *,
+    source_path: str,
+    evidence_type: str,
+    classifier: dict[str, Any] | None = None,
+    default_prompt_version: str | None = None,
+) -> dict[str, Any]:
+    classifier = classifier or {}
+    source_attribution = candidate.get("source_attribution", []) or []
+    source_refs = _unique_limited(
+        [
+            source_path,
+            candidate.get("candidate_id"),
+            candidate.get("source_route_note_candidate_id"),
+            candidate.get("linked_ln_proposal_id"),
+            *[
+                attribution.get("source_candidate_id")
+                for attribution in source_attribution
+                if isinstance(attribution, dict)
+            ],
+            *[
+                attribution.get("source_artifact_id")
+                for attribution in source_attribution
+                if isinstance(attribution, dict)
+            ],
+            *[
+                attribution.get("source_ref")
+                for attribution in source_attribution
+                if isinstance(attribution, dict)
+            ],
+        ],
+        limit=120,
+    )
+    attribution_confidences = [
+        attribution.get("confidence")
+        for attribution in source_attribution
+        if isinstance(attribution, dict) and attribution.get("confidence")
+    ]
+    attribution_stale_risks = [
+        attribution.get("stale_risk")
+        for attribution in source_attribution
+        if isinstance(attribution, dict) and attribution.get("stale_risk")
+    ]
+    confidence = (
+        candidate.get("confidence")
+        or candidate.get("ai_confidence")
+        or (attribution_confidences[0] if attribution_confidences else None)
+        or "medium"
+    )
+    stale_risk = (
+        candidate.get("stale_risk")
+        or candidate.get("ai_stale_risk")
+        or ("high" if candidate.get("stale_route_note") else None)
+        or (attribution_stale_risks[0] if attribution_stale_risks else None)
+        or "medium"
+    )
+    model_hash = (
+        candidate.get("model_output_sha256")
+        or classifier.get("prompt_sha256")
+        or _stable_projection_hash(
+            {
+                "candidate_id": candidate.get("candidate_id"),
+                "source_refs": source_refs,
+                "source_attribution": source_attribution,
+                "evidence_type": evidence_type,
+            }
+        )
+    )
+    prompt_version = (
+        candidate.get("pydantic_ai_prompt_version")
+        or classifier.get("prompt_version")
+        or default_prompt_version
+    )
+    return {
+        "source_refs": source_refs,
+        "confidence": confidence,
+        "stale_risk": stale_risk,
+        "review_state": candidate.get("review_state", "needs_review"),
+        "candidate_only": candidate.get("candidate_only", True),
+        "runtime_safety_truth": candidate.get("runtime_safety_truth", False),
+        "extractor_version": candidate.get(
+            "extractor_version",
+            "pretrip_gis_perception.projection.v1",
+        ),
+        "pydantic_ai_prompt_version": prompt_version,
+        "model_output_sha256": str(model_hash),
+        "model_output_summary": candidate.get("model_output_summary")
+        or (
+            f"{evidence_type} generated from GIS perception evidence; "
+            "pretrip candidate-only review item, not runtime safety truth."
+        ),
+    }
 
 
 def _overpass_candidate_coordinate(
@@ -1974,6 +2651,22 @@ def _apply_gis_perception_nearby_groups(
         members = [
             {
                 "candidate_id": item["candidate_id"],
+                **_projection_record_metadata(
+                    item,
+                    source_path="project.json#gis-perception-nearby-group-member",
+                    evidence_type="pretrip_gis_perception_nearby_group_member",
+                    source_kind="gis_nearby_group_member",
+                    identity_keys=("candidate_id", "source_refs"),
+                    review_state="display_group_member",
+                    confidence=item.get("confidence", "medium"),
+                    stale_risk=item.get("stale_risk", "medium"),
+                    extractor_version="pretrip_gis_perception.nearby_group_projection.v1",
+                    prompt_version="not_applicable_deterministic_nearby_grouping",
+                    summary=(
+                        "Nearby group member pointer for review navigation; "
+                        "semantic candidate remains separate and not runtime safety truth."
+                    ),
+                ),
                 "checkpoint_type": item.get("checkpoint_type"),
                 "semantic_aggregation_key": item.get("semantic_aggregation_key"),
                 "summary": item.get("route_note_summary") or item["candidate_id"],
@@ -1985,6 +2678,23 @@ def _apply_gis_perception_nearby_groups(
         ]
         center_lat = sum(float(item["lat"]) for item in group) / len(group)
         center_lon = sum(float(item["lon"]) for item in group) / len(group)
+        source_refs = _unique_limited(
+            [
+                *[
+                    ref
+                    for item in group
+                    for ref in item.get("source_refs", [])
+                ],
+                *[item["candidate_id"] for item in group],
+            ],
+            limit=240,
+        )
+        source_attribution = _merge_source_attributions(group)
+        stale_risk = (
+            "high"
+            if any(item.get("stale_risk") == "high" for item in group)
+            else "medium"
+        )
         nearby_group = {
             "nearby_group_id": group_id,
             "source_id": group_id,
@@ -1992,6 +2702,28 @@ def _apply_gis_perception_nearby_groups(
             "evidence_type": "pretrip_gis_perception_nearby_group",
             "source_path": "project.json#gis-perception-nearby-group",
             "status": "candidate_only_grouping",
+            "review_state": "display_group_only",
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+            "confidence": "medium",
+            "stale_risk": stale_risk,
+            "source_refs": source_refs,
+            "source_attribution": source_attribution,
+            "extractor_version": "pretrip_gis_perception.nearby_group_projection.v1",
+            "pydantic_ai_prompt_version": (
+                "not_applicable_deterministic_nearby_grouping"
+            ),
+            "model_output_sha256": _stable_projection_hash(
+                {
+                    "nearby_group_id": group_id,
+                    "member_ids": [item["candidate_id"] for item in group],
+                    "source_refs": source_refs,
+                }
+            ),
+            "model_output_summary": (
+                "Nearby display group for map/review navigation only; semantic "
+                "candidates are not merged and runtime safety truth is false."
+            ),
             "member_count": len(group),
             "lat": round(center_lat, 7),
             "lon": round(center_lon, 7),
@@ -2144,7 +2876,7 @@ def _gis_perception_review_queue_item(
         attribution.get("source_kind", "unknown"): attribution.get("source_candidate_id")
         for attribution in candidate.get("source_attribution", [])
     }
-    return {
+    item = {
         "item_id": f"review_queue.gis_perception.{candidate['candidate_id']}",
         "candidate_ref": candidate["candidate_id"],
         "category": "gis_perception_cp",
@@ -2173,11 +2905,49 @@ def _gis_perception_review_queue_item(
         },
         "accept_reject_allowed": True,
         "candidate_only": True,
+        "runtime_safety_truth": False,
         "human_review_required": True,
+        "review_state": "needs_review",
+        "confidence": candidate.get("confidence")
+        or candidate.get("ai_confidence")
+        or "medium",
+        "stale_risk": candidate.get("stale_risk")
+        or candidate.get("ai_stale_risk")
+        or "medium",
+        "source_refs": _review_queue_source_refs(
+            {
+                "source_ref": gis_timeline.get("source_path", ""),
+                "candidate_ref": candidate.get("candidate_id", ""),
+                "evidence_summary": {
+                    "source_attribution": candidate.get("source_attribution", []),
+                },
+            }
+        ),
+        "source_attribution": candidate.get("source_attribution", []),
+        "extractor_version": candidate.get(
+            "extractor_version",
+            "pretrip_admin_review_queue_projection.v1",
+        ),
+        "pydantic_ai_prompt_version": candidate.get("pydantic_ai_prompt_version"),
+        "model_output_sha256": candidate.get("model_output_sha256")
+        or _stable_projection_hash(
+            {
+                "candidate_ref": candidate.get("candidate_id"),
+                "source_attribution": candidate.get("source_attribution", []),
+            }
+        ),
+        "model_output_summary": candidate.get("model_output_summary")
+        or "GIS perception CP candidate queued for human review; pretrip evidence only.",
         "decision_recorded": False,
         "mutation_allowed": False,
         "map_target_ids": candidate.get("map_target_ids", [candidate["candidate_id"]]),
     }
+    item["evidence_summary"] = _review_queue_evidence_summary(
+        item,
+        source_path=item.get("source_ref", ""),
+        source_refs=item.get("source_refs", []),
+    )
+    return item
 
 
 def _review_queue_with_energy_projection_item(
@@ -2211,7 +2981,41 @@ def _review_queue_with_energy_projection_item(
             "medical_diagnosis": False,
         },
         "candidate_only": True,
+        "runtime_safety_truth": False,
         "human_review_required": True,
+        "review_state": "needs_review",
+        "confidence": "medium",
+        "stale_risk": "medium",
+        "source_refs": _review_queue_source_refs(
+            {
+                "source_ref": energy_projection.get("source_path", ""),
+                "candidate_ref": f"energy_reserve.depletion_checkpoint.{_safe_view_key(depletion_checkpoint)}",
+            }
+        ),
+        "source_attribution": [
+            {
+                "source_kind": "pretrip_energy_reserve_projection",
+                "source_candidate_id": f"energy_reserve.depletion_checkpoint.{_safe_view_key(depletion_checkpoint)}",
+                "source_artifact_id": energy_projection.get(
+                    "source_id",
+                    "pretrip_energy_reserve_projection",
+                ),
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+            }
+        ],
+        "extractor_version": "pretrip_admin_review_queue_projection.v1",
+        "pydantic_ai_prompt_version": None,
+        "model_output_sha256": _stable_projection_hash(
+            {
+                "candidate_ref": f"energy_reserve.depletion_checkpoint.{_safe_view_key(depletion_checkpoint)}",
+                "source_ref": energy_projection.get("source_path", ""),
+            }
+        ),
+        "model_output_summary": (
+            "Energy reserve projection queued for human review; advisory "
+            "pretrip evidence only and not runtime safety truth."
+        ),
         "decision_recorded": False,
         "accept_reject_allowed": False,
         "mutation_allowed": False,
@@ -2220,6 +3024,11 @@ def _review_queue_with_energy_projection_item(
         "evidence_type": "pretrip_review_queue_item",
         "map_target_ids": [depletion_checkpoint],
     }
+    item["evidence_summary"] = _review_queue_evidence_summary(
+        item,
+        source_path=item.get("source_ref", ""),
+        source_refs=item.get("source_refs", []),
+    )
     items = [*review_queue.get("items", []), item]
     category_counts = Counter(item.get("category", "unknown") for item in items)
     counts = {
@@ -2561,6 +3370,15 @@ def _candidate_list(
     return [
         {
             **candidate,
+            **_planning_candidate_provenance(
+                candidate,
+                source_path=source_path,
+                evidence_type=evidence_type,
+                default_summary=(
+                    f"{evidence_type} projected from pretrip planning artifacts; "
+                    "candidate-only evidence, not runtime safety truth."
+                ),
+            ),
             "source_id": candidate["candidate_id"],
             "source_path": source_path,
             "evidence_type": evidence_type,
@@ -2579,15 +3397,35 @@ def _segment_display_geometry_by_id(
 ) -> dict[str, dict[str, Any]]:
     if not payload:
         return {}
+    source_path = payload.get("source_path") or "outputs/segment_display_geometry.json"
     return {
         item["segment_candidate_id"]: {
             "source_id": item["segment_candidate_id"],
-            "source_path": payload.get("source_path")
-            or "outputs/segment_display_geometry.json",
+            "source_path": source_path,
             "evidence_type": "pretrip_segment_display_geometry",
+            **_projection_record_metadata(
+                item,
+                source_path=source_path,
+                evidence_type="pretrip_segment_display_geometry",
+                source_kind="segment_display_geometry",
+                identity_keys=("segment_candidate_id", "source_point_count"),
+                review_state="display_geometry_only",
+                confidence="medium",
+                stale_risk="medium",
+                extractor_version="pretrip_segment_display_geometry.projection.v1",
+                prompt_version="not_applicable_deterministic_display_geometry.v1",
+                summary=(
+                    "Segment display geometry for admin map focus and rendering; "
+                    "derived visualization evidence only, not runtime safety truth."
+                ),
+            ),
             "source_point_count": item.get("source_point_count"),
             "display_point_count": len(item.get("coordinates", [])),
             "coordinates": item.get("coordinates", []),
+            "resume_segment": item.get("resume_segment", False),
+            "resume_gap_count": item.get("resume_gap_count", 0),
+            "max_gap_m": item.get("max_gap_m"),
+            "resume_gaps": item.get("resume_gaps", []),
             "boundary": payload.get("boundary", {}),
         }
         for item in payload.get("segments", [])
@@ -2672,11 +3510,131 @@ def _decorate_map_candidates(
     return [
         {
             **candidate,
+            **_planning_candidate_provenance(
+                candidate,
+                source_path=source_path,
+                evidence_type=evidence_type,
+                default_summary=(
+                    f"{evidence_type} projected from offline map evidence; "
+                    "candidate-only evidence, not runtime safety truth."
+                ),
+            ),
             "source_id": candidate["candidate_id"],
             "source_path": source_path,
             "evidence_type": evidence_type,
         }
         for candidate in candidates
+    ]
+
+
+def _planning_candidate_provenance(
+    candidate: dict[str, Any],
+    *,
+    source_path: str,
+    evidence_type: str,
+    default_summary: str,
+) -> dict[str, Any]:
+    provenance = [
+        item
+        for item in candidate.get("provenance", []) or []
+        if isinstance(item, dict)
+    ]
+    source_refs = _unique_limited(
+        [
+            source_path,
+            candidate.get("candidate_id"),
+            *list(candidate.get("source_refs") or []),
+            *[
+                item.get("source_ref")
+                for item in provenance
+            ],
+            *[
+                item.get("uri")
+                for item in provenance
+            ],
+        ],
+        limit=32,
+    )
+    extractor_version = (
+        candidate.get("extractor_version")
+        or _candidate_provenance_method(provenance)
+        or "pretrip_candidate_projection.v1"
+    )
+    model_hash = candidate.get("model_output_sha256") or _stable_projection_hash(
+        {
+            "candidate_id": candidate.get("candidate_id"),
+            "evidence_type": evidence_type,
+            "source_refs": source_refs,
+            "review_state": candidate.get("review_state"),
+        }
+    )
+    return {
+        "source_refs": source_refs,
+        "source_attribution": candidate.get("source_attribution")
+        or _planning_source_attribution(
+            provenance,
+            source_path=source_path,
+            candidate_id=candidate.get("candidate_id"),
+            confidence=candidate.get("confidence", "medium"),
+            stale_risk=candidate.get("stale_risk", "medium"),
+        ),
+        "confidence": candidate.get("confidence", "medium"),
+        "stale_risk": candidate.get("stale_risk", "medium"),
+        "review_state": candidate.get("review_state", "needs_review"),
+        "candidate_only": candidate.get("candidate_only", True),
+        "runtime_safety_truth": candidate.get("runtime_safety_truth", False),
+        "extractor_version": extractor_version,
+        "pydantic_ai_prompt_version": candidate.get(
+            "pydantic_ai_prompt_version",
+            "not_applicable_deterministic_pretrip_projection.v1",
+        ),
+        "model_output_sha256": str(model_hash),
+        "model_output_summary": candidate.get("model_output_summary")
+        or default_summary,
+    }
+
+
+def _candidate_provenance_method(provenance: list[dict[str, Any]]) -> str | None:
+    for item in provenance:
+        method = item.get("method")
+        if method:
+            return str(method)
+    return None
+
+
+def _planning_source_attribution(
+    provenance: list[dict[str, Any]],
+    *,
+    source_path: str,
+    candidate_id: Any,
+    confidence: Any,
+    stale_risk: Any,
+) -> list[dict[str, Any]]:
+    if not provenance:
+        return [
+            {
+                "source_kind": "pretrip_artifact",
+                "source_ref": source_path,
+                "source_candidate_id": str(candidate_id or ""),
+                "confidence": confidence,
+                "stale_risk": stale_risk,
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+            }
+        ]
+    return [
+        {
+            "source_kind": item.get("source_kind", "pretrip_artifact"),
+            "source_ref": item.get("source_ref") or source_path,
+            "source_uri": item.get("uri"),
+            "source_candidate_id": str(candidate_id or ""),
+            "extractor_method": item.get("method"),
+            "confidence": confidence,
+            "stale_risk": stale_risk,
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+        }
+        for item in provenance
     ]
 
 
@@ -2709,13 +3667,300 @@ def _review_queue_summary(payload: dict[str, Any], source_path: str) -> dict[str
 
 
 def _review_queue_item(item: dict[str, Any], source_path: str) -> dict[str, Any]:
-    return {
+    evidence_summary = item.get("evidence_summary", {})
+    source_refs = _review_queue_source_refs(item)
+    source_attribution = _review_queue_source_attribution(item, source_refs)
+    model_hash = item.get("model_output_sha256") or _stable_projection_hash(
+        {
+            "item_id": item.get("item_id"),
+            "candidate_ref": item.get("candidate_ref"),
+            "source_refs": source_refs,
+            "evidence_summary": evidence_summary,
+        }
+    )
+    result = {
         **item,
         "source_id": item["item_id"],
         "source_path": source_path,
         "evidence_type": "pretrip_review_queue_item",
+        "evidence_summary": _review_queue_evidence_summary(
+            item,
+            source_path=source_path,
+            source_refs=source_refs,
+        ),
+        "review_state": item.get("review_state", "needs_review"),
+        "confidence": item.get("confidence")
+        or evidence_summary.get("confidence")
+        or evidence_summary.get("ai_confidence")
+        or "unknown",
+        "stale_risk": item.get("stale_risk")
+        or evidence_summary.get("stale_risk")
+        or evidence_summary.get("ai_stale_risk")
+        or "unknown",
+        "candidate_only": item.get("candidate_only", True),
+        "runtime_safety_truth": item.get("runtime_safety_truth", False),
+        "source_refs": source_refs,
+        "source_attribution": source_attribution,
+        "extractor_version": item.get(
+            "extractor_version",
+            "pretrip_admin_review_queue_projection.v1",
+        ),
+        "pydantic_ai_prompt_version": item.get(
+            "pydantic_ai_prompt_version",
+            "not_applicable_deterministic_review_queue_projection.v1",
+        ),
+        "model_output_sha256": str(model_hash),
+        "model_output_summary": item.get("model_output_summary")
+        or item.get("summary")
+        or (
+            "Pretrip review queue item; candidate review aid only, "
+            "not runtime safety truth."
+        ),
         "map_target_ids": _review_item_map_target_ids(item),
     }
+    return result
+
+
+def _review_queue_evidence_summary(
+    item: dict[str, Any],
+    *,
+    source_path: str,
+    source_refs: list[str],
+) -> dict[str, Any]:
+    evidence_summary = item.get("evidence_summary", {})
+    if not isinstance(evidence_summary, dict):
+        evidence_summary = {}
+    confidence = (
+        item.get("confidence")
+        or evidence_summary.get("confidence")
+        or evidence_summary.get("ai_confidence")
+        or "unknown"
+    )
+    stale_risk = (
+        item.get("stale_risk")
+        or evidence_summary.get("stale_risk")
+        or evidence_summary.get("ai_stale_risk")
+        or "unknown"
+    )
+    return {
+        **evidence_summary,
+        "source_id": f"{item.get('item_id', 'review_item')}.evidence_summary",
+        "source_path": source_path,
+        "evidence_type": "pretrip_review_queue_evidence_summary",
+        **_projection_record_metadata(
+            {
+                **evidence_summary,
+                "item_id": item.get("item_id"),
+                "candidate_ref": item.get("candidate_ref"),
+                "source_refs": source_refs,
+            },
+            source_path=source_path,
+            evidence_type="pretrip_review_queue_evidence_summary",
+            source_kind="review_queue_evidence_summary",
+            identity_keys=("item_id", "candidate_ref", "rule_id", "source_refs"),
+            review_state=item.get("review_state", "needs_review"),
+            confidence=confidence,
+            stale_risk=stale_risk,
+            extractor_version="pretrip_admin_review_queue_projection.v1",
+            prompt_version="not_applicable_deterministic_review_queue_projection.v1",
+            summary=(
+                "Nested review queue evidence summary for admin detail display; "
+                "candidate review aid only, not runtime safety truth."
+            ),
+            candidate_only=item.get("candidate_only", True),
+            runtime_safety_truth=False,
+        ),
+    }
+
+
+def _review_queue_source_refs(item: dict[str, Any]) -> list[str]:
+    refs: list[str] = []
+    for key in ("source_ref", "candidate_ref"):
+        value = item.get(key)
+        if value:
+            refs.append(str(value))
+    evidence_summary = item.get("evidence_summary", {})
+    if isinstance(evidence_summary, dict):
+        source_artifact_refs = evidence_summary.get("source_artifact_refs", {})
+        if isinstance(source_artifact_refs, dict):
+            refs.extend(str(value) for value in source_artifact_refs.values() if value)
+        for attribution in evidence_summary.get("source_attribution", []) or []:
+            if isinstance(attribution, dict):
+                for key in ("source_candidate_id", "source_artifact_id", "source_ref"):
+                    value = attribution.get(key)
+                    if value:
+                        refs.append(str(value))
+    return list(dict.fromkeys(refs))
+
+
+def _review_queue_source_attribution(
+    item: dict[str, Any],
+    source_refs: list[str],
+) -> list[dict[str, Any]]:
+    evidence_summary = item.get("evidence_summary", {})
+    if isinstance(evidence_summary, dict):
+        attribution = evidence_summary.get("source_attribution")
+        if isinstance(attribution, list) and attribution:
+            return attribution
+    return [
+        {
+            "source_kind": item.get("source_artifact_kind", "pretrip_review_source"),
+            "source_ref_key": item.get("source_ref_key"),
+            "source_candidate_id": item.get("candidate_ref"),
+            "source_artifact_ref": item.get("source_ref"),
+            "source_refs": source_refs,
+            "candidate_only": item.get("candidate_only", True),
+            "runtime_safety_truth": False,
+        }
+    ]
+
+
+def _projection_record_metadata(
+    record: dict[str, Any],
+    *,
+    source_path: str,
+    evidence_type: str,
+    source_kind: str,
+    identity_keys: tuple[str, ...],
+    review_state: str,
+    confidence: Any,
+    stale_risk: Any,
+    extractor_version: str,
+    prompt_version: str,
+    summary: str,
+    candidate_only: bool = True,
+    runtime_safety_truth: bool = False,
+) -> dict[str, Any]:
+    identity_refs = [
+        ref
+        for key in identity_keys
+        for ref in _mcp_source_ref_values(record.get(key))
+    ]
+    source_refs = _unique_limited(
+        [
+            source_path,
+            *identity_refs,
+            *_mcp_source_ref_values(record.get("source_refs")),
+            *_mcp_source_ref_values(record.get("target_ids")),
+        ],
+        limit=64,
+    )
+    source_candidate_id = (
+        record.get("candidate_ref")
+        or record.get("item_id")
+        or record.get("action_id")
+        or record.get("decision_id")
+        or record.get("review_id")
+        or record.get("request_id")
+        or record.get("contribution_id")
+        or record.get("imprint_id")
+        or record.get("candidate_id")
+        or record.get("group_id")
+        or ""
+    )
+    model_hash = record.get("model_output_sha256") or _stable_projection_hash(
+        {
+            "evidence_type": evidence_type,
+            "source_kind": source_kind,
+            "source_candidate_id": source_candidate_id,
+            "source_refs": source_refs,
+        }
+    )
+    return {
+        "source_refs": source_refs,
+        "source_attribution": [
+            {
+                "source_kind": source_kind,
+                "source_ref": source_path,
+                "source_candidate_id": str(source_candidate_id),
+                "confidence": confidence,
+                "stale_risk": stale_risk,
+                "candidate_only": candidate_only,
+                "runtime_safety_truth": runtime_safety_truth,
+            }
+        ],
+        "confidence": confidence,
+        "stale_risk": stale_risk,
+        "review_state": review_state,
+        "candidate_only": candidate_only,
+        "runtime_safety_truth": runtime_safety_truth,
+        "extractor_version": extractor_version,
+        "pydantic_ai_prompt_version": prompt_version,
+        "model_output_sha256": str(model_hash),
+        "model_output_summary": summary,
+    }
+
+
+def _decorate_admin_summary_metadata(tab: dict[str, Any]) -> None:
+    for value in tab.values():
+        if not isinstance(value, dict):
+            continue
+        if not all(key in value for key in ("source_id", "source_path", "evidence_type")):
+            continue
+        _ensure_admin_summary_metadata(value)
+
+
+def _ensure_admin_summary_metadata(summary: dict[str, Any]) -> None:
+    if all(
+        summary.get(field) not in (None, "", [])
+        for field in (
+            "source_refs",
+            "source_attribution",
+            "confidence",
+            "stale_risk",
+            "review_state",
+            "candidate_only",
+            "runtime_safety_truth",
+            "model_output_sha256",
+            "model_output_summary",
+            "extractor_version",
+            "pydantic_ai_prompt_version",
+        )
+    ):
+        return
+    boundary = summary.get("boundary") if isinstance(summary.get("boundary"), dict) else {}
+    metadata = _projection_record_metadata(
+        {
+            "source_id": summary.get("source_id"),
+            "source_path": summary.get("source_path"),
+            "evidence_type": summary.get("evidence_type"),
+            "status": summary.get("status"),
+            "source_refs": summary.get("source_refs"),
+        },
+        source_path=str(summary.get("source_path") or ""),
+        evidence_type=str(summary.get("evidence_type") or "pretrip_admin_summary"),
+        source_kind="pretrip_admin_summary",
+        identity_keys=("source_id", "source_path", "evidence_type", "status"),
+        review_state=str(summary.get("review_state") or "projection_only"),
+        confidence=summary.get("confidence") or "medium",
+        stale_risk=summary.get("stale_risk") or "medium",
+        extractor_version=str(
+            summary.get("extractor_version")
+            or "pretrip_admin_summary.projection.v1"
+        ),
+        prompt_version=str(
+            summary.get("pydantic_ai_prompt_version")
+            or "not_applicable_deterministic_admin_summary_projection.v1"
+        ),
+        summary=(
+            str(summary.get("evidence_type") or "pretrip admin summary")
+            + " summary for admin evidence navigation; candidate/pretrip "
+            "projection only, not runtime safety truth."
+        ),
+        candidate_only=summary.get(
+            "candidate_only",
+            boundary.get("candidate_only", True),
+        )
+        is not False,
+        runtime_safety_truth=summary.get(
+            "runtime_safety_truth",
+            boundary.get("runtime_safety_truth", False),
+        )
+        is True,
+    )
+    for key, value in metadata.items():
+        if summary.get(key) in (None, "", []):
+            summary[key] = value
 
 
 def _review_item_map_target_ids(item: dict[str, Any]) -> list[str]:
@@ -2791,6 +4036,23 @@ def _review_workbench_summary(
     gis_groups = [
         {
             "group_id": group.get("nearby_group_id"),
+            **_projection_record_metadata(
+                group,
+                source_path=group.get("source_path")
+                or "project.json#review-workbench-gis-nearby-group",
+                evidence_type="pretrip_review_workbench_gis_nearby_group",
+                source_kind="review_workbench_gis_nearby_group",
+                identity_keys=("nearby_group_id", "source_refs", "member_candidate_ids"),
+                review_state="inspect_group_members",
+                confidence=group.get("confidence", "medium"),
+                stale_risk=group.get("stale_risk", "medium"),
+                extractor_version="pretrip_admin_review_workbench_projection.v1",
+                prompt_version="not_applicable_deterministic_review_workbench_projection.v1",
+                summary=(
+                    "GIS nearby group review-workbench pointer; display grouping "
+                    "only, not semantic merge and not runtime safety truth."
+                ),
+            ),
             "group_type": "gis_nearby_group",
             "label": group.get("nearby_group_id"),
             "item_count": group.get("member_count", 0),
@@ -2884,6 +4146,29 @@ def _review_workbench_group(
         "source_id": group_id,
         "source_path": "project.json#review-workbench",
         "evidence_type": "pretrip_review_workbench_group",
+        **_projection_record_metadata(
+            {
+                "group_id": group_id,
+                "candidate_refs": [
+                    item["candidate_ref"] for item in items if item.get("candidate_ref")
+                ],
+                "group_type": group_type,
+                "label": label,
+            },
+            source_path="project.json#review-workbench",
+            evidence_type="pretrip_review_workbench_group",
+            source_kind="review_workbench_group",
+            identity_keys=("group_id", "group_type", "candidate_refs"),
+            review_state="projection_only",
+            confidence="medium",
+            stale_risk="medium",
+            extractor_version="pretrip_admin_review_workbench_projection.v1",
+            prompt_version="not_applicable_deterministic_review_workbench_projection.v1",
+            summary=(
+                "Review workbench grouping for human review navigation; "
+                "projection-only planning aid, not runtime safety truth."
+            ),
+        ),
         "status": "projection_only",
         "group_type": group_type,
         "label": label,
@@ -2943,6 +4228,22 @@ def _review_draft_log_summary(payload: dict[str, Any], source_path: str) -> dict
 def _review_draft_action_summary(action: dict[str, Any]) -> dict[str, Any]:
     return {
         "action_id": action["action_id"],
+        **_projection_record_metadata(
+            action,
+            source_path="reviews/review_draft_log.json",
+            evidence_type="pretrip_review_draft_action",
+            source_kind="review_draft_action",
+            identity_keys=("action_id", "candidate_ref", "source_ref_key"),
+            review_state=action.get("draft_state", "draft"),
+            confidence="medium",
+            stale_risk="medium",
+            extractor_version="pretrip_review_draft_log.projection.v1",
+            prompt_version="not_applicable_deterministic_review_draft_projection.v1",
+            summary=(
+                "Draft-only review action for admin navigation; "
+                "not an accepted planning assumption and not runtime safety truth."
+            ),
+        ),
         "action_kind": action["action_kind"],
         "category": action["category"],
         "candidate_ref": action["candidate_ref"],
@@ -2969,6 +4270,24 @@ def _review_decision_log_summary(payload: dict[str, Any], source_path: str) -> d
         "decisions": [
             {
                 "decision_id": decision["decision_id"],
+                **_projection_record_metadata(
+                    decision,
+                    source_path=source_path,
+                    evidence_type="pretrip_review_decision",
+                    source_kind="review_decision",
+                    identity_keys=("decision_id", "candidate_ref", "draft_action_id"),
+                    review_state=decision.get("decision", "decided"),
+                    confidence="medium",
+                    stale_risk="medium",
+                    candidate_only=decision.get("package_mutation_allowed") is not True,
+                    runtime_safety_truth=decision.get("runtime_mutation_allowed") is True,
+                    extractor_version="pretrip_review_decision_log.projection.v1",
+                    prompt_version="not_applicable_human_review_decision.v1",
+                    summary=(
+                        "Human review decision record over pretrip candidates; "
+                        "does not create runtime safety truth."
+                    ),
+                ),
                 "draft_action_id": decision["draft_action_id"],
                 "decision": decision["decision"],
                 "candidate_ref": decision["candidate_ref"],
@@ -3017,6 +4336,22 @@ def _review_decision_apply_plan_summary(
         "decisions": [
             {
                 "decision_id": decision["decision_id"],
+                **_projection_record_metadata(
+                    decision,
+                    source_path=source_path,
+                    evidence_type="pretrip_review_decision_apply_plan_decision",
+                    source_kind="review_decision_apply_plan",
+                    identity_keys=("decision_id", "candidate_ref", "draft_action_id"),
+                    review_state=decision.get("decision", "planned"),
+                    confidence="medium",
+                    stale_risk="medium",
+                    extractor_version="pretrip_review_decision_apply_plan.projection.v1",
+                    prompt_version="not_applicable_deterministic_review_apply_plan.v1",
+                    summary=(
+                        "Review decision apply-plan row; would-apply planning "
+                        "projection only, not runtime safety truth."
+                    ),
+                ),
                 "draft_action_id": decision["draft_action_id"],
                 "decision": decision["decision"],
                 "candidate_ref": decision["candidate_ref"],
@@ -3045,6 +4380,22 @@ def _external_import_queue_summary(payload: dict[str, Any], source_path: str) ->
         "requests": [
             {
                 "request_id": request["request_id"],
+                **_projection_record_metadata(
+                    request,
+                    source_path=source_path,
+                    evidence_type="pretrip_external_import_request",
+                    source_kind="external_import_request",
+                    identity_keys=("request_id", "source_id", "source_url"),
+                    review_state=request.get("review_requirement", "needs_review"),
+                    confidence="medium",
+                    stale_risk="medium",
+                    extractor_version="pretrip_external_import_queue.projection.v1",
+                    prompt_version="not_applicable_deterministic_external_import_projection.v1",
+                    summary=(
+                        "External import request for future source ingest; "
+                        "candidate-only planning request, not runtime safety truth."
+                    ),
+                ),
                 "source_id": request["source_id"],
                 "source_kind": request["source_kind"],
                 "source_url": request["source_url"],
@@ -3081,7 +4432,26 @@ def _route_note_summary(payload: dict[str, Any], source_path: str) -> dict[str, 
                 "note_category": candidate["note_category"],
                 "potential_ln_signal": candidate["potential_ln_signal"],
                 "requires_human_review": candidate["requires_human_review"],
+                "review_state": candidate.get("review_state", "needs_review"),
+                "confidence": candidate.get("confidence", "unknown"),
+                "stale_risk": candidate.get("stale_risk", "unknown"),
+                "route_note_age_days": candidate.get("route_note_age_days"),
+                "route_note_freshness": candidate.get(
+                    "route_note_freshness",
+                    "unknown",
+                ),
+                "stale_route_note": candidate.get("stale_route_note", False),
+                "candidate_only": candidate.get("candidate_only", True),
+                "runtime_safety_truth": candidate.get("runtime_safety_truth", False),
                 "source_fields_present": candidate["source_fields_present"],
+                "source_refs": candidate.get("source_refs", []),
+                "source_attribution": candidate.get("source_attribution", []),
+                "extractor_version": candidate.get("extractor_version"),
+                "pydantic_ai_prompt_version": candidate.get(
+                    "pydantic_ai_prompt_version",
+                ),
+                "model_output_sha256": candidate.get("model_output_sha256"),
+                "model_output_summary": candidate.get("model_output_summary"),
             }
             for candidate in payload.get("candidates", [])
         ],
@@ -3119,6 +4489,44 @@ def _layer_preparation_summary(
         "layers": [
             {
                 "layer_id": layer["layer_id"],
+                "source_id": f"{payload['job_id']}.{layer['layer_id']}",
+                "source_path": source_path,
+                "evidence_type": "pretrip_layer_preparation_layer",
+                **_projection_record_metadata(
+                    {
+                        **layer,
+                        "candidate_id": layer["layer_id"],
+                        "source_refs": [
+                            source_path,
+                            layer["layer_id"],
+                            *[
+                                ref.get("ref") if isinstance(ref, dict) else ref
+                                for ref in layer.get("source_refs", [])
+                            ],
+                        ],
+                    },
+                    source_path=source_path,
+                    evidence_type="pretrip_layer_preparation_layer",
+                    source_kind=f"pretrip_layer_preparation.{layer['layer_id']}",
+                    identity_keys=("candidate_id", "source_refs"),
+                    review_state=(
+                        "ready"
+                        if layer.get("status") in READY_LAYER_STATUSES
+                        else "needs_review"
+                    ),
+                    confidence=(
+                        "medium"
+                        if layer.get("status") in READY_LAYER_STATUSES
+                        else "low"
+                    ),
+                    stale_risk=layer.get("stale_risk", "medium"),
+                    extractor_version="pretrip_layer_preparation.projection.v1",
+                    prompt_version="not_applicable_deterministic_layer_preparation_projection.v1",
+                    summary=(
+                        "Pretrip layer preparation row projected as planning "
+                        "evidence metadata; not runtime safety truth."
+                    ),
+                ),
                 "status": layer["status"],
                 "adapter": layer["adapter"],
                 "counts": layer["counts"],
@@ -3182,6 +4590,17 @@ def _risk_score_summary(
         risk_values.append(risk_value)
         sample_id = str(properties.get("sample_id") or f"risk_score.{index:04d}")
         route_properties = route_sample_properties.get(sample_id, {})
+        provenance = _risk_candidate_provenance(
+            metadata=score_metadata or {},
+            source_path=source_path,
+            metadata_source_path=metadata_source_path,
+            route_source_path=route_source_path,
+            route_metadata_source_path=route_metadata_source_path,
+            default_summary=(
+                "Scout Risk Engine route-aligned point score candidate; "
+                "pretrip evidence only and not runtime safety truth."
+            ),
+        )
         points.append(
             {
                 "candidate_id": f"risk_score_point.{_safe_view_key(sample_id)}",
@@ -3225,6 +4644,7 @@ def _risk_score_summary(
                 "source_sample_ids": properties.get("source_sample_ids", []),
                 "candidate_only": True,
                 "runtime_safety_truth": False,
+                **provenance,
             }
         )
 
@@ -3319,6 +4739,15 @@ def _risk_ribbon_summary(
         bucket_counts[risk_bucket] += 1
         start_distance_m = _coerce_float(properties.get("start_distance_m"))
         end_distance_m = _coerce_float(properties.get("end_distance_m"))
+        provenance = _risk_candidate_provenance(
+            metadata=metadata,
+            source_path=source_path,
+            metadata_source_path=metadata_source_path,
+            default_summary=(
+                "Scout Risk Engine route-aligned risk ribbon segment candidate; "
+                "pretrip evidence only and not runtime safety truth."
+            ),
+        )
         segments.append(
             {
                 "candidate_id": f"risk_ribbon.{_safe_view_key(segment_id)}",
@@ -3376,6 +4805,7 @@ def _risk_ribbon_summary(
                 "route_aligned_samples_only": bool(
                     properties.get("route_aligned_samples_only", True)
                 ),
+                **provenance,
             }
         )
 
@@ -3422,6 +4852,68 @@ def _risk_ribbon_summary(
             )
         ),
     }
+
+
+def _risk_candidate_provenance(
+    *,
+    metadata: dict[str, Any],
+    source_path: str | None = "",
+    metadata_source_path: str | None = "",
+    route_source_path: str | None = "",
+    route_metadata_source_path: str | None = "",
+    default_summary: str,
+) -> dict[str, Any]:
+    source_refs = [
+        ref
+        for ref in (
+            source_path,
+            metadata_source_path,
+            route_source_path,
+            route_metadata_source_path,
+            metadata.get("source_route_risk_ref"),
+            metadata.get("source_risk_attribution_diagnostic_ref"),
+            metadata.get("warning_cp_proposals_ref"),
+        )
+        if ref
+    ]
+    model_hash = metadata.get("source_route_risk_sha256") or metadata.get(
+        "model_output_sha256"
+    )
+    if not model_hash:
+        model_hash = _stable_projection_hash(
+            {
+                "artifact_kind": metadata.get("artifact_kind"),
+                "source_refs": source_refs,
+                "score_field": metadata.get("score_field"),
+                "score_surface_type": metadata.get("score_surface_type"),
+            }
+        )
+    return {
+        "source_refs": list(dict.fromkeys(str(ref) for ref in source_refs)),
+        "confidence": metadata.get("confidence", "medium"),
+        "stale_risk": metadata.get("stale_risk", "medium"),
+        "review_state": metadata.get("review_state", "needs_review"),
+        "extractor_version": metadata.get(
+            "extractor_version",
+            "scout_risk_engine.heuristic_projection.v1",
+        ),
+        "pydantic_ai_prompt_version": metadata.get(
+            "pydantic_ai_prompt_version",
+            "not_applicable_deterministic_risk_projection.v1",
+        ),
+        "model_output_sha256": str(model_hash),
+        "model_output_summary": metadata.get("model_output_summary", default_summary),
+    }
+
+
+def _stable_projection_hash(payload: Any) -> str:
+    encoded = json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def _coerce_float(value: Any) -> float | None:
@@ -3493,6 +4985,11 @@ def _overpass_candidate(
         "source_id": candidate["candidate_id"],
         "source_path": source_path,
         "evidence_type": evidence_type,
+        **_overpass_candidate_provenance(
+            candidate,
+            source_path=source_path,
+            evidence_type=evidence_type,
+        ),
         "label": candidate["label"],
         "candidate_type": candidate["candidate_type"],
         "feature_type": candidate["feature_type"],
@@ -3549,6 +5046,74 @@ def _overpass_map_payload(candidate: dict[str, Any], properties: dict[str, Any])
             "name": candidate["label"],
             "coordinate": _geojson_point_coordinate(geometry),
         }
+    }
+
+
+def _overpass_candidate_provenance(
+    candidate: dict[str, Any],
+    *,
+    source_path: str,
+    evidence_type: str,
+) -> dict[str, Any]:
+    feature = candidate.get("geojson_feature", {})
+    properties = feature.get("properties", {})
+    source_refs = _unique_limited(
+        [
+            source_path,
+            candidate.get("candidate_id"),
+            candidate.get("linked_route_ref"),
+            candidate.get("linked_segment_ref"),
+            candidate.get("linked_checkpoint_ref"),
+            properties.get("normalized_artifact_path"),
+            properties.get("raw_response_sha256"),
+            f"{candidate.get('osm_type')}:{candidate.get('osm_id')}",
+        ],
+        limit=32,
+    )
+    model_hash = candidate.get("model_output_sha256") or _stable_projection_hash(
+        {
+            "candidate_id": candidate.get("candidate_id"),
+            "evidence_type": evidence_type,
+            "osm_type": candidate.get("osm_type"),
+            "osm_id": candidate.get("osm_id"),
+            "tags": candidate.get("tags", {}),
+            "source_refs": source_refs,
+        }
+    )
+    return {
+        "source_refs": source_refs,
+        "source_attribution": [
+            {
+                "source_kind": "overpass_candidate",
+                "source_profile": "overpass_osm_tags",
+                "source_ref": source_path,
+                "source_candidate_id": candidate.get("candidate_id"),
+                "source_artifact_id": properties.get("normalized_artifact_path"),
+                "source_label": candidate.get("label"),
+                "osm_type": candidate.get("osm_type"),
+                "osm_id": candidate.get("osm_id"),
+                "confidence": candidate.get("confidence", "medium"),
+                "stale_risk": candidate.get("stale_risk", "medium"),
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+            }
+        ],
+        "candidate_only": candidate.get("candidate_only", True),
+        "runtime_safety_truth": candidate.get("runtime_safety_truth", False),
+        "extractor_version": candidate.get(
+            "extractor_version",
+            candidate.get("conversion_rule_version", "overpass-vector-evidence.v1"),
+        ),
+        "pydantic_ai_prompt_version": candidate.get(
+            "pydantic_ai_prompt_version",
+            "not_applicable_deterministic_overpass_projection.v1",
+        ),
+        "model_output_sha256": str(model_hash),
+        "model_output_summary": candidate.get("model_output_summary")
+        or (
+            f"{evidence_type} normalized from Overpass/OSM tags; "
+            "pretrip candidate-only map evidence, not runtime safety truth."
+        ),
     }
 
 
@@ -3631,6 +5196,26 @@ def _risk_delta_summary(
             f"risk_delta.{baseline_segment.get('from_sample_id', index)}."
             f"{baseline_segment.get('to_sample_id', index)}"
         )
+        provenance = _risk_candidate_provenance(
+            metadata={
+                "artifact_kind": "scout_risk_delta_comparison",
+                "source_route_risk_sha256": _stable_projection_hash(
+                    {
+                        "baseline": baseline_segment.get("model_output_sha256"),
+                        "calibrated": calibrated_segment.get("model_output_sha256"),
+                        "segment_id": segment_id,
+                    }
+                ),
+            },
+            source_path=baseline_segment.get("source_path"),
+            metadata_source_path=baseline_segment.get("metadata_source_path"),
+            route_source_path=calibrated_segment.get("source_path"),
+            route_metadata_source_path=calibrated_segment.get("metadata_source_path"),
+            default_summary=(
+                "Scout Risk Engine comparison candidate between baseline ribbon "
+                "and calibrated heatmap; pretrip evidence only."
+            ),
+        )
         segments.append(
             {
                 "candidate_id": f"risk_delta.{_safe_view_key(segment_id)}",
@@ -3679,6 +5264,7 @@ def _risk_delta_summary(
                 "candidate_only": True,
                 "runtime_safety_truth": False,
                 "comparison_only": True,
+                **provenance,
             }
         )
 
@@ -3800,7 +5386,19 @@ def _route_note_ln_proposal_summary(
                 "proposed_coverage_label": proposal["proposed_coverage_label"],
                 "route_note_summary": proposal["route_note_summary"],
                 "human_review_required": proposal["human_review_required"],
+                "review_state": proposal.get("review_state", "needs_review"),
+                "confidence": proposal.get("confidence", "unknown"),
+                "stale_risk": proposal.get("stale_risk", "unknown"),
                 "candidate_only": proposal["candidate_only"],
+                "runtime_safety_truth": proposal.get("runtime_safety_truth", False),
+                "source_refs": proposal.get("source_refs", []),
+                "source_attribution": proposal.get("source_attribution", []),
+                "extractor_version": proposal.get("extractor_version"),
+                "pydantic_ai_prompt_version": proposal.get(
+                    "pydantic_ai_prompt_version",
+                ),
+                "model_output_sha256": proposal.get("model_output_sha256"),
+                "model_output_summary": proposal.get("model_output_summary"),
             }
             for proposal in payload.get("proposals", [])
         ],
@@ -3837,6 +5435,20 @@ def _route_note_review_options_summary(
                     "selected_admin_disposition"
                 ],
                 "decision_recorded": option["decision_recorded"],
+                "review_state": option.get("review_state", "draft"),
+                "confidence": option.get("confidence", "unknown"),
+                "stale_risk": option.get("stale_risk", "unknown"),
+                "candidate_only": option.get("candidate_only", True),
+                "runtime_safety_truth": option.get("runtime_safety_truth", False),
+                "draft_only": option.get("draft_only", True),
+                "source_refs": option.get("source_refs", []),
+                "source_attribution": option.get("source_attribution", []),
+                "extractor_version": option.get("extractor_version"),
+                "pydantic_ai_prompt_version": option.get(
+                    "pydantic_ai_prompt_version",
+                ),
+                "model_output_sha256": option.get("model_output_sha256"),
+                "model_output_summary": option.get("model_output_summary"),
             }
             for option in payload.get("options", [])
         ],
@@ -3910,7 +5522,125 @@ def _mcp_summary(
     candidates = list(mcp_candidates.get("mcp_candidates", []) or [])
     retrieval_counts = retrieval_plan or {}
     ocr_counts = ocr_labels or {}
-    support_rows = list((cp_support_reconciliation or {}).get("rows", []) or [])
+    retrieval_source_path = source_refs.get(
+        "mcp_retrieval_plan",
+        "outputs/mcp/mcp_retrieval_plan.json",
+    )
+    ocr_source_path = source_refs.get(
+        "mcp_ocr_labels",
+        "outputs/mcp/mcp_ocr_labels.json",
+    )
+    cp_support_source_path = source_refs.get(
+        "mcp_cp_support_reconciliation",
+        "outputs/mcp/mcp_cp_support_reconciliation.json",
+    )
+    retrieval_queries = [
+        {
+            **query,
+            **_mcp_projection_provenance(
+                query,
+                source_path=retrieval_source_path,
+                evidence_type="pretrip_mcp_retrieval_query",
+                source_kind="mcp_retrieval_query",
+                identity_keys=("query_id", "source_family_target", "query_text"),
+                confidence="medium",
+                stale_risk="medium",
+                review_state="needs_review",
+                model_output_summary=(
+                    "MCP Pydantic AI retrieval query planning output; "
+                    "fixture-backed candidate-only evidence, not runtime safety truth."
+                ),
+            ),
+        }
+        for query in retrieval_counts.get("queries", [])[:12]
+    ]
+    retrieval_fetch_summaries = [
+        {
+            **summary,
+            **_mcp_projection_provenance(
+                summary,
+                source_path=retrieval_source_path,
+                evidence_type="pretrip_mcp_retrieval_fetch_summary",
+                source_kind="mcp_retrieval_fetch_summary",
+                identity_keys=(
+                    "fetch_id",
+                    "query_id",
+                    "source_page_id",
+                    "snippet_hash",
+                    "url",
+                ),
+                confidence=summary.get("route_relevance", "medium"),
+                stale_risk=summary.get("stale_risk", "medium"),
+                review_state="needs_review" if summary.get("accepted") else "rejected",
+                model_output_summary=(
+                    "MCP retrieval fetch summary and snippet hash; "
+                    "candidate-only route-planning evidence, not runtime safety truth."
+                ),
+            ),
+        }
+        for summary in retrieval_counts.get("fetch_summaries", [])[:12]
+    ]
+    ocr_label_items = [
+        {
+            **label,
+            **_mcp_projection_provenance(
+                label,
+                source_path=ocr_source_path,
+                evidence_type="pretrip_mcp_ocr_label",
+                source_kind="mcp_ocr_label",
+                identity_keys=(
+                    "ocr_label_id",
+                    "named_point_id",
+                    "source_ref",
+                    "source_image_hash",
+                    "label_text",
+                ),
+                confidence=label.get("confidence", "medium"),
+                stale_risk="medium",
+                review_state="needs_review"
+                if label.get("review_required", True)
+                else "reference_only",
+                model_output_summary=(
+                    "MCP OCR label projection from local map tile metadata; "
+                    "review-gated candidate evidence, not runtime safety truth."
+                ),
+            ),
+        }
+        for label in ocr_counts.get("labels", [])[:12]
+    ]
+    support_rows = [
+        {
+            **_mcp_nested_support_projection(
+                row,
+                source_path=cp_support_source_path,
+                evidence_type="pretrip_mcp_cp_support_reconciliation_row",
+                source_kind="mcp_cp_support_reconciliation",
+                review_state="needs_human_review",
+            ),
+            **_mcp_projection_provenance(
+                row,
+                source_path=cp_support_source_path,
+                evidence_type="pretrip_mcp_cp_support_reconciliation_row",
+                source_kind="mcp_cp_support_reconciliation",
+                identity_keys=(
+                    "mcp_id",
+                    "label",
+                    "support_status",
+                    "recommendation",
+                    "linked_cp_candidates",
+                    "suggested_cp_insertion",
+                ),
+                confidence="medium",
+                stale_risk="medium",
+                review_state="needs_human_review",
+                model_output_summary=(
+                    "MCP-to-Scout-CP support reconciliation row; "
+                    "review-gated planning evidence, not runtime safety truth."
+                ),
+            ),
+        }
+        for row in list((cp_support_reconciliation or {}).get("rows", []) or [])
+    ]
     support_by_mcp_id = {row.get("mcp_id"): row for row in support_rows}
     review_actions = list((review_log or {}).get("actions", []) or [])
     latest_review_by_mcp_id = _latest_mcp_review_by_mcp_id(review_actions)
@@ -3982,14 +5712,14 @@ def _mcp_summary(
             ),
             "tool_contracts": retrieval_counts.get("tool_contracts", [])[:12],
             "fetch_summary_count": retrieval_counts.get("fetch_summary_count", 0),
-            "fetch_summaries": retrieval_counts.get("fetch_summaries", [])[:12],
-            "queries": retrieval_counts.get("queries", [])[:12],
+            "fetch_summaries": retrieval_fetch_summaries,
+            "queries": retrieval_queries,
         },
         "ocr": {
             "artifact_kind": ocr_counts.get("artifact_kind"),
             "label_count": ocr_counts.get("label_count", 0),
             "review_required_count": ocr_counts.get("review_required_count", 0),
-            "labels": ocr_counts.get("labels", [])[:12],
+            "labels": ocr_label_items,
         },
         "cp_support_reconciliation": {
             "artifact_kind": (cp_support_reconciliation or {}).get("artifact_kind"),
@@ -4009,6 +5739,40 @@ def _mcp_summary(
         "candidates": [
             {
                 **candidate,
+                **_mcp_nested_support_projection(
+                    candidate,
+                    source_path=source_refs.get(
+                        "mcp_candidates",
+                        "outputs/mcp/mcp_candidates.json",
+                    ),
+                    evidence_type="pretrip_major_critical_point_candidate",
+                    source_kind="mcp_candidate",
+                    review_state=candidate.get("review_state", "needs_human_review"),
+                ),
+                **_mcp_projection_provenance(
+                    candidate,
+                    source_path=source_refs.get(
+                        "mcp_candidates",
+                        "outputs/mcp/mcp_candidates.json",
+                    ),
+                    evidence_type="pretrip_major_critical_point_candidate",
+                    source_kind="mcp_candidate",
+                    identity_keys=(
+                        "mcp_id",
+                        "label",
+                        "linked_named_points",
+                        "linked_cp_candidates",
+                        "linked_risk_segments",
+                    ),
+                    confidence=candidate.get("confidence", "medium"),
+                    stale_risk=candidate.get("stale_risk", "medium"),
+                    review_state=candidate.get("review_state", "needs_human_review"),
+                    model_output_summary=(
+                        "Major critical point planning candidate synthesized "
+                        "from named-point, CP, OCR, and risk support evidence; "
+                        "not runtime safety truth."
+                    ),
+                ),
                 "source_id": candidate.get("mcp_id"),
                 "source_path": source_refs.get(
                     "mcp_candidates",
@@ -4026,6 +5790,222 @@ def _mcp_summary(
         ],
         "boundary": _summary_boundary(mcp_candidates.get("boundary", {})),
     }
+
+
+def _mcp_nested_support_projection(
+    record: dict[str, Any],
+    *,
+    source_path: str,
+    evidence_type: str,
+    source_kind: str,
+    review_state: str,
+) -> dict[str, Any]:
+    projected = dict(record)
+    if isinstance(projected.get("spacing_suppression_details"), list):
+        projected["spacing_suppression_details"] = [
+            _mcp_spacing_suppression_detail_projection(
+                detail,
+                parent=record,
+                source_path=source_path,
+                parent_evidence_type=evidence_type,
+                parent_source_kind=source_kind,
+                review_state=review_state,
+            )
+            for detail in projected.get("spacing_suppression_details", [])
+            if isinstance(detail, dict)
+        ]
+    if isinstance(projected.get("nearby_points_suppressed_by_spacing"), list):
+        projected["nearby_points_suppressed_by_spacing"] = [
+            _mcp_spacing_suppression_detail_projection(
+                detail,
+                parent=record,
+                source_path=source_path,
+                parent_evidence_type=evidence_type,
+                parent_source_kind=source_kind,
+                review_state=review_state,
+            )
+            for detail in projected.get("nearby_points_suppressed_by_spacing", [])
+            if isinstance(detail, dict)
+        ]
+    return projected
+
+
+def _mcp_spacing_suppression_detail_projection(
+    detail: dict[str, Any],
+    *,
+    parent: dict[str, Any],
+    source_path: str,
+    parent_evidence_type: str,
+    parent_source_kind: str,
+    review_state: str,
+) -> dict[str, Any]:
+    source_kind = f"{parent_source_kind}_spacing_suppression_detail"
+    evidence_type = f"{parent_evidence_type}_spacing_suppression_detail"
+    return {
+        **detail,
+        **_mcp_projection_provenance(
+            {
+                **detail,
+                "mcp_id": parent.get("mcp_id"),
+                "candidate_id": detail.get("source_id"),
+                "source_refs": [
+                    source_path,
+                    parent.get("mcp_id"),
+                    parent.get("label"),
+                    detail.get("source_id"),
+                    detail.get("label"),
+                    detail.get("reason"),
+                ],
+            },
+            source_path=source_path,
+            evidence_type=evidence_type,
+            source_kind=source_kind,
+            identity_keys=("mcp_id", "candidate_id", "source_id", "label", "reason"),
+            confidence=detail.get("confidence", parent.get("confidence", "medium")),
+            stale_risk=detail.get("stale_risk", parent.get("stale_risk", "medium")),
+            review_state=detail.get("review_state", review_state),
+            model_output_summary=(
+                "MCP spacing-suppressed nearby point retained for review "
+                "explainability; candidate-only planning evidence, not runtime "
+                "safety truth."
+            ),
+        ),
+    }
+
+
+def _mcp_projection_provenance(
+    record: dict[str, Any],
+    *,
+    source_path: str,
+    evidence_type: str,
+    source_kind: str,
+    identity_keys: tuple[str, ...],
+    confidence: Any,
+    stale_risk: Any,
+    review_state: str,
+    model_output_summary: str,
+) -> dict[str, Any]:
+    identity_values = [
+        ref
+        for key in identity_keys
+        for ref in _mcp_source_ref_values(record.get(key))
+    ]
+    nested_refs = []
+    nearest_cp = record.get("nearest_scout_cp")
+    if isinstance(nearest_cp, dict):
+        nested_refs.extend(
+            [
+                nearest_cp.get("candidate_id"),
+                nearest_cp.get("source_id"),
+            ]
+        )
+    existing_source_refs = [
+        ref
+        for ref in _mcp_source_ref_values(record.get("source_refs"))
+    ]
+    existing_source_attribution = [
+        attribution
+        for attribution in record.get("source_attribution", []) or []
+        if isinstance(attribution, dict)
+    ]
+    attribution_refs = [
+        ref
+        for attribution in existing_source_attribution
+        for key in ("source_ref", "source_candidate_id", "source_artifact_id")
+        for ref in _mcp_source_ref_values(attribution.get(key))
+    ]
+    source_refs = _unique_limited(
+        [
+            source_path,
+            *existing_source_refs,
+            *identity_values,
+            *attribution_refs,
+            *list(record.get("accepted_result_ids") or []),
+            *list(record.get("rejected_result_ids") or []),
+            *list(record.get("extracted_named_point_ids") or []),
+            *list(record.get("linked_cp_candidates") or []),
+            *nested_refs,
+        ],
+        limit=48,
+    )
+    identity_payload = {
+        key: record.get(key)
+        for key in identity_keys
+        if record.get(key) is not None
+    }
+    model_hash = record.get("model_output_sha256") or _stable_projection_hash(
+        {
+            "evidence_type": evidence_type,
+            "source_kind": source_kind,
+            "source_refs": source_refs,
+            "identity": identity_payload,
+        }
+    )
+    source_attribution = existing_source_attribution or [
+        {
+            "source_kind": source_kind,
+            "source_ref": source_path,
+            "source_candidate_id": str(
+                record.get("fetch_id")
+                or record.get("query_id")
+                or record.get("ocr_label_id")
+                or record.get("mcp_id")
+                or ""
+            ),
+            "confidence": confidence,
+            "stale_risk": stale_risk,
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+        }
+    ]
+    return {
+        "source_refs": source_refs,
+        "source_attribution": source_attribution,
+        "confidence": confidence,
+        "stale_risk": stale_risk,
+        "review_state": record.get("review_state", review_state),
+        "candidate_only": record.get("candidate_only", True),
+        "runtime_safety_truth": record.get("runtime_safety_truth", False),
+        "extractor_version": record.get(
+            "extractor_version",
+            "pretrip_mcp_synthesis.v1",
+        ),
+        "pydantic_ai_prompt_version": record.get(
+            "pydantic_ai_prompt_version",
+            "fixture_backed_pydantic_ai_tool_plan.v1",
+        ),
+        "model_output_sha256": str(model_hash),
+        "model_output_summary": record.get(
+            "model_output_summary",
+            model_output_summary,
+        ),
+    }
+
+
+def _mcp_source_ref_values(value: Any) -> list[str]:
+    if value is None or value == "":
+        return []
+    if isinstance(value, (str, int, float, bool)):
+        return [str(value)]
+    if isinstance(value, dict):
+        refs: list[str] = []
+        for key in (
+            "candidate_id",
+            "source_id",
+            "mcp_id",
+            "label",
+            "reason",
+            "support_status",
+        ):
+            refs.extend(_mcp_source_ref_values(value.get(key)))
+        return refs or [_stable_projection_hash(value)]
+    if isinstance(value, (list, tuple, set)):
+        return [
+            ref
+            for item in value
+            for ref in _mcp_source_ref_values(item)
+        ]
+    return [str(value)]
 
 
 def _latest_mcp_review_by_mcp_id(actions: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
@@ -4116,10 +6096,35 @@ def _spatial_imprints_summary(
         ),
         "candidate_source_path": source_refs.get("spatial_imprint_candidates"),
         "review_source_path": source_refs.get("spatial_imprint_reviews"),
-        "candidates": [_spatial_imprint_item_summary(item) for item in candidate_items],
+        "candidates": [
+            _spatial_imprint_item_summary(
+                item,
+                source_path=source_refs.get("spatial_imprint_candidates")
+                or "candidates/spatial_imprints.json",
+                review_state="needs_review",
+            )
+            for item in candidate_items
+        ],
         "reviews": [
             {
                 "review_id": record.get("review_id"),
+                **_projection_record_metadata(
+                    record,
+                    source_path=source_refs.get("spatial_imprint_reviews")
+                    or "reviews/spatial_imprint_reviews.json",
+                    evidence_type="pretrip_spatial_imprint_review",
+                    source_kind="spatial_imprint_review",
+                    identity_keys=("review_id", "candidate_ref", "source_refs"),
+                    review_state=record.get("decision", "reviewed"),
+                    confidence="medium",
+                    stale_risk="medium",
+                    extractor_version="pretrip_spatial_imprint_review.projection.v1",
+                    prompt_version="not_applicable_human_spatial_imprint_review.v1",
+                    summary=(
+                        "Human review record for a spatial imprint candidate; "
+                        "review context only, not runtime safety truth."
+                    ),
+                ),
                 "candidate_ref": record.get("candidate_ref"),
                 "decision": record.get("decision"),
                 "reviewed_by": record.get("reviewed_by"),
@@ -4129,18 +6134,45 @@ def _spatial_imprints_summary(
             for record in review_records
         ],
         "reviewed_imprints": [
-            _spatial_imprint_item_summary(item) for item in reviewed_imprints
+            _spatial_imprint_item_summary(
+                item,
+                source_path=source_refs.get("spatial_imprint_set")
+                or "outputs/spatial_imprint_set.json",
+                review_state="reviewed",
+            )
+            for item in reviewed_imprints
         ],
         "rejected_audit_refs": (manifest or {}).get("rejected_audit_refs", []),
         "disabled_audit_refs": (manifest or {}).get("disabled_audit_refs", []),
     }
 
 
-def _spatial_imprint_item_summary(item: dict[str, Any]) -> dict[str, Any]:
+def _spatial_imprint_item_summary(
+    item: dict[str, Any],
+    *,
+    source_path: str,
+    review_state: str,
+) -> dict[str, Any]:
     trigger = item.get("trigger", {})
     predicates = list(trigger.get("predicates", []) or [])
     return {
         "imprint_id": item.get("imprint_id"),
+        **_projection_record_metadata(
+            item,
+            source_path=source_path,
+            evidence_type="pretrip_spatial_imprint",
+            source_kind="spatial_imprint",
+            identity_keys=("imprint_id", "source_refs", "label"),
+            review_state=review_state,
+            confidence="medium",
+            stale_risk="medium",
+            extractor_version="pretrip_spatial_imprint.projection.v1",
+            prompt_version="not_applicable_deterministic_spatial_imprint_projection.v1",
+            summary=(
+                "Spatial imprint pretrip cue candidate or reviewed addendum; "
+                "advisory planning evidence, not runtime safety truth."
+            ),
+        ),
         "label": item.get("label"),
         "kind": item.get("kind"),
         "severity": item.get("severity"),
@@ -4171,6 +6203,22 @@ def _expert_contribution_summary(payload: dict[str, Any], source_path: str) -> d
         "records": [
             {
                 "contribution_id": record["contribution_id"],
+                **_projection_record_metadata(
+                    record,
+                    source_path=source_path,
+                    evidence_type="pretrip_expert_contribution_record",
+                    source_kind="expert_contribution",
+                    identity_keys=("contribution_id", "target_ref", "target_artifact_ref"),
+                    review_state=record.get("review_state", "needs_review"),
+                    confidence="medium",
+                    stale_risk="medium",
+                    extractor_version="pretrip_expert_contribution.projection.v1",
+                    prompt_version="not_applicable_human_expert_contribution.v1",
+                    summary=(
+                        "Expert/admin contribution record for candidate planning "
+                        "memory; not runtime safety truth."
+                    ),
+                ),
                 "contributor_alias": record["contributor_alias"],
                 "contributor_role": record["contributor_role"],
                 "source_surface": record["source_surface"],
@@ -4234,8 +6282,119 @@ def _departure_bundle_summary(payload: dict[str, Any], source_path: str) -> dict
         "counts": payload["counts"],
         "boundary": payload["boundary"],
         "package": payload["package"],
-        "route_refs": payload.get("route_refs", []),
-        "terrain_refs": payload.get("terrain_refs", []),
+        "route_refs": [
+            _departure_bundle_route_ref(ref, source_path)
+            for ref in payload.get("route_refs", [])
+        ],
+        "terrain_refs": [
+            _departure_bundle_terrain_ref(ref, source_path)
+            for ref in payload.get("terrain_refs", [])
+        ],
+    }
+
+
+def _departure_bundle_route_ref(
+    ref: dict[str, Any],
+    source_path: str,
+) -> dict[str, Any]:
+    metadata = _projection_record_metadata(
+        ref,
+        source_path=source_path,
+        evidence_type="pretrip_departure_bundle_route_ref",
+        source_kind="departure_bundle_route_ref",
+        identity_keys=("ref_key", "ref", "sha256"),
+        review_state="frozen_candidate_ref",
+        confidence="medium" if ref.get("exists") else "low",
+        stale_risk="medium",
+        extractor_version="pretrip_departure_bundle.projection.v1",
+        prompt_version="not_applicable_deterministic_departure_bundle_projection.v1",
+        summary=(
+            "Departure bundle route reference for reviewed-package staging; "
+            "planning artifact metadata only, not runtime safety truth."
+        ),
+    )
+    return {
+        **ref,
+        **metadata,
+        "summary": _departure_bundle_ref_summary(
+            ref.get("summary"),
+            parent_ref=ref,
+            source_path=source_path,
+            source_kind="departure_bundle_route_ref_summary",
+        ),
+    }
+
+
+def _departure_bundle_terrain_ref(
+    ref: dict[str, Any],
+    source_path: str,
+) -> dict[str, Any]:
+    metadata = _projection_record_metadata(
+        ref,
+        source_path=source_path,
+        evidence_type="pretrip_departure_bundle_terrain_ref",
+        source_kind="departure_bundle_terrain_ref",
+        identity_keys=("ref_key", "ref", "sha256"),
+        review_state="frozen_candidate_ref",
+        confidence="medium" if ref.get("exists") else "low",
+        stale_risk="medium",
+        extractor_version="pretrip_departure_bundle.projection.v1",
+        prompt_version="not_applicable_deterministic_departure_bundle_projection.v1",
+        summary=(
+            "Departure bundle terrain reference for reviewed-package staging; "
+            "planning artifact metadata only, not runtime safety truth."
+        ),
+    )
+    return {
+        **ref,
+        **metadata,
+        "summary": _departure_bundle_ref_summary(
+            ref.get("summary"),
+            parent_ref=ref,
+            source_path=source_path,
+            source_kind="departure_bundle_terrain_ref_summary",
+        ),
+    }
+
+
+def _departure_bundle_ref_summary(
+    summary: Any,
+    *,
+    parent_ref: dict[str, Any],
+    source_path: str,
+    source_kind: str,
+) -> Any:
+    if not isinstance(summary, dict):
+        return summary
+    return {
+        **summary,
+        "source_id": f"{parent_ref.get('ref_key', 'bundle_ref')}.summary",
+        "source_path": source_path,
+        "evidence_type": "pretrip_departure_bundle_ref_summary",
+        **_projection_record_metadata(
+            {
+                **summary,
+                "candidate_id": parent_ref.get("ref_key"),
+                "source_refs": [
+                    parent_ref.get("ref"),
+                    parent_ref.get("ref_key"),
+                    parent_ref.get("sha256"),
+                ],
+            },
+            source_path=source_path,
+            evidence_type="pretrip_departure_bundle_ref_summary",
+            source_kind=source_kind,
+            identity_keys=("candidate_id", "source_refs", "artifact_id"),
+            review_state="frozen_candidate_ref_summary",
+            confidence="medium" if parent_ref.get("exists") else "low",
+            stale_risk="medium",
+            extractor_version="pretrip_departure_bundle.projection.v1",
+            prompt_version="not_applicable_deterministic_departure_bundle_projection.v1",
+            summary=(
+                "Nested departure bundle artifact summary for admin inspection; "
+                "planning metadata only, not runtime safety truth."
+            ),
+        ),
     }
 
 
@@ -4279,7 +6438,39 @@ def _contour_summary(payload: dict[str, Any], source_path: str) -> dict[str, Any
         "candidate_count": len(payload.get("candidates", [])),
         "not_observed_fact": payload["not_observed_fact"],
         "raw_payloads_embedded": False,
-        "candidates": payload.get("candidates", []),
+        "candidates": [
+            {
+                **candidate,
+                **_projection_record_metadata(
+                    {
+                        **candidate,
+                        "source_refs": list(
+                            (candidate.get("source_artifact_refs") or {}).values()
+                        )
+                        + list(candidate.get("target_refs") or []),
+                    },
+                    source_path=source_path,
+                    evidence_type="pretrip_contour_interpretation_candidate",
+                    source_kind="contour_interpretation_candidate",
+                    identity_keys=("candidate_id", "source_refs", "target_refs"),
+                    review_state=(
+                        (candidate.get("review_lifecycle") or {}).get(
+                            "lifecycle_status"
+                        )
+                        or "admin_review_pending"
+                    ),
+                    confidence=candidate.get("confidence", "low"),
+                    stale_risk=candidate.get("stale_risk", "medium"),
+                    extractor_version="pretrip_contour_interpretation.projection.v1",
+                    prompt_version="not_applicable_manual_contour_candidate.v1",
+                    summary=(
+                        "Contour interpretation candidate linked to map/DTM refs; "
+                        "metadata-only planning evidence, not runtime safety truth."
+                    ),
+                ),
+            }
+            for candidate in payload.get("candidates", [])
+        ],
     }
 
 
@@ -4357,10 +6548,15 @@ def _reference_track_item(
     display = display_by_id.get(reference_id)
     return {
         **track,
+        "source_use_treatment": _reference_track_source_use_treatment(
+            track,
+            source_path,
+        ),
         "candidate_id": reference_id,
         "source_id": reference_id,
         "source_path": source_path,
         "evidence_type": "pretrip_reference_track",
+        **_reference_track_provenance(track, source_path),
         "label": track.get("route", {}).get("route_name") or reference_id,
         "review_state": "reference_only",
         "map_target_ids": [reference_id],
@@ -4370,6 +6566,39 @@ def _reference_track_item(
                     "source_id": reference_id,
                     "source_path": display_source_path,
                     "evidence_type": "pretrip_reference_track_display_geometry",
+                    **_projection_record_metadata(
+                        {
+                            **display,
+                            "candidate_id": reference_id,
+                            "source_refs": [
+                                reference_id,
+                                track.get("route", {}).get("artifact_id"),
+                                track.get("route", {}).get("sha256"),
+                            ],
+                        },
+                        source_path=display_source_path,
+                        evidence_type="pretrip_reference_track_display_geometry",
+                        source_kind="reference_track_display_geometry",
+                        identity_keys=(
+                            "candidate_id",
+                            "source_refs",
+                            "source_point_count",
+                        ),
+                        review_state="display_geometry_only",
+                        confidence=track.get("confidence", "medium"),
+                        stale_risk=track.get("stale_risk", "medium"),
+                        extractor_version=(
+                            "pretrip_reference_track_display_geometry.projection.v1"
+                        ),
+                        prompt_version=(
+                            "not_applicable_deterministic_display_geometry.v1"
+                        ),
+                        summary=(
+                            "Reference track display geometry for admin map focus "
+                            "and comparison; derived visualization evidence only, "
+                            "not runtime safety truth."
+                        ),
+                    ),
                     "source_point_count": display.get("source_point_count"),
                     "display_point_count": display.get("display_point_count"),
                     "display_sampling_performed": display.get(
@@ -4384,6 +6613,101 @@ def _reference_track_item(
     }
 
 
+def _reference_track_source_use_treatment(
+    track: dict[str, Any],
+    source_path: str,
+) -> dict[str, Any]:
+    treatment = track.get("source_use_treatment") or {}
+    reference_id = track.get("reference_id") or track.get("route", {}).get("artifact_id")
+    return {
+        **treatment,
+        "source_id": f"{reference_id}.source_use_treatment",
+        "source_path": source_path,
+        "evidence_type": "pretrip_reference_track_source_use_treatment",
+        **_projection_record_metadata(
+            {
+                **treatment,
+                "candidate_id": reference_id,
+                "source_refs": [
+                    reference_id,
+                    track.get("route", {}).get("artifact_id"),
+                    track.get("route", {}).get("sha256"),
+                    track.get("route", {}).get("source_uri"),
+                ],
+            },
+            source_path=source_path,
+            evidence_type="pretrip_reference_track_source_use_treatment",
+            source_kind="reference_track_source_use_treatment",
+            identity_keys=("candidate_id", "source_refs"),
+            review_state="reference_only",
+            confidence=track.get("confidence", "medium"),
+            stale_risk=track.get("stale_risk", "medium"),
+            extractor_version="pretrip_reference_tracks.projection.v1",
+            prompt_version=(
+                "not_applicable_deterministic_reference_track_projection.v1"
+            ),
+            summary=(
+                "Reference track source-use boundary for pretrip comparison; "
+                "not authoritative for MissionGraph and not runtime safety truth."
+            ),
+        ),
+    }
+
+
+def _reference_track_provenance(
+    track: dict[str, Any],
+    source_path: str,
+) -> dict[str, Any]:
+    route = track.get("route", {})
+    reference_id = track.get("reference_id") or route.get("artifact_id")
+    source_uri = route.get("source_uri")
+    source_refs = _unique_limited(
+        [
+            source_path,
+            reference_id,
+            route.get("artifact_id"),
+            route.get("sha256"),
+            source_uri,
+        ],
+        limit=16,
+    )
+    model_hash = _stable_projection_hash(
+        {
+            "reference_id": reference_id,
+            "source_refs": source_refs,
+            "distance_m": route.get("distance_m"),
+            "point_count": route.get("point_count"),
+        }
+    )
+    return {
+        "source_refs": source_refs,
+        "source_attribution": [
+            {
+                "source_kind": "reference_gpx_track",
+                "source_ref": source_path,
+                "source_uri": source_uri,
+                "source_candidate_id": reference_id,
+                "source_sha256": route.get("sha256"),
+                "confidence": track.get("confidence", "medium"),
+                "stale_risk": track.get("stale_risk", "medium"),
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+            }
+        ],
+        "confidence": track.get("confidence", "medium"),
+        "stale_risk": track.get("stale_risk", "medium"),
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+        "extractor_version": "pretrip_reference_tracks.projection.v1",
+        "pydantic_ai_prompt_version": "not_applicable_deterministic_reference_track_projection.v1",
+        "model_output_sha256": model_hash,
+        "model_output_summary": (
+            "Reference GPX track used as weak alignment and comparison evidence; "
+            "pretrip candidate-only map evidence, not runtime safety truth."
+        ),
+    }
+
+
 def _checkpoint_events_summary(payload: dict[str, Any], source_path: str) -> dict[str, Any]:
     return {
         "source_id": f"checkpoint_events.{payload['project_id']}",
@@ -4391,9 +6715,42 @@ def _checkpoint_events_summary(payload: dict[str, Any], source_path: str) -> dic
         "evidence_type": "pretrip_checkpoint_event_candidates",
         "event_count": payload["event_count"],
         "source_gpx": payload["source_gpx"],
-        "events": payload.get("events", []),
+        "events": [
+            _checkpoint_event_summary(event, source_path)
+            for event in payload.get("events", [])
+        ],
         "boundary": payload["boundary"],
         "notes": payload.get("notes", []),
+    }
+
+
+def _checkpoint_event_summary(
+    event: dict[str, Any],
+    source_path: str,
+) -> dict[str, Any]:
+    return {
+        **event,
+        **_projection_record_metadata(
+            event,
+            source_path=source_path,
+            evidence_type="pretrip_checkpoint_event_candidate",
+            source_kind="checkpoint_event_projection",
+            identity_keys=(
+                "event_id",
+                "checkpoint_candidate_id",
+                "route_point_index",
+                "source_refs",
+            ),
+            review_state="candidate_event",
+            confidence="medium",
+            stale_risk="medium",
+            extractor_version="pretrip_checkpoint_event_projection.v1",
+            prompt_version="not_applicable_deterministic_checkpoint_event_projection.v1",
+            summary=(
+                "Checkpoint event projection from pretrip route geometry; "
+                "candidate-only planning event, not runtime safety truth."
+            ),
+        ),
     }
 
 
@@ -4419,7 +6776,73 @@ def _segment_terrain_summary(payload: dict[str, Any], source_path: str) -> dict[
         "candidate_tile_count": payload["candidate_tile_count"],
         "raw_payloads_embedded": False,
         "notes": payload["notes"],
-        "segment_metadata": payload.get("segment_metadata", []),
+        "segment_metadata": [
+            _segment_terrain_metadata_summary(segment, source_path)
+            for segment in payload.get("segment_metadata", [])
+        ],
+    }
+
+
+def _segment_terrain_metadata_summary(
+    segment: dict[str, Any],
+    source_path: str,
+) -> dict[str, Any]:
+    return {
+        **segment,
+        **_projection_record_metadata(
+            {
+                **segment,
+                "source_refs": [
+                    segment.get("segment_candidate_id"),
+                    segment.get("from_candidate_id"),
+                    segment.get("to_candidate_id"),
+                    *[
+                        tile.get("tile_ref") or tile.get("tile_id")
+                        for tile in segment.get("candidate_tiles", [])
+                    ],
+                ],
+            },
+            source_path=source_path,
+            evidence_type="pretrip_segment_dtm_metadata",
+            source_kind="segment_dtm_metadata",
+            identity_keys=(
+                "segment_candidate_id",
+                "from_candidate_id",
+                "to_candidate_id",
+                "source_refs",
+            ),
+            review_state="candidate_terrain_metadata",
+            confidence="medium",
+            stale_risk="medium",
+            extractor_version="pretrip_segment_dtm_coverage.projection.v1",
+            prompt_version="not_applicable_deterministic_segment_dtm_projection.v1",
+            summary=(
+                "Segment-level DTM coverage metadata for pretrip terrain "
+                "planning evidence, not runtime safety truth."
+            ),
+        ),
+        "candidate_tiles": [
+            {
+                **tile,
+                **_projection_record_metadata(
+                    tile,
+                    source_path=source_path,
+                    evidence_type="pretrip_dtm_candidate_tile",
+                    source_kind="dtm_candidate_tile",
+                    identity_keys=("tile_id", "tile_ref", "match_reason"),
+                    review_state="candidate_tile",
+                    confidence="medium",
+                    stale_risk="medium",
+                    extractor_version="pretrip_segment_dtm_coverage.projection.v1",
+                    prompt_version="not_applicable_deterministic_dtm_tile_projection.v1",
+                    summary=(
+                        "DTM candidate tile coverage metadata for terrain "
+                        "planning evidence, not runtime safety truth."
+                    ),
+                ),
+            }
+            for tile in segment.get("candidate_tiles", [])
+        ],
     }
 
 
@@ -4482,11 +6905,101 @@ def _capability_timeline_import_summary(
         if timeline_payload is not None
         else None
     )
+    companion_capsule = (
+        _companion_capability_capsule_projection(
+            companion_capsule,
+            source_path=summary.get(
+                "source_path",
+                "outputs/capability_timeline.json",
+            ),
+        )
+        if companion_capsule is not None
+        else None
+    )
     return {
         **summary,
         "source_id": "pretrip.imported_capability_timeline",
         "evidence_type": "pretrip_capability_timeline_import",
         "status": "read_only_post_analysis_import",
+        "nodes": [
+            {
+                **node,
+                **_projection_record_metadata(
+                    node,
+                    source_path=(node.get("source_refs") or ["outputs/capability_timeline.json"])[0],
+                    evidence_type="pretrip_capability_timeline_node",
+                    source_kind="capability_timeline_node",
+                    identity_keys=("node_id", "source_refs"),
+                    review_state="requires_human_review",
+                    confidence=node.get("confidence", "medium"),
+                    stale_risk=node.get("stale_risk", "medium"),
+                    extractor_version="post_analysis_capability_timeline.projection.v1",
+                    prompt_version="not_applicable_deterministic_capability_timeline_import.v1",
+                    summary=(
+                        "Post-analysis capability timeline node imported as "
+                        "candidate-only pacing context, not runtime safety truth."
+                    ),
+                ),
+            }
+            for node in summary.get("nodes", [])
+        ],
+        "edges": [
+            {
+                **edge,
+                **_projection_record_metadata(
+                    edge,
+                    source_path=edge.get("source_path")
+                    or summary.get("source_path", "outputs/capability_timeline.json"),
+                    evidence_type=edge.get(
+                        "evidence_type",
+                        "pretrip_capability_timeline_edge",
+                    ),
+                    source_kind="capability_timeline_edge",
+                    identity_keys=("edge_id", "segment_id", "source_refs"),
+                    review_state="requires_human_review",
+                    confidence=edge.get("confidence", "medium"),
+                    stale_risk=edge.get("stale_risk", "medium"),
+                    extractor_version="post_analysis_capability_timeline.projection.v1",
+                    prompt_version="not_applicable_deterministic_capability_timeline_import.v1",
+                    summary=(
+                        "Post-analysis capability timeline edge imported as "
+                        "candidate-only pacing evidence, not runtime safety truth."
+                    ),
+                ),
+            }
+            for edge in summary.get("edges", [])
+        ],
+        "route_time_comparison": {
+            **(summary.get("route_time_comparison") or {}),
+            "segments": [
+                {
+                    **segment,
+                    **_projection_record_metadata(
+                        segment,
+                        source_path=(
+                            segment.get("source_refs")
+                            or ["outputs/capability_timeline.json#route-time"]
+                        )[0],
+                        evidence_type="pretrip_capability_timeline_route_time_comparison",
+                        source_kind="capability_route_time_comparison",
+                        identity_keys=("comparison_id", "edge_id", "segment_id", "source_refs"),
+                        review_state="requires_human_review",
+                        confidence=segment.get("confidence", "medium"),
+                        stale_risk=segment.get("stale_risk", "medium"),
+                        extractor_version="post_analysis_route_time_comparison.projection.v1",
+                        prompt_version="not_applicable_deterministic_route_time_comparison.v1",
+                        summary=(
+                            "Route-time comparison imported as candidate-only "
+                            "pacing evidence, not runtime safety truth."
+                        ),
+                    ),
+                }
+                for segment in (summary.get("route_time_comparison") or {}).get(
+                    "segments",
+                    [],
+                )
+            ],
+        },
         "counts": {
             "edge_count": summary.get("edge_count", 0),
             "rest_interval_count": summary.get("rest_interval_count", 0),
@@ -4515,6 +7028,52 @@ def _capability_timeline_import_summary(
             "phase1_runtime_mutation_allowed": False,
             "runtime_safety_truth": False,
         },
+    }
+
+
+def _companion_capability_capsule_projection(
+    capsule: dict[str, Any],
+    *,
+    source_path: str,
+) -> dict[str, Any]:
+    capsule_source_path = str(capsule.get("source_path") or source_path)
+    source_id = capsule.get(
+        "source_id",
+        capsule.get("artifact_kind", "scout_companion_capability_capsule"),
+    )
+    return {
+        **capsule,
+        "source_id": source_id,
+        "source_path": capsule_source_path,
+        "evidence_type": "pretrip_companion_capability_capsule",
+        **_projection_record_metadata(
+            {
+                **capsule,
+                "candidate_id": capsule.get(
+                    "owner_profile_ref",
+                    "local_user.private",
+                ),
+                "source_refs": [
+                    capsule_source_path,
+                    source_path,
+                    capsule.get("sha256"),
+                    capsule.get("owner_profile_ref"),
+                ],
+            },
+            source_path=capsule_source_path,
+            evidence_type="pretrip_companion_capability_capsule",
+            source_kind="post_analysis_capability_capsule",
+            identity_keys=("candidate_id", "source_refs", "sha256"),
+            review_state="review_only",
+            confidence=capsule.get("confidence", "medium"),
+            stale_risk="medium",
+            extractor_version="post_analysis_capability_capsule.projection.v1",
+            prompt_version="not_applicable_deterministic_companion_capsule_projection.v1",
+            summary=(
+                "Post-analysis companion capability capsule imported for "
+                "pretrip review-only matching context; not runtime safety truth."
+            ),
+        ),
     }
 
 
@@ -4650,20 +7209,300 @@ def _post_analysis_energy_feedback_summary(
 
 
 def _brain_seed_summary(payload: dict[str, Any], source_path: str) -> dict[str, Any]:
+    observed_facts = list(payload.get("observed_facts", []) or [])
+    nodes = list(payload.get("nodes", []) or [])
+    model_interpretations = list(payload.get("model_interpretations", []) or [])
+    non_review_gated_model_count = sum(
+        1
+        for item in model_interpretations
+        if item.get("write_policy") != "append_only_requires_review"
+    )
+    node_types = sorted(
+        {str(node.get("type")) for node in nodes if node.get("type")}
+    )
     return {
         "source_id": "brain_seed_nodes.chilai_nanhua_day1",
         "source_path": source_path,
         "evidence_type": "pretrip_brain_seed_nodes",
-        "node_count": len(payload.get("nodes", [])),
+        "node_count": len(nodes),
         "artifact_count": len(payload.get("artifacts", [])),
         "derived_measurement_count": len(payload.get("derived_measurements", [])),
         "human_review_count": len(payload.get("human_reviews", [])),
-        "model_interpretation_count": len(payload.get("model_interpretations", [])),
-        "observed_fact_count": len(payload.get("observed_facts", [])),
+        "model_interpretation_count": len(model_interpretations),
+        "observed_fact_count": len(observed_facts)
+        + sum(1 for node in nodes if node.get("type") == "ObservedFact"),
+        "non_review_gated_model_interpretation_count": non_review_gated_model_count,
+        "node_types": node_types,
+        "boundary": {
+            "candidate_seed_only": True,
+            "automatic_brain_write_allowed": False,
+            "explicit_operator_import_required": True,
+            "model_output_as_observed_fact_allowed": False,
+            "runtime_safety_truth": False,
+            "phase1_runtime_mutation_allowed": False,
+            "phase2_brain_writeback_allowed": False,
+        },
+        "model_interpretations": [
+            _brain_seed_model_interpretation_summary(item, source_path)
+            for item in model_interpretations[:12]
+        ],
+    }
+
+
+def _brain_seed_model_interpretation_summary(
+    item: dict[str, Any],
+    source_path: str,
+) -> dict[str, Any]:
+    return {
+        **item,
+        **_projection_record_metadata(
+            {
+                **item,
+                "source_refs": list(item.get("input_refs") or [])
+                + list(item.get("artifact_refs") or []),
+                "candidate_id": item.get("id"),
+            },
+            source_path=source_path,
+            evidence_type="pretrip_brain_seed_model_interpretation",
+            source_kind="brain_seed_model_interpretation",
+            identity_keys=("id", "input_refs", "artifact_refs", "subject"),
+            review_state="append_only_requires_review",
+            confidence="medium",
+            stale_risk="medium",
+            extractor_version="pretrip_brain_seed.projection.v1",
+            prompt_version=item.get(
+                "model_version",
+                "not_applicable_planning_output_projection.v1",
+            ),
+            summary=(
+                "Brain seed ModelInterpretation preview; append-only review "
+                "artifact, not ObservedFact and not runtime safety truth."
+            ),
+        ),
+    }
+
+
+def _planning_skill_audit_summary(
+    payload: dict[str, Any],
+    source_path: str,
+) -> dict[str, Any]:
+    records = [record for record in payload.get("records", []) if isinstance(record, dict)]
+    automatic_writeback_count = sum(
+        1
+        for record in records
+        if (record.get("preflight_results") or {})
+        .get("writeback_policy", {})
+        .get("automatic_brain_write")
+        is True
+    )
+    observed_fact_count = sum(1 for record in records if record.get("type") == "ObservedFact")
+    node_types = sorted({str(record.get("type")) for record in records if record.get("type")})
+    return {
+        "source_id": payload.get(
+            "audit_id",
+            f"planning_skill_audit.{payload.get('project_id', 'project')}",
+        ),
+        "source_path": source_path,
+        "evidence_type": "pretrip_planning_skill_audit",
+        "status": "skill_run_records_candidate_only",
+        "project_id": payload.get("project_id"),
+        "project_ref": payload.get("project_ref"),
+        "counts": {
+            "record_count": len(records),
+            "automatic_brain_write_count": automatic_writeback_count,
+            "observed_fact_count": observed_fact_count,
+            "skill_run_record_count": sum(
+                1 for record in records if record.get("type") == "SkillRunRecord"
+            ),
+        },
+        "node_types": node_types,
+        "records": [
+            _planning_skill_record_summary(record, source_path)
+            for record in records
+        ],
+        "boundary": {
+            "skill_run_record_only": node_types == ["SkillRunRecord"],
+            "automatic_brain_write_allowed": False,
+            "observed_fact_write_allowed": False,
+            "phase1_runtime_mutation_allowed": False,
+            "runtime_safety_truth": False,
+            "candidate_only": True,
+        },
+    }
+
+
+def _planning_skill_record_summary(
+    record: dict[str, Any],
+    source_path: str,
+) -> dict[str, Any]:
+    writeback_policy = (record.get("preflight_results") or {}).get(
+        "writeback_policy",
+        {},
+    )
+    return {
+        **record,
+        **_projection_record_metadata(
+            {
+                **record,
+                "source_refs": list(record.get("input_refs") or [])
+                + list(record.get("output_refs") or [])
+                + list(record.get("artifact_refs") or []),
+                "candidate_id": record.get("id"),
+            },
+            source_path=source_path,
+            evidence_type="pretrip_planning_skill_run_record",
+            source_kind="planning_skill_run_record",
+            identity_keys=("id", "skill_id", "input_refs", "output_refs"),
+            review_state="skill_run_record",
+            confidence="medium",
+            stale_risk="low",
+            extractor_version="pretrip_planning_skill_audit.projection.v1",
+            prompt_version="not_applicable_deterministic_skill_audit_projection.v1",
+            summary=(
+                "Planning SkillRunRecord for replayable pretrip evidence "
+                "processing; no automatic Brain writeback and not runtime "
+                "safety truth."
+            ),
+        ),
+        "automatic_brain_write": writeback_policy.get("automatic_brain_write") is True,
+        "creates_observed_fact": writeback_policy.get("creates_observed_fact") is True,
+        "creates_model_interpretation": (
+            writeback_policy.get("creates_model_interpretation") is True
+        ),
+    }
+
+
+def _planning_skill_manifest_catalog_summary(
+    payload: dict[str, Any],
+    source_path: str,
+) -> dict[str, Any]:
+    manifests = [
+        manifest
+        for manifest in payload.get("manifests", [])
+        if isinstance(manifest, dict)
+    ]
+    automatic_brain_write_allowed_count = sum(
+        1
+        for manifest in manifests
+        if (manifest.get("brain_writeback_policy") or {}).get(
+            "automatic_brain_write_allowed"
+        )
+        is True
+    )
+    observed_fact_write_allowed_count = sum(
+        1
+        for manifest in manifests
+        if (manifest.get("brain_writeback_policy") or {}).get(
+            "observed_fact_write_allowed"
+        )
+        is True
+    )
+    phase1_runtime_mutation_allowed_count = sum(
+        1
+        for manifest in manifests
+        if (manifest.get("runtime_mutation_policy") or {}).get(
+            "phase1_runtime_mutation_allowed"
+        )
+        is True
+    )
+    live_safety_call_allowed_count = sum(
+        1
+        for manifest in manifests
+        if (manifest.get("runtime_mutation_policy") or {}).get(
+            "live_safety_endpoint_calls_allowed"
+        )
+        is True
+    )
+    return {
+        "source_id": payload.get("catalog_id", "planning_skill_manifest_catalog"),
+        "source_path": source_path,
+        "evidence_type": "pretrip_planning_skill_manifest_catalog",
+        "status": "candidate_skill_contracts",
+        "project_id": payload.get("project_id"),
+        "raw_payloads_embedded": payload.get("raw_payloads_embedded", False),
+        "skill_config_manifest_ref": payload.get("skill_config_manifest_ref"),
+        "counts": {
+            "manifest_count": len(manifests),
+            "automatic_brain_write_allowed_count": automatic_brain_write_allowed_count,
+            "observed_fact_write_allowed_count": observed_fact_write_allowed_count,
+            "phase1_runtime_mutation_allowed_count": phase1_runtime_mutation_allowed_count,
+            "live_safety_endpoint_call_allowed_count": live_safety_call_allowed_count,
+            "review_required_count": sum(
+                1
+                for manifest in manifests
+                if (manifest.get("review_requirement") or {}).get("required") is True
+            ),
+            "candidate_outputs_only_count": sum(
+                1
+                for manifest in manifests
+                if (manifest.get("review_requirement") or {}).get(
+                    "candidate_outputs_only"
+                )
+                is True
+            ),
+        },
+        "manifests": [
+            _planning_skill_manifest_summary(manifest, source_path)
+            for manifest in manifests
+        ],
+        "boundary": {
+            "candidate_contracts_only": True,
+            "raw_payloads_embedded": payload.get("raw_payloads_embedded", False),
+            "automatic_brain_write_allowed": False,
+            "observed_fact_write_allowed": False,
+            "phase1_runtime_mutation_allowed": False,
+            "live_safety_endpoint_calls_allowed": False,
+            "runtime_safety_truth": False,
+        },
+    }
+
+
+def _planning_skill_manifest_summary(
+    manifest: dict[str, Any],
+    source_path: str,
+) -> dict[str, Any]:
+    input_refs = [
+        item.get("ref")
+        for item in manifest.get("allowed_input_refs", [])
+        if isinstance(item, dict)
+    ]
+    output_refs = [
+        item.get("ref")
+        for item in manifest.get("allowed_output_refs", [])
+        if isinstance(item, dict)
+    ]
+    return {
+        **manifest,
+        **_projection_record_metadata(
+            {
+                **manifest,
+                "source_refs": input_refs + output_refs,
+                "candidate_id": manifest.get("skill_id"),
+            },
+            source_path=source_path,
+            evidence_type="pretrip_planning_skill_manifest",
+            source_kind="planning_skill_manifest",
+            identity_keys=("skill_id", "allowed_write_scope", "source_refs"),
+            review_state=manifest.get("status", "candidate"),
+            confidence="medium",
+            stale_risk="medium",
+            extractor_version="pretrip_planning_skill_manifest_catalog.projection.v1",
+            prompt_version="not_applicable_deterministic_skill_manifest_projection.v1",
+            summary=(
+                "Planning skill manifest contract; candidate outputs require "
+                "human review and no live safety endpoint or automatic Brain "
+                "writeback is allowed."
+            ),
+        ),
     }
 
 
 def _planning_sections(planning_tab: dict[str, Any]) -> list[dict[str, Any]]:
+    route = planning_tab["route"]
+    checkpoints = planning_tab["mission_candidates"]["checkpoints"]
+    segments = planning_tab["mission_candidates"]["segments"]
+    retreat_routes = planning_tab["mission_candidates"]["retreat_routes"]
+    map_candidates = planning_tab["map_candidates"]
     eta = planning_tab["eta"]
     readiness = planning_tab["readiness"]
     resources = planning_tab["resources"]
@@ -4701,6 +7540,152 @@ def _planning_sections(planning_tab: dict[str, Any]) -> list[dict[str, Any]]:
     departure_bundle = planning_tab["departure_bundle"]
 
     sections = [
+        _section(
+            "route",
+            "Route Evidence",
+            route,
+            counts={
+                "point_count": route["point_count"],
+                "sample_count": len(route.get("point_samples", [])),
+                "polyline_point_count": len(route.get("polyline", [])),
+            },
+            summary={
+                "route_name": route["route_name"],
+                "distance_m": route["distance_m"],
+                "bounds": route["bounds"],
+                "started_at": route.get("started_at"),
+                "ended_at": route.get("ended_at"),
+            },
+            boundary={
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+                "phase1_runtime_mutation_allowed": False,
+            },
+        ),
+        _section(
+            "checkpoints",
+            "Checkpoint Candidates",
+            _candidate_collection_source(
+                checkpoints,
+                source_id="pretrip_checkpoint_candidates",
+                evidence_type="pretrip_checkpoint_candidates",
+            ),
+            status="candidate_only",
+            counts={
+                "candidate_count": len(checkpoints),
+                "compression_boundary_count": sum(
+                    1 for checkpoint in checkpoints
+                    if checkpoint.get("compression_boundary")
+                ),
+                "source_ref_count": len(
+                    {
+                        ref
+                        for checkpoint in checkpoints
+                        for ref in checkpoint.get("source_refs", [])
+                    }
+                ),
+            },
+            summary={
+                "first_checkpoint_id": checkpoints[0]["candidate_id"] if checkpoints else None,
+                "last_checkpoint_id": checkpoints[-1]["candidate_id"] if checkpoints else None,
+                "sample_candidates": _candidate_section_previews(checkpoints),
+            },
+            boundary={
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+                "phase1_runtime_mutation_allowed": False,
+                "mission_graph_compile_allowed": False,
+            },
+        ),
+        _section(
+            "segments",
+            "Segment Candidates",
+            _candidate_collection_source(
+                segments,
+                source_id="pretrip_segment_candidates",
+                evidence_type="pretrip_segment_candidates",
+            ),
+            status="candidate_only",
+            counts={
+                "candidate_count": len(segments),
+                "resume_segment_count": sum(
+                    1 for segment in segments
+                    if segment.get("resume_segment")
+                    or segment.get("display_geometry", {}).get("resume_segment")
+                ),
+                "source_ref_count": len(
+                    {
+                        ref
+                        for segment in segments
+                        for ref in segment.get("source_refs", [])
+                    }
+                ),
+            },
+            summary={
+                "first_segment_id": segments[0]["candidate_id"] if segments else None,
+                "last_segment_id": segments[-1]["candidate_id"] if segments else None,
+                "sample_candidates": _candidate_section_previews(segments),
+            },
+            boundary={
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+                "phase1_runtime_mutation_allowed": False,
+                "mission_graph_compile_allowed": False,
+            },
+        ),
+        _section(
+            "map_candidates",
+            "Map Candidates",
+            map_candidates,
+            status="candidate_only",
+            counts=map_candidates["counts"],
+            summary={
+                "corridor_candidates": _candidate_section_previews(
+                    map_candidates["corridor_candidates"]
+                ),
+                "hazard_candidates": _candidate_section_previews(
+                    map_candidates["hazard_candidates"]
+                ),
+                "poi_candidates": _candidate_section_previews(
+                    map_candidates["poi_candidates"]
+                ),
+            },
+            boundary={
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+                "phase1_runtime_mutation_allowed": False,
+                "mission_graph_compile_allowed": False,
+            },
+        ),
+        _section(
+            "retreat_routes",
+            "Retreat Routes",
+            _candidate_collection_source(
+                retreat_routes,
+                source_id="pretrip_retreat_route_candidates",
+                evidence_type="pretrip_retreat_route_candidates",
+            ),
+            status="candidate_only",
+            counts={
+                "candidate_count": len(retreat_routes),
+                "source_ref_count": len(
+                    {
+                        ref
+                        for retreat in retreat_routes
+                        for ref in retreat.get("source_refs", [])
+                    }
+                ),
+            },
+            summary={
+                "sample_candidates": _candidate_section_previews(retreat_routes),
+            },
+            boundary={
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+                "phase1_runtime_mutation_allowed": False,
+                "mission_graph_compile_allowed": False,
+            },
+        ),
         _section(
             "eta",
             "ETA Plan",
@@ -5419,6 +8404,10 @@ def _post_analysis_sections(post_analysis_tab: dict[str, Any]) -> list[dict[str,
     import_manifest = post_analysis_tab.get("import_manifest")
     admin_surface_projection = post_analysis_tab.get("admin_surface_projection")
     debug_projection = post_analysis_tab.get("debug_projection")
+    planning_skill_audit = post_analysis_tab.get("planning_skill_audit")
+    planning_skill_manifest_catalog = post_analysis_tab.get(
+        "planning_skill_manifest_catalog"
+    )
 
     sections = [
         _section(
@@ -5474,7 +8463,15 @@ def _post_analysis_sections(post_analysis_tab: dict[str, Any]) -> list[dict[str,
                 "model_interpretation_count": brain_seed["model_interpretation_count"],
                 "observed_fact_count": brain_seed["observed_fact_count"],
             },
-            summary={"observed_fact_count": brain_seed["observed_fact_count"]},
+            summary={
+                "observed_fact_count": brain_seed["observed_fact_count"],
+                "non_review_gated_model_interpretation_count": brain_seed[
+                    "non_review_gated_model_interpretation_count"
+                ],
+                "node_types": brain_seed["node_types"],
+                "model_interpretations": brain_seed["model_interpretations"][:12],
+            },
+            boundary=brain_seed["boundary"],
         ),
         _section(
             "after_action_next_plan",
@@ -5493,6 +8490,61 @@ def _post_analysis_sections(post_analysis_tab: dict[str, Any]) -> list[dict[str,
             },
         ),
     ]
+    if planning_skill_audit is not None:
+        sections.append(
+            _section(
+                "planning_skill_audit",
+                "Planning Skill Audit",
+                planning_skill_audit,
+                status=planning_skill_audit["status"],
+                counts=planning_skill_audit["counts"],
+                summary={
+                    "node_types": planning_skill_audit["node_types"],
+                    "record_count": planning_skill_audit["counts"].get(
+                        "record_count",
+                        0,
+                    ),
+                    "automatic_brain_write_count": planning_skill_audit[
+                        "counts"
+                    ].get("automatic_brain_write_count", 0),
+                    "observed_fact_count": planning_skill_audit["counts"].get(
+                        "observed_fact_count",
+                        0,
+                    ),
+                    "records": planning_skill_audit["records"][:12],
+                },
+                boundary=planning_skill_audit["boundary"],
+            )
+        )
+    if planning_skill_manifest_catalog is not None:
+        sections.append(
+            _section(
+                "planning_skill_manifest_catalog",
+                "Planning Skill Manifest Catalog",
+                planning_skill_manifest_catalog,
+                status=planning_skill_manifest_catalog["status"],
+                counts=planning_skill_manifest_catalog["counts"],
+                summary={
+                    "manifest_count": planning_skill_manifest_catalog[
+                        "counts"
+                    ].get("manifest_count", 0),
+                    "automatic_brain_write_allowed_count": (
+                        planning_skill_manifest_catalog["counts"].get(
+                            "automatic_brain_write_allowed_count",
+                            0,
+                        )
+                    ),
+                    "phase1_runtime_mutation_allowed_count": (
+                        planning_skill_manifest_catalog["counts"].get(
+                            "phase1_runtime_mutation_allowed_count",
+                            0,
+                        )
+                    ),
+                    "manifests": planning_skill_manifest_catalog["manifests"][:12],
+                },
+                boundary=planning_skill_manifest_catalog["boundary"],
+            )
+        )
     if capability_timeline_import is not None:
         sections.append(
             _section(
@@ -5668,6 +8720,27 @@ def _section(
         "source_id": source["source_id"],
         "source_path": source["source_path"],
         "evidence_type": source["evidence_type"],
+        **_projection_record_metadata(
+            {
+                "section_id": section_id,
+                "source_id": source["source_id"],
+                "source_path": source["source_path"],
+                "evidence_type": source["evidence_type"],
+            },
+            source_path=source["source_path"],
+            evidence_type="pretrip_admin_section_projection",
+            source_kind="admin_section_projection",
+            identity_keys=("section_id", "source_id", "source_path"),
+            review_state="projection_only",
+            confidence="medium",
+            stale_risk="medium",
+            extractor_version="pretrip_admin_section.projection.v1",
+            prompt_version="not_applicable_deterministic_admin_section_projection.v1",
+            summary=(
+                "Admin section summary for navigating pretrip evidence; "
+                "projection-only UI metadata, not runtime safety truth."
+            ),
+        ),
         "counts": counts,
         "summary": summary,
     }
@@ -5676,6 +8749,49 @@ def _section(
     if boundary is not None:
         section["boundary"] = _summary_boundary(boundary)
     return section
+
+
+def _candidate_collection_source(
+    candidates: list[dict[str, Any]],
+    *,
+    source_id: str,
+    evidence_type: str,
+) -> dict[str, Any]:
+    source_paths = _unique_limited(
+        candidate.get("source_path")
+        for candidate in candidates
+        if candidate.get("source_path")
+    )
+    return {
+        "source_id": source_id,
+        "source_path": source_paths[0] if source_paths else source_id,
+        "evidence_type": evidence_type,
+    }
+
+
+def _candidate_section_previews(
+    candidates: list[dict[str, Any]],
+    *,
+    limit: int = 12,
+) -> list[dict[str, Any]]:
+    previews: list[dict[str, Any]] = []
+    for candidate in candidates[:limit]:
+        previews.append(
+            {
+                "candidate_id": candidate.get("candidate_id"),
+                "label": candidate.get("label") or candidate.get("name"),
+                "candidate_type": (
+                    candidate.get("candidate_type")
+                    or candidate.get("type")
+                    or candidate.get("feature_type")
+                ),
+                "review_state": candidate.get("review_state"),
+                "confidence": candidate.get("confidence"),
+                "stale_risk": candidate.get("stale_risk"),
+                "source_ref_count": len(candidate.get("source_refs", [])),
+            }
+        )
+    return previews
 
 
 def _summary_boundary(boundary: dict[str, Any]) -> dict[str, Any]:
@@ -5703,7 +8819,7 @@ def _admin_projection_summary(
     payload: dict[str, Any],
     source_path: str,
 ) -> dict[str, Any]:
-    return {
+    summary = {
         "source_id": f"admin_surface_projection.{payload['project_id']}",
         "source_path": source_path,
         "evidence_type": "pretrip_admin_surface_projection",
@@ -5717,6 +8833,139 @@ def _admin_projection_summary(
         "debug_surface": payload["debug_surface"],
         "boundary": payload["boundary"],
     }
+    for key in (
+        "route_notes",
+        "route_note_ln_proposals",
+        "route_note_review_options",
+        "gis_perception",
+        "major_critical_points",
+        "departure_bundle",
+        "runtime_handoff",
+    ):
+        if key in payload:
+            if key == "major_critical_points":
+                summary[key] = _decorate_embedded_admin_mcp_projection(
+                    payload[key],
+                    source_path=source_path,
+                )
+            else:
+                summary[key] = (
+                    dict(payload[key]) if isinstance(payload[key], dict) else payload[key]
+                )
+            if isinstance(summary[key], dict):
+                _ensure_admin_summary_metadata(summary[key])
+    _ensure_admin_summary_metadata(summary)
+    return summary
+
+
+def _decorate_embedded_admin_mcp_projection(
+    mcp: dict[str, Any],
+    *,
+    source_path: str,
+) -> dict[str, Any]:
+    projected = dict(mcp)
+    if isinstance(projected.get("preview_candidates"), list):
+        projected["preview_candidates"] = [
+            {
+                **candidate,
+                **_mcp_nested_support_projection(
+                    candidate,
+                    source_path=source_path,
+                    evidence_type="pretrip_admin_surface_mcp_preview_candidate",
+                    source_kind="admin_surface_mcp_preview_candidate",
+                    review_state=candidate.get(
+                        "review_state",
+                        "needs_human_review",
+                    ),
+                ),
+                **_mcp_projection_provenance(
+                    candidate,
+                    source_path=source_path,
+                    evidence_type="pretrip_admin_surface_mcp_preview_candidate",
+                    source_kind="admin_surface_mcp_preview_candidate",
+                    identity_keys=("mcp_id", "candidate_id", "label"),
+                    confidence=candidate.get("confidence", "medium"),
+                    stale_risk=candidate.get("stale_risk", "medium"),
+                    review_state=candidate.get(
+                        "review_state",
+                        "needs_human_review",
+                    ),
+                    model_output_summary=(
+                        "Embedded admin-surface MCP preview candidate; "
+                        "planning projection only, not runtime safety truth."
+                    ),
+                ),
+            }
+            for candidate in projected.get("preview_candidates", [])
+        ]
+    cp_support = projected.get("cp_support_reconciliation")
+    if isinstance(cp_support, dict) and isinstance(cp_support.get("rows"), list):
+        projected["cp_support_reconciliation"] = {
+            **cp_support,
+            "rows": [
+                {
+                    **row,
+                    **_mcp_nested_support_projection(
+                        row,
+                        source_path=source_path,
+                        evidence_type="pretrip_admin_surface_mcp_cp_support_row",
+                        source_kind="admin_surface_mcp_cp_support",
+                        review_state=row.get("review_state", "needs_human_review"),
+                    ),
+                    **_mcp_projection_provenance(
+                        row,
+                        source_path=source_path,
+                        evidence_type="pretrip_admin_surface_mcp_cp_support_row",
+                        source_kind="admin_surface_mcp_cp_support",
+                        identity_keys=(
+                            "mcp_id",
+                            "label",
+                            "support_status",
+                            "recommendation",
+                        ),
+                        confidence=row.get("confidence", "medium"),
+                        stale_risk=row.get("stale_risk", "medium"),
+                        review_state=row.get("review_state", "needs_human_review"),
+                        model_output_summary=(
+                            "Embedded admin-surface MCP CP-support row; "
+                            "planning projection only, not runtime safety truth."
+                        ),
+                    ),
+                }
+                for row in cp_support.get("rows", [])
+            ],
+        }
+    ocr = projected.get("ocr")
+    if isinstance(ocr, dict) and isinstance(ocr.get("labels"), list):
+        projected["ocr"] = {
+            **ocr,
+            "labels": [
+                {
+                    **label,
+                    **_mcp_projection_provenance(
+                        label,
+                        source_path=source_path,
+                        evidence_type="pretrip_admin_surface_mcp_ocr_label",
+                        source_kind="admin_surface_mcp_ocr_label",
+                        identity_keys=(
+                            "ocr_label_id",
+                            "named_point_id",
+                            "source_ref",
+                            "source_image_hash",
+                        ),
+                        confidence=label.get("confidence", "medium"),
+                        stale_risk=label.get("stale_risk", "medium"),
+                        review_state=label.get("review_state", "needs_review"),
+                        model_output_summary=(
+                            "Embedded admin-surface MCP OCR label; planning "
+                            "projection only, not runtime safety truth."
+                        ),
+                    ),
+                }
+                for label in ocr.get("labels", [])
+            ],
+        }
+    return projected
 
 
 def _debug_projection_events_summary(
@@ -5758,10 +9007,37 @@ def _raw_sample_summary(
     segment_dtm: dict[str, Any],
     source_refs: dict[str, str],
 ) -> dict[str, Any]:
+    source_path = source_refs["package"]
     return {
         "source_id": pretrip_package["package_id"],
-        "source_path": source_refs["package"],
+        "source_path": source_path,
         "evidence_type": "pretrip_raw_sample_summary",
+        **_projection_record_metadata(
+            {
+                "candidate_id": pretrip_package["package_id"],
+                "source_refs": [
+                    source_path,
+                    source_refs.get("segment_dtm"),
+                    *[
+                        artifact.get("artifact_id")
+                        for artifact in pretrip_package.get("source_artifacts", [])
+                    ],
+                ],
+            },
+            source_path=source_path,
+            evidence_type="pretrip_raw_sample_summary",
+            source_kind="pretrip_package_source_artifact_summary",
+            identity_keys=("candidate_id", "source_refs"),
+            review_state="summary_only",
+            confidence="medium",
+            stale_risk="medium",
+            extractor_version="pretrip_raw_sample_summary.projection.v1",
+            prompt_version="not_applicable_deterministic_raw_sample_summary.v1",
+            summary=(
+                "Raw input sample summary records source artifact references "
+                "without embedding raw GPX, photo, DTM, or runtime safety truth."
+            ),
+        ),
         "raw_payloads_embedded": False,
         "raw_gpx_read": False,
         "raw_photo_read": False,
@@ -5787,6 +9063,100 @@ def _raw_sample_summary(
 
 def _source_refs(artifacts: dict[str, Path], root: Path) -> dict[str, str]:
     return {key: _relpath(path, root) for key, path in artifacts.items()}
+
+
+def _map_layers_with_local_raster_metadata(
+    map_layers: list[dict[str, Any]],
+    *,
+    local_raster_manifest: dict[str, Any] | None,
+    raster_tile_manifest: dict[str, Any] | None,
+    local_raster_source_path: str,
+    raster_tile_source_path: str,
+) -> list[dict[str, Any]]:
+    bbox = _normalize_bbox_wgs84(
+        (local_raster_manifest or {}).get("georeference", {}).get("bbox_wgs84")
+    ) or _normalize_bbox_wgs84((raster_tile_manifest or {}).get("bbox_wgs84"))
+    enriched_layers: list[dict[str, Any]] = []
+    for layer in map_layers:
+        if layer.get("layer_id") != "imagery":
+            enriched_layers.append(_map_layer_metadata(layer))
+            continue
+        enriched = dict(layer)
+        if local_raster_source_path:
+            enriched["local_raster_manifest_ref"] = local_raster_source_path
+        if raster_tile_source_path:
+            enriched["raster_tile_manifest_ref"] = raster_tile_source_path
+        if bbox:
+            enriched["raster_bbox_wgs84"] = bbox
+            enriched["raster_coverage_policy"] = "render_intersecting_tiles_only"
+        if raster_tile_manifest:
+            enriched["raster_tile_zoom_range"] = raster_tile_manifest.get("zoom_range")
+            enriched["raster_tile_cache_root"] = raster_tile_manifest.get("cache_root")
+        enriched_layers.append(_map_layer_metadata(enriched))
+    return enriched_layers
+
+
+def _map_layer_metadata(layer: dict[str, Any]) -> dict[str, Any]:
+    source_path = str(layer.get("source_path") or "project.json#map-layers")
+    source_refs = _unique_limited(
+        [
+            source_path,
+            layer.get("source_id"),
+            layer.get("layer_id"),
+            layer.get("data_layer_group"),
+            layer.get("local_raster_manifest_ref"),
+            layer.get("raster_tile_manifest_ref"),
+            layer.get("tile_url_template"),
+            layer.get("local_proxy_tile_url_template"),
+            layer.get("local_raster_tile_url_template"),
+            layer.get("overlay_endpoint_template"),
+        ],
+        limit=24,
+    )
+    return {
+        **layer,
+        "evidence_type": "pretrip_admin_map_layer",
+        **_projection_record_metadata(
+            {
+                **layer,
+                "source_refs": source_refs,
+                "candidate_id": layer.get("layer_id"),
+            },
+            source_path=source_path,
+            evidence_type="pretrip_admin_map_layer",
+            source_kind=str(layer.get("source_kind") or "admin_map_layer"),
+            identity_keys=(
+                "layer_id",
+                "data_layer_group",
+                "source_id",
+                "source_refs",
+            ),
+            review_state="reference_only",
+            confidence="medium" if layer.get("available", True) else "low",
+            stale_risk="medium",
+            extractor_version="pretrip_admin_map_layer_projection.v1",
+            prompt_version="not_applicable_deterministic_map_layer_projection.v1",
+            summary=(
+                "Admin map layer descriptor for pretrip evidence rendering; "
+                "layer metadata only, not runtime safety truth."
+            ),
+        ),
+    }
+
+
+def _normalize_bbox_wgs84(value: Any) -> dict[str, float] | None:
+    if not isinstance(value, dict):
+        return None
+    try:
+        west = float(value["west"])
+        south = float(value["south"])
+        east = float(value["east"])
+        north = float(value["north"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    if not (west <= east and south <= north):
+        return None
+    return {"west": west, "south": south, "east": east, "north": north}
 
 
 def _energy_projection_summary(

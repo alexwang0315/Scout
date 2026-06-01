@@ -123,6 +123,7 @@ def test_raster_tile_proxy_serves_cached_png_and_transparent_fallback(tmp_path):
     assert payload.source == "local_cache"
     assert payload.body == cached_path.read_bytes()
     assert payload.headers()["X-Scout-Tile-Source"] == "local_cache"
+    assert payload.headers()["Cache-Control"] == "no-cache, max-age=0, must-revalidate"
 
     fallback = load_or_build_raster_tile_payload(
         "chilai_nanhua_day1",
@@ -132,9 +133,11 @@ def test_raster_tile_proxy_serves_cached_png_and_transparent_fallback(tmp_path):
         14,
         cache_root=tmp_path,
     )
-    assert fallback.media_type == "image/svg+xml"
+    assert fallback.media_type == "image/png"
     assert fallback.source == "transparent_fallback"
-    assert b"Raster offline" in fallback.body
+    assert b"Raster offline" not in fallback.body
+    assert fallback.body.startswith(b"\x89PNG\r\n\x1a\n")
+    assert fallback.headers()["Cache-Control"] == "no-store"
 
 
 def test_raster_tile_proxy_contract_and_validation(tmp_path):

@@ -6,6 +6,7 @@ from pydantic import ValidationError
 
 import pretrip_route_note_candidates
 from pretrip_route_note_candidates import (
+    DEFAULT_RUDY_LIKE_GPX,
     RouteNoteCandidateSet,
     build_route_note_candidates_from_gpx,
     load_route_note_candidates,
@@ -27,7 +28,7 @@ FIXTURE_PATH = (
 
 
 def test_extracts_gpx_waypoint_name_cmt_desc_as_route_note_candidates():
-    candidate_set = build_route_note_candidates_from_gpx()
+    candidate_set = _default_route_note_candidate_set()
     payload = candidate_set.model_dump(mode="json")
 
     assert payload["artifact_kind"] == "pretrip_route_note_candidates"
@@ -51,10 +52,19 @@ def test_extracts_gpx_waypoint_name_cmt_desc_as_route_note_candidates():
     assert hazard["note_category"] == "hazard_hint"
     assert hazard["potential_ln_signal"] is True
     assert hazard["source_fields_present"] == ["name", "cmt", "desc"]
+    assert hazard["source_refs"] == ["source.comparison.rudy_like_gpx"]
+    assert hazard["source_attribution"][0]["source_kind"] == "gpx_route_note"
+    assert hazard["extractor_version"] == "pretrip_route_note_candidates.v0"
+    assert hazard["pydantic_ai_prompt_version"] == "deterministic_schema_ready.no_live_model.v0"
+    assert len(hazard["model_output_sha256"]) == 64
+    assert hazard["confidence"] == "medium"
+    assert hazard["review_state"] == "needs_review"
+    assert hazard["candidate_only"] is True
+    assert hazard["runtime_safety_truth"] is False
 
 
 def test_route_note_candidates_remain_review_gated_model_interpretations():
-    candidate_set = build_route_note_candidates_from_gpx()
+    candidate_set = _default_route_note_candidate_set()
     payload = candidate_set.model_dump(mode="json")
 
     assert payload["boundary"]["candidate_only"] is True
@@ -69,6 +79,11 @@ def test_route_note_candidates_remain_review_gated_model_interpretations():
     assert all(candidate["scout_interpretation"] == "ModelInterpretation" for candidate in payload["candidates"])
     assert all(candidate["requires_human_review"] is True for candidate in payload["candidates"])
     assert all(candidate["observed_fact_candidate"] is False for candidate in payload["candidates"])
+    assert all(candidate["source_refs"] for candidate in payload["candidates"])
+    assert all(candidate["source_attribution"] for candidate in payload["candidates"])
+    assert all(candidate["model_output_sha256"] for candidate in payload["candidates"])
+    assert all(candidate["candidate_only"] is True for candidate in payload["candidates"])
+    assert all(candidate["runtime_safety_truth"] is False for candidate in payload["candidates"])
 
     serialized = route_note_candidates_to_json(candidate_set)
     for forbidden in [
@@ -135,21 +150,34 @@ def test_route_note_candidates_flag_stale_waypoint_times(tmp_path: Path):
 def test_route_note_candidates_fixture_matches_builder_output():
     fixture_payload = FIXTURE_PATH.read_text(encoding="utf-8")
     fixture = load_route_note_candidates(FIXTURE_PATH)
+    if not DEFAULT_RUDY_LIKE_GPX.expanduser().exists():
+        assert fixture_payload == route_note_candidates_to_json(fixture)
+        assert fixture.counts.note_candidate_count == 81
+        assert all(candidate.source_refs for candidate in fixture.candidates)
+        assert all(candidate.source_attribution for candidate in fixture.candidates)
+        assert all(candidate.runtime_safety_truth is False for candidate in fixture.candidates)
+        return
     regenerated = build_route_note_candidates_from_gpx(
         freshness_as_of="2026-05-22T00:00:00+00:00"
     )
 
-    assert fixture == regenerated
+    assert fixture.model_dump(mode="json") == regenerated.model_dump(mode="json")
     assert fixture_payload == route_note_candidates_to_json(regenerated)
 
 
 def test_route_note_candidate_schema_rejects_count_mismatches_and_runtime_claims():
-    payload = build_route_note_candidates_from_gpx().model_dump(mode="json")
+    payload = _default_route_note_candidate_set().model_dump(mode="json")
     payload["counts"]["potential_ln_signal_count"] = 1
     with pytest.raises(ValidationError):
         RouteNoteCandidateSet.model_validate(payload)
 
-    payload = build_route_note_candidates_from_gpx().model_dump(mode="json")
+    payload = _default_route_note_candidate_set().model_dump(mode="json")
     payload["boundary"]["runtime_mutation_allowed"] = True
     with pytest.raises(ValidationError):
         RouteNoteCandidateSet.model_validate(payload)
+
+
+def _default_route_note_candidate_set():
+    if DEFAULT_RUDY_LIKE_GPX.expanduser().exists():
+        return build_route_note_candidates_from_gpx()
+    return load_route_note_candidates(FIXTURE_PATH)

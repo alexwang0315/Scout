@@ -9,6 +9,11 @@ from typing import Any
 DEFAULT_OSM_TILE_CACHE_ROOT = Path("~/.cache/scout-fusion/osm-tiles")
 LOCAL_OSM_TILE_URL_TEMPLATE = "/admin/tiles/osm/{z}/{x}/{y}.png"
 MAX_LOCAL_PROXY_ZOOM = 20
+TRANSPARENT_PNG_TILE = bytes.fromhex(
+    "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489"
+    "0000000d49444154789c6360606060000000050001a5f645400000000049454e44"
+    "ae426082"
+)
 
 
 @dataclass(frozen=True)
@@ -20,8 +25,13 @@ class AdminTilePayload:
     body_sha256: str
 
     def headers(self) -> dict[str, str]:
+        cache_control = (
+            "no-store"
+            if self.source.endswith("_fallback")
+            else "no-cache, max-age=0, must-revalidate"
+        )
         return {
-            "Cache-Control": "public, max-age=86400",
+            "Cache-Control": cache_control,
             "X-Scout-Tile-Source": self.source,
             "X-Scout-Tile-Hash": self.body_sha256,
         }
@@ -45,7 +55,7 @@ def build_osm_tile_proxy_contract(
         "max_zoom": MAX_LOCAL_PROXY_ZOOM,
         "notes": [
             "Proxy serves cached local OSM tiles when present.",
-            "When fallback is enabled, missing tiles return a generated offline demo SVG tile.",
+            "When fallback is enabled, missing tiles return a plain offline diagnostic SVG tile.",
             "This helper never fetches public OSM tile URLs; pre-seeding cache is a separate operator action.",
         ],
     }
@@ -69,6 +79,7 @@ def load_or_build_osm_tile_payload(
     *,
     cache_root: Path | str = DEFAULT_OSM_TILE_CACHE_ROOT,
     fallback_enabled: bool = True,
+    fallback_style: str = "offline",
 ) -> AdminTilePayload:
     cache_path = osm_tile_cache_path(z, x, y, cache_root=cache_root)
     if cache_path.exists():
@@ -84,11 +95,15 @@ def load_or_build_osm_tile_payload(
         raise FileNotFoundError(str(cache_path))
 
     tile = validate_osm_tile_coords(z, x, y)
+    source = "offline_fallback"
     body = _offline_svg_tile(tile["z"], tile["x"], tile["y"])
+    if fallback_style == "transparent":
+        source = "transparent_fallback"
+        body = _transparent_png_tile()
     return AdminTilePayload(
         body=body,
-        media_type="image/svg+xml",
-        source="offline_fallback",
+        media_type="image/png" if fallback_style == "transparent" else "image/svg+xml",
+        source=source,
         cache_path=cache_path,
         body_sha256=hashlib.sha256(body).hexdigest(),
     )
@@ -117,15 +132,15 @@ def validate_osm_tile_coords(
 
 
 def _offline_svg_tile(z: int, x: int, y: int) -> bytes:
-    hue = (x * 37 + y * 17 + z * 11) % 360
-    accent = f"hsl({hue}, 32%, 44%)"
     text = f"OSM offline {z}/{x}/{y}"
     svg = f"""<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
-  <rect width="256" height="256" fill="#d9e0dd"/>
-  <path d="M0 64H256M0 128H256M0 192H256M64 0V256M128 0V256M192 0V256" stroke="#aeb9b4" stroke-width="2"/>
-  <path d="M-20 190C48 146 94 157 143 109C184 68 213 66 276 38" fill="none" stroke="{accent}" stroke-width="18" stroke-linecap="round" opacity="0.72"/>
-  <path d="M-14 204C54 160 101 170 151 121C191 82 220 79 282 52" fill="none" stroke="#f5f7f2" stroke-width="5" stroke-linecap="round" opacity="0.88"/>
-  <text x="128" y="238" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="17" fill="#26302d">{text}</text>
+  <rect width="256" height="256" fill="#f4f7f8"/>
+  <rect x="0.5" y="0.5" width="255" height="255" fill="none" stroke="#c8d3da" stroke-width="1"/>
+  <text x="128" y="132" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="15" fill="#536575">{text}</text>
 </svg>
 """
     return svg.encode("utf-8")
+
+
+def _transparent_png_tile() -> bytes:
+    return TRANSPARENT_PNG_TILE

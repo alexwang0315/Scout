@@ -1,5 +1,6 @@
 import json
 import subprocess
+import sys
 from pathlib import Path
 
 from pretrip_mcp_models import McpClass, McpPolicy, NamedPointEvidenceSet
@@ -85,6 +86,18 @@ def test_synthesizes_candidate_only_mcp_set_with_spacing_and_cp_support():
     assert by_label["黑水塘"].source_family_coverage["mandatory_complete"] is True
     assert by_label["黑水塘"].nearest_scout_cp.support_found is True
     assert by_label["黑水塘"].nearest_scout_cp.distance_m <= 250
+    assert by_label["黑水塘"].source_refs
+    assert by_label["黑水塘"].source_attribution
+    assert by_label["黑水塘"].extractor_version == "pretrip_mcp_synthesis.v1"
+    assert (
+        by_label["黑水塘"].pydantic_ai_prompt_version
+        == "fixture_backed_pydantic_ai_tool_plan.v1"
+    )
+    assert len(by_label["黑水塘"].model_output_sha256) == 64
+    assert by_label["黑水塘"].model_output_summary
+    assert by_label["黑水塘"].stale_risk in {"low", "medium", "high"}
+    assert by_label["黑水塘"].candidate_only is True
+    assert by_label["黑水塘"].runtime_safety_truth is False
 
     collapse = by_label["大崩壁"]
     assert collapse.score_components.type_weight == 30
@@ -299,7 +312,7 @@ def test_np_promotion_requires_more_than_ten_accepted_pages():
 def test_cli_writes_mcp_candidate_artifact(tmp_path):
     result = subprocess.run(
         [
-            str(ROOT / "venv" / "bin" / "python"),
+            sys.executable,
             "-m",
             "pretrip_mcp_synthesis",
             "synthesize",
@@ -336,10 +349,16 @@ def test_cli_writes_mcp_candidate_artifact(tmp_path):
     assert "source_family_coverage" in output["mcp_candidates"][0]
     assert "nearest_scout_cp" in output["mcp_candidates"][0]
     assert "nearby_points_suppressed_by_spacing" in output["mcp_candidates"][0]
+    assert "source_refs" in output["mcp_candidates"][0]
+    assert "source_attribution" in output["mcp_candidates"][0]
+    assert output["mcp_candidates"][0]["candidate_only"] is True
+    assert output["mcp_candidates"][0]["runtime_safety_truth"] is False
+    assert output["mcp_candidates"][0]["extractor_version"] == "pretrip_mcp_synthesis.v1"
+    assert len(output["mcp_candidates"][0]["model_output_sha256"]) == 64
 
     retrieval = subprocess.run(
         [
-            str(ROOT / "venv" / "bin" / "python"),
+            sys.executable,
             "-m",
             "pretrip_mcp_synthesis",
             "search-preview",
@@ -359,7 +378,7 @@ def test_cli_writes_mcp_candidate_artifact(tmp_path):
 
     ocr = subprocess.run(
         [
-            str(ROOT / "venv" / "bin" / "python"),
+            sys.executable,
             "-m",
             "pretrip_mcp_synthesis",
             "normalize-ocr",
@@ -377,7 +396,7 @@ def test_cli_writes_mcp_candidate_artifact(tmp_path):
 
     support = subprocess.run(
         [
-            str(ROOT / "venv" / "bin" / "python"),
+            sys.executable,
             "-m",
             "pretrip_mcp_synthesis",
             "reconcile-support",

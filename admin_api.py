@@ -40,7 +40,12 @@ from pretrip_expert_contribution_apply_plan import (
     apply_expert_contributions_to_workspace,
     write_expert_contribution_apply_plan,
 )
-from pretrip_import import PretripImportRequest, run_pretrip_import
+from pretrip_gpx_filter import DEFAULT_MAX_REASONABLE_SPEED_KMH
+from pretrip_import import (
+    DEFAULT_CHECKPOINT_SPACING_M,
+    PretripImportRequest,
+    run_pretrip_import,
+)
 from pretrip_energy_projection import (
     DEFAULT_PRETRIP_ENERGY_PROJECTION_REF,
     write_pretrip_energy_reserve_projection,
@@ -208,8 +213,12 @@ class PreTripImportGpxRequest(BaseModel):
     workspace_root: str | None = Field(default=None, min_length=1)
     profile: Literal["mac-workstation", "pi-offline", "pi-online-explicit"] = "pi-offline"
     template_project_root: str | None = Field(default=None, min_length=1)
-    checkpoint_spacing_m: float = Field(default=1_500.0, gt=0)
+    checkpoint_spacing_m: float = Field(default=DEFAULT_CHECKPOINT_SPACING_M, gt=0)
     max_reference_display_points: int = Field(default=1_000, gt=0)
+    max_reasonable_gpx_speed_kmh: float = Field(
+        default=DEFAULT_MAX_REASONABLE_SPEED_KMH,
+        gt=0,
+    )
     import_timestamp: str | None = None
     import_stage: Literal["pretrip"] = "pretrip"
     overwrite: bool = False
@@ -666,16 +675,24 @@ def create_admin_router(
     resolved_wearable_inventory_root = wearable_inventory_root(_data_root_from_env())
 
     @router.get("", response_class=HTMLResponse)
-    def admin_page() -> str:
+    def admin_page() -> Response:
         if not DEFAULT_ADMIN_PAGE.exists():
             raise HTTPException(status_code=404, detail="Admin page not found")
-        return DEFAULT_ADMIN_PAGE.read_text(encoding="utf-8")
+        return Response(
+            DEFAULT_ADMIN_PAGE.read_text(encoding="utf-8"),
+            media_type="text/html",
+            headers={"Cache-Control": "no-store"},
+        )
 
     @router.get("/pretrip", response_class=HTMLResponse)
-    def pretrip_admin_page() -> str:
+    def pretrip_admin_page() -> Response:
         if not DEFAULT_PRETRIP_ADMIN_PAGE.exists():
             raise HTTPException(status_code=404, detail="Pre-trip admin page not found")
-        return DEFAULT_PRETRIP_ADMIN_PAGE.read_text(encoding="utf-8")
+        return Response(
+            DEFAULT_PRETRIP_ADMIN_PAGE.read_text(encoding="utf-8"),
+            media_type="text/html",
+            headers={"Cache-Control": "no-store"},
+        )
 
     @router.get("/scout-assistant-ui.js")
     def assistant_ui_script() -> Response:
@@ -1907,6 +1924,7 @@ def create_admin_router(
                     ),
                     checkpoint_spacing_m=request.checkpoint_spacing_m,
                     max_reference_display_points=request.max_reference_display_points,
+                    max_reasonable_gpx_speed_kmh=request.max_reasonable_gpx_speed_kmh,
                     overwrite=request.overwrite,
                     import_timestamp=request.import_timestamp,
                     import_stage="pretrip",
@@ -2262,14 +2280,22 @@ def create_admin_router(
         }
 
     @router.get("/tiles/osm/{z}/{x}/{y}.png")
-    def osm_tile(z: int, x: int, y: int) -> Response:
+    def osm_tile(
+        z: int,
+        x: int,
+        y: int,
+        fallback: str | None = None,
+        v: str | None = None,
+    ) -> Response:
         try:
+            fallback_style = "offline" if fallback == "offline" else "transparent"
             payload = load_or_build_osm_tile_payload(
                 z,
                 x,
                 y,
                 cache_root=_osm_tile_cache_root_from_env(),
                 fallback_enabled=_osm_tile_fallback_enabled_from_env(),
+                fallback_style=fallback_style,
             )
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -3220,6 +3246,7 @@ def _build_pretrip_import_gpx_preview(
             "import_stage": request.import_stage,
             "checkpoint_spacing_m": request.checkpoint_spacing_m,
             "max_reference_display_points": request.max_reference_display_points,
+            "max_reasonable_gpx_speed_kmh": request.max_reasonable_gpx_speed_kmh,
             "golden_route_count": 1,
             "reference_track_count": len(reference_paths),
             "source_file_count": 1 + len(reference_paths),
@@ -3247,6 +3274,21 @@ def _build_pretrip_import_gpx_preview(
         "settings": {
             "checkpoint_spacing_m": request.checkpoint_spacing_m,
             "max_reference_display_points": request.max_reference_display_points,
+            "max_reasonable_gpx_speed_kmh": request.max_reasonable_gpx_speed_kmh,
+        },
+        "gpx_speed_filter": {
+            "enabled": True,
+            "max_reasonable_speed_kmh": request.max_reasonable_gpx_speed_kmh,
+            "applied_in_preview": False,
+            "applied_during_import": True,
+            "rule": (
+                "Import writes filtered GPX copies and removes track points that "
+                "would require speed greater than max_reasonable_speed_kmh from "
+                "the previous kept point, or greater than 3x the previous kept "
+                "segment speed. Nearby GPX route notes protect points from "
+                "automatic pruning; long GPS gaps are preserved as resume "
+                "segment diagnostics."
+            ),
         },
         "planning_semantics": _pretrip_import_gpx_planning_semantics(request),
         "boundary": _pretrip_import_gpx_boundary(
@@ -3439,6 +3481,7 @@ def _pretrip_import_output_paths(project_root: Path) -> dict[str, str]:
         "gis_perception_ai_judgements": "outputs/gis_perception_ai_judgements.json",
         "route_note_ln_proposals": "outputs/route_note_ln_proposals.json",
         "gis_perception_candidates": "outputs/gis_perception_candidates.json",
+        "gpx_speed_filter_report": "outputs/gpx_speed_filter_report.json",
     }
     return {
         key: str((project_root / ref).resolve())

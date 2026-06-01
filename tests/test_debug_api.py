@@ -16,6 +16,15 @@ from voice_cue_models import VoiceCue
 
 
 class DebugApiTests(unittest.TestCase):
+    def test_debug_page_serves_no_store_html(self):
+        client = TestClient(create_debug_app())
+
+        response = client.get("/admin/debug")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["cache-control"], "no-store")
+        self.assertIn("Scout Phase 3.5 Runtime Debug", response.text)
+
     def test_debug_events_state_and_messages_are_read_only(self):
         log = MemoryRuntimeDebugEventLog()
         log.append(_event(sequence=1, kind="debug_session_started", payload={"safety_level": "L0_NORMAL"}))

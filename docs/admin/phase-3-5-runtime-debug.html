@@ -206,6 +206,23 @@
       padding-left: 0;
       padding-right: 0;
     }
+    .tool-button.is-active {
+      border-color: #7dc2a5;
+      background: #eaf6f0;
+      color: #1d4d3a;
+    }
+    .zoom-level {
+      min-width: 56px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--panel-soft);
+      color: var(--text);
+      padding: 3px 7px;
+      font-size: 12px;
+      font-variant-numeric: tabular-nums;
+      text-align: center;
+      white-space: nowrap;
+    }
 
     .layer-menu {
       position: relative;
@@ -403,12 +420,19 @@
       padding: 11px 12px;
       border-bottom: 1px solid var(--border);
       background: var(--panel);
+      min-width: 0;
     }
 
     .panel-title {
       display: grid;
       gap: 3px;
       min-width: 0;
+    }
+
+    .panel-title h2,
+    .panel-title .hint {
+      min-width: 0;
+      overflow-wrap: anywhere;
     }
 
     .panel-body {
@@ -573,6 +597,7 @@
       padding: 9px 10px;
       background: var(--panel-soft);
       min-width: 0;
+      overflow: hidden;
     }
 
     .timeline-node {
@@ -601,10 +626,17 @@
     }
 
     .item-line {
-      display: flex;
-      justify-content: space-between;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
       gap: 10px;
-      align-items: baseline;
+      align-items: start;
+      min-width: 0;
+    }
+
+    .item-line h3 {
+      min-width: 0;
+      overflow-wrap: anywhere;
+      line-height: 1.25;
     }
 
     .timeline-meta {
@@ -612,6 +644,8 @@
       justify-items: end;
       gap: 4px;
       flex: 0 0 auto;
+      max-width: 110px;
+      min-width: 0;
     }
 
     .level-badge {
@@ -644,6 +678,7 @@
       margin-top: 5px;
       color: var(--muted);
       overflow-wrap: anywhere;
+      max-width: 100%;
     }
 
     .hint {
@@ -675,6 +710,7 @@
       display: inline-flex;
       align-items: center;
       min-height: 20px;
+      max-width: 100%;
       border: 1px solid var(--border);
       border-radius: 999px;
       padding: 2px 7px;
@@ -682,6 +718,8 @@
       background: rgba(255, 255, 255, 0.03);
       white-space: nowrap;
       font-size: 12px;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
     .pill.ok { color: var(--ok); border-color: rgba(119, 184, 106, 0.55); }
@@ -793,7 +831,7 @@
       opacity: .44;
       image-rendering: auto;
     }
-    .raster-tile { opacity: .28; }
+    .raster-tile { opacity: .92; }
     .osm-attribution {
       fill: rgba(237, 242, 247, .68);
       font: 10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -829,6 +867,13 @@
       fill: var(--checkpoint);
       stroke: #fff;
       stroke-width: 2;
+      vector-effect: non-scaling-stroke;
+    }
+    .gis-perception-cp {
+      fill: var(--phase4);
+      stroke: #fff;
+      stroke-width: 1.8;
+      opacity: .86;
       vector-effect: non-scaling-stroke;
     }
     .poi,
@@ -930,6 +975,20 @@
     .mono {
       font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
       font-size: 12px;
+      white-space: normal;
+      word-break: break-word;
+    }
+
+    #selectedMapTarget {
+      max-width: min(46vw, 280px);
+      justify-content: flex-start;
+    }
+
+    #selectedEventSummary {
+      min-width: 0;
+      max-height: 3.2em;
+      overflow: hidden;
+      line-height: 1.35;
     }
 
     .empty {
@@ -1452,6 +1511,8 @@
                 <button id="zoomIn" class="tool-button compact" type="button" title="Zoom in" aria-label="Zoom in">+</button>
                 <button id="zoomOut" class="tool-button compact" type="button" title="Zoom out" aria-label="Zoom out">-</button>
                 <button id="fitRoute" class="tool-button" type="button" title="Reset map view" aria-label="Reset map view">Fit</button>
+                <button id="boxZoomMode" class="tool-button compact is-active" type="button" title="Rectangle drag zoom is active: drag down-right to zoom in, up-left to zoom out" aria-label="Rectangle drag zoom" aria-pressed="true">▣</button>
+                <span id="zoomLevel" class="zoom-level" title="Map zoom">1.00x</span>
                 <details class="layer-menu">
                   <summary id="layerControl" title="Show layer controls" aria-label="Layer controls">Layers <strong id="layerEnabledCount">-</strong></summary>
                   <div class="layer-menu-panel" aria-label="Map layer controls">
@@ -1466,8 +1527,8 @@
                       <label title="Route-aligned baseline terrain risk layer"><input type="checkbox" data-layer="risk-ribbon" checked> Baseline</label>
                       <label title="Route-specific calibrated heat map"><input type="checkbox" data-layer="risk-heatmap" checked> Calibrated</label>
                       <label title="Difference between baseline risk and calibrated heat"><input type="checkbox" data-layer="risk-delta"> Delta</label>
-                      <label title="Overpass evidence layer"><input type="checkbox" data-layer="overpass" checked> Overpass</label>
-                      <label title="Reference GPX tracks"><input type="checkbox" data-layer="reference-tracks" checked> Ref GPX</label>
+                      <label title="Overpass evidence layer"><input type="checkbox" data-layer="overpass"> Overpass</label>
+                      <label title="Reference GPX tracks"><input type="checkbox" data-layer="reference-tracks"> Ref GPX</label>
                       <label title="Route layer"><input type="checkbox" data-layer="route" checked> Route</label>
                       <label title="Segment layer"><input type="checkbox" data-layer="segments" checked> Segments</label>
                       <label title="Checkpoint layer"><input type="checkbox" data-layer="checkpoints" checked> CP</label>
@@ -1614,18 +1675,21 @@
     const MAP_VISUAL_PADDING = 56;
     const MAP_MIN_ZOOM = 0.6;
     const MAP_MAX_ZOOM = 12000;
-    const FOCUS_POINT_VIEWPORT_M = 5;
+    const FOCUS_POINT_VIEWPORT_M = 50;
     const FOCUS_PATH_MAX_ZOOM = 4.4;
     const FOCUS_POINT_BOX_THRESHOLD = 28;
     const MAP_ZOOM_STEP_FACTOR = 1.25;
     const OSM_PUBLIC_TILE_URL_TEMPLATE = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
-    const OSM_LOCAL_TILE_URL_TEMPLATE = `${apiBase()}/admin/tiles/osm/{z}/{x}/{y}.png`;
+    const OSM_LOCAL_TILE_URL_TEMPLATE = `${apiBase()}/admin/tiles/osm/{z}/{x}/{y}.png?fallback=transparent`;
     const OSM_TILE_URL_TEMPLATE = OSM_PUBLIC_TILE_URL_TEMPLATE;
     const OSM_TARGET_ZOOM = 17;
     const OSM_MAX_TILES = 64;
+    const RASTER_MAX_TILES = 64;
     const OSM_MIN_ZOOM = 8;
     const OSM_MAX_ZOOM = 20;
+    const OSM_TILE_CACHE_BUST = "transparent-fallback-v12";
     const RASTER_LOCAL_TILE_URL_TEMPLATE = `${apiBase()}/admin/tiles/imagery/{project_id}/{layer_id}/{z}/{x}/{y}.png`;
+    const RASTER_TILE_CACHE_BUST = "transparent-fallback-v12";
     const OSM_ATTRIBUTION = "OpenStreetMap contributors";
     const LEVELS = ["L0", "L1", "L2", "L3", "L4"];
     const STATUS_BAD = new Set(["degraded", "failed", "unavailable", "offline", "error"]);
@@ -1831,14 +1895,21 @@
     }
 
     function apiBase() {
-      if (location.protocol === "file:") return "http://127.0.0.1:9099";
+      const params = new URLSearchParams(location.search);
+      const override = params.get("apiBase") || localStorage.getItem("scout.adminApiBase");
+      if (override) return override.replace(/\/$/, "");
+      if (location.protocol === "file:") return "http://scout.local:9100";
       return "";
     }
 
     function osmTileTemplate() {
       const params = new URLSearchParams(location.search);
-      const requested = params.get("tileSource") || params.get("tiles") || localStorage.getItem("scout.osmTileSource");
-      return requested === "local" ? OSM_LOCAL_TILE_URL_TEMPLATE : OSM_TILE_URL_TEMPLATE;
+      const requested = params.get("osmSource") || params.get("osmTiles") || params.get("tiles") || localStorage.getItem("scout.osmTileSource");
+      return requested === "public" ? OSM_PUBLIC_TILE_URL_TEMPLATE : OSM_LOCAL_TILE_URL_TEMPLATE;
+    }
+
+    function isLocalOsmTileMode() {
+      return osmTileTemplate() === OSM_LOCAL_TILE_URL_TEMPLATE;
     }
 
     function svgEl(name, attrs = {}, content = "") {
@@ -1869,6 +1940,50 @@
       const layer = mapLayerById(projection, "imagery");
       return apiUrlTemplate(layer.local_raster_tile_url_template) || RASTER_LOCAL_TILE_URL_TEMPLATE;
     }
+    function normalizeRasterBounds(value) {
+      if (!value) return null;
+      const west = Number(value.west);
+      const south = Number(value.south);
+      const east = Number(value.east);
+      const north = Number(value.north);
+      if (![west, south, east, north].every(Number.isFinite)) return null;
+      if (west > east || south > north) return null;
+      return {west, south, east, north};
+    }
+    function rasterBoundsFor(projection) {
+      const layer = mapLayerById(projection, "imagery");
+      return normalizeRasterBounds(layer.raster_bbox_wgs84 || layer.bbox_wgs84 || layer.georeference?.bbox_wgs84);
+    }
+    function parseZoomRange(value) {
+      const match = String(value || "").match(/^(\d+)\s*-\s*(\d+)$/);
+      if (!match) return null;
+      return {
+        min: Number(match[1]),
+        max: Number(match[2])
+      };
+    }
+    function rasterZoomRangeFor(projection) {
+      const layer = mapLayerById(projection, "imagery");
+      const parsed = parseZoomRange(layer.raster_tile_zoom_range || layer.zoom_range);
+      const min = Number(layer.raster_tile_min_zoom ?? layer.min_zoom ?? parsed?.min ?? OSM_MIN_ZOOM);
+      const max = Number(layer.raster_tile_max_zoom ?? layer.max_zoom ?? parsed?.max ?? OSM_TARGET_ZOOM);
+      const safeMin = Number.isFinite(min) ? clamp(Math.round(min), OSM_MIN_ZOOM, OSM_MAX_ZOOM) : OSM_MIN_ZOOM;
+      const safeMax = Number.isFinite(max) ? clamp(Math.round(max), safeMin, OSM_MAX_ZOOM) : OSM_TARGET_ZOOM;
+      return {min: safeMin, max: safeMax};
+    }
+    function boundsIntersect(a, b) {
+      if (!a || !b) return true;
+      return a.west <= b.east && a.east >= b.west && a.south <= b.north && a.north >= b.south;
+    }
+    function rasterTileCacheBustedUrl(url) {
+      const separator = url.includes("?") ? "&" : "?";
+      return `${url}${separator}fallback=transparent&v=${RASTER_TILE_CACHE_BUST}`;
+    }
+    function osmTileCacheBustedUrl(url) {
+      if (url.startsWith("http://") || url.startsWith("https://")) return url;
+      const separator = url.includes("?") ? "&" : "?";
+      return `${url}${separator}v=${OSM_TILE_CACHE_BUST}`;
+    }
 
     function boundsForProjection(projection) {
       const bounds = projection?.route?.bounds || {};
@@ -1881,7 +1996,7 @@
     }
 
     function projectPoint(bounds, lat, lon) {
-      const pad = MAP_VISUAL_PADDING / debugPageState.zoom;
+      const pad = MAP_VISUAL_PADDING;
       const lonSpan = Math.max(bounds.east - bounds.west, 0.000001);
       const latSpan = Math.max(bounds.north - bounds.south, 0.000001);
       const x = pad + ((lon - bounds.west) / lonSpan) * (MAP_WIDTH - pad * 2);
@@ -1919,20 +2034,22 @@
     }
 
     function osmTileUrl(z, x, y) {
-      return osmTileTemplate()
+      const url = osmTileTemplate()
         .replace("{z}", z)
         .replace("{x}", x)
         .replace("{y}", y);
+      return osmTileCacheBustedUrl(url);
     }
 
     function rasterTileUrl(projection, z, x, y) {
       const layer = mapLayerById(projection, "imagery");
-      return rasterTileTemplate(projection)
+      const url = rasterTileTemplate(projection)
         .replace("{project_id}", PRETRIP_PROJECT_ID)
         .replace("{layer_id}", layer.layer_id || "imagery")
         .replace("{z}", z)
         .replace("{x}", x)
         .replace("{y}", y);
+      return rasterTileCacheBustedUrl(url);
     }
 
     function tileRangeForZoom(bounds, zoom) {
@@ -1956,8 +2073,15 @@
       return zoom;
     }
 
-    function tileCoverage(bounds) {
-      const z = chooseOsmZoom(bounds);
+    function chooseRasterZoom(projection, bounds) {
+      const range = rasterZoomRangeFor(projection);
+      let zoom = range.max;
+      while (zoom > range.min && tileCountForZoom(bounds, zoom) > RASTER_MAX_TILES) zoom -= 1;
+      return zoom;
+    }
+
+    function tileCoverage(bounds, zoom = null) {
+      const z = zoom ?? chooseOsmZoom(bounds);
       const {xMin, xMax, yMin, yMax} = tileRangeForZoom(bounds, z);
       const tiles = [];
       for (let x = xMin; x <= xMax; x += 1) {
@@ -1972,6 +2096,12 @@
         }
       }
       return tiles;
+    }
+
+    function rasterTileCoverage(projection, bounds, zoom = null) {
+      const z = zoom ?? chooseRasterZoom(projection, bounds);
+      const rasterBounds = rasterBoundsFor(projection);
+      return tileCoverage(bounds, z).filter(tile => boundsIntersect(tile, rasterBounds));
     }
 
     function attachMapEvidence(node, item, mapRef = "") {
@@ -1995,6 +2125,14 @@
     function applyMapViewport() {
       runtimeMap.setAttribute("viewBox", mapViewBox());
       syncMapMarkerScale();
+      updateMapZoomIndicator();
+    }
+    function updateMapZoomIndicator(extraLabel = "") {
+      const node = document.getElementById("zoomLevel");
+      if (!node) return;
+      const zoomText = `${debugPageState.zoom.toFixed(2)}x`;
+      node.textContent = extraLabel ? `${zoomText} ${extraLabel}` : zoomText;
+      node.title = "Map zoom; rectangle drag zoom is active.";
     }
     function syncMapMarkerScale() {
       const scale = Math.max(debugPageState.zoom, 1);
@@ -2020,9 +2158,13 @@
     }
 
     function zoomMap(direction) {
+      const [minX, minY, width, height] = mapViewBox().split(/\s+/).map(Number);
+      const centerX = minX + width / 2;
+      const centerY = minY + height / 2;
       const nextZoom = direction > 0 ? debugPageState.zoom * MAP_ZOOM_STEP_FACTOR : debugPageState.zoom / MAP_ZOOM_STEP_FACTOR;
       debugPageState.zoom = Math.max(MAP_MIN_ZOOM, Math.min(MAP_MAX_ZOOM, nextZoom));
-      clampMapPan();
+      debugPageState.panX = centerX - MAP_WIDTH / 2;
+      debugPageState.panY = centerY - MAP_HEIGHT / 2;
       applyMapViewport();
       highlightMapForEvent(selectedMapEvent());
     }
@@ -2056,8 +2198,11 @@
 
     function appendRasterLayer(group, projection, bounds, kind) {
       const isImagery = kind === "imagery";
-      group.appendChild(svgEl("rect", {x: 0, y: 0, width: MAP_WIDTH, height: MAP_HEIGHT, class: isImagery ? "layer-imagery" : "layer-osm"}));
-      tileCoverage(bounds).forEach(tile => {
+      if (!isImagery && !isLocalOsmTileMode()) {
+        group.appendChild(svgEl("rect", {x: 0, y: 0, width: MAP_WIDTH, height: MAP_HEIGHT, class: isImagery ? "layer-imagery" : "layer-osm"}));
+      }
+      const tiles = isImagery ? rasterTileCoverage(projection, bounds) : tileCoverage(bounds);
+      tiles.forEach(tile => {
         const [x1, y1] = projectPoint(bounds, tile.north, tile.west);
         const [x2, y2] = projectPoint(bounds, tile.south, tile.east);
         group.appendChild(svgEl("image", {
@@ -2082,13 +2227,13 @@
       applyMapViewport();
       runtimeMap.replaceChildren();
 
-      const imageryGroup = svgEl("g", {"data-layer-group": "imagery"});
-      appendRasterLayer(imageryGroup, projection, bounds, "imagery");
-      runtimeMap.appendChild(imageryGroup);
-
       const osmGroup = svgEl("g", {"data-layer-group": "osm"});
       appendRasterLayer(osmGroup, projection, bounds, "osm");
       runtimeMap.appendChild(osmGroup);
+
+      const imageryGroup = svgEl("g", {"data-layer-group": "imagery"});
+      appendRasterLayer(imageryGroup, projection, bounds, "imagery");
+      runtimeMap.appendChild(imageryGroup);
 
       const overpassGroup = svgEl("g", {"data-layer-group": "overpass"});
       (projection.overpass_evidence?.corridor_candidates || []).forEach(candidate => {
@@ -2203,6 +2348,23 @@
         attachMapEvidence(circle, checkpoint, `checkpoint route-progress ${checkpoint.candidate_id}`);
         checkpointGroup.appendChild(circle);
       });
+      (projection.gis_perception_timeline?.checkpoint_candidates || []).forEach(checkpoint => {
+        const lat = Number(checkpoint.lat);
+        const lon = Number(checkpoint.lon);
+        if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+        const [x, y] = projectPoint(bounds, lat, lon);
+        const refs = [
+          "checkpoint",
+          "gis-perception",
+          checkpoint.candidate_id,
+          checkpoint.source_id,
+          checkpoint.nearby_group_id,
+          ...(Array.isArray(checkpoint.map_target_ids) ? checkpoint.map_target_ids : [])
+        ].filter(Boolean).join(" ");
+        const circle = svgEl("circle", {cx: x, cy: y, r: 4.8, class: "gis-perception-cp"});
+        attachMapEvidence(circle, checkpoint, refs);
+        checkpointGroup.appendChild(circle);
+      });
       runtimeMap.appendChild(checkpointGroup);
 
       const poiGroup = svgEl("g", {"data-layer-group": "pois"});
@@ -2223,10 +2385,11 @@
       const refs = new Set(EVENT_MAP_REFS[event?.kind] || ["runtime"]);
       const subject = text(event?.subject_ref, "").toLowerCase();
       const payload = event?.payload || {};
-      (payload.map_target_ids || []).filter(Boolean).forEach(ref => refs.add(ref));
+      const specificMapTargets = (payload.map_target_ids || []).filter(Boolean);
+      specificMapTargets.forEach(ref => refs.add(ref));
       if (payload.segment_id) refs.add(payload.segment_id);
       if (payload.checkpoint_id) refs.add(payload.checkpoint_id);
-      if (subject.includes("checkpoint") || payload.checkpoint_id) refs.add("checkpoint");
+      if (subject.includes("checkpoint") && !payload.checkpoint_id && !specificMapTargets.length) refs.add("checkpoint");
       if (subject.includes("incident") || payload.incident_id) refs.add("incident");
       if (subject.includes("message") || payload.message_id) {
         refs.add("outbound");
@@ -3111,11 +3274,15 @@
       try {
         const box = node.getBBox();
         if (!Number.isFinite(box.x) || !Number.isFinite(box.y)) return null;
+        const width = Math.max(Number(box.width) || 0, 8);
+        const height = Math.max(Number(box.height) || 0, 8);
+        const centerX = box.x + (Number(box.width) || 0) / 2;
+        const centerY = box.y + (Number(box.height) || 0) / 2;
         return {
-          x: box.x,
-          y: box.y,
-          width: Math.max(Number(box.width) || 0, 8),
-          height: Math.max(Number(box.height) || 0, 8)
+          x: centerX - width / 2,
+          y: centerY - height / 2,
+          width,
+          height
         };
       } catch (_) {
         return null;
@@ -3157,8 +3324,22 @@
       return Math.max(1.2, Math.min(MAP_MAX_ZOOM, Math.max(widthZoom, heightZoom)));
     }
 
-    function focusZoomForBox(box, fitZoom) {
-      const isPointSized = box.width <= FOCUS_POINT_BOX_THRESHOLD && box.height <= FOCUS_POINT_BOX_THRESHOLD;
+    function isPointFocusEvent(event) {
+      const payload = event?.payload || {};
+      const type = String(payload.projection_event_type || payload.checkpoint_type || event?.kind || "");
+      return Boolean(
+        type.includes("checkpoint")
+        || type.includes("poi")
+        || type.includes("point")
+        || payload.checkpoint_id
+        || (payload.lat !== undefined && payload.lon !== undefined && !type.includes("segment"))
+      );
+    }
+
+    function focusZoomForBox(box, fitZoom, event = null) {
+      const isPointSized = isPointFocusEvent(event)
+        && box.width <= FOCUS_POINT_BOX_THRESHOLD
+        && box.height <= FOCUS_POINT_BOX_THRESHOLD;
       if (isPointSized) {
         return pointFocusZoom() || Math.max(1.2, Math.min(MAP_MAX_ZOOM, fitZoom, FOCUS_PATH_MAX_ZOOM));
       }
@@ -3166,9 +3347,13 @@
     }
 
     function mapBoxForEvent(event) {
+      const coordinate = coordinateFromEvent(event);
+      if (isPointFocusEvent(event) && coordinate && debugPageState.projection) {
+        const [x, y] = projectPoint(boundsForProjection(debugPageState.projection), coordinate.lat, coordinate.lon);
+        return pointBox(x, y);
+      }
       const preciseBoxes = preciseMapTargetsForEvent(event).map(svgBoxFor).filter(Boolean);
       if (preciseBoxes.length) return unionBoxes(preciseBoxes);
-      const coordinate = coordinateFromEvent(event);
       if (coordinate && debugPageState.projection) {
         const [x, y] = projectPoint(boundsForProjection(debugPageState.projection), coordinate.lat, coordinate.lon);
         return pointBox(x, y);
@@ -3178,21 +3363,21 @@
       return null;
     }
 
-    function focusMapBox(box) {
+    function focusMapBox(box, event = null) {
       if (!box) return false;
       const paddedWidth = Math.max(box.width + 90, 1);
       const paddedHeight = Math.max(box.height + 90, 1);
       const fitZoom = Math.min(MAP_WIDTH / paddedWidth, MAP_HEIGHT / paddedHeight);
-      debugPageState.zoom = focusZoomForBox(box, fitZoom);
+      debugPageState.zoom = focusZoomForBox(box, fitZoom, event);
       debugPageState.panX = box.x + box.width / 2 - MAP_WIDTH / 2;
       debugPageState.panY = box.y + box.height / 2 - MAP_HEIGHT / 2;
-      clampMapPan();
+      if (!isPointFocusEvent(event)) clampMapPan();
       applyMapViewport();
       return true;
     }
 
     function focusMapForEvent(event) {
-      const focused = focusMapBox(mapBoxForEvent(event));
+      const focused = focusMapBox(mapBoxForEvent(event), event);
       if (focused) highlightMapForEvent(event);
       return focused;
     }
@@ -3302,7 +3487,10 @@
       selection.currentScreenX = event.clientX;
       selection.currentScreenY = event.clientY;
       selection.moved = Math.abs(selection.screenX - event.clientX) > 8 || Math.abs(selection.screenY - event.clientY) > 8;
-      if (selection.moved) updateZoomSelectionOverlay(boxFromPoints(selection.start, current));
+      if (selection.moved) {
+        updateZoomSelectionOverlay(boxFromPoints(selection.start, current));
+        updateMapZoomIndicator(`box ${selectionZoomFactor(selection).toFixed(2)}x`);
+      }
     }
 
     function finishMapRectangleZoom(event) {
@@ -3329,12 +3517,16 @@
       const targets = mapTargetsForEvent(event);
       targets.forEach((target) => target.classList.add("map-highlight"));
       targets.slice(0, 4).forEach((target) => target.parentNode && target.parentNode.appendChild(target));
-      document.getElementById("selectedMapTarget").textContent = event
-        ? mapRefsForEvent(event).join(" + ")
-        : "no selection";
-      document.getElementById("selectedEventSummary").textContent = event
+      const targetLabel = event ? mapRefsForEvent(event).join(" + ") : "no selection";
+      const summaryLabel = event
         ? `${text(event.kind)} | ${hintForEvent(event)}`
         : "Select a timeline node to highlight the related runtime map element.";
+      const targetNode = document.getElementById("selectedMapTarget");
+      const summaryNode = document.getElementById("selectedEventSummary");
+      targetNode.textContent = targetLabel;
+      targetNode.title = targetLabel;
+      summaryNode.textContent = summaryLabel;
+      summaryNode.title = summaryLabel;
     }
 
     function selectTimelineNode(event, index, options = {}) {
@@ -3372,7 +3564,10 @@
       document.querySelectorAll(".timeline-node").forEach((node) => {
         const index = Number(node.dataset.eventIndex || -1);
         const event = debugPageState.events[index];
-        node.addEventListener("click", () => selectTimelineNode(event, index));
+        node.addEventListener("click", () => {
+          selectTimelineNode(event, index);
+          focusMapForEvent(event);
+        });
         node.addEventListener("dblclick", (mouseEvent) => {
           mouseEvent.preventDefault();
           selectTimelineNode(event, index);
@@ -3382,6 +3577,7 @@
           if (keyboardEvent.key === "Enter" || keyboardEvent.key === " ") {
             keyboardEvent.preventDefault();
             selectTimelineNode(event, index);
+            focusMapForEvent(event);
             return;
           }
           if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(keyboardEvent.key)) return;
@@ -3526,6 +3722,7 @@
       document.getElementById("zoomIn").addEventListener("click", () => zoomMap(1));
       document.getElementById("zoomOut").addEventListener("click", () => zoomMap(-1));
       document.getElementById("fitRoute").addEventListener("click", resetMapView);
+      document.getElementById("boxZoomMode").addEventListener("click", () => updateMapZoomIndicator("box"));
       document.getElementById("panUp").addEventListener("click", () => panMap(0, -70));
       document.getElementById("panDown").addEventListener("click", () => panMap(0, 70));
       document.getElementById("panLeft").addEventListener("click", () => panMap(-70, 0));

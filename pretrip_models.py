@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -153,9 +153,17 @@ class PreTripCandidateBase(BaseModel):
     candidate_id: str
     label: str
     source_refs: list[str] = Field(default_factory=list)
+    source_attribution: list[dict[str, Any]] = Field(default_factory=list)
     provenance: list[PreTripProvenance] = Field(default_factory=list)
     review_state: CandidateReviewState = CandidateReviewState.PROPOSED
     confidence: Literal["low", "medium", "high", "unknown"] = "unknown"
+    stale_risk: Literal["low", "medium", "high", "unknown"] = "medium"
+    extractor_version: str = "pretrip_candidate_generation.v0.1"
+    pydantic_ai_prompt_version: str = "not_applicable_deterministic_pretrip_import"
+    model_output_sha256: str = ""
+    model_output_summary: str = ""
+    candidate_only: Literal[True] = True
+    runtime_safety_truth: Literal[False] = False
     notes: str = ""
 
 
@@ -218,6 +226,30 @@ class PreTripRouteGuideTimingCandidate(PreTripCandidateBase):
     ] = "total_elapsed_time_including_normal_rest"
 
 
+def default_pretrip_package_planning_semantics() -> dict[str, Any]:
+    return {
+        "pretrip_candidate_evidence_only": True,
+        "runtime_safety_truth": False,
+        "reviewed_package_is_not_departure_approval": True,
+        "departure_gate_required_before_runtime": True,
+    }
+
+
+def default_pretrip_package_boundary() -> dict[str, Any]:
+    return {
+        "candidate_evidence_only": True,
+        "reviewed_planning_material_only": True,
+        "reviewed_package_is_not_departure_approval": True,
+        "departure_approval_granted": False,
+        "departure_gate_required_before_runtime": True,
+        "runtime_handoff_operator_trigger_required": True,
+        "phase1_runtime_mutation_allowed": False,
+        "phase2_brain_writeback_allowed": False,
+        "safety_api_calls_allowed": False,
+        "final_mission_graph_write_allowed": False,
+    }
+
+
 class PreTripPackage(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -234,3 +266,8 @@ class PreTripPackage(BaseModel):
     retreat_route_candidates: list[PreTripRetreatRouteCandidate] = Field(default_factory=list)
     route_guide_timing_candidates: list[PreTripRouteGuideTimingCandidate] = Field(default_factory=list)
     readiness_notes: list[str] = Field(default_factory=list)
+    planning_semantics: dict[str, Any] = Field(
+        default_factory=default_pretrip_package_planning_semantics
+    )
+    boundary: dict[str, Any] = Field(default_factory=default_pretrip_package_boundary)
+    metadata: dict[str, Any] = Field(default_factory=dict)

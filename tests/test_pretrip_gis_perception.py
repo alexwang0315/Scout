@@ -42,6 +42,8 @@ def test_builds_candidate_only_gis_perception_from_golden_route_and_references(
 
     assert result.route_note_candidates.counts.note_candidate_count == 4
     assert result.route_note_candidates.counts.potential_ln_signal_count == 2
+    assert result.route_note_candidates.counts.route_note_time_unknown_count == 4
+    assert result.route_note_candidates.counts.stale_route_note_count == 0
     assert result.route_note_ln_proposals.counts.proposal_count == 2
     assert result.gis_perception.counts.source_gpx_count == 2
     assert result.gis_perception.counts.gpx_route_note_candidate_count == 4
@@ -55,6 +57,39 @@ def test_builds_candidate_only_gis_perception_from_golden_route_and_references(
     assert result.gis_perception.classifier.judgement_count == 4
     assert result.gis_perception.classifier.prompt_sha256
     assert result.gis_perception.classifier.live_model_call_performed is False
+    assert result.gis_perception_ai_judgements.boundary.candidate_only is True
+    assert (
+        result.gis_perception_ai_judgements.boundary.phase1_runtime_mutation_allowed
+        is False
+    )
+    assert result.gis_perception_ai_judgements.boundary.phase2_writeback_allowed is False
+    assert result.gis_perception_ai_judgements.boundary.package_mutation_allowed is False
+    assert result.gis_perception_ai_judgements.boundary.raw_gpx_embedded is False
+    assert result.gis_perception_ai_judgements.source_refs
+    assert result.gis_perception_ai_judgements.counts is not None
+    assert result.gis_perception_ai_judgements.counts.input_count == 4
+    assert result.gis_perception_ai_judgements.counts.judgement_count == 4
+    assert result.gis_perception_ai_judgements.counts.source_ref_count == len(
+        result.gis_perception_ai_judgements.source_refs
+    )
+    assert result.gis_perception_ai_judgements.counts.candidate_only_count == 4
+    assert result.gis_perception_ai_judgements.counts.human_review_required_count == 4
+    assert result.gis_perception_ai_judgements.counts.runtime_safety_truth_count == 0
+    assert result.gis_perception_ai_judgements.counts.package_mutation_count == 0
+    assert result.gis_perception_ai_judgements.counts.phase1_runtime_mutation_count == 0
+    assert result.gis_perception_ai_judgements.counts.phase2_writeback_count == 0
+    assert result.gis_perception_ai_judgements.counts.raw_model_output_count == 0
+    assert all(
+        judgement.source_refs
+        and judgement.prompt_sha256 == result.gis_perception.classifier.prompt_sha256
+        and judgement.pydantic_ai_prompt_version
+        == "scout.gis_perception.structured_judgement.v0"
+        and len(judgement.model_output_sha256) == 64
+        and judgement.model_output_summary
+        and judgement.review_state == "needs_review"
+        and judgement.runtime_safety_truth is False
+        for judgement in result.gis_perception_ai_judgements.judgements
+    )
     assert {
         candidate.checkpoint_type
         for candidate in result.gis_perception.checkpoint_candidates

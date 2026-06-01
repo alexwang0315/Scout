@@ -9,6 +9,7 @@ from admin_api import create_admin_app
 from debug_api import create_debug_app
 from pretrip_admin_view import build_pretrip_admin_view
 from pretrip_import import PretripImportRequest, run_pretrip_import
+from pretrip_source_ingest import wgs84_to_twd97
 from runtime_debug_log import FileRuntimeDebugEventLog
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -69,12 +70,23 @@ def test_pretrip_import_core_writes_pretrip_admin_and_debug_projections(tmp_path
     project = _load(project_root / "project.json")
     admin_projection = _load(project_root / "outputs" / "admin_projection.json")
     package = _load(project_root / "outputs" / "pretrip_package.json")
+    reviewed_package = _load(project_root / "outputs" / "pretrip_package.reviewed.json")
     route_summary = _load(project_root / "normalized" / "routes" / "route_summary.json")
+    route_bundle = _load(project_root / "normalized" / "routes" / "route_evidence_bundle.json")
     reference_tracks = _load(project_root / "outputs" / "reference_tracks.json")
     reference_display = _load(project_root / "outputs" / "reference_track_display_geometry.json")
     route_notes = _load(project_root / "candidates" / "route_note_candidates.json")
+    normalized_route_notes = _load(
+        project_root / "normalized" / "notes" / "gpx_route_note_candidates.json"
+    )
     gis_ai_judgements = _load(project_root / "outputs" / "gis_perception_ai_judgements.json")
     route_note_ln_proposals = _load(project_root / "outputs" / "route_note_ln_proposals.json")
+    route_note_review_options = _load(project_root / "outputs" / "route_note_review_options.json")
+    checkpoint_events = _load(project_root / "outputs" / "checkpoint_events.json")
+    segment_display = _load(project_root / "outputs" / "segment_display_geometry.json")
+    segment_policy = _load(project_root / "outputs" / "segment_policy_candidates.json")
+    source_inbox = _load(project_root / "inbox" / "source_manifest.json")
+    source_index = _load(project_root / "sources" / "historical_gpx_source_index.json")
     gis_perception = _load(project_root / "outputs" / "gis_perception_candidates.json")
     serialized_outputs = "\n".join(
         path.read_text(encoding="utf-8")
@@ -85,10 +97,20 @@ def test_pretrip_import_core_writes_pretrip_admin_and_debug_projections(tmp_path
     assert manifest["import_stage"] == "pretrip"
     assert manifest["network_policy"]["network_calls_allowed"] is False
     assert manifest["inputs"]["golden_route_gpx"]["role"] == "golden_route_reference"
+    assert manifest["inputs"]["source_inbox"]["manifest_ref"] == "inbox/source_manifest.json"
+    assert manifest["inputs"]["source_inbox"]["source_file_count"] == 3
+    assert manifest["inputs"]["historical_gpx_source_index"] == {
+        "source_ref": "sources/historical_gpx_source_index.json",
+        "source_file_count": 3,
+        "raw_payloads_embedded": False,
+    }
     assert manifest["counts"]["reference_track_count"] == 2
     assert manifest["counts"]["route_note_candidate_count"] == 3
     assert manifest["counts"]["gis_perception_ai_judgement_count"] == 3
     assert manifest["counts"]["route_note_ln_proposal_count"] == 2
+    assert manifest["counts"]["route_note_ln_hint_coverage_proposal_count"] == 1
+    assert manifest["counts"]["route_note_ln_warning_coverage_proposal_count"] == 1
+    assert manifest["counts"]["route_note_review_option_count"] == 2
     assert manifest["counts"]["gis_perception_checkpoint_candidate_count"] == 3
     assert manifest["counts"]["debug_projection_event_count"] == 4
     assert manifest["boundary"]["actual_user_track_available"] is False
@@ -97,16 +119,69 @@ def test_pretrip_import_core_writes_pretrip_admin_and_debug_projections(tmp_path
     assert manifest["boundary"]["phase1_runtime_mutation_allowed"] is False
     assert package["source_artifacts"][0]["metadata"]["role"] == "golden_route_reference"
     assert package["source_artifacts"][0]["metadata"]["actual_user_track_available"] is False
+    assert package["boundary"]["candidate_evidence_only"] is True
+    assert package["boundary"]["reviewed_package_is_not_departure_approval"] is True
+    assert package["boundary"]["departure_approval_granted"] is False
+    assert package["boundary"]["phase1_runtime_mutation_allowed"] is False
+    assert package["planning_semantics"]["human_review_required_before_departure_gate"] is True
+    assert reviewed_package["status"] == "reviewed"
+    assert reviewed_package["metadata"]["review_status_source"] == (
+        "reviewed_path_admin_continuity_placeholder"
+    )
+    assert reviewed_package["metadata"]["human_review_count"] == 0
+    assert reviewed_package["metadata"]["departure_approval_granted"] is False
     assert project["import_manifest_ref"] == "outputs/import_manifest.json"
+    assert project["route_evidence_bundle_ref"] == (
+        "normalized/routes/route_evidence_bundle.json"
+    )
     assert project["admin_projection_ref"] == "outputs/admin_projection.json"
     assert project["debug_projection_events_ref"] == "outputs/debug_projection_events.jsonl"
     assert project["route_note_candidates_ref"] == "candidates/route_note_candidates.json"
+    assert project["normalized_route_note_candidates_ref"] == (
+        "normalized/notes/gpx_route_note_candidates.json"
+    )
     assert project["gis_perception_ai_judgements_ref"] == "outputs/gis_perception_ai_judgements.json"
     assert project["route_note_ln_proposals_ref"] == "outputs/route_note_ln_proposals.json"
+    assert project["route_note_review_options_ref"] == "outputs/route_note_review_options.json"
+    assert project["source_inbox_manifest_ref"] == "inbox/source_manifest.json"
+    assert project["historical_gpx_source_index_ref"] == (
+        "sources/historical_gpx_source_index.json"
+    )
+    assert project["route_note_ln_hint_coverage_proposal_count"] == 1
+    assert project["route_note_ln_warning_coverage_proposal_count"] == 1
+    assert project["route_note_review_option_count"] == 2
+    assert project["source_inbox_file_count"] == 3
     assert project["gis_perception_candidates_ref"] == "outputs/gis_perception_candidates.json"
     assert project["route_role"] == "golden_route"
     assert project["actual_user_track_available"] is False
     assert route_summary["route_name"] == "golden route import"
+    assert route_bundle["artifact_kind"] == (
+        "pretrip_historical_gpx_route_evidence_bundle"
+    )
+    assert route_bundle["golden_route"]["role"] == "golden_route_reference"
+    assert route_bundle["golden_route"]["filtered_geometry_ref"].startswith(
+        "normalized/routes/filtered/"
+    )
+    assert route_bundle["route_scope_for_map_preparation"]["corridor_policy"] == (
+        "bbox_fetch_then_along_track_filter"
+    )
+    assert route_bundle["route_scope_for_map_preparation"]["route_corridor_m"] == 500.0
+    assert (
+        route_bundle["route_scope_for_map_preparation"]["reference_track_corridor_m"]
+        == 300.0
+    )
+    assert route_bundle["gpx_filter_refs"] == {
+        "rest_area_candidates_ref": "outputs/rest_area_candidates.json",
+        "resume_segment_report_ref": "outputs/resume_segments.json",
+        "speed_filter_report_ref": "outputs/gpx_speed_filter_report.json",
+    }
+    assert route_bundle["note_candidate_refs"] == [
+        "normalized/notes/gpx_route_note_candidates.json",
+        "candidates/route_note_candidates.json",
+    ]
+    assert route_bundle["boundary"]["actual_user_track_available"] is False
+    assert route_bundle["boundary"]["safety_api_called"] is False
+    assert "<trkpt" not in json.dumps(route_bundle, ensure_ascii=False).lower()
     assert reference_tracks["route_role"] == "golden_route"
     assert reference_tracks["golden_route"]["role"] == "golden_route_reference"
     assert reference_tracks["boundary"]["pretrip_actual_user_track_available"] is False
@@ -118,10 +193,145 @@ def test_pretrip_import_core_writes_pretrip_admin_and_debug_projections(tmp_path
     assert admin_projection["surface_targets"] == ["/admin", "/admin/pretrip", "/admin/debug"]
     assert admin_projection["candidate_counts"]["gis_perception_checkpoint_candidate_count"] == 3
     assert admin_projection["candidate_counts"]["gis_perception_ai_judgement_count"] == 3
+    assert admin_projection["route_notes"]["status"] == "candidate_only"
+    assert admin_projection["route_notes"]["source_path"] == "candidates/route_note_candidates.json"
+    assert admin_projection["route_notes"]["counts"]["note_candidate_count"] == 3
+    assert admin_projection["route_notes"]["counts"]["route_note_time_unknown_count"] == 3
+    assert admin_projection["route_notes"]["counts"]["stale_route_note_count"] == 0
+    assert admin_projection["route_notes"]["counts"]["observed_fact_count"] == 0
+    assert admin_projection["route_notes"]["boundary"]["candidate_only"] is True
+    assert admin_projection["route_notes"]["boundary"]["raw_gpx_embedded"] is False
+    assert (
+        admin_projection["route_notes"]["boundary"][
+            "requires_human_review_before_ln_upgrade"
+        ]
+        is True
+    )
+    assert len(admin_projection["route_notes"]["preview_candidates"]) == 3
+    assert all(
+        candidate["candidate_only"] is True
+        and candidate["runtime_safety_truth"] is False
+        and candidate["requires_human_review"] is True
+        for candidate in admin_projection["route_notes"]["preview_candidates"]
+    )
+    preview_route_note = admin_projection["route_notes"]["preview_candidates"][0]
+    assert preview_route_note["route_note_freshness"] == "unknown"
+    assert preview_route_note["stale_route_note"] is False
+    assert preview_route_note["review_state"] == "needs_review"
+    assert preview_route_note["source_attribution"][0]["source_kind"] == "gpx_route_note"
+    assert preview_route_note["pydantic_ai_prompt_version"]
+    assert len(preview_route_note["model_output_sha256"]) == 64
+    assert admin_projection["route_note_ln_proposals"]["status"] == "candidate_only"
+    assert admin_projection["route_note_ln_proposals"]["counts"]["proposal_count"] == 2
+    assert (
+        admin_projection["route_note_ln_proposals"]["counts"][
+            "phase1_runtime_mutation_count"
+        ]
+        == 0
+    )
+    assert (
+        admin_projection["route_note_ln_proposals"]["boundary"][
+            "human_review_required_before_use"
+        ]
+        is True
+    )
+    assert (
+        admin_projection["route_note_ln_proposals"]["boundary"][
+            "package_mutation_allowed"
+        ]
+        is False
+    )
+    assert len(admin_projection["route_note_ln_proposals"]["preview_proposals"]) == 2
+    assert all(
+        proposal["candidate_only"] is True
+        and proposal["runtime_safety_truth"] is False
+        and proposal["human_review_required"] is True
+        for proposal in admin_projection["route_note_ln_proposals"][
+            "preview_proposals"
+        ]
+    )
+    preview_ln_proposal = admin_projection["route_note_ln_proposals"][
+        "preview_proposals"
+    ][0]
+    assert preview_ln_proposal["review_state"] == "needs_review"
+    assert preview_ln_proposal["source_attribution"][0]["source_kind"] == (
+        "route_note_candidate"
+    )
+    assert preview_ln_proposal["pydantic_ai_prompt_version"]
+    assert len(preview_ln_proposal["model_output_sha256"]) == 64
+    assert preview_ln_proposal["confidence"] in {"low", "medium", "high"}
+    assert preview_ln_proposal["stale_risk"] in {"low", "medium", "high", "unknown"}
+    assert (
+        admin_projection["route_note_review_options"]["status"]
+        == "candidate_only_draft_only"
+    )
+    assert (
+        admin_projection["route_note_review_options"]["counts"]["review_option_count"]
+        == 2
+    )
+    assert (
+        admin_projection["route_note_review_options"]["counts"][
+            "decision_recorded_count"
+        ]
+        == 0
+    )
+    assert (
+        admin_projection["route_note_review_options"]["boundary"][
+            "decision_recording_allowed"
+        ]
+        is False
+    )
+    assert admin_projection["route_note_review_options"]["boundary"]["draft_only"] is True
+    assert len(admin_projection["route_note_review_options"]["preview_options"]) == 2
+    assert all(
+        option["selected_admin_disposition"] is None
+        and option["decision_recorded"] is False
+        and option["draft_only"] is True
+        and option["runtime_safety_truth"] is False
+        for option in admin_projection["route_note_review_options"]["preview_options"]
+    )
+    preview_review_option = admin_projection["route_note_review_options"][
+        "preview_options"
+    ][0]
+    assert preview_review_option["review_state"] == "draft"
+    assert preview_review_option["source_attribution"][0]["source_kind"] == (
+        "route_note_ln_proposal"
+    )
+    assert preview_review_option["pydantic_ai_prompt_version"]
+    assert len(preview_review_option["model_output_sha256"]) == 64
+    assert preview_review_option["confidence"] in {"low", "medium", "high"}
+    assert preview_review_option["stale_risk"] in {"low", "medium", "high", "unknown"}
     assert admin_projection["gis_perception"]["source_profile"] == "gpx_corpus_route_notes"
     assert admin_projection["gis_perception"]["boundary"]["candidate_only"] is True
     assert admin_projection["gis_perception"]["ai_judgements"]["judgement_count"] == 3
     assert admin_projection["gis_perception"]["ai_judgements"]["network_calls_allowed"] is False
+    assert admin_projection["gis_perception"]["ai_judgements"]["boundary"][
+        "candidate_only"
+    ] is True
+    assert admin_projection["gis_perception"]["ai_judgements"]["boundary"][
+        "phase1_runtime_mutation_allowed"
+    ] is False
+    assert admin_projection["gis_perception"]["ai_judgements"]["boundary"][
+        "phase2_writeback_allowed"
+    ] is False
+    assert admin_projection["gis_perception"]["ai_judgements"]["source_ref_count"] == len(
+        admin_projection["gis_perception"]["ai_judgements"]["source_refs"]
+    )
+    assert admin_projection["gis_perception"]["ai_judgements"]["counts"][
+        "candidate_only_count"
+    ] == 3
+    assert admin_projection["gis_perception"]["ai_judgements"]["counts"][
+        "human_review_required_count"
+    ] == 3
+    assert admin_projection["gis_perception"]["ai_judgements"]["counts"][
+        "runtime_safety_truth_count"
+    ] == 0
+    assert admin_projection["gis_perception"]["ai_judgements"]["counts"][
+        "phase1_runtime_mutation_count"
+    ] == 0
+    assert admin_projection["gis_perception"]["ai_judgements"]["counts"][
+        "phase2_writeback_count"
+    ] == 0
     assert admin_projection["route"]["route_role"] == "golden_route_reference"
     assert admin_projection["planning_semantics"]["pretrip_actual_user_track_exists"] is False
     assert (
@@ -136,17 +346,101 @@ def test_pretrip_import_core_writes_pretrip_admin_and_debug_projections(tmp_path
     assert route_notes["counts"]["note_candidate_count"] == 3
     assert gis_ai_judgements["provider_kind"] == "pydantic_ai_test"
     assert gis_ai_judgements["judgement_count"] == 3
+    assert gis_ai_judgements["boundary"]["candidate_only"] is True
+    assert gis_ai_judgements["boundary"]["package_mutation_allowed"] is False
+    assert gis_ai_judgements["boundary"]["mission_graph_mutation_allowed"] is False
+    assert gis_ai_judgements["boundary"]["runtime_mutation_allowed"] is False
+    assert gis_ai_judgements["boundary"]["phase1_runtime_mutation_allowed"] is False
+    assert gis_ai_judgements["boundary"]["phase2_writeback_allowed"] is False
+    assert gis_ai_judgements["boundary"]["raw_gpx_embedded"] is False
+    assert gis_ai_judgements["source_refs"]
+    assert gis_ai_judgements["counts"]["input_count"] == 3
+    assert gis_ai_judgements["counts"]["judgement_count"] == 3
+    assert gis_ai_judgements["counts"]["source_ref_count"] == len(
+        gis_ai_judgements["source_refs"]
+    )
+    assert gis_ai_judgements["counts"]["candidate_only_count"] == 3
+    assert gis_ai_judgements["counts"]["human_review_required_count"] == 3
+    assert gis_ai_judgements["counts"]["runtime_safety_truth_count"] == 0
+    assert gis_ai_judgements["counts"]["package_mutation_count"] == 0
+    assert gis_ai_judgements["counts"]["mission_graph_mutation_count"] == 0
+    assert gis_ai_judgements["counts"]["runtime_mutation_count"] == 0
+    assert gis_ai_judgements["counts"]["phase1_runtime_mutation_count"] == 0
+    assert gis_ai_judgements["counts"]["phase2_writeback_count"] == 0
+    assert gis_ai_judgements["counts"]["raw_model_output_count"] == 0
     assert all(
         judgement["runtime_safety_truth"] is False
         for judgement in gis_ai_judgements["judgements"]
     )
+    assert all(
+        judgement["source_refs"]
+        and judgement["prompt_sha256"]
+        and judgement["pydantic_ai_prompt_version"]
+        == "scout.gis_perception.structured_judgement.v0"
+        and len(judgement["model_output_sha256"]) == 64
+        and judgement["model_output_summary"]
+        and judgement["review_state"] == "needs_review"
+        for judgement in gis_ai_judgements["judgements"]
+    )
     assert route_note_ln_proposals["counts"]["proposal_count"] == 2
+    assert route_note_review_options["counts"]["source_proposal_count"] == 2
+    assert route_note_review_options["counts"]["review_option_count"] == 2
+    assert route_note_review_options["boundary"]["candidate_only"] is True
+    assert route_note_review_options["boundary"]["draft_only"] is True
+    assert source_inbox["artifact_kind"] == "pretrip_source_inbox_manifest"
+    assert source_inbox["source_file_count"] == 3
+    assert source_inbox["raw_payloads_embedded"] is False
+    assert all(
+        (project_root / source["workspace_ref"]).exists()
+        for source in source_inbox["sources"]
+    )
+    assert all(
+        source["raw_payload_embedded_in_json"] is False
+        for source in source_inbox["sources"]
+    )
+    assert source_index["artifact_kind"] == "pretrip_historical_gpx_source_index"
+    assert source_index["schema_version"] == "historical_gpx_importer.v1"
+    assert source_index["source_file_count"] == 3
+    assert source_index["raw_payloads_embedded"] is False
+    assert source_index["sources"][0]["route_role"] == "golden_route"
+    assert all(
+        source["raw_payload_embedded_in_json"] is False
+        for source in source_index["sources"]
+    )
+    assert normalized_route_notes == route_notes
+    assert all(
+        candidate["source_attribution"]
+        and candidate["source_attribution"][0]["source_kind"] == "gpx_route"
+        for candidate in package["checkpoint_candidates"]
+    )
+    _assert_import_candidates_have_pretrip_provenance(
+        package["checkpoint_candidates"],
+        expected_source_kind="gpx_route",
+    )
+    _assert_import_candidates_have_pretrip_provenance(
+        package["segment_candidates"],
+        expected_source_kind="gpx_route_segment",
+    )
+    _assert_import_projection_items_have_pretrip_provenance(
+        checkpoint_events["events"],
+        expected_source_kind="pretrip_checkpoint_candidate",
+    )
+    _assert_import_projection_items_have_pretrip_provenance(
+        segment_display["segments"],
+        expected_source_kind="pretrip_segment_candidate",
+    )
     assert gis_perception["counts"]["checkpoint_candidate_count"] == 3
     assert gis_perception["boundary"]["phase1_runtime_mutation_allowed"] is False
     assert all(
         candidate["source_attribution"]
         and candidate["source_attribution"][0]["source_kind"] == "gpx_route_note"
         for candidate in gis_perception["checkpoint_candidates"]
+    )
+    _assert_gis_perception_candidates_have_pretrip_provenance(
+        gis_perception["checkpoint_candidates"]
+    )
+    _assert_segment_policy_candidates_have_pretrip_provenance(
+        segment_policy["candidates"]
     )
     assert "<gpx" not in serialized_outputs
     assert "<trkpt" not in serialized_outputs
@@ -188,6 +482,395 @@ def test_pretrip_import_core_writes_pretrip_admin_and_debug_projections(tmp_path
     )
 
 
+def test_pretrip_import_uses_material_root_for_terrain_weather_and_retreat(
+    tmp_path: Path,
+) -> None:
+    inbox = tmp_path / "inbox"
+    golden_route = _write_gpx(
+        inbox / "golden-route.gpx",
+        name="material root golden route",
+        points=[
+            (24.0, 121.0, 1000.0, "2026-05-01T00:00:00Z"),
+            (24.001, 121.001, 1010.0, "2026-05-01T00:10:00Z"),
+            (24.002, 121.002, 1020.0, "2026-05-01T00:20:00Z"),
+        ],
+    )
+    material_root = tmp_path / "materials" / "pretrip" / "material_import"
+    dtm_dir = material_root / "sources" / "dtm" / "分幅_南投縣20MDEM(2025)"
+    dtm_dir.mkdir(parents=True)
+    x, y = wgs84_to_twd97(24.001, 121.001)
+    _write_dtm_header(
+        dtm_dir / "material_dem.hdr",
+        tile_id="material",
+        origin_x=int(x) - 1200,
+        origin_y=int(y) - 1200,
+    )
+    (dtm_dir / "material_dem.grd").write_bytes(b"fixture")
+    (material_root / "material_manifest.json").write_text(
+        json.dumps(
+            {
+                "artifact_kind": "scout_pretrip_material_root_manifest",
+                "layout_version": "0.1.0",
+                "project_id": "material_import",
+                "sources": {
+                    "primary_gpx": str(golden_route),
+                    "gpx_corpus": str(inbox),
+                    "dtm_dirs": [str(dtm_dir)],
+                },
+                "boundary": {
+                    "pretrip_candidate_evidence_only": True,
+                    "runtime_safety_truth": False,
+                    "phase1_runtime_mutation_allowed": False,
+                },
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    run_pretrip_import(
+        PretripImportRequest(
+            project_id="material_import",
+            primary_gpx=golden_route,
+            workspace_root=tmp_path / "workspaces",
+            profile="pi-offline",
+            checkpoint_spacing_m=500.0,
+            material_root=material_root,
+            import_timestamp="2026-05-21T00:00:00+00:00",
+        )
+    )
+
+    project_root = tmp_path / "workspaces" / "material_import"
+    project = _load(project_root / "project.json")
+    dtm_summary = _load(project_root / "normalized" / "terrain" / "dtm_coverage_summary.json")
+    segment_dtm = _load(project_root / "normalized" / "terrain" / "segment_dtm_coverage.json")
+    weather = _load(project_root / "outputs" / "weather_daylight_evidence.json")
+    retreat_routes = _load(project_root / "candidates" / "retreat_routes.json")
+
+    assert project["dtm_coverage_summary_ref"] == "normalized/terrain/dtm_coverage_summary.json"
+    assert project["segment_dtm_coverage_ref"] == "normalized/terrain/segment_dtm_coverage.json"
+    assert project["weather_daylight_evidence_ref"] == "outputs/weather_daylight_evidence.json"
+    assert project["weather_daylight_evidence_count"] == 1
+    assert project["retreat_routes_ref"] == "candidates/retreat_routes.json"
+    assert project["retreat_route_candidate_count"] == 1
+    assert dtm_summary["source_dirs"] == [str(dtm_dir.resolve())]
+    assert dtm_summary["scanned_header_count"] == 1
+    assert dtm_summary["candidate_tiles"][0]["tile_id"] == "material"
+    assert segment_dtm["segment_count"] == project["segment_candidate_count"]
+    assert weather["status"] == "candidate_only"
+    assert weather["external_api_calls_made"] is False
+    assert weather["authoritative_weather_computed"] is False
+    assert retreat_routes[0]["candidate_id"] == "retreat.material_import.return_to_entry"
+    assert retreat_routes[0]["runtime_safety_truth"] is False
+
+
+def test_pretrip_import_filters_gpx_points_requiring_unreasonable_speed(
+    tmp_path: Path,
+) -> None:
+    golden_route = _write_gpx(
+        tmp_path / "golden-route.gpx",
+        name="speed filtered golden route",
+        points=[
+            (24.0, 121.0, 1000.0, "2026-05-01T00:00:00Z"),
+            (25.0, 122.0, 1000.0, "2026-05-01T00:01:00Z"),
+            (24.004, 121.004, 1005.0, "2026-05-01T00:20:00Z"),
+        ],
+    )
+    reference_route = _write_gpx(
+        tmp_path / "reference-route.gpx",
+        name="speed filtered reference route",
+        points=[
+            (24.0, 121.0, 1000.0, "2026-05-01T00:00:00Z"),
+            (25.1, 122.1, 1000.0, "2026-05-01T00:01:00Z"),
+            (24.004, 121.004, 1010.0, "2026-05-01T00:30:00Z"),
+        ],
+    )
+
+    manifest = run_pretrip_import(
+        PretripImportRequest(
+            project_id="speed_filter_import",
+            primary_gpx=golden_route,
+            reference_gpx_paths=(reference_route,),
+            workspace_root=tmp_path / "workspaces",
+            profile="pi-offline",
+            checkpoint_spacing_m=500.0,
+            import_timestamp="2026-05-21T00:00:00+00:00",
+        )
+    )
+
+    project_root = tmp_path / "workspaces" / "speed_filter_import"
+    project = _load(project_root / "project.json")
+    route_summary = _load(project_root / "normalized" / "routes" / "route_summary.json")
+    filter_report = _load(project_root / "outputs" / "gpx_speed_filter_report.json")
+    admin_projection = _load(project_root / "outputs" / "admin_projection.json")
+    debug_events = [
+        json.loads(line)
+        for line in (project_root / "outputs" / "debug_projection_events.jsonl")
+        .read_text(encoding="utf-8")
+        .splitlines()
+    ]
+    package = _load(project_root / "outputs" / "pretrip_package.json")
+    primary_filtered_gpx = Path(filter_report["primary"]["output_path"]).read_text(
+        encoding="utf-8"
+    )
+
+    assert manifest["counts"]["route_point_count"] == 2
+    assert manifest["counts"]["gpx_speed_filter_original_point_count"] == 6
+    assert manifest["counts"]["gpx_speed_filter_filtered_point_count"] == 4
+    assert manifest["counts"]["gpx_speed_filter_removed_point_count"] == 2
+    assert manifest["gpx_speed_filter"]["max_reasonable_speed_kmh"] == 120.0
+    assert manifest["boundary"]["gpx_speed_filter_applied"] is True
+    assert filter_report["removed_track_point_count"] == 2
+    assert filter_report["primary"]["removed_track_point_count"] == 1
+    assert filter_report["references"][0]["removed_track_point_count"] == 1
+    assert filter_report["primary"]["removed_points"][0]["source_index"] == 1
+    assert filter_report["boundary"]["pretrip_candidate_evidence_only"] is True
+    assert filter_report["boundary"]["runtime_safety_truth"] is False
+    assert route_summary["point_count"] == 2
+    assert route_summary["bbox_wgs84"]["max_lat"] < 24.02
+    assert route_summary["bbox_wgs84"]["max_lon"] < 121.02
+    assert "25.0" not in primary_filtered_gpx
+    assert "122.0" not in primary_filtered_gpx
+    assert package["source_artifacts"][0]["metadata"]["gpx_speed_filter"][
+        "removed_track_point_count"
+    ] == 1
+    assert package["source_artifacts"][0]["metadata"]["gpx_speed_filter"][
+        "report_ref"
+    ] == "outputs/gpx_speed_filter_report.json"
+    assert package["source_artifacts"][0]["metadata"]["gpx_speed_filter"][
+        "detail_lists_embedded"
+    ] is False
+    assert "removed_points" not in package["source_artifacts"][0]["metadata"][
+        "gpx_speed_filter"
+    ]
+    assert "exempted_points" not in package["source_artifacts"][0]["metadata"][
+        "gpx_speed_filter"
+    ]
+    assert admin_projection["route"]["gpx_speed_filter"]["removed_track_point_count"] == 2
+    assert project["gpx_speed_filter_removed_track_point_count"] == 2
+    assert project["gpx_speed_filter_report_ref"] == "outputs/gpx_speed_filter_report.json"
+    assert "removed 2 point(s)" in debug_events[1]["summary"]
+    assert debug_events[1]["payload"]["gpx_speed_filter"][
+        "removed_track_point_count"
+    ] == 2
+
+
+def test_pretrip_import_filters_gpx_points_requiring_three_times_previous_speed(
+    tmp_path: Path,
+) -> None:
+    golden_route = _write_gpx(
+        tmp_path / "golden-route.gpx",
+        name="relative speed filtered golden route",
+        points=[
+            (24.0, 121.0, 1000.0, "2026-05-01T00:00:00Z"),
+            (24.001, 121.0, 1001.0, "2026-05-01T00:10:00Z"),
+            (24.006, 121.0, 1002.0, "2026-05-01T00:20:00Z"),
+            (24.002, 121.0, 1003.0, "2026-05-01T00:30:00Z"),
+        ],
+    )
+
+    manifest = run_pretrip_import(
+        PretripImportRequest(
+            project_id="relative_speed_filter_import",
+            primary_gpx=golden_route,
+            workspace_root=tmp_path / "workspaces",
+            profile="pi-offline",
+            checkpoint_spacing_m=500.0,
+            import_timestamp="2026-05-21T00:00:00+00:00",
+        )
+    )
+
+    project_root = tmp_path / "workspaces" / "relative_speed_filter_import"
+    route_summary = _load(project_root / "normalized" / "routes" / "route_summary.json")
+    filter_report = _load(project_root / "outputs" / "gpx_speed_filter_report.json")
+    primary_removed = filter_report["primary"]["removed_points"][0]
+    primary_filtered_gpx = Path(filter_report["primary"]["output_path"]).read_text(
+        encoding="utf-8"
+    )
+
+    assert manifest["counts"]["route_point_count"] == 3
+    assert manifest["counts"]["gpx_speed_filter_removed_point_count"] == 1
+    assert manifest["gpx_speed_filter"]["max_previous_speed_ratio"] == 3.0
+    assert filter_report["primary"]["removed_track_point_count"] == 1
+    assert primary_removed["source_index"] == 2
+    assert primary_removed["reason"] == "required_speed_exceeds_previous_speed_ratio"
+    assert primary_removed["required_speed_kmh"] < 120.0
+    assert primary_removed["speed_ratio_to_previous_kept"] > 3.0
+    assert route_summary["point_count"] == 3
+    assert route_summary["bbox_wgs84"]["max_lat"] < 24.003
+    assert 'lat="24.006"' not in primary_filtered_gpx
+
+
+def test_pretrip_import_marks_long_distance_gaps_as_resume_segments(
+    tmp_path: Path,
+) -> None:
+    golden_route = _write_gpx(
+        tmp_path / "golden-route.gpx",
+        name="gap filtered golden route",
+        points=[
+            (24.0, 121.0, 1000.0, "2026-05-01T00:00:00Z"),
+            (24.001, 121.0, 1001.0, "2026-05-01T00:10:00Z"),
+            (24.15, 121.0, 1002.0, "2026-05-05T00:00:00Z"),
+            (24.151, 121.0, 1003.0, "2026-05-05T00:10:00Z"),
+        ],
+    )
+
+    manifest = run_pretrip_import(
+        PretripImportRequest(
+            project_id="gap_filter_import",
+            primary_gpx=golden_route,
+            workspace_root=tmp_path / "workspaces",
+            profile="pi-offline",
+            checkpoint_spacing_m=500.0,
+            import_timestamp="2026-05-21T00:00:00+00:00",
+        )
+    )
+
+    project_root = tmp_path / "workspaces" / "gap_filter_import"
+    route_summary = _load(project_root / "normalized" / "routes" / "route_summary.json")
+    filter_report = _load(project_root / "outputs" / "gpx_speed_filter_report.json")
+    resume_segments = _load(project_root / "outputs" / "resume_segments.json")
+    segments = _load(project_root / "candidates" / "segments.json")
+    segment_display_geometry = _load(
+        project_root / "outputs" / "segment_display_geometry.json"
+    )
+
+    assert manifest["counts"]["route_point_count"] == 4
+    assert manifest["counts"]["gpx_speed_filter_removed_point_count"] == 0
+    assert manifest["counts"]["resume_segment_count"] == 1
+    assert route_summary["point_count"] == 4
+    assert route_summary["bbox_wgs84"]["max_lat"] == 24.151
+    assert filter_report["primary"]["removed_points"] == []
+    assert resume_segments["max_reasonable_point_gap_m"] == 1000.0
+    assert resume_segments["resume_segment_count"] == 1
+    assert resume_segments["segments"][0]["segment_candidate_id"] == "seg.001"
+    assert resume_segments["segments"][0]["resume_segment"] is True
+    assert resume_segments["segments"][0]["gaps"][0]["distance_m"] > 1000.0
+    assert "Resume segment:" in segments[0]["notes"]
+    assert segments[0]["review_state"] == "needs_review"
+    assert segment_display_geometry["resume_segment_count"] == 1
+    assert segment_display_geometry["segments"][0]["resume_segment"] is True
+
+
+def test_pretrip_import_keeps_speed_outlier_when_route_note_protected(
+    tmp_path: Path,
+) -> None:
+    golden_route = _write_gpx(
+        tmp_path / "golden-route.gpx",
+        name="route note protected speed outlier",
+        points=[
+            (24.0, 121.0, 1000.0, "2026-05-01T00:00:00Z"),
+            (25.0, 122.0, 1001.0, "2026-05-01T00:01:00Z"),
+            (25.001, 122.001, 1002.0, "2026-05-01T00:10:00Z"),
+        ],
+        waypoints=[
+            (25.0, 122.0, "路徑註記保留", "人工標註點", ""),
+        ],
+    )
+
+    manifest = run_pretrip_import(
+        PretripImportRequest(
+            project_id="route_note_protected_import",
+            primary_gpx=golden_route,
+            workspace_root=tmp_path / "workspaces",
+            profile="pi-offline",
+            checkpoint_spacing_m=500.0,
+            import_timestamp="2026-05-21T00:00:00+00:00",
+        )
+    )
+
+    project_root = tmp_path / "workspaces" / "route_note_protected_import"
+    filter_report = _load(project_root / "outputs" / "gpx_speed_filter_report.json")
+    route_summary = _load(project_root / "normalized" / "routes" / "route_summary.json")
+
+    assert manifest["counts"]["route_point_count"] == 3
+    assert manifest["counts"]["gpx_speed_filter_removed_point_count"] == 0
+    assert manifest["counts"]["gpx_speed_filter_exempted_point_count"] == 1
+    assert route_summary["point_count"] == 3
+    assert filter_report["primary"]["removed_points"] == []
+    assert filter_report["primary"]["exempted_track_point_count"] == 1
+    exempted = filter_report["primary"]["exempted_points"][0]
+    assert exempted["source_index"] == 1
+    assert exempted["would_remove_reason"] == "required_speed_exceeds_absolute_threshold"
+    assert exempted["exemption_reason"] == "route_note_protected"
+    assert "路徑註記保留" in exempted["route_note"]["note"]
+
+
+def test_pretrip_import_adds_rest_area_checkpoint_from_low_speed_dense_cluster(
+    tmp_path: Path,
+) -> None:
+    cluster_points = [
+        (
+            24.001 + (0.00001 if index % 2 else 0.0),
+            121.001 + (0.00001 if index % 3 else 0.0),
+            1000.0,
+            f"2026-05-01T00:{5 + index * 2:02d}:00Z",
+        )
+        for index in range(16)
+    ]
+    golden_route = _write_gpx(
+        tmp_path / "golden-route.gpx",
+        name="rest area cluster golden route",
+        points=[
+            (24.0, 121.0, 1000.0, "2026-05-01T00:00:00Z"),
+            *cluster_points,
+            (24.006, 121.006, 1020.0, "2026-05-01T00:45:00Z"),
+        ],
+    )
+
+    manifest = run_pretrip_import(
+        PretripImportRequest(
+            project_id="rest_area_import",
+            primary_gpx=golden_route,
+            workspace_root=tmp_path / "workspaces",
+            profile="pi-offline",
+            checkpoint_spacing_m=2_000.0,
+            import_timestamp="2026-05-21T00:00:00+00:00",
+        )
+    )
+
+    project_root = tmp_path / "workspaces" / "rest_area_import"
+    project = _load(project_root / "project.json")
+    rest_area_report = _load(project_root / "outputs" / "rest_area_candidates.json")
+    checkpoints = _load(project_root / "candidates" / "checkpoints.json")
+    segments = _load(project_root / "candidates" / "segments.json")
+    checkpoint_events = _load(project_root / "outputs" / "checkpoint_events.json")
+
+    assert manifest["counts"]["rest_area_candidate_count"] == 1
+    assert manifest["counts"]["rest_area_checkpoint_count"] == 1
+    assert manifest["counts"]["checkpoint_candidate_count"] == 3
+    assert manifest["counts"]["segment_candidate_count"] == 2
+    assert project["rest_area_candidates_ref"] == "outputs/rest_area_candidates.json"
+    assert project["rest_area_candidate_count"] == 1
+    assert project["rest_area_checkpoint_count"] == 1
+    assert rest_area_report["rest_area_candidate_count"] == 1
+    assert rest_area_report["rest_area_checkpoint_count"] == 1
+    rest_area = rest_area_report["candidates"][0]
+    assert rest_area["checkpoint_inserted"] is True
+    assert rest_area["label"] == "Rest area / camp area 001"
+    assert rest_area["source_point_count"] == 16
+    assert rest_area["duration_seconds"] >= 30 * 60
+    assert rest_area["mean_speed_m_per_min"] < 5.0
+    rest_checkpoints = [
+        checkpoint
+        for checkpoint in checkpoints
+        if checkpoint["checkpoint_type"] == "rest_area"
+    ]
+    assert len(rest_checkpoints) == 1
+    assert rest_checkpoints[0]["candidate_id"] == rest_area["checkpoint_candidate_id"]
+    assert rest_checkpoints[0]["source_attribution"][0]["source_kind"] == "rest_area_cluster"
+    assert rest_checkpoints[0]["source_attribution"][0]["source_candidate_id"] == rest_area["candidate_id"]
+    assert len(segments) == 2
+    assert segments[0]["from_candidate_id"] == "cp.start"
+    assert segments[0]["to_candidate_id"] == rest_area["checkpoint_candidate_id"]
+    assert segments[1]["from_candidate_id"] == rest_area["checkpoint_candidate_id"]
+    assert segments[1]["to_candidate_id"] == "cp.finish"
+    assert any(
+        event["checkpoint_candidate_id"] == "cp.rest_area.001"
+        for event in checkpoint_events["events"]
+    )
+
+
 def test_pretrip_import_cli_copies_template_workspace_without_mutating_template(tmp_path: Path) -> None:
     inbox = tmp_path / "inbox"
     refs = inbox / "refs"
@@ -197,7 +880,7 @@ def test_pretrip_import_cli_copies_template_workspace_without_mutating_template(
         name="cli golden route",
         points=[
             (24.0, 121.0, 1000.0, "2026-05-01T00:00:00Z"),
-            (24.01, 121.01, 1010.0, "2026-05-01T00:10:00Z"),
+            (24.004, 121.004, 1010.0, "2026-05-01T00:10:00Z"),
         ],
     )
     _write_gpx(
@@ -205,7 +888,7 @@ def test_pretrip_import_cli_copies_template_workspace_without_mutating_template(
         name="cli reference",
         points=[
             (24.0, 121.0, 1000.0, "2026-05-01T00:00:00Z"),
-            (24.02, 121.02, 1020.0, "2026-05-01T00:20:00Z"),
+            (24.004, 121.004, 1020.0, "2026-05-01T00:20:00Z"),
         ],
     )
     template = tmp_path / "template"
@@ -300,6 +983,147 @@ def test_pretrip_import_template_workspace_feeds_admin_view_projection(tmp_path:
     ]
     assert view["admin_surface_projection"]["route"]["route_role"] == (
         "golden_route_reference"
+    )
+    assert view["admin_surface_projection"]["route_notes"]["status"] == "candidate_only"
+    assert (
+        view["admin_surface_projection"]["route_note_ln_proposals"]["counts"][
+            "proposal_count"
+        ]
+        == 0
+    )
+    assert (
+        view["admin_surface_projection"]["route_note_review_options"]["counts"][
+            "decision_recorded_count"
+        ]
+        == 0
+    )
+    assert (
+        view["admin_surface_projection"]["route_note_review_options"]["boundary"][
+            "draft_only"
+        ]
+        is True
+    )
+    assert view["admin_surface_projection"]["candidate_counts"]["mcp_candidate_count"] == 6
+    assert (
+        view["admin_surface_projection"]["major_critical_points"]["status"]
+        == "candidate_only"
+    )
+    assert (
+        view["admin_surface_projection"]["major_critical_points"]["counts"][
+            "mcp_candidate_count"
+        ]
+        == 6
+    )
+    assert (
+        view["admin_surface_projection"]["major_critical_points"]["counts"][
+            "retrieval_query_count"
+        ]
+        == 11
+    )
+    assert (
+        view["admin_surface_projection"]["major_critical_points"]["counts"][
+            "ocr_label_count"
+        ]
+        == 1
+    )
+    assert (
+        view["admin_surface_projection"]["major_critical_points"]["counts"][
+            "cp_support_supported_count"
+        ]
+        == 5
+    )
+    assert (
+        view["admin_surface_projection"]["major_critical_points"]["retrieval"][
+            "live_network_performed"
+        ]
+        is False
+    )
+    assert (
+        view["admin_surface_projection"]["major_critical_points"]["retrieval"][
+            "truth_decision_allowed"
+        ]
+        is False
+    )
+    assert (
+        view["admin_surface_projection"]["major_critical_points"]["boundary"][
+            "runtime_safety_truth"
+        ]
+        is False
+    )
+    assert (
+        view["admin_surface_projection"]["major_critical_points"]["boundary"][
+            "compile_allowed"
+        ]
+        is False
+    )
+    assert (
+        len(
+            view["admin_surface_projection"]["major_critical_points"][
+                "preview_candidates"
+            ]
+        )
+        == 6
+    )
+    assert view["admin_surface_projection"]["departure_bundle"]["status"] == (
+        "frozen_candidate"
+    )
+    assert (
+        view["admin_surface_projection"]["departure_bundle"]["boundary"][
+            "not_departure_approval"
+        ]
+        is True
+    )
+    assert (
+        view["admin_surface_projection"]["departure_bundle"]["boundary"][
+            "human_review_required_before_departure"
+        ]
+        is True
+    )
+    assert (
+        view["admin_surface_projection"]["departure_bundle"]["boundary"][
+            "phase1_runtime_mutation_allowed"
+        ]
+        is False
+    )
+    assert (
+        view["admin_surface_projection"]["departure_bundle"]["counts"][
+            "required_ref_count"
+        ]
+        >= 1
+    )
+    assert (
+        view["admin_surface_projection"]["runtime_handoff"]["status"]
+        == "candidate_metadata_only"
+    )
+    assert (
+        view["admin_surface_projection"]["runtime_handoff"]["boundary"][
+            "candidate_metadata_only"
+        ]
+        is True
+    )
+    assert (
+        view["admin_surface_projection"]["runtime_handoff"]["boundary"][
+            "departure_approval_granted"
+        ]
+        is False
+    )
+    assert (
+        view["admin_surface_projection"]["runtime_handoff"]["boundary"][
+            "runtime_handoff_operator_trigger_required"
+        ]
+        is True
+    )
+    assert (
+        view["admin_surface_projection"]["runtime_handoff"]["counts"][
+            "runtime_write_count"
+        ]
+        == 0
+    )
+    assert (
+        view["admin_surface_projection"]["runtime_handoff"]["counts"][
+            "safety_call_count"
+        ]
+        == 0
     )
     assert view["reference_tracks"]["golden_route"]["pretrip_actual_user_track"] is False
     assert view["gis_perception"]["status"] == "candidate_only"
@@ -423,7 +1247,12 @@ def test_admin_view_projects_aggregated_gis_perception_cp_into_review_queue(
         for attribution in candidate["source_attribution"]
     )
     assert review_queue["counts"]["category_counts"]["gis_perception_cp"] == 13
-    assert review_queue["counts"]["item_count"] == 156
+    assert review_queue["counts"]["category_counts"]["segment_policy"] == 2
+    assert review_queue["counts"]["item_count"] == 30
+    assert all(
+        "seg.040" not in item["candidate_ref"]
+        for item in review_queue["items"]
+    )
     gis_review_item = next(
         item
         for item in review_queue["items"]
@@ -435,8 +1264,171 @@ def test_admin_view_projects_aggregated_gis_perception_cp_into_review_queue(
     assert gis_review_item["evidence_summary"]["runtime_safety_truth"] is False
 
 
+def test_pretrip_import_preserves_workspace_local_imagery_refs(
+    tmp_path: Path,
+) -> None:
+    golden_route = _write_gpx(
+        tmp_path / "golden-route.gpx",
+        name="imagery ref preserved route",
+        points=[
+            (24.0, 121.0, 1000.0, "2026-05-01T00:00:00Z"),
+            (24.001, 121.001, 1001.0, "2026-05-01T00:10:00Z"),
+        ],
+    )
+    template_root = tmp_path / "template_project"
+    manifest_dir = template_root / "outputs" / "layers" / "manifests"
+    manifest_dir.mkdir(parents=True)
+    (template_root / "project.json").write_text(
+        json.dumps({"project_id": "imagery_import"}, sort_keys=True),
+        encoding="utf-8",
+    )
+    (manifest_dir / "imagery_import.local_raster_source_manifest.json").write_text(
+        json.dumps(
+            {
+                "source_kind": "local_geotiff",
+                "source_file": {
+                    "path": "/data/scout/raster-sources/imagery_import/map.tiff"
+                },
+                "handoff": {
+                    "scout_kmz_path": "/data/scout/raster-sources/imagery_import/map.kmz"
+                },
+            },
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+    (manifest_dir / "imagery_import.raster_tile_pyramid_plan.json").write_text(
+        json.dumps({"cache_root": "/data/scout/raster-tiles"}, sort_keys=True),
+        encoding="utf-8",
+    )
+
+    run_pretrip_import(
+        PretripImportRequest(
+            project_id="imagery_import",
+            primary_gpx=golden_route,
+            workspace_root=tmp_path / "workspaces",
+            template_project_root=template_root,
+            profile="pi-offline",
+            import_timestamp="2026-05-21T00:00:00+00:00",
+        )
+    )
+
+    project = _load(tmp_path / "workspaces" / "imagery_import" / "project.json")
+
+    assert project["imagery_manifest_ref"] == (
+        "outputs/layers/manifests/imagery_import.local_raster_source_manifest.json"
+    )
+    assert project["local_raster_manifest_ref"] == project["imagery_manifest_ref"]
+    assert project["raster_tile_manifest_ref"] == (
+        "outputs/layers/manifests/imagery_import.raster_tile_pyramid_plan.json"
+    )
+    assert project["imagery_source_tiff_ref"] == (
+        "/data/scout/raster-sources/imagery_import/map.tiff"
+    )
+    assert project["imagery_source_kmz_ref"] == (
+        "/data/scout/raster-sources/imagery_import/map.kmz"
+    )
+    assert project["imagery_tile_cache_root"] == "/data/scout/raster-tiles"
+    assert project["review_queue_manifest_ref"] == "outputs/review_queue_manifest.json"
+
+    review_queue = _load(
+        tmp_path
+        / "workspaces"
+        / "imagery_import"
+        / "outputs"
+        / "review_queue_manifest.json"
+    )
+    assert review_queue["boundary"]["candidate_queue_only"] is True
+    assert review_queue["boundary"]["phase1_runtime_mutation_allowed"] is False
+    assert review_queue["boundary"]["phase2_writeback_allowed"] is False
+    assert review_queue["counts"]["item_count"] >= 1
+
+
 def _load(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _assert_import_candidates_have_pretrip_provenance(
+    candidates: list[dict],
+    *,
+    expected_source_kind: str,
+) -> None:
+    for candidate in candidates:
+        assert candidate["source_refs"]
+        assert candidate["source_attribution"]
+        assert candidate["source_attribution"][0]["source_kind"] == expected_source_kind
+        assert candidate["extractor_version"] == "pretrip_import.0.1.0"
+        assert candidate["pydantic_ai_prompt_version"] == (
+            "not_applicable_deterministic_pretrip_import"
+        )
+        assert candidate["model_output_sha256"]
+        assert candidate["model_output_summary"]
+        assert candidate["confidence"] in {"high", "medium"}
+        assert candidate["stale_risk"] == "medium"
+        assert candidate["candidate_only"] is True
+        assert candidate["runtime_safety_truth"] is False
+
+
+def _assert_import_projection_items_have_pretrip_provenance(
+    items: list[dict],
+    *,
+    expected_source_kind: str,
+) -> None:
+    for item in items:
+        assert item["source_refs"]
+        assert item["source_attribution"]
+        assert item["source_attribution"][0]["source_kind"] == expected_source_kind
+        assert item["extractor_version"] == "pretrip_import.0.1.0"
+        assert item["pydantic_ai_prompt_version"] == (
+            "not_applicable_deterministic_pretrip_import"
+        )
+        assert item["model_output_sha256"]
+        assert item["model_output_summary"]
+        assert item["confidence"] in {"high", "medium"}
+        assert item["stale_risk"] == "medium"
+        assert item["review_state"] in {"proposed", "needs_review"}
+        assert item["candidate_only"] is True
+        assert item["runtime_safety_truth"] is False
+
+
+def _assert_gis_perception_candidates_have_pretrip_provenance(
+    candidates: list[dict],
+) -> None:
+    for candidate in candidates:
+        assert candidate["source_refs"]
+        assert candidate["source_attribution"]
+        assert candidate["extractor_version"] == "0.1.0"
+        assert candidate["pydantic_ai_prompt_version"] == (
+            "scout.gis_perception.structured_judgement.v0"
+        )
+        assert candidate["model_output_sha256"]
+        assert candidate["model_output_summary"]
+        assert candidate["confidence"] in {"low", "medium", "high"}
+        assert candidate["stale_risk"] in {"low", "medium", "high"}
+        assert candidate["review_state"] == "needs_review"
+        assert candidate["candidate_only"] is True
+        assert candidate["runtime_safety_truth"] is False
+
+
+def _assert_segment_policy_candidates_have_pretrip_provenance(
+    candidates: list[dict],
+) -> None:
+    for candidate in candidates:
+        assert candidate["source_refs"]
+        assert candidate["source_attribution"]
+        assert candidate["source_attribution"][0]["source_kind"] == (
+            "pretrip_segment_candidate"
+        )
+        assert candidate["extractor_version"] == "pretrip_segment_policy.v0.1"
+        assert candidate["pydantic_ai_prompt_version"] == (
+            "not_applicable_deterministic_segment_policy"
+        )
+        assert candidate["model_output_sha256"]
+        assert candidate["model_output_summary"]
+        assert candidate["confidence"] in {"high", "medium"}
+        assert candidate["stale_risk"] == "medium"
+        assert candidate["candidate_only"] is True
+        assert candidate["runtime_safety_truth"] is False
 
 
 def _write_gpx(
@@ -478,3 +1470,27 @@ def _write_gpx(
         encoding="utf-8",
     )
     return path
+
+
+def _write_dtm_header(path: Path, *, tile_id: str, origin_x: int, origin_y: int) -> None:
+    path.write_text(
+        "\n".join(
+            [
+                "fixture tile",
+                tile_id,
+                "TWD97[2010]",
+                "TWVD2001",
+                "5000",
+                "20",
+                "20",
+                "0",
+                "144",
+                "144",
+                str(origin_x),
+                str(origin_y),
+                "10",
+            ]
+        )
+        + "\n",
+        encoding="big5",
+    )

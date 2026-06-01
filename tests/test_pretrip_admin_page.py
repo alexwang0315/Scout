@@ -92,7 +92,11 @@ def test_pretrip_admin_page_contains_expected_layout_contract():
     assert "view.capability_timeline_import?.edges" in html
     assert "capability_timeline_import" in html
     assert "focusMapFor" in html
-    assert "FOCUS_POINT_VIEWPORT_M = 5" in html
+    assert "FOCUS_POINT_VIEWPORT_M = 50" in html
+    assert "pointFocusItemFor" in html
+    assert "findPointFocusEvidenceByRef" in html
+    assert "review_focus" in html
+    assert "const pad = MAP_VISUAL_PADDING / state.zoom;" not in html
     assert "MAP_ZOOM_STEP_FACTOR = 1.25" in html
     assert "zoom-selection" in html
     assert "beginMapRectangleZoom" in html
@@ -100,6 +104,7 @@ def test_pretrip_admin_page_contains_expected_layout_contract():
     assert "zoomMapOutFromBox" in html
     assert "Math.max(1, Math.min(MAP_MAX_ZOOM, state.zoom / factor))" in html
     assert "isZoomOutDrag" in html
+    assert 'button.addEventListener("click", () => {\n        selectEvidence(item);\n        focusMapFor(item);' in html
     assert 'addEventListener("dblclick"' in html
     assert "nearby_group_id" in html
     assert "route_note_freshness" in html
@@ -141,6 +146,8 @@ def test_pretrip_admin_page_has_read_only_toolbar_and_summary_raw_sample_contrac
         "zoomIn",
         "zoomOut",
         "fitRoute",
+        "boxZoomMode",
+        "zoomLevel",
         "panUp",
         "panDown",
         "panLeft",
@@ -182,6 +189,10 @@ def test_pretrip_admin_page_groups_dense_controls_and_uses_short_labels():
     assert 'id="readinessStripStatus">Loading…</strong>' in html
     assert 'class="sr-only">Reviewed planning is not runtime activation.</small>' in html
     assert 'aria-label="Map view controls"' in html
+    assert 'aria-label="Rectangle drag zoom"' in html
+    assert 'id="zoomLevel" class="zoom-level"' in html
+    assert "function updateMapZoomIndicator" in html
+    assert "selectionZoomFactor(selection).toFixed(2)" in html
     assert 'aria-label="Map layer controls"' in html
     assert 'class="layer-menu"' in html
     assert 'id="layerControl" title="Show layer controls" aria-label="Layer controls"' in html
@@ -199,12 +210,12 @@ def test_pretrip_admin_page_groups_dense_controls_and_uses_short_labels():
     assert 'aria-label="Local workspace menu actions"' in html
     assert 'title="Add retreat route to workspace edit log" aria-label="Add retreat route to workspace edit log">Add retreat</button>' in html
     assert 'title="Open Import GPX reference route flow" aria-label="Open Import GPX reference route flow">Import GPX</button>' in html
-    assert 'title="Route note layer"><input type="checkbox" data-layer="route-notes" checked> Notes</label>' in html
+    assert 'title="Route note layer"><input type="checkbox" data-layer="route-notes"> Notes</label>' in html
     assert 'title="Scout Risk Engine pretrip risk score point layer"><input type="checkbox" data-layer="risk-score"> Risk pts</label>' in html
     assert 'title="Route-aligned baseline terrain risk layer"><input type="checkbox" data-layer="risk-ribbon" checked> Baseline</label>' in html
     assert 'title="Route-specific calibrated heat map"><input type="checkbox" data-layer="risk-heatmap" checked> Calibrated</label>' in html
     assert 'title="Difference between baseline risk and calibrated heat"><input type="checkbox" data-layer="risk-delta"> Delta</label>' in html
-    assert 'title="Weather API layer"><input type="checkbox" data-layer="weather-api" checked> Weather</label>' in html
+    assert 'title="Weather API layer"><input type="checkbox" data-layer="weather-api"> Weather</label>' in html
     assert 'aria-label="Move to next review item">Next</button>' in html
     assert 'aria-label="Accept selected review">Accept</button>' in html
     assert 'aria-label="Route-note reviewed assumptions">Assumptions</button>' in html
@@ -384,23 +395,36 @@ def test_pretrip_admin_page_fetches_fixture_backed_read_only_project_api():
     assert "OSM_LOCAL_TILE_URL_TEMPLATE" in html
     assert "const OSM_TARGET_ZOOM = 17" in html
     assert "const OSM_MAX_TILES = 64" in html
+    assert "const RASTER_MAX_TILES = 64" in html
     assert "const MAP_VISUAL_PADDING = 56" in html
     assert "RASTER_LOCAL_TILE_URL_TEMPLATE" in html
+    assert "RASTER_TILE_CACHE_BUST" in html
+    assert "function rasterTileCacheBustedUrl" in html
     assert "/admin/tiles/osm/{z}/{x}/{y}.png" in html
+    assert "/admin/tiles/osm/{z}/{x}/{y}.png?fallback=transparent" in html
     assert "/admin/tiles/imagery/{project_id}/{layer_id}/{z}/{x}/{y}.png" in html
     assert "function osmTileTemplate" in html
+    assert "function isLocalOsmTileMode" in html
+    assert 'return requested === "public" ? OSM_PUBLIC_TILE_URL_TEMPLATE : OSM_LOCAL_TILE_URL_TEMPLATE' in html
     assert "function tileRangeForZoom" in html
     assert "function tileCountForZoom" in html
     assert "tileCountForZoom(bounds, zoom) > maxTiles" in html
     assert "function rasterTileTemplate" in html
-    assert 'params.get("tileSource")' in html
+    assert "function rasterZoomRangeFor" in html
+    assert "function chooseRasterZoom" in html
+    assert "const z = zoom ?? chooseRasterZoom(view, bounds)" in html
+    assert 'params.get("osmSource")' in html
     assert "https://tile.openstreetmap.org/{z}/{x}/{y}.png" in html
     assert "function renderRasterImagery" in html
     assert "function rasterTileCoverage" in html
+    assert "function rasterBoundsFor" in html
+    assert "function boundsIntersect" in html
+    assert "raster_bbox_wgs84" in html
     assert "class: \"raster-tile\"" in html
     assert "data-raster-tile" in html
     assert "local_raster_tile_url_template" in html
     assert "function renderOsmBasemap" in html
+    assert "if (!isLocalOsmTileMode())" in html
     assert "function osmTileCoverage" in html
     assert 'el("image"' in html
     assert "class: \"osm-tile\"" in html
@@ -614,7 +638,7 @@ def test_pretrip_admin_page_review_items_stay_map_target_backed_and_read_only():
     assert "view?.route_notes?.candidates || []" in html
     assert 'el("g", {"data-layer-group": "route-notes"})' in html
     assert 'class: "route-note"' in html
-    assert "button.addEventListener(\"click\", () => selectEvidence(item))" in html
+    assert 'button.addEventListener("click", () => {\n        selectEvidence(item);\n        focusMapFor(item);' in html
     assert "fetch(`${apiBase()}/admin/pretrip/projects/${PROJECT_ID}`)" in html
     assert "fetch(`${apiBase()}/safety" not in html
 

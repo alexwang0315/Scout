@@ -89,6 +89,11 @@ SCOUT_HARDWARE_READINESS_FIXTURE_PATH=/tmp/scout-hardware-readiness-live-probe.j
 | Artifact boundary | Every operator-triggered action records mutation scope and raw-payload policy. | blocking |
 | GIS/map rendering | Route, segment, checkpoint, layer, raster, and tile defects are evidence-only here. | GIS-related |
 
+The shared `/admin`, `/admin/debug`, and `/admin/pretrip` map interaction
+contract lives in `docs/specs/admin-gis-map-operations.md`. `/admin/debug`
+must reuse that layer menu, focus, zoom, and rectangle navigation behavior while
+remaining read-only.
+
 ## Hardware Readiness Aggregation
 
 Hardware readiness remains the source of truth for hardware status. `/admin/debug`

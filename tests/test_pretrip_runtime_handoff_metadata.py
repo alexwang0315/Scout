@@ -35,10 +35,14 @@ def test_builds_deterministic_candidate_runtime_handoff_metadata():
     assert payload["package"]["package_id"] == "pretrip.chilai_nanhua_day1.v0"
     assert payload["package"]["version"] == "0.1.0"
     assert payload["package"]["status"] == "reviewed"
+    assert payload["package"]["reviewed_package_is_not_departure_approval"] is True
+    assert payload["package"]["departure_approval_granted"] is False
+    assert payload["package"]["departure_gate_required_before_runtime"] is True
     assert payload["counts"] == {
         "readiness_ref_count": 3,
         "route_ref_count": 4,
         "route_source_count": 1,
+        "human_review_count": 245,
         "runtime_write_count": 0,
         "safety_call_count": 0,
         "bridge_mutation_count": 0,
@@ -118,6 +122,10 @@ def test_runtime_handoff_metadata_is_candidate_only_and_has_no_runtime_side_effe
     assert after == before
     assert manifest.boundary.model_dump(mode="json") == {
         "candidate_metadata_only": True,
+        "reviewed_package_is_not_departure_approval": True,
+        "departure_approval_granted": False,
+        "departure_gate_required_before_runtime": True,
+        "runtime_handoff_operator_trigger_required": True,
         "phase1_runtime_mutation_allowed": False,
         "safety_api_calls_allowed": False,
         "bridge_mutation_allowed": False,
@@ -129,6 +137,7 @@ def test_runtime_handoff_metadata_is_candidate_only_and_has_no_runtime_side_effe
         "raw_payloads_embedded": False,
         "notes": [
             "Candidate metadata handoff only; no Phase 1 runtime state is mutated.",
+            "Reviewed package metadata is not departure approval; the departure gate remains required.",
             "No safety endpoint is called and no Phase 3 bridge behavior is changed.",
             "No final runtime manifest or MissionGraph write is performed by this builder.",
         ],

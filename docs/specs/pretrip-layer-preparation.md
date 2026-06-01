@@ -46,6 +46,79 @@ A future connected run must require an explicit network flag, for example
 pretrip planning artifacts. `pi-offline` is the current Pi lightweight profile
 for the implementation; it means Pi 輕量模式（只讀本機工作區與快取摘要）。
 
+## Offline Map Handoff
+
+The fixed production path for offline raster imagery is:
+
+```text
+Mac build workstation
+  -> pretrip_offline_map_handoff.py
+  -> rsync handoff package to scout.local:/data/scout/
+  -> Scout admin serves /admin/tiles/imagery/... from /data/scout/raster-tiles
+```
+
+Scout hardware should not be the primary raster tile cutting machine. It may
+serve tiles and run `LayerPreparationJob` against already-installed refs, but
+the route's user-provided imagery package is prepared on Mac first.
+
+Canonical Mac command:
+
+```bash
+PYTHONPATH=. ./venv/bin/python pretrip_offline_map_handoff.py \
+  --project-id chilai_nanhua_day1 \
+  --source-geotiff ~/Downloads/271000x2663000-9x4-v2016_TWD97.tag.tiff \
+  --source-kmz ~/Downloads/271000x2663000-9x4-v2016_TWD97.tag.kmz \
+  --package-root /tmp/scout-offline-map-handoff/chilai_nanhua_day1 \
+  --scout-data-root /data/scout \
+  --min-zoom 5 \
+  --max-zoom 14
+```
+
+Canonical transfer:
+
+```bash
+rsync -a /tmp/scout-offline-map-handoff/chilai_nanhua_day1/ \
+  alexwang0315@scout.local:/data/scout/
+```
+
+The package includes:
+
+- `raster-sources/<project_id>/`: user-provided GeoTIFF/KMZ source files.
+- `raster-tiles/<project_id>/imagery/...`: PNG tile cache cut on Mac.
+- `admin/pretrip-workspaces/<project_id>/outputs/layers/manifests/`: Scout
+  runtime source manifest and raster tile plan.
+- `offline_map_handoff_manifest.json`: install summary, project refs, rsync
+  hint, source role, and no-network boundary metadata.
+
+After transfer, `project.json` must point to the installed manifest refs:
+
+```json
+{
+  "imagery_manifest_ref": "outputs/layers/manifests/chilai_nanhua_day1.local_raster_source_manifest.json",
+  "local_raster_manifest_ref": "outputs/layers/manifests/chilai_nanhua_day1.local_raster_source_manifest.json",
+  "raster_tile_manifest_ref": "outputs/layers/manifests/chilai_nanhua_day1.raster_tile_pyramid_plan.json",
+  "imagery_source_kind": "user_provided_local_geotiff",
+  "imagery_source_tiff_ref": "/data/scout/raster-sources/chilai_nanhua_day1/271000x2663000-9x4-v2016_TWD97.tag.tiff",
+  "imagery_source_kmz_ref": "/data/scout/raster-sources/chilai_nanhua_day1/271000x2663000-9x4-v2016_TWD97.tag.kmz",
+  "imagery_tile_cache_root": "/data/scout/raster-tiles"
+}
+```
+
+Only after these refs exist should Scout run:
+
+```bash
+./.venv/bin/python pretrip_layer_preparation.py \
+  --project-root /data/scout/admin/pretrip-workspaces/chilai_nanhua_day1 \
+  --project-id chilai_nanhua_day1 \
+  --layers osm,imagery,overpass,terrain,risk-score,risk-ribbon,route,reference-tracks,segments,checkpoints,pois,hazards,corridors,retreat,route-notes,weather \
+  --profile pi-offline \
+  --network-mode no-network
+```
+
+The resulting imagery layer should be `ready_from_project_ref`. A
+`ready_with_fallback` imagery layer means the handoff package or project refs
+are missing and should be fixed on Mac, not papered over on Scout.
+
 ## Workspace Outputs（工作區輸出）
 
 The `workspace`（工作區） outputs live under the selected project root:

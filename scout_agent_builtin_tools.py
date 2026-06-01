@@ -1588,23 +1588,28 @@ def _risk_heatmap(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
     if not args.dry_run and metadata_path is not None:
         write_heatmap_metadata(heatmap, metadata_path)
         artifact_refs.append(str(metadata_path))
+    preview_written = False
     if not args.dry_run and preview_path is not None:
-        write_heatmap_preview_png(heatmap, preview_path)
-        artifact_refs.append(str(preview_path))
+        try:
+            write_heatmap_preview_png(heatmap, preview_path)
+            preview_written = True
+            artifact_refs.append(str(preview_path))
+        except ModuleNotFoundError as exc:
+            if exc.name != "matplotlib":
+                raise
     workspace = _optional_path(request.get("workspace"))
     if (
         not args.dry_run
         and workspace is not None
         and output_path is not None
         and metadata_path is not None
-        and preview_path is not None
         and request.get("update_project_refs", False)
     ):
         update_workspace_project_refs(
             workspace=workspace,
             heatmap_path=output_path,
             metadata_path=metadata_path,
-            preview_path=preview_path,
+            preview_path=preview_path if preview_written else None,
             heatmap=heatmap,
         )
     return (
@@ -1617,6 +1622,7 @@ def _risk_heatmap(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
             "feature_count": len(heatmap.get("features", [])),
             "warning_cp_overlay_count": len(heatmap.get("warning_cp_overlay", [])),
             "artifact_refs": artifact_refs,
+            "preview_written": preview_written,
             "boundary": {
                 **_closed_boundary(),
                 "candidate_only": True,
@@ -1718,6 +1724,7 @@ def _pretrip_workspace_edit(args: argparse.Namespace) -> tuple[int, dict[str, An
 
 
 def _pretrip_import_gpx(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
+    from pretrip_gpx_filter import DEFAULT_MAX_REASONABLE_SPEED_KMH
     from pretrip_import import PretripImportRequest, run_pretrip_import
 
     request = _load_json(args.input)
@@ -1736,9 +1743,15 @@ def _pretrip_import_gpx(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
         ),
         profile=request.get("profile", "pi-offline"),
         template_project_root=_optional_path(request.get("template_project_root")),
-        checkpoint_spacing_m=float(request.get("checkpoint_spacing_m", 1500.0)),
+        checkpoint_spacing_m=float(request.get("checkpoint_spacing_m", 500.0)),
         max_reference_display_points=int(
             request.get("max_reference_display_points", 1000)
+        ),
+        max_reasonable_gpx_speed_kmh=float(
+            request.get(
+                "max_reasonable_gpx_speed_kmh",
+                DEFAULT_MAX_REASONABLE_SPEED_KMH,
+            )
         ),
         overwrite=bool(request.get("overwrite", False)),
         import_timestamp=request.get("import_timestamp"),
