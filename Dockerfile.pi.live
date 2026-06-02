@@ -68,6 +68,11 @@ COPY \
     offline_map.py \
     offline_map_models.py \
     pdr_fallback.py \
+    post_analysis_capability.py \
+    post_analysis_capability_models.py \
+    post_analysis_energy_feedback.py \
+    post_analysis_rest_detection.py \
+    post_analysis_route_slicing.py \
     phase1_incident_bridge.py \
     phase1_phase2_adapter.py \
     phase2_brain_ingest.py \
@@ -77,6 +82,11 @@ COPY \
     phase2_store_utils.py \
     phase2_writeback_policy.py \
     pretrip_assistant_context.py \
+    pretrip_admin_view.py \
+    pretrip_energy_projection.py \
+    pretrip_eta_plan.py \
+    pretrip_layer_preparation.py \
+    pretrip_spatial_imprint_export.py \
     provider_context.py \
     recording_policy_runtime.py \
     replay_runner.py \
@@ -106,11 +116,21 @@ COPY \
     safety_models.py \
     safety_runtime_session.py \
     safety_state_machine.py \
+    scout_agent_models.py \
+    scout_agent_tools.py \
+    scout_agent_trace.py \
+    scout_companion_match_models.py \
+    scout_energy_baseline.py \
+    scout_energy_models.py \
     scout_pi_runtime.py \
     server_safety_observation_admission_config.py \
     skill_registry_models.py \
     skill_runtime.py \
+    spatial_imprint_models.py \
+    voice_cue_models.py \
     ./
+
+COPY tools/scout_agent_tool_manifests/ ./tools/scout_agent_tool_manifests/
 
 COPY tests/fixtures/mission_graph/normal_climb_mission.json ./tests/fixtures/mission_graph/
 COPY tests/fixtures/routes/normal_climb.gpx ./tests/fixtures/routes/
