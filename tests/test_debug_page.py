@@ -162,6 +162,11 @@ class DebugPageTests(unittest.TestCase):
         self.assertIn("function rasterZoomRangeFor", html)
         self.assertIn("function chooseRasterZoom", html)
         self.assertIn("function rasterTileCoverage", html)
+        self.assertIn('data-layer="terrain" checked> Terrain', html)
+        self.assertIn(".terrain-raster-overlay", html)
+        self.assertIn("function terrainRasterOverlays", html)
+        self.assertIn("function renderTerrainBitmapOverlays", html)
+        self.assertIn("pretrip_terrain_visualization_bitmap_overlay", html)
         self.assertIn("const tiles = isImagery ? rasterTileCoverage(projection, bounds) : tileCoverage(bounds)", html)
         self.assertIn("if (!isImagery && !isLocalOsmTileMode())", html)
         self.assertIn("const pad = MAP_VISUAL_PADDING;", html)
@@ -169,6 +174,14 @@ class DebugPageTests(unittest.TestCase):
         self.assertLess(
             html.index('data-layer-group": "osm"'),
             html.index('data-layer-group": "imagery"'),
+        )
+        self.assertLess(
+            html.index('data-layer-group": "imagery"'),
+            html.index('data-layer-group": "terrain"'),
+        )
+        self.assertLess(
+            html.index('data-layer-group": "terrain"'),
+            html.index('data-layer-group": "overpass"'),
         )
 
     def test_static_debug_page_makes_timeline_body_touchpad_scrollable(self):

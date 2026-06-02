@@ -469,6 +469,7 @@ def build_pretrip_admin_view(
         project=project,
         route_summary=route_summary,
     )
+    terrain_visualization = _load_optional_json(artifacts.get("terrain_visualization"))
     human_reviews = _load_json(artifacts["human_reviews"])
     runtime_handoff = _load_optional_json(
         artifacts.get("runtime_handoff")
@@ -598,6 +599,11 @@ def build_pretrip_admin_view(
             source_refs.get("layer_preparation_manifest", ""),
             project_id=project_id,
             project_root=artifacts["project"].parent,
+        ),
+        "terrain_visualization": _terrain_visualization_summary(
+            project_id,
+            terrain_visualization,
+            source_refs.get("terrain_visualization", ""),
         ),
         "risk_score": _risk_score_summary(
             project_id,
@@ -917,6 +923,7 @@ def build_pretrip_admin_view(
         "reference_tracks": planning_tab["reference_tracks"],
         "checkpoint_events": planning_tab["checkpoint_events"],
         "layer_preparation": planning_tab["layer_preparation"],
+        "terrain_visualization": planning_tab["terrain_visualization"],
         "risk_score": planning_tab["risk_score"],
         "risk_ribbon": planning_tab["risk_ribbon"],
         "risk_heatmap": planning_tab["risk_heatmap"],
@@ -1073,6 +1080,7 @@ def resolve_pretrip_project_artifacts(
         "calibrated_risk_heatmap_metadata": "calibrated_risk_heatmap_metadata_ref",
         "risk_score_points": "risk_score_points_ref",
         "risk_score_points_metadata": "risk_score_points_metadata_ref",
+        "terrain_visualization": "terrain_visualization_ref",
         "admin_projection": "admin_projection_ref",
         "debug_projection_events": "debug_projection_events_ref",
         "gis_perception": "gis_perception_candidates_ref",
@@ -1282,6 +1290,9 @@ def load_pretrip_debug_projection_view(
     risk_heatmap_metadata_raw = _load_optional_json(
         optional_project_path("calibrated_risk_heatmap_metadata_ref")
     )
+    terrain_visualization_raw = _load_optional_json(
+        optional_project_path("terrain_visualization_ref")
+    )
     mcp_named_point_evidence_raw = _load_optional_json(
         optional_project_path("mcp_named_point_evidence_ref")
     )
@@ -1317,6 +1328,7 @@ def load_pretrip_debug_projection_view(
         "risk_route_profile_metadata": project.get("risk_route_profile_metadata_ref", ""),
         "risk_score_points": project.get("risk_score_points_ref", ""),
         "risk_score_points_metadata": project.get("risk_score_points_metadata_ref", ""),
+        "terrain_visualization": project.get("terrain_visualization_ref", ""),
         "risk_ribbon": project.get("risk_ribbon_ref", ""),
         "risk_ribbon_metadata": project.get("risk_ribbon_metadata_ref", ""),
         "calibrated_risk_heatmap": project.get("calibrated_risk_heatmap_ref", ""),
@@ -1415,6 +1427,11 @@ def load_pretrip_debug_projection_view(
             route_source_path=source_refs["risk_route_profile"],
             route_metadata_source_path=source_refs["risk_route_profile_metadata"],
         ),
+        "terrain_visualization": _terrain_visualization_summary(
+            project_id,
+            terrain_visualization_raw,
+            source_refs["terrain_visualization"],
+        ),
         "risk_ribbon": _risk_ribbon_summary(
             project_id,
             risk_ribbon_raw,
@@ -1511,6 +1528,7 @@ def load_pretrip_debug_projection_view(
         "reference_tracks": view["reference_tracks"],
         "checkpoint_events": view["checkpoint_events"],
         "risk_score": view["risk_score"],
+        "terrain_visualization": view["terrain_visualization"],
         "risk_ribbon": view["risk_ribbon"],
         "risk_heatmap": view["risk_heatmap"],
         "risk_delta": view["risk_delta"],
@@ -1544,6 +1562,14 @@ def load_pretrip_debug_projection_view(
             ),
             "risk_delta_segment_count": view["risk_delta"]["counts"].get(
                 "segment_count",
+                0,
+            ),
+            "terrain_bitmap_overlay_count": view["terrain_visualization"]["counts"].get(
+                "bitmap_overlay_count",
+                0,
+            ),
+            "terrain_sample_count": view["terrain_visualization"]["counts"].get(
+                "cell_count",
                 0,
             ),
             "mcp_candidate_count": (
@@ -4695,6 +4721,214 @@ def _risk_score_summary(
                     "candidate_only": True,
                     "runtime_safety_truth": False,
                     "route_aligned_samples_only": True,
+                },
+            )
+        ),
+    }
+
+
+def _terrain_visualization_summary(
+    project_id: str,
+    payload: dict[str, Any] | None,
+    source_path: str,
+) -> dict[str, Any]:
+    payload = payload or {}
+    visualization_spec = payload.get("visualization_spec", {})
+    source_ref_values = [
+        str(ref.get("ref"))
+        for ref in payload.get("source_refs", [])
+        if isinstance(ref, dict) and ref.get("ref")
+    ]
+    if source_path:
+        source_ref_values.insert(0, source_path)
+    source_ref_values = list(dict.fromkeys(source_ref_values))
+    raster_overlays: list[dict[str, Any]] = []
+    for overlay in payload.get("raster_overlays", []):
+        if not isinstance(overlay, dict):
+            continue
+        overlay_id = str(overlay.get("overlay_id") or overlay.get("mode") or "")
+        if not overlay_id:
+            continue
+        overlay_source_path = str(overlay.get("source_path") or "")
+        model_hash = _stable_projection_hash(
+            {
+                "source_path": source_path,
+                "overlay_id": overlay_id,
+                "overlay_source_path": overlay_source_path,
+                "sha256": overlay.get("sha256"),
+                "cell_resolution_m": overlay.get("cell_resolution_m"),
+                "corridor_half_width_m": overlay.get("corridor_half_width_m"),
+            }
+        )
+        raster_overlays.append(
+            {
+                "candidate_id": f"terrain_visualization.overlay.{_safe_view_key(overlay_id)}",
+                "source_id": f"terrain_visualization.overlay.{_safe_view_key(overlay_id)}",
+                "source_path": overlay_source_path,
+                "parent_source_path": source_path,
+                "evidence_type": "pretrip_terrain_visualization_bitmap_overlay",
+                "status": "candidate_only",
+                "mode": overlay.get("mode") or overlay_id,
+                "runtime_href": overlay.get("runtime_href"),
+                "media_type": overlay.get("media_type", "image/png"),
+                "sha256": overlay.get("sha256"),
+                "bbox_wgs84": overlay.get("bbox_wgs84"),
+                "bbox_twd97": overlay.get("bbox_twd97"),
+                "pixel_width": overlay.get("pixel_width"),
+                "pixel_height": overlay.get("pixel_height"),
+                "cell_resolution_m": overlay.get("cell_resolution_m"),
+                "corridor_half_width_m": overlay.get("corridor_half_width_m"),
+                "corridor_total_width_m": overlay.get("corridor_total_width_m"),
+                "default_visible": bool(overlay.get("default_visible")),
+                "opacity": overlay.get("opacity"),
+                "image_rendering": overlay.get("image_rendering", "pixelated"),
+                "terrain_visualization_layer": True,
+                "risk_heat_layer": False,
+                "source_refs": source_ref_values,
+                "source_attribution": [
+                    {
+                        "source_kind": "terrain_visualization_bitmap_overlay",
+                        "source_ref": overlay_source_path,
+                        "source_candidate_id": overlay_id,
+                        "source_label": f"{overlay_id} bitmap overlay",
+                        "evidence_type": "pretrip_terrain_visualization_bitmap_overlay",
+                        "confidence": "medium",
+                        "stale_risk": "medium",
+                        "candidate_only": True,
+                        "runtime_safety_truth": False,
+                    }
+                ],
+                "confidence": "medium",
+                "stale_risk": "medium",
+                "review_state": "needs_review",
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+                "extractor_version": "pretrip_terrain_visualization.bitmap_overlay.v1",
+                "pydantic_ai_prompt_version": (
+                    "not_applicable_deterministic_terrain_visualization.v1"
+                ),
+                "model_output_sha256": model_hash,
+                "model_output_summary": (
+                    "DEM/DTM-derived terrain bitmap overlay; pretrip candidate "
+                    "evidence only and not runtime safety truth."
+                ),
+            }
+        )
+    samples: list[dict[str, Any]] = []
+    contours: list[dict[str, Any]] = []
+    for index, feature in enumerate(payload.get("features", [])):
+        geometry = feature.get("geometry") or {}
+        if geometry.get("type") != "Point":
+            continue
+        coordinate = _geojson_point_coordinate(geometry)
+        properties = feature.get("properties") or {}
+        sample_id = str(
+            properties.get("terrain_visualization_id")
+            or properties.get("terrain_sample_id")
+            or properties.get("sample_id")
+            or f"terrain_visualization.{index + 1:06d}"
+        )
+        model_hash = _stable_projection_hash(
+            {
+                "source_path": source_path,
+                "sample_id": sample_id,
+                "slope_degrees": properties.get("slope_degrees"),
+                "elevation_m": properties.get("elevation_m"),
+                "contour_index_m": properties.get("contour_index_m"),
+            }
+        )
+        source_attribution = [
+            {
+                "source_kind": "terrain_visualization_artifact",
+                "source_ref": source_path,
+                "source_candidate_id": sample_id,
+                "source_label": properties.get("slope_class_label") or "terrain sample",
+                "evidence_type": "pretrip_terrain_visualization_sample",
+                "confidence": "medium",
+                "stale_risk": "medium",
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+            }
+        ]
+        sample = {
+            "candidate_id": f"terrain_visualization.{_safe_view_key(sample_id)}",
+            "source_id": f"terrain_visualization.{_safe_view_key(sample_id)}",
+            "source_path": source_path,
+            "evidence_type": "pretrip_terrain_visualization_sample",
+            "status": "candidate_only",
+            "lat": coordinate["lat"],
+            "lon": coordinate["lon"],
+            "distance_m": properties.get("distance_m"),
+            "elevation_m": properties.get("elevation_m"),
+            "visualization_modes": properties.get(
+                "visualization_modes",
+                visualization_spec.get("modes", []),
+            ),
+            "hillshade_value": properties.get("hillshade_value"),
+            "elevation_tint_color": properties.get("elevation_tint_color"),
+            "slope_degrees": properties.get("slope_degrees"),
+            "slope_class": properties.get("slope_class"),
+            "slope_class_label": properties.get("slope_class_label"),
+            "slope_color": properties.get("slope_color"),
+            "contour_interval_m": properties.get("contour_interval_m"),
+            "contour_index_m": properties.get("contour_index_m"),
+            "contour_marker": bool(properties.get("contour_marker")),
+            "terrain_visualization_layer": True,
+            "risk_heat_layer": False,
+            "source_refs": source_ref_values,
+            "source_attribution": source_attribution,
+            "confidence": "medium",
+            "stale_risk": "medium",
+            "review_state": "needs_review",
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+            "extractor_version": "pretrip_terrain_visualization.route_aligned.v1",
+            "pydantic_ai_prompt_version": (
+                "not_applicable_deterministic_terrain_visualization.v1"
+            ),
+            "model_output_sha256": model_hash,
+            "model_output_summary": (
+                "DEM/DTM-derived route-aligned terrain visualization evidence; "
+                "pretrip candidate evidence only and not runtime safety truth."
+            ),
+        }
+        samples.append(sample)
+        if sample["contour_marker"]:
+            contours.append(
+                {
+                    **sample,
+                    "candidate_id": sample["candidate_id"] + ".contour",
+                    "source_id": sample["source_id"] + ".contour",
+                    "evidence_type": "pretrip_terrain_contour_marker",
+                }
+            )
+
+    counts = dict(payload.get("counts") or {})
+    counts.setdefault("feature_count", len(samples))
+    counts.setdefault("bitmap_overlay_count", len(raster_overlays))
+    counts.setdefault("contour_marker_count", len(contours))
+    return {
+        "source_id": f"terrain_visualization.{project_id}",
+        "source_path": source_path,
+        "evidence_type": "pretrip_terrain_visualization",
+        "artifact_kind": payload.get(
+            "artifact_kind",
+            "pretrip_terrain_visualization",
+        ),
+        "status": "candidate_only" if samples or raster_overlays else "not_available",
+        "visualization_spec": visualization_spec,
+        "counts": counts,
+        "raster_overlays": raster_overlays,
+        "samples": samples,
+        "contours": contours,
+        "boundary": _summary_boundary(
+            payload.get(
+                "boundary",
+                {
+                    "candidate_only": True,
+                    "runtime_safety_truth": False,
+                    "terrain_visualization_layer": True,
+                    "risk_heat_layer": False,
                 },
             )
         ),

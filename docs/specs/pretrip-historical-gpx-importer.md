@@ -179,6 +179,37 @@ The importer writes under the selected workspace:
     debug_projection_events.jsonl
 ```
 
+## Clean / Overwrite Rebuild Semantics
+
+`--overwrite` and Scout rebuild scripts may regenerate route-derived artifacts
+from the fixed source material, but they must not silently erase durable admin
+evidence that importer and map preparation do not own. When an existing
+workspace is moved aside before a clean rebuild, the new workspace should
+restore safe project-relative refs from the backup for:
+
+- `readiness_report_ref`;
+- `resource_plan_ref`;
+- `planned_eta_ref`;
+- `departure_bundle_manifest_ref`;
+- `route_comparison_ref`;
+- capability timeline refs when present.
+
+Restore rules:
+
+- copy only refs that are relative to the source project root and resolve inside
+  the destination project root;
+- do not copy absolute paths or refs containing `..`;
+- do not overwrite a destination artifact that already exists;
+- refresh review/debug/admin projection summaries only as workspace projection
+  artifacts;
+- keep all restored artifacts pretrip/admin evidence and never promote them to
+  Phase 1 runtime safety truth.
+
+This lets operators rerun importer plus map preparation on Scout without losing
+readiness, ETA, resource planning, departure bundle, route-comparison, or
+timeline evidence that is still needed by `/admin/pretrip`, `/admin/debug`, and
+handoff review surfaces.
+
 `normalized/routes/route_evidence_bundle.json` is the handoff artifact for map
 preparation.
 

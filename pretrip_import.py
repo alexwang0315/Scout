@@ -80,6 +80,26 @@ REST_AREA_MIN_SOURCE_POINT_COUNT = 16
 ImportProfile = Literal["mac-workstation", "pi-offline", "pi-online-explicit"]
 ImportStage = Literal["pretrip", "post_analysis"]
 OFFLINE_PROFILES = {"mac-workstation", "pi-offline"}
+DURABLE_ADMIN_EVIDENCE_REF_KEYS: tuple[str, ...] = (
+    "readiness_report_ref",
+    "resource_plan_ref",
+    "planned_eta_ref",
+    "departure_bundle_manifest_ref",
+    "route_comparison_ref",
+    "capability_timeline_import_ref",
+    "post_analysis_capability_timeline_ref",
+)
+DEFAULT_DURABLE_ADMIN_EVIDENCE_REFS: dict[str, str] = {
+    "readiness_report_ref": "outputs/readiness_report.json",
+    "resource_plan_ref": "outputs/resource_plan.json",
+    "planned_eta_ref": "outputs/planned_eta.json",
+    "departure_bundle_manifest_ref": "outputs/departure_bundle_manifest.json",
+    "route_comparison_ref": "outputs/route_comparison.json",
+    "capability_timeline_import_ref": "outputs/capability_timeline_import.json",
+    "post_analysis_capability_timeline_ref": (
+        "outputs/post_analysis_capability_timeline.json"
+    ),
+}
 
 
 @dataclass(frozen=True)
@@ -3090,6 +3110,7 @@ def _project_payload(
         project_root=project_root,
         project_id=project_id,
     )
+    _restore_durable_admin_refs_from_workspace(payload, project_root=project_root)
     return payload
 
 
@@ -3135,6 +3156,140 @@ def _restore_local_imagery_refs_from_workspace(
             tile_plan = {}
         if tile_plan.get("cache_root"):
             payload.setdefault("imagery_tile_cache_root", tile_plan["cache_root"])
+
+
+def restore_durable_admin_evidence_refs(
+    *,
+    project_root: Path,
+    source_root: Path,
+) -> dict[str, Any]:
+    """Restore admin evidence refs that importer/layer prep do not regenerate."""
+
+    project_root = project_root.expanduser()
+    source_root = source_root.expanduser()
+    project_payload = _load_project_payload(project_root) or {
+        "project_id": project_root.name
+    }
+    summary = _restore_durable_admin_refs_from_workspace(
+        project_payload,
+        project_root=project_root,
+        source_root=source_root,
+    )
+    write_json(project_root / "project.json", project_payload)
+    _refresh_admin_projection_export_summaries(project_root)
+    review_queue_manifest = _rebuild_review_queue_if_possible(project_root)
+    if review_queue_manifest is not None:
+        write_json(
+            project_root / "outputs" / "review_queue_manifest.json",
+            review_queue_manifest.model_dump(mode="json"),
+        )
+        project_payload["review_queue_manifest_ref"] = (
+            "outputs/review_queue_manifest.json"
+        )
+        project_payload["review_queue_item_count"] = (
+            review_queue_manifest.counts.item_count
+        )
+        write_json(project_root / "project.json", project_payload)
+        summary["review_queue_refreshed"] = True
+    else:
+        summary["review_queue_refreshed"] = False
+    return summary
+
+
+def _restore_durable_admin_refs_from_workspace(
+    payload: dict[str, Any],
+    *,
+    project_root: Path,
+    source_root: Path | None = None,
+) -> dict[str, Any]:
+    summary: dict[str, Any] = {
+        "source_root": source_root.as_posix() if source_root is not None else None,
+        "restored": {},
+        "copied": {},
+        "skipped": {},
+        "invalid": {},
+    }
+    if source_root is not None:
+        source_project = _load_project_payload(source_root)
+        if source_project is None:
+            summary["source_project_missing"] = True
+        else:
+            _copy_durable_admin_evidence_files(
+                source_project=source_project,
+                source_root=source_root,
+                destination_root=project_root,
+                summary=summary,
+            )
+    for key in DURABLE_ADMIN_EVIDENCE_REF_KEYS:
+        if _payload_ref_exists(payload, key, project_root=project_root):
+            summary["skipped"][key] = "payload_ref_already_exists"
+            continue
+        restored_ref = summary["copied"].get(key) or DEFAULT_DURABLE_ADMIN_EVIDENCE_REFS[key]
+        restored_path = _safe_project_ref_path(project_root, restored_ref)
+        if restored_path is None:
+            summary["invalid"][key] = restored_ref
+            continue
+        if restored_path.exists():
+            payload[key] = restored_ref
+            summary["restored"][key] = restored_ref
+    return summary
+
+
+def _copy_durable_admin_evidence_files(
+    *,
+    source_project: dict[str, Any],
+    source_root: Path,
+    destination_root: Path,
+    summary: dict[str, Any],
+) -> None:
+    for key in DURABLE_ADMIN_EVIDENCE_REF_KEYS:
+        ref = source_project.get(key)
+        if not isinstance(ref, str) or not ref:
+            summary["skipped"][key] = "source_ref_missing"
+            continue
+        source_path = _safe_project_ref_path(source_root, ref)
+        destination_path = _safe_project_ref_path(destination_root, ref)
+        if source_path is None or destination_path is None:
+            summary["invalid"][key] = ref
+            continue
+        if not source_path.exists():
+            summary["skipped"][key] = "source_file_missing"
+            continue
+        if destination_path.exists():
+            summary["skipped"][key] = "destination_file_exists"
+            continue
+        destination_path.parent.mkdir(parents=True, exist_ok=True)
+        if source_path.is_dir():
+            shutil.copytree(source_path, destination_path)
+        else:
+            shutil.copy2(source_path, destination_path)
+        summary["copied"][key] = ref
+
+
+def _payload_ref_exists(
+    payload: dict[str, Any],
+    key: str,
+    *,
+    project_root: Path,
+) -> bool:
+    ref = payload.get(key)
+    if not isinstance(ref, str) or not ref:
+        return False
+    path = _safe_project_ref_path(project_root, ref)
+    return path is not None and path.exists()
+
+
+def _safe_project_ref_path(project_root: Path, ref: str) -> Path | None:
+    candidate = Path(ref)
+    if candidate.is_absolute() or any(part in {"..", "."} for part in candidate.parts):
+        return None
+    project_root_resolved = project_root.resolve()
+    path = (project_root / candidate).resolve()
+    try:
+        path.relative_to(project_root_resolved)
+    except ValueError:
+        return None
+    return path
 
 
 def _gpx_filter_summary(

@@ -41,6 +41,9 @@ MAX_REFERENCE_DISPLAY_POINTS="${SCOUT_MAX_REFERENCE_DISPLAY_POINTS:-2500}"
 MAX_REASONABLE_GPX_SPEED_KMH="${SCOUT_MAX_REASONABLE_GPX_SPEED_KMH:-120}"
 ROUTE_CORRIDOR_M="${SCOUT_ROUTE_CORRIDOR_M:-500}"
 REFERENCE_TRACK_CORRIDOR_M="${SCOUT_REFERENCE_TRACK_CORRIDOR_M:-300}"
+LAYER_PROFILE="${SCOUT_PRETRIP_LAYER_PROFILE:-pi-online-explicit}"
+NETWORK_MODE="${SCOUT_PRETRIP_NETWORK_MODE:-explicit-fetch}"
+ALLOW_NETWORK_FETCH="${SCOUT_PRETRIP_ALLOW_NETWORK_FETCH:-1}"
 BACKUP_ROOT="${SCOUT_PRETRIP_BACKUP_ROOT:-${WORKSPACE_ROOT}}"
 LOG_ROOT="${SCOUT_PRETRIP_REBUILD_LOG_ROOT:-/tmp}"
 LAYERS="${SCOUT_PRETRIP_LAYERS:-osm,overpass,terrain,risk-score,risk-ribbon,risk-heatmap,risk-delta,imagery,weather,reference-tracks,route,segments,checkpoints,pois,hazards,corridors,retreat,route-notes}"
@@ -74,6 +77,9 @@ mkdir -p "${WORKSPACE_ROOT}" "${BACKUP_ROOT}" "${LOG_ROOT}"
   echo "source_gpx_root=${SOURCE_GPX_ROOT}"
   echo "golden_route_gpx=${GOLDEN_ROUTE_GPX}"
   echo "admin_base_url=${ADMIN_BASE_URL}"
+  echo "layer_profile=${LAYER_PROFILE}"
+  echo "network_mode=${NETWORK_MODE}"
+  echo "allow_network_fetch=${ALLOW_NETWORK_FETCH}"
   echo "log_path=${LOG_PATH}"
 
   if [[ -d "${PROJECT_ROOT}" ]]; then
@@ -102,18 +108,43 @@ mkdir -p "${WORKSPACE_ROOT}" "${BACKUP_ROOT}" "${LOG_ROOT}"
   fi
   PYTHONDONTWRITEBYTECODE=1 "${PYTHON_BIN}" "${IMPORT_ARGS[@]}"
 
+  if [[ -f "${BACKUP_PATH}/project.json" ]]; then
+    echo "Restoring durable admin evidence refs from ${BACKUP_PATH}..."
+    PYTHONDONTWRITEBYTECODE=1 "${PYTHON_BIN}" - "${PROJECT_ROOT}" "${BACKUP_PATH}" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+from pretrip_import import restore_durable_admin_evidence_refs
+
+summary = restore_durable_admin_evidence_refs(
+    project_root=Path(sys.argv[1]),
+    source_root=Path(sys.argv[2]),
+)
+print(json.dumps({"durable_admin_evidence_restore": summary}, ensure_ascii=False, sort_keys=True))
+PY
+  else
+    echo "No prior durable admin evidence source found."
+  fi
+
   echo "Running pretrip layer preparation..."
-  PYTHONDONTWRITEBYTECODE=1 "${PYTHON_BIN}" -m pretrip_layer_preparation \
-    --project-id "${PROJECT_ID}" \
-    --workspace-root "${WORKSPACE_ROOT}" \
-    --layers "${LAYERS}" \
-    --profile pi-offline \
-    --network-mode no-network \
-    --route-evidence-bundle normalized/routes/route_evidence_bundle.json \
-    --route-corridor-m "${ROUTE_CORRIDOR_M}" \
-    --reference-track-corridor-m "${REFERENCE_TRACK_CORRIDOR_M}" \
-    --ai-mode fixture-or-precomputed \
+  LAYER_ARGS=(
+    -m pretrip_layer_preparation
+    --project-id "${PROJECT_ID}"
+    --workspace-root "${WORKSPACE_ROOT}"
+    --layers "${LAYERS}"
+    --profile "${LAYER_PROFILE}"
+    --network-mode "${NETWORK_MODE}"
+    --route-evidence-bundle normalized/routes/route_evidence_bundle.json
+    --route-corridor-m "${ROUTE_CORRIDOR_M}"
+    --reference-track-corridor-m "${REFERENCE_TRACK_CORRIDOR_M}"
+    --ai-mode fixture-or-precomputed
     --ai-output-policy hash-and-summary
+  )
+  if [[ "${ALLOW_NETWORK_FETCH}" == "1" || "${ALLOW_NETWORK_FETCH}" == "true" || "${ALLOW_NETWORK_FETCH}" == "TRUE" ]]; then
+    LAYER_ARGS+=(--allow-network-fetch)
+  fi
+  PYTHONDONTWRITEBYTECODE=1 "${PYTHON_BIN}" "${LAYER_ARGS[@]}"
 
   echo "Running spec alignment verifier..."
   VERIFY_ARGS=(
@@ -124,6 +155,9 @@ mkdir -p "${WORKSPACE_ROOT}" "${BACKUP_ROOT}" "${LOG_ROOT}"
   )
   if [[ -n "${ADMIN_BEARER_TOKEN_FILE}" ]]; then
     VERIFY_ARGS+=(--admin-bearer-token-file "${ADMIN_BEARER_TOKEN_FILE}")
+  fi
+  if [[ "${ALLOW_NETWORK_FETCH}" == "1" || "${ALLOW_NETWORK_FETCH}" == "true" || "${ALLOW_NETWORK_FETCH}" == "TRUE" ]]; then
+    VERIFY_ARGS+=(--allow-network-calls)
   fi
   PYTHONDONTWRITEBYTECODE=1 "${PYTHON_BIN}" "${VERIFY_ARGS[@]}"
 

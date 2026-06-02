@@ -60,6 +60,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--admin-base-url", default="")
     parser.add_argument("--admin-bearer-token-file", type=Path)
     parser.add_argument("--imagery-tile", default="14/13708/7063")
+    parser.add_argument(
+        "--allow-network-calls",
+        action="store_true",
+        help=(
+            "Allow connected preparation manifests that record external fetches. "
+            "Keep this off for CI fixtures and no-network alpha checks."
+        ),
+    )
     args = parser.parse_args(argv)
 
     project_root = args.workspace_root.expanduser() / args.project_id
@@ -129,7 +137,13 @@ def main(argv: list[str] | None = None) -> int:
 
     _check_source_indexes(source_index, source_inbox, errors)
     _check_route_evidence_bundle(route_bundle, errors)
-    _check_layer_preparation(layer_manifest, layer_summary, errors, warnings)
+    _check_layer_preparation(
+        layer_manifest,
+        layer_summary,
+        errors,
+        warnings,
+        allow_network_calls=args.allow_network_calls,
+    )
     _check_map_preparation_artifacts(map_preparation_artifacts, route_bundle, errors)
     _check_layer_projection(layer_projection, errors)
     _check_semantic_input_bundle(semantic_bundle, route_bundle, project, errors)
@@ -173,6 +187,7 @@ def main(argv: list[str] | None = None) -> int:
         "admin_api": api_summary,
         "imagery_tile": tile_summary,
         "imagery_projection": _imagery_projection_summary(layer_projection),
+        "network_policy": (layer_manifest or {}).get("network_policy", {}),
         "map_preparation": _map_preparation_artifact_summary(
             map_preparation_artifacts
         ),
@@ -271,6 +286,8 @@ def _check_layer_preparation(
     layer_summary: dict[str, Any] | None,
     errors: list[str],
     warnings: list[str],
+    *,
+    allow_network_calls: bool = False,
 ) -> None:
     if not layer_manifest or not layer_summary:
         return
@@ -279,7 +296,10 @@ def _check_layer_preparation(
         errors.append("layer preparation claims runtime safety truth")
     if boundary.get("phase1_runtime_mutation_allowed") is not False:
         errors.append("layer preparation allows Phase 1 runtime mutation")
-    if layer_manifest.get("network_policy", {}).get("network_calls_made") is not False:
+    network_calls_made = layer_manifest.get("network_policy", {}).get(
+        "network_calls_made"
+    )
+    if network_calls_made is not False and not allow_network_calls:
         errors.append("layer preparation made network calls")
 
     layers = {layer.get("layer_id"): layer for layer in layer_manifest.get("layers", [])}

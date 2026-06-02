@@ -381,6 +381,7 @@ def test_pretrip_admin_page_fetches_fixture_backed_read_only_project_api():
     assert 'data-layer="imagery"' in html
     assert 'data-layer="osm"' in html
     assert 'data-layer="terrain"' in html
+    assert 'data-layer="terrain" checked' in html
     assert 'data-layer="corridors"' in html
     assert 'data-layer="route"' in html
     assert 'data-layer="segments"' in html
@@ -429,6 +430,22 @@ def test_pretrip_admin_page_fetches_fixture_backed_read_only_project_api():
     assert 'el("image"' in html
     assert "class: \"osm-tile\"" in html
     assert "function renderTerrainMetadata" in html
+    assert "function terrainVisualization" in html
+    assert "function terrainRasterOverlays" in html
+    assert "function renderTerrainBitmapOverlays" in html
+    assert "class: \"terrain-raster-overlay\"" in html
+    assert "const TERRAIN_FALLBACK_CELL_WIDTH_M = 20" in html
+    assert "TERRAIN_CELL_WIDTH_M = 500" not in html
+    assert "function renderTerrainSquareCells" in html
+    assert "function terrainCellPlacement" in html
+    assert "function boxesOverlap" in html
+    assert "terrain-slope-cell" in html
+    assert '"data-terrain-cell-resolution-m": overlay.cell_resolution_m' in html
+    assert '"data-terrain-cell-resolution-m": sample.cell_resolution_m || TERRAIN_FALLBACK_CELL_WIDTH_M' in html
+    assert '"data-terrain-corridor-half-width-m": overlay.corridor_half_width_m' in html
+    assert '"data-elevation-m": sample.elevation_m' in html
+    assert '"data-hillshade-value": sample.hillshade_value' in html
+    assert "terrain-contour-marker" in html
     assert "segmentTerrainMetadata(view)" in html
     assert "post_analysis_capability_segment" in html
     assert "pretrip_capability_timeline_import" in html
@@ -440,11 +457,11 @@ def test_pretrip_admin_page_fetches_fixture_backed_read_only_project_api():
     assert "/admin/pretrip/projects/${PROJECT_ID}/weather-overlay" in html
     assert "state.weatherOverlay" in html
     assert "Weather API overlay" in html
-    assert html.index('data-layer-group": "osm"') < html.index(
-        'data-layer-group": "imagery"'
+    assert html.index('data-layer-group": "imagery"') < html.index(
+        'data-layer-group": "osm"'
     )
-    assert html.index("renderOsmBasemap(osmGroup") < html.index(
-        "renderRasterImagery(imageryGroup"
+    assert html.index("renderRasterImagery(imageryGroup") < html.index(
+        "renderOsmBasemap(osmGroup"
     )
     assert html.index('data-layer-group": "imagery"') < html.index(
         'data-layer-group": "terrain"'
@@ -639,7 +656,7 @@ def test_pretrip_admin_page_review_items_stay_map_target_backed_and_read_only():
     assert 'el("g", {"data-layer-group": "route-notes"})' in html
     assert 'class: "route-note"' in html
     assert 'button.addEventListener("click", () => {\n        selectEvidence(item);\n        focusMapFor(item);' in html
-    assert "fetch(`${apiBase()}/admin/pretrip/projects/${PROJECT_ID}`)" in html
+    assert "fetch(`${apiBase()}/admin/pretrip/projects/${PROJECT_ID}?compact=1`)" in html
     assert "fetch(`${apiBase()}/safety" not in html
 
 
@@ -938,7 +955,7 @@ def test_pretrip_admin_page_section_click_handler_does_not_add_write_calls():
     assert "state.selectedSectionId = section?.id || \"\"" in html
     assert "renderSectionList(state.view)" in html
     assert ".section-card.is-selected" in html
-    assert "fetch(`${apiBase()}/admin/pretrip/projects/${PROJECT_ID}`)" in html
+    assert "fetch(`${apiBase()}/admin/pretrip/projects/${PROJECT_ID}?compact=1`)" in html
     assert "fetch(`${apiBase()}/safety" not in html
     assert "PUT" not in html
     assert "PATCH" not in html

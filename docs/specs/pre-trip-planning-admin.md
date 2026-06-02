@@ -894,6 +894,73 @@ Recommended approach:
 - treat DTM/DEM-derived hazard classification as deterministic measurement
   only when the method is explicit and reproducible.
 
+DEM/DTM should also produce **Terrain Visualization**（地形視覺化圖層） outputs for
+admin map inspection. These visualization layers are evidence displays, not
+runtime safety truth:
+
+- **Hillshade**（陰影起伏圖）: grayscale shaded-relief raster/tile layer for
+  terrain shape.
+- **Elevation tint**（高度分層色）: hypsometric color tint by elevation band.
+- **Slope shading**（坡度著色）: color ramp by slope degree or percent grade.
+- **Contours**（等高線）: vector or raster contour overlay derived from DEM/DTM.
+
+The preferred production preparation path is:
+
+```text
+DEM/DTM GeoTIFF
+  -> GDAL hillshade
+  -> GDAL slope
+  -> GDAL color-relief for slope shading
+  -> GDAL contour
+  -> cut local tiles / GeoJSON
+  -> /admin/pretrip display
+```
+
+When alpha preparation uses a bitmap overlay fallback before full GDAL tile
+cutting is available, it must still calculate slope at the DEM/DTM cell
+resolution and record the corridor width, processor, source path/hash, and
+`runtime_safety_truth=false` metadata.
+
+The alpha admin projection uses one PNG bitmap overlay per terrain mode:
+
+- `terrain_hillshade_overlay_ref`;
+- `terrain_elevation_tint_overlay_ref`;
+- `terrain_slope_shading_overlay_ref`;
+- `terrain_contours_overlay_ref`.
+
+Each overlay is served through
+`/admin/pretrip/projects/{project_id}/terrain-overlays/{mode}.png` and is
+included in `terrain_visualization.raster_overlays` with `runtime_href`,
+`bbox_wgs84`, `sha256`, `cell_resolution_m`, `corridor_half_width_m`,
+`terrain_visualization_layer=true`, `risk_heat_layer=false`, and
+`runtime_safety_truth=false`. `/admin/pretrip` and `/admin/debug` must consume
+the same projection fields so both surfaces show the same hillshade, elevation
+tint, slope shading, and contour evidence. The current alpha DTM fallback keeps
+the DEM/DTM slope calculation at `20m` source cell resolution and renders it
+inside a route corridor of `500m` half width.
+
+Suggested slope shading classes:
+
+| Slope | Color | Scout meaning |
+| --- | --- | --- |
+| `0-10°` | light green | gentle terrain |
+| `10-20°` | yellow-green | normal mountain trail grade |
+| `20-30°` | yellow | clear climb/descent |
+| `30-40°` | orange | steep terrain evidence |
+| `40-50°` | deep yellow / orange-red | high-attention terrain candidate |
+| `>50°` | red | extreme steepness / cliff-like terrain candidate |
+
+The UI must distinguish:
+
+- `terrain visualization layer`（地形視覺化圖層）: hillshade, elevation tint,
+  slope shading, and contours derived directly from DEM/DTM;
+- `risk heat layer`（風險熱區圖層）: route-specific candidate risk, calibrated
+  from terrain dimensions plus historical notes, OSM tags, route-risk factor
+  analysis, and review context.
+
+Slope shading can explain why a place is steep, but it must not by itself
+become an accepted hazard, Ln trigger, or runtime safety decision.
+
 ### Contour Generation
 
 Contours are derived artifacts.
