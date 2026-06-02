@@ -214,6 +214,78 @@ def test_pretrip_project_api_returns_read_only_view_model():
     ] is False
 
 
+def test_pretrip_project_api_compact_payload_removes_duplicate_tabs():
+    client = TestClient(create_admin_app())
+
+    full_response = client.get(f"/admin/pretrip/projects/{PROJECT_ID}")
+    compact_response = client.get(f"/admin/pretrip/projects/{PROJECT_ID}?compact=1")
+
+    assert compact_response.status_code == 200
+    compact_payload = compact_response.json()
+    assert compact_payload["project_id"] == PROJECT_ID
+    assert compact_payload["compact_payload"]["enabled"] is True
+    assert compact_payload["compact_payload"]["removed_duplicate_tab_payload"] is True
+    assert compact_payload["compact_payload"]["trimmed_heavy_layer_items"] is True
+    assert compact_payload["tabs"]["pre_trip_planning"]["sections"]
+    assert "route_notes" not in compact_payload["tabs"]["pre_trip_planning"]
+    assert compact_payload["tabs"]["post_analysis"]["segment_terrain"]["source_path"]
+    assert compact_payload["tabs"]["post_analysis"]["runtime_handoff"]["boundary"][
+        "phase1_runtime_mutation_allowed"
+    ] is False
+    assert "samples" in compact_payload["terrain_visualization"]
+    assert compact_payload["terrain_visualization"]["contours"] == []
+    if compact_payload["route_notes"]["candidates"]:
+        assert "source_path" not in compact_payload["route_notes"]["candidates"][0]
+        assert compact_payload["route_notes"]["candidates"][0]["runtime_safety_truth"] is False
+    assert "checkpoint_candidates" not in compact_payload["gis_perception"]
+    assert len(compact_response.content) < len(full_response.content)
+
+
+def test_pretrip_project_terrain_overlay_api_serves_workspace_png(tmp_path: Path):
+    workspace_root = tmp_path / "pretrip_workspace"
+    project_root = workspace_root / PROJECT_ID
+    overlay_ref = "outputs/layers/normalized/terrain_slope_shading.png"
+    terrain_ref = "outputs/layers/normalized/terrain_visualization.geojson"
+    png_bytes = bytes.fromhex(
+        "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489"
+        "0000000d49444154789c6360606060000000050001a5f645400000000049454e44"
+        "ae426082"
+    )
+    (project_root / overlay_ref).parent.mkdir(parents=True, exist_ok=True)
+    (project_root / overlay_ref).write_bytes(png_bytes)
+    (project_root / "project.json").write_text(
+        json.dumps({"terrain_visualization_ref": terrain_ref}),
+        encoding="utf-8",
+    )
+    (project_root / terrain_ref).write_text(
+        json.dumps(
+            {
+                "raster_overlays": [
+                    {
+                        "mode": "slope_shading",
+                        "source_path": overlay_ref,
+                        "sha256": "fixture-sha",
+                        "candidate_only": True,
+                        "runtime_safety_truth": False,
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    client = TestClient(create_admin_app(pretrip_workspace_root=workspace_root))
+    response = client.get(
+        f"/admin/pretrip/projects/{PROJECT_ID}/terrain-overlays/slope_shading.png"
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/png"
+    assert response.headers["x-scout-terrain-overlay"] == "slope_shading"
+    assert response.headers["x-scout-runtime-safety-truth"] == "false"
+    assert response.content == png_bytes
+
+
 def test_pretrip_project_weather_overlay_api_returns_summary_only_contract():
     client = TestClient(create_admin_app())
 
@@ -362,6 +434,45 @@ def test_admin_imagery_tile_proxy_api_returns_cached_png(monkeypatch, tmp_path):
     assert response.headers["content-type"].startswith("image/png")
     assert response.headers["x-scout-tile-source"] == "local_cache"
     assert response.headers["cache-control"] == "no-cache, max-age=0, must-revalidate"
+    assert response.content == cached_path.read_bytes()
+
+
+def test_admin_imagery_tile_proxy_api_uses_workspace_project_cache_root(
+    monkeypatch,
+    tmp_path,
+):
+    monkeypatch.delenv("SCOUT_ADMIN_RASTER_TILE_CACHE_ROOT", raising=False)
+    workspace_root = tmp_path / "workspaces"
+    project_root = workspace_root / "chilai_nanhua_day1"
+    cache_root = tmp_path / "raster-tiles"
+    project_root.mkdir(parents=True)
+    (project_root / "project.json").write_text(
+        json.dumps(
+            {
+                "project_id": "chilai_nanhua_day1",
+                "imagery_tile_cache_root": str(cache_root),
+            },
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+    cached_path = raster_tile_cache_path(
+        "chilai_nanhua_day1",
+        "imagery",
+        5,
+        26,
+        13,
+        cache_root=cache_root,
+    )
+    cached_path.parent.mkdir(parents=True)
+    cached_path.write_bytes(b"\x89PNG\r\n\x1a\nworkspace-raster-tile")
+    client = TestClient(create_admin_app(pretrip_workspace_root=workspace_root))
+
+    response = client.get("/admin/tiles/imagery/chilai_nanhua_day1/imagery/5/26/13.png")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("image/png")
+    assert response.headers["x-scout-tile-source"] == "local_cache"
     assert response.content == cached_path.read_bytes()
 
 
@@ -764,6 +875,16 @@ def test_pretrip_import_gpx_run_writes_workspace_and_returns_projection_paths(tm
     debug_projection_payload = debug_projection_view.json()
     assert debug_projection_payload["event_count"] > 4
     assert debug_projection_payload["counts"]["reference_track_count"] == 2
+    assert debug_projection_payload["terrain_visualization"]["status"] in {
+        "candidate_only",
+        "not_available",
+    }
+    assert (
+        debug_projection_payload["terrain_visualization"]["boundary"][
+            "runtime_safety_truth"
+        ]
+        is False
+    )
     assert debug_projection_payload["boundary"]["runtime_safety_truth"] is False
     assert debug_projection_payload["timeline_events"][2]["kind"] == "checkpoint_detected"
 

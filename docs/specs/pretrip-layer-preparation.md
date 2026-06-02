@@ -29,7 +29,20 @@ projection events read-only.
 
 ## CLI Command
 
-Initial `CLI`（命令列介面） contract:
+Normal operator `CLI`（命令列介面） contract assumes the preparation machine has
+network access and fetches route-corridor Overpass vector evidence:
+
+```bash
+python -m pretrip_layer_preparation \
+  --project-id chilai_nanhua_day1 \
+  --workspace-root /data/scout/pretrip/workspaces \
+  --layers osm,overpass,terrain,imagery,weather,reference-tracks,route,segments,checkpoints \
+  --profile pi-online-explicit \
+  --network-mode explicit-fetch \
+  --allow-network-fetch
+```
+
+Offline/CI fixture contract:
 
 ```bash
 python -m pretrip_layer_preparation \
@@ -40,11 +53,19 @@ python -m pretrip_layer_preparation \
   --network-mode no-network
 ```
 
-`--network-mode no-network` is the default and must be valid on Mac/PC and Pi.
-A future connected run must require an explicit network flag, for example
-`--network-mode explicit-fetch --allow-network-fetch`, and must still write only
-pretrip planning artifacts. `pi-offline` is the current Pi lightweight profile
-for the implementation; it means Pi 輕量模式（只讀本機工作區與快取摘要）。
+`--network-mode no-network` remains the default for CI fixtures, deterministic
+tests, and offline replay. Operator preparation should use
+`--network-mode explicit-fetch --allow-network-fetch` when network is available,
+and must still write only pretrip planning artifacts. `pi-offline` is the Pi
+lightweight profile for local/cache-only replay; `pi-online-explicit` is the
+operator profile for connected Overpass preparation.
+
+OSM raster tiles are not required when Overpass vector evidence is present.
+Overpass and OSM raster basemaps come from related OSM data, but they serve
+different purposes: Overpass is structured route-corridor evidence for CP/POI
+synthesis, while raster tiles are visual basemap support. This alpha treats
+Overpass as the required connected OSM data fetch and leaves raster tile cache
+as optional operator-provided visual support.
 
 ## Offline Map Handoff
 
@@ -111,8 +132,9 @@ Only after these refs exist should Scout run:
   --project-root /data/scout/admin/pretrip-workspaces/chilai_nanhua_day1 \
   --project-id chilai_nanhua_day1 \
   --layers osm,imagery,overpass,terrain,risk-score,risk-ribbon,route,reference-tracks,segments,checkpoints,pois,hazards,corridors,retreat,route-notes,weather \
-  --profile pi-offline \
-  --network-mode no-network
+  --profile pi-online-explicit \
+  --network-mode explicit-fetch \
+  --allow-network-fetch
 ```
 
 The resulting imagery layer should be `ready_from_project_ref`. A
@@ -179,6 +201,115 @@ Adapters may include route geometry, reference tracks, local OSM tile cache,
 local raster imagery, terrain/DTM summaries, weather/daylight summaries, hazard
 or POI candidates, and review-state overlays.
 
+## DEM/DTM Visualization Preparation
+
+`DEM/DTM Visualization Preparation`（DEM/DTM 地形視覺化準備） is the terrain
+adapter path for admin display. It prepares visual layers from local DEM/DTM
+while keeping raw rasters referenced by path/hash.
+
+Required outputs may include:
+
+- `terrain_hillshade`（陰影起伏圖）: shaded-relief raster or tile manifest.
+- `terrain_elevation_tint`（高度分層色）: elevation color ramp raster/tile
+  manifest.
+- `terrain_slope_shading`（坡度著色）: slope-degree or percent-grade raster/tile
+  manifest.
+- `terrain_contours`（等高線）: contour GeoJSON or contour tile manifest.
+- `terrain_route_samples`（沿線地形採樣）: compact route-aligned samples for
+  elevation, slope, roughness, TEII_20m, and no-data coverage.
+- `terrain_visualization`（地形視覺化摘要）: compact GeoJSON fallback/proxy
+  that lets `/admin/pretrip` render hillshade, elevation tint, slope class, and
+  contour markers before full DEM raster tiles are available.
+- bitmap overlay refs for the alpha fallback:
+  `terrain_hillshade_overlay_ref`, `terrain_elevation_tint_overlay_ref`,
+  `terrain_slope_shading_overlay_ref`, and `terrain_contours_overlay_ref`.
+
+Preferred production pipeline:
+
+```text
+DEM/DTM GeoTIFF
+  -> GDAL hillshade
+  -> GDAL slope
+  -> GDAL color-relief for slope shading
+  -> GDAL contour
+  -> cut local tiles / GeoJSON
+  -> /admin/pretrip display
+```
+
+Alpha implementations may emit a single bitmap overlay per terrain mode before
+full local tile cutting is ready, but the manifest must mark the processor
+(`gdal` vs fallback), the cell resolution, the corridor width, and whether raw
+DEM/DTM payloads were embedded.
+
+The alpha DTM bitmap fallback renders a route corridor rather than isolated
+point markers: slope is calculated from the DEM/DTM grid at source resolution
+(`20m` for the Chilai alpha material), then projected into PNG overlays covering
+the configured route corridor (`route_corridor_m=500`, i.e. 1000m total width).
+The overlay metadata must expose `cell_resolution_m`,
+`corridor_half_width_m`, `bitmap_overlay=true`, `route_aligned_proxy=false`,
+and `runtime_safety_truth=false`.
+
+Suggested slope shading classes:
+
+```text
+0-10 deg   light green
+10-20 deg  yellow-green
+20-30 deg  yellow
+30-40 deg  orange
+40-50 deg  deep yellow / orange-red
+>50 deg    red
+```
+
+The terrain visualization adapter must record:
+
+- source DEM/DTM refs, checksums, CRS, vertical datum, resolution, bbox, and
+  no-data policy;
+- slope algorithm, window size, smoothing, and unit (`degree` or
+  `percent_grade`);
+- color ramp version and class thresholds;
+- tile pyramid or GeoJSON simplification metadata;
+- whether each layer is ready, missing, partially covered, or fallback-only.
+- when the alpha fallback uses route-aligned samples instead of a full raster
+  tile pyramid, it must mark `route_aligned_proxy=true` and
+  `full_raster_hillshade_generated=false`.
+- when the alpha fallback emits bitmap overlays from local DTM grid cells, it
+  must preserve the DEM/DTM cell resolution for slope calculation and mark
+  `bitmap_overlay=true`, `route_aligned_proxy=false`, and the corridor half
+  width.
+
+`terrain visualization layer`（地形視覺化圖層） is separate from `risk heat layer`
+（風險熱區圖層）. Hillshade, elevation tint, slope shading, and contours explain
+terrain evidence; `risk-score`, `risk-ribbon`, `risk-heatmap`, and `risk-delta`
+remain route-specific candidate risk overlays. The layer job must not present
+slope shading alone as an accepted hazard or runtime safety truth.
+
+The same `terrain_visualization.raster_overlays` projection is consumed by
+`/admin/pretrip` and `/admin/debug`. Debug rendering is read-only and uses the
+existing `/admin/pretrip/projects/{project_id}/terrain-overlays/{mode}.png`
+endpoint; it must not create a separate terrain truth source.
+
+## Clean Rebuild And Durable Evidence Refs
+
+Scout alpha rebuilds can move the existing workspace aside and regenerate GPX
+and layer-preparation outputs from source material. Rebuild tooling must
+preserve durable admin evidence artifacts that importer and map preparation do
+not regenerate, including:
+
+- `readiness_report_ref`;
+- `resource_plan_ref`;
+- `planned_eta_ref`;
+- `departure_bundle_manifest_ref`;
+- `route_comparison_ref`;
+- capability timeline refs when present.
+
+The restore path may copy only project-relative refs that remain inside the
+source and destination workspace roots. It must not overwrite a destination
+artifact that already exists. After restoring durable refs, the review queue and
+admin/debug projections may be refreshed as workspace-only projections. This
+keeps clean/overwrite reruns from dropping timeline/evidence surface content
+while still rebuilding route, Overpass, terrain, imagery, and risk layers from
+current source material.
+
 ## Overpass Route-Corridor Fetch
 
 `Overpass Route-Corridor Fetch`（依路線走廊擷取 OSM 向量） is owned by
@@ -207,15 +338,16 @@ runtime safety truth（現場安全真值） or mutate Phase 1/Phase 2 state.
 
 `network flag boundary`（網路旗標邊界） rules:
 
-- default mode is `no-network`;
+- default mode is `no-network` for fixtures and replay; normal operator
+  preparation uses explicit connected Overpass fetch;
 - `fetch` is the only lifecycle stage that may ever use live network;
 - live fetch requires both `--network-mode explicit-fetch` and
   `--allow-network-fetch`;
 - each live adapter must declare provider, timeout, cache root, rate-limit
   policy, source license, and raw-payload storage policy before it runs;
-- public OSM bulk/offline tile download remains prohibited unless the provider
-  is replaced with a self-hosted or explicitly offline-prefetch-permitted
-  source;
+- public OSM bulk/offline tile download remains prohibited. OSM raster tile
+  cache is optional visual support; Overpass vector evidence is the alpha
+  path for connected OSM data preparation;
 - no network flag may permit `/safety/*` mutation, Phase 2 Brain writeback,
   provider webhook sends, or final `MissionGraph` generation.
 

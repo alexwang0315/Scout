@@ -28,13 +28,13 @@ def test_pretrip_map_layers_order_imagery_bottom_and_api_top():
         "osm",
         "terrain",
         "corridors",
-        "hazards",
         "route",
         "reference-tracks",
         "retreat",
         "segments",
         "checkpoints",
         "pois",
+        "hazards",
         "route-notes",
         "mcp",
         "weather-api",
@@ -75,6 +75,18 @@ def test_pretrip_map_layers_order_imagery_bottom_and_api_top():
         "local_file_cache_then_offline_fallback"
     )
     assert layers[1]["downloads_tiles_into_repo"] is False
+    terrain = next(layer for layer in layers if layer["layer_id"] == "terrain")
+    assert terrain["source_kind"] == "terrain_visualization"
+    assert terrain["terrain_visualization_layer"] is True
+    assert terrain["risk_heat_layer"] is False
+    assert [item["class_id"] for item in terrain["slope_class_breaks"]] == [
+        "slope-0-10",
+        "slope-10-20",
+        "slope-20-30",
+        "slope-30-40",
+        "slope-40-50",
+        "slope-gt-50",
+    ]
     assert layers[-1]["layer_kind"] == "api"
     assert layers[-1]["label_zh"].startswith("氣象 API")
     assert layers[-1]["render_mode"] == "api_overlay"
@@ -101,9 +113,9 @@ def test_after_action_map_layers_reuse_the_same_base_and_api_order():
         "imagery",
         "osm",
         "corridors",
-        "hazards",
         "route",
         "checkpoints",
+        "hazards",
         "events",
         "weather-api",
     ]

@@ -367,6 +367,10 @@
     .layer-imagery { fill: #e5ebf1; opacity: .42; }
     .layer-osm { fill: #f7fafc; opacity: .72; }
     .raster-tile { opacity: .92; image-rendering: auto; }
+    .terrain-raster-overlay {
+      image-rendering: pixelated;
+      pointer-events: visiblePainted;
+    }
     .osm-tile { opacity: .86; image-rendering: auto; }
     .osm-attribution {
       fill: #405064;
@@ -388,6 +392,23 @@
       stroke: #c47f48;
       stroke-dasharray: 3 6;
       opacity: .28;
+      vector-effect: non-scaling-stroke;
+    }
+    .terrain-slope-cell {
+      stroke: rgba(17, 24, 39, .68);
+      stroke-width: 2;
+      opacity: .82;
+      pointer-events: visiblePainted;
+      shape-rendering: crispEdges;
+      vector-effect: non-scaling-stroke;
+    }
+    .terrain-contour-marker {
+      fill: none;
+      stroke: rgba(71, 85, 105, .8);
+      stroke-width: 1.2;
+      stroke-dasharray: 2 2;
+      opacity: .68;
+      pointer-events: none;
       vector-effect: non-scaling-stroke;
     }
     .corridor { fill: none; stroke: #718096; stroke-width: 9; opacity: .22; stroke-linecap: round; }
@@ -1226,7 +1247,7 @@
                   <div class="filters" aria-label="Map layers">
                     <label title="Imagery layer"><input type="checkbox" data-layer="imagery" checked> Imagery</label>
                     <label title="OpenStreetMap layer"><input type="checkbox" data-layer="osm" checked> OSM</label>
-                    <label title="Terrain layer"><input type="checkbox" data-layer="terrain"> Terrain</label>
+                    <label title="Terrain layer"><input type="checkbox" data-layer="terrain" checked> Terrain</label>
                     <label title="Scout Risk Engine pretrip risk score point layer"><input type="checkbox" data-layer="risk-score"> Risk pts</label>
                     <label title="Route-aligned baseline terrain risk layer"><input type="checkbox" data-layer="risk-ribbon" checked> Baseline</label>
                     <label title="Route-specific calibrated heat map"><input type="checkbox" data-layer="risk-heatmap" checked> Calibrated</label>
@@ -1625,6 +1646,8 @@
     const FOCUS_POINT_VIEWPORT_M = 50;
     const FOCUS_PATH_MAX_ZOOM = 4.4;
     const FOCUS_POINT_BOX_THRESHOLD = 28;
+    const TERRAIN_FALLBACK_CELL_WIDTH_M = 20;
+    const TERRAIN_FALLBACK_CELL_GAP_PX = 1;
     const MAP_ZOOM_STEP_FACTOR = 1.25;
     const OSM_PUBLIC_TILE_URL_TEMPLATE = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
     const OSM_LOCAL_TILE_URL_TEMPLATE = `${apiBase()}/admin/tiles/osm/{z}/{x}/{y}.png?fallback=transparent`;
@@ -1887,7 +1910,142 @@
     function segmentTerrainMetadata(view) {
       return view?.tabs?.post_analysis?.segment_terrain?.segment_metadata || [];
     }
+    function terrainVisualization(view) {
+      return view?.terrain_visualization || view?.tabs?.pre_trip_planning?.terrain_visualization || {};
+    }
+    function terrainSamples(view) {
+      return (terrainVisualization(view).samples || [])
+        .filter(sample => Number.isFinite(Number(sample.lat)) && Number.isFinite(Number(sample.lon)));
+    }
+    function terrainRasterOverlays(view) {
+      return (terrainVisualization(view).raster_overlays || [])
+        .filter(overlay => overlay?.runtime_href && normalizeRasterBounds(overlay.bbox_wgs84));
+    }
+    function renderTerrainBitmapOverlays(group, view, bounds) {
+      const overlays = terrainRasterOverlays(view)
+        .filter(overlay => overlay.default_visible && boundsIntersect(bounds, normalizeRasterBounds(overlay.bbox_wgs84)));
+      overlays.forEach(overlay => {
+        const overlayBounds = normalizeRasterBounds(overlay.bbox_wgs84);
+        const [x1, y1] = project(bounds, overlayBounds.north, overlayBounds.west);
+        const [x2, y2] = project(bounds, overlayBounds.south, overlayBounds.east);
+        const image = el("image", {
+          href: rasterTileCacheBustedUrl(apiUrlTemplate(overlay.runtime_href)),
+          x: Math.min(x1, x2).toFixed(2),
+          y: Math.min(y1, y2).toFixed(2),
+          width: Math.abs(x2 - x1).toFixed(2),
+          height: Math.abs(y2 - y1).toFixed(2),
+          class: "terrain-raster-overlay",
+          opacity: overlay.opacity ?? 0.86,
+          preserveAspectRatio: "none",
+          "data-terrain-overlay-mode": overlay.mode || overlay.overlay_id || "",
+          "data-terrain-cell-resolution-m": overlay.cell_resolution_m ?? "",
+          "data-terrain-corridor-half-width-m": overlay.corridor_half_width_m ?? "",
+          "data-terrain-sha256": overlay.sha256 || ""
+        });
+        attachEvidence(image, {
+          ...overlay,
+          evidence_type: "pretrip_terrain_visualization_bitmap_overlay",
+          label: `${overlay.mode || "terrain"} bitmap overlay`,
+          terrain_visualization_layer: true,
+          risk_heat_layer: false,
+          runtime_safety_truth: false
+        });
+        group.appendChild(image);
+      });
+      return overlays.length;
+    }
+    function terrainCellSide(bounds, widthMeters = TERRAIN_FALLBACK_CELL_WIDTH_M) {
+      const centerLat = (bounds.north + bounds.south) / 2;
+      const centerLon = (bounds.east + bounds.west) / 2;
+      const widthMetersInView = metersBetween(centerLat, bounds.west, centerLat, bounds.east);
+      const heightMetersInView = metersBetween(bounds.south, centerLon, bounds.north, centerLon);
+      const drawableWidth = Math.max(MAP_WIDTH - MAP_VISUAL_PADDING * 2, 1);
+      const drawableHeight = Math.max(MAP_HEIGHT - MAP_VISUAL_PADDING * 2, 1);
+      const xWidth = Number.isFinite(widthMetersInView) && widthMetersInView > 0
+        ? (widthMeters / widthMetersInView) * drawableWidth
+        : 0;
+      const yWidth = Number.isFinite(heightMetersInView) && heightMetersInView > 0
+        ? (widthMeters / heightMetersInView) * drawableHeight
+        : 0;
+      return Math.max(1, Math.min(24, (xWidth + yWidth) / 2 || 2));
+    }
+    function terrainCellBoxFor(sample, bounds, side) {
+      const [x, y] = project(bounds, sample.lat, sample.lon);
+      return {
+        x: x - side / 2,
+        y: y - side / 2,
+        width: side,
+        height: side
+      };
+    }
+    function expandedBox(box, padding = TERRAIN_FALLBACK_CELL_GAP_PX) {
+      return {
+        x: box.x - padding,
+        y: box.y - padding,
+        width: box.width + padding * 2,
+        height: box.height + padding * 2
+      };
+    }
+    function boxesOverlap(a, b) {
+      return a.x < b.x + b.width
+        && a.x + a.width > b.x
+        && a.y < b.y + b.height
+        && a.y + a.height > b.y;
+    }
+    function terrainCellPlacement(samples, bounds) {
+      const side = terrainCellSide(bounds);
+      const placed = [];
+      const occupied = [];
+      samples.forEach(sample => {
+        const box = terrainCellBoxFor(sample, bounds, side);
+        const candidateBox = expandedBox(box);
+        if (occupied.some(existing => boxesOverlap(candidateBox, existing))) return;
+        occupied.push(candidateBox);
+        placed.push({sample, box});
+      });
+      return placed;
+    }
+    function renderTerrainSquareCells(group, samples, bounds) {
+      terrainCellPlacement(samples, bounds).forEach(({sample, box}) => {
+        const cell = el("rect", {
+          x: box.x.toFixed(2),
+          y: box.y.toFixed(2),
+          width: box.width.toFixed(2),
+          height: box.height.toFixed(2),
+          class: `terrain-slope-cell ${sample.slope_class || "slope-unavailable"}`,
+          fill: sample.slope_color || "#94a3b8",
+          stroke: sample.elevation_tint_color || "#334155",
+          "data-slope-degrees": sample.slope_degrees ?? "",
+          "data-elevation-m": sample.elevation_m ?? "",
+          "data-hillshade-value": sample.hillshade_value ?? "",
+          "data-contour-index-m": sample.contour_index_m ?? "",
+          "data-terrain-cell-resolution-m": sample.cell_resolution_m || TERRAIN_FALLBACK_CELL_WIDTH_M
+        });
+        attachEvidence(cell, {
+          ...sample,
+          evidence_type: "pretrip_terrain_visualization_fallback_cell",
+          label: `Terrain cell ${Math.round(Number(sample.distance_m) || 0)}m`,
+          terrain_cell_resolution_m: sample.cell_resolution_m || TERRAIN_FALLBACK_CELL_WIDTH_M
+        });
+        group.appendChild(cell);
+      });
+    }
     function renderTerrainMetadata(group, view, bounds) {
+      const samples = terrainSamples(view);
+      const bitmapOverlayCount = renderTerrainBitmapOverlays(group, view, bounds);
+      if (!bitmapOverlayCount) {
+        renderTerrainSquareCells(group, samples, bounds);
+      }
+      terrainCellPlacement(samples, bounds).forEach(({sample, box}) => {
+        if (!bitmapOverlayCount && sample.contour_marker && Number.isFinite(Number(sample.contour_index_m))) {
+          const y = box.y + box.height / 2;
+          group.appendChild(el("path", {
+            d: `M ${box.x} ${y} L ${box.x + box.width} ${y}`,
+            class: "terrain-contour-marker",
+            "data-contour-index-m": sample.contour_index_m
+          }));
+        }
+      });
       const terrainBySegment = new Map(
         segmentTerrainMetadata(view).map(item => [item.segment_candidate_id, item])
       );
@@ -3855,13 +4013,13 @@
       svg.setAttribute("viewBox", `0 0 ${MAP_WIDTH} ${MAP_HEIGHT}`);
       svg.replaceChildren();
 
-      const osmGroup = el("g", {"data-layer-group": "osm"});
-      renderOsmBasemap(osmGroup, bounds, MAP_WIDTH, MAP_HEIGHT);
-      svg.appendChild(osmGroup);
-
       const imageryGroup = el("g", {"data-layer-group": "imagery"});
       renderRasterImagery(imageryGroup, view, bounds, MAP_WIDTH, MAP_HEIGHT);
       svg.appendChild(imageryGroup);
+
+      const osmGroup = el("g", {"data-layer-group": "osm"});
+      renderOsmBasemap(osmGroup, bounds, MAP_WIDTH, MAP_HEIGHT);
+      svg.appendChild(osmGroup);
 
       const terrainGroup = el("g", {"data-layer-group": "terrain"});
       renderTerrainMetadata(terrainGroup, view, bounds);
@@ -3874,14 +4032,6 @@
         corridorGroup.appendChild(path);
       });
       svg.appendChild(corridorGroup);
-
-      const hazardGroup = el("g", {"data-layer-group": "hazards"});
-      view.map_candidates.hazard_candidates.forEach(candidate => {
-        const path = el("path", {d: pathFromCoords(bounds, candidate.hazard.polygon) + " Z", class: "hazard"});
-        attachEvidence(path, candidate);
-        hazardGroup.appendChild(path);
-      });
-      svg.appendChild(hazardGroup);
 
       const overpassGroup = el("g", {"data-layer-group": "overpass"});
       (view.overpass_evidence?.corridor_candidates || []).forEach(candidate => {
@@ -3917,6 +4067,29 @@
         referenceTrackGroup.appendChild(path);
       });
       svg.appendChild(referenceTrackGroup);
+
+      const retreatGroup = el("g", {"data-layer-group": "retreat"});
+      view.retreat_routes.forEach(retreat => {
+        const points = [...view.checkpoints].reverse();
+        const path = el("path", {d: pathFromCoords(bounds, points), class: "retreat-line"});
+        attachEvidence(path, retreat);
+        retreatGroup.appendChild(path);
+      });
+      svg.appendChild(retreatGroup);
+
+      const segmentGroup = el("g", {"data-layer-group": "segments"});
+      view.segments.forEach(segment => {
+        const from = view.checkpoints.find(item => item.candidate_id === segment.from_candidate_id);
+        const to = view.checkpoints.find(item => item.candidate_id === segment.to_candidate_id);
+        if (!from || !to) return;
+        const segmentCoordinates = segment.display_geometry?.coordinates?.length >= 2
+          ? segment.display_geometry.coordinates
+          : [from, to];
+        const path = el("path", {d: pathFromCoords(bounds, segmentCoordinates), class: "segment-overlay"});
+        attachEvidence(path, segment);
+        segmentGroup.appendChild(path);
+      });
+      svg.appendChild(segmentGroup);
 
       const riskRibbonGroup = el("g", {"data-layer-group": "risk-ribbon"});
       (view.risk_ribbon?.segments || []).forEach(segment => {
@@ -3974,29 +4147,6 @@
       });
       svg.appendChild(riskScoreGroup);
 
-      const retreatGroup = el("g", {"data-layer-group": "retreat"});
-      view.retreat_routes.forEach(retreat => {
-        const points = [...view.checkpoints].reverse();
-        const path = el("path", {d: pathFromCoords(bounds, points), class: "retreat-line"});
-        attachEvidence(path, retreat);
-        retreatGroup.appendChild(path);
-      });
-      svg.appendChild(retreatGroup);
-
-      const segmentGroup = el("g", {"data-layer-group": "segments"});
-      view.segments.forEach(segment => {
-        const from = view.checkpoints.find(item => item.candidate_id === segment.from_candidate_id);
-        const to = view.checkpoints.find(item => item.candidate_id === segment.to_candidate_id);
-        if (!from || !to) return;
-        const segmentCoordinates = segment.display_geometry?.coordinates?.length >= 2
-          ? segment.display_geometry.coordinates
-          : [from, to];
-        const path = el("path", {d: pathFromCoords(bounds, segmentCoordinates), class: "segment-overlay"});
-        attachEvidence(path, segment);
-        segmentGroup.appendChild(path);
-      });
-      svg.appendChild(segmentGroup);
-
       const checkpointGroup = el("g", {"data-layer-group": "checkpoints"});
       view.checkpoints.forEach(checkpoint => {
         const [x, y] = project(bounds, checkpoint.lat, checkpoint.lon);
@@ -4029,6 +4179,14 @@
         poiGroup.appendChild(circle);
       });
       svg.appendChild(poiGroup);
+
+      const hazardGroup = el("g", {"data-layer-group": "hazards"});
+      view.map_candidates.hazard_candidates.forEach(candidate => {
+        const path = el("path", {d: pathFromCoords(bounds, candidate.hazard.polygon) + " Z", class: "hazard"});
+        attachEvidence(path, candidate);
+        hazardGroup.appendChild(path);
+      });
+      svg.appendChild(hazardGroup);
 
       const routeNoteGroup = el("g", {"data-layer-group": "route-notes"});
       (view.route_notes?.candidates || []).forEach(candidate => {
@@ -4525,7 +4683,7 @@
     }
     async function reloadProjectView() {
       const selectedSourceId = evidenceSourceId(state.selected);
-      const response = await fetch(`${apiBase()}/admin/pretrip/projects/${PROJECT_ID}`);
+      const response = await fetch(`${apiBase()}/admin/pretrip/projects/${PROJECT_ID}?compact=1`);
       const view = await response.json();
       state.weatherOverlay = null;
       state.view = view;

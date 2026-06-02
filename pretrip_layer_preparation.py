@@ -16,6 +16,7 @@ from typing import Any, Literal
 from admin_basemap_tiles import build_osm_basemap_contract, normalize_bbox_wgs84
 from pretrip_models import RouteBBox
 from pretrip_overpass_ingest import import_overpass_evidence_candidates
+from pretrip_source_ingest import wgs84_to_twd97
 
 
 LAYER_PREPARATION_VERSION = "0.1.0"
@@ -54,6 +55,21 @@ OUTPUT_REFS = {
     ),
     "terrain_route_samples_ref": (
         "outputs/layers/normalized/terrain_route_samples.geojson"
+    ),
+    "terrain_visualization_ref": (
+        "outputs/layers/normalized/terrain_visualization.geojson"
+    ),
+    "terrain_hillshade_overlay_ref": (
+        "outputs/layers/normalized/terrain_hillshade.png"
+    ),
+    "terrain_elevation_tint_overlay_ref": (
+        "outputs/layers/normalized/terrain_elevation_tint.png"
+    ),
+    "terrain_slope_shading_overlay_ref": (
+        "outputs/layers/normalized/terrain_slope_shading.png"
+    ),
+    "terrain_contours_overlay_ref": (
+        "outputs/layers/normalized/terrain_contours.png"
     ),
     "web_case_evidence_ref": "outputs/layers/normalized/web_case_evidence.json",
     "raster_label_evidence_ref": (
@@ -155,6 +171,62 @@ CALIBRATED_RISK_OUTPUT_REFS = {
         "outputs/risk/calibrated_risk_heatmap.metadata.json"
     ),
 }
+TERRAIN_VISUALIZATION_MODES = (
+    "hillshade",
+    "elevation_tint",
+    "slope_shading",
+    "contours",
+)
+TERRAIN_SLOPE_CLASSES = (
+    {
+        "class_id": "slope-0-10",
+        "min_degrees": 0.0,
+        "max_degrees": 10.0,
+        "label": "0-10 deg",
+        "color": "#b7e4a8",
+    },
+    {
+        "class_id": "slope-10-20",
+        "min_degrees": 10.0,
+        "max_degrees": 20.0,
+        "label": "10-20 deg",
+        "color": "#d9ef8b",
+    },
+    {
+        "class_id": "slope-20-30",
+        "min_degrees": 20.0,
+        "max_degrees": 30.0,
+        "label": "20-30 deg",
+        "color": "#fee08b",
+    },
+    {
+        "class_id": "slope-30-40",
+        "min_degrees": 30.0,
+        "max_degrees": 40.0,
+        "label": "30-40 deg",
+        "color": "#fdae61",
+    },
+    {
+        "class_id": "slope-40-50",
+        "min_degrees": 40.0,
+        "max_degrees": 50.0,
+        "label": "40-50 deg",
+        "color": "#f46d43",
+    },
+    {
+        "class_id": "slope-gt-50",
+        "min_degrees": 50.0,
+        "max_degrees": None,
+        "label": ">50 deg",
+        "color": "#d73027",
+    },
+)
+TERRAIN_CONTOUR_INTERVAL_M = 100.0
+TERRAIN_DTM_CELL_RESOLUTION_M = 20.0
+TERRAIN_DTM_CORRIDOR_HALF_WIDTH_M = 500.0
+TERRAIN_DTM_CORRIDOR_TOTAL_WIDTH_M = TERRAIN_DTM_CORRIDOR_HALF_WIDTH_M * 2.0
+TERRAIN_DTM_SEGMENT_BUCKET_M = 500.0
+TERRAIN_DTM_CONTOUR_TOLERANCE_M = 5.0
 
 
 @dataclass(frozen=True)
@@ -468,8 +540,11 @@ def _build_layer_preparation_manifest(
                 "artifacts only."
             ),
             (
-                "No live network calls are made in this slice; explicit-fetch "
-                "only records policy intent."
+                "Connected preparation fetches Overpass vector evidence only "
+                "when explicit-fetch and allow-network-fetch are both set; OSM "
+                "raster tiles remain optional visual basemap support."
+                if request.network_mode == "explicit-fetch"
+                else "No live network calls are made in no-network preparation."
             ),
             (
                 "Large raster, DEM, GPX, and tile payloads are referenced by "
@@ -708,7 +783,13 @@ def _build_layer_record(
         "stale_risk": "unknown",
     }
     if layer_id == "osm":
-        return _osm_layer_record(common, bbox, request)
+        return _osm_layer_record(
+            common,
+            bbox,
+            request,
+            project_root=project_root,
+            project=project,
+        )
     if layer_id == "overpass":
         return _overpass_layer_record(
             common,
@@ -726,6 +807,13 @@ def _build_layer_record(
             status_if_missing="missing_source",
             counts_from_payload=_terrain_counts,
             stale_risk="medium",
+            output_refs={
+                "terrain_route_samples_ref": OUTPUT_REFS["terrain_route_samples_ref"],
+                "terrain_visualization_ref": OUTPUT_REFS["terrain_visualization_ref"],
+                "terrain_visualization_modes": list(TERRAIN_VISUALIZATION_MODES),
+                "slope_class_breaks": list(TERRAIN_SLOPE_CLASSES),
+                "contour_interval_m": TERRAIN_CONTOUR_INTERVAL_M,
+            },
             missing_warning="Terrain/DTM coverage summary is missing.",
         )
     if layer_id == "risk-score":
@@ -848,43 +936,111 @@ def _osm_layer_record(
     common: dict[str, Any],
     bbox: dict[str, float],
     request: LayerPreparationRequest,
+    *,
+    project_root: Path,
+    project: dict[str, Any],
 ) -> dict[str, Any]:
     contract = build_osm_basemap_contract(
         bbox,
         max_tiles=64,
         tile_url_template="/admin/tiles/osm/{z}/{x}/{y}.png",
     )
+    project_id = request.project_id or project_root.name
+    cache_manifest_ref = (
+        f"outputs/layers/manifests/{project_id}.osm_tile_cache_manifest.json"
+    )
+    cache_manifest_path = project_root / cache_manifest_ref
+    cache_manifest = (
+        _load_json(cache_manifest_path) if cache_manifest_path.exists() else None
+    )
+    cache_plan = cache_manifest.get("plan", {}) if isinstance(cache_manifest, dict) else {}
+    seed_summary = (
+        cache_manifest.get("seed_summary", {}) if isinstance(cache_manifest, dict) else {}
+    )
+    cached_tile_count = int(seed_summary.get("tiles_written") or 0) + int(
+        seed_summary.get("tiles_skipped_existing") or 0
+    )
+    source_refs = [
+        {
+            "ref": "/admin/tiles/osm/{z}/{x}/{y}.png",
+            "source_kind": "local_osm_tile_proxy",
+            "external_network_required": False,
+        }
+    ]
+    output_refs = {
+        "local_proxy_tile_url_template": "/admin/tiles/osm/{z}/{x}/{y}.png"
+    }
+    counts = {
+        "tile_count": contract["tile_count"],
+        "zoom": contract["zoom"],
+        "max_tiles": contract["max_tiles"],
+        "osm_raster_tile_fetch_required": False,
+    }
+    status = "projection_ready"
+    overpass_refs = [
+        (key, project.get(key))
+        for key in (
+            "overpass_evidence_ref",
+            "overpass_map_context_ref",
+            "overpass_raw_payload_ref",
+        )
+        if project.get(key)
+    ]
+    for ref_key, ref in overpass_refs:
+        source_refs.append(
+            {
+                "ref": ref,
+                "source_kind": "overpass_vector_evidence",
+                "project_ref_key": ref_key,
+                "external_network_required": False,
+                "network_calls_made": False,
+            }
+        )
+    if overpass_refs:
+        output_refs["osm_data_evidence_policy"] = "covered_by_overpass_vector_evidence"
+        output_refs["overpass_vector_evidence_ref"] = project.get("overpass_map_context_ref")
+        counts["overpass_candidate_count"] = project.get("overpass_candidate_count", 0)
+        status = "ready_from_project_ref"
+    if cache_manifest:
+        source_refs.append(
+            {
+                "ref": cache_manifest_ref,
+                "source_kind": "osm_tile_cache_manifest",
+                "external_network_required": False,
+                "network_calls_made": bool(cached_tile_count),
+            }
+        )
+        output_refs["osm_tile_cache_manifest_ref"] = cache_manifest_ref
+        output_refs["osm_tile_cache_root"] = cache_plan.get("cache_root")
+        counts["planned_tile_count"] = cache_plan.get("total_tile_count", 0)
+        counts["cached_tile_count"] = cached_tile_count
+        counts["seed_tiles_seen"] = seed_summary.get("tiles_seen", 0)
+        status = (
+            "ready_from_project_ref"
+            if seed_summary.get("status") == "seed_complete"
+            else "projection_ready"
+        )
     record = {
         **common,
-        "status": "projection_ready",
-        "source_refs": [
-            {
-                "ref": "/admin/tiles/osm/{z}/{x}/{y}.png",
-                "source_kind": "local_osm_tile_proxy",
-                "external_network_required": False,
-            }
-        ],
-        "output_refs": {
-            "local_proxy_tile_url_template": "/admin/tiles/osm/{z}/{x}/{y}.png"
-        },
-        "counts": {
-            "tile_count": contract["tile_count"],
-            "zoom": contract["zoom"],
-            "max_tiles": contract["max_tiles"],
-        },
+        "status": status,
+        "source_refs": source_refs,
+        "output_refs": output_refs,
+        "counts": counts,
         "policy_notes": [
             (
                 "Public OSM bulk/offline tile download is prohibited; this "
-                "job records a local proxy/cache contract only."
-            )
+                "job records a local proxy/cache contract and only accepts "
+                "pre-seeded tiles from a permitted provider."
+            ),
+            (
+                "Overpass vector evidence covers OSM data acquisition for "
+                "pretrip preparation; OSM raster tiles are optional visual "
+                "basemap support and are not required when Overpass is present."
+            ),
         ],
         "warnings": [],
         "stale_risk": "medium",
     }
-    if request.network_mode == "explicit-fetch":
-        record["warnings"].append(
-            "explicit-fetch was requested, but OSM tile fetching is not implemented in this slice."
-        )
     return _with_lifecycle(record)
 
 
@@ -1423,7 +1579,7 @@ def _project_ref_layer_record(
     status_if_missing: str,
     counts_from_payload: Any,
     stale_risk: str,
-    output_refs: dict[str, str] | None = None,
+    output_refs: dict[str, Any] | None = None,
     missing_warning: str,
 ) -> dict[str, Any]:
     ref = project.get(ref_key)
@@ -1598,6 +1754,7 @@ def _map_preparation_summary_from_manifest(manifest: dict[str, Any]) -> dict[str
                 "raster_label_plan_ref",
                 "overpass_vector_evidence_ref",
                 "terrain_route_samples_ref",
+                "terrain_visualization_ref",
                 "web_case_evidence_ref",
                 "raster_label_evidence_ref",
                 "gis_semantic_input_bundle_ref",
@@ -3509,17 +3666,15 @@ def _write_map_preparation_spec_artifacts(
     )
     _write_json(
         project_root / outputs["overpass_vector_evidence_ref"],
-        _empty_geojson_evidence_from_manifest(
-            manifest,
-            artifact_kind="pretrip_overpass_vector_evidence",
-            evidence_type="pretrip_overpass_vector_candidate",
-            status=_layer_status(manifest, "overpass"),
-            source_plan_ref="outputs/layers/plans/overpass_query.ql",
-        ),
+        _overpass_vector_evidence_from_project(project_root, manifest),
     )
     _write_json(
         project_root / outputs["terrain_route_samples_ref"],
         _terrain_route_samples_from_project(project_root, manifest),
+    )
+    _write_json(
+        project_root / outputs["terrain_visualization_ref"],
+        _terrain_visualization_from_project(project_root, manifest),
     )
     _write_json(
         project_root / outputs["web_case_evidence_ref"],
@@ -3585,6 +3740,88 @@ def _raster_label_plan_from_manifest(manifest: dict[str, Any]) -> dict[str, Any]
     }
 
 
+def _overpass_vector_evidence_from_project(
+    project_root: Path,
+    manifest: dict[str, Any],
+) -> dict[str, Any]:
+    source_refs = manifest["inputs"]["source_refs"]
+    map_ref_record = source_refs.get("overpass_map_context_ref", {})
+    map_ref = map_ref_record.get("ref") if isinstance(map_ref_record, dict) else None
+    if isinstance(map_ref, str) and map_ref and (project_root / map_ref).exists():
+        payload = _load_json(project_root / map_ref)
+        features = []
+        type_counts: Counter[str] = Counter()
+        for index, feature in enumerate(payload.get("features", [])):
+            if not isinstance(feature, dict):
+                continue
+            properties = dict(feature.get("properties") or {})
+            candidate_type = str(
+                properties.get("candidate_type")
+                or properties.get("feature_type")
+                or "overpass_candidate"
+            )
+            type_counts[candidate_type] += 1
+            features.append(
+                {
+                    "type": "Feature",
+                    "geometry": feature.get("geometry"),
+                    "properties": {
+                        **properties,
+                        "overpass_vector_evidence_id": properties.get("id")
+                        or f"overpass.vector.{index + 1:06d}",
+                        "evidence_type": "pretrip_overpass_vector_candidate",
+                        "source_kind": "overpass_vector_evidence",
+                        "source_overpass_map_context_ref": map_ref,
+                        "route_scope_ref": manifest["inputs"][
+                            "route_evidence_bundle"
+                        ].get("source_ref"),
+                        "candidate_only": True,
+                        "requires_human_review": True,
+                        "runtime_safety_truth": False,
+                    },
+                }
+            )
+        artifact = _empty_geojson_evidence_from_manifest(
+            manifest,
+            artifact_kind="pretrip_overpass_vector_evidence",
+            evidence_type="pretrip_overpass_vector_candidate",
+            status="ready_from_project_ref" if features else "empty_project_ref",
+            source_plan_ref="outputs/layers/plans/overpass_query.ql",
+        )
+        artifact["features"] = features
+        artifact["counts"] = {
+            "feature_count": len(features),
+            "candidate_count": len(features),
+            "candidate_type_counts": dict(sorted(type_counts.items())),
+            "runtime_safety_truth_count": 0,
+        }
+        artifact["source_refs"] = [
+            ref
+            for ref in (
+                source_refs.get("overpass_evidence_ref"),
+                map_ref_record,
+                source_refs.get("overpass_raw_payload_ref"),
+                source_refs.get("overpass_query_ref"),
+            )
+            if isinstance(ref, dict)
+        ]
+        artifact["boundary"] = {
+            **artifact["boundary"],
+            "pretrip_candidate_evidence_only": True,
+            "runtime_safety_truth": False,
+            "phase1_runtime_mutation_allowed": False,
+        }
+        return artifact
+
+    return _empty_geojson_evidence_from_manifest(
+        manifest,
+        artifact_kind="pretrip_overpass_vector_evidence",
+        evidence_type="pretrip_overpass_vector_candidate",
+        status=_layer_status(manifest, "overpass"),
+        source_plan_ref="outputs/layers/plans/overpass_query.ql",
+    )
+
+
 def _web_case_evidence_from_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
     return {
         "artifact_kind": "pretrip_web_case_evidence",
@@ -3608,8 +3845,10 @@ def _terrain_route_samples_from_project(
     project_root: Path,
     manifest: dict[str, Any],
 ) -> dict[str, Any]:
-    risk_ref_record = manifest["inputs"]["source_refs"].get("risk_score_points_ref", {})
-    risk_ref = risk_ref_record.get("ref") if isinstance(risk_ref_record, dict) else None
+    risk_ref_key, risk_ref_record, risk_ref, risk_path = _terrain_source_ref(
+        project_root,
+        manifest,
+    )
     if not isinstance(risk_ref, str) or not risk_ref:
         return _empty_geojson_evidence_from_manifest(
             manifest,
@@ -3618,8 +3857,7 @@ def _terrain_route_samples_from_project(
             status=_layer_status(manifest, "terrain"),
             source_plan_ref=None,
         )
-    risk_path = project_root / risk_ref
-    if not risk_path.exists():
+    if risk_path is None or not risk_path.exists():
         return _empty_geojson_evidence_from_manifest(
             manifest,
             artifact_kind="pretrip_terrain_route_samples",
@@ -3642,7 +3880,8 @@ def _terrain_route_samples_from_project(
                 or f"terrain_route_sample.{index + 1:06d}",
                 "evidence_type": "pretrip_terrain_route_sample",
                 "source_kind": "scout_risk_engine_terrain_sample",
-                "source_risk_score_ref": risk_ref,
+                "source_risk_ref_key": risk_ref_key,
+                "source_risk_ref": risk_ref,
                 "route_scope_ref": manifest["inputs"]["route_evidence_bundle"].get(
                     "source_ref"
                 ),
@@ -3656,13 +3895,15 @@ def _terrain_route_samples_from_project(
         manifest,
         artifact_kind="pretrip_terrain_route_samples",
         evidence_type="pretrip_terrain_route_sample",
-        status="ready_from_risk_score_points" if features else "empty_risk_source",
+        status=f"ready_from_{risk_ref_key.removesuffix('_ref')}"
+        if features
+        else "empty_risk_source",
         source_plan_ref=None,
     )
     artifact["features"] = features
     artifact["counts"] = {
         "feature_count": len(features),
-        "source_risk_score_feature_count": len(payload.get("features", [])),
+        "source_risk_feature_count": len(payload.get("features", [])),
         "runtime_safety_truth_count": 0,
     }
     artifact["source_refs"] = [
@@ -3676,6 +3917,968 @@ def _terrain_route_samples_from_project(
         if isinstance(ref, dict)
     ]
     return artifact
+
+
+def _terrain_visualization_from_project(
+    project_root: Path,
+    manifest: dict[str, Any],
+) -> dict[str, Any]:
+    bitmap_artifact = _dtm_corridor_bitmap_terrain_visualization(
+        project_root,
+        manifest,
+    )
+    if bitmap_artifact is not None:
+        return bitmap_artifact
+    return _route_aligned_terrain_visualization_from_project(project_root, manifest)
+
+
+def _route_aligned_terrain_visualization_from_project(
+    project_root: Path,
+    manifest: dict[str, Any],
+) -> dict[str, Any]:
+    risk_ref_key, risk_ref_record, risk_ref, risk_path = _terrain_source_ref(
+        project_root,
+        manifest,
+    )
+    if not isinstance(risk_ref, str) or not risk_ref or risk_path is None:
+        return _empty_terrain_visualization(
+            manifest,
+            status=_layer_status(manifest, "terrain"),
+            warning="No risk route profile or risk score source is available.",
+        )
+    if not risk_path.exists():
+        return _empty_terrain_visualization(
+            manifest,
+            status="missing_risk_source",
+            warning=f"{risk_ref_key} points to a missing file: {risk_ref}",
+        )
+
+    payload = _load_json(risk_path)
+    source_features = _terrain_source_samples(payload)
+    if not source_features:
+        return _empty_terrain_visualization(
+            manifest,
+            status="empty_risk_source",
+            warning=f"{risk_ref_key} has no route-aligned point samples.",
+        )
+
+    elevations = [
+        sample["elevation_m"]
+        for sample in source_features
+        if isinstance(sample.get("elevation_m"), float)
+    ]
+    elevation_min = min(elevations) if elevations else None
+    elevation_max = max(elevations) if elevations else None
+    features: list[dict[str, Any]] = []
+    slope_counts: Counter[str] = Counter()
+    contour_marker_count = 0
+    for index, sample in enumerate(source_features):
+        slope_degrees = _route_aligned_slope_degrees(source_features, index)
+        slope_class = _slope_class_for_degrees(slope_degrees)
+        if slope_class:
+            slope_counts[str(slope_class["class_id"])] += 1
+        elevation_m = sample.get("elevation_m")
+        contour_index_m = (
+            _contour_index_m(elevation_m) if isinstance(elevation_m, float) else None
+        )
+        if contour_index_m is not None:
+            contour_marker_count += 1
+        sample_id = str(sample["sample_id"])
+        feature_id = f"terrain_visualization.{index + 1:06d}"
+        properties = {
+            **sample["properties"],
+            "terrain_visualization_id": feature_id,
+            "terrain_sample_id": sample_id,
+            "evidence_type": "pretrip_terrain_visualization_sample",
+            "source_kind": "scout_risk_engine_route_aligned_terrain",
+            "source_risk_ref_key": risk_ref_key,
+            "source_risk_ref": risk_ref,
+            "visualization_modes": list(TERRAIN_VISUALIZATION_MODES),
+            "terrain_visualization_layer": True,
+            "risk_heat_layer": False,
+            "hillshade_method": "route_aligned_slope_proxy",
+            "hillshade_value": _hillshade_value_from_slope(slope_degrees),
+            "elevation_tint_method": "route_aligned_elevation_band",
+            "elevation_tint_color": _elevation_tint_color(
+                elevation_m,
+                elevation_min=elevation_min,
+                elevation_max=elevation_max,
+            ),
+            "slope_method": "route_elevation_delta_degrees",
+            "slope_degrees": round(slope_degrees, 2)
+            if isinstance(slope_degrees, float)
+            else None,
+            "slope_source": "route_risk_profile_elevation_delta"
+            if isinstance(slope_degrees, float)
+            else "unavailable",
+            "slope_class": slope_class["class_id"] if slope_class else "unavailable",
+            "slope_class_label": slope_class["label"] if slope_class else "unavailable",
+            "slope_color": slope_class["color"] if slope_class else "#94a3b8",
+            "contour_interval_m": TERRAIN_CONTOUR_INTERVAL_M,
+            "contour_index_m": contour_index_m,
+            "contour_marker": contour_index_m is not None,
+            "route_scope_ref": manifest["inputs"]["route_evidence_bundle"].get(
+                "source_ref"
+            ),
+            "candidate_only": True,
+            "requires_human_review": True,
+            "runtime_safety_truth": False,
+        }
+        features.append(
+            {
+                "type": "Feature",
+                "geometry": sample["geometry"],
+                "properties": properties,
+            }
+        )
+
+    artifact = _empty_geojson_evidence_from_manifest(
+        manifest,
+        artifact_kind="pretrip_terrain_visualization",
+        evidence_type="pretrip_terrain_visualization_sample",
+        status=f"ready_from_{risk_ref_key.removesuffix('_ref')}",
+        source_plan_ref=None,
+    )
+    artifact["features"] = features
+    artifact["visualization_spec"] = {
+        "modes": list(TERRAIN_VISUALIZATION_MODES),
+        "slope_class_breaks": list(TERRAIN_SLOPE_CLASSES),
+        "contour_interval_m": TERRAIN_CONTOUR_INTERVAL_M,
+        "terrain_visualization_layer": True,
+        "risk_heat_layer": False,
+        "route_aligned_proxy": True,
+        "full_raster_hillshade_generated": False,
+        "raw_dem_embedded_in_json": False,
+    }
+    artifact["counts"] = {
+        "feature_count": len(features),
+        "source_risk_feature_count": len(payload.get("features", [])),
+        "mode_count": len(TERRAIN_VISUALIZATION_MODES),
+        "slope_class_counts": dict(sorted(slope_counts.items())),
+        "contour_marker_count": contour_marker_count,
+        "runtime_safety_truth_count": 0,
+    }
+    artifact["source_refs"] = [
+        ref
+        for ref in (
+            risk_ref_record,
+            manifest["inputs"]["source_refs"].get("risk_route_profile_metadata_ref"),
+            manifest["inputs"]["source_refs"].get("risk_score_points_metadata_ref"),
+            manifest["inputs"]["source_refs"].get("segment_dtm_coverage_ref"),
+        )
+        if isinstance(ref, dict)
+    ]
+    artifact["boundary"] = {
+        **artifact["boundary"],
+        "terrain_visualization_layer": True,
+        "risk_heat_layer": False,
+        "route_aligned_proxy": True,
+        "bitmap_overlay": False,
+    }
+    return artifact
+
+
+def _dtm_corridor_bitmap_terrain_visualization(
+    project_root: Path,
+    manifest: dict[str, Any],
+) -> dict[str, Any] | None:
+    dtm_ref_record = manifest["inputs"]["source_refs"].get("dtm_coverage_summary_ref")
+    dtm_ref = dtm_ref_record.get("ref") if isinstance(dtm_ref_record, dict) else None
+    if not isinstance(dtm_ref, str) or not dtm_ref:
+        return None
+    dtm_path = project_root / dtm_ref
+    if not dtm_path.exists():
+        return None
+
+    risk_ref_key, risk_ref_record, risk_ref, risk_path = _terrain_source_ref(
+        project_root,
+        manifest,
+    )
+    if not isinstance(risk_ref, str) or not risk_ref or risk_path is None:
+        return None
+    if not risk_path.exists():
+        return None
+
+    risk_payload = _load_json(risk_path)
+    source_samples = _terrain_source_samples(risk_payload)
+    route_points = _terrain_route_points_twd97(source_samples)
+    if len(route_points) < 2:
+        return None
+
+    dtm_payload = _load_json(dtm_path)
+    candidate_tiles = _dtm_candidate_tiles(
+        dtm_payload,
+        route_points,
+        corridor_half_width_m=TERRAIN_DTM_CORRIDOR_HALF_WIDTH_M,
+    )
+    if not candidate_tiles:
+        return None
+
+    elevation_by_xy = _read_dtm_grid_elevations(candidate_tiles)
+    if not elevation_by_xy:
+        return None
+
+    segment_index = _route_segment_index(
+        route_points,
+        corridor_half_width_m=TERRAIN_DTM_CORRIDOR_HALF_WIDTH_M,
+    )
+    cells = _dtm_corridor_cells(
+        elevation_by_xy,
+        segment_index,
+        corridor_half_width_m=TERRAIN_DTM_CORRIDOR_HALF_WIDTH_M,
+        resolution_m=TERRAIN_DTM_CELL_RESOLUTION_M,
+    )
+    if not cells:
+        return None
+
+    elevation_values = [cell["elevation_m"] for cell in cells]
+    elevation_min = min(elevation_values)
+    elevation_max = max(elevation_values)
+    bbox_twd97 = _dtm_cells_bbox_twd97(cells)
+    bbox_wgs84 = _projected_bbox_twd97_to_wgs84(bbox_twd97)
+    slope_counts = Counter(str(cell["slope_class"]["class_id"]) for cell in cells)
+    contour_cell_count = sum(1 for cell in cells if cell["contour_marker"])
+    overlays = _write_dtm_corridor_bitmap_overlays(
+        project_root=project_root,
+        manifest=manifest,
+        cells=cells,
+        bbox_twd97=bbox_twd97,
+        bbox_wgs84=bbox_wgs84,
+        elevation_min=elevation_min,
+        elevation_max=elevation_max,
+    )
+    gdal_pipeline = _gdal_terrain_pipeline_availability()
+
+    artifact = _empty_geojson_evidence_from_manifest(
+        manifest,
+        artifact_kind="pretrip_terrain_visualization",
+        evidence_type="pretrip_terrain_visualization_bitmap_overlay",
+        status="ready_from_dtm_20m_corridor_bitmap",
+        source_plan_ref=None,
+    )
+    artifact["features"] = []
+    artifact["raster_overlays"] = overlays
+    artifact["visualization_spec"] = {
+        "modes": list(TERRAIN_VISUALIZATION_MODES),
+        "slope_class_breaks": list(TERRAIN_SLOPE_CLASSES),
+        "contour_interval_m": TERRAIN_CONTOUR_INTERVAL_M,
+        "terrain_visualization_layer": True,
+        "risk_heat_layer": False,
+        "route_aligned_proxy": False,
+        "bitmap_overlay": True,
+        "preferred_processor": "gdal",
+        "actual_processor": "python_dtm_bitmap_fallback",
+        "gdal_pipeline": gdal_pipeline,
+        "bitmap_cell_resolution_m": TERRAIN_DTM_CELL_RESOLUTION_M,
+        "corridor_half_width_m": TERRAIN_DTM_CORRIDOR_HALF_WIDTH_M,
+        "corridor_total_width_m": TERRAIN_DTM_CORRIDOR_TOTAL_WIDTH_M,
+        "slope_method": "dtm_grid_20m_central_difference",
+        "hillshade_method": "dtm_slope_proxy_grayscale",
+        "elevation_tint_method": "dtm_elevation_band",
+        "contour_method": "dtm_near_interval_cell_marker",
+        "full_raster_hillshade_generated": False,
+        "raw_dem_embedded_in_json": False,
+        "raw_dem_committed_to_repo": False,
+    }
+    artifact["counts"] = {
+        "feature_count": 0,
+        "bitmap_overlay_count": len(overlays),
+        "cell_count": len(cells),
+        "rendered_dom_cell_count": 0,
+        "source_dtm_tile_count": len(candidate_tiles),
+        "source_dtm_grid_cell_count": len(elevation_by_xy),
+        "source_risk_feature_count": len(risk_payload.get("features", [])),
+        "mode_count": len(TERRAIN_VISUALIZATION_MODES),
+        "slope_class_counts": dict(sorted(slope_counts.items())),
+        "contour_marker_count": contour_cell_count,
+        "runtime_safety_truth_count": 0,
+    }
+    artifact["source_refs"] = [
+        ref
+        for ref in (
+            dtm_ref_record,
+            risk_ref_record,
+            manifest["inputs"]["source_refs"].get("risk_route_profile_metadata_ref"),
+            manifest["inputs"]["source_refs"].get("risk_score_points_metadata_ref"),
+            manifest["inputs"]["source_refs"].get("segment_dtm_coverage_ref"),
+        )
+        if isinstance(ref, dict)
+    ]
+    artifact["boundary"] = {
+        **artifact["boundary"],
+        "terrain_visualization_layer": True,
+        "risk_heat_layer": False,
+        "route_aligned_proxy": False,
+        "bitmap_overlay": True,
+        "pretrip_candidate_evidence_only": True,
+        "runtime_safety_truth": False,
+        "raw_dem_embedded_in_json": False,
+        "phase1_runtime_mutation_allowed": False,
+    }
+    artifact["dtm_grid"] = {
+        "crs": "TWD97 / TM2 zone 121 (EPSG:3826-compatible)",
+        "cell_resolution_m": TERRAIN_DTM_CELL_RESOLUTION_M,
+        "corridor_half_width_m": TERRAIN_DTM_CORRIDOR_HALF_WIDTH_M,
+        "corridor_total_width_m": TERRAIN_DTM_CORRIDOR_TOTAL_WIDTH_M,
+        "bbox_twd97": bbox_twd97,
+        "bbox_wgs84": bbox_wgs84,
+        "selected_cell_count": len(cells),
+        "source_tile_count": len(candidate_tiles),
+        "raw_grid_embedded_in_json": False,
+        "preferred_pipeline": gdal_pipeline,
+    }
+    return artifact
+
+
+def _terrain_route_points_twd97(
+    source_samples: list[dict[str, Any]],
+) -> list[dict[str, float]]:
+    route_points: list[dict[str, float]] = []
+    for sample in source_samples:
+        coordinates = sample.get("geometry", {}).get("coordinates", [])
+        if len(coordinates) < 2:
+            continue
+        lon = _as_float(coordinates[0])
+        lat = _as_float(coordinates[1])
+        if not isinstance(lat, float) or not isinstance(lon, float):
+            continue
+        x, y = wgs84_to_twd97(lat, lon)
+        if route_points and abs(route_points[-1]["x"] - x) < 0.001 and abs(
+            route_points[-1]["y"] - y
+        ) < 0.001:
+            continue
+        route_points.append(
+            {
+                "x": x,
+                "y": y,
+                "lat": lat,
+                "lon": lon,
+                "distance_m": sample.get("distance_m") or float(len(route_points)),
+            }
+        )
+    return route_points
+
+
+def _dtm_candidate_tiles(
+    dtm_payload: dict[str, Any],
+    route_points: list[dict[str, float]],
+    *,
+    corridor_half_width_m: float,
+) -> list[dict[str, Any]]:
+    route_bbox = {
+        "min_x": min(point["x"] for point in route_points) - corridor_half_width_m,
+        "min_y": min(point["y"] for point in route_points) - corridor_half_width_m,
+        "max_x": max(point["x"] for point in route_points) + corridor_half_width_m,
+        "max_y": max(point["y"] for point in route_points) + corridor_half_width_m,
+    }
+    candidates = []
+    for tile in dtm_payload.get("candidate_tiles", []):
+        if not isinstance(tile, dict):
+            continue
+        bbox = tile.get("bbox_twd97") or {}
+        if not _twd97_bbox_intersects(route_bbox, bbox):
+            continue
+        grid_path = _dtm_grid_path(tile)
+        if grid_path is None or not grid_path.exists():
+            continue
+        candidates.append({**tile, "_grid_path": grid_path})
+    return candidates
+
+
+def _twd97_bbox_intersects(
+    a: dict[str, Any],
+    b: dict[str, Any],
+) -> bool:
+    values = (
+        _as_float(a.get("min_x")),
+        _as_float(a.get("min_y")),
+        _as_float(a.get("max_x")),
+        _as_float(a.get("max_y")),
+        _as_float(b.get("min_x")),
+        _as_float(b.get("min_y")),
+        _as_float(b.get("max_x")),
+        _as_float(b.get("max_y")),
+    )
+    if any(value is None for value in values):
+        return False
+    amin_x, amin_y, amax_x, amax_y, bmin_x, bmin_y, bmax_x, bmax_y = values
+    assert amin_x is not None and amin_y is not None and amax_x is not None
+    assert amax_y is not None and bmin_x is not None and bmin_y is not None
+    assert bmax_x is not None and bmax_y is not None
+    return not (amax_x < bmin_x or amin_x > bmax_x or amax_y < bmin_y or amin_y > bmax_y)
+
+
+def _dtm_grid_path(tile: dict[str, Any]) -> Path | None:
+    for key in ("grid_uri", "grid_path", "path"):
+        value = tile.get(key)
+        if isinstance(value, str) and value:
+            return Path(value).expanduser()
+    return None
+
+
+def _read_dtm_grid_elevations(
+    candidate_tiles: list[dict[str, Any]],
+) -> dict[tuple[int, int], float]:
+    elevations: dict[tuple[int, int], float] = {}
+    for tile in candidate_tiles:
+        grid_path = tile.get("_grid_path")
+        if not isinstance(grid_path, Path):
+            continue
+        with grid_path.open(encoding="utf-8", errors="ignore") as handle:
+            for line in handle:
+                parts = line.split()
+                if len(parts) < 3:
+                    continue
+                x = _as_float(parts[0])
+                y = _as_float(parts[1])
+                elevation = _as_float(parts[2])
+                if not isinstance(x, float) or not isinstance(y, float):
+                    continue
+                if not isinstance(elevation, float):
+                    continue
+                elevations[(int(round(x)), int(round(y)))] = elevation
+    return elevations
+
+
+def _route_segment_index(
+    route_points: list[dict[str, float]],
+    *,
+    corridor_half_width_m: float,
+) -> dict[str, Any]:
+    segments: list[dict[str, float]] = []
+    buckets: dict[tuple[int, int], list[int]] = {}
+    bucket_size = TERRAIN_DTM_SEGMENT_BUCKET_M
+    for point_a, point_b in zip(route_points, route_points[1:]):
+        ax = point_a["x"]
+        ay = point_a["y"]
+        bx = point_b["x"]
+        by = point_b["y"]
+        if abs(ax - bx) + abs(ay - by) < 0.001:
+            continue
+        segment = {
+            "ax": ax,
+            "ay": ay,
+            "bx": bx,
+            "by": by,
+            "min_x": min(ax, bx) - corridor_half_width_m,
+            "min_y": min(ay, by) - corridor_half_width_m,
+            "max_x": max(ax, bx) + corridor_half_width_m,
+            "max_y": max(ay, by) + corridor_half_width_m,
+        }
+        index = len(segments)
+        segments.append(segment)
+        for ix in range(
+            math.floor(segment["min_x"] / bucket_size),
+            math.floor(segment["max_x"] / bucket_size) + 1,
+        ):
+            for iy in range(
+                math.floor(segment["min_y"] / bucket_size),
+                math.floor(segment["max_y"] / bucket_size) + 1,
+            ):
+                buckets.setdefault((ix, iy), []).append(index)
+    return {"segments": segments, "buckets": buckets, "bucket_size_m": bucket_size}
+
+
+def _dtm_corridor_cells(
+    elevation_by_xy: dict[tuple[int, int], float],
+    segment_index: dict[str, Any],
+    *,
+    corridor_half_width_m: float,
+    resolution_m: float,
+) -> list[dict[str, Any]]:
+    cells: list[dict[str, Any]] = []
+    max_distance_sq = corridor_half_width_m * corridor_half_width_m
+    for x, y in sorted(elevation_by_xy.keys(), key=lambda item: (item[1], item[0])):
+        distance_sq = _nearest_route_distance_sq(x, y, segment_index)
+        if distance_sq is None or distance_sq > max_distance_sq:
+            continue
+        elevation_m = elevation_by_xy[(x, y)]
+        slope_degrees = _dtm_grid_slope_degrees(
+            elevation_by_xy,
+            x,
+            y,
+            resolution_m=resolution_m,
+        )
+        slope_class = _slope_class_for_degrees(slope_degrees) or TERRAIN_SLOPE_CLASSES[0]
+        contour_index_m = _contour_index_m(elevation_m)
+        contour_marker = (
+            contour_index_m is not None
+            and abs(elevation_m - contour_index_m) <= TERRAIN_DTM_CONTOUR_TOLERANCE_M
+        )
+        cells.append(
+            {
+                "x": x,
+                "y": y,
+                "elevation_m": elevation_m,
+                "slope_degrees": slope_degrees,
+                "slope_class": slope_class,
+                "contour_index_m": contour_index_m,
+                "contour_marker": contour_marker,
+                "distance_to_route_m": math.sqrt(distance_sq),
+            }
+        )
+    return cells
+
+
+def _nearest_route_distance_sq(
+    x: float,
+    y: float,
+    segment_index: dict[str, Any],
+) -> float | None:
+    bucket_size = float(segment_index["bucket_size_m"])
+    bucket = (math.floor(x / bucket_size), math.floor(y / bucket_size))
+    segment_ids = segment_index["buckets"].get(bucket, [])
+    if not segment_ids:
+        return None
+    nearest: float | None = None
+    for segment_id in segment_ids:
+        segment = segment_index["segments"][segment_id]
+        if x < segment["min_x"] or x > segment["max_x"]:
+            continue
+        if y < segment["min_y"] or y > segment["max_y"]:
+            continue
+        distance_sq = _point_segment_distance_sq(
+            x,
+            y,
+            segment["ax"],
+            segment["ay"],
+            segment["bx"],
+            segment["by"],
+        )
+        if nearest is None or distance_sq < nearest:
+            nearest = distance_sq
+    return nearest
+
+
+def _point_segment_distance_sq(
+    px: float,
+    py: float,
+    ax: float,
+    ay: float,
+    bx: float,
+    by: float,
+) -> float:
+    vx = bx - ax
+    vy = by - ay
+    wx = px - ax
+    wy = py - ay
+    denominator = vx * vx + vy * vy
+    if denominator <= 0:
+        return (px - ax) ** 2 + (py - ay) ** 2
+    ratio = max(0.0, min(1.0, (wx * vx + wy * vy) / denominator))
+    qx = ax + ratio * vx
+    qy = ay + ratio * vy
+    return (px - qx) ** 2 + (py - qy) ** 2
+
+
+def _dtm_grid_slope_degrees(
+    elevation_by_xy: dict[tuple[int, int], float],
+    x: int,
+    y: int,
+    *,
+    resolution_m: float,
+) -> float | None:
+    step = int(round(resolution_m))
+    center = elevation_by_xy.get((x, y))
+    if center is None:
+        return None
+    east = elevation_by_xy.get((x + step, y))
+    west = elevation_by_xy.get((x - step, y))
+    north = elevation_by_xy.get((x, y + step))
+    south = elevation_by_xy.get((x, y - step))
+    dz_dx = _gradient_component(center, east, west, resolution_m)
+    dz_dy = _gradient_component(center, north, south, resolution_m)
+    if dz_dx is None and dz_dy is None:
+        return None
+    rise = math.sqrt((dz_dx or 0.0) ** 2 + (dz_dy or 0.0) ** 2)
+    return math.degrees(math.atan(rise))
+
+
+def _gradient_component(
+    center: float,
+    forward: float | None,
+    backward: float | None,
+    resolution_m: float,
+) -> float | None:
+    if isinstance(forward, float) and isinstance(backward, float):
+        return (forward - backward) / (2.0 * resolution_m)
+    if isinstance(forward, float):
+        return (forward - center) / resolution_m
+    if isinstance(backward, float):
+        return (center - backward) / resolution_m
+    return None
+
+
+def _dtm_cells_bbox_twd97(cells: list[dict[str, Any]]) -> dict[str, float]:
+    xs = [float(cell["x"]) for cell in cells]
+    ys = [float(cell["y"]) for cell in cells]
+    half_cell = TERRAIN_DTM_CELL_RESOLUTION_M / 2.0
+    return {
+        "min_x": min(xs) - half_cell,
+        "min_y": min(ys) - half_cell,
+        "max_x": max(xs) + half_cell,
+        "max_y": max(ys) + half_cell,
+    }
+
+
+def _projected_bbox_twd97_to_wgs84(
+    bbox_twd97: dict[str, float],
+) -> dict[str, float]:
+    corners = [
+        _twd97_to_wgs84(bbox_twd97["min_x"], bbox_twd97["min_y"]),
+        _twd97_to_wgs84(bbox_twd97["min_x"], bbox_twd97["max_y"]),
+        _twd97_to_wgs84(bbox_twd97["max_x"], bbox_twd97["min_y"]),
+        _twd97_to_wgs84(bbox_twd97["max_x"], bbox_twd97["max_y"]),
+    ]
+    return normalize_bbox_wgs84(
+        {
+            "south": min(lat for lat, _ in corners),
+            "west": min(lon for _, lon in corners),
+            "north": max(lat for lat, _ in corners),
+            "east": max(lon for _, lon in corners),
+        }
+    )
+
+
+def _twd97_to_wgs84(x: float, y: float) -> tuple[float, float]:
+    lat = y / 110_900.0
+    lon = 121.0 + (x - 250_000.0) / (
+        111_320.0 * max(math.cos(math.radians(lat)), 0.1)
+    )
+    for _ in range(10):
+        projected_x, projected_y = wgs84_to_twd97(lat, lon)
+        dx = x - projected_x
+        dy = y - projected_y
+        if abs(dx) + abs(dy) < 0.001:
+            break
+        delta = 1e-5
+        projected_lon_x, projected_lon_y = wgs84_to_twd97(lat, lon + delta)
+        projected_lat_x, projected_lat_y = wgs84_to_twd97(lat + delta, lon)
+        a = (projected_lon_x - projected_x) / delta
+        b = (projected_lat_x - projected_x) / delta
+        c = (projected_lon_y - projected_y) / delta
+        d = (projected_lat_y - projected_y) / delta
+        determinant = a * d - b * c
+        if abs(determinant) < 1e-9:
+            break
+        lon += (dx * d - b * dy) / determinant
+        lat += (a * dy - dx * c) / determinant
+    return lat, lon
+
+
+def _write_dtm_corridor_bitmap_overlays(
+    *,
+    project_root: Path,
+    manifest: dict[str, Any],
+    cells: list[dict[str, Any]],
+    bbox_twd97: dict[str, float],
+    bbox_wgs84: dict[str, float],
+    elevation_min: float,
+    elevation_max: float,
+) -> list[dict[str, Any]]:
+    try:
+        from PIL import Image
+    except Exception as exc:  # pragma: no cover - environment guard
+        raise RuntimeError("Pillow is required for DTM bitmap overlays") from exc
+
+    width = int(round((bbox_twd97["max_x"] - bbox_twd97["min_x"]) / TERRAIN_DTM_CELL_RESOLUTION_M))
+    height = int(round((bbox_twd97["max_y"] - bbox_twd97["min_y"]) / TERRAIN_DTM_CELL_RESOLUTION_M))
+    width = max(1, width)
+    height = max(1, height)
+    images = {
+        "hillshade": Image.new("RGBA", (width, height), (0, 0, 0, 0)),
+        "elevation_tint": Image.new("RGBA", (width, height), (0, 0, 0, 0)),
+        "slope_shading": Image.new("RGBA", (width, height), (0, 0, 0, 0)),
+        "contours": Image.new("RGBA", (width, height), (0, 0, 0, 0)),
+    }
+    pixels = {mode: image.load() for mode, image in images.items()}
+    for cell in cells:
+        col = int(
+            math.floor(
+                (float(cell["x"]) - bbox_twd97["min_x"])
+                / TERRAIN_DTM_CELL_RESOLUTION_M
+            )
+        )
+        row = int(
+            math.floor(
+                (bbox_twd97["max_y"] - float(cell["y"]))
+                / TERRAIN_DTM_CELL_RESOLUTION_M
+            )
+        )
+        if col < 0 or row < 0 or col >= width or row >= height:
+            continue
+        slope_degrees = cell.get("slope_degrees")
+        hillshade = _hillshade_value_from_slope(
+            slope_degrees if isinstance(slope_degrees, float) else None
+        )
+        if hillshade is not None:
+            pixels["hillshade"][col, row] = (hillshade, hillshade, hillshade, 132)
+        pixels["elevation_tint"][col, row] = _rgba_from_hex(
+            _elevation_tint_color(
+                cell.get("elevation_m"),
+                elevation_min=elevation_min,
+                elevation_max=elevation_max,
+            ),
+            alpha=132,
+        )
+        pixels["slope_shading"][col, row] = _rgba_from_hex(
+            str(cell["slope_class"]["color"]),
+            alpha=188,
+        )
+        if cell.get("contour_marker"):
+            pixels["contours"][col, row] = (17, 24, 39, 230)
+
+    overlay_defs = [
+        ("hillshade", "terrain_hillshade_overlay_ref", True, 0.28),
+        ("elevation_tint", "terrain_elevation_tint_overlay_ref", True, 0.32),
+        ("slope_shading", "terrain_slope_shading_overlay_ref", True, 0.78),
+        ("contours", "terrain_contours_overlay_ref", True, 0.88),
+    ]
+    overlays = []
+    for mode, ref_key, default_visible, opacity in overlay_defs:
+        source_ref = manifest["outputs"][ref_key]
+        output_path = project_root / source_ref
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        images[mode].save(output_path, format="PNG")
+        overlays.append(
+            {
+                "overlay_id": mode,
+                "mode": mode,
+                "source_path": source_ref,
+                "runtime_href": (
+                    f"/admin/pretrip/projects/{manifest['project_id']}"
+                    f"/terrain-overlays/{mode}.png"
+                ),
+                "media_type": "image/png",
+                "sha256": _sha256_file(output_path),
+                "bbox_wgs84": bbox_wgs84,
+                "bbox_twd97": bbox_twd97,
+                "pixel_width": width,
+                "pixel_height": height,
+                "cell_resolution_m": TERRAIN_DTM_CELL_RESOLUTION_M,
+                "corridor_half_width_m": TERRAIN_DTM_CORRIDOR_HALF_WIDTH_M,
+                "corridor_total_width_m": TERRAIN_DTM_CORRIDOR_TOTAL_WIDTH_M,
+                "default_visible": default_visible,
+                "opacity": opacity,
+                "image_rendering": "pixelated",
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+                "raw_dem_embedded_in_json": False,
+            }
+        )
+    return overlays
+
+
+def _gdal_terrain_pipeline_availability() -> dict[str, Any]:
+    commands = {
+        "gdal_translate": shutil.which("gdal_translate"),
+        "gdaldem": shutil.which("gdaldem"),
+        "gdal_contour": shutil.which("gdal_contour"),
+        "gdal2tiles.py": shutil.which("gdal2tiles.py") or shutil.which("gdal2tiles"),
+    }
+    return {
+        "pipeline_id": "dem_dtm_geotiff_gdal_terrain_visualization.v1",
+        "available": all(commands.values()),
+        "commands": commands,
+        "steps": [
+            "DEM/DTM source normalized to GeoTIFF",
+            "gdaldem hillshade -> terrain_hillshade raster",
+            "gdaldem slope -> terrain_slope degrees raster",
+            "gdaldem color-relief -> terrain_slope_shading raster",
+            "gdal_contour -> terrain_contours GeoJSON",
+            "gdal2tiles or local tile cutter -> /admin/pretrip display overlays",
+        ],
+        "fallback_when_unavailable": "python_dtm_bitmap_fallback",
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+    }
+
+
+def _rgba_from_hex(color: str, *, alpha: int) -> tuple[int, int, int, int]:
+    clean = color.strip().lstrip("#")
+    if len(clean) != 6:
+        return (148, 163, 184, alpha)
+    try:
+        return (
+            int(clean[0:2], 16),
+            int(clean[2:4], 16),
+            int(clean[4:6], 16),
+            alpha,
+        )
+    except ValueError:
+        return (148, 163, 184, alpha)
+
+
+def _empty_terrain_visualization(
+    manifest: dict[str, Any],
+    *,
+    status: str,
+    warning: str,
+) -> dict[str, Any]:
+    artifact = _empty_geojson_evidence_from_manifest(
+        manifest,
+        artifact_kind="pretrip_terrain_visualization",
+        evidence_type="pretrip_terrain_visualization_sample",
+        status=status,
+        source_plan_ref=None,
+    )
+    artifact["visualization_spec"] = {
+        "modes": list(TERRAIN_VISUALIZATION_MODES),
+        "slope_class_breaks": list(TERRAIN_SLOPE_CLASSES),
+        "contour_interval_m": TERRAIN_CONTOUR_INTERVAL_M,
+        "terrain_visualization_layer": True,
+        "risk_heat_layer": False,
+        "route_aligned_proxy": True,
+        "full_raster_hillshade_generated": False,
+        "raw_dem_embedded_in_json": False,
+    }
+    artifact["counts"] = {
+        **artifact["counts"],
+        "mode_count": len(TERRAIN_VISUALIZATION_MODES),
+        "contour_marker_count": 0,
+        "runtime_safety_truth_count": 0,
+    }
+    artifact["warnings"] = [warning]
+    return artifact
+
+
+def _terrain_source_ref(
+    project_root: Path,
+    manifest: dict[str, Any],
+) -> tuple[str, dict[str, Any] | None, str | None, Path | None]:
+    first_candidate: (
+        tuple[str, dict[str, Any] | None, str | None, Path | None] | None
+    ) = None
+    for ref_key in ("risk_route_profile_ref", "risk_score_points_ref"):
+        ref_record = manifest["inputs"]["source_refs"].get(ref_key, {})
+        ref = ref_record.get("ref") if isinstance(ref_record, dict) else None
+        if isinstance(ref, str) and ref:
+            path = project_root / ref
+            candidate = (ref_key, ref_record, ref, path)
+            if path.exists():
+                return candidate
+            if first_candidate is None:
+                first_candidate = candidate
+    if first_candidate is not None:
+        return first_candidate
+    return "", None, None, None
+
+
+def _terrain_source_samples(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    samples = []
+    for index, feature in enumerate(payload.get("features", [])):
+        if not isinstance(feature, dict):
+            continue
+        geometry = feature.get("geometry") or {}
+        coordinates = geometry.get("coordinates") or []
+        if geometry.get("type") != "Point" or len(coordinates) < 2:
+            continue
+        properties = dict(feature.get("properties") or {})
+        sample_id = str(properties.get("sample_id") or f"terrain_source.{index + 1:06d}")
+        samples.append(
+            {
+                "sample_id": sample_id,
+                "geometry": geometry,
+                "properties": properties,
+                "distance_m": _as_float(properties.get("distance_m")),
+                "elevation_m": _as_float(properties.get("elevation_m")),
+            }
+        )
+    return samples
+
+
+def _route_aligned_slope_degrees(
+    samples: list[dict[str, Any]],
+    index: int,
+) -> float | None:
+    current = samples[index]
+    current_distance = current.get("distance_m")
+    current_elevation = current.get("elevation_m")
+    if not isinstance(current_distance, float) or not isinstance(current_elevation, float):
+        return None
+    neighbors = []
+    if index > 0:
+        neighbors.append(samples[index - 1])
+    if index + 1 < len(samples):
+        neighbors.append(samples[index + 1])
+    slopes = []
+    for neighbor in neighbors:
+        neighbor_distance = neighbor.get("distance_m")
+        neighbor_elevation = neighbor.get("elevation_m")
+        if not isinstance(neighbor_distance, float) or not isinstance(
+            neighbor_elevation,
+            float,
+        ):
+            continue
+        distance_delta = abs(neighbor_distance - current_distance)
+        if distance_delta <= 0:
+            continue
+        elevation_delta = abs(neighbor_elevation - current_elevation)
+        slopes.append(math.degrees(math.atan(elevation_delta / distance_delta)))
+    if not slopes:
+        return None
+    return max(slopes)
+
+
+def _slope_class_for_degrees(slope_degrees: float | None) -> dict[str, Any] | None:
+    if not isinstance(slope_degrees, float):
+        return None
+    for slope_class in TERRAIN_SLOPE_CLASSES:
+        min_degrees = float(slope_class["min_degrees"])
+        max_degrees = slope_class["max_degrees"]
+        if slope_degrees < min_degrees:
+            continue
+        if max_degrees is None or slope_degrees < float(max_degrees):
+            return slope_class
+    return TERRAIN_SLOPE_CLASSES[-1]
+
+
+def _hillshade_value_from_slope(slope_degrees: float | None) -> int | None:
+    if not isinstance(slope_degrees, float):
+        return None
+    return max(70, min(240, round(230 - min(slope_degrees, 70.0) * 2.3)))
+
+
+def _elevation_tint_color(
+    elevation_m: float | None,
+    *,
+    elevation_min: float | None,
+    elevation_max: float | None,
+) -> str:
+    if not isinstance(elevation_m, float) or not isinstance(
+        elevation_min,
+        float,
+    ) or not isinstance(elevation_max, float):
+        return "#cbd5e1"
+    span = max(elevation_max - elevation_min, 1.0)
+    ratio = (elevation_m - elevation_min) / span
+    if ratio < 0.2:
+        return "#b7e4a8"
+    if ratio < 0.4:
+        return "#d9ef8b"
+    if ratio < 0.6:
+        return "#fee08b"
+    if ratio < 0.8:
+        return "#fdae61"
+    return "#8d6e63"
+
+
+def _contour_index_m(elevation_m: float | None) -> float | None:
+    if not isinstance(elevation_m, float):
+        return None
+    return round(elevation_m / TERRAIN_CONTOUR_INTERVAL_M) * TERRAIN_CONTOUR_INTERVAL_M
+
+
+def _as_float(value: Any) -> float | None:
+    if value in (None, ""):
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    if math.isnan(number) or math.isinf(number):
+        return None
+    return number
 
 
 def _empty_geojson_evidence_from_manifest(
@@ -3716,6 +4919,7 @@ def _geojson_source_path_for_artifact(
     mapping = {
         "pretrip_overpass_vector_evidence": "overpass_vector_evidence_ref",
         "pretrip_terrain_route_samples": "terrain_route_samples_ref",
+        "pretrip_terrain_visualization": "terrain_visualization_ref",
         "pretrip_raster_label_evidence": "raster_label_evidence_ref",
     }
     return manifest["outputs"][mapping[artifact_kind]]
@@ -3731,7 +4935,12 @@ def _map_preparation_source_artifacts(manifest: dict[str, Any]) -> list[dict[str
         "route_note_candidates_ref",
         "imagery_manifest_ref",
         "raster_tile_manifest_ref",
+        "dtm_coverage_summary_ref",
+        "segment_dtm_coverage_ref",
+        "risk_route_profile_ref",
+        "risk_route_profile_metadata_ref",
         "risk_score_points_ref",
+        "risk_score_points_metadata_ref",
         "risk_ribbon_ref",
         "calibrated_risk_heatmap_ref",
     }

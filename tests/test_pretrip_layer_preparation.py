@@ -170,6 +170,12 @@ def test_layer_preparation_run_writes_workspace_outputs_and_project_refs(
     layers_by_id = {layer["layer_id"]: layer for layer in manifest["layers"]}
     assert layers_by_id["osm"]["warnings"] == []
     assert layers_by_id["osm"]["policy_notes"]
+    assert layers_by_id["osm"]["status"] == "ready_from_project_ref"
+    assert layers_by_id["osm"]["counts"]["osm_raster_tile_fetch_required"] is False
+    assert layers_by_id["osm"]["counts"]["overpass_candidate_count"] > 0
+    assert layers_by_id["osm"]["output_refs"]["osm_data_evidence_policy"] == (
+        "covered_by_overpass_vector_evidence"
+    )
     assert layers_by_id["overpass"]["status"] == "ready_from_project_ref"
     assert layers_by_id["overpass"]["warnings"] == []
     assert project["layer_preparation_manifest_ref"] == (
@@ -426,6 +432,9 @@ def test_layer_preparation_records_gpx_filter_provenance_from_import_workspace(
         "terrain_route_samples_ref": (
             "outputs/layers/normalized/terrain_route_samples.geojson"
         ),
+        "terrain_visualization_ref": (
+            "outputs/layers/normalized/terrain_visualization.geojson"
+        ),
         "web_case_evidence_ref": "outputs/layers/normalized/web_case_evidence.json",
         "raster_label_evidence_ref": (
             "outputs/layers/normalized/raster_label_evidence.geojson"
@@ -439,6 +448,7 @@ def test_layer_preparation_records_gpx_filter_provenance_from_import_workspace(
     raster_label_plan = _load(project_root / project["raster_label_plan_ref"])
     overpass_vector_evidence = _load(project_root / project["overpass_vector_evidence_ref"])
     terrain_route_samples = _load(project_root / project["terrain_route_samples_ref"])
+    terrain_visualization = _load(project_root / project["terrain_visualization_ref"])
     web_case_evidence = _load(project_root / project["web_case_evidence_ref"])
     raster_label_evidence = _load(project_root / project["raster_label_evidence_ref"])
     assert map_preparation_summary["artifact_kind"] == (
@@ -460,6 +470,7 @@ def test_layer_preparation_records_gpx_filter_provenance_from_import_workspace(
     for artifact in (
         overpass_vector_evidence,
         terrain_route_samples,
+        terrain_visualization,
         raster_label_evidence,
     ):
         assert artifact["type"] == "FeatureCollection"
@@ -470,6 +481,15 @@ def test_layer_preparation_records_gpx_filter_provenance_from_import_workspace(
         assert artifact["boundary"]["raw_gpx_embedded_in_json"] is False
     assert overpass_vector_evidence["status"] == "not_requested"
     assert overpass_vector_evidence["network_policy"]["network_calls_made"] is False
+    assert terrain_visualization["artifact_kind"] == "pretrip_terrain_visualization"
+    assert terrain_visualization["visualization_spec"]["modes"] == [
+        "hillshade",
+        "elevation_tint",
+        "slope_shading",
+        "contours",
+    ]
+    assert terrain_visualization["visualization_spec"]["raw_dem_embedded_in_json"] is False
+    assert terrain_visualization["visualization_spec"]["risk_heat_layer"] is False
     assert web_case_evidence["artifact_kind"] == "pretrip_web_case_evidence"
     assert web_case_evidence["evidence_items"] == []
     assert web_case_evidence["boundary"]["large_scraped_text_embedded"] is False
@@ -744,15 +764,45 @@ def test_layer_preparation_syncs_scout_risk_score_outputs(
     assert (project_root / project["calibrated_risk_heatmap_metadata_ref"]).is_file()
     terrain_samples = _load(project_root / project["terrain_route_samples_ref"])
     assert terrain_samples["artifact_kind"] == "pretrip_terrain_route_samples"
-    assert terrain_samples["status"] == "ready_from_risk_score_points"
-    assert terrain_samples["counts"]["feature_count"] == 2
+    assert terrain_samples["status"] == "ready_from_risk_route_profile"
+    assert terrain_samples["counts"]["feature_count"] == 3
     assert terrain_samples["features"][0]["properties"]["evidence_type"] == (
         "pretrip_terrain_route_sample"
     )
-    assert terrain_samples["features"][0]["properties"]["source_risk_score_ref"] == (
-        project["risk_score_points_ref"]
+    assert terrain_samples["features"][0]["properties"]["source_risk_ref"] == (
+        project["risk_route_profile_ref"]
     )
     assert terrain_samples["features"][0]["properties"]["runtime_safety_truth"] is False
+    terrain_visualization = _load(project_root / project["terrain_visualization_ref"])
+    assert terrain_visualization["artifact_kind"] == "pretrip_terrain_visualization"
+    assert terrain_visualization["status"] == "ready_from_dtm_20m_corridor_bitmap"
+    assert terrain_visualization["visualization_spec"]["modes"] == [
+        "hillshade",
+        "elevation_tint",
+        "slope_shading",
+        "contours",
+    ]
+    assert terrain_visualization["visualization_spec"]["route_aligned_proxy"] is False
+    assert terrain_visualization["visualization_spec"]["bitmap_overlay"] is True
+    assert terrain_visualization["visualization_spec"]["preferred_processor"] == "gdal"
+    assert terrain_visualization["visualization_spec"]["actual_processor"] == (
+        "python_dtm_bitmap_fallback"
+    )
+    assert terrain_visualization["visualization_spec"]["bitmap_cell_resolution_m"] == 20.0
+    assert terrain_visualization["visualization_spec"]["corridor_half_width_m"] == 500.0
+    assert terrain_visualization["visualization_spec"]["risk_heat_layer"] is False
+    assert terrain_visualization["visualization_spec"]["raw_dem_embedded_in_json"] is False
+    assert terrain_visualization["counts"]["feature_count"] == 0
+    assert terrain_visualization["counts"]["cell_count"] > 0
+    assert terrain_visualization["counts"]["bitmap_overlay_count"] == 4
+    assert terrain_visualization["counts"]["runtime_safety_truth_count"] == 0
+    assert terrain_visualization["features"] == []
+    overlays = {overlay["mode"]: overlay for overlay in terrain_visualization["raster_overlays"]}
+    assert set(overlays) == {"hillshade", "elevation_tint", "slope_shading", "contours"}
+    assert overlays["slope_shading"]["cell_resolution_m"] == 20.0
+    assert overlays["slope_shading"]["corridor_half_width_m"] == 500.0
+    assert overlays["slope_shading"]["runtime_safety_truth"] is False
+    assert (project_root / overlays["slope_shading"]["source_path"]).is_file()
     _assert_risk_features_have_pretrip_provenance(
         project_root / project["risk_route_profile_ref"],
         expected_evidence_type="pretrip_route_risk_sample",
@@ -975,6 +1025,7 @@ def _write_risk_score_outputs(directory: Path) -> None:
                     "pretrip_risk": 61.2,
                     "risk_level": 4,
                     "distance_m": 10.0,
+                    "elevation_m": 100.0,
                     "teii_20m": 70.0,
                     "tri": 40.0,
                     "sri": 20.0,
@@ -991,6 +1042,7 @@ def _write_risk_score_outputs(directory: Path) -> None:
                     "pretrip_risk": 48.5,
                     "risk_level": 3,
                     "distance_m": 30.0,
+                    "elevation_m": 110.0,
                     "teii_20m": 55.0,
                     "tri": 20.0,
                     "sri": 5.0,
@@ -1007,6 +1059,7 @@ def _write_risk_score_outputs(directory: Path) -> None:
                     "pretrip_risk": 22.0,
                     "risk_level": 1,
                     "distance_m": 60.0,
+                    "elevation_m": 160.0,
                     "teii_20m": 10.0,
                     "tri": 5.0,
                     "sri": 1.0,

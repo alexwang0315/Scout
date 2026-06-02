@@ -49,18 +49,18 @@ _LAYER_SPECS: dict[str, AdminMapLayerSpec] = {
     "terrain": AdminMapLayerSpec(
         layer_id="terrain",
         label="Terrain",
-        label_zh="地形圖層（DTM/等高線摘要）",
+        label_zh="地形視覺化圖層（DEM/DTM hillshade/tint/slope/contours）",
         layer_kind="terrain",
         z_index=20,
         render_mode="svg_backdrop",
-        source_kind="dtm_summary",
+        source_kind="terrain_visualization",
     ),
     "risk-score": AdminMapLayerSpec(
         layer_id="risk-score",
         label="Risk score",
         label_zh="風險分數圖層（Scout Risk Engine 候選分數）",
         layer_kind="evidence",
-        z_index=59,
+        z_index=60,
         render_mode="svg_overlay",
         source_kind="scout_risk_engine",
         default_enabled=False,
@@ -70,7 +70,7 @@ _LAYER_SPECS: dict[str, AdminMapLayerSpec] = {
         label="Risk ribbon",
         label_zh="路徑風險色帶（Route Risk Ribbon，沿路徑分段顯示風險）",
         layer_kind="evidence",
-        z_index=58,
+        z_index=61,
         render_mode="svg_overlay",
         source_kind="scout_risk_engine",
     ),
@@ -79,7 +79,7 @@ _LAYER_SPECS: dict[str, AdminMapLayerSpec] = {
         label="Risk heat",
         label_zh="校準熱區圖層（Calibrated Heat Map，本 workspace 相對熱區）",
         layer_kind="evidence",
-        z_index=59,
+        z_index=62,
         render_mode="svg_overlay",
         source_kind="scout_risk_engine",
     ),
@@ -88,7 +88,7 @@ _LAYER_SPECS: dict[str, AdminMapLayerSpec] = {
         label="Risk delta",
         label_zh="風險差異圖層（Delta，比對 baseline 與 calibrated heat）",
         layer_kind="evidence",
-        z_index=59,
+        z_index=63,
         render_mode="svg_overlay",
         source_kind="scout_risk_engine",
         default_enabled=False,
@@ -98,7 +98,7 @@ _LAYER_SPECS: dict[str, AdminMapLayerSpec] = {
         label="Corridors",
         label_zh="路廊圖層（可通行路徑脈絡）",
         layer_kind="evidence",
-        z_index=30,
+        z_index=40,
         render_mode="svg_overlay",
         source_kind="map_context",
     ),
@@ -107,7 +107,7 @@ _LAYER_SPECS: dict[str, AdminMapLayerSpec] = {
         label="Hazards",
         label_zh="危險地形/風險圖層",
         layer_kind="evidence",
-        z_index=40,
+        z_index=76,
         render_mode="svg_overlay",
         source_kind="map_context",
     ),
@@ -134,7 +134,7 @@ _LAYER_SPECS: dict[str, AdminMapLayerSpec] = {
         label="Retreat",
         label_zh="撤退/折返路線圖層",
         layer_kind="evidence",
-        z_index=55,
+        z_index=54,
         render_mode="svg_overlay",
         source_kind="planning_candidate",
     ),
@@ -143,7 +143,7 @@ _LAYER_SPECS: dict[str, AdminMapLayerSpec] = {
         label="Segments",
         label_zh="分段圖層",
         layer_kind="evidence",
-        z_index=60,
+        z_index=56,
         render_mode="svg_overlay",
         source_kind="planning_candidate",
     ),
@@ -152,7 +152,7 @@ _LAYER_SPECS: dict[str, AdminMapLayerSpec] = {
         label="Checkpoints",
         label_zh="CP 檢查點圖層",
         layer_kind="evidence",
-        z_index=70,
+        z_index=72,
         render_mode="svg_overlay",
         source_kind="planning_candidate",
     ),
@@ -161,7 +161,7 @@ _LAYER_SPECS: dict[str, AdminMapLayerSpec] = {
         label="POI",
         label_zh="POI 興趣點/關鍵地點圖層",
         layer_kind="evidence",
-        z_index=75,
+        z_index=74,
         render_mode="svg_overlay",
         source_kind="map_context",
     ),
@@ -219,7 +219,10 @@ def build_pretrip_map_layers(
             source_refs.get("imagery") or source_refs.get("map_context"),
         ),
         "osm": ("pretrip.map_layer.osm", source_refs.get("map_context")),
-        "terrain": ("pretrip.map_layer.terrain", source_refs.get("segment_dtm")),
+        "terrain": (
+            "pretrip.map_layer.terrain",
+            source_refs.get("terrain_visualization") or source_refs.get("segment_dtm"),
+        ),
         "risk-score": (
             "pretrip.map_layer.risk_score",
             source_refs.get("risk_score_points")
@@ -263,17 +266,17 @@ def build_pretrip_map_layers(
             "osm",
             "terrain",
         ]
-    if sources["risk-score"][1]:
-        layer_order.append("risk-score")
     layer_order.extend(
         [
             "corridors",
-            "hazards",
             "route",
             "reference-tracks",
             "retreat",
+            "segments",
         ]
     )
+    if sources["risk-score"][1]:
+        layer_order.append("risk-score")
     if sources["risk-ribbon"][1]:
         layer_order.append("risk-ribbon")
     if sources["risk-heatmap"][1]:
@@ -282,9 +285,9 @@ def build_pretrip_map_layers(
         layer_order.append("risk-delta")
     layer_order.extend(
         [
-            "segments",
             "checkpoints",
             "pois",
+            "hazards",
             "route-notes",
             "mcp",
             "weather-api",
@@ -333,14 +336,14 @@ def build_after_action_map_layers(
     layer_order = ["imagery", "osm"]
     if risk_score_source_path:
         layer_order.append("risk-score")
-    layer_order.extend(["corridors", "hazards", "route"])
+    layer_order.extend(["corridors", "route"])
     if risk_ribbon_source_path:
         layer_order.append("risk-ribbon")
     if risk_heatmap_source_path:
         layer_order.append("risk-heatmap")
     if resolved_risk_delta_source:
         layer_order.append("risk-delta")
-    layer_order.extend(["checkpoints", "events", "weather-api"])
+    layer_order.extend(["checkpoints", "hazards", "events", "weather-api"])
     layers = _build_layers(
         tuple(layer_order),
         sources=sources,
@@ -458,6 +461,52 @@ def _layer_renderer_contract(layer_id: str) -> dict[str, Any]:
             "cache_policy": OSM_CACHE_POLICY,
             "local_proxy_cache_policy": "local_file_cache_then_offline_fallback",
             "downloads_tiles_into_repo": False,
+        }
+    if layer_id == "terrain":
+        return {
+            "terrain_visualization_modes": [
+                "hillshade",
+                "elevation_tint",
+                "slope_shading",
+                "contours",
+            ],
+            "terrain_visualization_ref_key": "terrain_visualization_ref",
+            "terrain_visualization_layer": True,
+            "risk_heat_layer": False,
+            "slope_class_breaks": [
+                {
+                    "class_id": "slope-0-10",
+                    "label": "0-10 deg",
+                    "color": "#b7e4a8",
+                },
+                {
+                    "class_id": "slope-10-20",
+                    "label": "10-20 deg",
+                    "color": "#d9ef8b",
+                },
+                {
+                    "class_id": "slope-20-30",
+                    "label": "20-30 deg",
+                    "color": "#fee08b",
+                },
+                {
+                    "class_id": "slope-30-40",
+                    "label": "30-40 deg",
+                    "color": "#fdae61",
+                },
+                {
+                    "class_id": "slope-40-50",
+                    "label": "40-50 deg",
+                    "color": "#f46d43",
+                },
+                {
+                    "class_id": "slope-gt-50",
+                    "label": ">50 deg",
+                    "color": "#d73027",
+                },
+            ],
+            "contour_interval_m": 100.0,
+            "runtime_safety_truth": False,
         }
     if layer_id == "weather-api":
         return {

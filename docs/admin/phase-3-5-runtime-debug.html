@@ -832,6 +832,10 @@
       image-rendering: auto;
     }
     .raster-tile { opacity: .92; }
+    .terrain-raster-overlay {
+      image-rendering: pixelated;
+      pointer-events: visiblePainted;
+    }
     .osm-attribution {
       fill: rgba(237, 242, 247, .68);
       font: 10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -1523,6 +1527,7 @@
                     <div class="filters" aria-label="Map layers">
                       <label title="Imagery layer"><input type="checkbox" data-layer="imagery" checked> Imagery</label>
                       <label title="OpenStreetMap layer"><input type="checkbox" data-layer="osm" checked> OSM</label>
+                      <label title="Terrain visualization evidence layer"><input type="checkbox" data-layer="terrain" checked> Terrain</label>
                       <label title="Scout Risk Engine pretrip risk score point layer"><input type="checkbox" data-layer="risk-score"> Risk pts</label>
                       <label title="Route-aligned baseline terrain risk layer"><input type="checkbox" data-layer="risk-ribbon" checked> Baseline</label>
                       <label title="Route-specific calibrated heat map"><input type="checkbox" data-layer="risk-heatmap" checked> Calibrated</label>
@@ -2221,6 +2226,47 @@
       }
     }
 
+    function terrainVisualization(projection) {
+      return projection?.terrain_visualization || {};
+    }
+
+    function terrainRasterOverlays(projection) {
+      return (terrainVisualization(projection).raster_overlays || [])
+        .filter(overlay => overlay?.runtime_href && normalizeRasterBounds(overlay.bbox_wgs84));
+    }
+
+    function renderTerrainBitmapOverlays(group, projection, bounds) {
+      terrainRasterOverlays(projection)
+        .filter(overlay => overlay.default_visible && boundsIntersect(bounds, normalizeRasterBounds(overlay.bbox_wgs84)))
+        .forEach(overlay => {
+          const overlayBounds = normalizeRasterBounds(overlay.bbox_wgs84);
+          const [x1, y1] = projectPoint(bounds, overlayBounds.north, overlayBounds.west);
+          const [x2, y2] = projectPoint(bounds, overlayBounds.south, overlayBounds.east);
+          const image = svgEl("image", {
+            href: rasterTileCacheBustedUrl(apiUrlTemplate(overlay.runtime_href)),
+            x: Math.min(x1, x2).toFixed(2),
+            y: Math.min(y1, y2).toFixed(2),
+            width: Math.abs(x2 - x1).toFixed(2),
+            height: Math.abs(y2 - y1).toFixed(2),
+            class: "terrain-raster-overlay",
+            opacity: overlay.opacity ?? 0.86,
+            preserveAspectRatio: "none",
+            "data-terrain-overlay-mode": overlay.mode || overlay.overlay_id || "",
+            "data-terrain-cell-resolution-m": overlay.cell_resolution_m ?? "",
+            "data-terrain-corridor-half-width-m": overlay.corridor_half_width_m ?? "",
+            "data-terrain-sha256": overlay.sha256 || ""
+          });
+          attachMapEvidence(image, {
+            ...overlay,
+            evidence_type: "pretrip_terrain_visualization_bitmap_overlay",
+            terrain_visualization_layer: true,
+            risk_heat_layer: false,
+            runtime_safety_truth: false
+          }, `terrain ${overlay.mode || overlay.overlay_id || ""}`);
+          group.appendChild(image);
+        });
+    }
+
     function renderDebugEvidenceMap(projection) {
       if (!projection?.route?.bounds) return;
       const bounds = boundsForProjection(projection);
@@ -2234,6 +2280,10 @@
       const imageryGroup = svgEl("g", {"data-layer-group": "imagery"});
       appendRasterLayer(imageryGroup, projection, bounds, "imagery");
       runtimeMap.appendChild(imageryGroup);
+
+      const terrainGroup = svgEl("g", {"data-layer-group": "terrain"});
+      renderTerrainBitmapOverlays(terrainGroup, projection, bounds);
+      runtimeMap.appendChild(terrainGroup);
 
       const overpassGroup = svgEl("g", {"data-layer-group": "overpass"});
       (projection.overpass_evidence?.corridor_candidates || []).forEach(candidate => {

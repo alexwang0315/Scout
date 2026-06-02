@@ -119,7 +119,9 @@ Required behavior:
 
 - collapsed control is an icon button or short `Layers` button;
 - expanded menu groups layers by purpose:
-  - Basemap（底圖）: `imagery`, `osm`, `terrain`;
+  - Basemap（底圖）: `imagery`, `osm`;
+  - Terrain visualization（地形視覺化）: `terrain`, `terrain-hillshade`,
+    `terrain-elevation-tint`, `terrain-slope-shading`, `terrain-contours`;
   - Route（路線）: `route`, `reference-tracks`, `corridors`, `segments`;
   - Planning（規劃）: `checkpoints`, `mcp`, `route-notes`, `pois`, `retreat`;
   - Risk（風險）: `hazards`, `risk-score`, `risk-ribbon`, `risk-heatmap`,
@@ -145,9 +147,29 @@ Layer ordering follows `admin_map_layers.py`:
 
 ```text
 imagery bottom
-osm / terrain / evidence / planning / runtime
+osm
+terrain hillshade / elevation tint / slope shading / contours
+route / reference tracks / corridors / retreat / segments
+risk ribbon / risk heat / risk delta
+CP / POI / hazards / route notes / MCP
+selected timeline highlight
 weather-api top
 ```
+
+Terrain visualization layers are DEM/DTM-derived evidence displays:
+
+- `terrain-hillshade`: shaded relief（陰影起伏）;
+- `terrain-elevation-tint`: elevation color bands（高度分層色）;
+- `terrain-slope-shading`: slope color bands（坡度著色）;
+- `terrain-contours`: contour overlay（等高線）.
+
+For the alpha bitmap fallback, `/admin/pretrip` and `/admin/debug` render the
+same `terrain_visualization.raster_overlays` projection. Each surface should
+display four PNG overlays when available: hillshade, elevation tint, slope
+shading, and contours. The SVG `<image>` overlays must carry
+`data-terrain-overlay-mode`, `data-terrain-cell-resolution-m`,
+`data-terrain-corridor-half-width-m`, and source hash metadata so browser smoke
+tests can verify that the 20m/500m DTM corridor view is present.
 
 Risk layers must support both before/after comparison:
 
@@ -165,6 +187,10 @@ Required behavior:
 
 - local imagery uses `admin_local_raster_source_manifest` and
   `/admin/tiles/imagery/{project_id}/{layer_id}/{z}/{x}/{y}.png`;
+- the imagery tile endpoint should resolve cache roots in this order:
+  workspace `project.json` `imagery_tile_cache_root`, then
+  `raster_tile_manifest_ref.cache_root`, then `SCOUT_ADMIN_RASTER_TILE_CACHE_ROOT`,
+  then the default local cache root;
 - OSM uses the local proxy first when offline/cache mode is active:
   `/admin/tiles/osm/{z}/{x}/{y}.png`;
 - missing tiles render transparent or a clear unavailable tile state;

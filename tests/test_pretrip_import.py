@@ -8,7 +8,11 @@ from fastapi.testclient import TestClient
 from admin_api import create_admin_app
 from debug_api import create_debug_app
 from pretrip_admin_view import build_pretrip_admin_view
-from pretrip_import import PretripImportRequest, run_pretrip_import
+from pretrip_import import (
+    PretripImportRequest,
+    restore_durable_admin_evidence_refs,
+    run_pretrip_import,
+)
 from pretrip_source_ingest import wgs84_to_twd97
 from runtime_debug_log import FileRuntimeDebugEventLog
 
@@ -937,6 +941,77 @@ def test_pretrip_import_cli_copies_template_workspace_without_mutating_template(
     assert (template / "project.json").read_text(encoding="utf-8") == original_template_project
     assert (project_root / "outputs" / "admin_projection.json").exists()
     assert (project_root / "outputs" / "debug_projection_events.jsonl").exists()
+
+
+def test_restore_durable_admin_evidence_refs_copies_safe_missing_refs(
+    tmp_path: Path,
+) -> None:
+    source_root = tmp_path / "source_project"
+    destination_root = tmp_path / "destination_project"
+    (source_root / "outputs").mkdir(parents=True)
+    (destination_root / "outputs").mkdir(parents=True)
+    durable_refs = {
+        "readiness_report_ref": "outputs/readiness_report.json",
+        "resource_plan_ref": "outputs/resource_plan.json",
+        "planned_eta_ref": "outputs/planned_eta.json",
+        "departure_bundle_manifest_ref": "outputs/departure_bundle_manifest.json",
+        "route_comparison_ref": "outputs/route_comparison.json",
+        "capability_timeline_import_ref": "outputs/capability_timeline_import.json",
+        "post_analysis_capability_timeline_ref": "../outside.json",
+    }
+    for key, ref in durable_refs.items():
+        if ref.startswith("../"):
+            continue
+        (source_root / ref).write_text(
+            json.dumps({"source_key": key}, sort_keys=True),
+            encoding="utf-8",
+        )
+    (source_root / "project.json").write_text(
+        json.dumps({"project_id": "source", **durable_refs}, sort_keys=True),
+        encoding="utf-8",
+    )
+    (destination_root / "outputs" / "route_comparison.json").write_text(
+        json.dumps({"kept": "destination"}, sort_keys=True),
+        encoding="utf-8",
+    )
+    (destination_root / "project.json").write_text(
+        json.dumps(
+            {
+                "project_id": "destination",
+                "route_comparison_ref": "outputs/route_comparison.json",
+            },
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+
+    summary = restore_durable_admin_evidence_refs(
+        project_root=destination_root,
+        source_root=source_root,
+    )
+
+    project = _load(destination_root / "project.json")
+    assert project["readiness_report_ref"] == "outputs/readiness_report.json"
+    assert project["resource_plan_ref"] == "outputs/resource_plan.json"
+    assert project["planned_eta_ref"] == "outputs/planned_eta.json"
+    assert project["departure_bundle_manifest_ref"] == (
+        "outputs/departure_bundle_manifest.json"
+    )
+    assert project["capability_timeline_import_ref"] == (
+        "outputs/capability_timeline_import.json"
+    )
+    assert "post_analysis_capability_timeline_ref" not in project
+    assert _load(destination_root / "outputs" / "readiness_report.json") == {
+        "source_key": "readiness_report_ref"
+    }
+    assert _load(destination_root / "outputs" / "route_comparison.json") == {
+        "kept": "destination"
+    }
+    assert summary["copied"]["readiness_report_ref"] == "outputs/readiness_report.json"
+    assert summary["skipped"]["route_comparison_ref"] == "payload_ref_already_exists"
+    assert summary["invalid"]["post_analysis_capability_timeline_ref"] == (
+        "../outside.json"
+    )
 
 
 def test_pretrip_import_template_workspace_feeds_admin_view_projection(tmp_path: Path) -> None:

@@ -108,6 +108,8 @@ PRETRIP_EVIDENCE_LIST_IGNORE_MARKERS = (
     "payload",
     "counts",
     "histogram",
+    "visualization_spec",
+    "slope_class_breaks",
     "bbox",
     "bounds",
     "segment_ref",
@@ -567,14 +569,14 @@ def test_builds_fixture_backed_pretrip_admin_view():
         "osm",
         "terrain",
         "corridors",
-        "hazards",
         "route",
         "reference-tracks",
         "retreat",
-        "risk-ribbon",
         "segments",
+        "risk-ribbon",
         "checkpoints",
         "pois",
+        "hazards",
         "route-notes",
         "mcp",
         "weather-api",
@@ -586,6 +588,10 @@ def test_builds_fixture_backed_pretrip_admin_view():
         "/admin/tiles/imagery/{project_id}/{layer_id}/{z}/{x}/{y}.png"
     )
     assert view["map_layers"][0]["external_network_required"] is False
+    terrain_layer = next(layer for layer in view["map_layers"] if layer["layer_id"] == "terrain")
+    assert terrain_layer["terrain_visualization_layer"] is True
+    assert terrain_layer["risk_heat_layer"] is False
+    assert terrain_layer["runtime_safety_truth"] is False
     assert view["map_layers"][-1]["label_zh"].startswith("氣象 API")
     assert view["map_layers"][-1]["external_api_calls_made"] is False
     mcp_layer = next(layer for layer in view["map_layers"] if layer["layer_id"] == "mcp")
@@ -745,6 +751,9 @@ def test_loads_debug_projection_view_with_shared_map_and_dense_timeline():
     assert projection["counts"]["mcp_suppressed_point_count"] == 2
     assert projection["counts"]["mcp_review_action_count"] == 0
     assert projection["counts"]["risk_ribbon_segment_count"] == 841
+    assert "terrain_bitmap_overlay_count" in projection["counts"]
+    assert "terrain_visualization" in projection
+    assert projection["terrain_visualization"]["boundary"]["runtime_safety_truth"] is False
     assert projection["counts"]["source_lifecycle_event_count"] == 4
     assert projection["route"]["point_count"] == 6909
     assert (
@@ -975,6 +984,25 @@ def test_admin_view_exposes_workspace_risk_score_layer(
         "model_output_summary"
     ]
     assert view["risk_score"]["boundary"]["runtime_safety_truth"] is False
+    assert view["terrain_visualization"]["status"] == "candidate_only"
+    assert view["terrain_visualization"]["counts"]["feature_count"] == 0
+    assert view["terrain_visualization"]["counts"]["bitmap_overlay_count"] == 4
+    assert view["terrain_visualization"]["counts"]["cell_count"] > 0
+    assert view["terrain_visualization"]["visualization_spec"]["modes"] == [
+        "hillshade",
+        "elevation_tint",
+        "slope_shading",
+        "contours",
+    ]
+    assert view["terrain_visualization"]["visualization_spec"]["bitmap_overlay"] is True
+    assert view["terrain_visualization"]["visualization_spec"]["bitmap_cell_resolution_m"] == 20.0
+    overlays = {overlay["mode"]: overlay for overlay in view["terrain_visualization"]["raster_overlays"]}
+    assert set(overlays) == {"hillshade", "elevation_tint", "slope_shading", "contours"}
+    assert overlays["slope_shading"]["cell_resolution_m"] == 20.0
+    assert overlays["slope_shading"]["corridor_half_width_m"] == 500.0
+    assert overlays["slope_shading"]["terrain_visualization_layer"] is True
+    assert overlays["slope_shading"]["risk_heat_layer"] is False
+    assert overlays["slope_shading"]["runtime_safety_truth"] is False
     risk_layer = next(layer for layer in view["map_layers"] if layer["layer_id"] == "risk-score")
     assert risk_layer["default_enabled"] is False
     sections = {
@@ -1638,6 +1666,7 @@ def _write_risk_score_outputs(directory: Path) -> None:
                     "pretrip_risk": 61.2,
                     "risk_level": 4,
                     "distance_m": 10.0,
+                    "elevation_m": 100.0,
                     "teii_20m": 70.0,
                 },
             },
@@ -1649,7 +1678,20 @@ def _write_risk_score_outputs(directory: Path) -> None:
                     "pretrip_risk": 48.5,
                     "risk_level": 3,
                     "distance_m": 30.0,
+                    "elevation_m": 110.0,
                     "teii_20m": 55.0,
+                },
+            },
+            {
+                "type": "Feature",
+                "geometry": {"type": "Point", "coordinates": [121.22, 24.02]},
+                "properties": {
+                    "sample_id": "risk.sample.003",
+                    "pretrip_risk": 22.0,
+                    "risk_level": 1,
+                    "distance_m": 60.0,
+                    "elevation_m": 160.0,
+                    "teii_20m": 10.0,
                 },
             },
         ],
@@ -1693,7 +1735,7 @@ def _write_risk_score_outputs(directory: Path) -> None:
         "route_risk.geojson": route_risk,
         "route_risk.metadata.json": {
             "artifact_kind": "scout_risk_overpass_route_profile_metadata",
-            "route_risk_sample_count": 2,
+            "route_risk_sample_count": 3,
             "boundary": {"candidate_only": True, "runtime_safety_truth": False},
         },
         "risk_score_points.geojson": score_points,

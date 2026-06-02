@@ -1774,15 +1774,66 @@ def create_admin_router(
         }
 
     @router.get("/pretrip/projects/{project_id}")
-    def pretrip_project(project_id: str) -> dict[str, Any]:
+    def pretrip_project(project_id: str, compact: bool = False) -> dict[str, Any]:
         try:
             project_root = _pretrip_workspace_project_root(
                 pretrip_workspace_root,
                 project_id=project_id,
             )
-            return build_pretrip_admin_view(project_id, project_root=project_root)
+            view = build_pretrip_admin_view(project_id, project_root=project_root)
+            return _compact_pretrip_project_view(view) if compact else view
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="Pre-trip project not found") from exc
+
+    @router.get("/pretrip/projects/{project_id}/terrain-overlays/{mode}.png")
+    def pretrip_project_terrain_overlay(project_id: str, mode: str) -> Response:
+        if mode not in {"hillshade", "elevation_tint", "slope_shading", "contours"}:
+            raise HTTPException(status_code=422, detail="unsupported terrain overlay mode")
+        project_root = _pretrip_workspace_project_root(
+            pretrip_workspace_root,
+            project_id=project_id,
+        )
+        if project_root is None:
+            raise HTTPException(status_code=404, detail="Pre-trip project not found")
+        project = json.loads((project_root / "project.json").read_text(encoding="utf-8"))
+        terrain_ref = project.get("terrain_visualization_ref")
+        if not isinstance(terrain_ref, str) or not terrain_ref:
+            raise HTTPException(status_code=404, detail="terrain visualization not prepared")
+        terrain_path = project_root / terrain_ref
+        if not terrain_path.exists():
+            raise HTTPException(status_code=404, detail="terrain visualization artifact missing")
+        terrain_payload = json.loads(terrain_path.read_text(encoding="utf-8"))
+        overlays = terrain_payload.get("raster_overlays", [])
+        overlay = next(
+            (
+                item
+                for item in overlays
+                if isinstance(item, dict) and item.get("mode") == mode
+            ),
+            None,
+        )
+        if not isinstance(overlay, dict):
+            raise HTTPException(status_code=404, detail="terrain overlay not available")
+        overlay_source_path = overlay.get("source_path")
+        if not isinstance(overlay_source_path, str) or not overlay_source_path:
+            raise HTTPException(status_code=404, detail="terrain overlay source missing")
+        overlay_path = (project_root / overlay_source_path).resolve()
+        try:
+            overlay_path.relative_to(project_root.resolve())
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail="unsafe terrain overlay path") from exc
+        if not overlay_path.exists():
+            raise HTTPException(status_code=404, detail="terrain overlay file missing")
+        return Response(
+            overlay_path.read_bytes(),
+            media_type="image/png",
+            headers={
+                "Cache-Control": "no-cache, max-age=0, must-revalidate",
+                "X-Scout-Terrain-Overlay": mode,
+                "X-Scout-Terrain-Overlay-Hash": str(overlay.get("sha256") or ""),
+                "X-Scout-Runtime-Safety-Truth": "false",
+            },
+        )
 
     @router.get("/pretrip/projects/{project_id}/weather-overlay")
     def pretrip_project_weather_overlay(project_id: str) -> dict[str, Any]:
@@ -2317,7 +2368,10 @@ def create_admin_router(
                 z,
                 x,
                 y,
-                cache_root=_raster_tile_cache_root_from_env(),
+                cache_root=_raster_tile_cache_root_for_project(
+                    pretrip_workspace_root,
+                    project_id=project_id,
+                ),
                 fallback_enabled=_raster_tile_fallback_enabled_from_env(),
             )
         except ValueError as exc:
@@ -3402,6 +3456,441 @@ def _pretrip_prepare_layers_paths(
     }
 
 
+def _compact_pretrip_project_view(view: dict[str, Any]) -> dict[str, Any]:
+    """Keep browser payloads traceable without duplicating heavy tab lists."""
+    compact = dict(view)
+    tabs = view.get("tabs", {})
+    pre_trip = tabs.get("pre_trip_planning", {}) if isinstance(tabs, dict) else {}
+    post = tabs.get("post_analysis", {}) if isinstance(tabs, dict) else {}
+    review = tabs.get("review_workspace", {}) if isinstance(tabs, dict) else {}
+    terrain_visualization = view.get("terrain_visualization", {})
+    compact["tabs"] = {
+        "pre_trip_planning": {
+            "sections": pre_trip.get("sections", []),
+            "terrain_visualization": {
+                "source_path": terrain_visualization.get("source_path", "")
+                if isinstance(terrain_visualization, dict)
+                else "",
+                "counts": terrain_visualization.get("counts", {})
+                if isinstance(terrain_visualization, dict)
+                else {},
+            },
+        },
+        "review_workspace": {
+            "sections": review.get("sections", []),
+        },
+        "post_analysis": {
+            "sections": post.get("sections", []),
+            "segment_terrain": post.get("segment_terrain", {}),
+            "runtime_handoff": post.get("runtime_handoff", {}),
+            "route_comparison": post.get("route_comparison", {}),
+            "capability_timeline_import": post.get("capability_timeline_import"),
+            "brain_seed": post.get("brain_seed", {}),
+        },
+    }
+    _compact_pretrip_heavy_layers(compact)
+    compact["compact_payload"] = {
+        "enabled": True,
+        "removed_duplicate_tab_payload": True,
+        "trimmed_heavy_layer_items": True,
+        "full_project_api": f"/admin/pretrip/projects/{view.get('project_id', '')}",
+        "runtime_safety_truth": False,
+    }
+    return compact
+
+
+_COMPACT_COMMON_EVIDENCE_KEYS = (
+    "candidate_id",
+    "source_id",
+    "item_id",
+    "source_path",
+    "metadata_source_path",
+    "evidence_type",
+    "status",
+    "label",
+    "title",
+    "summary",
+    "lat",
+    "lon",
+    "ele_m",
+    "time",
+    "distance_m",
+    "start_distance_m",
+    "end_distance_m",
+    "review_state",
+    "confidence",
+    "stale_risk",
+    "candidate_only",
+    "runtime_safety_truth",
+    "source_profile",
+    "category",
+    "severity",
+    "candidate_ref",
+    "map_target_ids",
+    "review_focus",
+    "target_ids",
+    "human_review_required",
+    "decision_recorded",
+    "accept_reject_allowed",
+    "mutation_allowed",
+)
+_COMPACT_SOURCE_ATTRIBUTION_KEYS = (
+    "source_kind",
+    "source_profile",
+    "source_ref",
+    "source_candidate_id",
+    "source_artifact_id",
+    "source_label",
+    "source_role",
+    "evidence_type",
+    "confidence",
+    "stale_risk",
+    "candidate_only",
+    "runtime_safety_truth",
+    "osm_type",
+    "osm_id",
+)
+_COMPACT_BOUNDARY_KEYS = (
+    "candidate_only",
+    "pretrip_candidate_evidence_only",
+    "projection_only",
+    "phase1_runtime_mutation_allowed",
+    "phase2_brain_writeback_allowed",
+    "runtime_safety_truth",
+    "safety_api_calls_allowed",
+    "final_runtime_write_allowed",
+    "not_departure_approval",
+    "human_review_required_before_departure",
+)
+
+
+def _compact_mapping(payload: dict[str, Any], keys: tuple[str, ...]) -> dict[str, Any]:
+    return {key: payload[key] for key in keys if key in payload}
+
+
+def _compact_source_attribution(payload: Any) -> list[dict[str, Any]]:
+    if not isinstance(payload, list) or not payload:
+        return []
+    first = payload[0]
+    if not isinstance(first, dict):
+        return []
+    return [_compact_mapping(first, _COMPACT_SOURCE_ATTRIBUTION_KEYS)]
+
+
+def _compact_boundary(payload: Any) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        return {}
+    return _compact_mapping(payload, _COMPACT_BOUNDARY_KEYS)
+
+
+def _compact_evidence_item(
+    item: dict[str, Any],
+    *,
+    extra_keys: tuple[str, ...] = (),
+    source_ref_limit: int = 0,
+    include_source_attribution: bool = False,
+) -> dict[str, Any]:
+    compact = _compact_mapping(item, (*_COMPACT_COMMON_EVIDENCE_KEYS, *extra_keys))
+    source_refs = item.get("source_refs")
+    if source_ref_limit > 0 and isinstance(source_refs, list):
+        compact["source_refs"] = source_refs[:source_ref_limit]
+    if include_source_attribution:
+        source_attribution = _compact_source_attribution(item.get("source_attribution"))
+        if source_attribution:
+            compact["source_attribution"] = source_attribution
+    boundary = _compact_boundary(item.get("boundary"))
+    if boundary:
+        compact["boundary"] = boundary
+    evidence_summary = item.get("evidence_summary")
+    if isinstance(evidence_summary, dict):
+        compact["evidence_summary"] = _compact_evidence_item(
+            evidence_summary,
+            extra_keys=("interpretation_mode", "not_observed_fact"),
+        )
+    return compact
+
+
+def _compact_collection_items(
+    payload: Any,
+    item_key: str,
+    *,
+    extra_keys: tuple[str, ...] = (),
+) -> Any:
+    if not isinstance(payload, dict):
+        return payload
+    compact = dict(payload)
+    items = payload.get(item_key)
+    if isinstance(items, list):
+        compact[item_key] = [
+            _compact_evidence_item(item, extra_keys=extra_keys)
+            if isinstance(item, dict)
+            else item
+            for item in items
+        ]
+    return compact
+
+
+def _compact_overpass_evidence(payload: Any) -> Any:
+    if not isinstance(payload, dict):
+        return payload
+    compact = dict(payload)
+    for key, extra_keys in {
+        "corridor_candidates": ("candidate_type", "feature_type", "osm_type", "osm_id", "tags", "corridor"),
+        "hazard_candidates": ("candidate_type", "feature_type", "osm_type", "osm_id", "tags", "hazard"),
+        "poi_candidates": ("candidate_type", "feature_type", "osm_type", "osm_id", "tags", "poi"),
+    }.items():
+        items = payload.get(key)
+        if isinstance(items, list):
+            compact[key] = [
+                _compact_evidence_item(item, extra_keys=extra_keys)
+                if isinstance(item, dict)
+                else item
+                for item in items
+            ]
+    return compact
+
+
+def _compact_reference_tracks(payload: Any) -> Any:
+    if not isinstance(payload, dict):
+        return payload
+    compact = dict(payload)
+    tracks = payload.get("reference_tracks")
+    if isinstance(tracks, list):
+        compact["reference_tracks"] = [
+            _compact_evidence_item(
+                track,
+                extra_keys=("display_geometry", "route"),
+            )
+            if isinstance(track, dict)
+            else track
+            for track in tracks
+        ]
+    return compact
+
+
+def _compact_gis_perception_timeline(payload: Any) -> Any:
+    if not isinstance(payload, dict):
+        return payload
+    compact = dict(payload)
+    checkpoint_candidates = payload.get("checkpoint_candidates")
+    if isinstance(checkpoint_candidates, list):
+        compact["checkpoint_candidates"] = [
+            _compact_evidence_item(
+                item,
+                extra_keys=(
+                    "checkpoint_type",
+                    "source_route_note_candidate_id",
+                    "source_gpx_role",
+                    "source_note_category",
+                    "route_note_age_days",
+                    "route_note_freshness",
+                    "stale_route_note",
+                    "linked_ln_proposal_id",
+                    "proposed_ln_scope",
+                    "route_note_summary",
+                    "timeline_element_type",
+                    "review_category",
+                    "semantic_aggregation_key",
+                    "nearby_group_id",
+                ),
+            )
+            if isinstance(item, dict)
+            else item
+            for item in checkpoint_candidates
+        ]
+    nearby_groups = payload.get("nearby_groups")
+    if isinstance(nearby_groups, list):
+        compact["nearby_groups"] = [
+            _compact_evidence_item(
+                item,
+                extra_keys=(
+                    "nearby_group_id",
+                    "member_count",
+                    "semantic_keys",
+                    "timeline_element_type",
+                    "review_category",
+                    "semantic_aggregation_key",
+                ),
+            )
+            if isinstance(item, dict)
+            else item
+            for item in nearby_groups
+        ]
+    return compact
+
+
+def _compact_major_critical_points(payload: Any) -> Any:
+    if not isinstance(payload, dict):
+        return payload
+    compact = dict(payload)
+    candidates = payload.get("candidates")
+    if isinstance(candidates, list):
+        compact["candidates"] = [
+            _compact_evidence_item(
+                item,
+                extra_keys=(
+                    "mcp_id",
+                    "mcp_classes",
+                    "mention_ratio",
+                    "accepted_evidence_page_count",
+                    "linked_cp_candidates",
+                    "linked_named_points",
+                    "linked_risk_segments",
+                    "nearest_scout_cp",
+                    "source_family_coverage",
+                    "nearby_points_suppressed_by_spacing",
+                    "cp_support_reconciliation",
+                    "suggested_cp_insertion",
+                ),
+            )
+            if isinstance(item, dict)
+            else item
+            for item in candidates
+        ]
+    return compact
+
+
+def _compact_route_notes(payload: Any) -> Any:
+    if not isinstance(payload, dict):
+        return payload
+    compact = dict(payload)
+    candidates = payload.get("candidates")
+    if isinstance(candidates, list):
+        keep_keys = (
+            "candidate_id",
+            "evidence_type",
+            "lat",
+            "lon",
+            "normalized_note",
+            "note_category",
+            "review_state",
+            "route_note_freshness",
+            "stale_route_note",
+            "candidate_only",
+            "runtime_safety_truth",
+        )
+        compact["candidates"] = [
+            _compact_mapping(item, keep_keys) if isinstance(item, dict) else item
+            for item in candidates
+        ]
+    return compact
+
+
+def _compact_pretrip_heavy_layers(view: dict[str, Any]) -> None:
+    view["route_notes"] = _compact_route_notes(view.get("route_notes"))
+    view["review_queue"] = _compact_collection_items(
+        view.get("review_queue"),
+        "items",
+        extra_keys=(
+            "source_ref",
+            "source_ref_key",
+            "source_artifact_kind",
+            "review_category",
+            "bulk_candidate_refs",
+        ),
+    )
+    view["risk_score"] = _compact_collection_items(
+        view.get("risk_score"),
+        "points",
+        extra_keys=(
+            "pretrip_risk",
+            "risk_level",
+            "score_field",
+            "route_id",
+            "sample_id",
+            "elevation_m",
+            "teii_20m",
+            "tri",
+            "sri",
+            "lec",
+            "scp",
+        ),
+    )
+    risk_segment_keys = (
+        "segment_id",
+        "coordinates",
+        "pretrip_risk",
+        "calibrated_risk_candidate",
+        "baseline_pretrip_risk",
+        "delta_score",
+        "score_field",
+        "risk_level",
+        "risk_bucket",
+        "delta_bucket",
+        "style_class",
+        "stroke",
+        "route_id",
+        "from_sample_id",
+        "to_sample_id",
+    )
+    view["risk_ribbon"] = _compact_collection_items(
+        view.get("risk_ribbon"),
+        "segments",
+        extra_keys=risk_segment_keys,
+    )
+    view["risk_heatmap"] = _compact_collection_items(
+        view.get("risk_heatmap"),
+        "segments",
+        extra_keys=risk_segment_keys,
+    )
+    view["risk_delta"] = _compact_collection_items(
+        view.get("risk_delta"),
+        "segments",
+        extra_keys=risk_segment_keys,
+    )
+    view["terrain_visualization"] = _compact_collection_items(
+        view.get("terrain_visualization"),
+        "samples",
+        extra_keys=(
+            "elevation_m",
+            "visualization_modes",
+            "hillshade_value",
+            "elevation_tint_color",
+            "slope_degrees",
+            "slope_class",
+            "slope_class_label",
+            "slope_color",
+            "contour_interval_m",
+            "contour_index_m",
+            "contour_marker",
+            "terrain_visualization_layer",
+            "risk_heat_layer",
+        ),
+    )
+    if isinstance(view.get("terrain_visualization"), dict):
+        view["terrain_visualization"]["contours"] = []
+    view["gis_perception_timeline"] = _compact_gis_perception_timeline(
+        view.get("gis_perception_timeline")
+    )
+    if isinstance(view.get("gis_perception"), dict):
+        view["gis_perception"] = {
+            key: value
+            for key, value in view["gis_perception"].items()
+            if key
+            in {
+                "source_id",
+                "source_path",
+                "evidence_type",
+                "status",
+                "source_profile",
+                "counts",
+                "classifier",
+                "boundary",
+                "source_refs",
+                "confidence",
+                "stale_risk",
+                "review_state",
+                "candidate_only",
+                "runtime_safety_truth",
+            }
+        }
+    view["major_critical_points"] = _compact_major_critical_points(
+        view.get("major_critical_points")
+    )
+    view["overpass_evidence"] = _compact_overpass_evidence(view.get("overpass_evidence"))
+    view["reference_tracks"] = _compact_reference_tracks(view.get("reference_tracks"))
+
+
 def _pretrip_import_reference_paths(
     request: PreTripImportGpxRequest,
     *,
@@ -3642,6 +4131,56 @@ def _raster_tile_cache_root_from_env() -> Path:
         if value
         else DEFAULT_RASTER_TILE_CACHE_ROOT.expanduser()
     )
+
+
+def _raster_tile_cache_root_for_project(
+    pretrip_workspace_root: Path | None,
+    *,
+    project_id: str,
+) -> Path:
+    project_root = _pretrip_workspace_project_root(
+        pretrip_workspace_root,
+        project_id=project_id,
+    )
+    if project_root is None:
+        return _raster_tile_cache_root_from_env()
+    try:
+        project = json.loads((project_root / "project.json").read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return _raster_tile_cache_root_from_env()
+    cache_root = project.get("imagery_tile_cache_root")
+    if isinstance(cache_root, str) and cache_root.strip():
+        return Path(cache_root).expanduser()
+    manifest_ref = project.get("raster_tile_manifest_ref")
+    manifest_path = _safe_pretrip_project_ref_path(project_root, manifest_ref)
+    if manifest_path is None or not manifest_path.exists():
+        return _raster_tile_cache_root_from_env()
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return _raster_tile_cache_root_from_env()
+    manifest_cache_root = manifest.get("cache_root")
+    if isinstance(manifest_cache_root, str) and manifest_cache_root.strip():
+        return Path(manifest_cache_root).expanduser()
+    return _raster_tile_cache_root_from_env()
+
+
+def _safe_pretrip_project_ref_path(
+    project_root: Path,
+    ref: Any,
+) -> Path | None:
+    if not isinstance(ref, str) or not ref:
+        return None
+    candidate = Path(ref)
+    if candidate.is_absolute() or any(part in {"..", "."} for part in candidate.parts):
+        return None
+    resolved_root = project_root.resolve()
+    resolved_path = (project_root / candidate).resolve()
+    try:
+        resolved_path.relative_to(resolved_root)
+    except ValueError:
+        return None
+    return resolved_path
 
 
 def _raster_tile_fallback_enabled_from_env() -> bool:

@@ -122,12 +122,50 @@ Initial OSM categories:
 Terrain preparation uses local DEM/DTM and risk outputs inside the bbox, then
 samples along the route:
 
+- hillshade terrain visualization;
+- elevation tint terrain visualization;
+- slope shading terrain visualization;
+- contour overlay;
 - elevation samples;
 - slope / roughness / TEII_20m / terrain risk dimensions;
 - route risk ribbon;
 - calibrated risk heatmap;
 - risk delta between baseline and calibrated views;
 - terrain-risk warning candidates for extreme excluded dimensions.
+
+Preferred production terrain rendering uses a GeoTIFF/GDAL chain:
+
+```text
+DEM/DTM GeoTIFF
+  -> GDAL hillshade
+  -> GDAL slope
+  -> GDAL color-relief for slope shading
+  -> GDAL contour
+  -> cut local tiles / GeoJSON
+  -> /admin/pretrip display
+```
+
+Alpha bitmap overlays are acceptable as a bridge only when the manifest records
+the DTM cell resolution, route-corridor width, processor, source checksums, and
+candidate-only boundary metadata.
+
+The alpha bitmap bridge emits four PNG overlays referenced by `project.json` and
+`terrain_visualization.geojson`: `terrain_hillshade.png`,
+`terrain_elevation_tint.png`, `terrain_slope_shading.png`, and
+`terrain_contours.png`. These overlays are generated from the local DTM grid at
+source cell resolution and clipped/projected to the route corridor. They are
+display layers for `/admin/pretrip` and `/admin/debug`; they are not risk heat,
+accepted hazards, or runtime safety truth.
+
+`terrain visualization`（地形視覺化） and `risk heat`（風險熱區） must remain
+separate:
+
+- hillshade, elevation tint, slope shading, and contours are DEM/DTM display
+  layers;
+- route risk ribbon, calibrated risk heatmap, and risk delta are
+  route-specific candidate-risk overlays;
+- slope shading may support AI and human explanation, but by itself it is not an
+  accepted hazard, Ln trigger, or runtime safety truth.
 
 Terrain evidence sent to Pydantic AI should be compact and route-positioned. It
 should not send large rasters or raw DEM payloads.
@@ -300,7 +338,36 @@ mission graphs, or trigger runtime warnings.
 
 ## Commands
 
-No-network planning from importer output:
+Normal connected operator preparation from importer output:
+
+```bash
+/Users/alexwang0315/scout-fusion/venv/bin/python -m pretrip_layer_preparation \
+  --project-root /tmp/scout-pretrip-alpha/nenggao_andongjun_alpha \
+  --route-evidence-bundle normalized/routes/route_evidence_bundle.json \
+  --layers osm,overpass,imagery,terrain,risk-score,risk-ribbon,risk-heatmap,risk-delta,pois,hazards,corridors,route-notes \
+  --route-corridor-m 500 \
+  --reference-track-corridor-m 300 \
+  --network-mode explicit-fetch \
+  --allow-network-fetch \
+  --ai-mode fixture-or-precomputed
+```
+
+Scout alpha fixed-material rebuild:
+
+```bash
+cd /home/alexwang0315/scout-fusion-agent-hw-test-20260601
+SCOUT_PRETRIP_ADMIN_BASE_URL=http://127.0.0.1:9100 \
+PYTHONDONTWRITEBYTECODE=1 \
+bash tools/rebuild_pretrip_workspace_on_scout.sh
+```
+
+The rebuild script reads the fixed material structure under
+`/data/scout/materials/pretrip/{project_id}`, regenerates GPX importer outputs,
+restores durable admin evidence refs from the moved backup workspace, then runs
+route-corridor map preparation with Overpass, imagery, terrain, risk, route,
+reference-track, CP/POI/hazard, corridor, retreat, and route-note layers.
+
+No-network fixture/replay planning remains available for deterministic tests:
 
 ```bash
 /Users/alexwang0315/scout-fusion/venv/bin/python -m pretrip_layer_preparation \
@@ -313,20 +380,9 @@ No-network planning from importer output:
   --ai-mode fixture-or-precomputed
 ```
 
-Explicit Overpass/web fetch and cloud AI are later alpha options:
-
-```bash
-/Users/alexwang0315/scout-fusion/venv/bin/python -m pretrip_layer_preparation \
-  --project-root /tmp/scout-pretrip-alpha/nenggao_andongjun_alpha \
-  --route-evidence-bundle normalized/routes/route_evidence_bundle.json \
-  --layers osm,terrain,web-case,raster-labels,risk-heatmap \
-  --route-corridor-m 500 \
-  --reference-track-corridor-m 300 \
-  --network-mode explicit-fetch \
-  --allow-network-fetch \
-  --ai-mode pydantic-cloud-explicit \
-  --ai-output-policy hash-and-summary
-```
+OSM raster tile fetching is not required in this alpha when Overpass vector
+evidence is present. Overpass is the connected OSM data source for route
+evidence and CP/POI synthesis; raster tiles are optional visual basemap support.
 
 Admin projection endpoint:
 
@@ -351,6 +407,15 @@ curl http://127.0.0.1:9099/admin/pretrip/projects/nenggao_andongjun_alpha/layer-
       normalized/
         overpass_vector_evidence.geojson
         terrain_route_samples.geojson
+        terrain_hillshade.png
+        terrain_elevation_tint.png
+        terrain_slope_shading.png
+        terrain_contours.png
+        terrain_hillshade_manifest.json
+        terrain_elevation_tint_manifest.json
+        terrain_slope_shading_manifest.json
+        terrain_contours.geojson
+        terrain_visualization.geojson
         web_case_evidence.json
         raster_label_evidence.geojson
       semantic/
