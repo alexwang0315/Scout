@@ -1,8 +1,36 @@
+import re
+from pathlib import Path
+
 from admin_map_layers import (
     build_after_action_map_layers,
     build_pretrip_map_layers,
     map_layer_ids,
 )
+
+
+ROOT = Path(__file__).resolve().parents[1]
+EXPECTED_ALPHA_WORKSPACE_LAYER_CONTROLS = [
+    "imagery",
+    "osm",
+    "terrain",
+    "risk-score",
+    "risk-ribbon",
+    "risk-heatmap",
+    "risk-delta",
+    "corridors",
+    "overpass",
+    "route",
+    "reference-tracks",
+    "retreat",
+    "segments",
+    "checkpoints",
+    "pois",
+    "hazards",
+    "mcp",
+    "route-notes",
+    "events",
+    "weather-api",
+]
 
 
 def test_pretrip_map_layers_order_imagery_bottom_and_api_top():
@@ -13,6 +41,10 @@ def test_pretrip_map_layers_order_imagery_bottom_and_api_top():
             "map_candidates": "candidates/map_candidates.json",
             "route_summary": "normalized/route_summary.json",
             "segment_dtm": "normalized/terrain/segment_dtm_coverage.json",
+            "overpass_evidence": "outputs/layers/normalized/overpass_vector_evidence.geojson",
+            "risk_score_points": "outputs/risk_score_points.geojson",
+            "risk_ribbon": "outputs/risk_ribbon.geojson",
+            "calibrated_risk_heatmap": "outputs/risk_heatmap.geojson",
             "weather_daylight": "outputs/weather_daylight_evidence.json",
         },
         weather={
@@ -28,15 +60,21 @@ def test_pretrip_map_layers_order_imagery_bottom_and_api_top():
         "osm",
         "terrain",
         "corridors",
+        "overpass",
         "route",
         "reference-tracks",
         "retreat",
         "segments",
+        "risk-score",
+        "risk-ribbon",
+        "risk-heatmap",
+        "risk-delta",
         "checkpoints",
         "pois",
         "hazards",
-        "route-notes",
         "mcp",
+        "route-notes",
+        "events",
         "weather-api",
     ]
     assert [layer["z_index"] for layer in layers] == sorted(
@@ -87,6 +125,12 @@ def test_pretrip_map_layers_order_imagery_bottom_and_api_top():
         "slope-40-50",
         "slope-gt-50",
     ]
+    overpass = next(layer for layer in layers if layer["layer_id"] == "overpass")
+    assert overpass["source_kind"] == "overpass_vector_evidence"
+    assert overpass["available"] is True
+    assert overpass["default_enabled"] is False
+    events = next(layer for layer in layers if layer["layer_id"] == "events")
+    assert events["available"] is False
     assert layers[-1]["layer_kind"] == "api"
     assert layers[-1]["label_zh"].startswith("氣象 API")
     assert layers[-1]["render_mode"] == "api_overlay"
@@ -97,6 +141,20 @@ def test_pretrip_map_layers_order_imagery_bottom_and_api_top():
     assert layers[-1]["secret_value_embedded"] is False
     assert layers[-1]["external_api_calls_made"] is False
     assert all(layer["toggleable"] is True for layer in layers)
+
+
+def test_admin_pages_expose_the_same_alpha_workspace_layer_controls():
+    pages = [
+        ROOT / "docs" / "admin" / "phase4-pretrip-planning.html",
+        ROOT / "docs" / "admin" / "phase-3-5-runtime-debug.html",
+        ROOT / "docs" / "admin" / "phase1-after-action.html",
+    ]
+
+    for page in pages:
+        html = page.read_text(encoding="utf-8")
+        assert re.findall(r'data-layer="([^"]+)"', html) == (
+            EXPECTED_ALPHA_WORKSPACE_LAYER_CONTROLS
+        )
 
 
 def test_after_action_map_layers_reuse_the_same_base_and_api_order():
@@ -112,10 +170,22 @@ def test_after_action_map_layers_reuse_the_same_base_and_api_order():
     assert map_layer_ids(layers) == [
         "imagery",
         "osm",
+        "terrain",
         "corridors",
+        "overpass",
         "route",
+        "reference-tracks",
+        "retreat",
+        "segments",
+        "risk-score",
+        "risk-ribbon",
+        "risk-heatmap",
+        "risk-delta",
         "checkpoints",
+        "pois",
         "hazards",
+        "mcp",
+        "route-notes",
         "events",
         "weather-api",
     ]
@@ -133,6 +203,14 @@ def test_after_action_map_layers_reuse_the_same_base_and_api_order():
         "/admin/tiles/osm/{z}/{x}/{y}.png"
     )
     assert layers[1]["local_proxy_external_network_required"] is False
+    terrain = next(layer for layer in layers if layer["layer_id"] == "terrain")
+    assert terrain["available"] is False
+    overpass = next(layer for layer in layers if layer["layer_id"] == "overpass")
+    assert overpass["source_kind"] == "overpass_vector_evidence"
+    assert overpass["available"] is True
+    assert overpass["default_enabled"] is False
+    reference_tracks = next(layer for layer in layers if layer["layer_id"] == "reference-tracks")
+    assert reference_tracks["available"] is False
     assert layers[-1]["layer_id"] == "weather-api"
     assert layers[-1]["available"] is False
     assert layers[-1]["default_enabled"] is False
