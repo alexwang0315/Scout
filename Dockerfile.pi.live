@@ -35,6 +35,7 @@ COPY \
     admin_after_action.py \
     admin_assistant_context.py \
     admin_basemap_tiles.py \
+    admin_evidence_timeline.py \
     admin_local_raster_tiles.py \
     admin_map_layers.py \
     admin_tile_cache_builder.py \
