@@ -122,7 +122,8 @@ Required behavior:
   - Basemap（底圖）: `imagery`, `osm`;
   - Terrain visualization（地形視覺化）: `terrain`, `terrain-hillshade`,
     `terrain-elevation-tint`, `terrain-slope-shading`, `terrain-contours`;
-  - Route（路線）: `route`, `reference-tracks`, `corridors`, `segments`;
+  - Route（路線）: `route`, `reference-tracks`, `corridors`, `overpass`,
+    `segments`;
   - Planning（規劃）: `checkpoints`, `mcp`, `route-notes`, `pois`, `retreat`;
   - Risk（風險）: `hazards`, `risk-score`, `risk-ribbon`, `risk-heatmap`,
     `risk-delta`;
@@ -131,6 +132,14 @@ Required behavior:
 - each row shows label, Chinese annotation when helpful, availability state,
   source kind, and default-on/default-off state;
 - unavailable layers remain visible but disabled with a reason;
+- `/admin/pretrip`, `/admin/debug`, and `/admin` must expose the same alpha
+  workspace layer-control ids when they are pointed at the same workspace:
+  `imagery`, `osm`, `terrain`, `risk-score`, `risk-ribbon`, `risk-heatmap`,
+  `risk-delta`, `corridors`, `overpass`, `route`, `reference-tracks`,
+  `retreat`, `segments`, `checkpoints`, `pois`, `hazards`, `mcp`,
+  `route-notes`, `events`, and `weather-api`. Pages may render unavailable
+  layers as disabled/empty evidence targets, but the control count and order
+  must not drift by surface.
 - layer state can be encoded in URL or local view state for repeatable review;
 - adding future layers must not make the map header taller by default.
 
@@ -149,9 +158,9 @@ Layer ordering follows `admin_map_layers.py`:
 imagery bottom
 osm
 terrain hillshade / elevation tint / slope shading / contours
-route / reference tracks / corridors / retreat / segments
+route / reference tracks / corridors / overpass / retreat / segments
 risk ribbon / risk heat / risk delta
-CP / POI / hazards / route notes / MCP
+CP / POI / hazards / route notes / MCP / events
 selected timeline highlight
 weather-api top
 ```

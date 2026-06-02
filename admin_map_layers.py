@@ -13,6 +13,28 @@ from admin_tile_proxy import LOCAL_OSM_TILE_URL_TEMPLATE
 
 
 ORDERING_POLICY = "imagery_bottom_api_top"
+WORKSPACE_LAYER_CONTROL_IDS = (
+    "imagery",
+    "osm",
+    "terrain",
+    "corridors",
+    "overpass",
+    "route",
+    "reference-tracks",
+    "retreat",
+    "segments",
+    "risk-score",
+    "risk-ribbon",
+    "risk-heatmap",
+    "risk-delta",
+    "checkpoints",
+    "pois",
+    "hazards",
+    "mcp",
+    "route-notes",
+    "events",
+    "weather-api",
+)
 
 
 @dataclass(frozen=True)
@@ -111,6 +133,16 @@ _LAYER_SPECS: dict[str, AdminMapLayerSpec] = {
         render_mode="svg_overlay",
         source_kind="map_context",
     ),
+    "overpass": AdminMapLayerSpec(
+        layer_id="overpass",
+        label="Overpass",
+        label_zh="Overpass 向量證據圖層（OSM corridor/POI/hazard evidence）",
+        layer_kind="evidence",
+        z_index=45,
+        render_mode="svg_overlay",
+        source_kind="overpass_vector_evidence",
+        default_enabled=False,
+    ),
     "route": AdminMapLayerSpec(
         layer_id="route",
         label="Route",
@@ -170,7 +202,7 @@ _LAYER_SPECS: dict[str, AdminMapLayerSpec] = {
         label="Route notes",
         label_zh="山友註記/路況經驗圖層",
         layer_kind="evidence",
-        z_index=80,
+        z_index=82,
         render_mode="svg_overlay",
         source_kind="route_note_candidate",
     ),
@@ -179,7 +211,7 @@ _LAYER_SPECS: dict[str, AdminMapLayerSpec] = {
         label="MCP",
         label_zh="MCP 主要關鍵點圖層",
         layer_kind="evidence",
-        z_index=82,
+        z_index=80,
         render_mode="svg_overlay",
         source_kind="major_critical_point_candidate",
     ),
@@ -244,6 +276,11 @@ def build_pretrip_map_layers(
         ),
         "corridors": ("pretrip.map_layer.corridors", source_refs.get("map_candidates")),
         "hazards": ("pretrip.map_layer.hazards", source_refs.get("map_candidates")),
+        "overpass": (
+            "pretrip.map_layer.overpass",
+            source_refs.get("overpass_evidence")
+            or source_refs.get("overpass_map_context"),
+        ),
         "route": ("pretrip.map_layer.route", source_refs.get("route_summary")),
         "reference-tracks": (
             "pretrip.map_layer.reference_tracks",
@@ -256,46 +293,23 @@ def build_pretrip_map_layers(
         "pois": ("pretrip.map_layer.pois", source_refs.get("map_candidates")),
         "route-notes": ("pretrip.map_layer.route_notes", source_refs.get("route_notes")),
         "mcp": ("pretrip.map_layer.mcp", source_refs.get("mcp_candidates")),
+        "events": ("pretrip.map_layer.events", source_refs.get("debug_projection_events")),
         "weather-api": (
             str(weather.get("source_id") or "pretrip.map_layer.weather_api"),
             str(weather.get("source_path") or source_refs.get("weather_daylight") or ""),
         ),
     }
-    layer_order = [
-            "imagery",
-            "osm",
-            "terrain",
-        ]
-    layer_order.extend(
-        [
-            "corridors",
-            "route",
-            "reference-tracks",
-            "retreat",
-            "segments",
-        ]
-    )
-    if sources["risk-score"][1]:
-        layer_order.append("risk-score")
-    if sources["risk-ribbon"][1]:
-        layer_order.append("risk-ribbon")
-    if sources["risk-heatmap"][1]:
-        layer_order.append("risk-heatmap")
-    if sources["risk-delta"][1]:
-        layer_order.append("risk-delta")
-    layer_order.extend(
-        [
-            "checkpoints",
-            "pois",
-            "hazards",
-            "route-notes",
-            "mcp",
-            "weather-api",
-        ]
-    )
     return _build_layers(
-        tuple(layer_order),
+        WORKSPACE_LAYER_CONTROL_IDS,
         sources=sources,
+        available={
+            "risk-score": bool(sources["risk-score"][1]),
+            "risk-ribbon": bool(sources["risk-ribbon"][1]),
+            "risk-heatmap": bool(sources["risk-heatmap"][1]),
+            "risk-delta": bool(sources["risk-delta"][1]),
+            "overpass": bool(sources["overpass"][1]),
+            "events": bool(sources["events"][1]),
+        },
         external_api_calls_made={
             "weather-api": bool(weather.get("external_api_calls_made")),
         },
@@ -327,36 +341,41 @@ def build_after_action_map_layers(
         "risk-heatmap": ("after_action.map_layer.risk_heatmap", risk_heatmap_source_path),
         "risk-delta": ("after_action.map_layer.risk_delta", resolved_risk_delta_source),
         "corridors": ("after_action.map_layer.corridors", map_source_path),
+        "overpass": ("after_action.map_layer.overpass", map_source_path),
         "hazards": ("after_action.map_layer.hazards", map_source_path),
         "route": ("after_action.map_layer.route", route_source_path),
+        "reference-tracks": ("after_action.map_layer.reference_tracks", None),
+        "retreat": ("after_action.map_layer.retreat", None),
+        "segments": ("after_action.map_layer.segments", mission_graph_source_path),
         "checkpoints": ("after_action.map_layer.checkpoints", mission_graph_source_path),
+        "pois": ("after_action.map_layer.pois", map_source_path),
+        "route-notes": ("after_action.map_layer.route_notes", None),
+        "mcp": ("after_action.map_layer.mcp", None),
+        "terrain": ("after_action.map_layer.terrain", None),
         "events": ("after_action.map_layer.events", incident_store_path),
         "weather-api": ("after_action.map_layer.weather_api", None),
     }
-    layer_order = ["imagery", "osm"]
-    if risk_score_source_path:
-        layer_order.append("risk-score")
-    layer_order.extend(["corridors", "route"])
-    if risk_ribbon_source_path:
-        layer_order.append("risk-ribbon")
-    if risk_heatmap_source_path:
-        layer_order.append("risk-heatmap")
-    if resolved_risk_delta_source:
-        layer_order.append("risk-delta")
-    layer_order.extend(["checkpoints", "hazards", "events", "weather-api"])
     layers = _build_layers(
-        tuple(layer_order),
+        WORKSPACE_LAYER_CONTROL_IDS,
         sources=sources,
         available={
+            "terrain": False,
             "risk-score": bool(risk_score_source_path),
             "risk-ribbon": bool(risk_ribbon_source_path),
             "risk-heatmap": bool(risk_heatmap_source_path),
             "risk-delta": bool(resolved_risk_delta_source),
+            "reference-tracks": False,
+            "retreat": False,
+            "route-notes": False,
+            "mcp": False,
             "weather-api": False,
         },
         default_enabled={
             "risk-score": False,
             "risk-delta": False,
+            "overpass": False,
+            "reference-tracks": False,
+            "route-notes": False,
             "weather-api": False,
         },
     )

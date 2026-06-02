@@ -887,6 +887,7 @@
       stroke-width: 1.5;
       vector-effect: non-scaling-stroke;
     }
+    .corridor,
     .overpass-corridor {
       fill: none;
       stroke: var(--overpass);
@@ -1532,12 +1533,19 @@
                       <label title="Route-aligned baseline terrain risk layer"><input type="checkbox" data-layer="risk-ribbon" checked> Baseline</label>
                       <label title="Route-specific calibrated heat map"><input type="checkbox" data-layer="risk-heatmap" checked> Calibrated</label>
                       <label title="Difference between baseline risk and calibrated heat"><input type="checkbox" data-layer="risk-delta"> Delta</label>
+                      <label title="Corridor layer"><input type="checkbox" data-layer="corridors" checked> Corridors</label>
                       <label title="Overpass evidence layer"><input type="checkbox" data-layer="overpass"> Overpass</label>
-                      <label title="Reference GPX tracks"><input type="checkbox" data-layer="reference-tracks"> Ref GPX</label>
                       <label title="Route layer"><input type="checkbox" data-layer="route" checked> Route</label>
+                      <label title="Reference GPX tracks"><input type="checkbox" data-layer="reference-tracks"> Ref GPX</label>
+                      <label title="Retreat route layer"><input type="checkbox" data-layer="retreat" checked> Retreat</label>
                       <label title="Segment layer"><input type="checkbox" data-layer="segments" checked> Segments</label>
                       <label title="Checkpoint layer"><input type="checkbox" data-layer="checkpoints" checked> CP</label>
                       <label title="Point-of-interest layer"><input type="checkbox" data-layer="pois" checked> POI</label>
+                      <label title="Hazard layer"><input type="checkbox" data-layer="hazards" checked> Hazards</label>
+                      <label title="Major Critical Point layer"><input type="checkbox" data-layer="mcp" checked> MCP</label>
+                      <label title="Route note layer"><input type="checkbox" data-layer="route-notes"> Notes</label>
+                      <label title="Runtime/event evidence layer"><input type="checkbox" data-layer="events" checked> Ln</label>
+                      <label title="Weather API layer"><input type="checkbox" data-layer="weather-api"> Weather</label>
                     </div>
                   </div>
                 </details>
@@ -2285,6 +2293,16 @@
       renderTerrainBitmapOverlays(terrainGroup, projection, bounds);
       runtimeMap.appendChild(terrainGroup);
 
+      const corridorGroup = svgEl("g", {"data-layer-group": "corridors"});
+      (projection.map_candidates?.corridor_candidates || []).forEach(candidate => {
+        const coords = candidate.corridor?.coordinates || [];
+        if (coords.length < 2) return;
+        const path = svgEl("path", {d: pathFromCoords(bounds, coords), class: "corridor"});
+        attachMapEvidence(path, candidate, `corridor ${candidate.source_id || candidate.candidate_id || ""}`);
+        corridorGroup.appendChild(path);
+      });
+      runtimeMap.appendChild(corridorGroup);
+
       const overpassGroup = svgEl("g", {"data-layer-group": "overpass"});
       (projection.overpass_evidence?.corridor_candidates || []).forEach(candidate => {
         const path = svgEl("path", {d: pathFromCoords(bounds, candidate.corridor?.coordinates || []), class: "overpass-corridor"});
@@ -2427,6 +2445,22 @@
         poiGroup.appendChild(circle);
       });
       runtimeMap.appendChild(poiGroup);
+
+      const hazardGroup = svgEl("g", {"data-layer-group": "hazards"});
+      (projection.map_candidates?.hazard_candidates || []).forEach(candidate => {
+        const polygon = candidate.hazard?.polygon || [];
+        if (!polygon.length) return;
+        const path = svgEl("path", {d: `${pathFromCoords(bounds, polygon)} Z`, class: "hazard"});
+        attachMapEvidence(path, candidate, `hazard ${candidate.source_id || candidate.candidate_id || ""}`);
+        hazardGroup.appendChild(path);
+      });
+      runtimeMap.appendChild(hazardGroup);
+
+      runtimeMap.appendChild(svgEl("g", {"data-layer-group": "retreat"}));
+      runtimeMap.appendChild(svgEl("g", {"data-layer-group": "mcp"}));
+      runtimeMap.appendChild(svgEl("g", {"data-layer-group": "route-notes"}));
+      runtimeMap.appendChild(svgEl("g", {"data-layer-group": "events"}));
+      runtimeMap.appendChild(svgEl("g", {"data-layer-group": "weather-api"}));
       updateLayers();
       applyMapViewport();
     }
