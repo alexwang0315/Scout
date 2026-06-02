@@ -13,9 +13,12 @@
   },
   "case_id": "chilai_nanhua_day1_post_analysis",
   "data_quality": {
-    "ambiguous_checkpoint_count": 0,
-    "gps_gap_count": 0,
-    "limitations": [],
+    "ambiguous_checkpoint_count": 11,
+    "gps_gap_count": 18,
+    "limitations": [
+      "one or more completed track timestamp gaps exceed policy",
+      "one or more checkpoint matches have multiple plausible clusters"
+    ],
     "low_confidence_edge_count": 0,
     "low_point_segment_count": 0,
     "missing_timestamp_count": 0,
@@ -24,52 +27,1974 @@
   },
   "edges": [
     {
-      "ascent_m": 120.0,
-      "confidence": "high",
-      "descent_m": 0.0,
+      "ascent_m": 18.13,
+      "confidence": "medium",
+      "descent_m": 32.28,
       "direction": "outbound",
-      "distance_m": 906.99,
-      "edge_id": "cp.start_to_cp.mid",
-      "elapsed_time_s": 900,
+      "distance_m": 1522.34,
+      "edge_id": "cp.start_to_cp.001",
+      "elapsed_time_s": 1163,
       "from_node_id": "cp.start",
       "guide_time_min": null,
-      "limitations": [],
-      "moving_time_s": 900,
-      "rest_intervals": [],
-      "rest_time_s": 0,
+      "limitations": [
+        "checkpoint match has multiple plausible completed-track clusters"
+      ],
+      "moving_time_s": 280,
+      "rest_intervals": [
+        "rest.001",
+        "rest.002"
+      ],
+      "rest_time_s": 883,
       "risk_context": {},
-      "segment_id": "seg.start_mid",
+      "segment_id": "seg.001",
       "source_refs": [
-        "segment_capsule.seg.start_mid",
+        "seg.001",
         "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json",
-        "track_slice.0-3",
+        "track_slice.0-51",
         "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx"
       ],
       "terrain_context": {},
-      "to_node_id": "cp.mid"
+      "to_node_id": "cp.001"
     },
     {
-      "ascent_m": 60.0,
+      "ascent_m": 13.32,
       "confidence": "high",
-      "descent_m": 20.0,
+      "descent_m": 16.92,
       "direction": "outbound",
-      "distance_m": 1006.37,
-      "edge_id": "cp.mid_to_cp.finish",
-      "elapsed_time_s": 1320,
-      "from_node_id": "cp.mid",
+      "distance_m": 1508.01,
+      "edge_id": "cp.001_to_cp.002",
+      "elapsed_time_s": 173,
+      "from_node_id": "cp.001",
       "guide_time_min": null,
       "limitations": [],
-      "moving_time_s": 900,
-      "rest_intervals": [
-        "rest.001"
-      ],
-      "rest_time_s": 420,
+      "moving_time_s": 173,
+      "rest_intervals": [],
+      "rest_time_s": 0,
       "risk_context": {},
-      "segment_id": "seg.mid_finish",
+      "segment_id": "seg.002",
       "source_refs": [
-        "segment_capsule.seg.mid_finish",
+        "seg.002",
         "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json",
-        "track_slice.3-8",
+        "track_slice.51-92",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx"
+      ],
+      "terrain_context": {},
+      "to_node_id": "cp.002"
+    },
+    {
+      "ascent_m": 11.86,
+      "confidence": "high",
+      "descent_m": 11.54,
+      "direction": "outbound",
+      "distance_m": 1494.53,
+      "edge_id": "cp.002_to_cp.003",
+      "elapsed_time_s": 148,
+      "from_node_id": "cp.002",
+      "guide_time_min": null,
+      "limitations": [],
+      "moving_time_s": 148,
+      "rest_intervals": [],
+      "rest_time_s": 0,
+      "risk_context": {},
+      "segment_id": "seg.003",
+      "source_refs": [
+        "seg.003",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json",
+        "track_slice.92-127",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx"
+      ],
+      "terrain_context": {},
+      "to_node_id": "cp.003"
+    },
+    {
+      "ascent_m": 3.68,
+      "confidence": "high",
+      "descent_m": 61.51,
+      "direction": "outbound",
+      "distance_m": 1479.95,
+      "edge_id": "cp.003_to_cp.004",
+      "elapsed_time_s": 133,
+      "from_node_id": "cp.003",
+      "guide_time_min": null,
+      "limitations": [],
+      "moving_time_s": 133,
+      "rest_intervals": [],
+      "rest_time_s": 0,
+      "risk_context": {},
+      "segment_id": "seg.004",
+      "source_refs": [
+        "seg.004",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json",
+        "track_slice.127-167",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx"
+      ],
+      "terrain_context": {},
+      "to_node_id": "cp.004"
+    },
+    {
+      "ascent_m": 0.0,
+      "confidence": "high",
+      "descent_m": 115.05,
+      "direction": "outbound",
+      "distance_m": 1503.0,
+      "edge_id": "cp.004_to_cp.005",
+      "elapsed_time_s": 130,
+      "from_node_id": "cp.004",
+      "guide_time_min": null,
+      "limitations": [],
+      "moving_time_s": 130,
+      "rest_intervals": [],
+      "rest_time_s": 0,
+      "risk_context": {},
+      "segment_id": "seg.005",
+      "source_refs": [
+        "seg.005",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json",
+        "track_slice.167-210",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx"
+      ],
+      "terrain_context": {},
+      "to_node_id": "cp.005"
+    },
+    {
+      "ascent_m": 20.02,
+      "confidence": "high",
+      "descent_m": 78.37,
+      "direction": "outbound",
+      "distance_m": 1566.76,
+      "edge_id": "cp.005_to_cp.006",
+      "elapsed_time_s": 160,
+      "from_node_id": "cp.005",
+      "guide_time_min": null,
+      "limitations": [],
+      "moving_time_s": 160,
+      "rest_intervals": [],
+      "rest_time_s": 0,
+      "risk_context": {},
+      "segment_id": "seg.006",
+      "source_refs": [
+        "seg.006",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json",
+        "track_slice.210-259",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx"
+      ],
+      "terrain_context": {},
+      "to_node_id": "cp.006"
+    },
+    {
+      "ascent_m": 25.11,
+      "confidence": "high",
+      "descent_m": 51.18,
+      "direction": "outbound",
+      "distance_m": 1474.48,
+      "edge_id": "cp.006_to_cp.007",
+      "elapsed_time_s": 144,
+      "from_node_id": "cp.006",
+      "guide_time_min": null,
+      "limitations": [],
+      "moving_time_s": 144,
+      "rest_intervals": [],
+      "rest_time_s": 0,
+      "risk_context": {},
+      "segment_id": "seg.007",
+      "source_refs": [
+        "seg.007",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json",
+        "track_slice.259-304",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx"
+      ],
+      "terrain_context": {},
+      "to_node_id": "cp.007"
+    },
+    {
+      "ascent_m": 58.06,
+      "confidence": "high",
+      "descent_m": 24.31,
+      "direction": "outbound",
+      "distance_m": 1493.4,
+      "edge_id": "cp.007_to_cp.008",
+      "elapsed_time_s": 150,
+      "from_node_id": "cp.007",
+      "guide_time_min": null,
+      "limitations": [],
+      "moving_time_s": 150,
+      "rest_intervals": [],
+      "rest_time_s": 0,
+      "risk_context": {},
+      "segment_id": "seg.008",
+      "source_refs": [
+        "seg.008",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json",
+        "track_slice.304-353",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx"
+      ],
+      "terrain_context": {},
+      "to_node_id": "cp.008"
+    },
+    {
+      "ascent_m": 103.65,
+      "confidence": "high",
+      "descent_m": 1.2,
+      "direction": "outbound",
+      "distance_m": 1484.84,
+      "edge_id": "cp.008_to_cp.009",
+      "elapsed_time_s": 175,
+      "from_node_id": "cp.008",
+      "guide_time_min": null,
+      "limitations": [],
+      "moving_time_s": 175,
+      "rest_intervals": [],
+      "rest_time_s": 0,
+      "risk_context": {},
+      "segment_id": "seg.009",
+      "source_refs": [
+        "seg.009",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json",
+        "track_slice.353-406",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx"
+      ],
+      "terrain_context": {},
+      "to_node_id": "cp.009"
+    },
+    {
+      "ascent_m": 8.41,
+      "confidence": "high",
+      "descent_m": 23.69,
+      "direction": "outbound",
+      "distance_m": 1494.39,
+      "edge_id": "cp.009_to_cp.010",
+      "elapsed_time_s": 147,
+      "from_node_id": "cp.009",
+      "guide_time_min": null,
+      "limitations": [],
+      "moving_time_s": 147,
+      "rest_intervals": [],
+      "rest_time_s": 0,
+      "risk_context": {},
+      "segment_id": "seg.010",
+      "source_refs": [
+        "seg.010",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json",
+        "track_slice.406-454",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx"
+      ],
+      "terrain_context": {},
+      "to_node_id": "cp.010"
+    },
+    {
+      "ascent_m": 62.77,
+      "confidence": "high",
+      "descent_m": 6.71,
+      "direction": "outbound",
+      "distance_m": 1484.72,
+      "edge_id": "cp.010_to_cp.011",
+      "elapsed_time_s": 165,
+      "from_node_id": "cp.010",
+      "guide_time_min": null,
+      "limitations": [],
+      "moving_time_s": 165,
+      "rest_intervals": [],
+      "rest_time_s": 0,
+      "risk_context": {},
+      "segment_id": "seg.011",
+      "source_refs": [
+        "seg.011",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json",
+        "track_slice.454-507",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx"
+      ],
+      "terrain_context": {},
+      "to_node_id": "cp.011"
+    },
+    {
+      "ascent_m": 51.55,
+      "confidence": "high",
+      "descent_m": 9.0,
+      "direction": "outbound",
+      "distance_m": 1536.52,
+      "edge_id": "cp.011_to_cp.012",
+      "elapsed_time_s": 175,
+      "from_node_id": "cp.011",
+      "guide_time_min": null,
+      "limitations": [],
+      "moving_time_s": 175,
+      "rest_intervals": [],
+      "rest_time_s": 0,
+      "risk_context": {},
+      "segment_id": "seg.012",
+      "source_refs": [
+        "seg.012",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json",
+        "track_slice.507-558",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx"
+      ],
+      "terrain_context": {},
+      "to_node_id": "cp.012"
+    },
+    {
+      "ascent_m": 23.87,
+      "confidence": "high",
+      "descent_m": 8.95,
+      "direction": "outbound",
+      "distance_m": 1476.96,
+      "edge_id": "cp.012_to_cp.013",
+      "elapsed_time_s": 168,
+      "from_node_id": "cp.012",
+      "guide_time_min": null,
+      "limitations": [],
+      "moving_time_s": 168,
+      "rest_intervals": [],
+      "rest_time_s": 0,
+      "risk_context": {},
+      "segment_id": "seg.013",
+      "source_refs": [
+        "seg.013",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json",
+        "track_slice.558-606",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx"
+      ],
+      "terrain_context": {},
+      "to_node_id": "cp.013"
+    },
+    {
+      "ascent_m": 14.13,
+      "confidence": "high",
+      "descent_m": 15.37,
+      "direction": "outbound",
+      "distance_m": 1485.52,
+      "edge_id": "cp.013_to_cp.014",
+      "elapsed_time_s": 816,
+      "from_node_id": "cp.013",
+      "guide_time_min": null,
+      "limitations": [],
+      "moving_time_s": 303,
+      "rest_intervals": [
+        "rest.003"
+      ],
+      "rest_time_s": 513,
+      "risk_context": {},
+      "segment_id": "seg.014",
+      "source_refs": [
+        "seg.014",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json",
+        "track_slice.606-650",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx"
+      ],
+      "terrain_context": {},
+      "to_node_id": "cp.014"
+    },
+    {
+      "ascent_m": 45.26,
+      "confidence": "high",
+      "descent_m": 4.24,
+      "direction": "outbound",
+      "distance_m": 1501.02,
+      "edge_id": "cp.014_to_cp.015",
+      "elapsed_time_s": 189,
+      "from_node_id": "cp.014",
+      "guide_time_min": null,
+      "limitations": [],
+      "moving_time_s": 189,
+      "rest_intervals": [],
+      "rest_time_s": 0,
+      "risk_context": {},
+      "segment_id": "seg.015",
+      "source_refs": [
+        "seg.015",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json",
+        "track_slice.650-694",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx"
+      ],
+      "terrain_context": {},
+      "to_node_id": "cp.015"
+    },
+    {
+      "ascent_m": 25.69,
+      "confidence": "high",
+      "descent_m": 25.31,
+      "direction": "outbound",
+      "distance_m": 1509.42,
+      "edge_id": "cp.015_to_cp.016",
+      "elapsed_time_s": 148,
+      "from_node_id": "cp.015",
+      "guide_time_min": null,
+      "limitations": [],
+      "moving_time_s": 148,
+      "rest_intervals": [],
+      "rest_time_s": 0,
+      "risk_context": {},
+      "segment_id": "seg.016",
+      "source_refs": [
+        "seg.016",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json",
+        "track_slice.694-738",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx"
+      ],
+      "terrain_context": {},
+      "to_node_id": "cp.016"
+    },
+    {
+      "ascent_m": 25.46,
+      "confidence": "high",
+      "descent_m": 30.51,
+      "direction": "outbound",
+      "distance_m": 1521.75,
+      "edge_id": "cp.016_to_cp.017",
+      "elapsed_time_s": 136,
+      "from_node_id": "cp.016",
+      "guide_time_min": null,
+      "limitations": [],
+      "moving_time_s": 136,
+      "rest_intervals": [],
+      "rest_time_s": 0,
+      "risk_context": {},
+      "segment_id": "seg.017",
+      "source_refs": [
+        "seg.017",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json",
+        "track_slice.738-773",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx"
+      ],
+      "terrain_context": {},
+      "to_node_id": "cp.017"
+    },
+    {
+      "ascent_m": 1.0,
+      "confidence": "high",
+      "descent_m": 46.39,
+      "direction": "outbound",
+      "distance_m": 1463.74,
+      "edge_id": "cp.017_to_cp.018",
+      "elapsed_time_s": 134,
+      "from_node_id": "cp.017",
+      "guide_time_min": null,
+      "limitations": [],
+      "moving_time_s": 134,
+      "rest_intervals": [],
+      "rest_time_s": 0,
+      "risk_context": {},
+      "segment_id": "seg.018",
+      "source_refs": [
+        "seg.018",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json",
+        "track_slice.773-814",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx"
+      ],
+      "terrain_context": {},
+      "to_node_id": "cp.018"
+    },
+    {
+      "ascent_m": 53.51,
+      "confidence": "high",
+      "descent_m": 16.27,
+      "direction": "outbound",
+      "distance_m": 1516.36,
+      "edge_id": "cp.018_to_cp.019",
+      "elapsed_time_s": 139,
+      "from_node_id": "cp.018",
+      "guide_time_min": null,
+      "limitations": [],
+      "moving_time_s": 139,
+      "rest_intervals": [],
+      "rest_time_s": 0,
+      "risk_context": {},
+      "segment_id": "seg.019",
+      "source_refs": [
+        "seg.019",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json",
+        "track_slice.814-856",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx"
+      ],
+      "terrain_context": {},
+      "to_node_id": "cp.019"
+    },
+    {
+      "ascent_m": 56.97,
+      "confidence": "high",
+      "descent_m": 5.63,
+      "direction": "outbound",
+      "distance_m": 1536.85,
+      "edge_id": "cp.019_to_cp.020",
+      "elapsed_time_s": 163,
+      "from_node_id": "cp.019",
+      "guide_time_min": null,
+      "limitations": [],
+      "moving_time_s": 163,
+      "rest_intervals": [],
+      "rest_time_s": 0,
+      "risk_context": {},
+      "segment_id": "seg.020",
+      "source_refs": [
+        "seg.020",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json",
+        "track_slice.856-902",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx"
+      ],
+      "terrain_context": {},
+      "to_node_id": "cp.020"
+    },
+    {
+      "ascent_m": 63.69,
+      "confidence": "high",
+      "descent_m": 1.26,
+      "direction": "outbound",
+      "distance_m": 1464.6,
+      "edge_id": "cp.020_to_cp.021",
+      "elapsed_time_s": 168,
+      "from_node_id": "cp.020",
+      "guide_time_min": null,
+      "limitations": [],
+      "moving_time_s": 168,
+      "rest_intervals": [],
+      "rest_time_s": 0,
+      "risk_context": {},
+      "segment_id": "seg.021",
+      "source_refs": [
+        "seg.021",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json",
+        "track_slice.902-953",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx"
+      ],
+      "terrain_context": {},
+      "to_node_id": "cp.021"
+    },
+    {
+      "ascent_m": 60.75,
+      "confidence": "high",
+      "descent_m": 1.84,
+      "direction": "outbound",
+      "distance_m": 1509.34,
+      "edge_id": "cp.021_to_cp.022",
+      "elapsed_time_s": 159,
+      "from_node_id": "cp.021",
+      "guide_time_min": null,
+      "limitations": [],
+      "moving_time_s": 159,
+      "rest_intervals": [],
+      "rest_time_s": 0,
+      "risk_context": {},
+      "segment_id": "seg.022",
+      "source_refs": [
+        "seg.022",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json",
+        "track_slice.953-998",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx"
+      ],
+      "terrain_context": {},
+      "to_node_id": "cp.022"
+    },
+    {
+      "ascent_m": 76.08,
+      "confidence": "high",
+      "descent_m": 4.49,
+      "direction": "outbound",
+      "distance_m": 1482.71,
+      "edge_id": "cp.022_to_cp.023",
+      "elapsed_time_s": 543,
+      "from_node_id": "cp.022",
+      "guide_time_min": null,
+      "limitations": [],
+      "moving_time_s": 543,
+      "rest_intervals": [],
+      "rest_time_s": 0,
+      "risk_context": {},
+      "segment_id": "seg.023",
+      "source_refs": [
+        "seg.023",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json",
+        "track_slice.998-1056",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx"
+      ],
+      "terrain_context": {},
+      "to_node_id": "cp.023"
+    },
+    {
+      "ascent_m": 60.44,
+      "confidence": "high",
+      "descent_m": 4.41,
+      "direction": "outbound",
+      "distance_m": 1503.01,
+      "edge_id": "cp.023_to_cp.024",
+      "elapsed_time_s": 193,
+      "from_node_id": "cp.023",
+      "guide_time_min": null,
+      "limitations": [],
+      "moving_time_s": 193,
+      "rest_intervals": [],
+      "rest_time_s": 0,
+      "risk_context": {},
+      "segment_id": "seg.024",
+      "source_refs": [
+        "seg.024",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json",
+        "track_slice.1056-1110",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx"
+      ],
+      "terrain_context": {},
+      "to_node_id": "cp.024"
+    },
+    {
+      "ascent_m": 59.53,
+      "confidence": "high",
+      "descent_m": 1.16,
+      "direction": "outbound",
+      "distance_m": 1499.42,
+      "edge_id": "cp.024_to_cp.025",
+      "elapsed_time_s": 196,
+      "from_node_id": "cp.024",
+      "guide_time_min": null,
+      "limitations": [],
+      "moving_time_s": 196,
+      "rest_intervals": [],
+      "rest_time_s": 0,
+      "risk_context": {},
+      "segment_id": "seg.025",
+      "source_refs": [
+        "seg.025",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json",
+        "track_slice.1110-1163",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx"
+      ],
+      "terrain_context": {},
+      "to_node_id": "cp.025"
+    },
+    {
+      "ascent_m": 62.69,
+      "confidence": "high",
+      "descent_m": 3.42,
+      "direction": "outbound",
+      "distance_m": 1493.62,
+      "edge_id": "cp.025_to_cp.026",
+      "elapsed_time_s": 200,
+      "from_node_id": "cp.025",
+      "guide_time_min": null,
+      "limitations": [],
+      "moving_time_s": 200,
+      "rest_intervals": [],
+      "rest_time_s": 0,
+      "risk_context": {},
+      "segment_id": "seg.026",
+      "source_refs": [
+        "seg.026",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json",
+        "track_slice.1163-1221",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx"
+      ],
+      "terrain_context": {},
+      "to_node_id": "cp.026"
+    },
+    {
+      "ascent_m": 81.82,
+      "confidence": "high",
+      "descent_m": 1.05,
+      "direction": "outbound",
+      "distance_m": 1520.25,
+      "edge_id": "cp.026_to_cp.027",
+      "elapsed_time_s": 238,
+      "from_node_id": "cp.026",
+      "guide_time_min": null,
+      "limitations": [],
+      "moving_time_s": 238,
+      "rest_intervals": [],
+      "rest_time_s": 0,
+      "risk_context": {},
+      "segment_id": "seg.027",
+      "source_refs": [
+        "seg.027",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json",
+        "track_slice.1221-1286",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx"
+      ],
+      "terrain_context": {},
+      "to_node_id": "cp.027"
+    },
+    {
+      "ascent_m": 159.98,
+      "confidence": "high",
+      "descent_m": 1.05,
+      "direction": "outbound",
+      "distance_m": 1473.47,
+      "edge_id": "cp.027_to_cp.028",
+      "elapsed_time_s": 322,
+      "from_node_id": "cp.027",
+      "guide_time_min": null,
+      "limitations": [],
+      "moving_time_s": 322,
+      "rest_intervals": [],
+      "rest_time_s": 0,
+      "risk_context": {},
+      "segment_id": "seg.028",
+      "source_refs": [
+        "seg.028",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json",
+        "track_slice.1286-1372",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx"
+      ],
+      "terrain_context": {},
+      "to_node_id": "cp.028"
+    },
+    {
+      "ascent_m": 219.35,
+      "confidence": "medium",
+      "descent_m": 7.0,
+      "direction": "outbound",
+      "distance_m": 1502.64,
+      "edge_id": "cp.028_to_cp.029",
+      "elapsed_time_s": 33878,
+      "from_node_id": "cp.028",
+      "guide_time_min": null,
+      "limitations": [
+        "segment has a large timestamp gap"
+      ],
+      "moving_time_s": 1000,
+      "rest_intervals": [
+        "rest.004"
+      ],
+      "rest_time_s": 32878,
+      "risk_context": {},
+      "segment_id": "seg.029",
+      "source_refs": [
+        "seg.029",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json",
+        "track_slice.1372-1499",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx"
+      ],
+      "terrain_context": {},
+      "to_node_id": "cp.029"
+    },
+    {
+      "ascent_m": 148.68,
+      "confidence": "high",
+      "descent_m": 15.18,
+      "direction": "outbound",
+      "distance_m": 1501.74,
+      "edge_id": "cp.029_to_cp.030",
+      "elapsed_time_s": 1885,
+      "from_node_id": "cp.029",
+      "guide_time_min": null,
+      "limitations": [],
+      "moving_time_s": 1885,
+      "rest_intervals": [],
+      "rest_time_s": 0,
+      "risk_context": {},
+      "segment_id": "seg.030",
+      "source_refs": [
+        "seg.030",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json",
+        "track_slice.1499-1691",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx"
+      ],
+      "terrain_context": {},
+      "to_node_id": "cp.030"
+    },
+    {
+      "ascent_m": 123.69,
+      "confidence": "high",
+      "descent_m": 10.9,
+      "direction": "outbound",
+      "distance_m": 1498.54,
+      "edge_id": "cp.030_to_cp.031",
+      "elapsed_time_s": 2264,
+      "from_node_id": "cp.030",
+      "guide_time_min": null,
+      "limitations": [],
+      "moving_time_s": 1605,
+      "rest_intervals": [
+        "rest.005"
+      ],
+      "rest_time_s": 659,
+      "risk_context": {},
+      "segment_id": "seg.031",
+      "source_refs": [
+        "seg.031",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json",
+        "track_slice.1691-1877",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx"
+      ],
+      "terrain_context": {},
+      "to_node_id": "cp.031"
+    },
+    {
+      "ascent_m": 93.88,
+      "confidence": "medium",
+      "descent_m": 29.9,
+      "direction": "outbound",
+      "distance_m": 1496.7,
+      "edge_id": "cp.031_to_cp.032",
+      "elapsed_time_s": 2840,
+      "from_node_id": "cp.031",
+      "guide_time_min": null,
+      "limitations": [
+        "segment has a large timestamp gap"
+      ],
+      "moving_time_s": 1643,
+      "rest_intervals": [
+        "rest.006",
+        "rest.007"
+      ],
+      "rest_time_s": 1197,
+      "risk_context": {},
+      "segment_id": "seg.032",
+      "source_refs": [
+        "seg.032",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json",
+        "track_slice.1877-2062",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx"
+      ],
+      "terrain_context": {},
+      "to_node_id": "cp.032"
+    },
+    {
+      "ascent_m": 119.17,
+      "confidence": "high",
+      "descent_m": 97.5,
+      "direction": "outbound",
+      "distance_m": 1504.57,
+      "edge_id": "cp.032_to_cp.033",
+      "elapsed_time_s": 1862,
+      "from_node_id": "cp.032",
+      "guide_time_min": null,
+      "limitations": [],
+      "moving_time_s": 1862,
+      "rest_intervals": [],
+      "rest_time_s": 0,
+      "risk_context": {},
+      "segment_id": "seg.033",
+      "source_refs": [
+        "seg.033",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json",
+        "track_slice.2062-2266",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx"
+      ],
+      "terrain_context": {},
+      "to_node_id": "cp.033"
+    },
+    {
+      "ascent_m": 143.63,
+      "confidence": "high",
+      "descent_m": 17.31,
+      "direction": "outbound",
+      "distance_m": 1496.79,
+      "edge_id": "cp.033_to_cp.034",
+      "elapsed_time_s": 2460,
+      "from_node_id": "cp.033",
+      "guide_time_min": null,
+      "limitations": [],
+      "moving_time_s": 1701,
+      "rest_intervals": [
+        "rest.008"
+      ],
+      "rest_time_s": 759,
+      "risk_context": {},
+      "segment_id": "seg.034",
+      "source_refs": [
+        "seg.034",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json",
+        "track_slice.2266-2467",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx"
+      ],
+      "terrain_context": {},
+      "to_node_id": "cp.034"
+    },
+    {
+      "ascent_m": 140.97,
+      "confidence": "high",
+      "descent_m": 12.61,
+      "direction": "outbound",
+      "distance_m": 1504.24,
+      "edge_id": "cp.034_to_cp.035",
+      "elapsed_time_s": 1627,
+      "from_node_id": "cp.034",
+      "guide_time_min": null,
+      "limitations": [],
+      "moving_time_s": 1627,
+      "rest_intervals": [],
+      "rest_time_s": 0,
+      "risk_context": {},
+      "segment_id": "seg.035",
+      "source_refs": [
+        "seg.035",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json",
+        "track_slice.2467-2662",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx"
+      ],
+      "terrain_context": {},
+      "to_node_id": "cp.035"
+    },
+    {
+      "ascent_m": 187.59,
+      "confidence": "high",
+      "descent_m": 76.11,
+      "direction": "outbound",
+      "distance_m": 1495.36,
+      "edge_id": "cp.035_to_cp.036",
+      "elapsed_time_s": 2464,
+      "from_node_id": "cp.035",
+      "guide_time_min": null,
+      "limitations": [],
+      "moving_time_s": 1705,
+      "rest_intervals": [
+        "rest.009"
+      ],
+      "rest_time_s": 759,
+      "risk_context": {},
+      "segment_id": "seg.036",
+      "source_refs": [
+        "seg.036",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json",
+        "track_slice.2662-2840",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx"
+      ],
+      "terrain_context": {},
+      "to_node_id": "cp.036"
+    },
+    {
+      "ascent_m": 98.88,
+      "confidence": "high",
+      "descent_m": 21.52,
+      "direction": "outbound",
+      "distance_m": 1506.72,
+      "edge_id": "cp.036_to_cp.037",
+      "elapsed_time_s": 1962,
+      "from_node_id": "cp.036",
+      "guide_time_min": null,
+      "limitations": [],
+      "moving_time_s": 1559,
+      "rest_intervals": [
+        "rest.010"
+      ],
+      "rest_time_s": 403,
+      "risk_context": {},
+      "segment_id": "seg.037",
+      "source_refs": [
+        "seg.037",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json",
+        "track_slice.2840-3002",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx"
+      ],
+      "terrain_context": {},
+      "to_node_id": "cp.037"
+    },
+    {
+      "ascent_m": 113.19,
+      "confidence": "medium",
+      "descent_m": 41.02,
+      "direction": "outbound",
+      "distance_m": 1495.57,
+      "edge_id": "cp.037_to_cp.038",
+      "elapsed_time_s": 6135,
+      "from_node_id": "cp.037",
+      "guide_time_min": null,
+      "limitations": [
+        "checkpoint match has multiple plausible completed-track clusters",
+        "segment has a large timestamp gap"
+      ],
+      "moving_time_s": 1809,
+      "rest_intervals": [
+        "rest.011"
+      ],
+      "rest_time_s": 4326,
+      "risk_context": {},
+      "segment_id": "seg.038",
+      "source_refs": [
+        "seg.038",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json",
+        "track_slice.3002-3170",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx"
+      ],
+      "terrain_context": {},
+      "to_node_id": "cp.038"
+    },
+    {
+      "ascent_m": 269.72,
+      "confidence": "medium",
+      "descent_m": 33.94,
+      "direction": "outbound",
+      "distance_m": 1505.3,
+      "edge_id": "cp.038_to_cp.039",
+      "elapsed_time_s": 3457,
+      "from_node_id": "cp.038",
+      "guide_time_min": null,
+      "limitations": [
+        "checkpoint match has multiple plausible completed-track clusters"
+      ],
+      "moving_time_s": 2975,
+      "rest_intervals": [
+        "rest.012"
+      ],
+      "rest_time_s": 482,
+      "risk_context": {},
+      "segment_id": "seg.039",
+      "source_refs": [
+        "seg.039",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json",
+        "track_slice.3170-3431",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx"
+      ],
+      "terrain_context": {},
+      "to_node_id": "cp.039"
+    },
+    {
+      "ascent_m": 287.01,
+      "confidence": "medium",
+      "descent_m": 106.72,
+      "direction": "outbound",
+      "distance_m": 1496.97,
+      "edge_id": "cp.039_to_cp.040",
+      "elapsed_time_s": 3369,
+      "from_node_id": "cp.039",
+      "guide_time_min": null,
+      "limitations": [
+        "checkpoint match has multiple plausible completed-track clusters"
+      ],
+      "moving_time_s": 2709,
+      "rest_intervals": [
+        "rest.013"
+      ],
+      "rest_time_s": 660,
+      "risk_context": {},
+      "segment_id": "seg.040",
+      "source_refs": [
+        "seg.040",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json",
+        "track_slice.3431-3675",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx"
+      ],
+      "terrain_context": {},
+      "to_node_id": "cp.040"
+    },
+    {
+      "ascent_m": 41.76,
+      "confidence": "medium",
+      "descent_m": 247.87,
+      "direction": "outbound",
+      "distance_m": 1497.17,
+      "edge_id": "cp.040_to_cp.041",
+      "elapsed_time_s": 2209,
+      "from_node_id": "cp.040",
+      "guide_time_min": null,
+      "limitations": [
+        "checkpoint match has multiple plausible completed-track clusters"
+      ],
+      "moving_time_s": 1979,
+      "rest_intervals": [
+        "rest.014"
+      ],
+      "rest_time_s": 230,
+      "risk_context": {},
+      "segment_id": "seg.041",
+      "source_refs": [
+        "seg.041",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json",
+        "track_slice.3675-3869",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx"
+      ],
+      "terrain_context": {},
+      "to_node_id": "cp.041"
+    },
+    {
+      "ascent_m": 151.28,
+      "confidence": "high",
+      "descent_m": 69.36,
+      "direction": "outbound",
+      "distance_m": 1501.13,
+      "edge_id": "cp.041_to_cp.042",
+      "elapsed_time_s": 2312,
+      "from_node_id": "cp.041",
+      "guide_time_min": null,
+      "limitations": [],
+      "moving_time_s": 2088,
+      "rest_intervals": [
+        "rest.015"
+      ],
+      "rest_time_s": 224,
+      "risk_context": {},
+      "segment_id": "seg.042",
+      "source_refs": [
+        "seg.042",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json",
+        "track_slice.3869-4080",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx"
+      ],
+      "terrain_context": {},
+      "to_node_id": "cp.042"
+    },
+    {
+      "ascent_m": 101.17,
+      "confidence": "medium",
+      "descent_m": 472.0,
+      "direction": "outbound",
+      "distance_m": 1506.52,
+      "edge_id": "cp.042_to_cp.043",
+      "elapsed_time_s": 3360,
+      "from_node_id": "cp.042",
+      "guide_time_min": null,
+      "limitations": [
+        "checkpoint match has multiple plausible completed-track clusters"
+      ],
+      "moving_time_s": 2763,
+      "rest_intervals": [
+        "rest.016",
+        "rest.017"
+      ],
+      "rest_time_s": 597,
+      "risk_context": {},
+      "segment_id": "seg.043",
+      "source_refs": [
+        "seg.043",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json",
+        "track_slice.4080-4351",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx"
+      ],
+      "terrain_context": {},
+      "to_node_id": "cp.043"
+    },
+    {
+      "ascent_m": 87.32,
+      "confidence": "medium",
+      "descent_m": 130.37,
+      "direction": "outbound",
+      "distance_m": 1491.49,
+      "edge_id": "cp.043_to_cp.044",
+      "elapsed_time_s": 47549,
+      "from_node_id": "cp.043",
+      "guide_time_min": null,
+      "limitations": [
+        "checkpoint match has multiple plausible completed-track clusters",
+        "segment has a large timestamp gap"
+      ],
+      "moving_time_s": 2046,
+      "rest_intervals": [
+        "rest.018",
+        "rest.019"
+      ],
+      "rest_time_s": 45503,
+      "risk_context": {},
+      "segment_id": "seg.044",
+      "source_refs": [
+        "seg.044",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json",
+        "track_slice.4351-4534",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx"
+      ],
+      "terrain_context": {},
+      "to_node_id": "cp.044"
+    },
+    {
+      "ascent_m": 338.53,
+      "confidence": "high",
+      "descent_m": 49.48,
+      "direction": "outbound",
+      "distance_m": 1497.75,
+      "edge_id": "cp.044_to_cp.045",
+      "elapsed_time_s": 5099,
+      "from_node_id": "cp.044",
+      "guide_time_min": null,
+      "limitations": [],
+      "moving_time_s": 4158,
+      "rest_intervals": [
+        "rest.020",
+        "rest.021"
+      ],
+      "rest_time_s": 941,
+      "risk_context": {},
+      "segment_id": "seg.045",
+      "source_refs": [
+        "seg.045",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json",
+        "track_slice.4534-4832",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx"
+      ],
+      "terrain_context": {},
+      "to_node_id": "cp.045"
+    },
+    {
+      "ascent_m": 158.95,
+      "confidence": "high",
+      "descent_m": 180.49,
+      "direction": "outbound",
+      "distance_m": 1504.1,
+      "edge_id": "cp.045_to_cp.046",
+      "elapsed_time_s": 3688,
+      "from_node_id": "cp.045",
+      "guide_time_min": null,
+      "limitations": [],
+      "moving_time_s": 3152,
+      "rest_intervals": [
+        "rest.022",
+        "rest.023"
+      ],
+      "rest_time_s": 536,
+      "risk_context": {},
+      "segment_id": "seg.046",
+      "source_refs": [
+        "seg.046",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json",
+        "track_slice.4832-5108",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx"
+      ],
+      "terrain_context": {},
+      "to_node_id": "cp.046"
+    },
+    {
+      "ascent_m": 300.2,
+      "confidence": "medium",
+      "descent_m": 180.47,
+      "direction": "outbound",
+      "distance_m": 1499.63,
+      "edge_id": "cp.046_to_cp.047",
+      "elapsed_time_s": 6179,
+      "from_node_id": "cp.046",
+      "guide_time_min": null,
+      "limitations": [
+        "segment has a large timestamp gap"
+      ],
+      "moving_time_s": 3934,
+      "rest_intervals": [
+        "rest.024",
+        "rest.025",
+        "rest.026"
+      ],
+      "rest_time_s": 2245,
+      "risk_context": {},
+      "segment_id": "seg.047",
+      "source_refs": [
+        "seg.047",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json",
+        "track_slice.5108-5400",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx"
+      ],
+      "terrain_context": {},
+      "to_node_id": "cp.047"
+    },
+    {
+      "ascent_m": 104.88,
+      "confidence": "medium",
+      "descent_m": 260.51,
+      "direction": "outbound",
+      "distance_m": 1499.78,
+      "edge_id": "cp.047_to_cp.048",
+      "elapsed_time_s": 6349,
+      "from_node_id": "cp.047",
+      "guide_time_min": null,
+      "limitations": [
+        "segment has a large timestamp gap"
+      ],
+      "moving_time_s": 2817,
+      "rest_intervals": [
+        "rest.027"
+      ],
+      "rest_time_s": 3532,
+      "risk_context": {},
+      "segment_id": "seg.048",
+      "source_refs": [
+        "seg.048",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json",
+        "track_slice.5400-5653",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx"
+      ],
+      "terrain_context": {},
+      "to_node_id": "cp.048"
+    },
+    {
+      "ascent_m": 382.98,
+      "confidence": "medium",
+      "descent_m": 142.07,
+      "direction": "outbound",
+      "distance_m": 1498.91,
+      "edge_id": "cp.048_to_cp.049",
+      "elapsed_time_s": 8149,
+      "from_node_id": "cp.048",
+      "guide_time_min": null,
+      "limitations": [
+        "segment has a large timestamp gap"
+      ],
+      "moving_time_s": 4579,
+      "rest_intervals": [
+        "rest.028",
+        "rest.029",
+        "rest.030",
+        "rest.031",
+        "rest.032",
+        "rest.033"
+      ],
+      "rest_time_s": 3570,
+      "risk_context": {},
+      "segment_id": "seg.049",
+      "source_refs": [
+        "seg.049",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json",
+        "track_slice.5653-5967",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx"
+      ],
+      "terrain_context": {},
+      "to_node_id": "cp.049"
+    },
+    {
+      "ascent_m": 237.17,
+      "confidence": "medium",
+      "descent_m": 259.36,
+      "direction": "outbound",
+      "distance_m": 1497.48,
+      "edge_id": "cp.049_to_cp.050",
+      "elapsed_time_s": 6458,
+      "from_node_id": "cp.049",
+      "guide_time_min": null,
+      "limitations": [
+        "segment has a large timestamp gap"
+      ],
+      "moving_time_s": 3612,
+      "rest_intervals": [
+        "rest.034",
+        "rest.035",
+        "rest.036"
+      ],
+      "rest_time_s": 2846,
+      "risk_context": {},
+      "segment_id": "seg.050",
+      "source_refs": [
+        "seg.050",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json",
+        "track_slice.5967-6248",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx"
+      ],
+      "terrain_context": {},
+      "to_node_id": "cp.050"
+    },
+    {
+      "ascent_m": 164.72,
+      "confidence": "medium",
+      "descent_m": 329.73,
+      "direction": "outbound",
+      "distance_m": 1502.82,
+      "edge_id": "cp.050_to_cp.051",
+      "elapsed_time_s": 53965,
+      "from_node_id": "cp.050",
+      "guide_time_min": null,
+      "limitations": [
+        "segment has a large timestamp gap"
+      ],
+      "moving_time_s": 6462,
+      "rest_intervals": [
+        "rest.037",
+        "rest.038"
+      ],
+      "rest_time_s": 47503,
+      "risk_context": {},
+      "segment_id": "seg.051",
+      "source_refs": [
+        "seg.051",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json",
+        "track_slice.6248-6518",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx"
+      ],
+      "terrain_context": {},
+      "to_node_id": "cp.051"
+    },
+    {
+      "ascent_m": 215.97,
+      "confidence": "medium",
+      "descent_m": 188.92,
+      "direction": "outbound",
+      "distance_m": 1505.68,
+      "edge_id": "cp.051_to_cp.052",
+      "elapsed_time_s": 4646,
+      "from_node_id": "cp.051",
+      "guide_time_min": null,
+      "limitations": [
+        "segment has a large timestamp gap"
+      ],
+      "moving_time_s": 3112,
+      "rest_intervals": [
+        "rest.039"
+      ],
+      "rest_time_s": 1534,
+      "risk_context": {},
+      "segment_id": "seg.052",
+      "source_refs": [
+        "seg.052",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json",
+        "track_slice.6518-6787",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx"
+      ],
+      "terrain_context": {},
+      "to_node_id": "cp.052"
+    },
+    {
+      "ascent_m": 125.22,
+      "confidence": "medium",
+      "descent_m": 297.61,
+      "direction": "outbound",
+      "distance_m": 1493.21,
+      "edge_id": "cp.052_to_cp.053",
+      "elapsed_time_s": 3358,
+      "from_node_id": "cp.052",
+      "guide_time_min": null,
+      "limitations": [
+        "segment has a large timestamp gap"
+      ],
+      "moving_time_s": 2277,
+      "rest_intervals": [
+        "rest.040"
+      ],
+      "rest_time_s": 1081,
+      "risk_context": {},
+      "segment_id": "seg.053",
+      "source_refs": [
+        "seg.053",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json",
+        "track_slice.6787-7007",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx"
+      ],
+      "terrain_context": {},
+      "to_node_id": "cp.053"
+    },
+    {
+      "ascent_m": 111.54,
+      "confidence": "medium",
+      "descent_m": 246.24,
+      "direction": "outbound",
+      "distance_m": 1502.61,
+      "edge_id": "cp.053_to_cp.054",
+      "elapsed_time_s": 6983,
+      "from_node_id": "cp.053",
+      "guide_time_min": null,
+      "limitations": [
+        "segment has a large timestamp gap"
+      ],
+      "moving_time_s": 2345,
+      "rest_intervals": [
+        "rest.041",
+        "rest.042"
+      ],
+      "rest_time_s": 4638,
+      "risk_context": {},
+      "segment_id": "seg.054",
+      "source_refs": [
+        "seg.054",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json",
+        "track_slice.7007-7282",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx"
+      ],
+      "terrain_context": {},
+      "to_node_id": "cp.054"
+    },
+    {
+      "ascent_m": 244.01,
+      "confidence": "high",
+      "descent_m": 88.44,
+      "direction": "outbound",
+      "distance_m": 1496.82,
+      "edge_id": "cp.054_to_cp.055",
+      "elapsed_time_s": 3168,
+      "from_node_id": "cp.054",
+      "guide_time_min": null,
+      "limitations": [],
+      "moving_time_s": 2612,
+      "rest_intervals": [
+        "rest.043"
+      ],
+      "rest_time_s": 556,
+      "risk_context": {},
+      "segment_id": "seg.055",
+      "source_refs": [
+        "seg.055",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json",
+        "track_slice.7282-7532",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx"
+      ],
+      "terrain_context": {},
+      "to_node_id": "cp.055"
+    },
+    {
+      "ascent_m": 254.45,
+      "confidence": "high",
+      "descent_m": 267.52,
+      "direction": "outbound",
+      "distance_m": 1500.99,
+      "edge_id": "cp.055_to_cp.056",
+      "elapsed_time_s": 4343,
+      "from_node_id": "cp.055",
+      "guide_time_min": null,
+      "limitations": [],
+      "moving_time_s": 3236,
+      "rest_intervals": [
+        "rest.044",
+        "rest.045"
+      ],
+      "rest_time_s": 1107,
+      "risk_context": {},
+      "segment_id": "seg.056",
+      "source_refs": [
+        "seg.056",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json",
+        "track_slice.7532-7816",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx"
+      ],
+      "terrain_context": {},
+      "to_node_id": "cp.056"
+    },
+    {
+      "ascent_m": 217.22,
+      "confidence": "medium",
+      "descent_m": 194.22,
+      "direction": "outbound",
+      "distance_m": 1498.92,
+      "edge_id": "cp.056_to_cp.057",
+      "elapsed_time_s": 5949,
+      "from_node_id": "cp.056",
+      "guide_time_min": null,
+      "limitations": [
+        "segment has a large timestamp gap"
+      ],
+      "moving_time_s": 3424,
+      "rest_intervals": [
+        "rest.046",
+        "rest.047",
+        "rest.048"
+      ],
+      "rest_time_s": 2525,
+      "risk_context": {},
+      "segment_id": "seg.057",
+      "source_refs": [
+        "seg.057",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json",
+        "track_slice.7816-8095",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx"
+      ],
+      "terrain_context": {},
+      "to_node_id": "cp.057"
+    },
+    {
+      "ascent_m": 89.47,
+      "confidence": "medium",
+      "descent_m": 201.31,
+      "direction": "outbound",
+      "distance_m": 1500.41,
+      "edge_id": "cp.057_to_cp.058",
+      "elapsed_time_s": 51590,
+      "from_node_id": "cp.057",
+      "guide_time_min": null,
+      "limitations": [
+        "segment has a large timestamp gap"
+      ],
+      "moving_time_s": 2315,
+      "rest_intervals": [
+        "rest.049",
+        "rest.050"
+      ],
+      "rest_time_s": 49275,
+      "risk_context": {},
+      "segment_id": "seg.058",
+      "source_refs": [
+        "seg.058",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json",
+        "track_slice.8095-8328",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx"
+      ],
+      "terrain_context": {},
+      "to_node_id": "cp.058"
+    },
+    {
+      "ascent_m": 215.78,
+      "confidence": "medium",
+      "descent_m": 79.88,
+      "direction": "outbound",
+      "distance_m": 1500.38,
+      "edge_id": "cp.058_to_cp.059",
+      "elapsed_time_s": 2457,
+      "from_node_id": "cp.058",
+      "guide_time_min": null,
+      "limitations": [
+        "checkpoint match has multiple plausible completed-track clusters"
+      ],
+      "moving_time_s": 2095,
+      "rest_intervals": [
+        "rest.051"
+      ],
+      "rest_time_s": 362,
+      "risk_context": {},
+      "segment_id": "seg.059",
+      "source_refs": [
+        "seg.059",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json",
+        "track_slice.8328-8542",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx"
+      ],
+      "terrain_context": {},
+      "to_node_id": "cp.059"
+    },
+    {
+      "ascent_m": 197.92,
+      "confidence": "medium",
+      "descent_m": 305.98,
+      "direction": "outbound",
+      "distance_m": 1500.45,
+      "edge_id": "cp.059_to_cp.060",
+      "elapsed_time_s": 2521,
+      "from_node_id": "cp.059",
+      "guide_time_min": null,
+      "limitations": [
+        "checkpoint match has multiple plausible completed-track clusters"
+      ],
+      "moving_time_s": 1909,
+      "rest_intervals": [
+        "rest.052"
+      ],
+      "rest_time_s": 612,
+      "risk_context": {},
+      "segment_id": "seg.060",
+      "source_refs": [
+        "seg.060",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json",
+        "track_slice.8542-8770",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx"
+      ],
+      "terrain_context": {},
+      "to_node_id": "cp.060"
+    },
+    {
+      "ascent_m": 35.28,
+      "confidence": "high",
+      "descent_m": 518.39,
+      "direction": "outbound",
+      "distance_m": 1499.15,
+      "edge_id": "cp.060_to_cp.061",
+      "elapsed_time_s": 4643,
+      "from_node_id": "cp.060",
+      "guide_time_min": null,
+      "limitations": [],
+      "moving_time_s": 3566,
+      "rest_intervals": [
+        "rest.053",
+        "rest.054"
+      ],
+      "rest_time_s": 1077,
+      "risk_context": {},
+      "segment_id": "seg.061",
+      "source_refs": [
+        "seg.061",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json",
+        "track_slice.8770-9034",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx"
+      ],
+      "terrain_context": {},
+      "to_node_id": "cp.061"
+    },
+    {
+      "ascent_m": 56.73,
+      "confidence": "medium",
+      "descent_m": 370.76,
+      "direction": "outbound",
+      "distance_m": 1507.32,
+      "edge_id": "cp.061_to_cp.062",
+      "elapsed_time_s": 5411,
+      "from_node_id": "cp.061",
+      "guide_time_min": null,
+      "limitations": [
+        "segment has a large timestamp gap"
+      ],
+      "moving_time_s": 5099,
+      "rest_intervals": [
+        "rest.055"
+      ],
+      "rest_time_s": 312,
+      "risk_context": {},
+      "segment_id": "seg.062",
+      "source_refs": [
+        "seg.062",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json",
+        "track_slice.9034-9270",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx"
+      ],
+      "terrain_context": {},
+      "to_node_id": "cp.062"
+    },
+    {
+      "ascent_m": 133.58,
+      "confidence": "high",
+      "descent_m": 226.48,
+      "direction": "outbound",
+      "distance_m": 1493.26,
+      "edge_id": "cp.062_to_cp.063",
+      "elapsed_time_s": 3884,
+      "from_node_id": "cp.062",
+      "guide_time_min": null,
+      "limitations": [],
+      "moving_time_s": 2906,
+      "rest_intervals": [
+        "rest.056",
+        "rest.057"
+      ],
+      "rest_time_s": 978,
+      "risk_context": {},
+      "segment_id": "seg.063",
+      "source_refs": [
+        "seg.063",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json",
+        "track_slice.9270-9523",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx"
+      ],
+      "terrain_context": {},
+      "to_node_id": "cp.063"
+    },
+    {
+      "ascent_m": 46.41,
+      "confidence": "high",
+      "descent_m": 359.22,
+      "direction": "outbound",
+      "distance_m": 1501.57,
+      "edge_id": "cp.063_to_cp.064",
+      "elapsed_time_s": 2730,
+      "from_node_id": "cp.063",
+      "guide_time_min": null,
+      "limitations": [],
+      "moving_time_s": 2730,
+      "rest_intervals": [],
+      "rest_time_s": 0,
+      "risk_context": {},
+      "segment_id": "seg.064",
+      "source_refs": [
+        "seg.064",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json",
+        "track_slice.9523-9764",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx"
+      ],
+      "terrain_context": {},
+      "to_node_id": "cp.064"
+    },
+    {
+      "ascent_m": 39.1,
+      "confidence": "high",
+      "descent_m": 142.25,
+      "direction": "outbound",
+      "distance_m": 1498.55,
+      "edge_id": "cp.064_to_cp.065",
+      "elapsed_time_s": 2996,
+      "from_node_id": "cp.064",
+      "guide_time_min": null,
+      "limitations": [],
+      "moving_time_s": 2280,
+      "rest_intervals": [
+        "rest.058"
+      ],
+      "rest_time_s": 716,
+      "risk_context": {},
+      "segment_id": "seg.065",
+      "source_refs": [
+        "seg.065",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json",
+        "track_slice.9764-9956",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx"
+      ],
+      "terrain_context": {},
+      "to_node_id": "cp.065"
+    },
+    {
+      "ascent_m": 26.07,
+      "confidence": "high",
+      "descent_m": 79.8,
+      "direction": "outbound",
+      "distance_m": 1501.97,
+      "edge_id": "cp.065_to_cp.066",
+      "elapsed_time_s": 1443,
+      "from_node_id": "cp.065",
+      "guide_time_min": null,
+      "limitations": [],
+      "moving_time_s": 1443,
+      "rest_intervals": [],
+      "rest_time_s": 0,
+      "risk_context": {},
+      "segment_id": "seg.066",
+      "source_refs": [
+        "seg.066",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json",
+        "track_slice.9956-10093",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx"
+      ],
+      "terrain_context": {},
+      "to_node_id": "cp.066"
+    },
+    {
+      "ascent_m": 89.95,
+      "confidence": "medium",
+      "descent_m": 54.71,
+      "direction": "outbound",
+      "distance_m": 1501.65,
+      "edge_id": "cp.066_to_cp.067",
+      "elapsed_time_s": 5276,
+      "from_node_id": "cp.066",
+      "guide_time_min": null,
+      "limitations": [
+        "segment has a large timestamp gap"
+      ],
+      "moving_time_s": 1651,
+      "rest_intervals": [
+        "rest.059"
+      ],
+      "rest_time_s": 3625,
+      "risk_context": {},
+      "segment_id": "seg.067",
+      "source_refs": [
+        "seg.067",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json",
+        "track_slice.10093-10251",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx"
+      ],
+      "terrain_context": {},
+      "to_node_id": "cp.067"
+    },
+    {
+      "ascent_m": 195.8,
+      "confidence": "high",
+      "descent_m": 163.8,
+      "direction": "outbound",
+      "distance_m": 1504.25,
+      "edge_id": "cp.067_to_cp.068",
+      "elapsed_time_s": 3264,
+      "from_node_id": "cp.067",
+      "guide_time_min": null,
+      "limitations": [],
+      "moving_time_s": 3008,
+      "rest_intervals": [
+        "rest.060"
+      ],
+      "rest_time_s": 256,
+      "risk_context": {},
+      "segment_id": "seg.068",
+      "source_refs": [
+        "seg.068",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json",
+        "track_slice.10251-10417",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx"
+      ],
+      "terrain_context": {},
+      "to_node_id": "cp.068"
+    },
+    {
+      "ascent_m": 85.0,
+      "confidence": "high",
+      "descent_m": 138.81,
+      "direction": "outbound",
+      "distance_m": 1500.13,
+      "edge_id": "cp.068_to_cp.069",
+      "elapsed_time_s": 2780,
+      "from_node_id": "cp.068",
+      "guide_time_min": null,
+      "limitations": [],
+      "moving_time_s": 2598,
+      "rest_intervals": [
+        "rest.061"
+      ],
+      "rest_time_s": 182,
+      "risk_context": {},
+      "segment_id": "seg.069",
+      "source_refs": [
+        "seg.069",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json",
+        "track_slice.10417-10556",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx"
+      ],
+      "terrain_context": {},
+      "to_node_id": "cp.069"
+    },
+    {
+      "ascent_m": 92.45,
+      "confidence": "high",
+      "descent_m": 270.94,
+      "direction": "outbound",
+      "distance_m": 1497.14,
+      "edge_id": "cp.069_to_cp.070",
+      "elapsed_time_s": 2833,
+      "from_node_id": "cp.069",
+      "guide_time_min": null,
+      "limitations": [],
+      "moving_time_s": 2436,
+      "rest_intervals": [
+        "rest.062"
+      ],
+      "rest_time_s": 397,
+      "risk_context": {},
+      "segment_id": "seg.070",
+      "source_refs": [
+        "seg.070",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json",
+        "track_slice.10556-10745",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx"
+      ],
+      "terrain_context": {},
+      "to_node_id": "cp.070"
+    },
+    {
+      "ascent_m": 101.92,
+      "confidence": "high",
+      "descent_m": 185.08,
+      "direction": "outbound",
+      "distance_m": 1496.35,
+      "edge_id": "cp.070_to_cp.071",
+      "elapsed_time_s": 3133,
+      "from_node_id": "cp.070",
+      "guide_time_min": null,
+      "limitations": [],
+      "moving_time_s": 3133,
+      "rest_intervals": [],
+      "rest_time_s": 0,
+      "risk_context": {},
+      "segment_id": "seg.071",
+      "source_refs": [
+        "seg.071",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json",
+        "track_slice.10745-10949",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx"
+      ],
+      "terrain_context": {},
+      "to_node_id": "cp.071"
+    },
+    {
+      "ascent_m": 73.65,
+      "confidence": "high",
+      "descent_m": 90.64,
+      "direction": "outbound",
+      "distance_m": 1500.8,
+      "edge_id": "cp.071_to_cp.072",
+      "elapsed_time_s": 1566,
+      "from_node_id": "cp.071",
+      "guide_time_min": null,
+      "limitations": [],
+      "moving_time_s": 1566,
+      "rest_intervals": [],
+      "rest_time_s": 0,
+      "risk_context": {},
+      "segment_id": "seg.072",
+      "source_refs": [
+        "seg.072",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json",
+        "track_slice.10949-11133",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx"
+      ],
+      "terrain_context": {},
+      "to_node_id": "cp.072"
+    },
+    {
+      "ascent_m": 21.03,
+      "confidence": "high",
+      "descent_m": 42.49,
+      "direction": "outbound",
+      "distance_m": 661.7,
+      "edge_id": "cp.072_to_cp.finish",
+      "elapsed_time_s": 815,
+      "from_node_id": "cp.072",
+      "guide_time_min": null,
+      "limitations": [],
+      "moving_time_s": 815,
+      "rest_intervals": [],
+      "rest_time_s": 0,
+      "risk_context": {},
+      "segment_id": "seg.073",
+      "source_refs": [
+        "seg.073",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json",
+        "track_slice.11133-11202",
         "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx"
       ],
       "terrain_context": {},
@@ -78,32 +2003,742 @@
   ],
   "nodes": [
     {
-      "label": "Trailhead",
-      "lat": 25.0,
-      "lon": 121.0,
+      "label": "Start",
+      "lat": 23.953086,
+      "lon": 121.175462,
       "node_id": "cp.start",
       "source_refs": [
-        "mission.checkpoint.cp.start",
+        "cp.start",
         "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json"
       ]
     },
     {
-      "label": "Mid ridge rest point",
-      "lat": 25.0,
-      "lon": 121.009,
-      "node_id": "cp.mid",
+      "label": "CP 001",
+      "lat": 23.956207,
+      "lon": 121.163872,
+      "node_id": "cp.001",
       "source_refs": [
-        "mission.checkpoint.cp.mid",
+        "cp.001",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json"
+      ]
+    },
+    {
+      "label": "CP 002",
+      "lat": 23.958536,
+      "lon": 121.150679,
+      "node_id": "cp.002",
+      "source_refs": [
+        "cp.002",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json"
+      ]
+    },
+    {
+      "label": "CP 003",
+      "lat": 23.96174,
+      "lon": 121.137974,
+      "node_id": "cp.003",
+      "source_refs": [
+        "cp.003",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json"
+      ]
+    },
+    {
+      "label": "CP 004",
+      "lat": 23.960834,
+      "lon": 121.129,
+      "node_id": "cp.004",
+      "source_refs": [
+        "cp.004",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json"
+      ]
+    },
+    {
+      "label": "CP 005",
+      "lat": 23.960052,
+      "lon": 121.125667,
+      "node_id": "cp.005",
+      "source_refs": [
+        "cp.005",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json"
+      ]
+    },
+    {
+      "label": "CP 006",
+      "lat": 23.965305,
+      "lon": 121.122645,
+      "node_id": "cp.006",
+      "source_refs": [
+        "cp.006",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json"
+      ]
+    },
+    {
+      "label": "CP 007",
+      "lat": 23.969532,
+      "lon": 121.123115,
+      "node_id": "cp.007",
+      "source_refs": [
+        "cp.007",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json"
+      ]
+    },
+    {
+      "label": "CP 008",
+      "lat": 23.975576,
+      "lon": 121.128047,
+      "node_id": "cp.008",
+      "source_refs": [
+        "cp.008",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json"
+      ]
+    },
+    {
+      "label": "CP 009",
+      "lat": 23.979282,
+      "lon": 121.135572,
+      "node_id": "cp.009",
+      "source_refs": [
+        "cp.009",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json"
+      ]
+    },
+    {
+      "label": "CP 010",
+      "lat": 23.988185,
+      "lon": 121.131086,
+      "node_id": "cp.010",
+      "source_refs": [
+        "cp.010",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json"
+      ]
+    },
+    {
+      "label": "CP 011",
+      "lat": 23.994792,
+      "lon": 121.132677,
+      "node_id": "cp.011",
+      "source_refs": [
+        "cp.011",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json"
+      ]
+    },
+    {
+      "label": "CP 012",
+      "lat": 24.004264,
+      "lon": 121.130031,
+      "node_id": "cp.012",
+      "source_refs": [
+        "cp.012",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json"
+      ]
+    },
+    {
+      "label": "CP 013",
+      "lat": 24.012951,
+      "lon": 121.129594,
+      "node_id": "cp.013",
+      "source_refs": [
+        "cp.013",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json"
+      ]
+    },
+    {
+      "label": "CP 014",
+      "lat": 24.022733,
+      "lon": 121.13245,
+      "node_id": "cp.014",
+      "source_refs": [
+        "cp.014",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json"
+      ]
+    },
+    {
+      "label": "CP 015",
+      "lat": 24.024864,
+      "lon": 121.143775,
+      "node_id": "cp.015",
+      "source_refs": [
+        "cp.015",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json"
+      ]
+    },
+    {
+      "label": "CP 016",
+      "lat": 24.027109,
+      "lon": 121.150541,
+      "node_id": "cp.016",
+      "source_refs": [
+        "cp.016",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json"
+      ]
+    },
+    {
+      "label": "CP 017",
+      "lat": 24.029146,
+      "lon": 121.162943,
+      "node_id": "cp.017",
+      "source_refs": [
+        "cp.017",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json"
+      ]
+    },
+    {
+      "label": "CP 018",
+      "lat": 24.032302,
+      "lon": 121.173131,
+      "node_id": "cp.018",
+      "source_refs": [
+        "cp.018",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json"
+      ]
+    },
+    {
+      "label": "CP 019",
+      "lat": 24.027245,
+      "lon": 121.177588,
+      "node_id": "cp.019",
+      "source_refs": [
+        "cp.019",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json"
+      ]
+    },
+    {
+      "label": "CP 020",
+      "lat": 24.027977,
+      "lon": 121.177763,
+      "node_id": "cp.020",
+      "source_refs": [
+        "cp.020",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json"
+      ]
+    },
+    {
+      "label": "CP 021",
+      "lat": 24.027074,
+      "lon": 121.186935,
+      "node_id": "cp.021",
+      "source_refs": [
+        "cp.021",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json"
+      ]
+    },
+    {
+      "label": "CP 022",
+      "lat": 24.027272,
+      "lon": 121.184125,
+      "node_id": "cp.022",
+      "source_refs": [
+        "cp.022",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json"
+      ]
+    },
+    {
+      "label": "CP 023",
+      "lat": 24.037745,
+      "lon": 121.186854,
+      "node_id": "cp.023",
+      "source_refs": [
+        "cp.023",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json"
+      ]
+    },
+    {
+      "label": "CP 024",
+      "lat": 24.036764,
+      "lon": 121.188078,
+      "node_id": "cp.024",
+      "source_refs": [
+        "cp.024",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json"
+      ]
+    },
+    {
+      "label": "CP 025",
+      "lat": 24.038102,
+      "lon": 121.199015,
+      "node_id": "cp.025",
+      "source_refs": [
+        "cp.025",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json"
+      ]
+    },
+    {
+      "label": "CP 026",
+      "lat": 24.037418,
+      "lon": 121.207525,
+      "node_id": "cp.026",
+      "source_refs": [
+        "cp.026",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json"
+      ]
+    },
+    {
+      "label": "CP 027",
+      "lat": 24.039858,
+      "lon": 121.214746,
+      "node_id": "cp.027",
+      "source_refs": [
+        "cp.027",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json"
+      ]
+    },
+    {
+      "label": "CP 028",
+      "lat": 24.042609,
+      "lon": 121.212305,
+      "node_id": "cp.028",
+      "source_refs": [
+        "cp.028",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json"
+      ]
+    },
+    {
+      "label": "CP 029",
+      "lat": 24.052114,
+      "lon": 121.216284,
+      "node_id": "cp.029",
+      "source_refs": [
+        "cp.029",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json"
+      ]
+    },
+    {
+      "label": "CP 030",
+      "lat": 24.045753,
+      "lon": 121.22431,
+      "node_id": "cp.030",
+      "source_refs": [
+        "cp.030",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json"
+      ]
+    },
+    {
+      "label": "CP 031",
+      "lat": 24.052185,
+      "lon": 121.228898,
+      "node_id": "cp.031",
+      "source_refs": [
+        "cp.031",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json"
+      ]
+    },
+    {
+      "label": "CP 032",
+      "lat": 24.046494,
+      "lon": 121.236224,
+      "node_id": "cp.032",
+      "source_refs": [
+        "cp.032",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json"
+      ]
+    },
+    {
+      "label": "CP 033",
+      "lat": 24.053487,
+      "lon": 121.242902,
+      "node_id": "cp.033",
+      "source_refs": [
+        "cp.033",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json"
+      ]
+    },
+    {
+      "label": "CP 034",
+      "lat": 24.045768,
+      "lon": 121.250592,
+      "node_id": "cp.034",
+      "source_refs": [
+        "cp.034",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json"
+      ]
+    },
+    {
+      "label": "CP 035",
+      "lat": 24.048331,
+      "lon": 121.255751,
+      "node_id": "cp.035",
+      "source_refs": [
+        "cp.035",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json"
+      ]
+    },
+    {
+      "label": "CP 036",
+      "lat": 24.047371,
+      "lon": 121.265473,
+      "node_id": "cp.036",
+      "source_refs": [
+        "cp.036",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json"
+      ]
+    },
+    {
+      "label": "CP 037",
+      "lat": 24.044532,
+      "lon": 121.272213,
+      "node_id": "cp.037",
+      "source_refs": [
+        "cp.037",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json"
+      ]
+    },
+    {
+      "label": "CP 038",
+      "lat": 24.045964,
+      "lon": 121.279789,
+      "node_id": "cp.038",
+      "source_refs": [
+        "cp.038",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json"
+      ]
+    },
+    {
+      "label": "CP 039",
+      "lat": 24.054294,
+      "lon": 121.284195,
+      "node_id": "cp.039",
+      "source_refs": [
+        "cp.039",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json"
+      ]
+    },
+    {
+      "label": "CP 040",
+      "lat": 24.059975,
+      "lon": 121.280648,
+      "node_id": "cp.040",
+      "source_refs": [
+        "cp.040",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json"
+      ]
+    },
+    {
+      "label": "CP 041",
+      "lat": 24.051209,
+      "lon": 121.284208,
+      "node_id": "cp.041",
+      "source_refs": [
+        "cp.041",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json"
+      ]
+    },
+    {
+      "label": "CP 042",
+      "lat": 24.039693,
+      "lon": 121.285943,
+      "node_id": "cp.042",
+      "source_refs": [
+        "cp.042",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json"
+      ]
+    },
+    {
+      "label": "CP 043",
+      "lat": 24.028949,
+      "lon": 121.279729,
+      "node_id": "cp.043",
+      "source_refs": [
+        "cp.043",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json"
+      ]
+    },
+    {
+      "label": "CP 044",
+      "lat": 24.01919,
+      "lon": 121.276389,
+      "node_id": "cp.044",
+      "source_refs": [
+        "cp.044",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json"
+      ]
+    },
+    {
+      "label": "CP 045",
+      "lat": 24.00857,
+      "lon": 121.270236,
+      "node_id": "cp.045",
+      "source_refs": [
+        "cp.045",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json"
+      ]
+    },
+    {
+      "label": "CP 046",
+      "lat": 23.99828,
+      "lon": 121.264584,
+      "node_id": "cp.046",
+      "source_refs": [
+        "cp.046",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json"
+      ]
+    },
+    {
+      "label": "CP 047",
+      "lat": 23.987266,
+      "lon": 121.261092,
+      "node_id": "cp.047",
+      "source_refs": [
+        "cp.047",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json"
+      ]
+    },
+    {
+      "label": "CP 048",
+      "lat": 23.977044,
+      "lon": 121.264253,
+      "node_id": "cp.048",
+      "source_refs": [
+        "cp.048",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json"
+      ]
+    },
+    {
+      "label": "CP 049",
+      "lat": 23.97381,
+      "lon": 121.27438,
+      "node_id": "cp.049",
+      "source_refs": [
+        "cp.049",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json"
+      ]
+    },
+    {
+      "label": "CP 050",
+      "lat": 23.9639,
+      "lon": 121.276815,
+      "node_id": "cp.050",
+      "source_refs": [
+        "cp.050",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json"
+      ]
+    },
+    {
+      "label": "CP 051",
+      "lat": 23.956495,
+      "lon": 121.275898,
+      "node_id": "cp.051",
+      "source_refs": [
+        "cp.051",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json"
+      ]
+    },
+    {
+      "label": "CP 052",
+      "lat": 23.945723,
+      "lon": 121.273085,
+      "node_id": "cp.052",
+      "source_refs": [
+        "cp.052",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json"
+      ]
+    },
+    {
+      "label": "CP 053",
+      "lat": 23.934357,
+      "lon": 121.273391,
+      "node_id": "cp.053",
+      "source_refs": [
+        "cp.053",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json"
+      ]
+    },
+    {
+      "label": "CP 054",
+      "lat": 23.924554,
+      "lon": 121.276033,
+      "node_id": "cp.054",
+      "source_refs": [
+        "cp.054",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json"
+      ]
+    },
+    {
+      "label": "CP 055",
+      "lat": 23.911938,
+      "lon": 121.276596,
+      "node_id": "cp.055",
+      "source_refs": [
+        "cp.055",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json"
+      ]
+    },
+    {
+      "label": "CP 056",
+      "lat": 23.90425,
+      "lon": 121.271388,
+      "node_id": "cp.056",
+      "source_refs": [
+        "cp.056",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json"
+      ]
+    },
+    {
+      "label": "CP 057",
+      "lat": 23.896012,
+      "lon": 121.26769,
+      "node_id": "cp.057",
+      "source_refs": [
+        "cp.057",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json"
+      ]
+    },
+    {
+      "label": "CP 058",
+      "lat": 23.886098,
+      "lon": 121.264224,
+      "node_id": "cp.058",
+      "source_refs": [
+        "cp.058",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json"
+      ]
+    },
+    {
+      "label": "CP 059",
+      "lat": 23.875118,
+      "lon": 121.264428,
+      "node_id": "cp.059",
+      "source_refs": [
+        "cp.059",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json"
+      ]
+    },
+    {
+      "label": "CP 060",
+      "lat": 23.880926,
+      "lon": 121.263359,
+      "node_id": "cp.060",
+      "source_refs": [
+        "cp.060",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json"
+      ]
+    },
+    {
+      "label": "CP 061",
+      "lat": 23.883187,
+      "lon": 121.252759,
+      "node_id": "cp.061",
+      "source_refs": [
+        "cp.061",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json"
+      ]
+    },
+    {
+      "label": "CP 062",
+      "lat": 23.885127,
+      "lon": 121.242881,
+      "node_id": "cp.062",
+      "source_refs": [
+        "cp.062",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json"
+      ]
+    },
+    {
+      "label": "CP 063",
+      "lat": 23.889885,
+      "lon": 121.233334,
+      "node_id": "cp.063",
+      "source_refs": [
+        "cp.063",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json"
+      ]
+    },
+    {
+      "label": "CP 064",
+      "lat": 23.891795,
+      "lon": 121.224114,
+      "node_id": "cp.064",
+      "source_refs": [
+        "cp.064",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json"
+      ]
+    },
+    {
+      "label": "CP 065",
+      "lat": 23.898452,
+      "lon": 121.21763,
+      "node_id": "cp.065",
+      "source_refs": [
+        "cp.065",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json"
+      ]
+    },
+    {
+      "label": "CP 066",
+      "lat": 23.910568,
+      "lon": 121.214999,
+      "node_id": "cp.066",
+      "source_refs": [
+        "cp.066",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json"
+      ]
+    },
+    {
+      "label": "CP 067",
+      "lat": 23.922903,
+      "lon": 121.211318,
+      "node_id": "cp.067",
+      "source_refs": [
+        "cp.067",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json"
+      ]
+    },
+    {
+      "label": "CP 068",
+      "lat": 23.929978,
+      "lon": 121.207544,
+      "node_id": "cp.068",
+      "source_refs": [
+        "cp.068",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json"
+      ]
+    },
+    {
+      "label": "CP 069",
+      "lat": 23.94047,
+      "lon": 121.204428,
+      "node_id": "cp.069",
+      "source_refs": [
+        "cp.069",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json"
+      ]
+    },
+    {
+      "label": "CP 070",
+      "lat": 23.943757,
+      "lon": 121.193016,
+      "node_id": "cp.070",
+      "source_refs": [
+        "cp.070",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json"
+      ]
+    },
+    {
+      "label": "CP 071",
+      "lat": 23.944988,
+      "lon": 121.187279,
+      "node_id": "cp.071",
+      "source_refs": [
+        "cp.071",
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json"
+      ]
+    },
+    {
+      "label": "CP 072",
+      "lat": 23.951433,
+      "lon": 121.17996,
+      "node_id": "cp.072",
+      "source_refs": [
+        "cp.072",
         "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json"
       ]
     },
     {
       "label": "Finish",
-      "lat": 25.009,
-      "lon": 121.009,
+      "lat": 23.952948,
+      "lon": 121.174533,
       "node_id": "cp.finish",
       "source_refs": [
-        "mission.checkpoint.cp.finish",
+        "cp.finish",
         "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json"
       ]
     }
@@ -120,36 +2755,1012 @@
     {
       "classification": "detected_rest",
       "confidence": "high",
-      "duration_s": 420,
-      "end_index": 5,
-      "end_offset_s": 1320,
-      "lat": 25.0,
-      "lon": 121.009,
+      "duration_s": 472,
+      "end_index": 2,
+      "end_offset_s": 482,
+      "lat": 23.953108,
+      "lon": 121.17536,
       "rest_id": "rest.001",
       "source_refs": [
         "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx",
-        "track_points.3-5"
+        "track_points.1-2"
       ],
-      "start_index": 3,
-      "start_offset_s": 900
+      "start_index": 1,
+      "start_offset_s": 10
+    },
+    {
+      "classification": "detected_rest",
+      "confidence": "high",
+      "duration_s": 411,
+      "end_index": 10,
+      "end_offset_s": 955,
+      "lat": 23.9535505,
+      "lon": 121.1744755,
+      "rest_id": "rest.002",
+      "source_refs": [
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx",
+        "track_points.9-10"
+      ],
+      "start_index": 9,
+      "start_offset_s": 544
+    },
+    {
+      "classification": "detected_rest",
+      "confidence": "high",
+      "duration_s": 513,
+      "end_index": 630,
+      "end_offset_s": 3634,
+      "lat": 24.0175635,
+      "lon": 121.1303765,
+      "rest_id": "rest.003",
+      "source_refs": [
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx",
+        "track_points.629-630"
+      ],
+      "start_index": 629,
+      "start_offset_s": 3121
+    },
+    {
+      "classification": "detected_rest",
+      "confidence": "high",
+      "duration_s": 32878,
+      "end_index": 1460,
+      "end_offset_s": 40194,
+      "lat": 24.050494,
+      "lon": 121.2151735,
+      "rest_id": "rest.004",
+      "source_refs": [
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx",
+        "track_points.1459-1460"
+      ],
+      "start_index": 1459,
+      "start_offset_s": 7316
+    },
+    {
+      "classification": "detected_rest",
+      "confidence": "high",
+      "duration_s": 659,
+      "end_index": 1751,
+      "end_offset_s": 43742,
+      "lat": 24.045322,
+      "lon": 121.225499,
+      "rest_id": "rest.005",
+      "source_refs": [
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx",
+        "track_points.1750-1751"
+      ],
+      "start_index": 1750,
+      "start_offset_s": 43083
+    },
+    {
+      "classification": "detected_rest",
+      "confidence": "high",
+      "duration_s": 203,
+      "end_index": 1973,
+      "end_offset_s": 45783,
+      "lat": 24.04827,
+      "lon": 121.233197,
+      "rest_id": "rest.006",
+      "source_refs": [
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx",
+        "track_points.1972-1973"
+      ],
+      "start_index": 1972,
+      "start_offset_s": 45580
+    },
+    {
+      "classification": "detected_rest",
+      "confidence": "high",
+      "duration_s": 994,
+      "end_index": 2060,
+      "end_offset_s": 47612,
+      "lat": 24.046693,
+      "lon": 121.2361465,
+      "rest_id": "rest.007",
+      "source_refs": [
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx",
+        "track_points.2059-2060"
+      ],
+      "start_index": 2059,
+      "start_offset_s": 46618
+    },
+    {
+      "classification": "detected_rest",
+      "confidence": "high",
+      "duration_s": 759,
+      "end_index": 2462,
+      "end_offset_s": 51915,
+      "lat": 24.0459433,
+      "lon": 121.2503247,
+      "rest_id": "rest.008",
+      "source_refs": [
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx",
+        "track_points.2460-2462"
+      ],
+      "start_index": 2460,
+      "start_offset_s": 51156
+    },
+    {
+      "classification": "detected_rest",
+      "confidence": "high",
+      "duration_s": 759,
+      "end_index": 2710,
+      "end_offset_s": 54839,
+      "lat": 24.0466193,
+      "lon": 121.2586843,
+      "rest_id": "rest.009",
+      "source_refs": [
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx",
+        "track_points.2708-2710"
+      ],
+      "start_index": 2708,
+      "start_offset_s": 54080
+    },
+    {
+      "classification": "detected_rest",
+      "confidence": "high",
+      "duration_s": 403,
+      "end_index": 2967,
+      "end_offset_s": 57683,
+      "lat": 24.0431185,
+      "lon": 121.2707655,
+      "rest_id": "rest.010",
+      "source_refs": [
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx",
+        "track_points.2966-2967"
+      ],
+      "start_index": 2966,
+      "start_offset_s": 57280
+    },
+    {
+      "classification": "detected_rest",
+      "confidence": "high",
+      "duration_s": 4326,
+      "end_index": 3152,
+      "end_offset_s": 63910,
+      "lat": 24.0453265,
+      "lon": 121.2796155,
+      "rest_id": "rest.011",
+      "source_refs": [
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx",
+        "track_points.3151-3152"
+      ],
+      "start_index": 3151,
+      "start_offset_s": 59584
+    },
+    {
+      "classification": "detected_rest",
+      "confidence": "high",
+      "duration_s": 482,
+      "end_index": 3383,
+      "end_offset_s": 67150,
+      "lat": 24.0506073,
+      "lon": 121.2843563,
+      "rest_id": "rest.012",
+      "source_refs": [
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx",
+        "track_points.3381-3383"
+      ],
+      "start_index": 3381,
+      "start_offset_s": 66668
+    },
+    {
+      "classification": "detected_rest",
+      "confidence": "high",
+      "duration_s": 660,
+      "end_index": 3652,
+      "end_offset_s": 70776,
+      "lat": 24.061211,
+      "lon": 121.279831,
+      "rest_id": "rest.013",
+      "source_refs": [
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx",
+        "track_points.3650-3652"
+      ],
+      "start_index": 3650,
+      "start_offset_s": 70116
+    },
+    {
+      "classification": "detected_rest",
+      "confidence": "high",
+      "duration_s": 230,
+      "end_index": 3791,
+      "end_offset_s": 72399,
+      "lat": 24.056731,
+      "lon": 121.285127,
+      "rest_id": "rest.014",
+      "source_refs": [
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx",
+        "track_points.3789-3791"
+      ],
+      "start_index": 3789,
+      "start_offset_s": 72169
+    },
+    {
+      "classification": "detected_rest",
+      "confidence": "high",
+      "duration_s": 224,
+      "end_index": 3878,
+      "end_offset_s": 73491,
+      "lat": 24.0506525,
+      "lon": 121.284369,
+      "rest_id": "rest.015",
+      "source_refs": [
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx",
+        "track_points.3877-3878"
+      ],
+      "start_index": 3877,
+      "start_offset_s": 73267
+    },
+    {
+      "classification": "detected_rest",
+      "confidence": "high",
+      "duration_s": 190,
+      "end_index": 4088,
+      "end_offset_s": 75735,
+      "lat": 24.0393667,
+      "lon": 121.2859483,
+      "rest_id": "rest.016",
+      "source_refs": [
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx",
+        "track_points.4086-4088"
+      ],
+      "start_index": 4086,
+      "start_offset_s": 75545
+    },
+    {
+      "classification": "detected_rest",
+      "confidence": "high",
+      "duration_s": 407,
+      "end_index": 4090,
+      "end_offset_s": 76148,
+      "lat": 24.039319,
+      "lon": 121.2859375,
+      "rest_id": "rest.017",
+      "source_refs": [
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx",
+        "track_points.4089-4090"
+      ],
+      "start_index": 4089,
+      "start_offset_s": 75741
+    },
+    {
+      "classification": "detected_rest",
+      "confidence": "high",
+      "duration_s": 210,
+      "end_index": 4365,
+      "end_offset_s": 79225,
+      "lat": 24.028294,
+      "lon": 121.2796007,
+      "rest_id": "rest.018",
+      "source_refs": [
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx",
+        "track_points.4363-4365"
+      ],
+      "start_index": 4363,
+      "start_offset_s": 79015
+    },
+    {
+      "classification": "detected_rest",
+      "confidence": "high",
+      "duration_s": 45293,
+      "end_index": 4378,
+      "end_offset_s": 124636,
+      "lat": 24.029075,
+      "lon": 121.2797642,
+      "rest_id": "rest.019",
+      "source_refs": [
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx",
+        "track_points.4375-4378"
+      ],
+      "start_index": 4375,
+      "start_offset_s": 79343
+    },
+    {
+      "classification": "detected_rest",
+      "confidence": "high",
+      "duration_s": 632,
+      "end_index": 4702,
+      "end_offset_s": 129383,
+      "lat": 24.0132673,
+      "lon": 121.2731983,
+      "rest_id": "rest.020",
+      "source_refs": [
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx",
+        "track_points.4700-4702"
+      ],
+      "start_index": 4700,
+      "start_offset_s": 128751
+    },
+    {
+      "classification": "detected_rest",
+      "confidence": "high",
+      "duration_s": 309,
+      "end_index": 4779,
+      "end_offset_s": 130742,
+      "lat": 24.010833,
+      "lon": 121.2711417,
+      "rest_id": "rest.021",
+      "source_refs": [
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx",
+        "track_points.4777-4779"
+      ],
+      "start_index": 4777,
+      "start_offset_s": 130433
+    },
+    {
+      "classification": "detected_rest",
+      "confidence": "high",
+      "duration_s": 287,
+      "end_index": 4901,
+      "end_offset_s": 132689,
+      "lat": 24.006913,
+      "lon": 121.269808,
+      "rest_id": "rest.022",
+      "source_refs": [
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx",
+        "track_points.4900-4901"
+      ],
+      "start_index": 4900,
+      "start_offset_s": 132402
+    },
+    {
+      "classification": "detected_rest",
+      "confidence": "high",
+      "duration_s": 249,
+      "end_index": 5023,
+      "end_offset_s": 134266,
+      "lat": 24.0018305,
+      "lon": 121.2667005,
+      "rest_id": "rest.023",
+      "source_refs": [
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx",
+        "track_points.5022-5023"
+      ],
+      "start_index": 5022,
+      "start_offset_s": 134017
+    },
+    {
+      "classification": "detected_rest",
+      "confidence": "high",
+      "duration_s": 793,
+      "end_index": 5151,
+      "end_offset_s": 136549,
+      "lat": 23.9973737,
+      "lon": 121.2634284,
+      "rest_id": "rest.024",
+      "source_refs": [
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx",
+        "track_points.5145-5151"
+      ],
+      "start_index": 5145,
+      "start_offset_s": 135756
+    },
+    {
+      "classification": "detected_rest",
+      "confidence": "high",
+      "duration_s": 185,
+      "end_index": 5276,
+      "end_offset_s": 138755,
+      "lat": 23.9933695,
+      "lon": 121.260526,
+      "rest_id": "rest.025",
+      "source_refs": [
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx",
+        "track_points.5275-5276"
+      ],
+      "start_index": 5275,
+      "start_offset_s": 138570
+    },
+    {
+      "classification": "detected_rest",
+      "confidence": "high",
+      "duration_s": 1267,
+      "end_index": 5307,
+      "end_offset_s": 140462,
+      "lat": 23.9923025,
+      "lon": 121.260234,
+      "rest_id": "rest.026",
+      "source_refs": [
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx",
+        "track_points.5306-5307"
+      ],
+      "start_index": 5306,
+      "start_offset_s": 139195
+    },
+    {
+      "classification": "detected_rest",
+      "confidence": "high",
+      "duration_s": 3532,
+      "end_index": 5491,
+      "end_offset_s": 146065,
+      "lat": 23.9844847,
+      "lon": 121.2618217,
+      "rest_id": "rest.027",
+      "source_refs": [
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx",
+        "track_points.5489-5491"
+      ],
+      "start_index": 5489,
+      "start_offset_s": 142533
+    },
+    {
+      "classification": "detected_rest",
+      "confidence": "high",
+      "duration_s": 1056,
+      "end_index": 5775,
+      "end_offset_s": 150082,
+      "lat": 23.9753533,
+      "lon": 121.2683253,
+      "rest_id": "rest.028",
+      "source_refs": [
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx",
+        "track_points.5773-5775"
+      ],
+      "start_index": 5773,
+      "start_offset_s": 149026
+    },
+    {
+      "classification": "detected_rest",
+      "confidence": "high",
+      "duration_s": 218,
+      "end_index": 5858,
+      "end_offset_s": 151654,
+      "lat": 23.9753752,
+      "lon": 121.2711224,
+      "rest_id": "rest.029",
+      "source_refs": [
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx",
+        "track_points.5854-5858"
+      ],
+      "start_index": 5854,
+      "start_offset_s": 151436
+    },
+    {
+      "classification": "detected_rest",
+      "confidence": "high",
+      "duration_s": 246,
+      "end_index": 5864,
+      "end_offset_s": 152042,
+      "lat": 23.9751933,
+      "lon": 121.2713157,
+      "rest_id": "rest.030",
+      "source_refs": [
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx",
+        "track_points.5862-5864"
+      ],
+      "start_index": 5862,
+      "start_offset_s": 151796
+    },
+    {
+      "classification": "detected_rest",
+      "confidence": "high",
+      "duration_s": 1211,
+      "end_index": 5887,
+      "end_offset_s": 153575,
+      "lat": 23.9755225,
+      "lon": 121.272031,
+      "rest_id": "rest.031",
+      "source_refs": [
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx",
+        "track_points.5886-5887"
+      ],
+      "start_index": 5886,
+      "start_offset_s": 152364
+    },
+    {
+      "classification": "detected_rest",
+      "confidence": "high",
+      "duration_s": 207,
+      "end_index": 5903,
+      "end_offset_s": 154039,
+      "lat": 23.975614,
+      "lon": 121.272606,
+      "rest_id": "rest.032",
+      "source_refs": [
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx",
+        "track_points.5898-5903"
+      ],
+      "start_index": 5898,
+      "start_offset_s": 153832
+    },
+    {
+      "classification": "detected_rest",
+      "confidence": "high",
+      "duration_s": 632,
+      "end_index": 5930,
+      "end_offset_s": 155441,
+      "lat": 23.9753333,
+      "lon": 121.2735183,
+      "rest_id": "rest.033",
+      "source_refs": [
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx",
+        "track_points.5928-5930"
+      ],
+      "start_index": 5928,
+      "start_offset_s": 154809
+    },
+    {
+      "classification": "detected_rest",
+      "confidence": "high",
+      "duration_s": 1074,
+      "end_index": 6102,
+      "end_offset_s": 158261,
+      "lat": 23.9674548,
+      "lon": 121.2765117,
+      "rest_id": "rest.034",
+      "source_refs": [
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx",
+        "track_points.6099-6102"
+      ],
+      "start_index": 6099,
+      "start_offset_s": 157187
+    },
+    {
+      "classification": "detected_rest",
+      "confidence": "high",
+      "duration_s": 447,
+      "end_index": 6130,
+      "end_offset_s": 159257,
+      "lat": 23.9667565,
+      "lon": 121.2769025,
+      "rest_id": "rest.035",
+      "source_refs": [
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx",
+        "track_points.6129-6130"
+      ],
+      "start_index": 6129,
+      "start_offset_s": 158810
+    },
+    {
+      "classification": "detected_rest",
+      "confidence": "high",
+      "duration_s": 1325,
+      "end_index": 6183,
+      "end_offset_s": 161440,
+      "lat": 23.9654063,
+      "lon": 121.2780573,
+      "rest_id": "rest.036",
+      "source_refs": [
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx",
+        "track_points.6181-6183"
+      ],
+      "start_index": 6181,
+      "start_offset_s": 160115
+    },
+    {
+      "classification": "detected_rest",
+      "confidence": "high",
+      "duration_s": 189,
+      "end_index": 6415,
+      "end_offset_s": 167311,
+      "lat": 23.9593345,
+      "lon": 121.2758162,
+      "rest_id": "rest.037",
+      "source_refs": [
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx",
+        "track_points.6412-6415"
+      ],
+      "start_index": 6412,
+      "start_offset_s": 167122
+    },
+    {
+      "classification": "detected_rest",
+      "confidence": "high",
+      "duration_s": 47314,
+      "end_index": 6431,
+      "end_offset_s": 214758,
+      "lat": 23.9594188,
+      "lon": 121.2753532,
+      "rest_id": "rest.038",
+      "source_refs": [
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx",
+        "track_points.6426-6431"
+      ],
+      "start_index": 6426,
+      "start_offset_s": 167444
+    },
+    {
+      "classification": "detected_rest",
+      "confidence": "high",
+      "duration_s": 1534,
+      "end_index": 6640,
+      "end_offset_s": 219473,
+      "lat": 23.951436,
+      "lon": 121.2746435,
+      "rest_id": "rest.039",
+      "source_refs": [
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx",
+        "track_points.6639-6640"
+      ],
+      "start_index": 6639,
+      "start_offset_s": 217939
+    },
+    {
+      "classification": "detected_rest",
+      "confidence": "high",
+      "duration_s": 1081,
+      "end_index": 6916,
+      "end_offset_s": 223208,
+      "lat": 23.937979,
+      "lon": 121.2719775,
+      "rest_id": "rest.040",
+      "source_refs": [
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx",
+        "track_points.6915-6916"
+      ],
+      "start_index": 6915,
+      "start_offset_s": 222127
+    },
+    {
+      "classification": "detected_rest",
+      "confidence": "high",
+      "duration_s": 203,
+      "end_index": 7186,
+      "end_offset_s": 226423,
+      "lat": 23.925695,
+      "lon": 121.2760755,
+      "rest_id": "rest.041",
+      "source_refs": [
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx",
+        "track_points.7185-7186"
+      ],
+      "start_index": 7185,
+      "start_offset_s": 226220
+    },
+    {
+      "classification": "detected_rest",
+      "confidence": "high",
+      "duration_s": 4435,
+      "end_index": 7265,
+      "end_offset_s": 231123,
+      "lat": 23.925525,
+      "lon": 121.275873,
+      "rest_id": "rest.042",
+      "source_refs": [
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx",
+        "track_points.7264-7265"
+      ],
+      "start_index": 7264,
+      "start_offset_s": 226688
+    },
+    {
+      "classification": "detected_rest",
+      "confidence": "high",
+      "duration_s": 556,
+      "end_index": 7483,
+      "end_offset_s": 233923,
+      "lat": 23.914448,
+      "lon": 121.2759933,
+      "rest_id": "rest.043",
+      "source_refs": [
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx",
+        "track_points.7481-7483"
+      ],
+      "start_index": 7481,
+      "start_offset_s": 233367
+    },
+    {
+      "classification": "detected_rest",
+      "confidence": "high",
+      "duration_s": 535,
+      "end_index": 7626,
+      "end_offset_s": 236175,
+      "lat": 23.909087,
+      "lon": 121.2788455,
+      "rest_id": "rest.044",
+      "source_refs": [
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx",
+        "track_points.7625-7626"
+      ],
+      "start_index": 7625,
+      "start_offset_s": 235640
+    },
+    {
+      "classification": "detected_rest",
+      "confidence": "high",
+      "duration_s": 572,
+      "end_index": 7713,
+      "end_offset_s": 237581,
+      "lat": 23.907541,
+      "lon": 121.2748025,
+      "rest_id": "rest.045",
+      "source_refs": [
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx",
+        "track_points.7712-7713"
+      ],
+      "start_index": 7712,
+      "start_offset_s": 237009
+    },
+    {
+      "classification": "detected_rest",
+      "confidence": "high",
+      "duration_s": 1283,
+      "end_index": 7881,
+      "end_offset_s": 240802,
+      "lat": 23.901827,
+      "lon": 121.270221,
+      "rest_id": "rest.046",
+      "source_refs": [
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx",
+        "track_points.7880-7881"
+      ],
+      "start_index": 7880,
+      "start_offset_s": 239519
+    },
+    {
+      "classification": "detected_rest",
+      "confidence": "high",
+      "duration_s": 665,
+      "end_index": 7990,
+      "end_offset_s": 242985,
+      "lat": 23.8984225,
+      "lon": 121.2710345,
+      "rest_id": "rest.047",
+      "source_refs": [
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx",
+        "track_points.7989-7990"
+      ],
+      "start_index": 7989,
+      "start_offset_s": 242320
+    },
+    {
+      "classification": "detected_rest",
+      "confidence": "high",
+      "duration_s": 577,
+      "end_index": 8046,
+      "end_offset_s": 244308,
+      "lat": 23.8967685,
+      "lon": 121.2695945,
+      "rest_id": "rest.048",
+      "source_refs": [
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx",
+        "track_points.8045-8046"
+      ],
+      "start_index": 8045,
+      "start_offset_s": 243731
+    },
+    {
+      "classification": "detected_rest",
+      "confidence": "high",
+      "duration_s": 279,
+      "end_index": 8255,
+      "end_offset_s": 246567,
+      "lat": 23.8889735,
+      "lon": 121.264404,
+      "rest_id": "rest.049",
+      "source_refs": [
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx",
+        "track_points.8254-8255"
+      ],
+      "start_index": 8254,
+      "start_offset_s": 246288
+    },
+    {
+      "classification": "detected_rest",
+      "confidence": "high",
+      "duration_s": 48996,
+      "end_index": 8291,
+      "end_offset_s": 295853,
+      "lat": 23.8872507,
+      "lon": 121.2648107,
+      "rest_id": "rest.050",
+      "source_refs": [
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx",
+        "track_points.8289-8291"
+      ],
+      "start_index": 8289,
+      "start_offset_s": 246857
+    },
+    {
+      "classification": "detected_rest",
+      "confidence": "high",
+      "duration_s": 362,
+      "end_index": 8430,
+      "end_offset_s": 297736,
+      "lat": 23.881673,
+      "lon": 121.2631083,
+      "rest_id": "rest.051",
+      "source_refs": [
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx",
+        "track_points.8428-8430"
+      ],
+      "start_index": 8428,
+      "start_offset_s": 297374
+    },
+    {
+      "classification": "detected_rest",
+      "confidence": "high",
+      "duration_s": 612,
+      "end_index": 8610,
+      "end_offset_s": 300095,
+      "lat": 23.8727013,
+      "lon": 121.266109,
+      "rest_id": "rest.052",
+      "source_refs": [
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx",
+        "track_points.8608-8610"
+      ],
+      "start_index": 8608,
+      "start_offset_s": 299483
+    },
+    {
+      "classification": "detected_rest",
+      "confidence": "high",
+      "duration_s": 684,
+      "end_index": 8781,
+      "end_offset_s": 302080,
+      "lat": 23.8817363,
+      "lon": 121.2630853,
+      "rest_id": "rest.053",
+      "source_refs": [
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx",
+        "track_points.8779-8781"
+      ],
+      "start_index": 8779,
+      "start_offset_s": 301396
+    },
+    {
+      "classification": "detected_rest",
+      "confidence": "high",
+      "duration_s": 393,
+      "end_index": 8985,
+      "end_offset_s": 305069,
+      "lat": 23.8842563,
+      "lon": 121.2545683,
+      "rest_id": "rest.054",
+      "source_refs": [
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx",
+        "track_points.8983-8985"
+      ],
+      "start_index": 8983,
+      "start_offset_s": 304676
+    },
+    {
+      "classification": "detected_rest",
+      "confidence": "high",
+      "duration_s": 312,
+      "end_index": 9145,
+      "end_offset_s": 309143,
+      "lat": 23.88634,
+      "lon": 121.24879,
+      "rest_id": "rest.055",
+      "source_refs": [
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx",
+        "track_points.9144-9145"
+      ],
+      "start_index": 9144,
+      "start_offset_s": 308831
+    },
+    {
+      "classification": "detected_rest",
+      "confidence": "high",
+      "duration_s": 426,
+      "end_index": 9282,
+      "end_offset_s": 311898,
+      "lat": 23.8853863,
+      "lon": 121.2427753,
+      "rest_id": "rest.056",
+      "source_refs": [
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx",
+        "track_points.9280-9282"
+      ],
+      "start_index": 9280,
+      "start_offset_s": 311472
+    },
+    {
+      "classification": "detected_rest",
+      "confidence": "high",
+      "duration_s": 552,
+      "end_index": 9513,
+      "end_offset_s": 315140,
+      "lat": 23.890009,
+      "lon": 121.233808,
+      "rest_id": "rest.057",
+      "source_refs": [
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx",
+        "track_points.9512-9513"
+      ],
+      "start_index": 9512,
+      "start_offset_s": 314588
+    },
+    {
+      "classification": "detected_rest",
+      "confidence": "high",
+      "duration_s": 716,
+      "end_index": 9774,
+      "end_offset_s": 318794,
+      "lat": 23.8921455,
+      "lon": 121.223646,
+      "rest_id": "rest.058",
+      "source_refs": [
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx",
+        "track_points.9773-9774"
+      ],
+      "start_index": 9773,
+      "start_offset_s": 318078
+    },
+    {
+      "classification": "detected_rest",
+      "confidence": "high",
+      "duration_s": 3625,
+      "end_index": 10161,
+      "end_offset_s": 326660,
+      "lat": 23.9172025,
+      "lon": 121.2135305,
+      "rest_id": "rest.059",
+      "source_refs": [
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx",
+        "track_points.10160-10161"
+      ],
+      "start_index": 10160,
+      "start_offset_s": 323035
+    },
+    {
+      "classification": "detected_rest",
+      "confidence": "high",
+      "duration_s": 256,
+      "end_index": 10301,
+      "end_offset_s": 329169,
+      "lat": 23.9243017,
+      "lon": 121.2086147,
+      "rest_id": "rest.060",
+      "source_refs": [
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx",
+        "track_points.10299-10301"
+      ],
+      "start_index": 10299,
+      "start_offset_s": 328913
+    },
+    {
+      "classification": "detected_rest",
+      "confidence": "high",
+      "duration_s": 182,
+      "end_index": 10449,
+      "end_offset_s": 331691,
+      "lat": 23.932323,
+      "lon": 121.2082,
+      "rest_id": "rest.061",
+      "source_refs": [
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx",
+        "track_points.10448-10449"
+      ],
+      "start_index": 10448,
+      "start_offset_s": 331509
+    },
+    {
+      "classification": "detected_rest",
+      "confidence": "high",
+      "duration_s": 397,
+      "end_index": 10609,
+      "end_offset_s": 334911,
+      "lat": 23.9430837,
+      "lon": 121.2006672,
+      "rest_id": "rest.062",
+      "source_refs": [
+        "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx",
+        "track_points.10606-10609"
+      ],
+      "start_index": 10606,
+      "start_offset_s": 334514
     }
   ],
-  "route_family": "chilai_nanhua_day1",
+  "route_family": "nenggao_andongjun",
   "source_track": {
-    "sha256": "8b0d42c2de63001b0ad6f24eb655aec04215032f095f7339b95acfbd24974b7b",
+    "sha256": "276be2dd4f1f852133d782fab66c1fb80f71f2b3bb9a1b9c038ebea20a4b31eb",
     "source_id": "completed_track",
     "source_path": "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx"
   },
   "summary": {
-    "ascent_m": 180.0,
-    "ascent_m_per_hour_moving": 360.0,
-    "descent_m": 20.0,
-    "descent_m_per_hour_moving": 40.0,
-    "distance_m": 1913.36,
-    "elapsed_time_s": 2220,
-    "moving_pace_min_per_km": 15.68,
-    "moving_ratio": 0.811,
-    "moving_time_s": 1800,
-    "rest_time_s": 420
+    "ascent_m": 7930.7,
+    "ascent_m_per_hour_moving": 234.78,
+    "descent_m": 7908.02,
+    "descent_m_per_hour_moving": 234.11,
+    "distance_m": 108666.21,
+    "elapsed_time_s": 342084,
+    "moving_pace_min_per_km": 18.65,
+    "moving_ratio": 0.355,
+    "moving_time_s": 121605,
+    "rest_time_s": 220479
   }
 }

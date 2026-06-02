@@ -327,7 +327,7 @@ def test_builds_fixture_backed_pretrip_admin_view():
     assert view["evidence_timeline"]["counts"] == {
         "category_count": 12,
         "available_category_count": 12,
-        "total_evidence_count": 1566,
+        "total_evidence_count": 1698,
     }
     assert view["scout_agent_skills"]["artifact_kind"] == "scout_agent_skill_registry_summary"
     assert view["scout_agent_skills"]["counts"]["tool_count"] == 45
@@ -634,9 +634,9 @@ def test_builds_fixture_backed_pretrip_admin_view():
     capability = view["capability_timeline_import"]
     assert capability["evidence_type"] == "pretrip_capability_timeline_import"
     assert capability["status"] == "read_only_post_analysis_import"
-    assert capability["counts"] == {"edge_count": 2, "rest_interval_count": 1}
-    assert capability["summary"]["moving_time_s"] == 1800
-    assert capability["summary"]["rest_time_s"] == 420
+    assert capability["counts"] == {"edge_count": 73, "rest_interval_count": 62}
+    assert capability["summary"]["moving_time_s"] == 121605
+    assert capability["summary"]["rest_time_s"] == 220479
     assert capability["privacy"]["raw_track_shared"] is False
     assert capability["privacy"]["exact_timestamps_shared"] is False
     assert capability["privacy"]["incident_details_shared"] is False
@@ -896,7 +896,7 @@ def test_pretrip_imports_workspace_local_capability_timeline_export(tmp_path: Pa
     capability = view["capability_timeline_import"]
     assert capability["source_path"] == "outputs/capability_timeline.json"
     assert capability["capsule_source_path"] == "outputs/capability_capsule.json"
-    assert capability["counts"] == {"edge_count": 2, "rest_interval_count": 1}
+    assert capability["counts"] == {"edge_count": 73, "rest_interval_count": 62}
     assert capability["planning_use"]["auto_applies_to_eta"] is False
     assert capability["boundary"]["workspace_mutation_allowed"] is False
     assert capability["boundary"]["mission_graph_compile_allowed"] is False
@@ -1146,7 +1146,7 @@ def test_view_exposes_planning_and_post_analysis_tabs():
         ]
         is False
     )
-    assert post["capability_timeline_import"]["counts"]["edge_count"] == 2
+    assert post["capability_timeline_import"]["counts"]["edge_count"] == 73
     assert post["capability_timeline_import"]["planning_use"]["auto_applies_to_eta"] is False
     assert post["capability_timeline_import"]["boundary"]["runtime_safety_truth"] is False
 
@@ -1467,10 +1467,10 @@ def test_tabs_expose_compact_traceable_detail_sections():
     )
     assert sections_by_id["after_action_next_plan"]["counts"]["candidate_count"] == 3
     assert sections_by_id["capability_timeline_import"]["counts"] == {
-        "edge_count": 2,
-        "rest_interval_count": 1,
+        "edge_count": 73,
+        "rest_interval_count": 62,
     }
-    assert sections_by_id["capability_timeline_import"]["summary"]["moving_time_s"] == 1800
+    assert sections_by_id["capability_timeline_import"]["summary"]["moving_time_s"] == 121605
     assert sections_by_id["capability_timeline_import"]["summary"]["raw_track_shared"] is False
     assert sections_by_id["capability_timeline_import"]["summary"]["auto_applies_to_eta"] is False
     assert (

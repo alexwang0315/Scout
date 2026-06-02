@@ -424,6 +424,26 @@ python -m post_analysis_capability \
   --min-rest-duration-s 180
 ```
 
+Current fixture-backed golden route:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. ./venv/bin/python -m post_analysis_capability \
+  --case-id chilai_nanhua_day1_post_analysis \
+  --route-family nenggao_andongjun \
+  --completed-track-gpx tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx \
+  --checkpoint-definitions tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/checkpoints.json \
+  --route-time-entries tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/route_time_entries.json \
+  --output-dir tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/outputs
+```
+
+The current fixture is rebuilt from the user-provided
+`/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍.gpx.gpx` completed
+golden GPX. It keeps a cleaned completed track in the fixture and records the
+non-monotonic timestamp fragment cleanup in
+`tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/gpx_cleaning_report.json`.
+This is post-analysis evidence only and remains outside Phase 1 runtime safety
+truth.
+
 Proposed tests:
 
 ```bash

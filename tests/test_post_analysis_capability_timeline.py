@@ -19,6 +19,12 @@ from route_matching import load_gpx_route
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE_ROOT = ROOT / "tests" / "fixtures" / "post_analysis" / "chilai_nanhua_day1_post_analysis"
 CASE_ID = "chilai_nanhua_day1_post_analysis"
+GOLDEN_NODE_COUNT = 74
+GOLDEN_EDGE_COUNT = 73
+GOLDEN_REST_INTERVAL_COUNT = 62
+GOLDEN_MOVING_TIME_S = 121_605
+GOLDEN_ELAPSED_TIME_S = 342_084
+GOLDEN_REST_TIME_S = 220_479
 
 
 def _write_gpx(path: Path, points: list[tuple[float, float, str | None]]) -> None:
@@ -40,17 +46,31 @@ def _write_gpx(path: Path, points: list[tuple[float, float, str | None]]) -> Non
 
 class PostAnalysisCapabilityTimelineTests(unittest.TestCase):
     def test_detects_deterministic_rest_without_classifying_slow_drift(self):
-        route = load_gpx_route(FIXTURE_ROOT / "completed_track.gpx")
+        with tempfile.TemporaryDirectory() as tempdir:
+            gpx_path = Path(tempdir) / "rest.gpx"
+            _write_gpx(
+                gpx_path,
+                [
+                    (25.00000, 121.00000, "2026-05-01T00:00:00Z"),
+                    (25.00000, 121.00100, "2026-05-01T00:05:00Z"),
+                    (25.00000, 121.00200, "2026-05-01T00:10:00Z"),
+                    (25.00000, 121.00300, "2026-05-01T00:15:00Z"),
+                    (25.00001, 121.00301, "2026-05-01T00:18:00Z"),
+                    (25.00002, 121.00302, "2026-05-01T00:22:00Z"),
+                    (25.00000, 121.00500, "2026-05-01T00:30:00Z"),
+                ],
+            )
+            route = load_gpx_route(gpx_path)
 
-        rests = detect_rest_intervals(
-            route.points,
-            policy=RestDetectionPolicy(
-                rest_speed_threshold_kmh=0.5,
-                rest_radius_m=20,
-                min_rest_duration_s=180,
-            ),
-            source_ref="tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx",
-        )
+            rests = detect_rest_intervals(
+                route.points,
+                policy=RestDetectionPolicy(
+                    rest_speed_threshold_kmh=0.5,
+                    rest_radius_m=20,
+                    min_rest_duration_s=180,
+                ),
+                source_ref=str(gpx_path),
+            )
 
         self.assertEqual(len(rests), 1)
         self.assertEqual(rests[0].duration_s, 420)
@@ -91,14 +111,15 @@ class PostAnalysisCapabilityTimelineTests(unittest.TestCase):
 
         slices = slice_route_by_checkpoints(route, checkpoints, segments)
 
-        self.assertEqual([route_slice.segment.segment_id for route_slice in slices], ["seg.start_mid", "seg.mid_finish"])
-        self.assertEqual((slices[0].start_index, slices[0].end_index), (0, 3))
-        self.assertEqual((slices[1].start_index, slices[1].end_index), (3, 8))
-        self.assertGreater(slices[0].distance_m, 900)
-        self.assertGreater(slices[1].distance_m, 990)
-        self.assertEqual(slices[0].ascent_m, 120)
-        self.assertEqual(slices[1].ascent_m, 60)
-        self.assertEqual(slices[1].descent_m, 20)
+        self.assertEqual(len(checkpoints), GOLDEN_NODE_COUNT)
+        self.assertEqual(len(segments), GOLDEN_EDGE_COUNT)
+        self.assertEqual(len(slices), GOLDEN_EDGE_COUNT)
+        self.assertEqual(slices[0].segment.segment_id, "seg.001")
+        self.assertEqual(slices[-1].segment.segment_id, "seg.073")
+        self.assertEqual(slices[0].start_index, 0)
+        self.assertEqual(slices[-1].end_index, len(route.points) - 1)
+        self.assertGreater(slices[0].distance_m, 1_400)
+        self.assertGreater(slices[-1].distance_m, 600)
 
     def test_writes_capability_timeline_and_privacy_capsule(self):
         with tempfile.TemporaryDirectory() as tempdir:
@@ -122,31 +143,30 @@ class PostAnalysisCapabilityTimelineTests(unittest.TestCase):
         self.assertEqual(timeline["artifact_kind"], "post_analysis_capability_timeline")
         self.assertEqual(timeline["artifact_version"], "capability_timeline.v1")
         self.assertEqual(timeline["case_id"], CASE_ID)
-        self.assertEqual(len(timeline["nodes"]), 3)
-        self.assertEqual(len(timeline["edges"]), 2)
-        self.assertEqual(len(timeline["rest_intervals"]), 1)
-        self.assertEqual(timeline["edges"][0]["elapsed_time_s"], 900)
-        self.assertEqual(timeline["edges"][0]["moving_time_s"], 900)
-        self.assertEqual(timeline["edges"][0]["rest_time_s"], 0)
-        self.assertEqual(timeline["edges"][1]["elapsed_time_s"], 1320)
-        self.assertEqual(timeline["edges"][1]["rest_time_s"], 420)
-        self.assertEqual(timeline["edges"][1]["moving_time_s"], 900)
-        self.assertEqual(timeline["summary"]["elapsed_time_s"], 2220)
-        self.assertEqual(timeline["summary"]["moving_time_s"], 1800)
-        self.assertEqual(timeline["summary"]["rest_time_s"], 420)
+        self.assertEqual(timeline["route_family"], "nenggao_andongjun")
+        self.assertEqual(len(timeline["nodes"]), GOLDEN_NODE_COUNT)
+        self.assertEqual(len(timeline["edges"]), GOLDEN_EDGE_COUNT)
+        self.assertEqual(len(timeline["rest_intervals"]), GOLDEN_REST_INTERVAL_COUNT)
+        self.assertEqual(timeline["edges"][0]["edge_id"], "cp.start_to_cp.001")
+        self.assertEqual(timeline["edges"][-1]["edge_id"], "cp.072_to_cp.finish")
+        self.assertEqual(timeline["summary"]["elapsed_time_s"], GOLDEN_ELAPSED_TIME_S)
+        self.assertEqual(timeline["summary"]["moving_time_s"], GOLDEN_MOVING_TIME_S)
+        self.assertEqual(timeline["summary"]["rest_time_s"], GOLDEN_REST_TIME_S)
         self.assertEqual(timeline["data_quality"]["missing_timestamp_count"], 0)
-        self.assertEqual(timeline["data_quality"]["gps_gap_count"], 0)
+        self.assertEqual(timeline["data_quality"]["suspicious_timestamp_count"], 0)
+        self.assertEqual(timeline["data_quality"]["gps_gap_count"], 18)
         self.assertTrue(timeline["boundary"]["post_analysis_only"])
         self.assertFalse(timeline["boundary"]["safety_api_calls_allowed"])
         self.assertFalse(timeline["boundary"]["phase1_runtime_mutation_allowed"])
 
         self.assertEqual(capsule["artifact_kind"], "post_analysis_capability_capsule")
+        self.assertEqual(capsule["route_family"], "nenggao_andongjun")
         self.assertEqual(capsule["source_scope"], "completed_run_summary_only")
         self.assertFalse(capsule["raw_track_shared"])
         self.assertFalse(capsule["exact_timestamps_shared"])
         self.assertFalse(capsule["incident_details_shared"])
         self.assertNotIn("<trkpt", json.dumps(capsule))
-        self.assertNotIn("2026-05-01T", json.dumps(capsule))
+        self.assertNotIn("2010-05-19T", json.dumps(capsule))
         self.assertNotIn("incident_id", json.dumps(capsule).lower())
         self.assertEqual(share_preview["artifact_kind"], "post_analysis_capability_share_preview")
         self.assertTrue(share_preview["export_requires_confirmation"])
@@ -162,16 +182,17 @@ class PostAnalysisCapabilityTimelineTests(unittest.TestCase):
         )
 
         self.assertEqual(summary["evidence_type"], "post_analysis_capability")
-        self.assertEqual(summary["edge_count"], 2)
-        self.assertEqual(summary["rest_interval_count"], 1)
-        self.assertEqual(summary["summary"]["moving_time_s"], 1800)
+        self.assertEqual(summary["route_family"], "nenggao_andongjun")
+        self.assertEqual(summary["edge_count"], GOLDEN_EDGE_COUNT)
+        self.assertEqual(summary["rest_interval_count"], GOLDEN_REST_INTERVAL_COUNT)
+        self.assertEqual(summary["summary"]["moving_time_s"], GOLDEN_MOVING_TIME_S)
         self.assertFalse(summary["capsule_preview"]["raw_track_shared"])
         self.assertFalse(summary["capsule_preview"]["exact_timestamps_shared"])
         self.assertFalse(summary["capsule_preview"]["incident_details_shared"])
-        self.assertEqual(summary["route_time_comparison"]["summary"]["comparison_count"], 2)
+        self.assertEqual(summary["route_time_comparison"]["summary"]["comparison_count"], 0)
         self.assertTrue(summary["share_preview"]["export_requires_confirmation"])
         self.assertNotIn("<trkpt", json.dumps(summary))
-        self.assertNotIn("2026-05-01T", json.dumps(summary))
+        self.assertNotIn("2010-05-19T", json.dumps(summary))
 
     def test_confidence_hardening_records_timestamp_gap_and_route_deviation(self):
         with tempfile.TemporaryDirectory() as tempdir:
@@ -328,8 +349,8 @@ class PostAnalysisCapabilityTimelineTests(unittest.TestCase):
                 json.dumps(
                     [
                         {
-                            "candidate_id": "guide.seg.start_mid",
-                            "segment_candidate_id": "seg.start_mid",
+                            "candidate_id": "guide.seg.001",
+                            "segment_candidate_id": "seg.001",
                             "route_guide_segment_time_minutes": 20,
                             "confidence": "medium",
                             "source_refs": ["guide.fixture"],
@@ -353,10 +374,10 @@ class PostAnalysisCapabilityTimelineTests(unittest.TestCase):
             exported = json.loads(export_path.read_text(encoding="utf-8"))
 
         self.assertEqual(source_path.name, "compiled_mission_graph.reviewed.json")
-        self.assertEqual(len(definitions["checkpoints"]), 3)
+        self.assertEqual(len(definitions["checkpoints"]), GOLDEN_NODE_COUNT)
         self.assertEqual(files.comparison["artifact_kind"], "post_analysis_route_time_comparison")
         self.assertEqual(files.comparison["summary"]["comparison_count"], 1)
-        self.assertEqual(files.comparison["segments"][0]["delta_vs_guide_moving_min"], -5)
+        self.assertEqual(files.comparison["segments"][0]["delta_vs_guide_moving_min"], -15)
         self.assertTrue(files.share_preview["excluded_fields"]["exact_coordinates"])
         self.assertTrue(exported["export_confirmed"])
         self.assertFalse(exported["export_boundary"]["runtime_safety_truth"])

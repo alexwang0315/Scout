@@ -174,6 +174,11 @@ and duration >= min_rest_duration_s
 
 ### Fixture 範例
 
+目前 repo fixture 已改用 `能高安東軍.gpx.gpx` golden completed GPX
+重建，不再是只有 start / mid / finish 的 synthetic demo。Fixture 會先移除
+non-monotonic timestamp fragments，清理證據在
+`tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/gpx_cleaning_report.json`。
+
 ```bash
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. ./venv/bin/python -m post_analysis_capability \
   --case-id chilai_nanhua_day1_post_analysis \
@@ -316,25 +321,26 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. ./venv/bin/python -m post_analysis_capabi
 {
   "artifact_kind": "post_analysis_capability_timeline",
   "case_id": "chilai_nanhua_day1_post_analysis",
+  "route_family": "nenggao_andongjun",
   "edges": [
     {
-      "edge_id": "cp.mid_to_cp.finish",
-      "segment_id": "seg.mid_finish",
-      "elapsed_time_s": 1320,
-      "moving_time_s": 900,
-      "rest_time_s": 420,
-      "distance_m": 1006.37,
-      "ascent_m": 60.0,
-      "descent_m": 20.0,
-      "confidence": "high",
-      "source_refs": ["segment_capsule.seg.mid_finish", "track_slice.3-8"]
+      "edge_id": "cp.start_to_cp.001",
+      "segment_id": "seg.001",
+      "elapsed_time_s": 1163,
+      "moving_time_s": 280,
+      "rest_time_s": 883,
+      "distance_m": 1522.34,
+      "ascent_m": 18.13,
+      "descent_m": 32.28,
+      "confidence": "medium",
+      "source_refs": ["seg.001", "track_slice.0-51"]
     }
   ],
   "summary": {
-    "elapsed_time_s": 2220,
-    "moving_time_s": 1800,
-    "rest_time_s": 420,
-    "moving_ratio": 0.811
+    "elapsed_time_s": 342084,
+    "moving_time_s": 121605,
+    "rest_time_s": 220479,
+    "moving_ratio": 0.355
   }
 }
 ```
@@ -435,9 +441,11 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. ./venv/bin/python -m post_analysis_capabi
 完成一次路線後，你可以得到一張「自己實際怎麼走」的能力時間軸：
 
 ```text
-[Trailhead] -- 900s moving / 900s elapsed -- [Mid ridge]
-[Mid ridge] -- 900s moving / 1320s elapsed -- [Finish]
-                            rest 420s
+[Start] -- 280s moving / 1163s elapsed -- [CP 001]
+  ...
+[CP 072] -- 815s moving / 815s elapsed -- [Finish]
+
+Golden fixture: 74 nodes / 73 segment edges / 62 detected rest intervals.
 ```
 
 這能讓你比較清楚地回答：
