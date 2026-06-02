@@ -309,6 +309,30 @@ def test_builds_fixture_backed_pretrip_admin_view():
     assert view["overpass_evidence"]["boundary"]["runtime_truth"] is False
     assert view["overpass_evidence"]["boundary"]["live_network_required"] is False
     assert view["overpass_evidence"]["request"]["endpoint"] == "https://overpass-api.de/api/interpreter"
+    assert view["evidence_timeline"]["artifact_kind"] == "scout_cross_surface_evidence_timeline"
+    assert view["evidence_timeline"]["category_order"] == [
+        "route",
+        "checkpoints",
+        "segments",
+        "capability_timeline",
+        "rest_intervals",
+        "mcp",
+        "gis_cp",
+        "risk",
+        "map_context",
+        "reference_tracks",
+        "review",
+        "runtime_handoff",
+    ]
+    assert view["evidence_timeline"]["counts"] == {
+        "category_count": 12,
+        "available_category_count": 12,
+        "total_evidence_count": 1566,
+    }
+    assert view["scout_agent_skills"]["artifact_kind"] == "scout_agent_skill_registry_summary"
+    assert view["scout_agent_skills"]["counts"]["tool_count"] == 45
+    assert view["scout_agent_skills"]["boundary"]["tool_execution_allowed_from_ui"] is False
+    assert view["tabs"]["agent_skills"]["sections"][0]["id"] == "scout_agent_skills"
     assert view["readiness"]["status"] == "ready"
     assert view["eta"]["target_eta"] == "2013-10-08T18:28:50+08:00"
     assert view["route_notes"]["counts"]["note_candidate_count"] == 81
@@ -1051,7 +1075,12 @@ def test_view_is_summary_only_and_has_traceable_source_refs():
 def test_view_exposes_planning_and_post_analysis_tabs():
     view = build_pretrip_admin_view(PROJECT_ID, root=ROOT)
 
-    assert set(view["tabs"]) == {"pre_trip_planning", "post_analysis", "review_workspace"}
+    assert set(view["tabs"]) == {
+        "pre_trip_planning",
+        "post_analysis",
+        "review_workspace",
+        "agent_skills",
+    }
     planning = view["tabs"]["pre_trip_planning"]
     post = view["tabs"]["post_analysis"]
     review_workspace = view["tabs"]["review_workspace"]

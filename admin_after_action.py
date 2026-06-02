@@ -7,6 +7,10 @@ from pathlib import Path
 from typing import Any
 
 from admin_map_layers import build_after_action_map_layers
+from admin_evidence_timeline import (
+    build_admin_evidence_timeline,
+    build_scout_agent_skill_summary,
+)
 from incident_store import IncidentStore
 from mission_graph import load_mission_graph
 from offline_map import load_offline_map_context
@@ -359,7 +363,7 @@ def _build_pretrip_admin_case_view(
         "evidence_type": "replay_summary",
     }
 
-    return {
+    view = {
         "case_id": case_id,
         "project_id": case_id,
         "artifacts": {
@@ -429,6 +433,20 @@ def _build_pretrip_admin_case_view(
         },
         "map": map_payload,
         "map_layers": pretrip_view["map_layers"],
+        "map_candidates": pretrip_view["map_candidates"],
+        "retreat_routes": pretrip_view["retreat_routes"],
+        "route_notes": pretrip_view["route_notes"],
+        "reference_tracks": pretrip_view["reference_tracks"],
+        "overpass_evidence": pretrip_view["overpass_evidence"],
+        "gis_perception_timeline": pretrip_view["gis_perception_timeline"],
+        "major_critical_points": pretrip_view.get("major_critical_points"),
+        "review_queue": pretrip_view["review_queue"],
+        "review_workbench": pretrip_view["review_workbench"],
+        "departure_reviewed_candidates": pretrip_view.get(
+            "departure_reviewed_candidates"
+        ),
+        "mcp_review_actions": pretrip_view.get("mcp_review_actions"),
+        "departure_bundle": pretrip_view["departure_bundle"],
         "risk_score": pretrip_view["risk_score"],
         "risk_ribbon": pretrip_view["risk_ribbon"],
         "risk_heatmap": pretrip_view["risk_heatmap"],
@@ -456,6 +474,9 @@ def _build_pretrip_admin_case_view(
             "event_count": len(debug_projection_events),
         },
     }
+    view["evidence_timeline"] = build_admin_evidence_timeline(view)
+    view["scout_agent_skills"] = build_scout_agent_skill_summary(root=root)
+    return view
 
 
 def _pretrip_artifact_refs(artifacts: dict[str, Path], project_root: Path) -> dict[str, str]:

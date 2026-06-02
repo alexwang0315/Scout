@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 
 from admin_after_action import build_admin_case_view
 from admin_api import create_admin_app
+from pretrip_admin_view import build_pretrip_admin_view
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -131,6 +132,30 @@ class AdminAfterActionTests(unittest.TestCase):
         self.assertEqual(payload["capability_timeline"]["summary"]["moving_time_s"], 1800)
         self.assertEqual(payload["capability_timeline"]["data_quality"]["gps_gap_count"], 0)
         self.assertEqual(payload["capability_timeline"]["route_time_comparison"]["summary"]["comparison_count"], 2)
+        pretrip_view = build_pretrip_admin_view(PRETRIP_CASE_ID)
+        self.assertEqual(
+            payload["evidence_timeline"]["category_order"],
+            pretrip_view["evidence_timeline"]["category_order"],
+        )
+        self.assertEqual(
+            [
+                (item["category_id"], item["label"], item["count"], item["available"])
+                for item in payload["evidence_timeline"]["categories"]
+            ],
+            [
+                (item["category_id"], item["label"], item["count"], item["available"])
+                for item in pretrip_view["evidence_timeline"]["categories"]
+            ],
+        )
+        self.assertEqual(payload["major_critical_points"]["counts"]["mcp_candidate_count"], 6)
+        self.assertEqual(
+            payload["gis_perception_timeline"]["counts"]["checkpoint_candidate_count"],
+            9,
+        )
+        self.assertEqual(payload["scout_agent_skills"]["counts"]["tool_count"], 45)
+        self.assertFalse(
+            payload["scout_agent_skills"]["boundary"]["tool_execution_allowed_from_ui"]
+        )
         self.assertTrue(payload["capability_timeline"]["share_preview"]["export_requires_confirmation"])
         self.assertTrue(payload["capability_timeline"]["share_preview"]["excluded_fields"]["raw_gpx"])
         self.assertTrue(payload["capability_timeline"]["share_preview"]["excluded_fields"]["exact_coordinates"])
@@ -211,6 +236,12 @@ class AdminAfterActionTests(unittest.TestCase):
         self.assertIn('const CASE_ID = "chilai_nanhua_day1"', response.text)
         self.assertIn("nextPlanCandidatePanel", response.text)
         self.assertIn("Capability Timeline", response.text)
+        self.assertIn("Evidence Timeline", response.text)
+        self.assertIn("Scout Agent Skills", response.text)
+        self.assertIn('id="evidenceTimelinePanel"', response.text)
+        self.assertIn('id="agentSkillsPanel"', response.text)
+        self.assertIn("function renderEvidenceTimelinePanel", response.text)
+        self.assertIn("function renderAgentSkillsPanel", response.text)
         self.assertIn("post_analysis_capability", response.text)
         self.assertIn("post_analysis_capability_segment", response.text)
         self.assertIn("Raw GPX shared", response.text)
@@ -248,6 +279,10 @@ class AdminAfterActionTests(unittest.TestCase):
         self.assertIn("FOCUS_POINT_VIEWPORT_M = 50", response.text)
         self.assertIn("pointFocusItemFor", response.text)
         self.assertIn("findPointFocusEvidenceByRef", response.text)
+        self.assertIn("view.major_critical_points?.candidates", response.text)
+        self.assertIn("view.gis_perception_timeline?.checkpoint_candidates", response.text)
+        self.assertIn("view.reference_tracks?.reference_tracks", response.text)
+        self.assertIn("view.evidence_timeline?.categories", response.text)
         self.assertIn('button.addEventListener("click", () => {\n        selectEvidence(item);\n        focusMapFor(item);', response.text)
         self.assertIn("evidenceCategory", response.text)
         self.assertIn("categoryColor", response.text)

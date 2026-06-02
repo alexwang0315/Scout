@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from collections import Counter
+import hashlib
+import json
 from pathlib import Path
 from typing import Any
 
@@ -92,7 +94,11 @@ def build_admin_evidence_timeline(view: dict[str, Any]) -> dict[str, Any]:
     mcp = view.get("major_critical_points") or {}
     gis = view.get("gis_perception_timeline") or {}
     review_queue = view.get("review_queue") or {}
+    review_workbench = view.get("review_workbench") or {}
+    route_notes = view.get("route_notes") or {}
     map_payload = view.get("map") or {}
+    overpass = view.get("overpass_evidence") or {}
+    map_candidates = view.get("map_candidates") or {}
     counts = {
         "route": 1 if view.get("route") else 0,
         "checkpoints": _len((view.get("mission") or {}).get("checkpoints")),
@@ -114,15 +120,23 @@ def build_admin_evidence_timeline(view: dict[str, Any]) -> dict[str, Any]:
         + _len((view.get("risk_heatmap") or {}).get("segments"))
         + _len((view.get("risk_delta") or {}).get("segments"))
         + _len(view.get("risk_rules")),
-        "map_context": _len(map_payload.get("corridors"))
+        "map_context": int((overpass.get("counts") or {}).get("candidates") or 0)
+        + int((map_candidates.get("counts") or {}).get("corridor_candidates") or 0)
+        + int((map_candidates.get("counts") or {}).get("hazard_candidates") or 0)
+        + int((map_candidates.get("counts") or {}).get("poi_candidates") or 0)
+        or _len(map_payload.get("corridors"))
         + _len(map_payload.get("hazards"))
         + _len(map_payload.get("pois")),
         "reference_tracks": int(
             (view.get("reference_tracks") or {}).get("reference_track_count")
             or _len((view.get("reference_tracks") or {}).get("reference_tracks"))
         ),
-        "review": int((review_queue.get("counts") or {}).get("item_count") or _len(review_queue.get("items"))),
-        "runtime_handoff": _len(view.get("safety_timeline")) + _len(view.get("incident_packages")),
+        "review": int((review_queue.get("counts") or {}).get("item_count") or _len(review_queue.get("items")))
+        + int((review_workbench.get("counts") or {}).get("category_group_count") or _len(review_workbench.get("category_groups")))
+        + int((route_notes.get("counts") or {}).get("note_candidate_count") or 0),
+        "runtime_handoff": 1
+        if view.get("departure_bundle") or view.get("runtime_handoff")
+        else _len(view.get("safety_timeline")) + _len(view.get("incident_packages")),
     }
     return _timeline_payload("admin", counts)
 
@@ -134,7 +148,13 @@ def build_scout_agent_skill_summary(
 ) -> dict[str, Any]:
     resolved_manifest_dir = manifest_dir or root / "tools" / "scout_agent_tool_manifests"
     manifests = load_tool_manifests(resolved_manifest_dir)
-    tools = [summarize_tool_manifest(manifest) for manifest in manifests]
+    tools = [
+        _agent_tool_projection_record(
+            summarize_tool_manifest(manifest),
+            source_path=_relpath(resolved_manifest_dir, root),
+        )
+        for manifest in manifests
+    ]
     mode_counts = Counter(str(tool["mode"]) for tool in tools)
     authorization_counts = Counter(str(tool["requires_authorization"]) for tool in tools)
     write_capable_count = sum(1 for tool in tools if tool.get("allowed_writes"))
@@ -163,9 +183,24 @@ def _timeline_payload(surface: str, counts: dict[str, int]) -> dict[str, Any]:
     categories = [
         {
             "category_id": category_id,
+            "source_id": f"{surface}.evidence_timeline.{category_id}",
+            "source_path": "view.evidence_timeline",
+            "evidence_type": "cross_surface_evidence_timeline_category",
             "label": EVIDENCE_TIMELINE_CATEGORY_LABELS[category_id],
             "count": int(counts.get(category_id, 0)),
             "available": int(counts.get(category_id, 0)) > 0,
+            **_projection_metadata(
+                source_path="view.evidence_timeline",
+                evidence_type="cross_surface_evidence_timeline_category",
+                source_kind="evidence_timeline_category",
+                source_id=f"{surface}.evidence_timeline.{category_id}",
+                source_refs=["view.evidence_timeline", category_id],
+                extractor_version="cross_surface_evidence_timeline.projection.v1",
+                summary=(
+                    "Cross-surface evidence timeline category projection; "
+                    "candidate-only UI evidence, not runtime safety truth."
+                ),
+            ),
         }
         for category_id in EVIDENCE_TIMELINE_CATEGORY_ORDER
     ]
@@ -192,6 +227,76 @@ def _timeline_payload(surface: str, counts: dict[str, int]) -> dict[str, Any]:
 
 def _len(value: Any) -> int:
     return len(value) if isinstance(value, list) else 0
+
+
+def _agent_tool_projection_record(
+    tool: dict[str, Any],
+    *,
+    source_path: str,
+) -> dict[str, Any]:
+    tool_id = str(tool.get("id") or "unknown_tool")
+    return {
+        **tool,
+        **_projection_metadata(
+            source_path=source_path,
+            evidence_type="scout_agent_skill_registry_tool",
+            source_kind="scout_agent_tool_manifest",
+            source_id=tool_id,
+            source_refs=[source_path, tool_id],
+            extractor_version="scout_agent_skill_registry.projection.v1",
+            summary=(
+                "Scout agent skill registry projection; listing only, not tool "
+                "execution or runtime safety truth."
+            ),
+        ),
+    }
+
+
+def _projection_metadata(
+    *,
+    source_path: str,
+    evidence_type: str,
+    source_kind: str,
+    source_id: str,
+    source_refs: list[str],
+    extractor_version: str,
+    summary: str,
+) -> dict[str, Any]:
+    identity = {
+        "source_id": source_id,
+        "source_path": source_path,
+        "evidence_type": evidence_type,
+        "source_refs": source_refs,
+    }
+    digest = hashlib.sha256(
+        json.dumps(identity, sort_keys=True, ensure_ascii=False).encode("utf-8")
+    ).hexdigest()
+    return {
+        "source_id": source_id,
+        "source_path": source_path,
+        "evidence_type": evidence_type,
+        "source_refs": source_refs,
+        "source_attribution": [
+            {
+                "source_kind": source_kind,
+                "source_ref": source_path,
+                "source_candidate_id": source_id,
+                "confidence": "medium",
+                "stale_risk": "medium",
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+            }
+        ],
+        "confidence": "medium",
+        "stale_risk": "medium",
+        "review_state": "projection_only",
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+        "extractor_version": extractor_version,
+        "pydantic_ai_prompt_version": "not_applicable_deterministic_registry_projection.v1",
+        "model_output_sha256": digest,
+        "model_output_summary": summary,
+    }
 
 
 def _relpath(path: Path, root: Path) -> str:
