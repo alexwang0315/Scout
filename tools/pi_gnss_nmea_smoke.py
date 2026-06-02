@@ -19,6 +19,10 @@ except ImportError:  # pragma: no cover - used when executed directly from tools
     from pi_grove_led_bar_smoke import DEFAULT_PORT, PORT_DEFAULTS, clear_led_bar, make_gpio_writer, write_led_bar_bits
 
 
+OLED_MAX_LINES_128 = 8
+OLED_MAX_CHARS_128 = 21
+
+
 def nmea_checksum_valid(sentence: str) -> bool:
     stripped = sentence.strip()
     if not stripped.startswith("$") or "*" not in stripped:
@@ -69,6 +73,7 @@ def build_gnss_payload(
         "gnss_time_utc": parsed.get("gnss_time_utc"),
         "position": parsed.get("position"),
         "fix_quality": parsed.get("fix_quality"),
+        "motion": parsed.get("motion", _empty_motion()),
         "satellite_signal": parsed.get("satellite_signal"),
         "raw_sentence": parsed["raw_sentence"],
         "checksum_valid": parsed["checksum_valid"],
@@ -98,6 +103,7 @@ def build_gnss_stream_status_payload(*, state: str, device_port: str, baud: int)
         "sentence_type": "NONE",
         "gnss_time_utc": None,
         "position": {"lat": None, "lon": None, "altitude_m": None},
+        "motion": _empty_motion(),
         "fix_quality": {
             "status": None,
             "valid": False,
@@ -283,6 +289,7 @@ def _latest_valid_fix_summary(payload: dict[str, Any] | None) -> dict[str, Any] 
         "sentence_type": payload.get("sentence_type"),
         "gnss_time_utc": payload.get("gnss_time_utc"),
         "position": position,
+        "motion": payload.get("motion") if isinstance(payload.get("motion"), dict) else _empty_motion(),
         "quality": fix_quality.get("quality"),
         "status": fix_quality.get("status"),
         "satellites": fix_quality.get("satellites"),
@@ -413,30 +420,97 @@ def gnss_oled_message(payload: dict[str, Any], *, sentence_count: int) -> str:
             f"{baud} BAUD",
             hint,
         ]
-        return "\n".join(line[:16] for line in lines)
+        return _format_oled_lines(lines)
 
     fix_quality = payload.get("fix_quality") or {}
     position = payload.get("position") or {}
+    motion = payload.get("motion") or {}
     sentence_type = str(payload.get("sentence_type") or "NMEA")[-3:]
-    fix_label = "FIX OK" if fix_quality.get("valid") else "NO FIX"
+    has_valid_fix = fix_quality.get("valid") is True
+    fix_label = "FIX OK" if has_valid_fix else "NO FIX"
     checksum_label = "CHK OK" if payload.get("checksum_valid") else "CHK BAD"
     satellites = fix_quality.get("satellites")
     quality = fix_quality.get("quality")
+    hdop = fix_quality.get("hdop")
     lat = position.get("lat")
     lon = position.get("lon")
+    altitude = position.get("altitude_m")
+    speed_kmh = motion.get("speed_kmh")
     lines = [
         "SCOUT GPS",
-        fix_label,
+        f"{fix_label} {checksum_label}",
         f"NMEA {sentence_type} {sentence_count}",
         f"SAT {_display_value(satellites)} Q{_display_value(quality)}",
-        checksum_label,
     ]
-    if lat is not None and lon is not None:
-        lines.append(f"{float(lat):.4f}")
-        lines.append(f"{float(lon):.4f}")
+    if has_valid_fix and lat is not None and lon is not None:
+        lines.append(f"LAT {float(lat):.5f}")
+        lines.append(f"LON {float(lon):.5f}")
+        if altitude is not None:
+            lines.append(f"ALT {float(altitude):.1f}M")
+        elif hdop is not None:
+            lines.append(f"HDOP {hdop}")
+        if speed_kmh is not None:
+            lines.append(f"SPD {float(speed_kmh):.1f}KMH")
     else:
         lines.append("SEARCH SKY")
-    return "\n".join(line[:16] for line in lines[:6])
+    return _format_oled_lines(lines)
+
+
+def _format_oled_lines(lines: list[str]) -> str:
+    return "\n".join(line[:OLED_MAX_CHARS_128] for line in lines[:OLED_MAX_LINES_128])
+
+
+def apply_gnss_oled_telemetry_state(
+    state: dict[str, Any],
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    stream_state = payload.get("nmea_stream_state")
+    if stream_state in {"waiting", "no_stream"} or payload.get("checksum_valid") is False:
+        return payload
+
+    sentence_type = str(payload.get("sentence_type") or "")
+    position = dict(state.get("position") or {"lat": None, "lon": None, "altitude_m": None})
+    incoming_position = payload.get("position") if isinstance(payload.get("position"), dict) else {}
+    if sentence_type.endswith(("RMC", "GGA")):
+        for key in ("lat", "lon", "altitude_m"):
+            if incoming_position.get(key) is not None:
+                position[key] = incoming_position[key]
+
+    fix_quality = dict(
+        state.get("fix_quality")
+        or {
+            "status": None,
+            "valid": False,
+            "quality": None,
+            "satellites": None,
+            "hdop": None,
+        }
+    )
+    incoming_fix_quality = payload.get("fix_quality") if isinstance(payload.get("fix_quality"), dict) else {}
+    if sentence_type.endswith(("RMC", "GGA")) and incoming_fix_quality.get("valid") is not None:
+        fix_quality["valid"] = incoming_fix_quality.get("valid") is True
+    for key in ("status", "quality", "satellites", "hdop"):
+        if incoming_fix_quality.get(key) is not None:
+            fix_quality[key] = incoming_fix_quality[key]
+
+    motion = dict(state.get("motion") or _empty_motion())
+    incoming_motion = payload.get("motion") if isinstance(payload.get("motion"), dict) else {}
+    for key in ("speed_knots", "speed_kmh", "speed_mps", "course_deg"):
+        if incoming_motion.get(key) is not None:
+            motion[key] = incoming_motion[key]
+
+    gnss_time_utc = payload.get("gnss_time_utc") or state.get("gnss_time_utc")
+    state["position"] = position
+    state["fix_quality"] = fix_quality
+    state["motion"] = motion
+    state["gnss_time_utc"] = gnss_time_utc
+
+    merged = dict(payload)
+    merged["position"] = position
+    merged["fix_quality"] = fix_quality
+    merged["motion"] = motion
+    merged["gnss_time_utc"] = gnss_time_utc
+    return merged
 
 
 def build_oled_status_payload(
@@ -676,10 +750,13 @@ def _parse_rmc(fields: list[str], raw_sentence: str) -> dict[str, Any]:
     status = fields[2] if len(fields) > 2 else ""
     lat = _parse_lat_lon(fields[3], fields[4]) if len(fields) > 4 else None
     lon = _parse_lat_lon(fields[5], fields[6]) if len(fields) > 6 else None
+    speed_knots = _float_or_none(fields[7]) if len(fields) > 7 else None
+    course_deg = _float_or_none(fields[8]) if len(fields) > 8 else None
     return {
         "sentence_type": fields[0],
         "gnss_time_utc": _parse_datetime(fields[1], fields[9] if len(fields) > 9 else ""),
         "position": {"lat": lat, "lon": lon, "altitude_m": None},
+        "motion": _motion_from_rmc(speed_knots=speed_knots, course_deg=course_deg),
         "fix_quality": {
             "status": status,
             "valid": status == "A",
@@ -777,6 +854,31 @@ def _parse_lat_lon(value: str, hemisphere: str) -> float | None:
     return round(result, 8)
 
 
+def _motion_from_rmc(*, speed_knots: float | None, course_deg: float | None) -> dict[str, float | None]:
+    if speed_knots is None:
+        return {
+            "speed_knots": None,
+            "speed_kmh": None,
+            "speed_mps": None,
+            "course_deg": course_deg,
+        }
+    return {
+        "speed_knots": speed_knots,
+        "speed_kmh": round(speed_knots * 1.852, 3),
+        "speed_mps": round(speed_knots * 0.514444, 3),
+        "course_deg": course_deg,
+    }
+
+
+def _empty_motion() -> dict[str, None]:
+    return {
+        "speed_knots": None,
+        "speed_kmh": None,
+        "speed_mps": None,
+        "course_deg": None,
+    }
+
+
 def _parse_datetime(time_value: str, date_value: str) -> str | None:
     if len(time_value) < 6 or len(date_value) != 6:
         return _parse_time_only(time_value)
@@ -840,6 +942,7 @@ def main(argv: list[str] | None = None) -> int:
 
     oled_updates: list[dict[str, Any]] = []
     led_updates: list[dict[str, Any]] = []
+    oled_telemetry_state: dict[str, Any] = {}
     last_oled_update = 0.0
     last_led_update = 0.0
     led_defaults = PORT_DEFAULTS[args.led_port]
@@ -872,9 +975,10 @@ def main(argv: list[str] | None = None) -> int:
             baud=args.baud,
             capture_mode="serial_device",
         )
+        oled_payload = apply_gnss_oled_telemetry_state(oled_telemetry_state, gnss_payload)
         oled_updates.append(
             write_gnss_oled_status(
-                gnss_payload=gnss_payload,
+                gnss_payload=oled_payload,
                 sentence_count=sentence_count,
                 bus=args.oled_bus,
                 address=args.oled_address,
@@ -922,9 +1026,10 @@ def main(argv: list[str] | None = None) -> int:
 
     def append_visual_status(gnss_payload: dict[str, Any], sentence_count: int) -> None:
         if args.oled_status:
+            oled_payload = apply_gnss_oled_telemetry_state(oled_telemetry_state, gnss_payload)
             oled_updates.append(
                 write_gnss_oled_status(
-                    gnss_payload=gnss_payload,
+                    gnss_payload=oled_payload,
                     sentence_count=sentence_count,
                     bus=args.oled_bus,
                     address=args.oled_address,

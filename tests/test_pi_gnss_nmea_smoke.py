@@ -5,6 +5,7 @@ from pathlib import Path
 
 from tools.pi_gnss_nmea_smoke import (
     _termios_baud_constant,
+    apply_gnss_oled_telemetry_state,
     build_gnss_stream_status_payload,
     gnss_led_bit,
     gnss_oled_message,
@@ -32,6 +33,10 @@ def test_parse_rmc_minimum_gnss_position_and_time() -> None:
     assert parsed["gnss_time_utc"] == "2011-05-28T09:27:51.000Z"
     assert parsed["position"]["lat"] == 53.36133667
     assert parsed["position"]["lon"] == -6.50562
+    assert parsed["motion"]["speed_knots"] == 0.06
+    assert parsed["motion"]["speed_kmh"] == 0.111
+    assert parsed["motion"]["speed_mps"] == 0.031
+    assert parsed["motion"]["course_deg"] == 31.66
     assert parsed["fix_quality"]["valid"] is True
     assert parsed["checksum_valid"] is True
 
@@ -221,7 +226,36 @@ def test_gnss_oled_message_summarizes_fix_state_and_nmea_signal() -> None:
     assert "NMEA GGA 3" in message
     assert "SAT 8 Q1" in message
     assert "CHK OK" in message
-    assert "48.1173" in message
+    assert "LAT 48.11730" in message
+    assert "LON 11.51667" in message
+    assert "ALT 545.4M" in message
+
+
+def test_gnss_oled_message_summarizes_rmc_speed() -> None:
+    payload = parse_raw_nmea(RMC, device_port="/dev/ttyUSB0", baud=9600)[0]
+
+    message = gnss_oled_message(payload, sentence_count=1)
+
+    assert "FIX OK CHK OK" in message
+    assert "SPD 0.1KMH" in message
+
+
+def test_gnss_oled_telemetry_state_merges_altitude_and_speed() -> None:
+    state: dict[str, object] = {}
+    gga_payload, rmc_payload = parse_raw_nmea(
+        f"{GGA}\n{RMC}",
+        device_port="/dev/ttyUSB0",
+        baud=9600,
+    )
+
+    apply_gnss_oled_telemetry_state(state, gga_payload)
+    merged = apply_gnss_oled_telemetry_state(state, rmc_payload)
+    message = gnss_oled_message(merged, sentence_count=2)
+
+    assert "LAT 53.36134" in message
+    assert "LON -6.50562" in message
+    assert "ALT 545.4M" in message
+    assert "SPD 0.1KMH" in message
 
 
 def test_gnss_oled_message_summarizes_non_fix_state() -> None:
@@ -310,6 +344,30 @@ def test_gnss_smoke_cli_raw_nmea_can_dry_run_oled_status(tmp_path: Path) -> None
     assert second_update["gnss_fix_state"] == "fix"
     persisted = [json.loads(line) for line in output.read_text().splitlines()]
     assert len(persisted) == 2
+
+
+def test_gnss_smoke_cli_raw_nmea_oled_status_merges_altitude_and_speed() -> None:
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--raw-nmea",
+            f"{GGA}\n{RMC}",
+            "--oled-status",
+            "--oled-dry-run",
+        ],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    stdout_payload = json.loads(result.stdout)
+    latest_update = stdout_payload["oled_status_updates"][-1]
+    assert latest_update["gnss_fix_state"] == "fix"
+    assert "ALT 545.4M" in latest_update["message"]
+    assert "SPD 0.1KMH" in latest_update["message"]
 
 
 def test_gnss_smoke_cli_raw_nmea_can_dry_run_led_status() -> None:

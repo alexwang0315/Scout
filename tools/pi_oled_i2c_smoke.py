@@ -12,8 +12,16 @@ from typing import Any
 
 I2C_SLAVE = 0x0703
 DEFAULT_MESSAGE = "SCOUT\nI2C OK\n0x3C"
-DISPLAY_WIDTH = 96
-DISPLAY_HEIGHT = 96
+SSD1327_DISPLAY_WIDTH = 96
+SSD1327_DISPLAY_HEIGHT = 96
+SH1107G_DISPLAY_WIDTH = 128
+SH1107G_DISPLAY_HEIGHT = 128
+DISPLAY_WIDTH = SSD1327_DISPLAY_WIDTH
+DISPLAY_HEIGHT = SSD1327_DISPLAY_HEIGHT
+DISPLAY_GEOMETRIES = {
+    "ssd1327": (SSD1327_DISPLAY_WIDTH, SSD1327_DISPLAY_HEIGHT),
+    "sh1107g": (SH1107G_DISPLAY_WIDTH, SH1107G_DISPLAY_HEIGHT),
+}
 
 FONT_5X7 = {
     " ": [0x00, 0x00, 0x00, 0x00, 0x00],
@@ -84,33 +92,56 @@ def parse_address(value: str) -> int:
     return address
 
 
-def render_message_buffer(message: str) -> list[int]:
-    pages = DISPLAY_HEIGHT // 8
-    buffer = [0x00] * (DISPLAY_WIDTH * pages)
-    for line_index, line in enumerate(message.upper().splitlines()[: pages]):
+def render_message_buffer(
+    message: str,
+    *,
+    width: int = DISPLAY_WIDTH,
+    height: int = DISPLAY_HEIGHT,
+) -> list[int]:
+    pages = height // 8
+    buffer = [0x00] * (width * pages)
+    max_lines = max(1, pages // 2)
+    max_chars = max(1, width // 6)
+    for line_index, line in enumerate(message.upper().splitlines()[:max_lines]):
         y_page = line_index * 2
         if y_page >= pages:
             break
         x = 0
-        for char in line[:16]:
+        for char in line[:max_chars]:
             glyph = FONT_5X7.get(char, FONT_5X7[" "])
             for column in glyph + [0x00]:
-                if x < DISPLAY_WIDTH:
-                    buffer[y_page * DISPLAY_WIDTH + x] = column
+                if x < width:
+                    buffer[y_page * width + x] = column
                 x += 1
     return buffer
 
 
 def write_sh1107g(device: I2cDevice, message: str) -> None:
     device.write_command(0xAE)
-    device.write_command(0xDC, 0x00)
+    device.write_command(0xD5, 0x50)
+    device.write_command(0x20)
     device.write_command(0x81, 0x80)
     device.write_command(0xA0)
-    device.write_command(0xC0)
     device.write_command(0xA4)
     device.write_command(0xA6)
+    device.write_command(0xAD, 0x80)
+    device.write_command(0xC0)
+    device.write_command(0xD9, 0x1F)
+    device.write_command(0xDB, 0x27)
     device.write_command(0xAF)
-    _write_monochrome_pages(device, render_message_buffer(message))
+    device.write_command(0xB0)
+    device.write_command(0x00)
+    device.write_command(0x11)
+    _write_monochrome_pages(
+        device,
+        render_message_buffer(
+            message,
+            width=SH1107G_DISPLAY_WIDTH,
+            height=SH1107G_DISPLAY_HEIGHT,
+        ),
+        width=SH1107G_DISPLAY_WIDTH,
+        height=SH1107G_DISPLAY_HEIGHT,
+    )
 
 
 def write_ssd1327(device: I2cDevice, message: str) -> None:
@@ -120,17 +151,37 @@ def write_ssd1327(device: I2cDevice, message: str) -> None:
     device.write_command(0xA2, 0x00)
     device.write_command(0xAB, 0x01)
     device.write_command(0xAF)
-    _write_monochrome_pages(device, render_message_buffer(message))
+    _write_monochrome_pages(
+        device,
+        render_message_buffer(
+            message,
+            width=SSD1327_DISPLAY_WIDTH,
+            height=SSD1327_DISPLAY_HEIGHT,
+        ),
+        width=SSD1327_DISPLAY_WIDTH,
+        height=SSD1327_DISPLAY_HEIGHT,
+    )
 
 
-def _write_monochrome_pages(device: I2cDevice, buffer: list[int]) -> None:
-    pages = DISPLAY_HEIGHT // 8
+def _write_monochrome_pages(
+    device: I2cDevice,
+    buffer: list[int],
+    *,
+    width: int,
+    height: int,
+) -> None:
+    pages = height // 8
     for page in range(pages):
         device.write_command(0xB0 + page)
         device.write_command(0x00)
         device.write_command(0x10)
-        start = page * DISPLAY_WIDTH
-        device.write_data(bytes(buffer[start : start + DISPLAY_WIDTH]))
+        start = page * width
+        device.write_data(bytes(buffer[start : start + width]))
+
+
+def display_geometry_for_driver(driver_attempted: str) -> tuple[int, int] | None:
+    driver = driver_attempted.split(":", 1)[-1]
+    return DISPLAY_GEOMETRIES.get(driver)
 
 
 def build_payload(
@@ -159,6 +210,10 @@ def build_payload(
     }
     if error is not None:
         payload["error"] = error
+    geometry = display_geometry_for_driver(driver_attempted)
+    if geometry is not None:
+        payload["display_width"] = geometry[0]
+        payload["display_height"] = geometry[1]
     return payload
 
 
