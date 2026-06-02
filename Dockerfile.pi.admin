@@ -60,8 +60,15 @@ COPY \
     pdr_fallback.py \
     phase46_live_replay_debug_projector.py \
     phase4_admin_runtime.py \
+    post_analysis_capability.py \
+    post_analysis_capability_models.py \
+    post_analysis_energy_feedback.py \
+    post_analysis_rest_detection.py \
+    post_analysis_route_slicing.py \
     pretrip_admin_view.py \
     pretrip_candidate_generation.py \
+    pretrip_energy_projection.py \
+    pretrip_eta_plan.py \
     pretrip_expert_contribution.py \
     pretrip_expert_contribution_apply_plan.py \
     pretrip_geojson_import.py \
@@ -83,6 +90,7 @@ COPY \
     pretrip_route_note_ln_proposals.py \
     pretrip_route_note_review_options.py \
     pretrip_route_note_reviewed_assumptions.py \
+    pretrip_spatial_imprint_export.py \
     pretrip_workspace_edit.py \
     pretrip_workspace_project.py \
     provider_context.py \
@@ -97,8 +105,18 @@ COPY \
     runtime_debug_models.py \
     safety_models.py \
     safety_state_machine.py \
+    scout_agent_models.py \
+    scout_agent_tools.py \
+    scout_agent_trace.py \
+    scout_companion_match_models.py \
+    scout_energy_baseline.py \
+    scout_energy_models.py \
     scout_hardware_readiness_live_probe.py \
+    spatial_imprint_models.py \
+    voice_cue_models.py \
     ./
+
+COPY tools/scout_agent_tool_manifests/ ./tools/scout_agent_tool_manifests/
 
 COPY docs/admin/phase1-after-action.html ./docs/admin/
 COPY docs/admin/phase-3-5-runtime-debug.html ./docs/admin/
