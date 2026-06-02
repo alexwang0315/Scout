@@ -959,6 +959,8 @@
       margin: 0;
       padding: 0;
       list-style: none;
+      max-height: 320px;
+      overflow: auto;
     }
 
     .capability-list li {
@@ -981,6 +983,11 @@
       margin-top: 3px;
       color: var(--muted);
       font-size: 12px;
+    }
+
+    .capability-milestone-label {
+      font-size: 10px;
+      fill: var(--text);
     }
 
     .capability-share-preview {
@@ -2043,42 +2050,57 @@
       const nodeY = 92;
       const left = 42;
       const right = width - 42;
+      const dense = nodes.length > 24 || edges.length > 24;
+      const nodeRadius = dense ? 4 : 13;
+      const restRadius = dense ? 3 : 7;
       const nodeOrder = nodes.map(item => item.node_id);
       const nodeX = new Map(nodeOrder.map((nodeId, index) => {
         const x = nodeOrder.length <= 1 ? width / 2 : left + (index / (nodeOrder.length - 1)) * (right - left);
         return [nodeId, x];
       }));
-      node.appendChild(el("text", {x: 18, y: 24}, "moving / elapsed; rest marker shown in yellow"));
+      node.appendChild(el("text", {x: 18, y: 24}, `${formatNumber(nodes.length)} checkpoints / ${formatNumber(edges.length)} segments; milestone labels shown for dense routes`));
       edges.forEach(edge => {
         const x1 = nodeX.get(edge.from_node_id) ?? left;
         const x2 = nodeX.get(edge.to_node_id) ?? right;
         const y = edge.direction === "return" ? 118 : 68;
+        const isSelected = selectedEdge?.edge_id === edge.edge_id;
         const line = el("line", {
           x1: x1.toFixed(1),
           y1: y,
           x2: x2.toFixed(1),
           y2: y,
-          class: `capability-edge capability-edge-${edge.confidence || "medium"}${selectedEdge?.edge_id === edge.edge_id ? " is-selected" : ""}`,
+          class: `capability-edge capability-edge-${edge.confidence || "medium"}${isSelected ? " is-selected" : ""}`,
           "data-source-id": edge.edge_id
         });
         line.addEventListener("click", () => selectEvidence(edge));
         node.appendChild(line);
         const mid = (x1 + x2) / 2;
-        node.appendChild(el("text", {x: mid.toFixed(1), y: y - 16, "text-anchor": "middle"}, `${edge.direction || "outbound"} ${formatNumber(edge.moving_time_s, "s")} moving`));
-        node.appendChild(el("text", {x: mid.toFixed(1), y: y + 24, "text-anchor": "middle"}, `${formatNumber(edge.elapsed_time_s, "s")} elapsed`));
         if ((edge.rest_time_s || 0) > 0) {
-          node.appendChild(el("circle", {cx: mid.toFixed(1), cy: y, r: 7, class: "capability-rest-marker"}));
+          node.appendChild(el("circle", {cx: mid.toFixed(1), cy: y, r: restRadius, class: "capability-rest-marker"}));
+        }
+        if (!dense || isSelected) {
+          node.appendChild(el("text", {x: mid.toFixed(1), y: y - 16, "text-anchor": "middle"}, `${edge.direction || "outbound"} ${formatNumber(edge.moving_time_s, "s")} moving`));
+          node.appendChild(el("text", {x: mid.toFixed(1), y: y + 24, "text-anchor": "middle"}, `${formatNumber(edge.elapsed_time_s, "s")} elapsed`));
+        }
+        if ((!dense || isSelected) && (edge.rest_time_s || 0) > 0) {
           node.appendChild(el("text", {x: mid.toFixed(1), y: y + 42, "text-anchor": "middle"}, `rest ${formatNumber(edge.rest_time_s, "s")}`));
         }
         const comparison = capabilityComparisonForEdge(edge, artifact);
-        if (comparison) {
+        if (comparison && (!dense || isSelected)) {
           node.appendChild(el("text", {x: mid.toFixed(1), y: y - 32, "text-anchor": "middle"}, `guide delta ${comparison.delta_vs_guide_moving_min}m`));
         }
       });
-      nodes.forEach(item => {
+      nodes.forEach((item, index) => {
         const x = nodeX.get(item.node_id) ?? left;
-        node.appendChild(el("circle", {cx: x.toFixed(1), cy: nodeY, r: 13, class: "capability-node"}));
-        node.appendChild(el("text", {x: x.toFixed(1), y: nodeY + 68, "text-anchor": "middle"}, item.label || item.node_id));
+        const isEndpoint = index === 0 || index === nodes.length - 1;
+        const isSelectedEndpoint = selectedEdge && (
+          item.node_id === selectedEdge.from_node_id || item.node_id === selectedEdge.to_node_id
+        );
+        const isMilestone = isEndpoint || isSelectedEndpoint || (!dense || index % 10 === 0);
+        node.appendChild(el("circle", {cx: x.toFixed(1), cy: nodeY, r: isMilestone ? Math.max(nodeRadius, 6) : nodeRadius, class: "capability-node"}));
+        if (isMilestone) {
+          node.appendChild(el("text", {x: x.toFixed(1), y: nodeY + 56, "text-anchor": "middle", class: "capability-milestone-label"}, item.label || item.node_id));
+        }
       });
     }
 
@@ -2168,7 +2190,7 @@
           );
         }
       } else {
-        (artifact.edges || []).slice(0, 4).forEach(capabilityEdge => {
+        (artifact.edges || []).forEach(capabilityEdge => {
           const comparison = capabilityComparisonForEdge(capabilityEdge, artifact);
           appendCapabilityListItem(
             segments,

@@ -128,10 +128,11 @@ class AdminAfterActionTests(unittest.TestCase):
         ])
         self.assertEqual(payload["debug_projection"]["event_count"], 4)
         self.assertEqual(payload["capability_timeline"]["evidence_type"], "post_analysis_capability")
-        self.assertEqual(payload["capability_timeline"]["edge_count"], 2)
-        self.assertEqual(payload["capability_timeline"]["summary"]["moving_time_s"], 1800)
-        self.assertEqual(payload["capability_timeline"]["data_quality"]["gps_gap_count"], 0)
-        self.assertEqual(payload["capability_timeline"]["route_time_comparison"]["summary"]["comparison_count"], 2)
+        self.assertEqual(payload["capability_timeline"]["route_family"], "nenggao_andongjun")
+        self.assertEqual(payload["capability_timeline"]["edge_count"], 73)
+        self.assertEqual(payload["capability_timeline"]["summary"]["moving_time_s"], 121605)
+        self.assertEqual(payload["capability_timeline"]["data_quality"]["gps_gap_count"], 18)
+        self.assertEqual(payload["capability_timeline"]["route_time_comparison"]["summary"]["comparison_count"], 0)
         pretrip_view = build_pretrip_admin_view(PRETRIP_CASE_ID)
         self.assertEqual(
             payload["evidence_timeline"]["category_order"],

@@ -1,0 +1,1705 @@
+{
+  "artifact_kind": "post_analysis_gpx_cleaning_report",
+  "boundary": {
+    "phase1_runtime_mutation_allowed": false,
+    "post_analysis_only": true,
+    "raw_gpx_shared_by_default": false,
+    "runtime_safety_truth": false,
+    "safety_api_calls_allowed": false
+  },
+  "cleaned_track_point_count": 11203,
+  "cleaning_policy": "drop_non_monotonic_timestamp_fragments.v1",
+  "notes": [
+    "Only track points with timestamps earlier than the previous kept timestamp are removed.",
+    "No speed, safety, or route-correctness judgment is made by this cleaning report."
+  ],
+  "original_track_point_count": 11413,
+  "output_path": "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/completed_track.gpx",
+  "output_sha256": "276be2dd4f1f852133d782fab66c1fb80f71f2b3bb9a1b9c038ebea20a4b31eb",
+  "removed_points": [
+    {
+      "lat": 24.029233,
+      "lon": 121.279839,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4377,
+      "time": "2009-05-02T06:36:11Z"
+    },
+    {
+      "lat": 24.02932,
+      "lon": 121.279809,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4378,
+      "time": "2009-05-02T06:36:24Z"
+    },
+    {
+      "lat": 24.029397,
+      "lon": 121.279771,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4379,
+      "time": "2009-05-02T06:36:31Z"
+    },
+    {
+      "lat": 24.029417,
+      "lon": 121.279732,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4380,
+      "time": "2009-05-02T06:36:35Z"
+    },
+    {
+      "lat": 24.029413,
+      "lon": 121.279686,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4381,
+      "time": "2009-05-02T06:36:39Z"
+    },
+    {
+      "lat": 24.02951,
+      "lon": 121.279564,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4382,
+      "time": "2009-05-02T06:36:53Z"
+    },
+    {
+      "lat": 24.029543,
+      "lon": 121.279528,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4383,
+      "time": "2009-05-02T06:36:57Z"
+    },
+    {
+      "lat": 24.029656,
+      "lon": 121.279502,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4384,
+      "time": "2009-05-02T06:37:07Z"
+    },
+    {
+      "lat": 24.0298,
+      "lon": 121.279474,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4385,
+      "time": "2009-05-02T06:37:20Z"
+    },
+    {
+      "lat": 24.029831,
+      "lon": 121.279472,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4386,
+      "time": "2009-05-02T06:37:23Z"
+    },
+    {
+      "lat": 24.029974,
+      "lon": 121.279467,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4387,
+      "time": "2009-05-02T06:37:36Z"
+    },
+    {
+      "lat": 24.030006,
+      "lon": 121.279465,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4388,
+      "time": "2009-05-02T06:37:39Z"
+    },
+    {
+      "lat": 24.030124,
+      "lon": 121.279432,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4389,
+      "time": "2009-05-02T06:37:49Z"
+    },
+    {
+      "lat": 24.030234,
+      "lon": 121.27942,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4390,
+      "time": "2009-05-02T06:38:06Z"
+    },
+    {
+      "lat": 24.030489,
+      "lon": 121.279364,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4391,
+      "time": "2009-05-02T06:38:31Z"
+    },
+    {
+      "lat": 24.030735,
+      "lon": 121.279395,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4392,
+      "time": "2009-05-02T06:38:54Z"
+    },
+    {
+      "lat": 24.03089,
+      "lon": 121.279422,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4393,
+      "time": "2009-05-02T06:39:07Z"
+    },
+    {
+      "lat": 24.031024,
+      "lon": 121.279498,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4394,
+      "time": "2009-05-02T06:39:21Z"
+    },
+    {
+      "lat": 24.031053,
+      "lon": 121.279546,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4395,
+      "time": "2009-05-02T06:39:26Z"
+    },
+    {
+      "lat": 24.031098,
+      "lon": 121.279681,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4396,
+      "time": "2009-05-02T06:39:36Z"
+    },
+    {
+      "lat": 24.03123,
+      "lon": 121.27975,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4397,
+      "time": "2009-05-02T06:39:50Z"
+    },
+    {
+      "lat": 24.031271,
+      "lon": 121.279771,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4398,
+      "time": "2009-05-02T06:39:55Z"
+    },
+    {
+      "lat": 24.031296,
+      "lon": 121.279786,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4399,
+      "time": "2009-05-02T06:39:58Z"
+    },
+    {
+      "lat": 24.031336,
+      "lon": 121.279825,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4400,
+      "time": "2009-05-02T06:40:04Z"
+    },
+    {
+      "lat": 24.03148,
+      "lon": 121.279918,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4401,
+      "time": "2009-05-02T06:40:21Z"
+    },
+    {
+      "lat": 24.031619,
+      "lon": 121.280011,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4402,
+      "time": "2009-05-02T06:40:35Z"
+    },
+    {
+      "lat": 24.031655,
+      "lon": 121.280043,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4403,
+      "time": "2009-05-02T06:40:39Z"
+    },
+    {
+      "lat": 24.031776,
+      "lon": 121.280056,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4404,
+      "time": "2009-05-02T06:40:53Z"
+    },
+    {
+      "lat": 24.031887,
+      "lon": 121.280077,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4405,
+      "time": "2009-05-02T06:41:07Z"
+    },
+    {
+      "lat": 24.031938,
+      "lon": 121.280066,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4406,
+      "time": "2009-05-02T06:41:12Z"
+    },
+    {
+      "lat": 24.032058,
+      "lon": 121.280006,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4407,
+      "time": "2009-05-02T06:41:25Z"
+    },
+    {
+      "lat": 24.032138,
+      "lon": 121.27999,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4408,
+      "time": "2009-05-02T06:41:33Z"
+    },
+    {
+      "lat": 24.032244,
+      "lon": 121.280003,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4409,
+      "time": "2009-05-02T06:41:43Z"
+    },
+    {
+      "lat": 24.032286,
+      "lon": 121.27995,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4410,
+      "time": "2009-05-02T06:41:48Z"
+    },
+    {
+      "lat": 24.032405,
+      "lon": 121.279837,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4411,
+      "time": "2009-05-02T06:42:02Z"
+    },
+    {
+      "lat": 24.032538,
+      "lon": 121.279805,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4412,
+      "time": "2009-05-02T06:42:18Z"
+    },
+    {
+      "lat": 24.03257,
+      "lon": 121.279803,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4413,
+      "time": "2009-05-02T06:42:22Z"
+    },
+    {
+      "lat": 24.032669,
+      "lon": 121.279801,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4414,
+      "time": "2009-05-02T06:42:35Z"
+    },
+    {
+      "lat": 24.032804,
+      "lon": 121.279847,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4415,
+      "time": "2009-05-02T06:42:53Z"
+    },
+    {
+      "lat": 24.032917,
+      "lon": 121.279928,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4416,
+      "time": "2009-05-02T06:43:08Z"
+    },
+    {
+      "lat": 24.033028,
+      "lon": 121.279957,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4417,
+      "time": "2009-05-02T06:43:21Z"
+    },
+    {
+      "lat": 24.033095,
+      "lon": 121.279939,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4418,
+      "time": "2009-05-02T06:43:30Z"
+    },
+    {
+      "lat": 24.03319,
+      "lon": 121.279915,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4419,
+      "time": "2009-05-02T06:43:44Z"
+    },
+    {
+      "lat": 24.033275,
+      "lon": 121.279943,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4420,
+      "time": "2009-05-02T06:44:01Z"
+    },
+    {
+      "lat": 24.0334,
+      "lon": 121.279942,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4421,
+      "time": "2009-05-02T06:44:20Z"
+    },
+    {
+      "lat": 24.03357,
+      "lon": 121.280009,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4422,
+      "time": "2009-05-02T06:44:43Z"
+    },
+    {
+      "lat": 24.033718,
+      "lon": 121.280107,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4423,
+      "time": "2009-05-02T06:45:05Z"
+    },
+    {
+      "lat": 24.033765,
+      "lon": 121.280144,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4424,
+      "time": "2009-05-02T06:45:09Z"
+    },
+    {
+      "lat": 24.033911,
+      "lon": 121.280246,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4425,
+      "time": "2009-05-02T06:45:29Z"
+    },
+    {
+      "lat": 24.034073,
+      "lon": 121.280284,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4426,
+      "time": "2009-05-02T06:45:47Z"
+    },
+    {
+      "lat": 24.034193,
+      "lon": 121.280269,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4427,
+      "time": "2009-05-02T06:46:01Z"
+    },
+    {
+      "lat": 24.034306,
+      "lon": 121.280223,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4428,
+      "time": "2009-05-02T06:46:23Z"
+    },
+    {
+      "lat": 24.034457,
+      "lon": 121.280074,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4429,
+      "time": "2009-05-02T06:46:46Z"
+    },
+    {
+      "lat": 24.034624,
+      "lon": 121.279986,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4430,
+      "time": "2009-05-02T06:47:07Z"
+    },
+    {
+      "lat": 24.034738,
+      "lon": 121.280115,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4431,
+      "time": "2009-05-02T06:47:21Z"
+    },
+    {
+      "lat": 24.034845,
+      "lon": 121.280197,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4432,
+      "time": "2009-05-02T06:47:40Z"
+    },
+    {
+      "lat": 24.034882,
+      "lon": 121.280365,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4433,
+      "time": "2009-05-02T06:47:59Z"
+    },
+    {
+      "lat": 24.034928,
+      "lon": 121.280389,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4434,
+      "time": "2009-05-02T06:48:02Z"
+    },
+    {
+      "lat": 24.035089,
+      "lon": 121.280368,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4435,
+      "time": "2009-05-02T06:48:18Z"
+    },
+    {
+      "lat": 24.035136,
+      "lon": 121.280344,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4436,
+      "time": "2009-05-02T06:48:26Z"
+    },
+    {
+      "lat": 24.035331,
+      "lon": 121.280356,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4437,
+      "time": "2009-05-02T06:48:48Z"
+    },
+    {
+      "lat": 24.035461,
+      "lon": 121.280455,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4438,
+      "time": "2009-05-02T06:49:05Z"
+    },
+    {
+      "lat": 24.035617,
+      "lon": 121.280587,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4439,
+      "time": "2009-05-02T06:49:25Z"
+    },
+    {
+      "lat": 24.035764,
+      "lon": 121.280588,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4440,
+      "time": "2009-05-02T06:49:41Z"
+    },
+    {
+      "lat": 24.035875,
+      "lon": 121.280628,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4441,
+      "time": "2009-05-02T06:49:54Z"
+    },
+    {
+      "lat": 24.03597,
+      "lon": 121.280584,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4442,
+      "time": "2009-05-02T06:50:04Z"
+    },
+    {
+      "lat": 24.036018,
+      "lon": 121.280598,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4443,
+      "time": "2009-05-02T06:50:08Z"
+    },
+    {
+      "lat": 24.036045,
+      "lon": 121.280605,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4444,
+      "time": "2009-05-02T06:50:11Z"
+    },
+    {
+      "lat": 24.03615,
+      "lon": 121.280631,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4445,
+      "time": "2009-05-02T06:50:21Z"
+    },
+    {
+      "lat": 24.036255,
+      "lon": 121.280649,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4446,
+      "time": "2009-05-02T06:50:35Z"
+    },
+    {
+      "lat": 24.036297,
+      "lon": 121.280635,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4447,
+      "time": "2009-05-02T06:50:39Z"
+    },
+    {
+      "lat": 24.036423,
+      "lon": 121.280587,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4448,
+      "time": "2009-05-02T06:50:55Z"
+    },
+    {
+      "lat": 24.036569,
+      "lon": 121.280593,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4449,
+      "time": "2009-05-02T06:51:15Z"
+    },
+    {
+      "lat": 24.036668,
+      "lon": 121.280539,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4450,
+      "time": "2009-05-02T06:51:27Z"
+    },
+    {
+      "lat": 24.036819,
+      "lon": 121.280518,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4451,
+      "time": "2009-05-02T06:51:45Z"
+    },
+    {
+      "lat": 24.036855,
+      "lon": 121.280511,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4452,
+      "time": "2009-05-02T06:51:49Z"
+    },
+    {
+      "lat": 24.036979,
+      "lon": 121.280471,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4453,
+      "time": "2009-05-02T06:52:03Z"
+    },
+    {
+      "lat": 24.037042,
+      "lon": 121.280467,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4454,
+      "time": "2009-05-02T06:52:10Z"
+    },
+    {
+      "lat": 24.037109,
+      "lon": 121.28049,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4455,
+      "time": "2009-05-02T06:52:18Z"
+    },
+    {
+      "lat": 24.037272,
+      "lon": 121.280537,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4456,
+      "time": "2009-05-02T06:52:34Z"
+    },
+    {
+      "lat": 24.037451,
+      "lon": 121.280589,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4457,
+      "time": "2009-05-02T06:52:53Z"
+    },
+    {
+      "lat": 24.037514,
+      "lon": 121.280692,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4458,
+      "time": "2009-05-02T06:53:08Z"
+    },
+    {
+      "lat": 24.037653,
+      "lon": 121.280806,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4459,
+      "time": "2009-05-02T06:53:28Z"
+    },
+    {
+      "lat": 24.037859,
+      "lon": 121.280722,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4460,
+      "time": "2009-05-02T06:53:49Z"
+    },
+    {
+      "lat": 24.03789,
+      "lon": 121.280751,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4461,
+      "time": "2009-05-02T06:53:52Z"
+    },
+    {
+      "lat": 24.037987,
+      "lon": 121.280803,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4462,
+      "time": "2009-05-02T06:54:11Z"
+    },
+    {
+      "lat": 24.03808,
+      "lon": 121.280904,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4463,
+      "time": "2009-05-02T06:54:28Z"
+    },
+    {
+      "lat": 24.038096,
+      "lon": 121.280929,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4464,
+      "time": "2009-05-02T06:54:30Z"
+    },
+    {
+      "lat": 24.038146,
+      "lon": 121.281026,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4465,
+      "time": "2009-05-02T06:54:50Z"
+    },
+    {
+      "lat": 24.038229,
+      "lon": 121.280943,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4466,
+      "time": "2009-05-02T06:55:02Z"
+    },
+    {
+      "lat": 24.0384,
+      "lon": 121.280871,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4467,
+      "time": "2009-05-02T06:55:20Z"
+    },
+    {
+      "lat": 24.038558,
+      "lon": 121.280908,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4468,
+      "time": "2009-05-02T06:55:37Z"
+    },
+    {
+      "lat": 24.038654,
+      "lon": 121.280969,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4469,
+      "time": "2009-05-02T06:55:50Z"
+    },
+    {
+      "lat": 24.038679,
+      "lon": 121.280957,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4470,
+      "time": "2009-05-02T06:55:52Z"
+    },
+    {
+      "lat": 24.038788,
+      "lon": 121.280818,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4471,
+      "time": "2009-05-02T06:56:05Z"
+    },
+    {
+      "lat": 24.03883,
+      "lon": 121.280815,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4472,
+      "time": "2009-05-02T06:56:09Z"
+    },
+    {
+      "lat": 24.038909,
+      "lon": 121.280824,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4473,
+      "time": "2009-05-02T06:56:15Z"
+    },
+    {
+      "lat": 24.039006,
+      "lon": 121.280855,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4474,
+      "time": "2009-05-02T06:56:29Z"
+    },
+    {
+      "lat": 24.039171,
+      "lon": 121.280925,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4475,
+      "time": "2009-05-02T06:56:41Z"
+    },
+    {
+      "lat": 24.039268,
+      "lon": 121.280918,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4476,
+      "time": "2009-05-02T06:56:52Z"
+    },
+    {
+      "lat": 24.039352,
+      "lon": 121.280909,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4477,
+      "time": "2009-05-02T06:57:03Z"
+    },
+    {
+      "lat": 24.039445,
+      "lon": 121.280755,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4478,
+      "time": "2009-05-02T06:57:20Z"
+    },
+    {
+      "lat": 24.039521,
+      "lon": 121.28059,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4479,
+      "time": "2009-05-02T06:57:45Z"
+    },
+    {
+      "lat": 24.039588,
+      "lon": 121.280472,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4480,
+      "time": "2009-05-02T06:58:32Z"
+    },
+    {
+      "lat": 24.03973,
+      "lon": 121.280458,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4481,
+      "time": "2009-05-02T06:58:49Z"
+    },
+    {
+      "lat": 24.039896,
+      "lon": 121.280512,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4482,
+      "time": "2009-05-02T06:59:05Z"
+    },
+    {
+      "lat": 24.039967,
+      "lon": 121.280552,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4483,
+      "time": "2009-05-02T06:59:13Z"
+    },
+    {
+      "lat": 24.040164,
+      "lon": 121.280522,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4484,
+      "time": "2009-05-02T06:59:34Z"
+    },
+    {
+      "lat": 24.040246,
+      "lon": 121.280503,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4485,
+      "time": "2009-05-02T06:59:41Z"
+    },
+    {
+      "lat": 24.040381,
+      "lon": 121.280561,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4486,
+      "time": "2009-05-02T06:59:56Z"
+    },
+    {
+      "lat": 24.04051,
+      "lon": 121.280479,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4487,
+      "time": "2009-05-02T07:00:13Z"
+    },
+    {
+      "lat": 24.04066,
+      "lon": 121.280397,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4488,
+      "time": "2009-05-02T07:00:33Z"
+    },
+    {
+      "lat": 24.040714,
+      "lon": 121.280425,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4489,
+      "time": "2009-05-02T07:00:40Z"
+    },
+    {
+      "lat": 24.040915,
+      "lon": 121.280497,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4490,
+      "time": "2009-05-02T07:01:01Z"
+    },
+    {
+      "lat": 24.041097,
+      "lon": 121.280506,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4491,
+      "time": "2009-05-02T07:01:20Z"
+    },
+    {
+      "lat": 24.041249,
+      "lon": 121.280598,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4492,
+      "time": "2009-05-02T07:01:39Z"
+    },
+    {
+      "lat": 24.041474,
+      "lon": 121.280672,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4493,
+      "time": "2009-05-02T07:02:02Z"
+    },
+    {
+      "lat": 24.041712,
+      "lon": 121.280713,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4494,
+      "time": "2009-05-02T07:02:24Z"
+    },
+    {
+      "lat": 24.041739,
+      "lon": 121.280736,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4495,
+      "time": "2009-05-02T07:02:28Z"
+    },
+    {
+      "lat": 24.041728,
+      "lon": 121.280805,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4496,
+      "time": "2009-05-02T07:02:34Z"
+    },
+    {
+      "lat": 24.041715,
+      "lon": 121.280837,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4497,
+      "time": "2009-05-02T07:02:37Z"
+    },
+    {
+      "lat": 24.041769,
+      "lon": 121.280939,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4498,
+      "time": "2009-05-02T07:02:50Z"
+    },
+    {
+      "lat": 24.041801,
+      "lon": 121.280888,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4499,
+      "time": "2009-05-02T07:02:56Z"
+    },
+    {
+      "lat": 24.041983,
+      "lon": 121.280861,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4500,
+      "time": "2009-05-02T07:03:11Z"
+    },
+    {
+      "lat": 24.042013,
+      "lon": 121.280867,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4501,
+      "time": "2009-05-02T07:03:18Z"
+    },
+    {
+      "lat": 24.042058,
+      "lon": 121.280804,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4502,
+      "time": "2009-05-02T07:03:33Z"
+    },
+    {
+      "lat": 24.042184,
+      "lon": 121.280638,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4503,
+      "time": "2009-05-02T07:03:46Z"
+    },
+    {
+      "lat": 24.042434,
+      "lon": 121.280483,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4504,
+      "time": "2009-05-02T07:04:09Z"
+    },
+    {
+      "lat": 24.042576,
+      "lon": 121.280643,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4505,
+      "time": "2009-05-02T07:04:29Z"
+    },
+    {
+      "lat": 24.042799,
+      "lon": 121.280729,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4506,
+      "time": "2009-05-02T07:04:52Z"
+    },
+    {
+      "lat": 24.042927,
+      "lon": 121.28066,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4507,
+      "time": "2009-05-02T07:05:07Z"
+    },
+    {
+      "lat": 24.042948,
+      "lon": 121.280607,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4508,
+      "time": "2009-05-02T07:05:11Z"
+    },
+    {
+      "lat": 24.043135,
+      "lon": 121.28049,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4509,
+      "time": "2009-05-02T07:05:36Z"
+    },
+    {
+      "lat": 24.043214,
+      "lon": 121.280489,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4510,
+      "time": "2009-05-02T07:05:43Z"
+    },
+    {
+      "lat": 24.043406,
+      "lon": 121.280519,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4511,
+      "time": "2009-05-02T07:06:02Z"
+    },
+    {
+      "lat": 24.043592,
+      "lon": 121.280632,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4512,
+      "time": "2009-05-02T07:06:23Z"
+    },
+    {
+      "lat": 24.043673,
+      "lon": 121.280795,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4513,
+      "time": "2009-05-02T07:06:40Z"
+    },
+    {
+      "lat": 24.043613,
+      "lon": 121.280951,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4514,
+      "time": "2009-05-02T07:06:56Z"
+    },
+    {
+      "lat": 24.043703,
+      "lon": 121.281108,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4515,
+      "time": "2009-05-02T07:07:10Z"
+    },
+    {
+      "lat": 24.043829,
+      "lon": 121.281315,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4516,
+      "time": "2009-05-02T07:07:31Z"
+    },
+    {
+      "lat": 24.043812,
+      "lon": 121.281387,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4517,
+      "time": "2009-05-02T07:07:44Z"
+    },
+    {
+      "lat": 24.043822,
+      "lon": 121.281472,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4518,
+      "time": "2009-05-02T07:08:05Z"
+    },
+    {
+      "lat": 24.043963,
+      "lon": 121.281593,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4519,
+      "time": "2009-05-02T07:08:15Z"
+    },
+    {
+      "lat": 24.044105,
+      "lon": 121.281536,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4520,
+      "time": "2009-05-02T07:08:32Z"
+    },
+    {
+      "lat": 24.044274,
+      "lon": 121.281713,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4521,
+      "time": "2009-05-02T07:08:46Z"
+    },
+    {
+      "lat": 24.044378,
+      "lon": 121.281815,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4522,
+      "time": "2009-05-02T07:08:59Z"
+    },
+    {
+      "lat": 24.044438,
+      "lon": 121.281749,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4523,
+      "time": "2009-05-02T07:09:05Z"
+    },
+    {
+      "lat": 24.044517,
+      "lon": 121.28172,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4524,
+      "time": "2009-05-02T07:09:12Z"
+    },
+    {
+      "lat": 24.044594,
+      "lon": 121.281661,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4525,
+      "time": "2009-05-02T07:09:20Z"
+    },
+    {
+      "lat": 24.044725,
+      "lon": 121.281545,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4526,
+      "time": "2009-05-02T07:09:33Z"
+    },
+    {
+      "lat": 24.044636,
+      "lon": 121.281452,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4527,
+      "time": "2009-05-02T07:09:44Z"
+    },
+    {
+      "lat": 24.044609,
+      "lon": 121.281437,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4528,
+      "time": "2009-05-02T07:09:48Z"
+    },
+    {
+      "lat": 24.04453,
+      "lon": 121.281396,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4529,
+      "time": "2009-05-02T07:09:52Z"
+    },
+    {
+      "lat": 24.044513,
+      "lon": 121.281347,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4530,
+      "time": "2009-05-02T07:09:56Z"
+    },
+    {
+      "lat": 24.044433,
+      "lon": 121.281175,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4531,
+      "time": "2009-05-02T07:10:10Z"
+    },
+    {
+      "lat": 24.044444,
+      "lon": 121.281145,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4532,
+      "time": "2009-05-02T07:10:12Z"
+    },
+    {
+      "lat": 24.044439,
+      "lon": 121.280983,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4533,
+      "time": "2009-05-02T07:10:24Z"
+    },
+    {
+      "lat": 24.044574,
+      "lon": 121.280868,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4534,
+      "time": "2009-05-02T07:10:35Z"
+    },
+    {
+      "lat": 24.044603,
+      "lon": 121.280812,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4535,
+      "time": "2009-05-02T07:10:40Z"
+    },
+    {
+      "lat": 24.04472,
+      "lon": 121.280806,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4536,
+      "time": "2009-05-02T07:10:58Z"
+    },
+    {
+      "lat": 24.044866,
+      "lon": 121.280872,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4537,
+      "time": "2009-05-02T07:11:11Z"
+    },
+    {
+      "lat": 24.045014,
+      "lon": 121.280898,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4538,
+      "time": "2009-05-02T07:11:23Z"
+    },
+    {
+      "lat": 24.045051,
+      "lon": 121.2809,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4539,
+      "time": "2009-05-02T07:11:26Z"
+    },
+    {
+      "lat": 24.045209,
+      "lon": 121.280897,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4540,
+      "time": "2009-05-02T07:11:42Z"
+    },
+    {
+      "lat": 24.045267,
+      "lon": 121.280938,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4541,
+      "time": "2009-05-02T07:11:50Z"
+    },
+    {
+      "lat": 24.045388,
+      "lon": 121.281042,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4542,
+      "time": "2009-05-02T07:12:04Z"
+    },
+    {
+      "lat": 24.04549,
+      "lon": 121.280955,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4543,
+      "time": "2009-05-02T07:12:21Z"
+    },
+    {
+      "lat": 24.045661,
+      "lon": 121.281014,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4544,
+      "time": "2009-05-02T07:12:37Z"
+    },
+    {
+      "lat": 24.045737,
+      "lon": 121.281106,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4545,
+      "time": "2009-05-02T07:12:50Z"
+    },
+    {
+      "lat": 24.045847,
+      "lon": 121.281077,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4546,
+      "time": "2009-05-02T07:13:03Z"
+    },
+    {
+      "lat": 24.045944,
+      "lon": 121.281084,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4547,
+      "time": "2009-05-02T07:13:13Z"
+    },
+    {
+      "lat": 24.046061,
+      "lon": 121.281082,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4548,
+      "time": "2009-05-02T07:13:24Z"
+    },
+    {
+      "lat": 24.046155,
+      "lon": 121.281054,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4549,
+      "time": "2009-05-02T07:13:34Z"
+    },
+    {
+      "lat": 24.046242,
+      "lon": 121.280919,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4550,
+      "time": "2009-05-02T07:13:47Z"
+    },
+    {
+      "lat": 24.046231,
+      "lon": 121.28082,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4551,
+      "time": "2009-05-02T07:13:55Z"
+    },
+    {
+      "lat": 24.046183,
+      "lon": 121.280769,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4552,
+      "time": "2009-05-02T07:14:01Z"
+    },
+    {
+      "lat": 24.046151,
+      "lon": 121.280637,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4553,
+      "time": "2009-05-02T07:14:13Z"
+    },
+    {
+      "lat": 24.046077,
+      "lon": 121.280522,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4554,
+      "time": "2009-05-02T07:14:24Z"
+    },
+    {
+      "lat": 24.046043,
+      "lon": 121.280456,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4555,
+      "time": "2009-05-02T07:14:30Z"
+    },
+    {
+      "lat": 24.046021,
+      "lon": 121.280289,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4556,
+      "time": "2009-05-02T07:14:44Z"
+    },
+    {
+      "lat": 24.045989,
+      "lon": 121.28022,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4557,
+      "time": "2009-05-02T07:14:50Z"
+    },
+    {
+      "lat": 24.045883,
+      "lon": 121.280172,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4558,
+      "time": "2009-05-02T07:15:00Z"
+    },
+    {
+      "lat": 24.045823,
+      "lon": 121.280089,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4559,
+      "time": "2009-05-02T07:15:08Z"
+    },
+    {
+      "lat": 24.045733,
+      "lon": 121.280043,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4560,
+      "time": "2009-05-02T07:15:17Z"
+    },
+    {
+      "lat": 24.045624,
+      "lon": 121.280038,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4561,
+      "time": "2009-05-02T07:15:26Z"
+    },
+    {
+      "lat": 24.045569,
+      "lon": 121.279961,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4562,
+      "time": "2009-05-02T07:15:34Z"
+    },
+    {
+      "lat": 24.0455,
+      "lon": 121.279969,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4563,
+      "time": "2009-05-02T07:15:40Z"
+    },
+    {
+      "lat": 24.045407,
+      "lon": 121.27992,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4564,
+      "time": "2009-05-02T07:15:51Z"
+    },
+    {
+      "lat": 24.045343,
+      "lon": 121.279833,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4565,
+      "time": "2009-05-02T07:16:05Z"
+    },
+    {
+      "lat": 24.045314,
+      "lon": 121.279651,
+      "previous_kept_time": "2010-05-20T08:37:47Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 4566,
+      "time": "2009-05-02T07:25:20Z"
+    },
+    {
+      "lat": 23.9444307,
+      "lon": 121.1913089,
+      "previous_kept_time": "2010-05-23T09:34:28Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 11393,
+      "time": "2010-01-16T00:03:59Z"
+    },
+    {
+      "lat": 23.944408,
+      "lon": 121.1914187,
+      "previous_kept_time": "2010-05-23T09:34:28Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 11394,
+      "time": "2010-01-16T00:04:12Z"
+    },
+    {
+      "lat": 23.9443894,
+      "lon": 121.191498,
+      "previous_kept_time": "2010-05-23T09:34:28Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 11395,
+      "time": "2010-01-16T00:04:22Z"
+    },
+    {
+      "lat": 23.9444146,
+      "lon": 121.1915834,
+      "previous_kept_time": "2010-05-23T09:34:28Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 11396,
+      "time": "2010-01-16T00:04:29Z"
+    },
+    {
+      "lat": 23.9444447,
+      "lon": 121.19167,
+      "previous_kept_time": "2010-05-23T09:34:28Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 11397,
+      "time": "2010-01-16T00:04:40Z"
+    },
+    {
+      "lat": 23.9443912,
+      "lon": 121.1917814,
+      "previous_kept_time": "2010-05-23T09:34:28Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 11398,
+      "time": "2010-01-16T00:04:53Z"
+    },
+    {
+      "lat": 23.9443473,
+      "lon": 121.1919302,
+      "previous_kept_time": "2010-05-23T09:34:28Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 11399,
+      "time": "2010-01-16T00:05:08Z"
+    },
+    {
+      "lat": 23.9442803,
+      "lon": 121.1920271,
+      "previous_kept_time": "2010-05-23T09:34:28Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 11400,
+      "time": "2010-01-16T00:05:20Z"
+    },
+    {
+      "lat": 23.944298,
+      "lon": 121.1921364,
+      "previous_kept_time": "2010-05-23T09:34:28Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 11401,
+      "time": "2010-01-16T00:05:31Z"
+    },
+    {
+      "lat": 23.9443229,
+      "lon": 121.1922123,
+      "previous_kept_time": "2010-05-23T09:34:28Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 11402,
+      "time": "2010-01-16T00:05:42Z"
+    },
+    {
+      "lat": 23.944341,
+      "lon": 121.1923297,
+      "previous_kept_time": "2010-05-23T09:34:28Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 11403,
+      "time": "2010-01-16T00:05:54Z"
+    },
+    {
+      "lat": 23.9443508,
+      "lon": 121.1923828,
+      "previous_kept_time": "2010-05-23T09:34:28Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 11404,
+      "time": "2010-01-16T00:05:58Z"
+    },
+    {
+      "lat": 23.9443177,
+      "lon": 121.1924922,
+      "previous_kept_time": "2010-05-23T09:34:28Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 11405,
+      "time": "2010-01-16T00:06:09Z"
+    },
+    {
+      "lat": 23.9443075,
+      "lon": 121.1925937,
+      "previous_kept_time": "2010-05-23T09:34:28Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 11406,
+      "time": "2010-01-16T00:06:21Z"
+    },
+    {
+      "lat": 23.9442712,
+      "lon": 121.1927013,
+      "previous_kept_time": "2010-05-23T09:34:28Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 11407,
+      "time": "2010-01-16T00:06:34Z"
+    },
+    {
+      "lat": 23.9441995,
+      "lon": 121.192748,
+      "previous_kept_time": "2010-05-23T09:34:28Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 11408,
+      "time": "2010-01-16T00:06:45Z"
+    },
+    {
+      "lat": 23.9441348,
+      "lon": 121.1928384,
+      "previous_kept_time": "2010-05-23T09:34:28Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 11409,
+      "time": "2010-01-16T00:06:57Z"
+    },
+    {
+      "lat": 23.9440587,
+      "lon": 121.1928963,
+      "previous_kept_time": "2010-05-23T09:34:28Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 11410,
+      "time": "2010-01-16T00:07:10Z"
+    },
+    {
+      "lat": 23.9440068,
+      "lon": 121.1928875,
+      "previous_kept_time": "2010-05-23T09:34:28Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 11411,
+      "time": "2010-01-16T00:07:14Z"
+    },
+    {
+      "lat": 23.9438852,
+      "lon": 121.192946,
+      "previous_kept_time": "2010-05-23T09:34:28Z",
+      "reason": "non_monotonic_timestamp_fragment",
+      "source_index": 11412,
+      "time": "2010-01-16T00:07:28Z"
+    }
+  ],
+  "removed_track_point_count": 210,
+  "schema_version": "0.1.0",
+  "source_path": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍.gpx.gpx",
+  "source_sha256": "5b07ce65357be6e77c425747ff5a23f78aef011a63fe82b2b337fe0c6e0e2b88"
+}

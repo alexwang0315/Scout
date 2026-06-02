@@ -2033,17 +2033,6 @@ def _check_project_refs(project_path: Path) -> dict[str, Any]:
 
 
 def _check_fixture_boundary(project_root: Path) -> dict[str, Any]:
-    if not _is_repo_fixture_project(project_root):
-        return {
-            "ok": True,
-            "max_fixture_file_bytes": MAX_FIXTURE_FILE_BYTES,
-            "raw_files": [],
-            "oversized_files": [],
-            "oversized_files_blocking": False,
-            "large_evidence_allowed_for_alpha": True,
-            "runtime_workspace_raw_files_allowed": True,
-            "missing": [],
-        }
     raw_files: list[str] = []
     oversized_files: list[str] = []
     for path in sorted(project_root.rglob("*")):
@@ -2063,6 +2052,7 @@ def _check_fixture_boundary(project_root: Path) -> dict[str, Any]:
         "oversized_files": oversized_files,
         "oversized_files_blocking": False,
         "large_evidence_allowed_for_alpha": True,
+        "runtime_workspace_raw_files_allowed": False,
         "missing": missing,
     }
 
@@ -11633,8 +11623,6 @@ def _release_check_tiny_gpx() -> str:
 def _resolve_project_ref(project_root: Path, ref: str) -> tuple[Path | None, str | None]:
     ref_path = Path(ref)
     if ref_path.is_absolute():
-        if ref_path.exists() and not _is_repo_fixture_project(project_root):
-            return ref_path, None
         return None, f"absolute_ref:{ref}"
     candidate = (project_root / ref_path).resolve()
     try:

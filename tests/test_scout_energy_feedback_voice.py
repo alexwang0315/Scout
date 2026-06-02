@@ -77,8 +77,8 @@ def test_post_analysis_energy_feedback_compares_projection_with_actual_timeline(
 
     assert payload["artifact_kind"] == "post_analysis_energy_reserve_feedback"
     assert payload["predicted_depletion_checkpoint_name"] == "雲海保線所"
-    assert payload["actual_elapsed_duration_minutes"] == 37
-    assert payload["actual_moving_duration_minutes"] == 30
+    assert payload["actual_elapsed_duration_minutes"] == 5701
+    assert payload["actual_moving_duration_minutes"] == 2027
     assert payload["privacy"]["raw_track_shared"] is False
     assert payload["privacy"]["exact_timestamps_shared"] is False
     assert payload["boundary"]["medical_diagnosis"] is False
