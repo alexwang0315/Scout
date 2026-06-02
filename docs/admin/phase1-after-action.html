@@ -28,6 +28,8 @@
       --cat-risk: #d65d5d;
       --cat-map: #8b96a3;
       --cat-route: #21a6a1;
+      --cat-mcp: #a78bfa;
+      --cat-gis: #38bdf8;
       --cat-start: #76b56d;
       --cat-finish: #f0d264;
       --cat-signal: #8ab4f8;
@@ -528,6 +530,26 @@
       vector-effect: non-scaling-stroke;
     }
 
+    .reference-track {
+      fill: none;
+      stroke: #94a3b8;
+      stroke-width: 1.4;
+      opacity: .45;
+      cursor: pointer;
+      pointer-events: stroke;
+      vector-effect: non-scaling-stroke;
+    }
+
+    .retreat {
+      fill: none;
+      stroke: var(--cat-retreat);
+      stroke-width: 2.2;
+      opacity: .72;
+      cursor: pointer;
+      pointer-events: stroke;
+      vector-effect: non-scaling-stroke;
+    }
+
     .segment-overlay {
       fill: none;
       stroke: var(--cat-segment);
@@ -572,6 +594,43 @@
 
     .checkpoint-trailhead {
       fill: var(--cat-segment);
+    }
+
+    .mcp-candidate {
+      fill: var(--cat-mcp);
+      stroke: #fff;
+      stroke-width: 1.2;
+      opacity: .9;
+      cursor: pointer;
+      vector-effect: non-scaling-stroke;
+    }
+
+    .gis-perception-cp {
+      fill: var(--cat-gis);
+      stroke: #092f3f;
+      stroke-width: 1.1;
+      opacity: .72;
+      cursor: pointer;
+      vector-effect: non-scaling-stroke;
+    }
+
+    .gis-nearby-group {
+      fill: none;
+      stroke: var(--cat-gis);
+      stroke-width: 1.2;
+      stroke-dasharray: 5 4;
+      opacity: .65;
+      cursor: pointer;
+      vector-effect: non-scaling-stroke;
+    }
+
+    .route-note {
+      fill: #f59e0b;
+      stroke: #fff;
+      stroke-width: 1;
+      opacity: .72;
+      cursor: pointer;
+      vector-effect: non-scaling-stroke;
     }
 
     .hazard {
@@ -776,6 +835,44 @@
 
     .capability-panel.is-empty {
       display: none;
+    }
+
+    .evidence-timeline-panel,
+    .agent-skills-panel {
+      display: grid;
+      gap: 10px;
+      margin-top: 16px;
+      padding-top: 14px;
+      border-top: 1px solid var(--border);
+    }
+
+    .evidence-timeline-list,
+    .agent-skill-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .evidence-timeline-item,
+    .agent-skill-item {
+      display: grid;
+      gap: 4px;
+      min-width: 0;
+      padding: 8px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: #171b20;
+      overflow-wrap: anywhere;
+    }
+
+    .evidence-timeline-item strong,
+    .agent-skill-item strong {
+      color: var(--text);
+      font-size: 12px;
+    }
+
+    .evidence-timeline-item small,
+    .agent-skill-item small {
+      color: var(--muted);
     }
 
     .capability-head {
@@ -1268,6 +1365,16 @@
           <ul id="capabilitySourceRefs" class="capability-list"></ul>
           <div id="capabilitySharePreview" class="capability-share-preview"></div>
           <p id="capabilityPrivacy" class="read-only-note">Read-only post-analysis evidence. No raw GPX, exact timestamps, or incident details are shared here.</p>
+        </section>
+        <section id="evidenceTimelinePanel" class="evidence-timeline-panel" aria-label="Cross-surface evidence timeline alignment">
+          <h2>Evidence Timeline</h2>
+          <p class="read-only-note">Shared category projection aligned with /admin/pretrip. Counts are evidence classes only, not runtime safety truth.</p>
+          <div id="evidenceTimelineList" class="evidence-timeline-list"></div>
+        </section>
+        <section id="agentSkillsPanel" class="agent-skills-panel" aria-label="Scout agent skills list">
+          <h2>Scout Agent Skills</h2>
+          <p class="read-only-note">Read-only registry projection. This admin page lists tools but does not execute skills or call live safety endpoints.</p>
+          <div id="agentSkillsList" class="agent-skill-list"></div>
         </section>
         <section id="nextPlanCandidatePanel" class="next-plan-panel" aria-label="Phase 4 next-plan candidate projection">
           <div class="next-plan-head">
@@ -2085,6 +2192,55 @@
       ].join(" | ");
     }
 
+    function renderEvidenceTimelinePanel(view) {
+      const list = document.getElementById("evidenceTimelineList");
+      if (!list) return;
+      list.replaceChildren();
+      (view?.evidence_timeline?.categories || []).forEach(category => {
+        const item = document.createElement("div");
+        item.className = "evidence-timeline-item";
+        const title = document.createElement("strong");
+        title.textContent = `${category.label || category.category_id}: ${formatNumber(category.count)}`;
+        const meta = document.createElement("small");
+        meta.textContent = `${category.category_id} | ${category.available ? "available" : "empty"} | shared with /admin/pretrip`;
+        item.appendChild(title);
+        item.appendChild(meta);
+        list.appendChild(item);
+      });
+      if (!(view?.evidence_timeline?.categories || []).length) {
+        const empty = document.createElement("div");
+        empty.className = "evidence-timeline-item";
+        empty.textContent = "No evidence timeline projection available.";
+        list.appendChild(empty);
+      }
+    }
+
+    function renderAgentSkillsPanel(view) {
+      const list = document.getElementById("agentSkillsList");
+      if (!list) return;
+      list.replaceChildren();
+      const registry = view?.scout_agent_skills || {};
+      const counts = registry.counts || {};
+      const header = document.createElement("div");
+      header.className = "agent-skill-item";
+      header.innerHTML = `<strong>${formatNumber(counts.tool_count || 0)} tools</strong><small>writes ${formatNumber(counts.write_capable_count || 0)} | UI execution ${registry.boundary?.tool_execution_allowed_from_ui === true}</small>`;
+      list.appendChild(header);
+      (registry.tools || []).forEach(tool => {
+        const item = document.createElement("div");
+        item.className = "agent-skill-item";
+        const title = document.createElement("strong");
+        title.textContent = tool.id || "unnamed tool";
+        const meta = document.createElement("small");
+        meta.textContent = `${tool.mode || "unknown"} | auth ${tool.requires_authorization || "unknown"} | dry-run ${tool.supports_dry_run === true}`;
+        const refs = document.createElement("small");
+        refs.textContent = `reads ${(tool.allowed_reads || []).length} | writes ${(tool.allowed_writes || []).length}`;
+        item.appendChild(title);
+        item.appendChild(meta);
+        item.appendChild(refs);
+        list.appendChild(item);
+      });
+    }
+
     function nextPlanCandidatesFor(item) {
       if (!item) return AFTER_ACTION_NEXT_PLAN_CANDIDATES;
       const refs = [
@@ -2131,6 +2287,10 @@
     function evidenceCategory(item) {
       if (!item) return "map";
       if (item.evidence_type === "replay_summary") return "replay";
+      if (item.evidence_type === "cross_surface_evidence_timeline_category") return "map";
+      if (item.evidence_type === "post_analysis_capability") return "map";
+      if (String(item.evidence_type || "").includes("major_critical_point") || item.mcp_id) return "mcp";
+      if (String(item.evidence_type || "").includes("gis_perception") || item.nearby_group_id) return "gis";
       if (item.evidence_type === "mission_checkpoint" || item.checkpoint_id) return "checkpoint";
       if (item.evidence_type === "mission_segment") return "segment";
       if (item.evidence_type === "segment_capsule") return "capsule";
@@ -2151,7 +2311,9 @@
         timeline: "var(--cat-timeline)",
         risk: "var(--cat-risk)",
         map: "var(--cat-map)",
-        route: "var(--cat-route)"
+        route: "var(--cat-route)",
+        mcp: "var(--cat-mcp)",
+        gis: "var(--cat-gis)"
       };
       return colors[category] || colors.map;
     }
@@ -2223,7 +2385,7 @@
       if (!item) return "";
       if (item.evidence_type === "segment_capsule") return item.segment_id || item.capsule?.segment_id || item.source_id || "";
       if (item.evidence_type === "replay_checkpoint") return item.checkpoint?.checkpoint_id || item.source_id || "";
-      return item.source_id || item.checkpoint_id || item.segment_id || item.corridor_id || item.hazard_id || item.incident_id || "";
+      return item.source_id || item.checkpoint_id || item.segment_id || item.candidate_id || item.mcp_id || item.nearby_group_id || item.poi_id || item.corridor_id || item.hazard_id || item.incident_id || item.category_id || "";
     }
 
     function selectorValue(value) {
@@ -2254,11 +2416,20 @@
         item.checkpoint_id,
         item.checkpoint?.checkpoint_id,
         item.candidate_id,
+        item.mcp_id,
+        item.nearby_group_id,
         item.poi_id,
         item.incident_id,
         item.source_ref,
         item.label,
+        item.from_node_id,
+        item.to_node_id,
+        item.from_candidate_id,
+        item.to_candidate_id,
+        item.candidate_ref,
         ...(Array.isArray(item.map_target_ids) ? item.map_target_ids : []),
+        ...(Array.isArray(item.review_focus) ? item.review_focus : []),
+        ...(Array.isArray(item.target_ids) ? item.target_ids : []),
         ...(Array.isArray(item.related) ? item.related : []),
         ...(Array.isArray(item.segment_ids) ? item.segment_ids : [])
       ].filter(Boolean);
@@ -2269,6 +2440,12 @@
         ...(view?.mission?.checkpoints || []),
         ...(view?.safety_timeline || []),
         ...(view?.map?.pois || []),
+        ...(view?.gis_perception_timeline?.checkpoint_candidates || []),
+        ...(view?.gis_perception_timeline?.nearby_groups || []),
+        ...(view?.major_critical_points?.candidates || []),
+        ...(view?.route_notes?.candidates || []),
+        ...(view?.map_candidates?.poi_candidates || []),
+        ...(view?.overpass_evidence?.poi_candidates || []),
         ...(view?.risk_score?.points || []),
         ...(view?.incident_packages || [])
       ];
@@ -2285,6 +2462,8 @@
       const coordinatePairs = [
         [item?.lat, item?.lon],
         [item?.poi?.coordinate?.lat, item?.poi?.coordinate?.lon],
+        [item?.center?.lat, item?.center?.lon],
+        [item?.coordinate?.lat, item?.coordinate?.lon],
         [item?.checkpoint?.lat, item?.checkpoint?.lon],
         [item?.trigger_event?.details?.lat, item?.trigger_event?.details?.lon],
         [item?.trigger_event?.details?.observation_lat, item?.trigger_event?.details?.observation_lon]
@@ -2356,10 +2535,16 @@
       return Boolean(
         type.includes("checkpoint")
         || type.includes("route_note")
+        || type.includes("major_critical_point")
+        || type.includes("mcp")
+        || type.includes("nearby_group")
+        || type.includes("gis_perception")
         || type.includes("poi")
         || type.includes("point")
         || item?.checkpoint_id
         || item?.checkpoint?.checkpoint_id
+        || item?.mcp_id
+        || item?.nearby_group_id
         || item?.lat !== undefined && item?.lon !== undefined && !type.includes("segment")
       );
     }
@@ -2766,6 +2951,7 @@
       const bounds = boundsWithMap(view);
       applyMapViewport();
       svg.replaceChildren();
+      const routeCoords = view.route.points.map(point => ({lat: point.lat, lon: point.lon}));
 
       const osmGroup = el("g", {"data-layer-group": "osm"});
       renderOsmBasemap(osmGroup, bounds, MAP_WIDTH, MAP_HEIGHT);
@@ -2801,12 +2987,31 @@
       svg.appendChild(hazardGroup);
 
       const referenceGroup = el("g", {"data-layer-group": "reference-tracks"});
+      (view.reference_tracks?.reference_tracks || []).forEach(track => {
+        const coords = track.display_geometry?.coordinates || [];
+        if (coords.length < 2) return;
+        const path = el("path", {d: pathFromCoords(bounds, coords), class: "reference-track"});
+        attachEvidence(path, track);
+        tagEvidenceNode(path, track, "reference-track");
+        referenceGroup.appendChild(path);
+      });
       svg.appendChild(referenceGroup);
 
       const retreatGroup = el("g", {"data-layer-group": "retreat"});
+      (view.retreat_routes || []).forEach(route => {
+        const start = Number(route.route_point_start_index ?? 0);
+        const end = Number(route.route_point_end_index ?? start);
+        const from = Math.max(0, Math.min(start, end));
+        const to = Math.min(routeCoords.length - 1, Math.max(start, end));
+        const coords = routeCoords.slice(from, to + 1);
+        if (coords.length < 2) return;
+        const path = el("path", {d: pathFromCoords(bounds, coords), class: "retreat"});
+        attachEvidence(path, route);
+        tagEvidenceNode(path, route, "retreat");
+        retreatGroup.appendChild(path);
+      });
       svg.appendChild(retreatGroup);
 
-      const routeCoords = view.route.points.map(point => ({lat: point.lat, lon: point.lon}));
       const routeGroup = el("g", {"data-layer-group": "route"});
       const routePath = el("path", {d: pathFromCoords(bounds, routeCoords), class: "route"});
       attachEvidence(routePath, {
@@ -2903,6 +3108,24 @@
         tagEvidenceNode(circle, checkpoint, "checkpoint");
         checkpointGroup.appendChild(circle);
       });
+      (view.gis_perception_timeline?.checkpoint_candidates || []).forEach(candidate => {
+        const coordinate = coordinateFromEvidence(candidate);
+        if (!coordinate) return;
+        const [x, y] = project(bounds, coordinate.lat, coordinate.lon);
+        const circle = el("circle", {cx: x, cy: y, r: 5.5, class: "gis-perception-cp"});
+        attachEvidence(circle, candidate);
+        tagEvidenceNode(circle, candidate, "checkpoint");
+        checkpointGroup.appendChild(circle);
+      });
+      (view.gis_perception_timeline?.nearby_groups || []).forEach(group => {
+        const coordinate = coordinateFromEvidence(group);
+        if (!coordinate) return;
+        const [x, y] = project(bounds, coordinate.lat, coordinate.lon);
+        const circle = el("circle", {cx: x, cy: y, r: 8, class: "gis-nearby-group"});
+        attachEvidence(circle, group);
+        tagEvidenceNode(circle, group, "checkpoint");
+        checkpointGroup.appendChild(circle);
+      });
       svg.appendChild(checkpointGroup);
 
       const poiGroup = el("g", {"data-layer-group": "pois"});
@@ -2918,9 +3141,27 @@
       svg.appendChild(poiGroup);
 
       const mcpGroup = el("g", {"data-layer-group": "mcp"});
+      (view.major_critical_points?.candidates || []).forEach(candidate => {
+        const coordinate = coordinateFromEvidence(candidate);
+        if (!coordinate) return;
+        const [x, y] = project(bounds, coordinate.lat, coordinate.lon);
+        const circle = el("circle", {cx: x, cy: y, r: 6.5, class: "mcp-candidate"});
+        attachEvidence(circle, candidate);
+        tagEvidenceNode(circle, candidate, "mcp");
+        mcpGroup.appendChild(circle);
+      });
       svg.appendChild(mcpGroup);
 
       const routeNoteGroup = el("g", {"data-layer-group": "route-notes"});
+      (view.route_notes?.candidates || []).forEach(candidate => {
+        const coordinate = coordinateFromEvidence(candidate);
+        if (!coordinate) return;
+        const [x, y] = project(bounds, coordinate.lat, coordinate.lon);
+        const circle = el("circle", {cx: x, cy: y, r: 4, class: "route-note"});
+        attachEvidence(circle, candidate);
+        tagEvidenceNode(circle, candidate, "route-note");
+        routeNoteGroup.appendChild(circle);
+      });
       svg.appendChild(routeNoteGroup);
 
       const eventGroup = el("g", {"data-layer-group": "events"});
@@ -2989,6 +3230,10 @@
     function renderEvidenceTree(view) {
       const tree = document.getElementById("evidenceTree");
       tree.replaceChildren();
+      tree.appendChild(treeGroup("Evidence Timeline", view.evidence_timeline?.categories || [], item => ({
+        label: item.label || item.category_id,
+        sublabel: `${item.count || 0} evidence | ${item.available ? "available" : "empty"}`
+      }), true, "timeline"));
       tree.appendChild(treeGroup("Replay", [view.replay], item => ({
         label: item.safety_level,
         sublabel: `${item.observations_processed.toLocaleString()} observations | ${item.checkpoint_count} checkpoints | ${item.segment_capsule_count} capsules`
@@ -3015,6 +3260,26 @@
           sublabel: `${formatNumber(item.moving_time_s, "s")} moving | ${formatNumber(item.elapsed_time_s, "s")} elapsed | ${item.confidence}`
         }), false, "timeline"));
       }
+      tree.appendChild(treeGroup("Major Critical Points", view.major_critical_points?.candidates || [], item => ({
+        label: item.label || item.mcp_id,
+        sublabel: `${item.confidence || "-"} | ${item.cp_support_reconciliation?.support_status || "support-review"} | ${Math.round(item.distance_m || 0)}m`
+      }), true, "mcp"));
+      tree.appendChild(treeGroup("AI GIS CP", view.gis_perception_timeline?.checkpoint_candidates || [], item => ({
+        label: item.route_note_summary || item.candidate_id,
+        sublabel: `${item.checkpoint_type || "-"} | group ${item.nearby_group_id || "-"} | ${item.route_note_freshness || "unknown"}`
+      }), false, "gis"));
+      tree.appendChild(treeGroup("GIS CP Areas", view.gis_perception_timeline?.nearby_groups || [], item => ({
+        label: item.nearby_group_id,
+        sublabel: `${item.member_count || 0} CP | ${item.semantic_keys?.join(", ") || "mixed"}`
+      }), false, "gis"));
+      tree.appendChild(treeGroup("Reference GPX", view.reference_tracks?.reference_tracks || [], item => ({
+        label: item.label || item.candidate_id,
+        sublabel: `${Math.round((item.route?.distance_m || 0) / 1000)}km | ${item.route?.point_count || 0} pts`
+      }), false, "route"));
+      tree.appendChild(treeGroup("Retreat Routes", view.retreat_routes || [], item => ({
+        label: item.label || item.candidate_id,
+        sublabel: `${item.review_state || "candidate"} | ${Math.round(item.distance_m || 0)}m`
+      }), false, "route"));
       tree.appendChild(treeGroup("Timeline", view.safety_timeline, item => ({
         label: item.label || item.to_level || item.evidence_type,
         sublabel: `${item.timestamp === null || item.timestamp === undefined ? "" : `t=${Number(item.timestamp).toFixed(0)} | `}${item.reason || item.evidence_type}`
@@ -3039,6 +3304,14 @@
         label: `${item.delta_bucket || "delta"} ${Number(item.delta_score || 0).toFixed(1)}`,
         sublabel: `baseline ${Number(item.baseline_pretrip_risk || 0).toFixed(1)} | calibrated ${Number(item.calibrated_risk_candidate || 0).toFixed(1)}`
       }), false, "risk"));
+      tree.appendChild(treeGroup("Review Queue", view.review_queue?.items || [], item => ({
+        label: item.title || item.item_id,
+        sublabel: `${item.severity || "-"} | ${item.category || "-"}`
+      }), false, "map"));
+      tree.appendChild(treeGroup("Review Groups", view.review_workbench?.category_groups || [], item => ({
+        label: item.label,
+        sublabel: `${item.item_count || 0} items | ${item.review_action || "review"}`
+      }), false, "map"));
       tree.appendChild(treeGroup("Map Layers", [
         {
           evidence_type: "map_layer_summary",
@@ -3219,6 +3492,8 @@
         updateMetrics(view);
         renderMap(view);
         renderEvidenceTree(view);
+        renderEvidenceTimelinePanel(view);
+        renderAgentSkillsPanel(view);
         setDetail({
           evidence_type: "case_summary",
           source_id: view.case_id,

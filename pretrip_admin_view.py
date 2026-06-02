@@ -9,6 +9,10 @@ from pathlib import Path
 from typing import Any
 
 from admin_map_layers import build_pretrip_map_layers
+from admin_evidence_timeline import (
+    build_pretrip_evidence_timeline,
+    build_scout_agent_skill_summary,
+)
 from post_analysis_capability import summarize_capability_artifacts
 from scout_companion_match_models import build_companion_capability_capsule_from_timeline
 from post_analysis_energy_feedback import POST_ANALYSIS_ENERGY_FEEDBACK_REF
@@ -908,7 +912,7 @@ def build_pretrip_admin_view(
     _decorate_admin_summary_metadata(post_analysis_tab)
     _decorate_admin_summary_metadata(review_workspace_tab)
 
-    return {
+    view = {
         "project_id": project_id,
         "artifacts": source_refs,
         "summary": planning_tab["summary"],
@@ -982,6 +986,13 @@ def build_pretrip_admin_view(
             "review_workspace": review_workspace_tab,
         },
     }
+    view["evidence_timeline"] = build_pretrip_evidence_timeline(view)
+    view["scout_agent_skills"] = build_scout_agent_skill_summary(root=root)
+    view["tabs"]["agent_skills"] = _agent_skills_tab(
+        view["scout_agent_skills"],
+        view["evidence_timeline"],
+    )
+    return view
 
 
 def resolve_pretrip_project_artifacts(
@@ -8936,6 +8947,69 @@ def _post_analysis_sections(post_analysis_tab: dict[str, Any]) -> list[dict[str,
             )
         )
     return sections
+
+
+def _agent_skills_tab(
+    scout_agent_skills: dict[str, Any],
+    evidence_timeline: dict[str, Any],
+) -> dict[str, Any]:
+    skill_source = {
+        "source_id": "pretrip.scout_agent_skills",
+        "source_path": scout_agent_skills["source_path"],
+        "evidence_type": "pretrip_scout_agent_skill_registry_summary",
+    }
+    timeline_source = {
+        "source_id": "pretrip.cross_surface_evidence_timeline",
+        "source_path": "view.evidence_timeline",
+        "evidence_type": "pretrip_cross_surface_evidence_timeline",
+    }
+    return {
+        "source_id": skill_source["source_id"],
+        "source_path": skill_source["source_path"],
+        "evidence_type": skill_source["evidence_type"],
+        "status": "read_only_registry_projection",
+        "scout_agent_skills": scout_agent_skills,
+        "evidence_timeline": evidence_timeline,
+        "sections": [
+            _section(
+                "scout_agent_skills",
+                "Scout Agent Skills",
+                skill_source,
+                status="read_only_registry_projection",
+                counts=scout_agent_skills["counts"],
+                summary={
+                    "tool_count": scout_agent_skills["counts"].get("tool_count", 0),
+                    "mode_counts": scout_agent_skills["counts"].get("mode_counts", {}),
+                    "authorization_counts": scout_agent_skills["counts"].get(
+                        "authorization_counts",
+                        {},
+                    ),
+                    "write_capable_count": scout_agent_skills["counts"].get(
+                        "write_capable_count",
+                        0,
+                    ),
+                },
+                boundary=scout_agent_skills["boundary"],
+            ),
+            _section(
+                "evidence_timeline",
+                "Evidence Timeline Alignment",
+                timeline_source,
+                status="projection_only",
+                counts=evidence_timeline["counts"],
+                summary={
+                    "surface": evidence_timeline["surface"],
+                    "category_order": evidence_timeline["category_order"],
+                    "available_categories": [
+                        item["category_id"]
+                        for item in evidence_timeline["categories"]
+                        if item["available"]
+                    ],
+                },
+                boundary=evidence_timeline["boundary"],
+            ),
+        ],
+    }
 
 
 def _section(

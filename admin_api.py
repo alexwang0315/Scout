@@ -3463,6 +3463,7 @@ def _compact_pretrip_project_view(view: dict[str, Any]) -> dict[str, Any]:
     pre_trip = tabs.get("pre_trip_planning", {}) if isinstance(tabs, dict) else {}
     post = tabs.get("post_analysis", {}) if isinstance(tabs, dict) else {}
     review = tabs.get("review_workspace", {}) if isinstance(tabs, dict) else {}
+    agent = tabs.get("agent_skills", {}) if isinstance(tabs, dict) else {}
     terrain_visualization = view.get("terrain_visualization", {})
     compact["tabs"] = {
         "pre_trip_planning": {
@@ -3486,6 +3487,11 @@ def _compact_pretrip_project_view(view: dict[str, Any]) -> dict[str, Any]:
             "route_comparison": post.get("route_comparison", {}),
             "capability_timeline_import": post.get("capability_timeline_import"),
             "brain_seed": post.get("brain_seed", {}),
+        },
+        "agent_skills": {
+            "sections": agent.get("sections", []),
+            "scout_agent_skills": agent.get("scout_agent_skills", {}),
+            "evidence_timeline": agent.get("evidence_timeline", {}),
         },
     }
     _compact_pretrip_heavy_layers(compact)

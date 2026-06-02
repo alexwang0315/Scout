@@ -227,6 +227,13 @@ def test_pretrip_project_api_compact_payload_removes_duplicate_tabs():
     assert compact_payload["compact_payload"]["removed_duplicate_tab_payload"] is True
     assert compact_payload["compact_payload"]["trimmed_heavy_layer_items"] is True
     assert compact_payload["tabs"]["pre_trip_planning"]["sections"]
+    assert compact_payload["tabs"]["agent_skills"]["sections"]
+    assert compact_payload["tabs"]["agent_skills"]["scout_agent_skills"]["counts"][
+        "tool_count"
+    ] == 45
+    assert compact_payload["tabs"]["agent_skills"]["evidence_timeline"]["counts"][
+        "category_count"
+    ] == 12
     assert "route_notes" not in compact_payload["tabs"]["pre_trip_planning"]
     assert compact_payload["tabs"]["post_analysis"]["segment_terrain"]["source_path"]
     assert compact_payload["tabs"]["post_analysis"]["runtime_handoff"]["boundary"][

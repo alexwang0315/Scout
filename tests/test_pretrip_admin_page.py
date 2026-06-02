@@ -50,10 +50,13 @@ def test_pretrip_admin_page_contains_expected_layout_contract():
     assert "Review , Workspace" in html
     assert "Import GPX" in html
     assert "Wearables" in html
+    assert "Scout Agent Skills" in html
     assert 'id="reviewWorkspacePanel"' in html
     assert 'id="reviewWorkspaceTree"' in html
     assert 'id="importGpxPanel"' in html
     assert 'id="wearablesPanel"' in html
+    assert 'id="agentSkillsPanel"' in html
+    assert 'id="agentSkillsList"' in html
     assert "segment-overlay" in html
     assert "reference-track" in html
     assert "gis-perception-cp" in html
@@ -76,6 +79,8 @@ def test_pretrip_admin_page_contains_expected_layout_contract():
     assert "AI GIS CP" in html
     assert "GIS CP Areas" in html
     assert "Major Critical Points" in html
+    assert "Evidence Timeline" in html
+    assert "view.evidence_timeline?.categories" in html
     assert "view.major_critical_points?.candidates" in html
     assert "item.cp_support_reconciliation?.support_status" in html
     assert "item.accepted_evidence_page_count" in html
@@ -356,8 +361,9 @@ def test_pretrip_admin_page_has_wearable_inventory_energy_controls():
     ):
         assert f"function {function_name}" in html
 
-    assert 'DETAIL_TAB_IDS = new Set(["pre_trip_planning", "post_analysis", "review_workspace", "import_gpx", "wearables"])' in html
+    assert 'DETAIL_TAB_IDS = new Set(["pre_trip_planning", "post_analysis", "review_workspace", "import_gpx", "wearables", "agent_skills"])' in html
     assert 'document.getElementById("wearablesPanel").classList.toggle("is-active", tab === "wearables")' in html
+    assert 'document.getElementById("agentSkillsPanel").classList.toggle("is-active", tab === "agent_skills")' in html
     assert "/admin/wearables" in html
     assert "/admin/wearables/validate" in html
     assert "/admin/wearables/import" in html

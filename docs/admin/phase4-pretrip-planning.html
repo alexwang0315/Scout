@@ -652,6 +652,30 @@
       display: grid;
       gap: 9px;
     }
+    .agent-skills-panel {
+      max-height: 52vh;
+      overflow: auto;
+    }
+    .agent-skill-list {
+      display: grid;
+      gap: 8px;
+    }
+    .agent-skill-item {
+      display: grid;
+      gap: 4px;
+      min-width: 0;
+      padding: 8px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fff;
+      overflow-wrap: anywhere;
+    }
+    .agent-skill-item strong {
+      font-size: .82rem;
+    }
+    .agent-skill-item small {
+      color: var(--muted);
+    }
     .import-gpx-field {
       display: grid;
       gap: 4px;
@@ -1331,6 +1355,7 @@
         <button id="reviewWorkspaceTab" class="tab-button" type="button" role="tab" aria-selected="false" data-tab="review_workspace" title="Review and workspace" aria-label="Review and workspace">Review</button>
         <button id="importGpxTab" class="tab-button" type="button" role="tab" aria-selected="false" data-tab="import_gpx" title="Import GPX">Import</button>
         <button id="wearablesTab" class="tab-button" type="button" role="tab" aria-selected="false" data-tab="wearables" title="Wearable logs">Wearables</button>
+        <button id="agentSkillsTab" class="tab-button" type="button" role="tab" aria-selected="false" data-tab="agent_skills" title="Scout agent skills">Agent</button>
       </div>
       <div id="jsonPane" class="detail-body">
         <h2 id="detailTitle">No selection</h2>
@@ -1546,6 +1571,15 @@
             <pre id="wearableResult" class="import-gpx-result">No wearable request sent.</pre>
           </form>
         </div>
+        <div id="agentSkillsPanel" class="import-gpx-panel agent-skills-panel" aria-label="Scout agent skills list">
+          <div class="control-group-header">
+            <span>Scout Agent Skills</span>
+            <small>read-only registry</small>
+          </div>
+          <p class="import-gpx-copy">Registry projection only. The UI lists available tools but does not execute skills, call live safety endpoints, or mutate runtime state.</p>
+          <div id="agentSkillsSummary" class="summary-list"></div>
+          <div id="agentSkillsList" class="agent-skill-list"></div>
+        </div>
         <div id="sectionList" class="section-list" aria-label="Active tab sections"></div>
         <pre id="detailJson">{}</pre>
       </div>
@@ -1662,7 +1696,7 @@
     const RASTER_LOCAL_TILE_URL_TEMPLATE = `${apiBase()}/admin/tiles/imagery/{project_id}/{layer_id}/{z}/{x}/{y}.png`;
     const RASTER_TILE_CACHE_BUST = "transparent-fallback-v12";
     const OSM_ATTRIBUTION = "OpenStreetMap contributors";
-    const DETAIL_TAB_IDS = new Set(["pre_trip_planning", "post_analysis", "review_workspace", "import_gpx", "wearables"]);
+    const DETAIL_TAB_IDS = new Set(["pre_trip_planning", "post_analysis", "review_workspace", "import_gpx", "wearables", "agent_skills"]);
     const state = {
       view: null,
       selected: null,
@@ -2469,6 +2503,7 @@
       if (tabId === "review_workspace") return "Review , Workspace";
       if (tabId === "import_gpx") return "Import GPX";
       if (tabId === "wearables") return "Wearables";
+      if (tabId === "agent_skills") return "Scout Agent Skills";
       return "Pre-trip planning";
     }
     function activeTabSource(tabId = state.activeTab) {
@@ -2476,6 +2511,7 @@
       if (tabId === "review_workspace") return "review_workspace | review queue and local workspace controls";
       if (tabId === "import_gpx") return "import_gpx | server-side reference route import";
       if (tabId === "wearables") return "wearables | local wearable inventory and energy reserve refresh";
+      if (tabId === "agent_skills") return "agent_skills | read-only Scout agent tool registry";
       return "pre_trip_planning | fixture-backed planning workspace";
     }
     function tabOverviewPayload(view, tabId = state.activeTab) {
@@ -2504,6 +2540,12 @@
           phase1_runtime_safety_truth: false,
           raw_health_payload_shared: false,
           refresh_target: "local inventory and workspace projection"
+        } : null,
+        scout_agent_skills: tabId === "agent_skills" ? {
+          tool_count: view?.scout_agent_skills?.counts?.tool_count || 0,
+          mode_counts: view?.scout_agent_skills?.counts?.mode_counts || {},
+          tool_execution_allowed_from_ui: view?.scout_agent_skills?.boundary?.tool_execution_allowed_from_ui === true,
+          live_safety_api_calls_allowed: view?.scout_agent_skills?.boundary?.live_safety_api_calls_allowed === true
         } : null,
         runtime_handoff_status: tab?.runtime_handoff?.status || null,
         route_comparison_classification: tab?.route_comparison?.classification || null,
@@ -4385,11 +4427,55 @@
       updateReviewSelectionSummary();
       highlightTreeNode(state.selected);
     }
+    function renderAgentSkillsPanel(view) {
+      const summary = document.getElementById("agentSkillsSummary");
+      const list = document.getElementById("agentSkillsList");
+      if (!summary || !list) return;
+      const registry = view?.scout_agent_skills || {};
+      const counts = registry.counts || {};
+      const boundary = registry.boundary || {};
+      summary.replaceChildren();
+      [
+        ["Tools", counts.tool_count ?? 0],
+        ["Modes", Object.keys(counts.mode_counts || {}).length],
+        ["Writes", counts.write_capable_count ?? 0],
+        ["UI execute", String(boundary.tool_execution_allowed_from_ui === true)]
+      ].forEach(([label, value]) => {
+        const box = document.createElement("div");
+        box.innerHTML = `<small>${label}</small><strong>${value}</strong>`;
+        summary.appendChild(box);
+      });
+      list.replaceChildren();
+      (registry.tools || []).forEach(tool => {
+        const item = document.createElement("div");
+        item.className = "agent-skill-item";
+        const title = document.createElement("strong");
+        title.textContent = tool.id || "unnamed tool";
+        const meta = document.createElement("small");
+        meta.textContent = `${tool.mode || "unknown"} | auth ${tool.requires_authorization || "unknown"} | dry-run ${tool.supports_dry_run === true}`;
+        const refs = document.createElement("small");
+        refs.textContent = `reads ${(tool.allowed_reads || []).length} | writes ${(tool.allowed_writes || []).length}`;
+        item.appendChild(title);
+        item.appendChild(meta);
+        item.appendChild(refs);
+        list.appendChild(item);
+      });
+      if (!(registry.tools || []).length) {
+        const empty = document.createElement("div");
+        empty.className = "agent-skill-item";
+        empty.textContent = "No Scout agent skills registered for this workspace.";
+        list.appendChild(empty);
+      }
+    }
     function renderEvidenceTree(view) {
       const tree = document.getElementById("evidenceTree");
       tree.replaceChildren();
       updateStatusFilterOptions(view);
       updateReviewQueueControls(view);
+      tree.appendChild(treeGroup("Evidence Timeline", view.evidence_timeline?.categories || [], item => ({
+        label: item.label || item.category_id,
+        sublabel: `${item.count || 0} evidence | ${item.available ? "available" : "empty"}`
+      }), true, "timeline"));
       tree.appendChild(treeGroup("Checkpoints", view.checkpoints, item => ({
         label: item.label || item.candidate_id,
         sublabel: `${item.checkpoint_type} | ${item.review_state}`
@@ -4504,6 +4590,14 @@
               ["Medical diagnosis", "false"],
               ["Runtime safety truth", "false"]
             ]
+        : state.activeTab === "agent_skills"
+          ? [
+              ["Tools", view.scout_agent_skills?.counts?.tool_count || 0],
+              ["Modes", Object.keys(view.scout_agent_skills?.counts?.mode_counts || {}).length],
+              ["Write capable", view.scout_agent_skills?.counts?.write_capable_count || 0],
+              ["UI execution", String(view.scout_agent_skills?.boundary?.tool_execution_allowed_from_ui === true)],
+              ["Live safety calls", String(view.scout_agent_skills?.boundary?.live_safety_api_calls_allowed === true)]
+            ]
           : [
               ["Runtime handoff", tab.runtime_handoff.status],
               ["Route comparison", tab.route_comparison.classification],
@@ -4596,6 +4690,7 @@
       document.getElementById("importGpxPanel").classList.toggle("is-active", tab === "import_gpx");
       document.getElementById("reviewWorkspacePanel").classList.toggle("is-active", tab === "review_workspace");
       document.getElementById("wearablesPanel").classList.toggle("is-active", tab === "wearables");
+      document.getElementById("agentSkillsPanel").classList.toggle("is-active", tab === "agent_skills");
     }
     function setActiveTab(tab) {
       state.activeTab = tab;
@@ -4694,6 +4789,7 @@
       updateMetrics(view);
       renderMap(view);
       renderEvidenceTree(view);
+      renderAgentSkillsPanel(view);
       renderTabSummary(view);
       renderSectionList(view);
       syncActiveTabChrome();
