@@ -153,6 +153,65 @@ vcgencmd get_throttled
 預期結果：`throttled=0x0`。若不是 `0x0`，先處理電源、溫度或供電線材，不要繼續
 做硬體 smoke。
 
+Waveshare UPS HAT (E) power telemetry smoke:
+
+```bash
+python3 tools/pi_ups_hat_e_smoke.py \
+  --bus /dev/i2c-1 \
+  --address 0x2d \
+  --samples 1 \
+  --oled-status \
+  --led-status \
+  --output-jsonl /data/scout/providers/ups_hat_e/manual-smoke.jsonl
+```
+
+預期結果：I2C `0x2d` 可讀到 UPS HAT (E) telemetry，JSONL 會包含 Type-C/VBUS
+電壓、電流、功率、電池電壓、電池電流、百分比、剩餘容量與四節 cell 電壓。OLED
+會顯示 `SCOUT UPS`、power state、battery percent、battery voltage/current、
+VBUS voltage/power 與 cell 狀態；LED Bar 預設 LED1 表示放電、LED2 表示充電、
+LED3 表示 fast charging、LED10 表示 low cell。
+
+中文註釋：UPS HAT (E) 官方範例包含低電壓後寫入 `0x2d/0x01=0x55` 並關機的流程；
+Scout smoke tool 目前只讀 telemetry，不寫 UPS 控制寄存器、不執行 auto shutdown。
+payload 會固定 `automatic_shutdown_allowed=false`、`power_control_write_allowed=false`、
+`phase1_safety_decision_change_allowed=false`、`remote_outbound_allowed=false`。
+低電壓或電量百分比在 alpha 階段只能當 diagnostic power evidence，不可直接改 L0-L4。
+
+Waveshare UPS HAT (E) local monitor:
+
+```bash
+mkdir -p /data/scout/providers/ups_hat_e
+nohup python3 tools/pi_ups_hat_e_monitor.py \
+  --interval-seconds 60 \
+  --low-percent 10 \
+  --full-percent 100 \
+  --state-file /data/scout/providers/ups_hat_e/monitor-state.json \
+  --output-jsonl /data/scout/providers/ups_hat_e/monitor.jsonl \
+  --oled-status \
+  --led-status \
+  > /data/scout/providers/ups_hat_e/monitor.out 2>&1 &
+echo $! > /data/scout/providers/ups_hat_e/monitor.pid
+```
+
+檢查 monitor 是否仍在執行：
+
+```bash
+pgrep -af "^python3 .*pi_ups_hat_e_monitor.py"
+tail -n 1 /data/scout/providers/ups_hat_e/monitor.jsonl | python3 -m json.tool
+```
+
+停止 monitor：
+
+```bash
+kill "$(cat /data/scout/providers/ups_hat_e/monitor.pid)"
+```
+
+中文註釋：monitor 每 60 秒讀一次 UPS HAT (E)，每筆都寫 JSONL；低於 `--low-percent`
+或達到 `--full-percent` 時會在 payload 裡標記 `notification_emitted=true`，並用 OLED/LED
+顯示狀態。`state-file` 用來避免同一個 alert 狀態每分鐘重複觸發；若真的需要每筆都
+重複標記 alert，才加 `--repeat-alerts`。此 monitor 仍是 diagnostic-only，不寫 UPS
+控制寄存器、不執行 shutdown、不改 L0-L4。
+
 I2C scan:
 
 ```bash

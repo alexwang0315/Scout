@@ -19,6 +19,13 @@ before implementation starts.
 - Debug and simulator tooling may observe Scout runtime behavior, but must not
   change route progress, L0-L4 transitions, incident creation, bridge behavior,
   provider evidence, skill policy, or outbound transport behavior.
+- The on-trip safe-device loop is defined in
+  `docs/specs/scout-closed-loop-operating-cycle.md`. This phase owns the
+  read-only observability surface for that loop: plan-node events,
+  hardware/software status, Ln action traces, mock outbound queue state,
+  communication-node status, team-care prompts, and search black-box snapshots.
+- For alpha, `/admin/debug` or an equivalent on-device debug surface is the
+  primary verification surface for the On-Trip Scout Safe Device foundation.
 
 ## Objective
 
@@ -37,7 +44,9 @@ API, debug web surface, and mock outbound message layer needed to inspect:
 - Phase 3 bridge import status;
 - provider availability and degraded status;
 - Ln activation gate and skill run envelopes;
-- outbound messages Scout would attempt to send.
+- outbound messages Scout would attempt to send;
+- on-trip plan-node check-ins, hardware/software state, team-care prompts,
+  communication-node state, and search black-box evidence snapshots.
 
 Success means a developer can replay fixtures or hardware-like samples and
 answer:

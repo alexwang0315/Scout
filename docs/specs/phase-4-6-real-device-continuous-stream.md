@@ -7,6 +7,12 @@ Date: 2026-05-21
 Phase 4.6 moves Scout from signed sample stream admission to real Apple Watch /
 mobile continuous stream readiness.
 
+This is one input surface for the on-trip safe-device loop defined in
+`docs/specs/scout-closed-loop-operating-cycle.md`. Real device streams can feed
+plan-node check-ins, hardware/software state, wearable/body-load cues, and
+communication readiness evidence, but they do not by themselves approve
+departure, send SOS/incident reports, or mutate Phase 2 Brain facts.
+
 中文註釋：這個 milestone 的目標是讓真裝置連續串流有明確身份、簽章、排序、
 重送、限流與 operator control 語意。它不是 field mission 自動出發，也不是
 SOS / SMS / satellite / incident bridge live send 的啟用。

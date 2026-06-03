@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="220" height="56" viewBox="0 0 220 56" role="img">
+<title>cp.024_to_cp.025 terrain profile</title>
+<rect x="0" y="0" width="220" height="56" fill="#171b20"/>
+<rect x="10.0" y="8" width="6.6" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="16.6" y="8" width="6.8" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="23.3" y="8" width="7.1" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="30.5" y="8" width="5.4" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="35.9" y="8" width="6.6" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="42.5" y="8" width="5.6" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="48.1" y="8" width="3.7" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="51.8" y="8" width="3.7" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="55.6" y="8" width="5.5" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="61.0" y="8" width="4.0" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="65.0" y="8" width="8.8" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="73.8" y="8" width="5.6" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="79.5" y="8" width="6.0" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="85.4" y="8" width="10.1" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="95.5" y="8" width="3.2" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="98.7" y="8" width="8.7" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="107.4" y="8" width="10.4" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="117.8" y="8" width="5.8" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="123.6" y="8" width="5.8" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="129.4" y="8" width="4.0" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="133.4" y="8" width="6.1" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="139.5" y="8" width="8.7" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="148.2" y="8" width="8.9" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="157.1" y="8" width="7.2" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="164.4" y="8" width="3.3" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="167.7" y="8" width="6.3" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="174.0" y="8" width="5.2" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="179.2" y="8" width="4.6" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="183.8" y="8" width="4.2" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="188.1" y="8" width="6.3" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="194.3" y="8" width="6.8" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="201.1" y="8" width="2.9" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="204.0" y="8" width="3.4" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="207.4" y="8" width="2.6" height="34" fill="#9ee6a0" opacity="0.28"/>
+<polyline points="10.0,42.0 16.6,40.6 23.3,39.7 30.5,39.3 35.9,38.0 42.5,36.5 48.1,36.2 51.8,35.7 55.6,34.6 61.0,33.6 65.0,32.8 73.8,31.3 79.5,30.4 85.4,29.9 95.5,27.8 98.7,27.2 107.4,24.8 117.8,23.5 123.6,23.5 129.4,22.5 133.4,22.5 139.5,21.9 148.2,21.7 157.1,19.9 164.4,16.9 167.7,16.1 174.0,15.5 179.2,14.3 183.8,13.1 188.1,11.3 194.3,9.7 201.1,9.0 204.0,9.0 207.4,8.1 210.0,8.0" fill="none" stroke="#f4f7fb" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<text x="10" y="52" fill="#9aa4b2" font-size="9">normal</text>
+<text x="210" y="52" text-anchor="end" fill="#9aa4b2" font-size="9">1482-1540m</text>
+</svg>

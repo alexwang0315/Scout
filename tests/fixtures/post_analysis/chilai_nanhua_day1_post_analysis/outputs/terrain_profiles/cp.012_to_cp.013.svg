@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="220" height="56" viewBox="0 0 220 56" role="img">
+<title>cp.012_to_cp.013 terrain profile</title>
+<rect x="0" y="0" width="220" height="56" fill="#171b20"/>
+<rect x="10.0" y="8" width="4.2" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="14.2" y="8" width="5.0" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="19.2" y="8" width="4.7" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="24.0" y="8" width="5.9" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="29.9" y="8" width="4.0" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="33.9" y="8" width="5.5" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="39.3" y="8" width="3.8" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="43.1" y="8" width="3.3" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="46.4" y="8" width="8.7" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="55.2" y="8" width="4.8" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="60.0" y="8" width="5.0" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="65.0" y="8" width="3.5" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="68.5" y="8" width="5.9" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="74.3" y="8" width="3.8" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="78.1" y="8" width="4.8" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="82.8" y="8" width="5.6" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="88.4" y="8" width="5.8" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="94.3" y="8" width="4.5" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="98.7" y="8" width="7.7" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="106.4" y="8" width="7.6" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="114.0" y="8" width="3.2" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="117.2" y="8" width="4.7" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="122.0" y="8" width="2.8" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="124.8" y="8" width="3.1" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="127.9" y="8" width="4.1" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="131.9" y="8" width="5.5" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="137.4" y="8" width="4.7" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="142.1" y="8" width="2.9" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="145.0" y="8" width="5.3" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="150.3" y="8" width="5.8" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="156.1" y="8" width="3.2" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="159.3" y="8" width="4.5" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="163.8" y="8" width="4.8" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="168.6" y="8" width="4.6" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="173.3" y="8" width="4.7" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="178.0" y="8" width="7.4" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="185.3" y="8" width="6.3" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="191.7" y="8" width="6.1" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="197.8" y="8" width="5.5" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="203.3" y="8" width="3.7" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="207.0" y="8" width="3.0" height="34" fill="#9ee6a0" opacity="0.28"/>
+<polyline points="10.0,40.6 14.2,39.6 19.2,39.2 24.0,42.0 29.9,39.7 33.9,39.5 39.3,38.3 43.1,37.7 46.4,36.9 55.2,36.4 60.0,37.1 65.0,34.3 68.5,32.6 74.3,32.9 78.1,31.4 82.8,31.4 88.4,28.9 94.3,28.7 98.7,27.7 106.4,22.6 114.0,22.6 117.2,19.3 122.0,15.5 124.8,14.5 127.9,9.7 131.9,10.9 137.4,10.1 142.1,10.3 145.0,9.3 150.3,10.2 156.1,11.8 159.3,10.3 163.8,8.0 168.6,8.4 173.3,8.3 178.0,8.4 185.3,9.2 191.7,8.2 197.8,10.1 203.3,13.2 207.0,14.2 210.0,13.5" fill="none" stroke="#f4f7fb" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<text x="10" y="52" fill="#9aa4b2" font-size="9">normal</text>
+<text x="210" y="52" text-anchor="end" fill="#9aa4b2" font-size="9">1139-1158m</text>
+</svg>

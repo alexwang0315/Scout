@@ -5,6 +5,19 @@
 Phase 4.5 defines how Scout moves from a pre-trip planning workspace into a
 field runtime handoff without weakening the Phase 1 safety boundary.
 
+This is the handoff point between the pretrip side of
+`docs/specs/scout-closed-loop-operating-cycle.md` and the on-trip safe-device
+loop. A reviewed package may enter field runtime only through Departure Gate,
+Final MissionGraph, and Runtime Handoff provenance. The handoff can expose
+reviewed plan nodes, Ln action rules, communication nodes, team-care nodes, and
+search black-box node metadata to runtime, but it must not treat unreviewed
+pretrip candidates as live truth.
+
+Official Scout workspace template import/export is a separate planning-template
+loop, not a runtime handoff path. A template imported from another Scout device
+or user must still become a reviewed local package, pass Departure Gate, produce
+a Final MissionGraph, and pass Runtime Handoff before Phase 1 can load it.
+
 The goal is not to make every trip use the same heavy review process. Simple
 single-day trips should be able to use a low-friction review path, while deep
 mountain, multi-day, traverse, or hard-retreat trips should use a more

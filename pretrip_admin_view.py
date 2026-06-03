@@ -521,6 +521,23 @@ def build_pretrip_admin_view(
     source_refs = _source_refs(artifacts, root if project_root is None else project_root)
     route_points = _route_point_samples(route_summary, checkpoints)
     route_polyline = _route_polyline(map_context)
+    segment_display_by_id = _segment_display_geometry_by_id(segment_display_geometry)
+    mission_checkpoints = _candidate_list(
+        checkpoints,
+        source_path=source_refs["checkpoints"],
+        evidence_type="pretrip_checkpoint_candidate",
+    )
+    mission_segments = _candidate_list(
+        segments,
+        source_path=source_refs["segments"],
+        evidence_type="pretrip_segment_candidate",
+        display_geometry=segment_display_by_id,
+    )
+    mission_retreat_routes = _candidate_list(
+        retreat_routes,
+        source_path=source_refs["retreat_routes"],
+        evidence_type="pretrip_retreat_route_candidate",
+    )
 
     planning_tab = {
         "summary": _project_summary(project, route_summary, pretrip_package, source_refs),
@@ -538,26 +555,15 @@ def build_pretrip_admin_view(
             "ended_at": route_summary.get("ended_at"),
             "point_samples": route_points,
             "polyline": route_polyline,
+            "display_geometry": _route_display_geometry_from_segments(
+                project_id,
+                mission_segments,
+            ),
         },
         "mission_candidates": {
-            "checkpoints": _candidate_list(
-                checkpoints,
-                source_path=source_refs["checkpoints"],
-                evidence_type="pretrip_checkpoint_candidate",
-            ),
-            "segments": _candidate_list(
-                segments,
-                source_path=source_refs["segments"],
-                evidence_type="pretrip_segment_candidate",
-                display_geometry=_segment_display_geometry_by_id(
-                    segment_display_geometry
-                ),
-            ),
-            "retreat_routes": _candidate_list(
-                retreat_routes,
-                source_path=source_refs["retreat_routes"],
-                evidence_type="pretrip_retreat_route_candidate",
-            ),
+            "checkpoints": mission_checkpoints,
+            "segments": mission_segments,
+            "retreat_routes": mission_retreat_routes,
         },
         "map_candidates": _map_candidate_summary(map_candidates, source_refs["map_candidates"]),
         "readiness": _summary_with_source(
@@ -1765,38 +1771,33 @@ def _route_display_geometry_from_segments(
     project_id: str,
     segments: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    coordinates: list[dict[str, float]] = []
+    coordinate_segments: list[list[dict[str, float]]] = []
     for segment in segments:
         display_geometry = segment.get("display_geometry")
-        segment_coordinates = (
-            display_geometry.get("coordinates", [])
-            if isinstance(display_geometry, dict)
-            else []
-        )
-        if len(segment_coordinates) < 2:
+        if not isinstance(display_geometry, dict):
             continue
-        for point in segment_coordinates:
-            if not isinstance(point, dict):
-                continue
-            lat = point.get("lat")
-            lon = point.get("lon")
-            if not isinstance(lat, (int, float)) or not isinstance(lon, (int, float)):
-                continue
-            normalized = {"lat": float(lat), "lon": float(lon)}
-            if coordinates and coordinates[-1] == normalized:
-                continue
-            coordinates.append(normalized)
+        coordinate_segments.extend(
+            _display_geometry_coordinate_segments(display_geometry)
+        )
+    coordinates = [
+        point
+        for coordinate_segment in coordinate_segments
+        for point in coordinate_segment
+    ]
     return {
         "source_id": f"route_display_geometry.{project_id}",
         "source_path": "outputs/segment_display_geometry.json",
         "evidence_type": "pretrip_route_display_geometry",
         "display_point_count": len(coordinates),
+        "display_segment_count": len(coordinate_segments),
         "coordinates": coordinates,
+        "coordinate_segments": coordinate_segments,
         "boundary": {
             "display_geometry_only": True,
             "candidate_only": True,
             "runtime_safety_truth": False,
             "internal_gpx_points_preserved": True,
+            "gpx_segment_boundary_preserved": True,
         },
     }
 
@@ -3457,8 +3458,20 @@ def _segment_display_geometry_by_id(
                 ),
             ),
             "source_point_count": item.get("source_point_count"),
-            "display_point_count": len(item.get("coordinates", [])),
+            "display_point_count": item.get(
+                "display_point_count",
+                len(item.get("coordinates", [])),
+            ),
+            "display_segment_count": item.get(
+                "display_segment_count",
+                len(item.get("coordinate_segments", [])),
+            ),
             "coordinates": item.get("coordinates", []),
+            "coordinate_segments": item.get("coordinate_segments", []),
+            "segment_boundary_preserved": item.get(
+                "segment_boundary_preserved",
+                False,
+            ),
             "resume_segment": item.get("resume_segment", False),
             "resume_gap_count": item.get("resume_gap_count", 0),
             "max_gap_m": item.get("max_gap_m"),
@@ -3467,6 +3480,40 @@ def _segment_display_geometry_by_id(
         }
         for item in payload.get("segments", [])
     }
+
+
+def _display_geometry_coordinate_segments(
+    display_geometry: dict[str, Any],
+) -> list[list[dict[str, float]]]:
+    coordinate_segments = display_geometry.get("coordinate_segments")
+    if isinstance(coordinate_segments, list):
+        normalized_segments = [
+            _normalized_coordinate_segment(segment)
+            for segment in coordinate_segments
+            if isinstance(segment, list)
+        ]
+        normalized_segments = [
+            segment for segment in normalized_segments if len(segment) >= 2
+        ]
+        if normalized_segments:
+            return normalized_segments
+    coordinates = _normalized_coordinate_segment(
+        display_geometry.get("coordinates", [])
+    )
+    return [coordinates] if len(coordinates) >= 2 else []
+
+
+def _normalized_coordinate_segment(segment: list[Any]) -> list[dict[str, float]]:
+    normalized: list[dict[str, float]] = []
+    for point in segment:
+        if not isinstance(point, dict):
+            continue
+        lat = point.get("lat")
+        lon = point.get("lon")
+        if not isinstance(lat, (int, float)) or not isinstance(lon, (int, float)):
+            continue
+        normalized.append({"lat": float(lat), "lon": float(lon)})
+    return normalized
 
 
 def _route_point_samples(
@@ -6846,10 +6893,16 @@ def _reference_track_item(
                     ),
                     "source_point_count": display.get("source_point_count"),
                     "display_point_count": display.get("display_point_count"),
+                    "display_segment_count": display.get("display_segment_count"),
                     "display_sampling_performed": display.get(
                         "display_sampling_performed"
                     ),
                     "coordinates": display.get("coordinates", []),
+                    "coordinate_segments": display.get("coordinate_segments", []),
+                    "segment_boundary_preserved": display.get(
+                        "segment_boundary_preserved",
+                        False,
+                    ),
                 }
             }
             if display is not None
@@ -7190,7 +7243,7 @@ def _capability_timeline_import_summary(
         ],
         "edges": [
             {
-                **edge,
+                **_capability_timeline_edge_projection(edge),
                 **_projection_record_metadata(
                     edge,
                     source_path=edge.get("source_path")
@@ -7274,6 +7327,21 @@ def _capability_timeline_import_summary(
             "runtime_safety_truth": False,
         },
     }
+
+
+def _capability_timeline_edge_projection(edge: dict[str, Any]) -> dict[str, Any]:
+    projected = dict(edge)
+    terrain_profile = projected.get("terrain_profile")
+    if isinstance(terrain_profile, dict):
+        samples = terrain_profile.get("samples") or []
+        projected["terrain_profile"] = {
+            "source": terrain_profile.get("source"),
+            "sample_distance_m": terrain_profile.get("sample_distance_m"),
+            "sample_count": len(samples) if isinstance(samples, list) else 0,
+            "profile_svg_ref": terrain_profile.get("profile_svg_ref"),
+            "summary": terrain_profile.get("summary", {}),
+        }
+    return projected
 
 
 def _companion_capability_capsule_projection(

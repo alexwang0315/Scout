@@ -52,9 +52,12 @@ COPY \
     hardware_readiness_assistant_context.py \
     incident_package.py \
     incident_store.py \
+    ins_dr_input_adapter.py \
+    ins_dr_navigation.py \
     mission_graph.py \
     mission_models.py \
     mission_progress.py \
+    observation_adapter.py \
     offline_map.py \
     offline_map_models.py \
     pdr_fallback.py \
@@ -73,6 +76,7 @@ COPY \
     pretrip_expert_contribution_apply_plan.py \
     pretrip_geojson_import.py \
     pretrip_gpx_corpus.py \
+    pretrip_gpx_filter.py \
     pretrip_import.py \
     pretrip_layer_preparation.py \
     pretrip_models.py \
@@ -116,6 +120,9 @@ COPY \
     voice_cue_models.py \
     ./
 
+# Keep the preview admin image aligned with the root Python module graph.
+COPY *.py ./
+
 COPY tools/scout_agent_tool_manifests/ ./tools/scout_agent_tool_manifests/
 
 COPY docs/admin/phase1-after-action.html ./docs/admin/
@@ -125,6 +132,7 @@ COPY docs/admin/phase4-pretrip-planning.html ./docs/admin/
 COPY docs/admin/scout-assistant-ui.js ./docs/admin/
 
 COPY tests/fixtures/pretrip/projects/chilai_nanhua_day1/ ./tests/fixtures/pretrip/projects/chilai_nanhua_day1/
+COPY tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/ ./tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/
 COPY tests/fixtures/hardware/readiness_context.json ./tests/fixtures/hardware/readiness_context.json
 COPY tests/fixtures/field_cases/scout_260512_golden.json ./tests/fixtures/field_cases/
 COPY tests/fixtures/maps/scout_260512_overpass_map_context.geojson ./tests/fixtures/maps/

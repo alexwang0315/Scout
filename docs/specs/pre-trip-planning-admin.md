@@ -5,6 +5,12 @@
 Build a spec-first engineering plan for Scout Fusion's Phase 4 Pre-Trip
 Planning Admin.
 
+The full product loop is defined in
+`docs/specs/scout-closed-loop-operating-cycle.md`. This spec owns the pre-trip
+workspace portion of that loop: source ingest, AI-assisted candidate synthesis,
+human review, official Scout workspace template import/export, reviewed package
+output, and runtime handoff preparation.
+
 The Pre-Trip Planning Admin is an upstream mission-planning and evidence
 assembly tool. Before a trip starts, it should help a leader import route data,
 attach map and terrain evidence, define checkpoints and POIs, choose segment
@@ -131,8 +137,13 @@ what actually happened in previous field runs:
   lessons;
 - which **Capability Timeline**（能力時間軸） and **Capability Capsule**（能力膠囊）
   outputs from completed routes should seed future pacing assumptions;
+- which **Scout Energy Reserve / Energy Limit**（體能儲備 / 體能限制） feedback
+  derived from completed user tracks should seed future rest, check-in,
+  turnaround, ETA buffer, and energy-aware CP candidate proposals;
 - which Phase 2 `DerivedMeasurement`, `HumanReview`, `DecisionOptionSet`, and
   `SkillRunRecord` nodes should seed the next pre-trip plan.
+- which official Scout workspace template exports should become reusable
+  candidate evidence for another Scout device or user.
 
 The key boundary is direction:
 
@@ -140,8 +151,10 @@ The key boundary is direction:
 previous mission evidence
   -> after-action admin review
   -> post-analysis capability timeline
+  -> Energy Reserve / Energy Limit feedback
   -> reviewed planning lessons
   -> next PreTripPackage candidates
+  -> energy-aware proposed CP/rest/check-in candidates
   -> human review
   -> future MissionGraph compile
 ```
@@ -151,9 +164,48 @@ The detailed post-analysis pacing plan lives in
 扣除休息） output can become a reviewed pretrip pacing reference, but it must
 stay opt-in, privacy-preserving, and non-runtime truth.
 
+The detailed body-battery plan lives in
+`docs/specs/scout-body-battery-and-companion-match.md`. Energy Reserve may
+consume Capability Timeline outputs after a completed trip and produce
+candidate-only baseline updates. Energy Limit may produce conservative
+CP/rest/check-in suggestions for the next pretrip workspace. These suggestions
+may affect proposed CP density, rest-area emphasis, turnaround gates, water/camp
+stop emphasis, segment length expectations, and conservative ETA buffers, but
+they must remain review-gated planning evidence.
+
 The after-action viewer may propose next-plan candidates, but it must not mutate
 the completed Phase 1 mission, rewrite incident packages, or change live safety
 behavior for any active mission.
+
+### Workspace Transfer And Template Import/Export Loop
+
+Official Scout workspace transfer is the third closed loop described in
+`docs/specs/scout-closed-loop-operating-cycle.md`. It lets Scout A export a
+reviewed or completed workspace, and lets Scout B import that package as a rich
+pretrip template.
+
+This resembles importing public GPX or selecting a golden GPX, but the source is
+richer and more structured:
+
+- reviewed route and reference-track geometry;
+- reviewed CP/MCP/POI/hazard/rest/water/camp/communication nodes;
+- Scout time（Scout 時間） summaries derived from completed Scout trips;
+- route notes, field notes, article-derived notes, and after-action review
+  lessons;
+- risk, terrain, map-preparation, and source-attribution refs;
+- review status, redaction summary, schema version, hashes, and sharing policy.
+
+Template import must be candidate-only. Scout B must re-run local validation,
+map preparation, stale-evidence checks, human/AI review, departure gate, and
+runtime handoff. Imported Scout-time data may inform ETA comparison and route
+planning, but it must not become Scout B user capability evidence.
+
+Template export must be official-tool mediated and redaction-aware. By default,
+it should exclude raw GPX, exact timestamps, raw wearable payloads, private
+identity, and full incident packages. Optional ecosystem contribution may
+publish only aggregate route intelligence such as common CP names, route-note
+frequencies, timing distributions, communication-node observations, and
+map/risk staleness reports.
 
 ### Pre-Trip Project Workspace and AI Skills
 
@@ -177,6 +229,7 @@ pretrip/projects/
       conversations/
       images/
       field_exports/
+      scout_templates/
     normalized/
       routes/
       route_guides/
@@ -199,6 +252,7 @@ pretrip/projects/
       compiled_mission_graph.json
       brain_seed_nodes.json
       fixtures/
+      workspace_exports/
 ```
 
 The Admin portal can install and run planning skills inside this workspace. A
@@ -371,6 +425,16 @@ Pre-Trip Planning Admin should:
 `Alpha release policy`（Alpha 測試放寬政策） replaces the early proof-of-concept
 limits and opens the product boundaries needed for a workable alpha:
 
+- alpha must provide the first two Scout closed loops defined in
+  `docs/specs/scout-closed-loop-operating-cycle.md`: Climbing Experience
+  Accumulation and On-Trip Scout Safe Device;
+- the On-Trip Scout Safe Device loop is the minimum on-trip foundation for
+  alpha. `/admin/debug` or equivalent on-device debug surfaces must expose
+  plan-node state, hardware/software status, Ln action traces, local advisory
+  cues, communication/team-care state, and search black-box evidence refs;
+- the Workspace Transfer And Ecosystem loop is release-before scope, not an
+  alpha blocker, unless an alpha test explicitly requires Scout A to Scout B
+  template transfer;
 - workspace edit/import controls may be enabled when they write only copied
   workspace candidate artifacts;
 - large planning evidence is allowed when it remains deterministic and
@@ -798,6 +862,8 @@ The `pretrip-eta-fitness-calibration` skill should support:
 - `pace_multiplier_basis`: `total_elapsed_time`, `moving_time_only`, or
   `mixed_unknown`;
 - fixed rest minutes at CPs, huts, camps, viewpoints, or water points;
+- Energy Reserve feedback refs from completed user tracks, including proposed
+  rest/check-in CP candidates and confidence/limitation notes;
 - conservative multiplier adjustment for long days where a short-route pace
   should not be applied directly;
 - separate multiplier profiles for light-pack day hikes, heavy-pack overnight
@@ -1017,6 +1083,7 @@ Examples:
 - saved webpages or screenshots;
 - route-guide images;
 - GPX files from other hikers;
+- official Scout workspace template packages from another Scout device or user;
 - chat transcripts or notes from conversations with other hikers;
 - previous Scout after-action exports;
 - hand-written packing, water, camp, or access notes.

@@ -303,9 +303,22 @@ This spec defines two related but separate capabilities:
 
 - `Scout Energy Reserve`（Scout 體能儲備）: a personal, baseline-relative body
   battery proxy for daily training, post-analysis, and field advisory cues.
+- `Scout Step Ease / Exertion Snapshot`（下一步輕鬆度 / 當下耗力快照）:
+  a short-window field signal that asks whether the next step is becoming harder
+  than expected for this person, route segment, and environment.
+- `Scout Composure Reserve`（冷靜行動儲備）: a non-medical decision-margin proxy
+  that combines physical load, navigation uncertainty, environment pressure, and
+  plan-node drift before panic or poor decisions have a chance to compound.
 - `Companion Capability Match`（同行能力匹配）: an opt-in matching score that helps
   users find hiking partners with similar route rhythm, endurance, rest habits,
   and body-load profile.
+
+The full product loop is defined in
+`docs/specs/scout-closed-loop-operating-cycle.md`. This spec owns the energy and
+capability feedback portion of that loop: wearable/activity baseline,
+Capability Timeline consumption, post-analysis Energy Reserve / Energy Limit
+feedback, and candidate-only influence on future pretrip CP/rest/check-in
+suggestions.
 
 The feature is not a medical product, not a diagnosis engine, and not Phase 1
 runtime safety truth. It uses wearable and route evidence to support awareness,
@@ -326,6 +339,7 @@ historical wearable activity
   + Capability Timeline moving/rest/elapsed time
   + route effort normalization
   -> personal energy and endurance baseline
+  -> on-trip step-ease and composure snapshots
   -> privacy-preserving companion match score
   -> advisory field rest cues
 ```
@@ -335,6 +349,8 @@ Success means a user can:
 - import Apple Watch, Garmin, GPX/FIT/TCX, or Scout runtime activity history;
 - build a personal baseline from their own routes and daily training;
 - compare new route performance against their own baseline and route effort;
+- see short-window exertion and decision-margin cues when the next step becomes
+  harder than expected;
 - share a coarse capability profile without raw GPX or exact timestamps;
 - find companion candidates with similar walking, climbing, descending, rest,
   and fatigue-decay patterns;
@@ -360,6 +376,13 @@ This creates daily-use retention:
 - after a trip, Scout explains where fatigue appeared;
 - when joining others, users can compare coarse capability without exposing raw
   private traces.
+
+The field-use rationale is sharper than general wellness: many accidents open a
+window when the next step becomes difficult and the user starts losing calm
+judgment. The cause can be physical fatigue, route confusion, poor weather,
+fading daylight, team separation, or simple under-preparation. Scout should
+therefore model not only body reserve over days, but also the immediate
+"can I still take the next step calmly?" margin.
 
 ## Theory Foundation
 
@@ -479,7 +502,67 @@ this route segment against this user's historical route-effort profile
 this live climb against this user's expected fatigue curve
 ```
 
-### 5. Wearable Data Accuracy Limits
+### 5. Step Ease And Composure Load
+
+Long-term body reserve may take weeks or months to personalize. Field usefulness
+requires a faster signal. Scout should model a short-window `Step Ease` score
+from the current trip, using the first stable minutes of a route and reviewed
+pretrip expectations as temporary baselines when personal history is sparse.
+
+Step Ease asks:
+
+```text
+Is the next step becoming harder than expected right now?
+```
+
+It should compare expected effort for the segment against observed effort:
+
+```text
+observed_exertion_now =
+  heart_rate_drift
+  + pace_decay_for_same_grade
+  + cadence_decay
+  + micro_stop_frequency
+  + movement_instability
+
+expected_segment_effort =
+  route_grade
+  + ascent/descent
+  + terrain/risk context
+  + planned pace/rest envelope
+  + weather/daylight pressure
+```
+
+Scout should then derive a decision-margin cue:
+
+```text
+Composure Load =
+  physical_load
+  + navigation_load
+  + environmental_load
+  + decision_load
+```
+
+Where:
+
+- `physical_load` covers heart-rate drift, pace decay, cadence decay, late-route
+  fatigue, and rest debt;
+- `navigation_load` covers route deviation, repeated backtracking, low map/GPS
+  confidence, and unresolved next-CP ambiguity;
+- `environmental_load` covers daylight loss, weather degradation, temperature,
+  terrain exposure, and communication weakness;
+- `decision_load` covers missed plan-node check-ins, ETA drift, team separation,
+  manual discomfort check-ins, and repeated hesitation.
+
+This is not a panic detector. Scout must avoid diagnosing emotion. The goal is
+to surface a calm action cue before the user enters a fragile decision state:
+
+```text
+Stop briefly. Confirm current position, next checkpoint, daylight, weather, and
+retreat options before continuing.
+```
+
+### 6. Wearable Data Accuracy Limits
 
 Consumer wearable data is useful for trends, but device error varies by metric,
 movement pattern, skin contact, sensor generation, physiology, and activity
@@ -494,7 +577,7 @@ Scout must:
 - downgrade confidence when device data is sparse, stale, or inconsistent;
 - let users override or annotate how they felt.
 
-### 6. Companion Matching As Similarity, Not Ranking
+### 7. Companion Matching As Similarity, Not Ranking
 
 Companion matching should compare normalized capability vectors, not total
 finish time. Two users can be compatible even if they have never walked the same
@@ -548,13 +631,69 @@ Daily activity and completed route data can update baseline artifacts:
 
 ```text
 wearable import
+  + completed user track
+  + post-analysis capability timeline
   -> normalized activity history
   -> personal baseline profile
   -> energy reserve trend
+  -> energy limit candidate
   -> companion capability vector
 ```
 
 These artifacts are user-private by default.
+
+### Capability Timeline To Energy Reserve Feedback Loop
+
+`docs/specs/post-analysis-capability-timeline.md` produces completed-trip
+moving/rest/elapsed evidence from a user recorded GPX or Scout runtime track.
+Energy Reserve consumes that evidence after the trip is closed; it does not
+consume pretrip reference GPX or public route downloads as capability evidence.
+
+The intended flow is:
+
+```text
+completed trip workspace
+  -> user recorded GPX / Scout runtime track
+  -> Capability Timeline
+  -> post_analysis_energy_reserve_feedback
+  -> updated personal endurance baseline candidate
+  -> energy limit candidate
+  -> next pretrip energy reserve projection
+  -> proposed energy-aware CP/rest/check-in candidates
+  -> human/AI review
+```
+
+The Energy Reserve update should compare each completed route against the user's
+baseline, route-effort profile, and available wearable summaries:
+
+- actual moving time vs. expected moving time;
+- actual rest frequency/duration vs. expected rest pattern;
+- late-route fatigue decay;
+- ascent/descent load per moving hour;
+- wearable load and recovery context when available;
+- data-quality limits from GPS gaps, IMU/PDR gaps, sparse wearable data, or
+  missing user check-ins.
+
+Outputs remain local post-analysis evidence:
+
+- `post_analysis_energy_reserve_feedback`: explains whether the previous
+  projection over/under-estimated fatigue and where reserve dropped.
+- `scout_energy_reserve_baseline_update_candidate`: proposes baseline updates
+  from completed trip evidence, with confidence and limitations.
+- `scout_energy_limit_candidate`: proposes conservative planning constraints
+  such as shorter segment targets, earlier turnaround gates, denser rest/check
+  nodes, or larger ETA/rest buffers for the next pretrip workspace.
+- `pretrip_energy_reserve_projection`: reads the updated baseline candidate only
+  after review or explicit local acceptance.
+- `energy_aware_cp_adjustment_candidates`: optional next-trip planning
+  candidates for rest/check-in CPs, turnaround gates, camp/water emphasis, or
+  CP-density changes.
+
+Energy-aware CP adjustments are not checkpoint truth. They may influence the
+next pretrip proposed CP set, but only as candidate evidence with source refs to
+Capability Timeline and Energy Reserve artifacts. They must not directly mutate
+the reviewed MissionGraph, mark checkpoints reached, or become Phase 1 runtime
+safety truth.
 
 ### Pretrip Boundary
 
@@ -562,13 +701,16 @@ Pretrip can read a coarse baseline:
 
 ```text
 capability vector
+  + Energy Reserve baseline/projection
   -> route feasibility context
   -> pacing recommendation
+  -> energy-aware CP/rest/check-in candidates
   -> companion compatibility
   -> human review
 ```
 
-It must not automatically reject a route or approve a team.
+It must not automatically reject a route, approve a team, or insert CPs into a
+departure package without review.
 
 ### Runtime Boundary
 
@@ -578,7 +720,10 @@ Runtime can read live wearable signals for advisory cues:
 live wearable observation
   + current route-effort segment
   + personal baseline
-  -> advisory fatigue cue
+  + navigation/environment/plan-node context
+  -> exertion snapshot
+  -> composure snapshot
+  -> advisory fatigue or decision-margin cue
   -> voice/UI suggestion
 ```
 
@@ -589,6 +734,14 @@ It must not:
 - mark a checkpoint reached;
 - alter MissionGraph progress;
 - trigger SOS or outbound messages without explicit operator/SOS flow.
+
+When composure margin degrades, the default runtime cue should be conservative
+and action-oriented, not alarming:
+
+```text
+Pause. Check where you are, confirm the next checkpoint, and decide whether to
+continue, rest, or retreat.
+```
 
 ## Core Concepts
 
@@ -616,6 +769,61 @@ Suggested output bands:
 | `stop_and_check` | large deviation plus user discomfort or multiple weak signals | ask user to check condition |
 
 `stop_and_check` is still not Phase 1 safety truth.
+
+### Scout Step Ease（下一步輕鬆度）
+
+A short-window exertion signal for on-trip use. Step Ease is designed for cold
+start and sparse-history situations where a complete Energy Reserve baseline does
+not yet exist.
+
+Suggested output:
+
+| Band | Meaning | Product behavior |
+| --- | --- | --- |
+| `easy` | next step remains easier than expected | no cue |
+| `normal` | effort is within the expected envelope | quiet status only |
+| `strained` | effort is rising for the same route context | suggest slower pace |
+| `rest_suggested` | sustained effort drift or repeated micro-stops | suggest rest |
+| `manual_check` | high effort drift plus weak context signals | ask for self check |
+
+Inputs may include:
+
+- heart-rate drift for similar grade/pace;
+- pace decay under similar slope;
+- cadence or step-length decay when available;
+- micro-stop frequency;
+- movement instability from IMU/PDR when available;
+- terrain and weather context;
+- user-reported RPE or discomfort.
+
+Step Ease must be computed from a short window, preserve data-quality notes, and
+never become a checkpoint arrival or safety truth signal.
+
+### Scout Composure Reserve（冷靜行動儲備）
+
+A non-medical decision-margin proxy. Composure Reserve explains why the user may
+need to pause before continuing, even when no single health value is extreme.
+
+Suggested output bands:
+
+| Band | Meaning | Product behavior |
+| --- | --- | --- |
+| `steady` | decision margin is intact | no cue |
+| `watch` | one load source is rising | keep next CP and retreat option visible |
+| `fragile` | multiple load sources are rising | pause-and-verify cue |
+| `stop_and_plan` | physical/navigation/environment pressure is compounded | require manual acknowledgement |
+
+It should combine:
+
+- Step Ease / physical load;
+- navigation uncertainty;
+- weather and daylight pressure;
+- plan-node and ETA drift;
+- communication weakness;
+- team-care context when available.
+
+Composure Reserve is not a panic detector, diagnosis, or automatic SOS trigger.
+It exists to preserve calm action before poor decisions compound.
 
 ### Personal Endurance Baseline（個人耐受基線）
 
@@ -662,6 +870,39 @@ It should not expose raw route history by default.
 
 ## Data Sources
 
+### Supported User Device Scenarios
+
+Scout must not make specialized hardware or Apple/Garmin ownership a prerequisite
+for trying the product. The Energy Reserve, Step Ease, and Composure Reserve path
+must support three entry scenarios:
+
+1. `scout_ecosystem_device`
+   - The user wears or carries hardware/software that can run Scout-compatible
+     capture or bridge software.
+   - Expected data: live or near-live wearable observations, route progress,
+     PDR/IMU/GPS, plan-node check-ins, and optional user check-ins.
+   - Product value: strongest on-trip Step Ease and Composure Reserve support.
+
+2. `compatible_wearable_or_app_bridge`
+   - The user uses Apple Watch, Garmin, Strava, Nike Run Club, or another device
+     or app that can expose activity data through HealthKit, Garmin exports,
+     FIT/TCX/GPX, or a Scout bridge.
+   - Expected data: workouts, heart-rate summaries, distance, elevation, routes,
+     effort/RPE where available, and historical activity windows.
+   - Product value: strong Energy Reserve baseline and post-analysis calibration;
+     on-trip usefulness depends on whether live bridge data is available.
+
+3. `gpx_only_device`
+   - The user has a non-Scout-compatible device, app, or public/history source
+     that can produce GPX only.
+   - Expected data: completed route geometry, timestamps when available, moving
+     time, pause/rest evidence, and DEM/risk-derived terrain context.
+   - Product value: cold-start terrain-time baseline, Capability Timeline, and
+     next-pretrip energy-aware candidates without a wearable dependency.
+
+GPX-only users should still receive useful Scout planning and post-analysis
+feedback. Wearable data improves confidence; it must not become an adoption gate.
+
 ### Historical Import
 
 Supported input categories:
@@ -686,6 +927,36 @@ Exact timestamps are used only transiently to derive `activity_date`, relative
 duration, and heart-rate summary windows. Garmin Body Battery and stress values
 remain provider source values only.
 
+### Two Apple Ingestion Modes
+
+Scout should support both Apple activity data paths, but they have different
+product roles:
+
+1. `manual_apple_health_export_importer`
+   - Role: development tool, lab tool, and one-time historical import path.
+   - Input: user-provided Apple Health export archive, workout route files, or
+     locally extracted HealthKit-style summaries.
+   - Use case: bootstrap early baselines, validate parsers, reproduce field
+     cases, and support users who want offline/manual data ownership.
+   - Boundary: no background sync, no Apple account binding, no runtime coupling,
+     no raw Health export content embedded in Scout artifacts.
+
+2. `scout_ios_healthkit_bridge`
+   - Role: Scout ecosystem component.
+   - Input: HealthKit data read through a Scout iOS companion app after explicit
+     user authorization.
+   - Use case: ongoing daily/training activity sync, completed workout ingestion,
+     workout route handoff, Step Ease calibration, and Energy Reserve baseline
+     updates.
+   - Boundary: user-consented, least-scope HealthKit reads; summarized payloads
+     only; no Scout hardware direct pull from Apple cloud; no provider-derived
+     value is promoted into Scout truth without review/provenance.
+
+The manual importer is acceptable for alpha development and operator review. The
+HealthKit bridge is the product path for the Scout ecosystem and should be
+designed as a first-class companion-app integration rather than as a parser-only
+utility.
+
 ### Live Field Input
 
 Potential live inputs:
@@ -693,9 +964,12 @@ Potential live inputs:
 - heart rate;
 - HRV only if device and API support reliable near-real-time access;
 - pace/speed;
+- cadence, step length, or pedometer deltas when available;
 - movement/stopped state;
 - route progress;
 - altitude trend;
+- route deviation and next-checkpoint ambiguity;
+- weather, daylight, and communication-pressure context;
 - user check-in;
 - device-provided stress/body battery if available.
 
@@ -804,6 +1078,89 @@ precise private timelines.
 }
 ```
 
+### Exertion And Composure Snapshot
+
+`scout_exertion_snapshot` and `scout_composure_snapshot` are short-window field
+artifacts. They may be generated from live stream observations, local replay, or
+post-analysis reconstruction. They are advisory context only.
+
+```json
+{
+  "artifact_kind": "scout_exertion_snapshot",
+  "artifact_version": "exertion_snapshot.v1",
+  "source_provider": "apple_watch_sensorlog+pretrip_route_context",
+  "source_path": "runtime/observations/window_0042+outputs/final_mission_graph.json",
+  "sha256": "...",
+  "route_segment_ref": "segment_040",
+  "window": {
+    "duration_s": 300,
+    "relative_start_s": 2400,
+    "relative_end_s": 2700
+  },
+  "step_ease_score": 58,
+  "step_ease_band": "strained",
+  "observed": {
+    "heart_rate_bpm_p50": 142,
+    "pace_m_per_min": 38.0,
+    "cadence_spm": 92,
+    "micro_stop_count": 3
+  },
+  "expected": {
+    "heart_rate_bpm_p50": 132,
+    "pace_m_per_min": 43.0,
+    "segment_effort_band": "uphill_moderate"
+  },
+  "exertion_factors": {
+    "heart_rate_drift_ratio": 0.076,
+    "pace_decay_ratio": 0.116,
+    "cadence_decay_ratio": 0.05,
+    "micro_stop_penalty": 0.12
+  },
+  "data_quality": {
+    "heart_rate_confidence": "medium",
+    "gps_confidence": "medium",
+    "limitations": [
+      "short-window advisory context only"
+    ]
+  },
+  "boundary": {
+    "advisory_only": true,
+    "medical_diagnosis": false,
+    "phase1_runtime_safety_truth": false,
+    "safety_api_calls_allowed": false
+  }
+}
+```
+
+```json
+{
+  "artifact_kind": "scout_composure_snapshot",
+  "artifact_version": "composure_snapshot.v1",
+  "source_provider": "exertion_snapshot+route_progress+environment_context",
+  "source_path": "outputs/exertion/window_0042.json+runtime/debug_state.json",
+  "sha256": "...",
+  "route_segment_ref": "segment_040",
+  "decision_margin_band": "fragile",
+  "step_ease_score": 58,
+  "loads": {
+    "physical_load": "strained",
+    "navigation_load": "watch",
+    "environmental_load": "watch",
+    "decision_load": "fragile"
+  },
+  "recommended_action": "pause_verify_next_checkpoint_and_retreat_options",
+  "cue_text_zh": "先停下來，確認目前位置、下一個檢查點、剩餘日照與撤退選項，再決定是否繼續。",
+  "boundary": {
+    "advisory_only": true,
+    "medical_diagnosis": false,
+    "panic_detection": false,
+    "phase1_runtime_safety_truth": false,
+    "safety_api_calls_allowed": false,
+    "outbound_message_allowed": false
+  }
+}
+```
+
 ### Companion Match Capsule
 
 ```json
@@ -875,6 +1232,237 @@ reserve_score = clamp(50 + reserve_delta * 10, 0, 100)
 ```
 
 Output should prefer band and explanation over a false-precise number.
+
+Cold-start policy:
+
+```text
+if personal_baseline_history is sparse:
+  reserve_score = scout_default_prior_score
+  confidence = very_low or low
+  baseline_source = scout_default_prior
+  update_rate = high initially, then decays as personal evidence accumulates
+```
+
+The default prior exists so the product can give conservative planning cues from
+day one. It must be labeled as a prior, not as a learned truth.
+
+### Terrain-Time Fitness Proxy
+
+When wearable baseline data is missing, Scout should still estimate a useful
+outdoor capability baseline from completed GPX, DEM/DTM, risk score, and
+Capability Timeline evidence.
+
+Development assumption:
+
+```text
+For hiking support, early physical consumption can be approximated from:
+  terrain demand + distance + route risk
+compared against:
+  observed moving/elapsed time
+```
+
+This proxy should split completed tracks into fixed route windows, initially
+`100m`:
+
+```text
+terrain_time_window:
+  distance_2d_m
+  ascent_m
+  descent_m
+  risk_score_mean
+  risk_score_p95
+  moving_time_s
+  elapsed_time_s
+  rest_or_pause_s
+```
+
+TTM should also carry a daylight constraint. Mountain capability is not only a
+terrain/time ratio; the same segment becomes operationally harder when usable
+daylight is short. Scout should support two deterministic sampling modes:
+
+```text
+daily_daylight_window:
+  use actual trip date + route location/timezone
+  sample from local sunrise to local sunset
+
+seasonal_daylight_profiles:
+  use representative seasonal or monthly daylight windows
+  use the shortest relevant daylight profile for conservative pretrip warnings
+```
+
+If the trip date is known, prefer the daily sunrise/sunset window. If the trip
+date is unknown, sample four seasonal profiles or monthly profiles for the route
+location. This is a planning and post-analysis evidence constraint; it must not
+be promoted to Phase 1 runtime safety truth.
+
+```text
+daylight_window:
+  mode: daily_sunrise_sunset | seasonal_profiles
+  timezone
+  sunrise_local
+  sunset_local
+  daylight_duration_min
+  usable_daylight_margin_min
+  sample_basis: trip_date | season | month
+```
+
+Flat-window rule:
+
+```text
+if ascent_m < 5 and descent_m < 5 within a 100m window:
+  treat the window as 2D distance/time evidence
+else:
+  treat the window as terrain-load evidence
+```
+
+Terrain-load evidence:
+
+```text
+terrain_load =
+  distance_2d_m
+  + up_weight * ascent_m
+  + down_weight * descent_m
+  + risk_weight * risk_score
+```
+
+Useful derived envelopes:
+
+```text
+uphill_sustainable_envelope =
+  ascent_m per 100m window per time bucket
+
+descent_sustainable_envelope =
+  descent_m per 100m window per time bucket
+
+terrain_time_ratio =
+  observed_moving_time_s / expected_flat_window_time_s
+
+daylight_constrained_time_budget =
+  usable_daylight_minutes - planned_elapsed_minutes - required_margin_minutes
+
+daylight_pressure_penalty =
+  clamp(required_elapsed_minutes - usable_daylight_minutes, 0, max_penalty)
+```
+
+Examples:
+
+```text
+100m distance with 20m ascent per unit time
+  -> candidate uphill sustainable limit
+
+100m distance with 50m descent per unit time
+  -> candidate descent-control sustainable limit
+```
+
+Daylight examples:
+
+```text
+same terrain_load in summer daylight
+  -> normal terrain-time pressure
+
+same terrain_load in winter daylight with a late start
+  -> higher daylight pressure and earlier rest/turnaround CP recommendation
+```
+
+The product should avoid presenting this as a hard "maximum limit" from a small
+sample. Use language such as `sustainable terrain envelope`, `watch threshold`,
+or `strained terrain band`.
+
+This proxy is especially important for `gpx_only_device` users. It gives Scout a
+way to produce first-pass Energy Limit, Step Ease expectations, rest/check-in CP
+candidates, and next-pretrip pacing advice without requiring any wearable.
+
+Suggested artifact:
+
+```json
+{
+  "artifact_kind": "scout_terrain_time_fitness_proxy",
+  "artifact_version": "terrain_time_fitness_proxy.v1",
+  "source_provider": "completed_gpx+dem+risk_score+capability_timeline",
+  "window_m": 100,
+  "flat_window_threshold_m": 5,
+  "daylight_constraint": {
+    "enabled": true,
+    "mode": "daily_sunrise_sunset",
+    "sample_basis": "trip_date",
+    "timezone": "Asia/Taipei",
+    "sunrise_local": "2026-05-12T05:12:00+08:00",
+    "sunset_local": "2026-05-12T18:32:00+08:00",
+    "usable_daylight_minutes": 740,
+    "required_daylight_margin_minutes": 45,
+    "seasonal_profiles": []
+  },
+  "flat_pace_baseline_s_per_100m": 92,
+  "uphill_envelope": {
+    "watch_ascent_m_per_100m": 12,
+    "strained_ascent_m_per_100m": 20
+  },
+  "descent_envelope": {
+    "watch_descent_m_per_100m": 30,
+    "strained_descent_m_per_100m": 50
+  },
+  "risk_adjusted_time_multiplier": 1.18,
+  "daylight_adjusted_time_pressure": {
+    "band": "watch",
+    "remaining_daylight_margin_minutes": 62,
+    "turnaround_cp_recommendation_allowed": true
+  },
+  "confidence": "low",
+  "boundary": {
+    "advisory_only": true,
+    "medical_diagnosis": false,
+    "phase1_runtime_safety_truth": false
+  }
+}
+```
+
+### Scout Step Ease / Exertion Score
+
+First-slice transparent formula:
+
+```text
+step_ease_score = clamp(
+  100
+  - hr_drift_penalty
+  - pace_decay_penalty
+  - cadence_decay_penalty
+  - micro_stop_penalty
+  - movement_instability_penalty
+  - route_context_pressure_penalty,
+  0,
+  100
+)
+```
+
+The short-window expected baseline may come from, in priority order:
+
+1. route-family personal baseline for similar grade and effort;
+2. earlier stable windows from the same trip;
+3. `scout_terrain_time_fitness_proxy` from completed GPX/DEM/risk evidence;
+4. reviewed pretrip route-effort expectation;
+5. Scout default prior with low confidence.
+
+`Step Ease` should be easier to compute than full Energy Reserve. It is the
+alpha field signal for whether the next step is still easy, normal, strained, or
+requires a pause.
+
+### Scout Composure Reserve Score
+
+First-slice transparent formula:
+
+```text
+composure_load =
+  physical_load_weight * physical_load
+  + navigation_load_weight * navigation_load
+  + environmental_load_weight * environmental_load
+  + decision_load_weight * decision_load
+
+composure_score = clamp(100 - composure_load, 0, 100)
+```
+
+The output should prioritize band and recommended action over a false-precise
+number. A low score does not diagnose panic; it means Scout should help the user
+pause, verify facts, and make the next decision calmly.
 
 ### Route-Effort-Adjusted Capability
 
@@ -995,6 +1583,10 @@ Runtime cue examples:
 - "Heart-rate load is higher than your baseline on similar slope. Slow down and
   check how you feel."
 - "Rest rhythm is later than usual for this route effort."
+- "This segment is becoming harder than expected. Slow down and keep the next
+  checkpoint visible."
+- "Pause and verify your current location, next checkpoint, daylight, and retreat
+  option before continuing."
 
 Each cue must be logged as advisory evidence only.
 
@@ -3201,6 +3793,10 @@ Scout can diagnose readiness:
 - Session-RPE review: https://pmc.ncbi.nlm.nih.gov/articles/PMC5673663/
 - Garmin Body Battery device manual: https://www8.garmin.com/manuals/webhelp/venu/EN-US/GUID-87E1392B-2C55-40B7-A1FF-3AB9252DA0A0.html
 - Garmin stress support: https://support.garmin.com/en-US/?faq=WT9BmhjacO4ZpxbCc0EKn9
+- Apple HealthKit overview: https://developer.apple.com/documentation/healthkit
+- Apple HealthKit workout container: https://developer.apple.com/documentation/healthkit/hkworkout
+- Apple HealthKit workout effort relationship: https://developer.apple.com/documentation/healthkit/hkworkouteffortrelationship
+- Apple Watch training load support: https://support.apple.com/guide/watch/apde4c07a6cf/watchos
 - Apple HealthKit heart-rate data type: https://developer.apple.com/documentation/healthkit/hkquantitytypeidentifier/heartrate
 - Apple Watch measurement accuracy review: https://www.nature.com/articles/s41746-025-02238-1
 - Wearable reliability and validity review: https://pmc.ncbi.nlm.nih.gov/articles/PMC7509623/
@@ -3218,3 +3814,7 @@ Scout can diagnose readiness:
   Garmin Health summary JSON, or existing Apple Watch SensorLog?
 - Should body reserve influence pretrip readiness as an advisory warning only,
   or remain purely post-analysis until enough validation exists?
+- Should `Step Ease` use a 0-100 score, a 1-10 exertion score, or both with one
+  hidden behind the other in UI?
+- What is the alpha threshold for promoting a composure snapshot into an OLED or
+  voice cue without creating alarm fatigue?

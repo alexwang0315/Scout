@@ -437,6 +437,7 @@ def _build_pretrip_admin_case_view(
         "retreat_routes": pretrip_view["retreat_routes"],
         "route_notes": pretrip_view["route_notes"],
         "reference_tracks": pretrip_view["reference_tracks"],
+        "terrain_visualization": pretrip_view["terrain_visualization"],
         "overpass_evidence": pretrip_view["overpass_evidence"],
         "gis_perception_timeline": pretrip_view["gis_perception_timeline"],
         "major_critical_points": pretrip_view.get("major_critical_points"),

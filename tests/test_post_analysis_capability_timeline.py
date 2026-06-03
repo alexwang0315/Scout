@@ -139,6 +139,10 @@ class PostAnalysisCapabilityTimelineTests(unittest.TestCase):
             timeline = json.loads(timeline_path.read_text(encoding="utf-8"))
             capsule = json.loads(capsule_path.read_text(encoding="utf-8"))
             share_preview = json.loads(Path(files.share_preview_path).read_text(encoding="utf-8"))
+            profile_svg_exists = (
+                timeline_path.parent
+                / timeline["edges"][0]["terrain_profile"]["profile_svg_ref"]
+            ).exists()
 
         self.assertEqual(timeline["artifact_kind"], "post_analysis_capability_timeline")
         self.assertEqual(timeline["artifact_version"], "capability_timeline.v1")
@@ -149,6 +153,13 @@ class PostAnalysisCapabilityTimelineTests(unittest.TestCase):
         self.assertEqual(len(timeline["rest_intervals"]), GOLDEN_REST_INTERVAL_COUNT)
         self.assertEqual(timeline["edges"][0]["edge_id"], "cp.start_to_cp.001")
         self.assertEqual(timeline["edges"][-1]["edge_id"], "cp.072_to_cp.finish")
+        self.assertIsNotNone(timeline["edges"][0]["terrain_profile"])
+        profile = timeline["edges"][0]["terrain_profile"]
+        self.assertEqual(profile["source"], "completed_track_elevation")
+        self.assertEqual(profile["sample_distance_m"], 20.0)
+        self.assertGreaterEqual(len(profile["samples"]), 2)
+        self.assertIn(profile["summary"]["terrain_difficulty_band"], {"normal", "watch", "strained", "severe"})
+        self.assertTrue(profile_svg_exists)
         self.assertEqual(timeline["summary"]["elapsed_time_s"], GOLDEN_ELAPSED_TIME_S)
         self.assertEqual(timeline["summary"]["moving_time_s"], GOLDEN_MOVING_TIME_S)
         self.assertEqual(timeline["summary"]["rest_time_s"], GOLDEN_REST_TIME_S)
@@ -189,6 +200,8 @@ class PostAnalysisCapabilityTimelineTests(unittest.TestCase):
         self.assertFalse(summary["capsule_preview"]["raw_track_shared"])
         self.assertFalse(summary["capsule_preview"]["exact_timestamps_shared"])
         self.assertFalse(summary["capsule_preview"]["incident_details_shared"])
+        if summary["edges"][0].get("terrain_profile") is not None:
+            self.assertIn("terrain_difficulty_band", summary["edges"][0]["terrain_profile"]["summary"])
         self.assertEqual(summary["route_time_comparison"]["summary"]["comparison_count"], 0)
         self.assertTrue(summary["share_preview"]["export_requires_confirmation"])
         self.assertNotIn("<trkpt", json.dumps(summary))
