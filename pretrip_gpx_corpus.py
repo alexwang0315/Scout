@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import xml.etree.ElementTree as ET
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -13,6 +15,12 @@ from route_matching import RoutePoint, load_gpx_route
 
 TW_MAP_GPX_PRIMARY_FILENAME = "能高安東軍縱走.gpx.gpx"
 TW_MAP_GPX_GOLDEN_ROUTE_FILENAME = TW_MAP_GPX_PRIMARY_FILENAME
+
+
+@dataclass(frozen=True)
+class _IndexedDisplayPoint:
+    source_index: int
+    point: RoutePoint
 
 
 def list_reference_gpx_paths(
@@ -174,6 +182,7 @@ def build_segment_display_geometry(
 ) -> dict[str, Any]:
     route_path = Path(route_gpx_path).expanduser()
     route = load_gpx_route(route_path)
+    indexed_display_segments = _load_indexed_display_segments(route_path)
     segment_geometries: list[dict[str, Any]] = []
 
     for segment in segment_candidates:
@@ -184,6 +193,15 @@ def build_segment_display_geometry(
         if start_index < 0 or end_index >= len(route.points) or start_index >= end_index:
             continue
         points = route.points[start_index : end_index + 1]
+        coordinate_segments = _coordinate_segments_for_range(
+            indexed_display_segments,
+            start_index=start_index,
+            end_index=end_index,
+        )
+        if not coordinate_segments:
+            fallback_coordinates = _display_coordinates(points)
+            coordinate_segments = [fallback_coordinates] if fallback_coordinates else []
+        coordinates = _flatten_coordinate_segments(coordinate_segments)
         segment_geometries.append(
             {
                 "segment_candidate_id": segment.candidate_id,
@@ -192,8 +210,12 @@ def build_segment_display_geometry(
                 "route_point_start_index": start_index,
                 "route_point_end_index": end_index,
                 "source_point_count": len(points),
+                "display_point_count": len(coordinates),
+                "display_segment_count": len(coordinate_segments),
                 "distance_m": round(segment.distance_m, 2),
-                "coordinates": _display_coordinates(points),
+                "coordinates": coordinates,
+                "coordinate_segments": coordinate_segments,
+                "segment_boundary_preserved": len(coordinate_segments) > 1,
             }
         )
 
@@ -221,6 +243,7 @@ def build_segment_display_geometry(
         },
         "notes": [
             "Segment display geometry（分段顯示幾何）只保留 lat/lon 曲線，供 admin map 畫出原始 GPX 走向。",
+            "coordinate_segments preserves GPX track/segment boundaries（保留原始航跡分段邊界），避免畫出跨段長直線。",
             "不保存 timestamp/elevation/extension 欄位；不是 MissionGraph 或 runtime safety truth（現場安全真相）。",
         ],
     }
@@ -240,7 +263,19 @@ def build_reference_track_display_geometry(
     for index, reference_path in enumerate(sorted(Path(path).expanduser() for path in reference_gpx_paths), start=1):
         route = load_gpx_route(reference_path)
         reference_id = f"{primary_artifact_id}.reference.{index:03d}"
-        coordinates = _display_coordinates(route.points, max_points=max_points_per_track)
+        coordinate_segments = _display_coordinate_segments(
+            _point_segments_from_indexed_segments(
+                _load_indexed_display_segments(reference_path)
+            ),
+            max_points=max_points_per_track,
+        )
+        if not coordinate_segments:
+            fallback_coordinates = _display_coordinates(
+                route.points,
+                max_points=max_points_per_track,
+            )
+            coordinate_segments = [fallback_coordinates] if fallback_coordinates else []
+        coordinates = _flatten_coordinate_segments(coordinate_segments)
         references.append(
             {
                 "reference_id": reference_id,
@@ -252,6 +287,9 @@ def build_reference_track_display_geometry(
                 "display_point_count": len(coordinates),
                 "display_sampling_performed": len(coordinates) < len(route.points),
                 "coordinates": coordinates,
+                "coordinate_segments": coordinate_segments,
+                "display_segment_count": len(coordinate_segments),
+                "segment_boundary_preserved": len(coordinate_segments) > 1,
             }
         )
 
@@ -277,7 +315,8 @@ def build_reference_track_display_geometry(
         },
         "notes": [
             "Reference tracks（專家/山友參考軌跡）是獨立 evidence layer，不是 OSM/Overpass 資料。",
-            "畫面使用下採樣 display geometry；完整 GPX 保留在本機來源資料夾，不進 runtime safety truth。",
+            "畫面使用下採樣 display geometry；coordinate_segments preserves GPX track/segment boundaries（保留航跡分段邊界）以避免跨段長直線。",
+            "完整 GPX 保留在本機來源資料夾，不進 runtime safety truth。",
         ],
     }
 
@@ -297,6 +336,82 @@ def _display_coordinates(
     ]
 
 
+def _load_indexed_display_segments(path: Path | str) -> list[list[_IndexedDisplayPoint]]:
+    root = ET.parse(Path(path).expanduser()).getroot()
+    ns = _namespace(root)
+    source_index = 0
+    segments: list[list[_IndexedDisplayPoint]] = []
+    for track in root.findall("g:trk", ns):
+        for segment in track.findall("g:trkseg", ns):
+            points: list[_IndexedDisplayPoint] = []
+            for trkpt in segment.findall("g:trkpt", ns):
+                point = RoutePoint(
+                    lat=float(trkpt.attrib["lat"]),
+                    lon=float(trkpt.attrib["lon"]),
+                )
+                points.append(_IndexedDisplayPoint(source_index=source_index, point=point))
+                source_index += 1
+            if points:
+                segments.append(points)
+    return segments
+
+
+def _namespace(root: ET.Element) -> dict[str, str]:
+    if root.tag.startswith("{"):
+        return {"g": root.tag[1:].split("}", 1)[0]}
+    return {"g": "http://www.topografix.com/GPX/1/1"}
+
+
+def _point_segments_from_indexed_segments(
+    indexed_segments: list[list[_IndexedDisplayPoint]],
+) -> list[list[RoutePoint]]:
+    return [[item.point for item in segment] for segment in indexed_segments]
+
+
+def _coordinate_segments_for_range(
+    indexed_segments: list[list[_IndexedDisplayPoint]],
+    *,
+    start_index: int,
+    end_index: int,
+) -> list[list[dict[str, float]]]:
+    point_segments: list[list[RoutePoint]] = []
+    for segment in indexed_segments:
+        points = [
+            item.point
+            for item in segment
+            if start_index <= item.source_index <= end_index
+        ]
+        if points:
+            point_segments.append(points)
+    return _display_coordinate_segments(point_segments)
+
+
+def _display_coordinate_segments(
+    point_segments: list[list[RoutePoint]],
+    *,
+    max_points: int | None = None,
+) -> list[list[dict[str, float]]]:
+    selected_segments = _downsample_point_segments(
+        point_segments,
+        max_points=max_points,
+    )
+    return [
+        _display_coordinates(points)
+        for points in selected_segments
+        if len(points) >= 2
+    ]
+
+
+def _flatten_coordinate_segments(
+    coordinate_segments: list[list[dict[str, float]]],
+) -> list[dict[str, float]]:
+    return [
+        point
+        for segment in coordinate_segments
+        for point in segment
+    ]
+
+
 def _downsample_points(
     points: list[RoutePoint],
     *,
@@ -309,6 +424,33 @@ def _downsample_points(
     step = (len(points) - 1) / (max_points - 1)
     indices = sorted({round(index * step) for index in range(max_points)})
     return [points[index] for index in indices]
+
+
+def _downsample_point_segments(
+    point_segments: list[list[RoutePoint]],
+    *,
+    max_points: int | None,
+) -> list[list[RoutePoint]]:
+    non_empty_segments = [segment for segment in point_segments if segment]
+    total_points = sum(len(segment) for segment in non_empty_segments)
+    if max_points is None or max_points <= 0 or total_points <= max_points:
+        return non_empty_segments
+    if max_points == 1:
+        return [[non_empty_segments[0][0]]] if non_empty_segments else []
+    step = (total_points - 1) / (max_points - 1)
+    selected_indices = {round(index * step) for index in range(max_points)}
+    selected_segments: list[list[RoutePoint]] = []
+    offset = 0
+    for segment in non_empty_segments:
+        selected = [
+            point
+            for local_index, point in enumerate(segment)
+            if offset + local_index in selected_indices
+        ]
+        if selected:
+            selected_segments.append(selected)
+        offset += len(segment)
+    return selected_segments
 
 
 def write_json(path: Path, payload: dict[str, Any]) -> None:

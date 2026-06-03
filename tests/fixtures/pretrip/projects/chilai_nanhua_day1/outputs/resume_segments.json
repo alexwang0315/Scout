@@ -1,0 +1,110 @@
+{
+  "artifact_kind": "pretrip_resume_segment_diagnostic",
+  "boundary": {
+    "candidate_diagnostic_only": true,
+    "gpx_points_pruned_for_gap": false,
+    "phase1_runtime_mutation_allowed": false,
+    "runtime_safety_truth": false
+  },
+  "max_reasonable_point_gap_m": 1000.0,
+  "notes": [
+    "Adjacent kept GPX points farther than max_reasonable_point_gap_m are preserved and marked as resume segments.",
+    "This catches multi-day or GPS-off gaps without cascading point deletion."
+  ],
+  "resume_segment_count": 4,
+  "schema_version": "0.1.0",
+  "segments": [
+    {
+      "from_candidate_id": "cp.046",
+      "gaps": [
+        {
+          "distance_m": 1191.203,
+          "from_lat": 23.9752804,
+          "from_lon": 121.2735419,
+          "from_route_point_index": 788,
+          "from_time": "2013-10-10T01:40:03Z",
+          "to_lat": 23.965414,
+          "to_lon": 121.2781091,
+          "to_route_point_index": 789,
+          "to_time": "2013-10-10T03:40:29Z"
+        }
+      ],
+      "max_gap_m": 1191.203,
+      "resume_gap_count": 1,
+      "resume_segment": true,
+      "route_point_end_index": 789,
+      "route_point_start_index": 771,
+      "segment_candidate_id": "seg.050",
+      "to_candidate_id": "cp.047"
+    },
+    {
+      "from_candidate_id": "cp.067",
+      "gaps": [
+        {
+          "distance_m": 1090.195,
+          "from_lat": 23.8975043,
+          "from_lon": 121.2706279,
+          "from_route_point_index": 1412,
+          "from_time": "2013-10-11T07:01:23Z",
+          "to_lat": 23.8895271,
+          "to_lon": 121.2643937,
+          "to_route_point_index": 1413,
+          "to_time": "2013-10-11T08:01:06Z"
+        }
+      ],
+      "max_gap_m": 1090.195,
+      "resume_gap_count": 1,
+      "resume_segment": true,
+      "route_point_end_index": 1413,
+      "route_point_start_index": 1410,
+      "segment_candidate_id": "seg.074",
+      "to_candidate_id": "cp.068"
+    },
+    {
+      "from_candidate_id": "cp.071",
+      "gaps": [
+        {
+          "distance_m": 1055.022,
+          "from_lat": 23.8817629,
+          "from_lon": 121.2630055,
+          "from_route_point_index": 1514,
+          "from_time": "2013-10-11T23:05:49Z",
+          "to_lat": 23.8727123,
+          "to_lon": 121.2661197,
+          "to_route_point_index": 1515,
+          "to_time": "2013-10-11T23:59:51Z"
+        }
+      ],
+      "max_gap_m": 1055.022,
+      "resume_gap_count": 1,
+      "resume_segment": true,
+      "route_point_end_index": 1515,
+      "route_point_start_index": 1471,
+      "segment_candidate_id": "seg.079",
+      "to_candidate_id": "cp.072"
+    },
+    {
+      "from_candidate_id": "cp.085",
+      "gaps": [
+        {
+          "distance_m": 1325.359,
+          "from_lat": 23.8902496,
+          "from_lon": 121.2320561,
+          "from_route_point_index": 1927,
+          "from_time": "2013-10-12T07:23:52Z",
+          "to_lat": 23.8928429,
+          "to_lon": 121.2193321,
+          "to_route_point_index": 1928,
+          "to_time": "2013-10-12T08:53:18Z"
+        }
+      ],
+      "max_gap_m": 1325.359,
+      "resume_gap_count": 1,
+      "resume_segment": true,
+      "route_point_end_index": 1928,
+      "route_point_start_index": 1907,
+      "segment_candidate_id": "seg.096",
+      "to_candidate_id": "cp.086"
+    }
+  ]
+}

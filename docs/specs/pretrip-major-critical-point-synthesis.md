@@ -35,6 +35,7 @@ Build an evidence-backed synthesis pipeline that can:
 reference GPX / offline map / route guide / public web pages / OCR labels
   -> source retrieval and normalization
   -> NP extraction and evidence counting
+  -> Historical GPX Importer MCP integration
   -> Scout CP / terrain / risk / OSM alignment
   -> MCP synthesis
   -> human review
@@ -535,6 +536,14 @@ pretrip_mcp_models.py
 
 pretrip_mcp_synthesis.py
   CLI and deterministic MCP synthesis from fixture-backed evidence.
+
+pretrip_import.py
+  Runs fixture-backed MCP synthesis during a clean historical GPX import when
+  --mcp-named-point-evidence is supplied or the material root contains
+  sources/mcp/named_point_evidence.json. The importer writes MCP refs and counts
+  into project.json, outputs/import_manifest.json, and
+  outputs/admin_projection.json so /admin/pretrip, /admin/debug, and /admin see
+  the same workspace MCP artifacts after a fresh import.
 
 pretrip_mcp_retrieval.py
   Retrieval planning and source normalization. Live network disabled in tests.

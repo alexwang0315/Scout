@@ -12,7 +12,7 @@ from pretrip_source_ingest import sha256_file
 
 
 DEFAULT_MAX_REASONABLE_SPEED_KMH = 120.0
-DEFAULT_MAX_PREVIOUS_SPEED_RATIO = 3.0
+DEFAULT_MAX_PREVIOUS_SPEED_RATIO = 8.0
 DEFAULT_RESUME_SEGMENT_GAP_M = 1000.0
 DEFAULT_ROUTE_NOTE_PROTECTION_RADIUS_M = 30.0
 
@@ -78,9 +78,12 @@ def write_speed_filtered_gpx(
     output_path: Path | str,
     *,
     max_reasonable_speed_kmh: float = DEFAULT_MAX_REASONABLE_SPEED_KMH,
+    max_previous_speed_ratio: float = DEFAULT_MAX_PREVIOUS_SPEED_RATIO,
 ) -> GpxSpeedFilterReport:
     if max_reasonable_speed_kmh <= 0:
         raise ValueError("max_reasonable_speed_kmh must be greater than 0")
+    if max_previous_speed_ratio <= 0:
+        raise ValueError("max_previous_speed_ratio must be greater than 0")
     source = Path(source_path).expanduser().resolve()
     output = Path(output_path).expanduser()
     tree = ET.parse(source)
@@ -91,6 +94,7 @@ def write_speed_filtered_gpx(
     keep_ids, removed, exempted = _kept_track_point_ids(
         track_points,
         max_reasonable_speed_kmh=max_reasonable_speed_kmh,
+        max_previous_speed_ratio=max_previous_speed_ratio,
         protected_points=protected_points,
     )
     filtered_root = copy.deepcopy(root)
@@ -107,7 +111,7 @@ def write_speed_filtered_gpx(
         source_path=source.as_posix(),
         output_path=output.resolve().as_posix(),
         max_reasonable_speed_kmh=max_reasonable_speed_kmh,
-        max_previous_speed_ratio=DEFAULT_MAX_PREVIOUS_SPEED_RATIO,
+        max_previous_speed_ratio=max_previous_speed_ratio,
         original_track_point_count=len(track_points),
         filtered_track_point_count=filtered_count,
         removed_track_point_count=len(track_points) - filtered_count,
@@ -123,6 +127,7 @@ def _kept_track_point_ids(
     points: list[_TrackPoint],
     *,
     max_reasonable_speed_kmh: float,
+    max_previous_speed_ratio: float,
     protected_points: dict[int, dict[str, Any]],
 ) -> tuple[set[int], list[dict[str, Any]], list[dict[str, Any]]]:
     kept: set[int] = set()
@@ -139,11 +144,13 @@ def _kept_track_point_ids(
         removal_reason = _removal_reason(
             evaluation,
             max_reasonable_speed_kmh=max_reasonable_speed_kmh,
+            max_previous_speed_ratio=max_previous_speed_ratio,
             previous_kept_speed_kmh=previous_kept_speed_kmh,
         )
         if removal_reason:
             serializable_evaluation = _serializable_evaluation(
                 evaluation,
+                max_previous_speed_ratio=max_previous_speed_ratio,
                 previous_kept_speed_kmh=previous_kept_speed_kmh,
             )
             protected_note = protected_points.get(point.source_index)
@@ -193,6 +200,7 @@ def _removal_reason(
     evaluation: dict[str, Any] | None,
     *,
     max_reasonable_speed_kmh: float,
+    max_previous_speed_ratio: float,
     previous_kept_speed_kmh: float | None,
 ) -> str | None:
     required_speed = _numeric_speed(evaluation)
@@ -202,7 +210,7 @@ def _removal_reason(
         return "required_speed_exceeds_absolute_threshold"
     if previous_kept_speed_kmh is None or previous_kept_speed_kmh <= 0:
         return None
-    if required_speed > previous_kept_speed_kmh * DEFAULT_MAX_PREVIOUS_SPEED_RATIO:
+    if required_speed > previous_kept_speed_kmh * max_previous_speed_ratio:
         return "required_speed_exceeds_previous_speed_ratio"
     return None
 
@@ -210,6 +218,7 @@ def _removal_reason(
 def _serializable_evaluation(
     evaluation: dict[str, Any] | None,
     *,
+    max_previous_speed_ratio: float,
     previous_kept_speed_kmh: float | None,
 ) -> dict[str, Any]:
     if evaluation is None:
@@ -221,7 +230,7 @@ def _serializable_evaluation(
     if previous_kept_speed_kmh is not None:
         serializable["previous_kept_speed_kmh"] = round(previous_kept_speed_kmh, 3)
         serializable["max_relative_speed_kmh"] = round(
-            previous_kept_speed_kmh * DEFAULT_MAX_PREVIOUS_SPEED_RATIO,
+            previous_kept_speed_kmh * max_previous_speed_ratio,
             3,
         )
         if required_speed is not None and previous_kept_speed_kmh > 0:

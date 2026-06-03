@@ -26,7 +26,26 @@ from pretrip_gpx_corpus import (
     build_segment_display_geometry,
     write_json,
 )
-from pretrip_gpx_filter import DEFAULT_MAX_REASONABLE_SPEED_KMH, write_speed_filtered_gpx
+from pretrip_gpx_filter import (
+    DEFAULT_MAX_PREVIOUS_SPEED_RATIO,
+    DEFAULT_MAX_REASONABLE_SPEED_KMH,
+    write_speed_filtered_gpx,
+)
+from pretrip_mcp_synthesis import (
+    DEFAULT_CP_SUPPORT_RECONCILIATION_OUTPUT_NAME,
+    DEFAULT_OCR_LABEL_OUTPUT_NAME,
+    DEFAULT_OUTPUT_NAME as DEFAULT_MCP_OUTPUT_NAME,
+    DEFAULT_RETRIEVAL_PLAN_OUTPUT_NAME,
+    build_cp_support_reconciliation,
+    build_fixture_backed_retrieval_plan,
+    load_named_point_evidence,
+    normalize_ocr_labels_from_evidence,
+    synthesize_mcp_candidates,
+    write_cp_support_reconciliation,
+    write_mcp_candidate_set,
+    write_ocr_label_set,
+    write_retrieval_plan,
+)
 from pretrip_models import (
     CandidateReviewState,
     DtmCoverageSummary,
@@ -119,8 +138,10 @@ class PretripImportRequest:
     import_timestamp: str | None = None
     import_stage: ImportStage = "pretrip"
     max_reasonable_gpx_speed_kmh: float = DEFAULT_MAX_REASONABLE_SPEED_KMH
+    max_previous_gpx_speed_ratio: float = DEFAULT_MAX_PREVIOUS_SPEED_RATIO
     material_root: Path | None = None
     dtm_dirs: tuple[Path, ...] = ()
+    mcp_named_point_evidence: Path | None = None
 
 
 def run_pretrip_import(request: PretripImportRequest) -> dict[str, Any]:
@@ -148,6 +169,7 @@ def run_pretrip_import(request: PretripImportRequest) -> dict[str, Any]:
         primary_gpx=primary_gpx,
         reference_paths=reference_paths,
         max_reasonable_speed_kmh=request.max_reasonable_gpx_speed_kmh,
+        max_previous_speed_ratio=request.max_previous_gpx_speed_ratio,
     )
     filtered_primary_gpx = gpx_filter["primary"]["filtered_path"]
     filtered_reference_paths = [
@@ -428,6 +450,14 @@ def run_pretrip_import(request: PretripImportRequest) -> dict[str, Any]:
         output_refs["segment_dtm_coverage_ref"] = (
             "normalized/terrain/segment_dtm_coverage.json"
         )
+    mcp_import_summary = _build_mcp_import_artifacts(
+        request=request,
+        project_root=project_root,
+        output_refs=output_refs,
+        route_name=route_summary.route_name,
+        checkpoint_candidates=checkpoint_candidates,
+        import_timestamp=import_timestamp,
+    )
     historical_gpx_source_index = _build_historical_gpx_source_index(
         project_id=request.project_id,
         import_timestamp=import_timestamp,
@@ -464,6 +494,7 @@ def run_pretrip_import(request: PretripImportRequest) -> dict[str, Any]:
         historical_gpx_source_index=historical_gpx_source_index,
         gpx_speed_filter=gpx_filter_report,
     )
+    _attach_mcp_import_manifest(manifest, mcp_import_summary)
     admin_projection = _build_admin_projection(
         request=request,
         project_root=project_root,
@@ -472,6 +503,7 @@ def run_pretrip_import(request: PretripImportRequest) -> dict[str, Any]:
         reference_track_count=len(reference_paths),
         checkpoint_count=len(checkpoint_candidates),
         segment_count=len(segment_candidates),
+        segment_display_geometry=segment_display_geometry,
         rest_area_report=rest_area_report,
         resume_segment_report=resume_segment_report,
         gis_perception=gis_perception_result.gis_perception.model_dump(mode="json"),
@@ -624,6 +656,7 @@ def run_pretrip_import(request: PretripImportRequest) -> dict[str, Any]:
             if dtm_coverage_summary is not None
             else None
         ),
+        mcp_import_summary=mcp_import_summary,
     )
     write_json(project_root / "project.json", project_payload)
     brain_seed = _rebuild_brain_seed_if_possible(
@@ -707,6 +740,15 @@ def main(argv: list[str] | None = None) -> None:
         default=[],
         help="Local DTM source directory for metadata-only terrain coverage.",
     )
+    parser.add_argument(
+        "--mcp-named-point-evidence",
+        type=Path,
+        help=(
+            "Fixture-backed named-point evidence for MCP synthesis. When omitted, "
+            "the importer looks for sources/mcp/named_point_evidence.json under "
+            "the fixed material root."
+        ),
+    )
     parser.add_argument("--checkpoint-spacing-m", type=float, default=DEFAULT_CHECKPOINT_SPACING_M)
     parser.add_argument("--max-reference-display-points", type=int, default=1_000)
     parser.add_argument(
@@ -714,6 +756,15 @@ def main(argv: list[str] | None = None) -> None:
         type=float,
         default=DEFAULT_MAX_REASONABLE_SPEED_KMH,
         help="Remove GPX track points that require more than this speed from the previous kept point.",
+    )
+    parser.add_argument(
+        "--max-previous-gpx-speed-ratio",
+        type=float,
+        default=DEFAULT_MAX_PREVIOUS_SPEED_RATIO,
+        help=(
+            "Remove GPX track points that require more than this multiple of "
+            "the previous kept segment speed."
+        ),
     )
     parser.add_argument(
         "--import-stage",
@@ -736,8 +787,10 @@ def main(argv: list[str] | None = None) -> None:
             checkpoint_spacing_m=args.checkpoint_spacing_m,
             max_reference_display_points=args.max_reference_display_points,
             max_reasonable_gpx_speed_kmh=args.max_reasonable_gpx_speed_kmh,
+            max_previous_gpx_speed_ratio=args.max_previous_gpx_speed_ratio,
             material_root=args.material_root,
             dtm_dirs=tuple(args.dtm_dir),
+            mcp_named_point_evidence=args.mcp_named_point_evidence,
             overwrite=args.overwrite,
             import_stage=args.import_stage,
         )
@@ -760,6 +813,8 @@ def _validate_request(request: PretripImportRequest) -> None:
         raise ValueError("max_reference_display_points must be greater than 0")
     if request.max_reasonable_gpx_speed_kmh <= 0:
         raise ValueError("max_reasonable_gpx_speed_kmh must be greater than 0")
+    if request.max_previous_gpx_speed_ratio <= 0:
+        raise ValueError("max_previous_gpx_speed_ratio must be greater than 0")
     primary = request.primary_gpx.expanduser()
     if not primary.exists():
         raise FileNotFoundError(f"golden route GPX not found: {primary}")
@@ -769,6 +824,13 @@ def _validate_request(request: PretripImportRequest) -> None:
         raise FileNotFoundError(f"template project root not found: {request.template_project_root}")
     if request.material_root is not None and not request.material_root.expanduser().exists():
         raise FileNotFoundError(f"material root not found: {request.material_root}")
+    if (
+        request.mcp_named_point_evidence is not None
+        and not request.mcp_named_point_evidence.expanduser().exists()
+    ):
+        raise FileNotFoundError(
+            f"MCP named-point evidence not found: {request.mcp_named_point_evidence}"
+        )
     for dtm_dir in request.dtm_dirs:
         if not dtm_dir.expanduser().exists():
             raise FileNotFoundError(f"DTM directory not found: {dtm_dir}")
@@ -920,12 +982,14 @@ def _prepare_speed_filtered_gpx(
     primary_gpx: Path,
     reference_paths: list[Path],
     max_reasonable_speed_kmh: float,
+    max_previous_speed_ratio: float,
 ) -> dict[str, Any]:
     filter_root = project_root / "normalized" / "routes" / "filtered"
     primary_report = write_speed_filtered_gpx(
         primary_gpx,
         filter_root / f"primary.{_safe_file_stem(primary_gpx)}.speed_filtered.gpx",
         max_reasonable_speed_kmh=max_reasonable_speed_kmh,
+        max_previous_speed_ratio=max_previous_speed_ratio,
     )
     reference_reports = []
     for index, reference_path in enumerate(reference_paths, start=1):
@@ -935,6 +999,7 @@ def _prepare_speed_filtered_gpx(
                 filter_root
                 / f"reference_{index:03d}.{_safe_file_stem(reference_path)}.speed_filtered.gpx",
                 max_reasonable_speed_kmh=max_reasonable_speed_kmh,
+                max_previous_speed_ratio=max_previous_speed_ratio,
             )
         )
     return {
@@ -1682,6 +1747,180 @@ def _dtm_source_dirs(request: PretripImportRequest) -> list[Path]:
     return [Path(value).expanduser() for value in source_dirs if Path(value).expanduser().exists()]
 
 
+def _resolve_mcp_named_point_evidence(request: PretripImportRequest) -> Path | None:
+    if request.mcp_named_point_evidence is not None:
+        return request.mcp_named_point_evidence.expanduser().resolve()
+    material_root = _material_root_for_request(request)
+    if material_root is None:
+        return None
+    manifest = _material_manifest(request)
+    manifest_source = manifest.get("sources", {}).get("mcp_named_point_evidence")
+    candidates: list[Path] = []
+    if isinstance(manifest_source, str):
+        candidates.append(Path(manifest_source).expanduser())
+    candidates.extend(
+        [
+            material_root / "sources" / "mcp" / "named_point_evidence.json",
+            material_root / "mcp" / "named_point_evidence.json",
+        ]
+    )
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate.resolve()
+    return None
+
+
+def _mcp_output_refs() -> dict[str, str]:
+    return {
+        "mcp_named_point_evidence_ref": "outputs/mcp/named_point_evidence.json",
+        "mcp_retrieval_plan_ref": (
+            f"outputs/mcp/{DEFAULT_RETRIEVAL_PLAN_OUTPUT_NAME}"
+        ),
+        "mcp_ocr_labels_ref": f"outputs/mcp/{DEFAULT_OCR_LABEL_OUTPUT_NAME}",
+        "mcp_candidates_ref": f"outputs/mcp/{DEFAULT_MCP_OUTPUT_NAME}",
+        "mcp_cp_support_reconciliation_ref": (
+            f"outputs/mcp/{DEFAULT_CP_SUPPORT_RECONCILIATION_OUTPUT_NAME}"
+        ),
+    }
+
+
+def _build_mcp_import_artifacts(
+    *,
+    request: PretripImportRequest,
+    project_root: Path,
+    output_refs: dict[str, str],
+    route_name: str,
+    checkpoint_candidates: list[PreTripCheckpointCandidate],
+    import_timestamp: str,
+) -> dict[str, Any] | None:
+    evidence_path = _resolve_mcp_named_point_evidence(request)
+    if evidence_path is None:
+        return None
+
+    evidence_set = load_named_point_evidence(evidence_path)
+    if evidence_set.project_id != request.project_id:
+        raise ValueError(
+            "MCP named-point evidence project_id does not match import project_id: "
+            f"{evidence_set.project_id} != {request.project_id}"
+        )
+
+    mcp_refs = _mcp_output_refs()
+    output_refs.update(mcp_refs)
+    checkpoint_ref = output_refs["checkpoint_candidates_ref"]
+    write_json(
+        project_root / checkpoint_ref,
+        [candidate.model_dump(mode="json") for candidate in checkpoint_candidates],
+    )
+    _write_mcp_project_stub(
+        project_root=project_root,
+        project_id=request.project_id,
+        output_refs=output_refs,
+    )
+
+    mcp_source_refs = (mcp_refs["mcp_named_point_evidence_ref"],)
+    evidence_output_path = project_root / mcp_refs["mcp_named_point_evidence_ref"]
+    evidence_output_path.parent.mkdir(parents=True, exist_ok=True)
+    evidence_output_path.write_text(evidence_set.to_json(), encoding="utf-8")
+
+    retrieval_plan = build_fixture_backed_retrieval_plan(
+        evidence_set,
+        route_name=route_name,
+        generated_at=import_timestamp,
+    )
+    write_retrieval_plan(
+        retrieval_plan,
+        project_root / mcp_refs["mcp_retrieval_plan_ref"],
+    )
+    ocr_labels = normalize_ocr_labels_from_evidence(
+        evidence_set,
+        source_refs=mcp_source_refs,
+    )
+    write_ocr_label_set(
+        ocr_labels,
+        project_root / mcp_refs["mcp_ocr_labels_ref"],
+    )
+    candidate_set = synthesize_mcp_candidates(
+        evidence_set,
+        project_root=project_root,
+        source_refs=mcp_source_refs,
+    )
+    write_mcp_candidate_set(
+        candidate_set,
+        project_root / mcp_refs["mcp_candidates_ref"],
+    )
+    cp_support = build_cp_support_reconciliation(
+        candidate_set,
+        source_candidate_set_ref=mcp_refs["mcp_candidates_ref"],
+    )
+    write_cp_support_reconciliation(
+        cp_support,
+        project_root / mcp_refs["mcp_cp_support_reconciliation_ref"],
+    )
+    _write_mcp_project_stub(
+        project_root=project_root,
+        project_id=request.project_id,
+        output_refs=output_refs,
+    )
+
+    return {
+        "enabled": True,
+        "source_path": evidence_path.as_posix(),
+        "source_sha256": sha256_file(evidence_path),
+        "refs": mcp_refs,
+        "counts": {
+            "mcp_candidate_count": candidate_set.mcp_candidate_count,
+            "mcp_suppressed_point_count": candidate_set.suppressed_point_count,
+            "mcp_dense_checkpoint_count": candidate_set.dense_checkpoint_count,
+            "mcp_retrieval_query_count": retrieval_plan.query_count,
+            "mcp_ocr_label_count": ocr_labels.label_count,
+            "mcp_cp_support_supported_count": cp_support.supported_count,
+            "mcp_cp_support_suggested_insertion_count": (
+                cp_support.suggested_insertion_count
+            ),
+        },
+        "boundary": {
+            "pretrip_candidate_evidence_only": True,
+            "fixture_backed": True,
+            "live_network_performed": False,
+            "runtime_safety_truth": False,
+            "phase1_runtime_mutation_allowed": False,
+            "phase2_brain_writeback_allowed": False,
+            "compile_allowed": False,
+        },
+    }
+
+
+def _write_mcp_project_stub(
+    *,
+    project_root: Path,
+    project_id: str,
+    output_refs: dict[str, str],
+) -> None:
+    project_path = project_root / "project.json"
+    payload: dict[str, Any] = {}
+    if project_path.exists():
+        try:
+            existing = json.loads(project_path.read_text(encoding="utf-8"))
+            if isinstance(existing, dict):
+                payload = existing
+        except json.JSONDecodeError:
+            payload = {}
+    payload.update(
+        {
+            "project_id": project_id,
+            "checkpoint_candidates_ref": output_refs["checkpoint_candidates_ref"],
+        }
+    )
+    payload.update(
+        {
+            key: value
+            for key, value in output_refs.items()
+            if key.startswith("mcp_") and key.endswith("_ref")
+        }
+    )
+    write_json(project_path, payload)
+
+
 def _build_default_retreat_routes(
     *,
     request: PretripImportRequest,
@@ -2157,6 +2396,35 @@ def _build_import_manifest(
             "raw_gpx_embedded_in_json": False,
             "gpx_speed_filter_applied": True,
         },
+    }
+
+
+def _attach_mcp_import_manifest(
+    manifest: dict[str, Any],
+    mcp_import_summary: dict[str, Any] | None,
+) -> None:
+    if mcp_import_summary is None:
+        return
+    manifest["inputs"]["mcp_named_point_evidence"] = {
+        "source_path": mcp_import_summary["source_path"],
+        "sha256": mcp_import_summary["source_sha256"],
+        "role": "fixture_backed_named_point_evidence",
+        "raw_payload_embedded": False,
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+    }
+    manifest["outputs"].update(mcp_import_summary["refs"])
+    manifest["counts"].update(mcp_import_summary["counts"])
+    manifest["mcp_synthesis"] = {
+        "enabled": True,
+        "source_ref": mcp_import_summary["refs"]["mcp_named_point_evidence_ref"],
+        "candidate_ref": mcp_import_summary["refs"]["mcp_candidates_ref"],
+        "retrieval_plan_ref": mcp_import_summary["refs"]["mcp_retrieval_plan_ref"],
+        "ocr_labels_ref": mcp_import_summary["refs"]["mcp_ocr_labels_ref"],
+        "cp_support_reconciliation_ref": mcp_import_summary["refs"][
+            "mcp_cp_support_reconciliation_ref"
+        ],
+        "boundary": mcp_import_summary["boundary"],
     }
 
 
@@ -2650,6 +2918,7 @@ def _build_admin_projection(
     reference_track_count: int,
     checkpoint_count: int,
     segment_count: int,
+    segment_display_geometry: dict[str, Any],
     rest_area_report: dict[str, Any],
     resume_segment_report: dict[str, Any],
     gis_perception: dict[str, Any],
@@ -2717,6 +2986,11 @@ def _build_admin_projection(
             "route_summary_ref": output_refs["route_summary_ref"],
             "map_context_ref": output_refs["map_context_ref"],
             "gpx_speed_filter": filter_summary,
+            "display_geometry": _route_display_geometry_from_segment_display_geometry(
+                project_id=request.project_id,
+                segment_display_geometry=segment_display_geometry,
+                source_path=output_refs["segment_display_geometry_ref"],
+            ),
         },
         "candidate_counts": candidate_counts,
         "gis_perception": {
@@ -2803,6 +3077,72 @@ def _build_admin_projection(
         projection["major_critical_points"] = mcp_summary
     projection.update(_admin_export_handoff_projection_summaries(project_root))
     return projection
+
+
+def _route_display_geometry_from_segment_display_geometry(
+    *,
+    project_id: str,
+    segment_display_geometry: dict[str, Any],
+    source_path: str,
+) -> dict[str, Any]:
+    coordinate_segments: list[list[dict[str, float]]] = []
+    for segment in segment_display_geometry.get("segments", []):
+        coordinate_segments.extend(_display_coordinate_segments(segment))
+    coordinates = [
+        point
+        for coordinate_segment in coordinate_segments
+        for point in coordinate_segment
+    ]
+    return {
+        "source_id": f"route_display_geometry.{project_id}",
+        "source_path": source_path,
+        "evidence_type": "pretrip_route_display_geometry",
+        "display_point_count": len(coordinates),
+        "display_segment_count": len(coordinate_segments),
+        "coordinates": coordinates,
+        "coordinate_segments": coordinate_segments,
+        "boundary": {
+            "display_geometry_only": True,
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+            "internal_gpx_points_preserved": True,
+            "gpx_segment_boundary_preserved": True,
+        },
+    }
+
+
+def _display_coordinate_segments(
+    display_geometry: dict[str, Any],
+) -> list[list[dict[str, float]]]:
+    coordinate_segments = display_geometry.get("coordinate_segments")
+    if isinstance(coordinate_segments, list):
+        normalized_segments = [
+            _normalized_coordinate_segment(segment)
+            for segment in coordinate_segments
+            if isinstance(segment, list)
+        ]
+        normalized_segments = [
+            segment for segment in normalized_segments if len(segment) >= 2
+        ]
+        if normalized_segments:
+            return normalized_segments
+    coordinates = _normalized_coordinate_segment(
+        display_geometry.get("coordinates", [])
+    )
+    return [coordinates] if len(coordinates) >= 2 else []
+
+
+def _normalized_coordinate_segment(segment: list[Any]) -> list[dict[str, float]]:
+    normalized: list[dict[str, float]] = []
+    for point in segment:
+        if not isinstance(point, dict):
+            continue
+        lat = point.get("lat")
+        lon = point.get("lon")
+        if not isinstance(lat, (int, float)) or not isinstance(lon, (int, float)):
+            continue
+        normalized.append({"lat": float(lat), "lon": float(lon)})
+    return normalized
 
 
 def _build_debug_projection_events(
@@ -3016,6 +3356,7 @@ def _project_payload(
     weather_daylight_evidence_count: int,
     segment_dtm_coverage: dict[str, Any] | None,
     dtm_coverage_summary: dict[str, Any] | None,
+    mcp_import_summary: dict[str, Any] | None,
 ) -> dict[str, Any]:
     project_path = project_root / "project.json"
     payload: dict[str, Any] = {}
@@ -3091,6 +3432,15 @@ def _project_payload(
             "resume_segment_max_reasonable_point_gap_m": DEFAULT_RESUME_SEGMENT_GAP_M,
         }
     )
+    if mcp_import_summary is not None:
+        payload.update(mcp_import_summary["refs"])
+        payload.update(mcp_import_summary["counts"])
+        payload["mcp_named_point_evidence_source_path"] = mcp_import_summary[
+            "source_path"
+        ]
+        payload["mcp_named_point_evidence_sha256"] = mcp_import_summary[
+            "source_sha256"
+        ]
     if segment_dtm_coverage is not None:
         payload["segment_dtm_coverage_ref"] = "normalized/terrain/segment_dtm_coverage.json"
         payload["segment_dtm_segment_count"] = segment_dtm_coverage.get(

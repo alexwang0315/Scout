@@ -1,0 +1,301 @@
+{
+  "artifact_kind": "pretrip_import_manifest",
+  "boundary": {
+    "actual_user_track_available": false,
+    "actual_user_track_required_before_post_analysis": true,
+    "golden_route_is_reference_evidence": true,
+    "gpx_speed_filter_applied": true,
+    "incident_store_mutation_allowed": false,
+    "mission_graph_compiled": false,
+    "phase1_runtime_mutation_allowed": false,
+    "phase2_brain_writeback_allowed": false,
+    "pretrip_candidate_evidence_only": true,
+    "raw_gpx_embedded_in_json": false,
+    "real_outbound_transport_allowed": false,
+    "unwalked_route_sections_require_danger_review": true,
+    "unwalked_route_sections_require_manual_waypoints": true
+  },
+  "counts": {
+    "checkpoint_candidate_count": 124,
+    "debug_projection_event_count": 4,
+    "gis_perception_ai_judgement_count": 4406,
+    "gis_perception_checkpoint_candidate_count": 660,
+    "golden_route_count": 1,
+    "gpx_speed_filter_exempted_point_count": 447,
+    "gpx_speed_filter_filtered_point_count": 78561,
+    "gpx_speed_filter_original_point_count": 138978,
+    "gpx_speed_filter_removed_point_count": 60417,
+    "reference_track_count": 23,
+    "rest_area_candidate_count": 21,
+    "rest_area_checkpoint_count": 12,
+    "resume_segment_count": 4,
+    "route_note_candidate_count": 4406,
+    "route_note_ln_hint_coverage_proposal_count": 84,
+    "route_note_ln_proposal_count": 197,
+    "route_note_ln_warning_coverage_proposal_count": 113,
+    "route_note_potential_ln_signal_count": 197,
+    "route_note_review_option_count": 197,
+    "route_point_count": 2612,
+    "segment_candidate_count": 123,
+    "source_file_count": 24
+  },
+  "gpx_speed_filter": {
+    "applied": true,
+    "candidate_only": true,
+    "enabled": true,
+    "exempted_track_point_count": 447,
+    "filter_scope": "pretrip_import_gpx_sources",
+    "filtered_track_point_count": 78561,
+    "max_previous_speed_ratio": 8.0,
+    "max_reasonable_speed_kmh": 120.0,
+    "original_track_point_count": 138978,
+    "primary_removed_track_point_count": 4297,
+    "reference_removed_track_point_count": 56120,
+    "removed_track_point_count": 60417,
+    "report_ref": "outputs/gpx_speed_filter_report.json",
+    "route_note_protection_radius_m": 30.0,
+    "runtime_safety_truth": false,
+    "source_file_count": 24
+  },
+  "import_stage": "pretrip",
+  "imported_at": "2026-06-03T00:00:00+00:00",
+  "importer_version": "0.1.0",
+  "inputs": {
+    "golden_route_gpx": {
+      "role": "golden_route_reference",
+      "sha256": "a270bbc769c9c521c4bb839a6230fb3760c37478c5b3ebe57f36f5d8755f6ee7",
+      "size_bytes": 1186689,
+      "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍縱走.gpx.gpx"
+    },
+    "historical_gpx_source_index": {
+      "raw_payloads_embedded": false,
+      "source_file_count": 24,
+      "source_ref": "sources/historical_gpx_source_index.json"
+    },
+    "reference_tracks": [
+      {
+        "role": "reference_track",
+        "sha256": "2e1bd1d887ae7e684b387b5c489053b4029ac81d1d1c569d333118e49d3a4d5c",
+        "size_bytes": 483243,
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/20161119_20奇萊連峰.gpx"
+      },
+      {
+        "role": "reference_track",
+        "sha256": "82949f7bcc388b833182bd3a9253f67843ff86d3133a734b5c81aa7ea456e8ea",
+        "size_bytes": 2850703,
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/2024-09-14馬君山_萬里池(萬馬線)_ㄚ國_p.gpx"
+      },
+      {
+        "role": "reference_track",
+        "sha256": "969284361f45ac9f2859a12bbab8f767ecdf1d65d76103c4a195feb4e0ed523c",
+        "size_bytes": 511937,
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/990418能高安東軍GDB檔.gpx"
+      },
+      {
+        "role": "reference_track",
+        "sha256": "6c4a4922039702ff6277a476f258579962a8b81801fd6729252ad46b481cf6ef",
+        "size_bytes": 774085,
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/C_Documents and Settings_Administrator_桌面_20111127-29.gdb-GPX自動轉檔.gpx"
+      },
+      {
+        "role": "reference_track",
+        "sha256": "88dba87e66279cca6351e88d5348c4ecd59407de4d53ff2a79fda576014fadac",
+        "size_bytes": 717754,
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/C_UsersltcDesktop20141010奇萊南峰.gdb.gpx"
+      },
+      {
+        "role": "reference_track",
+        "sha256": "2d57a1d949547b9f17a1c2a5470795d9d8fd0fff1de09924e40b2f5bd7bfbbaf",
+        "size_bytes": 2722484,
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/GoLife_Run_gpx_2016-11-12.gpx"
+      },
+      {
+        "role": "reference_track",
+        "sha256": "25bb956166fc75b870f8b5df3090f30d67eb57080883b03d67989628c3b4edf5",
+        "size_bytes": 1272529,
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/Lucky／200226 卡賀爾山。深堀山_p.gpx"
+      },
+      {
+        "role": "reference_track",
+        "sha256": "4882e4ba5b685ac2039039ebb5b2b5d96289e77bc5d59de0a438a4b3395851b0",
+        "size_bytes": 230669,
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/chen661能高安東軍5天-GPX自動轉檔.gpx"
+      },
+      {
+        "role": "reference_track",
+        "sha256": "99e7ed44d7f9d7179cbb5dd9d5360afa9da98df37de045c18ec3bfd81ad2cc66",
+        "size_bytes": 81514,
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/一日廬山3寶(金牌).gdb.gpx"
+      },
+      {
+        "role": "reference_track",
+        "sha256": "0936ebcd6aac0e63c7332e06f2b76f6411e1858088bc634956bcdbd28779fa54",
+        "size_bytes": 520074,
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/嘉明湖 含軌跡檔.gpx"
+      },
+      {
+        "role": "reference_track",
+        "sha256": "7230b8b990036bd81aa33e3c08431e3d235f66ecdc339b3cc01d9af71f0a02ef",
+        "size_bytes": 681011,
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/奇萊主北航跡圖-GPX自動轉檔.gpx"
+      },
+      {
+        "role": "reference_track",
+        "sha256": "739711660f95cae9c4f9c03a527f86741885bf951c8f1e74c664f4cc074297fc",
+        "size_bytes": 899551,
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/奇萊北壁下屏風山.gpx"
+      },
+      {
+        "role": "reference_track",
+        "sha256": "2fcace002e33dc0601e49f17a326d0ae886c667bdab31f082397a6e6ae006cab",
+        "size_bytes": 232240,
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/奇萊南峰、南華山、光被八表碑.gpx"
+      },
+      {
+        "role": "reference_track",
+        "sha256": "53fbaefac94b7755226cf15dfef66bb8d2b5c0f3a55016bd930b6d1a499ad14f",
+        "size_bytes": 420771,
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/奇萊南峰南華山(金牌).gdb-GPX自動轉檔.gpx"
+      },
+      {
+        "role": "reference_track",
+        "sha256": "27530b99b34ba1e73b8befaa47a1831641988c6307136c10f58f743d5af02703",
+        "size_bytes": 276891,
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/奇萊南華.gpx.gpx"
+      },
+      {
+        "role": "reference_track",
+        "sha256": "f86cb56deb45776e0efdf21a785cd129198a68f4b76754d7486e8a0fcb68841a",
+        "size_bytes": 801224,
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/武陵四秀航跡圖.gpx"
+      },
+      {
+        "role": "reference_track",
+        "sha256": "7ae21717dc034ae6f2a11c4828a9bf1f9ca29d8c6c05c2055fa0de257e293165",
+        "size_bytes": 447379,
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/竹林營地.gpx"
+      },
+      {
+        "role": "reference_track",
+        "sha256": "fb5fbfe72150d9998ae2ca22394011fdc26826d0607d3b1a96978dbcb71213e8",
+        "size_bytes": 1565999,
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高.gpx"
+      },
+      {
+        "role": "reference_track",
+        "sha256": "b6573a054c59981cfe8066a54976974c682fbbeebfb76ef9ed35a5c68ff1534a",
+        "size_bytes": 314456,
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍-GPX自動轉檔.gpx"
+      },
+      {
+        "role": "reference_track",
+        "sha256": "5b07ce65357be6e77c425747ff5a23f78aef011a63fe82b2b337fe0c6e0e2b88",
+        "size_bytes": 1679728,
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍.gpx.gpx"
+      },
+      {
+        "role": "reference_track",
+        "sha256": "a202f75d4e371051ae8b36634dee7b8214edff8573c76223076340ae64d104f7",
+        "size_bytes": 642554,
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/能高安東軍金杏真路.gpx"
+      },
+      {
+        "role": "reference_track",
+        "sha256": "b20d70861a50b38a8a142f1e2ff2ea0dddeada64e29186c1f60e9531db749f16",
+        "size_bytes": 333066,
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/航跡檔給想去人參考-GPX自動轉檔.gpx"
+      },
+      {
+        "role": "reference_track",
+        "sha256": "07e4b5acd316ee5abcf0d16386ee56f5630ce0c7daf57f1414fd6d727962a58f",
+        "size_bytes": 919869,
+        "uri": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai/行跡檔 -GPX自動轉檔.gpx"
+      }
+    ],
+    "source_inbox": {
+      "manifest_ref": "inbox/source_manifest.json",
+      "raw_payloads_embedded": false,
+      "source_file_count": 24
+    }
+  },
+  "network_policy": {
+    "network_calls_allowed": false,
+    "notes": "pi-offline（Pi 離線模式）and mac-workstation import local files only in this slice.",
+    "profile": "mac-workstation"
+  },
+  "outputs": {
+    "admin_projection_ref": "outputs/admin_projection.json",
+    "brain_seed_nodes_ref": "outputs/brain_seed_nodes.json",
+    "checkpoint_candidates_ref": "candidates/checkpoints.json",
+    "checkpoint_events_ref": "outputs/checkpoint_events.json",
+    "compiled_mission_graph_candidate_ref": "outputs/compiled_mission_graph.candidate.json",
+    "compiled_mission_graph_reviewed_ref": "outputs/compiled_mission_graph.reviewed.json",
+    "debug_projection_events_ref": "outputs/debug_projection_events.jsonl",
+    "gis_perception_ai_judgements_ref": "outputs/gis_perception_ai_judgements.json",
+    "gis_perception_candidates_ref": "outputs/gis_perception_candidates.json",
+    "gpx_speed_filter_report_ref": "outputs/gpx_speed_filter_report.json",
+    "historical_gpx_source_index_ref": "sources/historical_gpx_source_index.json",
+    "human_reviews_ref": "reviews/human_reviews.json",
+    "import_manifest_ref": "outputs/import_manifest.json",
+    "map_candidates_ref": "candidates/map_candidates.json",
+    "map_context_ref": "normalized/map/map_context.geojson",
+    "normalized_route_note_candidates_ref": "normalized/notes/gpx_route_note_candidates.json",
+    "package_ref": "outputs/pretrip_package.json",
+    "reference_track_display_geometry_ref": "outputs/reference_track_display_geometry.json",
+    "reference_tracks_ref": "outputs/reference_tracks.json",
+    "rest_area_candidates_ref": "outputs/rest_area_candidates.json",
+    "resume_segment_report_ref": "outputs/resume_segments.json",
+    "retreat_routes_ref": "candidates/retreat_routes.json",
+    "reviewed_package_ref": "outputs/pretrip_package.reviewed.json",
+    "route_evidence_bundle_ref": "normalized/routes/route_evidence_bundle.json",
+    "route_note_candidates_ref": "candidates/route_note_candidates.json",
+    "route_note_ln_proposals_ref": "outputs/route_note_ln_proposals.json",
+    "route_note_review_options_ref": "outputs/route_note_review_options.json",
+    "route_summary_ref": "normalized/routes/route_summary.json",
+    "segment_candidates_ref": "candidates/segments.json",
+    "segment_display_geometry_ref": "outputs/segment_display_geometry.json",
+    "segment_policy_candidates_ref": "outputs/segment_policy_candidates.json",
+    "source_inbox_manifest_ref": "inbox/source_manifest.json",
+    "weather_daylight_evidence_ref": "outputs/weather_daylight_evidence.json"
+  },
+  "planning_semantics": {
+    "golden_route": {
+      "actual_user_track": false,
+      "meaning": "selected similar reference route before departure",
+      "runtime_safety_truth": false
+    },
+    "manual_waypoint_route_policy": {
+      "danger_review_required": true,
+      "manual_waypoints_required": true,
+      "notes": "Unwalked route sections（未曾發生的路徑區段）can be planned only through manually drawn waypoint candidates and must raise danger review.",
+      "unwalked_route_sections_allowed": true
+    },
+    "post_analysis_replacement_policy": {
+      "actual_track_may_replace_pretrip_golden_route": true,
+      "historical_planning_evidence_mutation_allowed": false
+    },
+    "pretrip_actual_user_track_exists": false
+  },
+  "profile": "mac-workstation",
+  "project_id": "chilai_nanhua_day1",
+  "rest_areas": {
+    "enabled": true,
+    "policy": {
+      "cluster_radius_m": 80.0,
+      "max_speed_m_per_min": 5.0,
+      "min_duration_seconds": 1200,
+      "min_source_point_count": 16
+    },
+    "report_ref": "outputs/rest_area_candidates.json",
+    "rest_area_candidate_count": 21,
+    "rest_area_checkpoint_count": 12
+  },
+  "resume_segments": {
+    "enabled": true,
+    "max_reasonable_point_gap_m": 1000.0,
+    "report_ref": "outputs/resume_segments.json",
+    "resume_segment_count": 4
+  },
+  "schema_version": "0.1.0",
+  "workspace_root": "/private/tmp/scout_import_check_current/chilai_nanhua_day1"
+}

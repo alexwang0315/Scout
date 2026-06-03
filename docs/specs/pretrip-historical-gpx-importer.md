@@ -33,6 +33,7 @@ The importer must run before route-corridor map preparation:
 historical/open-download GPX corpus
   -> Historical GPX Importer
   -> route evidence bundle
+  -> optional MCP synthesis from named-point evidence
   -> Route-Corridor Map Preparation
   -> OSM/GIS/web/raster along-track evidence
   -> Pydantic AI semantic judgement
@@ -97,7 +98,8 @@ Mac/admin workstation example:
   --profile mac-workstation \
   --checkpoint-spacing-m 750 \
   --max-reference-display-points 5000 \
-  --max-reasonable-gpx-speed-kmh 120
+  --max-reasonable-gpx-speed-kmh 120 \
+  --mcp-named-point-evidence /Users/alexwang0315/scout-materials/sources/mcp/named_point_evidence.json
 ```
 
 Scout Pi offline example:
@@ -111,7 +113,8 @@ Scout Pi offline example:
   --profile pi-offline \
   --checkpoint-spacing-m 750 \
   --max-reference-display-points 3000 \
-  --max-reasonable-gpx-speed-kmh 120
+  --max-reasonable-gpx-speed-kmh 120 \
+  --mcp-named-point-evidence /data/scout/materials/pretrip/nenggao_andongjun_alpha/sources/mcp/named_point_evidence.json
 ```
 
 Preview from admin runtime:
@@ -168,6 +171,12 @@ The importer writes under the selected workspace:
     gis_checkpoint_candidates.json
   outputs/
     import_manifest.json
+    mcp/
+      named_point_evidence.json
+      mcp_retrieval_plan.json
+      mcp_ocr_labels.json
+      mcp_candidates.json
+      mcp_cp_support_reconciliation.json
     gpx_speed_filter_report.json
     resume_segments.json
     rest_area_candidates.json
@@ -209,6 +218,34 @@ This lets operators rerun importer plus map preparation on Scout without losing
 readiness, ETA, resource planning, departure bundle, route-comparison, or
 timeline evidence that is still needed by `/admin/pretrip`, `/admin/debug`, and
 handoff review surfaces.
+
+## MCP Synthesis Integration
+
+When `--mcp-named-point-evidence` is provided, or when the fixed material root
+contains `sources/mcp/named_point_evidence.json`, the importer must run the
+existing MCP synthesis pipeline after checkpoint generation and before admin
+projection generation.
+
+The importer writes:
+
+- `outputs/mcp/named_point_evidence.json`;
+- `outputs/mcp/mcp_retrieval_plan.json`;
+- `outputs/mcp/mcp_ocr_labels.json`;
+- `outputs/mcp/mcp_candidates.json`;
+- `outputs/mcp/mcp_cp_support_reconciliation.json`.
+
+`project.json`, `outputs/import_manifest.json`, and `outputs/admin_projection.json`
+must include the corresponding `mcp_*_ref` values and counts. `/admin/pretrip`,
+`/admin/debug`, and `/admin` must therefore show MCP from a clean re-imported
+workspace, not only from restored fixture state.
+
+MCP synthesis remains fixture-backed / evidence-only in this slice:
+
+- no live search is performed by importer tests;
+- no `/safety/*` endpoint is called;
+- MCP candidates are pretrip planning evidence only;
+- MCP cannot compile into runtime truth without human review and a later
+  departure-gate handoff.
 
 `normalized/routes/route_evidence_bundle.json` is the handoff artifact for map
 preparation.
@@ -310,8 +347,12 @@ below the absolute threshold.
 Default:
 
 ```text
-max_previous_speed_ratio = 3.0
+max_previous_speed_ratio = 8.0
 ```
+
+`3.0` remains a strict-mode value for regression tests or explicitly requested
+cleanup runs, but it is too aggressive for alpha default GPX import because it
+can remove many usable mountain-track points before map review.
 
 Output:
 
@@ -430,6 +471,15 @@ Normalized route summaries, route display geometry, CP candidates, segment
 candidates, reference-track display geometry, and route evidence bundle must be
 built from the filtered GPX outputs, not the raw GPX files. Raw GPX remains
 preserved as source evidence by path/hash.
+
+Display geometry must preserve GPX track/segment boundaries（保留航跡分段邊界）:
+
+- `coordinates` may remain as a backward-compatible flattened display list;
+- `coordinate_segments` is the authoritative map-rendering list of line parts;
+- `/admin`, `/admin/pretrip`, `/admin/debug`, and post-analysis reference-track
+  rendering must prefer `coordinate_segments`;
+- no UI should draw a synthetic line across two GPX `<trkseg>` / `<trk>`
+  boundaries unless a later reviewed route-edit explicitly connects them.
 
 `project.json`, `import_manifest.json`, `/admin/pretrip`, `/admin`, and
 `/admin/debug` projections must include filter summary counts and references,

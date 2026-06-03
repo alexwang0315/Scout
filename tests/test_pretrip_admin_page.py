@@ -973,8 +973,8 @@ def test_pretrip_admin_view_exposes_fixture_fields_used_by_readiness_strip():
 
     assert view["readiness"]["status"] == "ready"
     assert view["review_queue"]["counts"]["blocker_count"] == 0
-    assert view["review_queue"]["counts"]["warning_count"] == 10
-    assert view["review_queue"]["counts"]["review_count"] == 142
+    assert view["review_queue"]["counts"]["warning_count"] == 67
+    assert view["review_queue"]["counts"]["review_count"] == 380
     assert view["departure_bundle"]["package"]["status"] == "reviewed"
     assert view["departure_bundle"]["boundary"]["human_review_required_before_departure"] is True
     assert view["departure_bundle"]["boundary"]["not_departure_approval"] is True
