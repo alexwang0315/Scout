@@ -568,6 +568,86 @@ def test_pretrip_import_uses_material_root_for_terrain_weather_and_retreat(
     assert retreat_routes[0]["runtime_safety_truth"] is False
 
 
+def test_pretrip_import_generates_mcp_artifacts_from_named_point_evidence(
+    tmp_path: Path,
+) -> None:
+    evidence_path = ROOT / "tests" / "fixtures" / "pretrip" / "mcp" / "named_point_evidence.json"
+    evidence = _load(evidence_path)
+    route_points = [
+        (
+            named_point["route_position"]["lat"],
+            named_point["route_position"]["lon"],
+            1000.0 + index,
+            f"2026-05-01T{index:02d}:00:00Z",
+        )
+        for index, named_point in enumerate(
+            sorted(
+                evidence["named_points"],
+                key=lambda item: item["route_position"]["distance_m"],
+            )
+        )
+    ]
+    golden_route = _write_gpx(
+        tmp_path / "golden-route.gpx",
+        name="能高安東軍縱走",
+        points=route_points,
+    )
+
+    manifest = run_pretrip_import(
+        PretripImportRequest(
+            project_id="chilai_nanhua_day1",
+            primary_gpx=golden_route,
+            workspace_root=tmp_path / "workspaces",
+            profile="pi-offline",
+            checkpoint_spacing_m=500.0,
+            import_timestamp="2026-05-21T00:00:00+00:00",
+            mcp_named_point_evidence=evidence_path,
+        )
+    )
+
+    project_root = tmp_path / "workspaces" / "chilai_nanhua_day1"
+    project = _load(project_root / "project.json")
+    admin_projection = _load(project_root / "outputs" / "admin_projection.json")
+    mcp_candidates = _load(project_root / "outputs" / "mcp" / "mcp_candidates.json")
+    retrieval_plan = _load(project_root / "outputs" / "mcp" / "mcp_retrieval_plan.json")
+    ocr_labels = _load(project_root / "outputs" / "mcp" / "mcp_ocr_labels.json")
+    cp_support = _load(
+        project_root / "outputs" / "mcp" / "mcp_cp_support_reconciliation.json"
+    )
+
+    assert manifest["inputs"]["mcp_named_point_evidence"]["raw_payload_embedded"] is False
+    assert manifest["mcp_synthesis"]["boundary"]["live_network_performed"] is False
+    assert manifest["mcp_synthesis"]["boundary"]["runtime_safety_truth"] is False
+    assert manifest["counts"]["mcp_candidate_count"] == 6
+    assert manifest["counts"]["mcp_retrieval_query_count"] == 11
+    assert manifest["counts"]["mcp_ocr_label_count"] == 1
+    assert manifest["counts"]["mcp_cp_support_supported_count"] == 5
+    assert project["mcp_candidates_ref"] == "outputs/mcp/mcp_candidates.json"
+    assert project["mcp_candidate_count"] == 6
+    assert project["mcp_cp_support_supported_count"] == 5
+    assert admin_projection["candidate_counts"]["mcp_candidate_count"] == 6
+    assert admin_projection["major_critical_points"]["status"] == "candidate_only"
+    assert (
+        admin_projection["major_critical_points"]["retrieval"][
+            "live_network_performed"
+        ]
+        is False
+    )
+    assert (
+        admin_projection["major_critical_points"]["boundary"]["runtime_safety_truth"]
+        is False
+    )
+    assert mcp_candidates["mcp_candidate_count"] == 6
+    assert mcp_candidates["runtime_safety_truth"] is False
+    assert mcp_candidates["compile_allowed"] is False
+    assert retrieval_plan["query_count"] == 11
+    assert retrieval_plan["live_network_performed"] is False
+    assert retrieval_plan["truth_decision_allowed"] is False
+    assert ocr_labels["label_count"] == 1
+    assert cp_support["supported_count"] == 5
+    assert cp_support["suggested_insertion_count"] == 1
+
+
 def test_pretrip_import_filters_gpx_points_requiring_unreasonable_speed(
     tmp_path: Path,
 ) -> None:
@@ -681,6 +761,7 @@ def test_pretrip_import_filters_gpx_points_requiring_three_times_previous_speed(
             profile="pi-offline",
             checkpoint_spacing_m=500.0,
             import_timestamp="2026-05-21T00:00:00+00:00",
+            max_previous_gpx_speed_ratio=3.0,
         )
     )
 
@@ -703,6 +784,125 @@ def test_pretrip_import_filters_gpx_points_requiring_three_times_previous_speed(
     assert route_summary["point_count"] == 3
     assert route_summary["bbox_wgs84"]["max_lat"] < 24.003
     assert 'lat="24.006"' not in primary_filtered_gpx
+
+
+def test_pretrip_import_default_relative_speed_filter_keeps_five_times_spike(
+    tmp_path: Path,
+) -> None:
+    golden_route = _write_gpx(
+        tmp_path / "golden-route.gpx",
+        name="less aggressive relative speed filtered golden route",
+        points=[
+            (24.0, 121.0, 1000.0, "2026-05-01T00:00:00Z"),
+            (24.001, 121.0, 1001.0, "2026-05-01T00:10:00Z"),
+            (24.006, 121.0, 1002.0, "2026-05-01T00:20:00Z"),
+            (24.002, 121.0, 1003.0, "2026-05-01T00:30:00Z"),
+        ],
+    )
+
+    manifest = run_pretrip_import(
+        PretripImportRequest(
+            project_id="default_relative_speed_filter_import",
+            primary_gpx=golden_route,
+            workspace_root=tmp_path / "workspaces",
+            profile="pi-offline",
+            checkpoint_spacing_m=500.0,
+            import_timestamp="2026-05-21T00:00:00+00:00",
+        )
+    )
+
+    project_root = tmp_path / "workspaces" / "default_relative_speed_filter_import"
+    route_summary = _load(project_root / "normalized" / "routes" / "route_summary.json")
+    filter_report = _load(project_root / "outputs" / "gpx_speed_filter_report.json")
+    primary_filtered_gpx = Path(filter_report["primary"]["output_path"]).read_text(
+        encoding="utf-8"
+    )
+
+    assert manifest["counts"]["route_point_count"] == 4
+    assert manifest["counts"]["gpx_speed_filter_removed_point_count"] == 0
+    assert manifest["gpx_speed_filter"]["max_previous_speed_ratio"] == 8.0
+    assert filter_report["primary"]["removed_track_point_count"] == 0
+    assert route_summary["point_count"] == 4
+    assert route_summary["bbox_wgs84"]["max_lat"] == 24.006
+    assert 'lat="24.006"' in primary_filtered_gpx
+
+
+def test_pretrip_import_preserves_gpx_segment_boundaries_in_display_geometry(
+    tmp_path: Path,
+) -> None:
+    references = tmp_path / "references"
+    references.mkdir()
+    golden_route = _write_segmented_gpx(
+        tmp_path / "golden-route.gpx",
+        name="segmented golden route",
+        segments=[
+            [
+                (24.0, 121.0, 1000.0, "2026-05-01T00:00:00Z"),
+                (24.001, 121.001, 1001.0, "2026-05-01T00:10:00Z"),
+            ],
+            [
+                (24.5, 121.5, 1100.0, "2026-05-02T00:00:00Z"),
+                (24.501, 121.501, 1101.0, "2026-05-02T00:10:00Z"),
+            ],
+        ],
+    )
+    _write_segmented_gpx(
+        references / "reference.gpx",
+        name="segmented reference route",
+        segments=[
+            [
+                (24.0, 121.0, 1000.0, "2026-05-01T00:00:00Z"),
+                (24.002, 121.002, 1002.0, "2026-05-01T00:10:00Z"),
+            ],
+            [
+                (24.6, 121.6, 1200.0, "2026-05-02T00:00:00Z"),
+                (24.602, 121.602, 1202.0, "2026-05-02T00:10:00Z"),
+            ],
+        ],
+    )
+
+    run_pretrip_import(
+        PretripImportRequest(
+            project_id="segmented_display_import",
+            primary_gpx=golden_route,
+            reference_dir=references,
+            workspace_root=tmp_path / "workspaces",
+            profile="pi-offline",
+            checkpoint_spacing_m=100_000.0,
+            max_reference_display_points=100,
+            import_timestamp="2026-05-21T00:00:00+00:00",
+        )
+    )
+
+    project_root = tmp_path / "workspaces" / "segmented_display_import"
+    segment_display = _load(project_root / "outputs" / "segment_display_geometry.json")
+    reference_display = _load(
+        project_root / "outputs" / "reference_track_display_geometry.json"
+    )
+    view = build_pretrip_admin_view("segmented_display_import", project_root=project_root)
+
+    segment_geometry = segment_display["segments"][0]
+    reference_geometry = reference_display["reference_tracks"][0]
+    view_segment_geometry = view["segments"][0]["display_geometry"]
+    view_reference_geometry = view["reference_tracks"]["reference_tracks"][0][
+        "display_geometry"
+    ]
+    route_display_geometry = view["admin_surface_projection"]["route"][
+        "display_geometry"
+    ]
+
+    assert segment_geometry["display_segment_count"] == 2
+    assert len(segment_geometry["coordinate_segments"]) == 2
+    assert all(len(segment) == 2 for segment in segment_geometry["coordinate_segments"])
+    assert segment_geometry["segment_boundary_preserved"] is True
+    assert reference_geometry["display_segment_count"] == 2
+    assert len(reference_geometry["coordinate_segments"]) == 2
+    assert reference_geometry["segment_boundary_preserved"] is True
+    assert view_segment_geometry["display_segment_count"] == 2
+    assert len(view_segment_geometry["coordinate_segments"]) == 2
+    assert len(view_reference_geometry["coordinate_segments"]) == 2
+    assert route_display_geometry["display_segment_count"] == 2
+    assert len(route_display_geometry["coordinate_segments"]) == 2
 
 
 def test_pretrip_import_marks_long_distance_gaps_as_resume_segments(
@@ -1539,6 +1739,35 @@ def _write_gpx(
                 "<trk><trkseg>",
                 trkpts,
                 "</trkseg></trk>",
+                "</gpx>",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    return path
+
+
+def _write_segmented_gpx(
+    path: Path,
+    *,
+    name: str,
+    segments: list[list[tuple[float, float, float, str]]],
+) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    track_segments = []
+    for segment in segments:
+        trkpts = "\n".join(
+            f'<trkpt lat="{lat}" lon="{lon}"><ele>{ele}</ele><time>{time}</time></trkpt>'
+            for lat, lon, ele, time in segment
+        )
+        track_segments.append("\n".join(["<trk><trkseg>", trkpts, "</trkseg></trk>"]))
+    path.write_text(
+        "\n".join(
+            [
+                '<?xml version="1.0" encoding="UTF-8"?>',
+                '<gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1">',
+                f"<metadata><name>{name}</name></metadata>",
+                *track_segments,
                 "</gpx>",
             ]
         ),

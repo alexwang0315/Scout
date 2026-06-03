@@ -261,12 +261,20 @@ def test_builds_fixture_backed_pretrip_admin_view():
     assert view["project_id"] == PROJECT_ID
     assert view["summary"]["route_name"] == "2013-10-08 10:58:50 每日記錄"
     assert view["summary"]["status"] == "candidate"
-    assert view["route"]["point_count"] == 6909
-    assert view["route"]["distance_m"] == 162559.51
+    assert view["route"]["point_count"] == 2612
+    assert view["route"]["distance_m"] == 55174.67
     assert len(view["route"]["point_samples"]) == 3
     assert len(view["route"]["polyline"]) >= 2
-    assert len(view["checkpoints"]) == 110
-    assert len(view["segments"]) == 109
+    assert len(view["checkpoints"]) == 124
+    assert len(view["segments"]) == 123
+    segment_040 = next(segment for segment in view["segments"] if segment["candidate_id"] == "seg.040")
+    assert segment_040["distance_m"] < 1000.0
+    assert view["admin_surface_projection"]["route"]["gpx_speed_filter"][
+        "removed_track_point_count"
+    ] == 60417
+    assert view["admin_surface_projection"]["route"]["gpx_speed_filter"][
+        "max_previous_speed_ratio"
+    ] == 8.0
     assert view["segments"][0]["display_geometry"]["display_point_count"] > 1
     assert len(view["retreat_routes"]) == 1
     assert view["reference_tracks"]["reference_track_count"] == 23
@@ -281,8 +289,8 @@ def test_builds_fixture_backed_pretrip_admin_view():
     _assert_pretrip_candidate_metadata(
         view["reference_tracks"]["reference_tracks"][0]
     )
-    assert view["checkpoint_events"]["event_count"] == 110
-    assert view["checkpoint_events"]["source_gpx"]["point_count"] == 6909
+    assert view["checkpoint_events"]["event_count"] == 124
+    assert view["checkpoint_events"]["source_gpx"]["point_count"] == 2612
     assert view["checkpoint_events"]["source_gpx"]["trimming_performed"] is False
     _assert_pretrip_candidate_metadata(view["checkpoint_events"]["events"][0])
     _assert_pretrip_candidate_metadata(view["checkpoints"][0])
@@ -327,7 +335,7 @@ def test_builds_fixture_backed_pretrip_admin_view():
     assert view["evidence_timeline"]["counts"] == {
         "category_count": 12,
         "available_category_count": 12,
-        "total_evidence_count": 1698,
+        "total_evidence_count": 6656,
     }
     assert view["scout_agent_skills"]["artifact_kind"] == "scout_agent_skill_registry_summary"
     assert view["scout_agent_skills"]["counts"]["tool_count"] == 45
@@ -335,9 +343,9 @@ def test_builds_fixture_backed_pretrip_admin_view():
     assert view["tabs"]["agent_skills"]["sections"][0]["id"] == "scout_agent_skills"
     assert view["readiness"]["status"] == "ready"
     assert view["eta"]["target_eta"] == "2013-10-08T18:28:50+08:00"
-    assert view["route_notes"]["counts"]["note_candidate_count"] == 81
-    assert view["route_notes"]["counts"]["potential_ln_signal_count"] == 23
-    assert view["route_notes"]["counts"]["stale_route_note_count"] == 5
+    assert view["route_notes"]["counts"]["note_candidate_count"] == 4406
+    assert view["route_notes"]["counts"]["potential_ln_signal_count"] == 197
+    assert view["route_notes"]["counts"]["stale_route_note_count"] == 611
     assert view["route_notes"]["boundary"]["requires_human_review_before_ln_upgrade"] is True
     route_note_candidate = view["route_notes"]["candidates"][0]
     assert route_note_candidate["source_id"] == route_note_candidate["candidate_id"]
@@ -345,16 +353,16 @@ def test_builds_fixture_backed_pretrip_admin_view():
         "candidates/route_note_candidates.json"
     )
     assert route_note_candidate["evidence_type"] == "pretrip_route_note_candidate"
-    assert route_note_candidate["route_note_freshness"] == "aging"
-    assert route_note_candidate["stale_route_note"] is False
+    assert route_note_candidate["route_note_freshness"] == "stale"
+    assert route_note_candidate["stale_route_note"] is True
     assert route_note_candidate["review_state"] == "needs_review"
     assert route_note_candidate["source_attribution"][0]["source_kind"] == "gpx_route_note"
     assert route_note_candidate["pydantic_ai_prompt_version"]
     assert len(route_note_candidate["model_output_sha256"]) == 64
-    assert view["route_note_ln_proposals"]["counts"]["proposal_count"] == 23
+    assert view["route_note_ln_proposals"]["counts"]["proposal_count"] == 197
     assert (
         view["route_note_ln_proposals"]["counts"]["warning_coverage_proposal_count"]
-        == 3
+        == 113
     )
     assert (
         view["route_note_ln_proposals"]["boundary"][
@@ -369,7 +377,7 @@ def test_builds_fixture_backed_pretrip_admin_view():
     assert len(ln_proposal["model_output_sha256"]) == 64
     assert ln_proposal["confidence"] in {"low", "medium", "high"}
     assert ln_proposal["stale_risk"] in {"low", "medium", "high", "unknown"}
-    assert view["route_note_review_options"]["counts"]["review_option_count"] == 23
+    assert view["route_note_review_options"]["counts"]["review_option_count"] == 197
     assert (
         view["route_note_review_options"]["counts"]["decision_recorded_count"]
         == 0
@@ -412,7 +420,7 @@ def test_builds_fixture_backed_pretrip_admin_view():
         "lat": 23.9536093,
     }
     assert view["gis_perception_timeline"]["counts"]["overpass_checkpoint_candidate_count"] == 9
-    assert view["gis_perception_timeline"]["counts"]["checkpoint_candidate_count"] == 9
+    assert view["gis_perception_timeline"]["counts"]["checkpoint_candidate_count"] == 304
     if view["gis_perception"]["checkpoint_candidates"]:
         raw_gis_cp = view["gis_perception"]["checkpoint_candidates"][0]
         assert raw_gis_cp["review_state"] == "needs_review"
@@ -421,7 +429,7 @@ def test_builds_fixture_backed_pretrip_admin_view():
         assert raw_gis_cp["source_refs"]
         assert raw_gis_cp["confidence"] in {"low", "medium", "high", "unknown"}
         assert raw_gis_cp["stale_risk"] in {"low", "medium", "high", "unknown"}
-        assert raw_gis_cp["extractor_version"] == "pretrip_gis_perception.projection.v1"
+        assert raw_gis_cp["extractor_version"] == "0.1.0"
         assert raw_gis_cp["pydantic_ai_prompt_version"] == (
             "scout.gis_perception.structured_judgement.v0"
         )
@@ -508,18 +516,20 @@ def test_builds_fixture_backed_pretrip_admin_view():
         and candidate["source_family_coverage"]["mandatory_complete"] is True
         for candidate in view["major_critical_points"]["candidates"]
     )
-    assert all(
-        candidate["source_profile"] == "overpass_osm_tags"
+    source_profiles = {
+        candidate["source_profile"]
         for candidate in view["gis_perception_timeline"]["checkpoint_candidates"]
-    )
+    }
+    assert "gpx_corpus_route_notes" in source_profiles
+    assert "overpass_osm_tags" in source_profiles
     assert any(
         attribution["source_kind"] == "overpass_candidate"
         for candidate in view["gis_perception_timeline"]["checkpoint_candidates"]
         for attribution in candidate["source_attribution"]
     )
-    assert view["review_queue"]["counts"]["item_count"] == 152
+    assert view["review_queue"]["counts"]["item_count"] == 447
     assert view["review_queue"]["counts"]["category_counts"]["route_note"] == 23
-    assert view["review_queue"]["counts"]["category_counts"]["gis_perception_cp"] == 9
+    assert view["review_queue"]["counts"]["category_counts"]["gis_perception_cp"] == 304
     first_review_item = view["review_queue"]["items"][0]
     assert first_review_item["review_state"] == "needs_review"
     assert first_review_item["candidate_only"] is True
@@ -554,13 +564,13 @@ def test_builds_fixture_backed_pretrip_admin_view():
     assert first_review_item["model_output_summary"]
     assert view["review_workbench"]["status"] == "projection_only"
     assert view["review_workbench"]["counts"]["category_group_count"] == 8
-    assert view["review_workbench"]["counts"]["bulk_eligible_count"] == 138
-    assert view["review_workbench"]["counts"]["single_review_required_count"] == 14
+    assert view["review_workbench"]["counts"]["bulk_eligible_count"] == 376
+    assert view["review_workbench"]["counts"]["single_review_required_count"] == 71
     assert view["review_workbench"]["boundary"]["ai_triage_is_review_aid"] is True
     assert view["review_workbench"]["boundary"]["runtime_safety_truth"] is False
     assert any(
         group["group_id"] == "review_group.category.gis_perception_cp"
-        and group["bulk_eligible_count"] == 9
+        and group["bulk_eligible_count"] == 247
         for group in view["review_workbench"]["category_groups"]
     )
     assert view["review_draft_log"]["status"] == "draft_only"
@@ -773,8 +783,8 @@ def test_loads_debug_projection_view_with_shared_map_and_dense_timeline():
     assert projection["artifact_kind"] == "pretrip_debug_projection"
     assert projection["project_id"] == PROJECT_ID
     assert projection["event_count"] > 200
-    assert projection["counts"]["checkpoint_candidate_count"] == 110
-    assert projection["counts"]["segment_candidate_count"] == 109
+    assert projection["counts"]["checkpoint_candidate_count"] == 124
+    assert projection["counts"]["segment_candidate_count"] == 123
     assert projection["counts"]["reference_track_count"] == 23
     assert projection["counts"]["mcp_candidate_count"] == 6
     assert projection["counts"]["mcp_suppressed_point_count"] == 2
@@ -784,14 +794,14 @@ def test_loads_debug_projection_view_with_shared_map_and_dense_timeline():
     assert "terrain_visualization" in projection
     assert projection["terrain_visualization"]["boundary"]["runtime_safety_truth"] is False
     assert projection["counts"]["source_lifecycle_event_count"] == 4
-    assert projection["route"]["point_count"] == 6909
+    assert projection["route"]["point_count"] == 2612
     assert (
         projection["route"]["display_geometry"]["boundary"][
             "internal_gpx_points_preserved"
         ]
         is True
     )
-    assert projection["route"]["display_geometry"]["display_point_count"] > 6000
+    assert projection["route"]["display_geometry"]["display_point_count"] > 2000
     assert projection["reference_tracks"]["reference_track_count"] == 23
     assert projection["major_critical_points"]["status"] == "candidate_only"
     assert projection["major_critical_points"]["counts"]["mcp_candidate_count"] == 6
@@ -1201,6 +1211,7 @@ def test_tabs_expose_compact_traceable_detail_sections():
         ("planning_skill_audit", "Planning Skill Audit"),
         ("planning_skill_manifest_catalog", "Planning Skill Manifest Catalog"),
         ("capability_timeline_import", "Capability Timeline Import"),
+        ("import_manifest", "Import Manifest"),
         ("admin_surface_projection", "Admin Surface Projection"),
         ("debug_projection", "Debug Projection"),
     ]
@@ -1217,17 +1228,17 @@ def test_tabs_expose_compact_traceable_detail_sections():
         assert section["summary"]
 
     assert sections_by_id["route"]["counts"] == {
-        "point_count": 6909,
-        "polyline_point_count": 110,
+        "point_count": 2612,
+        "polyline_point_count": 124,
         "sample_count": 3,
     }
     assert sections_by_id["route"]["boundary"]["runtime_safety_truth"] is False
-    assert sections_by_id["checkpoints"]["counts"]["candidate_count"] == 110
+    assert sections_by_id["checkpoints"]["counts"]["candidate_count"] == 124
     assert sections_by_id["checkpoints"]["summary"]["sample_candidates"][0][
         "candidate_id"
     ] == "cp.start"
     assert sections_by_id["checkpoints"]["boundary"]["mission_graph_compile_allowed"] is False
-    assert sections_by_id["segments"]["counts"]["candidate_count"] == 109
+    assert sections_by_id["segments"]["counts"]["candidate_count"] == 123
     assert sections_by_id["segments"]["summary"]["sample_candidates"][0][
         "candidate_id"
     ] == "seg.001"
@@ -1252,7 +1263,7 @@ def test_tabs_expose_compact_traceable_detail_sections():
         "hazard_note_count": 2,
         "source_ref_count": 2,
     }
-    assert sections_by_id["review_queue"]["counts"]["item_count"] == 152
+    assert sections_by_id["review_queue"]["counts"]["item_count"] == 447
     assert sections_by_id["review_draft_log"]["counts"]["action_count"] == 3
     assert sections_by_id["review_draft_log"]["summary"]["draft_only"] is True
     assert sections_by_id["review_draft_log"]["summary"]["decisions_recorded"] is False
@@ -1322,16 +1333,16 @@ def test_tabs_expose_compact_traceable_detail_sections():
     assert sections_by_id["external_import_queue"]["summary"]["crawler_enabled_count"] == 0
     assert sections_by_id["external_import_queue"]["boundary"]["no_network"] is True
     assert sections_by_id["external_import_queue"]["boundary"]["no_crawler"] is True
-    assert sections_by_id["route_notes"]["counts"]["note_candidate_count"] == 81
-    assert sections_by_id["route_notes"]["summary"]["hazard_hint_count"] == 3
-    assert sections_by_id["route_notes"]["summary"]["potential_ln_signal_count"] == 23
+    assert sections_by_id["route_notes"]["counts"]["note_candidate_count"] == 4406
+    assert sections_by_id["route_notes"]["summary"]["hazard_hint_count"] == 113
+    assert sections_by_id["route_notes"]["summary"]["potential_ln_signal_count"] == 197
     assert sections_by_id["route_notes"]["boundary"]["raw_gpx_embedded"] is False
-    assert sections_by_id["route_note_ln_proposals"]["counts"]["proposal_count"] == 23
+    assert sections_by_id["route_note_ln_proposals"]["counts"]["proposal_count"] == 197
     assert (
         sections_by_id["route_note_ln_proposals"]["summary"][
             "warning_coverage_proposal_count"
         ]
-        == 3
+        == 113
     )
     assert (
         sections_by_id["route_note_ln_proposals"]["boundary"][
@@ -1339,7 +1350,7 @@ def test_tabs_expose_compact_traceable_detail_sections():
         ]
         is False
     )
-    assert sections_by_id["route_note_review_options"]["counts"]["review_option_count"] == 23
+    assert sections_by_id["route_note_review_options"]["counts"]["review_option_count"] == 197
     assert (
         sections_by_id["route_note_review_options"]["summary"][
             "allowed_admin_dispositions"
@@ -1489,10 +1500,18 @@ def test_tabs_expose_compact_traceable_detail_sections():
         sections_by_id["capability_timeline_import"]["boundary"]["runtime_safety_truth"]
         is False
     )
-    assert sections_by_id["admin_surface_projection"]["counts"] == {
-        "checkpoint_candidate_count": 110,
+    admin_projection_counts = sections_by_id["admin_surface_projection"]["counts"]
+    assert {
+        key: admin_projection_counts[key]
+        for key in [
+            "checkpoint_candidate_count",
+            "reference_track_count",
+            "segment_candidate_count",
+        ]
+    } == {
+        "checkpoint_candidate_count": 124,
         "reference_track_count": 23,
-        "segment_candidate_count": 109,
+        "segment_candidate_count": 123,
     }
     assert sections_by_id["admin_surface_projection"]["summary"]["surface_targets"] == [
         "/admin",

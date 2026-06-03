@@ -2,15 +2,15 @@
   "artifact_id": "artifact.gpx.chilai_nanhua_day1",
   "bbox_wgs84": {
     "max_lat": 24.053969560191035,
-    "max_lon": 121.281699500978,
+    "max_lon": 121.28102609887719,
     "min_lat": 23.872665725648403,
     "min_lon": 121.17726685479283
   },
-  "distance_m": 162559.51,
+  "distance_m": 55174.67,
   "elevation_max_m": 3350.81,
-  "elevation_min_m": 1213.8,
-  "ended_at": "2013-10-12T10:00:40Z",
-  "point_count": 6909,
+  "elevation_min_m": 1216.69,
+  "ended_at": "2013-10-13T06:23:04Z",
+  "point_count": 2612,
   "route_name": "2013-10-08 10:58:50 每日記錄",
   "started_at": "2013-10-08T02:58:50Z"
 }
