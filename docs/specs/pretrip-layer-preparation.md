@@ -300,7 +300,9 @@ not regenerate, including:
 - `planned_eta_ref`;
 - `departure_bundle_manifest_ref`;
 - `route_comparison_ref`;
-- capability timeline refs when present.
+- capability timeline refs when present;
+- imported Scout workspace template refs and template import candidate refs when
+  present.
 
 The restore path may copy only project-relative refs that remain inside the
 source and destination workspace roots. It must not overwrite a destination

@@ -6,6 +6,7 @@
 !requirements.pi.txt
 !requirements.pi.admin.txt
 !requirements.pi.live.txt
+!*.py
 !checkpoint_manager.py
 !communication_provider.py
 !communication_tool.py
@@ -53,6 +54,7 @@
 !live_runtime_enablement_cli.py
 !live_runtime_soak_check.py
 !pretrip_assistant_context.py
+!pretrip_gpx_filter.py
 !runtime_input_admission.py
 !runtime_observation_envelope.py
 !runtime_remote_provider_config_preflight.py
@@ -170,3 +172,6 @@
 !tests/fixtures/pretrip/projects/
 !tests/fixtures/pretrip/projects/chilai_nanhua_day1/
 !tests/fixtures/pretrip/projects/chilai_nanhua_day1/**
+!tests/fixtures/post_analysis/
+!tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/
+!tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/**

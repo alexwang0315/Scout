@@ -3,6 +3,8 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
+import re
 from pathlib import Path
 from typing import Any
 
@@ -18,7 +20,10 @@ from post_analysis_capability_models import (
     RestDetectionPolicy,
     RouteTimeComparisonArtifact,
     RouteTimeComparisonSegment,
+    SegmentTerrainProfile,
     SourceTrackRef,
+    TerrainProfileSample,
+    TerrainProfileSummary,
 )
 from post_analysis_rest_detection import detect_rest_intervals, timed_route_points
 from post_analysis_route_slicing import (
@@ -49,6 +54,8 @@ def build_capability_artifacts(
     root: Path = ROOT,
 ) -> CapabilityArtifactFiles:
     route = load_gpx_route(completed_track_gpx)
+    resolved_output_dir = output_dir or completed_track_gpx.parent
+    profile_output_dir = resolved_output_dir / "terrain_profiles"
     if checkpoint_definitions_path is None:
         if pretrip_project_root is None:
             raise ValueError("checkpoint_definitions_path or pretrip_project_root is required")
@@ -75,6 +82,7 @@ def build_capability_artifacts(
         checkpoint_source_path=checkpoint_source_path,
         rest_policy=policy,
         analysis_context=analysis_context,
+        terrain_profile_output_dir=profile_output_dir,
         root=root,
     )
     capsule = build_capability_capsule(timeline.model_dump(mode="json"))
@@ -88,7 +96,6 @@ def build_capability_artifacts(
         )
     share_preview = build_capability_share_preview(capsule.model_dump(mode="json"))
 
-    resolved_output_dir = output_dir or completed_track_gpx.parent
     resolved_output_dir.mkdir(parents=True, exist_ok=True)
     timeline_path = resolved_output_dir / "capability_timeline.json"
     capsule_path = resolved_output_dir / "capability_capsule.json"
@@ -161,6 +168,7 @@ def build_capability_timeline(
     checkpoint_source_path: Path,
     rest_policy: RestDetectionPolicy,
     analysis_context: dict[str, Any] | None = None,
+    terrain_profile_output_dir: Path | None = None,
     root: Path = ROOT,
 ):
     from post_analysis_capability_models import CapabilityTimelineArtifact
@@ -230,6 +238,11 @@ def build_capability_timeline(
                 limitations=edge_limitations,
                 terrain_context=route_slice.segment.terrain_context or {},
                 risk_context=route_slice.segment.risk_context or {},
+                terrain_profile=_build_segment_terrain_profile(
+                    route_slice=route_slice,
+                    edge_id=f"{route_slice.segment.from_checkpoint_id}_to_{route_slice.segment.to_checkpoint_id}",
+                    output_dir=terrain_profile_output_dir,
+                ),
                 guide_time_min=route_slice.segment.guide_time_min,
             )
         )
@@ -444,6 +457,7 @@ def summarize_capability_artifacts(
                 "limitations": edge.get("limitations", []),
                 "terrain_context": edge.get("terrain_context", {}),
                 "risk_context": edge.get("risk_context", {}),
+                "terrain_profile": edge.get("terrain_profile"),
                 "guide_time_min": edge.get("guide_time_min"),
                 "evidence_type": "post_analysis_capability_segment",
                 "source_id": edge["edge_id"],
@@ -561,6 +575,260 @@ def _timeline_data_quality(
     )
 
 
+def _build_segment_terrain_profile(
+    *,
+    route_slice,
+    edge_id: str,
+    output_dir: Path | None,
+    sample_distance_m: float = 20.0,
+) -> SegmentTerrainProfile | None:
+    samples = _terrain_profile_samples(
+        route_slice.points,
+        risk_score=_extract_risk_score(route_slice.segment.risk_context or {}),
+        sample_distance_m=sample_distance_m,
+    )
+    if len(samples) < 2:
+        return None
+
+    summary = _terrain_profile_summary(samples)
+    if output_dir is None:
+        profile_svg_ref = f"terrain_profiles/{_safe_artifact_name(edge_id)}.svg"
+    else:
+        output_dir.mkdir(parents=True, exist_ok=True)
+        profile_name = f"{_safe_artifact_name(edge_id)}.svg"
+        _write_terrain_profile_svg(
+            output_dir / profile_name,
+            edge_id=edge_id,
+            samples=samples,
+            summary=summary,
+        )
+        profile_svg_ref = f"terrain_profiles/{profile_name}"
+
+    return SegmentTerrainProfile(
+        source="completed_track_elevation",
+        sample_distance_m=sample_distance_m,
+        profile_svg_ref=profile_svg_ref,
+        samples=samples,
+        summary=summary,
+    )
+
+
+def _terrain_profile_samples(
+    points,
+    *,
+    risk_score: float | None,
+    sample_distance_m: float,
+) -> list[TerrainProfileSample]:
+    elevated = [point for point in points if point.elevation_m is not None]
+    if len(elevated) < 2:
+        return []
+
+    samples = []
+    previous_sample_offset: float | None = None
+    segment_start_progress = elevated[0].progress_m
+    for index, point in enumerate(elevated):
+        offset_m = max(point.progress_m - segment_start_progress, 0.0)
+        is_first = index == 0
+        is_last = index == len(elevated) - 1
+        due_by_distance = (
+            previous_sample_offset is None
+            or offset_m - previous_sample_offset >= sample_distance_m
+        )
+        if not (is_first or is_last or due_by_distance):
+            continue
+        slope_deg = _local_slope_deg(elevated, index)
+        samples.append(
+            TerrainProfileSample(
+                offset_m=round(offset_m, 2),
+                elevation_m=round(float(point.elevation_m), 2),
+                slope_deg=round(slope_deg, 2) if slope_deg is not None else None,
+                risk_score=risk_score,
+            )
+        )
+        previous_sample_offset = offset_m
+
+    return samples
+
+
+def _local_slope_deg(points, index: int) -> float | None:
+    if len(points) < 2:
+        return None
+    previous_index = max(index - 1, 0)
+    next_index = min(index + 1, len(points) - 1)
+    if previous_index == next_index:
+        return None
+    previous = points[previous_index]
+    current = points[index]
+    next_point = points[next_index]
+    left_distance = max(current.progress_m - previous.progress_m, 0.0)
+    right_distance = max(next_point.progress_m - current.progress_m, 0.0)
+    if right_distance > 0:
+        horizontal_m = right_distance
+        vertical_m = abs(float(next_point.elevation_m) - float(current.elevation_m))
+    elif left_distance > 0:
+        horizontal_m = left_distance
+        vertical_m = abs(float(current.elevation_m) - float(previous.elevation_m))
+    else:
+        return None
+    return math.degrees(math.atan(vertical_m / horizontal_m))
+
+
+def _terrain_profile_summary(samples: list[TerrainProfileSample]) -> TerrainProfileSummary:
+    elevations = [sample.elevation_m for sample in samples]
+    ascent = 0.0
+    descent = 0.0
+    for previous, current in zip(samples, samples[1:], strict=False):
+        delta = current.elevation_m - previous.elevation_m
+        if delta >= 0:
+            ascent += delta
+        else:
+            descent += abs(delta)
+    slopes = [sample.slope_deg for sample in samples if sample.slope_deg is not None]
+    slope_band_counts = {key: 0 for key in ("0_10", "10_20", "20_30", "30_40", "40_50", "50_plus")}
+    for slope in slopes:
+        slope_band_counts[_slope_band_key(slope)] += 1
+    max_slope = max(slopes) if slopes else None
+    mean_slope = sum(slopes) / len(slopes) if slopes else None
+    return TerrainProfileSummary(
+        min_elevation_m=round(min(elevations), 2),
+        max_elevation_m=round(max(elevations), 2),
+        ascent_m=round(ascent, 2),
+        descent_m=round(descent, 2),
+        max_slope_deg=round(max_slope, 2) if max_slope is not None else None,
+        mean_slope_deg=round(mean_slope, 2) if mean_slope is not None else None,
+        slope_band_counts=slope_band_counts,
+        terrain_difficulty_band=_terrain_difficulty_band(
+            max_slope_deg=max_slope,
+            ascent_m=ascent,
+            descent_m=descent,
+            distance_m=max(sample.offset_m for sample in samples),
+        ),
+    )
+
+
+def _slope_band_key(slope_deg: float) -> str:
+    if slope_deg < 10:
+        return "0_10"
+    if slope_deg < 20:
+        return "10_20"
+    if slope_deg < 30:
+        return "20_30"
+    if slope_deg < 40:
+        return "30_40"
+    if slope_deg < 50:
+        return "40_50"
+    return "50_plus"
+
+
+def _terrain_difficulty_band(
+    *,
+    max_slope_deg: float | None,
+    ascent_m: float,
+    descent_m: float,
+    distance_m: float,
+) -> str:
+    if max_slope_deg is None or distance_m <= 0:
+        return "unknown"
+    ascent_per_100m = ascent_m / distance_m * 100.0
+    descent_per_100m = descent_m / distance_m * 100.0
+    if max_slope_deg >= 50 or ascent_per_100m >= 30 or descent_per_100m >= 45:
+        return "severe"
+    if max_slope_deg >= 35 or ascent_per_100m >= 20 or descent_per_100m >= 30:
+        return "strained"
+    if max_slope_deg >= 20 or ascent_per_100m >= 10 or descent_per_100m >= 18:
+        return "watch"
+    return "normal"
+
+
+def _write_terrain_profile_svg(
+    path: Path,
+    *,
+    edge_id: str,
+    samples: list[TerrainProfileSample],
+    summary: TerrainProfileSummary,
+) -> None:
+    width = 220
+    height = 56
+    pad_x = 10
+    pad_top = 8
+    pad_bottom = 14
+    plot_w = width - pad_x * 2
+    plot_h = height - pad_top - pad_bottom
+    max_offset = max(sample.offset_m for sample in samples) or 1.0
+    min_ele = summary.min_elevation_m
+    max_ele = summary.max_elevation_m
+    ele_range = max(max_ele - min_ele, 1.0)
+
+    coords: list[tuple[float, float]] = []
+    for sample in samples:
+        x = pad_x + (sample.offset_m / max_offset) * plot_w
+        y = pad_top + (1.0 - ((sample.elevation_m - min_ele) / ele_range)) * plot_h
+        coords.append((x, y))
+
+    bands = []
+    for index, sample in enumerate(samples[1:], start=1):
+        previous_x = coords[index - 1][0]
+        current_x = coords[index][0]
+        band = _slope_band_key(sample.slope_deg or 0.0)
+        bands.append(
+            f'<rect x="{previous_x:.1f}" y="{pad_top}" width="{max(current_x - previous_x, 1):.1f}" '
+            f'height="{plot_h}" fill="{_slope_band_color(band)}" opacity="0.28"/>'
+        )
+
+    polyline = " ".join(f"{x:.1f},{y:.1f}" for x, y in coords)
+    label = _svg_text(edge_id[:34])
+    difficulty = _svg_text(summary.terrain_difficulty_band)
+    path.write_text(
+        "\n".join(
+            [
+                '<svg xmlns="http://www.w3.org/2000/svg" width="220" height="56" viewBox="0 0 220 56" role="img">',
+                f"<title>{label} terrain profile</title>",
+                '<rect x="0" y="0" width="220" height="56" fill="#171b20"/>',
+                *bands,
+                f'<polyline points="{polyline}" fill="none" stroke="#f4f7fb" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>',
+                f'<text x="10" y="52" fill="#9aa4b2" font-size="9">{difficulty}</text>',
+                f'<text x="210" y="52" text-anchor="end" fill="#9aa4b2" font-size="9">{min_ele:.0f}-{max_ele:.0f}m</text>',
+                "</svg>",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+
+def _slope_band_color(band: str) -> str:
+    return {
+        "0_10": "#9ee6a0",
+        "10_20": "#c6e86b",
+        "20_30": "#f2d84b",
+        "30_40": "#f6a044",
+        "40_50": "#e46e3f",
+        "50_plus": "#d84b4b",
+    }.get(band, "#6f7a85")
+
+
+def _extract_risk_score(risk_context: dict[str, Any]) -> float | None:
+    for key in ("risk_score", "risk_score_mean", "pretrip_risk_score", "risk"):
+        value = risk_context.get(key)
+        if isinstance(value, (int, float)):
+            return round(float(value), 4)
+    return None
+
+
+def _safe_artifact_name(value: str) -> str:
+    cleaned = re.sub(r"[^A-Za-z0-9_.-]+", "_", value.strip())
+    return cleaned.strip("._") or "terrain_profile"
+
+
+def _svg_text(value: str) -> str:
+    return (
+        value.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+    )
+
+
 def _duration_or_zero(start_offset: int | None, end_offset: int | None) -> int:
     if start_offset is None or end_offset is None:
         return 0
@@ -661,12 +929,26 @@ def _write_capability_csv(path: Path, timeline: dict[str, Any]) -> None:
         "distance_m",
         "ascent_m",
         "descent_m",
+        "terrain_difficulty_band",
         "confidence",
     ]
     rows = [",".join(headers)]
     for edge in timeline.get("edges", []):
-        rows.append(",".join(_csv_cell(edge.get(header)) for header in headers))
+        rows.append(
+            ",".join(
+                _csv_cell(_capability_csv_value(edge, header))
+                for header in headers
+            )
+        )
     path.write_text("\n".join(rows) + "\n", encoding="utf-8")
+
+
+def _capability_csv_value(edge: dict[str, Any], header: str) -> Any:
+    if header == "terrain_difficulty_band":
+        return (edge.get("terrain_profile") or {}).get("summary", {}).get(
+            "terrain_difficulty_band"
+        )
+    return edge.get(header)
 
 
 def _csv_cell(value: Any) -> str:

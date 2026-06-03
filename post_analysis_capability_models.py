@@ -53,6 +53,38 @@ class RestInterval(BaseModel):
     source_refs: list[str]
 
 
+class TerrainProfileSample(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    offset_m: float
+    elevation_m: float
+    slope_deg: float | None = None
+    risk_score: float | None = None
+
+
+class TerrainProfileSummary(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    min_elevation_m: float
+    max_elevation_m: float
+    ascent_m: float
+    descent_m: float
+    max_slope_deg: float | None = None
+    mean_slope_deg: float | None = None
+    slope_band_counts: dict[str, int] = Field(default_factory=dict)
+    terrain_difficulty_band: str
+
+
+class SegmentTerrainProfile(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    source: str
+    sample_distance_m: float
+    profile_svg_ref: str
+    samples: list[TerrainProfileSample]
+    summary: TerrainProfileSummary
+
+
 class CapabilityEdge(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -73,6 +105,7 @@ class CapabilityEdge(BaseModel):
     limitations: list[str] = Field(default_factory=list)
     terrain_context: dict[str, Any] = Field(default_factory=dict)
     risk_context: dict[str, Any] = Field(default_factory=dict)
+    terrain_profile: SegmentTerrainProfile | None = None
     guide_time_min: int | None = None
 
 

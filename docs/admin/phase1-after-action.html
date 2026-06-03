@@ -480,6 +480,40 @@
       image-rendering: auto;
     }
 
+    .terrain-raster-overlay {
+      opacity: .86;
+      image-rendering: auto;
+      mix-blend-mode: multiply;
+    }
+
+    .overpass-corridor {
+      fill: none;
+      stroke: var(--overpass);
+      stroke-width: 1.4;
+      opacity: .64;
+      cursor: pointer;
+      pointer-events: stroke;
+      vector-effect: non-scaling-stroke;
+    }
+
+    .overpass-hazard {
+      fill: rgba(214, 93, 93, 0.18);
+      stroke: var(--overpass);
+      stroke-width: 1.3;
+      opacity: .68;
+      cursor: pointer;
+      vector-effect: non-scaling-stroke;
+    }
+
+    .overpass-poi {
+      fill: var(--overpass);
+      stroke: #06271f;
+      stroke-width: 1.1;
+      opacity: .78;
+      cursor: pointer;
+      vector-effect: non-scaling-stroke;
+    }
+
     .osm-attribution {
       fill: var(--muted);
       font-size: 11px;
@@ -755,6 +789,12 @@
       cursor: pointer;
     }
 
+    .tree-label {
+      display: block;
+      font-weight: 650;
+      overflow-wrap: anywhere;
+    }
+
     .tree button:hover {
       background: color-mix(in srgb, var(--category-color, #171b20) 18%, #171b20);
     }
@@ -774,6 +814,35 @@
       display: block;
       color: var(--muted);
       margin-top: 4px;
+    }
+
+    .tree-profile-preview {
+      display: grid;
+      gap: 4px;
+      margin-top: 7px;
+    }
+
+    .tree-profile-thumb {
+      display: block;
+      width: 100%;
+      height: 34px;
+      border: 1px solid rgba(255, 255, 255, 0.09);
+      border-radius: 4px;
+      background: #101318;
+    }
+
+    .tree-profile-thumb polyline {
+      vector-effect: non-scaling-stroke;
+    }
+
+    .tree-profile-stats {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      color: #f4f7fb;
+      font-size: 11px;
+      font-weight: 650;
+      line-height: 1.25;
     }
 
     .source {
@@ -911,6 +980,27 @@
     .capability-svg text {
       font-size: 11px;
       fill: var(--muted);
+    }
+
+    .capability-terrain-profile {
+      min-height: 76px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px;
+      background: #171b20;
+      color: var(--muted);
+      font-size: 12px;
+      overflow: hidden;
+    }
+
+    .capability-terrain-profile svg {
+      display: block;
+      width: 100%;
+      height: 64px;
+    }
+
+    .capability-terrain-profile strong {
+      color: var(--text);
     }
 
     .capability-node {
@@ -1367,6 +1457,7 @@
             <span id="capabilityConfidence">confidence -</span>
           </div>
           <div id="capabilityMetrics" class="capability-metrics"></div>
+          <div id="capabilityTerrainProfile" class="capability-terrain-profile">Select a capability segment to inspect terrain profile evidence.</div>
           <svg id="capabilityTimelineSvg" class="capability-svg" viewBox="0 0 720 170" role="img" aria-label="Capability Timeline SVG"></svg>
           <ul id="capabilitySegments" class="capability-list"></ul>
           <ul id="capabilitySourceRefs" class="capability-list"></ul>
@@ -1661,6 +1752,19 @@
         return `${index === 0 ? "M" : "L"}${x.toFixed(2)},${y.toFixed(2)}`;
       }).join(" ");
     }
+    function coordinateSegments(displayGeometry, fallbackCoords = []) {
+      const segments = displayGeometry?.coordinate_segments || [];
+      const usableSegments = segments.filter(segment => Array.isArray(segment) && segment.length >= 2);
+      if (usableSegments.length) return usableSegments;
+      return fallbackCoords.length >= 2 ? [fallbackCoords] : [];
+    }
+    function pathFromCoordSegments(bounds, segments) {
+      return (segments || [])
+        .filter(segment => Array.isArray(segment) && segment.length >= 2)
+        .map(segment => pathFromCoords(bounds, segment))
+        .filter(Boolean)
+        .join(" ");
+    }
 
     function clamp(value, min, max) {
       return Math.max(min, Math.min(max, value));
@@ -1784,6 +1888,46 @@
       group.appendChild(el("text", {x: width - 10, y: height - 10, "text-anchor": "end", class: "osm-attribution"}, OSM_ATTRIBUTION));
     }
 
+    function terrainVisualization(view) {
+      return view?.terrain_visualization || {};
+    }
+    function terrainRasterOverlays(view) {
+      return (terrainVisualization(view).raster_overlays || [])
+        .filter(overlay => overlay?.runtime_href && normalizeRasterBounds(overlay.bbox_wgs84));
+    }
+    function renderTerrainBitmapOverlays(group, view, bounds) {
+      terrainRasterOverlays(view)
+        .filter(overlay => overlay.default_visible && boundsIntersect(bounds, normalizeRasterBounds(overlay.bbox_wgs84)))
+        .forEach(overlay => {
+          const overlayBounds = normalizeRasterBounds(overlay.bbox_wgs84);
+          const [x1, y1] = project(bounds, overlayBounds.north, overlayBounds.west);
+          const [x2, y2] = project(bounds, overlayBounds.south, overlayBounds.east);
+          const image = el("image", {
+            href: rasterTileCacheBustedUrl(apiUrlTemplate(overlay.runtime_href)),
+            x: Math.min(x1, x2).toFixed(2),
+            y: Math.min(y1, y2).toFixed(2),
+            width: Math.abs(x2 - x1).toFixed(2),
+            height: Math.abs(y2 - y1).toFixed(2),
+            class: "terrain-raster-overlay",
+            opacity: overlay.opacity ?? 0.86,
+            preserveAspectRatio: "none",
+            "data-terrain-overlay-mode": overlay.mode || overlay.overlay_id || "",
+            "data-terrain-cell-resolution-m": overlay.cell_resolution_m ?? "",
+            "data-terrain-corridor-half-width-m": overlay.corridor_half_width_m ?? "",
+            "data-terrain-sha256": overlay.sha256 || ""
+          });
+          attachEvidence(image, {
+            ...overlay,
+            evidence_type: "pretrip_terrain_visualization_bitmap_overlay",
+            label: `${overlay.mode || "terrain"} bitmap overlay`,
+            terrain_visualization_layer: true,
+            risk_heat_layer: false,
+            runtime_safety_truth: false
+          });
+          group.appendChild(image);
+        });
+    }
+
     function renderWeatherOverlayPlaceholder(group, width, height) {
       group.appendChild(el("rect", {x: 14, y: 14, width: width - 28, height: height - 28, rx: 10, class: "weather-api-frame"}));
       const x = width - 326;
@@ -1805,6 +1949,34 @@
         });
       });
       return b;
+    }
+
+    function renderOverpassEvidence(group, view, bounds) {
+      (view.overpass_evidence?.corridor_candidates || []).forEach(candidate => {
+        const coordinates = candidate.corridor?.coordinates || [];
+        if (coordinates.length < 2) return;
+        const path = el("path", {d: pathFromCoords(bounds, coordinates), class: "overpass-corridor"});
+        attachEvidence(path, candidate);
+        tagEvidenceNode(path, candidate, "overpass");
+        group.appendChild(path);
+      });
+      (view.overpass_evidence?.hazard_candidates || []).forEach(candidate => {
+        const polygon = candidate.hazard?.polygon || [];
+        if (polygon.length < 3) return;
+        const path = el("path", {d: `${pathFromCoords(bounds, polygon)} Z`, class: "overpass-hazard"});
+        attachEvidence(path, candidate);
+        tagEvidenceNode(path, candidate, "overpass");
+        group.appendChild(path);
+      });
+      (view.overpass_evidence?.poi_candidates || []).forEach(candidate => {
+        const coordinate = candidate.poi?.coordinate;
+        if (!coordinate) return;
+        const [x, y] = project(bounds, coordinate.lat, coordinate.lon);
+        const circle = el("circle", {cx: x, cy: y, r: 5, class: "overpass-poi"});
+        attachEvidence(circle, candidate);
+        tagEvidenceNode(circle, candidate, "overpass");
+        group.appendChild(circle);
+      });
     }
 
     function setDetail(item) {
@@ -2037,6 +2209,155 @@
         .find(segment => segment.edge_id === edge?.edge_id || segment.segment_id === edge?.segment_id) || null;
     }
 
+    function capabilitySlopeBandColor(slopeDeg) {
+      if (slopeDeg >= 50) return "#d84b4b";
+      if (slopeDeg >= 40) return "#e46e3f";
+      if (slopeDeg >= 30) return "#f6a044";
+      if (slopeDeg >= 20) return "#f2d84b";
+      if (slopeDeg >= 10) return "#c6e86b";
+      return "#9ee6a0";
+    }
+
+    function capabilityProfileThumbnailSamples(samples, maxCount = 48) {
+      if (samples.length <= maxCount) return samples;
+      const compact = [];
+      const lastIndex = samples.length - 1;
+      for (let index = 0; index < maxCount; index += 1) {
+        compact.push(samples[Math.round((index / (maxCount - 1)) * lastIndex)]);
+      }
+      return compact;
+    }
+
+    function createCapabilityTerrainProfileThumbnail(edge) {
+      const profile = edge?.terrain_profile || null;
+      const samples = profile?.samples || [];
+      if (samples.length < 2) return null;
+      const summary = profile.summary || {};
+      const compactSamples = capabilityProfileThumbnailSamples(samples);
+      const width = 180;
+      const height = 34;
+      const padX = 5;
+      const padY = 4;
+      const plotW = width - padX * 2;
+      const plotH = height - padY * 2;
+      const maxOffset = Math.max(...compactSamples.map(sample => Number(sample.offset_m) || 0), 1);
+      const elevations = samples.map(sample => Number(sample.elevation_m)).filter(Number.isFinite);
+      const minEle = Number.isFinite(summary.min_elevation_m) ? Number(summary.min_elevation_m) : Math.min(...elevations);
+      const maxEle = Number.isFinite(summary.max_elevation_m) ? Number(summary.max_elevation_m) : Math.max(...elevations);
+      const eleRange = Math.max(maxEle - minEle, 1);
+      const coords = compactSamples.map(sample => {
+        const x = padX + ((Number(sample.offset_m) || 0) / maxOffset) * plotW;
+        const y = padY + (1 - (((Number(sample.elevation_m) || minEle) - minEle) / eleRange)) * plotH;
+        return [x, y];
+      });
+      const svg = el("svg", {
+        viewBox: `0 0 ${width} ${height}`,
+        class: "tree-profile-thumb",
+        role: "img",
+        "aria-label": `${edge.edge_id || "capability segment"} terrain profile thumbnail`
+      });
+      svg.appendChild(el("rect", {x: 0, y: 0, width, height, fill: "#101318"}));
+      compactSamples.slice(1).forEach((sample, index) => {
+        const [prevX] = coords[index];
+        const [currentX] = coords[index + 1];
+        svg.appendChild(el("rect", {
+          x: prevX.toFixed(1),
+          y: padY,
+          width: Math.max(currentX - prevX, 1).toFixed(1),
+          height: plotH,
+          fill: capabilitySlopeBandColor(Number(sample.slope_deg) || 0),
+          opacity: "0.34"
+        }));
+      });
+      svg.appendChild(el("polyline", {
+        points: coords.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" "),
+        fill: "none",
+        stroke: "#f4f7fb",
+        "stroke-width": 1.8,
+        "stroke-linejoin": "round",
+        "stroke-linecap": "round"
+      }));
+      const wrapper = document.createElement("div");
+      wrapper.className = "tree-profile-preview";
+      wrapper.appendChild(svg);
+      const stats = document.createElement("div");
+      stats.className = "tree-profile-stats";
+      const ascent = document.createElement("span");
+      ascent.textContent = `ascent ${formatOneDecimal(summary.ascent_m, "m")}`;
+      const descent = document.createElement("span");
+      descent.textContent = `descent ${formatOneDecimal(summary.descent_m, "m")}`;
+      stats.appendChild(ascent);
+      stats.appendChild(descent);
+      wrapper.appendChild(stats);
+      return wrapper;
+    }
+
+    function renderCapabilityTerrainProfile(edge) {
+      const container = document.getElementById("capabilityTerrainProfile");
+      container.replaceChildren();
+      if (!edge) {
+        container.textContent = "Select a capability segment to inspect terrain profile evidence.";
+        return;
+      }
+      const profile = edge.terrain_profile || null;
+      const samples = profile?.samples || [];
+      if (samples.length < 2) {
+        container.textContent = "No terrain profile evidence for this segment.";
+        return;
+      }
+      const summary = profile.summary || {};
+      const label = document.createElement("div");
+      const labelTitle = document.createElement("strong");
+      labelTitle.textContent = "Terrain profile";
+      label.appendChild(labelTitle);
+      label.appendChild(document.createTextNode(` | ${summary.terrain_difficulty_band || "unknown"} | ${formatOneDecimal(summary.min_elevation_m, "m")} - ${formatOneDecimal(summary.max_elevation_m, "m")} | ${profile.profile_svg_ref || "inline"}`));
+      container.appendChild(label);
+
+      const width = 220;
+      const height = 64;
+      const padX = 10;
+      const padTop = 8;
+      const padBottom = 16;
+      const plotW = width - padX * 2;
+      const plotH = height - padTop - padBottom;
+      const maxOffset = Math.max(...samples.map(sample => Number(sample.offset_m) || 0), 1);
+      const elevations = samples.map(sample => Number(sample.elevation_m)).filter(Number.isFinite);
+      const minEle = Number.isFinite(summary.min_elevation_m) ? Number(summary.min_elevation_m) : Math.min(...elevations);
+      const maxEle = Number.isFinite(summary.max_elevation_m) ? Number(summary.max_elevation_m) : Math.max(...elevations);
+      const eleRange = Math.max(maxEle - minEle, 1);
+      const coords = samples.map(sample => {
+        const x = padX + ((Number(sample.offset_m) || 0) / maxOffset) * plotW;
+        const y = padTop + (1 - (((Number(sample.elevation_m) || minEle) - minEle) / eleRange)) * plotH;
+        return [x, y];
+      });
+
+      const svg = el("svg", {viewBox: "0 0 220 64", role: "img", "aria-label": "Segment terrain profile"});
+      svg.appendChild(el("rect", {x: 0, y: 0, width, height, fill: "#171b20"}));
+      samples.slice(1).forEach((sample, index) => {
+        const [prevX] = coords[index];
+        const [currentX] = coords[index + 1];
+        svg.appendChild(el("rect", {
+          x: prevX.toFixed(1),
+          y: padTop,
+          width: Math.max(currentX - prevX, 1).toFixed(1),
+          height: plotH,
+          fill: capabilitySlopeBandColor(Number(sample.slope_deg) || 0),
+          opacity: "0.28"
+        }));
+      });
+      svg.appendChild(el("polyline", {
+        points: coords.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" "),
+        fill: "none",
+        stroke: "#f4f7fb",
+        "stroke-width": 2,
+        "stroke-linejoin": "round",
+        "stroke-linecap": "round"
+      }));
+      svg.appendChild(el("text", {x: 10, y: 58}, `ascent ${formatOneDecimal(summary.ascent_m, "m")}`));
+      svg.appendChild(el("text", {x: 210, y: 58, "text-anchor": "end"}, `descent ${formatOneDecimal(summary.descent_m, "m")}`));
+      container.appendChild(svg);
+    }
+
     function renderCapabilityTimelineSvg(artifact, selectedEdge) {
       const node = document.getElementById("capabilityTimelineSvg");
       node.replaceChildren();
@@ -2134,11 +2455,13 @@
       const segments = document.getElementById("capabilitySegments");
       const sourceRefs = document.getElementById("capabilitySourceRefs");
       const svgNode = document.getElementById("capabilityTimelineSvg");
+      const terrainProfileNode = document.getElementById("capabilityTerrainProfile");
       const sharePreview = document.getElementById("capabilitySharePreview");
       metrics.replaceChildren();
       segments.replaceChildren();
       sourceRefs.replaceChildren();
       svgNode.replaceChildren();
+      terrainProfileNode.replaceChildren();
       sharePreview.replaceChildren();
       const artifact = capabilityArtifactForSelection(item);
       if (!artifact) {
@@ -2155,6 +2478,7 @@
       document.getElementById("capabilityConfidence").textContent = edge
         ? `confidence ${edge.confidence || "-"}`
         : `confidence ${capsule.confidence || "-"}`;
+      const profileEdge = edge || (artifact.edges || [])[0] || null;
 
       const metricRows = edge ? [
         ["Moving", formatNumber(edge.moving_time_s, "s")],
@@ -2172,6 +2496,7 @@
         ["Moving ratio", summary.moving_ratio === undefined ? "-" : String(summary.moving_ratio)]
       ];
       metricRows.forEach(([label, value]) => metrics.appendChild(capabilityMetric(label, value)));
+      renderCapabilityTerrainProfile(profileEdge);
       renderCapabilityTimelineSvg(artifact, edge);
       renderCapabilitySharePreview(artifact);
 
@@ -2180,7 +2505,7 @@
         appendCapabilityListItem(
           segments,
           edge.edge_id || "selected capability segment",
-          `${formatNumber(edge.moving_time_s, "s")} moving | ${formatNumber(edge.elapsed_time_s, "s")} elapsed | ${formatNumber(edge.rest_time_s, "s")} rest`
+          `${formatNumber(edge.moving_time_s, "s")} moving | ${formatNumber(edge.elapsed_time_s, "s")} elapsed | ${formatNumber(edge.rest_time_s, "s")} rest | terrain ${edge.terrain_profile?.summary?.terrain_difficulty_band || "unknown"}`
         );
         if (comparison) {
           appendCapabilityListItem(
@@ -2195,7 +2520,7 @@
           appendCapabilityListItem(
             segments,
             capabilityEdge.edge_id,
-            `${capabilityEdge.from_node_id} -> ${capabilityEdge.to_node_id} | ${formatNumber(capabilityEdge.moving_time_s, "s")} moving | ${formatNumber(capabilityEdge.rest_time_s, "s")} rest${comparison ? ` | guide delta ${comparison.delta_vs_guide_moving_min}m` : ""}`
+            `${capabilityEdge.from_node_id} -> ${capabilityEdge.to_node_id} | ${formatNumber(capabilityEdge.moving_time_s, "s")} moving | ${formatNumber(capabilityEdge.rest_time_s, "s")} rest | terrain ${capabilityEdge.terrain_profile?.summary?.terrain_difficulty_band || "unknown"}${comparison ? ` | guide delta ${comparison.delta_vs_guide_moving_min}m` : ""}`
           );
         });
       }
@@ -2984,6 +3309,7 @@
       svg.appendChild(imageryGroup);
 
       const terrainGroup = el("g", {"data-layer-group": "terrain"});
+      renderTerrainBitmapOverlays(terrainGroup, view, bounds);
       svg.appendChild(terrainGroup);
 
       const corridorGroup = el("g", {"data-layer-group": "corridors"});
@@ -2997,6 +3323,7 @@
       svg.appendChild(corridorGroup);
 
       const overpassGroup = el("g", {"data-layer-group": "overpass"});
+      renderOverpassEvidence(overpassGroup, view, bounds);
       svg.appendChild(overpassGroup);
 
       const hazardGroup = el("g", {"data-layer-group": "hazards"});
@@ -3010,9 +3337,15 @@
 
       const referenceGroup = el("g", {"data-layer-group": "reference-tracks"});
       (view.reference_tracks?.reference_tracks || []).forEach(track => {
-        const coords = track.display_geometry?.coordinates || [];
-        if (coords.length < 2) return;
-        const path = el("path", {d: pathFromCoords(bounds, coords), class: "reference-track"});
+        const segments = coordinateSegments(
+          track.display_geometry,
+          track.display_geometry?.coordinates || []
+        );
+        if (!segments.length) return;
+        const path = el("path", {
+          d: pathFromCoordSegments(bounds, segments),
+          class: "reference-track"
+        });
         attachEvidence(path, track);
         tagEvidenceNode(path, track, "reference-track");
         referenceGroup.appendChild(path);
@@ -3208,18 +3541,25 @@
       applyMapViewport();
     }
 
-    function treeButton(item, label, sublabel = "") {
+    function treeButton(item, mapped, sublabel = "") {
+      const label = typeof mapped === "object" && mapped !== null ? mapped.label : mapped;
+      const resolvedSublabel = typeof mapped === "object" && mapped !== null ? mapped.sublabel : sublabel;
+      const thumbnail = typeof mapped === "object" && mapped !== null ? mapped.thumbnail : null;
       const button = document.createElement("button");
       button.type = "button";
       button.style.setProperty("--category-color", categoryColor(evidenceCategory(item)));
       button.dataset.treeSourceId = evidenceSourceId(item);
       button.dataset.treeCategory = evidenceCategory(item);
-      button.textContent = label;
-      if (sublabel) {
+      const labelNode = document.createElement("span");
+      labelNode.className = "tree-label";
+      labelNode.textContent = label;
+      button.appendChild(labelNode);
+      if (resolvedSublabel) {
         const small = document.createElement("small");
-        small.textContent = sublabel;
+        small.textContent = resolvedSublabel;
         button.appendChild(small);
       }
+      if (thumbnail) button.appendChild(thumbnail);
       button.addEventListener("click", () => {
         selectEvidence(item);
         focusMapFor(item);
@@ -3242,7 +3582,7 @@
       group.className = "tree-group";
       items.forEach(item => {
         const mapped = mapper(item);
-        group.appendChild(treeButton(item, mapped.label, mapped.sublabel));
+        group.appendChild(treeButton(item, mapped));
       });
       details.appendChild(summary);
       details.appendChild(group);
@@ -3279,7 +3619,8 @@
         }), false, "timeline"));
         tree.appendChild(treeGroup("Capability Segments", view.capability_timeline.edges || [], item => ({
           label: item.edge_id,
-          sublabel: `${formatNumber(item.moving_time_s, "s")} moving | ${formatNumber(item.elapsed_time_s, "s")} elapsed | ${item.confidence}`
+          sublabel: `${formatNumber(item.moving_time_s, "s")} moving | ${formatNumber(item.elapsed_time_s, "s")} elapsed | ${item.confidence}`,
+          thumbnail: createCapabilityTerrainProfileThumbnail(item)
         }), false, "timeline"));
       }
       tree.appendChild(treeGroup("Major Critical Points", view.major_critical_points?.candidates || [], item => ({
@@ -3495,6 +3836,7 @@
         const group = svg.querySelector(`[data-layer-group="${input.dataset.layer}"]`);
         if (!group) return;
         group.classList.toggle("is-hidden", !input.checked);
+        group.setAttribute("data-layer-hidden", input.checked ? "false" : "true");
       });
       const summary = document.getElementById("layerEnabledCount");
       if (summary) {

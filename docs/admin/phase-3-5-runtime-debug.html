@@ -880,6 +880,17 @@
       opacity: .86;
       vector-effect: non-scaling-stroke;
     }
+    .mcp-candidate {
+      fill: var(--mcp);
+      stroke: #fff;
+      stroke-width: 2.2;
+      opacity: .94;
+      vector-effect: non-scaling-stroke;
+    }
+    .mcp-candidate.is-review-required {
+      stroke: var(--warning);
+      stroke-width: 3;
+    }
     .poi,
     .overpass-poi {
       fill: var(--poi);
@@ -2023,6 +2034,19 @@
         return `${index === 0 ? "M" : "L"}${x.toFixed(2)},${y.toFixed(2)}`;
       }).join(" ");
     }
+    function coordinateSegments(displayGeometry, fallbackCoords = []) {
+      const segments = displayGeometry?.coordinate_segments || [];
+      const usableSegments = segments.filter(segment => Array.isArray(segment) && segment.length >= 2);
+      if (usableSegments.length) return usableSegments;
+      return fallbackCoords.length >= 2 ? [fallbackCoords] : [];
+    }
+    function pathFromCoordSegments(bounds, segments) {
+      return (segments || [])
+        .filter(segment => Array.isArray(segment) && segment.length >= 2)
+        .map(segment => pathFromCoords(bounds, segment))
+        .filter(Boolean)
+        .join(" ");
+    }
 
     function clamp(value, min, max) {
       return Math.max(min, Math.min(max, value));
@@ -2326,9 +2350,15 @@
 
       const referenceGroup = svgEl("g", {"data-layer-group": "reference-tracks"});
       (projection.reference_tracks?.reference_tracks || []).forEach(track => {
-        const coords = track.display_geometry?.coordinates || [];
-        if (coords.length < 2) return;
-        const path = svgEl("path", {d: pathFromCoords(bounds, coords), class: "reference-track"});
+        const segments = coordinateSegments(
+          track.display_geometry,
+          track.display_geometry?.coordinates || []
+        );
+        if (!segments.length) return;
+        const path = svgEl("path", {
+          d: pathFromCoordSegments(bounds, segments),
+          class: "reference-track"
+        });
         attachMapEvidence(path, track, `reference-tracks ${track.source_id || track.artifact_id || ""}`);
         referenceGroup.appendChild(path);
       });
@@ -2338,7 +2368,13 @@
       const routeCoords = projection.route.display_geometry?.coordinates?.length
         ? projection.route.display_geometry.coordinates
         : projection.route.polyline;
-      const routePath = svgEl("path", {d: pathFromCoords(bounds, routeCoords), class: "route-line"});
+      const routePath = svgEl("path", {
+        d: pathFromCoordSegments(
+          bounds,
+          coordinateSegments(projection.route.display_geometry, routeCoords)
+        ),
+        class: "route-line"
+      });
       attachMapEvidence(routePath, projection.route, "route route-progress");
       routeGroup.appendChild(routePath);
       runtimeMap.appendChild(routeGroup);
@@ -2401,9 +2437,15 @@
 
       const segmentGroup = svgEl("g", {"data-layer-group": "segments"});
       (projection.segments || []).forEach(segment => {
-        const coords = segment.display_geometry?.coordinates || [];
-        if (coords.length < 2) return;
-        const path = svgEl("path", {d: pathFromCoords(bounds, coords), class: "segment-overlay"});
+        const segments = coordinateSegments(
+          segment.display_geometry,
+          segment.display_geometry?.coordinates || []
+        );
+        if (!segments.length) return;
+        const path = svgEl("path", {
+          d: pathFromCoordSegments(bounds, segments),
+          class: "segment-overlay"
+        });
         attachMapEvidence(path, segment, `route-progress segment ${segment.candidate_id}`);
         segmentGroup.appendChild(path);
       });
@@ -2457,7 +2499,20 @@
       runtimeMap.appendChild(hazardGroup);
 
       runtimeMap.appendChild(svgEl("g", {"data-layer-group": "retreat"}));
-      runtimeMap.appendChild(svgEl("g", {"data-layer-group": "mcp"}));
+
+      const mcpGroup = svgEl("g", {"data-layer-group": "mcp"});
+      (projection.major_critical_points?.candidates || []).forEach(candidate => {
+        if (!Number.isFinite(Number(candidate.lat)) || !Number.isFinite(Number(candidate.lon))) return;
+        const [x, y] = projectPoint(bounds, candidate.lat, candidate.lon);
+        const className = candidate.review_state === "suggested_insertion_review_required"
+          ? "mcp-candidate is-review-required"
+          : "mcp-candidate";
+        const circle = svgEl("circle", {cx: x, cy: y, r: 6.5, class: className});
+        attachMapEvidence(circle, candidate, `mcp ${candidate.source_id || candidate.mcp_id || ""}`);
+        mcpGroup.appendChild(circle);
+      });
+      runtimeMap.appendChild(mcpGroup);
+
       runtimeMap.appendChild(svgEl("g", {"data-layer-group": "route-notes"}));
       runtimeMap.appendChild(svgEl("g", {"data-layer-group": "events"}));
       runtimeMap.appendChild(svgEl("g", {"data-layer-group": "weather-api"}));

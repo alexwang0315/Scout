@@ -7,6 +7,12 @@ a **Capability Timeline**（能力時間軸） similar in spirit to a Sunriver-s
 route-time diagram（上河式步程圖）, but grounded in the user's actual completed
 track and Scout evidence.
 
+The full product loop is defined in
+`docs/specs/scout-closed-loop-operating-cycle.md`. This spec owns the
+completed-trip analysis portion of that loop: user recorded track ingestion,
+moving/rest/elapsed timeline generation, privacy capsule output, and evidence
+handoff to Energy Reserve and future pretrip planning.
+
 User-facing guides（一般使用者說明）:
 `docs/admin/post-analysis-capability-timeline-user-guide.html`
 and `docs/admin/post-analysis-capability-timeline-user-guide.md`
@@ -37,13 +43,16 @@ treat guidebook route times as user capability.
 1. This feature runs only after a safe return, in post-analysis. It is not a
    pretrip estimator and not a Phase 1 runtime safety decision.
 2. The actual walked track exists after the climb, either from Scout runtime
-   capture or a user-imported GPX.
+   capture or a user-imported GPX recorded by the user during that trip.
 3. The completed track can be matched to reviewed checkpoints and segments from
    the pretrip project or the final MissionGraph.
 4. The first implementation can use deterministic rest detection rules before
    adding model-assisted classification.
 5. Any sharing feature is opt-in and exports coarse capability summaries, not
    raw route traces.
+6. Public/reference/golden GPX files used during pretrip planning are not
+   capability evidence. They may define route geometry, checkpoints, or guide
+   comparisons, but they must not be treated as the user's completed capability.
 
 ## Role in Scout Phases
 
@@ -65,7 +74,9 @@ and after-action evidence.
 Post-analysis owns the completed-run interpretation:
 
 ```text
-completed track
+Scout completed trip record
+  -> user recorded GPX or Scout runtime track
+  -> optional IMU/PDR logs and sealed route observations
   -> checkpoint/segment matching
   -> rest detection
   -> moving-time measurement
@@ -73,20 +84,87 @@ completed track
   -> optional privacy-preserving share capsule
 ```
 
+### Generation Timing and Source Boundary
+
+Capability Timeline generation is tied to a completed trip workspace, not to
+pretrip route import.
+
+Primary production source:
+
+- Scout-internal completed trip record;
+- user recorded GPX captured during the trip, or a Scout runtime track exported
+  after the trip;
+- checkpoint hits, segment capsules, route observations, and optional IMU/PDR
+  logs stored with that completed trip.
+
+Supporting sources:
+
+- reviewed checkpoints and segments from the pretrip project or final
+  MissionGraph;
+- route-guide time entries for comparison only;
+- terrain/risk context as post-analysis evidence context only.
+
+Non-sources for capability measurement:
+
+- public/downloaded reference GPX used during pretrip planning;
+- golden route GPX used to define the intended route;
+- OSM/Overpass geometry;
+- route-guide timing tables;
+- MCP/CP candidate geometry.
+
+When a completed trip workspace is opened, Scout should inspect whether the
+workspace contains a user recorded GPX or Scout runtime track plus matching
+checkpoint/segment definitions:
+
+- if no completed track exists: show `Capability Timeline: no completed user
+  track`;
+- if the completed track exists and no artifact exists: show `ready to
+  generate`;
+- if the completed track, IMU/PDR logs, checkpoint definitions, or segment
+  evidence are newer than the artifact: show `stale, refresh recommended`;
+- if the artifact exists and is current: show it as read-only post-analysis
+  evidence.
+
+Generation may be operator-triggered from `/admin` or automatically queued as a
+clearly logged post-analysis job after trip close. It must not run silently from
+a pretrip importer. It must not be generated from public/reference/golden GPX
+unless the fixture or test explicitly labels that GPX as a stand-in completed
+track.
+
 ### Phase 4 Feedback Loop
 
-Capability results may seed future pretrip planning, but only as reviewed
-planning evidence:
+Capability results may seed Energy Reserve and future pretrip planning, but
+only as reviewed planning evidence:
 
 ```text
-capability capsule
+completed user track
+  -> capability timeline
+  -> Energy Reserve / Energy Limit feedback
+  -> updated personal endurance baseline or limit candidate
   -> future pretrip pacing reference
+  -> proposed rest/check-in/energy-aware CP candidates
   -> human review
   -> planning ETA calibration
 ```
 
-They must not automatically approve a route, recruit partners, or guarantee
-team safety.
+The Energy Reserve link is one-way and evidence-only:
+
+- Capability Timeline can update or adjust the user's baseline-relative
+  endurance profile after a completed trip.
+- Energy Limit can describe the conservative planning constraints inferred from
+  that profile, such as shorter segment targets, earlier turnaround gates, or
+  denser rest/check-in points for the next plan.
+- Energy Reserve can explain whether the completed trip was easier/harder than
+  expected, where fatigue/rest patterns emerged, and whether the next plan
+  should include denser rest/check-in points.
+- The next pretrip workspace may use this as a source for proposed CP
+  adjustments such as rest-area candidates, earlier turnaround check gates,
+  additional water/camp stop emphasis, or wider spacing relaxation for users
+  whose baseline supports it.
+
+They must not automatically approve a route, recruit partners, guarantee team
+safety, or directly rewrite future MissionGraph checkpoints. Any CP or ETA
+change remains candidate-only until reviewed.
 
 ## Core Concepts
 
@@ -144,6 +222,30 @@ moving_time = elapsed_time - rest_time
 Moving time is a better capability signal than elapsed time because rest time is
 affected by meal breaks, weather, photography, water filtering, team waiting,
 and safety checks.
+
+### Segment Terrain Profile（區段地形剖面圖）
+
+Each checkpoint-to-checkpoint edge should be able to carry a small terrain
+profile preview. The profile is a compact post-analysis evidence view, not a
+runtime safety truth. It answers:
+
+```text
+How steep, sustained, and exposed was this segment compared with the time spent?
+```
+
+The first implementation can generate a small SVG sparkline per segment:
+
+- x-axis: distance along the segment;
+- y-axis: elevation in meters;
+- background bands: slope class or route risk bucket when available;
+- annotations: major climbs, descents, rests, daylight/night portions, and weak
+  data sections;
+- source: completed user track elevation when reliable, otherwise DEM/DTM
+  sampled along the completed track or reviewed route corridor.
+
+The profile should be stored as a generated artifact reference plus a small
+decimated sample summary. Do not embed raw DEM/DTM rasters or full-resolution
+GPX samples in the shareable timeline artifact.
 
 ### Capability Capsule（能力膠囊）
 
@@ -219,6 +321,40 @@ Example:
       "moving_time_s": 10800,
       "rest_time_s": 1800,
       "rest_intervals": ["rest.001", "rest.002"],
+      "terrain_profile": {
+        "source": "dem_dtm+completed_track",
+        "sample_distance_m": 20,
+        "profile_svg_ref": "outputs/terrain_profiles/cp.yunhai_to_cp.tianchi.svg",
+        "samples": [
+          {
+            "offset_m": 0,
+            "elevation_m": 2200,
+            "slope_deg": 4.2,
+            "risk_score": 0.18
+          },
+          {
+            "offset_m": 20,
+            "elevation_m": 2204,
+            "slope_deg": 9.5,
+            "risk_score": 0.21
+          }
+        ],
+        "summary": {
+          "min_elevation_m": 2200,
+          "max_elevation_m": 2920,
+          "ascent_m": 820,
+          "descent_m": 60,
+          "slope_band_counts": {
+            "0_10": 12,
+            "10_20": 80,
+          "20_30": 40,
+          "30_40": 12,
+          "40_50": 2,
+          "50_plus": 0
+        },
+          "terrain_difficulty_band": "strained"
+        }
+      },
       "confidence": "medium",
       "source_refs": ["segment_capsule.seg.012", "track_slice.012"]
     }
@@ -287,6 +423,8 @@ The first visual can be SVG:
 ```text
 [CP A] -- 180m moving / 210m total -- [CP B]
               rest 30m
+              ╭───╮
+     terrain: ╯   ╰─
 ```
 
 For bidirectional evidence:
@@ -309,11 +447,19 @@ Selecting an edge should show:
 
 - segment labels;
 - distance/ascent/descent;
+- small terrain profile with elevation, slope/risk background, and rest markers;
 - moving/elapsed/rest time;
 - rest intervals;
 - raw source refs;
 - confidence and limitations;
 - comparison with route-guide/reference time if available.
+
+Profile interactions:
+
+- single-click profile: keep the edge selected;
+- double-click segment/timeline card: focus the map to the segment route extent;
+- hover/tap sample: show offset, elevation, slope band, and evidence source;
+- profile rendering must remain read-only post-analysis evidence.
 
 ### Share Preview
 
@@ -328,10 +474,12 @@ Before export, show exactly what will be shared:
 
 ### Inputs
 
-- completed GPX or Scout runtime track;
-- checkpoint/segment definitions;
-- optional segment capsules;
-- optional terrain/risk outputs;
+- completed trip record containing a user recorded GPX or Scout runtime track;
+- checkpoint/segment definitions from the reviewed pretrip project or final
+  MissionGraph;
+- optional IMU/PDR logs for confidence, gap, and motion interpretation;
+- optional segment capsules and checkpoint arrival evidence;
+- optional terrain/risk outputs as post-analysis context;
 - optional route-guide time entries;
 - optional user metadata if explicitly supplied:
   - pack weight;
@@ -342,14 +490,24 @@ Before export, show exactly what will be shared:
 
 ### Processing Steps
 
-1. Normalize completed track.
-2. Match track points to checkpoint arrivals.
-3. Slice track into checkpoint-to-checkpoint segments.
-4. Detect rest intervals.
-5. Compute elapsed/moving/rest time per segment.
-6. Compute capability metrics.
-7. Compare against guide/reference times if available.
-8. Produce timeline and share capsule artifacts.
+1. Resolve completed trip workspace and select the user recorded GPX or Scout
+   runtime track as the primary completed-track source.
+2. Reject public/reference/golden pretrip GPX as capability source unless it is
+   explicitly marked fixture-only stand-in completed evidence.
+3. Normalize completed track.
+4. Match track points to checkpoint arrivals.
+5. Slice track into checkpoint-to-checkpoint segments.
+6. Detect rest intervals.
+7. Use IMU/PDR and sealed route observations, when present, to annotate
+   confidence and data-quality limitations.
+8. Compute elapsed/moving/rest time per segment.
+9. Sample terrain per segment from completed-track elevation, DEM/DTM, or a
+   reviewed route-corridor terrain artifact.
+10. Generate compact terrain profile artifacts and attach profile refs to
+    segment edges.
+11. Compute capability metrics.
+12. Compare against guide/reference times if available.
+13. Produce timeline and share capsule artifacts.
 
 ### Confidence Rules
 
@@ -373,6 +531,7 @@ First slice:
 - moving pace min/km;
 - ascent meters per moving hour;
 - descent meters per moving hour;
+- segment terrain profile difficulty band;
 - segment-level slowest/fastest relative deltas.
 
 Later slices:
@@ -380,6 +539,7 @@ Later slices:
 - terrain-adjusted effort score;
 - risk-adjusted speed;
 - elevation-band performance;
+- daylight-constrained terrain-time budget;
 - fatigue decay after N hours;
 - team waiting detection;
 - model-assisted rest classification.
@@ -424,7 +584,7 @@ python -m post_analysis_capability \
   --min-rest-duration-s 180
 ```
 
-Current fixture-backed golden route:
+Current fixture-backed completed-track stand-in:
 
 ```bash
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. ./venv/bin/python -m post_analysis_capability \
@@ -443,6 +603,11 @@ non-monotonic timestamp fragment cleanup in
 `tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/gpx_cleaning_report.json`.
 This is post-analysis evidence only and remains outside Phase 1 runtime safety
 truth.
+
+This fixture is allowed only because it is explicitly labeled and treated as a
+stand-in completed track for tests. The production generator must prefer Scout's
+completed trip workspace and user recorded GPX/runtime track, not pretrip
+reference GPX or public route downloads.
 
 Proposed tests:
 

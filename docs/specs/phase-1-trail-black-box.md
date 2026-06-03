@@ -4,6 +4,15 @@
 
 Build the first engineering milestone for Scout as a wilderness safety black box and edge-agent runtime.
 
+This spec owns the deterministic black-box/runtime foundation used by the
+on-trip safe-device loop in
+`docs/specs/scout-closed-loop-operating-cycle.md`: route progress, checkpoint
+matching, sealed segments, incident evidence, and local search/recovery
+artifacts. The closed-loop product spec may define higher-level node types such
+as communication nodes, team-care nodes, or search black-box nodes, but those
+nodes must still respect Phase 1 runtime boundaries and cannot grant model or
+debug tooling authority over L0-L4 safety state.
+
 Phase 1 must prove that the current Mac/iPhone/Apple Watch + FastAPI prototype can:
 
 1. Load a planned route as a `MissionGraph` with checkpoints, control zones, segment requirements, diversion points, and recording policies.

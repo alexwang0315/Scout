@@ -133,6 +133,16 @@ class AdminAfterActionTests(unittest.TestCase):
         self.assertEqual(payload["capability_timeline"]["summary"]["moving_time_s"], 121605)
         self.assertEqual(payload["capability_timeline"]["data_quality"]["gps_gap_count"], 18)
         self.assertEqual(payload["capability_timeline"]["route_time_comparison"]["summary"]["comparison_count"], 0)
+        self.assertIn("terrain_visualization", payload)
+        self.assertIn("bitmap_overlay_count", payload["terrain_visualization"]["counts"])
+        self.assertFalse(
+            payload["terrain_visualization"]["boundary"]["runtime_safety_truth"]
+        )
+        self.assertGreater(
+            payload["overpass_evidence"]["counts"]["candidates"],
+            0,
+        )
+        self.assertFalse(payload["overpass_evidence"]["boundary"]["runtime_truth"])
         pretrip_view = build_pretrip_admin_view(PRETRIP_CASE_ID)
         self.assertEqual(
             payload["evidence_timeline"]["category_order"],
@@ -218,6 +228,13 @@ class AdminAfterActionTests(unittest.TestCase):
         self.assertIn("verticalResizer", response.text)
         self.assertIn("horizontalResizer", response.text)
         self.assertIn("evidenceTree", response.text)
+        self.assertIn("function terrainVisualization", response.text)
+        self.assertIn("function renderTerrainBitmapOverlays", response.text)
+        self.assertIn("function renderOverpassEvidence", response.text)
+        self.assertIn("class: \"terrain-raster-overlay\"", response.text)
+        self.assertIn("overpass-corridor", response.text)
+        self.assertIn("overpass-hazard", response.text)
+        self.assertIn("overpass-poi", response.text)
         self.assertIn("jsonPane", response.text)
         self.assertIn("narrativePanel", response.text)
         self.assertIn("layer-menu", response.text)
