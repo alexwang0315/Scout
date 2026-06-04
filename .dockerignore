@@ -6,6 +6,12 @@
 !requirements.pi.txt
 !requirements.pi.admin.txt
 !requirements.pi.live.txt
+!scout-risk-engine/
+!scout-risk-engine/scout_codex_package/
+!scout-risk-engine/scout_codex_package/**
+scout-risk-engine/scout_codex_package/.pytest_cache/**
+scout-risk-engine/scout_codex_package/out/**
+scout-risk-engine/scout_codex_package/tests/__pycache__/**
 !*.py
 !checkpoint_manager.py
 !communication_provider.py
