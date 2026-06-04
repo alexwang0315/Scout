@@ -184,7 +184,7 @@ class AdminAfterActionTests(unittest.TestCase):
         self.assertEqual(payload["major_critical_points"]["counts"]["mcp_candidate_count"], 6)
         self.assertEqual(
             payload["gis_perception_timeline"]["counts"]["checkpoint_candidate_count"],
-            304,
+            111,
         )
         self.assertEqual(payload["scout_agent_skills"]["counts"]["tool_count"], 45)
         self.assertFalse(
@@ -832,6 +832,15 @@ class AdminAfterActionTests(unittest.TestCase):
         self.assertIn("https://tile.openstreetmap.org/{z}/{x}/{y}.png", response.text)
         self.assertIn("function renderRasterImagery", response.text)
         self.assertIn("function rasterTileCoverage", response.text)
+        self.assertIn("function isDirectRuntimeRasterLayer", response.text)
+        self.assertIn(
+            'layer?.raster_tile_delivery === "direct_wmts_runtime"',
+            response.text,
+        )
+        self.assertIn(
+            '["wmts_tile", "wmts_kvp_tile", "xyz_tile"].includes(sourceKind)',
+            response.text,
+        )
         self.assertIn('class: "raster-tile"', response.text)
         self.assertIn("data-raster-tile", response.text)
         self.assertIn("function renderOsmBasemap", response.text)

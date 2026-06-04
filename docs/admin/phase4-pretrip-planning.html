@@ -1992,7 +1992,14 @@
     }
     function rasterBoundsFor(view, layerId = "imagery") {
       const layer = rasterLayerFor(view, layerId);
+      if (isDirectRuntimeRasterLayer(layer)) return null;
       return normalizeRasterBounds(layer.raster_bbox_wgs84 || layer.bbox_wgs84 || layer.georeference?.bbox_wgs84);
+    }
+    function isDirectRuntimeRasterLayer(layer) {
+      const sourceKind = String(layer?.source_kind || layer?.imagery_source_kind || "");
+      return layer?.raster_tile_delivery === "direct_wmts_runtime"
+        || layer?.render_mode === "wmts_raster_tile"
+        || ["wmts_tile", "wmts_kvp_tile", "xyz_tile"].includes(sourceKind);
     }
     function parseZoomRange(value) {
       const match = String(value || "").match(/^(\d+)\s*-\s*(\d+)$/);
@@ -2038,8 +2045,11 @@
       return raw.replace(/["\\]/g, "\\$&");
     }
     function boundsFor(view) {
-      const b = view.route.bounds;
-      return { south: b.min_lat, north: b.max_lat, west: b.min_lon, east: b.max_lon };
+      const b = view.route.display_bounds || view.route.bounds;
+      const normalized = b.south !== undefined
+        ? { south: b.south, north: b.north, west: b.west, east: b.east }
+        : { south: b.min_lat, north: b.max_lat, west: b.min_lon, east: b.max_lon };
+      return fitBoundsToMapAspect(normalized);
     }
     function lonToMercatorXValue(lon) {
       return (lon + 180) / 360;
@@ -2051,6 +2061,36 @@
     function mercatorYValueToLat(y) {
       const n = Math.PI - 2 * Math.PI * y;
       return 180 / Math.PI * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)));
+    }
+    function fitBoundsToMapAspect(bounds) {
+      const pad = MAP_VISUAL_PADDING;
+      const usableWidth = Math.max(MAP_WIDTH - pad * 2, 1);
+      const usableHeight = Math.max(MAP_HEIGHT - pad * 2, 1);
+      const targetAspect = usableWidth / usableHeight;
+      const westX = lonToMercatorXValue(bounds.west);
+      const eastX = lonToMercatorXValue(bounds.east);
+      const northY = latToMercatorYValue(bounds.north);
+      const southY = latToMercatorYValue(bounds.south);
+      const centerX = (westX + eastX) / 2;
+      const centerY = (northY + southY) / 2;
+      let xSpan = Math.max(eastX - westX, 0.000001);
+      let ySpan = Math.max(southY - northY, 0.000001);
+      const currentAspect = xSpan / ySpan;
+      if (currentAspect < targetAspect) {
+        xSpan = ySpan * targetAspect;
+      } else if (currentAspect > targetAspect) {
+        ySpan = xSpan / targetAspect;
+      }
+      const fittedWestX = clamp(centerX - xSpan / 2, 0, 1);
+      const fittedEastX = clamp(centerX + xSpan / 2, 0, 1);
+      const fittedNorthY = clamp(centerY - ySpan / 2, 0, 1);
+      const fittedSouthY = clamp(centerY + ySpan / 2, 0, 1);
+      return {
+        south: mercatorYValueToLat(fittedSouthY),
+        north: mercatorYValueToLat(fittedNorthY),
+        west: fittedWestX * 360 - 180,
+        east: fittedEastX * 360 - 180
+      };
     }
     function mercatorFrameForBounds(bounds) {
       const pad = MAP_VISUAL_PADDING;
