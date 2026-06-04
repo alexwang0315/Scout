@@ -289,12 +289,14 @@ def build_release_check(
     missing_required.extend(admin_map_layer_check["missing"])
 
     admin_local_raster_source_check = _check_admin_local_raster_source(root)
+    admin_local_raster_source_check["legacy_optional"] = True
+    admin_local_raster_source_check["phase4_required"] = False
     checks["admin_local_raster_source"] = admin_local_raster_source_check
-    missing_required.extend(admin_local_raster_source_check["missing"])
 
     admin_local_raster_tiles_check = _check_admin_local_raster_tiles(root)
+    admin_local_raster_tiles_check["legacy_optional"] = True
+    admin_local_raster_tiles_check["phase4_required"] = False
     checks["admin_local_raster_tiles"] = admin_local_raster_tiles_check
-    missing_required.extend(admin_local_raster_tiles_check["missing"])
 
     admin_basemap_renderer_check = _check_admin_basemap_renderer(root)
     checks["admin_basemap_renderer"] = admin_basemap_renderer_check
@@ -770,13 +772,23 @@ def _check_pretrip_admin_ui(root: Path) -> dict[str, Any]:
 
 def _check_admin_map_layer_stack(root: Path) -> dict[str, Any]:
     from admin_map_layers import (
+        ORDERING_POLICY,
         build_after_action_map_layers,
         build_pretrip_map_layers,
         map_layer_ids,
     )
 
-    expected_pretrip = [
+    wmts_raster_layer_ids = [
         "imagery",
+        "rudy",
+        "rudy-twmap",
+        "relief",
+        "geology",
+        "topo-5k",
+        "forest",
+    ]
+    expected_pretrip = [
+        *wmts_raster_layer_ids,
         "osm",
         "terrain",
         "corridors",
@@ -798,7 +810,7 @@ def _check_admin_map_layer_stack(root: Path) -> dict[str, Any]:
         "weather-api",
     ]
     expected_after_action = [
-        "imagery",
+        *wmts_raster_layer_ids,
         "osm",
         "terrain",
         "corridors",
@@ -821,7 +833,6 @@ def _check_admin_map_layer_stack(root: Path) -> dict[str, Any]:
     ]
     pretrip_layers = build_pretrip_map_layers(
         source_refs={
-            "imagery": "external/local/chilai_nanhua_day1.local_raster_source_manifest.json",
             "map_context": "normalized/map/map_context.geojson",
             "map_candidates": "candidates/map_candidates.json",
             "overpass_evidence": "outputs/layers/normalized/overpass_vector_evidence.geojson",
@@ -850,25 +861,23 @@ def _check_admin_map_layer_stack(root: Path) -> dict[str, Any]:
         missing.append("admin_map_layer_stack:after_action_layer_order")
     if pretrip_layers[0].get("layer_kind") != "imagery":
         missing.append("admin_map_layer_stack:pretrip_imagery_not_bottom")
-    if pretrip_layers[0].get("local_raster_manifest_supported") is not True:
-        missing.append("admin_map_layer_stack:pretrip_imagery_local_raster_manifest")
-    if pretrip_layers[0].get("local_raster_tile_url_template") != (
-        "/admin/tiles/imagery/{project_id}/{layer_id}/{z}/{x}/{y}.png"
-    ):
-        missing.append("admin_map_layer_stack:pretrip_imagery_tile_template")
-    if pretrip_layers[0].get("external_network_required") is not False:
+    if pretrip_layers[0].get("local_raster_manifest_supported") is not False:
+        missing.append("admin_map_layer_stack:pretrip_imagery_local_raster_disabled")
+    if pretrip_layers[0].get("raster_tile_delivery") != "direct_wmts_runtime":
+        missing.append("admin_map_layer_stack:pretrip_imagery_wmts_runtime")
+    if pretrip_layers[0].get("external_network_required") is not True:
         missing.append("admin_map_layer_stack:pretrip_imagery_external_network")
     if pretrip_layers[-1].get("layer_kind") != "api":
         missing.append("admin_map_layer_stack:pretrip_api_not_top")
     if after_action_layers[0].get("layer_kind") != "imagery":
         missing.append("admin_map_layer_stack:after_action_imagery_not_bottom")
-    if after_action_layers[0].get("local_raster_manifest_supported") is not True:
-        missing.append("admin_map_layer_stack:after_action_imagery_local_raster_manifest")
-    if after_action_layers[0].get("local_raster_tile_url_template") != (
-        "/admin/tiles/imagery/{project_id}/{layer_id}/{z}/{x}/{y}.png"
-    ):
-        missing.append("admin_map_layer_stack:after_action_imagery_tile_template")
-    if after_action_layers[0].get("external_network_required") is not False:
+    if after_action_layers[0].get("local_raster_manifest_supported") is not False:
+        missing.append(
+            "admin_map_layer_stack:after_action_imagery_local_raster_disabled"
+        )
+    if after_action_layers[0].get("raster_tile_delivery") != "direct_wmts_runtime":
+        missing.append("admin_map_layer_stack:after_action_imagery_wmts_runtime")
+    if after_action_layers[0].get("external_network_required") is not True:
         missing.append("admin_map_layer_stack:after_action_imagery_external_network")
     if after_action_layers[-1].get("layer_kind") != "api":
         missing.append("admin_map_layer_stack:after_action_api_not_top")
@@ -878,6 +887,26 @@ def _check_admin_map_layer_stack(root: Path) -> dict[str, Any]:
         missing.append("admin_map_layer_stack:pretrip_external_api_call")
     if any(layer.get("external_api_calls_made") for layer in after_action_layers):
         missing.append("admin_map_layer_stack:after_action_external_api_call")
+    wmts_layers = [
+        *(next(layer for layer in pretrip_layers if layer["layer_id"] == layer_id)
+          for layer_id in wmts_raster_layer_ids),
+        *(next(layer for layer in after_action_layers if layer["layer_id"] == layer_id)
+          for layer_id in wmts_raster_layer_ids),
+    ]
+    for wmts_layer in wmts_layers:
+        layer_id = wmts_layer["layer_id"]
+        if wmts_layer.get("render_mode") != "wmts_raster_tile":
+            missing.append(f"admin_map_layer_stack:{layer_id}_wmts_render_mode")
+        if wmts_layer.get("raster_tile_delivery") != "direct_wmts_runtime":
+            missing.append(f"admin_map_layer_stack:{layer_id}_wmts_delivery")
+        if wmts_layer.get("local_raster_tile_cache_policy") != (
+            "disabled_use_wmts_runtime"
+        ):
+            missing.append(f"admin_map_layer_stack:{layer_id}_local_cache_disabled")
+        if wmts_layer.get("external_network_required") is not True:
+            missing.append(f"admin_map_layer_stack:{layer_id}_wmts_network_contract")
+        if wmts_layer.get("downloads_tiles_into_repo") is not False:
+            missing.append(f"admin_map_layer_stack:{layer_id}_downloads_tiles")
     osm_layers = [
         next(layer for layer in pretrip_layers if layer["layer_id"] == "osm"),
         next(layer for layer in after_action_layers if layer["layer_id"] == "osm"),
@@ -935,7 +964,13 @@ def _check_admin_map_layer_stack(root: Path) -> dict[str, Any]:
                 missing.append(
                     f"admin_map_layer_stack:{surface}_missing_toggle:{layer_id}"
                 )
-            if f'data-layer-group": "{layer_id}"' not in page_text:
+            has_static_group = f'data-layer-group": "{layer_id}"' in page_text
+            has_dynamic_wmts_group = (
+                layer_id in wmts_raster_layer_ids
+                and f'layerId: "{layer_id}"' in page_text
+                and "RASTER_OVERLAY_LAYER_DEFINITIONS.forEach" in page_text
+            )
+            if not (has_static_group or has_dynamic_wmts_group):
                 missing.append(
                     f"admin_map_layer_stack:{surface}_missing_group:{layer_id}"
                 )
@@ -961,14 +996,18 @@ def _check_admin_map_layer_stack(root: Path) -> dict[str, Any]:
                 )
         if surface in {"pretrip", "after_action"}:
             raster_fragments = (
-                "RASTER_LOCAL_TILE_URL_TEMPLATE",
+                "const HAPPYMAN_WMTS_ENDPOINT",
+                "RASTER_SOURCE_LAYER_DEFINITIONS",
+                "RASTER_OVERLAY_LAYER_DEFINITIONS",
+                "https://wmts.nlsc.gov.tw/wmts/PHOTO2/default/EPSG:3857/{z}/{y}/{x}",
+                "https://tile.happyman.idv.tw/mp/service",
+                "wmts_kvp_tile",
+                "function wmtsTileMatrixId",
+                "function wmtsTileUrl",
                 "function rasterTileTemplate",
                 "function rasterTileCoverage",
-                "function renderRasterImagery",
-                "/admin/tiles/imagery/{project_id}/{layer_id}/{z}/{x}/{y}.png",
                 'class: "raster-tile"',
                 "data-raster-tile",
-                "local_raster_tile_url_template",
             )
             for fragment in raster_fragments:
                 if fragment not in page_text:
@@ -984,6 +1023,8 @@ def _check_admin_map_layer_stack(root: Path) -> dict[str, Any]:
                 )
         positions = [
             page_text.find(f'data-layer-group": "{layer_id}"')
+            if f'data-layer-group": "{layer_id}"' in page_text
+            else page_text.find(f'layerId: "{layer_id}"')
             for layer_id in layer_ids
         ]
         page_order_ok[surface] = all(position >= 0 for position in positions)
@@ -994,15 +1035,17 @@ def _check_admin_map_layer_stack(root: Path) -> dict[str, Any]:
         "ok": not missing,
         "pretrip_layer_ids": map_layer_ids(pretrip_layers),
         "after_action_layer_ids": map_layer_ids(after_action_layers),
-        "ordering_policy": "imagery_bottom_api_top",
+        "ordering_policy": ORDERING_POLICY,
         "pretrip_imagery_bottom": pretrip_layers[0].get("layer_id") == "imagery",
         "pretrip_imagery_source_path": pretrip_layers[0].get("source_path"),
         "pretrip_imagery_local_raster_manifest_supported": pretrip_layers[0].get(
             "local_raster_manifest_supported"
         ),
-        "pretrip_imagery_local_raster_tile_url_template": pretrip_layers[0].get(
-            "local_raster_tile_url_template"
+        "pretrip_imagery_raster_tile_delivery": pretrip_layers[0].get(
+            "raster_tile_delivery"
         ),
+        "pretrip_imagery_source_kind": pretrip_layers[0].get("source_kind"),
+        "pretrip_imagery_render_mode": pretrip_layers[0].get("render_mode"),
         "pretrip_raster_imagery_renderer_present": page_raster_imagery_ok["pretrip"],
         "pretrip_imagery_external_network_required": pretrip_layers[0].get(
             "external_network_required"
@@ -1013,9 +1056,11 @@ def _check_admin_map_layer_stack(root: Path) -> dict[str, Any]:
         "after_action_imagery_local_raster_manifest_supported": after_action_layers[
             0
         ].get("local_raster_manifest_supported"),
-        "after_action_imagery_local_raster_tile_url_template": after_action_layers[
-            0
-        ].get("local_raster_tile_url_template"),
+        "after_action_imagery_raster_tile_delivery": after_action_layers[0].get(
+            "raster_tile_delivery"
+        ),
+        "after_action_imagery_source_kind": after_action_layers[0].get("source_kind"),
+        "after_action_imagery_render_mode": after_action_layers[0].get("render_mode"),
         "after_action_raster_imagery_renderer_present": page_raster_imagery_ok[
             "after_action"
         ],
@@ -1034,6 +1079,10 @@ def _check_admin_map_layer_stack(root: Path) -> dict[str, Any]:
         "osm_local_proxy_external_network_required": osm_layers[0].get(
             "local_proxy_external_network_required"
         ),
+        "wmts_raster_layer_ids": wmts_raster_layer_ids,
+        "wmts_raster_layer_count": len(wmts_raster_layer_ids),
+        "wmts_tile_delivery": "direct_wmts_runtime",
+        "imagery_processing_enabled": False,
         "weather_api_render_mode": weather_layers[0].get("render_mode"),
         "weather_api_external_network_required": weather_layers[0].get(
             "external_network_required"

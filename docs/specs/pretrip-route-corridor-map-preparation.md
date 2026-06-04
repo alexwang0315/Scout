@@ -200,6 +200,29 @@ stored snippets or saved HTML/text, not live network.
 **Raster Label Perception**（圖磚標註感知） reads local imagery, local map tiles,
 or scanned route-guide references.
 
+Map display imagery should prefer **WMTS-backed tile pyramid cache**
+（以 WMTS 圖磚金字塔支撐的本機快取） when the source exposes WMTS. A single
+fixed zoom cache is not sufficient for alpha map review because zooming will
+stretch the same bitmap tiles and distort contour labels, line width, and map
+symbol scale. For WMTS/XYZ sources, map preparation must store a multi-zoom tile
+cache plan with:
+
+- source id and provider;
+- source kind, for example `wmts_kvp_tile`（WMTS KVP 參數式圖磚）;
+- WMTS layer, style, TileMatrixSet（圖磚矩陣集合）, format, and endpoint hash;
+- bbox fetch boundary and route-corridor scope;
+- min/max zoom and per-zoom tile counts;
+- cache root and runtime `/admin/tiles/imagery/{project_id}/{layer_id}/{z}/{x}/{y}.png`
+  proxy template;
+- explicit network/cache policy.
+
+`no-network` preparation writes only the plan and existing cache refs.
+`explicit-fetch` preparation may seed the cache only from an allowlisted imagery
+source and only into workspace or Scout Pi cache paths, never into repo
+fixtures. The browser should request the current zoom's native tile when it is
+available; fallback to a nearby cached zoom must be marked as resampled imagery
+and should not be treated as precise evidence.
+
 It may extract labels such as:
 
 - `通訊點`;

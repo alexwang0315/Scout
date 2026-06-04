@@ -8,13 +8,28 @@ from admin_basemap_tiles import (
     DEFAULT_CACHE_POLICY as OSM_CACHE_POLICY,
     DEFAULT_OSM_TILE_URL_TEMPLATE as OSM_TILE_URL_TEMPLATE,
 )
-from admin_local_raster_tiles import LOCAL_RASTER_TILE_URL_TEMPLATE
+from admin_imagery_sources import DEFAULT_IMAGERY_SOURCE_ID, DEFAULT_REGISTRY_ID
 from admin_tile_proxy import LOCAL_OSM_TILE_URL_TEMPLATE
 
 
-ORDERING_POLICY = "imagery_bottom_api_top"
+ORDERING_POLICY = "wmts_tiles_bottom_api_top"
+RASTER_OVERLAY_SOURCE_IDS = {
+    "imagery": DEFAULT_IMAGERY_SOURCE_ID,
+    "rudy": "happyman_rudy",
+    "rudy-twmap": "happyman_rudy_twmap",
+    "relief": "happyman_colorrelief",
+    "geology": "happyman_geo2016",
+    "topo-5k": "happyman_tw5k2000",
+    "forest": "happyman_forest",
+}
 WORKSPACE_LAYER_CONTROL_IDS = (
     "imagery",
+    "rudy",
+    "rudy-twmap",
+    "relief",
+    "geology",
+    "topo-5k",
+    "forest",
     "osm",
     "terrain",
     "corridors",
@@ -53,11 +68,71 @@ _LAYER_SPECS: dict[str, AdminMapLayerSpec] = {
     "imagery": AdminMapLayerSpec(
         layer_id="imagery",
         label="Imagery",
-        label_zh="影像圖層（最底層）",
+        label_zh="影像圖層（WMTS，最底層）",
         layer_kind="imagery",
         z_index=0,
-        render_mode="svg_backdrop",
-        source_kind="local_metadata",
+        render_mode="wmts_raster_tile",
+        source_kind="wmts_tile",
+    ),
+    "rudy": AdminMapLayerSpec(
+        layer_id="rudy",
+        label="Rudy",
+        label_zh="魯地圖圖層（Rudy Map，登山地形底圖）",
+        layer_kind="imagery",
+        z_index=1,
+        render_mode="wmts_raster_tile",
+        source_kind="wmts_kvp_tile",
+        default_enabled=False,
+    ),
+    "rudy-twmap": AdminMapLayerSpec(
+        layer_id="rudy-twmap",
+        label="Rudy+TW",
+        label_zh="魯地圖加 TWMap 樣式圖層（Rudy Map + TWMap）",
+        layer_kind="imagery",
+        z_index=2,
+        render_mode="wmts_raster_tile",
+        source_kind="wmts_kvp_tile",
+        default_enabled=False,
+    ),
+    "relief": AdminMapLayerSpec(
+        layer_id="relief",
+        label="Relief",
+        label_zh="彩色地形陰影圖層（color relief terrain shading）",
+        layer_kind="terrain",
+        z_index=3,
+        render_mode="wmts_raster_tile",
+        source_kind="wmts_kvp_tile",
+        default_enabled=False,
+    ),
+    "geology": AdminMapLayerSpec(
+        layer_id="geology",
+        label="Geology",
+        label_zh="地質圖圖層（geology overlay，規劃證據）",
+        layer_kind="terrain",
+        z_index=4,
+        render_mode="wmts_raster_tile",
+        source_kind="wmts_kvp_tile",
+        default_enabled=False,
+    ),
+    "topo-5k": AdminMapLayerSpec(
+        layer_id="topo-5k",
+        label="Topo 5K",
+        label_zh="五千分之一地形圖圖層（1/5000 topo map）",
+        layer_kind="terrain",
+        z_index=5,
+        render_mode="wmts_raster_tile",
+        source_kind="wmts_kvp_tile",
+        default_enabled=False,
+    ),
+    "forest": AdminMapLayerSpec(
+        layer_id="forest",
+        label="Forest",
+        label_zh="林班界圖層（forest compartment overlay）",
+        layer_kind="terrain",
+        z_index=6,
+        render_mode="wmts_raster_tile",
+        source_kind="wmts_kvp_tile",
+        default_enabled=False,
     ),
     "osm": AdminMapLayerSpec(
         layer_id="osm",
@@ -98,8 +173,8 @@ _LAYER_SPECS: dict[str, AdminMapLayerSpec] = {
     ),
     "risk-heatmap": AdminMapLayerSpec(
         layer_id="risk-heatmap",
-        label="Risk heat",
-        label_zh="校準熱區圖層（Calibrated Heat Map，本 workspace 相對熱區）",
+        label="Risk calibration",
+        label_zh="風險校準熱區圖層（Calibrated Heat Map，本 workspace 相對熱區）",
         layer_kind="evidence",
         z_index=62,
         render_mode="svg_overlay",
@@ -250,6 +325,30 @@ def build_pretrip_map_layers(
             "pretrip.map_layer.imagery",
             source_refs.get("imagery") or source_refs.get("map_context"),
         ),
+        "rudy": (
+            "pretrip.map_layer.rudy",
+            source_refs.get("imagery") or source_refs.get("map_context"),
+        ),
+        "rudy-twmap": (
+            "pretrip.map_layer.rudy_twmap",
+            source_refs.get("imagery") or source_refs.get("map_context"),
+        ),
+        "relief": (
+            "pretrip.map_layer.relief",
+            source_refs.get("imagery") or source_refs.get("terrain_visualization"),
+        ),
+        "geology": (
+            "pretrip.map_layer.geology",
+            source_refs.get("imagery") or source_refs.get("map_context"),
+        ),
+        "topo-5k": (
+            "pretrip.map_layer.topo_5k",
+            source_refs.get("imagery") or source_refs.get("map_context"),
+        ),
+        "forest": (
+            "pretrip.map_layer.forest",
+            source_refs.get("imagery") or source_refs.get("map_context"),
+        ),
         "osm": ("pretrip.map_layer.osm", source_refs.get("map_context")),
         "terrain": (
             "pretrip.map_layer.terrain",
@@ -336,6 +435,12 @@ def build_after_action_map_layers(
     sources = {
         "imagery": ("after_action.map_layer.imagery", map_source_path),
         "osm": ("after_action.map_layer.osm", map_source_path),
+        "rudy": ("after_action.map_layer.rudy", map_source_path),
+        "rudy-twmap": ("after_action.map_layer.rudy_twmap", map_source_path),
+        "relief": ("after_action.map_layer.relief", map_source_path),
+        "geology": ("after_action.map_layer.geology", map_source_path),
+        "topo-5k": ("after_action.map_layer.topo_5k", map_source_path),
+        "forest": ("after_action.map_layer.forest", map_source_path),
         "risk-score": ("after_action.map_layer.risk_score", risk_score_source_path),
         "risk-ribbon": ("after_action.map_layer.risk_ribbon", risk_ribbon_source_path),
         "risk-heatmap": ("after_action.map_layer.risk_heatmap", risk_heatmap_source_path),
@@ -460,15 +565,40 @@ def _layer_dict(
 def _layer_renderer_contract(layer_id: str) -> dict[str, Any]:
     if layer_id == "imagery":
         return {
-            "local_raster_manifest_supported": True,
-            "preferred_manifest_kind": "admin_local_raster_source_manifest",
-            "local_raster_tile_url_template": LOCAL_RASTER_TILE_URL_TEMPLATE,
-            "local_raster_tile_cache_policy": (
-                "local_file_cache_then_transparent_fallback"
-            ),
-            "external_network_required": False,
+            "local_raster_manifest_supported": False,
+            "preferred_manifest_kind": "scout_imagery_source_registry",
+            "scout_imagery_source_registry_supported": True,
+            "imagery_source_registry_id": DEFAULT_REGISTRY_ID,
+            "default_imagery_source_id": DEFAULT_IMAGERY_SOURCE_ID,
+            "imagery_source_id": DEFAULT_IMAGERY_SOURCE_ID,
+            "raster_tile_delivery": "direct_wmts_runtime",
+            "local_raster_tile_cache_policy": "disabled_use_wmts_runtime",
+            "external_network_required": True,
+            "local_proxy_external_network_required": False,
+            "remote_fetch_requires_explicit_enable": False,
+            "source_registry_env": "SCOUT_IMAGERY_SOURCE_REGISTRY_PATH",
             "tile_cutting_required": False,
             "downloads_tiles_into_repo": False,
+            "imagery_bbox_policy": "route_visible_bounds_wmts_runtime",
+            "tile_order_warning": (
+                "Imagery sources may use z/y/x or z/x/y; source registry "
+                "must render templates by named z/x/y placeholders."
+            ),
+        }
+    if layer_id in RASTER_OVERLAY_SOURCE_IDS:
+        return {
+            "imagery_source_registry_id": DEFAULT_REGISTRY_ID,
+            "imagery_source_id": RASTER_OVERLAY_SOURCE_IDS[layer_id],
+            "source_registry_env": "SCOUT_IMAGERY_SOURCE_REGISTRY_PATH",
+            "raster_tile_delivery": "direct_wmts_runtime",
+            "local_raster_tile_cache_policy": "disabled_use_wmts_runtime",
+            "external_network_required": True,
+            "local_proxy_external_network_required": False,
+            "remote_fetch_requires_explicit_enable": False,
+            "tile_cutting_required": False,
+            "downloads_tiles_into_repo": False,
+            "runtime_safety_truth": False,
+            "candidate_only": True,
         }
     if layer_id == "osm":
         return {

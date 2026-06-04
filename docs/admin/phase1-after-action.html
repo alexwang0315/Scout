@@ -34,6 +34,7 @@
       --cat-finish: #f0d264;
       --cat-signal: #8ab4f8;
       --cat-retreat: #e07a3f;
+      --overpass: #0f766e;
       --risk-low: #8fb7a1;
       --risk-moderate: #eab308;
       --risk-high: #f97316;
@@ -131,6 +132,37 @@
       margin-top: 4px;
       font-size: 16px;
       letter-spacing: 0;
+    }
+
+    .energy-monitor {
+      display: grid;
+      grid-template-columns: minmax(130px, .8fr) minmax(160px, 1fr) minmax(180px, 1.2fr) minmax(130px, .8fr);
+      gap: 8px;
+      min-width: 0;
+      border: 1px solid var(--border);
+      border-left: 4px solid var(--cat-timeline);
+      border-radius: 6px;
+      background: var(--panel);
+      padding: 8px 10px;
+    }
+
+    .energy-monitor div {
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .energy-monitor span {
+      display: block;
+      color: var(--muted);
+      font-size: 11px;
+      text-transform: uppercase;
+    }
+
+    .energy-monitor strong {
+      display: block;
+      margin-top: 3px;
+      font-size: 14px;
+      color: var(--text);
     }
 
     .control-group {
@@ -362,6 +394,7 @@
       overflow: hidden;
     }
     #map {
+      background: #fbfcfe;
       cursor: crosshair;
       touch-action: none;
       user-select: none;
@@ -462,12 +495,12 @@
     }
 
     .layer-imagery {
-      fill: #101418;
+      fill: #f4f7fa;
     }
 
     .layer-osm {
-      fill: #161b20;
-      opacity: 0.86;
+      fill: #ffffff;
+      opacity: 0.94;
     }
 
     .osm-tile {
@@ -486,40 +519,61 @@
       mix-blend-mode: multiply;
     }
 
+    .terrain-line {
+      fill: none;
+      stroke: #246b8f;
+      stroke-width: 4.5;
+      stroke-dasharray: 7 5;
+      opacity: .78;
+      stroke-linecap: round;
+      vector-effect: non-scaling-stroke;
+    }
+
+    .terrain-line.is-unlinked {
+      stroke: #c47f48;
+      stroke-dasharray: 3 6;
+      opacity: .62;
+      vector-effect: non-scaling-stroke;
+    }
+
     .overpass-corridor {
       fill: none;
       stroke: var(--overpass);
-      stroke-width: 1.4;
-      opacity: .64;
+      stroke-width: 4;
+      opacity: .82;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-dasharray: 12 7;
       cursor: pointer;
       pointer-events: stroke;
       vector-effect: non-scaling-stroke;
     }
 
     .overpass-hazard {
-      fill: rgba(214, 93, 93, 0.18);
+      fill: rgba(15, 118, 110, 0.12);
       stroke: var(--overpass);
-      stroke-width: 1.3;
-      opacity: .68;
+      stroke-width: 2.2;
+      opacity: .78;
+      stroke-dasharray: 7 5;
       cursor: pointer;
       vector-effect: non-scaling-stroke;
     }
 
     .overpass-poi {
       fill: var(--overpass);
-      stroke: #06271f;
-      stroke-width: 1.1;
-      opacity: .78;
+      stroke: #ffffff;
+      stroke-width: 2;
+      opacity: .92;
       cursor: pointer;
       vector-effect: non-scaling-stroke;
     }
 
     .osm-attribution {
-      fill: var(--muted);
+      fill: #334155;
       font-size: 11px;
       paint-order: stroke;
-      stroke: rgba(18, 22, 25, 0.9);
-      stroke-width: 3px;
+      stroke: rgba(255, 255, 255, 0.9);
+      stroke-width: 2px;
     }
 
     .weather-api-frame {
@@ -572,6 +626,18 @@
       cursor: pointer;
       pointer-events: stroke;
       vector-effect: non-scaling-stroke;
+    }
+
+    .completed-track {
+      fill: none;
+      stroke: #38d5ff;
+      stroke-width: 3.1;
+      opacity: .98;
+      cursor: pointer;
+      pointer-events: stroke;
+      vector-effect: non-scaling-stroke;
+      stroke-linecap: round;
+      stroke-linejoin: round;
     }
 
     .retreat {
@@ -667,6 +733,70 @@
       vector-effect: non-scaling-stroke;
     }
 
+    .point-label {
+      fill: #0f172a;
+      stroke: rgba(255, 255, 255, 0.92);
+      paint-order: stroke;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-weight: 700;
+      letter-spacing: 0;
+      pointer-events: none;
+    }
+
+    .point-label.is-hidden {
+      display: none;
+    }
+    .map-label-overlay {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      overflow: hidden;
+      z-index: 5;
+    }
+    .map-label-badge,
+    .map-label-callout {
+      position: absolute;
+      box-sizing: border-box;
+      letter-spacing: 0;
+      white-space: nowrap;
+      pointer-events: none;
+    }
+    .map-label-badge {
+      min-width: 16px;
+      height: 14px;
+      padding: 1px 4px;
+      border: 1px solid rgba(15, 23, 42, .26);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, .88);
+      color: #0f172a;
+      font: 700 9px/12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      text-align: center;
+      box-shadow: 0 1px 3px rgba(15, 23, 42, .18);
+    }
+    .map-label-callout {
+      max-width: 220px;
+      padding: 8px 10px;
+      border: 1px solid rgba(71, 85, 105, .38);
+      border-radius: 9px;
+      background: rgba(255, 255, 255, .94);
+      color: #0f172a;
+      box-shadow: 0 8px 22px rgba(15, 23, 42, .18);
+    }
+    .map-label-callout strong,
+    .map-label-callout span {
+      display: block;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .map-label-callout strong {
+      font: 800 13px/16px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    .map-label-callout span {
+      margin-top: 2px;
+      color: #334155;
+      font: 500 11px/14px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
     .hazard {
       fill: rgba(214, 93, 93, 0.24);
       stroke: var(--hazard);
@@ -680,6 +810,11 @@
       stroke-width: 1.5;
       cursor: pointer;
       vector-effect: non-scaling-stroke;
+    }
+
+    .scout-reaction-event {
+      fill: var(--cat-timeline);
+      stroke: #f4f0ff;
     }
     .risk-score-point { stroke: #fff; stroke-width: 1.2; opacity: .42; vector-effect: non-scaling-stroke; }
     .risk-score-point.risk-l1 { fill: #2f855a; }
@@ -754,6 +889,58 @@
       display: grid;
       gap: 8px;
       margin-top: 14px;
+    }
+
+    .tree-tabs {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 6px;
+      margin: 10px 0 12px;
+    }
+
+    .tree-tab {
+      min-width: 0;
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--category-color, var(--cat-map));
+      border-radius: 6px;
+      background: var(--panel);
+      color: var(--muted);
+      padding: 6px 8px;
+      text-align: left;
+      cursor: pointer;
+      font: inherit;
+    }
+
+    .tree-tab strong,
+    .tree-tab small {
+      display: block;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .tree-tab strong {
+      color: var(--text);
+      font-size: 12px;
+    }
+
+    .tree-tab small {
+      margin-top: 2px;
+      font-size: 11px;
+    }
+
+    .tree-tab.is-active {
+      background: #243044;
+      color: var(--text);
+      border-color: var(--focus);
+    }
+
+    .tree-empty {
+      border: 1px dashed var(--border);
+      border-radius: 6px;
+      padding: 12px;
+      color: var(--muted);
+      background: rgba(255, 255, 255, .03);
     }
 
     .tree details {
@@ -892,6 +1079,137 @@
     .read-only-note {
       color: var(--muted);
       font-size: 12px;
+    }
+
+    .scenario-panel {
+      display: grid;
+      gap: 10px;
+      margin-top: 16px;
+      padding-top: 14px;
+      border-top: 1px solid var(--border);
+    }
+
+    .scenario-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .scenario-head h2 {
+      margin: 0;
+      font-size: 15px;
+    }
+
+    .scenario-head span {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .scenario-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .scenario-card {
+      display: grid;
+      gap: 6px;
+      min-width: 0;
+      padding: 9px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: #151a1f;
+    }
+
+    .scenario-card.is-active {
+      border-color: var(--accent);
+      background: #17222a;
+    }
+
+    .scenario-card strong {
+      color: var(--text);
+      font-size: 13px;
+    }
+
+    .scenario-card p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .scenario-card small {
+      color: var(--muted);
+      overflow-wrap: anywhere;
+    }
+
+    .scenario-card button {
+      justify-self: start;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px 9px;
+      background: #20262c;
+      color: var(--text);
+      cursor: pointer;
+    }
+
+    .scenario-card button:disabled {
+      color: var(--muted);
+      cursor: default;
+    }
+
+    .reaction-panel {
+      display: grid;
+      gap: 10px;
+      margin-top: 16px;
+      padding-top: 14px;
+      border-top: 1px solid var(--border);
+    }
+
+    .reaction-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .reaction-head h2 {
+      margin: 0;
+      font-size: 15px;
+    }
+
+    .reaction-head span {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .reaction-event-list {
+      display: grid;
+      gap: 7px;
+    }
+
+    .reaction-event {
+      display: grid;
+      gap: 4px;
+      min-width: 0;
+      padding: 8px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: #151a1f;
+    }
+
+    .reaction-event strong {
+      font-size: 12px;
+      color: var(--text);
+    }
+
+    .reaction-event p,
+    .reaction-event small {
+      margin: 0;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.45;
+      overflow-wrap: anywhere;
     }
 
     .capability-panel {
@@ -1352,6 +1670,7 @@
       }
       .tree-pane { border-bottom: 1px solid var(--border); }
       .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .energy-monitor { grid-template-columns: 1fr 1fr; }
       .narrative-facts { grid-template-columns: 1fr; }
       .capability-metrics { grid-template-columns: 1fr; }
     }
@@ -1375,6 +1694,12 @@
             <div class="metric"><span>CP</span><strong id="checkpoints">-</strong></div>
             <div class="metric"><span>Incidents</span><strong id="incidents">-</strong></div>
           </div>
+          <section id="energyReserveMonitor" class="energy-monitor" aria-label="Energy Reserve baseline monitor">
+            <div><span>Energy</span><strong id="energyReserveHeadline">Loading…</strong></div>
+            <div><span>Health Data</span><strong id="energyReserveHealth">not loaded</strong></div>
+            <div><span>Trip Capability</span><strong id="energyReserveTrip">no completed trip</strong></div>
+            <div><span>Candidate</span><strong id="energyReserveChange">no change</strong></div>
+          </section>
           <section class="control-group" aria-label="Map view controls">
             <div class="control-group-header">
               <span>Map</span>
@@ -1395,6 +1720,12 @@
                   </div>
                   <div class="filters" aria-label="Map layers">
                     <label title="Imagery layer"><input type="checkbox" data-layer="imagery" checked> Imagery</label>
+                    <label title="Rudy Map hiking topographic layer"><input type="checkbox" data-layer="rudy"> Rudy</label>
+                    <label title="Rudy Map with TWMap style"><input type="checkbox" data-layer="rudy-twmap"> Rudy+TW</label>
+                    <label title="Taiwan color relief terrain shading layer"><input type="checkbox" data-layer="relief"> Relief</label>
+                    <label title="Taiwan geology 2016 layer"><input type="checkbox" data-layer="geology"> Geology</label>
+                    <label title="Taiwan 1/5000 topographic layer"><input type="checkbox" data-layer="topo-5k"> Topo 5K</label>
+                    <label title="Taiwan forest compartment boundary layer"><input type="checkbox" data-layer="forest"> Forest</label>
                     <label title="OpenStreetMap layer"><input type="checkbox" data-layer="osm" checked> OSM</label>
                     <label title="Terrain visualization evidence layer"><input type="checkbox" data-layer="terrain" checked> Terrain</label>
                     <label title="Scout Risk Engine pretrip risk score point layer"><input type="checkbox" data-layer="risk-score"> Risk pts</label>
@@ -1402,8 +1733,9 @@
                     <label title="Route-specific calibrated heat map"><input type="checkbox" data-layer="risk-heatmap" checked> Calibrated</label>
                     <label title="Difference between baseline risk and calibrated heat"><input type="checkbox" data-layer="risk-delta"> Delta</label>
                     <label title="Corridor layer"><input type="checkbox" data-layer="corridors" checked> Corridors</label>
-                    <label title="Overpass evidence layer"><input type="checkbox" data-layer="overpass"> Overpass</label>
+                    <label title="Overpass evidence layer"><input type="checkbox" data-layer="overpass" checked> Overpass</label>
                     <label title="Route layer"><input type="checkbox" data-layer="route" checked> Route</label>
+                    <label title="Active completed trip GPX track"><input type="checkbox" data-layer="completed-track" checked> Done GPX</label>
                     <label title="Reference GPX tracks"><input type="checkbox" data-layer="reference-tracks"> Ref GPX</label>
                     <label title="Retreat route layer"><input type="checkbox" data-layer="retreat" checked> Retreat</label>
                     <label title="Segment layer"><input type="checkbox" data-layer="segments" checked> Segments</label>
@@ -1437,6 +1769,7 @@
     <section id="infoPane" class="info-pane">
       <div class="tree-pane">
         <h2>Evidence Tree</h2>
+        <div id="evidenceTreeTabs" class="tree-tabs" role="tablist" aria-label="Evidence tree categories"></div>
         <div id="evidenceTree" class="tree"></div>
       </div>
       <div id="horizontalResizer" class="splitter splitter-horizontal" role="separator" aria-orientation="horizontal" tabindex="0"></div>
@@ -1448,6 +1781,22 @@
           <div id="narrativeFacts" class="narrative-facts"></div>
           <p id="narrativeReadOnlyNote" class="read-only-note">chilai_nanhua_day1 is shown as read-only GPX projection evidence. It is not Phase 1 runtime safety truth.</p>
         </div>
+        <section id="completedTripRecordingPanel" class="scenario-panel" aria-label="Completed trip GPX recording set selector">
+          <div class="scenario-head">
+            <h2>Completed Trip GPX</h2>
+            <span id="completedTripRecordingStatus">loading recordings</span>
+          </div>
+          <p class="read-only-note">Reads completed trip GPX files from Scout storage. Multiple recordings can exist; selecting one sets the active post-analysis target without deleting other GPX files.</p>
+          <div id="completedTripRecordingList" class="scenario-list"></div>
+        </section>
+        <section id="scoutReactionSimulationPanel" class="reaction-panel" aria-label="Scout reaction replay">
+          <div class="reaction-head">
+            <h2>Scout Reaction Replay</h2>
+            <span id="scoutReactionSimulationStatus">no active GPX</span>
+          </div>
+          <p class="read-only-note">Read-only replay of recorded waypoint-note results: Ln state records, warning records, skill outcomes, voice cue records, and Pydantic AI prompts captured during the completed GPX. Loading a completed GPX does not call live safety endpoints, run a skill, call a model, play voice, or send outbound messages.</p>
+          <div id="scoutReactionSimulationList" class="reaction-event-list"></div>
+        </section>
         <section id="capabilityPanel" class="capability-panel is-empty" aria-label="Capability Timeline read-only projection">
           <div class="capability-head">
             <div>
@@ -1603,7 +1952,11 @@
     const MAP_VISUAL_PADDING = 34;
     const MAP_MIN_ZOOM = 0.6;
     const MAP_MAX_ZOOM = 12000;
-    const FOCUS_POINT_VIEWPORT_M = 50;
+    const FOCUS_POINT_VIEWPORT_M = 1000;
+    const POINT_LABEL_VIEWPORT_M = 30;
+    const POINT_LABEL_FONT_PX = 4;
+    const POINT_LABEL_STROKE_PX = 0.6;
+    const POINT_LABEL_OFFSET_PX = 3;
     const FOCUS_PATH_MAX_ZOOM = 4.4;
     const FOCUS_POINT_BOX_THRESHOLD = 28;
     const MAP_ZOOM_STEP_FACTOR = 1.25;
@@ -1616,9 +1969,38 @@
     const OSM_MIN_ZOOM = 8;
     const OSM_MAX_ZOOM = 20;
     const OSM_TILE_CACHE_BUST = "transparent-fallback-v12";
-    const RASTER_LOCAL_TILE_URL_TEMPLATE = `${apiBase()}/admin/tiles/imagery/{project_id}/{layer_id}/{z}/{x}/{y}.png`;
-    const RASTER_TILE_CACHE_BUST = "transparent-fallback-v12";
+    const RASTER_TILE_CACHE_BUST = "wmts-runtime-v1";
     const OSM_ATTRIBUTION = "OpenStreetMap contributors";
+    const HAPPYMAN_WMTS_ENDPOINT = "https://tile.happyman.idv.tw/mp/service";
+    const HAPPYMAN_WMTS_BASE = {
+      sourceKind: "wmts_kvp_tile",
+      wmtsEndpoint: HAPPYMAN_WMTS_ENDPOINT,
+      wmtsStyle: "default",
+      wmtsTileMatrixSet: "gm_grid",
+      wmtsTileMatrixIdStyle: "zero_padded_2",
+      wmtsFormat: "image/png",
+      wmtsVersion: "1.0.0",
+      minZoom: 5,
+      maxZoom: 20
+    };
+    const RASTER_SOURCE_LAYER_DEFINITIONS = [
+      {layerId: "imagery", sourceId: "nlsc_photo2", label: "Imagery", sourceKind: "wmts_tile", urlTemplate: "https://wmts.nlsc.gov.tw/wmts/PHOTO2/default/EPSG:3857/{z}/{y}/{x}", tileOrder: "z_y_x", minZoom: 5, maxZoom: 19, opacity: 0.92},
+      {layerId: "rudy", sourceId: "happyman_rudy", label: "Rudy", wmtsLayer: "rudy", opacity: 0.94, ...HAPPYMAN_WMTS_BASE},
+      {layerId: "rudy-twmap", sourceId: "happyman_rudy_twmap", label: "Rudy+TW", wmtsLayer: "rudy_twmap", opacity: 0.9, ...HAPPYMAN_WMTS_BASE},
+      {layerId: "relief", sourceId: "happyman_colorrelief", label: "Relief", wmtsLayer: "colorrelief", opacity: 0.58, ...HAPPYMAN_WMTS_BASE},
+      {layerId: "geology", sourceId: "happyman_geo2016", label: "Geology", wmtsLayer: "geo2016", opacity: 0.52, ...HAPPYMAN_WMTS_BASE},
+      {layerId: "topo-5k", sourceId: "happyman_tw5k2000", label: "Topo 5K", wmtsLayer: "tw5k2000", opacity: 0.82, ...HAPPYMAN_WMTS_BASE},
+      {layerId: "forest", sourceId: "happyman_forest", label: "Forest", wmtsLayer: "forest", opacity: 0.72, ...HAPPYMAN_WMTS_BASE}
+    ];
+    const RASTER_SOURCE_LAYER_BY_ID = Object.fromEntries(RASTER_SOURCE_LAYER_DEFINITIONS.map(layer => [layer.layerId, layer]));
+    const RASTER_OVERLAY_LAYER_DEFINITIONS = RASTER_SOURCE_LAYER_DEFINITIONS.filter(layer => layer.layerId !== "imagery");
+    const EVIDENCE_TREE_TABS = [
+      {id: "default", label: "CP / Timeline", category: "checkpoint"},
+      {id: "map_risk", label: "Map / Risk", category: "risk"},
+      {id: "completed", label: "Completed GPX", category: "route"},
+      {id: "review", label: "Review / Queue", category: "gis"},
+      {id: "info", label: "Info / Other", category: "map"}
+    ];
     const AFTER_ACTION_NEXT_PLAN_CANDIDATES = [
       {
         candidate_id: "after_action.chilai_nanhua_day1.golden_route_semantics",
@@ -1645,7 +2027,7 @@
         boundary: "reference tracks stay planning evidence only; not runtime safety truth"
       }
     ];
-    const state = { view: null, projected: null, selected: null, zoom: 1, panX: 0, panY: 0, zoomSelection: null };
+    const state = { view: null, projected: null, selected: null, zoom: 1, panX: 0, panY: 0, zoomSelection: null, completedTripRecordings: null, focusedLabelIds: new Set(), activeEvidenceTreeTab: "default", evidenceTreeTabCounts: {} };
     const svg = document.getElementById("map");
     const hoverHint = document.getElementById("hoverHint");
     const layerInputs = document.querySelectorAll("[data-layer]");
@@ -1672,16 +2054,50 @@
       return (view?.map_layers || []).find(layer => layer.layer_id === layerId) || {};
     }
 
+    function rasterLayerFor(view, layerId = "imagery") {
+      const explicitLayer = mapLayerById(view, layerId);
+      const definition = RASTER_SOURCE_LAYER_BY_ID[layerId];
+      if (explicitLayer.layer_id) {
+        return {
+          ...explicitLayer,
+          source_kind: explicitLayer.source_kind || definition?.sourceKind,
+          imagery_source_id: explicitLayer.imagery_source_id || definition?.sourceId,
+          raster_layer_opacity: explicitLayer.raster_layer_opacity ?? definition?.opacity
+        };
+      }
+      if (!definition) return mapLayerById(view, "imagery");
+      const imageryLayer = mapLayerById(view, "imagery");
+      const layerManifest = imageryLayer.raster_layer_manifests?.[layerId] || {};
+      return {
+        ...imageryLayer,
+        ...layerManifest,
+        layer_id: definition.layerId,
+        label: definition.label,
+        source_kind: layerManifest.imagery_source_kind || definition.sourceKind,
+        imagery_source_id: layerManifest.imagery_source_id || definition.sourceId,
+        raster_layer_opacity: definition.opacity,
+        candidate_only: true,
+        runtime_safety_truth: false
+      };
+    }
+
     function apiUrlTemplate(template) {
       if (!template) return "";
       if (template.startsWith("http://") || template.startsWith("https://")) return template;
       if (template.startsWith("/")) return `${apiBase()}${template}`;
       return template;
     }
+    function rasterSourceDefinitionFor(layerId, layer = {}) {
+      const sourceId = layer.imagery_source_id || layer.source_id;
+      return RASTER_SOURCE_LAYER_BY_ID[layerId]
+        || RASTER_SOURCE_LAYER_DEFINITIONS.find(definition => definition.sourceId === sourceId)
+        || RASTER_SOURCE_LAYER_BY_ID.imagery;
+    }
 
-    function rasterTileTemplate(view) {
-      const layer = mapLayerById(view, "imagery");
-      return apiUrlTemplate(layer.local_raster_tile_url_template) || RASTER_LOCAL_TILE_URL_TEMPLATE;
+    function rasterTileTemplate(view, layerId = "imagery") {
+      const layer = rasterLayerFor(view, layerId);
+      const definition = rasterSourceDefinitionFor(layerId, layer);
+      return definition.urlTemplate || "";
     }
     function normalizeRasterBounds(value) {
       if (!value) return null;
@@ -1693,8 +2109,8 @@
       if (west > east || south > north) return null;
       return {west, south, east, north};
     }
-    function rasterBoundsFor(view) {
-      const layer = mapLayerById(view, "imagery");
+    function rasterBoundsFor(view, layerId = "imagery") {
+      const layer = rasterLayerFor(view, layerId);
       return normalizeRasterBounds(layer.raster_bbox_wgs84 || layer.bbox_wgs84 || layer.georeference?.bbox_wgs84);
     }
     function parseZoomRange(value) {
@@ -1705,11 +2121,12 @@
         max: Number(match[2])
       };
     }
-    function rasterZoomRangeFor(view) {
-      const layer = mapLayerById(view, "imagery");
+    function rasterZoomRangeFor(view, layerId = "imagery") {
+      const layer = rasterLayerFor(view, layerId);
+      const definition = rasterSourceDefinitionFor(layerId, layer);
       const parsed = parseZoomRange(layer.raster_tile_zoom_range || layer.zoom_range);
-      const min = Number(layer.raster_tile_min_zoom ?? layer.min_zoom ?? parsed?.min ?? OSM_MIN_ZOOM);
-      const max = Number(layer.raster_tile_max_zoom ?? layer.max_zoom ?? parsed?.max ?? OSM_TARGET_ZOOM);
+      const min = Number(layer.raster_tile_min_zoom ?? layer.min_zoom ?? parsed?.min ?? definition?.minZoom ?? OSM_MIN_ZOOM);
+      const max = Number(layer.raster_tile_max_zoom ?? layer.max_zoom ?? parsed?.max ?? definition?.maxZoom ?? OSM_TARGET_ZOOM);
       const safeMin = Number.isFinite(min) ? clamp(Math.round(min), OSM_MIN_ZOOM, OSM_MAX_ZOOM) : OSM_MIN_ZOOM;
       const safeMax = Number.isFinite(max) ? clamp(Math.round(max), safeMin, OSM_MAX_ZOOM) : OSM_TARGET_ZOOM;
       return {min: safeMin, max: safeMax};
@@ -1719,6 +2136,7 @@
       return a.west <= b.east && a.east >= b.west && a.south <= b.north && a.north >= b.south;
     }
     function rasterTileCacheBustedUrl(url) {
+      if (url.startsWith("http://") || url.startsWith("https://")) return url;
       const separator = url.includes("?") ? "&" : "?";
       return `${url}${separator}fallback=transparent&v=${RASTER_TILE_CACHE_BUST}`;
     }
@@ -1787,16 +2205,38 @@
       const url = osmTileTemplate().replace("{z}", z).replace("{x}", x).replace("{y}", y);
       return osmTileCacheBustedUrl(url);
     }
-    function rasterTileUrl(view, z, x, y) {
-      const layer = mapLayerById(view, "imagery");
-      const layerId = layer.layer_id || "imagery";
-      const url = rasterTileTemplate(view)
-        .replace("{project_id}", CASE_ID)
-        .replace("{layer_id}", layerId)
-        .replace("{z}", z)
-        .replace("{x}", x)
-        .replace("{y}", y);
-      return rasterTileCacheBustedUrl(url);
+    function wmtsTileMatrixId(definition, z) {
+      return definition.wmtsTileMatrixIdStyle === "zero_padded_2" ? String(z).padStart(2, "0") : String(z);
+    }
+    function replaceTilePlaceholders(template, z, x, y) {
+      return template
+        .replaceAll("{z}", String(z))
+        .replaceAll("{x}", String(x))
+        .replaceAll("{y}", String(y));
+    }
+    function wmtsTileUrl(definition, z, x, y) {
+      if (definition.sourceKind === "wmts_kvp_tile") {
+        const params = new URLSearchParams({
+          SERVICE: "WMTS",
+          REQUEST: "GetTile",
+          VERSION: definition.wmtsVersion || "1.0.0",
+          LAYER: definition.wmtsLayer,
+          STYLE: definition.wmtsStyle || "default",
+          TILEMATRIXSET: definition.wmtsTileMatrixSet,
+          TILEMATRIX: wmtsTileMatrixId(definition, z),
+          TILEROW: String(y),
+          TILECOL: String(x),
+          FORMAT: definition.wmtsFormat || "image/png"
+        });
+        return `${definition.wmtsEndpoint}?${params.toString()}`;
+      }
+      return replaceTilePlaceholders(definition.urlTemplate || rasterTileTemplate(null, definition.layerId), z, x, y);
+    }
+    function rasterTileUrl(view, requestedLayerId, z, x, y) {
+      const layer = rasterLayerFor(view, requestedLayerId);
+      const resolvedLayerId = layer.layer_id || "imagery";
+      const definition = rasterSourceDefinitionFor(resolvedLayerId, layer);
+      return rasterTileCacheBustedUrl(wmtsTileUrl(definition, z, x, y));
     }
     function tileRangeForZoom(bounds, zoom) {
       const maxIndex = (2 ** zoom) - 1;
@@ -1816,8 +2256,8 @@
       while (zoom > OSM_MIN_ZOOM && tileCountForZoom(bounds, zoom) > maxTiles) zoom -= 1;
       return zoom;
     }
-    function chooseRasterZoom(view, bounds, maxTiles = RASTER_MAX_TILES) {
-      const range = rasterZoomRangeFor(view);
+    function chooseRasterZoom(view, bounds, maxTiles = RASTER_MAX_TILES, layerId = "imagery") {
+      const range = rasterZoomRangeFor(view, layerId);
       let zoom = range.max;
       while (zoom > range.min && tileCountForZoom(bounds, zoom) > maxTiles) zoom -= 1;
       return zoom;
@@ -1840,18 +2280,20 @@
       }
       return tiles;
     }
-    function rasterTileCoverage(view, bounds, zoom = null) {
-      const z = zoom ?? chooseRasterZoom(view, bounds);
-      const rasterBounds = rasterBoundsFor(view);
+    function rasterTileCoverage(view, bounds, zoom = null, layerId = "imagery") {
+      const z = zoom ?? chooseRasterZoom(view, bounds, RASTER_MAX_TILES, layerId);
+      const rasterBounds = rasterBoundsFor(view, layerId);
       return osmTileCoverage(bounds, z)
         .filter(tile => boundsIntersect(tile, rasterBounds))
         .map(tile => ({
           ...tile,
-          href: rasterTileUrl(view, tile.z, tile.x, tile.y)
+          href: rasterTileUrl(view, layerId, tile.z, tile.x, tile.y)
         }));
     }
-    function renderRasterImagery(group, view, bounds, width, height) {
-      rasterTileCoverage(view, bounds).forEach(tile => {
+    function renderRasterImagery(group, view, bounds, width, height, layerId = "imagery") {
+      const layer = rasterLayerFor(view, layerId);
+      const opacity = Number(layer.raster_layer_opacity ?? RASTER_SOURCE_LAYER_BY_ID[layerId]?.opacity ?? 0.92);
+      rasterTileCoverage(view, bounds, null, layerId).forEach(tile => {
         const [x1, y1] = project(bounds, tile.north, tile.west);
         const [x2, y2] = project(bounds, tile.south, tile.east);
         group.appendChild(el("image", {
@@ -1863,7 +2305,10 @@
           class: "raster-tile",
           preserveAspectRatio: "none",
           "data-raster-tile": `${tile.z}/${tile.x}/${tile.y}`,
-          "data-source-kind": "local_geotiff"
+          "data-map-ref": layerId,
+          "data-source-id": layer.imagery_source_id || layer.source_id || "",
+          "data-source-kind": layer.source_kind || "local_geotiff",
+          opacity: Number.isFinite(opacity) ? opacity.toFixed(2) : "0.92"
         }));
       });
     }
@@ -1890,6 +2335,9 @@
 
     function terrainVisualization(view) {
       return view?.terrain_visualization || {};
+    }
+    function segmentTerrainMetadata(view) {
+      return view?.segment_terrain?.segment_metadata || [];
     }
     function terrainRasterOverlays(view) {
       return (terrainVisualization(view).raster_overlays || [])
@@ -1927,6 +2375,36 @@
           group.appendChild(image);
         });
     }
+    function renderSegmentTerrainLines(group, view, bounds) {
+      const terrainBySegment = new Map(
+        segmentTerrainMetadata(view).map(item => [item.segment_candidate_id, item])
+      );
+      const checkpointById = new Map(
+        (view.mission?.checkpoints || []).map(item => [item.checkpoint_id, item])
+      );
+      (view.mission?.segments || []).forEach(segment => {
+        const terrain = terrainBySegment.get(segment.segment_id);
+        const from = checkpointById.get(segment.from_checkpoint_id);
+        const to = checkpointById.get(segment.to_checkpoint_id);
+        if (!from || !to || !terrain) return;
+        const linkedTileCount = terrain.candidate_tiles?.length || 0;
+        const path = el("path", {
+          d: pathFromCoords(bounds, [from, to]),
+          class: linkedTileCount ? "terrain-line" : "terrain-line is-unlinked",
+          "data-terrain-tile-count": linkedTileCount
+        });
+        attachEvidence(path, {
+          source_id: terrain.segment_candidate_id,
+          source_path: view.segment_terrain?.source_path || "segment_dtm_coverage",
+          evidence_type: "pretrip_segment_dtm_coverage",
+          label: `DTM coverage ${terrain.from_candidate_id} -> ${terrain.to_candidate_id}`,
+          status: linkedTileCount ? `${linkedTileCount} candidate DEM tile(s)` : "no candidate DEM tile",
+          ...terrain
+        });
+        tagEvidenceNode(path, terrain, "terrain");
+        group.appendChild(path);
+      });
+    }
 
     function renderWeatherOverlayPlaceholder(group, width, height) {
       group.appendChild(el("rect", {x: 14, y: 14, width: width - 28, height: height - 28, rx: 10, class: "weather-api-frame"}));
@@ -1942,6 +2420,15 @@
       const b = { ...view.route.bounds };
       view.map.corridors.forEach(corridor => {
         corridor.coordinates.forEach(point => {
+          b.south = Math.min(b.south, point.lat);
+          b.north = Math.max(b.north, point.lat);
+          b.west = Math.min(b.west, point.lon);
+          b.east = Math.max(b.east, point.lon);
+        });
+      });
+      const completedSegments = view.completed_trip_track?.display_geometry?.coordinate_segments || [];
+      completedSegments.forEach(segment => {
+        segment.forEach(point => {
           b.south = Math.min(b.south, point.lat);
           b.north = Math.max(b.north, point.lat);
           b.west = Math.min(b.west, point.lon);
@@ -1976,6 +2463,7 @@
         attachEvidence(circle, candidate);
         tagEvidenceNode(circle, candidate, "overpass");
         group.appendChild(circle);
+        appendPointLabel(group, x, y, candidate, "overpass");
       });
     }
 
@@ -2008,6 +2496,168 @@
       return `${number.toLocaleString(undefined, {maximumFractionDigits: 1})}${suffix}`;
     }
 
+    function renderCompletedTripRecordingPanel(catalog) {
+      const list = document.getElementById("completedTripRecordingList");
+      const status = document.getElementById("completedTripRecordingStatus");
+      if (!list || !status) return;
+      list.replaceChildren();
+      if (!catalog || !Array.isArray(catalog.recordings) || catalog.recordings.length === 0) {
+        status.textContent = "no completed GPX";
+        const empty = document.createElement("p");
+        empty.className = "read-only-note";
+        empty.textContent = `Place completed trip GPX files under ${catalog?.recording_set_root || "Scout post-analysis recording set storage"} and reload.`;
+        list.appendChild(empty);
+        return;
+      }
+      const activeId = catalog.active_recording?.recording_id || state.view?.active_completed_trip_recording?.recording_id || "";
+      status.textContent = activeId ? `active: ${activeId}` : `${catalog.recording_count} GPX available`;
+      catalog.recordings.forEach(recording => {
+        const card = document.createElement("article");
+        card.className = `scenario-card${recording.recording_id === activeId ? " is-active" : ""}`;
+        const title = document.createElement("strong");
+        title.textContent = recording.display_name || recording.filename || recording.recording_id;
+        const content = document.createElement("p");
+        content.textContent = recording.description || `${recording.role || "recording"} | ${recording.participant_id || "participant"} | ${recording.source_device || "unknown device"}`;
+        const meta = document.createElement("small");
+        meta.textContent = [
+          recording.recording_id,
+          recording.role || "role -",
+          `${formatNumber(recording.point_count)} pts`,
+          `${formatOneDecimal((recording.distance_m || 0) / 1000, "km")}`,
+          `${recording.trkseg_count || 0} trkseg`,
+          `${recording.scout_note_waypoint_count || 0} Scout notes`
+        ].join(" | ");
+        const source = document.createElement("small");
+        source.textContent = recording.source_path || recording.filename || "";
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "run-post-analysis-button";
+        button.disabled = recording.loadable === false;
+        button.textContent = recording.loadable === false ? "Cannot analyze" : (recording.recording_id === activeId ? "Run post analysis again" : "Run post analysis");
+        button.setAttribute("aria-label", `Run post analysis for ${recording.display_name || recording.filename || recording.recording_id}`);
+        button.addEventListener("click", () => selectCompletedTripRecording(recording.recording_id, button));
+        card.appendChild(title);
+        card.appendChild(content);
+        card.appendChild(meta);
+        card.appendChild(source);
+        card.appendChild(button);
+        list.appendChild(card);
+      });
+    }
+
+    async function loadCompletedTripRecordings() {
+      const status = document.getElementById("completedTripRecordingStatus");
+      try {
+        const response = await fetch(`${apiBase()}/admin/post-analysis/completed-trip-recordings`);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const catalog = await response.json();
+        state.completedTripRecordings = catalog;
+        if (state.view) state.view.completed_trip_recordings = catalog;
+        renderCompletedTripRecordingPanel(catalog);
+      } catch (error) {
+        if (status) status.textContent = `failed: ${error.message}`;
+      }
+    }
+
+    async function selectCompletedTripRecording(recordingId, button) {
+      const status = document.getElementById("completedTripRecordingStatus");
+      const originalText = button?.textContent || "";
+      if (button) {
+        button.disabled = true;
+        button.textContent = "Running...";
+      }
+      if (status) status.textContent = `running ${recordingId}`;
+      try {
+        const response = await fetch(`${apiBase()}/admin/post-analysis/completed-trip-recordings/${encodeURIComponent(recordingId)}/select`, {method: "POST"});
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const result = await response.json();
+        if (state.view) {
+          state.view.capability_timeline = result.capability_timeline;
+          state.view.active_completed_trip_recording = result.recording;
+          state.view.scout_reaction_simulation = result.scout_reaction_simulation;
+          state.view.completed_trip_track = result.completed_trip_track;
+          if (result.energy_reserve_monitor) {
+            state.view.energy_reserve_monitor = result.energy_reserve_monitor;
+          }
+          if (state.view.completed_trip_recordings) {
+            state.view.completed_trip_recordings.active_recording = result.recording;
+          }
+        }
+        if (state.completedTripRecordings) {
+          state.completedTripRecordings.active_recording = result.recording;
+        }
+        renderCompletedTripRecordingPanel(state.completedTripRecordings || state.view?.completed_trip_recordings);
+        renderScoutReactionSimulationPanel(result.scout_reaction_simulation);
+        if (state.view) {
+          renderEnergyReserveMonitor(state.view);
+          renderMap(state.view);
+          renderEvidenceTree(state.view);
+        }
+        setDetail({
+          ...(result.capability_timeline || {}),
+          completed_trip_recording: result.recording,
+          completed_trip_track: result.completed_trip_track,
+          scout_reaction_simulation: result.scout_reaction_simulation,
+          evidence_type: "post_analysis_capability",
+          source_id: result.recording?.recording_id || recordingId,
+          source_path: result.paths?.active_completed_track_gpx || ""
+        });
+        if (status) status.textContent = `active: ${result.recording?.recording_id || recordingId}`;
+      } catch (error) {
+        if (status) status.textContent = `failed: ${error.message}`;
+        if (button) {
+          button.disabled = false;
+          button.textContent = originalText;
+        }
+      }
+    }
+
+    function renderScoutReactionSimulationPanel(simulation) {
+      const list = document.getElementById("scoutReactionSimulationList");
+      const status = document.getElementById("scoutReactionSimulationStatus");
+      if (!list || !status) return;
+      list.replaceChildren();
+      if (!simulation || !Array.isArray(simulation.events) || simulation.events.length === 0) {
+        status.textContent = "no active replay";
+        const empty = document.createElement("p");
+        empty.className = "read-only-note";
+        empty.textContent = "Select a completed trip GPX to replay recorded Scout reaction results from GPX waypoint notes.";
+        list.appendChild(empty);
+        return;
+      }
+      status.textContent = `${simulation.event_count || simulation.events.length} events | ${simulation.waypoint_note_count || 0} waypoint notes`;
+      simulation.events.slice(0, 16).forEach(event => {
+        const item = document.createElement("article");
+        item.className = "reaction-event";
+        const title = document.createElement("strong");
+        title.textContent = `${event.kind || "event"} | ${event.severity || "info"}`;
+        const summary = document.createElement("p");
+        summary.textContent = event.summary || "-";
+        const meta = document.createElement("small");
+        meta.textContent = [
+          event.subject_ref || "-",
+          event.payload?.waypoint_name || "-",
+          event.payload?.recorded_ln_level || event.payload?.to_level || event.payload?.skill_id || event.payload?.tool_name || event.payload?.provider || "-"
+        ].join(" | ");
+        item.appendChild(title);
+        item.appendChild(summary);
+        item.appendChild(meta);
+        const prompt = event.payload?.prompt || event.payload?.text || event.payload?.message;
+        if (prompt) {
+          const detail = document.createElement("small");
+          detail.textContent = prompt;
+          item.appendChild(detail);
+        }
+        list.appendChild(item);
+      });
+      if (simulation.events.length > 16) {
+        const more = document.createElement("p");
+        more.className = "read-only-note";
+        more.textContent = `${simulation.events.length - 16} additional recorded events are available in raw JSON.`;
+        list.appendChild(more);
+      }
+    }
+
     function narrativeSummary(item) {
       if (!item) return "Select evidence to read the mission story in plain language.";
       if (item.evidence_type === "case_summary") {
@@ -2028,10 +2678,15 @@
         return `Scout sealed this segment capsule for ${item.segment_id || item.capsule?.segment_id || "-"} as after-action evidence from ${item.start_checkpoint_id || item.capsule?.start_checkpoint_id || "-"} to ${item.end_checkpoint_id || item.capsule?.end_checkpoint_id || "-"}.`;
       }
       if (item.evidence_type === "post_analysis_capability") {
-        return `Capability Timeline is read-only post-analysis evidence with ${formatNumber(item.edge_count)} checkpoint segments, ${formatNumber(item.rest_interval_count)} detected rest intervals, and ${formatNumber(item.summary?.moving_time_s, "s")} moving time.`;
+        const observedCount = item.observed_edge_count ?? ((item.summary?.traversed_segment_count || 0) + (item.summary?.partial_segment_count || 0));
+        const plannedCount = item.summary?.planned_segment_count || item.edge_count || 0;
+        return `Capability Timeline is read-only post-analysis evidence with ${formatNumber(observedCount)} observed checkpoint segments out of ${formatNumber(plannedCount)} planned segments, ${formatNumber(item.rest_interval_count)} detected rest intervals, and ${formatNumber(item.summary?.moving_time_s, "s")} moving time.`;
       }
       if (item.evidence_type === "post_analysis_capability_segment") {
         return `This completed checkpoint segment measured ${formatNumber(item.moving_time_s, "s")} moving time, ${formatNumber(item.elapsed_time_s, "s")} elapsed time, and ${formatNumber(item.rest_time_s, "s")} rest time.`;
+      }
+      if (item.evidence_type === "completed_trip_scout_reaction_record") {
+        return `Scout recorded this ${item.kind || "reaction"} result at ${item.waypoint_name || item.subject_ref || "a scenario waypoint"}. It is replayed from completed-trip GPX notes and is not executed again on load.`;
       }
       if (item.evidence_type === "runtime_decision") {
         return item.reason || `Runtime decision evidence recorded ${item.from_level || "-"} to ${item.to_level || item.label || "-"}.`;
@@ -2109,7 +2764,8 @@
       }
       if (item.evidence_type === "post_analysis_capability") {
         return [
-          ["Segments", formatNumber(item.edge_count)],
+          ["Observed", formatNumber(item.observed_edge_count ?? ((item.summary?.traversed_segment_count || 0) + (item.summary?.partial_segment_count || 0)))],
+          ["Planned", formatNumber(item.summary?.planned_segment_count || item.edge_count || 0)],
           ["Moving", formatNumber(item.summary?.moving_time_s, "s")],
           ["Rest", formatNumber(item.summary?.rest_time_s, "s")],
           ["Raw GPX shared", String(item.capsule_preview?.raw_track_shared === true)]
@@ -2121,6 +2777,14 @@
           ["Moving", formatNumber(item.moving_time_s, "s")],
           ["Elapsed", formatNumber(item.elapsed_time_s, "s")],
           ["Rest", formatNumber(item.rest_time_s, "s")]
+        ];
+      }
+      if (item.evidence_type === "completed_trip_scout_reaction_record") {
+        return [
+          ["Kind", item.kind || "-"],
+          ["Severity", item.severity || "-"],
+          ["Waypoint", item.waypoint_name || item.subject_ref || "-"],
+          ["Replay Only", String(item.payload?.replayed_from_waypoint_note === true)]
         ];
       }
       if (item.evidence_type === "runtime_decision") {
@@ -2202,6 +2866,27 @@
       item.appendChild(strong);
       item.appendChild(span);
       list.appendChild(item);
+    }
+
+    function capabilityObservedEdges(artifact) {
+      const edges = artifact?.observed_edges || null;
+      if (Array.isArray(edges)) return edges;
+      return (artifact?.edges || []).filter(edge => edge.traversal_status !== "unreached");
+    }
+
+    function capabilityUnreachedEdges(artifact) {
+      return (artifact?.edges || []).filter(edge => edge.traversal_status === "unreached");
+    }
+
+    function capabilityObservedNodes(artifact, observedEdges) {
+      const nodes = artifact?.nodes || [];
+      const observedNodeIds = new Set();
+      observedEdges.forEach(edge => {
+        if (edge.from_node_id) observedNodeIds.add(edge.from_node_id);
+        if (edge.to_node_id) observedNodeIds.add(edge.to_node_id);
+      });
+      const observedNodes = nodes.filter(node => observedNodeIds.has(node.node_id));
+      return observedNodes.length ? observedNodes : nodes;
     }
 
     function capabilityComparisonForEdge(edge, artifact) {
@@ -2361,8 +3046,8 @@
     function renderCapabilityTimelineSvg(artifact, selectedEdge) {
       const node = document.getElementById("capabilityTimelineSvg");
       node.replaceChildren();
-      const edges = artifact?.edges || [];
-      const nodes = artifact?.nodes || [];
+      const edges = capabilityObservedEdges(artifact);
+      const nodes = capabilityObservedNodes(artifact, edges);
       if (!edges.length || !nodes.length) {
         node.appendChild(el("text", {x: 24, y: 82}, "Capability timeline artifact has no segment edges."));
         return;
@@ -2379,7 +3064,8 @@
         const x = nodeOrder.length <= 1 ? width / 2 : left + (index / (nodeOrder.length - 1)) * (right - left);
         return [nodeId, x];
       }));
-      node.appendChild(el("text", {x: 18, y: 24}, `${formatNumber(nodes.length)} checkpoints / ${formatNumber(edges.length)} segments; milestone labels shown for dense routes`));
+      const plannedCount = artifact?.summary?.planned_segment_count || artifact?.edge_count || edges.length;
+      node.appendChild(el("text", {x: 18, y: 24}, `${formatNumber(nodes.length)} observed checkpoints / ${formatNumber(edges.length)} observed segments; ${formatNumber(plannedCount)} planned`));
       edges.forEach(edge => {
         const x1 = nodeX.get(edge.from_node_id) ?? left;
         const x2 = nodeX.get(edge.to_node_id) ?? right;
@@ -2481,6 +3167,7 @@
       const profileEdge = edge || (artifact.edges || [])[0] || null;
 
       const metricRows = edge ? [
+        ["Status", edge.traversal_status || "traversed"],
         ["Moving", formatNumber(edge.moving_time_s, "s")],
         ["Elapsed", formatNumber(edge.elapsed_time_s, "s")],
         ["Rest", formatNumber(edge.rest_time_s, "s")],
@@ -2488,6 +3175,10 @@
         ["Ascent", formatOneDecimal(edge.ascent_m, "m")],
         ["Descent", formatOneDecimal(edge.descent_m, "m")]
       ] : [
+        ["Completion", summary.completion_status || "unknown"],
+        ["Observed", `${formatNumber(artifact.observed_edge_count ?? ((summary.traversed_segment_count || 0) + (summary.partial_segment_count || 0)))} segments`],
+        ["Planned", formatNumber(summary.planned_segment_count || artifact.edge_count || 0)],
+        ["Unreached", formatNumber(summary.unreached_segment_count || 0)],
         ["Moving", formatNumber(summary.moving_time_s, "s")],
         ["Elapsed", formatNumber(summary.elapsed_time_s, "s")],
         ["Rest", formatNumber(summary.rest_time_s, "s")],
@@ -2505,7 +3196,7 @@
         appendCapabilityListItem(
           segments,
           edge.edge_id || "selected capability segment",
-          `${formatNumber(edge.moving_time_s, "s")} moving | ${formatNumber(edge.elapsed_time_s, "s")} elapsed | ${formatNumber(edge.rest_time_s, "s")} rest | terrain ${edge.terrain_profile?.summary?.terrain_difficulty_band || "unknown"}`
+          `${edge.traversal_status || "traversed"} | ${formatNumber(edge.moving_time_s, "s")} moving | ${formatNumber(edge.elapsed_time_s, "s")} elapsed | ${formatNumber(edge.rest_time_s, "s")} rest | terrain ${edge.terrain_profile?.summary?.terrain_difficulty_band || "unknown"}`
         );
         if (comparison) {
           appendCapabilityListItem(
@@ -2515,14 +3206,22 @@
           );
         }
       } else {
-        (artifact.edges || []).forEach(capabilityEdge => {
+        capabilityObservedEdges(artifact).forEach(capabilityEdge => {
           const comparison = capabilityComparisonForEdge(capabilityEdge, artifact);
           appendCapabilityListItem(
             segments,
             capabilityEdge.edge_id,
-            `${capabilityEdge.from_node_id} -> ${capabilityEdge.to_node_id} | ${formatNumber(capabilityEdge.moving_time_s, "s")} moving | ${formatNumber(capabilityEdge.rest_time_s, "s")} rest | terrain ${capabilityEdge.terrain_profile?.summary?.terrain_difficulty_band || "unknown"}${comparison ? ` | guide delta ${comparison.delta_vs_guide_moving_min}m` : ""}`
+            `${capabilityEdge.traversal_status || "traversed"} | ${capabilityEdge.from_node_id} -> ${capabilityEdge.to_node_id} | ${formatNumber(capabilityEdge.moving_time_s, "s")} moving | ${formatNumber(capabilityEdge.rest_time_s, "s")} rest | terrain ${capabilityEdge.terrain_profile?.summary?.terrain_difficulty_band || "unknown"}${comparison ? ` | guide delta ${comparison.delta_vs_guide_moving_min}m` : ""}`
           );
         });
+        const unreached = capabilityUnreachedEdges(artifact);
+        if (unreached.length) {
+          appendCapabilityListItem(
+            segments,
+            "unreached planned segments",
+            `${formatNumber(unreached.length)} planned segments were not reached by this completed GPX and are excluded from observed capability evidence.`
+          );
+        }
       }
 
       const refs = edge
@@ -2636,6 +3335,7 @@
       if (item.evidence_type === "replay_summary") return "replay";
       if (item.evidence_type === "cross_surface_evidence_timeline_category") return "map";
       if (item.evidence_type === "post_analysis_capability") return "map";
+      if (item.evidence_type === "completed_trip_scout_reaction_record") return "timeline";
       if (String(item.evidence_type || "").includes("major_critical_point") || item.mcp_id) return "mcp";
       if (String(item.evidence_type || "").includes("gis_perception") || item.nearby_group_id) return "gis";
       if (item.evidence_type === "mission_checkpoint" || item.checkpoint_id) return "checkpoint";
@@ -2697,10 +3397,14 @@
         return `${capsule.segment_id || item.capsule_id} | ${capsule.start_checkpoint_id || "-"} -> ${capsule.end_checkpoint_id || "-"}`;
       }
       if (item.evidence_type === "post_analysis_capability") {
-        return `${item.edge_count || 0} segments | moving ${formatNumber(item.summary?.moving_time_s, "s")} | rest ${formatNumber(item.summary?.rest_time_s, "s")}`;
+        const observedCount = item.observed_edge_count ?? ((item.summary?.traversed_segment_count || 0) + (item.summary?.partial_segment_count || 0));
+        return `${item.summary?.completion_status || "unknown"} | ${formatNumber(observedCount)}/${formatNumber(item.summary?.planned_segment_count || item.edge_count || 0)} observed/planned | moving ${formatNumber(item.summary?.moving_time_s, "s")} | rest ${formatNumber(item.summary?.rest_time_s, "s")}`;
       }
       if (item.evidence_type === "post_analysis_capability_segment") {
-        return `${item.from_node_id || "-"} -> ${item.to_node_id || "-"} | moving ${formatNumber(item.moving_time_s, "s")} | confidence ${item.confidence || "-"}`;
+        return `${item.traversal_status || "traversed"} | ${item.from_node_id || "-"} -> ${item.to_node_id || "-"} | moving ${formatNumber(item.moving_time_s, "s")} | confidence ${item.confidence || "-"}`;
+      }
+      if (item.evidence_type === "completed_trip_scout_reaction_record") {
+        return `${item.kind || "record"} | ${item.severity || "info"} | ${item.waypoint_name || item.subject_ref || "-"}`;
       }
       if (item.evidence_type === "device_observation") {
         return `progress ${Math.round(item.total_progress_m || item.progress_m || 0)}m | points ${item.point_count || item.index || "-"}`;
@@ -2732,7 +3436,7 @@
       if (!item) return "";
       if (item.evidence_type === "segment_capsule") return item.segment_id || item.capsule?.segment_id || item.source_id || "";
       if (item.evidence_type === "replay_checkpoint") return item.checkpoint?.checkpoint_id || item.source_id || "";
-      return item.source_id || item.checkpoint_id || item.segment_id || item.candidate_id || item.mcp_id || item.nearby_group_id || item.poi_id || item.corridor_id || item.hazard_id || item.incident_id || item.category_id || "";
+      return item.source_id || item.event_id || item.checkpoint_id || item.segment_id || item.candidate_id || item.mcp_id || item.nearby_group_id || item.poi_id || item.corridor_id || item.hazard_id || item.incident_id || item.category_id || "";
     }
 
     function selectorValue(value) {
@@ -2774,6 +3478,8 @@
         item.from_candidate_id,
         item.to_candidate_id,
         item.candidate_ref,
+        item.event_id,
+        item.waypoint_note_id,
         ...(Array.isArray(item.map_target_ids) ? item.map_target_ids : []),
         ...(Array.isArray(item.review_focus) ? item.review_focus : []),
         ...(Array.isArray(item.target_ids) ? item.target_ids : []),
@@ -2794,7 +3500,8 @@
         ...(view?.map_candidates?.poi_candidates || []),
         ...(view?.overpass_evidence?.poi_candidates || []),
         ...(view?.risk_score?.points || []),
-        ...(view?.incident_packages || [])
+        ...(view?.incident_packages || []),
+        ...(view?.scout_reaction_simulation?.events || [])
       ];
     }
 
@@ -2870,11 +3577,272 @@
       const centerLon = (bounds.east + bounds.west) / 2;
       const widthMeters = metersBetween(centerLat, bounds.west, centerLat, bounds.east);
       const heightMeters = metersBetween(bounds.south, centerLon, bounds.north, centerLon);
-      const drawableWidth = Math.max(MAP_WIDTH - MAP_VISUAL_PADDING * 2, 1);
-      const drawableHeight = Math.max(MAP_HEIGHT - MAP_VISUAL_PADDING * 2, 1);
-      const widthZoom = (MAP_WIDTH * (widthMeters / drawableWidth)) / FOCUS_POINT_VIEWPORT_M;
-      const heightZoom = (MAP_HEIGHT * (heightMeters / drawableHeight)) / FOCUS_POINT_VIEWPORT_M;
+      const widthZoom = widthMeters / FOCUS_POINT_VIEWPORT_M;
+      const heightZoom = heightMeters / FOCUS_POINT_VIEWPORT_M;
       return Math.max(1.2, Math.min(MAP_MAX_ZOOM, Math.max(widthZoom, heightZoom)));
+    }
+
+    function currentViewportRangeM() {
+      if (!state.view) return Number.POSITIVE_INFINITY;
+      const bounds = boundsWithMap(state.view);
+      const centerLat = (bounds.north + bounds.south) / 2;
+      const centerLon = (bounds.east + bounds.west) / 2;
+      const widthMeters = metersBetween(centerLat, bounds.west, centerLat, bounds.east) / Math.max(state.zoom, 1);
+      const heightMeters = metersBetween(bounds.south, centerLon, bounds.north, centerLon) / Math.max(state.zoom, 1);
+      return Math.max(widthMeters, heightMeters);
+    }
+
+    function niceScaleMeters(targetMeters) {
+      if (!Number.isFinite(targetMeters) || targetMeters <= 0) return 100;
+      const exponent = 10 ** Math.floor(Math.log10(targetMeters));
+      return [1, 2, 5, 10]
+        .map(step => step * exponent)
+        .filter(value => value <= targetMeters)
+        .pop() || exponent;
+    }
+
+    function formatScaleMeters(meters) {
+      if (meters >= 1000) {
+        const km = meters / 1000;
+        return `${km >= 10 || Number.isInteger(km) ? km.toFixed(0) : km.toFixed(1)} km`;
+      }
+      return `${Math.round(meters)} m`;
+    }
+
+    function updateScaleBar() {
+      if (!state.view) return;
+      const bounds = boundsWithMap(state.view);
+      const centerLat = (bounds.north + bounds.south) / 2;
+      const routeWidthM = metersBetween(centerLat, bounds.west, centerLat, bounds.east);
+      const drawableWidth = Math.max(MAP_WIDTH - MAP_VISUAL_PADDING * 2, 1);
+      const zoom = Math.max(state.zoom, 1);
+      const metersPerScreenPx = routeWidthM / (drawableWidth * zoom);
+      if (!Number.isFinite(metersPerScreenPx) || metersPerScreenPx <= 0) return;
+      const scaleMeters = niceScaleMeters(metersPerScreenPx * 150);
+      const scaleUnits = (scaleMeters / routeWidthM) * drawableWidth;
+      const [minX, minY, viewWidth, viewHeight] = mapViewBox().split(/\s+/).map(Number);
+      if (![minX, minY, viewWidth, viewHeight, scaleUnits].every(Number.isFinite)) return;
+      let group = svg.querySelector('[data-ui-overlay="scale-bar"]');
+      if (!group) {
+        group = el("g", {"data-ui-overlay": "scale-bar", "aria-label": "Map scale bar"});
+        svg.appendChild(group);
+      }
+      const x = minX + 18 / zoom;
+      const y = minY + viewHeight - 24 / zoom;
+      const tick = 7 / zoom;
+      const stroke = 3 / zoom;
+      const fontSize = 12 / zoom;
+      const label = formatScaleMeters(scaleMeters);
+      group.replaceChildren(
+        el("rect", {
+          x: (x - 9 / zoom).toFixed(2),
+          y: (y - 24 / zoom).toFixed(2),
+          width: (scaleUnits + 18 / zoom).toFixed(2),
+          height: (32 / zoom).toFixed(2),
+          rx: (5 / zoom).toFixed(2),
+          fill: "rgba(255,255,255,0.86)",
+          stroke: "rgba(15,23,42,0.22)",
+          "stroke-width": (1 / zoom).toFixed(3)
+        }),
+        el("line", {x1: x.toFixed(2), y1: y.toFixed(2), x2: (x + scaleUnits).toFixed(2), y2: y.toFixed(2), stroke: "#0f172a", "stroke-width": stroke.toFixed(3), "stroke-linecap": "square"}),
+        el("line", {x1: x.toFixed(2), y1: (y - tick).toFixed(2), x2: x.toFixed(2), y2: (y + tick).toFixed(2), stroke: "#0f172a", "stroke-width": stroke.toFixed(3)}),
+        el("line", {x1: (x + scaleUnits).toFixed(2), y1: (y - tick).toFixed(2), x2: (x + scaleUnits).toFixed(2), y2: (y + tick).toFixed(2), stroke: "#0f172a", "stroke-width": stroke.toFixed(3)}),
+        el("text", {x: (x + scaleUnits / 2).toFixed(2), y: (y - 9 / zoom).toFixed(2), "text-anchor": "middle", fill: "#0f172a", "font-size": fontSize.toFixed(3), "font-family": "-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"}, label)
+      );
+    }
+
+    function readablePointLabel(value) {
+      const text = String(value || "").trim().replace(/\s+/g, " ");
+      if (!text) return "";
+      if (/^(node|way|relation)\/\d+$/.test(text) || /^\d{7,}$/.test(text)) return "";
+      if (/^(gis_cp[._]|gis_cp_cluster\.|gis_cp_nearby_group\.|cp_note[._]|pretrip_gis_|overpass[._]|route_note\.reference_|ln_proposal\.route_note\.)/.test(text)) return "";
+      const underscoreCount = (text.match(/_/g) || []).length;
+      const dotCount = (text.match(/\./g) || []).length;
+      if (text.length > 48 && (underscoreCount >= 3 || dotCount >= 4)) return "";
+      return text.length > 72 ? `${text.slice(0, 71).trim()}…` : text;
+    }
+
+    function firstRouteNoteLabel(item) {
+      const summaries = Array.isArray(item?.route_note_summaries) ? item.route_note_summaries : [];
+      return summaries.map(readablePointLabel).find(Boolean) || "";
+    }
+
+    function compactPointLabel(value) {
+      const text = String(value || "").trim();
+      const checkpoint = text.match(/^CP\s*0*(\d{1,3})$/i);
+      if (checkpoint) return String(Number(checkpoint[1])).padStart(3, "0");
+      return text.length > 16 ? `${text.slice(0, 15).trim()}…` : text;
+    }
+
+    function pointLabelText(item) {
+      const label = [
+        item?.map_label,
+        item?.display_label,
+        item?.short_label,
+        item?.label,
+        item?.name,
+        item?.title,
+        firstRouteNoteLabel(item),
+        item?.route_note_summary,
+        item?.summary,
+        item?.checkpoint_id,
+        item?.mcp_id,
+        item?.poi_id,
+        item?.event_id,
+        item?.candidate_id,
+        item?.nearby_group_id,
+        item?.source_id
+      ].map(readablePointLabel).find(Boolean) || "";
+      return compactPointLabel(label);
+    }
+    function pointLabelCalloutTitle(item, fallbackLabel) {
+      return [
+        item?.display_label,
+        item?.map_label,
+        item?.route_note_summary,
+        item?.summary,
+        hintTitle(item),
+        fallbackLabel
+      ].map(readablePointLabel).find(Boolean) || fallbackLabel || "selected point";
+    }
+    function pointLabelCalloutSummary(item, title) {
+      return [
+        hintSummary(item),
+        item?.source_path,
+        item?.source_id,
+        item?.candidate_id,
+        item?.evidence_type
+      ].map(readablePointLabel).find(value => value && value !== title) || "";
+    }
+
+    function pointLabelRefs(item) {
+      return [...new Set(evidenceIdsForPointFocus(item))];
+    }
+
+    function pointLabelUnitsPerScreenPixel() {
+      const matrix = svg.getScreenCTM?.();
+      const matrixScale = matrix ? Math.max(Math.abs(Number(matrix.a) || 0), Math.abs(Number(matrix.d) || 0)) : 0;
+      if (Number.isFinite(matrixScale) && matrixScale > 0) return 1 / matrixScale;
+      const [, , viewWidth, viewHeight] = mapViewBox().split(/\s+/).map(Number);
+      const rect = svg.getBoundingClientRect?.();
+      const fallbackScale = rect && viewWidth > 0 && viewHeight > 0
+        ? Math.min(rect.width / viewWidth, rect.height / viewHeight)
+        : Math.max(state.zoom, 1);
+      return Number.isFinite(fallbackScale) && fallbackScale > 0 ? 1 / fallbackScale : 1;
+    }
+    function mapLabelOverlay() {
+      const wrap = svg.parentElement;
+      let overlay = wrap?.querySelector(".map-label-overlay");
+      if (!overlay && wrap) {
+        overlay = document.createElement("div");
+        overlay.className = "map-label-overlay";
+        overlay.setAttribute("aria-hidden", "true");
+        wrap.appendChild(overlay);
+      }
+      return overlay;
+    }
+    function pointLabelScreenPoint(anchorX, anchorY) {
+      const matrix = svg.getScreenCTM?.();
+      const wrapRect = svg.parentElement?.getBoundingClientRect?.();
+      if (!matrix || !wrapRect) return null;
+      const point = svg.createSVGPoint();
+      point.x = anchorX;
+      point.y = anchorY;
+      const screen = point.matrixTransform(matrix);
+      return {x: screen.x - wrapRect.left, y: screen.y - wrapRect.top};
+    }
+    function placeMapOverlayNode(node, x, y, kind) {
+      const overlay = mapLabelOverlay();
+      if (!overlay) return;
+      overlay.appendChild(node);
+      const margin = 6;
+      const gap = kind === "callout" ? 10 : 3;
+      const width = node.offsetWidth || 1;
+      const height = node.offsetHeight || 1;
+      let left = x + gap;
+      let top = kind === "callout" ? y - height / 2 : y - height - gap;
+      if (left + width > overlay.clientWidth - margin) left = x - width - gap;
+      if (top < margin) top = y + gap;
+      if (top + height > overlay.clientHeight - margin) top = overlay.clientHeight - height - margin;
+      node.style.left = `${Math.max(margin, left).toFixed(1)}px`;
+      node.style.top = `${Math.max(margin, top).toFixed(1)}px`;
+    }
+    function appendMapOverlayLabel(label, focused) {
+      const anchorX = Number(label.dataset.labelAnchorX);
+      const anchorY = Number(label.dataset.labelAnchorY);
+      if (!Number.isFinite(anchorX) || !Number.isFinite(anchorY)) return;
+      const point = pointLabelScreenPoint(anchorX, anchorY);
+      if (!point) return;
+      const node = document.createElement("div");
+      node.className = focused ? "map-label-callout" : "map-label-badge";
+      if (focused) {
+        const title = document.createElement("strong");
+        const titleText = label.dataset.labelTitle || label.textContent || "selected point";
+        title.textContent = titleText;
+        node.appendChild(title);
+        const summaryText = label.dataset.labelSummary || "";
+        if (summaryText && summaryText !== titleText) {
+          const summary = document.createElement("span");
+          summary.textContent = summaryText;
+          node.appendChild(summary);
+        }
+      } else {
+        node.textContent = label.textContent || "";
+      }
+      placeMapOverlayNode(node, point.x, point.y, focused ? "callout" : "badge");
+    }
+
+    function appendPointLabel(group, x, y, item, layer) {
+      const label = pointLabelText(item);
+      const refs = pointLabelRefs(item);
+      if (!label || !refs.length) return;
+      const unitsPerPx = pointLabelUnitsPerScreenPixel();
+      group.appendChild(el("text", {
+        x: x + POINT_LABEL_OFFSET_PX * unitsPerPx,
+        y: y - POINT_LABEL_OFFSET_PX * unitsPerPx,
+        class: "point-label is-hidden",
+        "data-label-layer": layer,
+        "data-label-refs": refs.join(" "),
+        "data-label-anchor-x": x.toFixed(3),
+        "data-label-anchor-y": y.toFixed(3),
+        "data-label-title": pointLabelCalloutTitle(item, label),
+        "data-label-summary": pointLabelCalloutSummary(item, pointLabelCalloutTitle(item, label)),
+        "text-anchor": "start",
+        "font-size": (POINT_LABEL_FONT_PX * unitsPerPx).toFixed(3),
+        "stroke-width": (POINT_LABEL_STROKE_PX * unitsPerPx).toFixed(3)
+      }, label));
+    }
+
+    function isLayerEnabled(layer) {
+      const input = document.querySelector(`input[data-layer="${selectorValue(layer)}"]`);
+      return Boolean(input?.checked);
+    }
+
+    function focusLabelIdsForItem(item) {
+      const pointItem = pointFocusItemFor(item) || item;
+      return new Set(pointLabelRefs(pointItem));
+    }
+
+    function updatePointLabels() {
+      const showByZoom = currentViewportRangeM() <= POINT_LABEL_VIEWPORT_M;
+      const unitsPerPx = pointLabelUnitsPerScreenPixel();
+      const overlay = mapLabelOverlay();
+      overlay?.replaceChildren();
+      svg.querySelectorAll(".point-label").forEach(label => {
+        label.classList.add("is-hidden");
+        const anchorX = Number(label.dataset.labelAnchorX);
+        const anchorY = Number(label.dataset.labelAnchorY);
+        if (Number.isFinite(anchorX) && Number.isFinite(anchorY)) {
+          label.setAttribute("x", (anchorX + POINT_LABEL_OFFSET_PX * unitsPerPx).toFixed(3));
+          label.setAttribute("y", (anchorY - POINT_LABEL_OFFSET_PX * unitsPerPx).toFixed(3));
+        }
+        label.setAttribute("font-size", (POINT_LABEL_FONT_PX * unitsPerPx).toFixed(3));
+        label.setAttribute("stroke-width", (POINT_LABEL_STROKE_PX * unitsPerPx).toFixed(3));
+        const layerEnabled = isLayerEnabled(label.dataset.labelLayer);
+        const refs = String(label.dataset.labelRefs || "").split(/\s+/).filter(Boolean);
+        const focused = refs.some(ref => state.focusedLabelIds.has(ref));
+        if (layerEnabled && (focused || showByZoom)) appendMapOverlayLabel(label, focused);
+      });
     }
 
     function isDirectPointFocusItem(item) {
@@ -2948,9 +3916,12 @@
       return true;
     }
 
-    function focusMapFor(item) {
+    function focusMapFor(item, options = {}) {
+      if (options.label === true) state.focusedLabelIds = focusLabelIdsForItem(item);
+      else if (options.label === false) state.focusedLabelIds = new Set();
       const focused = focusMapBox(mapBoxFor(item), item);
       if (focused) highlightMapFor(item);
+      updatePointLabels();
       return focused;
     }
 
@@ -3300,16 +4271,23 @@
       svg.replaceChildren();
       const routeCoords = view.route.points.map(point => ({lat: point.lat, lon: point.lon}));
 
-      const osmGroup = el("g", {"data-layer-group": "osm"});
-      renderOsmBasemap(osmGroup, bounds, MAP_WIDTH, MAP_HEIGHT);
-      svg.appendChild(osmGroup);
-
       const imageryGroup = el("g", {"data-layer-group": "imagery"});
       renderRasterImagery(imageryGroup, view, bounds, MAP_WIDTH, MAP_HEIGHT);
       svg.appendChild(imageryGroup);
 
+      RASTER_OVERLAY_LAYER_DEFINITIONS.forEach(layer => {
+        const rasterGroup = el("g", {"data-layer-group": layer.layerId});
+        renderRasterImagery(rasterGroup, view, bounds, MAP_WIDTH, MAP_HEIGHT, layer.layerId);
+        svg.appendChild(rasterGroup);
+      });
+
+      const osmGroup = el("g", {"data-layer-group": "osm"});
+      renderOsmBasemap(osmGroup, bounds, MAP_WIDTH, MAP_HEIGHT);
+      svg.appendChild(osmGroup);
+
       const terrainGroup = el("g", {"data-layer-group": "terrain"});
       renderTerrainBitmapOverlays(terrainGroup, view, bounds);
+      renderSegmentTerrainLines(terrainGroup, view, bounds);
       svg.appendChild(terrainGroup);
 
       const corridorGroup = el("g", {"data-layer-group": "corridors"});
@@ -3379,6 +4357,25 @@
       });
       routeGroup.appendChild(routePath);
       svg.appendChild(routeGroup);
+
+      const completedTrackGroup = el("g", {"data-layer-group": "completed-track"});
+      const completedTrack = view.completed_trip_track;
+      if (completedTrack?.display_geometry) {
+        const segments = coordinateSegments(
+          completedTrack.display_geometry,
+          completedTrack.display_geometry?.coordinates || []
+        );
+        if (segments.length) {
+          const completedPath = el("path", {
+            d: pathFromCoordSegments(bounds, segments),
+            class: "completed-track"
+          });
+          attachEvidence(completedPath, completedTrack);
+          tagEvidenceNode(completedPath, completedTrack, "completed-track");
+          completedTrackGroup.appendChild(completedPath);
+        }
+      }
+      svg.appendChild(completedTrackGroup);
 
       const segmentGroup = el("g", {"data-layer-group": "segments"});
       view.mission.segments.forEach(segment => {
@@ -3462,6 +4459,7 @@
         attachEvidence(circle, checkpoint);
         tagEvidenceNode(circle, checkpoint, "checkpoint");
         checkpointGroup.appendChild(circle);
+        appendPointLabel(checkpointGroup, x, y, checkpoint, "checkpoints");
       });
       (view.gis_perception_timeline?.checkpoint_candidates || []).forEach(candidate => {
         const coordinate = coordinateFromEvidence(candidate);
@@ -3471,6 +4469,7 @@
         attachEvidence(circle, candidate);
         tagEvidenceNode(circle, candidate, "checkpoint");
         checkpointGroup.appendChild(circle);
+        appendPointLabel(checkpointGroup, x, y, candidate, "checkpoints");
       });
       (view.gis_perception_timeline?.nearby_groups || []).forEach(group => {
         const coordinate = coordinateFromEvidence(group);
@@ -3480,6 +4479,7 @@
         attachEvidence(circle, group);
         tagEvidenceNode(circle, group, "checkpoint");
         checkpointGroup.appendChild(circle);
+        appendPointLabel(checkpointGroup, x, y, group, "checkpoints");
       });
       svg.appendChild(checkpointGroup);
 
@@ -3492,6 +4492,7 @@
         attachEvidence(circle, poi);
         tagEvidenceNode(circle, poi, "poi");
         poiGroup.appendChild(circle);
+        appendPointLabel(poiGroup, x, y, poi, "pois");
       });
       svg.appendChild(poiGroup);
 
@@ -3504,6 +4505,7 @@
         attachEvidence(circle, candidate);
         tagEvidenceNode(circle, candidate, "mcp");
         mcpGroup.appendChild(circle);
+        appendPointLabel(mcpGroup, x, y, candidate, "mcp");
       });
       svg.appendChild(mcpGroup);
 
@@ -3516,6 +4518,7 @@
         attachEvidence(circle, candidate);
         tagEvidenceNode(circle, candidate, "route-note");
         routeNoteGroup.appendChild(circle);
+        appendPointLabel(routeNoteGroup, x, y, candidate, "route-notes");
       });
       svg.appendChild(routeNoteGroup);
 
@@ -3530,6 +4533,17 @@
         attachEvidence(marker, packageItem);
         tagEvidenceNode(marker, packageItem, "event");
         eventGroup.appendChild(marker);
+        appendPointLabel(eventGroup, x, y, packageItem, "events");
+      });
+      (view.scout_reaction_simulation?.events || []).forEach(event => {
+        const coordinate = coordinateFromEvidence(event);
+        if (!coordinate) return;
+        const [x, y] = project(bounds, coordinate.lat, coordinate.lon);
+        const marker = el("circle", {cx: x, cy: y, r: 5.5, class: "event scout-reaction-event"});
+        attachEvidence(marker, event);
+        tagEvidenceNode(marker, event, "event");
+        eventGroup.appendChild(marker);
+        appendPointLabel(eventGroup, x, y, event, "events");
       });
       svg.appendChild(eventGroup);
 
@@ -3562,19 +4576,19 @@
       if (thumbnail) button.appendChild(thumbnail);
       button.addEventListener("click", () => {
         selectEvidence(item);
-        focusMapFor(item);
+        focusMapFor(item, {label: false});
       });
       button.addEventListener("dblclick", event => {
         event.preventDefault();
         selectEvidence(item);
-        focusMapFor(item);
+        focusMapFor(item, {label: true});
       });
       return button;
     }
 
     function treeGroup(title, items, mapper, open = false, category = "map") {
       const details = document.createElement("details");
-      details.open = open;
+      details.open = false;
       details.style.setProperty("--category-color", categoryColor(category));
       const summary = document.createElement("summary");
       summary.textContent = `${title} (${items.length})`;
@@ -3589,93 +4603,156 @@
       return details;
     }
 
+    function renderEvidenceTreeTabs() {
+      const tabs = document.getElementById("evidenceTreeTabs");
+      if (!tabs) return;
+      tabs.replaceChildren();
+      EVIDENCE_TREE_TABS.forEach(tab => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "tree-tab";
+        button.style.setProperty("--category-color", categoryColor(tab.category));
+        button.setAttribute("role", "tab");
+        button.setAttribute("aria-selected", state.activeEvidenceTreeTab === tab.id ? "true" : "false");
+        button.classList.toggle("is-active", state.activeEvidenceTreeTab === tab.id);
+        button.innerHTML = `<strong>${tab.label}</strong><small>${state.evidenceTreeTabCounts[tab.id] || 0} items</small>`;
+        button.addEventListener("click", () => {
+          state.activeEvidenceTreeTab = tab.id;
+          if (state.view) renderEvidenceTree(state.view);
+        });
+        tabs.appendChild(button);
+      });
+    }
+
+    function appendEvidenceTreeGroup(tree, tabId, title, items, mapper, open = false, category = "map") {
+      const safeItems = items || [];
+      state.evidenceTreeTabCounts[tabId] = (state.evidenceTreeTabCounts[tabId] || 0) + safeItems.length;
+      if (state.activeEvidenceTreeTab !== tabId) return;
+      tree.appendChild(treeGroup(title, safeItems, mapper, open, category));
+    }
+
+    function renderEvidenceTreeEmptyIfNeeded(tree) {
+      if (tree.children.length) return;
+      const empty = document.createElement("div");
+      empty.className = "tree-empty";
+      empty.textContent = "No evidence in this category.";
+      tree.appendChild(empty);
+    }
+
     function renderEvidenceTree(view) {
       const tree = document.getElementById("evidenceTree");
       tree.replaceChildren();
-      tree.appendChild(treeGroup("Evidence Timeline", view.evidence_timeline?.categories || [], item => ({
+      state.evidenceTreeTabCounts = Object.fromEntries(EVIDENCE_TREE_TABS.map(tab => [tab.id, 0]));
+      appendEvidenceTreeGroup(tree, "default", "Evidence Timeline", view.evidence_timeline?.categories || [], item => ({
         label: item.label || item.category_id,
         sublabel: `${item.count || 0} evidence | ${item.available ? "available" : "empty"}`
-      }), true, "timeline"));
-      tree.appendChild(treeGroup("Replay", [view.replay], item => ({
+      }), false, "timeline");
+      appendEvidenceTreeGroup(tree, "info", "Replay", [view.replay], item => ({
         label: item.safety_level,
         sublabel: `${item.observations_processed.toLocaleString()} observations | ${item.checkpoint_count} checkpoints | ${item.segment_capsule_count} capsules`
-      }), true, "replay"));
-      tree.appendChild(treeGroup("Checkpoints", view.mission.checkpoints, item => ({
+      }), false, "replay");
+      appendEvidenceTreeGroup(tree, "default", "Checkpoints", view.mission.checkpoints, item => ({
         label: item.checkpoint_id,
         sublabel: `${item.checkpoint_type} | ${item.control_zone_after || "no zone"}`
-      }), true, "checkpoint"));
-      tree.appendChild(treeGroup("Segments", view.mission.segments, item => ({
+      }), false, "checkpoint");
+      appendEvidenceTreeGroup(tree, "default", "Segments", view.mission.segments, item => ({
         label: item.segment_id,
         sublabel: `${item.from_checkpoint_id} -> ${item.to_checkpoint_id} | ${Math.round(item.distance_m)}m`
-      }), true, "segment"));
-      tree.appendChild(treeGroup("Segment Capsules", view.segment_capsules, item => ({
+      }), false, "segment");
+      appendEvidenceTreeGroup(tree, "default", "Segment Capsules", view.segment_capsules, item => ({
         label: item.capsule_id,
         sublabel: `${item.segment_id || "-"} | ${item.start_checkpoint_id || "-"} -> ${item.end_checkpoint_id || "-"}`
-      }), false, "capsule"));
+      }), false, "capsule");
       if (view.capability_timeline) {
-        tree.appendChild(treeGroup("Capability Timeline", [view.capability_timeline], item => ({
+        const observedEdges = capabilityObservedEdges(view.capability_timeline);
+        const unreachedEdges = capabilityUnreachedEdges(view.capability_timeline);
+        appendEvidenceTreeGroup(tree, "completed", "Capability Timeline", [view.capability_timeline], item => ({
           label: item.route_family || item.case_id,
-          sublabel: `${item.edge_count} segments | moving ${formatNumber(item.summary?.moving_time_s, "s")} | rest ${formatNumber(item.summary?.rest_time_s, "s")}`
-        }), false, "timeline"));
-        tree.appendChild(treeGroup("Capability Segments", view.capability_timeline.edges || [], item => ({
+          sublabel: `${item.summary?.completion_status || "unknown"} | ${formatNumber(item.observed_edge_count ?? observedEdges.length)}/${formatNumber(item.summary?.planned_segment_count || item.edge_count || 0)} observed/planned | moving ${formatNumber(item.summary?.moving_time_s, "s")} | rest ${formatNumber(item.summary?.rest_time_s, "s")}`
+        }), false, "timeline");
+        appendEvidenceTreeGroup(tree, "completed", "Capability Segments", observedEdges, item => ({
           label: item.edge_id,
-          sublabel: `${formatNumber(item.moving_time_s, "s")} moving | ${formatNumber(item.elapsed_time_s, "s")} elapsed | ${item.confidence}`,
+          sublabel: `${item.traversal_status || "traversed"} | ${formatNumber(item.moving_time_s, "s")} moving | ${formatNumber(item.elapsed_time_s, "s")} elapsed | ${item.confidence}`,
           thumbnail: createCapabilityTerrainProfileThumbnail(item)
-        }), false, "timeline"));
+        }), false, "timeline");
+        if (unreachedEdges.length) {
+          appendEvidenceTreeGroup(tree, "completed", "Unreached Planned Segments", unreachedEdges, item => ({
+            label: item.edge_id,
+            sublabel: `unreached | planned context only | excluded from observed capability evidence`
+          }), false, "timeline");
+        }
       }
-      tree.appendChild(treeGroup("Major Critical Points", view.major_critical_points?.candidates || [], item => ({
+      if (view.scout_reaction_simulation) {
+        appendEvidenceTreeGroup(tree, "default", "Scout Reaction Records", view.scout_reaction_simulation.events || [], item => ({
+          label: item.kind || item.event_id,
+          sublabel: `${item.severity || "info"} | ${item.waypoint_name || item.subject_ref || "-"} | replay only`
+        }), false, "timeline");
+      }
+      if (view.completed_trip_recordings) {
+        appendEvidenceTreeGroup(tree, "completed", "Completed Trip GPX", view.completed_trip_recordings.recordings || [], item => ({
+          label: item.display_name || item.filename || item.recording_id,
+          sublabel: `${item.role || "-"} | ${formatNumber(item.point_count)} pts | active selectable`
+        }), false, "timeline");
+      }
+      if (view.completed_trip_track) {
+        appendEvidenceTreeGroup(tree, "completed", "Completed Trip Track", [view.completed_trip_track], item => ({
+          label: item.display_name || item.filename || item.recording_id,
+          sublabel: `${formatNumber(item.point_count)} pts | ${formatNumber(item.display_point_count)} displayed | ${item.trkseg_count || 0} trkseg`
+        }), false, "route");
+      }
+      appendEvidenceTreeGroup(tree, "default", "Major Critical Points", view.major_critical_points?.candidates || [], item => ({
         label: item.label || item.mcp_id,
         sublabel: `${item.confidence || "-"} | ${item.cp_support_reconciliation?.support_status || "support-review"} | ${Math.round(item.distance_m || 0)}m`
-      }), true, "mcp"));
-      tree.appendChild(treeGroup("AI GIS CP", view.gis_perception_timeline?.checkpoint_candidates || [], item => ({
-        label: item.route_note_summary || item.candidate_id,
+      }), false, "mcp");
+      appendEvidenceTreeGroup(tree, "default", "AI GIS CP", view.gis_perception_timeline?.checkpoint_candidates || [], item => ({
+        label: item.display_label || item.map_label || item.route_note_summary || item.candidate_id,
         sublabel: `${item.checkpoint_type || "-"} | group ${item.nearby_group_id || "-"} | ${item.route_note_freshness || "unknown"}`
-      }), false, "gis"));
-      tree.appendChild(treeGroup("GIS CP Areas", view.gis_perception_timeline?.nearby_groups || [], item => ({
-        label: item.nearby_group_id,
+      }), false, "gis");
+      appendEvidenceTreeGroup(tree, "default", "GIS CP Areas", view.gis_perception_timeline?.nearby_groups || [], item => ({
+        label: item.display_label || item.map_label || item.nearby_group_id,
         sublabel: `${item.member_count || 0} CP | ${item.semantic_keys?.join(", ") || "mixed"}`
-      }), false, "gis"));
-      tree.appendChild(treeGroup("Reference GPX", view.reference_tracks?.reference_tracks || [], item => ({
+      }), false, "gis");
+      appendEvidenceTreeGroup(tree, "map_risk", "Reference GPX", view.reference_tracks?.reference_tracks || [], item => ({
         label: item.label || item.candidate_id,
         sublabel: `${Math.round((item.route?.distance_m || 0) / 1000)}km | ${item.route?.point_count || 0} pts`
-      }), false, "route"));
-      tree.appendChild(treeGroup("Retreat Routes", view.retreat_routes || [], item => ({
+      }), false, "route");
+      appendEvidenceTreeGroup(tree, "map_risk", "Retreat Routes", view.retreat_routes || [], item => ({
         label: item.label || item.candidate_id,
         sublabel: `${item.review_state || "candidate"} | ${Math.round(item.distance_m || 0)}m`
-      }), false, "route"));
-      tree.appendChild(treeGroup("Timeline", view.safety_timeline, item => ({
+      }), false, "route");
+      appendEvidenceTreeGroup(tree, "default", "Timeline", view.safety_timeline, item => ({
         label: item.label || item.to_level || item.evidence_type,
         sublabel: `${item.timestamp === null || item.timestamp === undefined ? "" : `t=${Number(item.timestamp).toFixed(0)} | `}${item.reason || item.evidence_type}`
-      }), false, "timeline"));
-      tree.appendChild(treeGroup("Risk Rules", view.risk_rules, item => ({
+      }), false, "timeline");
+      appendEvidenceTreeGroup(tree, "map_risk", "Risk Rules", view.risk_rules, item => ({
         label: item.rule_id,
         sublabel: `${item.output_level} | ${item.hazard_types.join(", ") || "any"}`
-      }), false, "risk"));
-      tree.appendChild(treeGroup("Risk Score", view.risk_score?.points || [], item => ({
+      }), false, "risk");
+      appendEvidenceTreeGroup(tree, "map_risk", "Risk Score", view.risk_score?.points || [], item => ({
         label: `${item.score_field || "pretrip_risk"} ${Number(item.pretrip_risk || 0).toFixed(1)}`,
         sublabel: `L${item.risk_level || "-"} | ${Math.round(item.distance_m || 0)}m`
-      }), false, "risk"));
-      tree.appendChild(treeGroup("Baseline Risk", view.risk_ribbon?.segments || [], item => ({
+      }), false, "risk");
+      appendEvidenceTreeGroup(tree, "map_risk", "Baseline Risk", view.risk_ribbon?.segments || [], item => ({
         label: `${item.risk_bucket || "risk"} ${Number(item.pretrip_risk || 0).toFixed(1)}`,
         sublabel: `${Math.round(item.start_distance_m || 0)}-${Math.round(item.end_distance_m || 0)}m`
-      }), false, "risk"));
-      tree.appendChild(treeGroup("Calibrated Heat", view.risk_heatmap?.segments || [], item => ({
+      }), false, "risk");
+      appendEvidenceTreeGroup(tree, "map_risk", "Calibrated Heat", view.risk_heatmap?.segments || [], item => ({
         label: `${item.risk_bucket || "heat"} ${Number(item.pretrip_risk || 0).toFixed(1)}`,
         sublabel: `${Math.round(item.start_distance_m || 0)}-${Math.round(item.end_distance_m || 0)}m`
-      }), false, "risk"));
-      tree.appendChild(treeGroup("Risk Delta", view.risk_delta?.segments || [], item => ({
+      }), false, "risk");
+      appendEvidenceTreeGroup(tree, "map_risk", "Risk Delta", view.risk_delta?.segments || [], item => ({
         label: `${item.delta_bucket || "delta"} ${Number(item.delta_score || 0).toFixed(1)}`,
         sublabel: `baseline ${Number(item.baseline_pretrip_risk || 0).toFixed(1)} | calibrated ${Number(item.calibrated_risk_candidate || 0).toFixed(1)}`
-      }), false, "risk"));
-      tree.appendChild(treeGroup("Review Queue", view.review_queue?.items || [], item => ({
+      }), false, "risk");
+      appendEvidenceTreeGroup(tree, "review", "Review Queue", view.review_queue?.items || [], item => ({
         label: item.title || item.item_id,
         sublabel: `${item.severity || "-"} | ${item.category || "-"}`
-      }), false, "map"));
-      tree.appendChild(treeGroup("Review Groups", view.review_workbench?.category_groups || [], item => ({
+      }), false, "gis");
+      appendEvidenceTreeGroup(tree, "review", "Review Groups", view.review_workbench?.category_groups || [], item => ({
         label: item.label,
         sublabel: `${item.item_count || 0} items | ${item.review_action || "review"}`
-      }), false, "map"));
-      tree.appendChild(treeGroup("Map Layers", [
+      }), false, "gis");
+      appendEvidenceTreeGroup(tree, "map_risk", "Map Layers", [
         {
           evidence_type: "map_layer_summary",
           source_id: "map_corridors",
@@ -3703,7 +4780,9 @@
       ], item => ({
         label: item.name,
         sublabel: `${item.count} items | ${item.metadata.source}`
-      }), false, "map"));
+      }), false, "map");
+      renderEvidenceTreeTabs();
+      renderEvidenceTreeEmptyIfNeeded(tree);
     }
 
     function initSplitters() {
@@ -3765,6 +4844,36 @@
       document.getElementById("incidents").textContent = view.replay.incident_count.toLocaleString();
       const meta = view.map.metadata;
       document.getElementById("mapMeta").textContent = `${meta.source} | confidence ${meta.confidence} | staleness ${meta.known_staleness_risk}`;
+      renderEnergyReserveMonitor(view);
+    }
+
+    function setEnergyMonitorText(id, value, title) {
+      const node = document.getElementById(id);
+      if (!node) return;
+      node.textContent = value;
+      if (title) {
+        node.title = title;
+        node.setAttribute("aria-label", title);
+      }
+    }
+
+    function renderEnergyReserveMonitor(view) {
+      const monitor = view?.energy_reserve_monitor || {};
+      const display = monitor.display || {};
+      const health = monitor.health_data || {};
+      const capability = monitor.trip_capability || {};
+      const change = monitor.candidate_change || {};
+      const title = [
+        `status: ${monitor.status || "missing_health_data"}`,
+        `baseline: ${health.baseline_loaded ? "loaded" : "not loaded"}`,
+        `activities: ${health.activity_count || 0}`,
+        `candidate delta: ${change.score_delta_candidate || 0}`,
+        "advisory only; no safety/runtime mutation"
+      ].join(" / ");
+      setEnergyMonitorText("energyReserveHeadline", display.headline || "no baseline", title);
+      setEnergyMonitorText("energyReserveHealth", display.health_text || "health data not loaded", title);
+      setEnergyMonitorText("energyReserveTrip", display.trip_text || `${capability.completion_status || "no completed trip"} capability`, title);
+      setEnergyMonitorText("energyReserveChange", display.change_text || "no candidate change", title);
     }
 
     function mapViewBox() {
@@ -3778,7 +4887,9 @@
     function applyMapViewport() {
       svg.setAttribute("viewBox", mapViewBox());
       syncMapMarkerScale();
+      updatePointLabels();
       updateMapZoomIndicator();
+      updateScaleBar();
     }
     function updateMapZoomIndicator(extraLabel = "") {
       const node = document.getElementById("zoomLevel");
@@ -3844,6 +4955,7 @@
         const enabled = inputs.filter(input => input.checked).length;
         summary.textContent = `${enabled}/${inputs.length}`;
       }
+      updatePointLabels();
       highlightMapFor(state.selected);
     }
 
@@ -3858,6 +4970,9 @@
         renderEvidenceTree(view);
         renderEvidenceTimelinePanel(view);
         renderAgentSkillsPanel(view);
+        renderCompletedTripRecordingPanel(view.completed_trip_recordings);
+        renderScoutReactionSimulationPanel(view.scout_reaction_simulation);
+        loadCompletedTripRecordings();
         setDetail({
           evidence_type: "case_summary",
           source_id: view.case_id,

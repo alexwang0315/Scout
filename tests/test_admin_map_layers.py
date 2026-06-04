@@ -11,6 +11,12 @@ from admin_map_layers import (
 ROOT = Path(__file__).resolve().parents[1]
 EXPECTED_ALPHA_WORKSPACE_LAYER_CONTROLS = [
     "imagery",
+    "rudy",
+    "rudy-twmap",
+    "relief",
+    "geology",
+    "topo-5k",
+    "forest",
     "osm",
     "terrain",
     "risk-score",
@@ -57,6 +63,12 @@ def test_pretrip_map_layers_order_imagery_bottom_and_api_top():
 
     assert map_layer_ids(layers) == [
         "imagery",
+        "rudy",
+        "rudy-twmap",
+        "relief",
+        "geology",
+        "topo-5k",
+        "forest",
         "osm",
         "terrain",
         "corridors",
@@ -85,34 +97,35 @@ def test_pretrip_map_layers_order_imagery_bottom_and_api_top():
     assert layers[0]["source_path"] == (
         "external/local/chilai_nanhua_day1.local_raster_source_manifest.json"
     )
-    assert layers[0]["local_raster_manifest_supported"] is True
-    assert layers[0]["preferred_manifest_kind"] == (
-        "admin_local_raster_source_manifest"
-    )
-    assert layers[0]["local_raster_tile_url_template"] == (
-        "/admin/tiles/imagery/{project_id}/{layer_id}/{z}/{x}/{y}.png"
-    )
-    assert layers[0]["local_raster_tile_cache_policy"] == (
-        "local_file_cache_then_transparent_fallback"
-    )
-    assert layers[0]["external_network_required"] is False
+    assert layers[0]["render_mode"] == "wmts_raster_tile"
+    assert layers[0]["source_kind"] == "wmts_tile"
+    assert layers[0]["local_raster_manifest_supported"] is False
+    assert layers[0]["preferred_manifest_kind"] == "scout_imagery_source_registry"
+    assert layers[0]["raster_tile_delivery"] == "direct_wmts_runtime"
+    assert layers[0]["local_raster_tile_cache_policy"] == "disabled_use_wmts_runtime"
+    assert layers[0]["external_network_required"] is True
+    assert layers[0]["scout_imagery_source_registry_supported"] is True
+    assert layers[0]["imagery_source_id"] == "nlsc_photo2"
+    assert layers[0]["default_imagery_source_id"] == "nlsc_photo2"
+    assert layers[0]["remote_fetch_requires_explicit_enable"] is False
     assert layers[0]["tile_cutting_required"] is False
     assert layers[0]["downloads_tiles_into_repo"] is False
-    assert layers[1]["render_mode"] == "osm_raster_tile"
-    assert layers[1]["source_kind"] == "openstreetmap_tile"
-    assert layers[1]["tile_url_template"] == (
+    osm = next(layer for layer in layers if layer["layer_id"] == "osm")
+    assert osm["render_mode"] == "osm_raster_tile"
+    assert osm["source_kind"] == "openstreetmap_tile"
+    assert osm["tile_url_template"] == (
         "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
     )
-    assert layers[1]["external_network_required"] is True
-    assert layers[1]["local_proxy_tile_url_template"] == (
+    assert osm["external_network_required"] is True
+    assert osm["local_proxy_tile_url_template"] == (
         "/admin/tiles/osm/{z}/{x}/{y}.png"
     )
-    assert layers[1]["local_proxy_external_network_required"] is False
-    assert layers[1]["cache_policy"] == "browser_http_cache_or_local_proxy"
-    assert layers[1]["local_proxy_cache_policy"] == (
+    assert osm["local_proxy_external_network_required"] is False
+    assert osm["cache_policy"] == "browser_http_cache_or_local_proxy"
+    assert osm["local_proxy_cache_policy"] == (
         "local_file_cache_then_offline_fallback"
     )
-    assert layers[1]["downloads_tiles_into_repo"] is False
+    assert osm["downloads_tiles_into_repo"] is False
     terrain = next(layer for layer in layers if layer["layer_id"] == "terrain")
     assert terrain["source_kind"] == "terrain_visualization"
     assert terrain["terrain_visualization_layer"] is True
@@ -152,9 +165,18 @@ def test_admin_pages_expose_the_same_alpha_workspace_layer_controls():
 
     for page in pages:
         html = page.read_text(encoding="utf-8")
-        assert re.findall(r'data-layer="([^"]+)"', html) == (
-            EXPECTED_ALPHA_WORKSPACE_LAYER_CONTROLS
-        )
+        static_layer_controls = [
+            layer
+            for layer in re.findall(r'data-layer="([^"]+)"', html)
+            if not layer.startswith("${")
+        ]
+        expected_controls = list(EXPECTED_ALPHA_WORKSPACE_LAYER_CONTROLS)
+        if page.name == "phase1-after-action.html":
+            expected_controls.insert(
+                expected_controls.index("reference-tracks"),
+                "completed-track",
+            )
+        assert static_layer_controls == expected_controls
 
 
 def test_after_action_map_layers_reuse_the_same_base_and_api_order():
@@ -169,6 +191,12 @@ def test_after_action_map_layers_reuse_the_same_base_and_api_order():
 
     assert map_layer_ids(layers) == [
         "imagery",
+        "rudy",
+        "rudy-twmap",
+        "relief",
+        "geology",
+        "topo-5k",
+        "forest",
         "osm",
         "terrain",
         "corridors",
@@ -193,16 +221,16 @@ def test_after_action_map_layers_reuse_the_same_base_and_api_order():
         layer["z_index"] for layer in layers
     )
     assert layers[0]["layer_id"] == "imagery"
-    assert layers[1]["layer_id"] == "osm"
-    assert layers[1]["source_kind"] == "openstreetmap_tile"
-    assert layers[1]["tile_url_template"] == (
+    osm = next(layer for layer in layers if layer["layer_id"] == "osm")
+    assert osm["source_kind"] == "openstreetmap_tile"
+    assert osm["tile_url_template"] == (
         "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
     )
-    assert layers[1]["external_network_required"] is True
-    assert layers[1]["local_proxy_tile_url_template"] == (
+    assert osm["external_network_required"] is True
+    assert osm["local_proxy_tile_url_template"] == (
         "/admin/tiles/osm/{z}/{x}/{y}.png"
     )
-    assert layers[1]["local_proxy_external_network_required"] is False
+    assert osm["local_proxy_external_network_required"] is False
     terrain = next(layer for layer in layers if layer["layer_id"] == "terrain")
     assert terrain["available"] is False
     overpass = next(layer for layer in layers if layer["layer_id"] == "overpass")

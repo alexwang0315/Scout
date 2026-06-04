@@ -13,7 +13,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
 
+from admin_imagery_sources import (
+    DEFAULT_REGISTRY_ID,
+    imagery_source_for_project,
+)
 from admin_basemap_tiles import build_osm_basemap_contract, normalize_bbox_wgs84
+from admin_local_raster_tiles import (
+    DEFAULT_IMAGERY_TILE_CACHE_MAX_ZOOM,
+    DEFAULT_IMAGERY_TILE_CACHE_MIN_ZOOM,
+)
 from pretrip_models import RouteBBox
 from pretrip_overpass_ingest import import_overpass_evidence_candidates
 from pretrip_source_ingest import wgs84_to_twd97
@@ -34,7 +42,6 @@ DEFAULT_LAYERS = (
     "risk-ribbon",
     "risk-heatmap",
     "risk-delta",
-    "imagery",
     "weather",
     "reference-tracks",
     "route",
@@ -137,10 +144,12 @@ READY_STATUSES = {
     "ready",
     "ready_from_project_ref",
     "ready_with_fallback",
+    "ready_with_remote_source",
+    "wmts_runtime_only",
     "projection_ready",
     "planned_no_network",
 }
-HEAVY_LOCAL_LAYER_IDS = {"terrain", "imagery"}
+HEAVY_LOCAL_LAYER_IDS = {"terrain"}
 SCOUT_RISK_OUTPUT_SOURCES = {
     "chilai_nanhua_day1": (
         Path(__file__).resolve().parent
@@ -244,6 +253,11 @@ class LayerPreparationRequest:
     reference_track_corridor_m: float = 300.0
     ai_mode: AiMode = "fixture-or-precomputed"
     ai_output_policy: str = "hash-and-summary"
+    imagery_min_zoom: int = DEFAULT_IMAGERY_TILE_CACHE_MIN_ZOOM
+    imagery_max_zoom: int = DEFAULT_IMAGERY_TILE_CACHE_MAX_ZOOM
+    seed_imagery_cache: bool = False
+    imagery_provider_allows_offline_prefetch: bool = False
+    imagery_seed_max_tiles: int | None = None
     prepared_at: str | None = None
 
 
@@ -253,6 +267,7 @@ def run_layer_preparation(request: LayerPreparationRequest) -> dict[str, Any]:
         request,
         workspace_file_mutation_allowed=True,
     )
+    outputs = manifest["outputs"]
     summary = _summary_from_manifest(manifest)
     map_preparation_summary = _map_preparation_summary_from_manifest(manifest)
     adapter_manifest = _adapter_manifest_from_manifest(manifest)
@@ -278,7 +293,6 @@ def run_layer_preparation(request: LayerPreparationRequest) -> dict[str, Any]:
         semantic_input_bundle=semantic_input_bundle,
         semantic_judgements=semantic_judgements,
     )
-    outputs = manifest["outputs"]
 
     _write_json(project_root / outputs["layer_preparation_manifest_ref"], manifest)
     _write_json(project_root / outputs["layer_preparation_job_ref"], job_payload)
@@ -447,12 +461,6 @@ def _build_layer_preparation_manifest(
         )
     if workspace_file_mutation_allowed and "overpass" in normalized_layers:
         _stamp_overpass_evidence_provenance(project_root=project_root, project=project)
-    project = _infer_local_imagery_project_refs(
-        project_root=project_root,
-        project=project,
-        allow_manifest_copy=workspace_file_mutation_allowed,
-    )
-
     source_refs = _project_source_refs(project_root, project)
     gpx_filter = _gpx_filter_context(project_root, project)
     route_corridor = _route_corridor_record(
@@ -691,7 +699,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument(
         "--layers",
         default=",".join(DEFAULT_LAYERS),
-        help="Comma-separated layer ids, for example osm,overpass,terrain,imagery,weather.",
+        help="Comma-separated layer ids, for example osm,overpass,terrain,weather.",
     )
     parser.add_argument(
         "--profile",
@@ -724,6 +732,37 @@ def main(argv: list[str] | None = None) -> None:
         default="fixture-or-precomputed",
     )
     parser.add_argument("--ai-output-policy", default="hash-and-summary")
+    parser.add_argument(
+        "--imagery-min-zoom",
+        type=int,
+        default=DEFAULT_IMAGERY_TILE_CACHE_MIN_ZOOM,
+        help="Deprecated: imagery preparation is disabled; WMTS is rendered at runtime.",
+    )
+    parser.add_argument(
+        "--imagery-max-zoom",
+        type=int,
+        default=DEFAULT_IMAGERY_TILE_CACHE_MAX_ZOOM,
+        help="Deprecated: imagery preparation is disabled; WMTS is rendered at runtime.",
+    )
+    parser.add_argument(
+        "--seed-imagery-cache",
+        action="store_true",
+        help=(
+            "Deprecated: imagery tile cache seeding is disabled; WMTS is rendered at runtime."
+        ),
+    )
+    parser.add_argument(
+        "--imagery-provider-allows-offline-prefetch",
+        action="store_true",
+        help=(
+            "Deprecated: kept for CLI compatibility; imagery prefetch is disabled."
+        ),
+    )
+    parser.add_argument(
+        "--imagery-seed-max-tiles",
+        type=int,
+        help="Deprecated: imagery tile cache seeding is disabled.",
+    )
     parser.add_argument("--prepared-at")
     args = parser.parse_args(argv)
 
@@ -749,6 +788,13 @@ def main(argv: list[str] | None = None) -> None:
         reference_track_corridor_m=args.reference_track_corridor_m,
         ai_mode=args.ai_mode,
         ai_output_policy=args.ai_output_policy,
+        imagery_min_zoom=args.imagery_min_zoom,
+        imagery_max_zoom=args.imagery_max_zoom,
+        seed_imagery_cache=args.seed_imagery_cache,
+        imagery_provider_allows_offline_prefetch=(
+            args.imagery_provider_allows_offline_prefetch
+        ),
+        imagery_seed_max_tiles=args.imagery_seed_max_tiles,
         prepared_at=args.prepared_at,
     )
     manifest = run_layer_preparation(request)
@@ -845,6 +891,7 @@ def _build_layer_record(
             common,
             project=project,
             project_root=project_root,
+            request=request,
         )
     if layer_id == "weather":
         return _project_ref_layer_record(
@@ -1156,40 +1203,54 @@ def _imagery_layer_record(
     *,
     project: dict[str, Any],
     project_root: Path,
+    request: LayerPreparationRequest,
 ) -> dict[str, Any]:
-    refs = [
-        key
-        for key in (
-            "imagery_manifest_ref",
-            "local_raster_manifest_ref",
-            "raster_tile_manifest_ref",
-        )
-        if project.get(key)
-    ]
-    status = "ready_from_project_ref" if refs else "ready_with_fallback"
-    warnings = [] if refs else [
-        (
-            "No local imagery raster manifest is registered; admin tile "
-            "endpoint may render a deterministic fallback tile."
-        )
-    ]
+    imagery_source = imagery_source_for_project(project)
     record = {
         **common,
-        "status": status,
-        "source_refs": [{"ref": project[key], "project_ref_key": key} for key in refs],
+        "status": "wmts_runtime_only",
+        "source_refs": [
+            {
+                "source_id": imagery_source["source_id"],
+                "source_kind": imagery_source["source_kind"],
+                "provider": imagery_source.get("provider"),
+                "registry_id": project.get("imagery_source_registry_id")
+                or DEFAULT_REGISTRY_ID,
+                "project_ref_key": "imagery_source_id",
+                "url_template_sha256": hashlib.sha256(
+                    str(imagery_source.get("url_template") or "").encode("utf-8")
+                ).hexdigest(),
+                "raw_url_template_embedded": False,
+            }
+        ],
         "output_refs": {
-            "local_raster_tile_url_template": (
-                "/admin/tiles/imagery/{project_id}/{layer_id}/{z}/{x}/{y}.png"
-            )
+            "tile_delivery": "direct_wmts_runtime",
+            "imagery_source_registry_id": project.get("imagery_source_registry_id")
+            or DEFAULT_REGISTRY_ID,
         },
         "counts": {
-            "registered_raster_manifest_count": len(refs),
-            "fallback_tile_available": not refs,
+            "registered_raster_manifest_count": 0,
+            "fallback_tile_available": False,
+            "remote_imagery_source_registered": True,
+            "imagery_tile_cache_plan_tile_count": 0,
+            "imagery_tile_cache_plan_zoom_count": 0,
         },
-        "warnings": warnings,
+        "warnings": [
+            (
+                "Imagery preparation is disabled in alpha; map tiles are rendered "
+                "from allowlisted WMTS sources at runtime."
+            )
+        ],
         "stale_risk": "medium",
+        "imagery_source_id": imagery_source["source_id"],
+        "imagery_source_kind": imagery_source["source_kind"],
+        "imagery_source_registry_id": project.get("imagery_source_registry_id")
+        or DEFAULT_REGISTRY_ID,
+        "remote_fetch_requires_explicit_enable": False,
+        "raster_tile_delivery": "direct_wmts_runtime",
+        "tile_cutting_required": False,
+        "downloads_tiles_into_repo": False,
     }
-    record.update(_local_raster_layer_metadata(project_root=project_root, project=project))
     return _with_lifecycle(record)
 
 
@@ -1207,6 +1268,9 @@ def _local_raster_layer_metadata(
     bbox = _normalized_optional_bbox(
         (local_manifest or {}).get("georeference", {}).get("bbox_wgs84")
     ) or _normalized_optional_bbox((tile_manifest or {}).get("bbox_wgs84"))
+    imagery_bbox = _normalized_optional_bbox(project.get("imagery_bbox_wgs84"))
+    if bbox is None:
+        bbox = imagery_bbox
 
     metadata: dict[str, Any] = {}
     if local_ref:
@@ -1224,7 +1288,34 @@ def _local_raster_layer_metadata(
         ):
             if source_key in tile_manifest:
                 metadata[target_key] = tile_manifest[source_key]
+    if imagery_bbox:
+        metadata["imagery_bbox_wgs84"] = imagery_bbox
+        metadata["imagery_bbox_policy"] = project.get(
+            "imagery_bbox_policy",
+            "gpx_bbox_scaled_115_percent",
+        )
+        metadata["imagery_bbox_scale_factor"] = project.get(
+            "imagery_bbox_scale_factor",
+            1.15,
+        )
+    if project.get("imagery_source_id"):
+        metadata["imagery_source_id"] = project["imagery_source_id"]
+    if project.get("imagery_source_registry_id"):
+        metadata["imagery_source_registry_id"] = project["imagery_source_registry_id"]
     return metadata
+
+
+def _maybe_seed_imagery_tile_cache(
+    *,
+    request: LayerPreparationRequest,
+    project: dict[str, Any],
+    manifest: dict[str, Any],
+) -> dict[str, Any] | None:
+    if request.seed_imagery_cache:
+        raise ValueError(
+            "imagery tile cache seeding is disabled; use runtime WMTS tile display"
+        )
+    return None
 
 
 def _risk_score_layer_record(
@@ -1840,6 +1931,18 @@ def _map_projection_layer(layer: dict[str, Any]) -> dict[str, Any]:
         "raster_tile_zoom_range",
         "raster_tile_cache_root",
         "raster_tile_count",
+        "raster_tile_min_zoom",
+        "raster_tile_max_zoom",
+        "raster_tile_delivery",
+        "imagery_tile_cache_plan_ref",
+        "imagery_bbox_wgs84",
+        "imagery_bbox_policy",
+        "imagery_bbox_scale_factor",
+        "imagery_source_id",
+        "imagery_source_kind",
+        "imagery_source_registry_id",
+        "remote_fetch_requires_explicit_enable",
+        "remote_fetch_env",
     ):
         if key in layer:
             projected[key] = layer[key]
@@ -3727,7 +3830,7 @@ def _raster_label_plan_from_manifest(manifest: dict[str, Any]) -> dict[str, Any]
         "project_id": manifest["project_id"],
         "source_id": manifest["job_id"] + ".raster_label_plan",
         "source_path": manifest["outputs"]["raster_label_plan_ref"],
-        "status": "planned_local_raster_label_not_run",
+        "status": "disabled_imagery_processing_cancelled",
         "route_scope_ref": manifest["inputs"]["route_evidence_bundle"].get(
             "source_ref"
         ),
@@ -3735,6 +3838,12 @@ def _raster_label_plan_from_manifest(manifest: dict[str, Any]) -> dict[str, Any]
         "raster_source_refs": imagery_layer.get("source_refs", []),
         "raster_bbox_wgs84": imagery_layer.get("raster_bbox_wgs84"),
         "ocr_or_vision_performed": False,
+        "imagery_processing_enabled": False,
+        "tile_display_mode": "runtime_wmts",
+        "notes_zh": [
+            "本 slice 已取消 imagery preparation（影像前處理）。",
+            "圖磚只作 runtime WMTS 顯示，不在 map preparation 階段執行 OCR/vision。",
+        ],
         "output_ref": manifest["outputs"]["raster_label_evidence_ref"],
         "boundary": _map_preparation_candidate_boundary(manifest),
     }
@@ -4933,8 +5042,6 @@ def _map_preparation_source_artifacts(manifest: dict[str, Any]) -> list[dict[str
         "rest_area_candidates_ref",
         "normalized_route_note_candidates_ref",
         "route_note_candidates_ref",
-        "imagery_manifest_ref",
-        "raster_tile_manifest_ref",
         "dtm_coverage_summary_ref",
         "segment_dtm_coverage_ref",
         "risk_route_profile_ref",
@@ -5064,6 +5171,14 @@ def _validate_request(request: LayerPreparationRequest) -> None:
     _normalize_layer_ids(request.layers)
     if request.profile == "pi-online-explicit" and request.network_mode != "explicit-fetch":
         raise ValueError("pi-online-explicit requires network_mode=explicit-fetch")
+    if request.imagery_min_zoom > request.imagery_max_zoom:
+        raise ValueError("imagery_min_zoom must be <= imagery_max_zoom")
+    if request.seed_imagery_cache:
+        raise ValueError(
+            "seed_imagery_cache is disabled; map tiles are rendered from WMTS at runtime"
+        )
+    if request.imagery_seed_max_tiles is not None and request.imagery_seed_max_tiles < 1:
+        raise ValueError("imagery_seed_max_tiles must be positive when set")
 
 
 def _validate_project_id(project_id: str) -> None:

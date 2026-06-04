@@ -81,6 +81,36 @@ class ScoutEnergyReserveTests(unittest.TestCase):
         self.assertEqual(baseline.activity_count, 1)
         self.assertEqual(baseline.route_family_profiles, [])
 
+    def test_cross_training_uses_separate_route_family_profile(self):
+        activity = load_wearable_activity_summary(FIXTURES[0], root=ROOT)
+        first = activity.model_copy(
+            update={
+                "activity_id": "cross.training.001",
+                "activity_type": "cross_training",
+                "activity_date": date(2026, 5, 26),
+                "distance_m": 0.0,
+                "ascent_m": 0.0,
+                "descent_m": 0.0,
+            }
+        )
+        second = activity.model_copy(
+            update={
+                "activity_id": "cross.training.002",
+                "activity_type": "cross_training",
+                "activity_date": date(2026, 5, 27),
+                "distance_m": 0.0,
+                "ascent_m": 0.0,
+                "descent_m": 0.0,
+            }
+        )
+
+        baseline = build_energy_reserve_baseline([first, second], reference_date=date(2026, 5, 27))
+
+        self.assertEqual(
+            [profile.route_family for profile in baseline.route_family_profiles],
+            ["cross_training"],
+        )
+
     def test_garmin_provider_values_remain_source_values_not_scout_truth(self):
         garmin = load_wearable_activity_summary(FIXTURES[2], root=ROOT)
 

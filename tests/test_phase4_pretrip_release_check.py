@@ -38,32 +38,51 @@ def test_current_chilai_pretrip_release_check_passes():
         is True
     )
     assert summary["checks"]["admin_map_layer_stack"]["pretrip_imagery_bottom"] is True
+    assert summary["checks"]["admin_map_layer_stack"]["ordering_policy"] == (
+        "wmts_tiles_bottom_api_top"
+    )
     assert summary["checks"]["admin_map_layer_stack"][
         "pretrip_imagery_local_raster_manifest_supported"
-    ] is True
+    ] is False
     assert summary["checks"]["admin_map_layer_stack"][
-        "pretrip_imagery_local_raster_tile_url_template"
-    ] == "/admin/tiles/imagery/{project_id}/{layer_id}/{z}/{x}/{y}.png"
+        "pretrip_imagery_raster_tile_delivery"
+    ] == "direct_wmts_runtime"
+    assert summary["checks"]["admin_map_layer_stack"][
+        "pretrip_imagery_render_mode"
+    ] == "wmts_raster_tile"
     assert summary["checks"]["admin_map_layer_stack"][
         "pretrip_raster_imagery_renderer_present"
     ] is True
     assert summary["checks"]["admin_map_layer_stack"][
         "pretrip_imagery_external_network_required"
-    ] is False
+    ] is True
     assert summary["checks"]["admin_map_layer_stack"]["pretrip_api_top"] is True
     assert summary["checks"]["admin_map_layer_stack"]["after_action_imagery_bottom"] is True
     assert summary["checks"]["admin_map_layer_stack"][
         "after_action_imagery_local_raster_manifest_supported"
-    ] is True
+    ] is False
     assert summary["checks"]["admin_map_layer_stack"][
-        "after_action_imagery_local_raster_tile_url_template"
-    ] == "/admin/tiles/imagery/{project_id}/{layer_id}/{z}/{x}/{y}.png"
+        "after_action_imagery_raster_tile_delivery"
+    ] == "direct_wmts_runtime"
+    assert summary["checks"]["admin_map_layer_stack"][
+        "after_action_imagery_render_mode"
+    ] == "wmts_raster_tile"
     assert summary["checks"]["admin_map_layer_stack"][
         "after_action_raster_imagery_renderer_present"
     ] is True
     assert summary["checks"]["admin_map_layer_stack"][
         "after_action_imagery_external_network_required"
-    ] is False
+    ] is True
+    assert summary["checks"]["admin_map_layer_stack"]["wmts_raster_layer_ids"] == [
+        "imagery",
+        "rudy",
+        "rudy-twmap",
+        "relief",
+        "geology",
+        "topo-5k",
+        "forest",
+    ]
+    assert summary["checks"]["admin_map_layer_stack"]["imagery_processing_enabled"] is False
     assert summary["checks"]["admin_map_layer_stack"]["after_action_api_top"] is True
     assert (
         summary["checks"]["admin_map_layer_stack"]["after_action_weather_api_available"]
@@ -131,68 +150,10 @@ def test_current_chilai_pretrip_release_check_passes():
         summary["checks"]["admin_tile_cache_builder"]["source_has_nonstdlib_network"]
         is False
     )
-    assert summary["checks"]["admin_local_raster_source"]["status"] == "geotiff_wgs84"
-    assert summary["checks"]["admin_local_raster_source"]["source_kind"] == (
-        "local_geotiff"
-    )
-    assert summary["checks"]["admin_local_raster_source"]["layer_id"] == "imagery"
-    assert summary["checks"]["admin_local_raster_source"]["crs_code"] == 4326
-    assert summary["checks"]["admin_local_raster_source"]["bbox_wgs84"]
-    assert (
-        summary["checks"]["admin_local_raster_source"]["repo_fixture_write_allowed"]
-        is False
-    )
-    assert (
-        summary["checks"]["admin_local_raster_source"][
-            "raw_raster_committed_to_repo_allowed"
-        ]
-        is False
-    )
-    assert (
-        summary["checks"]["admin_local_raster_source"]["external_network_required"]
-        is False
-    )
-    assert (
-        summary["checks"]["admin_local_raster_source"]["tile_cutting_performed"]
-        is False
-    )
-    assert summary["checks"]["admin_local_raster_source"]["source_has_network"] is False
-    assert summary["checks"]["admin_local_raster_tiles"]["status"] == (
-        "planned_capacity_ok"
-    )
-    assert summary["checks"]["admin_local_raster_tiles"]["project_id"] == (
-        "chilai_nanhua_day1"
-    )
-    assert summary["checks"]["admin_local_raster_tiles"]["layer_id"] == "imagery"
-    assert summary["checks"]["admin_local_raster_tiles"]["runtime_tile_url_template"] == (
-        "/admin/tiles/imagery/{project_id}/{layer_id}/{z}/{x}/{y}.png"
-    )
-    assert summary["checks"]["admin_local_raster_tiles"]["within_capacity_limit"] is True
-    assert (
-        summary["checks"]["admin_local_raster_tiles"]["external_network_required"]
-        is False
-    )
-    assert (
-        summary["checks"]["admin_local_raster_tiles"]["downloads_tiles_into_repo"]
-        is False
-    )
-    assert (
-        summary["checks"]["admin_local_raster_tiles"][
-            "raw_raster_committed_to_repo_allowed"
-        ]
-        is False
-    )
-    assert summary["checks"]["admin_local_raster_tiles"]["dry_run_status"] == (
-        "dry_run_ready"
-    )
-    assert summary["checks"]["admin_local_raster_tiles"]["seed_status"] == (
-        "seed_complete"
-    )
-    assert summary["checks"]["admin_local_raster_tiles"]["seed_tiles_written"] == 1
-    assert summary["checks"]["admin_local_raster_tiles"]["payload_source"] == (
-        "local_cache"
-    )
-    assert summary["checks"]["admin_local_raster_tiles"]["source_has_network"] is False
+    assert summary["checks"]["admin_local_raster_source"]["legacy_optional"] is True
+    assert summary["checks"]["admin_local_raster_source"]["phase4_required"] is False
+    assert summary["checks"]["admin_local_raster_tiles"]["legacy_optional"] is True
+    assert summary["checks"]["admin_local_raster_tiles"]["phase4_required"] is False
     assert summary["checks"]["admin_tile_proxy"]["status"] == "local_proxy_ready"
     assert summary["checks"]["admin_tile_proxy"]["url_template"] == (
         "/admin/tiles/osm/{z}/{x}/{y}.png"

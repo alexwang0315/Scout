@@ -1619,6 +1619,52 @@ def test_pretrip_import_preserves_workspace_local_imagery_refs(
     assert review_queue["counts"]["item_count"] >= 1
 
 
+def test_pretrip_import_writes_imagery_scope_from_gpx_bbox_115_percent(
+    tmp_path: Path,
+) -> None:
+    golden_route = _write_gpx(
+        tmp_path / "golden-route.gpx",
+        name="imagery scope route",
+        points=[
+            (24.0, 121.0, 1000.0, "2026-05-01T00:00:00Z"),
+            (24.001, 121.002, 1001.0, "2026-05-01T00:10:00Z"),
+        ],
+    )
+
+    run_pretrip_import(
+        PretripImportRequest(
+            project_id="imagery_scope",
+            primary_gpx=golden_route,
+            workspace_root=tmp_path / "workspaces",
+            profile="pi-offline",
+            import_timestamp="2026-05-21T00:00:00+00:00",
+        )
+    )
+
+    project_root = tmp_path / "workspaces" / "imagery_scope"
+    project = _load(project_root / "project.json")
+    manifest = _load(project_root / "outputs" / "import_manifest.json")
+    route_bundle = _load(
+        project_root / "normalized" / "routes" / "route_evidence_bundle.json"
+    )
+    expected_bbox = {
+        "west": 120.99985,
+        "south": 23.999925,
+        "east": 121.00215,
+        "north": 24.001075,
+    }
+
+    assert project["imagery_source_id"] == "nlsc_photo2"
+    assert project["imagery_source_registry_id"] == "scout.imagery_sources.default.v1"
+    assert project["imagery_bbox_policy"] == "gpx_bbox_scaled_115_percent"
+    assert project["imagery_bbox_scale_factor"] == 1.15
+    assert project["imagery_bbox_wgs84"] == expected_bbox
+    assert manifest["imagery_acquisition_scope"]["bbox_wgs84"] == expected_bbox
+    assert route_bundle["imagery_scope_for_map_preparation"]["bbox_wgs84"] == (
+        expected_bbox
+    )
+
+
 def _load(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 

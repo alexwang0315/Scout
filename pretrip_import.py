@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
 
+from admin_imagery_sources import DEFAULT_IMAGERY_SOURCE_ID, DEFAULT_REGISTRY_ID
 from geo_utils import haversine_m
 from pretrip_candidate_generation import (
     generate_pretrip_candidates_from_gpx,
@@ -91,6 +92,7 @@ from runtime_debug_models import RuntimeDebugEvent
 
 IMPORTER_VERSION = "0.1.0"
 DEFAULT_CHECKPOINT_SPACING_M = 500.0
+DEFAULT_IMAGERY_BBOX_SCALE_FACTOR = 1.15
 DEFAULT_RESUME_SEGMENT_GAP_M = 1000.0
 REST_AREA_MAX_SPEED_M_PER_MIN = 5.0
 REST_AREA_CLUSTER_RADIUS_M = 80.0
@@ -2286,6 +2288,7 @@ def _build_import_manifest(
     gpx_speed_filter: dict[str, Any],
 ) -> dict[str, Any]:
     filter_summary = _gpx_filter_summary(gpx_speed_filter, output_refs=output_refs)
+    imagery_scope = _build_imagery_acquisition_scope(route_summary)
     return {
         "artifact_kind": "pretrip_import_manifest",
         "schema_version": "0.1.0",
@@ -2322,6 +2325,7 @@ def _build_import_manifest(
         },
         "outputs": output_refs,
         "gpx_speed_filter": filter_summary,
+        "imagery_acquisition_scope": imagery_scope,
         "counts": {
             "source_file_count": 1 + len(reference_paths),
             "golden_route_count": 1,
@@ -2441,6 +2445,7 @@ def _build_route_evidence_bundle(
 ) -> dict[str, Any]:
     route_bbox = _route_bbox_list(route_summary)
     scope_bbox = _expand_bbox_list(route_bbox, 500.0)
+    imagery_scope = _build_imagery_acquisition_scope(route_summary)
     return {
         "artifact_kind": "pretrip_historical_gpx_route_evidence_bundle",
         "schema_version": "historical_gpx_importer.v1",
@@ -2483,6 +2488,7 @@ def _build_route_evidence_bundle(
             "reference_track_corridor_m": 300.0,
             "corridor_policy": "bbox_fetch_then_along_track_filter",
         },
+        "imagery_scope_for_map_preparation": imagery_scope,
         "note_candidate_refs": [
             output_refs["normalized_route_note_candidates_ref"],
             output_refs["route_note_candidates_ref"],
@@ -2511,6 +2517,56 @@ def _route_bbox_list(route_summary: dict[str, Any]) -> list[float]:
         float(bbox["min_lat"]),
         float(bbox["max_lon"]),
         float(bbox["max_lat"]),
+    ]
+
+
+def _build_imagery_acquisition_scope(route_summary: dict[str, Any]) -> dict[str, Any]:
+    route_bbox = _route_bbox_list(route_summary)
+    imagery_bbox = _scale_bbox_list(route_bbox, DEFAULT_IMAGERY_BBOX_SCALE_FACTOR)
+    return {
+        "artifact_kind": "pretrip_imagery_acquisition_scope",
+        "schema_version": "scout_imagery_source_scope.v1",
+        "source": "historical_gpx_importer",
+        "source_route_bbox_wgs84": _bbox_list_to_dict(route_bbox),
+        "bbox_wgs84": _bbox_list_to_dict(imagery_bbox),
+        "scale_factor": DEFAULT_IMAGERY_BBOX_SCALE_FACTOR,
+        "bbox_policy": "gpx_bbox_scaled_115_percent",
+        "imagery_source_id": DEFAULT_IMAGERY_SOURCE_ID,
+        "imagery_source_registry_id": DEFAULT_REGISTRY_ID,
+        "tile_cache_policy": "scout_proxy_cache_first_explicit_remote_fetch",
+        "runtime_safety_truth": False,
+        "notes_zh": [
+            "影像圖層取用範圍依 GPX bbox 中心放大到 115%。",
+            "這是圖磚取用範圍，不是 Phase 1 runtime safety truth。",
+        ],
+    }
+
+
+def _bbox_list_to_dict(bbox: list[float]) -> dict[str, float]:
+    west, south, east, north = bbox
+    return {
+        "west": west,
+        "south": south,
+        "east": east,
+        "north": north,
+    }
+
+
+def _scale_bbox_list(bbox: list[float], scale_factor: float) -> list[float]:
+    if scale_factor <= 0:
+        raise ValueError("scale_factor must be positive")
+    west, south, east, north = bbox
+    center_lon = (west + east) / 2.0
+    center_lat = (south + north) / 2.0
+    width = max(east - west, 1e-6)
+    height = max(north - south, 1e-6)
+    scaled_width = width * scale_factor
+    scaled_height = height * scale_factor
+    return [
+        round(max(-180.0, center_lon - scaled_width / 2.0), 7),
+        round(max(-90.0, center_lat - scaled_height / 2.0), 7),
+        round(min(180.0, center_lon + scaled_width / 2.0), 7),
+        round(min(90.0, center_lat + scaled_height / 2.0), 7),
     ]
 
 
@@ -3362,6 +3418,10 @@ def _project_payload(
     payload: dict[str, Any] = {}
     if project_path.exists():
         payload = json.loads(project_path.read_text(encoding="utf-8"))
+    imagery_scope = _build_imagery_acquisition_scope(route_summary)
+    imagery_source_id = str(
+        payload.get("imagery_source_id") or imagery_scope["imagery_source_id"]
+    )
     payload.update(
         {
             "project_id": project_id,
@@ -3430,6 +3490,13 @@ def _project_payload(
             ],
             "resume_segment_report_ref": output_refs["resume_segment_report_ref"],
             "resume_segment_max_reasonable_point_gap_m": DEFAULT_RESUME_SEGMENT_GAP_M,
+            "imagery_source_id": imagery_source_id,
+            "imagery_source_registry_id": imagery_scope["imagery_source_registry_id"],
+            "imagery_bbox_wgs84": imagery_scope["bbox_wgs84"],
+            "imagery_source_route_bbox_wgs84": imagery_scope["source_route_bbox_wgs84"],
+            "imagery_bbox_scale_factor": imagery_scope["scale_factor"],
+            "imagery_bbox_policy": imagery_scope["bbox_policy"],
+            "imagery_tile_cache_policy": imagery_scope["tile_cache_policy"],
         }
     )
     if mcp_import_summary is not None:

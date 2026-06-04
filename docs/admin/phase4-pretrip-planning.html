@@ -62,7 +62,7 @@
     }
     .readiness-strip {
       display: grid;
-      grid-template-columns: minmax(160px, 1.1fr) repeat(6, minmax(76px, .7fr));
+      grid-template-columns: minmax(150px, 1fr) minmax(170px, 1.15fr) repeat(6, minmax(76px, .65fr));
       gap: 6px;
       align-items: stretch;
       padding: 6px 10px;
@@ -95,6 +95,7 @@
     .readiness-strip [data-readiness-kind="warnings"] { border-left-color: var(--warning); }
     .readiness-strip [data-readiness-kind="review"] { border-left-color: var(--review); }
     .readiness-strip [data-readiness-kind="package"] { border-left-color: var(--ok); }
+    .readiness-strip [data-readiness-kind="energy"] { border-left-color: var(--reference); }
     .sr-only {
       position: absolute;
       width: 1px;
@@ -338,6 +339,7 @@
     .pan-right { grid-column: 3; grid-row: 2; }
     .pan-down { grid-column: 2; grid-row: 3; }
     .map-wrap {
+      position: relative;
       min-height: 0;
       padding: 10px;
       background: #edf2f6;
@@ -377,21 +379,21 @@
       font-size: 11px;
       paint-order: stroke;
       stroke: rgba(255, 255, 255, .82);
-      stroke-width: 3px;
+      stroke-width: 2px;
     }
     .terrain-line {
       fill: none;
-      stroke: #8aa0b5;
-      stroke-width: 5.5;
-      stroke-dasharray: 9 7;
-      opacity: .34;
+      stroke: #246b8f;
+      stroke-width: 4.5;
+      stroke-dasharray: 7 5;
+      opacity: .78;
       stroke-linecap: round;
       vector-effect: non-scaling-stroke;
     }
     .terrain-line.is-unlinked {
       stroke: #c47f48;
       stroke-dasharray: 3 6;
-      opacity: .28;
+      opacity: .62;
       vector-effect: non-scaling-stroke;
     }
     .terrain-slope-cell {
@@ -498,13 +500,74 @@
     .mcp-candidate { fill: var(--mcp); stroke: white; stroke-width: 2.8; opacity: .96; }
     .mcp-candidate.is-review-required { stroke: var(--warning); stroke-width: 3.4; }
     .route-note { fill: var(--review); stroke: white; stroke-width: 2; opacity: .88; }
+    .point-label {
+      fill: #0f172a;
+      stroke: rgba(255, 255, 255, .92);
+      paint-order: stroke;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-weight: 700;
+      letter-spacing: 0;
+      pointer-events: none;
+    }
+    .point-label.is-hidden { display: none; }
+    .map-label-overlay {
+      position: absolute;
+      inset: 10px;
+      pointer-events: none;
+      overflow: hidden;
+      z-index: 5;
+    }
+    .map-label-badge,
+    .map-label-callout {
+      position: absolute;
+      box-sizing: border-box;
+      letter-spacing: 0;
+      white-space: nowrap;
+      pointer-events: none;
+    }
+    .map-label-badge {
+      min-width: 16px;
+      height: 14px;
+      padding: 1px 4px;
+      border: 1px solid rgba(15, 23, 42, .26);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, .88);
+      color: #0f172a;
+      font: 700 9px/12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      text-align: center;
+      box-shadow: 0 1px 3px rgba(15, 23, 42, .18);
+    }
+    .map-label-callout {
+      max-width: 220px;
+      padding: 8px 10px;
+      border: 1px solid rgba(71, 85, 105, .38);
+      border-radius: 9px;
+      background: rgba(255, 255, 255, .94);
+      color: #0f172a;
+      box-shadow: 0 8px 22px rgba(15, 23, 42, .18);
+    }
+    .map-label-callout strong,
+    .map-label-callout span {
+      display: block;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .map-label-callout strong {
+      font: 800 13px/16px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    .map-label-callout span {
+      margin-top: 2px;
+      color: #334155;
+      font: 500 11px/14px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
     .map-highlight { filter: drop-shadow(0 0 7px rgba(40, 102, 110, .65)); opacity: 1; }
     [data-layer-hidden="true"] { display: none; }
     .route-pane {
       grid-area: features;
       display: grid;
-      grid-template-rows: auto minmax(240px, 1fr);
-      overflow-y: auto;
+      grid-template-rows: auto auto minmax(0, 1fr);
+      min-height: 0;
+      overflow: hidden;
       overscroll-behavior: contain;
       scrollbar-gutter: stable;
     }
@@ -516,29 +579,70 @@
       border-right: 0;
     }
     .pane-head {
-      padding: 12px 14px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 5px;
+      padding: 8px 12px;
       border-bottom: 1px solid var(--line);
       background: var(--panel);
     }
+    .feature-header-row {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 10px;
+      min-width: 0;
+    }
+    .feature-header-row h2 {
+      margin: 0;
+    }
+    .feature-header-row .meta {
+      margin: 0;
+      min-width: 0;
+      flex: 1;
+      text-align: right;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
     .metric-grid {
       display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 8px;
-      margin-top: 10px;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 3px;
+      min-width: 0;
     }
     .metric {
+      display: flex;
+      align-items: baseline;
+      gap: 3px;
       border: 1px solid var(--line);
-      border-radius: 6px;
-      padding: 8px;
+      border-radius: 5px;
+      padding: 3px 5px;
       background: #fbfcfe;
+      min-width: 0;
+      max-width: 100%;
     }
-    .metric span { display: block; color: var(--muted); font-size: 12px; }
-    .metric strong { display: block; margin-top: 2px; font-size: 15px; }
+    .metric span {
+      color: var(--muted);
+      font-size: 9px;
+      text-transform: uppercase;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .metric strong {
+      min-width: 0;
+      font-size: 11px;
+      font-variant-numeric: tabular-nums;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
     .list-controls {
       display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 8px;
-      margin-top: 10px;
+      grid-template-columns: minmax(0, 1fr) minmax(0, .82fr) minmax(0, .82fr);
+      gap: 5px;
+      margin-top: 1px;
     }
     .list-controls input, .list-controls select {
       min-width: 0;
@@ -546,12 +650,10 @@
       border-radius: 6px;
       background: #fff;
       color: var(--ink);
-      padding: 7px 8px;
+      padding: 5px 7px;
+      font-size: 12px;
     }
-    .list-controls .control-group-header {
-      grid-column: 1 / -1;
-    }
-    .list-controls input { grid-column: 1 / -1; }
+    .list-controls .control-group-header { display: none; }
     .review-controls {
       display: grid;
       gap: 8px;
@@ -786,6 +888,53 @@
       padding: 12px;
       min-height: 0;
       scrollbar-gutter: stable;
+    }
+    .tree-tabs {
+      display: flex;
+      gap: 5px;
+      padding: 6px 10px 4px;
+      overflow-x: auto;
+      scrollbar-gutter: stable;
+    }
+    .tree-tab {
+      flex: 0 0 112px;
+      min-width: 112px;
+      border: 1px solid var(--line);
+      border-left: 3px solid var(--category-color, var(--accent));
+      border-radius: 6px;
+      background: #fbfcfe;
+      color: var(--muted);
+      padding: 4px 6px;
+      text-align: left;
+      cursor: pointer;
+      font: inherit;
+    }
+    .tree-tab strong,
+    .tree-tab small {
+      display: block;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .tree-tab strong {
+      color: var(--ink);
+      font-size: 11px;
+    }
+    .tree-tab small {
+      margin-top: 1px;
+      font-size: 10px;
+    }
+    .tree-tab.is-active {
+      border-color: var(--accent);
+      background: #e9eef4;
+      color: var(--ink);
+    }
+    .tree-empty {
+      border: 1px dashed var(--line);
+      border-radius: 6px;
+      padding: 12px;
+      color: var(--muted);
+      background: #fbfcfe;
     }
     .review-workspace-panel {
       display: none;
@@ -1217,6 +1366,11 @@
       <strong id="readinessStripStatus">Loading…</strong>
       <small id="readinessStripBoundary" class="sr-only">Reviewed planning is not runtime activation.</small>
     </div>
+    <div id="energyReserveMonitor" data-readiness-kind="energy" title="Energy reserve baseline monitor is advisory only.">
+      <span>Energy</span>
+      <strong id="energyReserveHeadline">Loading…</strong>
+      <small id="energyReserveSubline">health data not loaded</small>
+    </div>
     <div data-readiness-kind="blockers">
       <span>Blockers</span>
       <strong id="readinessBlockerCount">-</strong>
@@ -1270,6 +1424,12 @@
                   </div>
                   <div class="filters" aria-label="Map layers">
                     <label title="Imagery layer"><input type="checkbox" data-layer="imagery" checked> Imagery</label>
+                    <label title="Rudy Map hiking topographic layer"><input type="checkbox" data-layer="rudy"> Rudy</label>
+                    <label title="Rudy Map with TWMap style"><input type="checkbox" data-layer="rudy-twmap"> Rudy+TW</label>
+                    <label title="Taiwan color relief terrain shading layer"><input type="checkbox" data-layer="relief"> Relief</label>
+                    <label title="Taiwan geology 2016 layer"><input type="checkbox" data-layer="geology"> Geology</label>
+                    <label title="Taiwan 1/5000 topographic layer"><input type="checkbox" data-layer="topo-5k"> Topo 5K</label>
+                    <label title="Taiwan forest compartment boundary layer"><input type="checkbox" data-layer="forest"> Forest</label>
                     <label title="OpenStreetMap layer"><input type="checkbox" data-layer="osm" checked> OSM</label>
                     <label title="Terrain layer"><input type="checkbox" data-layer="terrain" checked> Terrain</label>
                     <label title="Scout Risk Engine pretrip risk score point layer"><input type="checkbox" data-layer="risk-score"> Risk pts</label>
@@ -1320,9 +1480,11 @@
 
     <section class="route-pane">
       <div class="pane-head">
-        <h2 title="CP / Segment Frame">Features</h2>
-        <p id="routeMeta" class="meta">Loading pre-trip route…</p>
-        <div class="metric-grid">
+        <div class="feature-header-row">
+          <h2 title="CP / Segment Frame">Features</h2>
+          <p id="routeMeta" class="meta">Loading pre-trip route…</p>
+        </div>
+        <div class="metric-grid" aria-label="Feature summary">
           <div class="metric"><span>Readiness</span><strong id="readinessStatus">-</strong></div>
           <div class="metric"><span>Review Queue</span><strong id="reviewQueueCount">-</strong></div>
           <div class="metric"><span>Checkpoints</span><strong id="checkpointCount">-</strong></div>
@@ -1345,6 +1507,7 @@
           </select>
         </div>
       </div>
+      <div id="evidenceTreeTabs" class="tree-tabs" role="tablist" aria-label="Evidence tree categories"></div>
       <div id="evidenceTree" class="tree"></div>
     </section>
 
@@ -1414,11 +1577,11 @@
             <span>Prepare Layers</span>
             <small>workspace job</small>
           </div>
-          <p class="import-gpx-copy">LayerPreparationJob（圖層準備工作）checks local map, OSM, Overpass, DEM, imagery, weather, and reference evidence for this pre-trip workspace.</p>
+          <p class="import-gpx-copy">LayerPreparationJob（圖層準備工作）checks local map, OSM, Overpass, DEM, weather, and reference evidence for this pre-trip workspace. Imagery tiles（影像圖磚）are displayed from WMTS at runtime and are not prepared here.</p>
           <form id="prepareLayersForm" class="import-gpx-form">
             <div class="import-gpx-field">
               <label for="prepareLayersList">Layer ids</label>
-              <input id="prepareLayersList" type="text" autocomplete="off" value="osm,overpass,terrain,imagery,weather,reference-tracks,route,segments,checkpoints">
+              <input id="prepareLayersList" type="text" autocomplete="off" value="osm,overpass,terrain,weather,reference-tracks,route,segments,checkpoints">
               <small>Comma-separated ids; aliases dem/dtm map to terrain.</small>
             </div>
             <div class="import-gpx-grid">
@@ -1678,7 +1841,11 @@
     const MAP_VISUAL_PADDING = 56;
     const MAP_MIN_ZOOM = 0.6;
     const MAP_MAX_ZOOM = 12000;
-    const FOCUS_POINT_VIEWPORT_M = 50;
+    const FOCUS_POINT_VIEWPORT_M = 1000;
+    const POINT_LABEL_VIEWPORT_M = 30;
+    const POINT_LABEL_FONT_PX = 4;
+    const POINT_LABEL_STROKE_PX = 0.6;
+    const POINT_LABEL_OFFSET_PX = 3;
     const FOCUS_PATH_MAX_ZOOM = 4.4;
     const FOCUS_POINT_BOX_THRESHOLD = 28;
     const TERRAIN_FALLBACK_CELL_WIDTH_M = 20;
@@ -1693,19 +1860,51 @@
     const OSM_MIN_ZOOM = 8;
     const OSM_MAX_ZOOM = 20;
     const OSM_TILE_CACHE_BUST = "transparent-fallback-v12";
-    const RASTER_LOCAL_TILE_URL_TEMPLATE = `${apiBase()}/admin/tiles/imagery/{project_id}/{layer_id}/{z}/{x}/{y}.png`;
-    const RASTER_TILE_CACHE_BUST = "transparent-fallback-v12";
+    const RASTER_TILE_CACHE_BUST = "wmts-runtime-v1";
     const OSM_ATTRIBUTION = "OpenStreetMap contributors";
+    const HAPPYMAN_WMTS_ENDPOINT = "https://tile.happyman.idv.tw/mp/service";
+    const HAPPYMAN_WMTS_BASE = {
+      sourceKind: "wmts_kvp_tile",
+      wmtsEndpoint: HAPPYMAN_WMTS_ENDPOINT,
+      wmtsStyle: "default",
+      wmtsTileMatrixSet: "gm_grid",
+      wmtsTileMatrixIdStyle: "zero_padded_2",
+      wmtsFormat: "image/png",
+      wmtsVersion: "1.0.0",
+      minZoom: 5,
+      maxZoom: 20
+    };
+    const RASTER_SOURCE_LAYER_DEFINITIONS = [
+      {layerId: "imagery", sourceId: "nlsc_photo2", label: "Imagery", sourceKind: "wmts_tile", urlTemplate: "https://wmts.nlsc.gov.tw/wmts/PHOTO2/default/EPSG:3857/{z}/{y}/{x}", tileOrder: "z_y_x", minZoom: 5, maxZoom: 19, opacity: 0.92},
+      {layerId: "rudy", sourceId: "happyman_rudy", label: "Rudy", wmtsLayer: "rudy", opacity: 0.94, ...HAPPYMAN_WMTS_BASE},
+      {layerId: "rudy-twmap", sourceId: "happyman_rudy_twmap", label: "Rudy+TW", wmtsLayer: "rudy_twmap", opacity: 0.9, ...HAPPYMAN_WMTS_BASE},
+      {layerId: "relief", sourceId: "happyman_colorrelief", label: "Relief", wmtsLayer: "colorrelief", opacity: 0.58, ...HAPPYMAN_WMTS_BASE},
+      {layerId: "geology", sourceId: "happyman_geo2016", label: "Geology", wmtsLayer: "geo2016", opacity: 0.52, ...HAPPYMAN_WMTS_BASE},
+      {layerId: "topo-5k", sourceId: "happyman_tw5k2000", label: "Topo 5K", wmtsLayer: "tw5k2000", opacity: 0.82, ...HAPPYMAN_WMTS_BASE},
+      {layerId: "forest", sourceId: "happyman_forest", label: "Forest", wmtsLayer: "forest", opacity: 0.72, ...HAPPYMAN_WMTS_BASE}
+    ];
+    const RASTER_SOURCE_LAYER_BY_ID = Object.fromEntries(RASTER_SOURCE_LAYER_DEFINITIONS.map(layer => [layer.layerId, layer]));
+    const RASTER_OVERLAY_LAYER_DEFINITIONS = RASTER_SOURCE_LAYER_DEFINITIONS.filter(layer => layer.layerId !== "imagery");
     const DETAIL_TAB_IDS = new Set(["pre_trip_planning", "post_analysis", "review_workspace", "import_gpx", "wearables", "agent_skills"]);
+    const EVIDENCE_TREE_TABS = [
+      {id: "default", label: "CP / Timeline", category: "checkpoint"},
+      {id: "map_risk", label: "Map / Risk", category: "risk"},
+      {id: "completed", label: "Completed GPX", category: "reference"},
+      {id: "review", label: "Review / Queue", category: "review"},
+      {id: "info", label: "Info / Other", category: "route"}
+    ];
     const state = {
       view: null,
       selected: null,
       activeTab: initialActiveTab(),
+      activeEvidenceTreeTab: "default",
+      evidenceTreeTabCounts: {},
       selectedSectionId: "",
       zoom: 1,
       panX: 0,
       panY: 0,
       zoomSelection: null,
+      focusedLabelIds: new Set(),
       selectedMapCoordinate: null,
       reviewQueueCursor: -1,
       selectedReviewCandidateRefs: new Set(),
@@ -1738,15 +1937,48 @@
     function mapLayerById(view, layerId) {
       return (view?.map_layers || []).find(layer => layer.layer_id === layerId) || {};
     }
+    function rasterLayerFor(view, layerId = "imagery") {
+      const explicitLayer = mapLayerById(view, layerId);
+      const definition = RASTER_SOURCE_LAYER_BY_ID[layerId];
+      if (explicitLayer.layer_id) {
+        return {
+          ...explicitLayer,
+          source_kind: explicitLayer.source_kind || definition?.sourceKind,
+          imagery_source_id: explicitLayer.imagery_source_id || definition?.sourceId,
+          raster_layer_opacity: explicitLayer.raster_layer_opacity ?? definition?.opacity
+        };
+      }
+      if (!definition) return mapLayerById(view, "imagery");
+      const imageryLayer = mapLayerById(view, "imagery");
+      const layerManifest = imageryLayer.raster_layer_manifests?.[layerId] || {};
+      return {
+        ...imageryLayer,
+        ...layerManifest,
+        layer_id: definition.layerId,
+        label: definition.label,
+        source_kind: layerManifest.imagery_source_kind || definition.sourceKind,
+        imagery_source_id: layerManifest.imagery_source_id || definition.sourceId,
+        raster_layer_opacity: definition.opacity,
+        candidate_only: true,
+        runtime_safety_truth: false
+      };
+    }
     function apiUrlTemplate(template) {
       if (!template) return "";
       if (template.startsWith("http://") || template.startsWith("https://")) return template;
       if (template.startsWith("/")) return `${apiBase()}${template}`;
       return template;
     }
-    function rasterTileTemplate(view) {
-      const layer = mapLayerById(view, "imagery");
-      return apiUrlTemplate(layer.local_raster_tile_url_template) || RASTER_LOCAL_TILE_URL_TEMPLATE;
+    function rasterSourceDefinitionFor(layerId, layer = {}) {
+      const sourceId = layer.imagery_source_id || layer.source_id;
+      return RASTER_SOURCE_LAYER_BY_ID[layerId]
+        || RASTER_SOURCE_LAYER_DEFINITIONS.find(definition => definition.sourceId === sourceId)
+        || RASTER_SOURCE_LAYER_BY_ID.imagery;
+    }
+    function rasterTileTemplate(view, layerId = "imagery") {
+      const layer = rasterLayerFor(view, layerId);
+      const definition = rasterSourceDefinitionFor(layerId, layer);
+      return definition.urlTemplate || "";
     }
     function normalizeRasterBounds(value) {
       if (!value) return null;
@@ -1758,8 +1990,8 @@
       if (west > east || south > north) return null;
       return {west, south, east, north};
     }
-    function rasterBoundsFor(view) {
-      const layer = mapLayerById(view, "imagery");
+    function rasterBoundsFor(view, layerId = "imagery") {
+      const layer = rasterLayerFor(view, layerId);
       return normalizeRasterBounds(layer.raster_bbox_wgs84 || layer.bbox_wgs84 || layer.georeference?.bbox_wgs84);
     }
     function parseZoomRange(value) {
@@ -1770,11 +2002,12 @@
         max: Number(match[2])
       };
     }
-    function rasterZoomRangeFor(view) {
-      const layer = mapLayerById(view, "imagery");
+    function rasterZoomRangeFor(view, layerId = "imagery") {
+      const layer = rasterLayerFor(view, layerId);
+      const definition = rasterSourceDefinitionFor(layerId, layer);
       const parsed = parseZoomRange(layer.raster_tile_zoom_range || layer.zoom_range);
-      const min = Number(layer.raster_tile_min_zoom ?? layer.min_zoom ?? parsed?.min ?? OSM_MIN_ZOOM);
-      const max = Number(layer.raster_tile_max_zoom ?? layer.max_zoom ?? parsed?.max ?? OSM_TARGET_ZOOM);
+      const min = Number(layer.raster_tile_min_zoom ?? layer.min_zoom ?? parsed?.min ?? definition?.minZoom ?? OSM_MIN_ZOOM);
+      const max = Number(layer.raster_tile_max_zoom ?? layer.max_zoom ?? parsed?.max ?? definition?.maxZoom ?? OSM_TARGET_ZOOM);
       const safeMin = Number.isFinite(min) ? clamp(Math.round(min), OSM_MIN_ZOOM, OSM_MAX_ZOOM) : OSM_MIN_ZOOM;
       const safeMax = Number.isFinite(max) ? clamp(Math.round(max), safeMin, OSM_MAX_ZOOM) : OSM_TARGET_ZOOM;
       return {min: safeMin, max: safeMax};
@@ -1784,6 +2017,7 @@
       return a.west <= b.east && a.east >= b.west && a.south <= b.north && a.north >= b.south;
     }
     function rasterTileCacheBustedUrl(url) {
+      if (url.startsWith("http://") || url.startsWith("https://")) return url;
       const separator = url.includes("?") ? "&" : "?";
       return `${url}${separator}fallback=transparent&v=${RASTER_TILE_CACHE_BUST}`;
     }
@@ -1807,13 +2041,74 @@
       const b = view.route.bounds;
       return { south: b.min_lat, north: b.max_lat, west: b.min_lon, east: b.max_lon };
     }
-    function project(bounds, lat, lon) {
+    function lonToMercatorXValue(lon) {
+      return (lon + 180) / 360;
+    }
+    function latToMercatorYValue(lat) {
+      const latRad = clamp(lat, -85.05112878, 85.05112878) * Math.PI / 180;
+      return (1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2;
+    }
+    function mercatorYValueToLat(y) {
+      const n = Math.PI - 2 * Math.PI * y;
+      return 180 / Math.PI * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)));
+    }
+    function mercatorFrameForBounds(bounds) {
       const pad = MAP_VISUAL_PADDING;
-      const lonSpan = Math.max(bounds.east - bounds.west, 0.000001);
-      const latSpan = Math.max(bounds.north - bounds.south, 0.000001);
-      const x = pad + ((lon - bounds.west) / lonSpan) * (MAP_WIDTH - pad * 2);
-      const y = MAP_HEIGHT - pad - ((lat - bounds.south) / latSpan) * (MAP_HEIGHT - pad * 2);
+      const westX = lonToMercatorXValue(bounds.west);
+      const eastX = lonToMercatorXValue(bounds.east);
+      const northY = latToMercatorYValue(bounds.north);
+      const southY = latToMercatorYValue(bounds.south);
+      const xSpan = Math.max(eastX - westX, 0.000001);
+      const ySpan = Math.max(southY - northY, 0.000001);
+      const usableWidth = Math.max(MAP_WIDTH - pad * 2, 1);
+      const usableHeight = Math.max(MAP_HEIGHT - pad * 2, 1);
+      return {
+        westX,
+        eastX,
+        northY,
+        southY,
+        centerX: westX + xSpan / 2,
+        centerY: northY + ySpan / 2,
+        scale: Math.min(usableWidth / xSpan, usableHeight / ySpan)
+      };
+    }
+    function project(bounds, lat, lon) {
+      const frame = mercatorFrameForBounds(bounds);
+      const lonX = lonToMercatorXValue(lon);
+      const latY = latToMercatorYValue(lat);
+      const x = MAP_WIDTH / 2 + (lonX - frame.centerX) * frame.scale;
+      const y = MAP_HEIGHT / 2 + (latY - frame.centerY) * frame.scale;
       return [x, y];
+    }
+    function coordinateFromMapPointForBounds(bounds, x, y) {
+      const frame = mercatorFrameForBounds(bounds);
+      const lonX = clamp(
+        frame.centerX + (x - MAP_WIDTH / 2) / frame.scale,
+        frame.westX,
+        frame.eastX
+      );
+      const latY = clamp(
+        frame.centerY + (y - MAP_HEIGHT / 2) / frame.scale,
+        frame.northY,
+        frame.southY
+      );
+      return {
+        lat: mercatorYValueToLat(latY),
+        lon: lonX * 360 - 180
+      };
+    }
+    function visibleBoundsFor(view) {
+      if (!view) return null;
+      const bounds = boundsFor(view);
+      const box = mapViewportBox();
+      const nw = coordinateFromMapPointForBounds(bounds, box.minX, box.minY);
+      const se = coordinateFromMapPointForBounds(bounds, box.minX + box.width, box.minY + box.height);
+      return {
+        north: Math.max(nw.lat, se.lat),
+        south: Math.min(nw.lat, se.lat),
+        west: Math.min(nw.lon, se.lon),
+        east: Math.max(nw.lon, se.lon)
+      };
     }
     function pathFromCoords(bounds, coords) {
       return coords.map((point, index) => {
@@ -1855,16 +2150,38 @@
       const url = osmTileTemplate().replace("{z}", z).replace("{x}", x).replace("{y}", y);
       return osmTileCacheBustedUrl(url);
     }
-    function rasterTileUrl(view, z, x, y) {
-      const layer = mapLayerById(view, "imagery");
-      const layerId = layer.layer_id || "imagery";
-      const url = rasterTileTemplate(view)
-        .replace("{project_id}", PROJECT_ID)
-        .replace("{layer_id}", layerId)
-        .replace("{z}", z)
-        .replace("{x}", x)
-        .replace("{y}", y);
-      return rasterTileCacheBustedUrl(url);
+    function wmtsTileMatrixId(definition, z) {
+      return definition.wmtsTileMatrixIdStyle === "zero_padded_2" ? String(z).padStart(2, "0") : String(z);
+    }
+    function replaceTilePlaceholders(template, z, x, y) {
+      return template
+        .replaceAll("{z}", String(z))
+        .replaceAll("{x}", String(x))
+        .replaceAll("{y}", String(y));
+    }
+    function wmtsTileUrl(definition, z, x, y) {
+      if (definition.sourceKind === "wmts_kvp_tile") {
+        const params = new URLSearchParams({
+          SERVICE: "WMTS",
+          REQUEST: "GetTile",
+          VERSION: definition.wmtsVersion || "1.0.0",
+          LAYER: definition.wmtsLayer,
+          STYLE: definition.wmtsStyle || "default",
+          TILEMATRIXSET: definition.wmtsTileMatrixSet,
+          TILEMATRIX: wmtsTileMatrixId(definition, z),
+          TILEROW: String(y),
+          TILECOL: String(x),
+          FORMAT: definition.wmtsFormat || "image/png"
+        });
+        return `${definition.wmtsEndpoint}?${params.toString()}`;
+      }
+      return replaceTilePlaceholders(definition.urlTemplate || rasterTileTemplate(null, definition.layerId), z, x, y);
+    }
+    function rasterTileUrl(view, requestedLayerId, z, x, y) {
+      const layer = rasterLayerFor(view, requestedLayerId);
+      const resolvedLayerId = layer.layer_id || "imagery";
+      const definition = rasterSourceDefinitionFor(resolvedLayerId, layer);
+      return rasterTileCacheBustedUrl(wmtsTileUrl(definition, z, x, y));
     }
     function tileRangeForZoom(bounds, zoom) {
       const maxIndex = (2 ** zoom) - 1;
@@ -1884,8 +2201,8 @@
       while (zoom > OSM_MIN_ZOOM && tileCountForZoom(bounds, zoom) > maxTiles) zoom -= 1;
       return zoom;
     }
-    function chooseRasterZoom(view, bounds, maxTiles = RASTER_MAX_TILES) {
-      const range = rasterZoomRangeFor(view);
+    function chooseRasterZoom(view, bounds, maxTiles = RASTER_MAX_TILES, layerId = "imagery") {
+      const range = rasterZoomRangeFor(view, layerId);
       let zoom = range.max;
       while (zoom > range.min && tileCountForZoom(bounds, zoom) > maxTiles) zoom -= 1;
       return zoom;
@@ -1908,18 +2225,20 @@
       }
       return tiles;
     }
-    function rasterTileCoverage(view, bounds, zoom = null) {
-      const z = zoom ?? chooseRasterZoom(view, bounds);
-      const rasterBounds = rasterBoundsFor(view);
+    function rasterTileCoverage(view, bounds, zoom = null, layerId = "imagery") {
+      const z = zoom ?? chooseRasterZoom(view, bounds, RASTER_MAX_TILES, layerId);
+      const rasterBounds = rasterBoundsFor(view, layerId);
       return osmTileCoverage(bounds, z)
         .filter(tile => boundsIntersect(tile, rasterBounds))
         .map(tile => ({
           ...tile,
-          href: rasterTileUrl(view, tile.z, tile.x, tile.y)
+          href: rasterTileUrl(view, layerId, tile.z, tile.x, tile.y)
         }));
     }
-    function renderRasterImagery(group, view, bounds, width, height) {
-      rasterTileCoverage(view, bounds).forEach(tile => {
+    function renderRasterLayer(group, view, bounds, width, height, layerId = "imagery", coverageBounds = bounds) {
+      const layer = rasterLayerFor(view, layerId);
+      const opacity = Number(layer.raster_layer_opacity ?? RASTER_SOURCE_LAYER_BY_ID[layerId]?.opacity ?? 0.92);
+      rasterTileCoverage(view, coverageBounds, null, layerId).forEach(tile => {
         const [x1, y1] = project(bounds, tile.north, tile.west);
         const [x2, y2] = project(bounds, tile.south, tile.east);
         group.appendChild(el("image", {
@@ -1931,15 +2250,18 @@
           class: "raster-tile",
           preserveAspectRatio: "none",
           "data-raster-tile": `${tile.z}/${tile.x}/${tile.y}`,
-          "data-source-kind": "local_geotiff"
+          "data-map-ref": layerId,
+          "data-source-id": layer.imagery_source_id || layer.source_id || "",
+          "data-source-kind": layer.source_kind || "local_geotiff",
+          opacity: Number.isFinite(opacity) ? opacity.toFixed(2) : "0.92"
         }));
       });
     }
-    function renderOsmBasemap(group, bounds, width, height) {
+    function renderOsmBasemap(group, bounds, width, height, coverageBounds = bounds) {
       if (!isLocalOsmTileMode()) {
         group.appendChild(el("rect", {x: 0, y: 0, width, height, class: "layer-osm"}));
       }
-      osmTileCoverage(bounds).forEach(tile => {
+      osmTileCoverage(coverageBounds).forEach(tile => {
         const [x1, y1] = project(bounds, tile.north, tile.west);
         const [x2, y2] = project(bounds, tile.south, tile.east);
         group.appendChild(el("image", {
@@ -2382,6 +2704,27 @@
       node.title = title;
       node.setAttribute("aria-label", title);
     }
+    function renderEnergyReserveMonitor(view) {
+      const monitor = view.energy_reserve_monitor || view.tabs?.pre_trip_planning?.energy_reserve_monitor || {};
+      const display = monitor.display || {};
+      const health = monitor.health_data || {};
+      const change = monitor.candidate_change || {};
+      const headline = display.headline || "no baseline";
+      const subline = [
+        display.health_text || "health data not loaded",
+        display.trip_text || "no capability",
+        display.change_text || "no candidate change"
+      ].filter(Boolean).join(" | ");
+      const title = [
+        `status: ${monitor.status || "missing_health_data"}`,
+        `baseline: ${health.baseline_loaded ? "loaded" : "not loaded"}`,
+        `activities: ${health.activity_count || 0}`,
+        `candidate delta: ${change.score_delta_candidate || 0}`,
+        "advisory only; no safety/runtime mutation"
+      ].join(" / ");
+      setTextWithTitle("energyReserveHeadline", headline, title);
+      setTextWithTitle("energyReserveSubline", subline, title);
+    }
     function updateReadinessStrip(view) {
       const reviewCounts = view.review_queue?.counts || {};
       const departureBoundary = view.departure_bundle?.boundary || {};
@@ -2406,18 +2749,47 @@
       setTextWithTitle("readinessReviewedPackageStatus", view.departure_bundle?.package?.status || "candidate", "Reviewed planning package status");
       setTextWithTitle("readinessDepartureGateBoundary", departureBoundary.not_departure_approval ? "Review" : "Gate", departureTitle);
       setTextWithTitle("readinessRuntimeHandoffBoundary", runtimeBoundary.safety_api_calls_allowed === false ? "Closed" : "Handoff", runtimeTitle);
+      renderEnergyReserveMonitor(view);
     }
     function mapViewBox() {
+      const {minX, minY, width, height} = mapViewportBox();
+      return `${minX.toFixed(2)} ${minY.toFixed(2)} ${width.toFixed(2)} ${height.toFixed(2)}`;
+    }
+    function mapViewportBox() {
       const width = MAP_WIDTH / state.zoom;
       const height = MAP_HEIGHT / state.zoom;
       const minX = (MAP_WIDTH - width) / 2 + state.panX;
       const minY = (MAP_HEIGHT - height) / 2 + state.panY;
-      return `${minX.toFixed(2)} ${minY.toFixed(2)} ${width.toFixed(2)} ${height.toFixed(2)}`;
+      return {minX, minY, width, height};
+    }
+    function renderRasterBasemapLayers(view) {
+      if (!view) return;
+      const bounds = boundsFor(view);
+      const coverageBounds = visibleBoundsFor(view) || bounds;
+      const imageryGroup = svg.querySelector('[data-layer-group="imagery"]');
+      if (imageryGroup) {
+        imageryGroup.replaceChildren();
+        renderRasterLayer(imageryGroup, view, bounds, MAP_WIDTH, MAP_HEIGHT, "imagery", coverageBounds);
+      }
+      RASTER_OVERLAY_LAYER_DEFINITIONS.forEach(layer => {
+        const rasterGroup = svg.querySelector(`[data-layer-group="${selectorValue(layer.layerId)}"]`);
+        if (!rasterGroup) return;
+        rasterGroup.replaceChildren();
+        renderRasterLayer(rasterGroup, view, bounds, MAP_WIDTH, MAP_HEIGHT, layer.layerId, coverageBounds);
+      });
+      const osmGroup = svg.querySelector('[data-layer-group="osm"]');
+      if (osmGroup) {
+        osmGroup.replaceChildren();
+        renderOsmBasemap(osmGroup, bounds, MAP_WIDTH, MAP_HEIGHT, coverageBounds);
+      }
     }
     function applyMapViewport() {
       svg.setAttribute("viewBox", mapViewBox());
+      renderRasterBasemapLayers(state.view);
       syncMapMarkerScale();
+      updatePointLabels();
       updateMapZoomIndicator();
+      updateScaleBar();
     }
     function updateMapZoomIndicator(extraLabel = "") {
       const node = document.getElementById("zoomLevel");
@@ -2701,11 +3073,258 @@
       const centerLon = (bounds.east + bounds.west) / 2;
       const widthMeters = metersBetween(centerLat, bounds.west, centerLat, bounds.east);
       const heightMeters = metersBetween(bounds.south, centerLon, bounds.north, centerLon);
-      const drawableWidth = Math.max(MAP_WIDTH - MAP_VISUAL_PADDING * 2, 1);
-      const drawableHeight = Math.max(MAP_HEIGHT - MAP_VISUAL_PADDING * 2, 1);
-      const widthZoom = (MAP_WIDTH * (widthMeters / drawableWidth)) / FOCUS_POINT_VIEWPORT_M;
-      const heightZoom = (MAP_HEIGHT * (heightMeters / drawableHeight)) / FOCUS_POINT_VIEWPORT_M;
+      const widthZoom = widthMeters / FOCUS_POINT_VIEWPORT_M;
+      const heightZoom = heightMeters / FOCUS_POINT_VIEWPORT_M;
       return Math.max(1.2, Math.min(MAP_MAX_ZOOM, Math.max(widthZoom, heightZoom)));
+    }
+    function currentViewportRangeM() {
+      if (!state.view) return Number.POSITIVE_INFINITY;
+      const bounds = boundsFor(state.view);
+      const centerLat = (bounds.north + bounds.south) / 2;
+      const centerLon = (bounds.east + bounds.west) / 2;
+      const widthMeters = metersBetween(centerLat, bounds.west, centerLat, bounds.east) / Math.max(state.zoom, 1);
+      const heightMeters = metersBetween(bounds.south, centerLon, bounds.north, centerLon) / Math.max(state.zoom, 1);
+      return Math.max(widthMeters, heightMeters);
+    }
+    function niceScaleMeters(targetMeters) {
+      if (!Number.isFinite(targetMeters) || targetMeters <= 0) return 100;
+      const exponent = 10 ** Math.floor(Math.log10(targetMeters));
+      return [1, 2, 5, 10]
+        .map(step => step * exponent)
+        .filter(value => value <= targetMeters)
+        .pop() || exponent;
+    }
+    function formatScaleMeters(meters) {
+      if (meters >= 1000) {
+        const km = meters / 1000;
+        return `${km >= 10 || Number.isInteger(km) ? km.toFixed(0) : km.toFixed(1)} km`;
+      }
+      return `${Math.round(meters)} m`;
+    }
+    function updateScaleBar() {
+      if (!state.view) return;
+      const bounds = boundsFor(state.view);
+      const centerLat = (bounds.north + bounds.south) / 2;
+      const routeWidthM = metersBetween(centerLat, bounds.west, centerLat, bounds.east);
+      const drawableWidth = Math.max(MAP_WIDTH - MAP_VISUAL_PADDING * 2, 1);
+      const zoom = Math.max(state.zoom, 1);
+      const metersPerScreenPx = routeWidthM / (drawableWidth * zoom);
+      if (!Number.isFinite(metersPerScreenPx) || metersPerScreenPx <= 0) return;
+      const scaleMeters = niceScaleMeters(metersPerScreenPx * 150);
+      const scaleUnits = (scaleMeters / routeWidthM) * drawableWidth;
+      const [minX, minY, viewWidth, viewHeight] = mapViewBox().split(/\s+/).map(Number);
+      if (![minX, minY, viewWidth, viewHeight, scaleUnits].every(Number.isFinite)) return;
+      let group = svg.querySelector('[data-ui-overlay="scale-bar"]');
+      if (!group) {
+        group = el("g", {"data-ui-overlay": "scale-bar", "aria-label": "Map scale bar"});
+        svg.appendChild(group);
+      }
+      const x = minX + 18 / zoom;
+      const y = minY + viewHeight - 24 / zoom;
+      const tick = 7 / zoom;
+      const stroke = 3 / zoom;
+      const fontSize = 12 / zoom;
+      const label = formatScaleMeters(scaleMeters);
+      group.replaceChildren(
+        el("rect", {
+          x: (x - 9 / zoom).toFixed(2),
+          y: (y - 24 / zoom).toFixed(2),
+          width: (scaleUnits + 18 / zoom).toFixed(2),
+          height: (32 / zoom).toFixed(2),
+          rx: (5 / zoom).toFixed(2),
+          fill: "rgba(255,255,255,0.86)",
+          stroke: "rgba(15,23,42,0.22)",
+          "stroke-width": (1 / zoom).toFixed(3)
+        }),
+        el("line", {x1: x.toFixed(2), y1: y.toFixed(2), x2: (x + scaleUnits).toFixed(2), y2: y.toFixed(2), stroke: "#0f172a", "stroke-width": stroke.toFixed(3), "stroke-linecap": "square"}),
+        el("line", {x1: x.toFixed(2), y1: (y - tick).toFixed(2), x2: x.toFixed(2), y2: (y + tick).toFixed(2), stroke: "#0f172a", "stroke-width": stroke.toFixed(3)}),
+        el("line", {x1: (x + scaleUnits).toFixed(2), y1: (y - tick).toFixed(2), x2: (x + scaleUnits).toFixed(2), y2: (y + tick).toFixed(2), stroke: "#0f172a", "stroke-width": stroke.toFixed(3)}),
+        el("text", {x: (x + scaleUnits / 2).toFixed(2), y: (y - 9 / zoom).toFixed(2), "text-anchor": "middle", fill: "#0f172a", "font-size": fontSize.toFixed(3), "font-family": "-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"}, label)
+      );
+    }
+    function readablePointLabel(value) {
+      const text = String(value || "").trim().replace(/\s+/g, " ");
+      if (!text) return "";
+      if (/^(node|way|relation)\/\d+$/.test(text) || /^\d{7,}$/.test(text)) return "";
+      if (/^(gis_cp[._]|gis_cp_cluster\.|gis_cp_nearby_group\.|cp_note[._]|pretrip_gis_|overpass[._]|route_note\.reference_|ln_proposal\.route_note\.)/.test(text)) return "";
+      const underscoreCount = (text.match(/_/g) || []).length;
+      const dotCount = (text.match(/\./g) || []).length;
+      if (text.length > 48 && (underscoreCount >= 3 || dotCount >= 4)) return "";
+      return text.length > 72 ? `${text.slice(0, 71).trim()}…` : text;
+    }
+    function firstRouteNoteLabel(item) {
+      const summaries = Array.isArray(item?.route_note_summaries) ? item.route_note_summaries : [];
+      return summaries.map(readablePointLabel).find(Boolean) || "";
+    }
+    function compactPointLabel(value) {
+      const text = String(value || "").trim();
+      const checkpoint = text.match(/^CP\s*0*(\d{1,3})$/i);
+      if (checkpoint) return String(Number(checkpoint[1])).padStart(3, "0");
+      return text.length > 16 ? `${text.slice(0, 15).trim()}…` : text;
+    }
+    function pointLabelText(item) {
+      const label = [
+        item?.map_label,
+        item?.display_label,
+        item?.short_label,
+        item?.label,
+        item?.name,
+        item?.title,
+        firstRouteNoteLabel(item),
+        item?.route_note_summary,
+        item?.summary,
+        item?.checkpoint_id,
+        item?.mcp_id,
+        item?.poi_id,
+        item?.event_id,
+        item?.candidate_id,
+        item?.nearby_group_id,
+        item?.source_id
+      ].map(readablePointLabel).find(Boolean) || "";
+      return compactPointLabel(label);
+    }
+    function pointLabelCalloutTitle(item, fallbackLabel) {
+      return [
+        item?.display_label,
+        item?.map_label,
+        item?.route_note_summary,
+        item?.summary,
+        hintTitle(item),
+        fallbackLabel
+      ].map(readablePointLabel).find(Boolean) || fallbackLabel || "selected point";
+    }
+    function pointLabelCalloutSummary(item, title) {
+      return [
+        hintSummary(item),
+        item?.source_path,
+        item?.source_id,
+        item?.candidate_id,
+        item?.evidence_type
+      ].map(readablePointLabel).find(value => value && value !== title) || "";
+    }
+    function pointLabelRefs(item) {
+      return [...new Set(evidenceIdsForPointFocus(item))];
+    }
+    function pointLabelUnitsPerScreenPixel() {
+      const matrix = svg.getScreenCTM?.();
+      const matrixScale = matrix ? Math.max(Math.abs(Number(matrix.a) || 0), Math.abs(Number(matrix.d) || 0)) : 0;
+      if (Number.isFinite(matrixScale) && matrixScale > 0) return 1 / matrixScale;
+      const [, , viewWidth, viewHeight] = mapViewBox().split(/\s+/).map(Number);
+      const rect = svg.getBoundingClientRect?.();
+      const fallbackScale = rect && viewWidth > 0 && viewHeight > 0
+        ? Math.min(rect.width / viewWidth, rect.height / viewHeight)
+        : Math.max(state.zoom, 1);
+      return Number.isFinite(fallbackScale) && fallbackScale > 0 ? 1 / fallbackScale : 1;
+    }
+    function mapLabelOverlay() {
+      const wrap = svg.parentElement;
+      let overlay = wrap?.querySelector(".map-label-overlay");
+      if (!overlay && wrap) {
+        overlay = document.createElement("div");
+        overlay.className = "map-label-overlay";
+        overlay.setAttribute("aria-hidden", "true");
+        wrap.appendChild(overlay);
+      }
+      return overlay;
+    }
+    function pointLabelScreenPoint(anchorX, anchorY) {
+      const matrix = svg.getScreenCTM?.();
+      const wrapRect = svg.parentElement?.getBoundingClientRect?.();
+      if (!matrix || !wrapRect) return null;
+      const point = svg.createSVGPoint();
+      point.x = anchorX;
+      point.y = anchorY;
+      const screen = point.matrixTransform(matrix);
+      return {x: screen.x - wrapRect.left, y: screen.y - wrapRect.top};
+    }
+    function placeMapOverlayNode(node, x, y, kind) {
+      const overlay = mapLabelOverlay();
+      if (!overlay) return;
+      overlay.appendChild(node);
+      const margin = 6;
+      const gap = kind === "callout" ? 10 : 3;
+      const width = node.offsetWidth || 1;
+      const height = node.offsetHeight || 1;
+      let left = x + gap;
+      let top = kind === "callout" ? y - height / 2 : y - height - gap;
+      if (left + width > overlay.clientWidth - margin) left = x - width - gap;
+      if (top < margin) top = y + gap;
+      if (top + height > overlay.clientHeight - margin) top = overlay.clientHeight - height - margin;
+      node.style.left = `${Math.max(margin, left).toFixed(1)}px`;
+      node.style.top = `${Math.max(margin, top).toFixed(1)}px`;
+    }
+    function appendMapOverlayLabel(label, focused) {
+      const anchorX = Number(label.dataset.labelAnchorX);
+      const anchorY = Number(label.dataset.labelAnchorY);
+      if (!Number.isFinite(anchorX) || !Number.isFinite(anchorY)) return;
+      const point = pointLabelScreenPoint(anchorX, anchorY);
+      if (!point) return;
+      const node = document.createElement("div");
+      node.className = focused ? "map-label-callout" : "map-label-badge";
+      if (focused) {
+        const title = document.createElement("strong");
+        const titleText = label.dataset.labelTitle || label.textContent || "selected point";
+        title.textContent = titleText;
+        node.appendChild(title);
+        const summaryText = label.dataset.labelSummary || "";
+        if (summaryText && summaryText !== titleText) {
+          const summary = document.createElement("span");
+          summary.textContent = summaryText;
+          node.appendChild(summary);
+        }
+      } else {
+        node.textContent = label.textContent || "";
+      }
+      placeMapOverlayNode(node, point.x, point.y, focused ? "callout" : "badge");
+    }
+    function appendPointLabel(group, x, y, item, layer) {
+      const label = pointLabelText(item);
+      const refs = pointLabelRefs(item);
+      if (!label || !refs.length) return;
+      const unitsPerPx = pointLabelUnitsPerScreenPixel();
+      group.appendChild(el("text", {
+        x: x + POINT_LABEL_OFFSET_PX * unitsPerPx,
+        y: y - POINT_LABEL_OFFSET_PX * unitsPerPx,
+        class: "point-label is-hidden",
+        "data-label-layer": layer,
+        "data-label-refs": refs.join(" "),
+        "data-label-anchor-x": x.toFixed(3),
+        "data-label-anchor-y": y.toFixed(3),
+        "data-label-title": pointLabelCalloutTitle(item, label),
+        "data-label-summary": pointLabelCalloutSummary(item, pointLabelCalloutTitle(item, label)),
+        "text-anchor": "start",
+        "font-size": (POINT_LABEL_FONT_PX * unitsPerPx).toFixed(3),
+        "stroke-width": (POINT_LABEL_STROKE_PX * unitsPerPx).toFixed(3)
+      }, label));
+    }
+    function isLayerEnabled(layer) {
+      const input = document.querySelector(`input[data-layer="${selectorValue(layer)}"]`);
+      return Boolean(input?.checked);
+    }
+    function focusLabelIdsForItem(item) {
+      const pointItem = pointFocusItemFor(item) || item;
+      return new Set(pointLabelRefs(pointItem));
+    }
+    function updatePointLabels() {
+      const showByZoom = currentViewportRangeM() <= POINT_LABEL_VIEWPORT_M;
+      const unitsPerPx = pointLabelUnitsPerScreenPixel();
+      const overlay = mapLabelOverlay();
+      overlay?.replaceChildren();
+      svg.querySelectorAll(".point-label").forEach(label => {
+        label.classList.add("is-hidden");
+        const anchorX = Number(label.dataset.labelAnchorX);
+        const anchorY = Number(label.dataset.labelAnchorY);
+        if (Number.isFinite(anchorX) && Number.isFinite(anchorY)) {
+          label.setAttribute("x", (anchorX + POINT_LABEL_OFFSET_PX * unitsPerPx).toFixed(3));
+          label.setAttribute("y", (anchorY - POINT_LABEL_OFFSET_PX * unitsPerPx).toFixed(3));
+        }
+        label.setAttribute("font-size", (POINT_LABEL_FONT_PX * unitsPerPx).toFixed(3));
+        label.setAttribute("stroke-width", (POINT_LABEL_STROKE_PX * unitsPerPx).toFixed(3));
+        const layerEnabled = isLayerEnabled(label.dataset.labelLayer);
+        const refs = String(label.dataset.labelRefs || "").split(/\s+/).filter(Boolean);
+        const focused = refs.some(ref => state.focusedLabelIds.has(ref));
+        if (layerEnabled && (focused || showByZoom)) appendMapOverlayLabel(label, focused);
+      });
     }
     function isDirectPointFocusItem(item) {
       const type = String(item?.evidence_type || item?.checkpoint_type || item?.feature_type || "");
@@ -2784,9 +3403,12 @@
       applyMapViewport();
       return true;
     }
-    function focusMapFor(item) {
+    function focusMapFor(item, options = {}) {
+      if (options.label === true) state.focusedLabelIds = focusLabelIdsForItem(item);
+      else if (options.label === false) state.focusedLabelIds = new Set();
       const focused = focusMapBox(mapBoxFor(item), item);
       if (focused) highlightMapFor(item);
+      updatePointLabels();
       return focused;
     }
     function mapPointFromPointerEvent(event) {
@@ -2926,14 +3548,7 @@
     function coordinateFromMapPoint(x, y) {
       if (!state.view) return null;
       const bounds = boundsFor(state.view);
-      const pad = MAP_VISUAL_PADDING;
-      const usableWidth = Math.max(MAP_WIDTH - pad * 2, 1);
-      const usableHeight = Math.max(MAP_HEIGHT - pad * 2, 1);
-      const lonSpan = Math.max(bounds.east - bounds.west, 0.000001);
-      const latSpan = Math.max(bounds.north - bounds.south, 0.000001);
-      const lon = bounds.west + clamp((x - pad) / usableWidth, 0, 1) * lonSpan;
-      const lat = bounds.south + clamp((MAP_HEIGHT - pad - y) / usableHeight, 0, 1) * latSpan;
-      return {lat, lon};
+      return coordinateFromMapPointForBounds(bounds, x, y);
     }
     function coordinateFromMapPointerEvent(event) {
       if (!state.view || !svg.getScreenCTM) return null;
@@ -3530,6 +4145,7 @@
         }));
         setWearableResult(result);
         setWearableStatus("Energy reserve refreshed from local wearable inventory.", "success");
+        await reloadProjectView();
       } catch (error) {
         setWearableStatus(`Energy refresh failed: ${error.message || error}`, "error");
         setWearableResult({error: error.message || String(error), payload});
@@ -4066,20 +4682,23 @@
     }
     function renderMap(view) {
       const bounds = boundsFor(view);
+      const coverageBounds = visibleBoundsFor(view) || bounds;
       svg.setAttribute("viewBox", `0 0 ${MAP_WIDTH} ${MAP_HEIGHT}`);
       svg.replaceChildren();
 
       const imageryGroup = el("g", {"data-layer-group": "imagery"});
-      renderRasterImagery(imageryGroup, view, bounds, MAP_WIDTH, MAP_HEIGHT);
+      renderRasterLayer(imageryGroup, view, bounds, MAP_WIDTH, MAP_HEIGHT, "imagery", coverageBounds);
       svg.appendChild(imageryGroup);
 
-      const osmGroup = el("g", {"data-layer-group": "osm"});
-      renderOsmBasemap(osmGroup, bounds, MAP_WIDTH, MAP_HEIGHT);
-      svg.appendChild(osmGroup);
+      RASTER_OVERLAY_LAYER_DEFINITIONS.forEach(layer => {
+        const rasterGroup = el("g", {"data-layer-group": layer.layerId});
+        renderRasterLayer(rasterGroup, view, bounds, MAP_WIDTH, MAP_HEIGHT, layer.layerId, coverageBounds);
+        svg.appendChild(rasterGroup);
+      });
 
-      const terrainGroup = el("g", {"data-layer-group": "terrain"});
-      renderTerrainMetadata(terrainGroup, view, bounds);
-      svg.appendChild(terrainGroup);
+      const osmGroup = el("g", {"data-layer-group": "osm"});
+      renderOsmBasemap(osmGroup, bounds, MAP_WIDTH, MAP_HEIGHT, coverageBounds);
+      svg.appendChild(osmGroup);
 
       const corridorGroup = el("g", {"data-layer-group": "corridors"});
       view.map_candidates.corridor_candidates.forEach(candidate => {
@@ -4105,6 +4724,7 @@
         const circle = el("circle", {cx: x, cy: y, r: 5, class: "overpass-poi"});
         attachEvidence(circle, candidate);
         overpassGroup.appendChild(circle);
+        appendPointLabel(overpassGroup, x, y, candidate, "overpass");
       });
       svg.appendChild(overpassGroup);
 
@@ -4207,6 +4827,10 @@
       });
       svg.appendChild(riskDeltaGroup);
 
+      const terrainGroup = el("g", {"data-layer-group": "terrain"});
+      renderTerrainMetadata(terrainGroup, view, bounds);
+      svg.appendChild(terrainGroup);
+
       const riskScoreGroup = el("g", {"data-layer-group": "risk-score"});
       (view.risk_score?.points || []).forEach(point => {
         const [x, y] = project(bounds, point.lat, point.lon);
@@ -4227,12 +4851,14 @@
         const circle = el("circle", {cx: x, cy: y, r: 5, class: "checkpoint"});
         attachEvidence(circle, checkpoint);
         checkpointGroup.appendChild(circle);
+        appendPointLabel(checkpointGroup, x, y, checkpoint, "checkpoints");
       });
       (view.gis_perception_timeline?.nearby_groups || []).forEach(group => {
         const [x, y] = project(bounds, group.lat, group.lon);
         const ring = el("circle", {cx: x, cy: y, r: 13, class: "gis-nearby-group"});
         attachEvidence(ring, group);
         checkpointGroup.appendChild(ring);
+        appendPointLabel(checkpointGroup, x, y, group, "checkpoints");
       });
       (view.gis_perception_timeline?.checkpoint_candidates || []).forEach(checkpoint => {
         const [x, y] = project(bounds, checkpoint.lat, checkpoint.lon);
@@ -4242,6 +4868,7 @@
         const circle = el("circle", {cx: x, cy: y, r: 5.5, class: className});
         attachEvidence(circle, checkpoint);
         checkpointGroup.appendChild(circle);
+        appendPointLabel(checkpointGroup, x, y, checkpoint, "checkpoints");
       });
       svg.appendChild(checkpointGroup);
 
@@ -4251,6 +4878,7 @@
         const circle = el("circle", {cx: x, cy: y, r: 6, class: "poi"});
         attachEvidence(circle, candidate);
         poiGroup.appendChild(circle);
+        appendPointLabel(poiGroup, x, y, candidate, "pois");
       });
       svg.appendChild(poiGroup);
 
@@ -4268,6 +4896,7 @@
         const circle = el("circle", {cx: x, cy: y, r: 4, class: "route-note"});
         attachEvidence(circle, candidate);
         routeNoteGroup.appendChild(circle);
+        appendPointLabel(routeNoteGroup, x, y, candidate, "route-notes");
       });
       svg.appendChild(routeNoteGroup);
 
@@ -4280,6 +4909,7 @@
         const circle = el("circle", {cx: x, cy: y, r: 7, class: className});
         attachEvidence(circle, candidate);
         mcpGroup.appendChild(circle);
+        appendPointLabel(mcpGroup, x, y, candidate, "mcp");
       });
       svg.appendChild(mcpGroup);
 
@@ -4341,18 +4971,18 @@
       button.appendChild(badgeRow);
       button.addEventListener("click", () => {
         selectEvidence(item);
-        focusMapFor(item);
+        focusMapFor(item, {label: false});
       });
       button.addEventListener("dblclick", event => {
         event.preventDefault();
         selectEvidence(item);
-        focusMapFor(item);
+        focusMapFor(item, {label: true});
       });
       return button;
     }
     function treeGroup(title, items, mapper, open = false, category = "route") {
       const details = document.createElement("details");
-      details.open = open;
+      details.open = false;
       details.style.setProperty("--category-color", categoryColor(category));
       const summary = document.createElement("summary");
       summary.textContent = `${title} (${items.length})`;
@@ -4365,6 +4995,39 @@
       details.appendChild(summary);
       details.appendChild(group);
       return details;
+    }
+    function renderEvidenceTreeTabs() {
+      const tabs = document.getElementById("evidenceTreeTabs");
+      if (!tabs) return;
+      tabs.replaceChildren();
+      EVIDENCE_TREE_TABS.forEach(tab => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "tree-tab";
+        button.style.setProperty("--category-color", categoryColor(tab.category));
+        button.setAttribute("role", "tab");
+        button.setAttribute("aria-selected", state.activeEvidenceTreeTab === tab.id ? "true" : "false");
+        button.classList.toggle("is-active", state.activeEvidenceTreeTab === tab.id);
+        button.innerHTML = `<strong>${tab.label}</strong><small>${state.evidenceTreeTabCounts[tab.id] || 0} items</small>`;
+        button.addEventListener("click", () => {
+          state.activeEvidenceTreeTab = tab.id;
+          if (state.view) renderEvidenceTree(state.view);
+        });
+        tabs.appendChild(button);
+      });
+    }
+    function appendEvidenceTreeGroup(tree, tabId, title, items, mapper, open = false, category = "route") {
+      const safeItems = items || [];
+      state.evidenceTreeTabCounts[tabId] = (state.evidenceTreeTabCounts[tabId] || 0) + safeItems.length;
+      if (state.activeEvidenceTreeTab !== tabId) return;
+      tree.appendChild(treeGroup(title, safeItems, mapper, open, category));
+    }
+    function renderEvidenceTreeEmptyIfNeeded(tree) {
+      if (tree.children.length) return;
+      const empty = document.createElement("div");
+      empty.className = "tree-empty";
+      empty.textContent = "No evidence in this category.";
+      tree.appendChild(empty);
     }
     function updateStatusFilterOptions(view) {
       const select = document.getElementById("featureStatusFilter");
@@ -4501,58 +5164,84 @@
     function renderEvidenceTree(view) {
       const tree = document.getElementById("evidenceTree");
       tree.replaceChildren();
+      state.evidenceTreeTabCounts = Object.fromEntries(EVIDENCE_TREE_TABS.map(tab => [tab.id, 0]));
       updateStatusFilterOptions(view);
       updateReviewQueueControls(view);
-      tree.appendChild(treeGroup("Evidence Timeline", view.evidence_timeline?.categories || [], item => ({
+      appendEvidenceTreeGroup(tree, "default", "Evidence Timeline", view.evidence_timeline?.categories || [], item => ({
         label: item.label || item.category_id,
         sublabel: `${item.count || 0} evidence | ${item.available ? "available" : "empty"}`
-      }), true, "timeline"));
-      tree.appendChild(treeGroup("Checkpoints", view.checkpoints, item => ({
+      }), true, "timeline");
+      appendEvidenceTreeGroup(tree, "default", "Checkpoints", view.checkpoints, item => ({
         label: item.label || item.candidate_id,
         sublabel: `${item.checkpoint_type} | ${item.review_state}`
-      }), true, "checkpoint"));
-      tree.appendChild(treeGroup("AI GIS CP", view.gis_perception_timeline?.checkpoint_candidates || [], item => ({
-        label: item.route_note_summary || item.candidate_id,
+      }), true, "checkpoint");
+      appendEvidenceTreeGroup(tree, "default", "AI GIS CP", view.gis_perception_timeline?.checkpoint_candidates || [], item => ({
+        label: item.display_label || item.map_label || item.route_note_summary || item.candidate_id,
         sublabel: `${item.checkpoint_type} | group ${item.nearby_group_id || "-"} | ${item.route_note_freshness || "unknown"}`
-      }), false, "checkpoint"));
-      tree.appendChild(treeGroup("GIS CP Areas", view.gis_perception_timeline?.nearby_groups || [], item => ({
-        label: item.nearby_group_id,
+      }), false, "checkpoint");
+      appendEvidenceTreeGroup(tree, "default", "GIS CP Areas", view.gis_perception_timeline?.nearby_groups || [], item => ({
+        label: item.display_label || item.map_label || item.nearby_group_id,
         sublabel: `${item.member_count} CP | ${item.semantic_keys?.join(", ") || "mixed"}`
-      }), false, "checkpoint"));
-      tree.appendChild(treeGroup("Major Critical Points", view.major_critical_points?.candidates || [], item => ({
+      }), false, "checkpoint");
+      appendEvidenceTreeGroup(tree, "default", "Major Critical Points", view.major_critical_points?.candidates || [], item => ({
         label: item.label || item.mcp_id,
         sublabel: `${item.confidence} | ${item.cp_support_reconciliation?.support_status || "support-review"} | ${Math.round(item.distance_m || 0)}m | ${Math.round((item.mention_ratio || 0) * 100)}% / ${item.accepted_evidence_page_count || 0} pages | families ${(item.source_family_coverage?.present || []).join(", ") || "-"} | suppressed ${(item.nearby_points_suppressed_by_spacing || []).length}`
-      }), true, "mcp"));
-      tree.appendChild(treeGroup("Risk Score", view.risk_score?.points || [], item => ({
+      }), true, "mcp");
+      appendEvidenceTreeGroup(tree, "map_risk", "Risk Score", view.risk_score?.points || [], item => ({
         label: `${item.score_field || "pretrip_risk"} ${Number(item.pretrip_risk || 0).toFixed(1)}`,
         sublabel: `L${item.risk_level || "-"} | ${Math.round(item.distance_m || 0)}m${item.teii_20m == null ? "" : ` | TEII ${Number(item.teii_20m).toFixed(1)}`}`
-      }), false, "risk"));
-      tree.appendChild(treeGroup("Risk Heat", view.risk_heatmap?.segments || [], item => ({
+      }), false, "risk");
+      appendEvidenceTreeGroup(tree, "map_risk", "Risk Heat", view.risk_heatmap?.segments || [], item => ({
         label: `${item.risk_bucket || "heat"} ${Number(item.pretrip_risk || 0).toFixed(1)}`,
         sublabel: `${item.score_field || "calibrated"} | ${Math.round(item.start_distance_m || 0)}-${Math.round(item.end_distance_m || 0)}m`
-      }), false, "risk"));
-      tree.appendChild(treeGroup("Risk Delta", view.risk_delta?.segments || [], item => ({
+      }), false, "risk");
+      appendEvidenceTreeGroup(tree, "map_risk", "Risk Delta", view.risk_delta?.segments || [], item => ({
         label: `${item.delta_bucket || "delta"} ${Number(item.delta_score || 0).toFixed(1)}`,
         sublabel: `baseline ${Number(item.baseline_pretrip_risk || 0).toFixed(1)} | calibrated ${Number(item.calibrated_risk_candidate || 0).toFixed(1)}`
-      }), false, "risk"));
-      tree.appendChild(treeGroup("Segments", view.segments, item => ({
+      }), false, "risk");
+      appendEvidenceTreeGroup(tree, "default", "Segments", view.segments, item => ({
         label: item.label || item.candidate_id,
         sublabel: `${item.from_candidate_id} -> ${item.to_candidate_id} | ${Math.round(item.distance_m)}m`
-      }), true, "segment"));
-      tree.appendChild(treeGroup("Retreat Routes", view.retreat_routes, item => ({
+      }), true, "segment");
+      appendEvidenceTreeGroup(tree, "map_risk", "Retreat Routes", view.retreat_routes, item => ({
         label: item.label || item.candidate_id,
         sublabel: item.review_state || "candidate"
-      }), true, "retreat"));
-      tree.appendChild(treeGroup("Reference GPX", view.reference_tracks?.reference_tracks || [], item => ({
+      }), true, "retreat");
+      appendEvidenceTreeGroup(tree, "map_risk", "Reference GPX", view.reference_tracks?.reference_tracks || [], item => ({
         label: item.label || item.candidate_id,
         sublabel: `${Math.round((item.route?.distance_m || 0) / 1000)}km | ${item.route?.point_count || 0} pts`
-      }), false, "reference"));
-      tree.appendChild(treeGroup("Capability Timeline", view.capability_timeline_import?.edges || [], item => ({
+      }), false, "reference");
+      appendEvidenceTreeGroup(tree, "completed", "Capability Timeline", view.capability_timeline_import?.edges || [], item => ({
         label: item.edge_id || item.source_id,
         sublabel: `${item.from_node_id || "-"} -> ${item.to_node_id || "-"} | ${Math.round(item.moving_time_s || 0)}s moving | ${Math.round(item.rest_time_s || 0)}s rest`
-      }), false, "reference"));
+      }), false, "reference");
+      const infoSections = Object.entries(view.tabs || {}).flatMap(([tabId, tab]) =>
+        (tab.sections || []).map(section => ({...section, tab_id: tabId}))
+      );
+      appendEvidenceTreeGroup(tree, "info", "Info Sections", infoSections, item => ({
+        label: item.title || item.id,
+        sublabel: `${item.tab_id || "tab"} | ${item.status || "traceable"}`
+      }), false, "route");
+      appendEvidenceTreeGroup(tree, "review", "Review Groups", view.review_workbench?.category_groups || [], item => ({
+        label: item.label,
+        sublabel: `${item.item_count} items | ${item.bulk_eligible_count} bulk | ${item.review_action}`
+      }), true, "review_group");
+      appendEvidenceTreeGroup(tree, "review", "Review Queue", view.review_queue.items, item => ({
+        label: item.title,
+        sublabel: `${item.severity} | ${item.category}`
+      }), false, "review");
+      appendEvidenceTreeGroup(tree, "review", "Departure Reviewed Candidates", view.departure_reviewed_candidates?.candidates || [], item => ({
+        label: item.candidate_ref,
+        sublabel: `${item.decision} | ${item.promotion_scope}`
+      }), false, "review");
+      appendEvidenceTreeGroup(tree, "review", "MCP Review Actions", view.mcp_review_actions?.actions || [], item => ({
+        label: item.mcp_id,
+        sublabel: `${item.decision} | ${item.reviewer_alias}`
+      }), false, "review");
       renderReviewWorkspaceTree(view);
+      renderEvidenceTreeTabs();
       applyTreeFilters();
+      renderEvidenceTreeEmptyIfNeeded(tree);
     }
     function renderReviewWorkspaceTree(view) {
       const tree = document.getElementById("reviewWorkspaceTree");
@@ -4707,6 +5396,7 @@
         const enabled = layerInputs.filter(input => input.checked).length;
         summary.textContent = `${enabled}/${layerInputs.length}`;
       }
+      updatePointLabels();
       highlightMapFor(state.selected);
       highlightTreeNode(state.selected);
     }

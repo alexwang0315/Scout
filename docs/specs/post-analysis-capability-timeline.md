@@ -42,8 +42,10 @@ treat guidebook route times as user capability.
 
 1. This feature runs only after a safe return, in post-analysis. It is not a
    pretrip estimator and not a Phase 1 runtime safety decision.
-2. The actual walked track exists after the climb, either from Scout runtime
-   capture or a user-imported GPX recorded by the user during that trip.
+2. The actual walked evidence exists after the climb as a completed trip
+   recording set, not necessarily as one GPX file. It may include Scout runtime
+   capture, one or more user-imported GPX files recorded during that trip, and
+   optional teammate/participant GPX files.
 3. The completed track can be matched to reviewed checkpoints and segments from
    the pretrip project or the final MissionGraph.
 4. The first implementation can use deterministic rest detection rules before
@@ -92,8 +94,8 @@ pretrip route import.
 Primary production source:
 
 - Scout-internal completed trip record;
-- user recorded GPX captured during the trip, or a Scout runtime track exported
-  after the trip;
+- completed trip recording set containing one or more user-recorded GPX files
+  captured during the trip, or a Scout runtime track exported after the trip;
 - checkpoint hits, segment capsules, route observations, and optional IMU/PDR
   logs stored with that completed trip.
 
@@ -111,6 +113,88 @@ Non-sources for capability measurement:
 - OSM/Overpass geometry;
 - route-guide timing tables;
 - MCP/CP candidate geometry.
+
+### Completed Trip Recording Set
+
+A long completed climb may not produce one clean GPX. Scout must treat
+completed-trip input as a `CompletedTripRecordingSet`:
+
+```text
+completed_trip_workspace/recorded/
+  manifest.json
+  primary_user/
+    watch_day1_part1.gpx
+    watch_day1_part2.gpx
+    phone_day2.gpx
+  participants/
+    user_alex.gpx
+    teammate_a.gpx
+    teammate_b.gpx
+  scout_runtime/
+    runtime_track.jsonl
+    imu_pdr_summary.json
+```
+
+The manifest should record:
+
+- trip id, source device, participant id, participant role, and recording role;
+- GPX path, sha256, point count, trk/trkseg count, time span, and bounds;
+- whether the file is `primary_self`, `self_backup`, `teammate_context`,
+  `scout_runtime_primary`, or `unknown`;
+- privacy level and whether exact timestamps/raw coordinates may be used
+  locally;
+- per-file data-quality flags: gaps, overlaps, impossible jumps, duplicated
+  timestamps, missing elevation, missing time, and day-boundary/resume markers.
+
+Post-analysis must first resolve a `primary capability track` before computing
+Capability Timeline. The primary track may be:
+
+- Scout runtime track, if available and marked primary;
+- the user's own GPX files merged by time and route continuity;
+- a selected participant GPX if the operator explicitly chooses that
+  participant as the capability subject.
+
+Other GPX files in the same completed trip remain supporting evidence. They may
+help explain team pacing, waiting, route ambiguity, group separation, or
+communication/team-care events, but they must not silently contaminate the
+primary user's capability score.
+
+Active view policy:
+
+- `/admin` may keep the first alpha UI simple: one active GPX, merged primary
+  track, or selected participant is analyzed and displayed at a time.
+- This active selection is a lens over the completed trip recording set. It is
+  not a storage limit.
+- Selecting a GPX for Capability Timeline may copy or point to it as
+  `latest_completed_trip.gpx` for compatibility, but the original recording set
+  and all participant/source files must remain in the completed trip workspace.
+- Switching the active GPX/subject should update the active post-analysis
+  artifacts without deleting other files from the trip.
+- Alpha admin reads completed GPX files from:
+  `SCOUT_DATA_ROOT/post_analysis/completed_trips/chilai_nanhua_day1/recorded/`.
+  If this directory is empty, it may fall back to
+  `SCOUT_DATA_ROOT/post_analysis/inbox/*.gpx` for compatibility.
+- `/admin/post-analysis/completed-trip-recordings` lists the recording set and
+  per-file provenance. `/admin/post-analysis/completed-trip-recordings/{id}/select`
+  sets one active GPX, writes compatibility artifacts under
+  `SCOUT_DATA_ROOT/post_analysis/inbox/latest_completed_trip.gpx`, builds the
+  Capability Timeline, and preserves the rest of the recording set.
+- Fixture scenarios remain demo material. They may be copied into the recording
+  set for alpha validation, but production post-analysis should treat them as
+  ordinary completed GPX recordings once they are in Scout storage.
+
+Merging rules:
+
+- preserve GPX `trk` and `trkseg` boundaries as provenance;
+- do not draw or analyze artificial straight lines across device-off gaps;
+- mark large gaps as `resume_segment` or `recording_gap`, not as walked
+  distance;
+- when files overlap in time, keep the selected primary source and annotate the
+  conflict instead of averaging users together;
+- allow the operator to choose the capability subject when multiple user GPX
+  files exist;
+- keep teammate tracks out of Energy Reserve baseline updates unless that
+  teammate is the selected subject.
 
 When a completed trip workspace is opened, Scout should inspect whether the
 workspace contains a user recorded GPX or Scout runtime track plus matching
@@ -490,24 +574,29 @@ Before export, show exactly what will be shared:
 
 ### Processing Steps
 
-1. Resolve completed trip workspace and select the user recorded GPX or Scout
-   runtime track as the primary completed-track source.
-2. Reject public/reference/golden pretrip GPX as capability source unless it is
+1. Resolve completed trip workspace and build the `CompletedTripRecordingSet`
+   inventory.
+2. Select or derive the primary capability subject and primary completed-track
+   source from Scout runtime track or the user's own GPX files.
+3. Reject public/reference/golden pretrip GPX as capability source unless it is
    explicitly marked fixture-only stand-in completed evidence.
-3. Normalize completed track.
-4. Match track points to checkpoint arrivals.
-5. Slice track into checkpoint-to-checkpoint segments.
-6. Detect rest intervals.
-7. Use IMU/PDR and sealed route observations, when present, to annotate
+4. Preserve source-file, track, and track-segment provenance while normalizing
+   the primary completed track.
+5. Mark recording gaps, resume segments, and overlapping participant tracks
+   before slicing.
+6. Match track points to checkpoint arrivals.
+7. Slice track into checkpoint-to-checkpoint segments.
+8. Detect rest intervals.
+9. Use IMU/PDR and sealed route observations, when present, to annotate
    confidence and data-quality limitations.
-8. Compute elapsed/moving/rest time per segment.
-9. Sample terrain per segment from completed-track elevation, DEM/DTM, or a
+10. Compute elapsed/moving/rest time per segment.
+11. Sample terrain per segment from completed-track elevation, DEM/DTM, or a
    reviewed route-corridor terrain artifact.
-10. Generate compact terrain profile artifacts and attach profile refs to
+12. Generate compact terrain profile artifacts and attach profile refs to
     segment edges.
-11. Compute capability metrics.
-12. Compare against guide/reference times if available.
-13. Produce timeline and share capsule artifacts.
+13. Compute capability metrics for the selected subject only.
+14. Compare against guide/reference times if available.
+15. Produce timeline, recording-set provenance, and share capsule artifacts.
 
 ### Confidence Rules
 
@@ -608,6 +697,61 @@ This fixture is allowed only because it is explicitly labeled and treated as a
 stand-in completed track for tests. The production generator must prefer Scout's
 completed trip workspace and user recorded GPX/runtime track, not pretrip
 reference GPX or public route downloads.
+
+Completed-trip scenario fixtures:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 ./venv/bin/python tools/generate_completed_trip_gpx_scenarios.py
+```
+
+The generator reads the current historical GPX corpus plus golden route from
+`/Users/alexwang0315/Downloads/twmap-gpx-yunhai` and writes fixture-only
+completed-trip GPX files under
+`tests/fixtures/post_analysis/chilai_nanhua_day1_completed_trip_scenarios/`.
+The generated manifest and GPX metadata must keep
+`fixture_only=true`, `post_analysis_only=true`, and
+`runtime_safety_truth=false`.
+
+The scenario set covers:
+
+- `completed_halfway_return.gpx`: abandoned route with same-corridor return.
+- `completed_novel_overlap_chain.gpx`: a synthetic route assembled from
+  overlapping historical GPX sources without relying on one precedent GPX.
+- `completed_delayed_emergency_camp.gpx`: normal route completion after an
+  unplanned overnight camp caused by delay.
+- `completed_weather_camp_hold.gpx`: multi-day weather hold at camp before
+  continuing.
+- `completed_normal_golden.gpx`: normal completion of the selected golden
+  route with planned camps.
+
+Each scenario is retimed with a fixture fitness profile instead of inheriting
+the source GPX timestamps. The timing model records a flat-speed baseline,
+ascent/descent time penalties, progress-band speed multipliers, and per-band
+moving/rest duration in the generated manifest. This allows Capability Timeline
+and Scout Energy Reserve tests to compare different post-analysis fitness
+states while still using deterministic fixture input.
+
+Scenario waypoint notes may embed `SCOUT_NOTE_JSON` records in GPX `cmt` and
+`extensions/scout_note`. These records are not instructions to execute. They are
+completed-trip evidence of what Scout had already recorded at that waypoint:
+Ln state results, warning records, skill outcomes, voice cue records, outbound
+draft records, provider status records, and Pydantic AI prompts/results. Admin
+may replay/render them as `completed_trip_scout_reaction_replay` evidence, but
+loading a scenario must not call `/safety/*`, mutate Ln state, run a skill, call
+a model, play TTS, send outbound messages, or write Brain facts.
+
+The `/admin` after-action surface may expose these fixtures through an
+operator-triggered completed-trip scenario selector. The selector displays the
+scenario name and scenario content from the manifest/GPX metadata, copies the
+chosen GPX into Scout's post-analysis inbox as the latest completed trip, and
+builds Capability Timeline artifacts under Scout data storage. This flow is
+only a post-analysis fixture driver: it does not call `/safety/*`, does not
+mutate Phase 1 runtime state, and does not write Phase 2 Brain facts.
+
+These fixtures are valid inputs for Capability Timeline regression and admin
+post-analysis smoke. They are not a substitute for Scout's production
+completed-trip source of truth, which remains the completed user track imported
+from Scout's trip workspace.
 
 Proposed tests:
 

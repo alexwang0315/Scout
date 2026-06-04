@@ -16,6 +16,7 @@ from admin_local_raster_tiles import (
     DEFAULT_RASTER_TILE_CACHE_ROOT,
     load_or_build_raster_tile_payload,
 )
+from admin_imagery_sources import imagery_source_for_project
 from admin_tile_proxy import (
     DEFAULT_OSM_TILE_CACHE_ROOT,
     load_or_build_osm_tile_payload,
@@ -53,6 +54,16 @@ from pretrip_energy_projection import (
 from post_analysis_energy_feedback import (
     POST_ANALYSIS_ENERGY_FEEDBACK_REF,
     write_post_analysis_energy_feedback,
+)
+from post_analysis_completed_trip_scenarios import (
+    list_completed_trip_scenarios,
+    load_active_completed_trip_scenario_projection,
+    select_completed_trip_scenario_for_post_analysis,
+)
+from post_analysis_completed_trip_recordings import (
+    list_completed_trip_recordings,
+    load_active_completed_trip_recording_projection,
+    select_completed_trip_recording_for_post_analysis,
 )
 from scout_companion_match_admin import refresh_companion_match_review_for_workspace
 from pretrip_departure_reviewed_candidates import (
@@ -108,6 +119,7 @@ from scout_energy_reserve import (
     write_provider_live_executor_production_readiness_gate,
     write_provider_live_executor_response_consumption,
 )
+from scout_energy_reserve_monitor import build_energy_reserve_monitor_from_view
 from scout_mobile_handoff import DEFAULT_MOBILE_HANDOFF_FILENAME, build_mobile_energy_companion_handoff
 from scout_wearable_daily_home import build_daily_home_preview
 from scout_wearable_provider_transport import (
@@ -706,6 +718,70 @@ def create_admin_router(
     @router.get("/cases")
     def cases() -> dict[str, Any]:
         return {"cases": list_admin_cases()}
+
+    @router.get("/post-analysis/completed-trip-scenarios")
+    def completed_trip_scenarios() -> dict[str, Any]:
+        try:
+            return list_completed_trip_scenarios(
+                data_root=_data_root_from_env(),
+                root=ROOT,
+            )
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (ValueError, OSError, ValidationError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @router.post("/post-analysis/completed-trip-scenarios/{scenario_id}/select")
+    def select_completed_trip_scenario(scenario_id: str) -> dict[str, Any]:
+        try:
+            result = select_completed_trip_scenario_for_post_analysis(
+                scenario_id,
+                data_root=_data_root_from_env(),
+                root=ROOT,
+            )
+            _attach_energy_reserve_monitor(
+                result,
+                inventory_root=resolved_wearable_inventory_root,
+                surface="admin",
+            )
+            return result
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="Completed trip scenario not found") from exc
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (ValueError, OSError, ValidationError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @router.get("/post-analysis/completed-trip-recordings")
+    def completed_trip_recordings() -> dict[str, Any]:
+        try:
+            return list_completed_trip_recordings(
+                data_root=_data_root_from_env(),
+                root=ROOT,
+            )
+        except (ValueError, OSError, ValidationError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @router.post("/post-analysis/completed-trip-recordings/{recording_id}/select")
+    def select_completed_trip_recording(recording_id: str) -> dict[str, Any]:
+        try:
+            result = select_completed_trip_recording_for_post_analysis(
+                recording_id,
+                data_root=_data_root_from_env(),
+                root=ROOT,
+            )
+            _attach_energy_reserve_monitor(
+                result,
+                inventory_root=resolved_wearable_inventory_root,
+                surface="admin",
+            )
+            return result
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="Completed trip recording not found") from exc
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (ValueError, OSError, ValidationError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     @router.get("/wearables")
     def wearable_inventory() -> dict[str, Any]:
@@ -1781,6 +1857,11 @@ def create_admin_router(
                 project_id=project_id,
             )
             view = build_pretrip_admin_view(project_id, project_root=project_root)
+            _attach_energy_reserve_monitor(
+                view,
+                inventory_root=resolved_wearable_inventory_root,
+                surface="pretrip",
+            )
             return _compact_pretrip_project_view(view) if compact else view
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="Pre-trip project not found") from exc
@@ -2360,8 +2441,25 @@ def create_admin_router(
         )
 
     @router.get("/tiles/imagery/{project_id}/{layer_id}/{z}/{x}/{y}.png")
-    def imagery_tile(project_id: str, layer_id: str, z: int, x: int, y: int) -> Response:
+    def imagery_tile(
+        project_id: str,
+        layer_id: str,
+        z: int,
+        x: int,
+        y: int,
+        source_id: str | None = None,
+    ) -> Response:
         try:
+            project = _pretrip_project_payload_for_tiles(
+                pretrip_workspace_root,
+                project_id=project_id,
+            )
+            imagery_source = imagery_source_for_project(
+                project,
+                layer_id=layer_id,
+                registry_path=_imagery_source_registry_path_from_env(),
+                source_id=source_id,
+            )
             payload = load_or_build_raster_tile_payload(
                 project_id,
                 layer_id,
@@ -2373,6 +2471,9 @@ def create_admin_router(
                     project_id=project_id,
                 ),
                 fallback_enabled=_raster_tile_fallback_enabled_from_env(),
+                imagery_source=imagery_source,
+                allow_remote_fetch=_imagery_remote_fetch_enabled_from_env(),
+                remote_fetch_timeout_seconds=_imagery_remote_fetch_timeout_from_env(),
             )
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -3147,11 +3248,20 @@ def create_admin_router(
                 if case_id == PRETRIP_CASE_ID
                 else None
             )
-            return build_admin_case_view(
+            view = build_admin_case_view(
                 case_id,
                 incident_store_path=resolved_incident_store_path,
                 pretrip_project_root=pretrip_project_root,
             )
+            if case_id == PRETRIP_CASE_ID:
+                _attach_completed_trip_scenario_projection(view, data_root=_data_root_from_env())
+                _attach_completed_trip_recording_projection(view, data_root=_data_root_from_env())
+            _attach_energy_reserve_monitor(
+                view,
+                inventory_root=resolved_wearable_inventory_root,
+                surface="admin",
+            )
+            return view
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="Admin case not found") from exc
 
@@ -3468,6 +3578,7 @@ def _compact_pretrip_project_view(view: dict[str, Any]) -> dict[str, Any]:
     compact["tabs"] = {
         "pre_trip_planning": {
             "sections": pre_trip.get("sections", []),
+            "energy_reserve_monitor": view.get("energy_reserve_monitor"),
             "terrain_visualization": {
                 "source_path": terrain_visualization.get("source_path", "")
                 if isinstance(terrain_visualization, dict)
@@ -3503,6 +3614,67 @@ def _compact_pretrip_project_view(view: dict[str, Any]) -> dict[str, Any]:
         "runtime_safety_truth": False,
     }
     return compact
+
+
+def _attach_energy_reserve_monitor(
+    payload: dict[str, Any],
+    *,
+    inventory_root: Path,
+    surface: str,
+) -> None:
+    payload["energy_reserve_monitor"] = build_energy_reserve_monitor_from_view(
+        payload,
+        inventory_root=inventory_root,
+        surface=surface,
+    )
+    tabs = payload.get("tabs")
+    if isinstance(tabs, dict):
+        pretrip_tab = tabs.get("pre_trip_planning")
+        if isinstance(pretrip_tab, dict):
+            pretrip_tab["energy_reserve_monitor"] = payload["energy_reserve_monitor"]
+
+
+def _attach_completed_trip_scenario_projection(
+    view: dict[str, Any],
+    *,
+    data_root: Path,
+) -> None:
+    try:
+        catalog = list_completed_trip_scenarios(data_root=data_root, root=ROOT)
+    except FileNotFoundError:
+        return
+    view["completed_trip_scenarios"] = catalog
+    active = load_active_completed_trip_scenario_projection(data_root=data_root, root=ROOT)
+    if not active:
+        return
+    view["active_completed_trip_scenario"] = active.get("scenario")
+    if active.get("scout_reaction_simulation"):
+        view["scout_reaction_simulation"] = active.get("scout_reaction_simulation")
+    capability = active.get("capability_timeline")
+    if capability:
+        capability["completed_trip_scenario"] = active.get("scenario")
+        view["capability_timeline"] = capability
+
+
+def _attach_completed_trip_recording_projection(
+    view: dict[str, Any],
+    *,
+    data_root: Path,
+) -> None:
+    catalog = list_completed_trip_recordings(data_root=data_root, root=ROOT)
+    view["completed_trip_recordings"] = catalog
+    active = load_active_completed_trip_recording_projection(data_root=data_root, root=ROOT)
+    if not active:
+        return
+    view["active_completed_trip_recording"] = active.get("recording")
+    if active.get("completed_trip_track"):
+        view["completed_trip_track"] = active.get("completed_trip_track")
+    if active.get("scout_reaction_simulation"):
+        view["scout_reaction_simulation"] = active.get("scout_reaction_simulation")
+    capability = active.get("capability_timeline")
+    if capability:
+        capability["completed_trip_recording"] = active.get("recording")
+        view["capability_timeline"] = capability
 
 
 _COMPACT_COMMON_EVIDENCE_KEYS = (
@@ -4169,6 +4341,44 @@ def _raster_tile_cache_root_for_project(
     if isinstance(manifest_cache_root, str) and manifest_cache_root.strip():
         return Path(manifest_cache_root).expanduser()
     return _raster_tile_cache_root_from_env()
+
+
+def _pretrip_project_payload_for_tiles(
+    pretrip_workspace_root: Path | None,
+    *,
+    project_id: str,
+) -> dict[str, Any]:
+    project_root = _pretrip_workspace_project_root(
+        pretrip_workspace_root,
+        project_id=project_id,
+    )
+    if project_root is None:
+        return {}
+    try:
+        return json.loads((project_root / "project.json").read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return {}
+
+
+def _imagery_source_registry_path_from_env() -> Path | None:
+    value = os.getenv("SCOUT_IMAGERY_SOURCE_REGISTRY_PATH")
+    return Path(value).expanduser() if value else None
+
+
+def _imagery_remote_fetch_enabled_from_env() -> bool:
+    value = os.getenv("SCOUT_ADMIN_IMAGERY_REMOTE_FETCH", "false")
+    return value.strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
+def _imagery_remote_fetch_timeout_from_env() -> float:
+    value = os.getenv("SCOUT_ADMIN_IMAGERY_REMOTE_FETCH_TIMEOUT_SECONDS")
+    if not value:
+        return 10.0
+    try:
+        timeout = float(value)
+    except ValueError:
+        return 10.0
+    return max(0.25, min(timeout, 60.0))
 
 
 def _safe_pretrip_project_ref_path(

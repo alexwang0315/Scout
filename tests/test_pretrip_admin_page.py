@@ -17,6 +17,11 @@ def test_pretrip_admin_page_contains_expected_layout_contract():
     assert "max-width: 100vw;" in html
     assert 'src="/admin/scout-assistant-ui.js"' in html
     assert 'id="readinessStrip"' in html
+    assert 'id="energyReserveMonitor"' in html
+    assert 'id="energyReserveHeadline"' in html
+    assert 'id="energyReserveSubline"' in html
+    assert "renderEnergyReserveMonitor" in html
+    assert "view.energy_reserve_monitor" in html
     assert "map frame" not in html.lower()
     assert 'id="map"' in html
     assert 'id="evidenceTree"' in html
@@ -26,7 +31,10 @@ def test_pretrip_admin_page_contains_expected_layout_contract():
     assert "grid-template-columns: minmax(290px, 360px) minmax(640px, 1fr) minmax(340px, 420px);" in html
     assert 'grid-template-areas: "features map detail";' in html
     assert "grid-template-rows: auto minmax(0, 1fr);" in html
-    assert "grid-template-rows: auto minmax(240px, 1fr);" in html
+    assert "grid-template-rows: auto auto minmax(0, 1fr);" in html
+    assert "feature-header-row" in html
+    assert 'class="metric-grid" aria-label="Feature summary"' in html
+    assert ".list-controls .control-group-header { display: none; }" in html
     assert "overflow-y: auto;" in html
     assert "overscroll-behavior: contain;" in html
     assert "scrollbar-gutter: stable;" in html
@@ -97,7 +105,43 @@ def test_pretrip_admin_page_contains_expected_layout_contract():
     assert "view.capability_timeline_import?.edges" in html
     assert "capability_timeline_import" in html
     assert "focusMapFor" in html
-    assert "FOCUS_POINT_VIEWPORT_M = 50" in html
+    assert "FOCUS_POINT_VIEWPORT_M = 1000" in html
+    assert "const widthZoom = widthMeters / FOCUS_POINT_VIEWPORT_M;" in html
+    assert "const heightZoom = heightMeters / FOCUS_POINT_VIEWPORT_M;" in html
+    assert "POINT_LABEL_VIEWPORT_M = 30" in html
+    assert "POINT_LABEL_FONT_PX = 4" in html
+    assert "POINT_LABEL_STROKE_PX = 0.6" in html
+    assert "POINT_LABEL_OFFSET_PX = 3" in html
+    assert "function updateScaleBar" in html
+    assert '"data-ui-overlay": "scale-bar"' in html
+    assert "aria-label\": \"Map scale bar\"" in html
+    assert "niceScaleMeters" in html
+    assert "formatScaleMeters" in html
+    assert "function readablePointLabel" in html
+    assert "function compactPointLabel" in html
+    assert "function pointLabelUnitsPerScreenPixel" in html
+    assert ".map-label-overlay" in html
+    assert "function appendMapOverlayLabel" in html
+    assert "function placeMapOverlayNode" in html
+    assert "function pointLabelCalloutTitle" in html
+    assert "function pointLabelCalloutSummary" in html
+    assert 'overlay?.replaceChildren();' in html
+    assert 'label.classList.add("is-hidden");' in html
+    assert '"data-label-title": pointLabelCalloutTitle(item, label)' in html
+    assert '"data-label-summary": pointLabelCalloutSummary(item, pointLabelCalloutTitle(item, label))' in html
+    assert "item?.map_label" in html
+    assert "item?.display_label" in html
+    assert "gis_cp_cluster\\." in html
+    assert "function updatePointLabels" in html
+    assert '"data-label-layer"' in html
+    assert '"data-label-anchor-x"' in html
+    assert '"data-label-anchor-y"' in html
+    assert 'label.setAttribute("font-size", (POINT_LABEL_FONT_PX * unitsPerPx).toFixed(3));' in html
+    assert 'label.setAttribute("stroke-width", (POINT_LABEL_STROKE_PX * unitsPerPx).toFixed(3));' in html
+    assert "anchorX + POINT_LABEL_OFFSET_PX * unitsPerPx" in html
+    assert "anchorY - POINT_LABEL_OFFSET_PX * unitsPerPx" in html
+    assert "currentViewportRangeM() <= POINT_LABEL_VIEWPORT_M" in html
+    assert "layerEnabled && (focused || showByZoom)" in html
     assert "pointFocusItemFor" in html
     assert "findPointFocusEvidenceByRef" in html
     assert "review_focus" in html
@@ -109,11 +153,14 @@ def test_pretrip_admin_page_contains_expected_layout_contract():
     assert "zoomMapOutFromBox" in html
     assert "Math.max(1, Math.min(MAP_MAX_ZOOM, state.zoom / factor))" in html
     assert "isZoomOutDrag" in html
-    assert 'button.addEventListener("click", () => {\n        selectEvidence(item);\n        focusMapFor(item);' in html
+    assert 'button.addEventListener("click", () => {\n        selectEvidence(item);\n        focusMapFor(item, {label: false});' in html
+    assert 'button.addEventListener("dblclick", event => {\n        event.preventDefault();\n        selectEvidence(item);\n        focusMapFor(item, {label: true});' in html
     assert 'addEventListener("dblclick"' in html
     assert "nearby_group_id" in html
     assert "route_note_freshness" in html
     assert "view.gis_perception_timeline?.checkpoint_candidates" in html
+    assert "item.display_label || item.map_label || item.route_note_summary" in html
+    assert "item.display_label || item.map_label || item.nearby_group_id" in html
 
 
 def test_pretrip_admin_page_has_top_level_readiness_strip_boundary_contract():
@@ -385,6 +432,12 @@ def test_pretrip_admin_page_fetches_fixture_backed_read_only_project_api():
     assert "/admin/pretrip/projects/${PROJECT_ID}" in html
     assert "apiBase()" in html
     assert 'data-layer="imagery"' in html
+    assert 'data-layer="rudy"' in html
+    assert 'data-layer="rudy-twmap"' in html
+    assert 'data-layer="relief"' in html
+    assert 'data-layer="geology"' in html
+    assert 'data-layer="topo-5k"' in html
+    assert 'data-layer="forest"' in html
     assert 'data-layer="osm"' in html
     assert 'data-layer="terrain"' in html
     assert 'data-layer="terrain" checked' in html
@@ -404,12 +457,10 @@ def test_pretrip_admin_page_fetches_fixture_backed_read_only_project_api():
     assert "const OSM_MAX_TILES = 64" in html
     assert "const RASTER_MAX_TILES = 64" in html
     assert "const MAP_VISUAL_PADDING = 56" in html
-    assert "RASTER_LOCAL_TILE_URL_TEMPLATE" in html
     assert "RASTER_TILE_CACHE_BUST" in html
     assert "function rasterTileCacheBustedUrl" in html
     assert "/admin/tiles/osm/{z}/{x}/{y}.png" in html
     assert "/admin/tiles/osm/{z}/{x}/{y}.png?fallback=transparent" in html
-    assert "/admin/tiles/imagery/{project_id}/{layer_id}/{z}/{x}/{y}.png" in html
     assert "function osmTileTemplate" in html
     assert "function isLocalOsmTileMode" in html
     assert 'return requested === "public" ? OSM_PUBLIC_TILE_URL_TEMPLATE : OSM_LOCAL_TILE_URL_TEMPLATE' in html
@@ -417,19 +468,41 @@ def test_pretrip_admin_page_fetches_fixture_backed_read_only_project_api():
     assert "function tileCountForZoom" in html
     assert "tileCountForZoom(bounds, zoom) > maxTiles" in html
     assert "function rasterTileTemplate" in html
+    assert "function rasterLayerFor" in html
+    assert "RASTER_SOURCE_LAYER_DEFINITIONS" in html
+    assert "RASTER_OVERLAY_LAYER_DEFINITIONS" in html
+    assert "https://wmts.nlsc.gov.tw/wmts/PHOTO2/default/EPSG:3857/{z}/{y}/{x}" in html
+    assert "const HAPPYMAN_WMTS_ENDPOINT" in html
+    assert "function wmtsTileUrl" in html
+    assert "function wmtsTileMatrixId" in html
+    assert 'sourceId: "happyman_rudy"' in html
+    assert 'sourceId: "happyman_geo2016"' in html
+    assert 'sourceId: "happyman_forest"' in html
     assert "function rasterZoomRangeFor" in html
     assert "function chooseRasterZoom" in html
-    assert "const z = zoom ?? chooseRasterZoom(view, bounds)" in html
+    assert "const z = zoom ?? chooseRasterZoom(view, bounds, RASTER_MAX_TILES, layerId)" in html
     assert 'params.get("osmSource")' in html
     assert "https://tile.openstreetmap.org/{z}/{x}/{y}.png" in html
-    assert "function renderRasterImagery" in html
+    assert "function renderRasterLayer" in html
+    assert "function lonToMercatorXValue" in html
+    assert "function latToMercatorYValue" in html
+    assert "function mercatorYValueToLat" in html
+    assert "function mercatorFrameForBounds" in html
+    assert "scale: Math.min(usableWidth / xSpan, usableHeight / ySpan)" in html
+    assert "function coordinateFromMapPointForBounds" in html
+    assert "function visibleBoundsFor" in html
+    assert "function mapViewportBox" in html
+    assert "function renderRasterBasemapLayers" in html
+    assert "renderRasterBasemapLayers(state.view)" in html
+    assert "const coverageBounds = visibleBoundsFor(view) || bounds" in html
+    assert "renderRasterLayer(imageryGroup, view, bounds, MAP_WIDTH, MAP_HEIGHT, \"imagery\", coverageBounds)" in html
+    assert "renderRasterLayer(rasterGroup, view, bounds, MAP_WIDTH, MAP_HEIGHT, layer.layerId, coverageBounds)" in html
+    assert "renderOsmBasemap(osmGroup, bounds, MAP_WIDTH, MAP_HEIGHT, coverageBounds)" in html
     assert "function rasterTileCoverage" in html
     assert "function rasterBoundsFor" in html
     assert "function boundsIntersect" in html
-    assert "raster_bbox_wgs84" in html
     assert "class: \"raster-tile\"" in html
     assert "data-raster-tile" in html
-    assert "local_raster_tile_url_template" in html
     assert "function renderOsmBasemap" in html
     assert "if (!isLocalOsmTileMode())" in html
     assert "function osmTileCoverage" in html
@@ -466,19 +539,25 @@ def test_pretrip_admin_page_fetches_fixture_backed_read_only_project_api():
     assert html.index('data-layer-group": "imagery"') < html.index(
         'data-layer-group": "osm"'
     )
-    assert html.index("renderRasterImagery(imageryGroup") < html.index(
+    assert html.index("renderRasterLayer(imageryGroup") < html.index(
+        "RASTER_OVERLAY_LAYER_DEFINITIONS.forEach"
+    )
+    assert html.index("RASTER_OVERLAY_LAYER_DEFINITIONS.forEach") < html.index(
         "renderOsmBasemap(osmGroup"
-    )
-    assert html.index('data-layer-group": "imagery"') < html.index(
-        'data-layer-group": "terrain"'
-    )
-    assert html.index('data-layer-group": "terrain"') < html.index(
-        'data-layer-group": "overpass"'
     )
     assert html.index('data-layer-group": "reference-tracks"') < html.index(
         'data-layer-group": "risk-ribbon"'
     )
     assert html.index('data-layer-group": "risk-ribbon"') < html.index(
+        'data-layer-group": "risk-heatmap"'
+    )
+    assert html.index('data-layer-group": "risk-heatmap"') < html.index(
+        'data-layer-group": "risk-delta"'
+    )
+    assert html.index('data-layer-group": "risk-delta"') < html.index(
+        'data-layer-group": "terrain"'
+    )
+    assert html.index('data-layer-group": "terrain"') < html.index(
         'data-layer-group": "risk-score"'
     )
     assert html.index('data-layer-group": "overpass"') < html.index(
@@ -504,7 +583,16 @@ def test_pretrip_admin_page_renders_overpass_evidence_layer_and_tree():
     assert "view.overpass_evidence?.corridor_candidates" in html
     assert "view.overpass_evidence?.hazard_candidates" in html
     assert "view.overpass_evidence?.poi_candidates" in html
-    assert 'treeGroup("Reference GPX"' in html
+    assert 'appendEvidenceTreeGroup(tree, "map_risk", "Reference GPX"' in html
+    assert 'id="evidenceTreeTabs"' in html
+    assert "EVIDENCE_TREE_TABS" in html
+    assert "details.open = false;" in html
+    assert "details.open = open;" not in html
+    assert 'label: "CP / Timeline"' in html
+    assert 'label: "Map / Risk"' in html
+    assert 'label: "Completed GPX"' in html
+    assert 'label: "Review / Queue"' in html
+    assert 'label: "Info / Other"' in html
     assert "candidate.corridor.coordinates" in html
     assert "candidate.hazard.polygon" in html
     assert "candidate.poi.coordinate" in html
@@ -638,7 +726,7 @@ def test_pretrip_admin_page_has_review_queue_navigation_and_filter_contract():
     assert "Warning, blocker, departure, and runtime handoff items remain single-review." in html
     assert "button.dataset.bulkSelected" in html
     assert ".is-bulk-selected" in html
-    assert 'treeGroup("Review Groups", view.review_workbench?.category_groups || []' in html
+    assert 'appendEvidenceTreeGroup(tree, "review", "Review Groups", view.review_workbench?.category_groups || []' in html
     assert "state.selectedReviewCandidateRefs = new Set(item.bulk_candidate_refs)" in html
     assert "Selected review group" in html
     assert "Selected ${items.length} map-visible review-only items from the current viewport." in html
@@ -654,14 +742,15 @@ def test_pretrip_admin_page_has_review_queue_navigation_and_filter_contract():
 def test_pretrip_admin_page_review_items_stay_map_target_backed_and_read_only():
     html = PAGE.read_text(encoding="utf-8")
 
-    assert 'treeGroup("Review Queue"' in html
+    assert 'appendEvidenceTreeGroup(tree, "review", "Review Queue"' in html
     assert 'data-tree-category="review"' in html
     assert "mapTargetsFor(item)" in html
     assert "item?.map_target_ids" in html
     assert "view?.route_notes?.candidates || []" in html
     assert 'el("g", {"data-layer-group": "route-notes"})' in html
     assert 'class: "route-note"' in html
-    assert 'button.addEventListener("click", () => {\n        selectEvidence(item);\n        focusMapFor(item);' in html
+    assert 'button.addEventListener("click", () => {\n        selectEvidence(item);\n        focusMapFor(item, {label: false});' in html
+    assert 'button.addEventListener("dblclick", event => {\n        event.preventDefault();\n        selectEvidence(item);\n        focusMapFor(item, {label: true});' in html
     assert "fetch(`${apiBase()}/admin/pretrip/projects/${PROJECT_ID}?compact=1`)" in html
     assert "fetch(`${apiBase()}/safety" not in html
 

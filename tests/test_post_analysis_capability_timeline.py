@@ -18,6 +18,13 @@ from route_matching import load_gpx_route
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE_ROOT = ROOT / "tests" / "fixtures" / "post_analysis" / "chilai_nanhua_day1_post_analysis"
+SCENARIO_FIXTURE_ROOT = (
+    ROOT
+    / "tests"
+    / "fixtures"
+    / "post_analysis"
+    / "chilai_nanhua_day1_completed_trip_scenarios"
+)
 CASE_ID = "chilai_nanhua_day1_post_analysis"
 GOLDEN_NODE_COUNT = 74
 GOLDEN_EDGE_COUNT = 73
@@ -184,6 +191,57 @@ class PostAnalysisCapabilityTimelineTests(unittest.TestCase):
         self.assertTrue(share_preview["excluded_fields"]["raw_gpx"])
         self.assertTrue(share_preview["excluded_fields"]["exact_timestamps"])
         self.assertTrue(share_preview["excluded_fields"]["incident_package_details"])
+
+    def test_completed_trip_scenarios_distinguish_partial_turnaround_from_complete_trip(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            temp = Path(tempdir)
+            normal = build_capability_artifacts(
+                case_id="completed_normal_golden",
+                completed_track_gpx=SCENARIO_FIXTURE_ROOT / "completed_normal_golden.gpx",
+                checkpoint_definitions_path=FIXTURE_ROOT / "checkpoints.json",
+                output_dir=temp / "normal",
+            )
+            halfway = build_capability_artifacts(
+                case_id="completed_halfway_return",
+                completed_track_gpx=SCENARIO_FIXTURE_ROOT / "completed_halfway_return.gpx",
+                checkpoint_definitions_path=FIXTURE_ROOT / "checkpoints.json",
+                output_dir=temp / "halfway",
+            )
+
+        normal_summary = normal.timeline["summary"]
+        halfway_summary = halfway.timeline["summary"]
+        halfway_edges = halfway.timeline["edges"]
+
+        self.assertEqual(normal_summary["completion_status"], "complete")
+        self.assertEqual(normal_summary["planned_segment_count"], GOLDEN_EDGE_COUNT)
+        self.assertEqual(normal_summary["traversed_segment_count"], GOLDEN_EDGE_COUNT)
+        self.assertEqual(normal_summary["partial_segment_count"], 0)
+        self.assertEqual(normal_summary["unreached_segment_count"], 0)
+
+        self.assertEqual(halfway_summary["completion_status"], "partial")
+        self.assertEqual(halfway_summary["planned_segment_count"], GOLDEN_EDGE_COUNT)
+        self.assertEqual(halfway_summary["traversed_segment_count"], 22)
+        self.assertEqual(halfway_summary["partial_segment_count"], 1)
+        self.assertEqual(halfway_summary["unreached_segment_count"], 50)
+        self.assertEqual(halfway_summary["turnaround_edge_id"], "cp.022_to_cp.023")
+        self.assertLess(halfway_summary["distance_m"], normal_summary["distance_m"])
+        self.assertEqual(
+            [edge["traversal_status"] for edge in halfway_edges[:24]][-2:],
+            ["partial", "unreached"],
+        )
+        self.assertTrue(
+            all(
+                edge["distance_m"] == 0
+                and edge["moving_time_s"] == 0
+                and edge["terrain_profile"] is None
+                for edge in halfway_edges
+                if edge["traversal_status"] == "unreached"
+            )
+        )
+        self.assertIn(
+            "one or more planned segments were not reached by the completed track",
+            halfway.timeline["data_quality"]["limitations"],
+        )
 
     def test_admin_summary_excludes_raw_track_and_exact_times(self):
         summary = summarize_capability_artifacts(

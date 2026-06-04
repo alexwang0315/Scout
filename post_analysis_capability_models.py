@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 Confidence = Literal["high", "medium", "low"]
+TraversalStatus = Literal["traversed", "partial", "unreached"]
 
 
 class RestDetectionPolicy(BaseModel):
@@ -93,6 +94,7 @@ class CapabilityEdge(BaseModel):
     from_node_id: str
     to_node_id: str
     direction: str = "outbound"
+    traversal_status: TraversalStatus = "traversed"
     elapsed_time_s: int
     moving_time_s: int
     rest_time_s: int
@@ -122,6 +124,12 @@ class CapabilitySummary(BaseModel):
     moving_pace_min_per_km: float | None = None
     ascent_m_per_hour_moving: float | None = None
     descent_m_per_hour_moving: float | None = None
+    planned_segment_count: int = 0
+    traversed_segment_count: int = 0
+    partial_segment_count: int = 0
+    unreached_segment_count: int = 0
+    completion_status: Literal["complete", "partial", "unknown"] = "unknown"
+    turnaround_edge_id: str | None = None
 
 
 class PostAnalysisBoundary(BaseModel):
@@ -146,6 +154,8 @@ class CapabilityDataQuality(BaseModel):
     low_point_segment_count: int = 0
     route_deviation_count: int = 0
     low_confidence_edge_count: int = 0
+    partial_segment_count: int = 0
+    unreached_segment_count: int = 0
     limitations: list[str] = Field(default_factory=list)
 
 

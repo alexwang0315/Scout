@@ -240,6 +240,8 @@ def _route_family(activity: WearableActivitySummary) -> str:
     if activity.route_family:
         return activity.route_family
     effort = _route_effort_units(activity)
+    if activity.activity_type in {"cross_training", "pilates", "strength", "strength_training"}:
+        return "cross_training"
     if activity.activity_type in {"hike", "hiking"}:
         if activity.ascent_m >= 800 or effort >= 18:
             return "mountain_hike"

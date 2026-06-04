@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from geo_utils import haversine_m
@@ -57,6 +57,7 @@ class RouteSlice:
     descent_m: float | None
     confidence: str
     limitations: list[str]
+    traversal_status: str = "traversed"
 
 
 def load_checkpoint_definitions(payload: dict[str, Any]) -> tuple[list[CapabilityCheckpoint], list[CapabilitySegmentDefinition]]:
@@ -170,7 +171,80 @@ def slice_route_by_checkpoints(
                 limitations=limitations,
             )
         )
-    return slices
+    return _mark_traversal_statuses(slices)
+
+
+def _mark_traversal_statuses(route_slices: list[RouteSlice]) -> list[RouteSlice]:
+    if not route_slices:
+        return route_slices
+    failed = [_unreached_candidate(route_slice) for route_slice in route_slices]
+    run = _first_sustained_failure_run(failed, min_run_length=8)
+    if run is None:
+        return route_slices
+    start, _end = run
+    turnaround_index = max(0, start - 1)
+    marked: list[RouteSlice] = []
+    for index, route_slice in enumerate(route_slices):
+        if index < turnaround_index:
+            marked.append(route_slice)
+        elif index == turnaround_index:
+            limitations = sorted(
+                set(
+                    [
+                        *route_slice.limitations,
+                        "completed track appears to turn around before the next planned checkpoint",
+                    ]
+                )
+            )
+            marked.append(
+                replace(route_slice, traversal_status="partial", limitations=limitations)
+            )
+        else:
+            limitations = sorted(
+                set(
+                    [
+                        *route_slice.limitations,
+                        "planned segment was not reached by the completed track",
+                    ]
+                )
+            )
+            marked.append(
+                replace(route_slice, traversal_status="unreached", limitations=limitations)
+            )
+    return marked
+
+
+def _unreached_candidate(route_slice: RouteSlice) -> bool:
+    expected = route_slice.expected_distance_m or 0.0
+    if expected <= 150:
+        return False
+    index_span = route_slice.end_index - route_slice.start_index
+    if index_span <= 1:
+        return True
+    if route_slice.distance_m < expected * 0.2:
+        return True
+    if route_slice.from_match.distance_m > 1000 and route_slice.to_match.distance_m > 1000:
+        return True
+    return False
+
+
+def _first_sustained_failure_run(
+    failed: list[bool],
+    *,
+    min_run_length: int,
+) -> tuple[int, int] | None:
+    index = 0
+    while index < len(failed):
+        if not failed[index]:
+            index += 1
+            continue
+        end = index
+        while end < len(failed) and failed[end]:
+            end += 1
+        if end - index >= min_run_length:
+            return index, end - 1
+        index = end
+    return None
 
 
 def _match_checkpoint_sequence_monotonic(

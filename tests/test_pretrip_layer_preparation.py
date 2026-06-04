@@ -185,7 +185,7 @@ def test_layer_preparation_run_writes_workspace_outputs_and_project_refs(
     assert (project_root / project["layer_preparation_job_ref"]).is_file()
 
 
-def test_layer_preparation_recovers_local_imagery_refs_from_workspace_manifests(
+def test_layer_preparation_ignores_local_imagery_refs_for_wmts_runtime(
     tmp_path: Path,
 ) -> None:
     project_root = _copy_fixture_project(tmp_path)
@@ -230,38 +230,108 @@ def test_layer_preparation_recovers_local_imagery_refs_from_workspace_manifests(
             prepared_at="2026-05-22T00:00:00+00:00",
         )
     )
-    project = _load(project_root / "project.json")
     imagery_layer = manifest["layers"][0]
 
-    assert imagery_layer["status"] == "ready_from_project_ref"
-    assert imagery_layer["counts"]["registered_raster_manifest_count"] == 3
-    assert imagery_layer["raster_bbox_wgs84"] == {
-        "west": 121.21478855,
-        "south": 24.03365911,
-        "east": 121.30320941,
-        "north": 24.06992621,
-    }
-    assert imagery_layer["raster_coverage_policy"] == "render_intersecting_tiles_only"
-    assert imagery_layer["raster_tile_zoom_range"] == "5-14"
+    assert imagery_layer["status"] == "wmts_runtime_only"
+    assert imagery_layer["raster_tile_delivery"] == "direct_wmts_runtime"
+    assert imagery_layer["counts"]["registered_raster_manifest_count"] == 0
+    assert imagery_layer["counts"]["imagery_tile_cache_plan_tile_count"] == 0
+    assert imagery_layer["downloads_tiles_into_repo"] is False
+    assert "raster_bbox_wgs84" not in imagery_layer
+    assert "raster_tile_zoom_range" not in imagery_layer
     projection = _load(project_root / manifest["outputs"]["layer_map_projection_ref"])
     projected_imagery = projection["layers"][0]
-    assert projected_imagery["raster_bbox_wgs84"] == imagery_layer["raster_bbox_wgs84"]
-    assert projected_imagery["local_raster_tile_url_template"] == (
-        "/admin/tiles/imagery/{project_id}/{layer_id}/{z}/{x}/{y}.png"
-    )
-    assert project["imagery_manifest_ref"] == (
-        "outputs/layers/manifests/chilai_nanhua_day1.local_raster_source_manifest.json"
-    )
-    assert project["local_raster_manifest_ref"] == project["imagery_manifest_ref"]
-    assert project["raster_tile_manifest_ref"] == (
-        "outputs/layers/manifests/chilai_nanhua_day1.raster_tile_pyramid_plan.json"
-    )
-    assert project["imagery_tile_cache_root"] == "/data/scout/raster-tiles"
-    assert project["imagery_source_tiff_ref"] == "/data/scout/raster-sources/map.tiff"
-    assert project["imagery_source_kmz_ref"] == "/data/scout/raster-sources/map.kmz"
+    assert projected_imagery["status"] == "wmts_runtime_only"
+    assert projected_imagery["raster_tile_delivery"] == "direct_wmts_runtime"
+    assert "local_raster_tile_url_template" not in projected_imagery
+    assert "imagery_tile_cache_plan_ref" not in manifest["outputs"]
 
 
-def test_layer_preparation_copies_known_scout_imagery_manifests(
+def test_layer_preparation_keeps_imagery_bbox_metadata_without_cache_plan(
+    tmp_path: Path,
+) -> None:
+    project_root = _copy_fixture_project(tmp_path)
+    project_path = project_root / "project.json"
+    project = _load(project_path)
+    project.pop("imagery_manifest_ref", None)
+    project.pop("local_raster_manifest_ref", None)
+    project.pop("raster_tile_manifest_ref", None)
+    project["imagery_source_id"] = "nlsc_photo2"
+    project["imagery_source_registry_id"] = "scout.imagery_sources.default.v1"
+    project["imagery_bbox_wgs84"] = {
+        "west": 121.2,
+        "south": 24.03,
+        "east": 121.31,
+        "north": 24.08,
+    }
+    project["imagery_bbox_policy"] = "gpx_bbox_scaled_115_percent"
+    project["imagery_bbox_scale_factor"] = 1.15
+    project_path.write_text(json.dumps(project, ensure_ascii=False), encoding="utf-8")
+
+    manifest = run_layer_preparation(
+        LayerPreparationRequest(
+            project_id="chilai_nanhua_day1",
+            project_root=project_root,
+            layers=("imagery",),
+            prepared_at="2026-05-22T00:00:00+00:00",
+        )
+    )
+
+    imagery_layer = manifest["layers"][0]
+    projection = _load(project_root / manifest["outputs"]["layer_map_projection_ref"])
+    projected = projection["layers"][0]
+
+    assert imagery_layer["status"] == "wmts_runtime_only"
+    assert imagery_layer["imagery_source_id"] == "nlsc_photo2"
+    assert imagery_layer["raster_tile_delivery"] == "direct_wmts_runtime"
+    assert "raster_bbox_wgs84" not in imagery_layer
+    assert "imagery_tile_cache_plan_ref" not in imagery_layer
+    assert "imagery_tile_cache_plan" not in imagery_layer
+    assert "raster_tile_zoom_range" not in imagery_layer
+    assert imagery_layer["counts"]["remote_imagery_source_registered"] is True
+    assert projected["imagery_source_id"] == "nlsc_photo2"
+    assert projected["raster_tile_delivery"] == "direct_wmts_runtime"
+    assert "local_raster_tile_url_template" not in projected
+    assert "imagery_tile_cache_plan_ref" not in manifest["outputs"]
+
+
+def test_layer_preparation_rejects_imagery_cache_seed_when_explicit(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_root = _copy_fixture_project(tmp_path)
+    project_path = project_root / "project.json"
+    project = _load(project_path)
+    project.pop("imagery_manifest_ref", None)
+    project.pop("local_raster_manifest_ref", None)
+    project.pop("raster_tile_manifest_ref", None)
+    project["imagery_source_id"] = "happyman_rudy"
+    project["imagery_bbox_wgs84"] = {
+        "west": 121.2,
+        "south": 24.03,
+        "east": 121.21,
+        "north": 24.04,
+    }
+    project_path.write_text(json.dumps(project, ensure_ascii=False), encoding="utf-8")
+    with pytest.raises(ValueError, match="seed_imagery_cache is disabled"):
+        run_layer_preparation(
+            LayerPreparationRequest(
+                project_id="chilai_nanhua_day1",
+                project_root=project_root,
+                layers=("imagery",),
+                network_mode="explicit-fetch",
+                allow_network_fetch=True,
+                imagery_min_zoom=12,
+                imagery_max_zoom=12,
+                seed_imagery_cache=True,
+                imagery_provider_allows_offline_prefetch=True,
+                imagery_seed_max_tiles=2,
+                prepared_at="2026-05-22T00:00:00+00:00",
+            )
+        )
+
+
+def test_layer_preparation_does_not_copy_known_scout_imagery_manifests(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -293,7 +363,7 @@ def test_layer_preparation_copies_known_scout_imagery_manifests(
     )
     monkeypatch.setattr(pretrip_layer_preparation, "DEFAULT_SCOUT_DATA_ROOT", scout_root)
 
-    run_layer_preparation(
+    manifest = run_layer_preparation(
         LayerPreparationRequest(
             project_id="chilai_nanhua_day1",
             project_root=project_root,
@@ -303,20 +373,18 @@ def test_layer_preparation_copies_known_scout_imagery_manifests(
     )
     project = _load(project_root / "project.json")
 
-    assert (
+    assert not (
         project_root
         / "outputs/layers/manifests/chilai_nanhua_day1.local_raster_source_manifest.json"
     ).is_file()
-    assert (
+    assert not (
         project_root
         / "outputs/layers/manifests/chilai_nanhua_day1.raster_tile_pyramid_plan.json"
     ).is_file()
-    assert project["imagery_manifest_ref"] == (
-        "outputs/layers/manifests/chilai_nanhua_day1.local_raster_source_manifest.json"
-    )
-    assert project["raster_tile_manifest_ref"] == (
-        "outputs/layers/manifests/chilai_nanhua_day1.raster_tile_pyramid_plan.json"
-    )
+    assert "imagery_manifest_ref" not in project
+    assert "raster_tile_manifest_ref" not in project
+    imagery_layer = manifest["layers"][0]
+    assert imagery_layer["status"] == "wmts_runtime_only"
 
 
 def test_layer_preparation_records_gpx_filter_provenance_from_import_workspace(
