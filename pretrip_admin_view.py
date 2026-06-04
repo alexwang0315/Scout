@@ -40,6 +40,10 @@ COMPANION_MATCH_REVIEW_REF = "outputs/companion_match_review.json"
 GIS_PERCEPTION_AGGREGATION_RADIUS_M = 80.0
 GIS_PERCEPTION_NEARBY_GROUP_RADIUS_M = 80.0
 GIS_PERCEPTION_LABEL_MAX_CHARS = 64
+ROUTE_PROJECTION_FILTER_VERSION = "pretrip_route_bounds_projection_filter.v1"
+ROUTE_DISPLAY_BOUNDS_VERSION = "pretrip_route_reference_display_bounds.v1"
+ROUTE_DISPLAY_BOUNDS_PRIMARY_OVERLAP_MIN = 0.55
+ROUTE_DISPLAY_BOUNDS_COMPARISON_OVERLAP_MIN = 0.55
 RISK_DELTA_COLORS = {
     "calibrated_higher": "#9333ea",
     "baseline_higher": "#2563eb",
@@ -60,6 +64,179 @@ EMPTY_PRETRIP_BOUNDARY = {
     "phase2_brain_writeback_allowed": False,
     "runtime_safety_truth": False,
 }
+
+
+def _route_projection_bounds(route_summary: dict[str, Any]) -> dict[str, float] | None:
+    bbox = route_summary.get("bbox_wgs84")
+    if not isinstance(bbox, dict):
+        return None
+    try:
+        bounds = {
+            "south": float(bbox["min_lat"]),
+            "north": float(bbox["max_lat"]),
+            "west": float(bbox["min_lon"]),
+            "east": float(bbox["max_lon"]),
+        }
+    except (KeyError, TypeError, ValueError):
+        try:
+            bounds = {
+                "south": float(bbox["south"]),
+                "north": float(bbox["north"]),
+                "west": float(bbox["west"]),
+                "east": float(bbox["east"]),
+            }
+        except (KeyError, TypeError, ValueError):
+            return None
+    if not (bounds["south"] <= bounds["north"] and bounds["west"] <= bounds["east"]):
+        return None
+    return bounds
+
+
+def _expand_bounds_with_point(
+    bounds: dict[str, float],
+    point: dict[str, Any],
+) -> None:
+    try:
+        lat = float(point["lat"])
+        lon = float(point["lon"])
+    except (KeyError, TypeError, ValueError):
+        return
+    if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+        return
+    bounds["south"] = min(bounds["south"], lat)
+    bounds["north"] = max(bounds["north"], lat)
+    bounds["west"] = min(bounds["west"], lon)
+    bounds["east"] = max(bounds["east"], lon)
+
+
+def _display_geometry_points(display: dict[str, Any] | None) -> list[dict[str, Any]]:
+    if not isinstance(display, dict):
+        return []
+    points: list[dict[str, Any]] = []
+    coordinate_segments = display.get("coordinate_segments")
+    if isinstance(coordinate_segments, list):
+        for segment in coordinate_segments:
+            if isinstance(segment, list):
+                points.extend(point for point in segment if isinstance(point, dict))
+    if points:
+        return points
+    coordinates = display.get("coordinates")
+    if isinstance(coordinates, list):
+        return [point for point in coordinates if isinstance(point, dict)]
+    return []
+
+
+def _reference_display_geometry_by_id(
+    reference_track_display_geometry: dict[str, Any] | None,
+) -> dict[str, dict[str, Any]]:
+    if not isinstance(reference_track_display_geometry, dict):
+        return {}
+    return {
+        item["reference_id"]: item
+        for item in reference_track_display_geometry.get("reference_tracks", [])
+        if isinstance(item, dict) and item.get("reference_id")
+    }
+
+
+def _route_reference_display_bounds(
+    route_summary: dict[str, Any],
+    reference_tracks: dict[str, Any] | None,
+    reference_track_display_geometry: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    base_bounds = _route_projection_bounds(route_summary)
+    if base_bounds is None:
+        return None
+
+    bounds = dict(base_bounds)
+    display_by_id = _reference_display_geometry_by_id(reference_track_display_geometry)
+    included_reference_ids: list[str] = []
+    skipped_reference_ids: list[str] = []
+    for track in (reference_tracks or {}).get("reference_tracks", []):
+        if not isinstance(track, dict):
+            continue
+        reference_id = track.get("reference_id")
+        comparison = track.get("bbox_comparison") or {}
+        primary_overlap = float(comparison.get("primary_overlap_ratio") or 0.0)
+        comparison_overlap = float(comparison.get("comparison_overlap_ratio") or 0.0)
+        eligible = (
+            bool(comparison.get("overlaps"))
+            and primary_overlap >= ROUTE_DISPLAY_BOUNDS_PRIMARY_OVERLAP_MIN
+            and comparison_overlap >= ROUTE_DISPLAY_BOUNDS_COMPARISON_OVERLAP_MIN
+        )
+        if not eligible or not reference_id:
+            if reference_id:
+                skipped_reference_ids.append(reference_id)
+            continue
+        points = _display_geometry_points(display_by_id.get(reference_id))
+        if not points:
+            skipped_reference_ids.append(reference_id)
+            continue
+        before = dict(bounds)
+        for point in points:
+            _expand_bounds_with_point(bounds, point)
+        if bounds != before:
+            included_reference_ids.append(reference_id)
+        else:
+            skipped_reference_ids.append(reference_id)
+
+    return {
+        "bounds_wgs84": bounds,
+        "base_route_bounds_wgs84": base_bounds,
+        "strategy": "route_bounds_plus_high_overlap_reference_display_geometry",
+        "version": ROUTE_DISPLAY_BOUNDS_VERSION,
+        "primary_overlap_min": ROUTE_DISPLAY_BOUNDS_PRIMARY_OVERLAP_MIN,
+        "comparison_overlap_min": ROUTE_DISPLAY_BOUNDS_COMPARISON_OVERLAP_MIN,
+        "included_reference_ids": included_reference_ids,
+        "skipped_reference_ids": skipped_reference_ids,
+        "raw_artifacts_mutated": False,
+        "display_only": True,
+        "runtime_safety_truth": False,
+    }
+
+
+def _point_within_projection_bounds(
+    item: dict[str, Any],
+    bounds: dict[str, float] | None,
+) -> bool:
+    if bounds is None:
+        return True
+    try:
+        lat = float(item["lat"])
+        lon = float(item["lon"])
+    except (KeyError, TypeError, ValueError):
+        return False
+    return (
+        bounds["south"] <= lat <= bounds["north"]
+        and bounds["west"] <= lon <= bounds["east"]
+    )
+
+
+def _projection_filter_summary(
+    *,
+    source_count: int,
+    visible_count: int,
+    display_bounds: dict[str, float] | None,
+) -> dict[str, Any]:
+    if display_bounds is None:
+        return {
+            "strategy": "none",
+            "source_candidate_count": source_count,
+            "visible_candidate_count": visible_count,
+            "filtered_out_of_route_bounds_count": 0,
+            "raw_artifacts_mutated": False,
+            "runtime_safety_truth": False,
+        }
+    return {
+        "strategy": "route_bounds_wgs84_ui_projection_filter",
+        "version": ROUTE_PROJECTION_FILTER_VERSION,
+        "bounds_wgs84": dict(display_bounds),
+        "source_candidate_count": source_count,
+        "visible_candidate_count": visible_count,
+        "filtered_out_of_route_bounds_count": source_count - visible_count,
+        "raw_artifacts_mutated": False,
+        "candidate_evidence_mutated": False,
+        "runtime_safety_truth": False,
+    }
 
 
 def _missing_artifact_status(artifact_key: str) -> dict[str, Any]:
@@ -521,6 +698,12 @@ def build_pretrip_admin_view(
     )
 
     source_refs = _source_refs(artifacts, root if project_root is None else project_root)
+    route_projection_bounds = _route_projection_bounds(route_summary)
+    route_display_bounds = _route_reference_display_bounds(
+        route_summary,
+        reference_tracks,
+        reference_track_display_geometry,
+    )
     route_points = _route_point_samples(route_summary, checkpoints)
     route_polyline = _route_polyline(map_context)
     segment_display_by_id = _segment_display_geometry_by_id(segment_display_geometry)
@@ -549,6 +732,12 @@ def build_pretrip_admin_view(
             "evidence_type": "pretrip_route_summary",
             "route_name": route_summary["route_name"],
             "bounds": route_summary["bbox_wgs84"],
+            "display_bounds": (
+                route_display_bounds["bounds_wgs84"]
+                if route_display_bounds is not None
+                else None
+            ),
+            "display_bounds_metadata": route_display_bounds,
             "point_count": route_summary["point_count"],
             "distance_m": route_summary["distance_m"],
             "elevation_min_m": route_summary.get("elevation_min_m"),
@@ -591,7 +780,11 @@ def build_pretrip_admin_view(
             if energy_projection is not None
             else None,
         },
-        "route_notes": _route_note_summary(route_notes, source_refs["route_notes"]),
+        "route_notes": _route_note_summary(
+            route_notes,
+            source_refs["route_notes"],
+            display_bounds=route_projection_bounds,
+        ),
         "reference_tracks": _reference_tracks_summary(
             reference_tracks,
             source_refs.get("reference_tracks", ""),
@@ -665,6 +858,7 @@ def build_pretrip_admin_view(
                 "gis_perception_ai_judgements",
                 "",
             ),
+            display_bounds=route_projection_bounds,
         ),
         "route_note_review_options": _route_note_review_options_summary(
             route_note_review_options,
@@ -1266,6 +1460,7 @@ def load_pretrip_debug_projection_view(
         return resolved_project_root / project_ref if project_ref else None
 
     route_summary = _load_json(resolved_project_root / project["route_summary_ref"])
+    route_projection_bounds = _route_projection_bounds(route_summary)
     map_context = _load_json(resolved_project_root / project["map_context_ref"])
     checkpoints_raw = _load_json(
         resolved_project_root / project["checkpoint_candidates_ref"]
@@ -1277,6 +1472,11 @@ def load_pretrip_debug_projection_view(
     )
     reference_track_display_geometry = _load_optional_json(
         optional_project_path("reference_track_display_geometry_ref")
+    )
+    route_display_bounds = _route_reference_display_bounds(
+        route_summary,
+        reference_tracks_raw,
+        reference_track_display_geometry,
     )
     checkpoint_events_raw = _load_optional_json(
         optional_project_path("checkpoint_events_ref")
@@ -1403,6 +1603,12 @@ def load_pretrip_debug_projection_view(
             "evidence_type": "pretrip_route_summary",
             "route_name": route_summary["route_name"],
             "bounds": route_summary["bbox_wgs84"],
+            "display_bounds": (
+                route_display_bounds["bounds_wgs84"]
+                if route_display_bounds is not None
+                else None
+            ),
+            "display_bounds_metadata": route_display_bounds,
             "point_count": route_summary["point_count"],
             "distance_m": route_summary["distance_m"],
             "elevation_min_m": route_summary.get("elevation_min_m"),
@@ -1433,6 +1639,7 @@ def load_pretrip_debug_projection_view(
             source_refs["gis_perception"],
             ai_judgements_payload=gis_perception_ai_judgements_raw,
             ai_judgements_source_path=source_refs["gis_perception_ai_judgements"],
+            display_bounds=route_projection_bounds,
         ),
         "reference_tracks": _reference_tracks_summary(
             reference_tracks_raw,
@@ -1868,6 +2075,7 @@ def _debug_projection_gis_perception_summary(
     *,
     ai_judgements_payload: dict[str, Any] | None = None,
     ai_judgements_source_path: str = "",
+    display_bounds: dict[str, float] | None = None,
 ) -> dict[str, Any]:
     ai_judgement_summary = _gis_perception_ai_judgement_summary(
         ai_judgements_payload,
@@ -1928,17 +2136,35 @@ def _debug_projection_gis_perception_summary(
                 ),
             }
         )
+    visible_checkpoint_candidates = [
+        candidate
+        for candidate in checkpoint_candidates
+        if _point_within_projection_bounds(candidate, display_bounds)
+    ]
+    projection_filter = _projection_filter_summary(
+        source_count=len(checkpoint_candidates),
+        visible_count=len(visible_checkpoint_candidates),
+        display_bounds=display_bounds,
+    )
+    counts = {
+        **payload["counts"],
+        "visible_checkpoint_candidate_count": len(visible_checkpoint_candidates),
+        "filtered_out_of_route_bounds_count": projection_filter[
+            "filtered_out_of_route_bounds_count"
+        ],
+    }
     return {
         "source_id": payload["artifact_id"],
         "source_path": source_path,
         "evidence_type": "pretrip_gis_perception_candidates",
         "status": payload["status"],
         "source_profile": payload["source_profile"],
-        "counts": payload["counts"],
+        "counts": counts,
         "classifier": payload["classifier"],
         "boundary": _summary_boundary(payload["boundary"]),
         "ai_judgements": ai_judgement_summary,
-        "checkpoint_candidates": checkpoint_candidates,
+        "projection_filter": projection_filter,
+        "checkpoint_candidates": visible_checkpoint_candidates,
     }
 
 
@@ -4725,51 +4951,75 @@ def _external_import_queue_summary(payload: dict[str, Any], source_path: str) ->
     }
 
 
-def _route_note_summary(payload: dict[str, Any], source_path: str) -> dict[str, Any]:
+def _route_note_summary(
+    payload: dict[str, Any],
+    source_path: str,
+    *,
+    display_bounds: dict[str, float] | None = None,
+) -> dict[str, Any]:
+    candidates = [
+        {
+            "candidate_id": candidate["candidate_id"],
+            "source_id": candidate["candidate_id"],
+            "source_path": source_path,
+            "evidence_type": "pretrip_route_note_candidate",
+            "lat": candidate["lat"],
+            "lon": candidate["lon"],
+            "ele_m": candidate.get("ele_m"),
+            "time": candidate.get("time"),
+            "normalized_note": candidate["normalized_note"],
+            "note_category": candidate["note_category"],
+            "potential_ln_signal": candidate["potential_ln_signal"],
+            "requires_human_review": candidate["requires_human_review"],
+            "review_state": candidate.get("review_state", "needs_review"),
+            "confidence": candidate.get("confidence", "unknown"),
+            "stale_risk": candidate.get("stale_risk", "unknown"),
+            "route_note_age_days": candidate.get("route_note_age_days"),
+            "route_note_freshness": candidate.get(
+                "route_note_freshness",
+                "unknown",
+            ),
+            "stale_route_note": candidate.get("stale_route_note", False),
+            "candidate_only": candidate.get("candidate_only", True),
+            "runtime_safety_truth": candidate.get("runtime_safety_truth", False),
+            "source_fields_present": candidate["source_fields_present"],
+            "source_refs": candidate.get("source_refs", []),
+            "source_attribution": candidate.get("source_attribution", []),
+            "extractor_version": candidate.get("extractor_version"),
+            "pydantic_ai_prompt_version": candidate.get(
+                "pydantic_ai_prompt_version",
+            ),
+            "model_output_sha256": candidate.get("model_output_sha256"),
+            "model_output_summary": candidate.get("model_output_summary"),
+        }
+        for candidate in payload.get("candidates", [])
+    ]
+    visible_candidates = [
+        candidate
+        for candidate in candidates
+        if _point_within_projection_bounds(candidate, display_bounds)
+    ]
+    projection_filter = _projection_filter_summary(
+        source_count=len(candidates),
+        visible_count=len(visible_candidates),
+        display_bounds=display_bounds,
+    )
+    counts = {
+        **payload["counts"],
+        "visible_candidate_count": len(visible_candidates),
+        "filtered_out_of_route_bounds_count": projection_filter[
+            "filtered_out_of_route_bounds_count"
+        ],
+    }
     return {
         "source_id": payload["artifact_id"],
         "source_path": source_path,
         "evidence_type": "pretrip_route_note_candidates",
         "status": payload["status"],
-        "counts": payload["counts"],
+        "counts": counts,
         "boundary": _summary_boundary(payload["boundary"]),
-        "candidates": [
-            {
-                "candidate_id": candidate["candidate_id"],
-                "source_id": candidate["candidate_id"],
-                "source_path": source_path,
-                "evidence_type": "pretrip_route_note_candidate",
-                "lat": candidate["lat"],
-                "lon": candidate["lon"],
-                "ele_m": candidate.get("ele_m"),
-                "time": candidate.get("time"),
-                "normalized_note": candidate["normalized_note"],
-                "note_category": candidate["note_category"],
-                "potential_ln_signal": candidate["potential_ln_signal"],
-                "requires_human_review": candidate["requires_human_review"],
-                "review_state": candidate.get("review_state", "needs_review"),
-                "confidence": candidate.get("confidence", "unknown"),
-                "stale_risk": candidate.get("stale_risk", "unknown"),
-                "route_note_age_days": candidate.get("route_note_age_days"),
-                "route_note_freshness": candidate.get(
-                    "route_note_freshness",
-                    "unknown",
-                ),
-                "stale_route_note": candidate.get("stale_route_note", False),
-                "candidate_only": candidate.get("candidate_only", True),
-                "runtime_safety_truth": candidate.get("runtime_safety_truth", False),
-                "source_fields_present": candidate["source_fields_present"],
-                "source_refs": candidate.get("source_refs", []),
-                "source_attribution": candidate.get("source_attribution", []),
-                "extractor_version": candidate.get("extractor_version"),
-                "pydantic_ai_prompt_version": candidate.get(
-                    "pydantic_ai_prompt_version",
-                ),
-                "model_output_sha256": candidate.get("model_output_sha256"),
-                "model_output_summary": candidate.get("model_output_summary"),
-            }
-            for candidate in payload.get("candidates", [])
-        ],
+        "projection_filter": projection_filter,
+        "candidates": visible_candidates,
     }
 
 

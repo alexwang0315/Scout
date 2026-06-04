@@ -2167,7 +2167,14 @@
     }
     function rasterBoundsFor(projection, layerId = "imagery") {
       const layer = rasterLayerFor(projection, layerId);
+      if (isDirectRuntimeRasterLayer(layer)) return null;
       return normalizeRasterBounds(layer.raster_bbox_wgs84 || layer.bbox_wgs84 || layer.georeference?.bbox_wgs84);
+    }
+    function isDirectRuntimeRasterLayer(layer) {
+      const sourceKind = String(layer?.source_kind || layer?.imagery_source_kind || "");
+      return layer?.raster_tile_delivery === "direct_wmts_runtime"
+        || layer?.render_mode === "wmts_raster_tile"
+        || ["wmts_tile", "wmts_kvp_tile", "xyz_tile"].includes(sourceKind);
     }
     function parseZoomRange(value) {
       const match = String(value || "").match(/^(\d+)\s*-\s*(\d+)$/);

@@ -24,6 +24,15 @@ class DebugApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.headers["cache-control"], "no-store")
         self.assertIn("Scout Phase 3.5 Runtime Debug", response.text)
+        self.assertIn("function isDirectRuntimeRasterLayer", response.text)
+        self.assertIn(
+            'layer?.raster_tile_delivery === "direct_wmts_runtime"',
+            response.text,
+        )
+        self.assertIn(
+            '["wmts_tile", "wmts_kvp_tile", "xyz_tile"].includes(sourceKind)',
+            response.text,
+        )
 
     def test_debug_events_state_and_messages_are_read_only(self):
         log = MemoryRuntimeDebugEventLog()

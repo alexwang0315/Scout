@@ -484,9 +484,14 @@ def test_pretrip_admin_page_fetches_fixture_backed_read_only_project_api():
     assert 'params.get("osmSource")' in html
     assert "https://tile.openstreetmap.org/{z}/{x}/{y}.png" in html
     assert "function renderRasterLayer" in html
+    assert "const b = view.route.display_bounds || view.route.bounds" in html
+    assert "const normalized = b.south !== undefined" in html
+    assert "return fitBoundsToMapAspect(normalized)" in html
     assert "function lonToMercatorXValue" in html
     assert "function latToMercatorYValue" in html
     assert "function mercatorYValueToLat" in html
+    assert "function fitBoundsToMapAspect" in html
+    assert "const targetAspect = usableWidth / usableHeight" in html
     assert "function mercatorFrameForBounds" in html
     assert "scale: Math.min(usableWidth / xSpan, usableHeight / ySpan)" in html
     assert "function coordinateFromMapPointForBounds" in html
@@ -500,6 +505,9 @@ def test_pretrip_admin_page_fetches_fixture_backed_read_only_project_api():
     assert "renderOsmBasemap(osmGroup, bounds, MAP_WIDTH, MAP_HEIGHT, coverageBounds)" in html
     assert "function rasterTileCoverage" in html
     assert "function rasterBoundsFor" in html
+    assert "function isDirectRuntimeRasterLayer" in html
+    assert 'layer?.raster_tile_delivery === "direct_wmts_runtime"' in html
+    assert '["wmts_tile", "wmts_kvp_tile", "xyz_tile"].includes(sourceKind)' in html
     assert "function boundsIntersect" in html
     assert "class: \"raster-tile\"" in html
     assert "data-raster-tile" in html
@@ -1062,8 +1070,8 @@ def test_pretrip_admin_view_exposes_fixture_fields_used_by_readiness_strip():
 
     assert view["readiness"]["status"] == "ready"
     assert view["review_queue"]["counts"]["blocker_count"] == 0
-    assert view["review_queue"]["counts"]["warning_count"] == 67
-    assert view["review_queue"]["counts"]["review_count"] == 380
+    assert view["review_queue"]["counts"]["warning_count"] == 33
+    assert view["review_queue"]["counts"]["review_count"] == 221
     assert view["departure_bundle"]["package"]["status"] == "reviewed"
     assert view["departure_bundle"]["boundary"]["human_review_required_before_departure"] is True
     assert view["departure_bundle"]["boundary"]["not_departure_approval"] is True
