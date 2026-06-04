@@ -6,6 +6,7 @@ from typing import Any, Protocol
 from fastapi import APIRouter, FastAPI, HTTPException, Query
 from fastapi.responses import HTMLResponse, Response
 
+from mobile_wearable_ingress_debug import load_mobile_wearable_ingress_debug_status
 from runtime_debug_log import MemoryRuntimeDebugEventLog
 from runtime_debug_models import RuntimeDebugEventKind
 from scout_agent_debug_projection import load_agent_trace_debug_events
@@ -44,6 +45,7 @@ def create_debug_app(
     agent_trace_log_path: Path | str | None = None,
     spatial_imprint_store_path: Path | str | None = None,
     spatial_imprint_trigger_report_path: Path | str | None = None,
+    mobile_wearable_ingress_status_path: Path | str | None = None,
     debug_page_path: Path | str = DEFAULT_DEBUG_PAGE,
 ) -> FastAPI:
     app = FastAPI(title="Scout Phase 3.5 Debug API")
@@ -54,6 +56,7 @@ def create_debug_app(
             agent_trace_log_path=agent_trace_log_path,
             spatial_imprint_store_path=spatial_imprint_store_path,
             spatial_imprint_trigger_report_path=spatial_imprint_trigger_report_path,
+            mobile_wearable_ingress_status_path=mobile_wearable_ingress_status_path,
         )
     )
     app.include_router(create_debug_page_router(debug_page_path=debug_page_path))
@@ -67,6 +70,7 @@ def create_debug_router(
     agent_trace_log_path: Path | str | None = None,
     spatial_imprint_store_path: Path | str | None = None,
     spatial_imprint_trigger_report_path: Path | str | None = None,
+    mobile_wearable_ingress_status_path: Path | str | None = None,
 ) -> APIRouter:
     router = APIRouter(prefix="/debug", tags=["debug"])
     resolved_log = debug_log or MemoryRuntimeDebugEventLog()
@@ -179,6 +183,12 @@ def create_debug_router(
             "messages": messages_payload,
             "debug_boundary": _debug_boundary(),
         }
+
+    @router.get("/mobile-wearable/ingress")
+    def mobile_wearable_ingress() -> dict[str, Any]:
+        return load_mobile_wearable_ingress_debug_status(
+            mobile_wearable_ingress_status_path
+        )
 
     @router.api_route("/clear", methods=["POST"])
     def clear_debug_projection(payload: dict[str, Any] | None = None) -> dict[str, Any]:

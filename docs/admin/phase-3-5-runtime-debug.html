@@ -1233,7 +1233,7 @@
       <div>
         <h1>Runtime Debug</h1>
         <p class="meta">Read-only engineering console aligned to chilai_nanhua_day1 when available.</p>
-        <code>/debug/events /debug/state /debug/messages</code>
+        <code>/debug/events /debug/state /debug/messages /debug/mobile-wearable/ingress</code>
       </div>
       <div class="boundary">
         <strong>Debug boundary</strong>
@@ -1265,6 +1265,7 @@
             <div class="tab" role="tab" id="tab-monitor" tabindex="-1" aria-selected="false" aria-controls="panel-monitor" data-tab-target="panel-monitor">Monitor</div>
             <div class="tab" role="tab" id="tab-provider" tabindex="-1" aria-selected="false" aria-controls="panel-provider" data-tab-target="panel-provider">Provider</div>
             <div class="tab" role="tab" id="tab-hardware" tabindex="-1" aria-selected="false" aria-controls="panel-hardware" data-tab-target="panel-hardware">Hardware</div>
+            <div class="tab" role="tab" id="tab-ingress" tabindex="-1" aria-selected="false" aria-controls="panel-ingress" data-tab-target="panel-ingress">Ingress</div>
             <div class="tab" role="tab" id="tab-incident" tabindex="-1" aria-selected="false" aria-controls="panel-incident" data-tab-target="panel-incident">Incident</div>
             <div class="tab" role="tab" id="tab-skill" tabindex="-1" aria-selected="false" aria-controls="panel-skill" data-tab-target="panel-skill">Ln / Skill</div>
             <div class="tab" role="tab" id="tab-outbound" tabindex="-1" aria-selected="false" aria-controls="panel-outbound" data-tab-target="panel-outbound">Outbound</div>
@@ -1399,6 +1400,47 @@
               <div class="list" id="hardwareInterfaceList" style="margin-top: 10px;"></div>
               <div class="list" id="hardwareProviderList" style="margin-top: 10px;"></div>
               <div class="list" id="hardwareBoundaryList" style="margin-top: 10px;"></div>
+            </section>
+
+            <section class="tab-panel" role="tabpanel" id="panel-ingress" aria-labelledby="tab-ingress" hidden>
+              <div class="tab-panel-head">
+                <div class="item-line">
+                  <h2>Mobile/Wearable Ingress</h2>
+                  <span class="pill" id="mobileIngressSummary">not seen</span>
+                </div>
+                <p class="hint">讀取 /debug/mobile-wearable/ingress；顯示 LAN/WAN/LoRa 接入摘要，不載入 raw payload。</p>
+              </div>
+              <p class="hint state-context" id="mobileIngressSelectionContext">Mobile/wearable ingress 是獨立 evidence projection，不因 timeline 選取改變。</p>
+              <div class="grid">
+                <div class="metric">
+                  <span>Ingress records</span>
+                  <strong id="mobileIngressRecordCount">0</strong>
+                  <p class="hint">已保存到 ingress summary index 的接入筆數。</p>
+                </div>
+                <div class="metric">
+                  <span>Messages</span>
+                  <strong id="mobileIngressMessageCount">0</strong>
+                  <p class="hint">Sensor Logger observer 接受的 message 數。</p>
+                </div>
+                <div class="metric">
+                  <span>Invalid / unknown</span>
+                  <strong id="mobileIngressInvalidCount">0</strong>
+                  <p class="hint">無法 normalize 或解析的接入訊息。</p>
+                </div>
+                <div class="metric">
+                  <span>Sensors</span>
+                  <strong id="mobileIngressSensorCount">0</strong>
+                  <p class="hint">最近狀態中出現過的 sensor name 數量。</p>
+                </div>
+                <div class="metric">
+                  <span>Latest parse</span>
+                  <strong id="mobileIngressLatestStatus">none</strong>
+                  <p class="hint">最近一筆 ingress 的 parse_status。</p>
+                </div>
+              </div>
+              <div class="list" id="mobileIngressTransportList" style="margin-top: 10px;"></div>
+              <div class="list" id="mobileIngressRecordList" style="margin-top: 10px;"></div>
+              <div class="list" id="mobileIngressBoundaryList" style="margin-top: 10px;"></div>
             </section>
 
             <section class="tab-panel" role="tabpanel" id="panel-incident" aria-labelledby="tab-incident" hidden>
@@ -1717,7 +1759,7 @@
     const OSM_ATTRIBUTION = "OpenStreetMap contributors";
     const LEVELS = ["L0", "L1", "L2", "L3", "L4"];
     const STATUS_BAD = new Set(["degraded", "failed", "unavailable", "offline", "error"]);
-    const DEBUG_TAB_IDS = ["panel-state", "panel-monitor", "panel-provider", "panel-hardware", "panel-incident", "panel-skill", "panel-outbound", "panel-boundary", "panel-api"];
+    const DEBUG_TAB_IDS = ["panel-state", "panel-monitor", "panel-provider", "panel-hardware", "panel-ingress", "panel-incident", "panel-skill", "panel-outbound", "panel-boundary", "panel-api"];
     const debugPageState = {
       events: [],
       chronologicalEvents: [],
@@ -1726,6 +1768,7 @@
       runtimeState: {},
       messages: [],
       hardwareReadiness: null,
+      mobileWearableIngress: null,
       monitoringCenter: null,
       projection: null,
       zoom: 1,
@@ -1878,8 +1921,8 @@
     function pillClass(value) {
       const normalized = text(value, "").toLowerCase();
       if (STATUS_BAD.has(normalized)) return "pill bad";
-      if (normalized === "warning" || normalized === "skipped" || normalized === "queued") return "pill warn";
-      if (normalized === "available" || normalized === "ok" || normalized === "succeeded" || normalized === "mock-delivered") return "pill ok";
+      if (normalized === "warning" || normalized === "skipped" || normalized === "queued" || normalized === "rejected" || normalized === "unrecognized") return "pill warn";
+      if (normalized === "available" || normalized === "ok" || normalized === "succeeded" || normalized === "mock-delivered" || normalized === "accepted" || normalized === "subscribed") return "pill ok";
       return "pill info";
     }
 
@@ -2700,6 +2743,46 @@
       }
     }
 
+    async function loadMobileWearableIngressContext() {
+      try {
+        return await fetchJson("/debug/mobile-wearable/ingress");
+      } catch (error) {
+        return {
+          artifact_kind: "scout_mobile_wearable_ingress_debug_status",
+          status: "unavailable",
+          read_only: true,
+          unavailable: true,
+          error: error.message,
+          message_count: 0,
+          invalid_message_count: 0,
+          sensor_names: [],
+          sessions: [],
+          mqtt_state: {},
+          mqtt: {},
+          ingress: {
+            record_count: 0,
+            accepted_count: 0,
+            rejected_count: 0,
+            unrecognized_count: 0,
+            ingress_transports: [],
+            source_adapters: [],
+            latest_record: null,
+            recent_records: []
+          },
+          evidence: {},
+          boundary: {
+            read_only: true,
+            raw_payload_embedded: false,
+            credential_value_exposed: false,
+            runtime_admission_performed: false,
+            phase1_l0_l4_state_mutated: false,
+            safety_api_called: false,
+            phase2_brain_writeback: false
+          }
+        };
+      }
+    }
+
     async function loadMonitoringCenter() {
       try {
         return await fetchJson("/debug/monitoring");
@@ -3080,6 +3163,92 @@
         : empty("No hardware readiness boundary reported.");
     }
 
+    function ingressTransportItem(title, value, status = "ok") {
+      return `
+        <div class="item">
+          <div class="item-line">
+            <h3>${escapeHtml(title)}</h3>
+            <span class="${pillClass(status)}">${escapeHtml(text(value, "not seen"))}</span>
+          </div>
+          <p class="hint">Mobile/wearable ingress summary only; raw payload stays in evidence JSONL.</p>
+        </div>
+      `;
+    }
+
+    function ingressRecordItem(record) {
+      const summary = record.normalized_summary || {};
+      const metadata = record.transport_metadata || {};
+      const mqtt = metadata.mqtt || {};
+      const fields = [
+        `transport=${text(record.ingress_transport)}`,
+        `source=${text(record.source_adapter)}`,
+        `received=${text(record.received_at)}`,
+        `bytes=${text(record.payload_byte_count, "0")}`,
+        `sha=${text(record.payload_sha256, "").slice(0, 12)}`,
+        `raw=${text(record.raw_artifact_path, "artifact unavailable")}`
+      ];
+      if (summary.device_id) fields.push(`device=${text(summary.device_id)}`);
+      if (summary.session_id) fields.push(`session=${text(summary.session_id)}`);
+      if (summary.payload_count !== undefined) fields.push(`payload_count=${text(summary.payload_count)}`);
+      if (Array.isArray(summary.sensor_names) && summary.sensor_names.length) {
+        fields.push(`sensors=${summary.sensor_names.slice(0, 8).map(text).join(", ")}`);
+      }
+      if (mqtt.topic) fields.push(`topic=${text(mqtt.topic)}`);
+      if (record.reject_reason) fields.push(`reason=${text(record.reject_reason)}`);
+      return `
+        <div class="item">
+          <div class="item-line">
+            <h3>${escapeHtml(record.ingress_id || "ingress record")}</h3>
+            <span class="${pillClass(record.parse_status)}">${escapeHtml(text(record.parse_status, "unknown"))}</span>
+          </div>
+          <p class="hint">接入訊息已保存；這裡只顯示 summary/index，不顯示 raw sensor values。</p>
+          <p class="summary mono">${escapeHtml(fields.join(" | "))}</p>
+        </div>
+      `;
+    }
+
+    function renderMobileWearableIngress(selectedEvent) {
+      const payload = debugPageState.mobileWearableIngress || {};
+      const ingress = payload.ingress || {};
+      const records = ingress.recent_records || [];
+      const latest = ingress.latest_record || records[records.length - 1] || {};
+      const boundary = payload.boundary || {};
+      const unavailable = Boolean(payload.unavailable);
+      const recordCount = ingress.record_count || 0;
+      const invalidCount = (payload.invalid_message_count || 0) + (ingress.rejected_count || 0) + (ingress.unrecognized_count || 0);
+      const sensorNames = payload.sensor_names || [];
+
+      setText("mobileIngressRecordCount", recordCount, "0");
+      setText("mobileIngressMessageCount", payload.message_count, "0");
+      setText("mobileIngressInvalidCount", invalidCount, "0");
+      setText("mobileIngressSensorCount", sensorNames.length, "0");
+      setText("mobileIngressLatestStatus", latest.parse_status || "none", "none");
+      document.getElementById("mobileIngressSummary").textContent = unavailable
+        ? "unavailable"
+        : (recordCount ? `${recordCount} ingress` : "not seen");
+      document.getElementById("mobileIngressSummary").className = unavailable
+        ? "pill bad"
+        : (recordCount ? "pill ok" : "pill info");
+      document.getElementById("mobileIngressSelectionContext").textContent = selectedEvent
+        ? `Mobile/wearable ingress 是獨立 evidence projection；目前 timeline 選取 #${text(selectedEvent.sequence)}。`
+        : "Mobile/wearable ingress 是獨立 evidence projection，不因 timeline 選取改變。";
+
+      const transportItems = [
+        ingressTransportItem("Broker", payload.mqtt?.host || payload.reason || "not configured", unavailable ? "unavailable" : "ok"),
+        ingressTransportItem("MQTT state", payload.mqtt_state?.ever_subscribed ? "subscribed" : (payload.mqtt_state?.ever_connected ? "connected" : "not connected"), payload.mqtt_state?.ever_subscribed ? "ok" : "not seen"),
+        ingressTransportItem("Transports", (ingress.ingress_transports || []).join(", ") || "none", recordCount ? "ok" : "not seen"),
+        ingressTransportItem("Source adapters", (ingress.source_adapters || []).join(", ") || "none", recordCount ? "ok" : "not seen"),
+        ingressTransportItem("Evidence", payload.evidence?.ingress_index_jsonl_path || payload.evidence?.raw_jsonl_path || "not written", recordCount ? "ok" : "not seen")
+      ];
+      document.getElementById("mobileIngressTransportList").innerHTML = transportItems.join("");
+      document.getElementById("mobileIngressRecordList").innerHTML = records.length
+        ? records.slice().reverse().map(ingressRecordItem).join("")
+        : empty(unavailable ? `Mobile/wearable ingress unavailable: ${text(payload.error || payload.reason)}` : "No mobile/wearable ingress messages reported.");
+      document.getElementById("mobileIngressBoundaryList").innerHTML = Object.keys(boundary).length
+        ? Object.entries(boundary).map(([name, value]) => metricItem(name, value)).join("")
+        : empty("No mobile/wearable ingress boundary reported.");
+    }
+
     function renderIncidentDetails(events, selectedEvent) {
       const incidentEvents = events.filter((event) =>
         event.kind === "incident_package_created" ||
@@ -3336,6 +3505,7 @@
       renderMonitoringCenter(events, selectedEvent);
       renderProviderDetails(events, selectedEvent);
       renderHardwareReadiness(selectedEvent);
+      renderMobileWearableIngress(selectedEvent);
       renderIncidentDetails(events, selectedEvent);
       renderSkillDetails(events, selectedEvent);
       renderMessageDetails(events, selectedEvent);
@@ -3807,16 +3977,18 @@
 
     async function loadDebugSurface() {
       try {
-        const [eventResult, state, messagePayload, hardwareReadiness, monitoringCenter] = await Promise.all([
+        const [eventResult, state, messagePayload, hardwareReadiness, mobileWearableIngress, monitoringCenter] = await Promise.all([
           loadProjectedDebugEventPayload(),
           fetchJson("/debug/state"),
           fetchJson("/debug/messages"),
           loadHardwareReadinessContext(),
+          loadMobileWearableIngressContext(),
           loadMonitoringCenter()
         ]);
         const eventPayload = eventResult.payload || {};
         debugPageState.projection = eventResult.projection || null;
         debugPageState.hardwareReadiness = hardwareReadiness || null;
+        debugPageState.mobileWearableIngress = mobileWearableIngress || null;
         debugPageState.monitoringCenter = monitoringCenter || null;
         if (debugPageState.projection) renderDebugEvidenceMap(debugPageState.projection);
         const resolvedState = stateWithProjectedEvents(state || {}, eventPayload);
