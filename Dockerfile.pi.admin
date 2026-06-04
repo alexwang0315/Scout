@@ -131,6 +131,9 @@ COPY docs/admin/phase-3-6-hardware-readiness.html ./docs/admin/
 COPY docs/admin/phase4-pretrip-planning.html ./docs/admin/
 COPY docs/admin/scout-assistant-ui.js ./docs/admin/
 
+COPY scout-risk-engine/scout_codex_package/ ./scout-risk-engine/scout_codex_package/
+RUN pip install --no-cache-dir ./scout-risk-engine/scout_codex_package
+
 COPY tests/fixtures/pretrip/projects/chilai_nanhua_day1/ ./tests/fixtures/pretrip/projects/chilai_nanhua_day1/
 COPY tests/fixtures/pretrip/mcp/ ./tests/fixtures/pretrip/mcp/
 COPY tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/ ./tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/
