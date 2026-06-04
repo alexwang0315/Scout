@@ -439,6 +439,12 @@ def test_builds_fixture_backed_pretrip_admin_view():
     assert timeline_gis_cp["review_state"] == "needs_review"
     assert timeline_gis_cp["candidate_only"] is True
     assert timeline_gis_cp["runtime_safety_truth"] is False
+    assert timeline_gis_cp["display_label"] == "3159南鞍營地"
+    assert timeline_gis_cp["map_label"] == "3159南鞍營地"
+    clustered_gis_cp = view["gis_perception_timeline"]["checkpoint_candidates"][1]
+    assert clustered_gis_cp["candidate_id"].startswith("gis_cp_cluster.")
+    assert clustered_gis_cp["display_label"] == "上切 / 108 上切點 / 103上切點"
+    assert "gis_cp_cluster" not in clustered_gis_cp["display_label"]
     assert timeline_gis_cp["source_refs"]
     assert timeline_gis_cp["source_attribution"]
     assert len(timeline_gis_cp["model_output_sha256"]) == 64
@@ -447,10 +453,25 @@ def test_builds_fixture_backed_pretrip_admin_view():
         assert nearby_group["review_state"] == "display_group_only"
         assert nearby_group["candidate_only"] is True
         assert nearby_group["runtime_safety_truth"] is False
+        assert nearby_group["display_label"].startswith("附近 CP: ")
+        assert "gis_cp_nearby_group" not in nearby_group["display_label"]
         assert nearby_group["semantic_merge_allowed"] is False
         assert nearby_group["source_refs"]
         assert nearby_group["source_attribution"]
         assert len(nearby_group["model_output_sha256"]) == 64
+    overpass_without_name = next(
+        candidate
+        for candidate in view["gis_perception_timeline"]["checkpoint_candidates"]
+        if candidate.get("source_profile") == "overpass_osm_tags"
+        and candidate.get("display_label") == "OSM 避難點"
+    )
+    assert "node/" not in overpass_without_name["display_label"]
+    named_overpass = next(
+        candidate
+        for candidate in view["gis_perception_timeline"]["checkpoint_candidates"]
+        if candidate.get("display_label") == "岩壁水源"
+    )
+    assert named_overpass["map_label"] == "岩壁水源"
     assert view["major_critical_points"]["status"] == "candidate_only"
     assert view["major_critical_points"]["counts"]["mcp_candidate_count"] == 6
     assert view["major_critical_points"]["counts"]["dense_checkpoint_count"] == 110
@@ -600,6 +621,12 @@ def test_builds_fixture_backed_pretrip_admin_view():
     _assert_pretrip_candidate_metadata(view["departure_bundle"]["terrain_refs"][0])
     assert [layer["layer_id"] for layer in view["map_layers"]] == [
         "imagery",
+        "rudy",
+        "rudy-twmap",
+        "relief",
+        "geology",
+        "topo-5k",
+        "forest",
         "osm",
         "terrain",
         "corridors",
@@ -622,11 +649,9 @@ def test_builds_fixture_backed_pretrip_admin_view():
     ]
     assert view["map_layers"][0]["label_zh"].startswith("影像圖層")
     _assert_pretrip_candidate_metadata(view["map_layers"][0])
-    assert view["map_layers"][0]["local_raster_manifest_supported"] is True
-    assert view["map_layers"][0]["local_raster_tile_url_template"] == (
-        "/admin/tiles/imagery/{project_id}/{layer_id}/{z}/{x}/{y}.png"
-    )
-    assert view["map_layers"][0]["external_network_required"] is False
+    assert view["map_layers"][0]["local_raster_manifest_supported"] is False
+    assert view["map_layers"][0]["raster_tile_delivery"] == "direct_wmts_runtime"
+    assert view["map_layers"][0]["external_network_required"] is True
     terrain_layer = next(layer for layer in view["map_layers"] if layer["layer_id"] == "terrain")
     assert terrain_layer["terrain_visualization_layer"] is True
     assert terrain_layer["risk_heat_layer"] is False
@@ -715,10 +740,15 @@ def test_map_layers_expose_local_raster_coverage_metadata(tmp_path: Path) -> Non
         "outputs/layers/manifests/"
         "chilai_nanhua_day1.raster_tile_pyramid_plan.json"
     )
+    rudy_twmap_ref = (
+        "outputs/layers/manifests/"
+        "raster_tile_manifest.happyman_rudy_twmap.z12-z14.json"
+    )
     project_path = project_root / "project.json"
     project = json.loads(project_path.read_text(encoding="utf-8"))
     project["local_raster_manifest_ref"] = raster_ref
     project["raster_tile_manifest_ref"] = tile_ref
+    project["raster_layer_manifest_refs"] = {"rudy-twmap": rudy_twmap_ref}
     project_path.write_text(json.dumps(project, sort_keys=True), encoding="utf-8")
     (project_root / raster_ref).write_text(
         json.dumps(
@@ -754,6 +784,31 @@ def test_map_layers_expose_local_raster_coverage_metadata(tmp_path: Path) -> Non
         ),
         encoding="utf-8",
     )
+    (project_root / rudy_twmap_ref).write_text(
+        json.dumps(
+            {
+                "artifact_kind": "admin_imagery_tile_cache_plan",
+                "bbox_wgs84": {
+                    "west": 121.22,
+                    "south": 24.04,
+                    "east": 121.3,
+                    "north": 24.06,
+                },
+                "zoom_range": "12-14",
+                "min_zoom": 12,
+                "max_zoom": 14,
+                "cache_root": "/data/scout/raster-tiles",
+                "total_tile_count": 25,
+                "source_id": "happyman_rudy_twmap",
+                "source_kind": "wmts_kvp_tile",
+                "runtime_tile_url_template": (
+                    "/admin/tiles/imagery/{project_id}/{layer_id}/{z}/{x}/{y}.png"
+                ),
+            },
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
 
     view = build_pretrip_admin_view(PROJECT_ID, root=ROOT, project_root=project_root)
     debug = load_pretrip_debug_projection_view(
@@ -764,17 +819,16 @@ def test_map_layers_expose_local_raster_coverage_metadata(tmp_path: Path) -> Non
 
     for layer_set in (view["map_layers"], debug["map_layers"]):
         imagery = next(layer for layer in layer_set if layer["layer_id"] == "imagery")
-        assert imagery["raster_bbox_wgs84"] == {
-            "west": 121.21478855,
-            "south": 24.03365911,
-            "east": 121.30320941,
-            "north": 24.06992621,
-        }
-        assert imagery["raster_coverage_policy"] == "render_intersecting_tiles_only"
-        assert imagery["local_raster_manifest_ref"] == raster_ref
-        assert imagery["raster_tile_manifest_ref"] == tile_ref
-        assert imagery["raster_tile_zoom_range"] == "5-14"
-        assert imagery["raster_tile_cache_root"] == "/data/scout/raster-tiles"
+        assert imagery["raster_tile_delivery"] == "direct_wmts_runtime"
+        assert imagery["raster_coverage_policy"] == "render_visible_wmts_tiles_only"
+        assert "raster_bbox_wgs84" not in imagery
+        assert "local_raster_manifest_ref" not in imagery
+        assert "raster_tile_manifest_ref" not in imagery
+        assert "raster_layer_manifest_refs" not in imagery
+        assert "raster_layer_manifests" not in imagery
+        rudy_twmap = next(layer for layer in layer_set if layer["layer_id"] == "rudy-twmap")
+        assert rudy_twmap["raster_tile_delivery"] == "direct_wmts_runtime"
+        assert rudy_twmap["imagery_source_id"] == "happyman_rudy_twmap"
 
 
 def test_loads_debug_projection_view_with_shared_map_and_dense_timeline():
@@ -910,6 +964,24 @@ def test_pretrip_imports_workspace_local_capability_timeline_export(tmp_path: Pa
     assert capability["planning_use"]["auto_applies_to_eta"] is False
     assert capability["boundary"]["workspace_mutation_allowed"] is False
     assert capability["boundary"]["mission_graph_compile_allowed"] is False
+
+
+def test_pretrip_view_exposes_energy_reserve_monitor_without_runtime_mutation():
+    view = build_pretrip_admin_view(PROJECT_ID, root=ROOT)
+
+    monitor = view["energy_reserve_monitor"]
+    assert monitor["artifact_kind"] == "scout_energy_reserve_monitor"
+    assert monitor["status"] == "missing_health_data"
+    assert monitor["health_data"]["loaded"] is False
+    assert monitor["trip_capability"]["loaded"] is True
+    assert monitor["candidate_change"]["applied_to_baseline"] is False
+    assert monitor["boundary"]["phase1_runtime_safety_truth"] is False
+    assert monitor["boundary"]["safety_api_calls_allowed"] is False
+    assert monitor["mutation"]["safety_api_called"] is False
+    assert (
+        view["tabs"]["pre_trip_planning"]["energy_reserve_monitor"]
+        == monitor
+    )
 
 
 def test_pretrip_imports_workspace_local_companion_match_review(tmp_path: Path):

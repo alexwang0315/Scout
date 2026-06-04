@@ -25,6 +25,7 @@ from replay_runner import ReplayResult, replay_route
 from risk_rules import load_risk_rules
 from route_matching import load_gpx_route
 from safety_models import IncidentPackage
+from scout_energy_reserve_monitor import build_energy_reserve_monitor_from_view
 
 
 ROOT = Path(__file__).resolve().parent
@@ -438,6 +439,11 @@ def _build_pretrip_admin_case_view(
         "route_notes": pretrip_view["route_notes"],
         "reference_tracks": pretrip_view["reference_tracks"],
         "terrain_visualization": pretrip_view["terrain_visualization"],
+        "segment_terrain": (
+            pretrip_view.get("tabs", {})
+            .get("post_analysis", {})
+            .get("segment_terrain", {})
+        ),
         "overpass_evidence": pretrip_view["overpass_evidence"],
         "gis_perception_timeline": pretrip_view["gis_perception_timeline"],
         "major_critical_points": pretrip_view.get("major_critical_points"),
@@ -477,6 +483,10 @@ def _build_pretrip_admin_case_view(
     }
     view["evidence_timeline"] = build_admin_evidence_timeline(view)
     view["scout_agent_skills"] = build_scout_agent_skill_summary(root=root)
+    view["energy_reserve_monitor"] = build_energy_reserve_monitor_from_view(
+        view,
+        surface="admin",
+    )
     return view
 
 

@@ -26,6 +26,16 @@ source payloads. Tests generate raw Apple Health XML, Garmin JSON, zip archives,
 and GPX/TCX/FIT content in temporary directories rather than committing raw
 health/track files.
 
+Implemented Health Auto Export archive scope: Apple-compatible provider archive
+inspection also recognizes `HealthAutoExport-*.json` members inside local ZIP
+archives. The local parser expands `data.workouts` into sanitized Apple Health
+summary envelopes, infers walking/running/cross-training activity types from
+workout names, preserves route GPX and detailed `heartRateData` as local source
+material only, and emits no raw health payload, raw route geometry, exact
+timestamps, or source samples. Health Auto Export `physical_effort` / workout
+`intensity` values are treated as source-value candidates for future calibration
+and are not promoted into Scout Energy Reserve truth in this slice.
+
 Implemented provider API contract scope: offline Garmin Health API and Apple
 HealthKit-style fixture transports can summarize account-authorized response
 fixtures into sanitized imports only after explicit consent. They record
@@ -3514,6 +3524,10 @@ Test cases:
 - local Apple Health XML, Garmin Connect JSON, and GPX/TCX/FIT raw files can be
   summarized into sanitized envelopes without committing raw fixtures or
   embedding raw records, provider payloads, trackpoints, or timestamps;
+- local Health Auto Export JSON/GPX ZIP archives can be inspected and expanded
+  into sanitized Apple Health summary envelopes; detailed workout routes,
+  `heartRateData`, exact timestamps, and `physical_effort` source values remain
+  local source material and are not Scout truth;
 - FIT files with session summary but no track points can still produce
   sanitized duration, moving time, distance, ascent/descent, and average HR;
 - FIT files with lap summary but no track points or session summary can still
@@ -3676,6 +3690,9 @@ Never:
 - Scout can expand local Apple Health XML and Garmin Connect JSON export batches
   into multiple sanitized envelopes without storing raw health payloads or raw
   tracks.
+- Scout can expand local Health Auto Export JSON/GPX ZIP archives into
+  sanitized Apple Health summary envelopes without embedding raw route geometry,
+  detailed heart-rate samples, exact timestamps, or provider source payloads.
 - Scout can discover local Apple Health and Garmin provider export
   directories/zips and summarize supported members without extracting raw
   payloads into the workspace.

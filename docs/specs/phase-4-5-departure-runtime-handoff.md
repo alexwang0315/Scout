@@ -13,6 +13,20 @@ reviewed plan nodes, Ln action rules, communication nodes, team-care nodes, and
 search black-box node metadata to runtime, but it must not treat unreviewed
 pretrip candidates as live truth.
 
+The closed-loop authority boundary is explicit:
+
+- Loop 1 / Climbing Experience Accumulation is pre-trip and post-analysis only.
+  It may prepare, review, replay, learn, and recommend, but it must not call
+  live `/safety/*`, trigger Scout hardware, perform real check-ins, play
+  Spatial Imprint cues, send SOS/status/incident messages, or generate live
+  INS/PDR route updates for an active trip.
+- Loop 2 / On-Trip Scout Safe Device is the first loop where real Scout field
+  action is allowed, and only after this handoff chain plus runtime activation
+  and the applicable Ln/operator/provider policy gates. This is where real
+  check-ins, hardware sensing, OLED/voice cues, Spatial Imprint playback,
+  minimal event package sealing, INS/PDR route generation, and policy-gated
+  communication actions belong.
+
 Official Scout workspace template import/export is a separate planning-template
 loop, not a runtime handoff path. A template imported from another Scout device
 or user must still become a reviewed local package, pass Departure Gate, produce

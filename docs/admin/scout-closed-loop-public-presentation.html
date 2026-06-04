@@ -460,12 +460,12 @@
         <div class="tile">
           <span class="tag alpha">Alpha required</span>
           <strong>1. Climbing Experience Accumulation</strong>
-          <p>Reviewed pre-trip plans, completed trip records, Capability Timeline, Energy Reserve, and next-plan suggestions.</p>
+          <p>Reviewed pre-trip plans, completed trip records, Capability Timeline, Energy Reserve, and next-plan suggestions. This loop does not trigger live safety or hardware actions.</p>
         </div>
         <div class="tile">
           <span class="tag alpha">Alpha foundation</span>
           <strong>2. On-Trip Scout Safe Device</strong>
-          <p>Plan-node check-ins, hardware sensing, local cues, team/communication state, and black-box evidence.</p>
+          <p>Real plan-node check-ins, hardware sensing, Spatial Imprint playback, local cues, communication actions, and black-box evidence under runtime gates.</p>
         </div>
         <div class="tile">
           <span class="tag release">Release-before</span>
@@ -494,12 +494,12 @@
           <tr>
             <td>Climbing Experience Accumulation</td>
             <td>Pre-trip reviewed plan, completed trip record, post-analysis in admin, Energy Reserve / Energy Limit feedback, next pre-trip candidates.</td>
-            <td>Capability and energy outputs are planning evidence, not medical claims or automatic route approval.</td>
+            <td>Planning/post-analysis only: no live <code>/safety/*</code>, no hardware actuation, no real check-in/send, and no replayed action is executed again.</td>
           </tr>
           <tr>
             <td>On-Trip Scout Safe Device</td>
-            <td>Reviewed plan nodes, hardware/software status, Ln action traces, local advisory cues, communication/team-care state, search black-box refs.</td>
-            <td>Outbound communication and incident reporting remain operator/provider-policy gated.</td>
+            <td>Reviewed plan nodes, real hardware/software status, Ln action traces, physical check-ins, local cues, communication/team-care state, INS/PDR route generation, and search black-box refs.</td>
+            <td>This is the real action loop, but actions remain gated by runtime handoff, Ln policy, operator confirmation, and provider policy.</td>
           </tr>
           <tr>
             <td>Workspace Transfer And Ecosystem</td>
@@ -541,14 +541,15 @@
       <h2>Scout on-trip is a safe device loop, not just a recorder.</h2>
       <p class="lead">
         The reviewed plan becomes a live field structure: Scout watches for plan-node state, records
-        hardware evidence, exposes why an action happened, and preserves black-box context.
+        hardware evidence, performs allowed physical/device actions, exposes why an action happened,
+        and preserves black-box context.
       </p>
       <div class="loop-row" aria-label="on-trip loop">
         <div class="node blue"><b>Reviewed plan nodes</b><span>CP, MCP, rest, hazard, communication, team-care</span></div>
         <div class="node blue"><b>Hardware sensing</b><span>GNSS, IMU, PDR, battery, radio, wearable, storage</span></div>
-        <div class="node blue"><b>Ln action traces</b><span>Record, cue, prompt, prepare, queue, skip</span></div>
-        <div class="node blue"><b>Local cues</b><span>OLED, voice, admin/debug, operator prompt</span></div>
-        <div class="node blue"><b>Black-box evidence</b><span>Last known node, recent trace, device status, comm attempts</span></div>
+        <div class="node blue"><b>Real actions</b><span>Check-in, cue, Spatial Imprint playback, INS/PDR route update</span></div>
+        <div class="node blue"><b>Communication gate</b><span>Operator-approved status, SOS, incident report, provider send</span></div>
+        <div class="node blue"><b>Black-box evidence</b><span>Minimal event package, last known node, trace, device status</span></div>
       </div>
       <div class="grid-4">
         <div class="tile"><strong>Check-in</strong><p>Plan-node arrival, departure, missed timing, and segment capsule state.</p></div>

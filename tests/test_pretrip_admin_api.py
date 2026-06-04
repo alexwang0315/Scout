@@ -181,16 +181,16 @@ def test_pretrip_project_api_returns_read_only_view_model():
     payload = response.json()
     assert payload["project_id"] == PROJECT_ID
     assert payload["readiness"]["status"] == "ready"
-    assert len(payload["checkpoints"]) == 110
-    assert len(payload["segments"]) == 109
+    assert len(payload["checkpoints"]) == 124
+    assert len(payload["segments"]) == 123
     assert payload["reference_tracks"]["reference_track_count"] == 23
-    assert payload["checkpoint_events"]["event_count"] == 110
+    assert payload["checkpoint_events"]["event_count"] == 124
     assert payload["raw_sample_summary"]["raw_payloads_embedded"] is False
     assert payload["review_draft_log"]["status"] == "draft_only"
     assert payload["review_draft_log"]["counts"]["action_count"] == 3
     assert payload["review_draft_log"]["boundary"]["decisions_recorded"] is False
     assert payload["review_draft_log"]["boundary"]["package_mutation_allowed"] is False
-    assert payload["route_note_review_options"]["counts"]["review_option_count"] == 23
+    assert payload["route_note_review_options"]["counts"]["review_option_count"] == 197
     assert (
         payload["route_note_review_options"]["counts"]["decision_recorded_count"]
         == 0
@@ -495,6 +495,132 @@ def test_admin_imagery_tile_proxy_api_returns_transparent_fallback(monkeypatch, 
     assert response.headers["cache-control"] == "no-store"
     assert b"Raster offline" not in response.content
     assert response.content.startswith(b"\x89PNG\r\n\x1a\n")
+
+
+def test_admin_imagery_tile_proxy_api_can_fill_cache_from_registry_source(
+    monkeypatch,
+    tmp_path,
+):
+    workspace_root = tmp_path / "workspaces"
+    project_root = workspace_root / "chilai_nanhua_day1"
+    cache_root = tmp_path / "raster-tiles"
+    project_root.mkdir(parents=True)
+    (project_root / "project.json").write_text(
+        json.dumps(
+            {
+                "project_id": "chilai_nanhua_day1",
+                "imagery_source_id": "nlsc_photo2",
+                "imagery_tile_cache_root": str(cache_root),
+            },
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("SCOUT_ADMIN_IMAGERY_REMOTE_FETCH", "true")
+    remote_body = b"\x89PNG\r\n\x1a\napi-remote-imagery"
+    requested_urls = []
+
+    class FakeResponse:
+        headers = {"Content-Type": "image/png"}
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self):
+            return remote_body
+
+    def fake_urlopen(request, timeout):
+        requested_urls.append(request.full_url)
+        assert timeout == 10.0
+        return FakeResponse()
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    client = TestClient(create_admin_app(pretrip_workspace_root=workspace_root))
+
+    response = client.get("/admin/tiles/imagery/chilai_nanhua_day1/imagery/5/26/13.png")
+
+    assert response.status_code == 200
+    assert response.headers["x-scout-tile-source"] == "remote_fetch_cache_fill"
+    assert response.headers["x-scout-imagery-source-id"] == "nlsc_photo2"
+    assert requested_urls == [
+        "https://wmts.nlsc.gov.tw/wmts/PHOTO2/default/EPSG:3857/5/13/26"
+    ]
+    cached_path = raster_tile_cache_path(
+        "chilai_nanhua_day1",
+        "imagery",
+        5,
+        26,
+        13,
+        cache_root=cache_root,
+    )
+    assert cached_path.read_bytes() == remote_body
+
+
+def test_admin_imagery_tile_proxy_api_can_fill_named_rudy_layer_from_source_id(
+    monkeypatch,
+    tmp_path,
+):
+    workspace_root = tmp_path / "workspaces"
+    project_root = workspace_root / "chilai_nanhua_day1"
+    cache_root = tmp_path / "raster-tiles"
+    project_root.mkdir(parents=True)
+    (project_root / "project.json").write_text(
+        json.dumps(
+            {
+                "project_id": "chilai_nanhua_day1",
+                "imagery_tile_cache_root": str(cache_root),
+            },
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("SCOUT_ADMIN_IMAGERY_REMOTE_FETCH", "true")
+    remote_body = b"\x89PNG\r\n\x1a\nrudy-layer"
+    requested_urls = []
+
+    class FakeResponse:
+        headers = {"Content-Type": "image/png"}
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self):
+            return remote_body
+
+    def fake_urlopen(request, timeout):
+        requested_urls.append(request.full_url)
+        return FakeResponse()
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    client = TestClient(create_admin_app(pretrip_workspace_root=workspace_root))
+
+    response = client.get(
+        "/admin/tiles/imagery/chilai_nanhua_day1/rudy/13/6853/3534.png"
+        "?source_id=happyman_rudy"
+    )
+
+    assert response.status_code == 200
+    assert response.headers["x-scout-tile-source"] == "remote_fetch_cache_fill"
+    assert response.headers["x-scout-imagery-source-id"] == "happyman_rudy"
+    assert "LAYER=rudy" in requested_urls[0]
+    assert "TILEMATRIX=13" in requested_urls[0]
+    assert "TILEROW=3534" in requested_urls[0]
+    assert "TILECOL=6853" in requested_urls[0]
+    cached_path = raster_tile_cache_path(
+        "chilai_nanhua_day1",
+        "rudy",
+        13,
+        6853,
+        3534,
+        cache_root=cache_root,
+    )
+    assert cached_path.read_bytes() == remote_body
 
 
 def test_admin_imagery_tile_proxy_api_rejects_invalid_identity():
@@ -1097,7 +1223,7 @@ def test_pretrip_route_note_disposition_api_rejects_without_workspace():
     response = client.post(
         f"/admin/pretrip/projects/{PROJECT_ID}/route-note-dispositions",
         json={
-            "route_note_ref": "route_note.rudy_like_gpx.wpt_000",
+            "route_note_ref": "route_note.golden_route.wpt_025",
             "disposition": "promote_hint",
             "persist_to_workspace": True,
         },
@@ -1119,7 +1245,7 @@ def test_pretrip_route_note_disposition_api_persists_to_tmp_workspace_only(tmp_p
     response = client.post(
         f"/admin/pretrip/projects/{PROJECT_ID}/route-note-dispositions",
         json={
-            "route_note_ref": "route_note.rudy_like_gpx.wpt_000",
+            "route_note_ref": "route_note.golden_route.wpt_025",
             "disposition": "promote_warning",
             "reviewer_alias": "trip_leader",
             "decided_at": "2026-05-15T11:30:00+08:00",
@@ -1133,7 +1259,7 @@ def test_pretrip_route_note_disposition_api_persists_to_tmp_workspace_only(tmp_p
     assert payload["persisted"] is True
     assert payload["counts"]["disposition_count"] == 1
     assert payload["counts"]["promote_warning_count"] == 1
-    assert payload["record"]["candidate_ref"] == "route_note.rudy_like_gpx.wpt_000"
+    assert payload["record"]["candidate_ref"] == "route_note.golden_route.wpt_025"
     assert payload["record"]["selected_disposition"] == "promote_warning"
     assert payload["record"]["metadata_only"] is True
     assert payload["record"]["package_mutation_allowed"] is False
@@ -1163,7 +1289,7 @@ def test_pretrip_route_note_disposition_api_persists_to_tmp_workspace_only(tmp_p
 
     persisted_log = json.loads(workspace_log.read_text(encoding="utf-8"))
     assert persisted_log["counts"]["disposition_count"] == 1
-    assert persisted_log["records"][0]["candidate_ref"] == "route_note.rudy_like_gpx.wpt_000"
+    assert persisted_log["records"][0]["candidate_ref"] == "route_note.golden_route.wpt_025"
     assert persisted_log["records"][0]["selected_disposition"] == "promote_warning"
     assert "<gpx" not in workspace_log.read_text(encoding="utf-8").lower()
     assert _repo_fixture_bytes() == original_fixture_bytes
@@ -1178,7 +1304,7 @@ def test_pretrip_route_note_disposition_api_rejects_duplicate_workspace_append(
     )
     client = TestClient(create_admin_app(pretrip_workspace_root=workspace_root))
     payload = {
-        "route_note_ref": "route_note.rudy_like_gpx.wpt_000",
+        "route_note_ref": "route_note.golden_route.wpt_025",
         "disposition": "field_verify",
         "persist_to_workspace": True,
     }
@@ -1501,7 +1627,7 @@ def test_pretrip_route_note_reviewed_assumptions_api_writes_workspace_only(tmp_p
     disposition_response = client.post(
         f"/admin/pretrip/projects/{PROJECT_ID}/route-note-dispositions",
         json={
-            "route_note_ref": "route_note.rudy_like_gpx.wpt_000",
+                "route_note_ref": "route_note.golden_route.wpt_025",
             "disposition": "promote_warning",
             "reviewer_alias": "trip_leader",
             "decided_at": "2026-05-15T11:30:00+08:00",
@@ -1548,7 +1674,7 @@ def test_pretrip_project_api_overlays_route_note_reviewed_assumptions(tmp_path):
     disposition_response = client.post(
         f"/admin/pretrip/projects/{PROJECT_ID}/route-note-dispositions",
         json={
-            "route_note_ref": "route_note.rudy_like_gpx.wpt_000",
+            "route_note_ref": "route_note.golden_route.wpt_025",
             "disposition": "promote_warning",
             "persist_to_workspace": True,
         },

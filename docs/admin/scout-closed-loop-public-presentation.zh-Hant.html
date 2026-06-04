@@ -433,12 +433,12 @@
         <div class="tile">
           <span class="tag alpha">Alpha 必備</span>
           <strong>1. 攀爬經驗累積閉環</strong>
-          <p>從 pre-trip reviewed plan、completed trip、Capability Timeline 到 Energy Reserve，再回到下一次 pre-trip 建議。</p>
+          <p>從 pre-trip reviewed plan、completed trip、Capability Timeline 到 Energy Reserve，再回到下一次 pre-trip 建議；這個閉環不觸發 live safety 或硬體作動。</p>
         </div>
         <div class="tile">
           <span class="tag alpha">Alpha 核心</span>
           <strong>2. On-Trip Scout Safe Device</strong>
-          <p>行程中的節點打卡、硬體感知、本地提醒、團隊/通訊狀態與搜尋黑盒證據。</p>
+          <p>行程中的真實節點打卡、硬體感知、空間印記播放、本地提醒、通訊行動與搜尋黑盒證據。</p>
         </div>
         <div class="tile">
           <span class="tag release">Release 前完成</span>
@@ -467,12 +467,12 @@
           <tr>
             <td>攀爬經驗累積</td>
             <td>能看到 reviewed plan、completed trip record、admin post-analysis、Energy Reserve / Energy Limit feedback、下一次 pre-trip candidates。</td>
-            <td>能力與體能輸出只是規劃證據，不是醫療判斷，也不是自動核准行程。</td>
+            <td>只屬於事前準備與事後分析：不呼叫 live <code>/safety/*</code>、不做硬體作動、不進行真實打卡/送出，也不把 replay record 重新執行。</td>
           </tr>
           <tr>
             <td>On-Trip Scout Safe Device</td>
-            <td>能呈現 reviewed plan nodes、硬體/軟體狀態、Ln action traces、本地 advisory cues、team/communication state、search black-box refs。</td>
-            <td>通訊送出與 incident report 仍需 operator/provider policy gate。</td>
+            <td>能處理 reviewed plan nodes、真實硬體/軟體狀態、Ln action traces、實體打卡、本地 cues、通訊/團隊狀態、INS/PDR 路線產生與 search black-box refs。</td>
+            <td>這是真實行動閉環，但行動仍需 runtime handoff、Ln policy、operator confirmation 與 provider policy gate。</td>
           </tr>
           <tr>
             <td>Workspace 轉移與生態系</td>
@@ -514,14 +514,14 @@
       <h2>Scout 在路上是一個 safe device loop，不只是錄軌器。</h2>
       <p class="lead">
         Reviewed plan 在現場會變成可執行、可觀測的結構：Scout 追蹤計畫節點，
-        記錄硬體與軟體狀態，說明為什麼做出提醒或紀錄，並保留必要的 black-box evidence。
+        記錄硬體與軟體狀態，執行被允許的實體/裝置行動，說明為什麼做出提醒或紀錄，並保留必要的 black-box evidence。
       </p>
       <div class="loop-row" aria-label="on-trip 閉環">
         <div class="node blue"><b>Reviewed plan nodes</b><span>CP、MCP、休息、危險、通訊、團隊照看</span></div>
         <div class="node blue"><b>硬體感知</b><span>GNSS、IMU、PDR、電池、radio、wearable、儲存狀態</span></div>
-        <div class="node blue"><b>Ln action traces</b><span>record、cue、prompt、prepare、queue、skip</span></div>
-        <div class="node blue"><b>本地提醒</b><span>OLED、語音、admin/debug、operator prompt</span></div>
-        <div class="node blue"><b>黑盒證據</b><span>last known node、recent trace、device status、communication attempts</span></div>
+        <div class="node blue"><b>真實行動</b><span>打卡、cue、空間印記播放、INS/PDR route update</span></div>
+        <div class="node blue"><b>通訊 gate</b><span>operator-approved status、SOS、incident report、provider send</span></div>
+        <div class="node blue"><b>黑盒證據</b><span>最小事件包、last known node、trace、device status</span></div>
       </div>
       <div class="grid-4">
         <div class="tile"><strong>打卡</strong><p>節點抵達、離開、missed timing 與 segment capsule state。</p></div>

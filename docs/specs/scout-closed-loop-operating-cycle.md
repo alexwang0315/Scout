@@ -107,6 +107,43 @@ packages:
 - the workspace-transfer loop lets reviewed Scout knowledge move between
   devices or users as candidate/template evidence, not as automatic truth.
 
+## Authority Boundary Between Loop 1 And Loop 2
+
+Loop 1 and Loop 2 are intentionally different authority domains.
+
+Loop 1 is the pre-trip and post-analysis evidence loop. It may read source
+material, build candidate evidence, run deterministic planning tools, ask
+Pydantic AI to synthesize evidence, review completed-trip records, generate
+Capability Timeline, update Energy Reserve / Energy Limit candidates, and
+propose next pre-trip CP/route/rest/turnaround candidates. It must not perform
+real Scout field actions. Specifically, Loop 1 must not:
+
+- call live `/safety/*` endpoints;
+- mutate Phase 1 L0-L4 runtime safety state;
+- trigger hardware, GPIO, radio, Bluetooth, voice, OLED, SOS, or provider sends;
+- perform real check-ins or communication sends;
+- create live INS/PDR route updates for an active trip;
+- treat post-analysis replay records as newly executed runtime actions.
+
+Loop 2 is the on-trip safe-device action loop. It is the domain where Scout may
+perform real field behavior after the reviewed package passes Departure Gate,
+Final MissionGraph creation, Runtime Handoff, runtime activation, and the
+relevant Ln/operator/provider policy gates. Loop 2 may therefore include real
+plan-node check-ins, hardware sensing, OLED/voice cues, Spatial Imprint
+playback, minimal event package sealing, INS/PDR route generation, local
+black-box snapshots, and policy-gated SOS/status/incident communication.
+
+In short:
+
+```text
+Loop 1 = prepare, review, learn, recommend.
+Loop 2 = observe, act, cue, communicate, seal evidence.
+```
+
+Crossing from Loop 1 into Loop 2 is never implicit. It requires a reviewed
+package and the Phase 4.5 handoff chain defined in
+`docs/specs/phase-4-5-departure-runtime-handoff.md`.
+
 ## Alpha And Release Priority
 
 Alpha must ship Loop 1 and Loop 2.
@@ -122,12 +159,23 @@ pre-trip reviewed plan
   -> next pre-trip proposed candidates
 ```
 
+This alpha proof remains non-runtime: the loop may replay completed-trip
+records and generate next-plan candidates, but it must not re-trigger the
+recorded safety/hardware behavior from that trip.
+
 Loop 2, the On-Trip Scout Safe Device Loop, is the minimum on-trip Scout
 foundation. It is not optional for alpha. The alpha version should prove that a
 reviewed plan can drive plan-node check-ins, hardware/software status
 projection, Ln-governed records/actions, local reminders/cues, team/communication
 state, and black-box evidence refs through `/admin/debug` or equivalent on-device
 debug surfaces.
+
+Unlike Loop 1, Loop 2 is allowed to exercise real Scout action paths when the
+required gates are satisfied: operator-approved SOS/status sends, physical
+check-ins, Spatial Imprint playback, minimal event record packaging, hardware
+state changes or reads, and INS/PDR route generation. Alpha may keep individual
+providers mocked or policy-gated, but the loop's product role is real on-trip
+device behavior, not post-analysis replay.
 
 Loop 3, the Workspace Transfer And Ecosystem Loop, can wait until before the
 broader release. It should not block alpha unless an alpha test explicitly needs
@@ -321,7 +369,8 @@ boundaries.
 After return, Scout creates or opens a completed trip workspace. It should
 contain:
 
-- user recorded GPX or Scout runtime track;
+- completed trip recording set: one or more user-recorded GPX files, optional
+  teammate/participant GPX files, and/or Scout runtime track;
 - IMU/PDR/GNSS summaries;
 - checkpoint hits and segment capsules;
 - route progress and deviation evidence;
@@ -332,6 +381,29 @@ contain:
 
 This workspace is the source for post-analysis. It is separate from pretrip
 reference GPX and public route downloads.
+
+The completed trip recording set must not assume that one climb equals one GPX.
+Long climbs may be split by day, battery loss, app restarts, device changes, or
+manual recording pauses. Team climbs may also include multiple participants'
+GPX files. Scout should keep these files in a manifest with participant role,
+source device, sha256, time span, bounds, trk/trkseg counts, gap markers, and
+privacy flags.
+
+Capability Timeline must select or derive one primary capability subject before
+updating Energy Reserve. The user's own merged track or Scout runtime track may
+be the primary source. Teammate tracks are supporting context for team pace,
+waiting, separation, and route ambiguity unless the operator explicitly selects
+that participant as the subject.
+
+The alpha admin UI may still show and analyze one active GPX/subject at a time.
+That is an active-view constraint, not a storage constraint. A completed trip
+workspace may keep many GPX files and runtime logs; selecting one active source
+for post-analysis must not delete or replace the rest of the recording set.
+In the alpha implementation, `/admin` lists this source set through
+`/admin/post-analysis/completed-trip-recordings` and selects one active analysis
+target through `/admin/post-analysis/completed-trip-recordings/{id}/select`.
+The active GPX may be mirrored to `post_analysis/inbox/latest_completed_trip.gpx`
+for compatibility, but that mirror is not the completed trip storage model.
 
 ## Stage 7: Capability Timeline
 
@@ -497,6 +569,9 @@ pretrip_workspace/outputs/pretrip_package.reviewed.json
 pretrip_workspace/outputs/runtime_handoff_metadata.candidate.json
 
 completed_trip_workspace/recorded/user_track.gpx
+completed_trip_workspace/recorded/recording_set_manifest.json
+completed_trip_workspace/recorded/primary_user/*.gpx
+completed_trip_workspace/recorded/participants/*.gpx
 completed_trip_workspace/runtime/*.jsonl
 completed_trip_workspace/outputs/capability_timeline.json
 completed_trip_workspace/outputs/capability_capsule.json

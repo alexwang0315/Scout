@@ -1,0 +1,815 @@
+{
+  "artifact_kind": "completed_trip_gpx_scenario_fixture_manifest",
+  "artifact_version": "completed_trip_gpx_scenarios.v1",
+  "fixture_only": true,
+  "generated_files": [
+    {
+      "distance_m": 77171.18,
+      "duration_seconds": 165961,
+      "ended_at": "2026-05-12T20:21:01.870472Z",
+      "fitness_profile": {
+        "ascent_penalty_s_per_m": 9.2,
+        "base_flat_speed_mps": 0.86,
+        "descent_penalty_s_per_m": 5.6,
+        "description": "Low reserve and weak uphill tolerance; pace drops before the turnaround, then recovery is partial on the return.",
+        "label": "low_reserve_return",
+        "min_step_speed_mps": 0.22,
+        "timing_bands": [
+          {
+            "end_fraction": 0.18,
+            "label": "outbound_warmup",
+            "note": "early pace is cautious",
+            "speed_multiplier": 0.92,
+            "start_fraction": 0.0
+          },
+          {
+            "end_fraction": 0.5,
+            "label": "outbound_climb_fade",
+            "note": "reserve drops on sustained climb",
+            "speed_multiplier": 0.58,
+            "start_fraction": 0.18
+          },
+          {
+            "end_fraction": 0.82,
+            "label": "return_recovery",
+            "note": "pace improves after abort decision",
+            "speed_multiplier": 0.74,
+            "start_fraction": 0.5
+          },
+          {
+            "end_fraction": 1.0,
+            "label": "return_finish",
+            "note": "short recovery near trailhead",
+            "speed_multiplier": 0.86,
+            "start_fraction": 0.82
+          }
+        ]
+      },
+      "fixture_only": true,
+      "hold_events": [
+        {
+          "after_fraction": 0.5,
+          "duration_seconds": 7200,
+          "label": "TURNAROUND_REST",
+          "timing_band": "outbound_climb_fade"
+        }
+      ],
+      "marker_count": 2,
+      "markers": [
+        {
+          "elevation_m": 2574.55,
+          "label": "TURNAROUND",
+          "lat": 24.04433,
+          "lon": 121.252247,
+          "timestamp": "2026-05-11T22:18:24.677721Z",
+          "type": "abandon_return_decision"
+        },
+        {
+          "duration_seconds": 7200,
+          "elevation_m": 2574.55,
+          "label": "TURNAROUND_REST",
+          "lat": 24.04433,
+          "lon": 121.252247,
+          "timestamp": "2026-05-11T22:18:24.677721Z",
+          "type": "hold"
+        }
+      ],
+      "outcome": "abandoned_return",
+      "path": "/Users/alexwang0315/scout-fusion/tests/fixtures/post_analysis/chilai_nanhua_day1_completed_trip_scenarios/completed_halfway_return.gpx",
+      "post_analysis_only": true,
+      "runtime_safety_truth": false,
+      "scenario_content": "使用者出發後體能儲備快速下降，在接近中段前判斷後續行程風險過高，於同一路廊折返；中途有短暫休息，回程速度略恢復但整體仍偏慢。",
+      "scenario_id": "completed_halfway_return",
+      "scenario_name": "半途放棄折返",
+      "scout_note_waypoint_count": 2,
+      "sha256": "e2f0cd605ad6aa5f7bc5a3a8f0cb812e623ffcf7f2c1910e6552fa2fed9257c5",
+      "source_routes": [
+        "completed_golden_reference",
+        "golden"
+      ],
+      "started_at": "2026-05-10T22:15:00Z",
+      "timing_segments": [
+        {
+          "ascent_m": 229.54,
+          "descent_m": 381.02,
+          "distance_m": 13880.26,
+          "end_fraction": 0.18,
+          "hold_duration_seconds": 0,
+          "label": "outbound_warmup",
+          "moving_duration_seconds": 21789,
+          "note": "early pace is cautious",
+          "speed_multiplier": 0.92,
+          "start_fraction": 0.0
+        },
+        {
+          "ascent_m": 1613.16,
+          "descent_m": 82.31,
+          "distance_m": 24696.68,
+          "end_fraction": 0.5,
+          "hold_duration_seconds": 7200,
+          "label": "outbound_climb_fade",
+          "moving_duration_seconds": 64797,
+          "note": "reserve drops on sustained climb",
+          "speed_multiplier": 0.58,
+          "start_fraction": 0.18
+        },
+        {
+          "ascent_m": 82.31,
+          "descent_m": 1613.16,
+          "distance_m": 24696.68,
+          "end_fraction": 0.82,
+          "hold_duration_seconds": 0,
+          "label": "return_recovery",
+          "moving_duration_seconds": 48602,
+          "note": "pace improves after abort decision",
+          "speed_multiplier": 0.74,
+          "start_fraction": 0.5
+        },
+        {
+          "ascent_m": 381.02,
+          "descent_m": 229.54,
+          "distance_m": 13880.26,
+          "end_fraction": 1.0,
+          "hold_duration_seconds": 0,
+          "label": "return_finish",
+          "moving_duration_seconds": 23561,
+          "note": "short recovery near trailhead",
+          "speed_multiplier": 0.86,
+          "start_fraction": 0.82
+        }
+      ],
+      "title": "Completed trip fixture - halfway return",
+      "total_hold_duration_seconds": 7200,
+      "total_moving_duration_seconds": 158762,
+      "track_point_count": 763
+    },
+    {
+      "distance_m": 81646.66,
+      "duration_seconds": 237308,
+      "ended_at": "2026-05-13T15:55:08.205097Z",
+      "fitness_profile": {
+        "ascent_penalty_s_per_m": 6.8,
+        "base_flat_speed_mps": 0.94,
+        "descent_penalty_s_per_m": 4.6,
+        "description": "Moderate fitness with extra routefinding load at source-track switches; movement is slower near ambiguous overlaps.",
+        "label": "routefinding_moderate",
+        "min_step_speed_mps": 0.28,
+        "timing_bands": [
+          {
+            "end_fraction": 0.28,
+            "label": "known_start",
+            "note": "known golden corridor",
+            "speed_multiplier": 0.96,
+            "start_fraction": 0.0
+          },
+          {
+            "end_fraction": 0.36,
+            "label": "first_switch_search",
+            "note": "track switch and verification",
+            "speed_multiplier": 0.56,
+            "start_fraction": 0.28
+          },
+          {
+            "end_fraction": 0.62,
+            "label": "novel_middle",
+            "note": "moderate pace on assembled corridor",
+            "speed_multiplier": 0.82,
+            "start_fraction": 0.36
+          },
+          {
+            "end_fraction": 0.72,
+            "label": "second_switch_search",
+            "note": "second overlap decision",
+            "speed_multiplier": 0.58,
+            "start_fraction": 0.62
+          },
+          {
+            "end_fraction": 1.0,
+            "label": "committed_finish",
+            "note": "pace recovers after route choice",
+            "speed_multiplier": 0.88,
+            "start_fraction": 0.72
+          }
+        ]
+      },
+      "fixture_only": true,
+      "hold_events": [
+        {
+          "after_fraction": 0.31,
+          "duration_seconds": 36000,
+          "label": "CHAIN_CAMP_1",
+          "timing_band": "first_switch_search"
+        },
+        {
+          "after_fraction": 0.69,
+          "duration_seconds": 39600,
+          "label": "CHAIN_CAMP_2",
+          "timing_band": "second_switch_search"
+        }
+      ],
+      "marker_count": 4,
+      "markers": [
+        {
+          "elevation_m": 1467.997,
+          "label": "CHAIN_SWITCH_1",
+          "lat": 24.040277,
+          "lon": 121.187691,
+          "timestamp": "2026-05-11T07:26:43.876131Z",
+          "type": "reference_track_switch"
+        },
+        {
+          "elevation_m": 3217.669922,
+          "label": "CHAIN_SWITCH_2",
+          "lat": 23.989224136,
+          "lon": 121.260112245,
+          "timestamp": "2026-05-12T08:09:17.815866Z",
+          "type": "reference_track_switch"
+        },
+        {
+          "duration_seconds": 36000,
+          "elevation_m": 1503.373,
+          "label": "CHAIN_CAMP_1",
+          "lat": 24.037797,
+          "lon": 121.193231,
+          "timestamp": "2026-05-11T08:00:02.795983Z",
+          "type": "hold"
+        },
+        {
+          "duration_seconds": 39600,
+          "elevation_m": 3104.234375,
+          "label": "CHAIN_CAMP_2",
+          "lat": 23.949707234,
+          "lon": 121.273379121,
+          "timestamp": "2026-05-12T12:51:38.097616Z",
+          "type": "hold"
+        }
+      ],
+      "outcome": "novel_no_precedent_chain",
+      "path": "/Users/alexwang0315/scout-fusion/tests/fixtures/post_analysis/chilai_nanhua_day1_completed_trip_scenarios/completed_novel_overlap_chain.gpx",
+      "post_analysis_only": true,
+      "runtime_safety_truth": false,
+      "scenario_content": "使用者沿 golden route 出發後，接上多條 historical GPX 的交疊走廊，形成沒有單一先例 GPX 的完成路線；路線切換處有額外判斷與停留。",
+      "scenario_id": "completed_novel_overlap_chain",
+      "scenario_name": "交疊路線拼接的新走法",
+      "scout_note_waypoint_count": 4,
+      "sha256": "fdaf055a7882d0a33428aaf5950f1525956fc2375e381d1efbc829b02c048a99",
+      "source_routes": [
+        "completed_golden_reference",
+        "chen_reference",
+        "golden"
+      ],
+      "started_at": "2026-05-10T22:00:00Z",
+      "timing_segments": [
+        {
+          "ascent_m": 606.68,
+          "descent_m": 391.35,
+          "distance_m": 22850.73,
+          "end_fraction": 0.28,
+          "hold_duration_seconds": 0,
+          "label": "known_start",
+          "moving_duration_seconds": 31257,
+          "note": "known golden corridor",
+          "speed_multiplier": 0.96,
+          "start_fraction": 0.0
+        },
+        {
+          "ascent_m": 444.57,
+          "descent_m": 0.0,
+          "distance_m": 6486.93,
+          "end_fraction": 0.36,
+          "hold_duration_seconds": 36000,
+          "label": "first_switch_search",
+          "moving_duration_seconds": 15346,
+          "note": "track switch and verification",
+          "speed_multiplier": 0.56,
+          "start_fraction": 0.28
+        },
+        {
+          "ascent_m": 1782.68,
+          "descent_m": 562.86,
+          "distance_m": 21192.56,
+          "end_fraction": 0.62,
+          "hold_duration_seconds": 0,
+          "label": "novel_middle",
+          "moving_duration_seconds": 42206,
+          "note": "moderate pace on assembled corridor",
+          "speed_multiplier": 0.82,
+          "start_fraction": 0.36
+        },
+        {
+          "ascent_m": 668.11,
+          "descent_m": 953.13,
+          "distance_m": 8214.72,
+          "end_fraction": 0.72,
+          "hold_duration_seconds": 39600,
+          "label": "second_switch_search",
+          "moving_duration_seconds": 23994,
+          "note": "second overlap decision",
+          "speed_multiplier": 0.58,
+          "start_fraction": 0.62
+        },
+        {
+          "ascent_m": 1240.22,
+          "descent_m": 2812.34,
+          "distance_m": 22782.79,
+          "end_fraction": 1.0,
+          "hold_duration_seconds": 0,
+          "label": "committed_finish",
+          "moving_duration_seconds": 48911,
+          "note": "pace recovers after route choice",
+          "speed_multiplier": 0.88,
+          "start_fraction": 0.72
+        }
+      ],
+      "title": "Completed trip fixture - novel overlap chain",
+      "total_hold_duration_seconds": 75600,
+      "total_moving_duration_seconds": 161708,
+      "track_point_count": 673
+    },
+    {
+      "distance_m": 91210.2,
+      "duration_seconds": 299427,
+      "ended_at": "2026-05-14T09:40:27.726664Z",
+      "fitness_profile": {
+        "ascent_penalty_s_per_m": 8.0,
+        "base_flat_speed_mps": 0.88,
+        "descent_penalty_s_per_m": 5.8,
+        "description": "Fatigue-prone profile; the party starts below average, slows substantially before an unplanned camp, then recovers only partly.",
+        "label": "fatigue_emergency",
+        "min_step_speed_mps": 0.24,
+        "timing_bands": [
+          {
+            "end_fraction": 0.28,
+            "label": "slow_start",
+            "note": "below-average start",
+            "speed_multiplier": 0.82,
+            "start_fraction": 0.0
+          },
+          {
+            "end_fraction": 0.58,
+            "label": "midday_depletion",
+            "note": "fatigue accumulates",
+            "speed_multiplier": 0.62,
+            "start_fraction": 0.28
+          },
+          {
+            "end_fraction": 0.68,
+            "label": "emergency_camp_approach",
+            "note": "late and depleted before camp",
+            "speed_multiplier": 0.42,
+            "start_fraction": 0.58
+          },
+          {
+            "end_fraction": 0.86,
+            "label": "post_camp_recovery",
+            "note": "partial recovery after emergency camp",
+            "speed_multiplier": 0.72,
+            "start_fraction": 0.68
+          },
+          {
+            "end_fraction": 1.0,
+            "label": "controlled_finish",
+            "note": "careful finish after delay",
+            "speed_multiplier": 0.66,
+            "start_fraction": 0.86
+          }
+        ]
+      },
+      "fixture_only": true,
+      "hold_events": [
+        {
+          "after_fraction": 0.65,
+          "duration_seconds": 64800,
+          "label": "EMERGENCY_CAMP",
+          "timing_band": "emergency_camp_approach"
+        }
+      ],
+      "marker_count": 2,
+      "markers": [
+        {
+          "elevation_m": 2987.617,
+          "label": "EMERGENCY_CAMP",
+          "lat": 23.975102,
+          "lon": 121.26565,
+          "timestamp": "2026-05-12T14:06:34.045206Z",
+          "type": "unplanned_camp_due_to_delay"
+        },
+        {
+          "duration_seconds": 64800,
+          "elevation_m": 2987.617,
+          "label": "EMERGENCY_CAMP",
+          "lat": 23.975102,
+          "lon": 121.26565,
+          "timestamp": "2026-05-12T14:06:34.045206Z",
+          "type": "hold"
+        }
+      ],
+      "outcome": "delayed_emergency_camp",
+      "path": "/Users/alexwang0315/scout-fusion/tests/fixtures/post_analysis/chilai_nanhua_day1_completed_trip_scenarios/completed_delayed_emergency_camp.gpx",
+      "post_analysis_only": true,
+      "runtime_safety_truth": false,
+      "scenario_content": "使用者完成主要路線，但中段因體能耗損與行程延宕，在非原定位置緊急紮營；隔日恢復後繼續前進，但後段仍保持保守速度。",
+      "scenario_id": "completed_delayed_emergency_camp",
+      "scenario_name": "行程延宕後緊急紮營",
+      "scout_note_waypoint_count": 2,
+      "sha256": "d0ececb78ac311b32bb5cca2df6722b53949d253059d81b954ac3207e95cff50",
+      "source_routes": [
+        "completed_golden_reference",
+        "golden"
+      ],
+      "started_at": "2026-05-10T22:30:00Z",
+      "timing_segments": [
+        {
+          "ascent_m": 684.59,
+          "descent_m": 393.79,
+          "distance_m": 25530.2,
+          "end_fraction": 0.28,
+          "hold_duration_seconds": 0,
+          "label": "slow_start",
+          "moving_duration_seconds": 43163,
+          "note": "below-average start",
+          "speed_multiplier": 0.82,
+          "start_fraction": 0.0
+        },
+        {
+          "ascent_m": 2159.74,
+          "descent_m": 827.42,
+          "distance_m": 27322.1,
+          "end_fraction": 0.58,
+          "hold_duration_seconds": 0,
+          "label": "midday_depletion",
+          "moving_duration_seconds": 72152,
+          "note": "fatigue accumulates",
+          "speed_multiplier": 0.62,
+          "start_fraction": 0.28
+        },
+        {
+          "ascent_m": 995.55,
+          "descent_m": 547.94,
+          "distance_m": 9078.21,
+          "end_fraction": 0.68,
+          "hold_duration_seconds": 64800,
+          "label": "emergency_camp_approach",
+          "moving_duration_seconds": 35699,
+          "note": "late and depleted before camp",
+          "speed_multiplier": 0.42,
+          "start_fraction": 0.58
+        },
+        {
+          "ascent_m": 1218.01,
+          "descent_m": 2549.62,
+          "distance_m": 16422.53,
+          "end_fraction": 0.86,
+          "hold_duration_seconds": 0,
+          "label": "post_camp_recovery",
+          "moving_duration_seconds": 50454,
+          "note": "partial recovery after emergency camp",
+          "speed_multiplier": 0.72,
+          "start_fraction": 0.68
+        },
+        {
+          "ascent_m": 511.53,
+          "descent_m": 1228.01,
+          "distance_m": 12755.11,
+          "end_fraction": 1.0,
+          "hold_duration_seconds": 0,
+          "label": "controlled_finish",
+          "moving_duration_seconds": 33176,
+          "note": "careful finish after delay",
+          "speed_multiplier": 0.66,
+          "start_fraction": 0.86
+        }
+      ],
+      "title": "Completed trip fixture - delayed emergency camp",
+      "total_hold_duration_seconds": 64800,
+      "total_moving_duration_seconds": 234628,
+      "track_point_count": 921
+    },
+    {
+      "distance_m": 91343.6,
+      "duration_seconds": 437670,
+      "ended_at": "2026-05-15T23:44:30.115200Z",
+      "fitness_profile": {
+        "ascent_penalty_s_per_m": 5.9,
+        "base_flat_speed_mps": 1.0,
+        "descent_penalty_s_per_m": 4.1,
+        "description": "Good baseline reserve; the multi-day delay is weather-driven, not primarily fitness-driven, but post-hold pace is conservative.",
+        "label": "weather_hold_good_reserve",
+        "min_step_speed_mps": 0.3,
+        "timing_bands": [
+          {
+            "end_fraction": 0.34,
+            "label": "good_start",
+            "note": "strong controlled start",
+            "speed_multiplier": 1.02,
+            "start_fraction": 0.0
+          },
+          {
+            "end_fraction": 0.42,
+            "label": "storm_hold_approach",
+            "note": "slowing before weather hold",
+            "speed_multiplier": 0.74,
+            "start_fraction": 0.34
+          },
+          {
+            "end_fraction": 0.62,
+            "label": "post_weather_check",
+            "note": "conservative restart",
+            "speed_multiplier": 0.78,
+            "start_fraction": 0.42
+          },
+          {
+            "end_fraction": 0.82,
+            "label": "clearing_weather",
+            "note": "pace improves as conditions improve",
+            "speed_multiplier": 0.9,
+            "start_fraction": 0.62
+          },
+          {
+            "end_fraction": 1.0,
+            "label": "normal_finish",
+            "note": "steady finish",
+            "speed_multiplier": 0.94,
+            "start_fraction": 0.82
+          }
+        ]
+      },
+      "fixture_only": true,
+      "hold_events": [
+        {
+          "after_fraction": 0.38,
+          "duration_seconds": 273600,
+          "label": "WEATHER_HOLD_CAMP",
+          "timing_band": "storm_hold_approach"
+        }
+      ],
+      "marker_count": 2,
+      "markers": [
+        {
+          "elevation_m": 2355.197,
+          "label": "WEATHER_HOLD_CAMP",
+          "lat": 24.047817,
+          "lon": 121.235626,
+          "timestamp": "2026-05-11T11:18:50.260196Z",
+          "type": "multi_day_weather_hold"
+        },
+        {
+          "duration_seconds": 273600,
+          "elevation_m": 2355.197,
+          "label": "WEATHER_HOLD_CAMP",
+          "lat": 24.047817,
+          "lon": 121.235626,
+          "timestamp": "2026-05-11T11:18:50.260196Z",
+          "type": "hold"
+        }
+      ],
+      "outcome": "weather_hold_multi_day",
+      "path": "/Users/alexwang0315/scout-fusion/tests/fixtures/post_analysis/chilai_nanhua_day1_completed_trip_scenarios/completed_weather_camp_hold.gpx",
+      "post_analysis_only": true,
+      "runtime_safety_truth": false,
+      "scenario_content": "使用者體能狀態尚可，但遇到天候因素而在營地停留數日；天候轉好後重新出發，後續採保守速度完成路線。",
+      "scenario_id": "completed_weather_camp_hold",
+      "scenario_name": "氣候因素營地停留多日",
+      "scout_note_waypoint_count": 2,
+      "sha256": "7fdacad697ca923b6fcefb5b3b6eb3c4a22224c4302b26c3b3fb8cc45b4eb8a4",
+      "source_routes": [
+        "completed_golden_reference",
+        "golden"
+      ],
+      "started_at": "2026-05-10T22:10:00Z",
+      "timing_segments": [
+        {
+          "ascent_m": 1088.89,
+          "descent_m": 395.46,
+          "distance_m": 31007.82,
+          "end_fraction": 0.34,
+          "hold_duration_seconds": 0,
+          "label": "good_start",
+          "moving_duration_seconds": 38435,
+          "note": "strong controlled start",
+          "speed_multiplier": 1.02,
+          "start_fraction": 0.0
+        },
+        {
+          "ascent_m": 702.24,
+          "descent_m": 67.87,
+          "distance_m": 7281.38,
+          "end_fraction": 0.42,
+          "hold_duration_seconds": 273600,
+          "label": "storm_hold_approach",
+          "moving_duration_seconds": 14263,
+          "note": "slowing before weather hold",
+          "speed_multiplier": 0.74,
+          "start_fraction": 0.34
+        },
+        {
+          "ascent_m": 1426.49,
+          "descent_m": 876.86,
+          "distance_m": 18234.68,
+          "end_fraction": 0.62,
+          "hold_duration_seconds": 0,
+          "label": "post_weather_check",
+          "moving_duration_seconds": 35391,
+          "note": "conservative restart",
+          "speed_multiplier": 0.78,
+          "start_fraction": 0.42
+        },
+        {
+          "ascent_m": 1818.62,
+          "descent_m": 1905.89,
+          "distance_m": 18166.31,
+          "end_fraction": 0.82,
+          "hold_duration_seconds": 0,
+          "label": "clearing_weather",
+          "moving_duration_seconds": 38737,
+          "note": "pace improves as conditions improve",
+          "speed_multiplier": 0.9,
+          "start_fraction": 0.62
+        },
+        {
+          "ascent_m": 533.2,
+          "descent_m": 2300.68,
+          "distance_m": 16417.96,
+          "end_fraction": 1.0,
+          "hold_duration_seconds": 0,
+          "label": "normal_finish",
+          "moving_duration_seconds": 30044,
+          "note": "steady finish",
+          "speed_multiplier": 0.94,
+          "start_fraction": 0.82
+        }
+      ],
+      "title": "Completed trip fixture - weather hold at camp",
+      "total_hold_duration_seconds": 273600,
+      "total_moving_duration_seconds": 156870,
+      "track_point_count": 929
+    },
+    {
+      "distance_m": 91222.54,
+      "duration_seconds": 206073,
+      "ended_at": "2026-05-13T07:14:33.686978Z",
+      "fitness_profile": {
+        "ascent_penalty_s_per_m": 5.2,
+        "base_flat_speed_mps": 1.08,
+        "descent_penalty_s_per_m": 3.7,
+        "description": "Trained and steady profile with good uphill tolerance and only mild late-route slowdown.",
+        "label": "trained_steady",
+        "min_step_speed_mps": 0.34,
+        "timing_bands": [
+          {
+            "end_fraction": 0.34,
+            "label": "steady_start",
+            "note": "efficient start",
+            "speed_multiplier": 1.04,
+            "start_fraction": 0.0
+          },
+          {
+            "end_fraction": 0.67,
+            "label": "camp_to_camp",
+            "note": "stable middle section",
+            "speed_multiplier": 1.0,
+            "start_fraction": 0.34
+          },
+          {
+            "end_fraction": 0.88,
+            "label": "late_route",
+            "note": "mild late-route slowdown",
+            "speed_multiplier": 0.94,
+            "start_fraction": 0.67
+          },
+          {
+            "end_fraction": 1.0,
+            "label": "finish",
+            "note": "controlled finish",
+            "speed_multiplier": 0.98,
+            "start_fraction": 0.88
+          }
+        ]
+      },
+      "fixture_only": true,
+      "hold_events": [
+        {
+          "after_fraction": 0.34,
+          "duration_seconds": 36000,
+          "label": "NORMAL_CAMP_1",
+          "timing_band": "camp_to_camp"
+        },
+        {
+          "after_fraction": 0.67,
+          "duration_seconds": 36000,
+          "label": "NORMAL_CAMP_2",
+          "timing_band": "late_route"
+        }
+      ],
+      "marker_count": 4,
+      "markers": [
+        {
+          "elevation_m": 2100.731,
+          "label": "NORMAL_CAMP_1",
+          "lat": 24.051465,
+          "lon": 121.219395,
+          "timestamp": "2026-05-11T08:16:25.061171Z",
+          "type": "planned_camp"
+        },
+        {
+          "elevation_m": 3242.332,
+          "label": "NORMAL_CAMP_2",
+          "lat": 23.967989,
+          "lon": 121.275674,
+          "timestamp": "2026-05-12T06:53:09.840053Z",
+          "type": "planned_camp"
+        },
+        {
+          "duration_seconds": 36000,
+          "elevation_m": 2100.731,
+          "label": "NORMAL_CAMP_1",
+          "lat": 24.051465,
+          "lon": 121.219395,
+          "timestamp": "2026-05-11T08:16:25.061171Z",
+          "type": "hold"
+        },
+        {
+          "duration_seconds": 36000,
+          "elevation_m": 3242.332,
+          "label": "NORMAL_CAMP_2",
+          "lat": 23.967989,
+          "lon": 121.275674,
+          "timestamp": "2026-05-12T06:53:09.840053Z",
+          "type": "hold"
+        }
+      ],
+      "outcome": "normal_golden_completed",
+      "path": "/Users/alexwang0315/scout-fusion/tests/fixtures/post_analysis/chilai_nanhua_day1_completed_trip_scenarios/completed_normal_golden.gpx",
+      "post_analysis_only": true,
+      "runtime_safety_truth": false,
+      "scenario_content": "使用者依照 golden route 正常完成行程，包含兩個計畫中的紮營休息點；整體 pacing 穩定，代表較好的訓練與體能儲備狀態。",
+      "scenario_id": "completed_normal_golden",
+      "scenario_name": "正常完成 golden 行程",
+      "scout_note_waypoint_count": 4,
+      "sha256": "3e8e80373fc52ae4c88476735ef372e7359ec952b543107f74314389e357cc00",
+      "source_routes": [
+        "completed_golden_reference",
+        "golden"
+      ],
+      "started_at": "2026-05-10T22:00:00Z",
+      "timing_segments": [
+        {
+          "ascent_m": 1088.89,
+          "descent_m": 395.46,
+          "distance_m": 31007.82,
+          "end_fraction": 0.34,
+          "hold_duration_seconds": 0,
+          "label": "steady_start",
+          "moving_duration_seconds": 34744,
+          "note": "efficient start",
+          "speed_multiplier": 1.04,
+          "start_fraction": 0.0
+        },
+        {
+          "ascent_m": 2680.24,
+          "descent_m": 1317.31,
+          "distance_m": 30075.29,
+          "end_fraction": 0.67,
+          "hold_duration_seconds": 36000,
+          "label": "camp_to_camp",
+          "moving_duration_seconds": 46652,
+          "note": "stable middle section",
+          "speed_multiplier": 1.0,
+          "start_fraction": 0.34
+        },
+        {
+          "ascent_m": 1344.97,
+          "descent_m": 2980.52,
+          "distance_m": 19064.58,
+          "end_fraction": 0.88,
+          "hold_duration_seconds": 36000,
+          "label": "late_route",
+          "moving_duration_seconds": 36793,
+          "note": "mild late-route slowdown",
+          "speed_multiplier": 0.94,
+          "start_fraction": 0.67
+        },
+        {
+          "ascent_m": 455.34,
+          "descent_m": 853.47,
+          "distance_m": 10960.46,
+          "end_fraction": 1.0,
+          "hold_duration_seconds": 0,
+          "label": "finish",
+          "moving_duration_seconds": 15882,
+          "note": "controlled finish",
+          "speed_multiplier": 0.98,
+          "start_fraction": 0.88
+        }
+      ],
+      "title": "Completed trip fixture - normal golden route",
+      "total_hold_duration_seconds": 72000,
+      "total_moving_duration_seconds": 134074,
+      "track_point_count": 923
+    }
+  ],
+  "phase1_runtime_mutation_allowed": false,
+  "post_analysis_only": true,
+  "runtime_safety_truth": false,
+  "source_dir": "/Users/alexwang0315/Downloads/twmap-gpx-yunhai"
+}

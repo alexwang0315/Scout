@@ -209,6 +209,47 @@ def test_provider_archive_discovers_apple_health_export_directory_without_extrac
     assert "Record" not in serialized
 
 
+def test_provider_archive_imports_health_auto_export_zip_without_embedding_raw_payload(tmp_path):
+    zip_path = _write_health_auto_export_zip(tmp_path / "HealthAutoExport_fixture.zip")
+
+    manifest = inspect_provider_archive(
+        zip_path,
+        source_format="apple_health_export",
+    )
+    result = write_sanitized_import_batch_from_provider_archive(
+        zip_path,
+        source_format="apple_health_export",
+        output_dir=tmp_path / "sanitized",
+        activity_id_prefix="health.auto.export",
+    )
+    serialized = json.dumps(result)
+
+    assert manifest["archive_kind"] == "zip"
+    assert manifest["selected_member_path"] == "HealthAutoExport-2026-05-01-2026-05-02.json"
+    assert manifest["supported_members"][0]["provider_role"] == "health_auto_export_json"
+    assert result["artifact_kind"] == "scout_wearable_provider_archive_import_result"
+    assert result["source_provider"] == "apple_health_export_summary"
+    assert result["activity_count"] == 2
+    assert [item["sanitized_import"]["activity_type"] for item in result["results"]] == [
+        "walking",
+        "running",
+    ]
+    assert [item["sanitized_import"]["distance_m"] for item in result["results"]] == [
+        1200,
+        2500,
+    ]
+    assert result["results"][0]["sanitized_import"]["heart_rate"]["sample_count"] == 3
+    assert result["results"][1]["sanitized_import"]["heart_rate"]["sample_count"] == 1
+    assert result["results"][0]["sanitized_import"]["data_quality"]["gps_confidence"] == "medium"
+    assert all(Path(path).exists() for path in result["sanitized_import_paths"])
+    assert result["mutation"]["raw_payload_committed"] is False
+    assert result["mutation"]["raw_health_payload_shared"] is False
+    assert result["mutation"]["raw_track_shared"] is False
+    assert "heartRateData" not in serialized
+    assert '"route":' not in serialized
+    assert "2026-05-01 07:" not in serialized
+
+
 def test_provider_archive_manifest_maps_garmin_production_zip_without_raw_payload(tmp_path):
     activities_path = _write_garmin_connect_batch_export_json(tmp_path / "activities.json")
     activity_detail_path = _write_garmin_connect_export_json(tmp_path / "activity_987654323.json")
@@ -834,6 +875,104 @@ def test_raw_importer_cli_summarizes_apple_health_then_normalizes_and_builds(tmp
     assert "startDate" not in json.dumps(raw_payload)
 
 
+def test_raw_importer_cli_imports_health_auto_export_archive_then_builds_energy_baseline(tmp_path):
+    zip_path = _write_health_auto_export_zip(tmp_path / "HealthAutoExport_fixture.zip")
+    sanitized_dir = tmp_path / "sanitized"
+    inspect_completed = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "scout_energy_reserve",
+            "inspect-provider-archive",
+            "--input",
+            str(zip_path),
+            "--source-format",
+            "apple_health_export",
+        ],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    raw_completed = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "scout_energy_reserve",
+            "summarize-provider-archive",
+            "--input",
+            str(zip_path),
+            "--source-format",
+            "apple_health_export",
+            "--output-dir",
+            str(sanitized_dir),
+            "--activity-id-prefix",
+            "health.auto.export.cli",
+        ],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    inspect_payload = json.loads(inspect_completed.stdout)
+    raw_payload = json.loads(raw_completed.stdout)
+    normalized_dir = tmp_path / "normalized"
+    normalize_completed = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "scout_energy_reserve",
+            "normalize",
+            "--input",
+            raw_payload["sanitized_import_paths"][0],
+            "--input",
+            raw_payload["sanitized_import_paths"][1],
+            "--output-dir",
+            str(normalized_dir),
+            "--root",
+            str(tmp_path),
+        ],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    normalized_payload = json.loads(normalize_completed.stdout)
+    build_completed = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "scout_energy_reserve",
+            "build",
+            "--activity",
+            normalized_payload["normalized_paths"][0],
+            "--activity",
+            normalized_payload["normalized_paths"][1],
+            "--output-dir",
+            str(tmp_path / "energy"),
+            "--reference-date",
+            "2026-05-02",
+            "--root",
+            str(tmp_path),
+        ],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    build_payload = json.loads(build_completed.stdout)
+
+    assert inspect_payload["selected_member_path"] == "HealthAutoExport-2026-05-01-2026-05-02.json"
+    assert raw_payload["activity_count"] == 2
+    assert raw_payload["mutation"]["raw_health_payload_shared"] is False
+    assert normalized_payload["source_provider"] == "apple_health_export"
+    assert build_payload["baseline"]["activity_count"] == 2
+    assert build_payload["baseline"]["reserve_trend"]["confidence"] == "low"
+    assert build_payload["boundary"]["phase1_runtime_safety_truth"] is False
+    assert "heartRateData" not in json.dumps(raw_payload)
+    assert "2026-05-01 07:" not in json.dumps(raw_payload)
+
+
 def test_raw_importer_cli_summarizes_garmin_then_normalizes_and_builds(tmp_path):
     json_path = _write_garmin_connect_export_json(tmp_path / "garmin_activity.json")
     sanitized_dir = tmp_path / "sanitized"
@@ -1208,6 +1347,67 @@ def _write_apple_health_batch_export_xml(path: Path) -> Path:
 """,
         encoding="utf-8",
     )
+    return path
+
+
+def _write_health_auto_export_zip(path: Path) -> Path:
+    payload = {
+        "data": {
+            "workouts": [
+                {
+                    "id": "walk-001",
+                    "name": "戶外 步行",
+                    "start": "2026-05-01 07:00:00 +0800",
+                    "end": "2026-05-01 07:20:00 +0800",
+                    "duration": 1200,
+                    "distance": {"qty": 1.2, "units": "km"},
+                    "elevationUp": {"qty": 18, "units": "m"},
+                    "heartRateData": [
+                        {"date": "2026-05-01 07:00:05 +0800", "Avg": 112, "units": "bpm"},
+                        {"date": "2026-05-01 07:10:05 +0800", "Avg": 128, "units": "bpm"},
+                        {"date": "2026-05-01 07:19:50 +0800", "Avg": 142, "units": "bpm"},
+                    ],
+                    "route": [
+                        {"lat": 25.0, "lon": 121.0, "date": "2026-05-01 07:00:00 +0800"},
+                        {"lat": 25.001, "lon": 121.001, "date": "2026-05-01 07:20:00 +0800"},
+                    ],
+                },
+                {
+                    "id": "run-001",
+                    "name": "戶外 跑步",
+                    "start": "2026-05-02 07:00:00 +0800",
+                    "end": "2026-05-02 07:18:00 +0800",
+                    "duration": 1080,
+                    "distance": {"qty": 2.5, "units": "km"},
+                    "elevationUp": {"qty": 12, "units": "m"},
+                    "avgHeartRate": {"qty": 156, "units": "bpm"},
+                    "route": [
+                        {"lat": 25.0, "lon": 121.0, "date": "2026-05-02 07:00:00 +0800"},
+                        {"lat": 25.002, "lon": 121.002, "date": "2026-05-02 07:18:00 +0800"},
+                    ],
+                },
+            ],
+            "metrics": [
+                {
+                    "name": "physical_effort",
+                    "units": "kcal/hr·kg",
+                    "data": [
+                        {"date": "2026-05-01 00:00:00 +0800", "qty": 3.8},
+                        {"date": "2026-05-02 00:00:00 +0800", "qty": 4.1},
+                    ],
+                }
+            ],
+        }
+    }
+    with zipfile.ZipFile(path, "w") as archive:
+        archive.writestr(
+            "HealthAutoExport-2026-05-01-2026-05-02.json",
+            json.dumps(payload, ensure_ascii=False),
+        )
+        archive.writestr(
+            "戶外 步行-Route-20260501_070000.gpx",
+            "<gpx><trk><trkseg><trkpt lat=\"25\" lon=\"121\" /></trkseg></trk></gpx>",
+        )
     return path
 
 

@@ -6,12 +6,18 @@ import io
 import json
 import math
 import time
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from admin_basemap_tiles import MAX_OSM_ZOOM, MIN_OSM_ZOOM, normalize_bbox_wgs84
+from admin_imagery_sources import (
+    RemoteImageryTile,
+    fetch_remote_imagery_tile,
+    imagery_tile_url,
+    wmts_source_metadata,
+)
 from admin_tile_cache_builder import DEFAULT_TILE_CACHE_CAPACITY_BYTES
 from admin_tile_proxy import validate_osm_tile_coords
 
@@ -24,6 +30,8 @@ DEFAULT_RASTER_TILE_MIN_ZOOM = 5
 DEFAULT_RASTER_TILE_MAX_ZOOM = 20
 DEFAULT_RASTER_TILE_SIZE = 256
 DEFAULT_ESTIMATED_RASTER_TILE_BYTES = 64 * 1024
+DEFAULT_IMAGERY_TILE_CACHE_MIN_ZOOM = 12
+DEFAULT_IMAGERY_TILE_CACHE_MAX_ZOOM = 17
 WEB_MERCATOR_MAX_LAT = 85.05112878
 TRANSPARENT_PNG_TILE = bytes.fromhex(
     "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489"
@@ -39,6 +47,8 @@ class AdminRasterTilePayload:
     source: str
     cache_path: Path
     body_sha256: str
+    imagery_source_id: str | None = None
+    remote_url_sha256: str | None = None
 
     def headers(self) -> dict[str, str]:
         cache_control = (
@@ -46,11 +56,16 @@ class AdminRasterTilePayload:
             if self.source.endswith("_fallback")
             else "no-cache, max-age=0, must-revalidate"
         )
-        return {
+        headers = {
             "Cache-Control": cache_control,
             "X-Scout-Tile-Source": self.source,
             "X-Scout-Tile-Hash": self.body_sha256,
         }
+        if self.imagery_source_id:
+            headers["X-Scout-Imagery-Source-Id"] = self.imagery_source_id
+        if self.remote_url_sha256:
+            headers["X-Scout-Imagery-Source-Url-Sha256"] = self.remote_url_sha256
+        return headers
 
 
 def build_raster_tile_pyramid_plan(
@@ -258,6 +273,162 @@ def iter_raster_plan_tiles(plan: Mapping[str, Any]) -> list[dict[str, int]]:
     return tiles
 
 
+def build_imagery_tile_cache_plan(
+    bbox: Mapping[str, Any] | object,
+    *,
+    project_id: str,
+    layer_id: str,
+    imagery_source: Mapping[str, Any],
+    cache_root: Path | str = DEFAULT_RASTER_TILE_CACHE_ROOT,
+    min_zoom: int = DEFAULT_IMAGERY_TILE_CACHE_MIN_ZOOM,
+    max_zoom: int = DEFAULT_IMAGERY_TILE_CACHE_MAX_ZOOM,
+    capacity_limit_bytes: int = DEFAULT_TILE_CACHE_CAPACITY_BYTES,
+    estimated_tile_bytes: int = DEFAULT_ESTIMATED_RASTER_TILE_BYTES,
+    plan_id: str | None = None,
+) -> dict[str, Any]:
+    safe_project_id = _safe_identifier(project_id, "project_id")
+    safe_layer_id = _safe_identifier(layer_id, "layer_id")
+    source_min_zoom = int(imagery_source.get("min_zoom", MIN_OSM_ZOOM))
+    source_max_zoom = int(imagery_source.get("max_zoom", MAX_OSM_ZOOM))
+    if min_zoom < source_min_zoom or max_zoom > source_max_zoom or min_zoom > max_zoom:
+        raise ValueError(
+            "imagery tile cache zoom range must fit the selected source "
+            f"range {source_min_zoom}-{source_max_zoom}"
+        )
+    if capacity_limit_bytes <= 0:
+        raise ValueError("capacity_limit_bytes must be positive")
+    if estimated_tile_bytes <= 0:
+        raise ValueError("estimated_tile_bytes must be positive")
+
+    normalized = normalize_bbox_wgs84(bbox)
+    zoom_ranges = [
+        _zoom_range(normalized, zoom=z, estimated_tile_bytes=estimated_tile_bytes)
+        for z in range(int(min_zoom), int(max_zoom) + 1)
+    ]
+    total_tile_count = sum(int(item["tile_count"]) for item in zoom_ranges)
+    estimated_total_bytes = total_tile_count * estimated_tile_bytes
+    within_capacity = estimated_total_bytes <= capacity_limit_bytes
+    source_url_fingerprint = imagery_tile_url(
+        imagery_source,
+        int(min_zoom),
+        int(zoom_ranges[0]["x_min"]),
+        int(zoom_ranges[0]["y_min"]),
+    )
+    source_metadata = wmts_source_metadata(imagery_source)
+    return {
+        "artifact_kind": "admin_imagery_tile_cache_plan",
+        "schema_version": "1.0",
+        "plan_id": plan_id
+        or f"admin_imagery_tile_cache.{safe_project_id}.{safe_layer_id}.z{min_zoom}-{max_zoom}",
+        "status": "planned_capacity_ok" if within_capacity else "blocked_capacity_limit",
+        "project_id": safe_project_id,
+        "layer_id": safe_layer_id,
+        "source_id": imagery_source["source_id"],
+        "source_kind": imagery_source.get("source_kind"),
+        "source_provider": imagery_source.get("provider"),
+        "source_attribution": imagery_source.get("attribution"),
+        "source_url_sha256": hashlib.sha256(
+            source_url_fingerprint.encode("utf-8")
+        ).hexdigest(),
+        "raw_source_url_embedded": False,
+        "source_metadata": source_metadata,
+        "cache_root": str(Path(cache_root).expanduser()),
+        "bbox_wgs84": normalized,
+        "min_zoom": int(min_zoom),
+        "max_zoom": int(max_zoom),
+        "zoom_range": f"{int(min_zoom)}-{int(max_zoom)}",
+        "runtime_tile_url_template": LOCAL_RASTER_TILE_URL_TEMPLATE,
+        "tile_size": DEFAULT_RASTER_TILE_SIZE,
+        "estimated_tile_bytes": estimated_tile_bytes,
+        "capacity_limit_bytes": capacity_limit_bytes,
+        "estimated_total_bytes": estimated_total_bytes,
+        "within_capacity_limit": within_capacity,
+        "total_tile_count": total_tile_count,
+        "zoom_ranges": zoom_ranges,
+        "external_network_required": True,
+        "network_mode_required": "explicit-fetch",
+        "remote_fetch_requires_explicit_enable": True,
+        "remote_fetch_env": "SCOUT_ADMIN_IMAGERY_REMOTE_FETCH",
+        "downloads_tiles_into_repo": False,
+        "raw_raster_committed_to_repo_allowed": False,
+        "notes_zh": [
+            "WMTS/XYZ 圖磚快取計畫：每個 zoom 都有自己的 tile matrix，避免固定 cache 被放大縮小造成比例失真。",
+            "cache root 應在工作區或 Scout Pi 本機資料區，不寫入 repo fixtures。",
+            "no-network 模式只產生計畫；實際抓圖必須 explicit-fetch 且使用 allowlist imagery source。",
+        ],
+    }
+
+
+ImageryTileFetch = Callable[
+    [Mapping[str, Any], int, int, int],
+    RemoteImageryTile,
+]
+
+
+def seed_imagery_tile_cache(
+    plan: Mapping[str, Any],
+    *,
+    imagery_source: Mapping[str, Any],
+    provider_allows_offline_prefetch: bool = False,
+    dry_run: bool = True,
+    max_tiles: int | None = None,
+    fetch_tile: ImageryTileFetch | None = None,
+) -> dict[str, Any]:
+    if plan.get("artifact_kind") != "admin_imagery_tile_cache_plan":
+        raise ValueError("plan must be an admin_imagery_tile_cache_plan")
+    if plan.get("within_capacity_limit") is not True:
+        raise ValueError("imagery tile cache plan exceeds capacity limit")
+    if not provider_allows_offline_prefetch:
+        raise ValueError("provider_allows_offline_prefetch must be true before seeding")
+
+    fetcher = fetch_tile or _default_imagery_tile_fetch
+    cache_root = Path(str(plan["cache_root"])).expanduser()
+    started_at = time.time()
+    tiles_seen = 0
+    tiles_written = 0
+    tiles_skipped_existing = 0
+    bytes_written = 0
+
+    for tile in iter_raster_plan_tiles(plan):
+        if max_tiles is not None and tiles_seen >= max_tiles:
+            break
+        tiles_seen += 1
+        path = raster_tile_cache_path(
+            str(plan["project_id"]),
+            str(plan["layer_id"]),
+            tile["z"],
+            tile["x"],
+            tile["y"],
+            cache_root=cache_root,
+        )
+        if path.exists():
+            tiles_skipped_existing += 1
+            continue
+        if dry_run:
+            continue
+        remote_tile = fetcher(
+            imagery_source,
+            int(tile["z"]),
+            int(tile["x"]),
+            int(tile["y"]),
+        )
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(remote_tile.body)
+        tiles_written += 1
+        bytes_written += len(remote_tile.body)
+
+    return _imagery_seed_summary(
+        "dry_run_ready" if dry_run else "seed_complete",
+        plan=plan,
+        dry_run=dry_run,
+        tiles_seen=tiles_seen,
+        tiles_written=tiles_written,
+        tiles_skipped_existing=tiles_skipped_existing,
+        bytes_written=bytes_written,
+        started_at=started_at,
+    )
+
+
 def build_local_raster_tile_proxy_contract(
     *,
     cache_root: Path | str = DEFAULT_RASTER_TILE_CACHE_ROOT,
@@ -272,11 +443,15 @@ def build_local_raster_tile_proxy_contract(
         "cache_policy": "local_file_cache_then_transparent_fallback",
         "fallback_enabled": fallback_enabled,
         "external_network_fetch_allowed": False,
+        "remote_fetch_supported_when_explicit": True,
+        "remote_fetch_env": "SCOUT_ADMIN_IMAGERY_REMOTE_FETCH",
+        "source_registry_env": "SCOUT_IMAGERY_SOURCE_REGISTRY_PATH",
         "downloads_tiles_into_repo": False,
         "max_zoom": MAX_OSM_ZOOM,
         "notes_zh": [
             "這個 proxy 只服務已存在的本機 raster PNG tile。",
             "缺 tile 時可回傳透明 fallback，避免瀏覽器畫面出現破圖。",
+            "若明確開啟遠端取圖，proxy 會從 Scout imagery source registry 取圖並寫入本機 cache。",
         ],
     }
 
@@ -312,6 +487,10 @@ def load_or_build_raster_tile_payload(
     *,
     cache_root: Path | str = DEFAULT_RASTER_TILE_CACHE_ROOT,
     fallback_enabled: bool = True,
+    imagery_source: Mapping[str, Any] | None = None,
+    allow_remote_fetch: bool = False,
+    remote_fetch_timeout_seconds: float = 10.0,
+    remote_fetcher: Any = fetch_remote_imagery_tile,
 ) -> AdminRasterTilePayload:
     cache_path = raster_tile_cache_path(
         project_id,
@@ -325,11 +504,41 @@ def load_or_build_raster_tile_payload(
         body = cache_path.read_bytes()
         return AdminRasterTilePayload(
             body=body,
-            media_type="image/png",
+            media_type=_tile_media_type(body, default="image/png"),
             source="local_cache",
             cache_path=cache_path,
             body_sha256=hashlib.sha256(body).hexdigest(),
+            imagery_source_id=(
+                str(imagery_source.get("source_id"))
+                if isinstance(imagery_source, Mapping) and imagery_source.get("source_id")
+                else None
+            ),
         )
+    if allow_remote_fetch and imagery_source is not None:
+        try:
+            remote_tile = remote_fetcher(
+                imagery_source,
+                int(z),
+                int(x),
+                int(y),
+                timeout_seconds=remote_fetch_timeout_seconds,
+            )
+            cache_path.parent.mkdir(parents=True, exist_ok=True)
+            cache_path.write_bytes(remote_tile.body)
+            return AdminRasterTilePayload(
+                body=remote_tile.body,
+                media_type=_tile_media_type(remote_tile.body, default=remote_tile.media_type),
+                source="remote_fetch_cache_fill",
+                cache_path=cache_path,
+                body_sha256=remote_tile.body_sha256,
+                imagery_source_id=remote_tile.source_id,
+                remote_url_sha256=hashlib.sha256(
+                    remote_tile.url.encode("utf-8")
+                ).hexdigest(),
+            )
+        except Exception:
+            if not fallback_enabled:
+                raise
     if not fallback_enabled:
         raise FileNotFoundError(str(cache_path))
 
@@ -338,9 +547,18 @@ def load_or_build_raster_tile_payload(
     return AdminRasterTilePayload(
         body=body,
         media_type="image/png",
-        source="transparent_fallback",
+        source=(
+            "transparent_remote_error_fallback"
+            if allow_remote_fetch and imagery_source is not None
+            else "transparent_fallback"
+        ),
         cache_path=cache_path,
         body_sha256=hashlib.sha256(body).hexdigest(),
+        imagery_source_id=(
+            str(imagery_source.get("source_id"))
+            if isinstance(imagery_source, Mapping) and imagery_source.get("source_id")
+            else None
+        ),
     )
 
 
@@ -506,6 +724,46 @@ def _cut_summary(
     }
 
 
+def _default_imagery_tile_fetch(
+    imagery_source: Mapping[str, Any],
+    z: int,
+    x: int,
+    y: int,
+) -> RemoteImageryTile:
+    return fetch_remote_imagery_tile(imagery_source, z, x, y)
+
+
+def _imagery_seed_summary(
+    status: str,
+    *,
+    plan: Mapping[str, Any],
+    dry_run: bool,
+    tiles_seen: int,
+    tiles_written: int,
+    tiles_skipped_existing: int,
+    bytes_written: int,
+    started_at: float,
+) -> dict[str, Any]:
+    return {
+        "artifact_kind": "admin_imagery_tile_cache_seed_summary",
+        "status": status,
+        "project_id": plan.get("project_id"),
+        "layer_id": plan.get("layer_id"),
+        "source_id": plan.get("source_id"),
+        "zoom_range": plan.get("zoom_range"),
+        "cache_root": plan.get("cache_root"),
+        "dry_run": dry_run,
+        "tiles_seen": tiles_seen,
+        "tiles_written": tiles_written,
+        "tiles_skipped_existing": tiles_skipped_existing,
+        "bytes_written": bytes_written,
+        "duration_seconds": round(time.time() - started_at, 3),
+        "external_network_required": not dry_run,
+        "network_mode_required": "explicit-fetch",
+        "downloads_tiles_into_repo": False,
+    }
+
+
 def _safe_identifier(value: Any, field_name: str) -> str:
     text = str(value or "").strip()
     if not text:
@@ -518,6 +776,16 @@ def _safe_identifier(value: Any, field_name: str) -> str:
 
 def _transparent_png_tile() -> bytes:
     return TRANSPARENT_PNG_TILE
+
+
+def _tile_media_type(body: bytes, *, default: str) -> str:
+    if body.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if body.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if body.startswith(b"GIF87a") or body.startswith(b"GIF89a"):
+        return "image/gif"
+    return default.split(";")[0].strip() or "application/octet-stream"
 
 
 def _tile_y_to_lat(y: int, z: int) -> float:

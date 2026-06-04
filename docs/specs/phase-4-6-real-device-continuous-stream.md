@@ -41,6 +41,176 @@ any long field run:
 - status and evidence artifacts remain summary-only and do not expose secrets
   or raw payloads.
 
+## Apple Scout Client v0
+
+The first Apple platform milestone is an Apple Scout Client, not a safety
+notification feature.
+
+Client topology:
+
+- Apple Watch is the primary live sensor collector.
+- iPhone is the Scout network bridge, signer, queue owner, and operator-visible
+  control surface.
+- Scout receives the stream as an evidence-only Apple client observation channel
+  before any runtime/safety bridge is enabled.
+- Future Scout interoperability can map accepted Apple observations into
+  `/runtime/streams/*` or `/safety/*` only after an operator-controlled runtime
+  handoff and source-policy match.
+
+Initial Scout endpoint candidate:
+
+- `POST /clients/apple/observations`
+- `GET /clients/apple/status`
+
+The endpoint pair is intentionally separate from `/safety/*`. It lets the
+client prove real Watch/iPhone capture, authentication, buffering, and Scout
+receipt before the safety reporting path is reopened.
+
+中文註釋：第一步是 Apple Scout Client 能把 Apple Watch 端的健康與感測資訊即
+時送回 Scout，Scout 先把它當 evidence stream。Safety 通報、SOS、SMS、衛星或
+incident bridge 都是之後的互通層，不在 v0 自動啟用。
+
+### Source Placement
+
+Apple health exports and Apple sensor streams have different timing contracts:
+
+- Health Auto Export is an admin/pre-trip batch source. It prepares Apple Health
+  metrics, workouts, and GPX route evidence before departure or during admin
+  review.
+- Health Auto Export REST API / MQTT automations are useful for true Apple
+  Health provenance, but they are not the live motion stream for Phase 4.6.
+- SensorLog and Sensor Logger are the live Apple Watch/iPhone evidence sources
+  for Phase 4.6 because they can emit motion, location, pedometer, battery,
+  barometer, and heart-rate frames during the trip.
+- Third-party live streams are first admitted as local-network
+  `operator_live_evidence` unless they can supply the Scout
+  `device_id_scoped_token_hmac_signature` envelope.
+
+The first live Scout endpoint should therefore target SensorLog/Sensor Logger
+payloads, not Health Auto Export health-metric batches:
+
+- `POST /clients/apple/sensorlog/observations`
+- `GET /clients/apple/sensorlog/status`
+
+This endpoint remains evidence-only. It may write an evidence directory and
+normalized summary, but it must not call `/safety/*`, change Phase 1 L0-L4
+state, send SOS/SMS/satellite messages, or write Phase 2 Brain facts.
+
+Expected live payload shapes:
+
+- SensorLog snapshot rows, as seen in `SensorLogFiles_*`, where each JSON row
+  contains fields such as `loggingTime`, `heartRateBPM`,
+  `accelerometerAccelerationX`, `motionQuaternionW`, `locationLatitude`,
+  `locationLongitude`, `pedometerDistance`, and `batteryLevel`.
+- Sensor Logger event rows, as seen in `_62_*.json`, where each JSON row has a
+  `sensor` discriminator such as `Gyroscope`, `Accelerometer`,
+  `WatchLocation`, `WatchBarometer`, `WristMotion`, or `HeartRate`.
+
+SensorLog snapshot rows can flow through existing SensorLog normalization more
+directly. Sensor Logger event rows need a small live frame assembler because
+gyro/accelerometer/location/heart-rate events arrive as separate rows.
+
+### Watch Collection
+
+The Watch target should sample only fields that are available through Apple
+frameworks and user-granted permissions:
+
+- HealthKit live workout data: heart rate, active energy, distance, workout
+  state, workout activity, elapsed time, and available step/cadence summaries.
+- Core Motion data: accelerometer, gyroscope, gravity, user acceleration,
+  rotation rate, attitude/quaternion, compass/magnetometer when available.
+- Barometer data: pressure and relative altitude when `CMAltimeter` is
+  available.
+- Location route data: latitude, longitude, altitude, speed, course, and
+  accuracy only when location permission is granted and the operator enables
+  route capture.
+
+The Watch should send compact frames to the iPhone companion using
+WatchConnectivity. It must not own Scout credentials, send `/safety/*` requests,
+or decide incident reporting.
+
+### iPhone Bridge
+
+The iPhone companion owns Scout-facing behavior:
+
+- binds Watch frames to `source_id`, `source_kind`, `device_id`, `session_id`,
+  and monotonic `sequence_no`;
+- computes `payload_sha256`;
+- signs the envelope with `device_id_scoped_token_hmac_signature`;
+- queues frames when Scout is offline;
+- enforces the 10 Hz client-side send cap before Scout-side backpressure;
+- retains the latest point after retry exhaustion;
+- displays Scout reachability, queue depth, last accepted sequence, and whether
+  the stream is paused by Scout.
+
+Operator pause/resume from Scout remains server-side admission state. The
+iPhone may continue local buffering while paused, but it must display that Scout
+is not admitting live observations.
+
+### Observation Envelope
+
+`POST /clients/apple/observations` accepts a signed envelope, not raw HealthKit
+exports:
+
+```json
+{
+  "artifact_kind": "scout_apple_client_observation_envelope",
+  "artifact_version": "apple_client_observation_envelope.v0",
+  "source_id": "runtime_source.apple_watch.v0",
+  "source_kind": "apple_watch",
+  "device_id": "apple-watch-local-device-id",
+  "session_id": "apple-session-20260604-am",
+  "sequence_no": 42,
+  "observed_at": "2026-06-04T08:15:30+08:00",
+  "monotonic_ms": 1234567,
+  "transport": "http_push",
+  "payload_sha256": "sha256-of-payload",
+  "token_scope": "runtime:observation:write",
+  "signature_algorithm": "hmac_sha256",
+  "signature": "base64-hmac-signature",
+  "payload": {
+    "health": {
+      "heart_rate_bpm": 142,
+      "active_energy_kj": 12.4,
+      "distance_m": 85.2,
+      "workout_state": "running"
+    },
+    "motion": {
+      "accelerometer_g": {"x": 0.01, "y": 0.02, "z": 0.98},
+      "gyroscope_rad_s": {"x": 0.03, "y": 0.01, "z": 0.00},
+      "quaternion": {"w": 0.99, "x": 0.01, "y": 0.02, "z": 0.03}
+    },
+    "location": {
+      "latitude": 24.1201,
+      "longitude": 121.2841,
+      "horizontal_accuracy_m": 8.0,
+      "speed_mps": 1.2
+    }
+  },
+  "quality": {
+    "sample_cadence_ms": 1000,
+    "permissions": ["healthkit", "motion", "location"],
+    "missing_fields": []
+  },
+  "privacy": {
+    "raw_health_payload_shared": false,
+    "raw_track_shared_to_status": false,
+    "status_surfaces_summary_only": true
+  },
+  "boundary": {
+    "evidence_only": true,
+    "medical_diagnosis": false,
+    "phase1_runtime_safety_truth": false,
+    "safety_api_called": false,
+    "assistant_safety_mutation_allowed": false
+  }
+}
+```
+
+Scout response summaries may include accepted/rejected counts, last admitted
+sequence, queue state, and advisory data-quality notes. They must not echo raw
+health payloads, raw tracks, tokens, signatures, or HMAC secrets.
+
 ## Non-Goals
 
 - no automatic SOS send;

@@ -18,6 +18,7 @@ from scout_companion_match_models import build_companion_capability_capsule_from
 from post_analysis_energy_feedback import POST_ANALYSIS_ENERGY_FEEDBACK_REF
 from pretrip_layer_preparation import build_layer_preparation_not_prepared_view
 from pretrip_energy_projection import DEFAULT_PRETRIP_ENERGY_PROJECTION_REF
+from scout_energy_reserve_monitor import build_energy_reserve_monitor_from_view
 from pretrip_spatial_imprint_export import (
     DEFAULT_SPATIAL_IMPRINT_CANDIDATES_REF,
     DEFAULT_SPATIAL_IMPRINT_MANIFEST_REF,
@@ -38,6 +39,7 @@ DEPARTURE_REVIEWED_CANDIDATES_REF = "outputs/departure_reviewed_candidates.json"
 COMPANION_MATCH_REVIEW_REF = "outputs/companion_match_review.json"
 GIS_PERCEPTION_AGGREGATION_RADIUS_M = 80.0
 GIS_PERCEPTION_NEARBY_GROUP_RADIUS_M = 80.0
+GIS_PERCEPTION_LABEL_MAX_CHARS = 64
 RISK_DELTA_COLORS = {
     "calibrated_higher": "#9333ea",
     "baseline_higher": "#2563eb",
@@ -709,11 +711,16 @@ def build_pretrip_admin_view(
     )
     planning_tab["map_layers"] = _map_layers_with_local_raster_metadata(
         planning_tab["map_layers"],
+        project=project,
         local_raster_manifest=_load_optional_json(
             artifacts.get("local_raster_manifest")
         ),
         raster_tile_manifest=_load_optional_json(
             artifacts.get("raster_tile_manifest")
+        ),
+        raster_layer_manifests=_raster_layer_manifest_summaries(
+            artifacts["project"].parent,
+            project,
         ),
         local_raster_source_path=source_refs.get("local_raster_manifest", ""),
         raster_tile_source_path=source_refs.get("raster_tile_manifest", ""),
@@ -998,6 +1005,13 @@ def build_pretrip_admin_view(
         view["scout_agent_skills"],
         view["evidence_timeline"],
     )
+    view["energy_reserve_monitor"] = build_energy_reserve_monitor_from_view(
+        view,
+        surface="pretrip",
+    )
+    view["tabs"]["pre_trip_planning"]["energy_reserve_monitor"] = view[
+        "energy_reserve_monitor"
+    ]
     return view
 
 
@@ -1310,6 +1324,7 @@ def load_pretrip_debug_projection_view(
     terrain_visualization_raw = _load_optional_json(
         optional_project_path("terrain_visualization_ref")
     )
+    segment_dtm_raw = _load_optional_json(optional_project_path("segment_dtm_coverage_ref"))
     mcp_named_point_evidence_raw = _load_optional_json(
         optional_project_path("mcp_named_point_evidence_ref")
     )
@@ -1449,6 +1464,10 @@ def load_pretrip_debug_projection_view(
             terrain_visualization_raw,
             source_refs["terrain_visualization"],
         ),
+        "segment_terrain": _segment_terrain_summary(
+            segment_dtm_raw,
+            source_refs["segment_dtm"],
+        ),
         "risk_ribbon": _risk_ribbon_summary(
             project_id,
             risk_ribbon_raw,
@@ -1481,11 +1500,16 @@ def load_pretrip_debug_projection_view(
     }
     view["map_layers"] = _map_layers_with_local_raster_metadata(
         view["map_layers"],
+        project=project,
         local_raster_manifest=_load_optional_json(
             optional_project_path("local_raster_manifest_ref")
         ),
         raster_tile_manifest=_load_optional_json(
             optional_project_path("raster_tile_manifest_ref")
+        ),
+        raster_layer_manifests=_raster_layer_manifest_summaries(
+            resolved_project_root,
+            project,
         ),
         local_raster_source_path=project.get("local_raster_manifest_ref", ""),
         raster_tile_source_path=project.get("raster_tile_manifest_ref", ""),
@@ -1546,6 +1570,7 @@ def load_pretrip_debug_projection_view(
         "checkpoint_events": view["checkpoint_events"],
         "risk_score": view["risk_score"],
         "terrain_visualization": view["terrain_visualization"],
+        "segment_terrain": view["segment_terrain"],
         "risk_ribbon": view["risk_ribbon"],
         "risk_heatmap": view["risk_heatmap"],
         "risk_delta": view["risk_delta"],
@@ -1587,6 +1612,10 @@ def load_pretrip_debug_projection_view(
             ),
             "terrain_sample_count": view["terrain_visualization"]["counts"].get(
                 "cell_count",
+                0,
+            ),
+            "segment_terrain_segment_count": view["segment_terrain"].get(
+                "segment_count",
                 0,
             ),
             "mcp_candidate_count": (
@@ -1860,17 +1889,10 @@ def _debug_projection_gis_perception_summary(
             "ai_judgements": ai_judgement_summary,
             "checkpoint_candidates": [],
         }
-    return {
-        "source_id": payload["artifact_id"],
-        "source_path": source_path,
-        "evidence_type": "pretrip_gis_perception_candidates",
-        "status": payload["status"],
-        "source_profile": payload["source_profile"],
-        "counts": payload["counts"],
-        "classifier": payload["classifier"],
-        "boundary": _summary_boundary(payload["boundary"]),
-        "ai_judgements": ai_judgement_summary,
-        "checkpoint_candidates": [
+    checkpoint_candidates = []
+    for candidate in payload.get("checkpoint_candidates", []):
+        display_label = _gis_perception_candidate_display_label(candidate)
+        checkpoint_candidates.append(
             {
                 "candidate_id": candidate["candidate_id"],
                 "source_id": candidate["candidate_id"],
@@ -1894,6 +1916,8 @@ def _debug_projection_gis_perception_summary(
                 "linked_ln_proposal_id": candidate.get("linked_ln_proposal_id"),
                 "proposed_ln_scope": candidate["proposed_ln_scope"],
                 "route_note_summary": candidate["route_note_summary"],
+                "display_label": display_label,
+                "map_label": display_label,
                 "source_attribution": candidate.get("source_attribution", []),
                 "human_review_required": candidate["human_review_required"],
                 **_gis_perception_candidate_provenance(
@@ -1903,8 +1927,18 @@ def _debug_projection_gis_perception_summary(
                     evidence_type="pretrip_gis_perception_checkpoint_candidate",
                 ),
             }
-            for candidate in payload.get("checkpoint_candidates", [])
-        ],
+        )
+    return {
+        "source_id": payload["artifact_id"],
+        "source_path": source_path,
+        "evidence_type": "pretrip_gis_perception_candidates",
+        "status": payload["status"],
+        "source_profile": payload["source_profile"],
+        "counts": payload["counts"],
+        "classifier": payload["classifier"],
+        "boundary": _summary_boundary(payload["boundary"]),
+        "ai_judgements": ai_judgement_summary,
+        "checkpoint_candidates": checkpoint_candidates,
     }
 
 
@@ -2153,7 +2187,7 @@ def _gis_perception_timeline_checkpoint(
         candidate.get("source_route_note_candidate_id"),
         candidate.get("linked_ln_proposal_id"),
     ]
-    return {
+    checkpoint = {
         **candidate,
         "source_id": candidate["candidate_id"],
         "source_path": source_path,
@@ -2173,6 +2207,10 @@ def _gis_perception_timeline_checkpoint(
             evidence_type="pretrip_gis_perception_timeline_checkpoint_candidate",
         ),
     }
+    display_label = _gis_perception_candidate_display_label(checkpoint)
+    checkpoint["display_label"] = display_label
+    checkpoint["map_label"] = display_label
+    return checkpoint
 
 
 def _overpass_gis_perception_timeline_checkpoints(
@@ -2204,6 +2242,10 @@ def _overpass_gis_perception_timeline_checkpoints(
         )
         ai_reason = _overpass_ai_reason_zh(candidate)
         candidate_id = f"gis_cp.overpass_tag.{_safe_view_key(candidate['candidate_id'])}"
+        display_label = _overpass_candidate_display_label(candidate)
+        route_note_summary = (
+            display_label if display_label.startswith("OSM ") else f"OSM {display_label}"
+        )
         source_attribution = [
             {
                 "source_kind": "overpass_candidate",
@@ -2211,7 +2253,7 @@ def _overpass_gis_perception_timeline_checkpoints(
                 "source_candidate_id": candidate["candidate_id"],
                 "source_artifact_id": overpass_evidence.get("source_id", ""),
                 "source_role": "route_corridor_osm_evidence",
-                "source_label": candidate.get("label") or candidate["candidate_id"],
+                "source_label": candidate.get("label") or display_label,
                 "evidence_type": candidate.get(
                     "evidence_type",
                     "pretrip_overpass_vector_evidence",
@@ -2222,80 +2264,75 @@ def _overpass_gis_perception_timeline_checkpoints(
                 "runtime_safety_truth": False,
             }
         ]
-        projected.append(
-            {
-                "candidate_id": candidate_id,
-                "source_id": candidate_id,
-                "source_path": source_path,
-                "evidence_type": "pretrip_gis_perception_timeline_checkpoint_candidate",
-                "timeline_element_type": "checkpoint_candidate",
-                "status": "candidate_only",
-                "review_state": "needs_review",
-                "review_category": "gis_perception_cp",
-                "source_profile": "overpass_osm_tags",
-                "checkpoint_type": checkpoint_type,
-                "lat": round(coordinate["lat"], 7),
-                "lon": round(coordinate["lon"], 7),
-                "source_route_note_candidate_id": None,
-                "source_gpx_key": None,
-                "source_gpx_role": None,
-                "source_note_category": None,
-                "route_note_age_days": None,
-                "route_note_freshness": "unknown",
-                "stale_route_note": False,
-                "ai_judgement_id": f"gis_ai_judgement.overpass_tag.fixture.{index:05d}",
-                "ai_reason_zh": ai_reason,
-                "ai_confidence": candidate.get("confidence", "low"),
-                "ai_stale_risk": candidate.get("stale_risk", "medium"),
-                "ai_source_signals": _overpass_ai_source_signals(candidate),
-                "linked_ln_proposal_id": None,
-                "proposed_ln_scope": proposed_ln_scope,
-                "route_note_summary": (
-                    f"OSM {candidate.get('candidate_type')}: "
-                    f"{candidate.get('label') or candidate['candidate_id']}"
+        record = {
+            "candidate_id": candidate_id,
+            "source_id": candidate_id,
+            "source_path": source_path,
+            "evidence_type": "pretrip_gis_perception_timeline_checkpoint_candidate",
+            "timeline_element_type": "checkpoint_candidate",
+            "status": "candidate_only",
+            "review_state": "needs_review",
+            "review_category": "gis_perception_cp",
+            "source_profile": "overpass_osm_tags",
+            "checkpoint_type": checkpoint_type,
+            "lat": round(coordinate["lat"], 7),
+            "lon": round(coordinate["lon"], 7),
+            "source_route_note_candidate_id": None,
+            "source_gpx_key": None,
+            "source_gpx_role": None,
+            "source_note_category": None,
+            "route_note_age_days": None,
+            "route_note_freshness": "unknown",
+            "stale_route_note": False,
+            "ai_judgement_id": f"gis_ai_judgement.overpass_tag.fixture.{index:05d}",
+            "ai_reason_zh": ai_reason,
+            "ai_confidence": candidate.get("confidence", "low"),
+            "ai_stale_risk": candidate.get("stale_risk", "medium"),
+            "ai_source_signals": _overpass_ai_source_signals(candidate),
+            "linked_ln_proposal_id": None,
+            "proposed_ln_scope": proposed_ln_scope,
+            "route_note_summary": route_note_summary,
+            "display_label": display_label,
+            "map_label": display_label,
+            "recommended_review_action": review_action,
+            "source_attribution": source_attribution,
+            "source_attribution_count": len(source_attribution),
+            "candidate_only": True,
+            "human_review_required": True,
+            "runtime_safety_truth": False,
+            "raw_gpx_embedded": False,
+            "semantic_aggregation_key": _overpass_semantic_aggregation_key(
+                candidate
+            ),
+            "map_target_ids": [candidate["candidate_id"], candidate_id],
+            "overpass_candidate_ref": candidate["candidate_id"],
+            "osm": {
+                "osm_type": candidate.get("osm_type"),
+                "osm_id": candidate.get("osm_id"),
+                "tags": candidate.get("tags", {}),
+                "candidate_type": candidate.get("candidate_type"),
+                "conversion_rule_version": candidate.get(
+                    "conversion_rule_version"
                 ),
-                "recommended_review_action": review_action,
-                "source_attribution": source_attribution,
-                "source_attribution_count": len(source_attribution),
-                "candidate_only": True,
-                "human_review_required": True,
-                "runtime_safety_truth": False,
-                "raw_gpx_embedded": False,
-                "semantic_aggregation_key": _overpass_semantic_aggregation_key(
-                    candidate
-                ),
-                "map_target_ids": [candidate["candidate_id"], candidate_id],
-                "overpass_candidate_ref": candidate["candidate_id"],
-                "osm": {
-                    "osm_type": candidate.get("osm_type"),
-                    "osm_id": candidate.get("osm_id"),
-                    "tags": candidate.get("tags", {}),
-                    "candidate_type": candidate.get("candidate_type"),
-                    "conversion_rule_version": candidate.get(
-                        "conversion_rule_version"
-                    ),
+            },
+            **_gis_perception_candidate_provenance(
+                {
+                    **candidate,
+                    "candidate_id": candidate_id,
+                    "route_note_summary": route_note_summary,
+                    "source_attribution": source_attribution,
+                    "human_review_required": True,
                 },
-                **_gis_perception_candidate_provenance(
-                    {
-                        **candidate,
-                        "candidate_id": candidate_id,
-                        "route_note_summary": (
-                            f"OSM {candidate.get('candidate_type')}: "
-                            f"{candidate.get('label') or candidate['candidate_id']}"
-                        ),
-                        "source_attribution": source_attribution,
-                        "human_review_required": True,
-                    },
-                    source_path=source_path,
-                    evidence_type=(
-                        "pretrip_gis_perception_timeline_checkpoint_candidate"
-                    ),
-                    default_prompt_version=(
-                        "not_applicable_deterministic_overpass_projection"
-                    ),
+                source_path=source_path,
+                evidence_type=(
+                    "pretrip_gis_perception_timeline_checkpoint_candidate"
                 ),
-            }
-        )
+                default_prompt_version=(
+                    "not_applicable_deterministic_overpass_projection"
+                ),
+            ),
+        }
+        projected.append(record)
     return projected
 
 
@@ -2386,7 +2423,7 @@ def _merged_gis_perception_timeline_checkpoint(
         if any(item.get("stale_risk") == "high" for item in cluster)
         else representative.get("stale_risk", "medium")
     )
-    return {
+    merged = {
         **representative,
         "candidate_id": (
             f"gis_cp_cluster.{index:04d}."
@@ -2448,6 +2485,15 @@ def _merged_gis_perception_timeline_checkpoint(
             "semantic_judgement_source": "pydantic_ai_structured_judgement",
         },
     }
+    display_source = (
+        merged
+        if len(cluster) == 1
+        else {**merged, "display_label": "", "map_label": "", "label": ""}
+    )
+    display_label = _gis_perception_candidate_display_label(display_source)
+    merged["display_label"] = display_label
+    merged["map_label"] = display_label
+    return merged
 
 
 def _gis_perception_semantic_aggregation_key(candidate: dict[str, Any]) -> str:
@@ -2707,7 +2753,11 @@ def _apply_gis_perception_nearby_groups(
                 ),
                 "checkpoint_type": item.get("checkpoint_type"),
                 "semantic_aggregation_key": item.get("semantic_aggregation_key"),
-                "summary": item.get("route_note_summary") or item["candidate_id"],
+                "summary": _gis_perception_candidate_display_label(item),
+                "display_label": item.get("display_label")
+                or _gis_perception_candidate_display_label(item),
+                "map_label": item.get("map_label")
+                or _gis_perception_candidate_display_label(item),
                 "source_profile": item.get("source_profile"),
                 "stale_route_note": item.get("stale_route_note", False),
                 "route_note_freshness": item.get("route_note_freshness", "unknown"),
@@ -2763,6 +2813,7 @@ def _apply_gis_perception_nearby_groups(
                 "candidates are not merged and runtime safety truth is false."
             ),
             "member_count": len(group),
+            "member_candidate_ids": [item["candidate_id"] for item in group],
             "lat": round(center_lat, 7),
             "lon": round(center_lon, 7),
             "radius_m": radius_m,
@@ -2776,6 +2827,9 @@ def _apply_gis_perception_nearby_groups(
                 }
             ),
         }
+        display_label = _gis_nearby_group_display_label(nearby_group)
+        nearby_group["display_label"] = display_label
+        nearby_group["map_label"] = display_label
         nearby_groups.append(nearby_group)
         for item in group:
             group_by_candidate_id[item["candidate_id"]] = nearby_group
@@ -2796,10 +2850,11 @@ def _apply_gis_perception_nearby_groups(
         annotated.append(
             {
                 **candidate,
-                "nearby_group_id": nearby_group["nearby_group_id"],
-                "nearby_group_size": nearby_group["member_count"],
-                "nearby_group_members": nearby_group["members"],
-            }
+                    "nearby_group_id": nearby_group["nearby_group_id"],
+                    "nearby_group_label": nearby_group["display_label"],
+                    "nearby_group_size": nearby_group["member_count"],
+                    "nearby_group_members": nearby_group["members"],
+                }
         )
     return annotated, nearby_groups
 
@@ -2866,6 +2921,179 @@ def _safe_view_key(value: str) -> str:
     return re.sub(r"[^0-9A-Za-z_]+", "_", value).strip("_").lower()[:96] or "candidate"
 
 
+def _readable_label_text(value: Any, *, max_chars: int = GIS_PERCEPTION_LABEL_MAX_CHARS) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    text = re.sub(r"\s+", " ", text)
+    text = re.sub(
+        r"\s*\|\s*\d{4}-\d{2}-\d{2}(?:[ T]\d{1,2}:\d{2}(?::\d{2})?)?\s*$",
+        "",
+        text,
+    ).strip()
+    if not text:
+        return ""
+    if _looks_like_internal_identifier(text):
+        return ""
+    if len(text) > max_chars:
+        return f"{text[: max_chars - 1].rstrip()}…"
+    return text
+
+
+def _looks_like_internal_identifier(text: str) -> bool:
+    compact = text.strip()
+    if re.fullmatch(r"(?:node|way|relation)/\d+", compact):
+        return True
+    if re.fullmatch(r"\d{7,}", compact):
+        return True
+    if compact.startswith(
+        (
+            "gis_cp.",
+            "gis_cp_",
+            "gis_cp_cluster.",
+            "gis_cp_nearby_group.",
+            "cp_note.",
+            "cp_note_",
+            "pretrip_gis_",
+            "overpass.",
+            "overpass_",
+            "route_note.reference_",
+            "ln_proposal.route_note.",
+        )
+    ):
+        return True
+    return len(compact) > 48 and (
+        compact.count("_") >= 3 or compact.count(".") >= 4
+    )
+
+
+def _semantic_key_label(key: Any) -> str:
+    labels = {
+        "route:detour": "繞路/岔路候選",
+        "route:cut": "上切/下切候選",
+        "route:vegetation": "植被遮蔽候選",
+        "route:path_condition": "路況提示候選",
+        "hazard:collapse": "崩塌地形候選",
+        "hazard:cliff": "斷崖地形候選",
+        "hazard:rope": "繩索地形候選",
+        "hazard:terrain": "地形風險候選",
+        "resource:water": "水源候選",
+        "resource:camp_or_shelter": "營地/山屋候選",
+        "access:parking": "停車/接駁候選",
+    }
+    return labels.get(str(key or ""), "")
+
+
+def _checkpoint_type_label(checkpoint_type: Any) -> str:
+    labels = {
+        "warning_review": "風險 CP 候選",
+        "hint_review": "路線提示 CP 候選",
+        "water_or_camp_review": "水源/營地 CP 候選",
+    }
+    return labels.get(str(checkpoint_type or ""), "GIS CP 候選")
+
+
+def _overpass_candidate_display_label(candidate: dict[str, Any]) -> str:
+    tags = candidate.get("tags") or {}
+    for key in (
+        "name",
+        "name:zh",
+        "name:zh-Hant",
+        "name:en",
+        "alt_name",
+        "loc_name",
+        "official_name",
+        "ref",
+    ):
+        label = _readable_label_text(tags.get(key) or candidate.get(key))
+        if label:
+            return label
+    label = _readable_label_text(candidate.get("label"))
+    if label:
+        return label
+    candidate_type = candidate.get("candidate_type")
+    if candidate_type == "water_source_candidate":
+        natural = tags.get("natural")
+        return "OSM 水源" if natural != "spring" else "OSM 泉水/水源"
+    if candidate_type == "shelter_candidate":
+        shelter_type = str(tags.get("shelter_type") or "")
+        return "OSM 涼亭/避難點" if shelter_type == "picnic_shelter" else "OSM 避難點"
+    if candidate_type == "parking_candidate":
+        return "OSM 停車/接駁點"
+    if candidate_type == "terrain_risk_candidate":
+        return "OSM 地形風險"
+    return "OSM 路線候選"
+
+
+def _gis_perception_candidate_display_label(candidate: dict[str, Any]) -> str:
+    osm_tags = (candidate.get("osm") or {}).get("tags") or {}
+    for value in (
+        candidate.get("map_label"),
+        candidate.get("display_label"),
+        candidate.get("short_label"),
+        candidate.get("label"),
+        candidate.get("name"),
+        osm_tags.get("name"),
+        osm_tags.get("name:zh"),
+        osm_tags.get("name:zh-Hant"),
+        osm_tags.get("alt_name"),
+        osm_tags.get("loc_name"),
+    ):
+        label = _readable_label_text(value)
+        if label:
+            return label
+    summary_labels = [
+        _readable_label_text(summary)
+        for summary in candidate.get("route_note_summaries", [])
+    ]
+    summary_labels = _unique_limited([label for label in summary_labels if label], limit=3)
+    if summary_labels:
+        return _readable_label_text(" / ".join(summary_labels))
+    for value in (
+        candidate.get("route_note_summary"),
+        candidate.get("summary"),
+        candidate.get("ai_reason_zh"),
+    ):
+        label = _readable_label_text(value)
+        if label:
+            return label
+    for attribution in candidate.get("source_attribution", []) or []:
+        if not isinstance(attribution, dict):
+            continue
+        label = _readable_label_text(attribution.get("source_label"))
+        if label:
+            return label
+    semantic_label = _semantic_key_label(candidate.get("semantic_aggregation_key"))
+    if semantic_label:
+        return semantic_label
+    return _checkpoint_type_label(candidate.get("checkpoint_type"))
+
+
+def _gis_nearby_group_display_label(group: dict[str, Any]) -> str:
+    member_labels = _unique_limited(
+        [
+            _gis_perception_candidate_display_label(member)
+            for member in group.get("members", [])
+            if isinstance(member, dict)
+        ],
+        limit=3,
+    )
+    member_labels = [label for label in member_labels if label]
+    if member_labels:
+        return _readable_label_text(f"附近 CP: {' / '.join(member_labels)}")
+    semantic_labels = _unique_limited(
+        [
+            _semantic_key_label(key)
+            for key in group.get("semantic_keys", [])
+        ],
+        limit=2,
+    )
+    semantic_labels = [label for label in semantic_labels if label]
+    if semantic_labels:
+        return _readable_label_text(f"附近 CP: {' / '.join(semantic_labels)}")
+    return "附近 CP"
+
+
 def _review_queue_with_gis_perception_items(
     review_queue: dict[str, Any],
     gis_timeline: dict[str, Any],
@@ -2914,13 +3142,14 @@ def _gis_perception_review_queue_item(
         attribution.get("source_kind", "unknown"): attribution.get("source_candidate_id")
         for attribution in candidate.get("source_attribution", [])
     }
+    display_label = _gis_perception_candidate_display_label(candidate)
     item = {
         "item_id": f"review_queue.gis_perception.{candidate['candidate_id']}",
         "candidate_ref": candidate["candidate_id"],
         "category": "gis_perception_cp",
         "severity": severity,
-        "title": f"GIS CP review: {candidate.get('checkpoint_type')}",
-        "summary": candidate.get("route_note_summary") or candidate["candidate_id"],
+        "title": f"GIS CP review: {display_label}",
+        "summary": display_label,
         "source_artifact_kind": "pretrip_gis_perception_candidates",
         "source_ref": gis_timeline.get("source_path", ""),
         "source_ref_key": "gis_perception_candidates_ref",
@@ -2935,6 +3164,7 @@ def _gis_perception_review_queue_item(
             "source_candidate_refs": source_refs,
             "aggregation": candidate.get("aggregation", {}),
             "nearby_group_id": candidate.get("nearby_group_id"),
+            "nearby_group_label": candidate.get("nearby_group_label"),
             "nearby_group_size": candidate.get("nearby_group_size", 1),
             "nearby_group_members": candidate.get("nearby_group_members", []),
             "merged_candidate_ids": candidate.get("merged_candidate_ids", []),
@@ -4138,7 +4368,8 @@ def _review_workbench_summary(
                 ),
             ),
             "group_type": "gis_nearby_group",
-            "label": group.get("nearby_group_id"),
+            "label": group.get("display_label")
+            or _gis_nearby_group_display_label(group),
             "item_count": group.get("member_count", 0),
             "candidate_refs": group.get("member_candidate_ids", []),
             "semantic_keys": group.get("semantic_keys", []),
@@ -7064,7 +7295,19 @@ def _route_comparison_summary(payload: dict[str, Any], source_path: str) -> dict
     }
 
 
-def _segment_terrain_summary(payload: dict[str, Any], source_path: str) -> dict[str, Any]:
+def _segment_terrain_summary(payload: dict[str, Any] | None, source_path: str) -> dict[str, Any]:
+    if not payload:
+        return {
+            "source_id": "segment_terrain.unavailable",
+            "source_path": source_path,
+            "evidence_type": "pretrip_segment_dtm_coverage",
+            "route_artifact_id": None,
+            "segment_count": 0,
+            "candidate_tile_count": 0,
+            "raw_payloads_embedded": False,
+            "notes": ["segment terrain metadata unavailable for this workspace"],
+            "segment_metadata": [],
+        }
     return {
         "source_id": payload["dtm_coverage_summary_id"],
         "source_path": source_path,
@@ -7214,6 +7457,32 @@ def _capability_timeline_import_summary(
         if companion_capsule is not None
         else None
     )
+
+    def project_edge(edge: dict[str, Any]) -> dict[str, Any]:
+        return {
+            **_capability_timeline_edge_projection(edge),
+            **_projection_record_metadata(
+                edge,
+                source_path=edge.get("source_path")
+                or summary.get("source_path", "outputs/capability_timeline.json"),
+                evidence_type=edge.get(
+                    "evidence_type",
+                    "pretrip_capability_timeline_edge",
+                ),
+                source_kind="capability_timeline_edge",
+                identity_keys=("edge_id", "segment_id", "source_refs"),
+                review_state="requires_human_review",
+                confidence=edge.get("confidence", "medium"),
+                stale_risk=edge.get("stale_risk", "medium"),
+                extractor_version="post_analysis_capability_timeline.projection.v1",
+                prompt_version="not_applicable_deterministic_capability_timeline_import.v1",
+                summary=(
+                    "Post-analysis capability timeline edge imported as "
+                    "candidate-only pacing evidence, not runtime safety truth."
+                ),
+            ),
+        }
+
     return {
         **summary,
         "source_id": "pretrip.imported_capability_timeline",
@@ -7241,31 +7510,9 @@ def _capability_timeline_import_summary(
             }
             for node in summary.get("nodes", [])
         ],
-        "edges": [
-            {
-                **_capability_timeline_edge_projection(edge),
-                **_projection_record_metadata(
-                    edge,
-                    source_path=edge.get("source_path")
-                    or summary.get("source_path", "outputs/capability_timeline.json"),
-                    evidence_type=edge.get(
-                        "evidence_type",
-                        "pretrip_capability_timeline_edge",
-                    ),
-                    source_kind="capability_timeline_edge",
-                    identity_keys=("edge_id", "segment_id", "source_refs"),
-                    review_state="requires_human_review",
-                    confidence=edge.get("confidence", "medium"),
-                    stale_risk=edge.get("stale_risk", "medium"),
-                    extractor_version="post_analysis_capability_timeline.projection.v1",
-                    prompt_version="not_applicable_deterministic_capability_timeline_import.v1",
-                    summary=(
-                        "Post-analysis capability timeline edge imported as "
-                        "candidate-only pacing evidence, not runtime safety truth."
-                    ),
-                ),
-            }
-            for edge in summary.get("edges", [])
+        "edges": [project_edge(edge) for edge in summary.get("edges", [])],
+        "observed_edges": [
+            project_edge(edge) for edge in summary.get("observed_edges", [])
         ],
         "route_time_comparison": {
             **(summary.get("route_time_comparison") or {}),
@@ -9444,32 +9691,100 @@ def _source_refs(artifacts: dict[str, Path], root: Path) -> dict[str, str]:
 def _map_layers_with_local_raster_metadata(
     map_layers: list[dict[str, Any]],
     *,
+    project: dict[str, Any] | None = None,
     local_raster_manifest: dict[str, Any] | None,
     raster_tile_manifest: dict[str, Any] | None,
+    raster_layer_manifests: dict[str, dict[str, Any]] | None = None,
     local_raster_source_path: str,
     raster_tile_source_path: str,
 ) -> list[dict[str, Any]]:
-    bbox = _normalize_bbox_wgs84(
-        (local_raster_manifest or {}).get("georeference", {}).get("bbox_wgs84")
-    ) or _normalize_bbox_wgs84((raster_tile_manifest or {}).get("bbox_wgs84"))
+    del local_raster_manifest, raster_tile_manifest
+    del raster_layer_manifests, local_raster_source_path, raster_tile_source_path
+    project_payload = project or {}
+    imagery_bbox = _normalize_bbox_wgs84(project_payload.get("imagery_bbox_wgs84"))
+    wmts_layer_ids = {
+        "imagery",
+        "rudy",
+        "rudy-twmap",
+        "relief",
+        "geology",
+        "topo-5k",
+        "forest",
+    }
     enriched_layers: list[dict[str, Any]] = []
     for layer in map_layers:
-        if layer.get("layer_id") != "imagery":
+        if layer.get("layer_id") not in wmts_layer_ids:
             enriched_layers.append(_map_layer_metadata(layer))
             continue
         enriched = dict(layer)
-        if local_raster_source_path:
-            enriched["local_raster_manifest_ref"] = local_raster_source_path
-        if raster_tile_source_path:
-            enriched["raster_tile_manifest_ref"] = raster_tile_source_path
-        if bbox:
-            enriched["raster_bbox_wgs84"] = bbox
-            enriched["raster_coverage_policy"] = "render_intersecting_tiles_only"
-        if raster_tile_manifest:
-            enriched["raster_tile_zoom_range"] = raster_tile_manifest.get("zoom_range")
-            enriched["raster_tile_cache_root"] = raster_tile_manifest.get("cache_root")
+        if imagery_bbox and layer.get("layer_id") == "imagery":
+            enriched["imagery_bbox_wgs84"] = imagery_bbox
+            enriched["imagery_bbox_policy"] = project_payload.get(
+                "imagery_bbox_policy",
+                "route_visible_bounds_wmts_runtime",
+            )
+            enriched["imagery_bbox_scale_factor"] = project_payload.get(
+                "imagery_bbox_scale_factor",
+                1.15,
+            )
+        enriched["raster_tile_delivery"] = "direct_wmts_runtime"
+        enriched["raster_coverage_policy"] = "render_visible_wmts_tiles_only"
+        for key in (
+            "imagery_source_id",
+            "imagery_source_registry_id",
+        ):
+            if layer.get("layer_id") == "imagery" and project_payload.get(key):
+                enriched[key] = project_payload[key]
         enriched_layers.append(_map_layer_metadata(enriched))
     return enriched_layers
+
+
+def _raster_layer_manifest_summaries(
+    project_root: Path,
+    project: dict[str, Any],
+) -> dict[str, dict[str, Any]]:
+    refs = project.get("raster_layer_manifest_refs")
+    if not isinstance(refs, dict):
+        return {}
+    summaries: dict[str, dict[str, Any]] = {}
+    for layer_id, ref in refs.items():
+        if not isinstance(layer_id, str) or not isinstance(ref, str):
+            continue
+        manifest_path = _project_ref_value_path(project_root, ref)
+        manifest = _load_optional_json(manifest_path)
+        if not isinstance(manifest, dict):
+            continue
+        summary: dict[str, Any] = {
+            "layer_id": layer_id,
+            "raster_tile_manifest_ref": ref,
+            "local_raster_tile_url_template": (
+                manifest.get("runtime_tile_url_template")
+                or "/admin/tiles/imagery/{project_id}/{layer_id}/{z}/{x}/{y}.png"
+            ),
+        }
+        for source_key, target_key in (
+            ("bbox_wgs84", "raster_bbox_wgs84"),
+            ("zoom_range", "raster_tile_zoom_range"),
+            ("min_zoom", "raster_tile_min_zoom"),
+            ("max_zoom", "raster_tile_max_zoom"),
+            ("cache_root", "raster_tile_cache_root"),
+            ("total_tile_count", "raster_tile_count"),
+            ("source_id", "imagery_source_id"),
+            ("source_kind", "imagery_source_kind"),
+        ):
+            if source_key in manifest:
+                summary[target_key] = manifest[source_key]
+        summaries[layer_id] = summary
+    return summaries
+
+
+def _project_ref_value_path(project_root: Path, ref: str) -> Path | None:
+    if not ref or "\x00" in ref:
+        return None
+    path = Path(ref)
+    if path.is_absolute() or ".." in path.parts:
+        return None
+    return project_root / path
 
 
 def _map_layer_metadata(layer: dict[str, Any]) -> dict[str, Any]:

@@ -198,22 +198,42 @@ def build_capability_timeline(
     timed_points = timed_route_points(route.points)
     edges: list[CapabilityEdge] = []
     for route_slice in route_slices:
-        start_offset = timed_points[route_slice.start_index].offset_s
-        end_offset = timed_points[route_slice.end_index].offset_s
-        elapsed_time_s = _duration_or_zero(start_offset, end_offset)
-        rest_ids = [
-            rest.rest_id
-            for rest in rests
-            if rest.start_index >= route_slice.start_index and rest.end_index <= route_slice.end_index
-        ]
-        rest_time_s = sum(rest.duration_s for rest in rests if rest.rest_id in rest_ids)
-        moving_time_s = max(elapsed_time_s - rest_time_s, 0)
-        edge_confidence, edge_limitations = _edge_confidence_and_limitations(
-            route_slice=route_slice,
-            timed_points=timed_points[route_slice.start_index : route_slice.end_index + 1],
-            elapsed_time_s=elapsed_time_s,
-            rest_policy=rest_policy,
-        )
+        if route_slice.traversal_status == "unreached":
+            elapsed_time_s = 0
+            rest_ids = []
+            rest_time_s = 0
+            moving_time_s = 0
+            edge_confidence = "low"
+            edge_limitations = sorted(set(route_slice.limitations))
+            distance_m = 0.0
+            ascent_m = None
+            descent_m = None
+            terrain_profile = None
+        else:
+            start_offset = timed_points[route_slice.start_index].offset_s
+            end_offset = timed_points[route_slice.end_index].offset_s
+            elapsed_time_s = _duration_or_zero(start_offset, end_offset)
+            rest_ids = [
+                rest.rest_id
+                for rest in rests
+                if rest.start_index >= route_slice.start_index and rest.end_index <= route_slice.end_index
+            ]
+            rest_time_s = sum(rest.duration_s for rest in rests if rest.rest_id in rest_ids)
+            moving_time_s = max(elapsed_time_s - rest_time_s, 0)
+            edge_confidence, edge_limitations = _edge_confidence_and_limitations(
+                route_slice=route_slice,
+                timed_points=timed_points[route_slice.start_index : route_slice.end_index + 1],
+                elapsed_time_s=elapsed_time_s,
+                rest_policy=rest_policy,
+            )
+            distance_m = route_slice.distance_m
+            ascent_m = route_slice.ascent_m
+            descent_m = route_slice.descent_m
+            terrain_profile = _build_segment_terrain_profile(
+                route_slice=route_slice,
+                edge_id=f"{route_slice.segment.from_checkpoint_id}_to_{route_slice.segment.to_checkpoint_id}",
+                output_dir=terrain_profile_output_dir,
+            )
         edges.append(
             CapabilityEdge(
                 edge_id=f"{route_slice.segment.from_checkpoint_id}_to_{route_slice.segment.to_checkpoint_id}",
@@ -221,12 +241,13 @@ def build_capability_timeline(
                 from_node_id=route_slice.segment.from_checkpoint_id,
                 to_node_id=route_slice.segment.to_checkpoint_id,
                 direction=route_slice.segment.direction,
+                traversal_status=route_slice.traversal_status,
                 elapsed_time_s=elapsed_time_s,
                 moving_time_s=moving_time_s,
                 rest_time_s=rest_time_s,
-                distance_m=route_slice.distance_m,
-                ascent_m=route_slice.ascent_m,
-                descent_m=route_slice.descent_m,
+                distance_m=distance_m,
+                ascent_m=ascent_m,
+                descent_m=descent_m,
                 rest_intervals=rest_ids,
                 confidence=edge_confidence,
                 source_refs=[
@@ -238,11 +259,7 @@ def build_capability_timeline(
                 limitations=edge_limitations,
                 terrain_context=route_slice.segment.terrain_context or {},
                 risk_context=route_slice.segment.risk_context or {},
-                terrain_profile=_build_segment_terrain_profile(
-                    route_slice=route_slice,
-                    edge_id=f"{route_slice.segment.from_checkpoint_id}_to_{route_slice.segment.to_checkpoint_id}",
-                    output_dir=terrain_profile_output_dir,
-                ),
+                terrain_profile=terrain_profile,
                 guide_time_min=route_slice.segment.guide_time_min,
             )
         )
@@ -299,6 +316,8 @@ def build_route_time_comparison(
     source_path = _relpath(route_time_entries_path, root)
     segments: list[RouteTimeComparisonSegment] = []
     for edge in timeline.get("edges", []):
+        if edge.get("traversal_status") == "unreached":
+            continue
         entry = _matching_route_time_entry(edge, route_time_entries)
         if entry is None:
             continue
@@ -411,6 +430,36 @@ def summarize_capability_artifacts(
         else build_capability_share_preview(capsule).model_dump(mode="json")
     )
     comparison = _load_json(comparison_path) if comparison_path.exists() else None
+    edges = [
+        {
+            "edge_id": edge["edge_id"],
+            "segment_id": edge.get("segment_id"),
+            "from_node_id": edge["from_node_id"],
+            "to_node_id": edge["to_node_id"],
+            "direction": edge.get("direction", "outbound"),
+            "traversal_status": edge.get("traversal_status", "traversed"),
+            "elapsed_time_s": edge["elapsed_time_s"],
+            "moving_time_s": edge["moving_time_s"],
+            "rest_time_s": edge["rest_time_s"],
+            "distance_m": edge["distance_m"],
+            "ascent_m": edge.get("ascent_m"),
+            "descent_m": edge.get("descent_m"),
+            "confidence": edge["confidence"],
+            "source_refs": edge["source_refs"],
+            "limitations": edge.get("limitations", []),
+            "terrain_context": edge.get("terrain_context", {}),
+            "risk_context": edge.get("risk_context", {}),
+            "terrain_profile": edge.get("terrain_profile"),
+            "guide_time_min": edge.get("guide_time_min"),
+            "evidence_type": "post_analysis_capability_segment",
+            "source_id": edge["edge_id"],
+            "source_path": _relpath(timeline_path, root),
+        }
+        for edge in timeline.get("edges", [])
+    ]
+    observed_edges = [
+        edge for edge in edges if edge.get("traversal_status") != "unreached"
+    ]
     return {
         "artifact_kind": "post_analysis_capability_summary",
         "case_id": timeline["case_id"],
@@ -421,6 +470,13 @@ def summarize_capability_artifacts(
         "timeline_source_path": _relpath(timeline_path, root),
         "capsule_source_path": _relpath(capsule_path, root),
         "edge_count": len(timeline.get("edges", [])),
+        "observed_edge_count": len(observed_edges),
+        "planned_segment_count": timeline.get("summary", {}).get("planned_segment_count"),
+        "traversed_segment_count": timeline.get("summary", {}).get("traversed_segment_count"),
+        "partial_segment_count": timeline.get("summary", {}).get("partial_segment_count"),
+        "unreached_segment_count": timeline.get("summary", {}).get("unreached_segment_count"),
+        "completion_status": timeline.get("summary", {}).get("completion_status"),
+        "turnaround_edge_id": timeline.get("summary", {}).get("turnaround_edge_id"),
         "rest_interval_count": len(timeline.get("rest_intervals", [])),
         "summary": timeline.get("summary", {}),
         "data_quality": timeline.get("data_quality", {}),
@@ -439,47 +495,33 @@ def summarize_capability_artifacts(
             "confidence": capsule.get("confidence"),
             "limitations": capsule.get("limitations", []),
         },
-        "edges": [
-            {
-                "edge_id": edge["edge_id"],
-                "segment_id": edge.get("segment_id"),
-                "from_node_id": edge["from_node_id"],
-                "to_node_id": edge["to_node_id"],
-                "direction": edge.get("direction", "outbound"),
-                "elapsed_time_s": edge["elapsed_time_s"],
-                "moving_time_s": edge["moving_time_s"],
-                "rest_time_s": edge["rest_time_s"],
-                "distance_m": edge["distance_m"],
-                "ascent_m": edge.get("ascent_m"),
-                "descent_m": edge.get("descent_m"),
-                "confidence": edge["confidence"],
-                "source_refs": edge["source_refs"],
-                "limitations": edge.get("limitations", []),
-                "terrain_context": edge.get("terrain_context", {}),
-                "risk_context": edge.get("risk_context", {}),
-                "terrain_profile": edge.get("terrain_profile"),
-                "guide_time_min": edge.get("guide_time_min"),
-                "evidence_type": "post_analysis_capability_segment",
-                "source_id": edge["edge_id"],
-                "source_path": _relpath(timeline_path, root),
-            }
-            for edge in timeline.get("edges", [])
-        ],
+        "edges": edges,
+        "observed_edges": observed_edges,
         "boundary": timeline.get("boundary", {}),
     }
 
 
 def _timeline_summary(edges: list[CapabilityEdge]) -> CapabilitySummary:
-    elapsed_time_s = sum(edge.elapsed_time_s for edge in edges)
-    moving_time_s = sum(edge.moving_time_s for edge in edges)
-    rest_time_s = sum(edge.rest_time_s for edge in edges)
-    distance_m = round(sum(edge.distance_m for edge in edges), 2)
-    ascent_values = [edge.ascent_m for edge in edges if edge.ascent_m is not None]
-    descent_values = [edge.descent_m for edge in edges if edge.descent_m is not None]
+    accounted_edges = [
+        edge for edge in edges if edge.traversal_status in {"traversed", "partial"}
+    ]
+    elapsed_time_s = sum(edge.elapsed_time_s for edge in accounted_edges)
+    moving_time_s = sum(edge.moving_time_s for edge in accounted_edges)
+    rest_time_s = sum(edge.rest_time_s for edge in accounted_edges)
+    distance_m = round(sum(edge.distance_m for edge in accounted_edges), 2)
+    ascent_values = [edge.ascent_m for edge in accounted_edges if edge.ascent_m is not None]
+    descent_values = [edge.descent_m for edge in accounted_edges if edge.descent_m is not None]
     ascent_m = round(sum(ascent_values), 2) if ascent_values else None
     descent_m = round(sum(descent_values), 2) if descent_values else None
     moving_hours = moving_time_s / 3600 if moving_time_s else 0.0
     distance_km = distance_m / 1000 if distance_m else 0.0
+    partial_segment_count = sum(1 for edge in edges if edge.traversal_status == "partial")
+    unreached_segment_count = sum(1 for edge in edges if edge.traversal_status == "unreached")
+    traversed_segment_count = sum(1 for edge in edges if edge.traversal_status == "traversed")
+    turnaround_edge_id = next(
+        (edge.edge_id for edge in edges if edge.traversal_status == "partial"),
+        None,
+    )
     return CapabilitySummary(
         elapsed_time_s=elapsed_time_s,
         moving_time_s=moving_time_s,
@@ -491,6 +533,12 @@ def _timeline_summary(edges: list[CapabilityEdge]) -> CapabilitySummary:
         moving_pace_min_per_km=round((moving_time_s / 60) / distance_km, 2) if distance_km else None,
         ascent_m_per_hour_moving=round(ascent_m / moving_hours, 2) if ascent_m is not None and moving_hours else None,
         descent_m_per_hour_moving=round(descent_m / moving_hours, 2) if descent_m is not None and moving_hours else None,
+        planned_segment_count=len(edges),
+        traversed_segment_count=traversed_segment_count,
+        partial_segment_count=partial_segment_count,
+        unreached_segment_count=unreached_segment_count,
+        completion_status="partial" if unreached_segment_count or partial_segment_count else "complete",
+        turnaround_edge_id=turnaround_edge_id,
     )
 
 
@@ -550,6 +598,8 @@ def _timeline_data_quality(
         > rest_policy.max_segment_distance_deviation_ratio
     )
     low_confidence_edge_count = sum(1 for edge in edges if edge.confidence == "low")
+    partial_segment_count = sum(1 for edge in edges if edge.traversal_status == "partial")
+    unreached_segment_count = sum(1 for edge in edges if edge.traversal_status == "unreached")
     limitations: list[str] = []
     if missing_timestamp_count:
         limitations.append("one or more completed track points are missing timestamps")
@@ -563,6 +613,10 @@ def _timeline_data_quality(
         limitations.append("one or more segments have fewer than two track points")
     if route_deviation_count:
         limitations.append("one or more completed segments deviate from planned/reference distance")
+    if partial_segment_count:
+        limitations.append("completed track appears to turn around before one planned segment")
+    if unreached_segment_count:
+        limitations.append("one or more planned segments were not reached by the completed track")
     return CapabilityDataQuality(
         missing_timestamp_count=missing_timestamp_count,
         suspicious_timestamp_count=suspicious_timestamp_count,
@@ -571,6 +625,8 @@ def _timeline_data_quality(
         low_point_segment_count=low_point_segment_count,
         route_deviation_count=route_deviation_count,
         low_confidence_edge_count=low_confidence_edge_count,
+        partial_segment_count=partial_segment_count,
+        unreached_segment_count=unreached_segment_count,
         limitations=limitations,
     )
 
@@ -923,6 +979,7 @@ def _write_capability_csv(path: Path, timeline: dict[str, Any]) -> None:
         "from_node_id",
         "to_node_id",
         "direction",
+        "traversal_status",
         "elapsed_time_s",
         "moving_time_s",
         "rest_time_s",

@@ -341,15 +341,26 @@ def write_sanitized_import_batch_from_provider_archive(
     envelopes: list[WearableSanitizedImportEnvelope] = []
     if source_format == "apple_health_export":
         member = import_members[0]
-        envelopes.extend(
-            _apple_health_batch_envelopes_from_root(
-                ElementTree.fromstring(member["text"]),
-                source_path=source_path,
-                source_sha=member["member_sha256"],
-                activity_id_prefix=activity_id_prefix,
-                activity_type=activity_type,
+        if member["source_format"] == "health_auto_export_json":
+            envelopes.extend(
+                _health_auto_export_batch_envelopes_from_payload(
+                    json.loads(member["text"]),
+                    source_path=source_path,
+                    source_sha=member["member_sha256"],
+                    activity_id_prefix=activity_id_prefix,
+                    activity_type=activity_type,
+                )
             )
-        )
+        else:
+            envelopes.extend(
+                _apple_health_batch_envelopes_from_root(
+                    ElementTree.fromstring(member["text"]),
+                    source_path=source_path,
+                    source_sha=member["member_sha256"],
+                    activity_id_prefix=activity_id_prefix,
+                    activity_type=activity_type,
+                )
+            )
     elif source_format == "garmin_connect_export":
         multi_member = len(import_members) > 1
         for member_index, member in enumerate(import_members, start=1):
@@ -619,7 +630,7 @@ def _provider_archive_member_allowed(name: str) -> bool:
 
 def _provider_archive_member_suffixes(source_format: ProviderArchiveSourceFormat) -> set[str]:
     if source_format == "apple_health_export":
-        return {".xml"}
+        return {".xml", ".json"}
     return {".json", ".fit", ".tcx", ".gpx"}
 
 
@@ -635,6 +646,17 @@ def _provider_archive_member_profile(name: str, source_format: ProviderArchiveSo
     lowered = name.lower()
     if source_format == "apple_health_export":
         basename = lowered.rsplit("/", 1)[-1]
+        health_auto_export_json = basename.startswith("healthautoexport-") and basename.endswith(".json")
+        if health_auto_export_json:
+            return {
+                "member_path": name,
+                "source_format": "health_auto_export_json",
+                "provider_role": "health_auto_export_json",
+                "supported_for_import": True,
+                "deferred": False,
+                "selection_priority": 2,
+                "selection_reason": "Health Auto Export JSON supported by local Apple wearable parser",
+            }
         supported = basename == "export.xml" or (
             basename.endswith(".xml") and "export" in basename and ("apple" in lowered or "health" in lowered)
         )
@@ -1043,6 +1065,165 @@ def _apple_health_batch_envelopes_from_root(
         )
         for index, workout in enumerate(workouts, start=1)
     ]
+
+
+def _health_auto_export_batch_envelopes_from_payload(
+    payload: Any,
+    *,
+    source_path: Path,
+    source_sha: str,
+    activity_id_prefix: str,
+    activity_type: str,
+) -> list[WearableSanitizedImportEnvelope]:
+    workouts = _health_auto_export_workouts(payload)
+    if not workouts:
+        raise ValueError("Health Auto Export JSON parser requires at least one workout")
+    return [
+        _health_auto_export_envelope_from_workout(
+            workout,
+            source_path=source_path,
+            source_sha=source_sha,
+            activity_id=f"{_activity_slug(activity_id_prefix)}.{index:03d}",
+            activity_type=activity_type,
+        )
+        for index, workout in enumerate(workouts, start=1)
+    ]
+
+
+def _health_auto_export_workouts(payload: Any) -> list[dict[str, Any]]:
+    if isinstance(payload, dict) and isinstance(payload.get("data"), dict):
+        payload = payload["data"]
+    if isinstance(payload, dict) and isinstance(payload.get("workouts"), list):
+        workouts = payload["workouts"]
+    elif isinstance(payload, list):
+        workouts = payload
+    else:
+        raise ValueError("Health Auto Export JSON parser requires data.workouts")
+    if not all(isinstance(workout, dict) for workout in workouts):
+        raise ValueError("Health Auto Export JSON parser requires workout objects")
+    return workouts
+
+
+def _health_auto_export_envelope_from_workout(
+    workout: dict[str, Any],
+    *,
+    source_path: Path,
+    source_sha: str,
+    activity_id: str,
+    activity_type: str,
+) -> WearableSanitizedImportEnvelope:
+    start = _parse_apple_date(_string_from_value(workout.get("start")))
+    end = _parse_apple_date(_string_from_value(workout.get("end")))
+    if start is None:
+        raise ValueError("Health Auto Export workout is missing start")
+    duration_s = round(
+        _first_number(workout, "duration")
+        or ((end - start).total_seconds() if end else 0)
+    )
+    heart_rates, sample_cadence_s = _health_auto_export_heart_rates(workout, duration_s=duration_s)
+    heart_rate = _heart_rate_summary(heart_rates, duration_s=duration_s)
+    missing_hr_seconds = 0 if heart_rate.sample_count else duration_s
+    workout_type = _health_auto_export_activity_type(workout, default=activity_type)
+    return WearableSanitizedImportEnvelope(
+        source_format="apple_health_export_summary",
+        activity_id=activity_id,
+        activity_type=workout_type,
+        activity_date=start.date().isoformat(),
+        duration_s=duration_s,
+        moving_time_s=duration_s,
+        distance_m=round(_health_auto_export_quantity(workout.get("distance"), default_units="km", target_units="m") or 0.0, 1),
+        ascent_m=round(_health_auto_export_quantity(workout.get("elevationUp"), default_units="m", target_units="m") or 0.0, 1),
+        descent_m=0.0,
+        rest_event_count=0,
+        rest_duration_min=[],
+        late_activity_fatigue_decay=None,
+        session_rpe=None,
+        heart_rate=heart_rate,
+        body_energy_provider_values=BodyEnergyProviderValues(),
+        data_quality=ScoutEnergyDataQuality(
+            heart_rate_confidence="medium" if heart_rate.sample_count else "low",
+            gps_confidence="medium" if workout.get("route") else "low",
+            missing_hr_seconds=missing_hr_seconds,
+            missing_hr_intervals=[],
+            sample_cadence_s=sample_cadence_s,
+            provider_value_confidence="low",
+            limitations=[
+                "Health Auto Export JSON parser emitted sanitized workout summary only",
+                f"source sha256: {source_sha}",
+                "raw health payload, route geometry, exact timestamps, and source samples are not embedded",
+                "Health Auto Export route GPX members remain local source material, not Scout runtime truth",
+            ],
+        ),
+        privacy=ScoutEnergyPrivacy(),
+        boundary=ScoutEnergyBoundary(),
+    )
+
+
+def _health_auto_export_activity_type(workout: dict[str, Any], *, default: str) -> str:
+    name = str(workout.get("name") or "").lower()
+    if "跑" in name or "run" in name:
+        return "running"
+    if "步行" in name or "walk" in name:
+        return "walking"
+    if "hike" in name or "登山" in name:
+        return "hiking"
+    if "皮拉提斯" in name or "pilates" in name:
+        return "cross_training"
+    return default
+
+
+def _health_auto_export_heart_rates(workout: dict[str, Any], *, duration_s: int) -> tuple[list[int], int | None]:
+    samples = workout.get("heartRateData")
+    heart_rates: list[int] = []
+    sample_times: list[datetime] = []
+    if isinstance(samples, list):
+        for sample in samples:
+            if not isinstance(sample, dict):
+                continue
+            bpm = _number_from_value(_first_value(sample, "Avg", "avg", "qty", "value"))
+            if bpm is not None:
+                heart_rates.append(round(bpm))
+            sample_time = _parse_apple_date(_string_from_value(sample.get("date")))
+            if sample_time is not None:
+                sample_times.append(sample_time)
+    if not heart_rates:
+        avg_bpm = _health_auto_export_quantity(workout.get("avgHeartRate"), default_units="bpm", target_units="bpm")
+        if avg_bpm is None and isinstance(workout.get("heartRate"), dict):
+            avg_bpm = _health_auto_export_quantity(
+                workout["heartRate"].get("avg"),
+                default_units="bpm",
+                target_units="bpm",
+            )
+        if avg_bpm is not None:
+            heart_rates.append(round(avg_bpm))
+    if len(sample_times) > 1:
+        ordered = sorted(sample_times)
+        deltas = [
+            (current - previous).total_seconds()
+            for previous, current in zip(ordered, ordered[1:])
+            if current > previous
+        ]
+        if deltas:
+            return heart_rates, max(1, round(sum(deltas) / len(deltas)))
+    cadence = round(duration_s / (len(heart_rates) - 1)) if len(heart_rates) > 1 and duration_s else None
+    return heart_rates, cadence
+
+
+def _health_auto_export_quantity(value: Any, *, default_units: str, target_units: str) -> float | None:
+    units = default_units
+    raw: Any = value
+    if isinstance(value, dict):
+        raw = value.get("qty", value.get("value"))
+        units = str(value.get("units") or default_units)
+    number = _number_from_value(raw)
+    if number is None:
+        return None
+    normalized_units = units.lower()
+    if target_units == "m":
+        if normalized_units == "km":
+            return number * 1000
+        return number
+    return number
 
 
 def _garmin_connect_batch_envelopes_from_payload(
