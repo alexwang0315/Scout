@@ -70,6 +70,10 @@ SCOUT_PHASE2_BRAIN_STORE_ROOT = os.getenv("SCOUT_PHASE2_BRAIN_STORE_ROOT")
 SCOUT_DEBUG_API_ENABLED = os.getenv("SCOUT_DEBUG_API_ENABLED", "false")
 SCOUT_DEBUG_LOG_PATH = os.getenv("SCOUT_DEBUG_LOG_PATH")
 SCOUT_AGENT_TRACE_LOG_PATH = os.getenv("SCOUT_AGENT_TRACE_LOG_PATH")
+SCOUT_MOBILE_WEARABLE_INGRESS_STATUS_PATH = os.getenv(
+    "SCOUT_MOBILE_WEARABLE_INGRESS_STATUS_PATH"
+)
+SCOUT_SENSORLOGGER_MQTT_EVIDENCE_DIR = os.getenv("SCOUT_SENSORLOGGER_MQTT_EVIDENCE_DIR")
 SCOUT_SPATIAL_IMPRINT_STORE_PATH = os.getenv("SCOUT_SPATIAL_IMPRINT_STORE_PATH")
 SCOUT_SPATIAL_IMPRINT_TRIGGER_REPORT_PATH = os.getenv(
     "SCOUT_SPATIAL_IMPRINT_TRIGGER_REPORT_PATH"
@@ -227,6 +231,7 @@ def _include_debug_router(app: FastAPI) -> None:
         create_debug_router(
             debug_log=debug_log,
             agent_trace_log_path=SCOUT_AGENT_TRACE_LOG_PATH,
+            mobile_wearable_ingress_status_path=_mobile_wearable_ingress_status_path(),
             spatial_imprint_store_path=SCOUT_SPATIAL_IMPRINT_STORE_PATH,
             spatial_imprint_trigger_report_path=SCOUT_SPATIAL_IMPRINT_TRIGGER_REPORT_PATH,
         )
@@ -239,6 +244,16 @@ def _include_debug_router(app: FastAPI) -> None:
         f" with spatial imprint store {SCOUT_SPATIAL_IMPRINT_STORE_PATH}" if SCOUT_SPATIAL_IMPRINT_STORE_PATH else "",
         f" with spatial imprint trigger report {SCOUT_SPATIAL_IMPRINT_TRIGGER_REPORT_PATH}" if SCOUT_SPATIAL_IMPRINT_TRIGGER_REPORT_PATH else "",
     )
+
+
+def _mobile_wearable_ingress_status_path() -> Path:
+    explicit_path = (SCOUT_MOBILE_WEARABLE_INGRESS_STATUS_PATH or "").strip()
+    if explicit_path:
+        return Path(explicit_path).expanduser()
+    evidence_dir = (SCOUT_SENSORLOGGER_MQTT_EVIDENCE_DIR or "").strip()
+    if evidence_dir:
+        return Path(evidence_dir).expanduser() / "sensorlogger_mqtt_status.json"
+    return SCOUT_ROOT / "artifacts" / "mobile_wearable" / "sensorlogger_mqtt" / "sensorlogger_mqtt_status.json"
 
 
 def _include_assistant_router(app: FastAPI) -> None:

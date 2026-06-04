@@ -11,6 +11,7 @@ ALLOWED_DEBUG_ENDPOINTS = {
     "/assistant/status",
     "/debug/events",
     "/debug/messages",
+    "/debug/mobile-wearable/ingress",
     "/debug/monitoring",
     "/debug/state",
 }
@@ -28,6 +29,7 @@ class DebugPageTests(unittest.TestCase):
         self.assertIn("Current L0-L4 State", html)
         self.assertIn("Provider Degraded Status", html)
         self.assertIn("Hardware Readiness", html)
+        self.assertIn("Mobile/Wearable Ingress", html)
         self.assertIn("Ln And Skill Runs", html)
         self.assertIn("Agent tool calls", html)
         self.assertIn("Spatial imprint events", html)
@@ -51,6 +53,7 @@ class DebugPageTests(unittest.TestCase):
         self.assertIn('id="panel-state"', html)
         self.assertIn('id="panel-provider"', html)
         self.assertIn('id="panel-hardware"', html)
+        self.assertIn('id="panel-ingress"', html)
         self.assertIn('id="panel-incident"', html)
         self.assertIn('id="panel-skill"', html)
         self.assertIn('id="panel-outbound"', html)
@@ -69,6 +72,26 @@ class DebugPageTests(unittest.TestCase):
         self.assertIn("renderEndpointPayloads", html)
         self.assertIn("JSON.stringify(payload || {}, null, 2)", html)
         self.assertIn("Debug endpoint payload windows", html)
+
+    def test_static_debug_page_reads_mobile_wearable_ingress_status(self):
+        html = PAGE_PATH.read_text(encoding="utf-8")
+
+        self.assertIn('id="tab-ingress"', html)
+        self.assertIn('id="panel-ingress"', html)
+        self.assertIn("/debug/mobile-wearable/ingress", html)
+        self.assertIn("loadMobileWearableIngressContext", html)
+        self.assertIn("debugPageState.mobileWearableIngress", html)
+        self.assertIn("renderMobileWearableIngress", html)
+        self.assertIn('id="mobileIngressSummary"', html)
+        self.assertIn('id="mobileIngressRecordCount"', html)
+        self.assertIn('id="mobileIngressMessageCount"', html)
+        self.assertIn('id="mobileIngressInvalidCount"', html)
+        self.assertIn('id="mobileIngressSensorCount"', html)
+        self.assertIn('id="mobileIngressLatestStatus"', html)
+        self.assertIn('id="mobileIngressRecordList"', html)
+        self.assertIn("raw payload stays in evidence JSONL", html)
+        self.assertIn("不顯示 raw sensor values", html)
+        self.assertIn("credential_value_exposed", html)
 
     def test_static_debug_page_has_debug_projection_clear_button(self):
         html = PAGE_PATH.read_text(encoding="utf-8")

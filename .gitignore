@@ -73,6 +73,7 @@ Scout/
 # Scout local captures and heavyweight map data
 PdrSample/
 catographydata/
+sensor-logger-streaming-demo-app/
 tmp/
 trajectory_map.png
 

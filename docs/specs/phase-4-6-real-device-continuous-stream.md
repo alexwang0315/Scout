@@ -13,6 +13,13 @@ plan-node check-ins, hardware/software state, wearable/body-load cues, and
 communication readiness evidence, but they do not by themselves approve
 departure, send SOS/incident reports, or mutate Phase 2 Brain facts.
 
+The mobile/wearable ecosystem contract that fixes Sensor Logger MQTT as Scout's
+canonical v0 reference wire format is owned by
+`docs/specs/scout-mobile-wearable-sensor-ecosystem.md`. This Phase 4.6 spec
+keeps the Apple Watch/iPhone runtime semantics, while the ecosystem spec owns
+the cross-client MQTT payload and topic contract that future Android and
+Scout-native clients should follow.
+
 中文註釋：這個 milestone 的目標是讓真裝置連續串流有明確身份、簽章、排序、
 重送、限流與 operator control 語意。它不是 field mission 自動出發，也不是
 SOS / SMS / satellite / incident bridge live send 的啟用。
