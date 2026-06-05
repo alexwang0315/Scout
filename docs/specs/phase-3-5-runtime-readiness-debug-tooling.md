@@ -557,7 +557,10 @@ Rules:
 
 ## Debug JSON API
 
-The `/debug` API must be read-only.
+The `/debug` API must be read-only with respect to runtime truth, safety state,
+incidents, outbound delivery, hardware control, and Phase 2 Brain writeback.
+Projection-only maintenance endpoints are allowed when they require explicit
+confirmation and preserve the same boundary.
 
 Initial endpoints:
 
@@ -567,6 +570,31 @@ GET /debug/state
 GET /debug/messages
 GET /debug
 ```
+
+2026-06 mobile/wearable ingress extension:
+
+```text
+GET /debug/stream
+GET /debug/mobile-wearable/ingress
+POST /debug/clear
+POST /debug/mobile-wearable/ingress/reset
+```
+
+`GET /debug/stream` uses Server-Sent Events for live debug snapshots. It exists
+because high-frequency provider, MQTT, GPIO, I2C, UART, and hardware observer
+events cannot rely on manual refresh buttons.
+
+The two POST endpoints above are projection-only maintenance controls:
+
+- `POST /debug/clear` requires `confirm_debug_projection_clear=true` and clears
+  projected debug timeline events only.
+- `POST /debug/mobile-wearable/ingress/reset` requires
+  `confirm_mobile_wearable_ingress_debug_reset=true` and resets
+  mobile/wearable ingress memo/counters from the current baseline only.
+
+Neither endpoint may delete raw evidence JSONL, delete ingress index JSONL,
+restart observers, mutate runtime admission, call `/safety/*`, send outbound
+messages, write Phase 2 Brain facts, or control hardware.
 
 Optional query parameters:
 
@@ -578,7 +606,9 @@ Optional query parameters:
 
 Rules:
 
-- no POST, PATCH, PUT, or DELETE under `/debug` in Phase 3.5;
+- no runtime/safety mutation POST, PATCH, PUT, or DELETE under `/debug`;
+- any allowed POST under `/debug` must be projection-only, confirmation-gated,
+  and boundary-tagged;
 - `/debug` must not call `/safety/observations`;
 - `/debug` must not call `/safety/ack`;
 - `/debug` must not write Phase 2 Brain nodes;
@@ -602,8 +632,19 @@ Required panels:
 Design constraints:
 
 - static HTML is enough for MVP;
-- read from `/debug/*` only;
+- read from `/debug/*` only, with `EventSource`/SSE for live snapshot updates;
 - no controls that mutate runtime state;
+- projection-only controls must be placed in the panel they affect. For example,
+  the Timeline clear action belongs in the Timeline header, not the global page
+  header, and mobile/wearable ingress reset belongs inside the Ingress panel.
+- high-rate ingress panels must render memo/counters/status chips, not one visual card or list item per incoming MQTT/provider message.
+- raw sensor values, private tracks, health values, and credentials must stay in
+  evidence files; debug UI should show bounded summaries and artifact refs only.
+- map feature mouse-over should provide named point/line/area hints when the
+  debug map has feature metadata.
+- debug headers, map controls, and toolbars should be compact because hardware
+  observer panes, ingress status, timeline, map, and assistant context compete
+  for the same operator screen space.
 - no planning project workspace controls;
 - no user-facing product copy;
 - no real transport controls.
@@ -671,6 +712,8 @@ Regression tests to keep green:
 Always:
 
 - keep `/debug` read-only;
+- treat `/debug/clear` and `/debug/mobile-wearable/ingress/reset` as
+  projection-only operator controls, not runtime mutation;
 - use fixture-backed simulator inputs first;
 - use mock outbound transport only;
 - preserve Phase 1 safety state semantics;
@@ -692,7 +735,8 @@ Never:
 
 - change Phase 1 safety decision logic as part of Phase 3.5;
 - make debug event data an input to route progress or risk rules;
-- let `/debug` call mutation endpoints;
+- let `/debug` call runtime, safety, incident, outbound, Brain, or hardware
+  mutation endpoints;
 - make bridge import default-on;
 - write model output as `ObservedFact`;
 - require hardware for Phase 3.5 acceptance;
