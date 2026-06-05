@@ -25,11 +25,21 @@ The Phase 4 admin container now has an opt-in debug projection surface:
 
 - `SCOUT_DEBUG_API_ENABLED=true`;
 - `SCOUT_DEBUG_LOG_PATH=/data/scout/admin/debug/runtime-debug-events.jsonl`;
+- `SCOUT_INGRESS_OBSERVER_SUPERVISOR_ENABLED=true`;
+- `SCOUT_SENSORLOGGER_MQTT_AUTOSTART=true`;
 - `GET /admin/debug`;
 - `GET /debug/events`;
 - `GET /debug/state`;
 - `GET /debug/messages`;
+- `GET /debug/stream`;
 - `POST /debug/clear`.
+
+When MQTT autostart is enabled, the admin runtime starts a background
+`sensorlogger-mqtt` observer during its application lifespan and stops it during
+shutdown. The observer writes evidence under
+`/data/scout/admin/ingress/sensorlogger_mqtt`, and `/health` reports
+`ingress_observers` with running status, log path, status path, and credential
+presence booleans. Credential values are never returned.
 
 All protected admin/debug routes remain behind the existing Phase 4 admin auth
 middleware:
@@ -72,6 +82,8 @@ and keep the output path unchanged.
    - accepted count changes;
    - observations processed changes;
    - incident delta.
+6. For Sensor Logger MQTT smoke, start publishing from the phone app and watch
+   the Ingress panel update through `GET /debug/stream`.
 
 `Clear` only truncates the debug projection log. It does not clear runtime state,
 safety state, incidents, outbound queues, Phase 2 Brain, or hardware state.

@@ -17,8 +17,8 @@ send SOS/SMS/satellite messages, or write Phase 2 Brain facts.
 - Sensor Logger Pro has MQTT Publishing enabled.
 - HiveMQ Cloud or another MQTT broker is running.
 - Sensor Logger and Scout observer use the same topic.
-- The local observer has `paho-mqtt==2.1.0` installed from
-  `requirements.pi.live.txt`.
+- The Scout admin image has `paho-mqtt==2.1.0` installed from
+  `requirements.pi.admin.txt`.
 
 Current lab topic:
 
@@ -26,10 +26,73 @@ Current lab topic:
 scout/test/alex/sensorlogger
 ```
 
-## Recommended Capture Command
+## Scout-Side Autostart
+
+The preferred Scout path is automatic. When the Phase 4 admin runtime starts,
+`IngressObserverSupervisor` starts the Sensor Logger MQTT observer in the
+background if `SCOUT_SENSORLOGGER_MQTT_AUTOSTART` is enabled and either the
+configured env file exists or inline broker/topic env vars are present.
+
+Default Scout paths:
+
+```text
+env file:     /data/scout/secrets/sensorlogger-mqtt.env
+evidence dir: /data/scout/admin/ingress/sensorlogger_mqtt
+log file:     /data/scout/admin/ingress/sensorlogger-mqtt-observer.log
+status file:  /data/scout/admin/ingress/sensorlogger_mqtt/sensorlogger_mqtt_status.json
+```
+
+The env file should contain the MQTT host, websocket TLS port, topic, and the
+Scout observer's subscribe credential. Keep Sensor Logger on a separate
+publish-only credential when possible.
+
+Verify autostart from the Scout host:
+
+```bash
+curl -sS \
+  -H "Authorization: Bearer $(cat /data/scout/admin/secrets/phase4-admin-token)" \
+  http://127.0.0.1:9110/health
+```
+
+Expected indicators in the health payload:
+
+- `ingress_observers.enabled` is `true`.
+- `ingress_observers.running_count` is at least `1`.
+- the `sensorlogger-mqtt` observer reports `running: true`.
+- `env_file_exists` is `true`.
+- no MQTT password or token value appears in the payload.
+
+Check the observer log without exposing secrets:
+
+```bash
+tail -n 40 /data/scout/admin/ingress/sensorlogger-mqtt-observer.log
+```
+
+## Reset Debug Counters
+
+`/admin/debug?tab=ingress` includes a `歸零` button for MQTT ingress counters.
+It writes a debug reset marker and makes the Ingress panel count from that
+baseline forward.
+
+This reset is projection-only:
+
+- it does not delete raw MQTT evidence JSONL;
+- it does not delete ingress summary JSONL;
+- it does not restart or stop the observer;
+- it does not mutate runtime admission, `/safety/*`, Phase 1 L0-L4, or Phase 2
+  Brain state.
+
+The reset marker is stored beside the observer status file:
+
+```text
+/data/scout/admin/ingress/sensorlogger_mqtt/sensorlogger_mqtt_debug_reset.json
+```
+
+## Local Capture Fallback
 
 The observer can read the local demo `.env` file directly. This avoids exporting
-the MQTT password in the shell:
+the MQTT password in the shell. Use this command only for local smoke tests or
+when the Scout-side admin runtime is not available:
 
 ```bash
 cd /Users/alexwang0315/scout-fusion
