@@ -1,7 +1,9 @@
 import socket
+import shutil
 import threading
 import urllib.request
 import json
+from pathlib import Path
 
 import pytest
 
@@ -12,11 +14,24 @@ from assistant_offline_fallback_contract import (
     OFFLINE_FALLBACK_SCHEMA_VERSION,
 )
 from assistant_pydantic_provider import (
+    EVIDENCE_FULLTEXT_TOOL_ID,
     FallbackPydanticAIRunner,
+    MAJOR_POINT_TOOL_ID,
+    MAP_PERCEPTION_TOOL_ID,
     PydanticAIAssistantProvider,
     PydanticAIEnvRunner,
+    RISK_SCORE_TOOL_ID,
+    ROUTE_STRUCTURE_TOOL_ID,
+    TERRAIN_SCORE_TOOL_ID,
+    WORKSPACE_CATALOG_TOOL_ID,
+    WORKSPACE_EVIDENCE_TOOL_ID,
     create_configured_pydantic_runner,
 )
+from scout_agent_kb import write_local_evidence_sqlite_index
+
+
+ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = ROOT / "tests" / "fixtures" / "pretrip" / "projects" / "chilai_nanhua_day1"
 
 
 class FakeRunner:
@@ -45,6 +60,166 @@ class FakeRunner:
         if self.fail_run:
             raise RuntimeError("run failed")
         return self.output
+
+
+class FakeWorkspaceToolRunner(FakeRunner):
+    def __init__(self, output_prefix: str = "tool-backed answer"):
+        super().__init__(output_prefix)
+        self.tool_calls = []
+
+    def run_with_workspace_tools(self, prompt: str, *, timeout_seconds: int, tool_context):
+        self.calls.append({"prompt": prompt, "timeout_seconds": timeout_seconds})
+        tool_result = tool_context.search_scout_workspace_evidence(
+            query="黑水塘有什麼資料？",
+            limit=5,
+        )
+        self.tool_calls.append(tool_result)
+        evidence_types = [
+            item.get("evidence_type")
+            for item in tool_result.get("results", [])
+            if isinstance(item, dict)
+        ]
+        return (
+            f"{self.output}: {tool_result.get('retrieval_engine')} "
+            f"{','.join(str(item) for item in evidence_types)}"
+        )
+
+
+class FakeRiskScoreToolRunner(FakeRunner):
+    def __init__(self, output_prefix: str = "risk-score answer"):
+        super().__init__(output_prefix)
+        self.tool_calls = []
+
+    def run_with_workspace_tools(self, prompt: str, *, timeout_seconds: int, tool_context):
+        self.calls.append({"prompt": prompt, "timeout_seconds": timeout_seconds})
+        tool_result = tool_context.search_scout_risk_scores(
+            query="baseline risk score highest",
+            surface="baseline",
+            limit=3,
+        )
+        self.tool_calls.append(tool_result)
+        top_score = (
+            tool_result.get("results", [{}])[0].get("score")
+            if tool_result.get("results")
+            else None
+        )
+        return f"{self.output}: top_score={top_score}"
+
+
+class FakeTerrainScoreToolRunner(FakeRunner):
+    def __init__(self, output_prefix: str = "terrain-score answer"):
+        super().__init__(output_prefix)
+        self.tool_calls = []
+
+    def run_with_workspace_tools(self, prompt: str, *, timeout_seconds: int, tool_context):
+        self.calls.append({"prompt": prompt, "timeout_seconds": timeout_seconds})
+        tool_result = tool_context.search_scout_terrain_scores(
+            query="terrain slope 最高",
+            metric="slope",
+            limit=3,
+        )
+        self.tool_calls.append(tool_result)
+        top_score = (
+            tool_result.get("results", [{}])[0].get("score")
+            if tool_result.get("results")
+            else None
+        )
+        top_field = (
+            tool_result.get("results", [{}])[0].get("score_field")
+            if tool_result.get("results")
+            else None
+        )
+        return f"{self.output}: top_{top_field}={top_score}"
+
+
+class FakeMapPerceptionToolRunner(FakeRunner):
+    def __init__(self, output_prefix: str = "map-perception answer"):
+        super().__init__(output_prefix)
+        self.tool_calls = []
+
+    def run_with_workspace_tools(self, prompt: str, *, timeout_seconds: int, tool_context):
+        self.calls.append({"prompt": prompt, "timeout_seconds": timeout_seconds})
+        tool_result = tool_context.search_scout_map_perception(
+            query="CP001 附近有沒有標註",
+            limit=3,
+        )
+        self.tool_calls.append(tool_result)
+        top_text = (
+            tool_result.get("results", [{}])[0].get("label_text")
+            if tool_result.get("results")
+            else None
+        )
+        return f"{self.output}: top_label={top_text}"
+
+
+class FakeWorkspaceCatalogToolRunner(FakeRunner):
+    def __init__(self, output_prefix: str = "workspace-catalog answer"):
+        super().__init__(output_prefix)
+        self.tool_calls = []
+
+    def run_with_workspace_tools(self, prompt: str, *, timeout_seconds: int, tool_context):
+        self.calls.append({"prompt": prompt, "timeout_seconds": timeout_seconds})
+        tool_result = tool_context.search_scout_workspace_catalog(
+            query="workspace 有哪些資料",
+            limit=4,
+        )
+        self.tool_calls.append(tool_result)
+        return f"{self.output}: artifact_refs={tool_result['summaries']['artifact_ref_count']}"
+
+
+class FakeRouteStructureToolRunner(FakeRunner):
+    def __init__(self, output_prefix: str = "route-structure answer"):
+        super().__init__(output_prefix)
+        self.tool_calls = []
+
+    def run_with_workspace_tools(self, prompt: str, *, timeout_seconds: int, tool_context):
+        self.calls.append({"prompt": prompt, "timeout_seconds": timeout_seconds})
+        tool_result = tool_context.search_scout_route_structure(
+            query="有多少個 CP?",
+            limit=3,
+        )
+        self.tool_calls.append(tool_result)
+        return f"{self.output}: cp_count={tool_result['summaries']['checkpoint_count']}"
+
+
+class FakeMajorPointToolRunner(FakeRunner):
+    def __init__(self, output_prefix: str = "major-point answer"):
+        super().__init__(output_prefix)
+        self.tool_calls = []
+
+    def run_with_workspace_tools(self, prompt: str, *, timeout_seconds: int, tool_context):
+        self.calls.append({"prompt": prompt, "timeout_seconds": timeout_seconds})
+        tool_result = tool_context.search_scout_major_points(
+            query="黑水塘在第幾 CP 附近?",
+            limit=3,
+        )
+        self.tool_calls.append(tool_result)
+        top_cp = (
+            tool_result.get("results", [{}])[0].get("nearest_cp_candidate_id")
+            if tool_result.get("results")
+            else None
+        )
+        return f"{self.output}: nearest_cp={top_cp}"
+
+
+class FakeEvidenceFulltextToolRunner(FakeRunner):
+    def __init__(self, output_prefix: str = "evidence-fulltext answer"):
+        super().__init__(output_prefix)
+        self.tool_calls = []
+
+    def run_with_workspace_tools(self, prompt: str, *, timeout_seconds: int, tool_context):
+        self.calls.append({"prompt": prompt, "timeout_seconds": timeout_seconds})
+        tool_result = tool_context.search_scout_evidence_fulltext(
+            query="黑水塘",
+            limit=3,
+        )
+        self.tool_calls.append(tool_result)
+        top_record = (
+            tool_result.get("results", [{}])[0].get("record_id")
+            if tool_result.get("results")
+            else None
+        )
+        return f"{self.output}: top_record={top_record}"
 
 
 def test_pydantic_ai_provider_is_opt_in_read_only_and_uses_injected_runner():
@@ -79,6 +254,298 @@ def test_pydantic_ai_provider_is_opt_in_read_only_and_uses_injected_runner():
     assert "route progress degraded" in response.answer
     assert runner.calls[0]["timeout_seconds"] == 3
     assert "Phase 1 deterministic safety decisions are authoritative" in runner.calls[0]["prompt"]
+
+
+def test_pydantic_ai_provider_can_answer_with_read_only_workspace_tool(
+    tmp_path: Path,
+    monkeypatch,
+):
+    workspace_root = tmp_path / "pretrip-workspaces"
+    project_root = workspace_root / "chilai_nanhua_day1"
+    shutil.copytree(PROJECT_ROOT, project_root)
+    write_local_evidence_sqlite_index(
+        project_root,
+        project_root / "outputs" / "kb" / "local-evidence-index.sqlite3",
+    )
+    monkeypatch.setenv("SCOUT_PRETRIP_WORKSPACE_ROOT", str(workspace_root))
+    runner = FakeWorkspaceToolRunner()
+
+    response = PydanticAIAssistantProvider(runner=runner, timeout_seconds=2).answer(
+        ScoutAssistantQuery(
+            surface="pretrip",
+            question="黑水塘有什麼資料？",
+            context_ref="chilai_nanhua_day1",
+            project_id="chilai_nanhua_day1",
+        ),
+        sources=[],
+    )
+
+    assert runner.tool_calls
+    assert response.sources[0].source_id == WORKSPACE_EVIDENCE_TOOL_ID
+    latest = response.sources[0].context_summary["latest"]
+    assert latest["status"] == "completed"
+    assert latest["retrieval_engine"] == "sqlite_fts5_bm25"
+    evidence_types = {item["evidence_type"] for item in latest["results"]}
+    assert "pretrip_mcp_named_point" in evidence_types
+    assert "pretrip_mcp_cp_support_reconciliation" in evidence_types
+    assert "pretrip_major_critical_point_candidate" in evidence_types
+    assert latest["boundary"]["runtime_safety_truth"] is False
+    assert response.boundary.phase1_mutation_allowed is False
+    assert response.boundary.outbound_send_allowed is False
+    assert any("workspace_tool_invocations=1" in item for item in response.limitations)
+    assert any(WORKSPACE_EVIDENCE_TOOL_ID in item for item in response.limitations)
+    assert "sqlite_fts5_bm25" in response.answer
+
+
+def test_pydantic_ai_provider_can_answer_with_read_only_risk_score_tool(
+    tmp_path: Path,
+    monkeypatch,
+):
+    workspace_root = tmp_path / "pretrip-workspaces"
+    project_root = workspace_root / "chilai_nanhua_day1"
+    shutil.copytree(PROJECT_ROOT, project_root)
+    monkeypatch.setenv("SCOUT_PRETRIP_WORKSPACE_ROOT", str(workspace_root))
+    runner = FakeRiskScoreToolRunner()
+
+    response = PydanticAIAssistantProvider(runner=runner, timeout_seconds=2).answer(
+        ScoutAssistantQuery(
+            surface="pretrip",
+            question="risk score baseline 最高分在哪？",
+            context_ref="chilai_nanhua_day1",
+            project_id="chilai_nanhua_day1",
+        ),
+        sources=[],
+    )
+
+    assert runner.tool_calls
+    assert response.sources[0].source_id == RISK_SCORE_TOOL_ID
+    latest = response.sources[0].context_summary["latest"]
+    assert latest["status"] == "completed"
+    assert latest["summaries"]["baseline"]["available"] is True
+    assert latest["result_count"] > 0
+    assert latest["results"][0]["surface"] == "baseline"
+    assert latest["boundary"]["runtime_safety_truth"] is False
+    assert response.boundary.phase1_mutation_allowed is False
+    assert response.boundary.outbound_send_allowed is False
+    assert any(RISK_SCORE_TOOL_ID in item for item in response.limitations)
+
+
+def test_pydantic_ai_provider_can_answer_with_read_only_terrain_score_tool(
+    tmp_path: Path,
+    monkeypatch,
+):
+    workspace_root = tmp_path / "pretrip-workspaces"
+    _write_terrain_workspace(workspace_root / "chilai_nanhua_day1")
+    monkeypatch.setenv("SCOUT_PRETRIP_WORKSPACE_ROOT", str(workspace_root))
+    runner = FakeTerrainScoreToolRunner()
+
+    response = PydanticAIAssistantProvider(runner=runner, timeout_seconds=2).answer(
+        ScoutAssistantQuery(
+            surface="pretrip",
+            question="terrain slope 最高在哪？",
+            context_ref="chilai_nanhua_day1",
+            project_id="chilai_nanhua_day1",
+        ),
+        sources=[],
+    )
+
+    assert runner.tool_calls
+    assert response.sources[0].source_id == TERRAIN_SCORE_TOOL_ID
+    latest = response.sources[0].context_summary["latest"]
+    assert latest["status"] == "completed"
+    assert latest["metric"] == "slope"
+    assert latest["result_count"] > 0
+    assert latest["results"][0]["score_field"] == "slope_degrees"
+    assert latest["boundary"]["runtime_safety_truth"] is False
+    assert response.boundary.phase1_mutation_allowed is False
+    assert response.boundary.outbound_send_allowed is False
+    assert any(TERRAIN_SCORE_TOOL_ID in item for item in response.limitations)
+
+
+def test_pydantic_ai_provider_can_answer_with_read_only_map_perception_tool(
+    tmp_path: Path,
+    monkeypatch,
+):
+    workspace_root = tmp_path / "pretrip-workspaces"
+    _write_map_perception_workspace(workspace_root / "chilai_nanhua_day1")
+    monkeypatch.setenv("SCOUT_PRETRIP_WORKSPACE_ROOT", str(workspace_root))
+    runner = FakeMapPerceptionToolRunner()
+
+    response = PydanticAIAssistantProvider(runner=runner, timeout_seconds=2).answer(
+        ScoutAssistantQuery(
+            surface="pretrip",
+            question="CP001 附近有沒有標註？",
+            context_ref="chilai_nanhua_day1",
+            project_id="chilai_nanhua_day1",
+        ),
+        sources=[],
+    )
+
+    assert runner.tool_calls
+    assert response.sources[0].source_id == MAP_PERCEPTION_TOOL_ID
+    latest = response.sources[0].context_summary["latest"]
+    assert latest["status"] == "completed"
+    assert latest["result_count"] > 0
+    assert latest["results"][0]["evidence_type"] == "ocr_label"
+    assert latest["results"][0]["label_text"] == "雲海保線所"
+    assert latest["boundary"]["runtime_safety_truth"] is False
+    assert response.boundary.phase1_mutation_allowed is False
+    assert response.boundary.outbound_send_allowed is False
+    assert any(MAP_PERCEPTION_TOOL_ID in item for item in response.limitations)
+
+
+def test_pydantic_ai_provider_can_answer_with_workspace_catalog_tool(
+    tmp_path: Path,
+    monkeypatch,
+):
+    workspace_root = tmp_path / "pretrip-workspaces"
+    shutil.copytree(PROJECT_ROOT, workspace_root / "chilai_nanhua_day1")
+    monkeypatch.setenv("SCOUT_PRETRIP_WORKSPACE_ROOT", str(workspace_root))
+    runner = FakeWorkspaceCatalogToolRunner()
+
+    response = PydanticAIAssistantProvider(runner=runner, timeout_seconds=2).answer(
+        ScoutAssistantQuery(
+            surface="pretrip",
+            question="這個 workspace 有哪些資料？",
+            context_ref="chilai_nanhua_day1",
+            project_id="chilai_nanhua_day1",
+        ),
+        sources=[],
+    )
+
+    assert runner.tool_calls
+    assert response.sources[0].source_id == WORKSPACE_CATALOG_TOOL_ID
+    latest = response.sources[0].context_summary["latest"]
+    assert latest["status"] == "completed"
+    assert latest["summaries"]["artifact_ref_count"] >= 60
+    assert latest["boundary"]["runtime_safety_truth"] is False
+    assert any(WORKSPACE_CATALOG_TOOL_ID in item for item in response.limitations)
+
+
+def test_pydantic_ai_provider_can_answer_with_route_structure_tool(
+    tmp_path: Path,
+    monkeypatch,
+):
+    workspace_root = tmp_path / "pretrip-workspaces"
+    shutil.copytree(PROJECT_ROOT, workspace_root / "chilai_nanhua_day1")
+    monkeypatch.setenv("SCOUT_PRETRIP_WORKSPACE_ROOT", str(workspace_root))
+    runner = FakeRouteStructureToolRunner()
+
+    response = PydanticAIAssistantProvider(runner=runner, timeout_seconds=2).answer(
+        ScoutAssistantQuery(
+            surface="pretrip",
+            question="有多少個 CP?",
+            context_ref="chilai_nanhua_day1",
+            project_id="chilai_nanhua_day1",
+        ),
+        sources=[],
+    )
+
+    assert runner.tool_calls
+    assert response.sources[0].source_id == ROUTE_STRUCTURE_TOOL_ID
+    latest = response.sources[0].context_summary["latest"]
+    assert latest["status"] == "completed"
+    assert latest["summaries"]["checkpoint_count"] == 124
+    assert latest["summaries"]["segment_count"] == 123
+    assert latest["boundary"]["runtime_safety_truth"] is False
+    assert any(ROUTE_STRUCTURE_TOOL_ID in item for item in response.limitations)
+
+
+def test_pydantic_ai_provider_can_answer_with_major_point_tool(
+    tmp_path: Path,
+    monkeypatch,
+):
+    workspace_root = tmp_path / "pretrip-workspaces"
+    shutil.copytree(PROJECT_ROOT, workspace_root / "chilai_nanhua_day1")
+    monkeypatch.setenv("SCOUT_PRETRIP_WORKSPACE_ROOT", str(workspace_root))
+    runner = FakeMajorPointToolRunner()
+
+    response = PydanticAIAssistantProvider(runner=runner, timeout_seconds=2).answer(
+        ScoutAssistantQuery(
+            surface="pretrip",
+            question="黑水塘在第幾 CP 附近?",
+            context_ref="chilai_nanhua_day1",
+            project_id="chilai_nanhua_day1",
+        ),
+        sources=[],
+    )
+
+    assert runner.tool_calls
+    assert response.sources[0].source_id == MAJOR_POINT_TOOL_ID
+    latest = response.sources[0].context_summary["latest"]
+    assert latest["status"] == "completed"
+    assert latest["results"][0]["candidate_id"] == "mcp.heishuitang.002"
+    assert latest["results"][0]["nearest_cp_candidate_id"] == "cp.002"
+    assert latest["boundary"]["runtime_safety_truth"] is False
+    assert any(MAJOR_POINT_TOOL_ID in item for item in response.limitations)
+
+
+def test_pydantic_ai_provider_can_answer_with_evidence_fulltext_tool(
+    tmp_path: Path,
+    monkeypatch,
+):
+    workspace_root = tmp_path / "pretrip-workspaces"
+    shutil.copytree(PROJECT_ROOT, workspace_root / "chilai_nanhua_day1")
+    monkeypatch.setenv("SCOUT_PRETRIP_WORKSPACE_ROOT", str(workspace_root))
+    runner = FakeEvidenceFulltextToolRunner()
+
+    response = PydanticAIAssistantProvider(runner=runner, timeout_seconds=2).answer(
+        ScoutAssistantQuery(
+            surface="pretrip",
+            question="黑水塘有什麼 route note 或報告？",
+            context_ref="chilai_nanhua_day1",
+            project_id="chilai_nanhua_day1",
+        ),
+        sources=[],
+    )
+
+    assert runner.tool_calls
+    assert response.sources[0].source_id == EVIDENCE_FULLTEXT_TOOL_ID
+    latest = response.sources[0].context_summary["latest"]
+    assert latest["status"] == "completed"
+    assert latest["result_count"] >= 1
+    assert latest["results"][0]["record_id"] == "mcp.heishuitang.002"
+    assert latest["boundary"]["runtime_safety_truth"] is False
+    assert any(EVIDENCE_FULLTEXT_TOOL_ID in item for item in response.limitations)
+
+
+def test_pydantic_ai_fallback_runner_preserves_workspace_tool_context(
+    tmp_path: Path,
+    monkeypatch,
+):
+    workspace_root = tmp_path / "pretrip-workspaces"
+    project_root = workspace_root / "chilai_nanhua_day1"
+    shutil.copytree(PROJECT_ROOT, project_root)
+    write_local_evidence_sqlite_index(
+        project_root,
+        project_root / "outputs" / "kb" / "local-evidence-index.sqlite3",
+    )
+    monkeypatch.setenv("SCOUT_PRETRIP_WORKSPACE_ROOT", str(workspace_root))
+    cloud = FakeRunner("cloud should not win", fail_run=True)
+    local = FakeWorkspaceToolRunner("local tool answer")
+    runner = FallbackPydanticAIRunner(
+        primary_runner=cloud,
+        fallback_runner=local,
+        primary_profile="cloud",
+        fallback_profile="local",
+    )
+
+    response = PydanticAIAssistantProvider(runner=runner, timeout_seconds=2).answer(
+        ScoutAssistantQuery(
+            surface="pretrip",
+            question="黑水塘有什麼資料？",
+            project_id="chilai_nanhua_day1",
+        ),
+        sources=[],
+    )
+
+    assert runner.last_profile == "local"
+    assert runner.failover_count == 1
+    assert local.tool_calls
+    assert response.sources[0].source_id == WORKSPACE_EVIDENCE_TOOL_ID
+    assert response.sources[0].context_summary["latest"]["status"] == "completed"
+    assert "local tool answer" in response.answer
+    assert any("local model fallback was used" in item for item in response.limitations)
 
 
 def test_pydantic_ai_prompt_includes_selected_event_detail_from_context_summary():
@@ -495,6 +962,173 @@ def test_configured_runner_enforces_fixed_schema_for_local_fallback_by_default()
     assert isinstance(runner, FallbackPydanticAIRunner)
     assert runner.enforce_local_fixed_schema is True
     assert runner.fixed_schema_offline_fallback_contract == OFFLINE_FALLBACK_SCHEMA_VERSION
+
+
+def _write_terrain_workspace(project_root: Path) -> Path:
+    (project_root / "candidates").mkdir(parents=True)
+    (project_root / "outputs" / "layers" / "normalized").mkdir(parents=True)
+    (project_root / "project.json").write_text(
+        json.dumps(
+            {
+                "project_id": project_root.name,
+                "checkpoint_candidates_ref": "candidates/checkpoints.json",
+                "terrain_route_samples_ref": (
+                    "outputs/layers/normalized/terrain_route_samples.geojson"
+                ),
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    (project_root / "candidates" / "checkpoints.json").write_text(
+        json.dumps(
+            [
+                {
+                    "candidate_id": "cp.001",
+                    "label": "CP 001",
+                    "lat": 24.001,
+                    "lon": 121.001,
+                }
+            ],
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    (project_root / "outputs" / "layers" / "normalized" / "terrain_route_samples.geojson").write_text(
+        json.dumps(
+            {
+                "type": "FeatureCollection",
+                "artifact_kind": "pretrip_layer_terrain_route_samples",
+                "features": [
+                    _terrain_point("terrain.sample.000", 24.0, 121.0, 0.0, 12.0, 44.0),
+                    _terrain_point(
+                        "terrain.sample.001",
+                        24.001,
+                        121.001,
+                        1000.0,
+                        38.0,
+                        82.0,
+                    ),
+                    _terrain_point(
+                        "terrain.sample.002",
+                        24.002,
+                        121.002,
+                        2000.0,
+                        54.0,
+                        96.0,
+                    ),
+                ],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    return project_root
+
+
+def _terrain_point(
+    sample_id: str,
+    lat: float,
+    lon: float,
+    distance_m: float,
+    slope_degrees: float,
+    teii_20m: float,
+) -> dict:
+    return {
+        "type": "Feature",
+        "geometry": {"type": "Point", "coordinates": [lon, lat]},
+        "properties": {
+            "sample_id": sample_id,
+            "route_id": "fixture_route",
+            "distance_m": distance_m,
+            "slope_degrees": slope_degrees,
+            "teii_20m": teii_20m,
+            "tri": min(teii_20m + 1.0, 100.0),
+            "sri": 5.0,
+            "lec": min(teii_20m + 2.0, 100.0),
+            "pretrip_risk": min(teii_20m + 3.0, 100.0),
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+        },
+    }
+
+
+def _write_map_perception_workspace(project_root: Path) -> Path:
+    (project_root / "candidates").mkdir(parents=True)
+    (project_root / "outputs" / "mcp").mkdir(parents=True)
+    (project_root / "project.json").write_text(
+        json.dumps(
+            {
+                "project_id": project_root.name,
+                "checkpoint_candidates_ref": "candidates/checkpoints.json",
+                "mcp_ocr_labels_ref": "outputs/mcp/mcp_ocr_labels.json",
+                "mcp_named_point_evidence_ref": "outputs/mcp/named_point_evidence.json",
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    (project_root / "candidates" / "checkpoints.json").write_text(
+        json.dumps(
+            [
+                {
+                    "candidate_id": "cp.001",
+                    "label": "CP 001",
+                    "lat": 24.001,
+                    "lon": 121.001,
+                }
+            ],
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    (project_root / "outputs" / "mcp" / "mcp_ocr_labels.json").write_text(
+        json.dumps(
+            {
+                "artifact_kind": "pretrip_mcp_ocr_label_set",
+                "candidate_only": True,
+                "full_source_image_embedded": False,
+                "labels": [
+                    {
+                        "ocr_label_id": "ocr.yunhai_station.001",
+                        "label_text": "雲海保線所",
+                        "bbox": [120, 310, 184, 338],
+                        "confidence": 0.87,
+                        "named_point_id": "np.yunhai_station",
+                        "source_ref": "local_map_tile.z15.x26142.y13991",
+                        "review_required": True,
+                        "candidate_only": True,
+                        "full_source_image_embedded": False,
+                    }
+                ],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    (project_root / "outputs" / "mcp" / "named_point_evidence.json").write_text(
+        json.dumps(
+            {
+                "artifact_kind": "pretrip_named_point_evidence_set",
+                "named_points": [
+                    {
+                        "named_point_id": "np.yunhai_station",
+                        "canonical_name": "雲海保線所",
+                        "aliases": ["保線所"],
+                        "point_class": ["camp_hut_structure"],
+                        "route_position": {
+                            "lat": 24.001,
+                            "lon": 121.001,
+                            "distance_m": 1000.0,
+                        },
+                    }
+                ],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    return project_root
 
 
 def _fixed_schema_local_output() -> str:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import sqlite3
 from pathlib import Path
 from typing import Any
 
@@ -56,6 +57,7 @@ class ScoutAgentKbQueryResult(ScoutAgentKbModel):
     schema_version: str = "0.1.0"
     project_id: str
     query: str
+    retrieval_engine: str = "heuristic"
     result_count: int = Field(ge=0)
     results: list[dict[str, Any]]
     searched_record_count: int = Field(ge=0)
@@ -73,6 +75,7 @@ def build_local_evidence_index(project_root: Path | str) -> ScoutAgentKbIndex:
     records.extend(_route_note_records(root, project))
     records.extend(_review_queue_records(root, project))
     records.extend(_spatial_imprint_records(root, project))
+    records.extend(_mcp_records(root, project))
     records.extend(_optional_summary_record(root, project, "calibrated_risk_heatmap_metadata_ref", "pretrip_risk_heatmap_metadata"))
     records.extend(_optional_summary_record(root, project, "spatial_imprint_manifest_ref", "pretrip_spatial_imprint_manifest"))
     return ScoutAgentKbIndex(
@@ -98,6 +101,31 @@ def write_local_evidence_index(
         json.dumps(index.model_dump(mode="json"), ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
+    return index
+
+
+def write_local_evidence_sqlite_index(
+    project_root: Path | str,
+    output_path: Path | str,
+) -> ScoutAgentKbIndex:
+    index = build_local_evidence_index(project_root)
+    destination = Path(output_path)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = destination.with_name(f"{destination.name}.tmp")
+    if temporary.exists():
+        temporary.unlink()
+
+    try:
+        with sqlite3.connect(temporary) as conn:
+            _initialize_sqlite_index(conn)
+            _write_sqlite_metadata(conn, index)
+            _write_sqlite_records(conn, index)
+            conn.commit()
+        temporary.replace(destination)
+    except Exception:
+        if temporary.exists():
+            temporary.unlink()
+        raise
     return index
 
 
@@ -138,9 +166,63 @@ def query_local_evidence_index(
     return ScoutAgentKbQueryResult(
         project_id=index.project_id,
         query=normalized_query,
+        retrieval_engine="heuristic",
         result_count=len(results),
         results=results,
         searched_record_count=len(index.records),
+    )
+
+
+def query_local_evidence_sqlite_index(
+    index_path: Path | str,
+    *,
+    query: str,
+    limit: int = 8,
+    evidence_types: set[str] | None = None,
+) -> ScoutAgentKbQueryResult:
+    normalized_query = query.strip()
+    if not normalized_query:
+        raise ValueError("kb query must not be blank")
+    if limit <= 0:
+        limit = 0
+
+    path = Path(index_path)
+    with sqlite3.connect(path) as conn:
+        conn.row_factory = sqlite3.Row
+        metadata = _read_sqlite_metadata(conn)
+        project_id = _required_metadata(metadata, "project_id")
+        record_count = int(_required_metadata(metadata, "record_count"))
+        boundary = ScoutAgentKbBoundary.model_validate_json(
+            _required_metadata(metadata, "boundary_json")
+        )
+        match_query = _fts_match_query(normalized_query)
+        if not match_query or limit == 0:
+            rows: list[sqlite3.Row] = []
+        else:
+            candidate_limit = _sqlite_candidate_limit(
+                limit=limit,
+                evidence_types=evidence_types,
+            )
+            sql, params = _sqlite_query_sql(
+                match_query,
+                limit=candidate_limit,
+                evidence_types=evidence_types,
+            )
+            rows = list(conn.execute(sql, params))
+
+    results = _diversify_sqlite_results(
+        [_sqlite_row_to_result(row, normalized_query) for row in rows],
+        limit=limit,
+        evidence_types=evidence_types,
+    )
+    return ScoutAgentKbQueryResult(
+        project_id=project_id,
+        query=normalized_query,
+        retrieval_engine="sqlite_fts5_bm25",
+        result_count=len(results),
+        results=results,
+        searched_record_count=record_count,
+        boundary=boundary,
     )
 
 
@@ -150,12 +232,242 @@ def query_project_local_evidence(
     query: str,
     limit: int = 8,
     evidence_types: set[str] | None = None,
+    use_sqlite_index: bool | None = None,
 ) -> ScoutAgentKbQueryResult:
+    root = Path(project_root)
+    sqlite_index_path = _default_sqlite_index_path(root)
+    if use_sqlite_index is not False and sqlite_index_path.exists():
+        try:
+            return query_local_evidence_sqlite_index(
+                sqlite_index_path,
+                query=query,
+                limit=limit,
+                evidence_types=evidence_types,
+            )
+        except Exception:
+            if use_sqlite_index is True:
+                raise
+
     return query_local_evidence_index(
-        build_local_evidence_index(project_root),
+        build_local_evidence_index(root),
         query=query,
         limit=limit,
         evidence_types=evidence_types,
+    )
+
+
+def _default_sqlite_index_path(project_root: Path) -> Path:
+    return project_root / "outputs" / "kb" / "local-evidence-index.sqlite3"
+
+
+def _initialize_sqlite_index(conn: sqlite3.Connection) -> None:
+    conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute(
+        """
+        CREATE TABLE metadata (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE records (
+            rowid INTEGER PRIMARY KEY,
+            record_id TEXT NOT NULL,
+            evidence_type TEXT NOT NULL,
+            record_json TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE VIRTUAL TABLE records_fts USING fts5(
+            record_id UNINDEXED,
+            evidence_type UNINDEXED,
+            title,
+            body,
+            tags,
+            token_text
+        )
+        """
+    )
+
+
+def _write_sqlite_metadata(
+    conn: sqlite3.Connection,
+    index: ScoutAgentKbIndex,
+) -> None:
+    metadata = {
+        "artifact_kind": "scout_local_evidence_sqlite_index",
+        "schema_version": index.schema_version,
+        "project_id": index.project_id,
+        "source_root": index.source_root,
+        "record_count": str(index.record_count),
+        "boundary_json": index.boundary.model_dump_json(),
+    }
+    conn.executemany(
+        "INSERT INTO metadata(key, value) VALUES (?, ?)",
+        sorted(metadata.items(), key=lambda item: item[0]),
+    )
+
+
+def _write_sqlite_records(
+    conn: sqlite3.Connection,
+    index: ScoutAgentKbIndex,
+) -> None:
+    for rowid, record in enumerate(index.records, start=1):
+        record_json = record.model_dump_json()
+        conn.execute(
+            """
+            INSERT INTO records(rowid, record_id, evidence_type, record_json)
+            VALUES (?, ?, ?, ?)
+            """,
+            (rowid, record.record_id, record.evidence_type, record_json),
+        )
+        conn.execute(
+            """
+            INSERT INTO records_fts(
+                rowid,
+                record_id,
+                evidence_type,
+                title,
+                body,
+                tags,
+                token_text
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                rowid,
+                record.record_id,
+                record.evidence_type,
+                record.title,
+                record.text,
+                " ".join(record.tags),
+                " ".join(_tokens(_record_search_text(record))),
+            ),
+        )
+
+
+def _read_sqlite_metadata(conn: sqlite3.Connection) -> dict[str, str]:
+    return {
+        str(row["key"]): str(row["value"])
+        for row in conn.execute("SELECT key, value FROM metadata")
+    }
+
+
+def _required_metadata(metadata: dict[str, str], key: str) -> str:
+    value = metadata.get(key)
+    if value is None:
+        raise ValueError(f"sqlite local evidence index missing metadata: {key}")
+    return value
+
+
+def _sqlite_query_sql(
+    match_query: str,
+    *,
+    limit: int,
+    evidence_types: set[str] | None,
+) -> tuple[str, list[Any]]:
+    where = ["records_fts MATCH ?"]
+    params: list[Any] = [match_query]
+    if evidence_types:
+        placeholders = ", ".join("?" for _ in evidence_types)
+        where.append(f"records_fts.evidence_type IN ({placeholders})")
+        params.extend(sorted(evidence_types))
+    params.append(limit)
+    sql = f"""
+        SELECT
+            records.record_json AS record_json,
+            bm25(records_fts) AS bm25_rank
+        FROM records_fts
+        JOIN records ON records.rowid = records_fts.rowid
+        WHERE {' AND '.join(where)}
+        ORDER BY bm25_rank ASC, records.evidence_type ASC, records.record_id ASC
+        LIMIT ?
+    """
+    return sql, params
+
+
+def _sqlite_candidate_limit(
+    *,
+    limit: int,
+    evidence_types: set[str] | None,
+) -> int:
+    if evidence_types and len(evidence_types) == 1:
+        return limit
+    return max(limit, limit * 8)
+
+
+def _diversify_sqlite_results(
+    results: list[dict[str, Any]],
+    *,
+    limit: int,
+    evidence_types: set[str] | None,
+) -> list[dict[str, Any]]:
+    if evidence_types and len(evidence_types) == 1:
+        return results[:limit]
+
+    per_type_soft_cap = 2 if limit >= 4 else 1
+    selected: list[dict[str, Any]] = []
+    deferred: list[dict[str, Any]] = []
+    counts: dict[str, int] = {}
+    for result in results:
+        evidence_type = str(result.get("evidence_type") or "")
+        count = counts.get(evidence_type, 0)
+        if count < per_type_soft_cap:
+            selected.append(result)
+            counts[evidence_type] = count + 1
+        else:
+            deferred.append(result)
+        if len(selected) >= limit:
+            return selected[:limit]
+
+    selected.extend(deferred)
+    return selected[:limit]
+
+
+def _sqlite_row_to_result(row: sqlite3.Row, query: str) -> dict[str, Any]:
+    record = ScoutAgentKbRecord.model_validate_json(str(row["record_json"]))
+    tokens = _tokens(query)
+    rank = float(row["bm25_rank"])
+    return {
+        "score": round(-rank, 9),
+        "retrieval_rank": rank,
+        "record_id": record.record_id,
+        "evidence_type": record.evidence_type,
+        "source_path": record.source_path,
+        "title": record.title,
+        "snippet": _snippet(record.text, query, tokens),
+        "tags": record.tags,
+        "metadata": record.metadata,
+        "boundary": record.boundary.model_dump(mode="json"),
+    }
+
+
+def _fts_match_query(query: str) -> str:
+    tokens = _tokens(query)
+    query_parts = _dedupe_preserving_order([query, *tokens])
+    quoted = [_quote_fts_token(token) for token in query_parts[:64] if token.strip()]
+    return " OR ".join(quoted)
+
+
+def _quote_fts_token(token: str) -> str:
+    return '"' + token.replace('"', '""') + '"'
+
+
+def _record_search_text(record: ScoutAgentKbRecord) -> str:
+    metadata_text = json.dumps(record.metadata, ensure_ascii=False, sort_keys=True)
+    return " ".join(
+        (
+            record.record_id,
+            record.evidence_type,
+            record.title,
+            record.text,
+            " ".join(record.tags),
+            metadata_text,
+        )
     )
 
 
@@ -415,6 +727,212 @@ def _spatial_imprint_records(root: Path, project: dict[str, Any]) -> list[ScoutA
     return records
 
 
+def _mcp_records(root: Path, project: dict[str, Any]) -> list[ScoutAgentKbRecord]:
+    records: list[ScoutAgentKbRecord] = []
+    records.extend(_mcp_named_point_records(root, project))
+    records.extend(_mcp_candidate_records(root, project))
+    records.extend(_mcp_cp_support_records(root, project))
+    return records
+
+
+def _mcp_named_point_records(root: Path, project: dict[str, Any]) -> list[ScoutAgentKbRecord]:
+    ref = project.get("mcp_named_point_evidence_ref")
+    if not ref:
+        return []
+    path = _project_path(root, str(ref), "mcp_named_point_evidence_ref")
+    if not path.exists():
+        return []
+    payload = _load_json_object(path)
+    records: list[ScoutAgentKbRecord] = []
+    for index, item in enumerate(payload.get("named_points", []) or []):
+        if not isinstance(item, dict):
+            continue
+        record_id = str(item.get("named_point_id") or f"mcp_named_point.{index:05d}")
+        route_position = item.get("route_position") if isinstance(item.get("route_position"), dict) else {}
+        boundary = item.get("boundary") if isinstance(item.get("boundary"), dict) else {}
+        title = str(item.get("canonical_name") or record_id)
+        text = _compact_text(
+            {
+                "canonical_name": item.get("canonical_name"),
+                "aliases": item.get("aliases"),
+                "point_class": item.get("point_class"),
+                "source_families": item.get("source_families"),
+                "missing_source_families": item.get("missing_source_families"),
+                "mention_page_count": item.get("mention_page_count"),
+                "mention_ratio": item.get("mention_ratio"),
+                "stale_risk": item.get("stale_risk"),
+                "distance_m": route_position.get("distance_m"),
+                "lat": route_position.get("lat"),
+                "lon": route_position.get("lon"),
+                "coordinate_confidence": route_position.get("coordinate_confidence"),
+                "candidate_only": boundary.get("candidate_only"),
+                "runtime_safety_truth": boundary.get("phase1_runtime_safety_truth"),
+            },
+            max_chars=1200,
+        )
+        records.append(
+            _record(
+                record_id=record_id,
+                evidence_type="pretrip_mcp_named_point",
+                source_path=str(ref),
+                title=title,
+                text=text or title,
+                tags=[
+                    "mcp",
+                    "named_point",
+                    *[str(value) for value in item.get("point_class", []) if value],
+                ],
+                metadata={
+                    "named_point_id": item.get("named_point_id"),
+                    "canonical_name": item.get("canonical_name"),
+                    "aliases": item.get("aliases"),
+                    "point_class": item.get("point_class"),
+                    "distance_m": route_position.get("distance_m"),
+                    "lat": route_position.get("lat"),
+                    "lon": route_position.get("lon"),
+                    "coordinate_confidence": route_position.get("coordinate_confidence"),
+                    "mention_ratio": item.get("mention_ratio"),
+                    "stale_risk": item.get("stale_risk"),
+                    "candidate_only": boundary.get("candidate_only"),
+                    "runtime_safety_truth": boundary.get("phase1_runtime_safety_truth"),
+                },
+            )
+        )
+    return records
+
+
+def _mcp_candidate_records(root: Path, project: dict[str, Any]) -> list[ScoutAgentKbRecord]:
+    ref = project.get("mcp_candidates_ref")
+    if not ref:
+        return []
+    path = _project_path(root, str(ref), "mcp_candidates_ref")
+    if not path.exists():
+        return []
+    payload = _load_json_object(path)
+    records: list[ScoutAgentKbRecord] = []
+    for index, item in enumerate(payload.get("mcp_candidates", []) or []):
+        if not isinstance(item, dict):
+            continue
+        record_id = str(item.get("mcp_id") or f"mcp_candidate.{index:05d}")
+        nearest_cp = item.get("nearest_scout_cp") if isinstance(item.get("nearest_scout_cp"), dict) else {}
+        boundary = item.get("boundary") if isinstance(item.get("boundary"), dict) else {}
+        title = str(item.get("label") or record_id)
+        text = _compact_text(
+            {
+                "label": item.get("label"),
+                "mcp_id": item.get("mcp_id"),
+                "mcp_classes": item.get("mcp_classes"),
+                "linked_named_points": item.get("linked_named_points"),
+                "linked_cp_candidates": item.get("linked_cp_candidates"),
+                "nearest_scout_cp": nearest_cp,
+                "promotion_reasons": item.get("promotion_reasons"),
+                "missing_source_gaps": item.get("missing_source_gaps"),
+                "confidence": item.get("confidence"),
+                "review_state": item.get("review_state"),
+                "mention_ratio": item.get("mention_ratio"),
+                "distance_m": item.get("distance_m"),
+                "lat": item.get("lat"),
+                "lon": item.get("lon"),
+                "candidate_only": boundary.get("candidate_only"),
+                "runtime_safety_truth": boundary.get("runtime_safety_truth"),
+            },
+            max_chars=1600,
+        )
+        records.append(
+            _record(
+                record_id=record_id,
+                evidence_type="pretrip_major_critical_point_candidate",
+                source_path=str(ref),
+                title=title,
+                text=text or title,
+                tags=[
+                    "mcp",
+                    "major_critical_point",
+                    *[str(value) for value in item.get("mcp_classes", []) if value],
+                ],
+                metadata={
+                    "mcp_id": item.get("mcp_id"),
+                    "label": item.get("label"),
+                    "mcp_classes": item.get("mcp_classes"),
+                    "linked_cp_candidates": item.get("linked_cp_candidates"),
+                    "nearest_cp_candidate_id": nearest_cp.get("candidate_id"),
+                    "nearest_cp_distance_m": nearest_cp.get("distance_m"),
+                    "support_found": nearest_cp.get("support_found"),
+                    "support_radius_m": nearest_cp.get("support_radius_m"),
+                    "distance_m": item.get("distance_m"),
+                    "lat": item.get("lat"),
+                    "lon": item.get("lon"),
+                    "confidence": item.get("confidence"),
+                    "review_state": item.get("review_state"),
+                    "candidate_only": boundary.get("candidate_only"),
+                    "runtime_safety_truth": boundary.get("runtime_safety_truth"),
+                },
+            )
+        )
+    return records
+
+
+def _mcp_cp_support_records(root: Path, project: dict[str, Any]) -> list[ScoutAgentKbRecord]:
+    ref = project.get("mcp_cp_support_reconciliation_ref")
+    if not ref:
+        return []
+    path = _project_path(root, str(ref), "mcp_cp_support_reconciliation_ref")
+    if not path.exists():
+        return []
+    payload = _load_json_object(path)
+    records: list[ScoutAgentKbRecord] = []
+    for index, item in enumerate(payload.get("rows", []) or []):
+        if not isinstance(item, dict):
+            continue
+        record_id = str(item.get("mcp_id") or f"mcp_cp_support.{index:05d}")
+        nearest_cp = item.get("nearest_scout_cp") if isinstance(item.get("nearest_scout_cp"), dict) else {}
+        title = str(item.get("label") or record_id)
+        text = _compact_text(
+            {
+                "label": item.get("label"),
+                "mcp_id": item.get("mcp_id"),
+                "linked_cp_candidates": item.get("linked_cp_candidates"),
+                "nearest_scout_cp": nearest_cp,
+                "support_status": item.get("support_status"),
+                "recommendation": item.get("recommendation"),
+                "review_required": item.get("review_required"),
+                "suggested_cp_insertion": item.get("suggested_cp_insertion"),
+                "spacing_suppression_details": item.get("spacing_suppression_details"),
+                "candidate_only": item.get("candidate_only"),
+                "runtime_safety_truth": item.get("runtime_safety_truth"),
+            },
+            max_chars=1600,
+        )
+        records.append(
+            _record(
+                record_id=record_id,
+                evidence_type="pretrip_mcp_cp_support_reconciliation",
+                source_path=str(ref),
+                title=title,
+                text=text or title,
+                tags=[
+                    "mcp",
+                    "cp_support",
+                    str(item.get("support_status") or ""),
+                ],
+                metadata={
+                    "mcp_id": item.get("mcp_id"),
+                    "label": item.get("label"),
+                    "linked_cp_candidates": item.get("linked_cp_candidates"),
+                    "nearest_cp_candidate_id": nearest_cp.get("candidate_id"),
+                    "nearest_cp_distance_m": nearest_cp.get("distance_m"),
+                    "support_found": nearest_cp.get("support_found"),
+                    "support_radius_m": nearest_cp.get("support_radius_m"),
+                    "support_status": item.get("support_status"),
+                    "review_required": item.get("review_required"),
+                    "candidate_only": item.get("candidate_only"),
+                    "runtime_safety_truth": item.get("runtime_safety_truth"),
+                },
+            )
+        )
+    return records
+
+
 def _optional_summary_record(
     root: Path,
     project: dict[str, Any],
@@ -482,11 +1000,30 @@ def _score_record(record: ScoutAgentKbRecord, query: str, tokens: list[str]) -> 
 
 
 def _tokens(query: str) -> list[str]:
-    return [
-        token
-        for token in re.findall(r"[A-Za-z0-9_:-]+|[\u4e00-\u9fff]+", query)
-        if token
-    ]
+    tokens: list[str] = []
+    for token in re.findall(r"[A-Za-z0-9_:-]+|[\u4e00-\u9fff]+", query):
+        if not token:
+            continue
+        tokens.append(token)
+        if re.fullmatch(r"[\u4e00-\u9fff]+", token) and len(token) > 2:
+            max_ngram = min(4, len(token))
+            for size in range(2, max_ngram + 1):
+                tokens.extend(
+                    token[index : index + size]
+                    for index in range(0, len(token) - size + 1)
+                )
+    return _dedupe_preserving_order(tokens)
+
+
+def _dedupe_preserving_order(tokens: list[str]) -> list[str]:
+    seen: set[str] = set()
+    deduped: list[str] = []
+    for token in tokens:
+        if token in seen:
+            continue
+        seen.add(token)
+        deduped.append(token)
+    return deduped
 
 
 def _snippet(text: str, query: str, tokens: list[str], *, limit: int = 220) -> str:

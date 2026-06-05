@@ -16,6 +16,10 @@ from assistant_models import (
     ScoutAssistantResponse,
 )
 from assistant_provider import FailedAssistantProvider, MockAssistantProvider, ScoutAssistantProvider
+from assistant_skill_router import (
+    build_local_evidence_search_fallback_response,
+    resolve_assistant_query_with_skill,
+)
 
 
 def create_assistant_app(
@@ -52,43 +56,103 @@ def create_assistant_router(
     def query_assistant(query: ScoutAssistantQuery) -> ScoutAssistantResponse:
         started_at = time.perf_counter()
         sources = resolved_context(query)
-        try:
-            response = resolved_provider.answer(query, sources=sources)
-            return _with_observability(
-                response,
-                provider=resolved_provider,
-                sources=sources,
-                started_at=started_at,
-                safe_failure=isinstance(resolved_provider, FailedAssistantProvider),
-            )
-        except Exception as exc:
-            response = ScoutAssistantResponse(
-                surface=query.surface,
-                answer=(
-                    "Assistant provider failed safely. This response is still a "
-                    "read-only model interpretation and no Scout state was changed."
-                ),
-                sources=sources,
-                boundary=AssistantBoundary(surface=query.surface),
-                limitations=[
-                    f"provider_error_type={type(exc).__name__}",
-                    "Provider failure was isolated from the source surface.",
-                    "No runtime, planning, outbound, review, or hardware state was changed.",
-                ],
-            )
-            return _with_observability(
-                response,
-                provider=resolved_provider,
-                sources=sources,
-                started_at=started_at,
-                safe_failure=True,
-            )
+        return answer_assistant_query_safely(
+            resolved_provider,
+            query,
+            sources=sources,
+            started_at=started_at,
+        )
 
     @router.get("/status")
     def assistant_status() -> dict[str, object]:
         return dict(resolved_provider_status)
 
     return router
+
+
+def answer_assistant_query_safely(
+    provider: ScoutAssistantProvider,
+    query: ScoutAssistantQuery,
+    *,
+    sources: list[AssistantSourceRef] | None = None,
+    started_at: float | None = None,
+) -> ScoutAssistantResponse:
+    resolved_sources = list(sources or [])
+    resolved_started_at = started_at if started_at is not None else time.perf_counter()
+    try:
+        skill_response = resolve_assistant_query_with_skill(
+            query,
+            sources=resolved_sources,
+        )
+        if skill_response is not None:
+            return _with_observability(
+                skill_response,
+                provider=provider,
+                sources=skill_response.sources,
+                started_at=resolved_started_at,
+                safe_failure=False,
+            )
+        resolved_sources = _augment_pydantic_workspace_tool_sources(
+            provider,
+            query,
+            sources=resolved_sources,
+        )
+        response = provider.answer(query, sources=resolved_sources)
+        return _with_observability(
+            response,
+            provider=provider,
+            sources=response.sources,
+            started_at=resolved_started_at,
+            safe_failure=isinstance(provider, FailedAssistantProvider),
+        )
+    except Exception as exc:
+        workspace_tool_fallback = _workspace_tool_fallback_response(
+            query,
+            sources=resolved_sources,
+            provider_error_type=type(exc).__name__,
+        )
+        if workspace_tool_fallback is not None:
+            return _with_observability(
+                workspace_tool_fallback,
+                provider=provider,
+                sources=workspace_tool_fallback.sources,
+                started_at=resolved_started_at,
+                safe_failure=True,
+            )
+        fallback_response = build_local_evidence_search_fallback_response(
+            query,
+            sources=resolved_sources,
+            provider_error_type=type(exc).__name__,
+        )
+        if fallback_response is not None:
+            return _with_observability(
+                fallback_response,
+                provider=provider,
+                sources=fallback_response.sources,
+                started_at=resolved_started_at,
+                safe_failure=True,
+            )
+        response = ScoutAssistantResponse(
+            surface=query.surface,
+            answer=(
+                "Assistant provider failed safely. This response is still a "
+                "read-only model interpretation and no Scout state was changed."
+            ),
+            sources=resolved_sources,
+            boundary=AssistantBoundary(surface=query.surface),
+            limitations=[
+                f"provider_error_type={type(exc).__name__}",
+                "Provider failure was isolated from the source surface.",
+                "No runtime, planning, outbound, review, or hardware state was changed.",
+            ],
+        )
+        return _with_observability(
+            response,
+            provider=provider,
+            sources=resolved_sources,
+            started_at=resolved_started_at,
+            safe_failure=True,
+        )
 
 
 def create_assistant_provider_status(
@@ -162,6 +226,42 @@ def create_assistant_provider_status(
         }
     )
     return status
+
+
+def _augment_pydantic_workspace_tool_sources(
+    provider: ScoutAssistantProvider,
+    query: ScoutAssistantQuery,
+    *,
+    sources: list[AssistantSourceRef],
+) -> list[AssistantSourceRef]:
+    if provider.__class__.__name__ != "PydanticAIAssistantProvider":
+        return sources
+    try:
+        from assistant_pydantic_provider import (
+            augment_sources_with_workspace_evidence_tool,
+        )
+
+        return augment_sources_with_workspace_evidence_tool(query, sources=sources)
+    except Exception:
+        return sources
+
+
+def _workspace_tool_fallback_response(
+    query: ScoutAssistantQuery,
+    *,
+    sources: list[AssistantSourceRef],
+    provider_error_type: str,
+) -> ScoutAssistantResponse | None:
+    try:
+        from assistant_pydantic_provider import build_workspace_tool_fallback_response
+
+        return build_workspace_tool_fallback_response(
+            query,
+            sources=sources,
+            provider_error_type=provider_error_type,
+        )
+    except Exception:
+        return None
 
 
 def _with_observability(

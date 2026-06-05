@@ -43,6 +43,10 @@ def test_builtin_manifest_directory_lists_read_and_proposal_tools() -> None:
     assert "scout.kb.hardware_readiness_summary" in tool_ids
     assert "scout.kb.build" in tool_ids
     assert "scout.kb.query" in tool_ids
+    assert "scout.ai.workspace_catalog.search" in tool_ids
+    assert "scout.ai.route_structure.search" in tool_ids
+    assert "scout.ai.major_points.search" in tool_ids
+    assert "scout.ai.evidence_fulltext.search" in tool_ids
     assert "scout.risk.attribution" in tool_ids
     assert "scout.risk.heatmap" in tool_ids
     assert "scout.safety_action.shelter_direction" in tool_ids
@@ -251,6 +255,81 @@ def test_builtin_kb_build_persists_index_with_authorization(tmp_path: Path) -> N
     assert output["boundary"]["raw_payloads_embedded"] is False
     assert index_path.is_file()
     assert load_agent_trace(trace_log)[0].tool_id == "scout.kb.build"
+
+
+def test_builtin_kb_build_and_query_sqlite_index(tmp_path: Path) -> None:
+    build_request = tmp_path / "kb-build.request.json"
+    query_request = tmp_path / "kb-query.request.json"
+    index_path = tmp_path / "outputs" / "kb" / "local-evidence-index.sqlite3"
+    build_request.write_text(
+        json.dumps(
+            {
+                "project_root": str(
+                    REPO_ROOT
+                    / "tests"
+                    / "fixtures"
+                    / "pretrip"
+                    / "projects"
+                    / "chilai_nanhua_day1"
+                )
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    build_exit, build_payload = run_scout_agent_cli(
+        [
+            "tools",
+            "run",
+            "scout.kb.build",
+            "--manifest-dir",
+            str(MANIFEST_DIR),
+            "--input",
+            str(build_request),
+            "--output",
+            str(index_path),
+            "--authorized-by",
+            "operator.alex",
+            "--json",
+        ]
+    )
+    assert build_exit == 0
+    build_output = json.loads(build_payload["outputs"]["stdout"])
+    assert build_output["artifact_refs"] == [str(index_path)]
+    assert index_path.is_file()
+
+    query_request.write_text(
+        json.dumps(
+            {
+                "index_path": str(index_path),
+                "query": "黑水塘 cp",
+                "limit": 3,
+                "evidence_types": ["pretrip_mcp_cp_support_reconciliation"],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    query_exit, query_payload = run_scout_agent_cli(
+        [
+            "tools",
+            "run",
+            "scout.kb.query",
+            "--manifest-dir",
+            str(MANIFEST_DIR),
+            "--input",
+            str(query_request),
+            "--json",
+        ]
+    )
+
+    assert query_exit == 0
+    query_output = json.loads(query_payload["outputs"]["stdout"])
+    assert query_output["index"]["artifact_kind"] == "scout_local_evidence_sqlite_index"
+    assert query_output["query_result"]["retrieval_engine"] == "sqlite_fts5_bm25"
+    assert query_output["query_result"]["results"][0]["record_id"] == "mcp.heishuitang.002"
+    assert query_output["query_result"]["results"][0]["metadata"]["support_status"] == "supported"
+    assert query_output["boundary"]["live_safety_api_calls_allowed"] is False
 
 
 def test_builtin_cp_proposal_preview_writes_candidate_only_artifact(tmp_path: Path) -> None:
@@ -1199,7 +1278,7 @@ def test_builtin_kb_query_reads_local_evidence_without_network(tmp_path: Path) -
     output = json.loads(payload["outputs"]["stdout"])
     assert output["artifact_kind"] == "scout_kb_query_tool_output"
     assert output["index"]["record_count"] > 100
-    assert output["query_result"]["results"][0]["record_id"] == "route_note.rudy_like_gpx.wpt_006"
+    assert output["query_result"]["results"][0]["record_id"] == "route_note.golden_route.wpt_051"
     assert output["query_result"]["results"][0]["metadata"]["note_category"] == "hazard_hint"
     assert output["boundary"]["offline_only"] is True
     assert output["boundary"]["live_safety_api_calls_allowed"] is False

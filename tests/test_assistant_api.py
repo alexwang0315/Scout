@@ -1,6 +1,7 @@
 import importlib
 import json
 import os
+import shutil
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -19,6 +20,10 @@ from runtime_debug_log import MemoryRuntimeDebugEventLog
 from runtime_debug_models import RuntimeDebugEvent
 
 
+ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = ROOT / "tests" / "fixtures" / "pretrip" / "projects" / "chilai_nanhua_day1"
+
+
 def _review_log(source_id: str, status: str) -> dict[str, object]:
     return {
         "source_id": f"{source_id}.chilai_nanhua_day1",
@@ -27,6 +32,139 @@ def _review_log(source_id: str, status: str) -> dict[str, object]:
         "status": status,
         "counts": {},
     }
+
+
+def _write_terrain_workspace(project_root: Path) -> Path:
+    (project_root / "candidates").mkdir(parents=True)
+    (project_root / "outputs" / "layers" / "normalized").mkdir(parents=True)
+    (project_root / "project.json").write_text(
+        json.dumps(
+            {
+                "project_id": project_root.name,
+                "checkpoint_candidates_ref": "candidates/checkpoints.json",
+                "terrain_route_samples_ref": (
+                    "outputs/layers/normalized/terrain_route_samples.geojson"
+                ),
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    (project_root / "candidates" / "checkpoints.json").write_text(
+        json.dumps(
+            [{"candidate_id": "cp.001", "label": "CP 001", "lat": 24.001, "lon": 121.001}],
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    (project_root / "outputs" / "layers" / "normalized" / "terrain_route_samples.geojson").write_text(
+        json.dumps(
+            {
+                "type": "FeatureCollection",
+                "features": [
+                    _terrain_point("terrain.sample.000", 24.0, 121.0, 0.0, 12.0, 44.0),
+                    _terrain_point("terrain.sample.001", 24.001, 121.001, 1000.0, 38.0, 82.0),
+                    _terrain_point("terrain.sample.002", 24.002, 121.002, 2000.0, 54.0, 96.0),
+                ],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    return project_root
+
+
+def _terrain_point(
+    sample_id: str,
+    lat: float,
+    lon: float,
+    distance_m: float,
+    slope_degrees: float,
+    teii_20m: float,
+) -> dict[str, object]:
+    return {
+        "type": "Feature",
+        "geometry": {"type": "Point", "coordinates": [lon, lat]},
+        "properties": {
+            "sample_id": sample_id,
+            "distance_m": distance_m,
+            "slope_degrees": slope_degrees,
+            "teii_20m": teii_20m,
+            "tri": min(teii_20m + 1.0, 100.0),
+            "sri": 5.0,
+            "lec": min(teii_20m + 2.0, 100.0),
+            "pretrip_risk": min(teii_20m + 3.0, 100.0),
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+        },
+    }
+
+
+def _write_map_perception_workspace(project_root: Path) -> Path:
+    (project_root / "candidates").mkdir(parents=True)
+    (project_root / "outputs" / "mcp").mkdir(parents=True)
+    (project_root / "project.json").write_text(
+        json.dumps(
+            {
+                "project_id": project_root.name,
+                "checkpoint_candidates_ref": "candidates/checkpoints.json",
+                "mcp_ocr_labels_ref": "outputs/mcp/mcp_ocr_labels.json",
+                "mcp_named_point_evidence_ref": "outputs/mcp/named_point_evidence.json",
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    (project_root / "candidates" / "checkpoints.json").write_text(
+        json.dumps(
+            [{"candidate_id": "cp.001", "label": "CP 001", "lat": 24.001, "lon": 121.001}],
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    (project_root / "outputs" / "mcp" / "mcp_ocr_labels.json").write_text(
+        json.dumps(
+            {
+                "artifact_kind": "pretrip_mcp_ocr_label_set",
+                "candidate_only": True,
+                "full_source_image_embedded": False,
+                "labels": [
+                    {
+                        "ocr_label_id": "ocr.yunhai_station.001",
+                        "label_text": "雲海保線所",
+                        "bbox": [120, 310, 184, 338],
+                        "confidence": 0.87,
+                        "named_point_id": "np.yunhai_station",
+                        "source_ref": "local_map_tile.z15.x26142.y13991",
+                        "review_required": True,
+                        "candidate_only": True,
+                        "full_source_image_embedded": False,
+                    }
+                ],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    (project_root / "outputs" / "mcp" / "named_point_evidence.json").write_text(
+        json.dumps(
+            {
+                "artifact_kind": "pretrip_named_point_evidence_set",
+                "named_points": [
+                    {
+                        "named_point_id": "np.yunhai_station",
+                        "canonical_name": "雲海保線所",
+                        "aliases": ["保線所"],
+                        "point_class": ["camp_hut_structure"],
+                        "route_position": {"lat": 24.001, "lon": 121.001, "distance_m": 1000.0},
+                    }
+                ],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    return project_root
 
 
 class AssistantApiTests(unittest.TestCase):
@@ -170,6 +308,222 @@ class AssistantApiTests(unittest.TestCase):
         self.assertEqual(payload["observability"]["failover_reason"], "local_run_error:RuntimeError")
         self.assertEqual(payload["observability"]["local_model_name"], "qwen2.5:0.5b")
         self.assertNotIn("api_key", json.dumps(payload).lower())
+
+    def test_pydantic_provider_failure_uses_workspace_tool_fallback(self):
+        from assistant_pydantic_provider import (
+            MAJOR_POINT_TOOL_ID,
+            PydanticAIAssistantProvider,
+        )
+        from scout_agent_kb import write_local_evidence_sqlite_index
+
+        class FailingRunner:
+            def run(self, prompt: str, *, timeout_seconds: int) -> str:
+                raise RuntimeError("provider unavailable")
+
+        with TemporaryDirectory() as tmp:
+            workspace_root = Path(tmp) / "pretrip-workspaces"
+            project_root = workspace_root / "chilai_nanhua_day1"
+            shutil.copytree(PROJECT_ROOT, project_root)
+            write_local_evidence_sqlite_index(
+                project_root,
+                project_root / "outputs" / "kb" / "local-evidence-index.sqlite3",
+            )
+            with patch.dict(
+                os.environ,
+                {"SCOUT_PRETRIP_WORKSPACE_ROOT": str(workspace_root)},
+                clear=False,
+            ):
+                provider = PydanticAIAssistantProvider(runner=FailingRunner())
+                client = TestClient(create_assistant_app(provider=provider))
+                response = client.post(
+                    "/assistant/query",
+                    json={
+                        "surface": "pretrip",
+                        "question": "黑水塘有什麼資料？",
+                        "project_id": "chilai_nanhua_day1",
+                    },
+                )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertIn("major point tool fallback", payload["answer"])
+        self.assertEqual(payload["sources"][0]["source_id"], MAJOR_POINT_TOOL_ID)
+        latest = payload["sources"][0]["context_summary"]["latest"]
+        self.assertEqual(latest["status"], "completed")
+        self.assertEqual(latest["results"][0]["candidate_id"], "mcp.heishuitang.002")
+        self.assertEqual(latest["results"][0]["nearest_cp_candidate_id"], "cp.002")
+        self.assertTrue(payload["observability"]["safe_failure"])
+        self.assertFalse(payload["boundary"]["phase1_mutation_allowed"])
+        self.assertFalse(payload["boundary"]["outbound_send_allowed"])
+
+    def test_pydantic_provider_failure_uses_risk_score_tool_fallback(self):
+        from assistant_pydantic_provider import (
+            PydanticAIAssistantProvider,
+            RISK_SCORE_TOOL_ID,
+        )
+
+        class FailingRunner:
+            def run(self, prompt: str, *, timeout_seconds: int) -> str:
+                raise RuntimeError("provider unavailable")
+
+        with TemporaryDirectory() as tmp:
+            workspace_root = Path(tmp) / "pretrip-workspaces"
+            project_root = workspace_root / "chilai_nanhua_day1"
+            shutil.copytree(PROJECT_ROOT, project_root)
+            with patch.dict(
+                os.environ,
+                {"SCOUT_PRETRIP_WORKSPACE_ROOT": str(workspace_root)},
+                clear=False,
+            ):
+                provider = PydanticAIAssistantProvider(runner=FailingRunner())
+                client = TestClient(create_assistant_app(provider=provider))
+                response = client.post(
+                    "/assistant/query",
+                    json={
+                        "surface": "pretrip",
+                        "question": "risk score baseline 最高分在哪？",
+                        "project_id": "chilai_nanhua_day1",
+                    },
+                )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertIn("risk score tool fallback", payload["answer"])
+        self.assertEqual(payload["sources"][0]["source_id"], RISK_SCORE_TOOL_ID)
+        latest = payload["sources"][0]["context_summary"]["latest"]
+        self.assertEqual(latest["status"], "completed")
+        self.assertTrue(latest["summaries"]["baseline"]["available"])
+        self.assertGreater(latest["result_count"], 0)
+        self.assertEqual(latest["results"][0]["surface"], "baseline")
+        self.assertTrue(payload["observability"]["safe_failure"])
+        self.assertFalse(payload["boundary"]["phase1_mutation_allowed"])
+        self.assertFalse(payload["boundary"]["outbound_send_allowed"])
+
+    def test_pydantic_provider_failure_uses_terrain_score_tool_fallback(self):
+        from assistant_pydantic_provider import (
+            PydanticAIAssistantProvider,
+            TERRAIN_SCORE_TOOL_ID,
+        )
+
+        class FailingRunner:
+            def run(self, prompt: str, *, timeout_seconds: int) -> str:
+                raise RuntimeError("provider unavailable")
+
+        with TemporaryDirectory() as tmp:
+            workspace_root = Path(tmp) / "pretrip-workspaces"
+            _write_terrain_workspace(workspace_root / "chilai_nanhua_day1")
+            with patch.dict(
+                os.environ,
+                {"SCOUT_PRETRIP_WORKSPACE_ROOT": str(workspace_root)},
+                clear=False,
+            ):
+                provider = PydanticAIAssistantProvider(runner=FailingRunner())
+                client = TestClient(create_assistant_app(provider=provider))
+                response = client.post(
+                    "/assistant/query",
+                    json={
+                        "surface": "pretrip",
+                        "question": "terrain slope 最高在哪？",
+                        "project_id": "chilai_nanhua_day1",
+                    },
+                )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertIn("terrain score tool fallback", payload["answer"])
+        self.assertEqual(payload["sources"][0]["source_id"], TERRAIN_SCORE_TOOL_ID)
+        latest = payload["sources"][0]["context_summary"]["latest"]
+        self.assertEqual(latest["status"], "completed")
+        self.assertEqual(latest["metric"], "slope")
+        self.assertGreater(latest["result_count"], 0)
+        self.assertEqual(latest["results"][0]["score_field"], "slope_degrees")
+        self.assertTrue(payload["observability"]["safe_failure"])
+        self.assertFalse(payload["boundary"]["phase1_mutation_allowed"])
+        self.assertFalse(payload["boundary"]["outbound_send_allowed"])
+
+    def test_pydantic_provider_failure_uses_map_perception_tool_fallback(self):
+        from assistant_pydantic_provider import (
+            MAP_PERCEPTION_TOOL_ID,
+            PydanticAIAssistantProvider,
+        )
+
+        class FailingRunner:
+            def run(self, prompt: str, *, timeout_seconds: int) -> str:
+                raise RuntimeError("provider unavailable")
+
+        with TemporaryDirectory() as tmp:
+            workspace_root = Path(tmp) / "pretrip-workspaces"
+            _write_map_perception_workspace(workspace_root / "chilai_nanhua_day1")
+            with patch.dict(
+                os.environ,
+                {"SCOUT_PRETRIP_WORKSPACE_ROOT": str(workspace_root)},
+                clear=False,
+            ):
+                provider = PydanticAIAssistantProvider(runner=FailingRunner())
+                client = TestClient(create_assistant_app(provider=provider))
+                response = client.post(
+                    "/assistant/query",
+                    json={
+                        "surface": "pretrip",
+                        "question": "CP001 附近有沒有標註？",
+                        "project_id": "chilai_nanhua_day1",
+                    },
+                )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertIn("map perception tool fallback", payload["answer"])
+        self.assertEqual(payload["sources"][0]["source_id"], MAP_PERCEPTION_TOOL_ID)
+        latest = payload["sources"][0]["context_summary"]["latest"]
+        self.assertEqual(latest["status"], "completed")
+        self.assertGreater(latest["result_count"], 0)
+        self.assertEqual(latest["results"][0]["evidence_type"], "ocr_label")
+        self.assertEqual(latest["results"][0]["label_text"], "雲海保線所")
+        self.assertTrue(payload["observability"]["safe_failure"])
+        self.assertFalse(payload["boundary"]["phase1_mutation_allowed"])
+        self.assertFalse(payload["boundary"]["outbound_send_allowed"])
+
+    def test_pydantic_unresolved_tool_code_uses_risk_score_tool_summary(self):
+        from assistant_pydantic_provider import (
+            PydanticAIAssistantProvider,
+            RISK_SCORE_TOOL_ID,
+        )
+
+        class ToolCodeRunner:
+            def run(self, prompt: str, *, timeout_seconds: int) -> str:
+                return (
+                    "```python\n"
+                    "[search_scout_risk_scores(query='risk score baseline 最高', "
+                    "surface='baseline', limit=5)]\n"
+                    "```"
+                )
+
+        with TemporaryDirectory() as tmp:
+            workspace_root = Path(tmp) / "pretrip-workspaces"
+            project_root = workspace_root / "chilai_nanhua_day1"
+            shutil.copytree(PROJECT_ROOT, project_root)
+            with patch.dict(
+                os.environ,
+                {"SCOUT_PRETRIP_WORKSPACE_ROOT": str(workspace_root)},
+                clear=False,
+            ):
+                provider = PydanticAIAssistantProvider(runner=ToolCodeRunner())
+                client = TestClient(create_assistant_app(provider=provider))
+                response = client.post(
+                    "/assistant/query",
+                    json={
+                        "surface": "pretrip",
+                        "question": "risk score baseline 最高分在哪？",
+                        "project_id": "chilai_nanhua_day1",
+                    },
+                )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertIn("risk score tool fallback", payload["answer"])
+        self.assertEqual(payload["sources"][0]["source_id"], RISK_SCORE_TOOL_ID)
+        self.assertFalse(payload["observability"]["safe_failure"])
+        self.assertIn("UnresolvedToolCallText", " ".join(payload["limitations"]))
 
     def test_assistant_api_can_use_bounded_debug_context_sources(self):
         log = MemoryRuntimeDebugEventLog(
