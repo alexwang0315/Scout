@@ -21,6 +21,7 @@ from ingress_evidence import (
 ARTIFACT_KIND = "scout_sensorlogger_mqtt_observer_status"
 ARTIFACT_VERSION = "sensorlogger_mqtt_observer_status.v0"
 DEFAULT_EVIDENCE_DIR = Path("artifacts/mobile_wearable/sensorlogger_mqtt")
+STATUS_RECENT_RECORD_LIMIT = 50
 
 
 @dataclass(frozen=True)
@@ -286,7 +287,9 @@ class SensorLoggerMqttObserver:
                 "ingress_index_jsonl_path": str(self.ingress_index_jsonl_path),
                 "status_path": str(self.status_path),
             },
-            "ingress": self.ingress_recorder.build_index().model_dump(mode="json"),
+            "ingress": self.ingress_recorder.build_status_index(
+                recent_record_limit=STATUS_RECENT_RECORD_LIMIT
+            ),
             "message_count": self.message_count,
             "invalid_message_count": self.invalid_message_count,
             "last_error": self.last_error,

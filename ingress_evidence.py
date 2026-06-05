@@ -188,6 +188,13 @@ class IngressEvidenceRecorder:
         records = self._records or _load_index_records(self.index_jsonl_path)
         return build_ingress_evidence_index(records)
 
+    def build_status_index(self, *, recent_record_limit: int = 50) -> dict[str, Any]:
+        records = self._records or _load_index_records(self.index_jsonl_path)
+        return build_ingress_evidence_status_index(
+            records,
+            recent_record_limit=recent_record_limit,
+        )
+
     @staticmethod
     def _append_jsonl(path: Path, payload: dict[str, Any]) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -220,6 +227,39 @@ def build_ingress_evidence_index(
         source_adapters=sorted({record.source_adapter for record in records}),
         records=records,
     )
+
+
+def build_ingress_evidence_status_index(
+    records: list[IngressEvidenceRecord],
+    *,
+    recent_record_limit: int = 50,
+    generated_at: str | None = None,
+) -> dict[str, Any]:
+    recent_limit = max(int(recent_record_limit), 0)
+    recent_records = records[-recent_limit:] if recent_limit else []
+    return {
+        "artifact_kind": INGRESS_INDEX_ARTIFACT_KIND,
+        "artifact_version": INGRESS_INDEX_ARTIFACT_VERSION,
+        "generated_at": generated_at or _now_iso(),
+        "record_count": len(records),
+        "accepted_count": sum(
+            1 for record in records if record.parse_status == IngressParseStatus.ACCEPTED
+        ),
+        "rejected_count": sum(
+            1 for record in records if record.parse_status == IngressParseStatus.REJECTED
+        ),
+        "unrecognized_count": sum(
+            1 for record in records if record.parse_status == IngressParseStatus.UNRECOGNIZED
+        ),
+        "ingress_transports": sorted(
+            {record.ingress_transport.value for record in records}
+        ),
+        "source_adapters": sorted({record.source_adapter for record in records}),
+        "records": [record.model_dump(mode="json") for record in recent_records],
+        "records_truncated": len(records) > len(recent_records),
+        "recent_record_limit": recent_limit,
+        "boundary": IngressEvidenceBoundary().model_dump(mode="json"),
+    }
 
 
 def _load_index_records(path: Path) -> list[IngressEvidenceRecord]:

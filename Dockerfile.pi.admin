@@ -16,6 +16,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     SCOUT_ADMIN_AUTH_REQUIRED=true \
     SCOUT_ADMIN_BASIC_USERNAME=scout-admin \
     SCOUT_ADMIN_ACCESS_TOKEN_FILE=/data/scout/admin/secrets/phase4-admin-token \
+    SCOUT_INGRESS_OBSERVER_SUPERVISOR_ENABLED=true \
+    SCOUT_SENSORLOGGER_MQTT_ENV_FILE=/data/scout/secrets/sensorlogger-mqtt.env \
+    SCOUT_SENSORLOGGER_MQTT_EVIDENCE_DIR=/data/scout/admin/ingress/sensorlogger_mqtt \
+    SCOUT_SENSORLOGGER_MQTT_LOG_PATH=/data/scout/admin/ingress/sensorlogger-mqtt-observer.log \
     SCOUT_AI_ASSISTANT_ENABLED=1 \
     SCOUT_AI_ASSISTANT_PROVIDER=mock \
     SCOUT_WEATHER_API_ENABLED=false \
@@ -149,7 +153,7 @@ COPY tests/fixtures/routes/scout_260512_field_route.gpx ./tests/fixtures/routes/
 RUN useradd --create-home --uid 1000 scout \
     && mkdir -p /data/scout/admin/pretrip-workspaces /data/scout/incidents \
         /data/scout/admin/secrets /data/scout/osm-tiles /data/scout/raster-tiles \
-        /data/scout/logs \
+        /data/scout/logs /data/scout/admin/ingress \
     && chown -R scout:scout /data/scout /app
 
 USER scout

@@ -137,6 +137,32 @@ def test_observer_tracks_gaps_duplicates_and_out_of_order_message_ids(tmp_path: 
     assert session["out_of_order_message_ids"] == [2]
 
 
+def test_observer_status_keeps_recent_records_but_preserves_full_evidence_index(
+    tmp_path: Path,
+) -> None:
+    observer = SensorLoggerMqttObserver(_config(tmp_path))
+
+    for message_id in range(1, 56):
+        observer.handle_message(
+            topic="scout/test/alex/sensorlogger",
+            payload=json.dumps(_message(message_id=message_id)),
+            received_at=1780555780.5 + message_id,
+        )
+
+    status = json.loads(observer.status_path.read_text(encoding="utf-8"))
+    index_lines = observer.ingress_index_jsonl_path.read_text(encoding="utf-8").splitlines()
+
+    assert status["message_count"] == 55
+    assert status["ingress"]["record_count"] == 55
+    assert status["ingress"]["accepted_count"] == 55
+    assert status["ingress"]["records_truncated"] is True
+    assert status["ingress"]["recent_record_limit"] == 50
+    assert len(status["ingress"]["records"]) == 50
+    assert len(index_lines) == 55
+    assert status["ingress"]["records"][0]["normalized_summary"]["message_id"] == 6
+    assert status["ingress"]["records"][-1]["normalized_summary"]["message_id"] == 55
+
+
 def test_normalizer_accepts_future_android_client_when_wire_shape_matches() -> None:
     normalized = normalize_sensorlogger_mqtt_message(
         {
