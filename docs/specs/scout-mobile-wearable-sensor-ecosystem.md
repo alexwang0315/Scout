@@ -46,6 +46,40 @@ against a known contract.
 最終 client。Scout 會把它的 MQTT payload shape 固定成 v0 參考格式，未來
 Android app 或 Scout 官方 iOS/watchOS app 先照這個格式送資料，再逐步演進。
 
+## Captured Requirements from 2026-06-05 Scout Client Discussion
+
+The immediate objective is not a polished Apple app. The immediate objective is
+to prove a Scout client path that can move real iPhone/Apple Watch sensor data
+into Scout while preserving evidence boundaries.
+
+Thread-derived requirements:
+
+- Use real device data for live testing. If a third-party app can publish live
+  iPhone/Apple Watch telemetry now, prefer it over simulated data for the first
+  Scout observer tests.
+- Sensor Logger Pro MQTT Publishing is the current reference live tester because
+  it can publish iPhone/Apple Watch motion, location, pedometer, battery,
+  barometer, and heart-rate-like wearable evidence to a broker.
+- Health Auto Export / Apple Health exports do not need to be live for v0.
+  Health summaries may be prepared in pre-trip or admin workflows as batch JSON,
+  CSV, GPX, REST, or MQTT-exported evidence. They must not block the live sensor
+  ingress milestone.
+- A Scout-native iOS/watchOS client remains the future target, but its first
+  prototype should preserve the Sensor Logger v0 outer envelope before adding
+  richer Scout-specific identity, bidirectional commands, or safety affordances.
+- The Scout-native Apple client can start as a bare operational UI with connection status, broker/topic configuration, permission status, recording state, and evidence upload state. It should not begin by implementing medical diagnosis or Phase 1 safety mutation.
+- Live Scout testing should focus on motion/location/PDR/vitals ingress first.
+  Apple Health historical aggregates belong in pre-trip/admin preparation unless
+  a later runtime requirement explicitly promotes them.
+- The same source-adapter contract must be usable by future Android, Scout iOS,
+  Scout watchOS, gateway, LoRa, and satellite adapters. The transport may
+  change, but the normalized record and safety admission gates must remain
+  transport-independent.
+
+中文註釋：第一階段不是做漂亮的 Apple app，而是先證明真裝置資料可以 live 進
+Scout。健康資料可以先做 pre-trip/admin batch evidence；真正需要 live 的是
+Sensor Logger 這類 motion/location/PDR/wearable telemetry。
+
 ## Layering Model
 
 Scout mobile/wearable sensing is split into six layers:
@@ -196,6 +230,26 @@ carry real location, heart-rate, or participant data.
 Normative broker ownership: Scout-owned or Scout-controlled MQTT broker before
 release.
 
+Network and broker requirements captured from the 2026-06-05 discussion:
+
+- LAN HTTP/WebSocket/TCP is acceptable for same-Wi-Fi, phone hotspot, or local
+  gateway coverage.
+- Public IPv4, floating public IP, router port forwarding, or dynamic DNS can
+  support local lab HTTP servers, but this is not a scalable release model for
+  many Scout hosts.
+- WAN live testing should use MQTT because both phones and Scout devices can
+  make outbound broker connections without requiring every Scout host to expose
+  an inbound public IP address.
+- Sensor Logger currently publishes MQTT over WebSocket/TLS in the tested setup;
+  Scout must support WebSocket/TLS broker URLs for this source adapter.
+- Public/free brokers are allowed only for protocol smoke tests. Release-bound
+  Scout deployments require a Scout-owned or Scout-controlled MQTT broker,
+  identity policy, topic policy, credential rotation, and audit logging.
+- MQTT is not only an upload channel. Future Scout clients need bidirectional communication for status, command, acknowledgement, safety-reporting coordination, and cross-client interop. That bidirectional path must still preserve safety-admission boundaries.
+- LoRa or LoRaWAN gateways are a nearby/off-grid option for sparse check-ins,
+  last-heard evidence, and low-rate summaries. They are not a substitute for
+  high-rate wearable streaming.
+
 ## Ingress Evidence Preservation
 
 Scout must preserve ingress evidence before deciding whether a message can be
@@ -277,6 +331,19 @@ Observer responsibilities:
 The observer should keep raw evidence and normalized status separate. The raw
 JSONL file is for replay/audit. The status file is for admin surfaces and should
 remain summary-only.
+
+Operational requirements:
+
+- The observer should run automatically in the Scout admin runtime when
+  configured. Operators should not need to manually start a one-off MQTT receive
+  command after the Scout server is already running.
+- `/health` or an equivalent admin status endpoint should expose observer
+  configured/running state, status path, evidence directory, log path, and
+  credential-presence booleans without exposing credential values.
+- The observer must keep watching in the background even when the debug page is
+  closed. Debug UI visibility is not a prerequisite for receiving MQTT or other
+  hardware/provider events.
+- Debug/admin counters may be reset as projection-only operator state, but raw ingress JSONL evidence and ingress index JSONL must remain available for audit and replay.
 
 ## Scout Sensor/Vitals Record
 

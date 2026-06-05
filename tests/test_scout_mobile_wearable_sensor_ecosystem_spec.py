@@ -31,6 +31,25 @@ def test_mobile_wearable_spec_names_sensor_logger_as_canonical_v0_reference() ->
         assert token in source
 
 
+def test_mobile_wearable_spec_records_current_scout_client_requirements() -> None:
+    source = read_spec()
+
+    for token in (
+        "Captured Requirements from 2026-06-05 Scout Client Discussion",
+        "Use real device data for live testing",
+        "Sensor Logger Pro MQTT Publishing is the current reference live tester",
+        "Health Auto Export / Apple Health exports do not need to be live for v0",
+        "pre-trip or admin workflows as batch JSON",
+        "A Scout-native iOS/watchOS client remains the future target",
+        "bare operational UI",
+        "connection status",
+        "permission status",
+        "recording state",
+        "Live Scout testing should focus on motion/location/PDR/vitals ingress first",
+    ):
+        assert token in source
+
+
 def test_mobile_wearable_spec_defines_mqtt_topics_and_transport_roles() -> None:
     source = read_spec()
 
@@ -48,6 +67,12 @@ def test_mobile_wearable_spec_defines_mqtt_topics_and_transport_roles() -> None:
         "LoRa/LoRaWAN: low-rate nearby/off-grid fallback",
         "Satellite message: very low-rate future fallback",
         "Scout-owned or Scout-controlled MQTT broker",
+        "Public IPv4, floating public IP, router port forwarding, or dynamic DNS",
+        "WAN live testing should use MQTT",
+        "WebSocket/TLS broker URLs",
+        "Public/free brokers are allowed only for protocol smoke tests",
+        "bidirectional communication for status, command, acknowledgement",
+        "LoRa or LoRaWAN gateways are a nearby/off-grid option",
     ):
         assert token in source
 
@@ -130,6 +155,10 @@ def test_mobile_wearable_spec_keeps_observer_evidence_only() -> None:
         '"phase1_runtime_safety_truth": false',
         '"safety_api_called": false',
         '"phase2_brain_writeback": false',
+        "The observer should run automatically in the Scout admin runtime",
+        "Debug UI visibility is not a prerequisite for receiving MQTT",
+        "Debug/admin counters may be reset as projection-only operator state",
+        "raw ingress JSONL evidence and ingress index JSONL must remain available",
     ):
         assert token in source
 
