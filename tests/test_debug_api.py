@@ -1,3 +1,4 @@
+import json
 import unittest
 
 from fastapi.testclient import TestClient
@@ -33,6 +34,10 @@ class DebugApiTests(unittest.TestCase):
             '["wmts_tile", "wmts_kvp_tile", "xyz_tile"].includes(sourceKind)',
             response.text,
         )
+        self.assertIn(".panel.map-panel", response.text)
+        self.assertIn("overflow: visible", response.text)
+        self.assertIn("width: min(360px, calc(100vw - 24px))", response.text)
+        self.assertIn("max-height: min(300px, calc(100vh - 150px))", response.text)
 
     def test_debug_events_state_and_messages_are_read_only(self):
         log = MemoryRuntimeDebugEventLog()
@@ -70,6 +75,34 @@ class DebugApiTests(unittest.TestCase):
         self.assertEqual(client.post("/debug/events", json={}).status_code, 405)
         self.assertEqual(client.patch("/debug/state", json={}).status_code, 405)
         self.assertEqual(client.delete("/debug/messages").status_code, 405)
+
+    def test_debug_stream_pushes_read_only_snapshot_over_sse(self):
+        log = MemoryRuntimeDebugEventLog()
+        log.append(_event(sequence=1, kind="debug_session_started"))
+        transport = _transport(log)
+        transport.queue_message(
+            category="checkin",
+            recipient_ref="remote_contact.primary",
+            body_preview="Debug stream mock message.",
+        )
+        client = TestClient(create_debug_app(debug_log=log, message_source=transport))
+
+        response = client.get("/debug/stream", params={"once": "true"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["content-type"].split(";")[0], "text/event-stream")
+        self.assertEqual(response.headers["cache-control"], "no-store")
+        self.assertIn("event: debug_snapshot", response.text)
+        payload = _sse_json_payload(response.text)
+        self.assertEqual(payload["artifact_kind"], "scout_debug_stream_snapshot")
+        self.assertEqual(payload["status"], "ok")
+        self.assertTrue(payload["read_only"])
+        self.assertEqual(payload["events"]["events"][0]["kind"], "debug_session_started")
+        self.assertEqual(payload["state"]["event_count"], 2)
+        self.assertEqual(payload["messages"]["messages"][0]["transport"], "mock")
+        self.assertEqual(payload["mobile_wearable_ingress"]["status"], "unavailable")
+        self.assertTrue(payload["debug_boundary"]["read_only"])
+        self.assertFalse(payload["debug_boundary"]["phase1_mutation_allowed"])
 
     def test_debug_clear_clears_projection_only_with_explicit_confirmation(self):
         log = MemoryRuntimeDebugEventLog()
@@ -369,6 +402,15 @@ def _transport(log: MemoryRuntimeDebugEventLog) -> MockOutboundTransport:
         debug_log=log,
         timestamp_factory=lambda: "2026-05-18T12:00:10Z",
     )
+
+
+def _sse_json_payload(text: str) -> dict:
+    data_lines = [
+        line.removeprefix("data: ")
+        for line in text.splitlines()
+        if line.startswith("data: ")
+    ]
+    return json.loads("\n".join(data_lines))
 
 
 if __name__ == "__main__":

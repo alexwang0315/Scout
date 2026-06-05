@@ -155,19 +155,37 @@
       opacity: 0.58;
     }
 
+    .panel-head .debug-button {
+      min-height: 24px;
+      padding: 2px 7px;
+      font-size: 11px;
+    }
+
+    .item-line-actions {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
     .map-toolbar {
-      display: grid;
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
       gap: 4px;
       min-width: 0;
+      position: relative;
+      z-index: 40;
       border: 1px solid var(--border);
       border-radius: 6px;
       background: var(--panel-soft);
-      padding: 5px;
-      margin-bottom: 8px;
+      padding: 3px 4px;
+      margin-bottom: 4px;
     }
 
     .control-group-header {
-      display: flex;
+      display: none;
       align-items: baseline;
       justify-content: space-between;
       gap: 10px;
@@ -184,25 +202,25 @@
 
     .toolbar-row {
       display: flex;
-      gap: 5px;
+      gap: 3px;
       align-items: center;
       flex-wrap: wrap;
     }
 
     .tool-button {
-      min-height: 24px;
+      min-height: 22px;
       border: 1px solid var(--border);
       border-radius: 6px;
       background: var(--panel);
       color: var(--text);
-      padding: 2px 7px;
+      padding: 1px 6px;
       cursor: pointer;
       font: inherit;
-      font-size: 12px;
+      font-size: 11px;
     }
 
     .tool-button.compact {
-      min-width: 30px;
+      min-width: 26px;
       padding-left: 0;
       padding-right: 0;
     }
@@ -212,13 +230,13 @@
       color: #1d4d3a;
     }
     .zoom-level {
-      min-width: 56px;
+      min-width: 48px;
       border: 1px solid var(--border);
       border-radius: 6px;
       background: var(--panel-soft);
       color: var(--text);
-      padding: 3px 7px;
-      font-size: 12px;
+      padding: 2px 5px;
+      font-size: 11px;
       font-variant-numeric: tabular-nums;
       text-align: center;
       white-space: nowrap;
@@ -226,20 +244,23 @@
 
     .layer-menu {
       position: relative;
+      width: fit-content;
+      max-width: 100%;
+      z-index: 60;
     }
 
     .layer-menu summary {
-      min-height: 24px;
+      min-height: 22px;
       display: inline-flex;
       align-items: center;
-      gap: 6px;
+      gap: 5px;
       border: 1px solid var(--border);
       border-radius: 6px;
       background: var(--panel);
       color: var(--text);
-      padding: 2px 7px;
+      padding: 1px 6px;
       cursor: pointer;
-      font-size: 12px;
+      font-size: 11px;
       list-style: none;
     }
 
@@ -263,15 +284,15 @@
 
     .layer-menu-panel {
       position: absolute;
-      top: calc(100% + 6px);
+      top: calc(100% + 4px);
       left: 0;
-      width: min(540px, calc(100vw - 28px));
-      max-height: 250px;
+      width: min(360px, calc(100vw - 24px));
+      max-height: min(300px, calc(100vh - 150px));
       overflow: auto;
       border: 1px solid var(--border);
       border-radius: 8px;
       background: var(--surface);
-      padding: 8px;
+      padding: 6px;
       box-shadow: 0 18px 42px rgba(0, 0, 0, .28);
       z-index: 20;
     }
@@ -296,48 +317,46 @@
     .filters {
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 3px;
+      gap: 2px;
       color: var(--muted);
-      font-size: 12px;
+      font-size: 11px;
     }
 
     .filters label {
       display: inline-flex;
       align-items: center;
-      gap: 4px;
-      min-height: 22px;
+      gap: 3px;
+      min-height: 19px;
       border: 1px solid var(--border);
       border-radius: 5px;
       background: var(--panel);
-      padding: 1px 5px;
+      padding: 0 4px;
       white-space: nowrap;
     }
 
     .filters input[type="checkbox"] {
-      width: 13px;
-      height: 13px;
+      width: 12px;
+      height: 12px;
       accent-color: var(--info);
     }
 
     .map-pan-controls {
-      display: inline-grid;
-      grid-template-columns: repeat(3, 24px);
-      grid-template-rows: repeat(3, 24px);
-      gap: 2px;
+      display: inline-flex;
+      gap: 1px;
       align-items: center;
       justify-content: center;
     }
 
     .map-pan-controls .tool-button {
-      min-height: 24px;
+      min-height: 20px;
       padding: 0;
       line-height: 1;
     }
 
-    .pan-up { grid-column: 2; grid-row: 1; }
-    .pan-left { grid-column: 1; grid-row: 2; }
-    .pan-right { grid-column: 3; grid-row: 2; }
-    .pan-down { grid-column: 2; grid-row: 3; }
+    .pan-left { order: 1; }
+    .pan-up { order: 2; }
+    .pan-down { order: 3; }
+    .pan-right { order: 4; }
 
     main {
       display: grid;
@@ -398,10 +417,10 @@
     .map-panel .panel-body {
       display: grid;
       grid-template-rows: auto minmax(0, 1fr) auto auto;
-      gap: 8px;
+      gap: 5px;
       min-height: 0;
-      overflow: hidden;
-      padding: 10px;
+      overflow: visible;
+      padding: 6px;
     }
 
     .panel {
@@ -412,12 +431,16 @@
       overflow: hidden;
     }
 
+    .panel.map-panel {
+      overflow: visible;
+    }
+
     .panel-head {
       display: flex;
       justify-content: space-between;
-      gap: 12px;
-      align-items: start;
-      padding: 11px 12px;
+      gap: 8px;
+      align-items: center;
+      padding: 7px 9px;
       border-bottom: 1px solid var(--border);
       background: var(--panel);
       min-width: 0;
@@ -425,7 +448,7 @@
 
     .panel-title {
       display: grid;
-      gap: 3px;
+      gap: 1px;
       min-width: 0;
     }
 
@@ -436,14 +459,14 @@
     }
 
     .panel-body {
-      padding: 12px;
+      padding: 9px;
     }
 
     .tab-list {
       display: flex;
       flex-wrap: wrap;
-      gap: 6px;
-      padding: 10px 12px;
+      gap: 4px;
+      padding: 7px 9px;
       border-bottom: 1px solid var(--border);
       background: rgba(255, 255, 255, 0.018);
     }
@@ -451,10 +474,10 @@
     .tab {
       border: 1px solid var(--border);
       border-radius: 999px;
-      padding: 5px 9px;
+      padding: 3px 7px;
       color: var(--muted);
       background: rgba(255, 255, 255, 0.03);
-      font-size: 12px;
+      font-size: 11px;
       cursor: pointer;
       user-select: none;
       white-space: nowrap;
@@ -490,7 +513,7 @@
 
     .tab-panel {
       display: none;
-      padding: 12px;
+      padding: 8px;
     }
 
     .tab-panel.is-active {
@@ -499,8 +522,22 @@
 
     .tab-panel-head {
       display: grid;
-      gap: 3px;
-      margin-bottom: 10px;
+      gap: 1px;
+      margin-bottom: 6px;
+    }
+
+    .tab-panel-head h2 {
+      font-size: 12px;
+      line-height: 1.15;
+    }
+
+    .tab-panel-head .hint {
+      margin-top: 1px;
+      font-size: 11px;
+      line-height: 1.22;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
     .grid {
@@ -510,23 +547,23 @@
     }
 
     .metric {
-      min-height: 68px;
+      min-height: 58px;
       border: 1px solid var(--border);
       border-radius: 6px;
-      padding: 9px 10px;
+      padding: 7px 8px;
       background: var(--panel-soft);
     }
 
     .metric span {
       display: block;
       color: var(--muted);
-      font-size: 12px;
+      font-size: 11px;
     }
 
     .metric strong {
       display: block;
-      margin-top: 4px;
-      font-size: 17px;
+      margin-top: 2px;
+      font-size: 16px;
       overflow-wrap: anywhere;
     }
 
@@ -681,6 +718,26 @@
       max-width: 100%;
     }
 
+    .ingress-memo {
+      margin-top: 8px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px 10px;
+      color: var(--text);
+      background: var(--panel-soft);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .ingress-chip-row {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+      min-width: 0;
+    }
+
     .hint {
       margin-top: 4px;
       color: #c2ccd6;
@@ -699,8 +756,8 @@
     }
 
     .state-context {
-      margin-top: 8px;
-      padding: 8px 10px;
+      margin-top: 5px;
+      padding: 6px 8px;
       border: 1px solid var(--border);
       border-radius: 6px;
       background: rgba(255, 255, 255, 0.025);
@@ -889,6 +946,40 @@
       font: 500 11px/14px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
 
+    .map-hover-tooltip {
+      position: absolute;
+      z-index: 7;
+      max-width: min(320px, 70vw);
+      padding: 7px 9px;
+      border: 1px solid rgba(71, 85, 105, .38);
+      border-radius: 6px;
+      background: rgba(15, 23, 42, .94);
+      color: #f8fafc;
+      box-shadow: 0 10px 24px rgba(15, 23, 42, .24);
+      pointer-events: none;
+      opacity: 0;
+      transform: translate3d(0, 0, 0);
+      transition: opacity .08s ease;
+    }
+    .map-hover-tooltip.is-visible {
+      opacity: 1;
+    }
+    .map-hover-tooltip strong,
+    .map-hover-tooltip span {
+      display: block;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .map-hover-tooltip strong {
+      font: 800 12px/15px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    .map-hover-tooltip span {
+      margin-top: 2px;
+      color: #cbd5e1;
+      font: 500 11px/14px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
     .layer-imagery { fill: #f4f7fa; }
     .layer-osm { fill: #ffffff; }
     [data-layer-hidden="true"] { display: none; }
@@ -929,6 +1020,7 @@
       stroke-linecap: round;
       stroke-linejoin: round;
       vector-effect: non-scaling-stroke;
+      pointer-events: visiblePainted;
     }
     .reference-track {
       fill: none;
@@ -938,6 +1030,7 @@
       stroke-linejoin: round;
       opacity: .34;
       vector-effect: non-scaling-stroke;
+      pointer-events: visiblePainted;
     }
     .segment-overlay {
       fill: none;
@@ -947,6 +1040,7 @@
       stroke-linejoin: round;
       opacity: .28;
       vector-effect: non-scaling-stroke;
+      pointer-events: visiblePainted;
     }
     .checkpoint {
       fill: var(--checkpoint);
@@ -988,6 +1082,7 @@
       stroke-linejoin: round;
       opacity: .5;
       vector-effect: non-scaling-stroke;
+      pointer-events: visiblePainted;
     }
     .hazard,
     .overpass-hazard {
@@ -995,6 +1090,7 @@
       stroke: rgba(217, 107, 98, .68);
       stroke-width: 2;
       vector-effect: non-scaling-stroke;
+      pointer-events: visiblePainted;
     }
     .risk-score-point { stroke: #fff; stroke-width: 1.2; opacity: .42; vector-effect: non-scaling-stroke; }
     .risk-score-point.risk-l1 { fill: #2f855a; }
@@ -1009,6 +1105,7 @@
       stroke-linejoin: round;
       opacity: .48;
       vector-effect: non-scaling-stroke;
+      pointer-events: visiblePainted;
     }
     .risk-ribbon-low { stroke: var(--risk-low); }
     .risk-ribbon-moderate { stroke: var(--risk-moderate); }
@@ -1023,6 +1120,7 @@
       opacity: .72;
       vector-effect: non-scaling-stroke;
       mix-blend-mode: multiply;
+      pointer-events: visiblePainted;
     }
     .risk-heatmap-low { stroke: #2c7bb6; }
     .risk-heatmap-moderate { stroke: #abd9e9; }
@@ -1037,6 +1135,7 @@
       opacity: .86;
       vector-effect: non-scaling-stroke;
       stroke-dasharray: 9 5;
+      pointer-events: visiblePainted;
     }
     .risk-delta-calibrated_higher { stroke: #9333ea; }
     .risk-delta-baseline_higher { stroke: #2563eb; }
@@ -1324,7 +1423,6 @@
           <span class="pill info" title="Mock outbound visibility only">Mock only</span>
         </div>
         <div class="debug-actions">
-          <button class="debug-button" type="button" id="debugClearButton" title="Clear projected debug events only">Clear</button>
           <span id="loadStatus">Loading debug snapshots...</span>
         </div>
       </div>
@@ -1487,11 +1585,15 @@
               <div class="tab-panel-head">
                 <div class="item-line">
                   <h2>Mobile/Wearable Ingress</h2>
-                  <span class="pill" id="mobileIngressSummary">not seen</span>
+                  <div class="item-line-actions">
+                    <span class="pill" id="mobileIngressSummary">listening</span>
+                    <button class="debug-button" type="button" id="mobileIngressResetButton" title="Reset MQTT ingress counters only">歸零</button>
+                  </div>
                 </div>
-                <p class="hint">讀取 /debug/mobile-wearable/ingress；顯示 LAN/WAN/LoRa 接入摘要，不載入 raw payload。</p>
+                <p class="hint">讀取 /debug/mobile-wearable/ingress；只顯示 memo/counters。raw payload stays in evidence JSONL，不顯示 raw sensor values。</p>
               </div>
               <p class="hint state-context" id="mobileIngressSelectionContext">Mobile/wearable ingress 是獨立 evidence projection，不因 timeline 選取改變。</p>
+              <div class="ingress-memo mono" id="mobileIngressMemo" title="No ingress memo.">No ingress memo.</div>
               <div class="grid">
                 <div class="metric">
                   <span>Ingress records</span>
@@ -1519,9 +1621,8 @@
                   <p class="hint">最近一筆 ingress 的 parse_status。</p>
                 </div>
               </div>
-              <div class="list" id="mobileIngressTransportList" style="margin-top: 10px;"></div>
-              <div class="list" id="mobileIngressRecordList" style="margin-top: 10px;"></div>
-              <div class="list" id="mobileIngressBoundaryList" style="margin-top: 10px;"></div>
+              <div class="ingress-chip-row" id="mobileIngressTransportList"></div>
+              <p class="summary mono ingress-boundary" id="mobileIngressBoundaryMemo">boundary unavailable</p>
             </section>
 
             <section class="tab-panel" role="tabpanel" id="panel-incident" aria-labelledby="tab-incident" hidden>
@@ -1720,7 +1821,10 @@
               <h2>Timeline</h2>
               <p class="hint">runtime event 的發生順序；右上 L0->L2 表示安全等級變化。</p>
             </div>
-            <span class="pill" id="eventCount">0 events</span>
+            <div class="item-line-actions">
+              <span class="pill" id="eventCount">0 events</span>
+              <button class="debug-button" type="button" id="debugClearButton" title="Clear projected debug events only">清 Timeline</button>
+            </div>
           </div>
           <div class="panel-body" aria-label="Runtime event timeline">
             <div class="list" id="timeline"></div>
@@ -1884,11 +1988,13 @@
       mobileWearableIngress: null,
       monitoringCenter: null,
       projection: null,
+      debugStreamSource: null,
       zoom: 1,
       panX: 0,
       panY: 0,
       zoomSelection: null,
-      focusedLabelIds: new Set()
+      focusedLabelIds: new Set(),
+      hoveredMapTarget: null
     };
     const runtimeMap = document.getElementById("runtimeMap");
     const EVENT_MAP_REFS = {
@@ -2373,6 +2479,67 @@
       const id = item?.source_id || item?.candidate_id || item?.segment_id || item?.checkpoint_id || "";
       if (id) node.setAttribute("data-source-id", id);
       node.setAttribute("data-map-ref", mapRef || id || item?.evidence_type || "evidence");
+      node.setAttribute("data-map-hover", "true");
+      node.setAttribute("data-map-feature-kind", mapFeatureKind(node, item));
+      node.setAttribute("data-map-hover-title", mapFeatureTitle(item));
+      node.setAttribute("data-map-hover-summary", mapFeatureSummary(item));
+      node.setAttribute("aria-label", mapFeatureAriaLabel(node));
+    }
+
+    function mapFeatureKind(node, item = {}) {
+      const tagName = String(node?.tagName || "").toLowerCase();
+      const className = String(node?.getAttribute?.("class") || "");
+      if (tagName === "circle" || tagName === "ellipse") return "point";
+      if (tagName === "rect" || tagName === "polygon") return "area";
+      if (className.includes("hazard") || className.includes("zone") || className.includes("area")) return "area";
+      if (item?.hazard?.polygon || item?.polygon) return "area";
+      if (tagName === "path") {
+        const d = String(node?.getAttribute?.("d") || "").trim();
+        return /z$/i.test(d) ? "area" : "line";
+      }
+      return "feature";
+    }
+
+    function mapFeatureTitle(item = {}) {
+      return [
+        item?.map_label,
+        item?.display_label,
+        item?.short_label,
+        item?.label,
+        item?.name,
+        item?.title,
+        firstRouteNoteLabel(item),
+        item?.route_note_summary,
+        item?.summary,
+        item?.checkpoint_id,
+        item?.segment_id,
+        item?.mcp_id,
+        item?.poi_id,
+        item?.candidate_id,
+        item?.source_id,
+        item?.artifact_id
+      ].map(readablePointLabel).find(Boolean) || "map feature";
+    }
+
+    function mapFeatureSummary(item = {}) {
+      return [
+        item?.evidence_type,
+        item?.checkpoint_type,
+        item?.source_path,
+        item?.review_state,
+        item?.source_id,
+        item?.candidate_id,
+        item?.segment_id,
+        item?.artifact_id
+      ].map(readablePointLabel).find(Boolean) || "evidence feature";
+    }
+
+    function mapFeatureAriaLabel(node) {
+      return [
+        node.dataset.mapFeatureKind || "feature",
+        node.dataset.mapHoverTitle || "map feature",
+        node.dataset.mapHoverSummary || ""
+      ].filter(Boolean).join(": ");
     }
 
     function selectedMapEvent() {
@@ -2569,6 +2736,7 @@
     function renderDebugEvidenceMap(projection) {
       if (!projection?.route?.bounds) return;
       const bounds = boundsForProjection(projection);
+      hideMapHoverTooltip();
       applyMapViewport();
       runtimeMap.replaceChildren();
 
@@ -3400,89 +3568,126 @@
     }
 
     function ingressTransportItem(title, value, status = "ok") {
-      return `
-        <div class="item">
-          <div class="item-line">
-            <h3>${escapeHtml(title)}</h3>
-            <span class="${pillClass(status)}">${escapeHtml(text(value, "not seen"))}</span>
-          </div>
-          <p class="hint">Mobile/wearable ingress summary only; raw payload stays in evidence JSONL.</p>
-        </div>
-      `;
+      const label = `${text(title)}: ${text(value, "not seen")}`;
+      return `<span class="${pillClass(status)}" title="${escapeHtml(label)}">${escapeHtml(label)}</span>`;
     }
 
-    function ingressRecordItem(record) {
-      const summary = record.normalized_summary || {};
-      const metadata = record.transport_metadata || {};
-      const mqtt = metadata.mqtt || {};
-      const fields = [
-        `transport=${text(record.ingress_transport)}`,
-        `source=${text(record.source_adapter)}`,
-        `received=${text(record.received_at)}`,
-        `bytes=${text(record.payload_byte_count, "0")}`,
-        `sha=${text(record.payload_sha256, "").slice(0, 12)}`,
-        `raw=${text(record.raw_artifact_path, "artifact unavailable")}`
-      ];
-      if (summary.device_id) fields.push(`device=${text(summary.device_id)}`);
-      if (summary.session_id) fields.push(`session=${text(summary.session_id)}`);
-      if (summary.payload_count !== undefined) fields.push(`payload_count=${text(summary.payload_count)}`);
-      if (Array.isArray(summary.sensor_names) && summary.sensor_names.length) {
-        fields.push(`sensors=${summary.sensor_names.slice(0, 8).map(text).join(", ")}`);
-      }
-      if (mqtt.topic) fields.push(`topic=${text(mqtt.topic)}`);
-      if (record.reject_reason) fields.push(`reason=${text(record.reject_reason)}`);
-      return `
-        <div class="item">
-          <div class="item-line">
-            <h3>${escapeHtml(record.ingress_id || "ingress record")}</h3>
-            <span class="${pillClass(record.parse_status)}">${escapeHtml(text(record.parse_status, "unknown"))}</span>
-          </div>
-          <p class="hint">接入訊息已保存；這裡只顯示 summary/index，不顯示 raw sensor values。</p>
-          <p class="summary mono">${escapeHtml(fields.join(" | "))}</p>
-        </div>
-      `;
+    function mobileIngressBoundaryMemo(boundary) {
+      if (!boundary || !Object.keys(boundary).length) return "boundary unavailable";
+      return [
+        `reset=${Boolean(boundary.debug_projection_reset_applied)}`,
+        `raw_cleared=${Boolean(boundary.raw_evidence_cleared)}`,
+        `observer_restarted=${Boolean(boundary.observer_process_restarted)}`,
+        `runtime_admission=${Boolean(boundary.runtime_admission_performed)}`,
+        `safety=${Boolean(boundary.safety_api_called)}`,
+        `brain=${Boolean(boundary.phase2_brain_writeback)}`
+      ].join(" | ");
     }
 
     function renderMobileWearableIngress(selectedEvent) {
       const payload = debugPageState.mobileWearableIngress || {};
       const ingress = payload.ingress || {};
-      const records = ingress.recent_records || [];
-      const latest = ingress.latest_record || records[records.length - 1] || {};
+      const latest = ingress.latest_record || {};
       const boundary = payload.boundary || {};
       const unavailable = Boolean(payload.unavailable);
       const recordCount = ingress.record_count || 0;
+      const messageCount = payload.message_count || 0;
+      const activityCount = Math.max(recordCount, messageCount);
       const invalidCount = (payload.invalid_message_count || 0) + (ingress.rejected_count || 0) + (ingress.unrecognized_count || 0);
       const sensorNames = payload.sensor_names || [];
 
       setText("mobileIngressRecordCount", recordCount, "0");
-      setText("mobileIngressMessageCount", payload.message_count, "0");
+      setText("mobileIngressMessageCount", messageCount, "0");
       setText("mobileIngressInvalidCount", invalidCount, "0");
       setText("mobileIngressSensorCount", sensorNames.length, "0");
       setText("mobileIngressLatestStatus", latest.parse_status || "none", "none");
       document.getElementById("mobileIngressSummary").textContent = unavailable
         ? "unavailable"
-        : (recordCount ? `${recordCount} ingress` : "not seen");
+        : (activityCount ? `${activityCount} ingress` : "listening");
       document.getElementById("mobileIngressSummary").className = unavailable
         ? "pill bad"
-        : (recordCount ? "pill ok" : "pill info");
+        : (activityCount ? "pill ok" : "pill info");
       document.getElementById("mobileIngressSelectionContext").textContent = selectedEvent
         ? `Mobile/wearable ingress 是獨立 evidence projection；目前 timeline 選取 #${text(selectedEvent.sequence)}。`
         : "Mobile/wearable ingress 是獨立 evidence projection，不因 timeline 選取改變。";
+      const memo = payload.memo || (unavailable
+        ? `status=unavailable | reason=${text(payload.error || payload.reason)}`
+        : `messages=${text(payload.message_count, "0")} | ingress=${text(recordCount, "0")} | latest=${text(latest.parse_status, "none")}`);
+      const memoNode = document.getElementById("mobileIngressMemo");
+      memoNode.textContent = memo;
+      memoNode.title = memo;
 
       const transportItems = [
         ingressTransportItem("Broker", payload.mqtt?.host || payload.reason || "not configured", unavailable ? "unavailable" : "ok"),
         ingressTransportItem("MQTT state", payload.mqtt_state?.ever_subscribed ? "subscribed" : (payload.mqtt_state?.ever_connected ? "connected" : "not connected"), payload.mqtt_state?.ever_subscribed ? "ok" : "not seen"),
+        ingressTransportItem("Reset", payload.projection_reset?.reset_at || "not reset", payload.projection_reset ? "ok" : "not seen"),
         ingressTransportItem("Transports", (ingress.ingress_transports || []).join(", ") || "none", recordCount ? "ok" : "not seen"),
         ingressTransportItem("Source adapters", (ingress.source_adapters || []).join(", ") || "none", recordCount ? "ok" : "not seen"),
         ingressTransportItem("Evidence", payload.evidence?.ingress_index_jsonl_path || payload.evidence?.raw_jsonl_path || "not written", recordCount ? "ok" : "not seen")
       ];
       document.getElementById("mobileIngressTransportList").innerHTML = transportItems.join("");
-      document.getElementById("mobileIngressRecordList").innerHTML = records.length
-        ? records.slice().reverse().map(ingressRecordItem).join("")
-        : empty(unavailable ? `Mobile/wearable ingress unavailable: ${text(payload.error || payload.reason)}` : "No mobile/wearable ingress messages reported.");
-      document.getElementById("mobileIngressBoundaryList").innerHTML = Object.keys(boundary).length
-        ? Object.entries(boundary).map(([name, value]) => metricItem(name, value)).join("")
-        : empty("No mobile/wearable ingress boundary reported.");
+      const boundaryMemo = mobileIngressBoundaryMemo(boundary);
+      const boundaryNode = document.getElementById("mobileIngressBoundaryMemo");
+      boundaryNode.textContent = boundaryMemo;
+      boundaryNode.title = boundaryMemo;
+    }
+
+    function applyDebugStreamSnapshot(payload) {
+      const eventPayload = payload.events || {};
+      const streamEvents = Array.isArray(eventPayload.events) ? eventPayload.events : [];
+      const state = payload.state || {};
+      const messagePayload = payload.messages || {};
+      const timelineEvents = streamEvents.length
+        ? mergeDebugEvents(debugPageState.chronologicalEvents || [], streamEvents)
+        : (debugPageState.chronologicalEvents || []);
+      const timelinePayload = {
+        ...eventPayload,
+        events: timelineEvents
+      };
+      const resolvedState = timelineEvents.length
+        ? stateWithProjectedEvents(state || {}, timelinePayload)
+        : (debugPageState.runtimeState || state || {});
+      debugPageState.mobileWearableIngress = payload.mobile_wearable_ingress || debugPageState.mobileWearableIngress;
+      debugPageState.monitoringCenter = payload.monitoring || debugPageState.monitoringCenter;
+      debugPageState.runtimeState = resolvedState || {};
+      setText("runtimeProfile", resolvedState.runtime_profile, "runtime unknown");
+      debugPageState.messages = messagePayload.messages || [];
+      if (streamEvents.length) {
+        renderEndpointPayloads(timelinePayload || {}, resolvedState || {}, messagePayload || {});
+        renderEvents(timelineEvents);
+      } else {
+        renderMobileWearableIngress(selectedMapEvent());
+        if (debugPageState.selectedTabId === "panel-api") {
+          renderEndpointPayloads(timelinePayload || {}, resolvedState || {}, messagePayload || {});
+        }
+      }
+      setText("loadStatus", "Live debug stream connected.");
+    }
+
+    function startDebugEventStream() {
+      if (!("EventSource" in window)) {
+        setText("loadStatus", "Live debug stream unavailable in this browser.");
+        return;
+      }
+      if (debugPageState.debugStreamSource) {
+        debugPageState.debugStreamSource.close();
+      }
+      const source = new EventSource("/debug/stream");
+      debugPageState.debugStreamSource = source;
+      source.addEventListener("debug_snapshot", (message) => {
+        try {
+          applyDebugStreamSnapshot(JSON.parse(message.data));
+        } catch (error) {
+          document.getElementById("loadStatus").innerHTML =
+            `<span class="error">Debug stream payload parse failed: ${escapeHtml(error.message)}</span>`;
+        }
+      });
+      source.addEventListener("open", () => {
+        setText("loadStatus", "Live debug stream connected.");
+      });
+      source.addEventListener("error", () => {
+        setText("loadStatus", "Live debug stream reconnecting...");
+      });
     }
 
     function renderIncidentDetails(events, selectedEvent) {
@@ -4089,6 +4294,69 @@
       placeMapOverlayNode(node, point.x, point.y, focused ? "callout" : "badge");
     }
 
+    function mapHoverTooltip() {
+      const wrap = runtimeMap.parentElement;
+      let tooltip = wrap?.querySelector(".map-hover-tooltip");
+      if (!tooltip && wrap) {
+        tooltip = document.createElement("div");
+        tooltip.className = "map-hover-tooltip";
+        tooltip.setAttribute("role", "status");
+        tooltip.setAttribute("aria-live", "polite");
+        tooltip.appendChild(document.createElement("strong"));
+        tooltip.appendChild(document.createElement("span"));
+        wrap.appendChild(tooltip);
+      }
+      return tooltip;
+    }
+
+    function positionMapHoverTooltip(tooltip, event) {
+      const wrapRect = runtimeMap.parentElement?.getBoundingClientRect?.();
+      if (!wrapRect) return;
+      const margin = 8;
+      const gap = 12;
+      const width = tooltip.offsetWidth || 1;
+      const height = tooltip.offsetHeight || 1;
+      let left = event.clientX - wrapRect.left + gap;
+      let top = event.clientY - wrapRect.top + gap;
+      if (left + width > wrapRect.width - margin) left = event.clientX - wrapRect.left - width - gap;
+      if (top + height > wrapRect.height - margin) top = event.clientY - wrapRect.top - height - gap;
+      tooltip.style.left = `${Math.max(margin, left).toFixed(1)}px`;
+      tooltip.style.top = `${Math.max(margin, top).toFixed(1)}px`;
+    }
+
+    function showMapHoverTooltip(target, event) {
+      const tooltip = mapHoverTooltip();
+      if (!tooltip) return;
+      if (debugPageState.hoveredMapTarget !== target) {
+        debugPageState.hoveredMapTarget = target;
+        const kind = text(target.dataset.mapFeatureKind, "feature");
+        const title = text(target.dataset.mapHoverTitle, "map feature");
+        const summary = text(target.dataset.mapHoverSummary, "evidence feature");
+        tooltip.querySelector("strong").textContent = `${kind}: ${title}`;
+        tooltip.querySelector("span").textContent = summary;
+      }
+      positionMapHoverTooltip(tooltip, event);
+      tooltip.classList.add("is-visible");
+    }
+
+    function hideMapHoverTooltip() {
+      debugPageState.hoveredMapTarget = null;
+      mapHoverTooltip()?.classList.remove("is-visible");
+    }
+
+    function handleMapHoverPointerMove(event) {
+      if (debugPageState.zoomSelection) {
+        hideMapHoverTooltip();
+        return;
+      }
+      const target = event.target?.closest?.('[data-map-hover="true"]');
+      if (!target || !runtimeMap.contains(target)) {
+        hideMapHoverTooltip();
+        return;
+      }
+      showMapHoverTooltip(target, event);
+    }
+
     function appendPointLabel(group, x, y, item, layer) {
       const label = pointLabelText(item);
       const refs = pointLabelRefs(item);
@@ -4549,8 +4817,27 @@
       }
     }
 
+    async function resetMobileWearableIngressProjection() {
+      const button = document.getElementById("mobileIngressResetButton");
+      if (!window.confirm("Reset MQTT ingress counters only? Raw evidence JSONL, observer process, runtime, safety, Brain, and hardware state will not be changed.")) return;
+      button.disabled = true;
+      setText("loadStatus", "Resetting mobile/wearable ingress counters...");
+      try {
+        const result = await postJson("/debug/mobile-wearable/ingress/reset", {confirm_mobile_wearable_ingress_debug_reset: true});
+        debugPageState.mobileWearableIngress = result.mobile_wearable_ingress || await loadMobileWearableIngressContext();
+        renderMobileWearableIngress(selectedMapEvent());
+        setText("loadStatus", "Mobile/wearable ingress counters reset. Observer keeps watching.");
+      } catch (error) {
+        document.getElementById("loadStatus").innerHTML =
+          `<span class="error">${escapeHtml(error.message)}</span>`;
+      } finally {
+        button.disabled = false;
+      }
+    }
+
     function bindDebugControls() {
       document.getElementById("debugClearButton").addEventListener("click", clearDebugProjection);
+      document.getElementById("mobileIngressResetButton").addEventListener("click", resetMobileWearableIngressProjection);
       document.querySelectorAll("[data-layer]").forEach(input => input.addEventListener("change", updateLayers));
       document.getElementById("zoomIn").addEventListener("click", () => zoomMap(1));
       document.getElementById("zoomOut").addEventListener("click", () => zoomMap(-1));
@@ -4562,8 +4849,11 @@
       document.getElementById("panRight").addEventListener("click", () => panMap(70, 0));
       runtimeMap.addEventListener("pointerdown", beginMapRectangleZoom);
       runtimeMap.addEventListener("pointermove", updateMapRectangleZoom);
+      runtimeMap.addEventListener("pointermove", handleMapHoverPointerMove);
       runtimeMap.addEventListener("pointerup", finishMapRectangleZoom);
+      runtimeMap.addEventListener("pointerleave", hideMapHoverTooltip);
       runtimeMap.addEventListener("pointercancel", cancelMapRectangleZoom);
+      runtimeMap.addEventListener("pointercancel", hideMapHoverTooltip);
     }
 
     const initialUrlSelection = readUrlSelection();
@@ -4575,6 +4865,7 @@
     switchDebugTab(document.querySelector(`[data-tab-target="${debugPageState.selectedTabId}"]`), { syncUrl: false });
     loadAssistantStatus();
     loadDebugSurface();
+    startDebugEventStream();
   </script>
 </body>
 </html>

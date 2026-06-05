@@ -1,12 +1,18 @@
 from __future__ import annotations
 
+import asyncio
+import hashlib
+import json
 from pathlib import Path
 from typing import Any, Protocol
 
 from fastapi import APIRouter, FastAPI, HTTPException, Query
-from fastapi.responses import HTMLResponse, Response
+from fastapi.responses import HTMLResponse, Response, StreamingResponse
 
-from mobile_wearable_ingress_debug import load_mobile_wearable_ingress_debug_status
+from mobile_wearable_ingress_debug import (
+    load_mobile_wearable_ingress_debug_status,
+    reset_mobile_wearable_ingress_debug_projection,
+)
 from runtime_debug_log import MemoryRuntimeDebugEventLog
 from runtime_debug_models import RuntimeDebugEventKind
 from scout_agent_debug_projection import load_agent_trace_debug_events
@@ -127,33 +133,7 @@ def create_debug_router(
             spatial_imprint_trigger_report_path=spatial_imprint_trigger_report_path,
         )
         messages = _messages(message_source, events)
-        latest_completed = _latest_event_payload(events, "debug_session_completed")
-        latest_safety = _latest_event_payload(events, "safety_event_emitted")
-        latest_provider = _latest_event_payload(events, "provider_status_recorded")
-        latest_bridge = _latest_event_payload(events, "phase3_bridge_result")
-        latest_agent_tool = _latest_event_payload(events, "agent_tool_invocation")
-        latest_spatial_imprint = _latest_spatial_imprint_payload(events)
-        safety_level = (
-            latest_completed.get("safety_level")
-            or latest_safety.get("safety_level")
-            or "unknown"
-        )
-        return {
-            "debug_session_id": events[-1].session_id if events else None,
-            "runtime_profile": "phase35-debug",
-            "safety_level": safety_level,
-            "latest_transition": _latest_event_payload(events, "safety_transition_recorded") or None,
-            "observations_processed": latest_completed.get("observations_processed"),
-            "event_count": len(events),
-            "agent_tool_count": _agent_tool_count(events),
-            "latest_agent_tool": latest_agent_tool,
-            "spatial_imprint_event_count": _spatial_imprint_event_count(events),
-            "latest_spatial_imprint": latest_spatial_imprint,
-            "provider_status": latest_provider,
-            "phase3_bridge": latest_bridge,
-            "message_count": len(messages),
-            "debug_boundary": _debug_boundary(),
-        }
+        return _state_payload(events, messages)
 
     @router.get("/monitoring")
     def monitoring() -> dict[str, Any]:
@@ -184,11 +164,53 @@ def create_debug_router(
             "debug_boundary": _debug_boundary(),
         }
 
+    @router.get("/stream")
+    def debug_stream(
+        once: bool = False,
+        interval_ms: int = Query(default=1000, ge=250, le=10000),
+    ) -> StreamingResponse:
+        return StreamingResponse(
+            _debug_stream_snapshots(
+                resolved_log,
+                message_source=message_source,
+                agent_trace_log_path=agent_trace_log_path,
+                spatial_imprint_store_path=spatial_imprint_store_path,
+                spatial_imprint_trigger_report_path=spatial_imprint_trigger_report_path,
+                mobile_wearable_ingress_status_path=mobile_wearable_ingress_status_path,
+                once=once,
+                interval_seconds=interval_ms / 1000,
+            ),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-store",
+                "X-Accel-Buffering": "no",
+            },
+        )
+
     @router.get("/mobile-wearable/ingress")
     def mobile_wearable_ingress() -> dict[str, Any]:
         return load_mobile_wearable_ingress_debug_status(
             mobile_wearable_ingress_status_path
         )
+
+    @router.post("/mobile-wearable/ingress/reset")
+    def reset_mobile_wearable_ingress(
+        payload: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        if not (payload or {}).get("confirm_mobile_wearable_ingress_debug_reset"):
+            raise HTTPException(
+                status_code=400,
+                detail="confirm_mobile_wearable_ingress_debug_reset=true is required",
+            )
+        result = reset_mobile_wearable_ingress_debug_projection(
+            mobile_wearable_ingress_status_path
+        )
+        if not result.get("reset_applied"):
+            raise HTTPException(
+                status_code=409,
+                detail=result.get("reason") or "mobile wearable ingress reset unavailable",
+            )
+        return result
 
     @router.api_route("/clear", methods=["POST"])
     def clear_debug_projection(payload: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -286,6 +308,141 @@ def _messages_from_outbound_events(events: list[Any]) -> list[dict[str, Any]]:
             "boundary": boundary,
         }
     return list(messages_by_id.values())
+
+
+def _state_payload(events: list[Any], messages: list[dict[str, Any]]) -> dict[str, Any]:
+    latest_completed = _latest_event_payload(events, "debug_session_completed")
+    latest_safety = _latest_event_payload(events, "safety_event_emitted")
+    latest_provider = _latest_event_payload(events, "provider_status_recorded")
+    latest_bridge = _latest_event_payload(events, "phase3_bridge_result")
+    latest_agent_tool = _latest_event_payload(events, "agent_tool_invocation")
+    latest_spatial_imprint = _latest_spatial_imprint_payload(events)
+    safety_level = (
+        latest_completed.get("safety_level")
+        or latest_safety.get("safety_level")
+        or "unknown"
+    )
+    return {
+        "debug_session_id": events[-1].session_id if events else None,
+        "runtime_profile": "phase35-debug",
+        "safety_level": safety_level,
+        "latest_transition": _latest_event_payload(events, "safety_transition_recorded") or None,
+        "observations_processed": latest_completed.get("observations_processed"),
+        "event_count": len(events),
+        "agent_tool_count": _agent_tool_count(events),
+        "latest_agent_tool": latest_agent_tool,
+        "spatial_imprint_event_count": _spatial_imprint_event_count(events),
+        "latest_spatial_imprint": latest_spatial_imprint,
+        "provider_status": latest_provider,
+        "phase3_bridge": latest_bridge,
+        "message_count": len(messages),
+        "debug_boundary": _debug_boundary(),
+    }
+
+
+async def _debug_stream_snapshots(
+    debug_log: DebugEventLog,
+    *,
+    message_source: DebugMessageSource | None,
+    agent_trace_log_path: Path | str | None,
+    spatial_imprint_store_path: Path | str | None,
+    spatial_imprint_trigger_report_path: Path | str | None,
+    mobile_wearable_ingress_status_path: Path | str | None,
+    once: bool,
+    interval_seconds: float,
+):
+    previous_signature = ""
+    while True:
+        payload = _debug_stream_snapshot_payload(
+            debug_log,
+            message_source=message_source,
+            agent_trace_log_path=agent_trace_log_path,
+            spatial_imprint_store_path=spatial_imprint_store_path,
+            spatial_imprint_trigger_report_path=spatial_imprint_trigger_report_path,
+            mobile_wearable_ingress_status_path=mobile_wearable_ingress_status_path,
+        )
+        signature = _debug_stream_signature(payload)
+        if signature != previous_signature:
+            payload["stream_signature"] = signature
+            yield _server_sent_event(
+                "debug_snapshot",
+                payload,
+                event_id=signature[:16],
+            )
+            previous_signature = signature
+        if once:
+            break
+        await asyncio.sleep(interval_seconds)
+
+
+def _debug_stream_snapshot_payload(
+    debug_log: DebugEventLog,
+    *,
+    message_source: DebugMessageSource | None,
+    agent_trace_log_path: Path | str | None,
+    spatial_imprint_store_path: Path | str | None,
+    spatial_imprint_trigger_report_path: Path | str | None,
+    mobile_wearable_ingress_status_path: Path | str | None,
+) -> dict[str, Any]:
+    events = _combined_events(
+        debug_log,
+        agent_trace_log_path=agent_trace_log_path,
+        spatial_imprint_store_path=spatial_imprint_store_path,
+        spatial_imprint_trigger_report_path=spatial_imprint_trigger_report_path,
+        limit=200,
+    )
+    messages = _messages(message_source, events)
+    return {
+        "artifact_kind": "scout_debug_stream_snapshot",
+        "status": "ok",
+        "stream": "debug",
+        "read_only": True,
+        "events": {
+            "events": [event.model_dump(mode="json") for event in events],
+            "debug_boundary": _debug_boundary(),
+        },
+        "state": _state_payload(events, messages),
+        "messages": {
+            "messages": messages,
+            "debug_boundary": _debug_boundary(),
+        },
+        "monitoring": _monitoring_center_payload(events, messages),
+        "mobile_wearable_ingress": load_mobile_wearable_ingress_debug_status(
+            mobile_wearable_ingress_status_path
+        ),
+        "debug_boundary": _debug_boundary(),
+    }
+
+
+def _debug_stream_signature(payload: dict[str, Any]) -> str:
+    encoded = json.dumps(
+        payload,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _server_sent_event(
+    event_name: str,
+    payload: dict[str, Any],
+    *,
+    event_id: str | None = None,
+) -> str:
+    encoded = json.dumps(
+        payload,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    lines: list[str] = []
+    if event_id:
+        lines.append(f"id: {event_id}")
+    lines.append(f"event: {event_name}")
+    for line in encoded.splitlines():
+        lines.append(f"data: {line}")
+    return "\n".join(lines) + "\n\n"
 
 
 def _latest_event_payload(events: list[Any], kind: str) -> dict[str, Any]:

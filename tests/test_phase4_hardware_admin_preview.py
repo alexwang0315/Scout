@@ -42,6 +42,12 @@ def test_phase4_admin_runtime_serves_pretrip_and_mock_assistant_on_lan_profile()
     assert health_payload["boundaries"]["debug_api_enabled"] is False
     assert health_payload["auth"]["required"] is False
     assert health_payload["auth"]["token_value_exposed"] is False
+    assert health_payload["ingress_observers"]["enabled"] is True
+    assert health_payload["ingress_observers"]["boundary"]["safety_api_called"] is False
+    assert (
+        health_payload["ingress_observers"]["boundary"]["credential_value_exposed"]
+        is False
+    )
     assert health_payload["routes"]["hardware_readiness"] == "/admin/hardware-readiness"
     assert health_payload["routes"]["hardware_readiness_context"] == "/admin/hardware-readiness/context"
 
@@ -99,6 +105,104 @@ def test_phase4_admin_runtime_mounts_debug_projection_when_explicitly_enabled() 
     )
     assert debug_state.status_code == 200
     assert debug_state.json()["debug_boundary"]["read_only"] is True
+
+
+def test_phase4_admin_runtime_mounts_mobile_wearable_ingress_status(
+    tmp_path: Path,
+) -> None:
+    status_path = tmp_path / "sensorlogger_mqtt_status.json"
+    status_path.write_text(
+        json.dumps(
+            {
+                "artifact_kind": "scout_sensorlogger_mqtt_observer_status",
+                "source_tool": "scout_sensorlogger_mqtt_observer",
+                "message_count": 1,
+                "invalid_message_count": 0,
+                "sensor_names": ["accelerometer"],
+                "sessions": [],
+                "mqtt": {
+                    "host": "mqtt.example.test",
+                    "port": 8884,
+                    "topic": "scout/test/alex/sensorlogger",
+                    "transport": "websockets",
+                    "use_tls": True,
+                    "username_configured": True,
+                    "password_configured": True,
+                },
+                "mqtt_state": {
+                    "connected": True,
+                    "subscribed": True,
+                    "ever_connected": True,
+                    "ever_subscribed": True,
+                },
+                "ingress": {
+                    "record_count": 0,
+                    "accepted_count": 0,
+                    "rejected_count": 0,
+                    "unrecognized_count": 0,
+                    "ingress_transports": [],
+                    "source_adapters": [],
+                    "records": [],
+                    "boundary": {
+                        "runtime_admission_performed": False,
+                        "phase1_l0_l4_state_mutated": False,
+                        "safety_api_called": False,
+                        "phase2_brain_writeback": False,
+                    },
+                },
+                "evidence": {
+                    "evidence_dir": str(tmp_path),
+                    "raw_jsonl_path": str(tmp_path / "sensorlogger_mqtt_raw.jsonl"),
+                    "ingress_index_jsonl_path": str(
+                        tmp_path / "sensorlogger_mqtt_ingress_index.jsonl"
+                    ),
+                    "status_path": str(status_path),
+                },
+                "boundary": {
+                    "evidence_only": True,
+                    "phase1_l0_l4_state_mutated": False,
+                    "safety_api_called": False,
+                    "phase2_brain_writeback": False,
+                },
+            },
+            ensure_ascii=False,
+            indent=2,
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+    app = create_phase4_admin_runtime_app(
+        environ={
+            "SCOUT_ADMIN_AUTH_REQUIRED": "true",
+            "SCOUT_ADMIN_ACCESS_TOKEN": "test-token",
+            "SCOUT_DEBUG_API_ENABLED": "true",
+            "SCOUT_MOBILE_WEARABLE_INGRESS_STATUS_PATH": str(status_path),
+        }
+    )
+    client = TestClient(app)
+
+    health = client.get("/health", headers={"Authorization": "Bearer test-token"})
+    assert health.status_code == 200
+    assert health.json()["routes"]["debug_mobile_wearable_ingress"] == (
+        "/debug/mobile-wearable/ingress"
+    )
+
+    unauthenticated = client.get("/debug/mobile-wearable/ingress")
+    assert unauthenticated.status_code == 401
+
+    response = client.get(
+        "/debug/mobile-wearable/ingress",
+        headers={"Authorization": "Bearer test-token"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "ok"
+    assert payload["status_path"] == str(status_path)
+    assert payload["message_count"] == 1
+    assert payload["mqtt"]["credential_configured"] is True
+    assert payload["boundary"]["safety_api_called"] is False
+    assert "password_configured" not in json.dumps(payload, sort_keys=True)
 
 
 def test_phase4_admin_runtime_can_point_hardware_readiness_at_live_probe_fixture(tmp_path: Path) -> None:

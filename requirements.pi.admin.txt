@@ -3,3 +3,4 @@ pydantic==2.13.3
 uvicorn==0.46.0
 Pillow==12.2.0
 pydantic-ai==1.88.0
+paho-mqtt==2.1.0

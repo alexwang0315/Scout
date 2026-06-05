@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from base64 import b64decode
+from contextlib import asynccontextmanager
 from hmac import compare_digest
 from pathlib import Path
 from typing import Any, Mapping
@@ -14,6 +15,7 @@ from assistant_api import create_assistant_provider_from_env, create_assistant_p
 from assistant_models import AssistantSourceRef, ScoutAssistantQuery, ScoutAssistantResponse
 from debug_api import create_debug_page_router, create_debug_router
 from hardware_readiness_api import create_hardware_readiness_router
+from ingress_observer_supervisor import IngressObserverSupervisor
 from runtime_debug_log import FileRuntimeDebugEventLog
 
 
@@ -39,12 +41,22 @@ def create_phase4_admin_runtime_app(
     debug_enabled = _is_true_like(env.get("SCOUT_DEBUG_API_ENABLED"))
     debug_log_path = env.get("SCOUT_DEBUG_LOG_PATH")
     agent_trace_log_path = env.get("SCOUT_AGENT_TRACE_LOG_PATH")
+    mobile_wearable_ingress_status_path = _mobile_wearable_ingress_status_path(env)
     spatial_imprint_store_path = env.get("SCOUT_SPATIAL_IMPRINT_STORE_PATH")
     spatial_imprint_trigger_report_path = env.get("SCOUT_SPATIAL_IMPRINT_TRIGGER_REPORT_PATH")
     hardware_readiness_fixture_path = env.get("SCOUT_HARDWARE_READINESS_FIXTURE_PATH")
     auth_config = _admin_auth_config(env)
     provider = create_assistant_provider_from_env(env)
     provider_status = create_assistant_provider_status(provider=provider, environ=env)
+    ingress_observer_supervisor = IngressObserverSupervisor.from_env(env)
+
+    @asynccontextmanager
+    async def lifespan(_: FastAPI):
+        ingress_observer_supervisor.start()
+        try:
+            yield
+        finally:
+            ingress_observer_supervisor.stop()
 
     app = FastAPI(
         title="Scout Phase 4 Admin LAN Preview",
@@ -53,6 +65,7 @@ def create_phase4_admin_runtime_app(
             "planning/admin surfaces only and does not run the Phase 1 field runtime."
         ),
         version="0.1.0",
+        lifespan=lifespan,
     )
 
     @app.middleware("http")
@@ -94,6 +107,7 @@ def create_phase4_admin_runtime_app(
             create_debug_router(
                 debug_log=debug_log,
                 agent_trace_log_path=agent_trace_log_path,
+                mobile_wearable_ingress_status_path=mobile_wearable_ingress_status_path,
                 spatial_imprint_store_path=spatial_imprint_store_path,
                 spatial_imprint_trigger_report_path=spatial_imprint_trigger_report_path,
             )
@@ -133,6 +147,9 @@ def create_phase4_admin_runtime_app(
                 "hardware_readiness_context": "/admin/hardware-readiness/context",
                 "debug_admin": "/admin/debug" if debug_enabled else None,
                 "debug_events": "/debug/events" if debug_enabled else None,
+                "debug_mobile_wearable_ingress": (
+                    "/debug/mobile-wearable/ingress" if debug_enabled else None
+                ),
                 "agent_trace_log": str(agent_trace_log_path) if agent_trace_log_path else None,
                 "spatial_imprint_store": (
                     str(spatial_imprint_store_path) if spatial_imprint_store_path else None
@@ -144,6 +161,7 @@ def create_phase4_admin_runtime_app(
                 ),
             },
             "auth": _admin_auth_status(auth_config),
+            "ingress_observers": ingress_observer_supervisor.status(),
             "boundaries": _runtime_boundaries(
                 env,
                 assistant_enabled=assistant_enabled,
@@ -175,6 +193,7 @@ def create_phase4_admin_runtime_app(
                 "repo_fixture_write_allowed": False,
             },
             "auth": _admin_auth_status(auth_config),
+            "ingress_observers": ingress_observer_supervisor.status(),
             "boundaries": _runtime_boundaries(
                 env,
                 assistant_enabled=assistant_enabled,
@@ -193,6 +212,19 @@ def create_phase4_admin_runtime_app(
             return provider.answer(query, sources=_assistant_sources(query))
 
     return app
+
+
+def _mobile_wearable_ingress_status_path(env: Mapping[str, str]) -> Path:
+    explicit_path = (env.get("SCOUT_MOBILE_WEARABLE_INGRESS_STATUS_PATH") or "").strip()
+    if explicit_path:
+        return Path(explicit_path).expanduser()
+
+    evidence_dir = (env.get("SCOUT_SENSORLOGGER_MQTT_EVIDENCE_DIR") or "").strip()
+    if evidence_dir:
+        return Path(evidence_dir).expanduser() / "sensorlogger_mqtt_status.json"
+
+    data_root = Path(env.get("SCOUT_DATA_ROOT", str(DEFAULT_DATA_ROOT))).expanduser()
+    return data_root / "admin" / "ingress" / "sensorlogger_mqtt" / "sensorlogger_mqtt_status.json"
 
 
 def _runtime_boundaries(

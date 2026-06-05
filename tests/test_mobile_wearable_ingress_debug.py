@@ -7,7 +7,10 @@ from fastapi.testclient import TestClient
 
 from debug_api import create_debug_app
 from ingress_evidence import IngressEvidenceRecorder
-from mobile_wearable_ingress_debug import load_mobile_wearable_ingress_debug_status
+from mobile_wearable_ingress_debug import (
+    load_mobile_wearable_ingress_debug_status,
+    reset_mobile_wearable_ingress_debug_projection,
+)
 
 
 def test_mobile_wearable_ingress_debug_status_sanitizes_observer_status(tmp_path: Path) -> None:
@@ -24,12 +27,16 @@ def test_mobile_wearable_ingress_debug_status_sanitizes_observer_status(tmp_path
     assert payload["ingress"]["latest_record"]["ingress_transport"] == "wan_mqtt"
     assert payload["ingress"]["latest_record"]["parse_status"] == "accepted"
     assert payload["ingress"]["latest_record"]["normalized_summary"]["payload_count"] == 1
+    assert payload["ingress"]["recent_records"] == []
+    assert "messages=1" in payload["memo"]
+    assert "latest=accepted" in payload["memo"]
     assert payload["mqtt"]["credential_configured"] is True
     assert payload["boundary"]["read_only"] is True
     assert payload["boundary"]["raw_payload_embedded"] is False
     assert payload["boundary"]["credential_value_exposed"] is False
     assert payload["boundary"]["safety_api_called"] is False
     assert "do-not-leak" not in serialized
+    assert "do-not-leak" not in payload["memo"]
     assert "raw_payload_text" not in serialized
     assert "raw_payload_base64" not in serialized
     assert "raw_message" not in serialized
@@ -52,6 +59,122 @@ def test_debug_api_exposes_mobile_wearable_ingress_read_only_endpoint(tmp_path: 
     assert payload["ingress"]["ingress_transports"] == ["wan_mqtt"]
     assert payload["ingress"]["latest_record"]["source_adapter"] == "sensorlogger"
     assert blocked_post.status_code == 405
+
+
+def test_mobile_wearable_ingress_debug_uses_persisted_ingress_count_after_observer_restart(
+    tmp_path: Path,
+) -> None:
+    status_path = _write_observer_status(tmp_path)
+    status = json.loads(status_path.read_text(encoding="utf-8"))
+    status["message_count"] = 0
+    status_path.write_text(
+        json.dumps(status, ensure_ascii=False, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+
+    payload = load_mobile_wearable_ingress_debug_status(status_path)
+
+    assert payload["message_count"] == 1
+    assert payload["ingress"]["accepted_count"] == 1
+    assert "messages=1" in payload["memo"]
+
+
+def test_mobile_wearable_ingress_reset_reconciles_persisted_index_after_observer_restart(
+    tmp_path: Path,
+) -> None:
+    status_path = _write_observer_status(tmp_path)
+    reset_mobile_wearable_ingress_debug_projection(status_path)
+    recorder = IngressEvidenceRecorder(
+        raw_jsonl_path=tmp_path / "sensorlogger_mqtt_raw.jsonl",
+        index_jsonl_path=tmp_path / "sensorlogger_mqtt_ingress_index.jsonl",
+    )
+    recorder.record(
+        ingress_transport="wan_mqtt",
+        source_adapter="sensorlogger",
+        raw_payload=json.dumps(
+            {
+                "messageId": 2,
+                "sessionId": "session-2",
+                "deviceId": "device-2",
+                "payload": [{"name": "gyroscope", "values": {"z": 0.2}}],
+            }
+        ),
+        parse_status="accepted",
+        received_at="2999-01-01T00:00:00.000000Z",
+        transport_metadata={"mqtt": {"topic": "scout/test/alex/sensorlogger"}},
+        normalized_summary={
+            "device_id": "device-2",
+            "session_id": "session-2",
+            "message_id": 2,
+            "payload_count": 1,
+            "sensor_names": ["gyroscope"],
+        },
+    )
+    status = json.loads(status_path.read_text(encoding="utf-8"))
+    status["message_count"] = 1
+    status["sensor_names"] = ["gyroscope"]
+    status["sessions"] = []
+    status["ingress"] = recorder.build_status_index(recent_record_limit=50)
+    status_path.write_text(
+        json.dumps(status, ensure_ascii=False, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+
+    payload = load_mobile_wearable_ingress_debug_status(status_path)
+
+    assert payload["message_count"] == 1
+    assert payload["ingress"]["record_count"] == 1
+    assert payload["ingress"]["accepted_count"] == 1
+    assert payload["ingress"]["latest_record"]["normalized_summary"]["message_id"] == 2
+    assert "messages=1" in payload["memo"]
+    assert "ingress=1" in payload["memo"]
+
+
+def test_debug_api_resets_mobile_wearable_ingress_projection_only(tmp_path: Path) -> None:
+    status_path = _write_observer_status(tmp_path)
+    raw_path = tmp_path / "sensorlogger_mqtt_raw.jsonl"
+    index_path = tmp_path / "sensorlogger_mqtt_ingress_index.jsonl"
+    client = TestClient(
+        create_debug_app(mobile_wearable_ingress_status_path=status_path)
+    )
+
+    rejected = client.post("/debug/mobile-wearable/ingress/reset", json={})
+    assert rejected.status_code == 400
+    assert client.get("/debug/mobile-wearable/ingress").json()["message_count"] == 1
+
+    response = client.post(
+        "/debug/mobile-wearable/ingress/reset",
+        json={"confirm_mobile_wearable_ingress_debug_reset": True},
+    )
+
+    assert response.status_code == 200
+    result = response.json()
+    assert result["status"] == "reset"
+    assert result["boundary"]["debug_projection_reset"] is True
+    assert result["boundary"]["raw_evidence_cleared"] is False
+    assert result["boundary"]["observer_process_restarted"] is False
+
+    payload = client.get("/debug/mobile-wearable/ingress").json()
+    assert payload["message_count"] == 0
+    assert payload["ingress"]["record_count"] == 0
+    assert payload["ingress"]["recent_records"] == []
+    assert payload["projection_reset"]["baseline"]["message_count"] == 1
+    assert payload["boundary"]["debug_projection_reset_applied"] is True
+    assert payload["boundary"]["raw_evidence_cleared"] is False
+    assert raw_path.read_text(encoding="utf-8").strip()
+    assert index_path.read_text(encoding="utf-8").strip()
+
+
+def test_mobile_wearable_ingress_reset_function_handles_missing_status_path(tmp_path: Path) -> None:
+    status_path = tmp_path / "sensorlogger_mqtt_status.json"
+
+    result = reset_mobile_wearable_ingress_debug_projection(status_path)
+
+    assert result["status"] == "reset"
+    assert result["baseline"]["message_count"] == 0
+    payload = load_mobile_wearable_ingress_debug_status(status_path)
+    assert payload["status"] == "unavailable"
+    assert payload["message_count"] == 0
 
 
 def test_mobile_wearable_ingress_debug_backfills_legacy_observer_raw_index(tmp_path: Path) -> None:
