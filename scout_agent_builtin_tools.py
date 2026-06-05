@@ -86,6 +86,14 @@ def run_builtin_tool(argv: Sequence[str] | None = None) -> tuple[int, dict[str, 
         return _kb_build(args)
     if args.command == "kb-query":
         return _kb_query(args)
+    if args.command == "ai-workspace-catalog":
+        return _ai_workspace_catalog(args)
+    if args.command == "ai-route-structure":
+        return _ai_route_structure(args)
+    if args.command == "ai-major-points":
+        return _ai_major_points(args)
+    if args.command == "ai-evidence-fulltext":
+        return _ai_evidence_fulltext(args)
     if args.command == "note-append-flight-recorder":
         return _note_append_flight_recorder(args)
     if args.command == "cp-propose-add":
@@ -215,6 +223,22 @@ def _build_parser() -> argparse.ArgumentParser:
     kb_build_parser.add_argument("--output", type=Path, default=None)
     kb_build_parser.add_argument("--dry-run", action="store_true")
     kb_build_parser.add_argument("--json", action="store_true")
+
+    ai_catalog_parser = subparsers.add_parser("ai-workspace-catalog")
+    ai_catalog_parser.add_argument("--input", type=Path, required=True)
+    ai_catalog_parser.add_argument("--json", action="store_true")
+
+    ai_route_parser = subparsers.add_parser("ai-route-structure")
+    ai_route_parser.add_argument("--input", type=Path, required=True)
+    ai_route_parser.add_argument("--json", action="store_true")
+
+    ai_major_parser = subparsers.add_parser("ai-major-points")
+    ai_major_parser.add_argument("--input", type=Path, required=True)
+    ai_major_parser.add_argument("--json", action="store_true")
+
+    ai_fulltext_parser = subparsers.add_parser("ai-evidence-fulltext")
+    ai_fulltext_parser.add_argument("--input", type=Path, required=True)
+    ai_fulltext_parser.add_argument("--json", action="store_true")
 
     note_parser = subparsers.add_parser("note-append-flight-recorder")
     note_parser.add_argument("--input", type=Path, required=True)
@@ -693,19 +717,48 @@ def _kb_query(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
         build_local_evidence_index,
         load_local_evidence_index,
         query_local_evidence_index,
+        query_local_evidence_sqlite_index,
     )
 
     request = _load_json(args.input)
     query = request.get("query")
     if not isinstance(query, str) or not query.strip():
         return 2, _error_payload("kb query requires non-empty query")
+    evidence_types = request.get("evidence_types")
     if request.get("index_path"):
-        index = load_local_evidence_index(request["index_path"])
+        index_path = Path(str(request["index_path"]))
+        if index_path.suffix.lower() in {".sqlite", ".sqlite3"}:
+            result = query_local_evidence_sqlite_index(
+                index_path,
+                query=query,
+                limit=int(request.get("limit", 8)),
+                evidence_types=set(evidence_types) if evidence_types else None,
+            )
+            return (
+                0,
+                {
+                    "artifact_kind": "scout_kb_query_tool_output",
+                    "status": "completed",
+                    "index": {
+                        "artifact_kind": "scout_local_evidence_sqlite_index",
+                        "project_id": result.project_id,
+                        "record_count": result.searched_record_count,
+                        "source_root": str(index_path),
+                    },
+                    "query_result": result.model_dump(mode="json"),
+                    "boundary": {
+                        **_closed_boundary(),
+                        "offline_only": True,
+                        "local_evidence_only": True,
+                        "raw_payloads_embedded": False,
+                    },
+                },
+            )
+        index = load_local_evidence_index(index_path)
     elif request.get("project_root"):
         index = build_local_evidence_index(request["project_root"])
     else:
         return 2, _error_payload("kb query requires project_root or index_path")
-    evidence_types = request.get("evidence_types")
     result = query_local_evidence_index(
         index,
         query=query,
@@ -734,8 +787,98 @@ def _kb_query(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
     )
 
 
+def _ai_workspace_catalog(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
+    from scout_workspace_search_tools import search_project_workspace_catalog
+
+    request = _load_json(args.input)
+    project_root = request.get("project_root") or request.get("trip_root")
+    if not project_root:
+        return 2, _error_payload("ai workspace-catalog requires project_root or trip_root")
+    try:
+        result = search_project_workspace_catalog(
+            project_root,
+            query=str(request.get("query") or ""),
+            domains=request.get("domains") if isinstance(request.get("domains"), list) else None,
+            include_missing=bool(request.get("include_missing", True)),
+            limit=int(request.get("limit", 6)),
+        )
+    except Exception as exc:  # noqa: BLE001 - CLI wrapper returns structured failures.
+        return 2, _error_payload(str(exc))
+    return 0, {"artifact_kind": "scout_ai_workspace_catalog_tool_output", **result}
+
+
+def _ai_route_structure(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
+    from scout_workspace_search_tools import search_project_route_structure
+
+    request = _load_json(args.input)
+    project_root = request.get("project_root") or request.get("trip_root")
+    if not project_root:
+        return 2, _error_payload("ai route-structure requires project_root or trip_root")
+    try:
+        result = search_project_route_structure(
+            project_root,
+            query=str(request.get("query") or ""),
+            cp=request.get("cp") if request.get("cp") is not None else None,
+            segment=request.get("segment") if request.get("segment") is not None else None,
+            limit=int(request.get("limit", 6)),
+        )
+    except Exception as exc:  # noqa: BLE001 - CLI wrapper returns structured failures.
+        return 2, _error_payload(str(exc))
+    return 0, {"artifact_kind": "scout_ai_route_structure_tool_output", **result}
+
+
+def _ai_major_points(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
+    from scout_workspace_search_tools import search_project_major_points
+
+    request = _load_json(args.input)
+    project_root = request.get("project_root") or request.get("trip_root")
+    if not project_root:
+        return 2, _error_payload("ai major-points requires project_root or trip_root")
+    try:
+        result = search_project_major_points(
+            project_root,
+            query=str(request.get("query") or ""),
+            limit=int(request.get("limit", 6)),
+            cp=request.get("cp") if request.get("cp") is not None else None,
+            point_kinds=request.get("point_kinds")
+            if isinstance(request.get("point_kinds"), list)
+            else None,
+        )
+    except Exception as exc:  # noqa: BLE001 - CLI wrapper returns structured failures.
+        return 2, _error_payload(str(exc))
+    return 0, {"artifact_kind": "scout_ai_major_points_tool_output", **result}
+
+
+def _ai_evidence_fulltext(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
+    from scout_workspace_search_tools import search_project_evidence_fulltext
+
+    request = _load_json(args.input)
+    project_root = request.get("project_root") or request.get("trip_root")
+    query = request.get("query")
+    if not project_root:
+        return 2, _error_payload("ai evidence-fulltext requires project_root or trip_root")
+    if not isinstance(query, str) or not query.strip():
+        return 2, _error_payload("ai evidence-fulltext requires non-empty query")
+    try:
+        result = search_project_evidence_fulltext(
+            project_root,
+            query=query,
+            limit=int(request.get("limit", 6)),
+            evidence_types=request.get("evidence_types")
+            if isinstance(request.get("evidence_types"), list)
+            else None,
+        )
+    except Exception as exc:  # noqa: BLE001 - CLI wrapper returns structured failures.
+        return 2, _error_payload(str(exc))
+    return 0, {"artifact_kind": "scout_ai_evidence_fulltext_tool_output", **result}
+
+
 def _kb_build(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
-    from scout_agent_kb import build_local_evidence_index, write_local_evidence_index
+    from scout_agent_kb import (
+        build_local_evidence_index,
+        write_local_evidence_index,
+        write_local_evidence_sqlite_index,
+    )
 
     request = _load_json(args.input)
     project_root = request.get("project_root") or request.get("trip_root")
@@ -747,6 +890,8 @@ def _kb_build(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
     try:
         if args.dry_run:
             index = build_local_evidence_index(project_root)
+        elif Path(output_path).suffix.lower() in {".sqlite", ".sqlite3"}:
+            index = write_local_evidence_sqlite_index(project_root, output_path)
         else:
             index = write_local_evidence_index(project_root, output_path)
     except Exception as exc:  # noqa: BLE001 - CLI wrapper returns structured failures.

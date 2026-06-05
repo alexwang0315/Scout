@@ -26,6 +26,8 @@ def build_pretrip_assistant_context(
         return _unavailable_pretrip_context(project_id)
     compact_view = _compact_pretrip_view(view, max_sections=max_sections)
     sources = _collect_sources(compact_view)
+    count_summary = _count_summary(view)
+    mcp_summary = _major_critical_point_summary(view)
     return {
         "surface": "pretrip",
         "context_kind": "assistant_context",
@@ -41,6 +43,8 @@ def build_pretrip_assistant_context(
             "readiness_status": view["readiness"].get("status"),
             "review_queue_status": view["review_queue"].get("status"),
             "review_queue_counts": view["review_queue"].get("counts", {}),
+            **count_summary,
+            **mcp_summary,
             "raw_payloads_embedded": view["raw_sample_summary"].get(
                 "raw_payloads_embedded"
             ),
@@ -53,6 +57,141 @@ def build_pretrip_assistant_context(
             "Candidate and review summaries are explanatory only.",
             "No review state, runtime handoff, or fact writeback target is mutated.",
         ],
+    }
+
+
+def _major_critical_point_summary(view: dict[str, Any]) -> dict[str, Any]:
+    major_critical_points = view.get("major_critical_points")
+    if not isinstance(major_critical_points, dict):
+        return {}
+
+    counts = dict(major_critical_points.get("counts", {}))
+    links: list[dict[str, Any]] = []
+    for candidate in major_critical_points.get("candidates", [])[:12]:
+        if not isinstance(candidate, dict):
+            continue
+        nearest_cp = candidate.get("nearest_scout_cp")
+        if not isinstance(nearest_cp, dict):
+            nearest_cp = {}
+        support = candidate.get("cp_support_reconciliation")
+        if not isinstance(support, dict):
+            support = {}
+        nearest_cp_id = nearest_cp.get("candidate_id") or _first_str(
+            candidate.get("linked_cp_candidates")
+        )
+        link = {
+            "label": candidate.get("label"),
+            "mcp_id": candidate.get("mcp_id") or candidate.get("source_id"),
+            "distance_m": candidate.get("distance_m"),
+            "mcp_classes": _str_list(candidate.get("mcp_classes")),
+            "linked_named_points": _str_list(candidate.get("linked_named_points")),
+            "linked_cp_candidates": _str_list(candidate.get("linked_cp_candidates")),
+            "nearest_cp_candidate_id": nearest_cp_id,
+            "nearest_cp_label": _cp_display_name(nearest_cp_id),
+            "nearest_cp_distance_m": nearest_cp.get("distance_m"),
+            "support_found": nearest_cp.get("support_found"),
+            "support_radius_m": nearest_cp.get("support_radius_m"),
+            "support_status": support.get("support_status"),
+            "confidence": candidate.get("confidence"),
+            "review_state": candidate.get("review_state"),
+            "candidate_only": candidate.get("candidate_only"),
+            "runtime_safety_truth": candidate.get("runtime_safety_truth"),
+            "nearby_suppressed_points": _nearby_suppressed_points(candidate),
+        }
+        links.append(_without_none(link))
+
+    return {
+        "major_critical_point_count": counts.get("mcp_candidate_count"),
+        "major_critical_point_cp_support_supported_count": counts.get(
+            "cp_support_supported_count"
+        ),
+        "major_critical_point_cp_support_suggested_insertion_count": counts.get(
+            "cp_support_suggested_insertion_count"
+        ),
+        "major_critical_point_cp_links": links,
+        "major_critical_point_answer_hints": {
+            "place_to_cp": (
+                "Use major_critical_point_cp_links.nearest_cp_label for questions "
+                "like 'X 在第幾 CP 附近'."
+            ),
+            "candidate_boundary": (
+                "Major critical point CP links are candidate-only planning "
+                "evidence and are not runtime safety truth."
+            ),
+        },
+    }
+
+
+def _nearby_suppressed_points(candidate: dict[str, Any]) -> list[dict[str, Any]]:
+    points: list[dict[str, Any]] = []
+    for point in candidate.get("nearby_points_suppressed_by_spacing", [])[:4]:
+        if not isinstance(point, dict):
+            continue
+        points.append(
+            _without_none(
+                {
+                    "label": point.get("label"),
+                    "source_id": point.get("source_id"),
+                    "source_distance_m": point.get("source_distance_m"),
+                    "reason": point.get("reason"),
+                }
+            )
+        )
+    return points
+
+
+def _first_str(value: Any) -> str | None:
+    if not isinstance(value, list):
+        return None
+    for item in value:
+        if isinstance(item, str) and item:
+            return item
+    return None
+
+
+def _str_list(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, str)]
+
+
+def _cp_display_name(candidate_id: str | None) -> str | None:
+    if candidate_id is None:
+        return None
+    if candidate_id == "cp.start":
+        return "Start"
+    prefix = "cp."
+    if candidate_id.startswith(prefix):
+        suffix = candidate_id[len(prefix) :]
+        if suffix:
+            return f"CP {suffix.upper()}"
+    return candidate_id
+
+
+def _without_none(value: dict[str, Any]) -> dict[str, Any]:
+    return {key: item for key, item in value.items() if item is not None}
+
+
+def _count_summary(view: dict[str, Any]) -> dict[str, Any]:
+    counts = dict(view.get("summary", {}).get("counts", {}))
+    review_counts = dict(view.get("review_queue", {}).get("counts", {}))
+    review_categories = dict(review_counts.get("category_counts", {}))
+    checkpoint_candidate_count = counts.get("checkpoint_candidate_count")
+    return {
+        "cp_count": checkpoint_candidate_count,
+        "cp_count_meaning": (
+            "checkpoint_candidate_count from the pre-trip checkpoint candidates"
+        ),
+        "checkpoint_candidate_count": checkpoint_candidate_count,
+        "checkpoint_event_count": counts.get("checkpoint_event_count"),
+        "segment_candidate_count": counts.get("segment_candidate_count"),
+        "rest_area_checkpoint_count": counts.get("rest_area_checkpoint_count"),
+        "gis_perception_cp_count": review_counts.get("gis_perception_cp_count")
+        or review_categories.get("gis_perception_cp"),
+        "count_answer_hints": {
+            "cp": "Use checkpoint_candidate_count/cp_count for questions like '有多少個cp'.",
+            "review_queue_cp": "Use gis_perception_cp_count only for GIS perception CP review items.",
+        },
     }
 
 
