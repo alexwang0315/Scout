@@ -39,9 +39,14 @@ def test_mobile_wearable_spec_defines_mqtt_topics_and_transport_roles() -> None:
         "scout/v1/mobile-wearable/sensorlogger/${deviceId}/${sessionId}/observations",
         "scout/v1/mobile-wearable/{source_adapter}/{device_id}/{session_id}/observations",
         "source_adapter=scout-android",
+        "Transport Layer Roles",
         "HTTP: local lab",
-        "MQTT: default WAN live path",
+        "WebSocket: local or WAN streaming",
+        "TCP stream: gateway-to-Scout",
+        "Bluetooth/BLE: short-range",
+        "MQTT: WAN live path",
         "LoRa/LoRaWAN: low-rate nearby/off-grid fallback",
+        "Satellite message: very low-rate future fallback",
         "Scout-owned or Scout-controlled MQTT broker",
     ):
         assert token in source
@@ -53,11 +58,16 @@ def test_mobile_wearable_spec_preserves_all_ingress_evidence_classes() -> None:
     for token in (
         "Ingress Evidence Preservation",
         "preserve ingress evidence before deciding whether a message can be",
-        "LAN HTTP or WebSocket",
+        "LAN HTTP, WebSocket, or TCP stream",
+        "Bluetooth/BLE from a paired phone",
         "WAN MQTT",
         "LoRa or LoRaWAN gateway messages",
-        "`ingress_transport`: `lan_http`, `lan_websocket`, `wan_mqtt`,",
+        "Satellite message relays",
+        "`ingress_transport`: `lan_http`, `lan_websocket`, `lan_tcp_stream`,",
+        "`short_range_bluetooth`",
+        "`wan_mqtt`",
         "`lora_gateway`",
+        "`satellite_message`",
         "`payload_sha256`",
         "`parse_status`: `accepted`, `rejected`, or `unrecognized`",
         "`raw_artifact_path`",
@@ -68,8 +78,39 @@ def test_mobile_wearable_spec_preserves_all_ingress_evidence_classes() -> None:
         "RSSI",
         "SNR",
         "spreading factor",
+        "Satellite: provider class",
         "Ingress preservation is not the same as runtime admission",
         "signed Scout observation/envelope contract",
+    ):
+        assert token in source
+
+
+def test_mobile_wearable_spec_separates_transport_application_record_and_safety() -> None:
+    source = read_spec()
+
+    for token in (
+        "Transport is not the application layer",
+        "Layering Model",
+        "Transport ingress layer",
+        "Source adapter layer",
+        "Scout Sensor/Vitals Record layer",
+        "Navigation estimation layer",
+        "Safety admission layer",
+        "Admin visualization/export layer",
+        "trajectory_diff_map.html",
+        "Scout Sensor/Vitals Record",
+        "artifact_kind: scout_sensor_vitals_record",
+        "journey.scout-svr/",
+        "observations.jsonl",
+        "navigation_estimates.jsonl",
+        "vitals.jsonl",
+        "journey.gpx",
+        "journey.kml",
+        "journey.csv",
+        "GPS-only position",
+        "INS/DR position",
+        "Do not escalate to cliff/fall/off-route Ln from a single INS/DR or GPS sample",
+        "uncertainty radius overlaps the legal/safe trail corridor",
     ):
         assert token in source
 
