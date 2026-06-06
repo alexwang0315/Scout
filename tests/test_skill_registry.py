@@ -5,7 +5,7 @@ from tempfile import TemporaryDirectory
 import yaml
 from pydantic import ValidationError
 
-from skill_registry import DuplicateSkillManifestError, SkillRegistry, load_skill_registry
+from skill_registry import DuplicateSkillManifestError, SkillRegistry, load_skill_manifest, load_skill_registry
 from skill_registry_models import SkillManifest
 
 
@@ -24,6 +24,7 @@ class SkillRegistryTests(unittest.TestCase):
                 "communication-state-check",
                 "decision-options",
                 "device-capability-check",
+                "ins-dr-wearable-route-constrained",
                 "latest-team-position-check",
                 "remote-status-json",
                 "team-checkin-summary",
@@ -80,6 +81,32 @@ class SkillRegistryTests(unittest.TestCase):
 
         self.assertEqual(registry.get(manifest.id), manifest)
         self.assertEqual(registry.skill_ids(), [manifest.id])
+
+    def test_ins_dr_skill_declares_application_routing_policy(self):
+        manifest = load_skill_manifest(
+            REPO_ROOT / "skills" / "scout" / "ins-dr-wearable-route-constrained.yaml"
+        )
+
+        self.assertEqual(manifest.application_routing.route_target, "navigation.ins_dr")
+        self.assertEqual(
+            manifest.application_routing.route_id,
+            "navigation.ins_dr.wearable_route_constrained.v0",
+        )
+        self.assertEqual(manifest.application_routing.profile, "wearable_route_constrained")
+        self.assertIn(["acc_x", "acc_y", "acc_z"], manifest.application_routing.value_key_groups)
+        self.assertIn("transport.egress", manifest.forbidden_writes)
+        self.assertEqual(manifest.application_routing.allowed_outbound_envelope_classes, [])
+
+    def test_application_routing_policy_rejects_enabled_policy_without_selectors(self):
+        payload = self._valid_manifest_payload()
+        payload["application_routing"] = {
+            "enabled": True,
+            "route_id": "navigation.ins_dr.empty.v0",
+            "route_target": "navigation.ins_dr",
+        }
+
+        with self.assertRaises(ValidationError):
+            SkillManifest.model_validate(payload)
 
     def _valid_manifest_payload(self, *, id: str = "example-skill") -> dict:
         return {

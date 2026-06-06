@@ -73,6 +73,38 @@ class AuditSettings(StrictModel):
     retention: AuditRetention = "mission_lifetime"
 
 
+class ApplicationRoutingPolicy(StrictModel):
+    enabled: bool = True
+    route_id: str
+    route_target: str
+    routing_agent: str = "scout.skill_routing_agent.v0"
+    observation_names: list[str] = Field(default_factory=list)
+    value_keys: list[str] = Field(default_factory=list)
+    value_key_groups: list[list[str]] = Field(default_factory=list)
+    capability_tags: list[str] = Field(default_factory=list)
+    profile: str | None = None
+    side_effect_policy: str = "no_runtime_safety_mutation_no_outbound"
+    allowed_outbound_envelope_classes: list[str] = Field(default_factory=list)
+    fan_out: bool = False
+
+    @model_validator(mode="after")
+    def validate_selectors(self) -> ApplicationRoutingPolicy:
+        has_selector = any(
+            (
+                self.observation_names,
+                self.value_keys,
+                self.value_key_groups,
+                self.capability_tags,
+            )
+        )
+        if self.enabled and not has_selector:
+            raise ValueError("enabled application_routing requires at least one selector")
+        empty_groups = [group for group in self.value_key_groups if not group]
+        if empty_groups:
+            raise ValueError("application_routing value_key_groups must not contain empty groups")
+        return self
+
+
 class SkillManifest(StrictModel):
     id: str
     version: str
@@ -90,6 +122,7 @@ class SkillManifest(StrictModel):
     failure_policy: FailurePolicy
     control_surface: ControlSurface
     audit: AuditSettings
+    application_routing: ApplicationRoutingPolicy | None = None
 
     @model_validator(mode="after")
     def validate_write_boundaries(self) -> SkillManifest:
