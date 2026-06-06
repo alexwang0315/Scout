@@ -10,6 +10,7 @@ from scout_agent_trace import load_agent_trace
 ROOT = Path(__file__).resolve().parents[1]
 PROJECT_ROOT = ROOT / "tests" / "fixtures" / "pretrip" / "projects" / "chilai_nanhua_day1"
 MANIFEST_DIR = ROOT / "tools" / "scout_agent_tool_manifests"
+QUESTION_CORPUS = ROOT / "docs" / "specs" / "scout-ai-200-question-corpus.json"
 
 
 def test_scout_ai_workspace_catalog_manifest_runs_with_trace(tmp_path: Path) -> None:
@@ -88,6 +89,21 @@ def test_scout_ai_evidence_fulltext_manifest_runs(tmp_path: Path) -> None:
     assert output["result_count"] >= 1
     assert output["results"][0]["record_id"] == "mcp.heishuitang.002"
     assert output["boundary"]["local_evidence_only"] is True
+
+
+def test_scout_ai_question_answerability_manifest_runs(tmp_path: Path) -> None:
+    output = _run_manifest(
+        "scout.ai.question_answerability.eval",
+        {"project_root": str(PROJECT_ROOT), "corpus_path": str(QUESTION_CORPUS)},
+        tmp_path,
+    )
+
+    assert output["artifact_kind"] == "scout_ai_question_answerability_tool_output"
+    assert output["question_count"] == 200
+    assert output["answerability_counts"]["answerable_by_current_read_only_tools"] > 0
+    assert output["answerability_counts"].get("needs_general_model_or_new_spec", 0) == 0
+    assert output["boundary"]["safety_api_called"] is False
+    assert output["report"]["artifact_kind"] == "scout_ai_question_answerability_eval"
 
 
 def _run_manifest(

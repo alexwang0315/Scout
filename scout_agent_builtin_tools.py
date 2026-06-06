@@ -94,6 +94,8 @@ def run_builtin_tool(argv: Sequence[str] | None = None) -> tuple[int, dict[str, 
         return _ai_major_points(args)
     if args.command == "ai-evidence-fulltext":
         return _ai_evidence_fulltext(args)
+    if args.command == "ai-question-answerability":
+        return _ai_question_answerability(args)
     if args.command == "note-append-flight-recorder":
         return _note_append_flight_recorder(args)
     if args.command == "cp-propose-add":
@@ -239,6 +241,10 @@ def _build_parser() -> argparse.ArgumentParser:
     ai_fulltext_parser = subparsers.add_parser("ai-evidence-fulltext")
     ai_fulltext_parser.add_argument("--input", type=Path, required=True)
     ai_fulltext_parser.add_argument("--json", action="store_true")
+
+    ai_question_parser = subparsers.add_parser("ai-question-answerability")
+    ai_question_parser.add_argument("--input", type=Path, required=True)
+    ai_question_parser.add_argument("--json", action="store_true")
 
     note_parser = subparsers.add_parser("note-append-flight-recorder")
     note_parser.add_argument("--input", type=Path, required=True)
@@ -871,6 +877,34 @@ def _ai_evidence_fulltext(args: argparse.Namespace) -> tuple[int, dict[str, Any]
     except Exception as exc:  # noqa: BLE001 - CLI wrapper returns structured failures.
         return 2, _error_payload(str(exc))
     return 0, {"artifact_kind": "scout_ai_evidence_fulltext_tool_output", **result}
+
+
+def _ai_question_answerability(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
+    from scout_ai_question_eval import evaluate_question_corpus, load_question_corpus
+
+    request = _load_json(args.input)
+    corpus_path = request.get("corpus_path")
+    project_root = request.get("project_root") or request.get("trip_root")
+    if corpus_path:
+        questions = load_question_corpus(corpus_path)
+    else:
+        questions = request.get("questions")
+    if not isinstance(questions, list):
+        return 2, _error_payload("ai question-answerability requires questions or corpus_path")
+    try:
+        result = evaluate_question_corpus(questions, project_root=project_root)
+    except Exception as exc:  # noqa: BLE001 - CLI wrapper returns structured failures.
+        return 2, _error_payload(str(exc))
+    return 0, {
+        "artifact_kind": "scout_ai_question_answerability_tool_output",
+        "question_count": result["question_count"],
+        "answerability_counts": result["answerability_counts"],
+        "current_tool_counts": result["current_tool_counts"],
+        "recommended_tool_counts": result["recommended_tool_counts"],
+        "missing_evidence_counts": result["missing_evidence_counts"],
+        "boundary": result["boundary"],
+        "report": result,
+    }
 
 
 def _kb_build(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
