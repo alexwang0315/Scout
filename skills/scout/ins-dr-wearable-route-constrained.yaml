@@ -1,0 +1,109 @@
+id: ins-dr-wearable-route-constrained
+version: 0.1.0
+status: experimental
+type: analysis
+priority: 10
+triggers:
+  - event: transport.observation.normalized
+    description: Route wearable IMU, PDR, GPS, and motion observations to the Scout INS/DR filter.
+    required_refs:
+      - scout_application_observation
+activation_gate:
+  mode: automatic
+  requires_human_approval: false
+  conditions:
+    - normalized observation is evidence-only
+    - application router is running outside Phase 1 safety mutation
+noise_control:
+  cooldown_seconds: 0
+  dedupe_window_seconds: 0
+  max_runs_per_mission: null
+  suppression_keys:
+    - observation_id
+preflight:
+  required_skill_ids: []
+  required_capabilities:
+    - scout.application_router
+    - scout.ins_dr.filter
+  required_artifacts:
+    - scout_application_observation
+allowed_reads:
+  - transport.ingress
+  - sensorlogger.payload
+  - scout.sensor_vitals_record
+  - route.context
+allowed_writes:
+  - scout.sensor_vitals_record.application_routes
+  - scout.sensor_vitals_record.filter_outputs
+  - scout.sensor_vitals_record.navigation_estimates
+forbidden_writes:
+  - phase1.runtime
+  - route_progress.state
+  - scout.safety.ln
+  - radio.hardware
+  - device.hardware
+  - transport.egress
+output_schema:
+  format: artifact
+  artifact_kinds:
+    - scout_application_dispatch_record
+    - scout_application_filter_output
+    - scout_ins_dr_navigation_estimate
+  required_fields:
+    - route_id
+    - route_target
+    - dispatch_status
+    - input_ref
+    - output_ref
+failure_policy:
+  on_error: record_failure
+  retry:
+    max_attempts: 0
+    backoff_seconds: 0
+  degrade_to: raw.archive
+control_surface:
+  operator_visible: true
+  manual_run_allowed: false
+  disable_allowed: true
+  status_label: INS/DR wearable route constrained router
+audit:
+  log_inputs: true
+  log_outputs: true
+  log_decision: true
+  retention: mission_lifetime
+application_routing:
+  enabled: true
+  route_id: navigation.ins_dr.wearable_route_constrained.v0
+  route_target: navigation.ins_dr
+  routing_agent: scout.skill_routing_agent.v0
+  profile: wearable_route_constrained
+  observation_names:
+    - location
+    - pedometer
+    - accelerometer
+    - gyroscope
+    - magnetometer
+    - barometer
+    - motion
+  value_keys:
+    - latitude
+    - longitude
+    - locationLatitude
+    - locationLongitude
+    - pedometerDistance
+    - pedometerNumberOfSteps
+    - distance_delta_m
+  value_key_groups:
+    - [acc_x, acc_y, acc_z]
+    - [gyro_x, gyro_y, gyro_z]
+    - [latitude, longitude]
+    - [locationLatitude, locationLongitude]
+  capability_tags:
+    - imu
+    - pdr
+    - gps
+    - location
+    - wheel
+  side_effect_policy: no_runtime_safety_mutation_no_outbound
+  allowed_outbound_envelope_classes: []
+  fan_out: false

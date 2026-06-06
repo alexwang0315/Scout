@@ -11,10 +11,21 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
+from tools.pi_oled_i2c_smoke import parse_address, write_display
+
+from application_router import (
+    ApplicationRouter,
+    build_default_application_router,
+    observations_from_sensorlogger_message,
+)
 from ingress_evidence import (
     IngressEvidenceRecorder,
     IngressParseStatus,
     IngressTransport,
+)
+from scout_sensor_vitals_record import (
+    append_sensor_vitals_records_jsonl,
+    sensor_vitals_records_from_observations,
 )
 
 
@@ -22,6 +33,7 @@ ARTIFACT_KIND = "scout_sensorlogger_mqtt_observer_status"
 ARTIFACT_VERSION = "sensorlogger_mqtt_observer_status.v0"
 DEFAULT_EVIDENCE_DIR = Path("artifacts/mobile_wearable/sensorlogger_mqtt")
 STATUS_RECENT_RECORD_LIMIT = 50
+LATENCY_RECENT_RECORD_LIMIT = 200
 
 
 @dataclass(frozen=True)
@@ -36,9 +48,17 @@ class SensorLoggerMqttObserverConfig:
     password: str | None = None
     client_id: str = "scout-sensorlogger-observer"
     evidence_dir: Path = DEFAULT_EVIDENCE_DIR
+    application_route_path: Path | None = None
+    application_router: ApplicationRouter | None = None
     max_messages: int | None = None
     timeout_seconds: float | None = None
     print_ready: bool = False
+    oled_status: bool = False
+    oled_dry_run: bool = False
+    oled_bus: Path = Path("/dev/i2c-1")
+    oled_address: int = 0x3C
+    oled_driver: str = "sh1107g"
+    oled_min_interval_seconds: float = 2.0
 
     @classmethod
     def from_env(cls, prefix: str = "SCOUT_SENSORLOGGER_MQTT_") -> "SensorLoggerMqttObserverConfig":
@@ -51,6 +71,7 @@ class SensorLoggerMqttObserverConfig:
             raise ValueError(f"{prefix}HOST and {prefix}TOPIC are required")
 
         evidence_dir = Path(read("EVIDENCE_DIR", str(DEFAULT_EVIDENCE_DIR)) or DEFAULT_EVIDENCE_DIR)
+        route_path_text = read("APPLICATION_ROUTE_PATH") or read("INS_DR_ROUTE_PATH")
         return cls(
             host=host,
             topic=topic,
@@ -62,9 +83,16 @@ class SensorLoggerMqttObserverConfig:
             password=read("PASSWORD"),
             client_id=read("CLIENT_ID", "scout-sensorlogger-observer") or "scout-sensorlogger-observer",
             evidence_dir=evidence_dir,
+            application_route_path=Path(route_path_text).expanduser() if route_path_text else None,
             max_messages=_int_or_none(read("MAX_MESSAGES")),
             timeout_seconds=_float_or_none(read("TIMEOUT_SECONDS")),
             print_ready=_bool_env(read("PRINT_READY", "false")),
+            oled_status=_bool_env(read("OLED_STATUS", "false")),
+            oled_dry_run=_bool_env(read("OLED_DRY_RUN", "false")),
+            oled_bus=Path(read("OLED_BUS", "/dev/i2c-1") or "/dev/i2c-1"),
+            oled_address=parse_address(read("OLED_ADDRESS", "0x3c") or "0x3c"),
+            oled_driver=read("OLED_DRIVER", "sh1107g") or "sh1107g",
+            oled_min_interval_seconds=_float_or_none(read("OLED_MIN_INTERVAL_SECONDS")) or 2.0,
         )
 
 
@@ -144,9 +172,17 @@ class SensorLoggerMqttObserver:
         self.mqtt_connect_reason: str | None = None
         self.mqtt_subscribe_reason: str | None = None
         self.sessions: dict[tuple[str, str], DeviceSessionState] = {}
+        self.latency_records: list[dict[str, Any]] = []
+        self.sensor_vitals_record_count = 0
+        self.latest_sensor_vitals_summary: dict[str, Any] | None = None
+        self.last_oled_emit_monotonic: float | None = None
         self.ingress_recorder = IngressEvidenceRecorder(
             raw_jsonl_path=self.raw_jsonl_path,
             index_jsonl_path=self.ingress_index_jsonl_path,
+        )
+        self.application_router = config.application_router or build_default_application_router(
+            record_dir=self.config.evidence_dir,
+            route_path=self.config.application_route_path,
         )
 
     @property
@@ -160,6 +196,26 @@ class SensorLoggerMqttObserver:
     @property
     def status_path(self) -> Path:
         return self.config.evidence_dir / "sensorlogger_mqtt_status.json"
+
+    @property
+    def application_routes_jsonl_path(self) -> Path:
+        return self.config.evidence_dir / "sensorlogger_mqtt_application_routes.jsonl"
+
+    @property
+    def filter_outputs_jsonl_path(self) -> Path:
+        return self.config.evidence_dir / "sensorlogger_mqtt_filter_outputs.jsonl"
+
+    @property
+    def latency_jsonl_path(self) -> Path:
+        return self.config.evidence_dir / "sensorlogger_mqtt_latency.jsonl"
+
+    @property
+    def sensor_vitals_records_jsonl_path(self) -> Path:
+        return self.config.evidence_dir / "sensorlogger_mqtt_sensor_vitals_records.jsonl"
+
+    @property
+    def oled_status_jsonl_path(self) -> Path:
+        return self.config.evidence_dir / "sensorlogger_mqtt_oled_status.jsonl"
 
     def handle_message(self, *, topic: str, payload: bytes | str, received_at: float | None = None) -> dict[str, Any]:
         received_at = received_at if received_at is not None else time.time()
@@ -239,6 +295,44 @@ class SensorLoggerMqttObserver:
                 "is_test_publish": normalized["is_test_publish"],
             },
         )
+        dispatch_records = []
+        routing_started_at = time.time()
+        observations = observations_from_sensorlogger_message(
+            message,
+            ingress_transport=ingress.ingress_transport,
+            source_adapter=ingress.source_adapter,
+            received_at=received_at_iso,
+            payload_sha256=ingress.payload_sha256,
+            ingress_id=ingress.ingress_id,
+        )
+        sensor_vitals_record_set = sensor_vitals_records_from_observations(
+            observations,
+            session_id=session_id,
+        )
+        append_sensor_vitals_records_jsonl(
+            self.sensor_vitals_records_jsonl_path,
+            sensor_vitals_record_set,
+        )
+        self.sensor_vitals_record_count += sensor_vitals_record_set.record_count
+        self.latest_sensor_vitals_summary = sensor_vitals_record_set.summary
+        for observation in observations:
+            dispatch_records.extend(self.application_router.dispatch(observation))
+        routing_completed_at = time.time()
+        latency_record = self._record_latency(
+            ingress_id=ingress.ingress_id,
+            message=message,
+            message_id=message_id,
+            session_id=session_id,
+            device_id=device_id,
+            payload_count=payload_count,
+            observation_count=len(observations),
+            received_at=received_at,
+            routing_started_at=routing_started_at,
+            routing_completed_at=routing_completed_at,
+            dispatch_records=dispatch_records,
+            session_state=session_state,
+        )
+        self._emit_oled_latency_status(latency_record)
         self._write_status()
         return self._message_result(
             ingress=ingress,
@@ -249,6 +343,13 @@ class SensorLoggerMqttObserver:
             device_id=device_id,
             payload_count=payload_count,
             sensor_names=sorted(sensor_names),
+            application_dispatch_count=len(dispatch_records),
+            application_dispatch_status_counts=_counts(
+                record.dispatch_status.value for record in dispatch_records
+            ),
+            application_route_targets=sorted({record.route_target.value for record in dispatch_records}),
+            sensor_vitals_record_count=sensor_vitals_record_set.record_count,
+            routing_latency=latency_record,
         )
 
     def status(self) -> dict[str, Any]:
@@ -285,16 +386,47 @@ class SensorLoggerMqttObserver:
                 "evidence_dir": str(self.config.evidence_dir),
                 "raw_jsonl_path": str(self.raw_jsonl_path),
                 "ingress_index_jsonl_path": str(self.ingress_index_jsonl_path),
+                "application_routes_jsonl_path": str(self.application_routes_jsonl_path),
+                "filter_outputs_jsonl_path": str(self.filter_outputs_jsonl_path),
+                "latency_jsonl_path": str(self.latency_jsonl_path),
+                "sensor_vitals_records_jsonl_path": str(self.sensor_vitals_records_jsonl_path),
+                "oled_status_jsonl_path": str(self.oled_status_jsonl_path),
                 "status_path": str(self.status_path),
             },
             "ingress": self.ingress_recorder.build_status_index(
                 recent_record_limit=STATUS_RECENT_RECORD_LIMIT
             ),
+            "application_router": self.application_router.status(),
             "message_count": self.message_count,
             "invalid_message_count": self.invalid_message_count,
             "last_error": self.last_error,
             "sensor_names": sensor_names,
             "sessions": sessions,
+            "latency": self._latency_status(),
+            "sensor_vitals_records": {
+                "artifact_kind": "scout_sensor_vitals_record_status",
+                "artifact_version": "sensor_vitals_record_status.v0",
+                "jsonl_path": str(self.sensor_vitals_records_jsonl_path),
+                "record_count": self.sensor_vitals_record_count,
+                "latest_summary": self.latest_sensor_vitals_summary,
+                "boundary": {
+                    "evidence_only": True,
+                    "medical_diagnosis": False,
+                    "phase1_runtime_safety_truth": False,
+                    "phase1_l0_l4_state_mutated": False,
+                    "safety_api_called": False,
+                    "raw_payload_embedded": False,
+                    "credential_value_exposed": False,
+                },
+            },
+            "oled": {
+                "enabled": self.config.oled_status,
+                "dry_run": self.config.oled_dry_run,
+                "bus": str(self.config.oled_bus),
+                "address": f"0x{self.config.oled_address:02x}",
+                "driver": self.config.oled_driver,
+                "min_interval_seconds": self.config.oled_min_interval_seconds,
+            },
             "boundary": boundary_fields(),
         }
 
@@ -423,6 +555,160 @@ class SensorLoggerMqttObserver:
             normalized_summary=normalized_summary,
         )
 
+    def _record_latency(
+        self,
+        *,
+        ingress_id: str,
+        message: dict[str, Any],
+        message_id: int | None,
+        session_id: str,
+        device_id: str,
+        payload_count: int,
+        observation_count: int,
+        received_at: float,
+        routing_started_at: float,
+        routing_completed_at: float,
+        dispatch_records: list[Any],
+        session_state: DeviceSessionState,
+    ) -> dict[str, Any]:
+        sensor_times = _sensorlogger_payload_timestamps_s(message)
+        sensor_earliest_s = min(sensor_times) if sensor_times else None
+        sensor_latest_s = max(sensor_times) if sensor_times else None
+        previous_record = self.latency_records[-1] if self.latency_records else None
+        mqtt_interarrival_ms = None
+        inferred_receive_hz = None
+        if previous_record is not None:
+            previous_received_at = _float_or_none(previous_record.get("mqtt_received_at_s"))
+            if previous_received_at is not None:
+                mqtt_interarrival_ms = max(0.0, (received_at - previous_received_at) * 1000.0)
+                if mqtt_interarrival_ms > 0:
+                    inferred_receive_hz = 1000.0 / mqtt_interarrival_ms
+
+        missing_message_count_total = sum(item["missing_count"] for item in session_state.message_id_gaps)
+        latency_record = {
+            "artifact_kind": "scout_sensorlogger_mqtt_routing_latency",
+            "artifact_version": "sensorlogger_mqtt_routing_latency.v0",
+            "ingress_id": ingress_id,
+            "device_id": device_id,
+            "session_id": session_id,
+            "message_id": message_id,
+            "payload_count": payload_count,
+            "observation_count": observation_count,
+            "dispatch_count": len(dispatch_records),
+            "dispatch_status_counts": _counts(record.dispatch_status.value for record in dispatch_records),
+            "route_target_counts": _counts(record.route_target.value for record in dispatch_records),
+            "mqtt_received_at_s": received_at,
+            "mqtt_received_at": _iso_from_timestamp(received_at),
+            "routing_started_at_s": routing_started_at,
+            "routing_started_at": _iso_from_timestamp(routing_started_at),
+            "routing_completed_at_s": routing_completed_at,
+            "routing_completed_at": _iso_from_timestamp(routing_completed_at),
+            "sensor_payload_earliest_time_s": sensor_earliest_s,
+            "sensor_payload_latest_time_s": sensor_latest_s,
+            "sensor_payload_earliest_time": _iso_from_timestamp(sensor_earliest_s) if sensor_earliest_s is not None else None,
+            "sensor_payload_latest_time": _iso_from_timestamp(sensor_latest_s) if sensor_latest_s is not None else None,
+            "sensor_payload_span_ms": (
+                (sensor_latest_s - sensor_earliest_s) * 1000.0
+                if sensor_earliest_s is not None and sensor_latest_s is not None
+                else None
+            ),
+            "mqtt_receive_to_route_complete_ms": (routing_completed_at - received_at) * 1000.0,
+            "routing_duration_ms": (routing_completed_at - routing_started_at) * 1000.0,
+            "sensor_latest_to_route_complete_ms": (
+                (routing_completed_at - sensor_latest_s) * 1000.0
+                if sensor_latest_s is not None
+                else None
+            ),
+            "sensor_earliest_to_route_complete_ms": (
+                (routing_completed_at - sensor_earliest_s) * 1000.0
+                if sensor_earliest_s is not None
+                else None
+            ),
+            "mqtt_interarrival_ms": mqtt_interarrival_ms,
+            "inferred_receive_hz": inferred_receive_hz,
+            "message_id_gap_count": len(session_state.message_id_gaps),
+            "missing_message_count_total": missing_message_count_total,
+            "duplicate_message_count": len(session_state.duplicate_message_ids),
+            "out_of_order_message_count": len(session_state.out_of_order_message_ids),
+            "boundary": {
+                "safety_api_called": False,
+                "phase1_l0_l4_state_mutated": False,
+                "outbound_send_performed": False,
+            },
+        }
+        _append_jsonl(self.latency_jsonl_path, latency_record)
+        self.latency_records.append(latency_record)
+        if len(self.latency_records) > LATENCY_RECENT_RECORD_LIMIT:
+            self.latency_records = self.latency_records[-LATENCY_RECENT_RECORD_LIMIT:]
+        return latency_record
+
+    def _latency_status(self) -> dict[str, Any]:
+        return {
+            "artifact_kind": "scout_sensorlogger_mqtt_latency_status",
+            "artifact_version": "sensorlogger_mqtt_latency_status.v0",
+            "recent_record_limit": LATENCY_RECENT_RECORD_LIMIT,
+            "sample_count": len(self.latency_records),
+            "latest": self.latency_records[-1] if self.latency_records else None,
+            "stats": {
+                "mqtt_receive_to_route_complete_ms": _numeric_summary(
+                    record.get("mqtt_receive_to_route_complete_ms") for record in self.latency_records
+                ),
+                "routing_duration_ms": _numeric_summary(
+                    record.get("routing_duration_ms") for record in self.latency_records
+                ),
+                "sensor_latest_to_route_complete_ms": _numeric_summary(
+                    record.get("sensor_latest_to_route_complete_ms") for record in self.latency_records
+                ),
+                "mqtt_interarrival_ms": _numeric_summary(
+                    record.get("mqtt_interarrival_ms") for record in self.latency_records
+                ),
+                "inferred_receive_hz": _numeric_summary(
+                    record.get("inferred_receive_hz") for record in self.latency_records
+                ),
+            },
+        }
+
+    def _emit_oled_latency_status(self, latency_record: dict[str, Any]) -> None:
+        if not self.config.oled_status:
+            return
+        now_monotonic = time.monotonic()
+        if (
+            self.last_oled_emit_monotonic is not None
+            and now_monotonic - self.last_oled_emit_monotonic < self.config.oled_min_interval_seconds
+        ):
+            return
+
+        message = _oled_latency_message(latency_record)
+        oled_record: dict[str, Any] = {
+            "artifact_kind": "scout_sensorlogger_mqtt_oled_status",
+            "artifact_version": "sensorlogger_mqtt_oled_status.v0",
+            "captured_at": _now_iso(),
+            "ingress_id": latency_record["ingress_id"],
+            "message_id": latency_record.get("message_id"),
+            "message": message,
+            "bus": str(self.config.oled_bus),
+            "address": f"0x{self.config.oled_address:02x}",
+            "driver": self.config.oled_driver,
+            "dry_run": self.config.oled_dry_run,
+            "write_status": "dry_run" if self.config.oled_dry_run else "ok",
+            "hardware_control_scope": "diagnostic_display_only",
+            "phase1_safety_decision_change_allowed": False,
+            "remote_outbound_allowed": False,
+        }
+        try:
+            if not self.config.oled_dry_run:
+                oled_record["driver_attempted"] = write_display(
+                    bus=self.config.oled_bus,
+                    address=self.config.oled_address,
+                    driver=self.config.oled_driver,
+                    message=message,
+                )
+        except Exception as exc:
+            oled_record["write_status"] = "error"
+            oled_record["error"] = f"{type(exc).__name__}: {exc}"
+        _append_jsonl(self.oled_status_jsonl_path, oled_record)
+        self.last_oled_emit_monotonic = now_monotonic
+
     @staticmethod
     def _message_result(
         *,
@@ -518,9 +804,23 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--no-tls", action="store_true")
     parser.add_argument("--client-id", default=os.environ.get("SCOUT_SENSORLOGGER_MQTT_CLIENT_ID", "scout-sensorlogger-observer"))
     parser.add_argument("--evidence-dir", type=Path, default=Path(os.environ.get("SCOUT_SENSORLOGGER_MQTT_EVIDENCE_DIR", str(DEFAULT_EVIDENCE_DIR))))
+    parser.add_argument(
+        "--application-route-path",
+        type=Path,
+        default=Path(os.environ["SCOUT_SENSORLOGGER_MQTT_APPLICATION_ROUTE_PATH"]).expanduser()
+        if os.environ.get("SCOUT_SENSORLOGGER_MQTT_APPLICATION_ROUTE_PATH")
+        else None,
+        help="Optional GPX route context used by the navigation.ins_dr application filter.",
+    )
     parser.add_argument("--max-messages", type=int, default=_int_or_none(os.environ.get("SCOUT_SENSORLOGGER_MQTT_MAX_MESSAGES")))
     parser.add_argument("--timeout-seconds", type=float, default=_float_or_none(os.environ.get("SCOUT_SENSORLOGGER_MQTT_TIMEOUT_SECONDS")))
     parser.add_argument("--print-ready", action="store_true", help="Print a readiness event after MQTT subscription succeeds.")
+    parser.add_argument("--oled-status", action="store_true", help="Show throttled routing latency status on a diagnostic OLED.")
+    parser.add_argument("--oled-dry-run", action="store_true", help="Record OLED messages without writing I2C hardware.")
+    parser.add_argument("--oled-bus", type=Path, default=Path(os.environ.get("SCOUT_SENSORLOGGER_MQTT_OLED_BUS", "/dev/i2c-1")))
+    parser.add_argument("--oled-address", type=parse_address, default=parse_address(os.environ.get("SCOUT_SENSORLOGGER_MQTT_OLED_ADDRESS", "0x3c")))
+    parser.add_argument("--oled-driver", choices=("sh1107g", "ssd1327", "auto"), default=os.environ.get("SCOUT_SENSORLOGGER_MQTT_OLED_DRIVER", "sh1107g"))
+    parser.add_argument("--oled-min-interval-seconds", type=float, default=_float_or_none(os.environ.get("SCOUT_SENSORLOGGER_MQTT_OLED_MIN_INTERVAL_SECONDS")))
     return parser
 
 
@@ -556,6 +856,15 @@ def config_from_args(args: argparse.Namespace) -> SensorLoggerMqttObserverConfig
     env_tls = _lookup_env(file_env, "SCOUT_SENSORLOGGER_MQTT_USE_TLS")
     parsed_tls = parsed_broker.get("use_tls")
     use_tls = False if args.no_tls else (_bool_env(env_tls) if env_tls is not None else bool(parsed_tls if parsed_tls is not None else True))
+    route_path_text = _lookup_env(
+        file_env,
+        "SCOUT_SENSORLOGGER_MQTT_APPLICATION_ROUTE_PATH",
+        "SCOUT_SENSORLOGGER_MQTT_INS_DR_ROUTE_PATH",
+        "SCOUT_APPLICATION_ROUTE_PATH",
+    )
+    application_route_path = args.application_route_path or (
+        Path(route_path_text).expanduser() if route_path_text else None
+    )
 
     return SensorLoggerMqttObserverConfig(
         host=host,
@@ -568,9 +877,20 @@ def config_from_args(args: argparse.Namespace) -> SensorLoggerMqttObserverConfig
         password=password,
         client_id=args.client_id,
         evidence_dir=args.evidence_dir,
+        application_route_path=application_route_path,
         max_messages=args.max_messages,
         timeout_seconds=args.timeout_seconds,
         print_ready=args.print_ready or _bool_env(_lookup_env(file_env, "SCOUT_SENSORLOGGER_MQTT_PRINT_READY")),
+        oled_status=args.oled_status or _bool_env(_lookup_env(file_env, "SCOUT_SENSORLOGGER_MQTT_OLED_STATUS")),
+        oled_dry_run=args.oled_dry_run or _bool_env(_lookup_env(file_env, "SCOUT_SENSORLOGGER_MQTT_OLED_DRY_RUN")),
+        oled_bus=args.oled_bus,
+        oled_address=args.oled_address,
+        oled_driver=args.oled_driver,
+        oled_min_interval_seconds=(
+            args.oled_min_interval_seconds
+            if args.oled_min_interval_seconds is not None
+            else (_float_or_none(_lookup_env(file_env, "SCOUT_SENSORLOGGER_MQTT_OLED_MIN_INTERVAL_SECONDS")) or 2.0)
+        ),
     )
 
 
@@ -616,6 +936,112 @@ def _float_or_none(value: Any) -> float | None:
         return None
 
 
+def _sensorlogger_payload_timestamps_s(message: dict[str, Any]) -> list[float]:
+    payload = message.get("payload")
+    if isinstance(payload, list):
+        readings = [item for item in payload if isinstance(item, dict)]
+    elif isinstance(message, dict) and "name" in message:
+        readings = [message]
+    else:
+        readings = []
+    timestamps: list[float] = []
+    for reading in readings:
+        parsed = _sensorlogger_timestamp_s(reading.get("time"))
+        if parsed is not None:
+            timestamps.append(parsed)
+    return timestamps
+
+
+def _sensorlogger_timestamp_s(value: Any) -> float | None:
+    parsed = _float_or_none(value)
+    if parsed is None:
+        return None
+    if parsed > 1_000_000_000_000_000:
+        return parsed / 1_000_000_000.0
+    if parsed > 1_000_000_000_000:
+        return parsed / 1_000.0
+    return parsed
+
+
+def _numeric_summary(values: Any) -> dict[str, float | int | None]:
+    numeric_values = [
+        float(value)
+        for value in values
+        if isinstance(value, (int, float)) and value == value
+    ]
+    if not numeric_values:
+        return {
+            "count": 0,
+            "min": None,
+            "avg": None,
+            "p50": None,
+            "p95": None,
+            "max": None,
+        }
+    return {
+        "count": len(numeric_values),
+        "min": min(numeric_values),
+        "avg": sum(numeric_values) / len(numeric_values),
+        "p50": _percentile(numeric_values, 50),
+        "p95": _percentile(numeric_values, 95),
+        "max": max(numeric_values),
+    }
+
+
+def _percentile(values: list[float], percentile: int) -> float:
+    ordered = sorted(values)
+    index = (len(ordered) - 1) * percentile / 100
+    lower = int(index)
+    upper = min(lower + 1, len(ordered) - 1)
+    if lower == upper:
+        return ordered[lower]
+    fraction = index - lower
+    return ordered[lower] * (1 - fraction) + ordered[upper] * fraction
+
+
+def _oled_latency_message(record: dict[str, Any]) -> str:
+    message_id = record.get("message_id")
+    receive_hz = record.get("inferred_receive_hz")
+    missing_count = record.get("missing_message_count_total")
+    return "\n".join(
+        [
+            "MQTT ROUTE",
+            f"MSG {message_id if message_id is not None else '?'}",
+            f"RX {_format_ms(record.get('mqtt_receive_to_route_complete_ms'))}",
+            f"SENS {_format_ms(record.get('sensor_latest_to_route_complete_ms'))}",
+            f"HZ {_format_hz(receive_hz)}",
+            f"LOSS {missing_count if missing_count is not None else 0}",
+        ]
+    )
+
+
+def _format_ms(value: Any) -> str:
+    parsed = _float_or_none(value)
+    if parsed is None:
+        return "NA"
+    if abs(parsed) >= 1000:
+        return f"{parsed / 1000:.1f}S"
+    return f"{parsed:.0f}MS"
+
+
+def _format_hz(value: Any) -> str:
+    parsed = _float_or_none(value)
+    if parsed is None:
+        return "NA"
+    if parsed >= 100:
+        return f"{parsed:.0f}"
+    if parsed >= 10:
+        return f"{parsed:.1f}"
+    return f"{parsed:.2f}"
+
+
+def _append_jsonl(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(payload, ensure_ascii=False, sort_keys=True))
+        handle.write("\n")
+
+
 def _reason_code_is_success(reason_code: Any) -> bool:
     if reason_code in (0, None):
         return True
@@ -659,6 +1085,14 @@ def _lookup_env(file_env: dict[str, str], *keys: str) -> str | None:
         if value not in (None, ""):
             return value
     return None
+
+
+def _counts(values: Any) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for value in values:
+        key = str(value)
+        counts[key] = counts.get(key, 0) + 1
+    return counts
 
 
 def _parse_broker_url(url: str | None) -> dict[str, Any]:

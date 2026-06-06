@@ -58,7 +58,7 @@ def test_mobile_wearable_spec_defines_mqtt_topics_and_transport_roles() -> None:
         "scout/v1/mobile-wearable/sensorlogger/${deviceId}/${sessionId}/observations",
         "scout/v1/mobile-wearable/{source_adapter}/{device_id}/{session_id}/observations",
         "source_adapter=scout-android",
-        "Transport Layer Roles",
+        "Transport Service Roles",
         "HTTP: local lab",
         "WebSocket: local or WAN streaming",
         "TCP stream: gateway-to-Scout",
@@ -116,19 +116,30 @@ def test_mobile_wearable_spec_separates_transport_application_record_and_safety(
     for token in (
         "Transport is not the application layer",
         "Layering Model",
-        "Transport ingress layer",
+        "Bidirectional transport service layer",
+        "Sends already-authorized outbound envelopes",
         "Source adapter layer",
+        "Application router layer",
+        "Application filter/agent layer",
+        "`navigation.ins_dr`",
+        "`resource.energy_reserve`",
+        "`beacon.tracer`",
+        "`weather.route_advisor`",
+        "`raw.archive`",
         "Scout Sensor/Vitals Record layer",
-        "Navigation estimation layer",
         "Safety admission layer",
         "Admin visualization/export layer",
         "trajectory_diff_map.html",
         "Scout Sensor/Vitals Record",
         "artifact_kind: scout_sensor_vitals_record",
+        "sensorlogger_mqtt_sensor_vitals_records.jsonl",
         "journey.scout-svr/",
         "observations.jsonl",
+        "application_routes.jsonl",
+        "filter_outputs.jsonl",
         "navigation_estimates.jsonl",
         "vitals.jsonl",
+        "transport_egress_index.jsonl",
         "journey.gpx",
         "journey.kml",
         "journey.csv",
@@ -136,6 +147,75 @@ def test_mobile_wearable_spec_separates_transport_application_record_and_safety(
         "INS/DR position",
         "Do not escalate to cliff/fall/off-route Ln from a single INS/DR or GPS sample",
         "uncertainty radius overlaps the legal/safe trail corridor",
+    ):
+        assert token in source
+
+
+def test_mobile_wearable_spec_defines_application_router_and_filter_registry() -> None:
+    source = read_spec()
+
+    for token in (
+        "Application Router And Filter Registry",
+        "The Scout application layer is not INS/DR",
+        "INS/DR is one registered filter",
+        "behind an application router",
+        "Required route targets for v0 planning",
+        "`navigation.ins_dr`: IMU, PDR, GPS/location, wheel odometry",
+        "`resource.energy_reserve`: heart rate, HRV, battery",
+        "`beacon.tracer`: hardware SOS, user distress triggers",
+        "`weather.route_advisor`: weather forecast, radar/nowcast summaries",
+        "validated by Pydantic AI",
+        "`raw.archive`: stores normalized or unrecognized evidence without applying an",
+        "Router rules must be declarative and versioned",
+        "`route_id` and `router_version`",
+        "`dispatch_status`: `accepted`, `blocked`, `deferred`, `failed`, or",
+        "`agent_skill_ref` when an AI skill/agent handled the message",
+        "A `ScoutApplicationSkill` is a declarative capability package",
+        "A `ScoutApplicationAgent` executes a registered skill under router policy",
+        "live router must not become an unconstrained",
+        "`ins-dr-wearable-route-constrained` skill manifest",
+        "`value_key_groups`",
+        "`acc_x`, `acc_y`, and `acc_z`",
+        "High-Rate Pipeline Versus Skill Router",
+        "High-rate pipeline lane",
+        "Flexible skill-router lane",
+        "Accelerometer / gyro / motion samples",
+        "`tools/application_router_benchmark.py`",
+        "`tools/application_router_microbench_standalone.py`",
+        "`sensorlogger_mqtt_latency.jsonl`",
+        "Sensor Logger package time to application routing completion",
+        "Optional OLED feedback",
+        "diagnostic display only",
+        "20% throughput budget",
+        "Agent output must not directly select Ln",
+        "mutate `/safety/*`",
+        "emergency packets unless",
+    ):
+        assert token in source
+
+
+def test_mobile_wearable_spec_defines_bidirectional_egress_and_black_box_beacon() -> None:
+    source = read_spec()
+
+    for token in (
+        "Egress Evidence Preservation",
+        "Outbound content is never invented by the transport service",
+        "`egress_transport`",
+        "`destination_class`",
+        "`peer_scout_server`",
+        "`message_class`",
+        "`position_beacon`",
+        "`emergency_packet`",
+        "`black_box_heartbeat`",
+        "`delivery_status`",
+        "`authorization_ref`",
+        "Black-Box Beacon And Peer Relay",
+        "latest reliable or admitted estimated position",
+        "another Scout server/node",
+        "peer relay forwarding",
+        "The transport service does not own",
+        "deciding that an incident exists",
+        "selecting safety level Ln",
     ):
         assert token in source
 
@@ -159,6 +239,8 @@ def test_mobile_wearable_spec_keeps_observer_evidence_only() -> None:
         "Debug UI visibility is not a prerequisite for receiving MQTT",
         "Debug/admin counters may be reset as projection-only operator state",
         "raw ingress JSONL evidence and ingress index JSONL must remain available",
+        "`sensorlogger_mqtt_sensor_vitals_records.jsonl`",
+        "`artifact_version=scout_sensor_vitals_record.v0`",
     ):
         assert token in source
 
