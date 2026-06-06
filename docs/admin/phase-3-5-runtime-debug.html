@@ -1206,6 +1206,8 @@
       display: grid;
       grid-template-rows: auto minmax(0, 1fr);
       min-height: 0;
+      max-height: min(620px, calc(100vh - 24px));
+      overflow: hidden;
     }
     .assistant-drawer summary {
       min-height: 38px;
@@ -1236,6 +1238,7 @@
       display: grid;
       gap: 10px;
       min-height: 0;
+      max-height: min(540px, calc(100vh - 112px));
       overflow-y: auto;
       padding-right: 2px;
     }
@@ -1397,6 +1400,14 @@
       .timeline-panel .panel-body {
         overflow: visible;
         scrollbar-gutter: auto;
+      }
+      .assistant-drawer {
+        max-height: min(760px, calc(100vh - 24px));
+        overflow: hidden;
+      }
+      .assistant-body {
+        max-height: min(680px, calc(100vh - 112px));
+        overflow-y: auto;
       }
       header { grid-template-columns: 1fr; }
       .boundary { justify-self: start; text-align: left; }

@@ -80,7 +80,8 @@ pause/resume/end control、provider send、incident bridge、或 Phase 2 writeba
 - `artifact_kind=phase4_admin_runtime_health`;
 - `runtime_profile=pi-phase4-admin-preview`;
 - `pretrip_workspace_root=/data/scout/admin/pretrip-workspaces`;
-- `assistant_provider=mock`;
+- `assistant_provider=pydantic_ai`;
+- `assistant_model_config_ref=/data/scout/config/assistant-models.json`;
 - `assistant_read_only=true`;
 - `phase1_field_runtime_started=false`;
 - `safety_api_mutation_allowed=false`;

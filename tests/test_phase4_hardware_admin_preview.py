@@ -67,6 +67,332 @@ def test_phase4_admin_runtime_serves_pretrip_and_mock_assistant_on_lan_profile()
     assert status.json()["token_values_exposed"] is False
 
 
+def test_phase4_admin_runtime_assistant_failure_returns_read_only_safe_response(
+    monkeypatch,
+) -> None:
+    class FailingProvider:
+        def answer(self, query, *, sources=None):
+            raise TimeoutError("provider timed out")
+
+    monkeypatch.setattr(
+        "phase4_admin_runtime.create_assistant_provider_from_env",
+        lambda _env: FailingProvider(),
+    )
+    app = create_phase4_admin_runtime_app(
+        environ={
+            "SCOUT_RUNTIME_PROFILE": "pi-phase4-admin-preview",
+            "SCOUT_AI_ASSISTANT_ENABLED": "1",
+        }
+    )
+    client = TestClient(app)
+
+    response = client.post(
+        "/assistant/query",
+        json={"surface": "pretrip", "question": "hi"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["read_only"] is True
+    assert payload["model_interpretation"] is True
+    assert payload["surface"] == "pretrip"
+    assert "Assistant provider failed safely" in payload["answer"]
+    assert payload["boundary"]["pretrip_review_mutation_allowed"] is False
+    assert payload["boundary"]["outbound_send_allowed"] is False
+    assert payload["observability"]["safe_failure"] is True
+    assert payload["observability"]["latency_class"] == "timeout_or_error"
+
+
+def test_phase4_admin_runtime_pretrip_assistant_exposes_checkpoint_counts() -> None:
+    app = create_phase4_admin_runtime_app(
+        environ={
+            "SCOUT_RUNTIME_PROFILE": "pi-phase4-admin-preview",
+            "SCOUT_AI_ASSISTANT_ENABLED": "1",
+        }
+    )
+    client = TestClient(app)
+
+    response = client.post(
+        "/assistant/query",
+        json={
+            "surface": "pretrip",
+            "question": "有多少個cp",
+            "context_ref": "chilai_nanhua_day1",
+            "project_id": "chilai_nanhua_day1",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["answer"].startswith("Scout AI read-only deterministic skill result")
+    assert "124 個 CP" in payload["answer"]
+    assert any(
+        limitation == "resolved_by=assistant_skill.pretrip.cp_count.v0"
+        for limitation in payload["limitations"]
+    )
+    assert payload["sources"][0]["source_id"] == "assistant_skill.pretrip.cp_count.v0"
+    context_source = next(
+        source
+        for source in payload["sources"]
+        if source["source_id"] == "assistant_context.pretrip"
+    )
+    summary = context_source["context_summary"]["summary"]
+    assert summary["cp_count"] == 124
+    assert summary["checkpoint_candidate_count"] == 124
+    assert summary["cp_count_meaning"] == (
+        "checkpoint_candidate_count from the pre-trip checkpoint candidates"
+    )
+
+
+def test_phase4_admin_runtime_pretrip_assistant_exposes_mcp_cp_links() -> None:
+    app = create_phase4_admin_runtime_app(
+        environ={
+            "SCOUT_RUNTIME_PROFILE": "pi-phase4-admin-preview",
+            "SCOUT_AI_ASSISTANT_ENABLED": "1",
+        }
+    )
+    client = TestClient(app)
+
+    response = client.post(
+        "/assistant/query",
+        json={
+            "surface": "pretrip",
+            "question": "黑水塘在第幾cp附近？",
+            "context_ref": "chilai_nanhua_day1",
+            "project_id": "chilai_nanhua_day1",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["answer"].startswith("Scout AI read-only deterministic skill result")
+    assert "黑水塘 在 CP 002 附近" in payload["answer"]
+    assert any(
+        limitation == "resolved_by=assistant_skill.pretrip.place_to_cp.v0"
+        for limitation in payload["limitations"]
+    )
+    context_source = next(
+        source
+        for source in payload["sources"]
+        if source["source_id"] == "assistant_context.pretrip"
+    )
+    summary = context_source["context_summary"]["summary"]
+    links = summary["major_critical_point_cp_links"]
+    heishuitang = next(link for link in links if link["label"] == "黑水塘")
+    assert heishuitang["mcp_id"] == "mcp.heishuitang.002"
+    assert heishuitang["nearest_cp_candidate_id"] == "cp.002"
+    assert heishuitang["nearest_cp_label"] == "CP 002"
+    assert heishuitang["nearest_cp_distance_m"] == 0.0
+    assert heishuitang["candidate_only"] is True
+    assert heishuitang["runtime_safety_truth"] is False
+    assert "mcp.heishuitang.002" in {
+        source["source_id"] for source in payload["sources"]
+    }
+
+
+def test_phase4_admin_runtime_pretrip_general_question_adds_local_evidence_search() -> None:
+    app = create_phase4_admin_runtime_app(
+        environ={
+            "SCOUT_RUNTIME_PROFILE": "pi-phase4-admin-preview",
+            "SCOUT_AI_ASSISTANT_ENABLED": "1",
+            "SCOUT_PRETRIP_WORKSPACE_ROOT": str(
+                ROOT / "tests" / "fixtures" / "pretrip" / "projects"
+            ),
+        }
+    )
+    client = TestClient(app)
+
+    response = client.post(
+        "/assistant/query",
+        json={
+            "surface": "pretrip",
+            "question": "大崩塌有什麼風險？",
+            "context_ref": "chilai_nanhua_day1",
+            "project_id": "chilai_nanhua_day1",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    search_source = payload["sources"][0]
+    assert search_source["source_id"] == (
+        "assistant_skill.pretrip.local_evidence_search.v0"
+    )
+    assert search_source["evidence_type"] == "assistant_local_evidence_search_results"
+    summary = search_source["context_summary"]
+    assert summary["result_count"] >= 1
+    assert summary["runtime_safety_truth"] is False
+    assert any("大崩塌" in result["snippet"] for result in summary["results"])
+    assert any(
+        source["source_id"] == "assistant_context.pretrip"
+        for source in payload["sources"]
+    )
+
+
+def test_phase4_admin_runtime_pretrip_general_question_searches_mcp_evidence() -> None:
+    app = create_phase4_admin_runtime_app(
+        environ={
+            "SCOUT_RUNTIME_PROFILE": "pi-phase4-admin-preview",
+            "SCOUT_AI_ASSISTANT_ENABLED": "1",
+            "SCOUT_PRETRIP_WORKSPACE_ROOT": str(
+                ROOT / "tests" / "fixtures" / "pretrip" / "projects"
+            ),
+        }
+    )
+    client = TestClient(app)
+
+    response = client.post(
+        "/assistant/query",
+        json={
+            "surface": "pretrip",
+            "question": "黑水塘有什麼資料？",
+            "context_ref": "chilai_nanhua_day1",
+            "project_id": "chilai_nanhua_day1",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    search_source = payload["sources"][0]
+    assert search_source["source_id"] == (
+        "assistant_skill.pretrip.local_evidence_search.v0"
+    )
+    results = search_source["context_summary"]["results"]
+    assert any(
+        result["evidence_type"] == "pretrip_major_critical_point_candidate"
+        and result["metadata"]["mcp_id"] == "mcp.heishuitang.002"
+        for result in results
+    )
+    assert any(
+        result["evidence_type"] == "pretrip_mcp_cp_support_reconciliation"
+        and result["metadata"]["nearest_cp_candidate_id"] == "cp.002"
+        for result in results
+    )
+
+
+def test_phase4_admin_runtime_pretrip_general_question_uses_local_evidence_fallback(
+    monkeypatch,
+) -> None:
+    class FailingProvider:
+        def answer(self, query, *, sources=None):
+            raise TimeoutError("provider should fall back to local evidence search")
+
+    monkeypatch.setattr(
+        "phase4_admin_runtime.create_assistant_provider_from_env",
+        lambda _env: FailingProvider(),
+    )
+    app = create_phase4_admin_runtime_app(
+        environ={
+            "SCOUT_RUNTIME_PROFILE": "pi-phase4-admin-preview",
+            "SCOUT_AI_ASSISTANT_ENABLED": "1",
+            "SCOUT_PRETRIP_WORKSPACE_ROOT": str(
+                ROOT / "tests" / "fixtures" / "pretrip" / "projects"
+            ),
+        }
+    )
+    client = TestClient(app)
+
+    response = client.post(
+        "/assistant/query",
+        json={
+            "surface": "pretrip",
+            "question": "大崩塌有什麼風險？",
+            "context_ref": "chilai_nanhua_day1",
+            "project_id": "chilai_nanhua_day1",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["observability"]["safe_failure"] is True
+    assert payload["answer"].startswith("Scout AI local evidence fallback")
+    assert "大崩塌" in payload["answer"]
+    assert "runtime safety truth" in payload["answer"]
+    assert any(
+        limitation == "resolved_by=assistant_skill.pretrip.local_evidence_search.v0"
+        for limitation in payload["limitations"]
+    )
+    assert payload["sources"][0]["source_id"] == (
+        "assistant_skill.pretrip.local_evidence_search.v0"
+    )
+
+
+def test_phase4_admin_runtime_pretrip_place_to_cp_skill_bypasses_failed_provider(
+    monkeypatch,
+) -> None:
+    class FailingProvider:
+        def answer(self, query, *, sources=None):
+            raise TimeoutError("provider should not be called for deterministic skill")
+
+    monkeypatch.setattr(
+        "phase4_admin_runtime.create_assistant_provider_from_env",
+        lambda _env: FailingProvider(),
+    )
+    app = create_phase4_admin_runtime_app(
+        environ={
+            "SCOUT_RUNTIME_PROFILE": "pi-phase4-admin-preview",
+            "SCOUT_AI_ASSISTANT_ENABLED": "1",
+        }
+    )
+    client = TestClient(app)
+
+    response = client.post(
+        "/assistant/query",
+        json={
+            "surface": "pretrip",
+            "question": "黑水塘在第幾cp附近？",
+            "context_ref": "chilai_nanhua_day1",
+            "project_id": "chilai_nanhua_day1",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["observability"]["safe_failure"] is False
+    assert payload["answer"].startswith("Scout AI read-only deterministic skill result")
+    assert "黑水塘 在 CP 002 附近" in payload["answer"]
+    assert payload["sources"][0]["source_id"] == (
+        "assistant_skill.pretrip.place_to_cp.v0"
+    )
+
+
+def test_phase4_admin_runtime_pretrip_cp_count_skill_bypasses_failed_provider(
+    monkeypatch,
+) -> None:
+    class FailingProvider:
+        def answer(self, query, *, sources=None):
+            raise TimeoutError("provider should not be called for deterministic skill")
+
+    monkeypatch.setattr(
+        "phase4_admin_runtime.create_assistant_provider_from_env",
+        lambda _env: FailingProvider(),
+    )
+    app = create_phase4_admin_runtime_app(
+        environ={
+            "SCOUT_RUNTIME_PROFILE": "pi-phase4-admin-preview",
+            "SCOUT_AI_ASSISTANT_ENABLED": "1",
+        }
+    )
+    client = TestClient(app)
+
+    response = client.post(
+        "/assistant/query",
+        json={
+            "surface": "pretrip",
+            "question": "有多少個cp",
+            "context_ref": "chilai_nanhua_day1",
+            "project_id": "chilai_nanhua_day1",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["observability"]["safe_failure"] is False
+    assert payload["answer"].startswith("Scout AI read-only deterministic skill result")
+    assert "124 個 CP" in payload["answer"]
+    assert payload["sources"][0]["source_id"] == "assistant_skill.pretrip.cp_count.v0"
+
+
 def test_phase4_admin_runtime_mounts_debug_projection_when_explicitly_enabled() -> None:
     app = create_phase4_admin_runtime_app(
         environ={
@@ -354,7 +680,8 @@ def test_phase4_hardware_admin_preview_cli_outputs_json() -> None:
     payload = json.loads(completed.stdout)
     assert payload["urls"]["health"] == "http://scout.local:9110/health"
     assert payload["environment"]["SCOUT_SAFETY_ENABLED"] == "false"
-    assert payload["environment"]["SCOUT_AI_ASSISTANT_PROVIDER"] == "mock"
+    assert payload["environment"]["SCOUT_AI_ASSISTANT_PROVIDER"] == "pydantic_ai"
+    assert payload["environment"]["SCOUT_AI_ASSISTANT_CONFIG_PATH"] == "/data/scout/config/assistant-models.json"
     assert payload["environment"]["SCOUT_ADMIN_AUTH_REQUIRED"] == "true"
     assert payload["environment"]["SCOUT_DEBUG_API_ENABLED"] == "true"
     assert payload["environment"]["SCOUT_DEBUG_LOG_PATH"] == "/data/scout/admin/debug/runtime-debug-events.jsonl"
@@ -407,12 +734,18 @@ def test_phase4_admin_compose_keeps_runtime_9099_free_for_existing_service() -> 
     assert "SCOUT_ADMIN_RASTER_TILE_CACHE_ROOT: /data/scout/raster-tiles" in source
     assert 'SCOUT_ADMIN_AUTH_REQUIRED: "${SCOUT_ADMIN_AUTH_REQUIRED:-true}"' in source
     assert "SCOUT_ADMIN_ACCESS_TOKEN_FILE: /data/scout/admin/secrets/phase4-admin-token" in source
+    assert "env_file:" in source
+    assert "- /data/scout/secrets/live-runtime.env" in source
+    assert "SCOUT_AI_ASSISTANT_PROVIDER: pydantic_ai" in source
+    assert "SCOUT_AI_ASSISTANT_CONFIG_PATH: /data/scout/config/assistant-models.json" in source
+    assert "host.docker.internal:host-gateway" in source
     assert 'SCOUT_DEBUG_API_ENABLED: "${SCOUT_DEBUG_API_ENABLED:-true}"' in source
     assert "SCOUT_DEBUG_LOG_PATH:" in source
     assert "/data/scout/admin/debug/runtime-debug-events.jsonl" in source
     assert '- "9110:9099"' in source
     assert '- "9099:9099"' not in source
     assert "depends_on:" not in source
+    assert "SCOUT_CLOUD_MODEL_TOKEN:" not in source
 
 
 def test_phase4_admin_docker_context_whitelists_only_metadata_and_admin_assets() -> None:
