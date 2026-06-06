@@ -47,6 +47,7 @@ def test_builtin_manifest_directory_lists_read_and_proposal_tools() -> None:
     assert "scout.ai.route_structure.search" in tool_ids
     assert "scout.ai.major_points.search" in tool_ids
     assert "scout.ai.evidence_fulltext.search" in tool_ids
+    assert "scout.ai.question_answerability.eval" in tool_ids
     assert "scout.risk.attribution" in tool_ids
     assert "scout.risk.heatmap" in tool_ids
     assert "scout.safety_action.shelter_direction" in tool_ids
