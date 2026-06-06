@@ -21,7 +21,12 @@ from assistant_api import (
     create_assistant_provider_status,
     create_assistant_router,
 )
-from assistant_context import create_assistant_context_resolver
+from assistant_context import (
+    assistant_source_refs_from_context,
+    create_assistant_context_resolver,
+)
+from assistant_models import AssistantSurface, ScoutAssistantQuery
+from assistant_skill_router import augment_pretrip_sources_with_local_evidence_search
 from debug_api import create_debug_page_router, create_debug_router
 from hardware_readiness_api import create_hardware_readiness_router
 from imu_api import router as imu_router
@@ -29,6 +34,7 @@ from macos_wifi import MacOSWifiWorld
 from pdr_engine import pdr
 from phase1_incident_bridge import phase1_incident_bridge_from_env
 from phase2_admin_api import create_phase2_admin_router
+from pretrip_assistant_context import build_pretrip_assistant_context
 from runtime_debug_log import FileRuntimeDebugEventLog
 from runtime_stream_controls import RuntimeStreamControlStore
 from runtime_stream_status_surface import create_runtime_stream_status_router
@@ -266,7 +272,9 @@ def _include_assistant_router(app: FastAPI) -> None:
     app.include_router(
         create_assistant_router(
             provider=provider,
-            context_resolver=create_assistant_context_resolver(debug_event_log=debug_log),
+            context_resolver=_create_server_assistant_context_resolver(
+                debug_event_log=debug_log,
+            ),
             provider_status=create_assistant_provider_status(provider=provider, environ=os.environ),
         )
     )
@@ -275,6 +283,53 @@ def _include_assistant_router(app: FastAPI) -> None:
         SCOUT_AI_ASSISTANT_PROVIDER,
         f" and config {SCOUT_AI_ASSISTANT_CONFIG_PATH}" if SCOUT_AI_ASSISTANT_CONFIG_PATH else "",
     )
+
+
+def _create_server_assistant_context_resolver(
+    *,
+    debug_event_log: FileRuntimeDebugEventLog | None,
+):
+    fallback_resolver = create_assistant_context_resolver(debug_event_log=debug_event_log)
+    workspace_root = (
+        Path(SCOUT_PRETRIP_WORKSPACE_ROOT).expanduser()
+        if SCOUT_PRETRIP_WORKSPACE_ROOT
+        else None
+    )
+
+    def resolve(query: ScoutAssistantQuery):
+        if query.surface == AssistantSurface.PRETRIP:
+            project_id = query.project_id or query.context_ref
+            project_root = _server_pretrip_project_root(workspace_root, project_id)
+            if project_root is not None:
+                try:
+                    context = build_pretrip_assistant_context(
+                        project_id,
+                        project_root=project_root,
+                        selected_source_id=query.selected_artifact_id,
+                    )
+                    sources = assistant_source_refs_from_context(context, query=query)
+                    return augment_pretrip_sources_with_local_evidence_search(
+                        query,
+                        sources=sources,
+                        project_root=project_root,
+                    )
+                except (FileNotFoundError, KeyError, ModuleNotFoundError, ValueError):
+                    pass
+        return fallback_resolver(query)
+
+    return resolve
+
+
+def _server_pretrip_project_root(
+    workspace_root: Path | None,
+    project_id: str | None,
+) -> Path | None:
+    if workspace_root is None or not project_id:
+        return None
+    candidate = workspace_root / project_id
+    if (candidate / "project.json").exists():
+        return candidate
+    return None
 
 
 def _include_runtime_stream_transport_router(app: FastAPI) -> None:

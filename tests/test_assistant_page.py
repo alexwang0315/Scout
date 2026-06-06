@@ -218,6 +218,33 @@ def test_admin_after_action_page_has_read_only_assistant_shell_and_live_query_co
     assert MUTATION_BUTTON_RE.search(shell) is None
 
 
+def test_admin_assistant_surfaces_keep_scrollable_panel_bounds():
+    admin_html = read_page(ADMIN_PAGE)
+    pretrip_html = read_page(PRETRIP_PAGE)
+    debug_html = read_page(DEBUG_PAGE)
+
+    admin_drawer = css_block(admin_html, "    .assistant-drawer {")
+    admin_panel = css_block(admin_html, "    .assistant-panel {")
+    assert "position: sticky;" in admin_drawer
+    assert "bottom: 0;" in admin_drawer
+    assert "max-height: min(720px, calc(100vh - 96px));" in admin_drawer
+    assert "overflow-y: auto;" in admin_panel
+
+    assert ".assistant-panel { overflow-y: visible; }" not in pretrip_html
+    pretrip_drawer = css_block(pretrip_html, "    .assistant-drawer {")
+    pretrip_panel = css_block(pretrip_html, "    .assistant-panel {")
+    assert "max-height: min(760px, calc(100vh - 80px));" in pretrip_drawer
+    assert "max-height: min(680px, calc(100vh - 130px));" in pretrip_panel
+    assert "overflow-y: auto;" in pretrip_panel
+
+    debug_drawer = css_block(debug_html, "    .assistant-drawer {")
+    debug_body = css_block(debug_html, "    .assistant-body {")
+    assert "max-height: min(620px, calc(100vh - 24px));" in debug_drawer
+    assert "overflow: hidden;" in debug_drawer
+    assert "max-height: min(540px, calc(100vh - 112px));" in debug_body
+    assert "overflow-y: auto;" in debug_body
+
+
 def test_hardware_readiness_page_has_read_only_assistant_shell_and_live_query_controls():
     html = read_page(HARDWARE_PAGE)
     shell = assistant_shell(html)

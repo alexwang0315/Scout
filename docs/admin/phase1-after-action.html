@@ -1492,12 +1492,29 @@
     .assistant-panel {
       display: grid;
       gap: 12px;
-      padding: 14px 0 0;
+      min-height: 0;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      scrollbar-gutter: stable;
+      padding: 14px 4px 0 0;
     }
 
     .assistant-drawer {
       margin-top: 16px;
       border-top: 1px solid var(--border);
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      min-height: 0;
+      max-height: min(720px, calc(100vh - 96px));
+      overflow: hidden;
+      position: sticky;
+      bottom: 0;
+      z-index: 3;
+      background: var(--surface);
+    }
+
+    .assistant-drawer[open] {
+      min-height: min(560px, calc(100vh - 140px));
     }
 
     .assistant-drawer summary {

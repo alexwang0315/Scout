@@ -21,7 +21,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     SCOUT_SENSORLOGGER_MQTT_EVIDENCE_DIR=/data/scout/admin/ingress/sensorlogger_mqtt \
     SCOUT_SENSORLOGGER_MQTT_LOG_PATH=/data/scout/admin/ingress/sensorlogger-mqtt-observer.log \
     SCOUT_AI_ASSISTANT_ENABLED=1 \
-    SCOUT_AI_ASSISTANT_PROVIDER=mock \
+    SCOUT_AI_ASSISTANT_PROVIDER=pydantic_ai \
+    SCOUT_AI_ASSISTANT_CONFIG_PATH=/data/scout/config/assistant-models.json \
     SCOUT_WEATHER_API_ENABLED=false \
     SCOUT_WEATHER_API_PROVIDER=open_meteo \
     SCOUT_PORT=9099 \
@@ -35,18 +36,27 @@ RUN pip install --no-cache-dir -r requirements.pi.admin.txt
 COPY \
     admin_after_action.py \
     admin_api.py \
+    admin_assistant_context.py \
     admin_basemap_tiles.py \
     admin_evidence_timeline.py \
+    admin_imagery_sources.py \
     admin_local_raster_tiles.py \
     admin_map_layers.py \
     admin_tile_cache_builder.py \
     admin_tile_proxy.py \
     admin_weather_overlay.py \
+    assistant_api.py \
+    assistant_context.py \
+    assistant_model_config.py \
     assistant_models.py \
+    assistant_offline_fallback_contract.py \
+    assistant_pydantic_provider.py \
     assistant_provider.py \
+    assistant_skill_router.py \
     checkpoint_manager.py \
     communication_provider.py \
     communication_tool.py \
+    debug_assistant_context.py \
     debug_api.py \
     environment_provider.py \
     geo_utils.py \
@@ -56,24 +66,35 @@ COPY \
     hardware_readiness_assistant_context.py \
     incident_package.py \
     incident_store.py \
+    ingress_observer_supervisor.py \
     ins_dr_input_adapter.py \
     ins_dr_navigation.py \
     mission_graph.py \
     mission_models.py \
     mission_progress.py \
+    mobile_wearable_ingress_debug.py \
     observation_adapter.py \
     offline_map.py \
     offline_map_models.py \
     pdr_fallback.py \
+    phase2_brain_models.py \
+    phase2_refs.py \
+    phase2_store_utils.py \
     phase46_live_replay_debug_projector.py \
     phase4_admin_runtime.py \
     post_analysis_capability.py \
     post_analysis_capability_models.py \
+    post_analysis_completed_trip_recordings.py \
+    post_analysis_completed_trip_scenarios.py \
     post_analysis_energy_feedback.py \
     post_analysis_rest_detection.py \
     post_analysis_route_slicing.py \
+    post_analysis_scout_reaction_simulation.py \
     pretrip_admin_view.py \
+    pretrip_assistant_context.py \
+    pretrip_brain_seed.py \
     pretrip_candidate_generation.py \
+    pretrip_departure_reviewed_candidates.py \
     pretrip_energy_projection.py \
     pretrip_eta_plan.py \
     pretrip_expert_contribution.py \
@@ -83,22 +104,34 @@ COPY \
     pretrip_gpx_filter.py \
     pretrip_import.py \
     pretrip_layer_preparation.py \
+    pretrip_mcp_models.py \
+    pretrip_mcp_review.py \
+    pretrip_mcp_synthesis.py \
+    pretrip_mission_compiler.py \
     pretrip_models.py \
     pretrip_overpass_ingest.py \
     pretrip_route_comparison.py \
     pretrip_source_ingest.py \
     pretrip_gis_perception.py \
+    pretrip_review_models.py \
+    pretrip_review_queue.py \
     pretrip_review_decision_apply.py \
     pretrip_review_decision_apply_store.py \
     pretrip_review_decision_log.py \
     pretrip_review_decision_store.py \
     pretrip_review_draft_fixture.py \
+    pretrip_risk_attribution_diagnostic.py \
+    pretrip_risk_heatmap.py \
+    pretrip_runtime_handoff_metadata.py \
     pretrip_route_note_candidates.py \
     pretrip_route_note_disposition_store.py \
     pretrip_route_note_ln_proposals.py \
     pretrip_route_note_review_options.py \
     pretrip_route_note_reviewed_assumptions.py \
+    pretrip_segment_policy.py \
     pretrip_spatial_imprint_export.py \
+    pretrip_terrain_summary.py \
+    pretrip_weather_daylight.py \
     pretrip_workspace_edit.py \
     pretrip_workspace_project.py \
     provider_context.py \
@@ -111,22 +144,42 @@ COPY \
     runtime_artifact_resolution.py \
     runtime_debug_log.py \
     runtime_debug_models.py \
+    scout_agent_debug_projection.py \
+    scout_agent_kb.py \
     safety_models.py \
     safety_state_machine.py \
     scout_agent_models.py \
     scout_agent_tools.py \
     scout_agent_trace.py \
+    scout_companion_match_admin.py \
     scout_companion_match_models.py \
     scout_energy_baseline.py \
+    scout_energy_field_cue.py \
     scout_energy_models.py \
+    scout_energy_reserve.py \
+    scout_energy_reserve_monitor.py \
     scout_hardware_readiness_live_probe.py \
+    scout_map_perception_tool.py \
+    scout_mobile_handoff.py \
+    scout_risk_score_tool.py \
+    scout_terrain_score_tool.py \
+    scout_wearable_adapters.py \
+    scout_wearable_admin.py \
+    scout_wearable_daily_home.py \
+    scout_wearable_live_frames.py \
+    scout_wearable_provider_transport.py \
+    scout_wearable_raw_importers.py \
+    scout_wearable_validator.py \
+    scout_workspace_search_tools.py \
+    skill_registry.py \
+    skill_registry_models.py \
+    spatial_imprint_debug_projection.py \
     spatial_imprint_models.py \
+    spatial_imprint_store.py \
     voice_cue_models.py \
     ./
 
-# Keep the preview admin image aligned with the root Python module graph.
-COPY *.py ./
-
+COPY tools/pydantic_ai_cloud_latency_benchmark.py ./tools/
 COPY tools/scout_agent_tool_manifests/ ./tools/scout_agent_tool_manifests/
 
 COPY docs/admin/phase1-after-action.html ./docs/admin/

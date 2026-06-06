@@ -11,11 +11,22 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from admin_api import create_admin_router
-from assistant_api import create_assistant_provider_from_env, create_assistant_provider_status
-from assistant_models import AssistantSourceRef, ScoutAssistantQuery, ScoutAssistantResponse
+from assistant_api import (
+    answer_assistant_query_safely,
+    create_assistant_provider_from_env,
+    create_assistant_provider_status,
+)
+from assistant_context import (
+    assistant_source_refs_from_context,
+    create_assistant_context_resolver,
+    query_source_refs,
+)
+from assistant_models import AssistantSourceRef, AssistantSurface, ScoutAssistantQuery, ScoutAssistantResponse
+from assistant_skill_router import augment_pretrip_sources_with_local_evidence_search
 from debug_api import create_debug_page_router, create_debug_router
 from hardware_readiness_api import create_hardware_readiness_router
 from ingress_observer_supervisor import IngressObserverSupervisor
+from pretrip_assistant_context import build_pretrip_assistant_context
 from runtime_debug_log import FileRuntimeDebugEventLog
 
 
@@ -49,6 +60,7 @@ def create_phase4_admin_runtime_app(
     provider = create_assistant_provider_from_env(env)
     provider_status = create_assistant_provider_status(provider=provider, environ=env)
     ingress_observer_supervisor = IngressObserverSupervisor.from_env(env)
+    assistant_context_resolver = create_assistant_context_resolver()
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
@@ -209,7 +221,15 @@ def create_phase4_admin_runtime_app(
 
         @app.post("/assistant/query")
         def assistant_query(query: ScoutAssistantQuery) -> ScoutAssistantResponse:
-            return provider.answer(query, sources=_assistant_sources(query))
+            return answer_assistant_query_safely(
+                provider,
+                query,
+                sources=_assistant_sources(
+                    query,
+                    pretrip_workspace_root=workspace_root,
+                    fallback_resolver=assistant_context_resolver,
+                ),
+            )
 
     return app
 
@@ -257,37 +277,48 @@ def _runtime_boundaries(
     }
 
 
-def _assistant_sources(query: ScoutAssistantQuery) -> list[AssistantSourceRef]:
-    refs: list[AssistantSourceRef] = []
-    if query.project_id:
-        refs.append(
-            AssistantSourceRef(
-                source_id=query.project_id,
-                source_path=(
-                    "tests/fixtures/pretrip/projects/"
-                    f"{query.project_id}/project.json"
-                ),
-                evidence_type="pretrip_project",
-                selected=True,
+def _assistant_sources(
+    query: ScoutAssistantQuery,
+    *,
+    pretrip_workspace_root: Path | None = None,
+    fallback_resolver=None,
+) -> list[AssistantSourceRef]:
+    if query.surface == AssistantSurface.PRETRIP:
+        project_id = query.project_id or query.context_ref
+        if project_id:
+            project_root = _assistant_pretrip_project_root(
+                pretrip_workspace_root,
+                project_id,
             )
-        )
-    if query.context_ref and query.context_ref != query.project_id:
-        refs.append(
-            AssistantSourceRef(
-                source_id=query.context_ref,
-                evidence_type="assistant_context_ref",
-                selected=True,
-            )
-        )
-    if query.selected_artifact_id:
-        refs.append(
-            AssistantSourceRef(
-                source_id=query.selected_artifact_id,
-                evidence_type="admin_artifact",
-                selected=True,
-            )
-        )
-    return refs
+            try:
+                context = build_pretrip_assistant_context(
+                    project_id,
+                    project_root=project_root,
+                    selected_source_id=query.selected_artifact_id,
+                )
+                sources = assistant_source_refs_from_context(context, query=query)
+                return augment_pretrip_sources_with_local_evidence_search(
+                    query,
+                    sources=sources,
+                    project_root=project_root,
+                )
+            except (FileNotFoundError, KeyError, ModuleNotFoundError, ValueError):
+                pass
+    if callable(fallback_resolver):
+        return fallback_resolver(query)
+    return query_source_refs(query)
+
+
+def _assistant_pretrip_project_root(
+    pretrip_workspace_root: Path | None,
+    project_id: str,
+) -> Path | None:
+    if pretrip_workspace_root is None:
+        return None
+    candidate = Path(pretrip_workspace_root).expanduser() / project_id
+    if (candidate / "project.json").exists():
+        return candidate
+    return None
 
 
 def _admin_auth_config(env: Mapping[str, str]) -> dict[str, Any]:
