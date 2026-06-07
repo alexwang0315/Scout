@@ -1499,15 +1499,12 @@ def _workflow_eval_case_from_question_item(
                 "weather": ("scout.context.weather_window",),
             },
             expected_missing_fields_by_source={
-                WEATHER_WINDOW_TOOL_ID: ("provider", "ttl_s"),
+                WEATHER_WINDOW_TOOL_ID: ("provider", "ttl_s", "route_weather_package"),
             },
-            expected_tool_registry_missing_fields_by_tool={
-                WEATHER_WINDOW_TOOL_ID: ("provider", "ttl_s"),
-            },
-            expected_full_workflow_answerability="missing_evidence",
+            expected_full_workflow_answerability="partial_evidence_with_missing_context",
             expected_full_workflow_source_tool_ids=(WEATHER_WINDOW_TOOL_ID,),
             expected_full_workflow_missing_fields_by_tool={
-                WEATHER_WINDOW_TOOL_ID: ("provider", "ttl_s"),
+                WEATHER_WINDOW_TOOL_ID: ("provider", "ttl_s", "route_weather_package"),
             },
             expected_full_workflow_step_ids=(
                 "context_registry_and_tool_plan",
@@ -1517,7 +1514,7 @@ def _workflow_eval_case_from_question_item(
             expected_limitation_fragments=(f"resolved_by={PRETRIP_TOOL_PLANNER_SKILL_ID}",),
             expected_answer_fragments=(
                 "registry planner fallback",
-                "A field conclusion should not be inferred",
+                "weather_placeholder_only",
                 "provider",
                 "ttl_s",
             ),

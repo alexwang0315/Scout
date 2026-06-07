@@ -704,7 +704,7 @@ def test_pydantic_ai_prompt_includes_selected_admin_evidence_from_context_summar
     assert '"reason": "Checkpoint cp_01 reached within 0.0m."' in prompt
 
 
-def test_pydantic_ai_prompt_includes_router_tool_plan_missing_evidence_contract():
+def test_pydantic_ai_prompt_includes_router_tool_plan_partial_weather_result():
     runner = FakeRunner("Weather answer must report missing provider evidence.")
     provider = PydanticAIAssistantProvider(runner=runner)
 
@@ -725,8 +725,8 @@ def test_pydantic_ai_prompt_includes_router_tool_plan_missing_evidence_contract(
                     "selected_tools": [
                         {
                             "tool_id": WEATHER_WINDOW_TOOL_ID,
-                            "status": "contract_only_missing_evidence",
-                            "missing_fields": ["provider", "ttl_s"],
+                            "status": "ready_to_execute",
+                            "missing_fields": [],
                         }
                     ],
                     "read_only": True,
@@ -735,16 +735,21 @@ def test_pydantic_ai_prompt_includes_router_tool_plan_missing_evidence_contract(
             ),
             AssistantSourceRef(
                 source_id=WEATHER_WINDOW_TOOL_ID,
-                source_path="scout_ai_tool_planner.plan_scout_ai_tools",
-                evidence_type="assistant_registry_tool_contract_gap",
+                source_path="scout_ai_tool_executor.execute_scout_ai_tool",
+                evidence_type="assistant_registry_tool_result",
                 selected=True,
                 context_summary={
                     "resolver": PRETRIP_TOOL_PLANNER_SKILL_ID,
                     "tool_id": WEATHER_WINDOW_TOOL_ID,
-                    "status": "contract_only_missing_evidence",
-                    "implementation_status": "new_agent_tool_needed",
-                    "missing_fields": ["provider", "ttl_s"],
-                    "implementation_gap": "No complete Scout AI weather-layer parser/assessor yet.",
+                    "status": "completed",
+                    "latest": {
+                        "answerability": "weather_placeholder_only",
+                        "missing_fields": [
+                            "provider",
+                            "ttl_s",
+                            "route_weather_package",
+                        ],
+                    },
                     "read_only": True,
                     "runtime_safety_truth": False,
                 },
@@ -760,6 +765,7 @@ def test_pydantic_ai_prompt_includes_router_tool_plan_missing_evidence_contract(
     assert '"missing_evidence_fields_by_source"' in prompt
     assert '"provider"' in prompt
     assert '"ttl_s"' in prompt
+    assert '"route_weather_package"' in prompt
     assert "state the missing evidence instead of inferring it" in prompt
     assert "must not replace missing tool evidence with guesses" in prompt
     assert "remote_outbound_send_allowed" in prompt

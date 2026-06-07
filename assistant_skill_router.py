@@ -22,6 +22,7 @@ from scout_ai_tool_planner import (
     ScoutAiToolPlanItemStatus,
     plan_scout_ai_tools,
 )
+from scout_weather_window_tool import WEATHER_WINDOW_TOOL_ID
 
 
 PRETRIP_PLACE_TO_CP_SKILL_ID = "assistant_skill.pretrip.place_to_cp.v0"
@@ -469,7 +470,12 @@ def _has_completed_pretrip_registry_tool_source(
             continue
         status = summary.get("status")
         latest = summary.get("latest") if isinstance(summary.get("latest"), dict) else {}
-        if status == "completed" or latest.get("status") == "completed":
+        missing_fields = latest.get("missing_fields")
+        has_missing_fields = isinstance(missing_fields, list) and bool(missing_fields)
+        completed = status == "completed" or latest.get("status") == "completed"
+        if completed and source.source_id != WEATHER_WINDOW_TOOL_ID:
+            return True
+        if completed and not has_missing_fields:
             return True
     return False
 
@@ -1101,6 +1107,12 @@ def _tool_source_fallback_line(source: AssistantSourceRef) -> str | None:
     result_count = _result_count(latest)
     top_hint = _top_payload_hint(latest)
     parts = [f"{label}: status={status}", f"result_count={result_count}"]
+    latest_missing_fields = latest.get("missing_fields")
+    if isinstance(latest_missing_fields, list) and latest_missing_fields:
+        parts.append(
+            "missing_fields="
+            + ",".join(str(field) for field in latest_missing_fields)
+        )
     if top_hint:
         parts.append(f"top={top_hint}")
     return ", ".join(parts)
@@ -1125,6 +1137,12 @@ def _payload_preview(payload: dict[str, Any]) -> dict[str, Any]:
         "query",
         "result_count",
         "searched_record_count",
+        "answerability",
+        "source_status",
+        "missing_fields",
+        "risk_summary",
+        "weather_window",
+        "matched_segment_count",
         "status",
     ):
         if payload.get(key) is not None:
@@ -1148,6 +1166,10 @@ def _top_payload_hint(payload: dict[str, Any]) -> str | None:
                     for part in (
                         first.get("label"),
                         first.get("title"),
+                        first.get("segment_id"),
+                        first.get("risk_level"),
+                        first.get("weather_risk"),
+                        first.get("final_risk"),
                         first.get("risk_bucket"),
                         first.get("score"),
                         first.get("cp"),

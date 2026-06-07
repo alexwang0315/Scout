@@ -19,6 +19,7 @@ from scout_ins_dr_trace_tool import INS_DR_TRACE_TOOL_ID
 from scout_map_perception_tool import MAP_PERCEPTION_TOOL_ID
 from scout_risk_score_tool import RISK_SCORE_TOOL_ID
 from scout_terrain_score_tool import TERRAIN_SCORE_TOOL_ID
+from scout_weather_window_tool import WEATHER_WINDOW_TOOL_ID
 from scout_workspace_search_tools import (
     MAJOR_POINT_TOOL_ID,
     ROUTE_STRUCTURE_TOOL_ID,
@@ -29,7 +30,6 @@ from scout_workspace_search_tools import (
 ARTIFACT_KIND = "scout_ai_tool_plan"
 ARTIFACT_VERSION = "scout_ai_tool_plan.v0"
 
-WEATHER_WINDOW_TOOL_ID = "scout.ai.weather_window.assess.v0"
 LIVE_NAVIGATION_STATE_TOOL_ID = "scout.ai.live_navigation_state.assess.v0"
 SAFETY_BOUNDARY_TOOL_ID = "scout.ai.safety_boundary.explain.v0"
 

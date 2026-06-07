@@ -16,6 +16,7 @@ from scout_safety_boundary_tool import SAFETY_BOUNDARY_TOOL_ID
 from scout_live_navigation_state_tool import LIVE_NAVIGATION_STATE_TOOL_ID
 from scout_ins_dr_trace_tool import INS_DR_TRACE_TOOL_ID
 from scout_energy_vitals_tool import ENERGY_VITALS_TOOL_ID
+from scout_weather_window_tool import WEATHER_WINDOW_TOOL_ID
 
 
 EXECUTABLE_TOOL_IDS = set(EXECUTABLE_TOOL_ALIASES)
@@ -101,6 +102,8 @@ def execute_scout_ai_tool(request: ScoutAiToolRequest | dict[str, Any]) -> Scout
         implementation_status=contract.implementation_status,
         output_artifact_kind=contract.output_artifact_kind,
         payload={"artifact_kind": contract.output_artifact_kind, **payload},
+        missing_fields=_completed_missing_fields(canonical_tool_id, payload),
+        warnings=_completed_warnings(canonical_tool_id, payload),
         sources=[_contract_source(canonical_tool_id), *_source_report_refs(payload)],
     )
 
@@ -222,6 +225,24 @@ def _execute_ready_current_tool(tool_id: str, arguments: dict[str, Any]) -> dict
             max_interpolation_gap_s=_float_or_none(
                 arguments.get("max_interpolation_gap_s")
             ),
+            limit=limit,
+        )
+
+    if tool_id == WEATHER_WINDOW_TOOL_ID:
+        from scout_weather_window_tool import assess_scout_weather_window
+
+        return assess_scout_weather_window(
+            project_root,
+            query=query,
+            weather_evidence_path=_str_or_none(arguments.get("weather_evidence_path")),
+            route_weather_package_path=_str_or_none(
+                arguments.get("route_weather_package_path")
+            ),
+            valid_from=_str_or_none(arguments.get("valid_from")),
+            valid_to=_str_or_none(arguments.get("valid_to")),
+            segment=_str_or_none(arguments.get("segment")),
+            include_segments=_bool_or_none(arguments.get("include_segments")),
+            stale_after_hours=_float_or_none(arguments.get("stale_after_hours")),
             limit=limit,
         )
 
@@ -364,6 +385,24 @@ def _source_report_refs(payload: dict[str, Any]) -> list[dict[str, Any]]:
                 }
             )
     return refs
+
+
+def _completed_missing_fields(tool_id: str, payload: dict[str, Any]) -> list[str]:
+    if tool_id != WEATHER_WINDOW_TOOL_ID:
+        return []
+    value = payload.get("missing_fields")
+    if isinstance(value, list):
+        return [str(item) for item in value if str(item).strip()]
+    return []
+
+
+def _completed_warnings(tool_id: str, payload: dict[str, Any]) -> list[str]:
+    if tool_id != WEATHER_WINDOW_TOOL_ID:
+        return []
+    value = payload.get("warnings")
+    if isinstance(value, list):
+        return [str(item) for item in value if str(item).strip()]
+    return []
 
 
 def _list_arg(arguments: dict[str, Any], key: str) -> list[str] | None:

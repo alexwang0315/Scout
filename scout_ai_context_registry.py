@@ -17,6 +17,7 @@ from scout_ins_dr_trace_tool import INS_DR_TRACE_TOOL_ID
 from scout_map_perception_tool import MAP_PERCEPTION_TOOL_ID
 from scout_risk_score_tool import RISK_SCORE_TOOL_ID
 from scout_terrain_score_tool import TERRAIN_SCORE_TOOL_ID
+from scout_weather_window_tool import FRESH_WEATHER_FIELDS, WEATHER_WINDOW_TOOL_ID
 from scout_workspace_search_tools import (
     EVIDENCE_FULLTEXT_TOOL_ID,
     MAJOR_POINT_TOOL_ID,
@@ -27,7 +28,6 @@ from scout_workspace_search_tools import (
 
 ARTIFACT_KIND = "scout_ai_context_registry"
 ARTIFACT_VERSION = "scout_ai_context_registry.v0"
-WEATHER_WINDOW_TOOL_ID = "scout.ai.weather_window.assess.v0"
 
 
 class ScoutAiContextSourceStatus(StrEnum):
@@ -137,17 +137,14 @@ def _entry_from_spec(
             missing_paths.append(value)
 
     minimum_existing = int(spec.get("minimum_existing", 1))
-    if len(source_paths) >= minimum_existing and not _contract_missing_fields(
-        spec,
-        contracts,
-    ):
+    missing_fields = _missing_fields_for_spec(spec, contracts)
+    if len(source_paths) >= minimum_existing and not missing_fields:
         status = ScoutAiContextSourceStatus.AVAILABLE
     elif source_paths:
         status = ScoutAiContextSourceStatus.PARTIAL
     else:
         status = ScoutAiContextSourceStatus.MISSING
 
-    missing_fields = _missing_fields_for_spec(spec, contracts)
     if status == ScoutAiContextSourceStatus.MISSING:
         missing_fields = [*missing_fields, *spec.get("missing_when_absent", [])]
 
@@ -273,6 +270,7 @@ def _source_specs() -> list[dict[str, Any]]:
             "count_keys": ["weather_daylight_evidence_count"],
             "tool_ids": [WEATHER_WINDOW_TOOL_ID],
             "evidence_types": ["weather_daylight_candidate"],
+            "missing_fields": list(FRESH_WEATHER_FIELDS),
             "limitations": [
                 "Fresh provider, forecast issue time, and TTL evidence are required before weather answers.",
             ],
