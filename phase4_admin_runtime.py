@@ -13,10 +13,12 @@ from fastapi.responses import JSONResponse
 from admin_api import create_admin_router
 from assistant_api import (
     answer_assistant_query_safely,
+    create_assistant_context_registry_status,
     create_assistant_provider_from_env,
     create_assistant_provider_status,
 )
 from assistant_context import (
+    augment_sources_with_configured_live_navigation_evidence,
     assistant_source_refs_from_context,
     create_assistant_context_resolver,
     query_source_refs,
@@ -58,9 +60,21 @@ def create_phase4_admin_runtime_app(
     hardware_readiness_fixture_path = env.get("SCOUT_HARDWARE_READINESS_FIXTURE_PATH")
     auth_config = _admin_auth_config(env)
     provider = create_assistant_provider_from_env(env)
-    provider_status = create_assistant_provider_status(provider=provider, environ=env)
     ingress_observer_supervisor = IngressObserverSupervisor.from_env(env)
-    assistant_context_resolver = create_assistant_context_resolver()
+    live_navigation_evidence_dir = _optional_path(
+        env.get("SCOUT_SENSORLOGGER_MQTT_EVIDENCE_DIR")
+    )
+    assistant_context_registry_status = create_assistant_context_registry_status(
+        environ=env,
+        pretrip_workspace_root=workspace_root,
+        live_navigation_evidence_dir=live_navigation_evidence_dir,
+    )
+    provider_status = create_assistant_provider_status(provider=provider, environ=env)
+    provider_status["assistant_context_registry"] = assistant_context_registry_status
+    assistant_context_resolver = create_assistant_context_resolver(
+        pretrip_workspace_root=workspace_root,
+        live_navigation_evidence_dir=live_navigation_evidence_dir,
+    )
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
@@ -173,6 +187,7 @@ def create_phase4_admin_runtime_app(
                 ),
             },
             "auth": _admin_auth_status(auth_config),
+            "assistant_context_registry": assistant_context_registry_status,
             "ingress_observers": ingress_observer_supervisor.status(),
             "boundaries": _runtime_boundaries(
                 env,
@@ -205,6 +220,7 @@ def create_phase4_admin_runtime_app(
                 "repo_fixture_write_allowed": False,
             },
             "auth": _admin_auth_status(auth_config),
+            "assistant_context_registry": assistant_context_registry_status,
             "ingress_observers": ingress_observer_supervisor.status(),
             "boundaries": _runtime_boundaries(
                 env,
@@ -227,6 +243,7 @@ def create_phase4_admin_runtime_app(
                 sources=_assistant_sources(
                     query,
                     pretrip_workspace_root=workspace_root,
+                    live_navigation_evidence_dir=live_navigation_evidence_dir,
                     fallback_resolver=assistant_context_resolver,
                 ),
             )
@@ -281,6 +298,7 @@ def _assistant_sources(
     query: ScoutAssistantQuery,
     *,
     pretrip_workspace_root: Path | None = None,
+    live_navigation_evidence_dir: Path | None = None,
     fallback_resolver=None,
 ) -> list[AssistantSourceRef]:
     if query.surface == AssistantSurface.PRETRIP:
@@ -297,6 +315,12 @@ def _assistant_sources(
                     selected_source_id=query.selected_artifact_id,
                 )
                 sources = assistant_source_refs_from_context(context, query=query)
+                sources = augment_sources_with_configured_live_navigation_evidence(
+                    query,
+                    sources=sources,
+                    evidence_dir=live_navigation_evidence_dir,
+                    project_root=project_root,
+                )
                 return augment_pretrip_sources_with_local_evidence_search(
                     query,
                     sources=sources,
@@ -319,6 +343,12 @@ def _assistant_pretrip_project_root(
     if (candidate / "project.json").exists():
         return candidate
     return None
+
+
+def _optional_path(value: str | None) -> Path | None:
+    if value is None or not value.strip():
+        return None
+    return Path(value).expanduser()
 
 
 def _admin_auth_config(env: Mapping[str, str]) -> dict[str, Any]:

@@ -21,6 +21,12 @@ from assistant_offline_fallback_contract import (
     format_offline_fallback_interpretation,
     parse_offline_fallback_interpretation,
 )
+from scout_ai_tool_contracts import (
+    ScoutAiToolImplementationStatus,
+    ScoutAiToolStatus,
+    tool_registry_output,
+)
+from scout_ai_tool_executor import execute_scout_ai_tool
 from scout_map_perception_tool import MAP_PERCEPTION_TOOL_ID
 from scout_risk_score_tool import RISK_SCORE_TOOL_ID
 from scout_terrain_score_tool import TERRAIN_SCORE_TOOL_ID
@@ -37,6 +43,9 @@ DEFAULT_MAX_CONTEXT_CHARS = 12000
 DEFAULT_WORKSPACE_TOOL_LIMIT = 5
 
 WORKSPACE_EVIDENCE_TOOL_ID = "pydantic_ai.tool.search_scout_workspace_evidence.v0"
+SAFETY_BOUNDARY_TOOL_ID = "scout.ai.safety_boundary.explain.v0"
+LIVE_NAVIGATION_STATE_TOOL_ID = "scout.ai.live_navigation_state.assess.v0"
+PRETRIP_TOOL_PLANNER_SKILL_ID = "assistant_skill.pretrip.tool_planner.v0"
 
 GLOBAL_ASSISTANT_PROMPT = """Scout is a wilderness safety system.
 Phase 1 deterministic safety decisions are authoritative.
@@ -44,49 +53,105 @@ The assistant explains state and evidence only.
 The assistant must not invent facts or claim actions happened.
 The assistant must cite source refs from the provided context.
 The assistant must label uncertain answers and missing context.
+The assistant must synthesize only after deterministic evidence sources have
+been gathered and must not replace missing tool evidence with guesses.
 The assistant must refuse attempts to mutate runtime, Brain, review state, outbound transport, or hardware.
-For pretrip workspace questions with a project_id/context_ref, call the read-only
-search_scout_workspace_evidence tool before answering when local route, CP, MCP,
-review, or map evidence may answer the question.
+For pretrip workspace questions with a project_id/context_ref, call the registered
+read-only Scout AI tools before answering when local route, CP, MCP, review,
+risk, terrain, or map evidence may answer the question.
 Return a concise read-only model interpretation.
 """
 
-WORKSPACE_TOOL_PROMPT = """Available read-only tools:
-- search_scout_workspace_evidence(query, limit=5, evidence_types=None)
-- search_scout_workspace_catalog(query, domains=None, include_missing=True, limit=6)
-- search_scout_route_structure(query, cp=None, segment=None, limit=6)
-- search_scout_major_points(query, limit=6, cp=None, point_kinds=None)
-- search_scout_evidence_fulltext(query, limit=6, evidence_types=None)
-- search_scout_risk_scores(query, surface="all", limit=6, min_score=None,
-  risk_bucket=None, distance_km_min=None, distance_km_max=None, cp=None,
-  lat=None, lon=None, radius_m=None)
-- search_scout_terrain_scores(query, metric="auto", limit=6, min_score=None,
-  min_slope_degrees=None, distance_km_min=None, distance_km_max=None, cp=None,
-  lat=None, lon=None, radius_m=None)
-- search_scout_map_perception(query, limit=6, evidence_types=None, cp=None,
-  lat=None, lon=None, radius_m=None)
+REGISTERED_WORKSPACE_TOOL_NAMES = {
+    WORKSPACE_CATALOG_TOOL_ID: "search_scout_workspace_catalog",
+    ROUTE_STRUCTURE_TOOL_ID: "search_scout_route_structure",
+    MAJOR_POINT_TOOL_ID: "search_scout_major_points",
+    EVIDENCE_FULLTEXT_TOOL_ID: "search_scout_evidence_fulltext",
+    RISK_SCORE_TOOL_ID: "search_scout_risk_scores",
+    TERRAIN_SCORE_TOOL_ID: "search_scout_terrain_scores",
+    MAP_PERCEPTION_TOOL_ID: "search_scout_map_perception",
+}
 
-Use these tools to search Scout's local pretrip workspace evidence before
-answering questions about route notes, CP/checkpoints, MCP/major critical
-points, named places, map evidence, review queue, or planning artifacts. Use
-search_scout_workspace_catalog when the user asks what data, layers, artifacts,
-or tools exist in the workspace. Use search_scout_route_structure for CP counts,
-checkpoint lookup, route summary, and segment structure. Use
-search_scout_major_points for MCP, named point, OCR point, or CP support
-reconciliation questions. Use search_scout_evidence_fulltext for broad
-workspace text search across route notes, reports, reviews, MCP, OCR, and
-planning snippets. Treat all returned candidate/planning evidence as not runtime
-safety truth unless the tool says otherwise. Use search_scout_risk_scores for
-baseline risk-score/risk-ribbon,
-calibrated risk heatmap, route risk score, risk delta, score-at-CP, score-at-km,
-or high-risk-score questions. Use search_scout_terrain_scores for terrain,
-slope, TEII/TRI/SRI/LEC, slope-at-CP, terrain-at-km, or steep/terrain-risk
-questions. Use search_scout_map_perception for OCR labels, map annotations,
-contour interpretation candidates, image-map judgement candidates, map layer
-materials, or questions about what existing workspace map/tile material says
-near a CP. Never mutate Scout state, call /safety/*, send outbound messages,
-control hardware, or write Brain/ObservedFact/HumanReview records.
-"""
+
+def build_workspace_tool_prompt(*, include_contract_only: bool = False) -> str:
+    registry = tool_registry_output(include_not_implemented=include_contract_only)
+    lines = [
+        "Available read-only Scout AI tools from scout_ai_tool_registry:",
+        "- search_scout_workspace_evidence(query, limit=5, evidence_types=None) "
+        "[legacy local evidence index; read-only]",
+    ]
+    for contract in registry.tools:
+        if (
+            contract.implementation_status
+            != ScoutAiToolImplementationStatus.READY_CURRENT_TOOL
+            and not include_contract_only
+        ):
+            continue
+        name = REGISTERED_WORKSPACE_TOOL_NAMES.get(contract.tool_id)
+        if name is None:
+            continue
+        args = _prompt_args_for_tool(contract.tool_id)
+        lines.append(
+            f"- {name}({args}) [{contract.tool_id}; "
+            f"{contract.implementation_status.value}]"
+        )
+        lines.append(f"  {contract.description}")
+        if contract.optional_fields:
+            lines.append(f"  optional_fields={', '.join(contract.optional_fields)}")
+    lines.append(
+        "Use these tools to search Scout's local pretrip workspace evidence before "
+        "answering questions about route notes, CP/checkpoints, MCP/major critical "
+        "points, named places, map evidence, review queue, risk scores, terrain, "
+        "or planning artifacts. Treat all returned candidate/planning evidence as "
+        "not runtime safety truth unless the tool says otherwise. Never mutate "
+        "Scout state, call /safety/*, send outbound messages, control hardware, "
+        "or write Brain/ObservedFact/HumanReview records."
+    )
+    return "\n".join(lines)
+
+
+def _prompt_args_for_tool(tool_id: str) -> str:
+    if tool_id == WORKSPACE_CATALOG_TOOL_ID:
+        return "query, domains=None, include_missing=True, limit=6"
+    if tool_id == ROUTE_STRUCTURE_TOOL_ID:
+        return "query, cp=None, segment=None, limit=6"
+    if tool_id == MAJOR_POINT_TOOL_ID:
+        return "query, limit=6, cp=None, point_kinds=None"
+    if tool_id == EVIDENCE_FULLTEXT_TOOL_ID:
+        return "query, limit=6, evidence_types=None"
+    if tool_id == RISK_SCORE_TOOL_ID:
+        return (
+            'query, surface="all", limit=6, min_score=None, risk_bucket=None, '
+            "distance_km_min=None, distance_km_max=None, cp=None, lat=None, "
+            "lon=None, radius_m=None, sort=\"auto\""
+        )
+    if tool_id == TERRAIN_SCORE_TOOL_ID:
+        return (
+            'query, metric="auto", limit=6, min_score=None, '
+            "min_slope_degrees=None, distance_km_min=None, distance_km_max=None, "
+            "cp=None, lat=None, lon=None, radius_m=None, sort=\"auto\""
+        )
+    if tool_id == MAP_PERCEPTION_TOOL_ID:
+        return (
+            'query, limit=6, evidence_types=None, cp=None, lat=None, lon=None, '
+            "radius_m=None, sort=\"auto\""
+        )
+    return "query"
+
+
+def _registered_tool_descriptions() -> dict[str, str]:
+    descriptions: dict[str, str] = {}
+    for contract in tool_registry_output(include_not_implemented=False).tools:
+        if contract.tool_id not in REGISTERED_WORKSPACE_TOOL_NAMES:
+            continue
+        descriptions[contract.tool_id] = (
+            f"{contract.description} Contract id: {contract.tool_id}. "
+            "This tool is read-only and never mutates runtime safety state."
+        )
+    return descriptions
+
+
+WORKSPACE_TOOL_PROMPT = build_workspace_tool_prompt()
 
 MUTATION_INTENT_FRAGMENTS = (
     "ignore previous",
@@ -211,14 +276,12 @@ class ScoutWorkspaceToolContext:
             self.invocations.append(result)
             return result
         try:
-            from scout_workspace_search_tools import search_project_workspace_catalog
-
-            result = search_project_workspace_catalog(
-                project_root,
+            result = self._execute_registered_tool(
+                WORKSPACE_CATALOG_TOOL_ID,
                 query=search_text,
+                limit=bounded_limit,
                 domains=domains,
                 include_missing=include_missing,
-                limit=bounded_limit,
             )
         except Exception as exc:  # Defensive: tool failures must stay read-only.
             result = self._tool_error(
@@ -250,14 +313,12 @@ class ScoutWorkspaceToolContext:
             self.invocations.append(result)
             return result
         try:
-            from scout_workspace_search_tools import search_project_route_structure
-
-            result = search_project_route_structure(
-                project_root,
+            result = self._execute_registered_tool(
+                ROUTE_STRUCTURE_TOOL_ID,
                 query=search_text,
+                limit=bounded_limit,
                 cp=cp,
                 segment=segment,
-                limit=bounded_limit,
             )
         except Exception as exc:  # Defensive: tool failures must stay read-only.
             result = self._tool_error(
@@ -289,10 +350,8 @@ class ScoutWorkspaceToolContext:
             self.invocations.append(result)
             return result
         try:
-            from scout_workspace_search_tools import search_project_major_points
-
-            result = search_project_major_points(
-                project_root,
+            result = self._execute_registered_tool(
+                MAJOR_POINT_TOOL_ID,
                 query=search_text,
                 limit=bounded_limit,
                 cp=cp,
@@ -336,10 +395,8 @@ class ScoutWorkspaceToolContext:
             self.invocations.append(result)
             return result
         try:
-            from scout_workspace_search_tools import search_project_evidence_fulltext
-
-            result = search_project_evidence_fulltext(
-                project_root,
+            result = self._execute_registered_tool(
+                EVIDENCE_FULLTEXT_TOOL_ID,
                 query=search_text,
                 limit=bounded_limit,
                 evidence_types=evidence_types,
@@ -367,6 +424,7 @@ class ScoutWorkspaceToolContext:
         lat: float | None = None,
         lon: float | None = None,
         radius_m: float | None = None,
+        sort: str = "auto",
     ) -> dict[str, object]:
         search_text = str(query or "").strip()
         bounded_limit = _bounded_tool_limit(limit, default_limit=6)
@@ -381,10 +439,8 @@ class ScoutWorkspaceToolContext:
             self.invocations.append(result)
             return result
         try:
-            from scout_risk_score_tool import search_project_risk_scores
-
-            result = search_project_risk_scores(
-                project_root,
+            result = self._execute_registered_tool(
+                RISK_SCORE_TOOL_ID,
                 query=search_text,
                 surface=surface,
                 limit=bounded_limit,
@@ -396,6 +452,7 @@ class ScoutWorkspaceToolContext:
                 lat=lat,
                 lon=lon,
                 radius_m=radius_m,
+                sort=sort,
             )
         except Exception as exc:  # Defensive: tool failures must stay read-only.
             result = self._tool_error(
@@ -420,6 +477,7 @@ class ScoutWorkspaceToolContext:
         lat: float | None = None,
         lon: float | None = None,
         radius_m: float | None = None,
+        sort: str = "auto",
     ) -> dict[str, object]:
         search_text = str(query or "").strip()
         bounded_limit = _bounded_tool_limit(limit, default_limit=6)
@@ -434,10 +492,8 @@ class ScoutWorkspaceToolContext:
             self.invocations.append(result)
             return result
         try:
-            from scout_terrain_score_tool import search_project_terrain_scores
-
-            result = search_project_terrain_scores(
-                project_root,
+            result = self._execute_registered_tool(
+                TERRAIN_SCORE_TOOL_ID,
                 query=search_text,
                 metric=metric,
                 limit=bounded_limit,
@@ -449,6 +505,7 @@ class ScoutWorkspaceToolContext:
                 lat=lat,
                 lon=lon,
                 radius_m=radius_m,
+                sort=sort,
             )
         except Exception as exc:  # Defensive: tool failures must stay read-only.
             result = self._tool_error(
@@ -469,6 +526,7 @@ class ScoutWorkspaceToolContext:
         lat: float | None = None,
         lon: float | None = None,
         radius_m: float | None = None,
+        sort: str = "auto",
     ) -> dict[str, object]:
         search_text = str(query or "").strip()
         bounded_limit = _bounded_tool_limit(limit, default_limit=6)
@@ -483,10 +541,8 @@ class ScoutWorkspaceToolContext:
             self.invocations.append(result)
             return result
         try:
-            from scout_map_perception_tool import search_project_map_perception
-
-            result = search_project_map_perception(
-                project_root,
+            result = self._execute_registered_tool(
+                MAP_PERCEPTION_TOOL_ID,
                 query=search_text,
                 limit=bounded_limit,
                 evidence_types=evidence_types,
@@ -494,6 +550,7 @@ class ScoutWorkspaceToolContext:
                 lat=lat,
                 lon=lon,
                 radius_m=radius_m,
+                sort=sort,
             )
         except Exception as exc:  # Defensive: tool failures must stay read-only.
             result = self._tool_error(
@@ -504,6 +561,48 @@ class ScoutWorkspaceToolContext:
             )
         self.invocations.append(result)
         return result
+
+    def _execute_registered_tool(
+        self,
+        tool_id: str,
+        *,
+        query: str,
+        limit: int,
+        **arguments: object,
+    ) -> dict[str, object]:
+        project_root = self._project_root()
+        if project_root is None:
+            raise RuntimeError("pretrip_workspace_unavailable")
+        request = {
+            "tool_id": tool_id,
+            "arguments": {
+                "project_root": str(project_root),
+                "query": query,
+                "limit": limit,
+                **arguments,
+            },
+        }
+        result = execute_scout_ai_tool(request)
+        if result.status != ScoutAiToolStatus.COMPLETED:
+            if result.errors:
+                detail = result.errors[0]
+            elif result.warnings:
+                detail = result.warnings[0]
+            else:
+                detail = result.status.value
+            raise RuntimeError(detail)
+        payload = dict(result.payload)
+        payload.setdefault("tool_id", result.tool_id)
+        payload.setdefault("status", "completed")
+        payload.setdefault(
+            "boundary",
+            {
+                **result.boundary.model_dump(mode="json"),
+                "offline_only": True,
+                "local_evidence_only": True,
+            },
+        )
+        return payload
 
     def tool_source_ref(self, tool_id: str | None = None) -> AssistantSourceRef | None:
         invocations = [
@@ -780,6 +879,8 @@ def build_workspace_tool_fallback_response(
     sources: list[AssistantSourceRef],
     provider_error_type: str,
 ) -> ScoutAssistantResponse | None:
+    if _has_safety_or_live_planner_evidence(sources):
+        return None
     risk_response = _build_risk_score_tool_fallback_response(
         query,
         sources=sources,
@@ -856,6 +957,19 @@ def build_workspace_tool_fallback_response(
             "No runtime, Brain, review, outbound, or hardware state was changed.",
         ],
     )
+
+
+def _has_safety_or_live_planner_evidence(sources: list[AssistantSourceRef]) -> bool:
+    for source in sources:
+        if source.source_id not in {
+            SAFETY_BOUNDARY_TOOL_ID,
+            LIVE_NAVIGATION_STATE_TOOL_ID,
+        }:
+            continue
+        summary = source.context_summary if isinstance(source.context_summary, dict) else {}
+        if summary.get("resolver") == PRETRIP_TOOL_PLANNER_SKILL_ID:
+            return True
+    return False
 
 
 def _build_risk_score_tool_fallback_response(
@@ -1313,6 +1427,16 @@ class PydanticAIAssistantProvider:
             limitations.append(
                 "Workspace evidence tool was read-only and did not promote candidate evidence to runtime safety truth."
             )
+        registry_tool_source_ids = _registry_tool_source_ids(response_sources)
+        if registry_tool_source_ids:
+            limitations.append(f"registry_tool_source_count={len(registry_tool_source_ids)}")
+            limitations.append(
+                "registry_tool_source_ids="
+                + ",".join(registry_tool_source_ids)
+            )
+            limitations.append(
+                "Registry tool evidence was read-only and did not promote candidate evidence to runtime safety truth."
+            )
         profile = getattr(self.runner, "last_profile", None)
         if profile:
             limitations.append(f"Model profile used: {profile}.")
@@ -1615,6 +1739,7 @@ class PydanticAIEnvRunner:
             OpenAIChatModel(self.model_name, provider=provider),
             system_prompt=f"{GLOBAL_ASSISTANT_PROMPT}\n{WORKSPACE_TOOL_PROMPT}",
         )
+        tool_descriptions = _registered_tool_descriptions()
 
         @agent.tool_plain(
             name="search_scout_workspace_evidence",
@@ -1636,11 +1761,7 @@ class PydanticAIEnvRunner:
 
         @agent.tool_plain(
             name="search_scout_workspace_catalog",
-            description=(
-                "List and search Scout pretrip workspace artifact refs, data "
-                "families, source paths, counts, and missing layers. This tool is "
-                "read-only and never mutates runtime safety state."
-            ),
+            description=tool_descriptions[WORKSPACE_CATALOG_TOOL_ID],
         )
         def search_scout_workspace_catalog(
             query: str,
@@ -1657,11 +1778,7 @@ class PydanticAIEnvRunner:
 
         @agent.tool_plain(
             name="search_scout_route_structure",
-            description=(
-                "Search Scout's route summary, checkpoint candidates, and segment "
-                "candidates. Use for CP counts, CP lookup, route distance, and "
-                "segment structure. This tool is read-only."
-            ),
+            description=tool_descriptions[ROUTE_STRUCTURE_TOOL_ID],
         )
         def search_scout_route_structure(
             query: str,
@@ -1678,11 +1795,7 @@ class PydanticAIEnvRunner:
 
         @agent.tool_plain(
             name="search_scout_major_points",
-            description=(
-                "Search MCP/major critical point candidates, named points, OCR "
-                "labels, and CP support reconciliation. Use for named places such "
-                "as 黑水塘 and questions about which CP a point is near."
-            ),
+            description=tool_descriptions[MAJOR_POINT_TOOL_ID],
         )
         def search_scout_major_points(
             query: str,
@@ -1699,11 +1812,7 @@ class PydanticAIEnvRunner:
 
         @agent.tool_plain(
             name="search_scout_evidence_fulltext",
-            description=(
-                "Run broad full-text search over Scout's local evidence index, "
-                "including route notes, reports, reviews, MCP, OCR, and planning "
-                "snippets. This tool is read-only and source-backed."
-            ),
+            description=tool_descriptions[EVIDENCE_FULLTEXT_TOOL_ID],
         )
         def search_scout_evidence_fulltext(
             query: str,
@@ -1718,11 +1827,7 @@ class PydanticAIEnvRunner:
 
         @agent.tool_plain(
             name="search_scout_risk_scores",
-            description=(
-                "Search Scout's baseline risk score/ribbon and calibrated risk heatmap "
-                "score layers. This tool is read-only and returns bounded candidate "
-                "score summaries with route distance, coordinate, bucket, and deltas."
-            ),
+            description=tool_descriptions[RISK_SCORE_TOOL_ID],
         )
         def search_scout_risk_scores(
             query: str,
@@ -1736,6 +1841,7 @@ class PydanticAIEnvRunner:
             lat: float | None = None,
             lon: float | None = None,
             radius_m: float | None = None,
+            sort: str = "auto",
         ) -> dict[str, object]:
             return tool_context.search_scout_risk_scores(
                 query=query,
@@ -1749,16 +1855,12 @@ class PydanticAIEnvRunner:
                 lat=lat,
                 lon=lon,
                 radius_m=radius_m,
+                sort=sort,
             )
 
         @agent.tool_plain(
             name="search_scout_terrain_scores",
-            description=(
-                "Search Scout's route-aligned terrain/slope score layers, including "
-                "direct slope fields when present and TEII/TRI/SRI/LEC terrain "
-                "dimensions. This tool is read-only and returns bounded candidate "
-                "terrain summaries with route distance and coordinate."
-            ),
+            description=tool_descriptions[TERRAIN_SCORE_TOOL_ID],
         )
         def search_scout_terrain_scores(
             query: str,
@@ -1772,6 +1874,7 @@ class PydanticAIEnvRunner:
             lat: float | None = None,
             lon: float | None = None,
             radius_m: float | None = None,
+            sort: str = "auto",
         ) -> dict[str, object]:
             return tool_context.search_scout_terrain_scores(
                 query=query,
@@ -1785,16 +1888,12 @@ class PydanticAIEnvRunner:
                 lat=lat,
                 lon=lon,
                 radius_m=radius_m,
+                sort=sort,
             )
 
         @agent.tool_plain(
             name="search_scout_map_perception",
-            description=(
-                "Search Scout's existing workspace map/tile perception materials, "
-                "including OCR labels, contour interpretation candidates, named-point "
-                "OCR context, and map layer/source refs. This tool is read-only and "
-                "does not run new OCR or vision inference."
-            ),
+            description=tool_descriptions[MAP_PERCEPTION_TOOL_ID],
         )
         def search_scout_map_perception(
             query: str,
@@ -1804,6 +1903,7 @@ class PydanticAIEnvRunner:
             lat: float | None = None,
             lon: float | None = None,
             radius_m: float | None = None,
+            sort: str = "auto",
         ) -> dict[str, object]:
             return tool_context.search_scout_map_perception(
                 query=query,
@@ -1813,6 +1913,7 @@ class PydanticAIEnvRunner:
                 lat=lat,
                 lon=lon,
                 radius_m=radius_m,
+                sort=sort,
             )
 
         tool_prompt = f"{WORKSPACE_TOOL_PROMPT}\n{prompt}"
@@ -1835,11 +1936,195 @@ def build_assistant_prompt(
         "selected_artifact_id": query.selected_artifact_id,
         "project_id": query.project_id,
         "sources": [source.model_dump(mode="json") for source in sources],
+        "evidence_synthesis_contract": _evidence_synthesis_contract(sources),
     }
     context_json = json.dumps(context, ensure_ascii=False, sort_keys=True)
     if len(context_json) > max_context_chars:
         context_json = f"{context_json[:max_context_chars]}\n[context truncated]"
     return f"{GLOBAL_ASSISTANT_PROMPT}\nContext:\n{context_json}\n"
+
+
+def _evidence_synthesis_contract(
+    sources: list[AssistantSourceRef],
+) -> dict[str, object]:
+    deterministic_sources: list[dict[str, object]] = []
+    completed_tool_result_sources: list[dict[str, object]] = []
+    contract_gap_sources: list[dict[str, object]] = []
+    missing_fields: dict[str, list[str]] = {}
+    context_registry_summary: dict[str, object] | None = None
+    tool_registry_summary: dict[str, object] | None = None
+    for source in sources:
+        summary = source.context_summary if isinstance(source.context_summary, dict) else {}
+        evidence_type = source.evidence_type or ""
+        resolver = summary.get("resolver")
+        source_record = {
+            "source_id": source.source_id,
+            "evidence_type": source.evidence_type,
+            "resolver": resolver,
+            "selected": source.selected,
+            "read_only": summary.get("read_only", True),
+            "runtime_safety_truth": summary.get("runtime_safety_truth", False),
+        }
+        if _is_deterministic_tool_source(source):
+            deterministic_sources.append(source_record)
+        completed_result = _completed_tool_result_summary(source, summary)
+        if completed_result is not None:
+            completed_tool_result_sources.append({**source_record, **completed_result})
+        if source.source_id == "assistant_context.context_registry":
+            context_registry_summary = _source_context_registry_summary(summary)
+        if source.source_id == "assistant_context.tool_registry":
+            tool_registry_summary = _source_tool_registry_summary(summary)
+        source_missing_fields = _source_missing_fields(summary)
+        if evidence_type == "assistant_registry_tool_contract_gap" or source_missing_fields:
+            contract_gap_sources.append(
+                {
+                    **source_record,
+                    "missing_fields": source_missing_fields,
+                    "implementation_gap": summary.get("implementation_gap"),
+                    "status": summary.get("status"),
+                    "implementation_status": summary.get("implementation_status"),
+                }
+            )
+        if source_missing_fields:
+            missing_fields[source.source_id] = source_missing_fields
+    return {
+        "artifact_kind": "assistant_evidence_synthesis_contract",
+        "artifact_version": "assistant_evidence_synthesis_contract.v0",
+        "source_count": len(sources),
+        "deterministic_tool_source_count": len(deterministic_sources),
+        "deterministic_tool_sources": deterministic_sources,
+        "completed_tool_result_sources": completed_tool_result_sources,
+        "contract_gap_sources": contract_gap_sources,
+        "missing_evidence_fields_by_source": missing_fields,
+        "context_registry_summary": context_registry_summary,
+        "tool_registry_summary": tool_registry_summary,
+        "answer_requirements": [
+            "Use deterministic tool/planner sources before freeform model synthesis.",
+            "When completed_tool_result_sources is non-empty, base concrete claims on those completed tool results before any model interpretation.",
+            "Cite source_id values for concrete claims.",
+            "If a contract gap or missing_fields entry is present, state the missing evidence instead of inferring it.",
+            "Treat candidate/pretrip evidence and runtime_safety_truth=false as advisory planning evidence only.",
+            "Keep the answer read-only and include limitations plus safety boundary.",
+        ],
+        "safety_boundary": {
+            "read_only": True,
+            "runtime_safety_truth": False,
+            "live_safety_api_calls_allowed": False,
+            "phase1_safety_mutation_allowed": False,
+            "brain_or_observed_fact_write_allowed": False,
+            "human_review_write_allowed": False,
+            "remote_outbound_send_allowed": False,
+            "hardware_control_allowed": False,
+        },
+    }
+
+
+def _completed_tool_result_summary(
+    source: AssistantSourceRef,
+    summary: dict[str, object],
+) -> dict[str, object] | None:
+    if source.evidence_type != "assistant_registry_tool_result":
+        return None
+    latest = summary.get("latest")
+    if not isinstance(latest, dict) or latest.get("status") != "completed":
+        return None
+    missing_fields = latest.get("missing_fields")
+    if not isinstance(missing_fields, list):
+        missing_fields = []
+    return {
+        "tool_id": str(summary.get("tool_id") or source.source_id),
+        "status": "completed",
+        "answerability": latest.get("answerability"),
+        "missing_fields": [str(field) for field in missing_fields],
+        "output_artifact_kind": latest.get("artifact_kind"),
+    }
+
+
+def _source_tool_registry_summary(summary: dict[str, object]) -> dict[str, object]:
+    keys = (
+        "available",
+        "artifact_kind",
+        "artifact_version",
+        "tool_count",
+        "ready_current_tool_count",
+        "executable_tool_count",
+        "contract_only_tool_count",
+        "implementation_status_counts",
+        "tool_ids_by_status",
+        "missing_evidence_tool_count",
+        "missing_evidence_tool_ids",
+        "missing_evidence_fields_by_tool",
+        "read_only",
+        "runtime_safety_truth",
+    )
+    return {key: summary[key] for key in keys if key in summary}
+
+
+def _source_context_registry_summary(summary: dict[str, object]) -> dict[str, object]:
+    keys = (
+        "artifact_kind",
+        "artifact_version",
+        "project_id",
+        "source_count",
+        "available_source_count",
+        "partial_source_count",
+        "missing_source_count",
+        "source_ids_by_domain",
+        "read_only",
+        "runtime_safety_truth",
+    )
+    compact = {key: summary[key] for key in keys if key in summary}
+    source_rows = summary.get("sources")
+    if isinstance(source_rows, list):
+        compact["sources"] = [
+            {
+                "source_id": row.get("source_id"),
+                "domain": row.get("domain"),
+                "status": row.get("status"),
+                "tool_ids": row.get("tool_ids", []),
+                "missing_fields": row.get("missing_fields", []),
+            }
+            for row in source_rows
+            if isinstance(row, dict)
+        ]
+    return compact
+
+
+def _is_deterministic_tool_source(source: AssistantSourceRef) -> bool:
+    evidence_type = source.evidence_type or ""
+    summary = source.context_summary if isinstance(source.context_summary, dict) else {}
+    resolver = str(summary.get("resolver") or "")
+    return (
+        evidence_type.startswith("assistant_registry_tool")
+        or evidence_type.startswith("assistant_")
+        and "tool" in evidence_type
+        or resolver.startswith("assistant_skill.")
+    )
+
+
+def _source_missing_fields(summary: dict[str, object]) -> list[str]:
+    missing = summary.get("missing_fields")
+    if not isinstance(missing, list):
+        latest = summary.get("latest")
+        if isinstance(latest, dict):
+            missing = latest.get("missing_fields")
+    if not isinstance(missing, list):
+        plan_item = summary.get("plan_item")
+        if isinstance(plan_item, dict):
+            missing = plan_item.get("missing_fields")
+    if not isinstance(missing, list):
+        return []
+    return [str(item) for item in missing if item is not None]
+
+
+def _registry_tool_source_ids(sources: list[AssistantSourceRef]) -> list[str]:
+    return _dedupe_preserving_order(
+        [
+            source.source_id
+            for source in sources
+            if (source.evidence_type or "").startswith("assistant_registry_tool")
+        ]
+    )
 
 
 def _has_mutation_intent(text: str) -> bool:

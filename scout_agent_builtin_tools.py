@@ -96,6 +96,22 @@ def run_builtin_tool(argv: Sequence[str] | None = None) -> tuple[int, dict[str, 
         return _ai_evidence_fulltext(args)
     if args.command == "ai-question-answerability":
         return _ai_question_answerability(args)
+    if args.command == "ai-assistant-workflow-eval":
+        return _ai_assistant_workflow_eval(args)
+    if args.command == "ai-workflow-discovery":
+        return _ai_workflow_discovery(args)
+    if args.command == "ai-evidence-collection":
+        return _ai_evidence_collection(args)
+    if args.command == "ai-answer-synthesis":
+        return _ai_answer_synthesis(args)
+    if args.command == "ai-full-workflow":
+        return _ai_full_workflow(args)
+    if args.command == "ai-context-registry":
+        return _ai_context_registry(args)
+    if args.command == "ai-tool-registry":
+        return _ai_tool_registry(args)
+    if args.command == "ai-tool-run":
+        return _ai_tool_run(args)
     if args.command == "note-append-flight-recorder":
         return _note_append_flight_recorder(args)
     if args.command == "cp-propose-add":
@@ -245,6 +261,38 @@ def _build_parser() -> argparse.ArgumentParser:
     ai_question_parser = subparsers.add_parser("ai-question-answerability")
     ai_question_parser.add_argument("--input", type=Path, required=True)
     ai_question_parser.add_argument("--json", action="store_true")
+
+    ai_workflow_eval_parser = subparsers.add_parser("ai-assistant-workflow-eval")
+    ai_workflow_eval_parser.add_argument("--input", type=Path, required=True)
+    ai_workflow_eval_parser.add_argument("--json", action="store_true")
+
+    ai_workflow_discovery_parser = subparsers.add_parser("ai-workflow-discovery")
+    ai_workflow_discovery_parser.add_argument("--input", type=Path, required=True)
+    ai_workflow_discovery_parser.add_argument("--json", action="store_true")
+
+    ai_evidence_collection_parser = subparsers.add_parser("ai-evidence-collection")
+    ai_evidence_collection_parser.add_argument("--input", type=Path, required=True)
+    ai_evidence_collection_parser.add_argument("--json", action="store_true")
+
+    ai_answer_synthesis_parser = subparsers.add_parser("ai-answer-synthesis")
+    ai_answer_synthesis_parser.add_argument("--input", type=Path, required=True)
+    ai_answer_synthesis_parser.add_argument("--json", action="store_true")
+
+    ai_full_workflow_parser = subparsers.add_parser("ai-full-workflow")
+    ai_full_workflow_parser.add_argument("--input", type=Path, required=True)
+    ai_full_workflow_parser.add_argument("--json", action="store_true")
+
+    ai_context_registry_parser = subparsers.add_parser("ai-context-registry")
+    ai_context_registry_parser.add_argument("--input", type=Path, required=True)
+    ai_context_registry_parser.add_argument("--json", action="store_true")
+
+    ai_tool_registry_parser = subparsers.add_parser("ai-tool-registry")
+    ai_tool_registry_parser.add_argument("--input", type=Path, required=True)
+    ai_tool_registry_parser.add_argument("--json", action="store_true")
+
+    ai_tool_run_parser = subparsers.add_parser("ai-tool-run")
+    ai_tool_run_parser.add_argument("--input", type=Path, required=True)
+    ai_tool_run_parser.add_argument("--json", action="store_true")
 
     note_parser = subparsers.add_parser("note-append-flight-recorder")
     note_parser.add_argument("--input", type=Path, required=True)
@@ -905,6 +953,413 @@ def _ai_question_answerability(args: argparse.Namespace) -> tuple[int, dict[str,
         "boundary": result["boundary"],
         "report": result,
     }
+
+
+def _ai_assistant_workflow_eval(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
+    from scout_ai_assistant_workflow_eval import (
+        DEFAULT_SELECTED_WORKFLOW_CASE_IDS,
+        build_selected_workflow_eval_cases,
+        render_workflow_eval_markdown,
+        run_assistant_workflow_eval,
+    )
+    from scout_ai_question_eval import load_question_corpus
+
+    request = _load_json(args.input)
+    project_root = request.get("project_root") or request.get("trip_root")
+    if not project_root:
+        return 2, _error_payload("ai assistant-workflow-eval requires project_root or trip_root")
+
+    corpus_path = request.get("corpus_path")
+    if corpus_path:
+        questions = load_question_corpus(corpus_path)
+    else:
+        questions = request.get("questions")
+    if not isinstance(questions, list):
+        return 2, _error_payload("ai assistant-workflow-eval requires questions or corpus_path")
+
+    case_ids = _string_list_from_request(
+        request.get("case_ids"),
+        default=DEFAULT_SELECTED_WORKFLOW_CASE_IDS,
+    )
+    project_id = str(request.get("project_id") or Path(str(project_root)).name)
+    case_project_roots = _string_mapping_from_request(request.get("case_project_roots"))
+    case_project_ids = _string_mapping_from_request(request.get("case_project_ids"))
+    limit = int(request.get("limit", 3))
+
+    try:
+        cases = build_selected_workflow_eval_cases(
+            questions,
+            case_ids=tuple(case_ids),
+        )
+        report = run_assistant_workflow_eval(
+            cases,
+            response_resolver=lambda case: _resolve_assistant_workflow_eval_case(
+                case.question,
+                project_root=Path(
+                    _workflow_case_override(
+                        case_project_roots,
+                        case.case_id,
+                        default=str(project_root),
+                    )
+                ),
+                project_id=_workflow_case_override(
+                    case_project_ids,
+                    case.case_id,
+                    default=project_id,
+                ),
+                limit=limit,
+            ),
+        )
+    except Exception as exc:  # noqa: BLE001 - CLI wrapper returns structured failures.
+        return 2, _error_payload(str(exc))
+
+    payload = {
+        "artifact_kind": "scout_ai_assistant_workflow_eval_tool_output",
+        "artifact_version": "scout_ai_assistant_workflow_eval_tool_output.v0",
+        "status": "completed"
+        if report["failed_count"] == 0
+        else "completed_with_failures",
+        "project_id": project_id,
+        "case_ids": case_ids,
+        "case_project_roots_configured": sorted(case_project_roots),
+        "report": report,
+        "markdown": render_workflow_eval_markdown(report),
+        "boundary": {
+            **_closed_boundary(),
+            "read_only": True,
+            "safety_api_called": False,
+            "phase1_l0_l4_state_mutated": False,
+            "outbound_send_performed": False,
+            "hardware_control_performed": False,
+            "workspace_file_write_allowed": False,
+        },
+    }
+    return (0 if report["failed_count"] == 0 else 1), payload
+
+
+def _resolve_assistant_workflow_eval_case(
+    question: str,
+    *,
+    project_root: Path,
+    project_id: str,
+    limit: int,
+):
+    from assistant_api import answer_assistant_query_safely
+    from assistant_context import assistant_source_refs_from_context
+    from assistant_models import AssistantSurface, ScoutAssistantQuery
+    from assistant_skill_router import augment_pretrip_sources_with_local_evidence_search
+    from pretrip_assistant_context import build_pretrip_assistant_context
+
+    query = ScoutAssistantQuery(
+        surface=AssistantSurface.PRETRIP,
+        question=question,
+        project_id=project_id,
+        context_ref=project_id,
+    )
+    try:
+        context = build_pretrip_assistant_context(
+            project_id,
+            project_root=project_root,
+        )
+        sources = assistant_source_refs_from_context(context, query=query)
+    except Exception:  # noqa: BLE001 - eval runner still validates tool-only profiles.
+        sources = []
+    sources = augment_pretrip_sources_with_local_evidence_search(
+        query,
+        sources=sources,
+        project_root=project_root,
+        limit=limit,
+    )
+    return answer_assistant_query_safely(
+        _WorkflowEvalFailingProvider(),
+        query,
+        sources=sources,
+    )
+
+
+class _WorkflowEvalFailingProvider:
+    def answer(self, query, *, sources=None):
+        raise RuntimeError("workflow eval provider intentionally unavailable")
+
+
+def _ai_workflow_discovery(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
+    from scout_ai_workflow_discovery import build_scout_ai_workflow_discovery_plan
+
+    request = _load_json(args.input)
+    project_root = request.get("project_root") or request.get("trip_root")
+    question = request.get("question")
+    if not project_root:
+        return 2, _error_payload("ai workflow-discovery requires project_root or trip_root")
+    if not isinstance(question, str) or not question.strip():
+        return 2, _error_payload("ai workflow-discovery requires non-empty question")
+    try:
+        result = build_scout_ai_workflow_discovery_plan(
+            question=question,
+            project_root=project_root,
+            project_id=request.get("project_id"),
+            surface=str(request.get("surface") or "pretrip"),
+            limit=int(request.get("limit", 6)),
+            include_missing_context_sources=bool(
+                request.get("include_missing_context_sources", True)
+            ),
+            include_not_implemented_tools=bool(
+                request.get("include_not_implemented_tools", True)
+            ),
+        )
+    except Exception as exc:  # noqa: BLE001 - CLI wrapper returns structured failures.
+        return 2, _error_payload(str(exc))
+    payload = result.model_dump(mode="json")
+    return (
+        0,
+        {
+            **payload,
+            "status": "completed",
+            "boundary": {
+                **payload["boundary"],
+                "read_only": True,
+                "safety_api_called": False,
+                "phase1_l0_l4_state_mutated": False,
+                "outbound_send_performed": False,
+                "hardware_control_performed": False,
+                "workspace_file_write_allowed": False,
+                "ready_tools_executed": False,
+                "model_synthesis_performed": False,
+                "raw_payloads_embedded": False,
+            },
+        },
+    )
+
+
+def _ai_evidence_collection(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
+    from scout_ai_evidence_collection import collect_scout_ai_evidence
+
+    request = _load_json(args.input)
+    project_root = request.get("project_root") or request.get("trip_root")
+    question = request.get("question")
+    if not project_root:
+        return 2, _error_payload("ai evidence-collection requires project_root or trip_root")
+    if not isinstance(question, str) or not question.strip():
+        return 2, _error_payload("ai evidence-collection requires non-empty question")
+    try:
+        result = collect_scout_ai_evidence(
+            question=question,
+            project_root=project_root,
+            project_id=request.get("project_id"),
+            surface=str(request.get("surface") or "pretrip"),
+            limit=int(request.get("limit", 6)),
+            include_missing_context_sources=bool(
+                request.get("include_missing_context_sources", True)
+            ),
+            include_not_implemented_tools=bool(
+                request.get("include_not_implemented_tools", True)
+            ),
+            max_result_items_per_tool=int(
+                request.get("max_result_items_per_tool", request.get("limit", 6))
+            ),
+        )
+    except Exception as exc:  # noqa: BLE001 - CLI wrapper returns structured failures.
+        return 2, _error_payload(str(exc))
+    payload = result.model_dump(mode="json")
+    return (
+        0,
+        {
+            **payload,
+            "status": "completed"
+            if payload["failed_tool_count"] == 0
+            else "completed_with_failures",
+            "boundary": {
+                **payload["boundary"],
+                "read_only": True,
+                "safety_api_called": False,
+                "phase1_l0_l4_state_mutated": False,
+                "outbound_send_performed": False,
+                "hardware_control_performed": False,
+                "workspace_file_write_allowed": False,
+                "model_synthesis_performed": False,
+                "raw_payloads_embedded": False,
+            },
+        },
+    )
+
+
+def _ai_answer_synthesis(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
+    from scout_ai_answer_synthesis import (
+        collect_and_synthesize_scout_ai_answer,
+        synthesize_scout_ai_answer_from_evidence,
+    )
+
+    request = _load_json(args.input)
+    try:
+        if isinstance(request.get("evidence_collection"), dict):
+            result = synthesize_scout_ai_answer_from_evidence(
+                request["evidence_collection"]
+            )
+        else:
+            project_root = request.get("project_root") or request.get("trip_root")
+            question = request.get("question")
+            if not project_root:
+                return 2, _error_payload("ai answer-synthesis requires project_root or trip_root")
+            if not isinstance(question, str) or not question.strip():
+                return 2, _error_payload("ai answer-synthesis requires non-empty question")
+            result = collect_and_synthesize_scout_ai_answer(
+                question=question,
+                project_root=project_root,
+                project_id=request.get("project_id"),
+                surface=str(request.get("surface") or "pretrip"),
+                limit=int(request.get("limit", 6)),
+                include_missing_context_sources=bool(
+                    request.get("include_missing_context_sources", True)
+                ),
+                include_not_implemented_tools=bool(
+                    request.get("include_not_implemented_tools", True)
+                ),
+                max_result_items_per_tool=int(
+                    request.get("max_result_items_per_tool", request.get("limit", 6))
+                ),
+            )
+    except Exception as exc:  # noqa: BLE001 - CLI wrapper returns structured failures.
+        return 2, _error_payload(str(exc))
+    payload = result.model_dump(mode="json")
+    return (
+        0,
+        {
+            **payload,
+            "status": "completed",
+            "boundary": {
+                **payload["boundary"],
+                "read_only": True,
+                "safety_api_called": False,
+                "phase1_l0_l4_state_mutated": False,
+                "outbound_send_performed": False,
+                "hardware_control_performed": False,
+                "workspace_file_write_allowed": False,
+                "model_provider_used": False,
+                "model_synthesis_performed": False,
+                "raw_payloads_embedded": False,
+            },
+        },
+    )
+
+
+def _ai_full_workflow(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
+    from scout_ai_full_workflow import (
+        full_workflow_from_answer_synthesis,
+        run_scout_ai_full_workflow,
+    )
+
+    request = _load_json(args.input)
+    try:
+        if isinstance(request.get("answer_synthesis"), dict):
+            result = full_workflow_from_answer_synthesis(request["answer_synthesis"])
+        else:
+            project_root = request.get("project_root") or request.get("trip_root")
+            question = request.get("question")
+            if not project_root:
+                return 2, _error_payload("ai full-workflow requires project_root or trip_root")
+            if not isinstance(question, str) or not question.strip():
+                return 2, _error_payload("ai full-workflow requires non-empty question")
+            result = run_scout_ai_full_workflow(
+                question=question,
+                project_root=project_root,
+                project_id=request.get("project_id"),
+                surface=str(request.get("surface") or "pretrip"),
+                limit=int(request.get("limit", 6)),
+                include_missing_context_sources=bool(
+                    request.get("include_missing_context_sources", True)
+                ),
+                include_not_implemented_tools=bool(
+                    request.get("include_not_implemented_tools", True)
+                ),
+                max_result_items_per_tool=int(
+                    request.get("max_result_items_per_tool", request.get("limit", 6))
+                ),
+            )
+    except Exception as exc:  # noqa: BLE001 - CLI wrapper returns structured failures.
+        return 2, _error_payload(str(exc))
+    payload = result.model_dump(mode="json")
+    return (
+        0,
+        {
+            **payload,
+            "status": "completed"
+            if payload["failed_tool_count"] == 0
+            else "completed_with_failures",
+            "boundary": {
+                **payload["boundary"],
+                "read_only": True,
+                "safety_api_called": False,
+                "phase1_l0_l4_state_mutated": False,
+                "outbound_send_performed": False,
+                "hardware_control_performed": False,
+                "workspace_file_write_allowed": False,
+                "model_provider_used": False,
+                "model_synthesis_performed": False,
+                "raw_payloads_embedded": False,
+            },
+        },
+    )
+
+
+def _ai_context_registry(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
+    from scout_ai_context_registry import discover_scout_ai_context_sources
+
+    request = _load_json(args.input)
+    project_root = request.get("project_root") or request.get("trip_root")
+    if not project_root:
+        return 2, _error_payload("ai context-registry requires project_root or trip_root")
+    try:
+        result = discover_scout_ai_context_sources(
+            project_root,
+            include_missing=bool(request.get("include_missing", True)),
+        )
+    except Exception as exc:  # noqa: BLE001 - CLI wrapper returns structured failures.
+        return 2, _error_payload(str(exc))
+    payload = result.model_dump(mode="json")
+    return (
+        0,
+        {
+            **payload,
+            "status": "completed",
+            "boundary": {
+                **payload["boundary"],
+                "read_only": True,
+                "safety_api_called": False,
+                "phase1_l0_l4_state_mutated": False,
+                "outbound_send_performed": False,
+                "hardware_control_performed": False,
+                "workspace_file_write_allowed": False,
+                "raw_payloads_embedded": False,
+            },
+        },
+    )
+
+
+def _ai_tool_registry(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
+    from scout_ai_tool_contracts import tool_registry_output
+
+    request = _load_json(args.input)
+    tool_ids = request.get("tool_ids")
+    if isinstance(tool_ids, str):
+        tool_ids = [tool_ids]
+    if tool_ids is not None and not isinstance(tool_ids, list):
+        return 2, _error_payload("ai tool-registry tool_ids must be a string or list")
+    try:
+        result = tool_registry_output(
+            include_not_implemented=bool(request.get("include_not_implemented", True)),
+            tool_ids=[str(tool_id) for tool_id in tool_ids] if tool_ids else None,
+        )
+    except Exception as exc:  # noqa: BLE001 - CLI wrapper returns structured failures.
+        return 2, _error_payload(str(exc))
+    return 0, result.model_dump(mode="json")
+
+
+def _ai_tool_run(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
+    from scout_ai_tool_executor import execute_scout_ai_tool
+
+    request = _load_json(args.input)
+    result = execute_scout_ai_tool(request)
+    exit_code = 2 if result.status == "failed" else 0
+    return exit_code, result.model_dump(mode="json")
 
 
 def _kb_build(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
@@ -2597,6 +3052,44 @@ def _optional_int(value: Any) -> int | None:
     if value is None or value == "":
         return None
     return int(value)
+
+
+def _string_list_from_request(
+    value: Any,
+    *,
+    default: tuple[str, ...] = (),
+) -> list[str]:
+    if value is None:
+        return list(default)
+    if isinstance(value, str):
+        return [part.strip() for part in value.split(",") if part.strip()]
+    if isinstance(value, list):
+        return [str(item) for item in value if str(item).strip()]
+    raise ValueError("expected string or list")
+
+
+def _string_mapping_from_request(value: Any) -> dict[str, str]:
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise ValueError("expected mapping")
+    return {
+        str(key): str(item)
+        for key, item in value.items()
+        if str(key).strip() and item is not None and str(item).strip()
+    }
+
+
+def _workflow_case_override(
+    mapping: dict[str, str],
+    case_id: str,
+    *,
+    default: str,
+) -> str:
+    if case_id in mapping:
+        return mapping[case_id]
+    base_case_id = case_id.split("@", 1)[0]
+    return mapping.get(base_case_id, default)
 
 
 def _source_manifest_from_request(request: dict[str, Any]) -> dict[str, Any]:

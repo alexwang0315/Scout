@@ -16,6 +16,11 @@ from assistant_readiness_check import (
     MILESTONE_10_2_PI_PROFILE_STATUS_TOKENS,
     REQUIRED_PATHS,
     RUNBOOK_TOKENS,
+    SCOUT_AI_WORKFLOW_FORBIDDEN_WRITES,
+    SCOUT_AI_WORKFLOW_MANIFEST_EXPECTATIONS,
+    SCOUT_AI_WORKFLOW_METADATA_REQUIREMENTS,
+    SCOUT_AI_WORKFLOW_REQUIRED_PATHS,
+    SCOUT_AI_WORKFLOW_SPEC_TOKENS,
     SPEC_GUARDRAILS,
     build_readiness_check,
 )
@@ -43,6 +48,7 @@ def test_complete_minimal_milestone10_fixture_passes(tmp_path: Path) -> None:
     assert result["checks"]["hardware_readiness_runbook"]["missing"] == []
     assert result["checks"]["assistant_ui_smoke_gate"]["missing"] == []
     assert result["checks"]["browser_smoke_doc"]["missing"] == []
+    assert result["checks"]["scout_ai_workflow_gate"]["missing"] == []
 
 
 @pytest.mark.parametrize(
@@ -108,6 +114,79 @@ def test_current_runbook_covers_required_operational_tokens() -> None:
     result = build_readiness_check(ROOT)
 
     assert result["checks"]["runbook"]["missing"] == []
+
+
+def test_current_server_mount_covers_assistant_opt_in_tokens() -> None:
+    result = build_readiness_check(ROOT)
+
+    assert result["checks"]["server_opt_in_mount"]["missing"] == []
+
+
+def test_current_scout_ai_workflow_gate_covers_required_tokens() -> None:
+    result = build_readiness_check(ROOT)
+
+    assert result["checks"]["scout_ai_workflow_gate"]["missing"] == []
+
+
+def test_missing_scout_ai_workflow_tokens_and_manifest_boundaries_are_reported(
+    tmp_path: Path,
+) -> None:
+    _write_complete_minimal_repo(tmp_path)
+    manifest_path = (
+        tmp_path
+        / "tools/scout_agent_tool_manifests/scout.ai.full_workflow.run.json"
+    )
+    _write(tmp_path / "docs/specs/scout-ai-tool-interface.md", "Scout AI Tool Interface")
+    _write(
+        manifest_path,
+        json.dumps(
+            {
+                "id": "wrong",
+                "mode": "unsafe",
+                "allowed_writes": ["pretrip.workspace"],
+                "forbidden_writes": ["phase1.runtime"],
+                "metadata": {
+                    "read_only": False,
+                    "runtime_safety_truth": True,
+                    "runtime_activation_allowed": True,
+                    "outbound_send_allowed": True,
+                    "hardware_control_allowed": True,
+                    "raw_payloads_embedded": True,
+                    "model_output_is_runtime_truth": True,
+                },
+            }
+        ),
+    )
+
+    result = build_readiness_check(tmp_path)
+
+    assert result["ok"] is False
+    missing = result["checks"]["scout_ai_workflow_gate"]["missing"]
+    assert "scout_ai_workflow_spec_token:Workflow Discovery Plan Tool" in missing
+    assert (
+        "scout_ai_workflow_manifest_id:"
+        "tools/scout_agent_tool_manifests/scout.ai.full_workflow.run.json:"
+        "scout.ai.full_workflow.run"
+    ) in missing
+    assert (
+        "scout_ai_workflow_manifest_mode:"
+        "tools/scout_agent_tool_manifests/scout.ai.full_workflow.run.json:"
+        "local_evidence_query"
+    ) in missing
+    assert (
+        "scout_ai_workflow_manifest_allowed_writes:"
+        "tools/scout_agent_tool_manifests/scout.ai.full_workflow.run.json:[]"
+    ) in missing
+    assert (
+        "scout_ai_workflow_manifest_forbidden_write:"
+        "tools/scout_agent_tool_manifests/scout.ai.full_workflow.run.json:"
+        "live.safety_api"
+    ) in missing
+    assert (
+        "scout_ai_workflow_manifest_metadata:"
+        "tools/scout_agent_tool_manifests/scout.ai.full_workflow.run.json:"
+        "runtime_safety_truth=False"
+    ) in missing
 
 
 def test_missing_milestone_10_2_failover_contract_tokens_are_reported(tmp_path: Path) -> None:
@@ -177,6 +256,9 @@ def _write_complete_minimal_repo(root: Path) -> None:
     for path in REQUIRED_PATHS:
         _write(root / path, _default_content(path))
 
+    for path in SCOUT_AI_WORKFLOW_REQUIRED_PATHS:
+        _write(root / path, _default_content(path))
+
     for path in ASSISTANT_FOUNDATION_PATHS:
         _write(root / path, _default_content(path))
 
@@ -193,10 +275,14 @@ def _write_complete_minimal_repo(root: Path) -> None:
                 "SCOUT_AI_ASSISTANT_CONFIG_PATH",
                 "create_assistant_router",
                 "create_assistant_context_resolver",
+                "_create_server_assistant_context_resolver",
                 "_include_assistant_router",
                 "provider_name = os.getenv('SCOUT_AI_ASSISTANT_PROVIDER', 'mock')",
                 "SCOUT_AI_ASSISTANT_CONFIG_PATH",
-                "app.include_router(create_assistant_router(context_resolver=create_assistant_context_resolver()))",
+                "app.include_router(",
+                "create_assistant_router(",
+                "context_resolver=_create_server_assistant_context_resolver()",
+                "provider_status=create_assistant_provider_status(provider=provider, environ=os.environ)",
             ]
         ),
     )
@@ -212,6 +298,13 @@ def _write_complete_minimal_repo(root: Path) -> None:
         root / "docs/admin/assistant-browser-smoke.md",
         "\n".join(BROWSER_SMOKE_DOC_TOKENS),
     )
+    _write(
+        root / "docs/specs/scout-ai-tool-interface.md",
+        "\n".join(SCOUT_AI_WORKFLOW_SPEC_TOKENS),
+    )
+    for relative_path, expected_id in SCOUT_AI_WORKFLOW_MANIFEST_EXPECTATIONS.items():
+        _write(root / relative_path, json.dumps(_scout_ai_workflow_manifest(expected_id)))
+
     _write(root / "docs/admin/scout-assistant-ui.js", "window.ScoutAssistantUI = {};")
     _append_token_map(root, MILESTONE_10_2_FAILOVER_HARDENING_TOKENS)
     _append_token_map(root, MILESTONE_10_2_PI_PROFILE_STATUS_TOKENS)
@@ -236,6 +329,7 @@ def _assistant_page(surface: str) -> str:
     <p>read-only model interpretation</p>
     <section><h3>Context</h3><ul><li>bounded context</li></ul></section>
     <section><h3>Offline fallback</h3><ul id="assistantOfflineFallbackList"><li>No offline fallback schema returned.</li></ul></section>
+    <section><h3>Workflow</h3><ul id="assistantWorkflowStatusList"><li>Workflow readiness status not loaded.</li></ul></section>
     <section><h3>Limitations</h3><ul><li>No writes.</li></ul></section>
     <section><h3>Sources</h3><ul><li>fixture</li></ul></section>
     <button type="button">Ask read-only assistant</button>
@@ -261,3 +355,13 @@ def _append_token_map(root: Path, token_map: dict[str, tuple[str, ...]]) -> None
         path = root / relative_path
         existing = path.read_text(encoding="utf-8") if path.exists() else ""
         _write(path, "\n".join((existing, *tokens)))
+
+
+def _scout_ai_workflow_manifest(expected_id: str) -> dict[str, object]:
+    return {
+        "id": expected_id,
+        "mode": "local_evidence_query",
+        "allowed_writes": [],
+        "forbidden_writes": list(SCOUT_AI_WORKFLOW_FORBIDDEN_WRITES),
+        "metadata": dict(SCOUT_AI_WORKFLOW_METADATA_REQUIREMENTS),
+    }

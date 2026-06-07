@@ -119,6 +119,70 @@
     ];
   }
 
+  function fullWorkflowSource(payload) {
+    const sources = Array.isArray(payload?.sources) ? payload.sources : [];
+    return sources.find(source => (
+      source?.source_id === "assistant_skill.pretrip.full_workflow.v0"
+      || source?.evidence_type === "assistant_full_workflow_summary"
+    )) || null;
+  }
+
+  function workflowItems(payload) {
+    const source = fullWorkflowSource(payload);
+    const summary = source?.context_summary || null;
+    if (!summary) return [];
+    const items = [
+      `artifact: ${text(summary.artifact_kind)} | answerability: ${text(summary.answerability)}`,
+      `tools: selected=${text(summary.selected_tool_count, "0")} executed=${text(summary.executed_tool_count, "0")} completed=${text(summary.completed_tool_count, "0")} gaps=${text(summary.contract_gap_count, "0")} missing=${text(summary.missing_evidence_count, "0")}`
+    ];
+    (summary.workflow_steps || []).slice(0, 4).forEach(step => {
+      items.push(`step: ${text(step.step_id)} | ${text(step.status)} | ${text(step.artifact_kind)}`);
+    });
+    (summary.sources || []).slice(0, 4).forEach(item => {
+      const missing = Array.isArray(item.missing_fields) && item.missing_fields.length
+        ? ` | missing=${item.missing_fields.join(",")}`
+        : "";
+      items.push(`source: ${text(item.tool_id)} | ${text(item.collection_status)}${missing}`);
+    });
+    (summary.missing_evidence || []).slice(0, 4).forEach(item => {
+      const fields = Array.isArray(item.missing_fields) ? item.missing_fields.join(",") : "none";
+      items.push(`missing: ${text(item.tool_id)} | fields=${fields}`);
+    });
+    const boundary = summary.boundary || {};
+    const policy = summary.workflow_policy || {};
+    items.push(
+      `boundary: runtime_safety_truth=${boundary.runtime_safety_truth === true ? "true" : "false"} model_provider_used=${policy.model_provider_used === true ? "true" : "false"} outbound=${policy.outbound_send_performed === true ? "true" : "false"} hardware=${policy.hardware_control_performed === true ? "true" : "false"}`
+    );
+    return items;
+  }
+
+  function renderWorkflowSummary(payload, options = {}) {
+    const listId = options.listId || "assistantWorkflowList";
+    renderList(listId, workflowItems(payload), "No full workflow summary returned.");
+  }
+
+  function workflowStatusItems(status) {
+    const workflow = status?.assistant_workflow || null;
+    if (!workflow) return [];
+    const items = [
+      `status: ${text(workflow.status)} | workflow_gate_ok=${workflow.workflow_gate_ok === true ? "true" : "false"} | overall_readiness_ok=${workflow.overall_readiness_ok === true ? "true" : "false"}`,
+      `tools: ${text(workflow.workflow_tool_count, "0")} | checked_manifests=${text(workflow.checked_manifest_count, "0")} | missing=${text(workflow.missing_count, "0")}`,
+      `boundary: runtime_safety_truth=${workflow.runtime_safety_truth === true ? "true" : "false"} candidate_evidence_is_runtime_truth=${workflow.candidate_evidence_is_runtime_truth === true ? "true" : "false"} outbound=${workflow.outbound_send_allowed === true ? "true" : "false"} hardware=${workflow.hardware_control_allowed === true ? "true" : "false"}`
+    ];
+    (workflow.workflow_order || []).slice(0, 8).forEach(step => {
+      items.push(`workflow_step: ${text(step)}`);
+    });
+    (workflow.missing || []).slice(0, 4).forEach(item => {
+      items.push(`missing: ${text(item)}`);
+    });
+    return items;
+  }
+
+  function renderWorkflowStatus(status, options = {}) {
+    const listId = options.listId || "assistantWorkflowStatusList";
+    renderList(listId, workflowStatusItems(status), "Workflow readiness status not loaded.");
+  }
+
   function renderOfflineFallback(payload, options = {}) {
     const listId = options.listId || "assistantOfflineFallbackList";
     renderList(listId, offlineFallbackItems(payload), "No offline fallback schema returned.");
@@ -149,6 +213,7 @@
   window.ScoutAssistantUI = {
     bindQuestionControls,
     fetchJson,
+    fullWorkflowSource,
     observabilityItems,
     offlineFallbackItems,
     postJson,
@@ -158,7 +223,11 @@
     renderOfflineFallback,
     renderProviderStatus,
     renderProviderStatusFailure,
+    renderWorkflowSummary,
+    renderWorkflowStatus,
     sourceItems,
-    text
+    text,
+    workflowItems,
+    workflowStatusItems
   };
 }());

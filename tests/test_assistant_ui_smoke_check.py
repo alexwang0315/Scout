@@ -157,6 +157,7 @@ def _page(surface: str) -> str:
     <p>read-only model interpretation</p>
     <section><h3>Context</h3><ul><li>selected context</li></ul></section>
     <section><h3>Offline fallback</h3><ul id="assistantOfflineFallbackList"><li>No offline fallback schema returned.</li></ul></section>
+    <section><h3>Workflow</h3><ul id="assistantWorkflowStatusList"><li>Workflow readiness status not loaded.</li></ul></section>
     <section><h3>Limitations</h3><ul><li>No writes.</li></ul></section>
     <section><h3>Sources</h3><ul><li>fixture</li></ul></section>
     <button type="button">Ask read-only assistant</button>

@@ -191,9 +191,12 @@ SERVER_OPT_IN_MOUNT_TOKENS = (
     "SCOUT_AI_ASSISTANT_CONFIG_PATH",
     "create_assistant_router",
     "create_assistant_context_resolver",
+    "_create_server_assistant_context_resolver",
     "_include_assistant_router",
     "mock",
-    "context_resolver=create_assistant_context_resolver",
+    "app.include_router(",
+    "context_resolver=",
+    "provider_status=create_assistant_provider_status",
 )
 
 RUNBOOK_TOKENS = (
@@ -276,6 +279,90 @@ BROWSER_SMOKE_DOC_TOKENS = (
     "assistant browser smoke gate",
 )
 
+SCOUT_AI_WORKFLOW_REQUIRED_PATHS = (
+    "docs/specs/scout-ai-tool-interface.md",
+    "scout_ai_context_registry.py",
+    "scout_ai_tool_contracts.py",
+    "scout_ai_tool_executor.py",
+    "scout_ai_tool_planner.py",
+    "scout_ai_workflow_discovery.py",
+    "scout_ai_evidence_collection.py",
+    "scout_ai_answer_synthesis.py",
+    "scout_ai_full_workflow.py",
+    "scout_ai_assistant_workflow_eval.py",
+    "tests/test_scout_ai_context_registry.py",
+    "tests/test_scout_ai_tool_contracts.py",
+    "tests/test_scout_ai_tool_planner.py",
+    "tests/test_scout_ai_workflow_discovery.py",
+    "tests/test_scout_ai_evidence_collection.py",
+    "tests/test_scout_ai_answer_synthesis.py",
+    "tests/test_scout_ai_full_workflow.py",
+    "tests/test_scout_ai_assistant_workflow_eval.py",
+    "tools/scout_agent_tool_manifests/scout.ai.context_registry.describe.json",
+    "tools/scout_agent_tool_manifests/scout.ai.tool_registry.describe.json",
+    "tools/scout_agent_tool_manifests/scout.ai.tool.run.json",
+    "tools/scout_agent_tool_manifests/scout.ai.workflow_discovery.plan.json",
+    "tools/scout_agent_tool_manifests/scout.ai.evidence_collection.collect.json",
+    "tools/scout_agent_tool_manifests/scout.ai.answer_synthesis.synthesize.json",
+    "tools/scout_agent_tool_manifests/scout.ai.full_workflow.run.json",
+    "tools/scout_agent_tool_manifests/scout.ai.assistant_workflow_eval.run.json",
+)
+
+SCOUT_AI_WORKFLOW_SPEC_TOKENS = (
+    "Scout AI Tool Interface",
+    "Registry Tool",
+    "Context Registry Tool",
+    "Workflow Discovery Plan Tool",
+    "Evidence Collection Tool",
+    "Answer Synthesis Tool",
+    "Full Workflow Runner",
+    "Assistant Workflow Eval Runner",
+    "scout.ai.context_registry.describe",
+    "scout.ai.tool_registry.describe",
+    "scout.ai.tool.run",
+    "scout.ai.workflow_discovery.plan",
+    "scout.ai.evidence_collection.collect",
+    "scout.ai.answer_synthesis.synthesize",
+    "scout.ai.full_workflow.run",
+    "scout.ai.assistant_workflow_eval.run",
+    "deterministic",
+    "read-only",
+    "runtime_safety_truth",
+    "model_synthesis_performed",
+    "outbound_send_performed",
+    "hardware_control_performed",
+)
+
+SCOUT_AI_WORKFLOW_MANIFEST_EXPECTATIONS: dict[str, str] = {
+    "tools/scout_agent_tool_manifests/scout.ai.context_registry.describe.json": "scout.ai.context_registry.describe",
+    "tools/scout_agent_tool_manifests/scout.ai.tool_registry.describe.json": "scout.ai.tool_registry.describe",
+    "tools/scout_agent_tool_manifests/scout.ai.tool.run.json": "scout.ai.tool.run",
+    "tools/scout_agent_tool_manifests/scout.ai.workflow_discovery.plan.json": "scout.ai.workflow_discovery.plan",
+    "tools/scout_agent_tool_manifests/scout.ai.evidence_collection.collect.json": "scout.ai.evidence_collection.collect",
+    "tools/scout_agent_tool_manifests/scout.ai.answer_synthesis.synthesize.json": "scout.ai.answer_synthesis.synthesize",
+    "tools/scout_agent_tool_manifests/scout.ai.full_workflow.run.json": "scout.ai.full_workflow.run",
+    "tools/scout_agent_tool_manifests/scout.ai.assistant_workflow_eval.run.json": "scout.ai.assistant_workflow_eval.run",
+}
+
+SCOUT_AI_WORKFLOW_FORBIDDEN_WRITES = (
+    "phase1.runtime",
+    "phase2.brain.observed_facts",
+    "live.safety_api",
+    "transport.egress",
+    "hardware.device",
+    "pretrip.workspace",
+)
+
+SCOUT_AI_WORKFLOW_METADATA_REQUIREMENTS: dict[str, bool] = {
+    "read_only": True,
+    "runtime_safety_truth": False,
+    "runtime_activation_allowed": False,
+    "outbound_send_allowed": False,
+    "hardware_control_allowed": False,
+    "raw_payloads_embedded": False,
+    "model_output_is_runtime_truth": False,
+}
+
 
 def build_readiness_check(repo_root: Path | str = REPO_ROOT) -> dict[str, Any]:
     root = Path(repo_root)
@@ -325,6 +412,10 @@ def build_readiness_check(repo_root: Path | str = REPO_ROOT) -> dict[str, Any]:
     browser_smoke_doc = _check_browser_smoke_doc(root)
     checks["browser_smoke_doc"] = browser_smoke_doc
     missing_required.extend(browser_smoke_doc["missing"])
+
+    scout_ai_workflow_gate = _check_scout_ai_workflow_gate(root)
+    checks["scout_ai_workflow_gate"] = scout_ai_workflow_gate
+    missing_required.extend(scout_ai_workflow_gate["missing"])
 
     failed_checks = sorted(name for name, check in checks.items() if not check["ok"])
     missing_required = sorted(set(missing_required))
@@ -493,6 +584,72 @@ def _check_browser_smoke_doc(root: Path) -> dict[str, Any]:
         if token not in source
     ]
     return {"ok": not missing, "missing": missing}
+
+
+def _check_scout_ai_workflow_gate(root: Path) -> dict[str, Any]:
+    path_check = _check_required_paths(root, SCOUT_AI_WORKFLOW_REQUIRED_PATHS)
+    missing = list(path_check["missing"])
+
+    spec_path = root / "docs/specs/scout-ai-tool-interface.md"
+    if spec_path.exists():
+        source = spec_path.read_text(encoding="utf-8")
+        missing.extend(
+            f"scout_ai_workflow_spec_token:{token}"
+            for token in SCOUT_AI_WORKFLOW_SPEC_TOKENS
+            if token not in source
+        )
+
+    checked_manifests: list[str] = []
+    for relative_path, expected_id in SCOUT_AI_WORKFLOW_MANIFEST_EXPECTATIONS.items():
+        manifest_path = root / relative_path
+        if not manifest_path.exists():
+            continue
+
+        checked_manifests.append(relative_path)
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            missing.append(f"scout_ai_workflow_manifest_json:{relative_path}")
+            continue
+
+        if manifest.get("id") != expected_id:
+            missing.append(f"scout_ai_workflow_manifest_id:{relative_path}:{expected_id}")
+        if manifest.get("mode") != "local_evidence_query":
+            missing.append(f"scout_ai_workflow_manifest_mode:{relative_path}:local_evidence_query")
+        if manifest.get("allowed_writes") != []:
+            missing.append(f"scout_ai_workflow_manifest_allowed_writes:{relative_path}:[]")
+
+        forbidden_writes = manifest.get("forbidden_writes")
+        if not isinstance(forbidden_writes, list):
+            missing.append(f"scout_ai_workflow_manifest_forbidden_writes:{relative_path}:list")
+            forbidden_write_values: set[str] = set()
+        else:
+            forbidden_write_values = set(str(value) for value in forbidden_writes)
+
+        missing.extend(
+            f"scout_ai_workflow_manifest_forbidden_write:{relative_path}:{token}"
+            for token in SCOUT_AI_WORKFLOW_FORBIDDEN_WRITES
+            if token not in forbidden_write_values
+        )
+
+        metadata = manifest.get("metadata")
+        if not isinstance(metadata, dict):
+            missing.append(f"scout_ai_workflow_manifest_metadata:{relative_path}:object")
+            metadata = {}
+
+        missing.extend(
+            f"scout_ai_workflow_manifest_metadata:{relative_path}:{key}={expected}"
+            for key, expected in SCOUT_AI_WORKFLOW_METADATA_REQUIREMENTS.items()
+            if metadata.get(key) is not expected
+        )
+
+    return {
+        "ok": not missing,
+        "required_paths": path_check["required"],
+        "present_paths": path_check["present"],
+        "checked_manifests": checked_manifests,
+        "missing": sorted(missing),
+    }
 
 
 def main(argv: list[str] | None = None) -> int:

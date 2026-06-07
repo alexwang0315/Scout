@@ -16,6 +16,9 @@ from assistant_api import (
     create_assistant_provider_status,
     create_assistant_router,
 )
+from assistant_context import create_assistant_context_resolver
+from assistant_models import AssistantSourceRef, AssistantSurface, ScoutAssistantQuery
+from assistant_skill_router import augment_pretrip_sources_with_local_evidence_search
 from incident_store import IncidentStore
 from live_runtime_enablement import (
     LiveRuntimeGate,
@@ -79,6 +82,11 @@ def create_pi_runtime_app(environ: Mapping[str, str] | None = None) -> FastAPI:
     event_bus = env.get("SCOUT_EVENT_BUS", "none")
     runtime_stream_status_enabled = _is_true_like(
         env.get("SCOUT_RUNTIME_STREAM_STATUS_ENABLED")
+    )
+    pretrip_workspace_root = _optional_path_from_env(env, "SCOUT_PRETRIP_WORKSPACE_ROOT")
+    live_navigation_evidence_dir = _optional_path_from_env(
+        env,
+        "SCOUT_SENSORLOGGER_MQTT_EVIDENCE_DIR",
     )
     live_enablement_report = (
         build_live_runtime_enablement_report(env, requested_gates=set(LiveRuntimeGate))
@@ -175,6 +183,10 @@ def create_pi_runtime_app(environ: Mapping[str, str] | None = None) -> FastAPI:
         app.include_router(
             create_assistant_router(
                 provider=provider,
+                context_resolver=_create_pi_assistant_context_resolver(
+                    pretrip_workspace_root=pretrip_workspace_root,
+                    live_navigation_evidence_dir=live_navigation_evidence_dir,
+                ),
                 provider_status=create_assistant_provider_status(
                     provider=provider,
                     environ=dict(env),
@@ -432,6 +444,49 @@ def _path_from_env(env: Mapping[str, str], key: str, default: Path) -> Path:
 def _optional_path_from_env(env: Mapping[str, str], key: str) -> Path | None:
     raw_value = env.get(key)
     return Path(raw_value).expanduser() if raw_value else None
+
+
+def _create_pi_assistant_context_resolver(
+    *,
+    pretrip_workspace_root: Path | None,
+    live_navigation_evidence_dir: Path | None,
+):
+    base_resolver = create_assistant_context_resolver(
+        pretrip_workspace_root=pretrip_workspace_root,
+        live_navigation_evidence_dir=live_navigation_evidence_dir,
+    )
+
+    def resolve(query: ScoutAssistantQuery) -> list[AssistantSourceRef]:
+        sources = base_resolver(query)
+        if query.surface != AssistantSurface.PRETRIP:
+            return sources
+        project_root = _pretrip_project_root(
+            pretrip_workspace_root,
+            query.project_id or query.context_ref,
+        )
+        return augment_pretrip_sources_with_local_evidence_search(
+            query,
+            sources=sources,
+            project_root=project_root,
+        )
+
+    return resolve
+
+
+def _pretrip_project_root(
+    workspace_root: Path | None,
+    project_id: str | None,
+) -> Path | None:
+    if workspace_root is None:
+        return None
+    if (workspace_root / "project.json").exists():
+        return workspace_root
+    if not project_id:
+        return None
+    candidate = workspace_root / project_id
+    if (candidate / "project.json").exists():
+        return candidate
+    return None
 
 
 def _is_true_like(value: str | None) -> bool:

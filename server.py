@@ -22,6 +22,7 @@ from assistant_api import (
     create_assistant_router,
 )
 from assistant_context import (
+    augment_sources_with_configured_live_navigation_evidence,
     assistant_source_refs_from_context,
     create_assistant_context_resolver,
 )
@@ -289,11 +290,20 @@ def _create_server_assistant_context_resolver(
     *,
     debug_event_log: FileRuntimeDebugEventLog | None,
 ):
-    fallback_resolver = create_assistant_context_resolver(debug_event_log=debug_event_log)
     workspace_root = (
         Path(SCOUT_PRETRIP_WORKSPACE_ROOT).expanduser()
         if SCOUT_PRETRIP_WORKSPACE_ROOT
         else None
+    )
+    live_navigation_evidence_dir = (
+        Path(SCOUT_SENSORLOGGER_MQTT_EVIDENCE_DIR).expanduser()
+        if SCOUT_SENSORLOGGER_MQTT_EVIDENCE_DIR
+        else None
+    )
+    fallback_resolver = create_assistant_context_resolver(
+        debug_event_log=debug_event_log,
+        pretrip_workspace_root=workspace_root,
+        live_navigation_evidence_dir=live_navigation_evidence_dir,
     )
 
     def resolve(query: ScoutAssistantQuery):
@@ -308,6 +318,12 @@ def _create_server_assistant_context_resolver(
                         selected_source_id=query.selected_artifact_id,
                     )
                     sources = assistant_source_refs_from_context(context, query=query)
+                    sources = augment_sources_with_configured_live_navigation_evidence(
+                        query,
+                        sources=sources,
+                        evidence_dir=live_navigation_evidence_dir,
+                        project_root=project_root,
+                    )
                     return augment_pretrip_sources_with_local_evidence_search(
                         query,
                         sources=sources,

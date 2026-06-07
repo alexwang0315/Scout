@@ -22,12 +22,19 @@ from assistant_pydantic_provider import (
     PydanticAIEnvRunner,
     RISK_SCORE_TOOL_ID,
     ROUTE_STRUCTURE_TOOL_ID,
+    ScoutWorkspaceToolContext,
     TERRAIN_SCORE_TOOL_ID,
     WORKSPACE_CATALOG_TOOL_ID,
     WORKSPACE_EVIDENCE_TOOL_ID,
+    build_workspace_tool_prompt,
     create_configured_pydantic_runner,
 )
+from assistant_skill_router import (
+    PRETRIP_CONTEXT_REGISTRY_SOURCE_ID,
+    PRETRIP_TOOL_PLANNER_SKILL_ID,
+)
 from scout_agent_kb import write_local_evidence_sqlite_index
+from scout_ai_tool_planner import ENERGY_VITALS_TOOL_ID, WEATHER_WINDOW_TOOL_ID
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -220,6 +227,41 @@ class FakeEvidenceFulltextToolRunner(FakeRunner):
             else None
         )
         return f"{self.output}: top_record={top_record}"
+
+
+def test_workspace_tool_prompt_is_generated_from_registry_contracts():
+    prompt = build_workspace_tool_prompt()
+
+    assert "scout_ai_tool_registry" in prompt
+    assert "search_scout_risk_scores" in prompt
+    assert RISK_SCORE_TOOL_ID in prompt
+    assert "search_scout_terrain_scores" in prompt
+    assert TERRAIN_SCORE_TOOL_ID in prompt
+    assert "search_scout_map_perception" in prompt
+    assert MAP_PERCEPTION_TOOL_ID in prompt
+    assert "scout.ai.weather_window.assess.v0" not in prompt
+    assert "Never mutate Scout state" in prompt
+
+
+def test_workspace_tool_context_runs_registered_tool_executor(tmp_path: Path, monkeypatch):
+    workspace_root = tmp_path / "pretrip-workspaces"
+    shutil.copytree(PROJECT_ROOT, workspace_root / "chilai_nanhua_day1")
+    monkeypatch.setenv("SCOUT_PRETRIP_WORKSPACE_ROOT", str(workspace_root))
+    query = ScoutAssistantQuery(
+        surface="pretrip",
+        question="有多少個 CP?",
+        context_ref="chilai_nanhua_day1",
+        project_id="chilai_nanhua_day1",
+    )
+    context = ScoutWorkspaceToolContext.from_query_and_env(query, sources=[])
+
+    result = context.search_scout_route_structure(query="有多少個 CP?", limit=2)
+
+    assert result["artifact_kind"] == "scout_ai_route_structure_tool_output"
+    assert result["tool_id"] == ROUTE_STRUCTURE_TOOL_ID
+    assert result["status"] == "completed"
+    assert result["summaries"]["checkpoint_count"] == 124
+    assert context.invocations[0]["artifact_kind"] == "scout_ai_route_structure_tool_output"
 
 
 def test_pydantic_ai_provider_is_opt_in_read_only_and_uses_injected_runner():
@@ -660,6 +702,308 @@ def test_pydantic_ai_prompt_includes_selected_admin_evidence_from_context_summar
     assert '"source_id": "cp_01"' in prompt
     assert '"evidence_type": "replay_checkpoint"' in prompt
     assert '"reason": "Checkpoint cp_01 reached within 0.0m."' in prompt
+
+
+def test_pydantic_ai_prompt_includes_router_tool_plan_missing_evidence_contract():
+    runner = FakeRunner("Weather answer must report missing provider evidence.")
+    provider = PydanticAIAssistantProvider(runner=runner)
+
+    response = provider.answer(
+        ScoutAssistantQuery(
+            surface="pretrip",
+            question="明天午後雷雨是否要紮營？",
+            project_id="chilai_nanhua_day1",
+        ),
+        sources=[
+            AssistantSourceRef(
+                source_id=PRETRIP_TOOL_PLANNER_SKILL_ID,
+                source_path="scout_ai_tool_planner.plan_scout_ai_tools",
+                evidence_type="assistant_registry_tool_plan",
+                selected=True,
+                context_summary={
+                    "resolver": PRETRIP_TOOL_PLANNER_SKILL_ID,
+                    "selected_tools": [
+                        {
+                            "tool_id": WEATHER_WINDOW_TOOL_ID,
+                            "status": "contract_only_missing_evidence",
+                            "missing_fields": ["provider", "ttl_s"],
+                        }
+                    ],
+                    "read_only": True,
+                    "runtime_safety_truth": False,
+                },
+            ),
+            AssistantSourceRef(
+                source_id=WEATHER_WINDOW_TOOL_ID,
+                source_path="scout_ai_tool_planner.plan_scout_ai_tools",
+                evidence_type="assistant_registry_tool_contract_gap",
+                selected=True,
+                context_summary={
+                    "resolver": PRETRIP_TOOL_PLANNER_SKILL_ID,
+                    "tool_id": WEATHER_WINDOW_TOOL_ID,
+                    "status": "contract_only_missing_evidence",
+                    "implementation_status": "new_agent_tool_needed",
+                    "missing_fields": ["provider", "ttl_s"],
+                    "implementation_gap": "No complete Scout AI weather-layer parser/assessor yet.",
+                    "read_only": True,
+                    "runtime_safety_truth": False,
+                },
+            ),
+        ],
+    )
+
+    prompt = runner.calls[0]["prompt"]
+    assert '"evidence_synthesis_contract"' in prompt
+    assert '"assistant_evidence_synthesis_contract.v0"' in prompt
+    assert PRETRIP_TOOL_PLANNER_SKILL_ID in prompt
+    assert WEATHER_WINDOW_TOOL_ID in prompt
+    assert '"missing_evidence_fields_by_source"' in prompt
+    assert '"provider"' in prompt
+    assert '"ttl_s"' in prompt
+    assert "state the missing evidence instead of inferring it" in prompt
+    assert "must not replace missing tool evidence with guesses" in prompt
+    assert "remote_outbound_send_allowed" in prompt
+    assert response.sources[1].source_id == WEATHER_WINDOW_TOOL_ID
+    assert response.boundary.safety_mutation_allowed is False
+    assert response.boundary.outbound_send_allowed is False
+
+
+def test_pydantic_ai_prompt_includes_context_registry_summary():
+    runner = FakeRunner("Context registry evidence summarized.")
+    provider = PydanticAIAssistantProvider(runner=runner)
+
+    provider.answer(
+        ScoutAssistantQuery(
+            surface="pretrip",
+            question="這個 workspace 有哪些資料可以讓 Scout AI 查？",
+            project_id="chilai_nanhua_day1",
+        ),
+        sources=[
+            AssistantSourceRef(
+                source_id=PRETRIP_CONTEXT_REGISTRY_SOURCE_ID,
+                source_path="scout_ai_context_registry.discover_scout_ai_context_sources",
+                evidence_type="assistant_context_registry",
+                selected=True,
+                context_summary={
+                    "artifact_kind": "scout_ai_context_registry",
+                    "artifact_version": "scout_ai_context_registry.v0",
+                    "project_id": "chilai_nanhua_day1",
+                    "source_count": 9,
+                    "available_source_count": 6,
+                    "partial_source_count": 1,
+                    "missing_source_count": 2,
+                    "source_ids_by_domain": {
+                        "route": ["scout.context.route_structure"],
+                        "weather": ["scout.context.weather_window"],
+                    },
+                    "sources": [
+                        {
+                            "source_id": "scout.context.route_structure",
+                            "domain": "route",
+                            "status": "available",
+                            "tool_ids": [ROUTE_STRUCTURE_TOOL_ID],
+                            "missing_fields": [],
+                        },
+                        {
+                            "source_id": "scout.context.weather_window",
+                            "domain": "weather",
+                            "status": "partial",
+                            "tool_ids": [WEATHER_WINDOW_TOOL_ID],
+                            "missing_fields": ["provider", "ttl_s"],
+                        },
+                    ],
+                    "read_only": True,
+                    "runtime_safety_truth": False,
+                    "raw_payloads_embedded": False,
+                },
+            )
+        ],
+    )
+
+    prompt = runner.calls[0]["prompt"]
+    assert '"context_registry_summary"' in prompt
+    assert PRETRIP_CONTEXT_REGISTRY_SOURCE_ID in prompt
+    assert '"artifact_kind": "scout_ai_context_registry"' in prompt
+    assert '"scout.context.route_structure"' in prompt
+    assert '"scout.context.weather_window"' in prompt
+    assert '"missing_fields": ["provider", "ttl_s"]' in prompt
+    assert "Use deterministic tool/planner sources before freeform model synthesis" in prompt
+    assert "runtime_safety_truth" in prompt
+
+
+def test_pydantic_ai_prompt_marks_ready_tool_evidence_as_candidate_not_runtime_truth():
+    runner = FakeRunner("Risk and terrain evidence summarized.")
+    provider = PydanticAIAssistantProvider(runner=runner)
+
+    provider.answer(
+        ScoutAssistantQuery(
+            surface="pretrip",
+            question="危險地形在哪些位置？",
+            project_id="chilai_nanhua_day1",
+        ),
+        sources=[
+            AssistantSourceRef(
+                source_id=PRETRIP_TOOL_PLANNER_SKILL_ID,
+                source_path="scout_ai_tool_planner.plan_scout_ai_tools",
+                evidence_type="assistant_registry_tool_plan",
+                selected=True,
+                context_summary={
+                    "resolver": PRETRIP_TOOL_PLANNER_SKILL_ID,
+                    "selected_tools": [
+                        {"tool_id": RISK_SCORE_TOOL_ID, "status": "ready_to_execute"},
+                        {"tool_id": TERRAIN_SCORE_TOOL_ID, "status": "ready_to_execute"},
+                    ],
+                    "read_only": True,
+                    "runtime_safety_truth": False,
+                },
+            ),
+            AssistantSourceRef(
+                source_id=RISK_SCORE_TOOL_ID,
+                source_path="scout_ai_tool_executor.execute_scout_ai_tool",
+                evidence_type="assistant_registry_tool_result",
+                selected=True,
+                context_summary={
+                    "resolver": PRETRIP_TOOL_PLANNER_SKILL_ID,
+                    "tool_id": RISK_SCORE_TOOL_ID,
+                    "status": "completed",
+                    "latest": {
+                        "status": "completed",
+                        "result_count": 2,
+                        "results": [
+                            {
+                                "surface": "baseline",
+                                "score": 79.58,
+                                "risk_bucket": "high",
+                            }
+                        ],
+                    },
+                    "boundary": {
+                        "read_only": True,
+                        "runtime_safety_truth": False,
+                    },
+                    "read_only": True,
+                    "runtime_safety_truth": False,
+                },
+            ),
+            AssistantSourceRef(
+                source_id=TERRAIN_SCORE_TOOL_ID,
+                source_path="scout_ai_tool_executor.execute_scout_ai_tool",
+                evidence_type="assistant_registry_tool_result",
+                selected=True,
+                context_summary={
+                    "resolver": PRETRIP_TOOL_PLANNER_SKILL_ID,
+                    "tool_id": TERRAIN_SCORE_TOOL_ID,
+                    "status": "completed",
+                    "latest": {
+                        "status": "completed",
+                        "result_count": 1,
+                        "results": [{"metric": "slope", "score": 54.0}],
+                    },
+                    "boundary": {
+                        "read_only": True,
+                        "runtime_safety_truth": False,
+                    },
+                    "read_only": True,
+                    "runtime_safety_truth": False,
+                },
+            ),
+        ],
+    )
+
+    prompt = runner.calls[0]["prompt"]
+    assert '"deterministic_tool_source_count": 3' in prompt
+    assert RISK_SCORE_TOOL_ID in prompt
+    assert TERRAIN_SCORE_TOOL_ID in prompt
+    assert '"runtime_safety_truth": false' in prompt
+    assert "Treat candidate/pretrip evidence and runtime_safety_truth=false" in prompt
+    assert "Cite source_id values for concrete claims" in prompt
+    assert "phase1_safety_mutation_allowed" in prompt
+    assert "hardware_control_allowed" in prompt
+
+
+def test_pydantic_ai_prompt_contract_lists_completed_energy_vitals_tool_result():
+    runner = FakeRunner("Energy/vitals evidence summarized.")
+    provider = PydanticAIAssistantProvider(runner=runner)
+
+    response = provider.answer(
+        ScoutAssistantQuery(
+            surface="pretrip",
+            question="最近 2 筆心率是不是持續升高？我很累需要休息嗎?",
+            project_id="energy-window-project",
+        ),
+        sources=[
+            AssistantSourceRef(
+                source_id=PRETRIP_TOOL_PLANNER_SKILL_ID,
+                source_path="scout_ai_tool_planner.plan_scout_ai_tools",
+                evidence_type="assistant_registry_tool_plan",
+                selected=True,
+                context_summary={
+                    "resolver": PRETRIP_TOOL_PLANNER_SKILL_ID,
+                    "selected_tools": [
+                        {"tool_id": ENERGY_VITALS_TOOL_ID, "status": "ready_to_execute"}
+                    ],
+                    "read_only": True,
+                    "runtime_safety_truth": False,
+                },
+            ),
+            AssistantSourceRef(
+                source_id=ENERGY_VITALS_TOOL_ID,
+                source_path="scout_ai_tool_executor.execute_scout_ai_tool",
+                evidence_type="assistant_registry_tool_result",
+                selected=True,
+                context_summary={
+                    "resolver": PRETRIP_TOOL_PLANNER_SKILL_ID,
+                    "tool_id": ENERGY_VITALS_TOOL_ID,
+                    "status": "completed",
+                    "latest": {
+                        "artifact_kind": "scout_ai_energy_vitals_tool_output",
+                        "status": "completed",
+                        "answerability": "energy_vitals_advisory_available",
+                        "missing_fields": [],
+                        "provided_fields": {
+                            "heart_rate_bpm": 130.0,
+                            "reserve_score": 36,
+                            "reserve_band": "rest_suggested",
+                        },
+                        "time_window": {
+                            "heart_rate_trend": {
+                                "trend": "decreasing",
+                                "first": 150.0,
+                                "last": 130.0,
+                                "delta": -20.0,
+                            }
+                        },
+                        "boundary": {
+                            "medical_diagnosis": False,
+                            "runtime_safety_truth": False,
+                            "safety_api_called": False,
+                            "outbound_send_performed": False,
+                        },
+                    },
+                    "boundary": {
+                        "read_only": True,
+                        "runtime_safety_truth": False,
+                    },
+                    "read_only": True,
+                    "runtime_safety_truth": False,
+                },
+            ),
+        ],
+    )
+
+    prompt = runner.calls[0]["prompt"]
+    assert '"completed_tool_result_sources"' in prompt
+    assert ENERGY_VITALS_TOOL_ID in prompt
+    assert '"answerability": "energy_vitals_advisory_available"' in prompt
+    assert '"heart_rate_bpm": 130.0' in prompt
+    assert '"trend": "decreasing"' in prompt
+    assert "base concrete claims on those completed tool results before any model interpretation" in prompt
+    assert "Treat candidate/pretrip evidence and runtime_safety_truth=false" in prompt
+    assert any("registry_tool_source_count=2" in item for item in response.limitations)
+    assert any(f"registry_tool_source_ids={PRETRIP_TOOL_PLANNER_SKILL_ID},{ENERGY_VITALS_TOOL_ID}" in item for item in response.limitations)
+    assert any("Registry tool evidence was read-only" in item for item in response.limitations)
+    assert response.boundary.safety_mutation_allowed is False
+    assert response.boundary.outbound_send_allowed is False
 
 
 def test_pydantic_ai_provider_enforces_context_budget():

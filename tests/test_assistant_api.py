@@ -10,14 +10,24 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from assistant_api import create_assistant_app
+from assistant_api import create_assistant_context_registry_status
 from assistant_api import create_assistant_provider_from_env
 from assistant_api import create_assistant_provider_status
+from assistant_api import create_assistant_workflow_status
 from assistant_context import assistant_source_refs_from_context, create_assistant_context_resolver
-from assistant_models import ScoutAssistantQuery
+from assistant_models import AssistantBoundary, ScoutAssistantQuery, ScoutAssistantResponse
+from assistant_skill_router import (
+    PRETRIP_FULL_WORKFLOW_SOURCE_ID,
+    PRETRIP_TOOL_PLANNER_SKILL_ID,
+    augment_pretrip_sources_with_local_evidence_search,
+)
 from admin_assistant_context import build_admin_assistant_context
 from pretrip_assistant_context import build_pretrip_assistant_context
 from runtime_debug_log import MemoryRuntimeDebugEventLog
 from runtime_debug_models import RuntimeDebugEvent
+from scout_ai_tool_planner import LIVE_NAVIGATION_STATE_TOOL_ID, WEATHER_WINDOW_TOOL_ID
+from scout_risk_score_tool import RISK_SCORE_TOOL_ID
+from scout_terrain_score_tool import TERRAIN_SCORE_TOOL_ID
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -222,8 +232,115 @@ class AssistantApiTests(unittest.TestCase):
         self.assertTrue(payload["model_interpretation"])
         self.assertEqual(payload["provider_class"], "MockAssistantProvider")
         self.assertFalse(payload["token_values_exposed"])
+        workflow = payload["assistant_workflow"]
+        self.assertTrue(workflow["available"])
+        self.assertEqual(workflow["status"], "ready")
+        self.assertTrue(workflow["workflow_gate_ok"])
+        self.assertTrue(workflow["overall_readiness_ok"])
+        self.assertEqual(workflow["missing_count"], 0)
+        self.assertEqual(workflow["missing"], [])
+        self.assertIn("scout.ai.workflow_discovery.plan", workflow["workflow_tool_ids"])
+        self.assertIn("scout.ai.evidence_collection.collect", workflow["workflow_tool_ids"])
+        self.assertIn("scout.ai.answer_synthesis.synthesize", workflow["workflow_tool_ids"])
+        self.assertIn("scout.ai.full_workflow.run", workflow["workflow_tool_ids"])
+        self.assertIn("assistant_workflow_eval_suite", workflow["workflow_order"])
+        self.assertTrue(workflow["deterministic_tools_first"])
+        self.assertTrue(workflow["model_synthesis_after_evidence"])
+        self.assertFalse(workflow["runtime_safety_truth"])
+        self.assertFalse(workflow["candidate_evidence_is_runtime_truth"])
+        self.assertFalse(workflow["live_safety_api_calls_allowed"])
+        self.assertFalse(workflow["phase1_safety_mutation_allowed"])
+        self.assertFalse(workflow["outbound_send_allowed"])
+        self.assertFalse(workflow["hardware_control_allowed"])
+        self.assertFalse(workflow["context_path_values_exposed"])
+        self.assertFalse(workflow["credential_values_exposed"])
+        registry = payload["assistant_context_registry"]
+        self.assertTrue(registry["read_only"])
+        self.assertFalse(registry["runtime_safety_truth"])
+        self.assertFalse(registry["context_path_values_exposed"])
+        self.assertFalse(registry["credential_values_exposed"])
+        tool_registry = registry["tool_registry"]
+        self.assertTrue(tool_registry["available"])
+        self.assertEqual(tool_registry["artifact_kind"], "scout_ai_tool_registry")
+        self.assertGreaterEqual(tool_registry["ready_current_tool_count"], 8)
+        self.assertGreaterEqual(tool_registry["contract_only_tool_count"], 1)
+        self.assertIn("ready_current_tool", tool_registry["implementation_status_counts"])
+        self.assertIn(
+            "scout.ai.weather_window.assess.v0",
+            tool_registry["missing_evidence_fields_by_tool"],
+        )
+        self.assertIn(
+            "provider",
+            tool_registry["missing_evidence_fields_by_tool"][
+                "scout.ai.weather_window.assess.v0"
+            ],
+        )
+        self.assertFalse(tool_registry["runtime_safety_truth"])
+        self.assertFalse(tool_registry["context_path_values_exposed"])
+        self.assertFalse(tool_registry["credential_values_exposed"])
         self.assertNotIn("api_key", json.dumps(payload).lower())
         self.assertNotIn("token-value", json.dumps(payload).lower())
+
+    def test_assistant_workflow_status_reports_readiness_without_path_or_token_values(self):
+        status = create_assistant_workflow_status()
+
+        self.assertTrue(status["available"])
+        self.assertEqual(status["status"], "ready")
+        self.assertTrue(status["workflow_gate_ok"])
+        self.assertTrue(status["overall_readiness_ok"])
+        self.assertEqual(status["missing_count"], 0)
+        self.assertEqual(status["missing"], [])
+        self.assertGreaterEqual(status["workflow_tool_count"], 8)
+        self.assertGreaterEqual(status["checked_manifest_count"], 8)
+        self.assertIn("scout.ai.context_registry.describe", status["workflow_tool_ids"])
+        self.assertIn("scout.ai.assistant_workflow_eval.run", status["workflow_tool_ids"])
+        self.assertTrue(status["read_only"])
+        self.assertTrue(status["deterministic_tools_first"])
+        self.assertTrue(status["model_synthesis_after_evidence"])
+        self.assertFalse(status["runtime_safety_truth"])
+        self.assertFalse(status["candidate_evidence_is_runtime_truth"])
+        self.assertFalse(status["live_safety_api_calls_allowed"])
+        self.assertFalse(status["phase1_safety_mutation_allowed"])
+        self.assertFalse(status["outbound_send_allowed"])
+        self.assertFalse(status["hardware_control_allowed"])
+        self.assertFalse(status["context_path_values_exposed"])
+        self.assertFalse(status["credential_values_exposed"])
+        dumped = json.dumps(status, ensure_ascii=False)
+        self.assertNotIn(str(ROOT), dumped)
+        self.assertNotIn("api_key", dumped.lower())
+        self.assertNotIn("token-value", dumped.lower())
+
+    def test_assistant_context_registry_status_reports_config_without_path_values(self):
+        status = create_assistant_context_registry_status(
+            environ={
+                "SCOUT_PRETRIP_WORKSPACE_ROOT": "/secret/pretrip-root",
+                "SCOUT_SENSORLOGGER_MQTT_EVIDENCE_DIR": "/secret/evidence-dir",
+            }
+        )
+
+        self.assertTrue(status["pretrip_workspace_root_configured"])
+        self.assertTrue(status["live_navigation_evidence_configured"])
+        self.assertEqual(status["live_navigation_evidence_adapter"], "sensorlogger_mqtt_jsonl")
+        self.assertFalse(status["context_path_values_exposed"])
+        self.assertFalse(status["credential_values_exposed"])
+        tool_registry = status["tool_registry"]
+        self.assertTrue(tool_registry["available"])
+        self.assertGreaterEqual(tool_registry["tool_count"], 10)
+        self.assertGreaterEqual(tool_registry["missing_evidence_tool_count"], 1)
+        self.assertIn(
+            "scout.ai.weather_window.assess.v0",
+            tool_registry["missing_evidence_tool_ids"],
+        )
+        self.assertFalse(tool_registry["runtime_safety_truth"])
+        self.assertFalse(tool_registry["context_path_values_exposed"])
+        self.assertFalse(tool_registry["credential_values_exposed"])
+        self.assertFalse(status["live_safety_api_calls_allowed"])
+        self.assertFalse(status["phase1_safety_mutation_allowed"])
+        self.assertFalse(status["outbound_send_allowed"])
+        self.assertFalse(status["hardware_control_allowed"])
+        dumped = json.dumps(status, ensure_ascii=False)
+        self.assertNotIn("/secret/pretrip-root", dumped)
+        self.assertNotIn("/secret/evidence-dir", dumped)
 
     def test_assistant_query_returns_non_authoritative_observability_metadata(self):
         client = TestClient(create_assistant_app())
@@ -248,6 +365,23 @@ class AssistantApiTests(unittest.TestCase):
         self.assertFalse(payload["observability"]["safe_failure"])
         self.assertNotIn("api_key", json.dumps(payload["observability"]).lower())
         self.assertNotIn("token", json.dumps(payload["observability"]).lower())
+        source_ids = {source["source_id"] for source in payload["sources"]}
+        self.assertIn("assistant_context.tool_registry", source_ids)
+        tool_registry_source = _source_by_id(payload, "assistant_context.tool_registry")
+        self.assertEqual(
+            tool_registry_source["evidence_type"],
+            "assistant_context_tool_registry",
+        )
+        tool_registry = tool_registry_source["context_summary"]
+        self.assertTrue(tool_registry["available"])
+        self.assertGreaterEqual(tool_registry["ready_current_tool_count"], 8)
+        self.assertIn(
+            "scout.ai.weather_window.assess.v0",
+            tool_registry["missing_evidence_fields_by_tool"],
+        )
+        self.assertFalse(tool_registry["runtime_safety_truth"])
+        self.assertFalse(tool_registry["context_path_values_exposed"])
+        self.assertFalse(tool_registry["credential_values_exposed"])
 
     def test_provider_failure_is_isolated_as_safe_response(self):
         class FailingProvider:
@@ -271,6 +405,256 @@ class AssistantApiTests(unittest.TestCase):
         self.assertFalse(payload["boundary"]["human_review_mutation_allowed"])
         self.assertTrue(payload["observability"]["safe_failure"])
         self.assertEqual(payload["observability"]["latency_class"], "timeout_or_error")
+
+    def test_provider_failure_uses_router_tool_plan_fallback_for_weather_gap(self):
+        class FailingProvider:
+            def answer(self, query: ScoutAssistantQuery, *, sources=None):
+                raise RuntimeError("provider unavailable")
+
+        client = TestClient(
+            create_assistant_app(
+                provider=FailingProvider(),
+                context_resolver=_pretrip_router_context_resolver(PROJECT_ROOT),
+            )
+        )
+
+        response = client.post(
+            "/assistant/query",
+            json={
+                "surface": "pretrip",
+                "question": "明天午後雷雨是否要紮營？",
+                "project_id": "chilai_nanhua_day1",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertIn("registry planner fallback", payload["answer"])
+        source_ids = {source["source_id"] for source in payload["sources"]}
+        self.assertIn(PRETRIP_TOOL_PLANNER_SKILL_ID, source_ids)
+        self.assertIn(PRETRIP_FULL_WORKFLOW_SOURCE_ID, source_ids)
+        self.assertIn(WEATHER_WINDOW_TOOL_ID, source_ids)
+        workflow_source = _source_by_id(payload, PRETRIP_FULL_WORKFLOW_SOURCE_ID)
+        self.assertEqual(
+            workflow_source["evidence_type"],
+            "assistant_full_workflow_summary",
+        )
+        workflow_summary = workflow_source["context_summary"]
+        self.assertEqual(workflow_summary["artifact_kind"], "scout_ai_full_workflow")
+        self.assertEqual(workflow_summary["answerability"], "missing_evidence")
+        self.assertEqual(workflow_summary["contract_gap_count"], 1)
+        self.assertEqual(workflow_summary["missing_evidence_count"], 1)
+        self.assertFalse(workflow_summary["workflow_policy"]["model_provider_used"])
+        self.assertFalse(workflow_summary["boundary"]["runtime_safety_truth"])
+        weather_source = _source_by_id(payload, WEATHER_WINDOW_TOOL_ID)
+        self.assertEqual(weather_source["evidence_type"], "assistant_registry_tool_contract_gap")
+        weather_summary = weather_source["context_summary"]
+        self.assertEqual(weather_summary["status"], "contract_only_missing_evidence")
+        self.assertIn("provider", weather_summary["missing_fields"])
+        self.assertIn("ttl_s", weather_summary["missing_fields"])
+        self.assertIn(f"resolved_by={PRETRIP_FULL_WORKFLOW_SOURCE_ID}", payload["limitations"])
+        self.assertIn(f"resolved_by={PRETRIP_TOOL_PLANNER_SKILL_ID}", payload["limitations"])
+        self.assertTrue(payload["observability"]["safe_failure"])
+        self.assertFalse(payload["boundary"]["phase1_mutation_allowed"])
+        self.assertFalse(payload["boundary"]["safety_mutation_allowed"])
+        self.assertFalse(payload["boundary"]["outbound_send_allowed"])
+        self.assertFalse(payload["boundary"]["hardware_control_allowed"])
+
+    def test_provider_success_receives_full_workflow_evidence_before_answer(self):
+        class RecordingProvider:
+            def __init__(self):
+                self.sources = []
+
+            def answer(self, query: ScoutAssistantQuery, *, sources=None):
+                self.sources = list(sources or [])
+                return ScoutAssistantResponse(
+                    surface=query.surface,
+                    answer="Provider synthesized from supplied Scout AI evidence.",
+                    sources=self.sources,
+                    boundary=AssistantBoundary(surface=query.surface),
+                    limitations=["successful provider path test"],
+                )
+
+        with TemporaryDirectory() as tmp:
+            workspace_root = Path(tmp) / "pretrip-workspaces"
+            project_root = workspace_root / "chilai_nanhua_day1"
+            shutil.copytree(PROJECT_ROOT, project_root)
+            provider = RecordingProvider()
+            with patch.dict(
+                os.environ,
+                {"SCOUT_PRETRIP_WORKSPACE_ROOT": str(workspace_root)},
+                clear=False,
+            ):
+                client = TestClient(
+                    create_assistant_app(
+                        provider=provider,
+                        context_resolver=lambda query: [],
+                    )
+                )
+                response = client.post(
+                    "/assistant/query",
+                    json={
+                        "surface": "pretrip",
+                        "question": "明天午後雷雨是否要紮營？",
+                        "project_id": "chilai_nanhua_day1",
+                    },
+                )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertGreaterEqual(len(provider.sources), 4)
+        source_ids = {source.source_id for source in provider.sources}
+        self.assertIn("assistant_context.tool_registry", source_ids)
+        self.assertIn(PRETRIP_TOOL_PLANNER_SKILL_ID, source_ids)
+        self.assertIn(PRETRIP_FULL_WORKFLOW_SOURCE_ID, source_ids)
+        self.assertIn(WEATHER_WINDOW_TOOL_ID, source_ids)
+
+        workflow_source = _source_by_id(response.json(), PRETRIP_FULL_WORKFLOW_SOURCE_ID)
+        self.assertEqual(workflow_source["evidence_type"], "assistant_full_workflow_summary")
+        workflow_summary = workflow_source["context_summary"]
+        self.assertEqual(workflow_summary["answerability"], "missing_evidence")
+        self.assertEqual(workflow_summary["contract_gap_count"], 1)
+        self.assertEqual(workflow_summary["missing_evidence_count"], 1)
+        self.assertFalse(workflow_summary["workflow_policy"]["model_provider_used"])
+        self.assertFalse(workflow_summary["boundary"]["runtime_safety_truth"])
+
+        weather_source = _source_by_id(response.json(), WEATHER_WINDOW_TOOL_ID)
+        self.assertEqual(weather_source["evidence_type"], "assistant_registry_tool_contract_gap")
+        self.assertEqual(weather_source["context_summary"]["status"], "contract_only_missing_evidence")
+        self.assertIn("provider", weather_source["context_summary"]["missing_fields"])
+        self.assertIn("ttl_s", weather_source["context_summary"]["missing_fields"])
+        payload = response.json()
+        self.assertFalse(payload["observability"]["safe_failure"])
+        self.assertFalse(payload["boundary"]["phase1_mutation_allowed"])
+        self.assertFalse(payload["boundary"]["safety_mutation_allowed"])
+        self.assertFalse(payload["boundary"]["outbound_send_allowed"])
+        self.assertFalse(payload["boundary"]["hardware_control_allowed"])
+
+    def test_provider_failure_preserves_router_tool_plan_sources_for_risk_and_terrain(self):
+        class FailingProvider:
+            def answer(self, query: ScoutAssistantQuery, *, sources=None):
+                raise RuntimeError("provider unavailable")
+
+        client = TestClient(
+            create_assistant_app(
+                provider=FailingProvider(),
+                context_resolver=_pretrip_router_context_resolver(PROJECT_ROOT),
+            )
+        )
+
+        response = client.post(
+            "/assistant/query",
+            json={
+                "surface": "pretrip",
+                "question": "危險地形在哪些位置？",
+                "project_id": "chilai_nanhua_day1",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertIn("risk score tool fallback", payload["answer"])
+        source_ids = {source["source_id"] for source in payload["sources"]}
+        self.assertIn(PRETRIP_TOOL_PLANNER_SKILL_ID, source_ids)
+        self.assertIn(RISK_SCORE_TOOL_ID, source_ids)
+        self.assertIn(TERRAIN_SCORE_TOOL_ID, source_ids)
+        risk_summary = _source_by_id(payload, RISK_SCORE_TOOL_ID)["context_summary"]
+        terrain_summary = _source_by_id(payload, TERRAIN_SCORE_TOOL_ID)["context_summary"]
+        self.assertEqual(risk_summary["status"], "completed")
+        self.assertGreaterEqual(risk_summary["latest"]["result_count"], 1)
+        self.assertFalse(risk_summary["boundary"]["runtime_safety_truth"])
+        self.assertEqual(terrain_summary["status"], "completed")
+        self.assertFalse(terrain_summary["boundary"]["runtime_safety_truth"])
+        self.assertIn(f"resolved_by={RISK_SCORE_TOOL_ID}", payload["limitations"])
+        self.assertTrue(payload["observability"]["safe_failure"])
+        self.assertFalse(payload["boundary"]["phase1_mutation_allowed"])
+        self.assertFalse(payload["boundary"]["safety_mutation_allowed"])
+        self.assertFalse(payload["boundary"]["outbound_send_allowed"])
+        self.assertFalse(payload["boundary"]["hardware_control_allowed"])
+
+    def test_provider_failure_hydrates_live_navigation_snapshot_from_query(self):
+        class FailingProvider:
+            def answer(self, query: ScoutAssistantQuery, *, sources=None):
+                raise RuntimeError("provider unavailable")
+
+        client = TestClient(
+            create_assistant_app(
+                provider=FailingProvider(),
+                context_resolver=_pretrip_router_context_resolver(PROJECT_ROOT),
+            )
+        )
+
+        response = client.post(
+            "/assistant/query",
+            json={
+                "surface": "pretrip",
+                "question": "哪些風險目前只是候選，不能觸發 Ln？",
+                "project_id": "chilai_nanhua_day1",
+                "live_navigation_snapshot": {
+                    "observed_at": "2026-06-07T08:00:00Z",
+                    "lat": 24.051,
+                    "lon": 121.22,
+                    "elevation_m": 1280.5,
+                    "source": "api_fixture_gnss_ins_dr",
+                    "hdop": 0.8,
+                    "horizontal_accuracy_m": 4.2,
+                    "fix_quality": "valid",
+                    "satellite_count": 8,
+                    "max_cno_dbhz": 42,
+                    "heading_deg": 45,
+                    "course_deg": 44,
+                    "speed_mps": 0.7,
+                    "nearest_route_distance_m": 12.4,
+                    "route_progress_m": 14550.0,
+                    "nearest_cp_id": "cp.042",
+                    "ins_dr_source": "wearable_route_constrained",
+                    "confidence": 0.82,
+                    "uncertainty_m": 6.5,
+                    "last_anchor_at": "2026-06-07T07:59:55Z",
+                    "raw_nmea": "$GPRMC,redacted*00",
+                },
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertIn("registry planner fallback", payload["answer"])
+        source_ids = {source["source_id"] for source in payload["sources"]}
+        self.assertIn("assistant_context.live_navigation_snapshot", source_ids)
+        self.assertIn(LIVE_NAVIGATION_STATE_TOOL_ID, source_ids)
+        live_query_source = _source_by_id(
+            payload,
+            "assistant_context.live_navigation_snapshot",
+        )
+        self.assertEqual(live_query_source["evidence_type"], "live_navigation_snapshot")
+        self.assertNotIn(
+            "raw_nmea",
+            live_query_source["context_summary"]["live_navigation_snapshot"],
+        )
+        live_summary = _source_by_id(payload, LIVE_NAVIGATION_STATE_TOOL_ID)["context_summary"]
+        latest = live_summary["latest"]
+        self.assertEqual(live_summary["hydration"]["status"], "hydrated")
+        self.assertEqual(
+            live_summary["hydration"]["source_id"],
+            "assistant_context.live_navigation_snapshot",
+        )
+        self.assertEqual(latest["answerability"], "snapshot_evidence_available")
+        self.assertEqual(latest["missing_fields"], [])
+        self.assertEqual(latest["provided_fields"]["lat"], 24.051)
+        self.assertEqual(latest["provided_fields"]["lon"], 121.22)
+        self.assertEqual(
+            latest["provided_fields"]["ins_dr_source"],
+            "wearable_route_constrained",
+        )
+        self.assertFalse(latest["boundary"]["live_hardware_read_performed"])
+        self.assertFalse(latest["boundary"]["safety_api_called"])
+        self.assertFalse(latest["boundary"]["phase1_l0_l4_state_mutated"])
+        self.assertFalse(latest["boundary"]["outbound_send_performed"])
+        self.assertIn(f"resolved_by={PRETRIP_TOOL_PLANNER_SKILL_ID}", payload["limitations"])
+        self.assertTrue(payload["observability"]["safe_failure"])
+        self.assertFalse(payload["boundary"]["phase1_mutation_allowed"])
+        self.assertFalse(payload["boundary"]["safety_mutation_allowed"])
+        self.assertFalse(payload["boundary"]["outbound_send_allowed"])
+        self.assertFalse(payload["boundary"]["hardware_control_allowed"])
 
     def test_local_fallback_failure_is_isolated_with_provider_provenance(self):
         from assistant_pydantic_provider import FallbackPydanticAIRunner, PydanticAIAssistantProvider
@@ -353,6 +737,72 @@ class AssistantApiTests(unittest.TestCase):
         self.assertEqual(latest["results"][0]["candidate_id"], "mcp.heishuitang.002")
         self.assertEqual(latest["results"][0]["nearest_cp_candidate_id"], "cp.002")
         self.assertTrue(payload["observability"]["safe_failure"])
+        self.assertFalse(payload["boundary"]["phase1_mutation_allowed"])
+        self.assertFalse(payload["boundary"]["outbound_send_allowed"])
+
+    def test_pydantic_provider_path_includes_registry_tool_plan_sources(self):
+        from assistant_pydantic_provider import PydanticAIAssistantProvider
+
+        class RecordingRunner:
+            def __init__(self):
+                self.prompts = []
+
+            def run(self, prompt: str, *, timeout_seconds: int) -> str:
+                self.prompts.append(prompt)
+                return "Weather answer reports missing provider evidence."
+
+        with TemporaryDirectory() as tmp:
+            workspace_root = Path(tmp) / "pretrip-workspaces"
+            project_root = workspace_root / "chilai_nanhua_day1"
+            shutil.copytree(PROJECT_ROOT, project_root)
+            runner = RecordingRunner()
+            with patch.dict(
+                os.environ,
+                {"SCOUT_PRETRIP_WORKSPACE_ROOT": str(workspace_root)},
+                clear=False,
+            ):
+                provider = PydanticAIAssistantProvider(runner=runner)
+                client = TestClient(
+                    create_assistant_app(
+                        provider=provider,
+                        context_resolver=lambda query: [],
+                    )
+                )
+                response = client.post(
+                    "/assistant/query",
+                    json={
+                        "surface": "pretrip",
+                        "question": "明天午後雷雨是否要紮營？",
+                        "project_id": "chilai_nanhua_day1",
+                    },
+                )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(runner.prompts), 1)
+        prompt = runner.prompts[0]
+        self.assertIn('"assistant_registry_tool_plan"', prompt)
+        self.assertIn('"assistant_registry_tool_contract_gap"', prompt)
+        self.assertIn(PRETRIP_TOOL_PLANNER_SKILL_ID, prompt)
+        self.assertIn(WEATHER_WINDOW_TOOL_ID, prompt)
+        self.assertIn('"source_id": "assistant_context.tool_registry"', prompt)
+        self.assertIn('"assistant_context_tool_registry"', prompt)
+        self.assertIn('"tool_ids_by_status"', prompt)
+        self.assertIn('"ready_current_tool_count"', prompt)
+        self.assertIn('"missing_evidence_fields_by_source"', prompt)
+        self.assertIn('"provider"', prompt)
+        self.assertIn('"ttl_s"', prompt)
+        self.assertIn("state the missing evidence instead of inferring it", prompt)
+
+        payload = response.json()
+        source_ids = {source["source_id"] for source in payload["sources"]}
+        self.assertIn("assistant_context.tool_registry", source_ids)
+        self.assertIn(PRETRIP_TOOL_PLANNER_SKILL_ID, source_ids)
+        self.assertIn(WEATHER_WINDOW_TOOL_ID, source_ids)
+        weather_source = _source_by_id(payload, WEATHER_WINDOW_TOOL_ID)
+        self.assertEqual(
+            weather_source["evidence_type"],
+            "assistant_registry_tool_contract_gap",
+        )
         self.assertFalse(payload["boundary"]["phase1_mutation_allowed"])
         self.assertFalse(payload["boundary"]["outbound_send_allowed"])
 
@@ -1019,6 +1469,35 @@ class AssistantApiTests(unittest.TestCase):
             "/safety/",
         ):
             self.assertNotIn(forbidden_fragment, source)
+
+
+def _pretrip_router_context_resolver(project_root: Path):
+    def resolve(query: ScoutAssistantQuery):
+        project_id = query.project_id or query.context_ref or project_root.name
+        context = build_pretrip_assistant_context(
+            project_id,
+            project_root=project_root,
+            selected_source_id=query.selected_artifact_id,
+        )
+        sources = assistant_source_refs_from_context(context, query=query)
+        return augment_pretrip_sources_with_local_evidence_search(
+            query,
+            sources=sources,
+            project_root=project_root,
+            limit=3,
+        )
+
+    return resolve
+
+
+def _source_by_id(payload: dict[str, object], source_id: str) -> dict[str, object]:
+    sources = payload.get("sources")
+    if not isinstance(sources, list):
+        raise AssertionError("payload has no source list")
+    for source in sources:
+        if isinstance(source, dict) and source.get("source_id") == source_id:
+            return source
+    raise AssertionError(f"missing source: {source_id}")
 
 
 class AssistantApiMountTests(unittest.TestCase):

@@ -197,6 +197,7 @@ class ScoutAssistantQuery(BaseModel):
     selected_event_id: str | None = None
     selected_artifact_id: str | None = None
     project_id: str | None = None
+    live_navigation_snapshot: dict[str, Any] | None = None
 
 
 class ScoutAssistantResponse(BaseModel):
