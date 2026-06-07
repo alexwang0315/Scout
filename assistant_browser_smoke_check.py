@@ -9,6 +9,9 @@ from typing import Any, Sequence
 
 
 REPO_ROOT = Path(__file__).resolve().parent
+REPO_LOCAL_PLAYWRIGHT_BROWSERS = (
+    REPO_ROOT / "node_modules" / "playwright-core" / ".local-browsers"
+)
 READ_ONLY_BOUNDARY = "read-only model interpretation"
 EXPECTED_OFFLINE_FALLBACK_TEXT = "No offline fallback schema returned."
 FORBIDDEN_ACTION_BUTTON_TOKENS = (
@@ -46,7 +49,35 @@ ASSISTANT_BROWSER_VIEWPORTS = (
     {"name": "desktop", "width": 1440, "height": 1000},
     {"name": "mobile", "width": 390, "height": 844},
 )
+BROWSER_RUNTIME_MODULES = ("playwright", "jsdom")
 
+
+NODE_BROWSER_RUNTIME_AVAILABILITY_SCRIPT = r"""
+(() => {
+  const modules = {};
+  for (const name of ["playwright", "jsdom"]) {
+    try {
+      modules[name] = {available: true, resolved: require.resolve(name)};
+    } catch (error) {
+      modules[name] = {
+        available: false,
+        error: error && error.code ? error.code : String(error),
+      };
+    }
+  }
+  const availableRuntimes = Object.entries(modules)
+    .filter(([, value]) => value.available)
+    .map(([name]) => name);
+  console.log(JSON.stringify({
+    node_available: true,
+    modules,
+    available_runtimes: availableRuntimes,
+    preferred_runtime: modules.playwright.available
+      ? "playwright"
+      : (modules.jsdom.available ? "jsdom" : null),
+  }));
+})();
+"""
 
 NODE_BROWSER_SMOKE_SCRIPT = r"""
 (async () => {
@@ -247,14 +278,8 @@ def run_assistant_browser_smoke_check(
         "timeoutMs": timeout_ms,
         "settleMs": 800,
     }
-    env = dict(os.environ)
+    env = _node_runtime_env(node_path=node_path)
     env["SCOUT_BROWSER_SMOKE_CONFIG"] = json.dumps(config)
-    if node_path:
-        env["NODE_PATH"] = (
-            node_path
-            if not env.get("NODE_PATH")
-            else f"{node_path}{os.pathsep}{env['NODE_PATH']}"
-        )
 
     try:
         completed = subprocess.run(
@@ -288,6 +313,91 @@ def run_assistant_browser_smoke_check(
         return _runtime_failure(base_url, "browser_runtime:invalid_observation_shape")
 
     return build_assistant_browser_smoke_check(base_url=base_url, observations=observations)
+
+
+def detect_assistant_browser_runtime_availability(
+    *,
+    node_executable: str = "node",
+    node_path: str | None = None,
+    process_timeout_sec: int = 10,
+) -> dict[str, Any]:
+    env = _node_runtime_env(node_path=node_path)
+
+    try:
+        completed = subprocess.run(
+            [node_executable],
+            input=NODE_BROWSER_RUNTIME_AVAILABILITY_SCRIPT,
+            check=False,
+            capture_output=True,
+            text=True,
+            env=env,
+            timeout=process_timeout_sec,
+        )
+    except FileNotFoundError as exc:
+        return _runtime_availability_failure(
+            node_executable=node_executable,
+            reason=f"browser_runtime:node_not_found:{exc}",
+        )
+    except subprocess.TimeoutExpired as exc:
+        return _runtime_availability_failure(
+            node_executable=node_executable,
+            reason=f"browser_runtime:timeout:{exc}",
+        )
+
+    if completed.returncode != 0:
+        return _runtime_availability_failure(
+            node_executable=node_executable,
+            reason="browser_runtime:node_failed",
+            detail=" ".join(completed.stderr.split()),
+        )
+
+    try:
+        payload = json.loads(completed.stdout)
+    except json.JSONDecodeError as exc:
+        return _runtime_availability_failure(
+            node_executable=node_executable,
+            reason=f"browser_runtime:invalid_json:{exc}",
+            detail=completed.stdout[-500:],
+        )
+
+    modules = payload.get("modules") if isinstance(payload, dict) else {}
+    if not isinstance(modules, dict):
+        modules = {}
+    missing_modules = [
+        name
+        for name in BROWSER_RUNTIME_MODULES
+        if not (isinstance(modules.get(name), dict) and modules[name].get("available"))
+    ]
+    available_runtimes = [
+        name
+        for name in BROWSER_RUNTIME_MODULES
+        if name not in missing_modules
+    ]
+    ok = bool(available_runtimes)
+    missing_required = (
+        []
+        if ok
+        else [f"browser_runtime:{name}_unavailable" for name in BROWSER_RUNTIME_MODULES]
+    )
+    return {
+        "ok": ok,
+        "check": "assistant_browser_runtime_availability",
+        "node_executable": node_executable,
+        "node_available": True,
+        "modules": modules,
+        "available_runtimes": available_runtimes,
+        "missing_runtime_modules": missing_modules,
+        "preferred_runtime": (
+            "playwright"
+            if "playwright" in available_runtimes
+            else ("jsdom" if "jsdom" in available_runtimes else None)
+        ),
+        "playwright_browsers_path": env.get("PLAYWRIGHT_BROWSERS_PATH"),
+        "browser_backed_smoke_available": "playwright" in available_runtimes,
+        "dom_backed_smoke_available": "jsdom" in available_runtimes,
+        "missing_required_artifacts": missing_required,
+        "runtime_error": "",
+    }
 
 
 def _missing_observation_requirements(
@@ -375,6 +485,42 @@ def _runtime_failure(base_url: str, reason: str, detail: str = "") -> dict[str, 
     }
 
 
+def _runtime_availability_failure(
+    *,
+    node_executable: str,
+    reason: str,
+    detail: str = "",
+) -> dict[str, Any]:
+    return {
+        "ok": False,
+        "check": "assistant_browser_runtime_availability",
+        "node_executable": node_executable,
+        "node_available": False,
+        "modules": {},
+        "available_runtimes": [],
+        "missing_runtime_modules": list(BROWSER_RUNTIME_MODULES),
+        "preferred_runtime": None,
+        "playwright_browsers_path": None,
+        "browser_backed_smoke_available": False,
+        "dom_backed_smoke_available": False,
+        "missing_required_artifacts": [reason],
+        "runtime_error": detail,
+    }
+
+
+def _node_runtime_env(*, node_path: str | None) -> dict[str, str]:
+    env = dict(os.environ)
+    if node_path:
+        env["NODE_PATH"] = (
+            node_path
+            if not env.get("NODE_PATH")
+            else f"{node_path}{os.pathsep}{env['NODE_PATH']}"
+        )
+    if not env.get("PLAYWRIGHT_BROWSERS_PATH") and REPO_LOCAL_PLAYWRIGHT_BROWSERS.exists():
+        env["PLAYWRIGHT_BROWSERS_PATH"] = "0"
+    return env
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Run the Scout assistant browser smoke gate against a running local server."
@@ -384,16 +530,24 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--node-path", default=os.getenv("SCOUT_BROWSER_NODE_PATH"))
     parser.add_argument("--timeout-ms", type=int, default=20000)
     parser.add_argument("--process-timeout-sec", type=int, default=90)
+    parser.add_argument("--runtime-check-only", action="store_true")
     parser.add_argument("--pretty", action="store_true")
     args = parser.parse_args(argv)
 
-    result = run_assistant_browser_smoke_check(
-        base_url=args.base_url,
-        node_executable=args.node,
-        node_path=args.node_path,
-        timeout_ms=args.timeout_ms,
-        process_timeout_sec=args.process_timeout_sec,
-    )
+    if args.runtime_check_only:
+        result = detect_assistant_browser_runtime_availability(
+            node_executable=args.node,
+            node_path=args.node_path,
+            process_timeout_sec=args.process_timeout_sec,
+        )
+    else:
+        result = run_assistant_browser_smoke_check(
+            base_url=args.base_url,
+            node_executable=args.node,
+            node_path=args.node_path,
+            timeout_ms=args.timeout_ms,
+            process_timeout_sec=args.process_timeout_sec,
+        )
     print(json.dumps(result, indent=2 if args.pretty else None, sort_keys=True))
     return 0 if result["ok"] else 1
 

@@ -1,0 +1,31 @@
+{
+  "name": "scout-fusion",
+  "version": "1.0.0",
+  "description": "S.C.O.U.T. Fusion is a FastAPI-based wilderness safety black box and file-backed safety evidence system. Phase 1 centers on a `MissionGraph` route plan, Apple Watch / SensorLog observations, offline map evidence, deterministic safety evaluation, incident packaging, and an after-action admin viewer. Phase 2 adds the file-backed Brain, replay, remote status, decision-support, and audit surfaces. Phase 3 safely connects the two after incident persistence while keeping Phase 1 as the live safety baseline. Phase 3.5 adds pre-porting runtime readiness and debug tooling so Scout behavior can be inspected before hardware deployment.",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "assistant:browser-runtime": "./venv/bin/python assistant_browser_smoke_check.py --runtime-check-only --pretty",
+    "assistant:browser-smoke": "./venv/bin/python assistant_browser_smoke_check.py --pretty"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alexwang0315/Scout.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/alexwang0315/Scout/issues"
+  },
+  "homepage": "https://github.com/alexwang0315/Scout#readme",
+  "devDependencies": {
+    "jsdom": "^29.1.1",
+    "playwright": "^1.60.0"
+  },
+  "private": true
+}
