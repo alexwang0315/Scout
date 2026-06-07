@@ -84,6 +84,40 @@ def _write_terrain_workspace(project_root: Path) -> Path:
     return project_root
 
 
+def _add_terrain_route_samples(project_root: Path) -> None:
+    normalized_dir = project_root / "outputs" / "layers" / "normalized"
+    normalized_dir.mkdir(parents=True, exist_ok=True)
+    project_path = project_root / "project.json"
+    project = json.loads(project_path.read_text(encoding="utf-8"))
+    project["terrain_route_samples_ref"] = (
+        "outputs/layers/normalized/terrain_route_samples.geojson"
+    )
+    project_path.write_text(
+        json.dumps(project, ensure_ascii=False, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+    (normalized_dir / "terrain_route_samples.geojson").write_text(
+        json.dumps(
+            {
+                "type": "FeatureCollection",
+                "features": [
+                    _terrain_point("terrain.sample.000", 24.04, 121.28, 0.0, 12.0, 44.0),
+                    _terrain_point(
+                        "terrain.sample.001",
+                        24.0510713,
+                        121.2201989,
+                        14550.0,
+                        47.0,
+                        88.0,
+                    ),
+                ],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+
 def _terrain_point(
     sample_id: str,
     lat: float,
@@ -523,6 +557,85 @@ class AssistantApiTests(unittest.TestCase):
         self.assertIn("provider", weather_source["context_summary"]["missing_fields"])
         self.assertIn("ttl_s", weather_source["context_summary"]["missing_fields"])
         payload = response.json()
+        self.assertFalse(payload["observability"]["safe_failure"])
+        self.assertFalse(payload["boundary"]["phase1_mutation_allowed"])
+        self.assertFalse(payload["boundary"]["safety_mutation_allowed"])
+        self.assertFalse(payload["boundary"]["outbound_send_allowed"])
+        self.assertFalse(payload["boundary"]["hardware_control_allowed"])
+
+    def test_provider_success_receives_ready_tool_risk_terrain_evidence_before_answer(self):
+        class RecordingProvider:
+            def __init__(self):
+                self.sources = []
+
+            def answer(self, query: ScoutAssistantQuery, *, sources=None):
+                self.sources = list(sources or [])
+                return ScoutAssistantResponse(
+                    surface=query.surface,
+                    answer="Provider synthesized from completed risk/terrain evidence.",
+                    sources=self.sources,
+                    boundary=AssistantBoundary(surface=query.surface),
+                    limitations=["successful ready-tool provider path test"],
+                )
+
+        with TemporaryDirectory() as tmp:
+            workspace_root = Path(tmp) / "pretrip-workspaces"
+            project_root = workspace_root / "chilai_nanhua_day1"
+            shutil.copytree(PROJECT_ROOT, project_root)
+            _add_terrain_route_samples(project_root)
+            provider = RecordingProvider()
+            with patch.dict(
+                os.environ,
+                {"SCOUT_PRETRIP_WORKSPACE_ROOT": str(workspace_root)},
+                clear=False,
+            ):
+                client = TestClient(
+                    create_assistant_app(
+                        provider=provider,
+                        context_resolver=lambda query: [],
+                    )
+                )
+                response = client.post(
+                    "/assistant/query",
+                    json={
+                        "surface": "pretrip",
+                        "question": "危險地形在哪些位置？",
+                        "project_id": "chilai_nanhua_day1",
+                    },
+                )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertGreaterEqual(len(provider.sources), 5)
+        source_ids = {source.source_id for source in provider.sources}
+        self.assertIn("assistant_context.tool_registry", source_ids)
+        self.assertIn(PRETRIP_TOOL_PLANNER_SKILL_ID, source_ids)
+        self.assertIn(PRETRIP_FULL_WORKFLOW_SOURCE_ID, source_ids)
+        self.assertIn(RISK_SCORE_TOOL_ID, source_ids)
+        self.assertIn(TERRAIN_SCORE_TOOL_ID, source_ids)
+
+        payload = response.json()
+        workflow_source = _source_by_id(payload, PRETRIP_FULL_WORKFLOW_SOURCE_ID)
+        self.assertEqual(workflow_source["evidence_type"], "assistant_full_workflow_summary")
+        workflow_summary = workflow_source["context_summary"]
+        self.assertEqual(workflow_summary["answerability"], "evidence_available")
+        self.assertEqual(workflow_summary["completed_tool_count"], 2)
+        self.assertEqual(workflow_summary["contract_gap_count"], 0)
+        self.assertEqual(workflow_summary["missing_evidence_count"], 0)
+        self.assertFalse(workflow_summary["workflow_policy"]["model_provider_used"])
+        self.assertFalse(workflow_summary["boundary"]["runtime_safety_truth"])
+
+        risk_source = _source_by_id(payload, RISK_SCORE_TOOL_ID)
+        terrain_source = _source_by_id(payload, TERRAIN_SCORE_TOOL_ID)
+        self.assertEqual(risk_source["evidence_type"], "assistant_registry_tool_result")
+        self.assertEqual(terrain_source["evidence_type"], "assistant_registry_tool_result")
+        risk_summary = risk_source["context_summary"]
+        terrain_summary = terrain_source["context_summary"]
+        self.assertEqual(risk_summary["status"], "completed")
+        self.assertEqual(terrain_summary["status"], "completed")
+        self.assertGreaterEqual(risk_summary["latest"]["result_count"], 1)
+        self.assertGreaterEqual(terrain_summary["latest"]["result_count"], 1)
+        self.assertFalse(risk_summary["boundary"]["runtime_safety_truth"])
+        self.assertFalse(terrain_summary["boundary"]["runtime_safety_truth"])
         self.assertFalse(payload["observability"]["safe_failure"])
         self.assertFalse(payload["boundary"]["phase1_mutation_allowed"])
         self.assertFalse(payload["boundary"]["safety_mutation_allowed"])

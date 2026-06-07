@@ -107,15 +107,24 @@ assistant response boundaries, and workflow eval checks.
 
 ## Follow-Up Hardening
 
-The workflow goal is satisfied for the current requested scope. Useful
-hardening slices remain:
+The workflow goal is satisfied for the current requested scope. Follow-up
+hardening status:
 
-- Promote these untracked workflow files into a bounded commit once review is
-  complete.
-- Add a browser-backed smoke path if Playwright/jsdom is available in the local
-  Node environment.
-- Extend provider success tests from weather contract-gap to a ready-tool
-  risk/terrain question.
+- Workflow files were promoted into bounded commit
+  `d67d69f2 Add Scout AI evidence workflow tools`.
+- Browser-backed smoke already exists through `assistant_browser_smoke_check.py`.
+  This follow-up added a runtime availability probe so Scout can report whether
+  Playwright or jsdom is installed before attempting browser/jsdom-backed QA.
+  The repo-local Node runtime now has Playwright and jsdom installed, with
+  Chromium browsers installed under repo-local Playwright storage. The smoke
+  runner auto-selects `PLAYWRIGHT_BROWSERS_PATH=0` when that local browser
+  store exists. `npm run assistant:browser-smoke -- --base-url
+  http://127.0.0.1:9111 --pretty` passed across debug, pretrip, admin, and
+  hardware-readiness surfaces on desktop and mobile viewports.
+- Provider-success coverage now includes a ready-tool risk/terrain question:
+  the successful provider path receives tool registry, planner, full workflow,
+  completed risk score evidence, and completed terrain evidence before model
+  synthesis.
 
 Suggested regression commands:
 
