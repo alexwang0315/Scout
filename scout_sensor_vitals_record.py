@@ -14,6 +14,48 @@ SENSOR_VITALS_RECORD_ARTIFACT_KIND = "scout_sensor_vitals_record"
 SENSOR_VITALS_RECORD_ARTIFACT_VERSION = "scout_sensor_vitals_record.v0"
 SENSOR_VITALS_RECORD_SET_ARTIFACT_KIND = "scout_sensor_vitals_record_set"
 SENSOR_VITALS_RECORD_SET_ARTIFACT_VERSION = "scout_sensor_vitals_record_set.v0"
+ENERGY_VITALS_SNAPSHOT_ARTIFACT_KIND = "scout_energy_vitals_snapshot"
+ENERGY_VITALS_SNAPSHOT_ARTIFACT_VERSION = "scout_energy_vitals_snapshot.v0"
+ENERGY_VITALS_TIME_WINDOW_ARTIFACT_KIND = "scout_energy_vitals_time_window"
+ENERGY_VITALS_TIME_WINDOW_ARTIFACT_VERSION = "scout_energy_vitals_time_window.v0"
+
+DEFAULT_SENSOR_VITALS_JSONL_RELATIVE_PATHS = (
+    "outputs/sensorlogger_mqtt_sensor_vitals_records.jsonl",
+    "sensorlogger_mqtt_sensor_vitals_records.jsonl",
+    "journey.scout-svr/observations.jsonl",
+    "journey.scout-svr/vitals.jsonl",
+    "observations.jsonl",
+    "vitals.jsonl",
+)
+
+ENERGY_VITALS_VALUE_ALIASES = {
+    "heart_rate_bpm": ("heartRate", "heart_rate", "heart_rate_bpm", "heartrate", "hr"),
+    "hrv_ms": ("hrvMs", "hrv_ms", "hrv", "heartRateVariabilityMs"),
+    "body_battery_or_provider_energy": (
+        "bodyBattery",
+        "body_battery",
+        "providerEnergy",
+        "provider_energy",
+        "energy",
+    ),
+    "pace_mps": ("paceMps", "pace_mps", "speedMps", "speed_mps", "pace", "speed"),
+    "cadence": ("cadence", "stepCadence", "step_cadence"),
+    "activity_load": ("activityLoad", "activity_load", "load", "loadSum", "load_sum"),
+    "baseline_window_days": (
+        "baselineWindowDays",
+        "baseline_window_days",
+        "windowDays",
+        "window_days",
+    ),
+    "reserve_score": ("reserveScore", "reserve_score", "energyReserveScore"),
+    "reserve_band": ("reserveBand", "reserve_band", "energyReserveBand"),
+    "heart_rate_drift_ratio": (
+        "heartRateDriftRatio",
+        "heart_rate_drift_ratio",
+        "hrDriftRatio",
+        "hr_drift_ratio",
+    ),
+}
 
 
 class SensorVitalsRecordModel(BaseModel):
@@ -148,6 +190,17 @@ def load_sensor_vitals_records_jsonl(path: Path) -> list[ScoutSensorVitalsRecord
     return records
 
 
+def load_project_sensor_vitals_records(
+    project_root: Path,
+    *,
+    path: Path | None = None,
+) -> tuple[list[ScoutSensorVitalsRecord], Path | None]:
+    resolved = path or _first_existing_project_record_path(project_root)
+    if resolved is None:
+        return [], None
+    return load_sensor_vitals_records_jsonl(resolved), resolved
+
+
 def query_sensor_vitals_records(
     records: Iterable[ScoutSensorVitalsRecord],
     *,
@@ -182,6 +235,180 @@ def query_sensor_vitals_records(
     return filtered
 
 
+def energy_vitals_snapshot_from_sensor_vitals_records(
+    records: Iterable[ScoutSensorVitalsRecord],
+    *,
+    window_s: float = 600.0,
+    reference_timestamp_s: float | None = None,
+    gap_threshold_s: float = 120.0,
+    max_records: int | None = None,
+) -> dict[str, Any]:
+    record_list = [
+        record for record in records if _record_has_energy_vitals_material(record)
+    ]
+    ordered = sorted(record_list, key=_record_sort_key, reverse=True)
+    snapshot: dict[str, Any] = {}
+    field_sources: dict[str, str] = {}
+
+    for record in ordered:
+        for field, aliases in ENERGY_VITALS_VALUE_ALIASES.items():
+            if field in snapshot:
+                continue
+            value = _first_value(record.values, aliases)
+            if _missing_snapshot_value(value):
+                continue
+            snapshot[field] = value
+            field_sources[field] = record.record_id
+
+    latest_record = ordered[0] if ordered else None
+    if latest_record is not None:
+        snapshot.setdefault(
+            "subject_id",
+            _first_non_empty(latest_record.session_id, latest_record.device_id),
+        )
+        snapshot.setdefault("observed_at", latest_record.observed_at)
+        snapshot.setdefault("privacy_scope", latest_record.privacy_class)
+        snapshot.setdefault("source_provider", latest_record.source_adapter)
+
+    used_record_ids = sorted(
+        {
+            *field_sources.values(),
+            *([latest_record.record_id] if latest_record is not None else []),
+        }
+    )
+    used_records = [
+        record for record in ordered if record.record_id in set(used_record_ids)
+    ]
+    time_window = energy_vitals_time_window_from_sensor_vitals_records(
+        record_list,
+        window_s=window_s,
+        reference_timestamp_s=reference_timestamp_s,
+        gap_threshold_s=gap_threshold_s,
+        max_records=max_records,
+    )
+    window_summary = time_window.get("summary")
+    if isinstance(window_summary, dict):
+        for field in (
+            "heart_rate_trend",
+            "hrv_trend",
+            "record_gap_count",
+            "staleness_s",
+        ):
+            value = window_summary.get(field)
+            if not _missing_snapshot_value(value):
+                snapshot[field] = value
+    return {
+        "artifact_kind": ENERGY_VITALS_SNAPSHOT_ARTIFACT_KIND,
+        "artifact_version": ENERGY_VITALS_SNAPSHOT_ARTIFACT_VERSION,
+        "record_count": len(record_list),
+        "selected_record_count": len(used_records),
+        "energy_vitals_snapshot": {
+            key: value
+            for key, value in snapshot.items()
+            if not _missing_snapshot_value(value)
+        },
+        "field_sources": field_sources,
+        "time_window": time_window,
+        "source_record_refs": [_record_ref(record) for record in used_records],
+        "boundary": ScoutSensorVitalsBoundary().model_dump(mode="json"),
+    }
+
+
+def energy_vitals_time_window_from_sensor_vitals_records(
+    records: Iterable[ScoutSensorVitalsRecord],
+    *,
+    window_s: float = 600.0,
+    reference_timestamp_s: float | None = None,
+    gap_threshold_s: float = 120.0,
+    max_records: int | None = None,
+) -> dict[str, Any]:
+    record_list = [
+        record for record in records if _record_has_energy_vitals_material(record)
+    ]
+    timestamped = [
+        record for record in record_list if record.timestamp_s is not None
+    ]
+    if reference_timestamp_s is None and timestamped:
+        reference_timestamp_s = max(float(record.timestamp_s) for record in timestamped)
+    candidates = sorted(
+        [
+            record
+            for record in timestamped
+            if reference_timestamp_s is None
+            or float(record.timestamp_s) <= reference_timestamp_s
+        ],
+        key=_record_sort_key,
+    )
+    if max_records is not None and max_records > 0:
+        ordered = candidates[-max_records:]
+        start_timestamp_s = (
+            float(ordered[0].timestamp_s)
+            if ordered and ordered[0].timestamp_s is not None
+            else None
+        )
+        selection_mode = "last_n_records"
+    else:
+        start_timestamp_s = (
+            reference_timestamp_s - window_s
+            if reference_timestamp_s is not None
+            else None
+        )
+        window_records = [
+            record
+            for record in candidates
+            if reference_timestamp_s is not None
+            and start_timestamp_s is not None
+            and start_timestamp_s <= float(record.timestamp_s) <= reference_timestamp_s
+        ]
+        ordered = sorted(window_records, key=_record_sort_key)
+        selection_mode = "time_window"
+    latest_timestamp_s = (
+        max(float(record.timestamp_s) for record in timestamped)
+        if timestamped
+        else None
+    )
+    staleness_s = (
+        round(reference_timestamp_s - latest_timestamp_s, 3)
+        if reference_timestamp_s is not None and latest_timestamp_s is not None
+        else None
+    )
+    heart_rate_trend = _numeric_series_summary(
+        ordered,
+        field="heart_rate_bpm",
+    )
+    hrv_trend = _numeric_series_summary(
+        ordered,
+        field="hrv_ms",
+    )
+    record_gap_count, max_gap_s = _record_gap_stats(
+        ordered,
+        gap_threshold_s=gap_threshold_s,
+    )
+    return {
+        "artifact_kind": ENERGY_VITALS_TIME_WINDOW_ARTIFACT_KIND,
+        "artifact_version": ENERGY_VITALS_TIME_WINDOW_ARTIFACT_VERSION,
+        "window_s": window_s,
+        "selection_mode": selection_mode,
+        "max_records": max_records,
+        "reference_timestamp_s": reference_timestamp_s,
+        "start_timestamp_s": start_timestamp_s,
+        "end_timestamp_s": reference_timestamp_s,
+        "record_count": len(record_list),
+        "timestamped_record_count": len(timestamped),
+        "window_record_count": len(ordered),
+        "summary": {
+            "heart_rate_trend": heart_rate_trend,
+            "hrv_trend": hrv_trend,
+            "record_gap_count": record_gap_count,
+            "max_gap_s": max_gap_s,
+            "gap_threshold_s": gap_threshold_s,
+            "staleness_s": staleness_s,
+        },
+        "source_record_refs": [_record_ref(record) for record in ordered],
+        "boundary": ScoutSensorVitalsBoundary().model_dump(mode="json"),
+    }
+
+
 def summarize_sensor_vitals_records(records: Iterable[ScoutSensorVitalsRecord]) -> dict[str, Any]:
     record_list = list(records)
     return {
@@ -197,6 +424,165 @@ def summarize_sensor_vitals_records(records: Iterable[ScoutSensorVitalsRecord]) 
         "privacy_class_counts": _counts(record.privacy_class for record in record_list),
         "boundary": ScoutSensorVitalsBoundary().model_dump(mode="json"),
     }
+
+
+def _first_existing_project_record_path(project_root: Path) -> Path | None:
+    for relative in DEFAULT_SENSOR_VITALS_JSONL_RELATIVE_PATHS:
+        path = project_root / relative
+        if path.exists():
+            return path
+    return None
+
+
+def _record_has_energy_vitals_material(record: ScoutSensorVitalsRecord) -> bool:
+    tag_set = {tag.lower() for tag in record.capability_tags}
+    if {"health", "vitals", "resource"}.intersection(tag_set):
+        return True
+    if record.privacy_class == "private_vitals":
+        return True
+    lower_name = record.observation_name.lower()
+    if lower_name in {"heart_rate", "heartrate", "hrv", "body_battery", "energy_reserve"}:
+        return True
+    normalized_keys = {_normalize_value_key(key) for key in record.values}
+    return any(
+        _normalize_value_key(alias) in normalized_keys
+        for aliases in ENERGY_VITALS_VALUE_ALIASES.values()
+        for alias in aliases
+    )
+
+
+def _record_sort_key(record: ScoutSensorVitalsRecord) -> tuple[float, str, str]:
+    timestamp = record.timestamp_s if record.timestamp_s is not None else -1.0
+    observed = record.observed_at or ""
+    return (float(timestamp), observed, record.received_at)
+
+
+def _numeric_series_summary(
+    records: list[ScoutSensorVitalsRecord],
+    *,
+    field: str,
+) -> dict[str, Any]:
+    values: list[dict[str, Any]] = []
+    aliases = ENERGY_VITALS_VALUE_ALIASES[field]
+    for record in records:
+        value = _float_or_none(_first_value(record.values, aliases))
+        if value is None:
+            continue
+        values.append(
+            {
+                "record_id": record.record_id,
+                "timestamp_s": record.timestamp_s,
+                "value": value,
+            }
+        )
+    numeric_values = [item["value"] for item in values]
+    if not numeric_values:
+        return {
+            "field": field,
+            "sample_count": 0,
+            "trend": "missing",
+        }
+    first = numeric_values[0]
+    last = numeric_values[-1]
+    delta = round(last - first, 3)
+    return {
+        "field": field,
+        "sample_count": len(numeric_values),
+        "first": first,
+        "last": last,
+        "min": min(numeric_values),
+        "max": max(numeric_values),
+        "mean": round(sum(numeric_values) / len(numeric_values), 3),
+        "delta": delta,
+        "trend": _trend_label(delta, sample_count=len(numeric_values)),
+        "source_record_ids": [str(item["record_id"]) for item in values],
+    }
+
+
+def _record_gap_stats(
+    records: list[ScoutSensorVitalsRecord],
+    *,
+    gap_threshold_s: float,
+) -> tuple[int, float | None]:
+    timestamps = [
+        float(record.timestamp_s)
+        for record in records
+        if record.timestamp_s is not None
+    ]
+    gaps = [
+        round(next_timestamp - timestamp, 3)
+        for timestamp, next_timestamp in zip(timestamps, timestamps[1:], strict=False)
+    ]
+    gap_count = sum(1 for gap in gaps if gap > gap_threshold_s)
+    max_gap = max(gaps) if gaps else None
+    return gap_count, max_gap
+
+
+def _trend_label(delta: float, *, sample_count: int) -> str:
+    if sample_count <= 1:
+        return "single_sample"
+    if delta > 0:
+        return "increasing"
+    if delta < 0:
+        return "decreasing"
+    return "flat"
+
+
+def _first_value(values: dict[str, Any], aliases: tuple[str, ...]) -> Any:
+    normalized = {_normalize_value_key(key): value for key, value in values.items()}
+    for alias in aliases:
+        value = normalized.get(_normalize_value_key(alias))
+        if not _missing_snapshot_value(value):
+            return value
+    return None
+
+
+def _record_ref(record: ScoutSensorVitalsRecord) -> dict[str, Any]:
+    return {
+        "record_id": record.record_id,
+        "observation_ref": record.observation_ref,
+        "observation_name": record.observation_name,
+        "session_id": record.session_id,
+        "device_id": record.device_id,
+        "source_adapter": record.source_adapter,
+        "ingress_transport": record.ingress_transport.value,
+        "observed_at": record.observed_at,
+        "timestamp_s": record.timestamp_s,
+        "privacy_class": record.privacy_class,
+        "capability_tags": list(record.capability_tags),
+        "raw_evidence_refs": list(record.raw_evidence_refs),
+        "payload_sha256": record.payload_sha256,
+    }
+
+
+def _normalize_value_key(value: str) -> str:
+    return str(value).replace("_", "").replace("-", "").lower()
+
+
+def _first_non_empty(*values: Any) -> Any:
+    for value in values:
+        if not _missing_snapshot_value(value):
+            return value
+    return None
+
+
+def _missing_snapshot_value(value: Any) -> bool:
+    if value is None:
+        return True
+    if isinstance(value, str):
+        return not value.strip()
+    if isinstance(value, list):
+        return not value
+    return False
+
+
+def _float_or_none(value: Any) -> float | None:
+    if _missing_snapshot_value(value):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _unit_map_for_observation(observation_name: str, values: dict[str, Any]) -> dict[str, str]:

@@ -1904,6 +1904,15 @@
                 <li>No offline fallback schema returned.</li>
               </ul>
             </section>
+            <section class="assistant-sources" aria-label="Assistant workflow audit">
+              <h3>Workflow</h3>
+              <ul id="assistantWorkflowStatusList" class="assistant-list">
+                <li>Workflow readiness status not loaded.</li>
+              </ul>
+              <ul id="assistantWorkflowList" class="assistant-list">
+                <li>No full workflow summary returned.</li>
+              </ul>
+            </section>
             <section class="assistant-limitations" aria-label="Assistant limitations">
               <h3>Limitations</h3>
               <ul id="assistantLimitationsList" class="assistant-list">
@@ -3863,6 +3872,7 @@
       try {
         const status = await fetchJson("/assistant/status");
         window.ScoutAssistantUI.renderProviderStatus(status);
+        window.ScoutAssistantUI.renderWorkflowStatus(status);
       } catch (error) {
         window.ScoutAssistantUI.renderProviderStatusFailure(error);
       }
@@ -3892,6 +3902,7 @@
       document.getElementById("assistantAnswerText").textContent = payload.answer || "No assistant answer returned.";
       renderAssistantContext(payload, queryPayload);
       window.ScoutAssistantUI.renderOfflineFallback(payload);
+      window.ScoutAssistantUI.renderWorkflowSummary(payload);
       renderAssistantList(
         "assistantLimitationsList",
         payload.limitations || ["No limitations returned by assistant provider."]
@@ -3937,6 +3948,7 @@
           debugPageState.selectedEventId || "selected timeline node unavailable"
         ]);
         window.ScoutAssistantUI.renderOfflineFallback({});
+        window.ScoutAssistantUI.renderWorkflowSummary({});
         setAssistantStatus("Assistant query failed", "error");
       } finally {
         document.getElementById("assistantAskButton").disabled = false;

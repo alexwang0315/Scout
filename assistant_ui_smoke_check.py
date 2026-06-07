@@ -129,6 +129,7 @@ def _missing_shell_tokens(surface: str, shell: str) -> list[str]:
         "read-only model interpretation",
         "Context",
         "Offline fallback",
+        "Workflow readiness status not loaded.",
         "Limitations",
         "Sources",
     )

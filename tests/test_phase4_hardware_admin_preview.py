@@ -9,6 +9,9 @@ from fastapi.testclient import TestClient
 
 from phase4_admin_runtime import create_phase4_admin_runtime_app
 from phase4_hardware_admin_preview import prepare_phase4_hardware_admin_preview
+from scout_ai_tool_planner import LIVE_NAVIGATION_STATE_TOOL_ID
+from scout_live_navigation_snapshot_evidence import LIVE_NAVIGATION_EVIDENCE_SOURCE_ID
+from scout_risk_score_tool import RISK_SCORE_TOOL_ID
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -16,6 +19,67 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def read(path: str) -> str:
     return (ROOT / path).read_text(encoding="utf-8")
+
+
+def _write_live_navigation_evidence(evidence_dir: Path) -> None:
+    evidence_dir.mkdir(parents=True, exist_ok=True)
+    sensorlogger_payload = {
+        "messageId": 101,
+        "sessionId": "session-1",
+        "deviceId": "watch-1",
+        "payload": [
+            {
+                "name": "location",
+                "time": 1780555780000000000,
+                "values": {
+                    "latitude": 24.051,
+                    "longitude": 121.22,
+                    "locationAltitude": 1280.5,
+                    "horizontalAccuracy": 4.2,
+                    "locationCourse": 44,
+                    "speed": 0.7,
+                    "hdop": 0.8,
+                    "fix_quality": "valid",
+                    "satellites": 8,
+                    "max_cno": 42,
+                    "raw_nmea": "$GPRMC,redacted*00",
+                },
+            }
+        ],
+    }
+    raw_record = {
+        "parse_status": "accepted",
+        "source_adapter": "sensorlogger_mqtt",
+        "ingress_transport": "mqtt",
+        "received_at": 1780555780.5,
+        "raw_payload_text": json.dumps(sensorlogger_payload, ensure_ascii=False),
+    }
+    filter_record = {
+        "route_target": "navigation.ins_dr",
+        "output_kind": "navigation_estimate",
+        "output_summary": {
+            "route_progress_m": 14550.0,
+            "confidence": 0.82,
+            "uncertainty_m": 6.5,
+            "ins_dr_source": "wearable_route_constrained",
+            "last_anchor_at": "2026-06-04T06:49:40Z",
+        },
+    }
+    (evidence_dir / "sensorlogger_mqtt_raw.jsonl").write_text(
+        json.dumps(raw_record, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    (evidence_dir / "sensorlogger_mqtt_filter_outputs.jsonl").write_text(
+        json.dumps(filter_record, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+
+
+def _source_by_id(payload: dict[str, object], source_id: str) -> dict[str, object]:
+    for source in payload["sources"]:
+        if source["source_id"] == source_id:
+            return source
+    raise AssertionError(f"missing source {source_id}")
 
 
 def test_phase4_admin_runtime_serves_pretrip_and_mock_assistant_on_lan_profile() -> None:
@@ -48,6 +112,13 @@ def test_phase4_admin_runtime_serves_pretrip_and_mock_assistant_on_lan_profile()
         health_payload["ingress_observers"]["boundary"]["credential_value_exposed"]
         is False
     )
+    registry = health_payload["assistant_context_registry"]
+    assert registry["read_only"] is True
+    assert registry["runtime_safety_truth"] is False
+    assert registry["pretrip_workspace_root_configured"] is True
+    assert registry["live_navigation_evidence_configured"] is False
+    assert registry["context_path_values_exposed"] is False
+    assert registry["credential_values_exposed"] is False
     assert health_payload["routes"]["hardware_readiness"] == "/admin/hardware-readiness"
     assert health_payload["routes"]["hardware_readiness_context"] == "/admin/hardware-readiness/context"
 
@@ -63,8 +134,47 @@ def test_phase4_admin_runtime_serves_pretrip_and_mock_assistant_on_lan_profile()
 
     status = client.get("/assistant/status")
     assert status.status_code == 200
-    assert status.json()["provider"] == "mock"
-    assert status.json()["token_values_exposed"] is False
+    status_payload = status.json()
+    assert status_payload["provider"] == "mock"
+    assert status_payload["token_values_exposed"] is False
+    assert status_payload["assistant_context_registry"] == registry
+
+
+def test_phase4_admin_runtime_status_reports_live_evidence_config_without_path_values(
+    tmp_path: Path,
+) -> None:
+    evidence_dir = tmp_path / "private-live-evidence"
+    evidence_dir.mkdir()
+    app = create_phase4_admin_runtime_app(
+        environ={
+            "SCOUT_RUNTIME_PROFILE": "pi-phase4-admin-preview",
+            "SCOUT_AI_ASSISTANT_ENABLED": "1",
+            "SCOUT_PRETRIP_WORKSPACE_ROOT": str(
+                ROOT / "tests" / "fixtures" / "pretrip" / "projects"
+            ),
+            "SCOUT_SENSORLOGGER_MQTT_EVIDENCE_DIR": str(evidence_dir),
+        }
+    )
+    client = TestClient(app)
+
+    health_payload = client.get("/health").json()
+    preview_payload = client.get("/phase4/admin-preview/status").json()
+    assistant_payload = client.get("/assistant/status").json()
+
+    for payload in (health_payload, preview_payload, assistant_payload):
+        registry = payload["assistant_context_registry"]
+        assert registry["pretrip_workspace_root_configured"] is True
+        assert registry["live_navigation_evidence_configured"] is True
+        assert registry["live_navigation_evidence_adapter"] == "sensorlogger_mqtt_jsonl"
+        assert registry["context_path_values_exposed"] is False
+        assert registry["credential_values_exposed"] is False
+        assert registry["live_safety_api_calls_allowed"] is False
+        assert registry["phase1_safety_mutation_allowed"] is False
+        assert registry["outbound_send_allowed"] is False
+        assert registry["hardware_control_allowed"] is False
+        dumped_registry = json.dumps(registry, ensure_ascii=False)
+        assert str(evidence_dir) not in dumped_registry
+        assert "private-live-evidence" not in dumped_registry
 
 
 def test_phase4_admin_runtime_assistant_failure_returns_read_only_safe_response(
@@ -214,9 +324,9 @@ def test_phase4_admin_runtime_pretrip_general_question_adds_local_evidence_searc
 
     assert response.status_code == 200
     payload = response.json()
-    search_source = payload["sources"][0]
-    assert search_source["source_id"] == (
-        "assistant_skill.pretrip.local_evidence_search.v0"
+    search_source = _source_by_id(
+        payload,
+        "assistant_skill.pretrip.local_evidence_search.v0",
     )
     assert search_source["evidence_type"] == "assistant_local_evidence_search_results"
     summary = search_source["context_summary"]
@@ -253,9 +363,9 @@ def test_phase4_admin_runtime_pretrip_general_question_searches_mcp_evidence() -
 
     assert response.status_code == 200
     payload = response.json()
-    search_source = payload["sources"][0]
-    assert search_source["source_id"] == (
-        "assistant_skill.pretrip.local_evidence_search.v0"
+    search_source = _source_by_id(
+        payload,
+        "assistant_skill.pretrip.local_evidence_search.v0",
     )
     results = search_source["context_summary"]["results"]
     assert any(
@@ -270,7 +380,62 @@ def test_phase4_admin_runtime_pretrip_general_question_searches_mcp_evidence() -
     )
 
 
-def test_phase4_admin_runtime_pretrip_general_question_uses_local_evidence_fallback(
+def test_phase4_admin_runtime_pretrip_assistant_hydrates_live_navigation_evidence(
+    tmp_path: Path,
+) -> None:
+    evidence_dir = tmp_path / "sensorlogger-evidence"
+    _write_live_navigation_evidence(evidence_dir)
+    app = create_phase4_admin_runtime_app(
+        environ={
+            "SCOUT_RUNTIME_PROFILE": "pi-phase4-admin-preview",
+            "SCOUT_AI_ASSISTANT_ENABLED": "1",
+            "SCOUT_PRETRIP_WORKSPACE_ROOT": str(
+                ROOT / "tests" / "fixtures" / "pretrip" / "projects"
+            ),
+            "SCOUT_SENSORLOGGER_MQTT_EVIDENCE_DIR": str(evidence_dir),
+        }
+    )
+    client = TestClient(app)
+
+    response = client.post(
+        "/assistant/query",
+        json={
+            "surface": "pretrip",
+            "question": "我現在是不是離主路太近但站在危險邊緣？",
+            "context_ref": "chilai_nanhua_day1",
+            "project_id": "chilai_nanhua_day1",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    source_ids = {source["source_id"] for source in payload["sources"]}
+    assert LIVE_NAVIGATION_EVIDENCE_SOURCE_ID in source_ids
+    assert LIVE_NAVIGATION_STATE_TOOL_ID in source_ids
+    evidence_source = _source_by_id(payload, LIVE_NAVIGATION_EVIDENCE_SOURCE_ID)
+    evidence_summary = evidence_source["context_summary"]
+    assert evidence_summary["read_only"] is True
+    assert evidence_summary["runtime_safety_truth"] is False
+    assert "raw_payload_text" not in json.dumps(evidence_summary, ensure_ascii=False)
+    assert "raw_nmea" not in json.dumps(evidence_summary, ensure_ascii=False)
+    live_summary = _source_by_id(payload, LIVE_NAVIGATION_STATE_TOOL_ID)["context_summary"]
+    latest = live_summary["latest"]
+    assert live_summary["hydration"]["status"] == "hydrated"
+    assert live_summary["hydration"]["source_id"] == LIVE_NAVIGATION_EVIDENCE_SOURCE_ID
+    assert latest["provided_fields"]["lat"] == 24.051
+    assert latest["provided_fields"]["lon"] == 121.22
+    assert latest["provided_fields"]["ins_dr_source"] == "wearable_route_constrained"
+    assert latest["answerability"] == "snapshot_missing_required_fields"
+    assert "nearest_route_distance_m" in latest["missing_fields"]
+    assert latest["boundary"]["safety_api_called"] is False
+    assert latest["boundary"]["phase1_l0_l4_state_mutated"] is False
+    assert latest["boundary"]["outbound_send_performed"] is False
+    assert payload["boundary"]["safety_mutation_allowed"] is False
+    assert payload["boundary"]["outbound_send_allowed"] is False
+    assert payload["boundary"]["hardware_control_allowed"] is False
+
+
+def test_phase4_admin_runtime_pretrip_general_question_uses_tool_plan_fallback(
     monkeypatch,
 ) -> None:
     class FailingProvider:
@@ -305,16 +470,16 @@ def test_phase4_admin_runtime_pretrip_general_question_uses_local_evidence_fallb
     assert response.status_code == 200
     payload = response.json()
     assert payload["observability"]["safe_failure"] is True
-    assert payload["answer"].startswith("Scout AI local evidence fallback")
+    assert payload["answer"].startswith("Scout AI risk score tool fallback")
     assert "大崩塌" in payload["answer"]
     assert "runtime safety truth" in payload["answer"]
     assert any(
-        limitation == "resolved_by=assistant_skill.pretrip.local_evidence_search.v0"
+        limitation == f"resolved_by={RISK_SCORE_TOOL_ID}"
         for limitation in payload["limitations"]
     )
-    assert payload["sources"][0]["source_id"] == (
-        "assistant_skill.pretrip.local_evidence_search.v0"
-    )
+    source_ids = {source["source_id"] for source in payload["sources"]}
+    assert RISK_SCORE_TOOL_ID in source_ids
+    assert "assistant_skill.pretrip.local_evidence_search.v0" in source_ids
 
 
 def test_phase4_admin_runtime_pretrip_place_to_cp_skill_bypasses_failed_provider(

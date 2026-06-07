@@ -9,11 +9,19 @@ cross-surface assistant answers, or future mobile clients.
 Important architecture update:
 
 - MQTT is not the application contract; it is one transport adapter.
-- Scout must support transport-independent ingress from HTTP, WebSocket, TCP
+- Scout must support transport-independent services over HTTP, WebSocket, TCP
   stream, Bluetooth/BLE, MQTT, LoRa/LoRaWAN, satellite message, and future
   channels.
+- Transport services are bidirectional: they can receive evidence and send
+  authorized envelopes to clients, peer Scout server nodes, gateways, and
+  emergency/SAR recipients.
 - The application layer should consume normalized Scout Sensor/Vitals Records,
   not transport-specific MQTT payloads.
+- INS/DR is one application filter behind a router. It is not the whole
+  application layer.
+- Scout needs a versioned application router that can dispatch normalized
+  messages to filters/modules/skills/agents such as INS/DR, Energy Reserve,
+  Beacon Tracer, Weather Route Advisor, or raw archive.
 - INS/DR + GPS estimates may eventually feed Scout Ln safety decisions after a
   safety admission gate. Offline replay and raw ingress still must not mutate
   safety state directly.
@@ -105,52 +113,226 @@ Required artifact fields:
   evidence are actually captured
 ```
 
-## Prompt: Transport-Independent Ingress Architecture
+## Prompt: Transport-Independent Service Architecture
 
 ```text
-Design Scout sensor ingress as a transport-independent stack.
+Design Scout sensor transport as a transport-independent, bidirectional service
+stack.
 
 Do not make MQTT the application layer. MQTT is only one adapter.
 
 Layers:
-1. Transport ingress
+1. Bidirectional transport service
    - HTTP, WebSocket, TCP stream, Bluetooth/BLE, MQTT, LoRa/LoRaWAN,
      satellite message, and future transports.
-   - Preserve raw bytes/messages, receive timestamp, payload hash, credential
-     boundary, transport metadata, and parse status.
-   - No route semantics and no safety decision.
+   - Receive raw bytes/messages and preserve ingress evidence.
+   - Send already-authorized outbound envelopes such as ack, status,
+     position_beacon, team_beacon, emergency_packet, incident_hint, or
+     black_box_heartbeat.
+   - Preserve receive/send timestamp, payload hash, credential boundary,
+     transport metadata, parse status, delivery status, retry state, and
+     authorization refs.
+   - No route semantics, no safety decision, and no emergency content creation.
+   - May enforce queue durability, retry/backoff, rate limits, packet-size
+     reduction, destination allowlists, and credential scope.
 
 2. Source adapter
    - Sensor Logger, Scout iOS, Scout Android, Garmin/Apple export, BLE
      peripheral, LoRa gateway, satellite check-in.
-   - Converts source-specific payloads into normalized observations.
+   - Converts source-specific payloads into normalized observations and routing
+     hints.
 
-3. Scout Sensor/Vitals Record
+3. Application router
+   - Dispatches normalized observations/events/forecasts/status messages to
+     registered filters, modules, Scout skills, agents, or raw archive.
+   - Routes IMU/PDR/GPS/wheel to `navigation.ins_dr`.
+   - Routes health/resource evidence to `resource.energy_reserve`.
+   - Routes SOS, beacon broadcast, last-heard, and relay messages to
+     `beacon.tracer`.
+   - Routes weather forecast/alert evidence to `weather.route_advisor`.
+   - Allows `raw.archive` when no application filter should run.
+   - Preserves route_id, router_version, match_reason, dispatch_status,
+     fan-out, input_ref, output_ref, side_effect_policy, and agent_skill_ref.
+
+4. Application filter/agent registry
+   - Registered targets declare input schema, output schema, side-effect policy,
+     safety boundary, allowed outbound envelope classes, and test fixtures.
+   - `navigation.ins_dr` consumes routed location + PDR/IMU/wheel evidence and
+     produces GPS-only, INS/DR, route-constrained DR, confidence, uncertainty,
+     degradation reasons, and re-anchor corrections.
+   - AI-backed targets use explicit ScoutApplicationSkill and
+     ScoutApplicationAgent contracts.
+   - Pydantic AI or equivalent typed agents may return validated advisory
+     candidates, but cannot directly select Ln, mutate `/safety/*`, or send
+     emergency packets without safety/operator authorization.
+
+5. Scout Sensor/Vitals Record
    - Dedicated journey file/bundle, analogous in role to FIT but Scout-owned.
    - Stores location, PDR, IMU, battery, environment, life signs, provenance,
-     data quality, and navigation estimates.
+     data quality, router decisions, filter outputs, and navigation estimates.
    - Can export GPX, KML, CSV, and admin HTML maps.
 
-4. Navigation estimation
-   - Consumes normalized location + PDR/IMU/wheel evidence.
-   - Produces GPS-only track, INS/DR track, route-constrained track,
-     confidence, uncertainty, degradation reasons, and re-anchor corrections.
-
-5. Safety admission
+6. Safety admission
    - Decides whether a navigation estimate can influence Ln.
    - Applies uncertainty, persistence, corridor overlap, map confidence,
      re-anchor freshness, and terrain-class policy.
 
-6. Admin/export
+7. Admin/export
    - Shows GPS-only and INS/DR tracks overlaid for precision comparison.
    - `trajectory_diff_map.html` is an admin view generated from record/export
      data, not the canonical data file.
 
 Deliverables:
 - Update or add transport-independent contracts.
-- Keep raw transport evidence separate from normalized application records.
+- Keep raw transport evidence and outbound envelope evidence separate from
+  normalized application records.
+- Add a versioned router/filter registry instead of wiring every payload
+  directly into INS/DR.
 - Add tests proving MQTT/HTTP/BLE/LoRa style ingress can share the same
   normalized record path.
+- Add tests proving egress summaries never expose credentials or raw private
+  payloads and only send authorized envelopes.
+```
+
+## Prompt: Application Router / Filter-Agent Registry
+
+```text
+Design Scout's application router for transport-independent sensor, status,
+hardware, health, beacon, and weather evidence.
+
+Core rule:
+- INS/DR is one filter target, not the application layer.
+- Transport adapters must not hard-code application routing.
+- INS/DR routing selectors should come from the
+  `ins-dr-wearable-route-constrained` skill manifest. The routing agent should
+  inspect manifest-defined `observation_names`, `value_keys`,
+  `value_key_groups`, and `capability_tags`, such as the `acc_x`/`acc_y`/`acc_z`
+  structure for wearable accelerometer evidence.
+- High-frequency sensor data must use a deterministic high-rate pipeline or
+  bounded queue. The skill-router lane is for flexible, low-rate, unknown, or
+  admin-reviewed messages; it must not run AI or rewrite full status for every
+  IMU sample.
+- Capacity claims must be backed by
+  `tools/application_router_benchmark.py` on full Scout runtimes or
+  `tools/application_router_microbench_standalone.py` on stdlib-only Scout
+  deployments, using the 20% throughput budget as the conservative continuous
+  operating envelope.
+- Live MQTT/Sensor Logger runs should use `sensorlogger_mqtt_latency.jsonl` to
+  compare MQTT receive time, Sensor Logger package time, and routing completion
+  time. Use message-id gaps plus p95 latency to decide when package loss or
+  backlog begins.
+- OLED feedback, when enabled, is throttled diagnostic display only. It may show
+  latest message id, receive-to-route latency, sensor-to-route latency,
+  inferred Hz, and loss count, but it must not mutate safety or send outbound
+  messages.
+- The router consumes normalized observations/envelopes and dispatches them to
+  registered filters, modules, Scout skills, agents, or raw archive.
+
+Required route targets:
+- `navigation.ins_dr`: IMU, PDR, GPS/location, wheel, barometer, heading, route
+  context.
+- `resource.energy_reserve`: heart rate, HRV, exertion, recovery, battery,
+  health summary, activity summary.
+- `beacon.tracer`: SOS triggers, beacon broadcasting, last-heard packets,
+  black-box heartbeat state, peer relay evidence.
+- `weather.route_advisor`: forecast, radar/nowcast, heavy-rain or typhoon
+  alert, temperature/wind risk, route timing context. Use Pydantic AI or an
+  equivalent typed agent only through a registered skill/agent contract.
+- `raw.archive`: normalized or unknown evidence that should be stored without
+  running a filter.
+
+Route rule fields:
+- route_id
+- router_version
+- input selectors
+- target filter/module/skill/agent id
+- fan-out and priority
+- idempotency/dedupe key
+- timeout/retry policy
+- allowed side effects and outbound envelope classes
+- output contract
+- operator/policy gate
+
+Dispatch record fields:
+- router_version
+- route_id
+- route_target
+- match_reason
+- dispatch_status
+- input_ref
+- output_ref
+- side_effect_policy
+- agent_skill_ref
+- credential_value_exposed=false
+
+AI boundary:
+- A ScoutApplicationSkill declares schemas, examples, validation rules, policy
+  boundaries, tools/transports, and tests.
+- A ScoutApplicationAgent executes a registered skill under router policy.
+- AI output is a typed candidate/advisory/summary until validated and admitted.
+- The router and AI agents must not directly select Ln, mutate `/safety/*`, or
+  send emergency packets without a separate safety/operator authorization
+  envelope.
+
+Deliverables:
+- Versioned router/filter registry contract.
+- Tests proving route dispatch for navigation, health/resource, beacon, weather,
+  and raw archive cases.
+- Tests proving AI-backed weather advice stays typed/advisory unless admitted.
+```
+
+## Prompt: Black-Box Beacon / Peer Relay Transport Service
+
+```text
+Design Scout black-box beacon and peer relay as transport services.
+
+Goal:
+- When application/safety admission has authorized an emergency or black-box
+  heartbeat, Scout should keep transmitting compact location/status packets to
+  clients, peer Scout server nodes, gateways, LoRa relays, MQTT topics, or
+  satellite message providers.
+- This is like a field black box: persistent, replayable, and auditable.
+
+Transport service responsibilities:
+- queue durability;
+- retry/backoff;
+- dedupe and sequence tracking;
+- delivery receipts when available;
+- per-transport packet-size reduction;
+- destination failover;
+- peer Scout server/node relay;
+- status projection for admin/debug;
+- egress evidence records with payload hash and authorization refs.
+
+Transport service must not:
+- decide that an incident exists;
+- select Ln;
+- create emergency content;
+- decide who can receive private details;
+- expose credentials or raw health/location payloads in summaries;
+- bypass safety admission or operator policy.
+
+Outbound packet classes:
+- ack
+- status
+- position_beacon
+- team_beacon
+- emergency_packet
+- incident_hint
+- black_box_heartbeat
+
+Required egress evidence:
+- egress_transport
+- destination_class
+- source_service
+- message_class
+- queued_at / sent_at
+- payload_sha256
+- delivery_status
+- retry_count
+- authorization_ref
+- raw/envelope artifact path
+- credential_value_exposed=false
 ```
 
 ## Prompt: Wearable Provider / Mobile Stream Integration
@@ -319,9 +501,12 @@ Preferred v0 bundle:
 journey.scout-svr/
   manifest.json
   observations.jsonl
+  application_routes.jsonl
+  filter_outputs.jsonl
   navigation_estimates.jsonl
   vitals.jsonl
   transport_ingress_index.jsonl
+  transport_egress_index.jsonl
   exports/
     journey.gpx
     journey.kml
@@ -332,6 +517,13 @@ Record requirements:
 - Keep raw transport payloads and private credentials outside summaries.
 - Preserve source_adapter, ingress_transport, payload_sha256, raw_evidence_refs,
   data_quality, privacy, and boundary fields.
+- Preserve egress_transport, destination_class, delivery_status, retry_count,
+  and authorization_ref when black-box or peer relay packets were sent.
+- Preserve router_version, route_id, route_target, match_reason,
+  dispatch_status, input_ref, output_ref, side_effect_policy, and
+  agent_skill_ref for application routing decisions.
+- Preserve filter outputs from INS/DR, Energy Reserve, Beacon Tracer,
+  Weather Route Advisor, and raw/archive-only decisions.
 - Store multiple tracks:
   - gps_only_track
   - ins_dr_track
@@ -460,7 +652,9 @@ The assistant must not:
 - Say route_heading_oracle is deployable independent sensor evidence.
 - Promote wearable provider health/location values into medical diagnosis or
   safety truth.
-- Suggest outbound or /safety/* actions.
+- Suggest outbound or /safety/* actions unless the user is explicitly operating
+  an approved runtime/safety admission workflow. In ordinary explanation mode,
+  outbound sends remain described as gated transport-service capability only.
 
 Return sources:
 - Link to the method matrix summary artifact when present.

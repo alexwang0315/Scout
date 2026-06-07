@@ -1,4 +1,6 @@
+import json
 import re
+import subprocess
 from pathlib import Path
 
 
@@ -39,10 +41,13 @@ def assert_shared_assistant_contract(shell: str, surface: str) -> None:
     assert "read-only model interpretation" in shell
     assert "Answer" in shell
     assert "Offline fallback" in shell
+    assert "Workflow" in shell
     assert "Limitations" in shell
     assert "Sources" in shell
     assert 'class="assistant-answer"' in shell
     assert 'id="assistantOfflineFallbackList"' in shell
+    assert 'id="assistantWorkflowStatusList"' in shell
+    assert 'id="assistantWorkflowList"' in shell
     assert 'class="assistant-limitations"' in shell
     assert 'class="assistant-sources"' in shell
     assert MUTATION_BUTTON_RE.search(shell) is None
@@ -67,6 +72,8 @@ def assert_live_query_contract(html: str, shell: str, surface: str) -> None:
     assert "renderAssistantResponse" in html
     assert "renderOfflineFallback(payload)" in html
     assert "renderOfflineFallback({})" in html
+    assert "renderWorkflowSummary(payload)" in html
+    assert "renderWorkflowSummary({})" in html
     assert "Assistant query failed" in html
     payload_function = function_block(html, "assistantQueryPayload")
     for field in FORBIDDEN_QUERY_FIELDS:
@@ -84,6 +91,9 @@ def assert_status_and_context_panel_contract(html: str, shell: str) -> None:
     assert "loadAssistantStatus" in html
     assert "renderAssistantContext" in html
     assert "token_values_exposed" in combined
+    assert "renderWorkflowStatus(status)" in html
+    assert "assistantWorkflowStatusList" in shell
+    assert "Workflow readiness status not loaded." in shell
     assert "api_key" not in shell.lower()
 
 
@@ -193,11 +203,92 @@ def test_shared_assistant_ui_module_has_read_only_fetch_and_render_helpers():
     assert "observabilityItems" in script
     assert "offlineFallbackItems" in script
     assert "renderOfflineFallback" in script
+    assert "fullWorkflowSource" in script
+    assert "workflowItems" in script
+    assert "renderWorkflowSummary" in script
+    assert "workflowStatusItems" in script
+    assert "renderWorkflowStatus" in script
+    assert "assistant_workflow" in script
+    assert "candidate_evidence_is_runtime_truth" in script
+    assert "assistant_full_workflow_summary" in script
     assert "assistantOfflineFallbackList" in script
+    assert "assistantWorkflowStatusList" in script
+    assert "assistantWorkflowList" in script
     assert "schema_version" in script
     assert "safety_authority" in script
     assert "token_values_exposed" in script
     assert "api_key" not in script.lower()
+
+
+def test_shared_assistant_ui_renders_workflow_status_after_js_execution():
+    script = read_page(ASSISTANT_UI_SCRIPT)
+    runner = f"""
+const script = {json.dumps(script)};
+const list = {{
+  textContent: "",
+  children: [],
+  appendChild(node) {{ this.children.push(node); }}
+}};
+const document = {{
+  getElementById(id) {{
+    return id === "assistantWorkflowStatusList" ? list : null;
+  }},
+  createElement(tag) {{
+    return {{tag, textContent: ""}};
+  }}
+}};
+const window = {{}};
+globalThis.document = document;
+globalThis.window = window;
+eval(script);
+window.ScoutAssistantUI.renderWorkflowStatus({{
+  assistant_workflow: {{
+    status: "ready",
+    workflow_gate_ok: true,
+    overall_readiness_ok: true,
+    workflow_tool_count: 8,
+    checked_manifest_count: 8,
+    missing_count: 0,
+    workflow_order: [
+      "user_question",
+      "context_registry_source_discovery",
+      "registry_backed_tool_planner",
+      "deterministic_read_only_tools"
+    ],
+    missing: [],
+    runtime_safety_truth: false,
+    candidate_evidence_is_runtime_truth: false,
+    outbound_send_allowed: false,
+    hardware_control_allowed: false
+  }}
+}});
+process.stdout.write(JSON.stringify({{
+  childCount: list.children.length,
+  renderedText: list.children.map(child => child.textContent).join("\\n")
+}}));
+"""
+    completed = subprocess.run(
+        ["node", "-"],
+        input=runner,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    payload = json.loads(completed.stdout)
+    assert payload["childCount"] >= 4
+    rendered = payload["renderedText"]
+    assert "status: ready" in rendered
+    assert "workflow_gate_ok=true" in rendered
+    assert "overall_readiness_ok=true" in rendered
+    assert "tools: 8" in rendered
+    assert "checked_manifests=8" in rendered
+    assert "runtime_safety_truth=false" in rendered
+    assert "candidate_evidence_is_runtime_truth=false" in rendered
+    assert "outbound=false" in rendered
+    assert "hardware=false" in rendered
+    assert "workflow_step: registry_backed_tool_planner" in rendered
 
 
 def test_admin_after_action_page_has_read_only_assistant_shell_and_live_query_controls():
