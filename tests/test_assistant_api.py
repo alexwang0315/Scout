@@ -299,15 +299,9 @@ class AssistantApiTests(unittest.TestCase):
         self.assertGreaterEqual(tool_registry["ready_current_tool_count"], 8)
         self.assertGreaterEqual(tool_registry["contract_only_tool_count"], 1)
         self.assertIn("ready_current_tool", tool_registry["implementation_status_counts"])
-        self.assertIn(
+        self.assertNotIn(
             "scout.ai.weather_window.assess.v0",
             tool_registry["missing_evidence_fields_by_tool"],
-        )
-        self.assertIn(
-            "provider",
-            tool_registry["missing_evidence_fields_by_tool"][
-                "scout.ai.weather_window.assess.v0"
-            ],
         )
         self.assertFalse(tool_registry["runtime_safety_truth"])
         self.assertFalse(tool_registry["context_path_values_exposed"])
@@ -360,8 +354,7 @@ class AssistantApiTests(unittest.TestCase):
         tool_registry = status["tool_registry"]
         self.assertTrue(tool_registry["available"])
         self.assertGreaterEqual(tool_registry["tool_count"], 10)
-        self.assertGreaterEqual(tool_registry["missing_evidence_tool_count"], 1)
-        self.assertIn(
+        self.assertNotIn(
             "scout.ai.weather_window.assess.v0",
             tool_registry["missing_evidence_tool_ids"],
         )
@@ -409,7 +402,7 @@ class AssistantApiTests(unittest.TestCase):
         tool_registry = tool_registry_source["context_summary"]
         self.assertTrue(tool_registry["available"])
         self.assertGreaterEqual(tool_registry["ready_current_tool_count"], 8)
-        self.assertIn(
+        self.assertNotIn(
             "scout.ai.weather_window.assess.v0",
             tool_registry["missing_evidence_fields_by_tool"],
         )
@@ -440,7 +433,7 @@ class AssistantApiTests(unittest.TestCase):
         self.assertTrue(payload["observability"]["safe_failure"])
         self.assertEqual(payload["observability"]["latency_class"], "timeout_or_error")
 
-    def test_provider_failure_uses_router_tool_plan_fallback_for_weather_gap(self):
+    def test_provider_failure_uses_router_tool_plan_fallback_for_weather_partial_result(self):
         class FailingProvider:
             def answer(self, query: ScoutAssistantQuery, *, sources=None):
                 raise RuntimeError("provider unavailable")
@@ -475,17 +468,19 @@ class AssistantApiTests(unittest.TestCase):
         )
         workflow_summary = workflow_source["context_summary"]
         self.assertEqual(workflow_summary["artifact_kind"], "scout_ai_full_workflow")
-        self.assertEqual(workflow_summary["answerability"], "missing_evidence")
-        self.assertEqual(workflow_summary["contract_gap_count"], 1)
+        self.assertEqual(workflow_summary["answerability"], "partial_evidence_with_missing_context")
+        self.assertEqual(workflow_summary["contract_gap_count"], 0)
         self.assertEqual(workflow_summary["missing_evidence_count"], 1)
         self.assertFalse(workflow_summary["workflow_policy"]["model_provider_used"])
         self.assertFalse(workflow_summary["boundary"]["runtime_safety_truth"])
         weather_source = _source_by_id(payload, WEATHER_WINDOW_TOOL_ID)
-        self.assertEqual(weather_source["evidence_type"], "assistant_registry_tool_contract_gap")
+        self.assertEqual(weather_source["evidence_type"], "assistant_registry_tool_result")
         weather_summary = weather_source["context_summary"]
-        self.assertEqual(weather_summary["status"], "contract_only_missing_evidence")
-        self.assertIn("provider", weather_summary["missing_fields"])
-        self.assertIn("ttl_s", weather_summary["missing_fields"])
+        self.assertEqual(weather_summary["status"], "completed")
+        self.assertEqual(weather_summary["latest"]["answerability"], "weather_placeholder_only")
+        self.assertIn("provider", weather_summary["latest"]["missing_fields"])
+        self.assertIn("ttl_s", weather_summary["latest"]["missing_fields"])
+        self.assertIn("route_weather_package", weather_summary["latest"]["missing_fields"])
         self.assertIn(f"resolved_by={PRETRIP_FULL_WORKFLOW_SOURCE_ID}", payload["limitations"])
         self.assertIn(f"resolved_by={PRETRIP_TOOL_PLANNER_SKILL_ID}", payload["limitations"])
         self.assertTrue(payload["observability"]["safe_failure"])
@@ -545,17 +540,25 @@ class AssistantApiTests(unittest.TestCase):
         workflow_source = _source_by_id(response.json(), PRETRIP_FULL_WORKFLOW_SOURCE_ID)
         self.assertEqual(workflow_source["evidence_type"], "assistant_full_workflow_summary")
         workflow_summary = workflow_source["context_summary"]
-        self.assertEqual(workflow_summary["answerability"], "missing_evidence")
-        self.assertEqual(workflow_summary["contract_gap_count"], 1)
+        self.assertEqual(workflow_summary["answerability"], "partial_evidence_with_missing_context")
+        self.assertEqual(workflow_summary["contract_gap_count"], 0)
         self.assertEqual(workflow_summary["missing_evidence_count"], 1)
         self.assertFalse(workflow_summary["workflow_policy"]["model_provider_used"])
         self.assertFalse(workflow_summary["boundary"]["runtime_safety_truth"])
 
         weather_source = _source_by_id(response.json(), WEATHER_WINDOW_TOOL_ID)
-        self.assertEqual(weather_source["evidence_type"], "assistant_registry_tool_contract_gap")
-        self.assertEqual(weather_source["context_summary"]["status"], "contract_only_missing_evidence")
-        self.assertIn("provider", weather_source["context_summary"]["missing_fields"])
-        self.assertIn("ttl_s", weather_source["context_summary"]["missing_fields"])
+        self.assertEqual(weather_source["evidence_type"], "assistant_registry_tool_result")
+        self.assertEqual(weather_source["context_summary"]["status"], "completed")
+        self.assertEqual(
+            weather_source["context_summary"]["latest"]["answerability"],
+            "weather_placeholder_only",
+        )
+        self.assertIn("provider", weather_source["context_summary"]["latest"]["missing_fields"])
+        self.assertIn("ttl_s", weather_source["context_summary"]["latest"]["missing_fields"])
+        self.assertIn(
+            "route_weather_package",
+            weather_source["context_summary"]["latest"]["missing_fields"],
+        )
         payload = response.json()
         self.assertFalse(payload["observability"]["safe_failure"])
         self.assertFalse(payload["boundary"]["phase1_mutation_allowed"])
@@ -894,7 +897,7 @@ class AssistantApiTests(unittest.TestCase):
         self.assertEqual(len(runner.prompts), 1)
         prompt = runner.prompts[0]
         self.assertIn('"assistant_registry_tool_plan"', prompt)
-        self.assertIn('"assistant_registry_tool_contract_gap"', prompt)
+        self.assertIn('"assistant_registry_tool_result"', prompt)
         self.assertIn(PRETRIP_TOOL_PLANNER_SKILL_ID, prompt)
         self.assertIn(WEATHER_WINDOW_TOOL_ID, prompt)
         self.assertIn('"source_id": "assistant_context.tool_registry"', prompt)
@@ -904,6 +907,7 @@ class AssistantApiTests(unittest.TestCase):
         self.assertIn('"missing_evidence_fields_by_source"', prompt)
         self.assertIn('"provider"', prompt)
         self.assertIn('"ttl_s"', prompt)
+        self.assertIn('"route_weather_package"', prompt)
         self.assertIn("state the missing evidence instead of inferring it", prompt)
 
         payload = response.json()
@@ -914,8 +918,9 @@ class AssistantApiTests(unittest.TestCase):
         weather_source = _source_by_id(payload, WEATHER_WINDOW_TOOL_ID)
         self.assertEqual(
             weather_source["evidence_type"],
-            "assistant_registry_tool_contract_gap",
+            "assistant_registry_tool_result",
         )
+        self.assertEqual(weather_source["context_summary"]["status"], "completed")
         self.assertFalse(payload["boundary"]["phase1_mutation_allowed"])
         self.assertFalse(payload["boundary"]["outbound_send_allowed"])
 

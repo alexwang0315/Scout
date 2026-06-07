@@ -66,7 +66,7 @@ def test_full_workflow_runs_risk_and_terrain_question_end_to_end() -> None:
     assert any("no model provider was called" in item for item in result.limitations)
 
 
-def test_full_workflow_reports_weather_missing_evidence_without_guessing() -> None:
+def test_full_workflow_runs_weather_tool_and_reports_missing_fresh_evidence() -> None:
     result = run_scout_ai_full_workflow(
         "明天午後雷雨是否要紮營?",
         project_root=PROJECT_ROOT,
@@ -74,25 +74,29 @@ def test_full_workflow_reports_weather_missing_evidence_without_guessing() -> No
         limit=3,
     )
 
-    assert result.answerability == "missing_evidence"
+    assert result.answerability == "partial_evidence_with_missing_context"
     assert result.selected_tool_count == 1
-    assert result.executed_tool_count == 0
-    assert result.completed_tool_count == 0
-    assert result.contract_gap_count == 1
+    assert result.executed_tool_count == 1
+    assert result.completed_tool_count == 1
+    assert result.contract_gap_count == 0
     assert result.failed_tool_count == 0
     assert result.missing_evidence_count == 1
-    assert result.workflow_policy.deterministic_tools_executed is False
+    assert result.workflow_policy.deterministic_tools_executed is True
     assert result.workflow_policy.model_provider_used is False
     assert result.workflow_policy.model_synthesis_performed is False
 
     assert result.sources[0]["tool_id"] == WEATHER_WINDOW_TOOL_ID
-    assert result.sources[0]["collection_status"] == "contract_gap"
+    assert result.sources[0]["collection_status"] == "completed"
+    assert result.sources[0]["top_result_summary"]["answerability"] == (
+        "weather_placeholder_only"
+    )
     assert "provider" in result.sources[0]["missing_fields"]
     assert "ttl_s" in result.sources[0]["missing_fields"]
+    assert "route_weather_package" in result.sources[0]["missing_fields"]
     assert result.missing_evidence[0]["tool_id"] == WEATHER_WINDOW_TOOL_ID
     assert "provider" in result.missing_evidence[0]["missing_fields"]
     assert "ttl_s" in result.missing_evidence[0]["missing_fields"]
-    assert "A field conclusion should not be inferred" in result.answer
+    assert "weather_placeholder_only" in result.answer
     assert "runtime safety truth" in result.answer
 
 

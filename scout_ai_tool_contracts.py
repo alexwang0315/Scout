@@ -27,6 +27,12 @@ from scout_energy_vitals_tool import (
     ENERGY_VITALS_REQUIRED_FIELDS,
     ENERGY_VITALS_TOOL_ID,
 )
+from scout_weather_window_tool import (
+    WEATHER_WINDOW_OPTIONAL_FIELDS,
+    WEATHER_WINDOW_OUTPUT_KIND,
+    WEATHER_WINDOW_REQUIRED_FIELDS,
+    WEATHER_WINDOW_TOOL_ID,
+)
 
 ARTIFACT_KIND_REGISTRY = "scout_ai_tool_registry"
 ARTIFACT_VERSION_REGISTRY = "scout_ai_tool_registry.v0"
@@ -175,6 +181,9 @@ EXECUTABLE_TOOL_ALIASES: dict[str, list[str]] = {
     ENERGY_VITALS_TOOL_ID: [
         "scout.ai.energy_vitals.assess",
     ],
+    WEATHER_WINDOW_TOOL_ID: [
+        "scout.ai.weather_window.assess",
+    ],
 }
 
 
@@ -190,6 +199,7 @@ EXECUTABLE_OUTPUT_KINDS: dict[str, str] = {
     LIVE_NAVIGATION_STATE_TOOL_ID: LIVE_NAVIGATION_STATE_OUTPUT_KIND,
     SAFETY_BOUNDARY_TOOL_ID: SAFETY_BOUNDARY_OUTPUT_KIND,
     ENERGY_VITALS_TOOL_ID: ENERGY_VITALS_OUTPUT_KIND,
+    WEATHER_WINDOW_TOOL_ID: WEATHER_WINDOW_OUTPUT_KIND,
 }
 
 
@@ -360,19 +370,31 @@ def _contract_from_raw(tool_id: str, raw: dict[str, Any]) -> ScoutAiToolContract
     status = _implementation_status(str(raw.get("status") or "new_agent_tool_needed"))
     if tool_id == INS_DR_TRACE_TOOL_ID:
         status = ScoutAiToolImplementationStatus.READY_CURRENT_TOOL
+    if tool_id == WEATHER_WINDOW_TOOL_ID:
+        status = ScoutAiToolImplementationStatus.READY_CURRENT_TOOL
+        required_fields = list(WEATHER_WINDOW_REQUIRED_FIELDS)
+        implementation_gap = None
+        existing_support = [
+            *_as_str_list(raw.get("existing_support")),
+            "scout_weather_window_tool.py read-only route weather package assessor",
+        ]
+    else:
+        required_fields = _as_str_list(raw.get("required_fields"))
+        implementation_gap = (
+            str(raw["implementation_gap"]) if raw.get("implementation_gap") else None
+        )
+        existing_support = _as_str_list(raw.get("existing_support"))
     return ScoutAiToolContract(
         tool_id=tool_id,
         label=str(raw.get("label") or tool_id),
         implementation_status=status,
         description=_description_for_raw(tool_id, raw),
         data_bundles=_as_str_list(raw.get("data_bundles")),
-        required_fields=_as_str_list(raw.get("required_fields")),
+        required_fields=required_fields,
         optional_fields=_optional_fields_for(tool_id),
         workflow_steps=_as_str_list(raw.get("workflow_steps")),
-        existing_support=_as_str_list(raw.get("existing_support")),
-        implementation_gap=(
-            str(raw["implementation_gap"]) if raw.get("implementation_gap") else None
-        ),
+        existing_support=existing_support,
+        implementation_gap=implementation_gap,
         argument_schema=_argument_schema_for(tool_id)
         if tool_id in EXECUTABLE_TOOL_ALIASES
         else _future_argument_schema(_as_str_list(raw.get("required_fields"))),
@@ -497,6 +519,8 @@ def _optional_fields_for(tool_id: str) -> list[str]:
             *ENERGY_VITALS_REQUIRED_FIELDS,
             *ENERGY_VITALS_OPTIONAL_FIELDS,
         ]
+    if tool_id == WEATHER_WINDOW_TOOL_ID:
+        return list(WEATHER_WINDOW_OPTIONAL_FIELDS)
     return []
 
 

@@ -197,7 +197,7 @@ def test_pretrip_tool_plan_sources_execute_ready_risk_and_terrain_tools() -> Non
     assert terrain_summary["boundary"]["runtime_safety_truth"] is False
 
 
-def test_pretrip_tool_plan_fallback_reports_weather_missing_evidence() -> None:
+def test_pretrip_tool_plan_fallback_reports_weather_partial_tool_evidence() -> None:
     query = ScoutAssistantQuery(
         surface=AssistantSurface.PRETRIP,
         question="明天午後雷雨是否要紮營？",
@@ -222,14 +222,16 @@ def test_pretrip_tool_plan_fallback_reports_weather_missing_evidence() -> None:
     assert "provider_error_type=ProviderFailed" in response.limitations
     assert f"resolved_by={PRETRIP_TOOL_PLANNER_SKILL_ID}" in response.limitations
     weather_summary = _summary_for(response.sources, WEATHER_WINDOW_TOOL_ID)
-    assert weather_summary["status"] == "contract_only_missing_evidence"
-    assert "provider" in weather_summary["missing_fields"]
-    assert "ttl_s" in weather_summary["missing_fields"]
+    assert weather_summary["status"] == "completed"
+    assert weather_summary["latest"]["answerability"] == "weather_placeholder_only"
+    assert "provider" in weather_summary["latest"]["missing_fields"]
+    assert "ttl_s" in weather_summary["latest"]["missing_fields"]
+    assert "route_weather_package" in weather_summary["latest"]["missing_fields"]
     assert response.boundary.safety_mutation_allowed is False
     assert response.boundary.outbound_send_allowed is False
 
 
-def test_pretrip_full_workflow_source_reports_weather_missing_evidence() -> None:
+def test_pretrip_full_workflow_source_reports_weather_partial_tool_evidence() -> None:
     query = ScoutAssistantQuery(
         surface=AssistantSurface.PRETRIP,
         question="明天午後雷雨是否要紮營？",
@@ -249,19 +251,20 @@ def test_pretrip_full_workflow_source_reports_weather_missing_evidence() -> None
     summary = source.context_summary
     assert summary is not None
     assert summary["artifact_kind"] == "scout_ai_full_workflow"
-    assert summary["answerability"] == "missing_evidence"
+    assert summary["answerability"] == "partial_evidence_with_missing_context"
     assert summary["selected_tool_count"] == 1
-    assert summary["executed_tool_count"] == 0
-    assert summary["contract_gap_count"] == 1
+    assert summary["executed_tool_count"] == 1
+    assert summary["contract_gap_count"] == 0
     assert summary["missing_evidence_count"] == 1
     assert summary["workflow_policy"]["model_provider_used"] is False
     assert summary["workflow_policy"]["model_synthesis_performed"] is False
     assert summary["boundary"]["runtime_safety_truth"] is False
     assert summary["runtime_safety_truth"] is False
-    assert "A field conclusion should not be inferred" in summary["answer"]
+    assert "weather_placeholder_only" in summary["answer"]
     assert summary["sources"][0]["tool_id"] == WEATHER_WINDOW_TOOL_ID
     assert "provider" in summary["missing_evidence"][0]["missing_fields"]
     assert "ttl_s" in summary["missing_evidence"][0]["missing_fields"]
+    assert "route_weather_package" in summary["missing_evidence"][0]["missing_fields"]
 
 
 def test_pretrip_full_workflow_fallback_uses_compact_workflow_source() -> None:
@@ -287,13 +290,13 @@ def test_pretrip_full_workflow_fallback_uses_compact_workflow_source() -> None:
     assert response is not None
     assert "registry planner fallback" in response.answer
     assert "full workflow fallback" in response.answer
-    assert "A field conclusion should not be inferred" in response.answer
+    assert "weather_placeholder_only" in response.answer
     assert PRETRIP_FULL_WORKFLOW_SOURCE_ID in {
         source.source_id for source in response.sources
     }
     workflow_summary = _summary_for(response.sources, PRETRIP_FULL_WORKFLOW_SOURCE_ID)
-    assert workflow_summary["answerability"] == "missing_evidence"
-    assert workflow_summary["contract_gap_count"] == 1
+    assert workflow_summary["answerability"] == "partial_evidence_with_missing_context"
+    assert workflow_summary["contract_gap_count"] == 0
     assert f"resolved_by={PRETRIP_FULL_WORKFLOW_SOURCE_ID}" in response.limitations
     assert response.boundary.safety_mutation_allowed is False
     assert response.boundary.outbound_send_allowed is False

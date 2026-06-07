@@ -60,7 +60,7 @@ def test_evidence_collection_executes_ready_risk_and_terrain_tools() -> None:
     assert terrain.result["payload"]["summaries"]
 
 
-def test_evidence_collection_reports_weather_contract_gap_without_model_synthesis() -> None:
+def test_evidence_collection_executes_weather_tool_without_model_synthesis() -> None:
     result = collect_scout_ai_evidence(
         "明天午後雷雨是否要紮營?",
         project_root=PROJECT_ROOT,
@@ -69,18 +69,23 @@ def test_evidence_collection_reports_weather_contract_gap_without_model_synthesi
     )
 
     assert result.selected_tool_count == 1
-    assert result.executed_tool_count == 0
-    assert result.completed_tool_count == 0
-    assert result.contract_gap_count == 1
-    assert result.execution_policy.ready_tools_executed is False
+    assert result.executed_tool_count == 1
+    assert result.completed_tool_count == 1
+    assert result.contract_gap_count == 0
+    assert result.execution_policy.ready_tools_executed is True
     assert result.execution_policy.model_synthesis_performed is False
 
     weather = _record(result, WEATHER_WINDOW_TOOL_ID)
-    assert weather.collection_status == "contract_gap"
-    assert weather.result is None
+    assert weather.collection_status == "completed"
+    assert weather.result is not None
+    assert weather.result["status"] == "completed"
+    assert weather.result["payload"]["answerability"] == "weather_placeholder_only"
+    assert weather.result["payload"]["source_status"] == "candidate_only"
+    assert weather.result["payload"]["result_count"] == 0
     assert "provider" in weather.missing_fields
     assert "ttl_s" in weather.missing_fields
-    assert weather.implementation_gap is not None
+    assert "route_weather_package" in weather.missing_fields
+    assert weather.implementation_gap is None
     assert weather.boundary.runtime_safety_truth is False
 
 

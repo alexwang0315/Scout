@@ -23,7 +23,7 @@ MANIFEST_PATH = (
 )
 
 
-def test_workflow_discovery_reports_weather_contract_gap_without_execution() -> None:
+def test_workflow_discovery_plans_weather_ready_tool_without_execution() -> None:
     result = build_scout_ai_workflow_discovery_plan(
         "明天午後雷雨是否要紮營?",
         project_root=PROJECT_ROOT,
@@ -37,8 +37,8 @@ def test_workflow_discovery_reports_weather_contract_gap_without_execution() -> 
     assert result.context_registry["artifact_kind"] == "scout_ai_context_registry"
     assert result.tool_registry_summary["artifact_kind"] == "scout_ai_tool_registry"
     assert WEATHER_WINDOW_TOOL_ID in result.selected_tool_ids
-    assert result.ready_to_execute_tool_ids == []
-    assert result.contract_gap_tool_ids == [WEATHER_WINDOW_TOOL_ID]
+    assert result.ready_to_execute_tool_ids == [WEATHER_WINDOW_TOOL_ID]
+    assert result.contract_gap_tool_ids == []
     assert result.execution_policy.ready_tools_executed is False
     assert result.execution_policy.model_synthesis_performed is False
     assert result.execution_policy.workspace_file_write_allowed is False
@@ -46,10 +46,9 @@ def test_workflow_discovery_reports_weather_contract_gap_without_execution() -> 
     assert result.boundary.live_safety_api_calls_allowed is False
 
     selected_weather = _plan_item(result.tool_plan, WEATHER_WINDOW_TOOL_ID)
-    assert selected_weather["status"] == "contract_only_missing_evidence"
-    assert selected_weather["request"] is None
-    assert "provider" in selected_weather["missing_fields"]
-    assert "ttl_s" in selected_weather["missing_fields"]
+    assert selected_weather["status"] == "ready_to_execute"
+    assert selected_weather["request"] is not None
+    assert selected_weather["missing_fields"] == []
     assert "tool_result" not in selected_weather
 
 

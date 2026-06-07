@@ -80,18 +80,19 @@ def test_planner_selects_risk_and_terrain_for_dangerous_terrain_question() -> No
         assert item.request["query"] == "危險地形在哪些位置?"
 
 
-def test_planner_selects_weather_contract_only_and_reports_missing_fields() -> None:
+def test_planner_selects_weather_ready_tool_for_weather_questions() -> None:
     plan = plan_scout_ai_tools(
         _query("明天午後雷雨是否要紮營?"),
         project_root=PROJECT_ROOT,
     )
 
     item = _single_tool(plan, WEATHER_WINDOW_TOOL_ID)
-    assert item.status == ScoutAiToolPlanItemStatus.CONTRACT_ONLY_MISSING_EVIDENCE
-    assert item.implementation_status == "partial_existing_surface"
-    assert item.request is None
-    assert "provider" in item.required_fields
-    assert "ttl_s" in item.missing_fields
+    assert item.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+    assert item.implementation_status == "ready_current_tool"
+    assert item.request is not None
+    assert item.request["tool_id"] == WEATHER_WINDOW_TOOL_ID
+    assert item.required_fields == ["project_root"]
+    assert item.missing_fields == []
     assert item.boundary.live_safety_api_calls_allowed is False
 
 

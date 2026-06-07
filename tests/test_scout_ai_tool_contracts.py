@@ -49,7 +49,7 @@ def test_tool_registry_lists_current_and_future_contracts() -> None:
         "ready_current_tool"
     )
     assert by_id["scout.ai.weather_window.assess.v0"].implementation_status == (
-        "partial_existing_surface"
+        "ready_current_tool"
     )
     assert by_id["scout.ai.live_navigation_state.assess.v0"].implementation_status == (
         "partial_existing_surface"
@@ -66,13 +66,7 @@ def test_tool_registry_lists_current_and_future_contracts() -> None:
     assert registry.contract_only_tool_count >= 1
     assert registry.implementation_status_counts["ready_current_tool"] >= 8
     assert "ready_current_tool" in registry.tool_ids_by_status
-    assert "scout.ai.weather_window.assess.v0" in registry.missing_evidence_fields_by_tool
-    assert "provider" in registry.missing_evidence_fields_by_tool[
-        "scout.ai.weather_window.assess.v0"
-    ]
-    assert "ttl_s" in registry.missing_evidence_fields_by_tool[
-        "scout.ai.weather_window.assess.v0"
-    ]
+    assert "scout.ai.weather_window.assess.v0" not in registry.missing_evidence_fields_by_tool
     assert registry.boundary.runtime_safety_truth is False
     assert registry.boundary.remote_outbound_send_allowed is False
 
@@ -111,21 +105,25 @@ def test_execute_ready_current_tool_returns_uniform_result() -> None:
     assert result.boundary.phase1_safety_mutation_allowed is False
 
 
-def test_execute_future_weather_tool_returns_not_implemented_contract() -> None:
+def test_execute_weather_tool_returns_read_only_weather_evidence_gap() -> None:
     result = execute_scout_ai_tool(
         {
             "tool_id": "scout.ai.weather_window.assess.v0",
-            "arguments": {
-                "query": "明天午後雷雨要不要提早紮營",
-            },
+            "project_root": str(PROJECT_ROOT),
+            "query": "明天午後雷雨要不要提早紮營",
         }
     )
 
-    assert result.status == "not_implemented"
-    assert result.implementation_status == "partial_existing_surface"
-    assert result.payload["contract"]["tool_id"] == "scout.ai.weather_window.assess.v0"
+    assert result.status == "completed"
+    assert result.implementation_status == "ready_current_tool"
+    assert result.output_artifact_kind == "scout_ai_weather_window_tool_output"
+    assert result.payload["artifact_kind"] == "scout_ai_weather_window_tool_output"
+    assert result.payload["tool_id"] == "scout.ai.weather_window.assess.v0"
+    assert result.payload["answerability"] == "weather_placeholder_only"
     assert "provider" in result.missing_fields
     assert "ttl_s" in result.missing_fields
+    assert "route_weather_package" in result.missing_fields
+    assert result.payload["boundary"]["client_cwa_api_key_allowed"] is False
     assert result.boundary.live_safety_api_calls_allowed is False
 
 
@@ -328,7 +326,7 @@ def test_agent_manifest_runs_tool_registry_and_tool_run(tmp_path: Path) -> None:
     assert registry_output["tool_count"] >= 10
     assert registry_output["ready_current_tool_count"] >= 8
     assert registry_output["contract_only_tool_count"] >= 1
-    assert "scout.ai.weather_window.assess.v0" in registry_output[
+    assert "scout.ai.weather_window.assess.v0" not in registry_output[
         "missing_evidence_fields_by_tool"
     ]
     assert any(

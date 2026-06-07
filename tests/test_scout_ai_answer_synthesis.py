@@ -57,7 +57,7 @@ def test_answer_synthesis_uses_completed_risk_and_terrain_evidence() -> None:
     assert any("no model provider was called" in item for item in result.limitations)
 
 
-def test_answer_synthesis_reports_weather_missing_evidence_without_guessing() -> None:
+def test_answer_synthesis_reports_weather_tool_missing_fresh_evidence_without_guessing() -> None:
     result = collect_and_synthesize_scout_ai_answer(
         "明天午後雷雨是否要紮營?",
         project_root=PROJECT_ROOT,
@@ -65,20 +65,24 @@ def test_answer_synthesis_reports_weather_missing_evidence_without_guessing() ->
         limit=3,
     )
 
-    assert result.answerability == "missing_evidence"
-    assert result.completed_source_count == 0
+    assert result.answerability == "partial_evidence_with_missing_context"
+    assert result.completed_source_count == 1
     assert result.missing_evidence_count == 1
     assert result.synthesis_policy.model_provider_used is False
     assert result.synthesis_policy.model_synthesis_performed is False
 
     assert result.sources[0].tool_id == WEATHER_WINDOW_TOOL_ID
-    assert result.sources[0].collection_status == "contract_gap"
+    assert result.sources[0].collection_status == "completed"
+    assert result.sources[0].top_result_summary["answerability"] == (
+        "weather_placeholder_only"
+    )
     assert "provider" in result.sources[0].missing_fields
     assert "ttl_s" in result.sources[0].missing_fields
+    assert "route_weather_package" in result.sources[0].missing_fields
     assert result.missing_evidence[0]["tool_id"] == WEATHER_WINDOW_TOOL_ID
     assert "provider" in result.missing_evidence[0]["missing_fields"]
     assert "ttl_s" in result.missing_evidence[0]["missing_fields"]
-    assert "A field conclusion should not be inferred" in result.answer
+    assert "weather_placeholder_only" in result.answer
     assert "provider" in result.answer
     assert "ttl_s" in result.answer
     assert "runtime safety truth" in result.answer

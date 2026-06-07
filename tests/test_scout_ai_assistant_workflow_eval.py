@@ -126,15 +126,12 @@ def test_workflow_eval_passes_missing_weather_question_from_200_question_rules()
             WEATHER_WINDOW_TOOL_ID,
         ),
         expected_missing_fields_by_source={
-            WEATHER_WINDOW_TOOL_ID: ("provider", "ttl_s"),
+            WEATHER_WINDOW_TOOL_ID: ("provider", "ttl_s", "route_weather_package"),
         },
-        expected_tool_registry_missing_fields_by_tool={
-            WEATHER_WINDOW_TOOL_ID: ("provider", "ttl_s"),
-        },
-        expected_full_workflow_answerability="missing_evidence",
+        expected_full_workflow_answerability="partial_evidence_with_missing_context",
         expected_full_workflow_source_tool_ids=(WEATHER_WINDOW_TOOL_ID,),
         expected_full_workflow_missing_fields_by_tool={
-            WEATHER_WINDOW_TOOL_ID: ("provider", "ttl_s"),
+            WEATHER_WINDOW_TOOL_ID: ("provider", "ttl_s", "route_weather_package"),
         },
         expected_full_workflow_step_ids=(
             "context_registry_and_tool_plan",
@@ -144,7 +141,7 @@ def test_workflow_eval_passes_missing_weather_question_from_200_question_rules()
         expected_limitation_fragments=(f"resolved_by={PRETRIP_TOOL_PLANNER_SKILL_ID}",),
         expected_answer_fragments=(
             "registry planner fallback",
-            "A field conclusion should not be inferred",
+            "weather_placeholder_only",
             "provider",
             "ttl_s",
         ),
@@ -164,8 +161,8 @@ def test_workflow_eval_passes_missing_weather_question_from_200_question_rules()
     ]
     assert result["full_workflow"]["source_id"] == PRETRIP_FULL_WORKFLOW_SOURCE_ID
     assert result["full_workflow"]["artifact_kind"] == "scout_ai_full_workflow"
-    assert result["full_workflow"]["answerability"] == "missing_evidence"
-    assert result["full_workflow"]["contract_gap_count"] == 1
+    assert result["full_workflow"]["answerability"] == "partial_evidence_with_missing_context"
+    assert result["full_workflow"]["contract_gap_count"] == 0
     assert result["full_workflow"]["missing_evidence_count"] == 1
     assert result["full_workflow"]["workflow_policy"]["model_provider_used"] is False
     assert result["full_workflow"]["boundary"]["runtime_safety_truth"] is False
@@ -175,14 +172,13 @@ def test_workflow_eval_passes_missing_weather_question_from_200_question_rules()
     )
     registry_source = _source_by_id(response, TOOL_REGISTRY_SOURCE_ID)
     assert registry_source.context_summary["runtime_safety_truth"] is False
-    assert WEATHER_WINDOW_TOOL_ID in registry_source.context_summary[
+    assert WEATHER_WINDOW_TOOL_ID not in registry_source.context_summary[
         "missing_evidence_fields_by_tool"
     ]
-    assert result["completed_tool_results"] == []
+    assert result["completed_tool_results"][0]["tool_id"] == WEATHER_WINDOW_TOOL_ID
+    assert result["completed_tool_results"][0]["answerability"] == "weather_placeholder_only"
     assert result["contract_gap_sources"][0]["tool_id"] == WEATHER_WINDOW_TOOL_ID
-    assert result["contract_gap_sources"][0]["status"] == (
-        "contract_only_missing_evidence"
-    )
+    assert result["contract_gap_sources"][0]["status"] == "completed"
     assert {
         "provider",
         "ttl_s",
@@ -315,12 +311,12 @@ def test_workflow_eval_checks_answer_synthesis_weather_missing_evidence_artifact
     result = evaluate_answer_synthesis_workflow_artifact(
         case,
         artifact,
-        expected_answer_synthesis_answerability="missing_evidence",
+        expected_answer_synthesis_answerability="partial_evidence_with_missing_context",
         expected_missing_fields_by_tool={
-            WEATHER_WINDOW_TOOL_ID: ("provider", "ttl_s"),
+            WEATHER_WINDOW_TOOL_ID: ("provider", "ttl_s", "route_weather_package"),
         },
         expected_answer_fragments=(
-            "A field conclusion should not be inferred",
+            "weather_placeholder_only",
             "provider",
             "ttl_s",
             "runtime safety truth",
@@ -332,7 +328,7 @@ def test_workflow_eval_checks_answer_synthesis_weather_missing_evidence_artifact
     )
 
     assert result["passed"] is True
-    assert result["completed_source_ids"] == []
+    assert result["completed_source_ids"] == [WEATHER_WINDOW_TOOL_ID]
     assert result["missing_evidence"][0]["tool_id"] == WEATHER_WINDOW_TOOL_ID
     assert {"provider", "ttl_s"}.issubset(
         set(result["missing_evidence"][0]["missing_fields"])
@@ -405,12 +401,12 @@ def test_workflow_eval_checks_full_workflow_weather_missing_evidence_artifact():
     result = evaluate_full_workflow_artifact(
         case,
         artifact,
-        expected_full_workflow_answerability="missing_evidence",
+        expected_full_workflow_answerability="partial_evidence_with_missing_context",
         expected_missing_fields_by_tool={
-            WEATHER_WINDOW_TOOL_ID: ("provider", "ttl_s"),
+            WEATHER_WINDOW_TOOL_ID: ("provider", "ttl_s", "route_weather_package"),
         },
         expected_answer_fragments=(
-            "A field conclusion should not be inferred",
+            "weather_placeholder_only",
             "provider",
             "ttl_s",
             "runtime safety truth",
@@ -422,7 +418,7 @@ def test_workflow_eval_checks_full_workflow_weather_missing_evidence_artifact():
     )
 
     assert result["passed"] is True
-    assert result["completed_source_ids"] == []
+    assert result["completed_source_ids"] == [WEATHER_WINDOW_TOOL_ID]
     assert result["missing_evidence"][0]["tool_id"] == WEATHER_WINDOW_TOOL_ID
     assert {"provider", "ttl_s"}.issubset(
         set(result["missing_evidence"][0]["missing_fields"])
@@ -684,7 +680,10 @@ def test_workflow_eval_runner_writes_bounded_json_and_markdown_report(tmp_path):
     weather_result = _result_by_case(persisted, "seed-007")
     assert weather_result["context_registry"]["source_id"] == CONTEXT_REGISTRY_SOURCE_ID
     assert weather_result["contract_gap_sources"][0]["tool_id"] == WEATHER_WINDOW_TOOL_ID
-    assert weather_result["completed_tool_results"] == []
+    assert weather_result["completed_tool_results"][0]["tool_id"] == WEATHER_WINDOW_TOOL_ID
+    assert weather_result["completed_tool_results"][0]["answerability"] == (
+        "weather_placeholder_only"
+    )
     assert "Scout AI Assistant Workflow Eval Report" in output_markdown.read_text(
         encoding="utf-8"
     )
