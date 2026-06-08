@@ -5,6 +5,7 @@ from pathlib import Path
 
 from scout.agents import (
     ModelCallLedger,
+    ModelProviderHealthMonitor,
     ModelSlaGateway,
     ModelPolicyMode,
     PydanticScoutAgentProvider,
@@ -67,6 +68,70 @@ def test_model_sla_gateway_timeout_fallback() -> None:
     assert result.output == "fallback"
     assert result.status == "timeout_fallback"
     assert result.fallback_used is True
+
+
+def test_model_sla_gateway_retries_and_records_telemetry() -> None:
+    policy = resolve_model_policy(
+        "openrouter:openai/gpt-4o-mini",
+        env={"OPENROUTER_API_KEY": "sk-test"},
+    )
+    calls = 0
+
+    def flaky_provider_call() -> str:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise RuntimeError("transient upstream error")
+        return "provider"
+
+    result = ModelSlaGateway(
+        policy,
+        health_monitor=ModelProviderHealthMonitor(failure_threshold=3),
+    ).run_sync(
+        "retry-test",
+        flaky_provider_call,
+        fallback_call=lambda: "fallback",
+        max_retries=1,
+    )
+
+    assert result.output == "provider"
+    assert result.status == "completed"
+    assert result.attempts == 2
+    assert result.provider_health["state"] == "healthy"
+    assert result.telemetry is not None
+    assert result.telemetry.attempts == 2
+
+
+def test_model_sla_gateway_circuit_breaker_fallback_skips_provider_call() -> None:
+    policy = resolve_model_policy(
+        "openrouter:openai/gpt-4o-mini",
+        env={"OPENROUTER_API_KEY": "sk-test"},
+    )
+    monitor = ModelProviderHealthMonitor(failure_threshold=1)
+    calls = 0
+
+    def failing_provider_call() -> str:
+        nonlocal calls
+        calls += 1
+        raise RuntimeError("provider unavailable")
+
+    first = ModelSlaGateway(policy, health_monitor=monitor).run_sync(
+        "circuit-open",
+        failing_provider_call,
+        fallback_call=lambda: "fallback",
+    )
+    second = ModelSlaGateway(policy, health_monitor=monitor).run_sync(
+        "circuit-fallback",
+        failing_provider_call,
+        fallback_call=lambda: "fallback",
+    )
+
+    assert first.status == "error_fallback"
+    assert first.provider_health["state"] == "open_circuit"
+    assert second.status == "circuit_fallback"
+    assert second.attempts == 0
+    assert second.provider_health["state"] == "open_circuit"
+    assert calls == 1
 
 
 def test_pydantic_provider_uses_sla_fallback_before_external_budget_call(

@@ -43,19 +43,22 @@ control, outbound send, Phase 1 L0-L4 mutation, `/safety/*` mutation, runtime
 ingest, or provider-values-as-Scout-truth blocks the evidence check.
 
 Evidence JSON can be produced from a real mobile, wearable, or hardware probe
-sample:
+sample. The default input is a Scout sample JSON object, and the producer also
+supports Sensor Logger JSON/CSV, NMEA GNSS text, and Scout host-probe JSON:
 
 ```bash
 ./venv/bin/scout-ai-os-hardware-evidence \
   --source sensor_logger_pro_mqtt \
   --source-device-id iphone-test-device \
+  --source-format sensor-logger-json \
   --sample-json /path/to/sample.json \
-  --output /path/to/hardware-evidence.json
+  --evidence-dir /path/to/evidence-dir
 ```
 
 The producer writes a `scout_hardware_evidence.v0` artifact with
 `advisory_only=true`, `not_safety_truth=true`, and all runtime/safety mutation
-flags set to `false`.
+flags set to `false`. When `--evidence-dir` is used, it also writes a
+`scout_hardware_evidence_directory.v0` index for audit/replay.
 
 ## What This Profile Verifies
 
@@ -71,15 +74,18 @@ flags set to `false`.
 - External notification intent can be recorded through a dry-run provider with
   `sent=false`.
 - Low-risk external notification can use a live-send provider path only after
-  operator confirmation, recipient allowlisting, and priority gating. The smoke
-  uses a memory transport and reports `live_network_verified=false`.
+  operator confirmation, recipient allowlisting, rate-limit/audit tracking, and
+  priority gating. The smoke uses memory transport plus a fake-network Telegram
+  Bot API adapter proof, and reports `live_network_verified=false`.
 - The generated package sandbox gate rejects disallowed network patterns before
   execution.
 - Generated runtime install lifecycle computes an artifact hash, requires a
   safe isolation profile and operator approval, and verifies install/revoke/
-  rollback records while keeping active runtime dispatch disabled.
+  rollback records. It also runs an isolated proof-only `run(payload)` dispatch
+  while keeping active runtime dispatch disabled.
 - External model calls are wrapped by the model SLA gateway for timeout,
-  budget preflight, and local fallback enforcement.
+  budget preflight, retry telemetry, provider health/circuit breaker, and local
+  fallback enforcement.
 
 ## Remaining Deliberate Boundaries
 
@@ -90,5 +96,6 @@ The profile still keeps these as not enabled:
 - active generated runtime dispatch from installed generated code.
 
 Those boundaries require explicit promotion. In particular, generated runtime
-install records are not wired into the action executor, and notification smoke
-does not send to a real external network endpoint.
+install records are not wired into the action executor, the generated dispatch
+proof is isolated and proof-only, and notification smoke does not send to a real
+external network endpoint.

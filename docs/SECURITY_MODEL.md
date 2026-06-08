@@ -58,14 +58,18 @@ Evidence that reports any of those effects as `true` is blocked by the profile.
 
 External notification support is fail-closed: dry-run remains the default, and
 the live-send path requires operator confirmation, recipient allowlisting,
-low-risk priority, and a transport provider. The hardware smoke uses a memory
-transport and marks real network delivery proof as not verified.
+low-risk priority, audit/rate-limit tracking, and a transport provider. The
+hardware smoke uses a memory transport and fake-network Telegram adapter proof,
+then marks real network delivery proof as not verified.
 
 Generated runtime install support is a lifecycle gate, not broad execution
 authority. It requires sandbox pass, deterministic artifact hash, low-risk
 package classification, safe isolation profile, operator approval, revoke, and
-rollback. Install records keep `runtime_code_executed=false` and
-`active_runtime_dispatch_enabled=false` until a later executor isolation gate.
+rollback. A generated runtime may be executed only through the isolated
+proof-only dispatcher, which verifies the install hash and safe isolation
+profile, then keeps `active_runtime_dispatch_enabled=false`, `safety_api_called=false`,
+and `outbound_sent=false`. Install records keep `runtime_code_executed=false`
+until a later executor isolation gate promotes active dispatch.
 
 ## Remaining Non-Implementation
 
