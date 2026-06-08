@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from importlib.metadata import version
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -42,6 +43,14 @@ def main(argv: list[str] | None = None) -> int:
         help="Scout Fusion repository root used to load built-in capabilities.",
     )
     parser.add_argument(
+        "--env-file",
+        default=None,
+        help=(
+            "Optional .env path to load before creating the Pydantic AI model. "
+            "Defaults to <repo-root>/.env when present."
+        ),
+    )
+    parser.add_argument(
         "--model",
         default=None,
         help=(
@@ -56,6 +65,7 @@ def main(argv: list[str] | None = None) -> int:
         user_id=args.user_id,
         now=args.now,
         repo_root=Path(args.repo_root),
+        env_file=Path(args.env_file) if args.env_file else None,
         model=args.model,
     )
     print(json.dumps(result, indent=2, sort_keys=True))
@@ -68,8 +78,10 @@ def run_smoke(
     user_id: str,
     now: str,
     repo_root: Path,
+    env_file: Path | None = None,
     model: Any | None = None,
 ) -> dict[str, Any]:
+    loaded_env_file = _load_env_file(env_file or repo_root / ".env")
     with TemporaryDirectory(prefix="scout-ai-os-pydantic-smoke-") as tmp:
         tmp_path = Path(tmp)
         provider = PydanticScoutAgentProvider(model=model)
@@ -105,6 +117,8 @@ def run_smoke(
             "provider": "PydanticScoutAgentProvider",
             "pydantic_ai_version": version("pydantic-ai"),
             "model": model or "local FunctionModel",
+            "env_file_loaded": loaded_env_file,
+            "openrouter_api_key_present": bool(os.getenv("OPENROUTER_API_KEY")),
             "request_status": created_payload["status"],
             "workflow_id": created_payload["workflow_id"],
             "workflow_name": workflow_payload["name"],
@@ -117,6 +131,23 @@ def run_smoke(
             "capability_count": len(capabilities.json()["capabilities"]),
             "runtime_tick": tick.json(),
         }
+
+
+def _load_env_file(path: Path) -> bool:
+    if not path.exists():
+        return False
+
+    for raw_line in path.read_text().splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        if not key:
+            continue
+        value = value.strip().strip('"').strip("'")
+        os.environ.setdefault(key, value)
+    return True
 
 
 __all__ = ["main", "run_smoke"]

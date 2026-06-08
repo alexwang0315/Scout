@@ -27,6 +27,7 @@ from scout.schemas import (
     LearningArtifactType,
     LearningBundle,
     PermissionSpec,
+    PlanMode,
     RuntimeTarget,
     TriggerSpec,
     TriggerType,
@@ -139,6 +140,40 @@ def test_execution_planner_prefers_existing_capabilities(tmp_path: Path) -> None
 
     assert plan.required_capabilities == ["manual_notification"]
     assert plan.missing_capabilities == []
+
+
+def test_execution_planner_repairs_missing_approval_message(
+    tmp_path: Path,
+) -> None:
+    class MissingApprovalMessageProvider:
+        def run(self, request: ScoutAgentRequest) -> Any:
+            if request.agent_name == "WorkflowCompilerAgent":
+                return DeterministicScoutAgentProvider().run(request)
+            if request.agent_name == "ExecutionPlannerAgent":
+                workflow = WorkflowSpec.model_validate(request.context["workflow"])
+                return {
+                    "mode": "use_existing",
+                    "reason": "Provider forgot approval message.",
+                    "workflow": workflow.model_dump(mode="json"),
+                    "required_capabilities": ["manual_notification"],
+                    "missing_capabilities": [],
+                    "approval_message": None,
+                    "safety_notes": [],
+                    "next_steps": [],
+                }
+            raise ValueError(request.agent_name)
+
+    deps = make_deps(tmp_path)
+    provider = MissingApprovalMessageProvider()
+    workflow = WorkflowCompilerAgent(provider).compile(
+        "Notify me 100 meters before the next campsite.",
+        deps,
+    )
+
+    plan = ExecutionPlannerAgent(provider).plan(workflow, deps)
+
+    assert plan.mode is PlanMode.ASK_PERMISSION
+    assert plan.approval_message == "Approve this workflow before installation."
 
 
 def test_code_builder_requires_low_risk_and_tests(tmp_path: Path) -> None:

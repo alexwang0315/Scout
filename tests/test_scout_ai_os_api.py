@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from fastapi.testclient import TestClient
 
 from scout.agents import PydanticScoutAgentProvider
 from scout.api.routes import create_app
+from scout.cli.pydantic_smoke import run_smoke
 
 
 def make_client(tmp_path: Path) -> TestClient:
@@ -147,3 +149,25 @@ def test_runtime_tick_endpoint_returns_summary(tmp_path: Path) -> None:
 
     assert response.status_code == 200
     assert response.json()["checked"] == 0
+
+
+def test_pydantic_smoke_loads_repo_env_without_printing_secret(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    env_file = tmp_path / ".env"
+    env_file.write_text("OPENROUTER_API_KEY=sk-test-secret\n")
+
+    result = run_smoke(
+        user_text="Remind me in 10 minutes.",
+        user_id="user-1",
+        now="2026-06-08T00:00:00+00:00",
+        repo_root=Path(__file__).resolve().parents[1],
+        env_file=env_file,
+    )
+
+    assert result["env_file_loaded"] is True
+    assert result["openrouter_api_key_present"] is True
+    assert "sk-test-secret" not in str(result)
+    assert os.environ["OPENROUTER_API_KEY"] == "sk-test-secret"
