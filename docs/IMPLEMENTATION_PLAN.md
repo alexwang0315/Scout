@@ -182,8 +182,8 @@ Deliverables:
 
 - production-grade sandbox isolation;
 - richer external notification providers;
-- external cloud/local LLM model selection beyond the local Pydantic AI
-  FunctionModel smoke path;
+- production model selection policy beyond the local Pydantic AI FunctionModel
+  smoke path and explicit OpenRouter smoke command;
 - generated capability approval/install workflow beyond metadata candidates;
 - Pydantic Evals dataset expansion;
 - background scheduler lifecycle management;

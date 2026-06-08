@@ -61,6 +61,18 @@ The smoke command uses `PydanticScoutAgentProvider` and Pydantic AI's local
 outputs without requiring cloud credentials. Pass `--model ...` only when an
 external Pydantic AI model provider is configured in the environment.
 
+For OpenRouter, put `OPENROUTER_API_KEY=...` in the repo-local `.env` file.
+The smoke command loads `<repo-root>/.env` by default and reports only whether
+the key is present, never the key value:
+
+```bash
+./venv/bin/scout-ai-os-pydantic-smoke --model openrouter:openai/gpt-4o-mini
+```
+
+External models may conservatively return `needs_approval` for workflows that
+the deterministic provider installs directly. That is acceptable for the MVP:
+approval remains explicit and the workflow is not activated automatically.
+
 ## Phase 1 Status
 
 Phase 1 is at release-candidate status on the `codex/phase-1-trail-black-box` branch.
