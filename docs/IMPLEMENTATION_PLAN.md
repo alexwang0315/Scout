@@ -241,19 +241,27 @@ Deliverables:
   model SLA gateway checks;
 - `DryRunNotificationProvider` for external transport intent with `sent=false`;
 - `OperatorConfirmedNotificationProvider` for low-risk live-send paths guarded
-  by phrase confirmation, recipient allowlisting, and priority gating;
+  by phrase confirmation, recipient allowlisting, priority gating, audit log,
+  and rate limiting;
+- `TelegramNotificationTransport` for operator-confirmed Telegram Bot API
+  adapter proof without default live-network send;
 - `scout.hardware.evidence` plus `scout-ai-os-hardware-evidence` for producing
-  advisory-only mobile/hardware evidence JSON;
-- `ModelSlaGateway` for timeout, budget ledger, and fallback enforcement around
-  Pydantic AI provider calls;
+  advisory-only mobile/hardware evidence JSON from sample JSON, Sensor Logger
+  JSON/CSV, NMEA GNSS text, and host-probe JSON;
+- `ModelSlaGateway` for timeout, budget ledger, retry telemetry, provider
+  health/circuit breaker, and fallback enforcement around Pydantic AI provider
+  calls;
 - `GeneratedRuntimeInstaller` for artifact hash, isolation profile, approval,
   install, revoke, and rollback lifecycle records while active dispatch remains
   disabled;
+- `GeneratedRuntimeDispatcher` for isolated proof-only `run(payload)` execution
+  that preserves `active_runtime_dispatch_enabled=false`;
 - hardware smoke documentation in `docs/SCOUT_AI_OS_HARDWARE_SMOKE.md`;
 - focused tests proving safe defaults, external-model missing-key blocking,
   advisory evidence acceptance, forbidden evidence blocking, operator-gated
-  notification send paths, external-model SLA fallback, and generated runtime
-  install lifecycle controls.
+  notification send paths, Telegram adapter proof, external-model SLA fallback
+  plus circuit breaker, generated runtime install lifecycle controls, and
+  proof-only generated runtime dispatch.
 
 This slice enables Scout hardware verification and gated lifecycle readiness.
 It still does not grant active generated-code dispatch, real external network
@@ -263,6 +271,7 @@ authority.
 ## Future Work
 
 - production OS/container attestation for generated runtime dispatch;
-- real external notification adapter proof with rate-limit/audit replay;
-- provider health circuit breaking for external model SLA telemetry;
-- mobile companion integration.
+- explicit live-network Telegram/notification proof run with real operator
+  destination config;
+- persisted model SLA telemetry dashboards/alerting;
+- mobile companion integration beyond local export/advisory evidence producers.

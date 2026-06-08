@@ -4,10 +4,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+import hashlib
 import json
+import time
 from urllib import request as urlrequest
 from urllib.parse import urlparse
-from typing import Any, Protocol
+from typing import Any, Callable, Protocol
 from uuid import uuid4
 
 from scout.services.workflow_store import WorkflowStore
@@ -38,6 +40,21 @@ class OperatorNotificationApproval:
     risk_level: str = "low"
     reason: str = ""
     approved_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
+
+
+@dataclass(frozen=True)
+class NotificationAuditRecord:
+    """Non-secret audit entry for external notification send decisions."""
+
+    audit_id: str
+    notification_id: str
+    provider: str
+    user_id_hash: str
+    priority: str
+    sent: bool
+    blocked_reason: str | None = None
+    created_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 class NotificationProvider(Protocol):
@@ -182,6 +199,77 @@ class HttpsJsonNotificationTransport:
         )
 
 
+class TelegramNotificationTransport:
+    """Telegram Bot API transport for operator-confirmed low-risk notifications."""
+
+    name = "telegram"
+
+    def __init__(
+        self,
+        *,
+        bot_token: str,
+        chat_id: str,
+        api_base_url: str = "https://api.telegram.org",
+        allowed_hosts: set[str] | None = None,
+        timeout_seconds: float = 10.0,
+        urlopen: Callable[..., Any] | None = None,
+    ) -> None:
+        token = bot_token.strip()
+        recipient = chat_id.strip()
+        if not token:
+            raise ValueError("bot_token must be non-empty")
+        if not recipient:
+            raise ValueError("chat_id must be non-empty")
+        parsed = urlparse(api_base_url)
+        if parsed.scheme != "https" or not parsed.netloc:
+            raise ValueError("Telegram API base URL must be HTTPS")
+        allowlist = allowed_hosts or {"api.telegram.org"}
+        if parsed.hostname not in allowlist:
+            raise ValueError("Telegram API host is not allowlisted")
+        if timeout_seconds <= 0:
+            raise ValueError("timeout_seconds must be positive")
+        self.bot_token = token
+        self.chat_id = recipient
+        self.api_base_url = api_base_url.rstrip("/")
+        self.timeout_seconds = timeout_seconds
+        self._urlopen = urlopen or urlrequest.urlopen
+
+    def deliver(self, result: NotificationResult) -> NotificationResult:
+        endpoint_url = f"{self.api_base_url}/bot{self.bot_token}/sendMessage"
+        payload = json.dumps(
+            {
+                "chat_id": self.chat_id,
+                "text": f"{result.title}\n\n{result.body}",
+                "disable_web_page_preview": True,
+            }
+        ).encode("utf-8")
+        req = urlrequest.Request(
+            endpoint_url,
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with self._urlopen(req, timeout=self.timeout_seconds) as response:
+            status_code = int(response.status)
+        parsed = urlparse(self.api_base_url)
+        return NotificationResult(
+            notification_id=result.notification_id,
+            user_id=result.user_id,
+            title=result.title,
+            body=result.body,
+            priority=result.priority,
+            provider=self.name,
+            sent=200 <= status_code < 300,
+            metadata={
+                **result.metadata,
+                "http_status": status_code,
+                "telegram_api_host": parsed.hostname,
+                "telegram_bot_token_present": True,
+                "telegram_chat_id_hash": _stable_secret_hash(self.chat_id),
+            },
+        )
+
+
 class OperatorConfirmedNotificationProvider:
     """External notification provider guarded by explicit operator approval."""
 
@@ -193,6 +281,8 @@ class OperatorConfirmedNotificationProvider:
         allowed_user_ids: set[str],
         allowed_priorities: set[str] | None = None,
         required_phrase: str = OPERATOR_NOTIFICATION_APPROVAL_PHRASE,
+        min_interval_seconds: float = 0.0,
+        clock: Callable[[], float] | None = None,
     ) -> None:
         if not allowed_user_ids:
             raise ValueError("allowed_user_ids must be non-empty")
@@ -201,8 +291,14 @@ class OperatorConfirmedNotificationProvider:
         self.allowed_user_ids = set(allowed_user_ids)
         self.allowed_priorities = set(allowed_priorities or LOW_RISK_NOTIFICATION_PRIORITIES)
         self.required_phrase = required_phrase
+        if min_interval_seconds < 0:
+            raise ValueError("min_interval_seconds cannot be negative")
+        self.min_interval_seconds = min_interval_seconds
+        self._clock = clock or time.monotonic
+        self._last_sent_at_by_user: dict[str, float] = {}
         self.name = f"operator_confirmed:{transport.name}"
         self.notifications: list[NotificationResult] = []
+        self.audit_log: list[NotificationAuditRecord] = []
 
     def deliver(self, result: NotificationResult) -> NotificationResult:
         blocked_reason = self._blocked_reason(result)
@@ -218,6 +314,7 @@ class OperatorConfirmedNotificationProvider:
                 },
             )
             self.notifications.append(delivered)
+            self._record_audit(delivered, blocked_reason=blocked_reason)
             return delivered
 
         transport_result = self.transport.deliver(
@@ -247,6 +344,9 @@ class OperatorConfirmedNotificationProvider:
             },
         )
         self.notifications.append(delivered)
+        if delivered.sent:
+            self._last_sent_at_by_user[delivered.user_id] = self._clock()
+        self._record_audit(delivered, blocked_reason=None if delivered.sent else "transport_failed")
         return delivered
 
     def _blocked_reason(self, result: NotificationResult) -> str | None:
@@ -260,7 +360,33 @@ class OperatorConfirmedNotificationProvider:
             return "priority_not_low_risk"
         if self.approval.risk_level != "low":
             return "approval_risk_not_low"
+        last_sent_at = self._last_sent_at_by_user.get(result.user_id)
+        if (
+            last_sent_at is not None
+            and self.min_interval_seconds > 0
+            and self._clock() - last_sent_at < self.min_interval_seconds
+        ):
+            return "rate_limited"
         return None
+
+    def _record_audit(
+        self,
+        result: NotificationResult,
+        *,
+        blocked_reason: str | None,
+    ) -> None:
+        self.audit_log.append(
+            NotificationAuditRecord(
+                audit_id=str(uuid4()),
+                notification_id=result.notification_id,
+                provider=result.provider,
+                user_id_hash=_stable_secret_hash(result.user_id),
+                priority=result.priority,
+                sent=result.sent,
+                blocked_reason=blocked_reason,
+                metadata=_redact_notification_metadata(result.metadata),
+            )
+        )
 
 
 class NotificationGateway:
@@ -340,12 +466,17 @@ def _redact_notification_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
     return redacted
 
 
+def _stable_secret_hash(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()[:12]
+
+
 __all__ = [
     "DryRunNotificationProvider",
     "HttpsJsonNotificationTransport",
     "LOW_RISK_NOTIFICATION_PRIORITIES",
     "MemoryNotificationProvider",
     "MemoryExternalNotificationTransport",
+    "NotificationAuditRecord",
     "NotificationGateway",
     "NotificationProvider",
     "NotificationResult",
@@ -353,4 +484,5 @@ __all__ = [
     "OperatorConfirmedNotificationProvider",
     "OperatorNotificationApproval",
     "StdoutNotificationProvider",
+    "TelegramNotificationTransport",
 ]

@@ -10,6 +10,8 @@ from scout.schemas import (
 )
 from scout.services import (
     GENERATED_RUNTIME_INSTALL_APPROVAL_PHRASE,
+    GeneratedRuntimeDispatcher,
+    GeneratedRuntimeDispatchRequest,
     GeneratedRuntimeInstallApproval,
     GeneratedRuntimeInstaller,
     RuntimeIsolationProfile,
@@ -112,6 +114,93 @@ def test_generated_runtime_install_revoke_and_rollback_lifecycle() -> None:
     assert revoked.status == "revoked"
     assert rolled_back.status == "rolled_back"
     assert rolled_back.rollback_of == installed.install_id
+
+
+def test_generated_runtime_dispatch_proof_executes_in_isolated_boundary() -> None:
+    installer = GeneratedRuntimeInstaller()
+    package = _package()
+    installed = installer.install(
+        package,
+        isolation_profile=_profile(),
+        approval=_approval(),
+    )
+
+    result = GeneratedRuntimeDispatcher().dispatch_proof(
+        package=package,
+        install_record=installed,
+        request=GeneratedRuntimeDispatchRequest(
+            install_id=installed.install_id,
+            capability_name=installed.capability_name,
+            payload={"ok": True},
+        ),
+    )
+
+    assert result.status == "completed"
+    assert result.output == {"ok": True}
+    assert result.runtime_code_executed is True
+    assert result.proof_runtime_code_executed is True
+    assert result.active_runtime_dispatch_enabled is False
+    assert result.safety_api_called is False
+    assert result.outbound_sent is False
+    assert result.boundary["active_runtime_dispatch_enabled"] is False
+
+
+def test_generated_runtime_dispatch_proof_blocks_hash_mismatch() -> None:
+    installer = GeneratedRuntimeInstaller()
+    package = _package()
+    installed = installer.install(
+        package,
+        isolation_profile=_profile(),
+        approval=_approval(),
+    )
+    changed_package = _package()
+    changed_package.files["payload_echo.py"] = (
+        "def run(payload):\n"
+        "    return {'changed': True, 'payload': payload}\n"
+    )
+
+    result = GeneratedRuntimeDispatcher().dispatch_proof(
+        package=changed_package,
+        install_record=installed,
+        request=GeneratedRuntimeDispatchRequest(
+            install_id=installed.install_id,
+            capability_name=installed.capability_name,
+            payload={"ok": True},
+        ),
+    )
+
+    assert result.status == "blocked"
+    assert "artifact_hash_mismatch" in result.block_reasons
+    assert result.runtime_code_executed is False
+
+
+def test_generated_runtime_dispatch_proof_blocks_network_package() -> None:
+    installer = GeneratedRuntimeInstaller()
+    package = _package()
+    package.files["payload_echo.py"] = (
+        "import socket\n\n"
+        "def run(payload):\n"
+        "    return {'ok': True}\n"
+    )
+    installed = installer.install(
+        _package(),
+        isolation_profile=_profile(),
+        approval=_approval(),
+    ).model_copy(update={"artifact_hash": generated_package_hash(package)})
+
+    result = GeneratedRuntimeDispatcher().dispatch_proof(
+        package=package,
+        install_record=installed,
+        request=GeneratedRuntimeDispatchRequest(
+            install_id=installed.install_id,
+            capability_name=installed.capability_name,
+            payload={"ok": True},
+        ),
+    )
+
+    assert result.status == "blocked"
+    assert "sandbox_failed" in result.block_reasons
+    assert result.runtime_code_executed is False
 
 
 def test_generated_runtime_install_raises_when_plan_blocked() -> None:
