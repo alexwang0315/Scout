@@ -1,0 +1,32 @@
+name: manual_notification
+description: Persist metadata for a local manual notification capability candidate.
+version: 0.1.0
+runtime: python
+risk_level: low
+input_schema:
+  type: object
+  required:
+    - title
+    - body
+  properties:
+    title:
+      type: string
+    body:
+      type: string
+    priority:
+      type: string
+output_schema:
+  type: object
+  properties:
+    delivered:
+      type: boolean
+permissions: []
+dependencies: []
+examples:
+  - input:
+      title: Trip reminder
+      body: Check route readiness before departure.
+    output:
+      delivered: false
+test_cases: []
+install_scope: user

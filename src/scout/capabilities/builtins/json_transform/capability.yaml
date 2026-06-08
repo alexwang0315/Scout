@@ -1,0 +1,30 @@
+name: json_transform
+description: Persist metadata for a deterministic JSON transform capability candidate.
+version: 0.1.0
+runtime: python
+risk_level: low
+input_schema:
+  type: object
+  required:
+    - payload
+  properties:
+    payload:
+      type: object
+    mapping:
+      type: object
+output_schema:
+  type: object
+  properties:
+    payload:
+      type: object
+permissions: []
+dependencies: []
+examples:
+  - input:
+      payload:
+        value: 1
+    output:
+      payload:
+        value: 1
+test_cases: []
+install_scope: user

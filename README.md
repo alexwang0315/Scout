@@ -20,6 +20,35 @@ The original Wi-Fi/PDR navigation prototype still exists as a legacy app flow. T
 - Exposes opt-in, read-only Phase 3.5 debug surfaces for runtime event timelines, L0-L4 transitions, provider degraded status, Ln/skill run visibility, and mock outbound message queues.
 - Keeps the legacy macOS Wi-Fi scan, PDR trajectory, heatmap, `/navigate`, and LLM navigation prototype paths available for compatibility.
 
+## Scout AI OS MVP
+
+This checkout also contains a new Scout AI OS MVP scaffold under `src/scout/`.
+It implements the Phase 0-9 scope from
+`docs/specs/SCOUT_AI_OS_MVP_SPEC.md`: typed workflow/capability/learning
+schemas, SQLite stores, permission checks, local notification events, manual
+runtime ticks, provider-backed typed agent facades with a deterministic no-LLM
+provider, generated capability sandbox verification, FastAPI routes, and
+reviewable learning artifact approval.
+
+Focused verification:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 ./venv/bin/python -m pytest -q -p no:cacheprovider \
+  tests/test_scout_ai_os_scaffold.py \
+  tests/test_scout_ai_os_schemas.py \
+  tests/test_scout_ai_os_stores.py \
+  tests/test_scout_ai_os_runtime.py \
+  tests/test_scout_ai_os_learning_store.py \
+  tests/test_scout_ai_os_agents.py \
+  tests/test_scout_ai_os_sandbox.py \
+  tests/test_scout_ai_os_api.py \
+  tests/test_scout_ai_os_docs.py
+```
+
+MVP limits: no production-grade sandbox isolation, no live LLM requirement, no
+external notification provider, no generated-code production install path, and
+no mutation of Scout Phase 1 L0-L4 safety truth.
+
 ## Phase 1 Status
 
 Phase 1 is at release-candidate status on the `codex/phase-1-trail-black-box` branch.
