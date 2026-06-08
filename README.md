@@ -47,9 +47,9 @@ PYTHONDONTWRITEBYTECODE=1 ./venv/bin/python -m pytest -q -p no:cacheprovider \
   tests/test_scout_ai_os_docs.py
 ```
 
-MVP limits: no production-grade sandbox isolation, no OS-level/container-grade
-sandbox isolation, no live LLM requirement, no external notification transport,
-no generated-code runtime install path, and no mutation of Scout Phase 1 L0-L4 safety truth.
+MVP limits: no production-grade sandbox isolation, no live LLM requirement, no
+ungated external notification transport, no active generated-code runtime
+dispatch path, and no mutation of Scout Phase 1 L0-L4 safety truth.
 
 The background scheduler is off by default. For local server smoke, enable it
 with:
@@ -72,10 +72,24 @@ Hardware-safe Scout AI OS smoke:
 
 This produces a JSON readiness report for a Scout host. The default run forces
 the local Pydantic AI `FunctionModel`, verifies API/UI/capability/sandbox/
-notification-dry-run gates, and keeps generated runtime install, live external
-notification transports, live external-model SLA enforcement, and Phase 1
-L0-L4 safety mutation blocked. See
+notification-dry-run gates, operator-confirmed notification gating, generated
+runtime install lifecycle, and external-model SLA gateway behavior. It still
+keeps active generated runtime dispatch, real network notification proof, and
+Phase 1 L0-L4 safety mutation disabled. See
 `docs/SCOUT_AI_OS_HARDWARE_SMOKE.md`.
+
+Hardware/mobile evidence JSON can be produced from a source sample and attached
+to the smoke run:
+
+```bash
+./venv/bin/scout-ai-os-hardware-evidence \
+  --source sensor_logger_pro_mqtt \
+  --sample-json /path/to/sample.json \
+  --output /path/to/hardware-evidence.json
+./venv/bin/scout-ai-os-hardware-smoke \
+  --repo-root /Users/alexwang0315/scout-fusion \
+  --evidence-json /path/to/hardware-evidence.json
+```
 
 Mac-side Pydantic AI smoke:
 
@@ -102,8 +116,10 @@ such as `gpt-4o-mini` and `gemma3-27b` normalize to OpenRouter model strings:
 If an external model is selected but its required credential is missing, the
 smoke command returns `model_config_blocked` without calling the provider.
 The redacted `model_policy` output also reports local rollout settings from
-`SCOUT_AI_OS_MODEL_TIMEOUT_SECONDS`, `SCOUT_AI_OS_MODEL_MAX_COST_USD`, and
-`SCOUT_AI_OS_MODEL_FALLBACK`.
+`SCOUT_AI_OS_MODEL_TIMEOUT_SECONDS`, `SCOUT_AI_OS_MODEL_MAX_COST_USD`,
+`SCOUT_AI_OS_MODEL_ESTIMATED_CALL_COST_USD`, and
+`SCOUT_AI_OS_MODEL_FALLBACK`. Live provider calls are wrapped by
+`ModelSlaGateway` for timeout, budget preflight, and fallback.
 
 External models may conservatively return `needs_approval` for workflows that
 the deterministic provider installs directly. That is acceptable for the MVP:
