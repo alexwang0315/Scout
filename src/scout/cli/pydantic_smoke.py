@@ -120,3 +120,7 @@ def run_smoke(
 
 
 __all__ = ["main", "run_smoke"]
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
