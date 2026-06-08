@@ -4,6 +4,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
+from scout.agents import PydanticScoutAgentProvider
 from scout.api.routes import create_app
 
 
@@ -40,6 +41,28 @@ def test_request_installs_low_risk_workflow_and_learning_artifact(
 
     artifact_payload = client.get("/learning-artifacts").json()
     assert artifact_payload["learning_artifacts"]
+
+
+def test_request_can_use_pydantic_ai_provider(tmp_path: Path) -> None:
+    app = create_app(
+        tmp_path / "api.sqlite",
+        root=Path(__file__).resolve().parents[1],
+        provider=PydanticScoutAgentProvider(),
+        eval_jsonl_path=tmp_path / "evals" / "workflow_compiler.jsonl",
+    )
+    client = TestClient(app)
+
+    response = client.post(
+        "/requests",
+        json={
+            "user_id": "user-1",
+            "user_text": "Remind me in 10 minutes.",
+            "active_context": {"now": "2026-06-08T00:00:00+00:00"},
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "installed"
 
 
 def test_request_needing_approval_saves_pending_workflow(tmp_path: Path) -> None:

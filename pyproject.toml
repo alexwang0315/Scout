@@ -14,6 +14,9 @@ dependencies = [
     "pyyaml",
 ]
 
+[project.scripts]
+scout-ai-os-pydantic-smoke = "scout.cli.pydantic_smoke:main"
+
 [tool.setuptools]
 package-dir = {"" = "src"}
 

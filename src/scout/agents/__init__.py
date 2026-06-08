@@ -10,6 +10,7 @@ from scout.agents.deps import (
 )
 from scout.agents.execution_planner import ExecutionPlannerAgent
 from scout.agents.learner import LearningAgent
+from scout.agents.pydantic_provider import PydanticScoutAgentProvider
 from scout.agents.workflow_compiler import WorkflowCompilerAgent
 
 
@@ -18,6 +19,7 @@ __all__ = [
     "DeterministicScoutAgentProvider",
     "ExecutionPlannerAgent",
     "LearningAgent",
+    "PydanticScoutAgentProvider",
     "ScoutAgentProvider",
     "ScoutAgentRequest",
     "ScoutDeps",
