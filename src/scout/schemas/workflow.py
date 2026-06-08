@@ -43,6 +43,7 @@ class TriggerType(str, Enum):
 class ActionType(str, Enum):
     NOTIFY = "notify"
     ASK_USER = "ask_user"
+    UI_ACTION = "ui_action"
     CREATE_TASK = "create_task"
     UPDATE_CHECKLIST = "update_checklist"
     CALL_API = "call_api"

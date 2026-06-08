@@ -60,6 +60,21 @@ def _debug_events() -> list[RuntimeDebugEvent]:
         ),
         _event(
             sequence=2,
+            kind="safety_event_emitted",
+            phase="phase1",
+            summary="Smoke replay emitted a focusable L2 concern event near CP 003.",
+            payload={
+                "safety_level": "L2_CONCERN",
+                "event_type": "route_deviation",
+                "checkpoint_id": "cp.003",
+                "lat": 24.04682851396501,
+                "lon": 121.22322332113981,
+                "map_target_ids": ["cp.003", "route-progress"],
+            },
+            subject_ref="cp.003",
+        ),
+        _event(
+            sequence=3,
             kind="provider_status_recorded",
             phase="phase35",
             summary="Fixture providers are available for visual smoke.",
@@ -68,13 +83,6 @@ def _debug_events() -> list[RuntimeDebugEvent]:
                 "status": "ok",
                 "degraded": False,
             },
-        ),
-        _event(
-            sequence=3,
-            kind="safety_event_emitted",
-            phase="phase1",
-            summary="Smoke replay emitted an L2 concern event.",
-            payload={"safety_level": "L2_CONCERN", "event_type": "route_deviation"},
         ),
         _event(
             sequence=4,
@@ -93,6 +101,7 @@ def _event(
     phase: str,
     summary: str,
     payload: dict,
+    subject_ref: str | None = None,
 ) -> RuntimeDebugEvent:
     return RuntimeDebugEvent(
         event_id=f"debug_event.admin_ui_smoke.{sequence:06d}",
@@ -104,7 +113,7 @@ def _event(
         source="admin_ui_smoke",
         phase=phase,
         severity="info",
-        subject_ref=f"smoke.subject.{sequence}",
+        subject_ref=subject_ref or f"smoke.subject.{sequence}",
         summary=summary,
         payload=payload,
     )

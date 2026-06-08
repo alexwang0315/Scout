@@ -41,8 +41,9 @@ class PydanticScoutAgentProvider:
         agent = Agent(
             self._model or self._local_function_model(request),
             output_type=request.output_type,
-            instructions=request.instructions,
+            instructions=_typed_output_instructions(request),
             name=request.agent_name,
+            retries={"output": 3},
             tools=_read_only_tools(request),
         )
         result = agent.run_sync(request.prompt)
@@ -103,6 +104,21 @@ def _read_only_tools(request: ScoutAgentRequest) -> list[Callable[..., Any]]:
         get_active_context,
         get_capability,
     ]
+
+
+def _typed_output_instructions(request: ScoutAgentRequest) -> str:
+    schema = request.output_type.model_json_schema()
+    return "\n".join(
+        [
+            request.instructions,
+            "",
+            "Typed output contract:",
+            f"- Return exactly one {request.output_type.__name__} object.",
+            "- Use the provided final output tool/schema; do not answer in prose.",
+            "- Do not execute actions, call external services, mutate Scout state, send outbound messages, or control hardware.",
+            f"- JSON schema: {schema}",
+        ]
+    )
 
 
 __all__ = ["PydanticScoutAgentProvider"]

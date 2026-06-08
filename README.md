@@ -26,9 +26,11 @@ This checkout also contains a new Scout AI OS MVP scaffold under `src/scout/`.
 It implements the Phase 0-9 scope from
 `docs/specs/SCOUT_AI_OS_MVP_SPEC.md`: typed workflow/capability/learning
 schemas, SQLite stores, permission checks, local notification events, manual
-runtime ticks, provider-backed typed agent facades with a deterministic no-LLM
-provider, generated capability sandbox verification, FastAPI routes, and
-reviewable learning artifact approval.
+runtime ticks, an opt-in background scheduler lifecycle, provider-backed typed
+agent facades with a deterministic no-LLM provider, generated capability
+sandbox verification, generated capability metadata approval, FastAPI routes,
+reviewable learning artifact approval, and a fixture-backed Pydantic Evals
+regression dataset.
 
 Focused verification:
 
@@ -45,9 +47,35 @@ PYTHONDONTWRITEBYTECODE=1 ./venv/bin/python -m pytest -q -p no:cacheprovider \
   tests/test_scout_ai_os_docs.py
 ```
 
-MVP limits: no production-grade sandbox isolation, no live LLM requirement, no
-external notification provider, no generated-code production install path, and
-no mutation of Scout Phase 1 L0-L4 safety truth.
+MVP limits: no production-grade sandbox isolation, no OS-level/container-grade
+sandbox isolation, no live LLM requirement, no external notification transport,
+no generated-code runtime install path, and no mutation of Scout Phase 1 L0-L4 safety truth.
+
+The background scheduler is off by default. For local server smoke, enable it
+with:
+
+```bash
+SCOUT_AI_OS_BACKGROUND_SCHEDULER=1 ./venv/bin/uvicorn scout.main:app
+```
+
+Deterministic Pydantic Evals regression:
+
+```bash
+./venv/bin/scout-ai-os-evals --repo-root /Users/alexwang0315/scout-fusion
+```
+
+Hardware-safe Scout AI OS smoke:
+
+```bash
+./venv/bin/scout-ai-os-hardware-smoke --repo-root /Users/alexwang0315/scout-fusion
+```
+
+This produces a JSON readiness report for a Scout host. The default run forces
+the local Pydantic AI `FunctionModel`, verifies API/UI/capability/sandbox/
+notification-dry-run gates, and keeps generated runtime install, live external
+notification transports, live external-model SLA enforcement, and Phase 1
+L0-L4 safety mutation blocked. See
+`docs/SCOUT_AI_OS_HARDWARE_SMOKE.md`.
 
 Mac-side Pydantic AI smoke:
 
@@ -63,15 +91,39 @@ external Pydantic AI model provider is configured in the environment.
 
 For OpenRouter, put `OPENROUTER_API_KEY=...` in the repo-local `.env` file.
 The smoke command loads `<repo-root>/.env` by default and reports only whether
-the key is present, never the key value:
+the key is present, never the key value. Model selection precedence is
+`--model`, then `SCOUT_AI_OS_MODEL`, then local `FunctionModel`. Common aliases
+such as `gpt-4o-mini` and `gemma3-27b` normalize to OpenRouter model strings:
 
 ```bash
 ./venv/bin/scout-ai-os-pydantic-smoke --model openrouter:openai/gpt-4o-mini
 ```
 
+If an external model is selected but its required credential is missing, the
+smoke command returns `model_config_blocked` without calling the provider.
+The redacted `model_policy` output also reports local rollout settings from
+`SCOUT_AI_OS_MODEL_TIMEOUT_SECONDS`, `SCOUT_AI_OS_MODEL_MAX_COST_USD`, and
+`SCOUT_AI_OS_MODEL_FALLBACK`.
+
 External models may conservatively return `needs_approval` for workflows that
 the deterministic provider installs directly. That is acceptable for the MVP:
 approval remains explicit and the workflow is not activated automatically.
+
+Local UI operation browser smoke:
+
+```bash
+npm run scout-ui:operation-smoke
+```
+
+The smoke runner starts the fixture-backed admin server, opens Chromium against
+`/admin`, `/admin/debug`, and `/admin/pretrip`, and verifies the 20
+`scout_ui_action_plan.v0` prompt corpus through
+`window.ScoutAssistantUI.applyUiActionPlan(...)`.
+
+Approved UI operations can also be represented in Scout AI OS workflows as
+`ActionType.UI_ACTION`. Runtime tick only records the
+`scout_ui_action_plan.v0` artifact and the browser executor hint; applying the
+plan remains a frontend allowlist/confirmation step.
 
 ## Phase 1 Status
 
