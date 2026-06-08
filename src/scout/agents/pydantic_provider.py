@@ -16,6 +16,8 @@ from scout.agents.deps import (
     ScoutAgentRequest,
     validate_provider_output,
 )
+from scout.agents.model_gateway import ModelSlaCallResult, ModelSlaGateway
+from scout.agents.model_policy import ModelPolicy, resolve_model_policy
 
 
 class PydanticScoutAgentProvider:
@@ -31,23 +33,43 @@ class PydanticScoutAgentProvider:
         model: Any | None = None,
         *,
         local_provider: ScoutAgentProvider | None = None,
+        model_policy: ModelPolicy | None = None,
     ) -> None:
         self._model = model
         self._local_provider = local_provider or DeterministicScoutAgentProvider()
+        self._model_policy = model_policy or resolve_model_policy(
+            model if isinstance(model, str) else None
+        )
+        self.last_sla_result: ModelSlaCallResult | None = None
 
     def run(self, request: ScoutAgentRequest) -> BaseModel:
         """Run a typed Scout request via ``pydantic_ai.Agent``."""
 
-        agent = Agent(
-            self._model or self._local_function_model(request),
-            output_type=request.output_type,
-            instructions=_typed_output_instructions(request),
-            name=request.agent_name,
-            retries={"output": 3},
-            tools=_read_only_tools(request),
+        def provider_call() -> BaseModel:
+            agent = Agent(
+                self._model or self._local_function_model(request),
+                output_type=request.output_type,
+                instructions=_typed_output_instructions(request),
+                name=request.agent_name,
+                retries={"output": 3},
+                tools=_read_only_tools(request),
+            )
+            result = agent.run_sync(request.prompt)
+            return validate_provider_output(result.output, request.output_type)
+
+        def fallback_call() -> BaseModel:
+            return validate_provider_output(
+                self._local_provider.run(request),
+                request.output_type,
+            )
+
+        sla_result = ModelSlaGateway(self._model_policy).run_sync(
+            request.agent_name,
+            provider_call,
+            fallback_call=fallback_call,
         )
-        result = agent.run_sync(request.prompt)
-        return validate_provider_output(result.output, request.output_type)
+        self.last_sla_result = sla_result
+        return validate_provider_output(sla_result.output, request.output_type)
 
     def _local_function_model(self, request: ScoutAgentRequest) -> FunctionModel:
         def scout_local_model(

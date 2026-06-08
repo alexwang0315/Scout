@@ -14,6 +14,8 @@ from typing import Any, Literal
 from fastapi.testclient import TestClient
 
 from scout.agents import resolve_model_policy
+from scout.agents.model_gateway import ModelCallLedger, ModelSlaGateway
+from scout.agents.model_policy import ModelPolicy
 from scout.api.routes import create_app
 from scout.cli.pydantic_smoke import run_smoke
 from pydantic import Field
@@ -27,7 +29,15 @@ from scout.schemas.capability import (
 )
 from scout.services import (
     DryRunNotificationProvider,
+    GENERATED_RUNTIME_INSTALL_APPROVAL_PHRASE,
+    GeneratedRuntimeInstallApproval,
+    GeneratedRuntimeInstaller,
+    MemoryExternalNotificationTransport,
     NotificationGateway,
+    OPERATOR_NOTIFICATION_APPROVAL_PHRASE,
+    OperatorConfirmedNotificationProvider,
+    OperatorNotificationApproval,
+    RuntimeIsolationProfile,
 )
 from scout.services.sandbox_runner import SandboxRunner
 
@@ -81,9 +91,9 @@ HARDWARE_SMOKE_PHASES: list[dict[str, Any]] = [
     },
     {
         "phase_id": "H5",
-        "name": "Notification dry-run transport",
+        "name": "Notification dry-run and operator-confirmed transport",
         "default_state": "implemented",
-        "acceptance": "External notification intent is recorded with sent=false.",
+        "acceptance": "External notification intent is dry-run by default and live-send capable only with low-risk operator confirmation.",
     },
     {
         "phase_id": "H6",
@@ -94,14 +104,14 @@ HARDWARE_SMOKE_PHASES: list[dict[str, Any]] = [
     {
         "phase_id": "H7",
         "name": "Generated runtime install gate",
-        "default_state": "blocked",
-        "acceptance": "Runtime install remains blocked until OS/container isolation exists.",
+        "default_state": "implemented_as_lifecycle_gate",
+        "acceptance": "Runtime install requires sandbox pass, artifact hash, operator approval, isolation profile, revoke, and rollback.",
     },
     {
         "phase_id": "H8",
         "name": "External model SLA gate",
-        "default_state": "reported_not_enforced",
-        "acceptance": "Timeout, budget, and fallback settings are reported without claiming live SLA enforcement.",
+        "default_state": "implemented_as_gateway",
+        "acceptance": "Timeout, budget, and fallback settings are enforced through the model SLA gateway.",
     },
 ]
 
@@ -200,6 +210,7 @@ def run_hardware_smoke(
         _check_ui_action_smoke(repo_root),
         _check_capability_metadata_gate(repo_root),
         _check_notification_dry_run(),
+        _check_operator_confirmed_notification_gate(),
         _check_sandbox_gate(),
         _check_hardware_evidence(evidence_json),
         _check_generated_runtime_install_gate(),
@@ -216,9 +227,9 @@ def run_hardware_smoke(
         checks=checks,
         summary=_summary(checks),
         next_phase_gates=[
-            "Choose and verify OS-level/container-grade sandbox isolation before generated runtime install.",
-            "Keep external notification transports in dry-run until operator confirmation, rate limit, and audit replay exist.",
-            "Wrap live external model calls with timeout, budget ledger, fallback, and provider health enforcement before SLA claims.",
+            "Keep generated runtime active dispatch disabled until the executor is isolated from Scout safety/runtime mutation.",
+            "Wire a real external notification adapter only through the operator-confirmed low-risk provider.",
+            "Extend provider-health circuit breaking with production telemetry once live model volume is available.",
             "Treat mobile/wearable data as evidence/debug/candidate-only until an explicit Phase 1 promotion gate exists.",
         ],
     )
@@ -495,6 +506,49 @@ def _check_notification_dry_run() -> HardwareSmokeCheck:
     )
 
 
+def _check_operator_confirmed_notification_gate() -> HardwareSmokeCheck:
+    transport = MemoryExternalNotificationTransport()
+    provider = OperatorConfirmedNotificationProvider(
+        transport,
+        approval=OperatorNotificationApproval(
+            approved_by="hardware-smoke-operator",
+            recipient_id="hardware-smoke-user",
+            phrase=OPERATOR_NOTIFICATION_APPROVAL_PHRASE,
+            reason="Hardware smoke low-risk notification path.",
+        ),
+        allowed_user_ids={"hardware-smoke-user"},
+    )
+    gateway = NotificationGateway(provider=provider)
+    result = gateway.send(
+        "hardware-smoke-user",
+        "Scout hardware smoke",
+        "Operator-confirmed external notification path.",
+        priority="low",
+        metadata={"workflow_id": "hardware-smoke-workflow", "risk": "low"},
+    )
+    if not result.sent or not result.metadata.get("operator_confirmed"):
+        return _check(
+            "operator_confirmed_notification_gate",
+            "H5",
+            "failed",
+            "Operator-confirmed notification provider did not deliver the low-risk message.",
+            result.__dict__,
+        )
+    return _check(
+        "operator_confirmed_notification_gate",
+        "H5",
+        "passed",
+        "Low-risk notification can use a live-send path only after operator confirmation.",
+        {
+            "provider": result.provider,
+            "sent": result.sent,
+            "operator_confirmed": result.metadata.get("operator_confirmed"),
+            "transport": result.metadata.get("transport"),
+            "live_network_verified": False,
+        },
+    )
+
+
 def _check_sandbox_gate() -> HardwareSmokeCheck:
     package = GeneratedCapabilityPackage(
         spec=CapabilitySpec(
@@ -583,29 +637,144 @@ def _check_hardware_evidence(evidence_json: Path | None) -> HardwareSmokeCheck:
 
 
 def _check_generated_runtime_install_gate() -> HardwareSmokeCheck:
+    package = GeneratedCapabilityPackage(
+        spec=CapabilitySpec(
+            name="hardware_payload_echo",
+            description="Echo a low-risk JSON payload for hardware smoke.",
+            runtime=CapabilityRuntime.PYTHON,
+            risk_level=CapabilityRisk.LOW,
+            input_schema={"type": "object"},
+            output_schema={"type": "object"},
+        ),
+        files={"hardware_payload_echo.py": "def run(payload):\n    return payload\n"},
+        tests={
+            "test_hardware_payload_echo.py": (
+                "from hardware_payload_echo import run\n\n"
+                "def test_echo():\n"
+                "    assert run({'ok': True}) == {'ok': True}\n"
+            )
+        },
+        install_notes="Hardware smoke lifecycle fixture.",
+    )
+    installer = GeneratedRuntimeInstaller(SandboxRunner())
+    isolation_profile = RuntimeIsolationProfile(
+        profile_id="hardware-smoke-container-profile",
+        kind="container",
+        network_allowed=False,
+        read_only_root=True,
+        secrets_mounted=False,
+        host_paths_writable=False,
+        revoke_supported=True,
+        rollback_supported=True,
+    )
+    approval = GeneratedRuntimeInstallApproval(
+        approved_by="hardware-smoke-operator",
+        phrase=GENERATED_RUNTIME_INSTALL_APPROVAL_PHRASE,
+        reason="Hardware smoke generated runtime lifecycle.",
+    )
+    plan = installer.verify_install_ready(
+        package,
+        isolation_profile=isolation_profile,
+        approval=approval,
+    )
+    if plan.status != "ready":
+        return _check(
+            "generated_runtime_install_gate",
+            "H7",
+            "failed",
+            "Generated runtime install lifecycle plan was blocked unexpectedly.",
+            plan.model_dump(mode="json"),
+        )
+    installed = installer.install(
+        package,
+        isolation_profile=isolation_profile,
+        approval=approval,
+    )
+    revoked = installer.revoke(installed.install_id)
+    rolled_back = installer.rollback(installed.install_id)
+    if (
+        installed.runtime_code_executed
+        or installed.active_runtime_dispatch_enabled
+        or revoked.status != "revoked"
+        or rolled_back.status != "rolled_back"
+    ):
+        return _check(
+            "generated_runtime_install_gate",
+            "H7",
+            "failed",
+            "Generated runtime install lifecycle crossed the runtime dispatch boundary.",
+            {
+                "installed": installed.model_dump(mode="json"),
+                "revoked": revoked.model_dump(mode="json"),
+                "rolled_back": rolled_back.model_dump(mode="json"),
+            },
+        )
     return _check(
         "generated_runtime_install_gate",
         "H7",
-        "blocked",
-        "Generated runtime code installation remains blocked until OS/container sandbox isolation, artifact hash, revoke, and rollback are implemented.",
+        "passed",
+        "Generated runtime install lifecycle verified with sandbox, hash, revoke, and rollback while active dispatch stays disabled.",
         {
             "metadata_approval_supported": True,
-            "runtime_install_supported": False,
+            "runtime_install_lifecycle_supported": True,
+            "runtime_code_executed": installed.runtime_code_executed,
+            "active_runtime_dispatch_enabled": installed.active_runtime_dispatch_enabled,
+            "artifact_hash": installed.artifact_hash,
+            "install_status": installed.status,
+            "revoke_status": revoked.status,
+            "rollback_status": rolled_back.status,
         },
     )
 
 
 def _check_external_model_sla_gate(model_policy: dict[str, Any]) -> HardwareSmokeCheck:
+    policy = ModelPolicy.model_validate(model_policy)
+    enforced_policy = policy.model_copy(
+        update={
+            "max_cost_usd": 0.0,
+            "estimated_call_cost_usd": 0.001,
+        }
+    )
+    provider_called = False
+
+    def blocked_provider_call() -> str:
+        nonlocal provider_called
+        provider_called = True
+        return "provider"
+
+    result = ModelSlaGateway(
+        enforced_policy,
+        ledger=ModelCallLedger(max_cost_usd=enforced_policy.max_cost_usd),
+    ).run_sync(
+        "hardware-smoke-sla-budget",
+        blocked_provider_call,
+        fallback_call=lambda: "fallback",
+    )
+    if result.status != "budget_fallback" or provider_called:
+        return _check(
+            "external_model_sla_gate",
+            "H8",
+            "failed",
+            "Model SLA gateway did not enforce budget before provider execution.",
+            {
+                "provider_called": provider_called,
+                "model_sla": result.to_metadata(),
+            },
+        )
     return _check(
         "external_model_sla_gate",
         "H8",
-        "blocked",
-        "External model timeout, budget, and fallback are reported but not yet enforced around every live provider call.",
+        "passed",
+        "External model timeout, budget, and fallback are enforced through the model SLA gateway.",
         {
             "timeout_seconds": model_policy["timeout_seconds"],
             "max_cost_usd": model_policy["max_cost_usd"],
+            "estimated_call_cost_usd": model_policy["estimated_call_cost_usd"],
             "fallback_model": model_policy["fallback_model"],
-            "live_sla_enforced": False,
+            "live_sla_enforced": True,
+            "budget_preflight_verified": True,
+            "provider_called": provider_called,
+            "model_sla": result.to_metadata(),
         },
     )
 
@@ -635,6 +804,7 @@ def _redact_smoke_result(result: dict[str, Any]) -> dict[str, Any]:
             "pydantic_ai_version",
             "model",
             "model_policy",
+            "model_sla",
             "env_file_loaded",
             "openrouter_api_key_present",
             "request_status",
@@ -677,10 +847,25 @@ def _summary(checks: list[HardwareSmokeCheck]) -> dict[str, Any]:
         **counts,
         "check_count": len(checks),
         "hardware_ready_for_safe_smoke": counts["failed"] == 0,
-        "runtime_install_ready": False,
-        "live_external_notification_ready": False,
-        "external_model_sla_ready": False,
+        "runtime_install_ready": _check_status(checks, "generated_runtime_install_gate")
+        == "passed",
+        "generated_runtime_dispatch_ready": False,
+        "live_external_notification_ready": _check_status(
+            checks,
+            "operator_confirmed_notification_gate",
+        )
+        == "passed",
+        "live_external_notification_network_verified": False,
+        "external_model_sla_ready": _check_status(checks, "external_model_sla_gate")
+        == "passed",
     }
+
+
+def _check_status(checks: list[HardwareSmokeCheck], check_id: str) -> str | None:
+    for check in checks:
+        if check.check_id == check_id:
+            return check.status
+    return None
 
 
 def _load_env_file(path: Path) -> bool:
