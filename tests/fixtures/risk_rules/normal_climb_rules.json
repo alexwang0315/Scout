@@ -1,0 +1,47 @@
+{
+  "ruleset_id": "normal_climb_phase1_rules",
+  "mission_id": "apple-watch-260511-0852",
+  "source": "synthetic_fixture",
+  "source_version": "phase-1-2026-05-11",
+  "rules": [
+    {
+      "rule_id": "dense_bamboo_cliff_l2",
+      "name": "Dense bamboo near cliff exposure",
+      "hazard_types": ["dense_bamboo", "cliff_exposure"],
+      "hazard_match": "all",
+      "min_duration_s": 30.0,
+      "min_map_confidence": 0.6,
+      "requires_weak_gps": null,
+      "segment_ids": [],
+      "output_level": "L2_CONCERN",
+      "confidence": 0.88,
+      "reason": "Dense bamboo and cliff exposure overlapped long enough to require concern-level handling."
+    },
+    {
+      "rule_id": "steep_slope_weak_gps_l2",
+      "name": "Steep slope with weak GPS",
+      "hazard_types": ["steep_slope"],
+      "hazard_match": "any",
+      "min_duration_s": 30.0,
+      "min_map_confidence": 0.65,
+      "requires_weak_gps": true,
+      "segment_ids": [],
+      "output_level": "L2_CONCERN",
+      "confidence": 0.84,
+      "reason": "Steep slope combined with weak GPS increases route-loss risk."
+    },
+    {
+      "rule_id": "low_confidence_hazard_watch",
+      "name": "Low-confidence hazard watch",
+      "hazard_types": ["steep_slope", "river", "landslide", "dense_bamboo", "cliff_exposure"],
+      "hazard_match": "any",
+      "min_duration_s": 30.0,
+      "min_map_confidence": 0.3,
+      "requires_weak_gps": null,
+      "segment_ids": [],
+      "output_level": "L1_WATCH",
+      "confidence": 0.6,
+      "reason": "Map evidence is low-confidence but sustained enough to increase watch level."
+    }
+  ]
+}

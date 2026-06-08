@@ -1,0 +1,73 @@
+{
+  "artifact_kind": "scout_260512_pretrip_map_candidate_placeholders",
+  "corridor_candidates": [
+    {
+      "candidate_id": "map.corridor.scout_260512.field_bbox.placeholder",
+      "label": "Scout 260512 field route corridor placeholder",
+      "notes": "Placeholder summarizes existing map coverage; does not embed GeoJSON features.",
+      "review_required": true,
+      "review_state": "needs_review",
+      "source_refs": [
+        "artifact.map.scout_260512_overpass_summary"
+      ],
+      "summary": {
+        "bbox": {
+          "east": 121.6705,
+          "north": 25.073,
+          "south": 25.0585,
+          "west": 121.6505
+        },
+        "corridor_count": 684,
+        "route_level_counts": {
+          "cycleway": 28,
+          "footway": 97,
+          "path": 39,
+          "pedestrian": 16,
+          "primary": 58,
+          "residential": 47,
+          "service": 320,
+          "steps": 20,
+          "tertiary": 14,
+          "unclassified": 45
+        }
+      }
+    }
+  ],
+  "hazard_candidates": [
+    {
+      "candidate_id": "map.hazard.scout_260512.weak_gps_review.placeholder",
+      "hazard_type": "field_data_quality_review",
+      "label": "Weak GPS review placeholder",
+      "notes": "Represents a review prompt from field evidence, not a live hazard assertion.",
+      "review_required": true,
+      "review_state": "needs_review",
+      "source_refs": [
+        "artifact.field_case.scout_260512_golden"
+      ]
+    }
+  ],
+  "poi_candidates": [
+    {
+      "candidate_id": "map.poi.scout_260512.field_midpoint.placeholder",
+      "coordinate": {
+        "lat": 25.06575,
+        "lon": 121.6605
+      },
+      "label": "Field midpoint POI placeholder",
+      "notes": "Synthetic placeholder for fixture regression only.",
+      "poi_type": "field_regression_anchor",
+      "review_required": true,
+      "review_state": "needs_review",
+      "source_refs": [
+        "artifact.field_case.scout_260512_golden"
+      ]
+    }
+  ],
+  "project_id": "scout_260512_field_regression",
+  "raw_payloads_embedded": false,
+  "source_refs": [
+    "artifact.field_case.scout_260512_golden",
+    "artifact.map.scout_260512_overpass_summary"
+  ],
+  "status": "candidate_only"
+}

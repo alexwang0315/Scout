@@ -1,0 +1,54 @@
+services:
+  scout-live:
+    platform: linux/arm64
+    build:
+      context: .
+      dockerfile: Dockerfile.pi.live
+    image: scout-fusion/pi-runtime:live
+    container_name: scout-pi-runtime-live
+    restart: unless-stopped
+    env_file:
+      - /data/scout/secrets/live-runtime.env
+    environment:
+      SCOUT_DATA_ROOT: /data/scout
+      SCOUT_RUNTIME_PROFILE: pi-field-live
+      SCOUT_ENABLE_LIVE_RUNTIME: "1"
+      SCOUT_ENABLE_LIVE_HARDWARE: "1"
+      SCOUT_ENABLE_AI_INFERENCE: "1"
+      SCOUT_ENABLE_LOCAL_MODEL: "1"
+      SCOUT_EVENT_BUS: none
+      SCOUT_RUNTIME_STREAM_STATUS_ENABLED: "1"
+      SCOUT_SAFETY_OBSERVATION_ADMISSION_ENABLED: "1"
+      SCOUT_SAFETY_OBSERVATION_ADMISSION_SECRET_FILE: /data/scout/secrets/runtime-stream-admission-secret
+      SCOUT_SAFETY_ENABLED: "true"
+      SCOUT_SAFETY_MISSION_GRAPH: /app/tests/fixtures/mission_graph/normal_climb_mission.json
+      SCOUT_SAFETY_INCIDENT_STORE: /data/scout/incidents
+      SCOUT_AI_ASSISTANT_ENABLED: "1"
+      SCOUT_AI_ASSISTANT_PROVIDER: pydantic_ai
+      SCOUT_AI_ASSISTANT_CONFIG_PATH: /data/scout/config/assistant-models.json
+      SCOUT_REMOTE_PROVIDER_LIVE_SEND_ENABLED: "1"
+      SCOUT_HARDWARE_PROVIDER_CONTROL_ENABLED: "1"
+      SCOUT_HARDWARE_PROVIDER_CONTROL_POLICY_PATH: /data/scout/config/hardware-provider-control-policy.json
+      SCOUT_HARDWARE_PROVIDER_CONTROL_TOKEN_FILE: /data/scout/secrets/hardware-provider-control-token
+      SCOUT_PORT: "9099"
+      SCOUT_LOG_LEVEL: info
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "9099:9099"
+    volumes:
+      - type: bind
+        source: /data/scout
+        target: /data/scout
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import json, urllib.request; r=urllib.request.urlopen('http://127.0.0.1:9099/health', timeout=3); raise SystemExit(0 if json.load(r).get('status') == 'ok' else 1)",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s

@@ -1,0 +1,34 @@
+{
+  "target_id": "scout-pi5-prototype-01",
+  "deployment_stage": "pi5_docker_step1",
+  "host_label": "scout.local",
+  "runtime_base_url": "http://scout.local:9099",
+  "assistant_base_url": "http://scout.local:9110",
+  "data_root": "/data/scout",
+  "runtime_profile": "pi-field",
+  "live_hardware_enabled": false,
+  "ai_inference_enabled": false,
+  "event_bus": "none",
+  "operator_started_services": false,
+  "assistant_model_config_ref": "~/.scout/assistant-models.json",
+  "expected_services": [
+    {
+      "service_id": "scout-runtime",
+      "kind": "runtime",
+      "mode": "manual_start",
+      "port": 9099,
+      "endpoint_path": "/health"
+    },
+    {
+      "service_id": "scout-admin-client",
+      "kind": "admin_client",
+      "mode": "manual_start",
+      "port": 9110,
+      "endpoint_path": "/admin"
+    }
+  ],
+  "notes": [
+    "Offline preflight only; an operator must manually start the target services.",
+    "No local model service is started or required for Step 1."
+  ]
+}

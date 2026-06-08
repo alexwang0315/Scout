@@ -1,0 +1,136 @@
+{
+  "version": 0.6,
+  "generator": "Overpass API fixture",
+  "osm3s": {
+    "timestamp_osm_base": "2026-05-20T00:00:00Z",
+    "copyright": "The data included in this fixture is synthetic OSM-shaped test data."
+  },
+  "elements": [
+    {
+      "type": "way",
+      "id": 1001,
+      "nodes": [1, 2, 3],
+      "tags": {
+        "highway": "path",
+        "name": "Fixture ridge trail"
+      },
+      "geometry": [
+        {"lat": 24.051, "lon": 121.211},
+        {"lat": 24.052, "lon": 121.214},
+        {"lat": 24.053, "lon": 121.218}
+      ]
+    },
+    {
+      "type": "way",
+      "id": 1002,
+      "nodes": [4, 5],
+      "tags": {
+        "route": "hiking",
+        "name": "Fixture hiking route way"
+      },
+      "geometry": [
+        {"lat": 24.053, "lon": 121.218},
+        {"lat": 24.055, "lon": 121.222}
+      ]
+    },
+    {
+      "type": "relation",
+      "id": 2001,
+      "tags": {
+        "type": "route",
+        "route": "hiking",
+        "name": "Fixture hiking relation"
+      },
+      "members": [
+        {
+          "type": "way",
+          "ref": 1001,
+          "role": "",
+          "geometry": [
+            {"lat": 24.051, "lon": 121.211},
+            {"lat": 24.052, "lon": 121.214}
+          ]
+        },
+        {
+          "type": "way",
+          "ref": 1002,
+          "role": "",
+          "geometry": [
+            {"lat": 24.052, "lon": 121.214},
+            {"lat": 24.055, "lon": 121.222}
+          ]
+        }
+      ]
+    },
+    {
+      "type": "node",
+      "id": 5001,
+      "lat": 24.054,
+      "lon": 121.219,
+      "tags": {
+        "tourism": "wilderness_hut",
+        "name": "Fixture mountain hut"
+      }
+    },
+    {
+      "type": "node",
+      "id": 5002,
+      "lat": 24.0525,
+      "lon": 121.2165,
+      "tags": {
+        "natural": "spring",
+        "name": "Fixture spring"
+      }
+    },
+    {
+      "type": "node",
+      "id": 5003,
+      "lat": 24.0505,
+      "lon": 121.2105,
+      "tags": {
+        "amenity": "parking",
+        "name": "Fixture trailhead parking"
+      }
+    },
+    {
+      "type": "node",
+      "id": 5004,
+      "lat": 24.057,
+      "lon": 121.226,
+      "tags": {
+        "natural": "peak",
+        "name": "Fixture peak",
+        "ele": "2860"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1003,
+      "nodes": [6, 7, 8, 9, 6],
+      "tags": {
+        "hazard": "landslide",
+        "name": "Fixture old landslide"
+      },
+      "geometry": [
+        {"lat": 24.055, "lon": 121.220},
+        {"lat": 24.055, "lon": 121.224},
+        {"lat": 24.052, "lon": 121.224},
+        {"lat": 24.052, "lon": 121.220},
+        {"lat": 24.055, "lon": 121.220}
+      ]
+    },
+    {
+      "type": "way",
+      "id": 1004,
+      "nodes": [10, 11],
+      "tags": {
+        "highway": "path",
+        "name": "Incomplete geometry should not crash"
+      },
+      "geometry": [
+        {"lat": 24.056, "lon": 121.225},
+        {"lat": 24.057}
+      ]
+    }
+  ]
+}

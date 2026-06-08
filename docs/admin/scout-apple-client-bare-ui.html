@@ -1,0 +1,707 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Scout Apple Client Bare UI</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f7f8fa;
+      --surface: #ffffff;
+      --surface-alt: #f0f4f7;
+      --text: #18212b;
+      --muted: #5c6875;
+      --line: #d6dde5;
+      --accent: #126a66;
+      --accent-strong: #0d4f4b;
+      --warn: #996317;
+      --bad: #9f2d2d;
+      --good: #1d6d3a;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 15px;
+      line-height: 1.45;
+    }
+
+    button,
+    input,
+    select,
+    textarea {
+      font: inherit;
+    }
+
+    button {
+      min-height: 36px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--surface);
+      color: var(--text);
+      cursor: pointer;
+      padding: 0 12px;
+    }
+
+    button.primary {
+      border-color: var(--accent);
+      background: var(--accent);
+      color: #ffffff;
+    }
+
+    button.primary:hover {
+      background: var(--accent-strong);
+    }
+
+    button:disabled {
+      cursor: not-allowed;
+      opacity: .55;
+    }
+
+    label {
+      display: grid;
+      gap: 4px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 650;
+    }
+
+    input,
+    select,
+    textarea {
+      width: 100%;
+      min-height: 36px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #ffffff;
+      color: var(--text);
+      padding: 8px 10px;
+    }
+
+    textarea {
+      min-height: 360px;
+      resize: vertical;
+      font-family: var(--mono);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .shell {
+      min-height: 100vh;
+      display: grid;
+      grid-template-rows: auto auto 1fr;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 18px 24px;
+      border-bottom: 1px solid var(--line);
+      background: var(--surface);
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 20px;
+      font-weight: 750;
+      letter-spacing: 0;
+    }
+
+    h2 {
+      margin: 0 0 12px;
+      font-size: 15px;
+      font-weight: 750;
+      letter-spacing: 0;
+    }
+
+    .subhead {
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .statusbar {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(120px, 1fr));
+      gap: 1px;
+      background: var(--line);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .metric {
+      background: var(--surface-alt);
+      padding: 10px 14px;
+      min-width: 0;
+    }
+
+    .metric span {
+      display: block;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .metric strong {
+      display: block;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 15px;
+      margin-top: 2px;
+    }
+
+    main {
+      display: grid;
+      grid-template-columns: minmax(320px, 440px) minmax(420px, 1fr);
+      gap: 1px;
+      background: var(--line);
+      min-height: 0;
+    }
+
+    section {
+      background: var(--surface);
+      padding: 18px;
+      min-width: 0;
+      overflow: auto;
+    }
+
+    .panel + .panel {
+      margin-top: 20px;
+      padding-top: 18px;
+      border-top: 1px solid var(--line);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .grid.one {
+      grid-template-columns: 1fr;
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .toggle {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 36px;
+      color: var(--text);
+      font-weight: 650;
+    }
+
+    .toggle input {
+      width: 18px;
+      min-height: 18px;
+    }
+
+    .boundary {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .pill {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 8px 10px;
+      font-size: 12px;
+      color: var(--muted);
+      background: var(--surface-alt);
+    }
+
+    .pill.good {
+      color: var(--good);
+      border-color: #bedbc6;
+      background: #eff8f1;
+    }
+
+    .pill.warn {
+      color: var(--warn);
+      border-color: #ead5ae;
+      background: #fff8eb;
+    }
+
+    .output-toolbar {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+
+    .log {
+      margin-top: 12px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fbfcfd;
+      min-height: 116px;
+      max-height: 190px;
+      overflow: auto;
+      font-family: var(--mono);
+      font-size: 12px;
+      padding: 10px;
+      white-space: pre-wrap;
+    }
+
+    .muted {
+      color: var(--muted);
+    }
+
+    .danger {
+      color: var(--bad);
+    }
+
+    .mono {
+      font-family: var(--mono);
+    }
+
+    @media (max-width: 920px) {
+      header {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .statusbar {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      main {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header>
+      <div>
+        <h1>Scout Apple Client Bare UI</h1>
+        <div class="subhead">Watch/iPhone client data-plane prototype. Evidence-only; safety bridge off.</div>
+      </div>
+      <div class="actions" aria-label="Session controls">
+        <button id="sampleButton" class="primary" type="button">Generate Sample</button>
+        <button id="sendButton" type="button">Send Once</button>
+        <button id="flushButton" type="button">Flush Queue</button>
+        <button id="exportButton" type="button">Export JSONL</button>
+      </div>
+    </header>
+
+    <div class="statusbar" aria-label="Client status">
+      <div class="metric"><span>Mode</span><strong id="modeValue">Dry run</strong></div>
+      <div class="metric"><span>Sequence</span><strong id="sequenceValue">0</strong></div>
+      <div class="metric"><span>Queue</span><strong id="queueValue">0</strong></div>
+      <div class="metric"><span>Latest fallback</span><strong id="fallbackValue">none</strong></div>
+      <div class="metric"><span>Last response</span><strong id="responseValue">not sent</strong></div>
+      <div class="metric"><span>Safety bridge</span><strong id="safetyValue">off</strong></div>
+    </div>
+
+    <main>
+      <section aria-label="Input controls">
+        <div class="panel">
+          <h2>Scout Link</h2>
+          <div class="grid one">
+            <label>Endpoint
+              <input id="endpointInput" value="http://scout.local:9099/clients/apple/observations" spellcheck="false">
+            </label>
+          </div>
+          <div class="grid">
+            <label>Source kind
+              <select id="sourceKindInput">
+                <option value="apple_watch">apple_watch</option>
+                <option value="mobile_phone">mobile_phone</option>
+              </select>
+            </label>
+            <label>Transport
+              <select id="transportInput">
+                <option value="http_push">http_push</option>
+                <option value="websocket">websocket</option>
+              </select>
+            </label>
+            <label>Source ID
+              <input id="sourceIdInput" value="runtime_source.apple_watch.v0" spellcheck="false">
+            </label>
+            <label>Device ID
+              <input id="deviceIdInput" value="apple-watch-local-device-id" spellcheck="false">
+            </label>
+            <label>Session ID
+              <input id="sessionIdInput" spellcheck="false">
+            </label>
+            <label>HMAC demo secret
+              <input id="secretInput" value="local-demo-secret" spellcheck="false" autocomplete="off">
+            </label>
+          </div>
+          <label class="toggle">
+            <input id="dryRunInput" type="checkbox" checked>
+            Dry-run only
+          </label>
+          <label class="toggle">
+            <input id="pausedInput" type="checkbox">
+            Simulate Scout paused
+          </label>
+        </div>
+
+        <div class="panel">
+          <h2>Watch Frame</h2>
+          <div class="grid">
+            <label>Heart rate bpm
+              <input id="heartRateInput" type="number" min="30" max="220" value="142">
+            </label>
+            <label>Active energy kJ
+              <input id="energyInput" type="number" min="0" step="0.1" value="12.4">
+            </label>
+            <label>Distance m
+              <input id="distanceInput" type="number" min="0" step="0.1" value="85.2">
+            </label>
+            <label>Workout state
+              <select id="workoutInput">
+                <option value="running">running</option>
+                <option value="walking">walking</option>
+                <option value="paused">paused</option>
+                <option value="unknown">unknown</option>
+              </select>
+            </label>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h2>Motion / Location</h2>
+          <div class="grid">
+            <label>Accelerometer X
+              <input id="accelXInput" type="number" step="0.01" value="0.01">
+            </label>
+            <label>Accelerometer Y
+              <input id="accelYInput" type="number" step="0.01" value="0.02">
+            </label>
+            <label>Accelerometer Z
+              <input id="accelZInput" type="number" step="0.01" value="0.98">
+            </label>
+            <label>Speed m/s
+              <input id="speedInput" type="number" min="0" step="0.1" value="1.2">
+            </label>
+            <label>Latitude
+              <input id="latInput" type="number" step="0.000001" value="24.1201">
+            </label>
+            <label>Longitude
+              <input id="lonInput" type="number" step="0.000001" value="121.2841">
+            </label>
+          </div>
+          <div class="actions">
+            <button id="geoButton" type="button">Use Browser Location</button>
+            <button id="retainButton" type="button">Retain Latest Only</button>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h2>Boundary</h2>
+          <div class="boundary">
+            <div class="pill good">evidence_only=true</div>
+            <div class="pill good">medical_diagnosis=false</div>
+            <div class="pill good">phase1_runtime_safety_truth=false</div>
+            <div class="pill good">safety_api_called=false</div>
+            <div class="pill warn">raw HealthKit unavailable in web</div>
+            <div class="pill warn">real Watch data requires Xcode</div>
+          </div>
+        </div>
+      </section>
+
+      <section aria-label="Generated envelope">
+        <div class="output-toolbar">
+          <h2>Observation Envelope</h2>
+          <div class="actions">
+            <button id="copyButton" type="button">Copy</button>
+            <button id="clearButton" type="button">Clear Log</button>
+          </div>
+        </div>
+        <textarea id="output" spellcheck="false" aria-label="Generated observation envelope"></textarea>
+        <div class="log" id="log" aria-label="Event log"></div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    const state = {
+      sequence: 0,
+      queue: [],
+      latestFallback: null,
+      lastEnvelope: null,
+      log: []
+    };
+
+    const $ = (id) => document.getElementById(id);
+    const encoder = new TextEncoder();
+
+    function readNumber(id) {
+      const value = Number($(id).value);
+      return Number.isFinite(value) ? value : 0;
+    }
+
+    function nowOffset() {
+      const offset = -new Date().getTimezoneOffset();
+      const sign = offset >= 0 ? "+" : "-";
+      const abs = Math.abs(offset);
+      const hours = String(Math.floor(abs / 60)).padStart(2, "0");
+      const minutes = String(abs % 60).padStart(2, "0");
+      return `${sign}${hours}:${minutes}`;
+    }
+
+    function isoWithOffset(date = new Date()) {
+      const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+      return local.toISOString().replace("Z", nowOffset());
+    }
+
+    function canonicalJson(value) {
+      if (value === null || typeof value !== "object") {
+        return JSON.stringify(value);
+      }
+      if (Array.isArray(value)) {
+        return `[${value.map(canonicalJson).join(",")}]`;
+      }
+      return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`).join(",")}}`;
+    }
+
+    async function sha256Hex(value) {
+      const digest = await crypto.subtle.digest("SHA-256", encoder.encode(value));
+      return Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
+    }
+
+    async function hmacBase64(secret, message) {
+      const key = await crypto.subtle.importKey(
+        "raw",
+        encoder.encode(secret),
+        { name: "HMAC", hash: "SHA-256" },
+        false,
+        ["sign"]
+      );
+      const signature = await crypto.subtle.sign("HMAC", key, encoder.encode(message));
+      const bytes = Array.from(new Uint8Array(signature));
+      return btoa(String.fromCharCode(...bytes));
+    }
+
+    function payloadFromInputs() {
+      return {
+        health: {
+          heart_rate_bpm: readNumber("heartRateInput"),
+          active_energy_kj: readNumber("energyInput"),
+          distance_m: readNumber("distanceInput"),
+          workout_state: $("workoutInput").value
+        },
+        motion: {
+          accelerometer_g: {
+            x: readNumber("accelXInput"),
+            y: readNumber("accelYInput"),
+            z: readNumber("accelZInput")
+          },
+          gyroscope_rad_s: { x: 0.03, y: 0.01, z: 0 },
+          quaternion: { w: 0.99, x: 0.01, y: 0.02, z: 0.03 }
+        },
+        location: {
+          latitude: readNumber("latInput"),
+          longitude: readNumber("lonInput"),
+          horizontal_accuracy_m: 8,
+          speed_mps: readNumber("speedInput")
+        }
+      };
+    }
+
+    async function buildEnvelope() {
+      state.sequence += 1;
+      const observedAt = isoWithOffset();
+      const payload = payloadFromInputs();
+      const payloadSha = await sha256Hex(canonicalJson(payload));
+      const envelope = {
+        artifact_kind: "scout_apple_client_observation_envelope",
+        artifact_version: "apple_client_observation_envelope.v0",
+        source_id: $("sourceIdInput").value.trim(),
+        source_kind: $("sourceKindInput").value,
+        device_id: $("deviceIdInput").value.trim(),
+        session_id: $("sessionIdInput").value.trim(),
+        sequence_no: state.sequence,
+        observed_at: observedAt,
+        monotonic_ms: Math.round(performance.now()),
+        transport: $("transportInput").value,
+        payload_sha256: payloadSha,
+        auth_method: "device_id_scoped_token_hmac_signature",
+        token_scope: "runtime:observation:write",
+        signature_algorithm: "hmac_sha256",
+        signature: "",
+        payload,
+        quality: {
+          sample_cadence_ms: 1000,
+          permissions: ["healthkit_simulated", "motion_simulated", "location_simulated"],
+          missing_fields: []
+        },
+        privacy: {
+          raw_health_payload_shared: false,
+          raw_track_shared_to_status: false,
+          status_surfaces_summary_only: true
+        },
+        boundary: {
+          evidence_only: true,
+          medical_diagnosis: false,
+          phase1_runtime_safety_truth: false,
+          safety_api_called: false,
+          assistant_safety_mutation_allowed: false
+        }
+      };
+      const signingString = [
+        envelope.source_id,
+        envelope.device_id,
+        envelope.transport,
+        envelope.sequence_no,
+        envelope.observed_at,
+        envelope.payload_sha256
+      ].join("|");
+      envelope.signature = await hmacBase64($("secretInput").value, signingString);
+      state.lastEnvelope = envelope;
+      $("output").value = JSON.stringify(envelope, null, 2);
+      log(`generated sequence=${envelope.sequence_no} payload_sha256=${payloadSha.slice(0, 12)}`);
+      refreshStatus();
+      return envelope;
+    }
+
+    async function sendEnvelope(envelope) {
+      if ($("pausedInput").checked) {
+        state.queue.push(envelope);
+        log(`queued_paused sequence=${envelope.sequence_no}`);
+        refreshStatus("paused");
+        return;
+      }
+      if ($("dryRunInput").checked) {
+        state.queue.push(envelope);
+        log(`dry_run_queued sequence=${envelope.sequence_no}`);
+        refreshStatus("dry-run queued");
+        return;
+      }
+      try {
+        const response = await fetch($("endpointInput").value, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(envelope)
+        });
+        const body = await response.text();
+        log(`sent sequence=${envelope.sequence_no} status=${response.status}`);
+        refreshStatus(`${response.status} ${body.slice(0, 80)}`);
+      } catch (error) {
+        state.queue.push(envelope);
+        log(`queued_disconnected sequence=${envelope.sequence_no} error=${error.message}`);
+        refreshStatus("queued disconnected");
+      }
+    }
+
+    async function flushQueue() {
+      const pending = [...state.queue];
+      state.queue = [];
+      for (const envelope of pending) {
+        await sendEnvelope(envelope);
+      }
+      refreshStatus();
+    }
+
+    function retainLatestOnly() {
+      state.latestFallback = state.queue.at(-1) || state.lastEnvelope;
+      state.queue = state.latestFallback ? [state.latestFallback] : [];
+      log(state.latestFallback ? `latest_point_retained sequence=${state.latestFallback.sequence_no}` : "no latest point");
+      refreshStatus("latest point retained");
+    }
+
+    function randomizeSample() {
+      const bpm = Math.round(118 + Math.random() * 42);
+      $("heartRateInput").value = String(bpm);
+      $("energyInput").value = (Number($("energyInput").value) + Math.random() * 1.8).toFixed(1);
+      $("distanceInput").value = (Number($("distanceInput").value) + 4 + Math.random() * 9).toFixed(1);
+      $("accelXInput").value = (Math.random() * 0.08 - 0.04).toFixed(2);
+      $("accelYInput").value = (Math.random() * 0.08 - 0.04).toFixed(2);
+      $("accelZInput").value = (0.94 + Math.random() * 0.08).toFixed(2);
+      $("speedInput").value = (0.8 + Math.random() * 1.3).toFixed(1);
+    }
+
+    function exportJsonl() {
+      const lines = [state.lastEnvelope, ...state.queue].filter(Boolean).map((item) => JSON.stringify(item)).join("\n") + "\n";
+      const blob = new Blob([lines], { type: "application/x-ndjson" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `scout-apple-client-${Date.now()}.jsonl`;
+      link.click();
+      URL.revokeObjectURL(url);
+      log(`exported_jsonl lines=${[state.lastEnvelope, ...state.queue].filter(Boolean).length}`);
+    }
+
+    function log(message) {
+      const entry = `${new Date().toLocaleTimeString()} ${message}`;
+      state.log.unshift(entry);
+      state.log = state.log.slice(0, 80);
+      $("log").textContent = state.log.join("\n");
+    }
+
+    function refreshStatus(responseText) {
+      $("modeValue").textContent = $("dryRunInput").checked ? "Dry run" : "Live POST";
+      $("sequenceValue").textContent = String(state.sequence);
+      $("queueValue").textContent = String(state.queue.length);
+      $("fallbackValue").textContent = state.latestFallback ? `seq ${state.latestFallback.sequence_no}` : "none";
+      if (responseText) $("responseValue").textContent = responseText;
+      $("safetyValue").textContent = "off";
+    }
+
+    async function useBrowserLocation() {
+      if (!navigator.geolocation) {
+        log("browser_location_unavailable");
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          $("latInput").value = position.coords.latitude.toFixed(6);
+          $("lonInput").value = position.coords.longitude.toFixed(6);
+          $("speedInput").value = Number.isFinite(position.coords.speed) && position.coords.speed !== null
+            ? position.coords.speed.toFixed(1)
+            : $("speedInput").value;
+          log("browser_location_updated");
+        },
+        (error) => log(`browser_location_error ${error.message}`),
+        { enableHighAccuracy: true, timeout: 5000 }
+      );
+    }
+
+    $("sessionIdInput").value = `apple-session-${new Date().toISOString().slice(0, 10)}`;
+    $("sampleButton").addEventListener("click", async () => {
+      randomizeSample();
+      await buildEnvelope();
+    });
+    $("sendButton").addEventListener("click", async () => sendEnvelope(state.lastEnvelope || await buildEnvelope()));
+    $("flushButton").addEventListener("click", flushQueue);
+    $("retainButton").addEventListener("click", retainLatestOnly);
+    $("exportButton").addEventListener("click", exportJsonl);
+    $("copyButton").addEventListener("click", async () => {
+      await navigator.clipboard.writeText($("output").value);
+      log("copied_envelope");
+    });
+    $("clearButton").addEventListener("click", () => {
+      state.log = [];
+      $("log").textContent = "";
+    });
+    $("geoButton").addEventListener("click", useBrowserLocation);
+    $("dryRunInput").addEventListener("change", () => refreshStatus());
+    buildEnvelope();
+  </script>
+</body>
+</html>

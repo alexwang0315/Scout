@@ -1,0 +1,186 @@
+{
+  "artifact_kind": "pretrip_mcp_cp_support_reconciliation",
+  "artifact_version": "mcp_cp_support_reconciliation.v1",
+  "boundary": {
+    "candidate_only": true,
+    "compile_allowed": false,
+    "phase1_runtime_mutation_allowed": false,
+    "runtime_safety_truth": false,
+    "safety_api_calls_allowed": false
+  },
+  "candidate_only": true,
+  "compile_allowed": false,
+  "mcp_candidate_count": 6,
+  "project_id": "chilai_nanhua_day1",
+  "rows": [
+    {
+      "candidate_only": true,
+      "compile_allowed": false,
+      "distance_m": 600.0,
+      "label": "舊林道叉路",
+      "linked_cp_candidates": [
+        "cp.start"
+      ],
+      "mcp_id": "mcp.old_forest_fork.001",
+      "nearest_scout_cp": {
+        "candidate_id": "cp.start",
+        "distance_m": 0.0,
+        "support_found": true,
+        "support_radius_m": 250.0
+      },
+      "recommendation": "Link MCP review action to the nearest Scout CP candidate.",
+      "review_required": true,
+      "runtime_safety_truth": false,
+      "spacing_suppression_details": [],
+      "suggested_cp_insertion": null,
+      "support_status": "supported",
+      "suppressed_point_count": 0
+    },
+    {
+      "candidate_only": true,
+      "compile_allowed": false,
+      "distance_m": 2350.0,
+      "label": "黑水塘",
+      "linked_cp_candidates": [
+        "cp.002"
+      ],
+      "mcp_id": "mcp.heishuitang.002",
+      "nearest_scout_cp": {
+        "candidate_id": "cp.002",
+        "distance_m": 0.0,
+        "support_found": true,
+        "support_radius_m": 250.0
+      },
+      "recommendation": "Link MCP review action to the nearest Scout CP candidate.",
+      "review_required": true,
+      "runtime_safety_truth": false,
+      "spacing_suppression_details": [
+        {
+          "distance_m": 1500.0,
+          "label": "雲海保線所",
+          "reason": "within primary MCP spacing window; preserved as linked suppressed point",
+          "score": 65.7,
+          "source_distance_m": 850.0,
+          "source_id": "np.yunhai_station",
+          "spacing_threshold_m": 1000.0
+        }
+      ],
+      "suggested_cp_insertion": null,
+      "support_status": "supported",
+      "suppressed_point_count": 1
+    },
+    {
+      "candidate_only": true,
+      "compile_allowed": false,
+      "distance_m": 4100.0,
+      "label": "大崩壁",
+      "linked_cp_candidates": [
+        "cp.003"
+      ],
+      "mcp_id": "mcp.major_collapse_wall.003",
+      "nearest_scout_cp": {
+        "candidate_id": "cp.003",
+        "distance_m": 0.0,
+        "support_found": true,
+        "support_radius_m": 250.0
+      },
+      "recommendation": "Link MCP review action to the nearest Scout CP candidate.",
+      "review_required": true,
+      "runtime_safety_truth": false,
+      "spacing_suppression_details": [
+        {
+          "distance_m": 4700.0,
+          "label": "固定繩橋段",
+          "reason": "within primary MCP spacing window; preserved as linked suppressed point",
+          "score": 62.7,
+          "source_distance_m": 600.0,
+          "source_id": "np.rope_bridge",
+          "spacing_threshold_m": 1000.0
+        }
+      ],
+      "suggested_cp_insertion": null,
+      "support_status": "supported",
+      "suppressed_point_count": 1
+    },
+    {
+      "candidate_only": true,
+      "compile_allowed": false,
+      "distance_m": 6900.0,
+      "label": "隱蔽樹林區",
+      "linked_cp_candidates": [
+        "cp.005"
+      ],
+      "mcp_id": "mcp.hidden_forest.004",
+      "nearest_scout_cp": {
+        "candidate_id": "cp.005",
+        "distance_m": 0.0,
+        "support_found": true,
+        "support_radius_m": 250.0
+      },
+      "recommendation": "Link MCP review action to the nearest Scout CP candidate.",
+      "review_required": true,
+      "runtime_safety_truth": false,
+      "spacing_suppression_details": [],
+      "suggested_cp_insertion": null,
+      "support_status": "supported",
+      "suppressed_point_count": 0
+    },
+    {
+      "candidate_only": true,
+      "compile_allowed": false,
+      "distance_m": 8200.0,
+      "label": "稜線啞口觀景點",
+      "linked_cp_candidates": [
+        "cp.006"
+      ],
+      "mcp_id": "mcp.ridge_pass_view.005",
+      "nearest_scout_cp": {
+        "candidate_id": "cp.006",
+        "distance_m": 0.0,
+        "support_found": true,
+        "support_radius_m": 250.0
+      },
+      "recommendation": "Link MCP review action to the nearest Scout CP candidate.",
+      "review_required": true,
+      "runtime_safety_truth": false,
+      "spacing_suppression_details": [],
+      "suggested_cp_insertion": null,
+      "support_status": "supported",
+      "suppressed_point_count": 0
+    },
+    {
+      "candidate_only": true,
+      "compile_allowed": false,
+      "distance_m": 9500.0,
+      "label": "稜線通訊點",
+      "linked_cp_candidates": [
+        "cp.039"
+      ],
+      "mcp_id": "mcp.mobile_reception_ridge.006",
+      "nearest_scout_cp": {
+        "candidate_id": "cp.039",
+        "distance_m": 19432.025,
+        "support_found": false,
+        "support_radius_m": 250.0
+      },
+      "recommendation": "No Scout CP support within policy radius; keep candidate review-required and create a suggested CP insertion.",
+      "review_required": true,
+      "runtime_safety_truth": false,
+      "spacing_suppression_details": [],
+      "suggested_cp_insertion": {
+        "distance_m": 9500.0,
+        "lat": 24.0,
+        "lon": 121.0,
+        "reason": "No Scout CP support within policy radius; create suggested candidate insertion for human review.",
+        "review_required": true
+      },
+      "support_status": "suggested_insertion_review_required",
+      "suppressed_point_count": 0
+    }
+  ],
+  "runtime_safety_truth": false,
+  "source_candidate_set_ref": "tests/fixtures/pretrip/projects/chilai_nanhua_day1/outputs/mcp/mcp_candidates.json",
+  "suggested_insertion_count": 1,
+  "support_radius_m": 250.0,
+  "supported_count": 5
+}

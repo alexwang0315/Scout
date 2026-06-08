@@ -1,0 +1,62 @@
+{
+  "ruleset_id": "scout_260512_field_phase1_rules",
+  "mission_id": "scout_260512_field_golden",
+  "source": "golden_case_fixture",
+  "source_version": "scout-260512-field-golden",
+  "rules": [
+    {
+      "rule_id": "field_dense_bamboo_cliff_l2",
+      "name": "Field dense bamboo near cliff exposure",
+      "hazard_types": [
+        "dense_bamboo",
+        "cliff_exposure"
+      ],
+      "hazard_match": "all",
+      "min_duration_s": 30.0,
+      "min_map_confidence": 0.6,
+      "requires_weak_gps": null,
+      "segment_ids": [],
+      "output_level": "L2_CONCERN",
+      "confidence": 0.86,
+      "reason": "Field mission treats sustained dense bamboo plus cliff exposure as concern-level risk."
+    },
+    {
+      "rule_id": "field_steep_slope_weak_gps_l2",
+      "name": "Field steep slope with weak GPS",
+      "hazard_types": [
+        "steep_slope"
+      ],
+      "hazard_match": "any",
+      "min_duration_s": 30.0,
+      "min_map_confidence": 0.65,
+      "requires_weak_gps": true,
+      "segment_ids": [
+        "seg_06",
+        "seg_07",
+        "seg_08"
+      ],
+      "output_level": "L2_CONCERN",
+      "confidence": 0.84,
+      "reason": "Weak GPS on field forest segments raises route-loss risk when map hazards indicate steep slope."
+    },
+    {
+      "rule_id": "field_low_confidence_hazard_watch",
+      "name": "Field low-confidence hazard watch",
+      "hazard_types": [
+        "steep_slope",
+        "river",
+        "landslide",
+        "dense_bamboo",
+        "cliff_exposure"
+      ],
+      "hazard_match": "any",
+      "min_duration_s": 30.0,
+      "min_map_confidence": 0.3,
+      "requires_weak_gps": null,
+      "segment_ids": [],
+      "output_level": "L1_WATCH",
+      "confidence": 0.6,
+      "reason": "Sustained lower-confidence map hazard evidence should raise watch level before L2 escalation."
+    }
+  ]
+}

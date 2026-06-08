@@ -1,0 +1,50 @@
+{
+  "activity_id": "fixture.garmin.body_battery.001",
+  "source_provider": "garmin_connect_export",
+  "activity_type": "hiking",
+  "activity_date": "2026-03-01",
+  "duration_s": 3600,
+  "moving_time_s": 3300,
+  "distance_m": 4500,
+  "ascent_m": 200,
+  "descent_m": 200,
+  "rest_event_count": 0,
+  "rest_duration_min": [],
+  "late_activity_fatigue_decay": 0.08,
+  "session_rpe": 4,
+  "heart_rate": {
+    "sample_count": 3,
+    "avg_bpm": 118,
+    "p90_bpm": 135,
+    "zone_minutes": {
+      "z1": 0,
+      "z2": 40,
+      "z3": 10,
+      "z4": 0,
+      "z5": 0
+    },
+    "samples": [
+      {"offset_s": 0, "bpm": 95, "quality": "medium"},
+      {"offset_s": 1800, "bpm": 126, "quality": "medium"},
+      {"offset_s": 3300, "bpm": 112, "quality": "medium"}
+    ]
+  },
+  "body_energy_provider_values": {
+    "garmin_body_battery_start": 70,
+    "garmin_body_battery_end": 35,
+    "garmin_stress_avg": 62,
+    "source_value_only": true,
+    "scout_truth": false
+  },
+  "data_quality": {
+    "heart_rate_confidence": "medium",
+    "gps_confidence": "medium",
+    "missing_hr_seconds": 0,
+    "missing_hr_intervals": [],
+    "sample_cadence_s": 1800,
+    "provider_value_confidence": "medium",
+    "limitations": [
+      "Garmin body battery and stress are provider values only"
+    ]
+  }
+}

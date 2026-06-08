@@ -1,0 +1,79 @@
+{
+  "counts": {
+    "files_scanned": 78,
+    "forbidden_fragments": 0,
+    "json_files_scanned": 78,
+    "json_parse_errors": 0,
+    "oversized_files": 0,
+    "raw_route_suffix_files": 0,
+    "raw_suffix_files": 0,
+    "total_issues": 0
+  },
+  "fixture_root": "tests/fixtures/pretrip",
+  "issues": {
+    "forbidden_fragments": [],
+    "json_parse_errors": [],
+    "oversized_files": [],
+    "raw_suffix_files": []
+  },
+  "manifest_id": "pretrip.fixture_hygiene.v0",
+  "phase": "phase_4_pretrip_fixture_hygiene",
+  "policy": {
+    "allowed_large_metadata_refs": [
+      "tests/fixtures/pretrip/projects/chilai_nanhua_day1/candidates/overpass_evidence.json",
+      "tests/fixtures/pretrip/projects/chilai_nanhua_day1/normalized/map/overpass_phase_a_raw.json",
+      "tests/fixtures/pretrip/projects/chilai_nanhua_day1/normalized/map/overpass_vector_evidence.geojson",
+      "tests/fixtures/pretrip/projects/chilai_nanhua_day1/normalized/terrain/segment_dtm_coverage.json",
+      "tests/fixtures/pretrip/projects/chilai_nanhua_day1/outputs/brain_seed_nodes.json",
+      "tests/fixtures/pretrip/projects/chilai_nanhua_day1/outputs/pretrip_package.json",
+      "tests/fixtures/pretrip/projects/chilai_nanhua_day1/outputs/pretrip_package.reviewed.json",
+      "tests/fixtures/pretrip/projects/chilai_nanhua_day1/outputs/reference_track_display_geometry.json",
+      "tests/fixtures/pretrip/projects/chilai_nanhua_day1/outputs/risk_ribbon.geojson",
+      "tests/fixtures/pretrip/projects/chilai_nanhua_day1/outputs/segment_display_geometry.json"
+    ],
+    "allowed_map_payload_refs": [
+      "tests/fixtures/pretrip/projects/chilai_nanhua_day1/candidates/map_candidates.json",
+      "tests/fixtures/pretrip/projects/chilai_nanhua_day1/candidates/overpass_evidence.json",
+      "tests/fixtures/pretrip/projects/chilai_nanhua_day1/normalized/map/map_context.geojson",
+      "tests/fixtures/pretrip/projects/chilai_nanhua_day1/normalized/map/overpass_vector_evidence.geojson",
+      "tests/fixtures/pretrip/projects/chilai_nanhua_day1/outputs/reference_track_display_geometry.json",
+      "tests/fixtures/pretrip/projects/chilai_nanhua_day1/outputs/risk_ribbon.geojson",
+      "tests/fixtures/pretrip/projects/chilai_nanhua_day1/outputs/segment_display_geometry.json"
+    ],
+    "fixture_only": true,
+    "ignored_metadata_filenames": [
+      ".DS_Store"
+    ],
+    "max_file_bytes": 262144,
+    "no_ui_or_runtime": true,
+    "raw_binary_suffixes": [
+      ".asc",
+      ".bin",
+      ".dem",
+      ".dtm",
+      ".fit",
+      ".gpx",
+      ".heic",
+      ".jpeg",
+      ".jpg",
+      ".kml",
+      ".kmz",
+      ".las",
+      ".laz",
+      ".png",
+      ".tcx",
+      ".tif",
+      ".tiff"
+    ],
+    "raw_dtm_gpx_jpg_repo_fixture_policy": "forbidden",
+    "raw_payload_policy": "refs_and_counts_only",
+    "raw_route_suffixes": [
+      ".fit",
+      ".gpx",
+      ".kml",
+      ".kmz",
+      ".tcx"
+    ]
+  },
+  "schema_version": "0.1.0"
+}

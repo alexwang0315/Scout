@@ -1,0 +1,65 @@
+{
+  "artifact_kind": "skill_config_manifest",
+  "config": {
+    "eta_policy": {
+      "default_when_multiplier_basis_unknown": "total_elapsed_time_including_normal_rest",
+      "timing_calculation_required_in_first_slice": false
+    },
+    "readiness_rules": [
+      {
+        "match": [
+          {
+            "field": "route_days",
+            "op": "lte",
+            "value": 1
+          },
+          {
+            "field": "distance_m",
+            "op": "lte",
+            "value_from": "short_route_max_distance_m"
+          },
+          {
+            "field": "route_kind",
+            "op": "not_contains",
+            "value": "traverse"
+          }
+        ],
+        "message": "Same-day short routes should include an alternate route before compile.",
+        "required_any": [
+          "alternate_route_ref",
+          "alternate_routes"
+        ],
+        "rule_id": "same_day_short_requires_alternate_route",
+        "severity": "warning"
+      },
+      {
+        "match_any": [
+          {
+            "field": "route_days",
+            "op": "gte",
+            "value": 2
+          },
+          {
+            "field": "route_kind",
+            "op": "contains",
+            "value": "traverse"
+          }
+        ],
+        "message": "Multiday or traverse routes require an alternate or retreat route before compile.",
+        "required_any": [
+          "alternate_route_ref",
+          "alternate_routes",
+          "retreat_route_ref",
+          "retreat_routes"
+        ],
+        "rule_id": "multiday_or_traverse_requires_alternate_or_retreat_route",
+        "severity": "blocker"
+      }
+    ],
+    "short_route_max_distance_m": 15000
+  },
+  "manifest_id": "skill_config_manifest.chilai_nanhua_day1.pretrip_readiness.v0",
+  "project_id": "chilai_nanhua_day1",
+  "scope": "pretrip_readiness",
+  "version": "0.1.0"
+}

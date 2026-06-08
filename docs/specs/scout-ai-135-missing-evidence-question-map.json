@@ -1,0 +1,4897 @@
+{
+  "artifact_kind": "scout_ai_missing_evidence_question_map",
+  "artifact_version": "scout_ai_missing_evidence_question_map.v0",
+  "boundary": {
+    "medical_diagnosis": false,
+    "outbound_send_performed": false,
+    "phase1_l0_l4_state_mutated": false,
+    "read_only": true,
+    "runtime_safety_truth": false,
+    "safety_api_called": false
+  },
+  "missing_evidence_summary": [
+    {
+      "count": 24,
+      "extra_data_needed": "timestamped current lat/lon/elevation, route progress, nearest CP/segment",
+      "gap": "current_position",
+      "label": "目前位置",
+      "question_ids": [
+        "seed-030",
+        "seed-041",
+        "seed-042",
+        "seed-059",
+        "seed-061",
+        "seed-065",
+        "seed-073",
+        "seed-077",
+        "seed-091",
+        "seed-095",
+        "seed-098",
+        "field-011",
+        "field-012",
+        "field-016",
+        "field-021",
+        "field-022",
+        "field-023",
+        "field-024",
+        "field-025",
+        "field-028",
+        "field-042",
+        "field-049",
+        "field-058",
+        "field-065"
+      ]
+    },
+    {
+      "count": 24,
+      "extra_data_needed": "HDOP/VDOP, horizontal accuracy, fix type, satellite/CN0 or provider confidence",
+      "gap": "gnss_accuracy",
+      "label": "GNSS 精度",
+      "question_ids": [
+        "seed-030",
+        "seed-041",
+        "seed-042",
+        "seed-059",
+        "seed-061",
+        "seed-065",
+        "seed-073",
+        "seed-077",
+        "seed-091",
+        "seed-095",
+        "seed-098",
+        "field-011",
+        "field-012",
+        "field-016",
+        "field-021",
+        "field-022",
+        "field-023",
+        "field-024",
+        "field-025",
+        "field-028",
+        "field-042",
+        "field-049",
+        "field-058",
+        "field-065"
+      ]
+    },
+    {
+      "count": 24,
+      "extra_data_needed": "recent INS/DR estimates, heading/course, step/PDR samples, uncertainty, last anchor",
+      "gap": "ins_dr_recent_samples",
+      "label": "近期 INS/DR/PDR 狀態",
+      "question_ids": [
+        "seed-030",
+        "seed-041",
+        "seed-042",
+        "seed-059",
+        "seed-061",
+        "seed-065",
+        "seed-073",
+        "seed-077",
+        "seed-091",
+        "seed-095",
+        "seed-098",
+        "field-011",
+        "field-012",
+        "field-016",
+        "field-021",
+        "field-022",
+        "field-023",
+        "field-024",
+        "field-025",
+        "field-028",
+        "field-042",
+        "field-049",
+        "field-058",
+        "field-065"
+      ]
+    },
+    {
+      "count": 18,
+      "extra_data_needed": "forecast/nowcast, rain/wind/fog/temp/daylight, valid time/TTL, route-local exposure context",
+      "gap": "fresh_weather_or_nowcast_with_ttl",
+      "label": "即時天氣/預報與 TTL",
+      "question_ids": [
+        "seed-007",
+        "seed-027",
+        "seed-083",
+        "seed-084",
+        "seed-085",
+        "seed-087",
+        "seed-088",
+        "seed-089",
+        "seed-090",
+        "field-006",
+        "field-031",
+        "field-033",
+        "field-034",
+        "field-035",
+        "field-036",
+        "field-037",
+        "field-038",
+        "field-039"
+      ]
+    },
+    {
+      "count": 16,
+      "extra_data_needed": "transport ingress records, parser output, router decisions, filter handoff, timestamps, latency/loss counters",
+      "gap": "runtime_ingress_router_trace",
+      "label": "Runtime ingress/router trace",
+      "question_ids": [
+        "seed-041",
+        "seed-042",
+        "seed-043",
+        "seed-048",
+        "seed-049",
+        "seed-050",
+        "seed-051",
+        "seed-052",
+        "seed-058",
+        "seed-059",
+        "seed-060",
+        "seed-091",
+        "seed-092",
+        "seed-093",
+        "seed-094",
+        "seed-098"
+      ]
+    },
+    {
+      "count": 16,
+      "extra_data_needed": "fitness baseline, expected pace, load, acclimatization, skill level, water/food plan, risk tolerance",
+      "gap": "user_or_team_baseline_profile",
+      "label": "個人/隊伍 baseline profile",
+      "question_ids": [
+        "field-001",
+        "field-002",
+        "field-009",
+        "field-010",
+        "field-012",
+        "field-025",
+        "field-026",
+        "field-040",
+        "field-041",
+        "field-044",
+        "field-045",
+        "field-046",
+        "field-047",
+        "field-050",
+        "field-074",
+        "field-086"
+      ]
+    },
+    {
+      "count": 16,
+      "extra_data_needed": "heart rate, HRV/body battery/source values, activity/pace trend, baseline-relative thresholds, privacy scope",
+      "gap": "wearable_vitals_and_baseline",
+      "label": "穿戴式生命徵象與 baseline",
+      "question_ids": [
+        "seed-006",
+        "seed-042",
+        "seed-047",
+        "seed-062",
+        "seed-068",
+        "seed-069",
+        "seed-070",
+        "field-001",
+        "field-009",
+        "field-041",
+        "field-042",
+        "field-044",
+        "field-045",
+        "field-046",
+        "field-050",
+        "field-059"
+      ]
+    },
+    {
+      "count": 14,
+      "extra_data_needed": "GPS-only trajectory, INS/DR/PDR estimates, raw IMU/PDR/vitals records, trajectory-diff metrics",
+      "gap": "gps_ins_dr_estimates_or_sensor_vitals_record",
+      "label": "GPS/INS/DR 軌跡與 sensor records",
+      "question_ids": [
+        "seed-031",
+        "seed-033",
+        "seed-034",
+        "seed-035",
+        "seed-036",
+        "seed-037",
+        "seed-038",
+        "seed-039",
+        "seed-040",
+        "seed-045",
+        "seed-050",
+        "seed-076",
+        "field-019",
+        "field-023"
+      ]
+    },
+    {
+      "count": 12,
+      "extra_data_needed": "risk candidate status, admission decision, persistence state, operator review, no-mutation proof",
+      "gap": "safety_candidate_or_admission_state",
+      "label": "Safety candidate/admission state",
+      "question_ids": [
+        "seed-014",
+        "seed-030",
+        "seed-035",
+        "seed-071",
+        "seed-072",
+        "seed-073",
+        "seed-074",
+        "seed-075",
+        "seed-077",
+        "seed-079",
+        "seed-080",
+        "seed-100"
+      ]
+    },
+    {
+      "count": 10,
+      "extra_data_needed": "phone/watch/headlamp/powerbank battery, offline map state, food/water/fuel inventory, expected remaining time",
+      "gap": "equipment_inventory_or_battery_telemetry",
+      "label": "裝備/電量/資源 telemetry",
+      "question_ids": [
+        "field-061",
+        "field-062",
+        "field-063",
+        "field-064",
+        "field-066",
+        "field-067",
+        "field-068",
+        "field-069",
+        "field-070",
+        "field-079"
+      ]
+    },
+    {
+      "count": 9,
+      "extra_data_needed": "team member positions, last-heard timestamps, check-in schedule, rendezvous plan, comms state",
+      "gap": "team_member_positions_and_last_heard",
+      "label": "隊伍位置與最後回報",
+      "question_ids": [
+        "field-051",
+        "field-052",
+        "field-053",
+        "field-054",
+        "field-056",
+        "field-058",
+        "field-059",
+        "field-089",
+        "field-096"
+      ]
+    },
+    {
+      "count": 8,
+      "extra_data_needed": "injury/lost/incident context, emergency playbook context, operator/留守 authorization ref before outbound action",
+      "gap": "incident_context_or_authorization_ref",
+      "label": "事故情境與授權",
+      "question_ids": [
+        "field-061",
+        "field-070",
+        "field-077",
+        "field-082",
+        "field-084",
+        "field-085",
+        "field-089",
+        "field-090"
+      ]
+    },
+    {
+      "count": 8,
+      "extra_data_needed": "domain-specific source package or tool input contract must be defined and populated",
+      "gap": "tool_specific_evidence_not_verified",
+      "label": "工具專屬 evidence 尚未驗證",
+      "question_ids": [
+        "seed-032",
+        "field-027",
+        "field-029",
+        "field-057",
+        "field-071",
+        "field-072",
+        "field-076",
+        "field-083"
+      ]
+    },
+    {
+      "count": 7,
+      "extra_data_needed": "completed journey log, warnings/events timeline, trajectory/corridor diff, incident package candidates, post-trip review notes",
+      "gap": "completed_journey_or_incident_record",
+      "label": "完成旅程/事故紀錄",
+      "question_ids": [
+        "field-091",
+        "field-092",
+        "field-096",
+        "field-097",
+        "field-098",
+        "field-099",
+        "field-100"
+      ]
+    },
+    {
+      "count": 5,
+      "extra_data_needed": "source provenance, review queue, conflict report, unanswered context requirements",
+      "gap": "review_queue_or_provenance_report",
+      "label": "Review/provenance/conflict report",
+      "question_ids": [
+        "seed-019",
+        "seed-020",
+        "seed-029",
+        "seed-097",
+        "seed-099"
+      ]
+    }
+  ],
+  "other_answerability_counts": {
+    "advisory_only_not_medical_diagnosis": 7,
+    "answerable_by_current_read_only_tools": 52,
+    "blocked_for_direct_action_can_only_explain": 6
+  },
+  "primary_missing_evidence_summary": [
+    {
+      "count": 24,
+      "extra_data_needed": "timestamped current lat/lon/elevation, route progress, nearest CP/segment",
+      "gap": "current_position",
+      "label": "目前位置",
+      "question_ids": [
+        "seed-030",
+        "seed-041",
+        "seed-042",
+        "seed-059",
+        "seed-061",
+        "seed-065",
+        "seed-073",
+        "seed-077",
+        "seed-091",
+        "seed-095",
+        "seed-098",
+        "field-011",
+        "field-012",
+        "field-016",
+        "field-021",
+        "field-022",
+        "field-023",
+        "field-024",
+        "field-025",
+        "field-028",
+        "field-042",
+        "field-049",
+        "field-058",
+        "field-065"
+      ]
+    },
+    {
+      "count": 18,
+      "extra_data_needed": "forecast/nowcast, rain/wind/fog/temp/daylight, valid time/TTL, route-local exposure context",
+      "gap": "fresh_weather_or_nowcast_with_ttl",
+      "label": "即時天氣/預報與 TTL",
+      "question_ids": [
+        "seed-007",
+        "seed-027",
+        "seed-083",
+        "seed-084",
+        "seed-085",
+        "seed-087",
+        "seed-088",
+        "seed-089",
+        "seed-090",
+        "field-006",
+        "field-031",
+        "field-033",
+        "field-034",
+        "field-035",
+        "field-036",
+        "field-037",
+        "field-038",
+        "field-039"
+      ]
+    },
+    {
+      "count": 14,
+      "extra_data_needed": "fitness baseline, expected pace, load, acclimatization, skill level, water/food plan, risk tolerance",
+      "gap": "user_or_team_baseline_profile",
+      "label": "個人/隊伍 baseline profile",
+      "question_ids": [
+        "field-001",
+        "field-002",
+        "field-009",
+        "field-010",
+        "field-026",
+        "field-040",
+        "field-041",
+        "field-044",
+        "field-045",
+        "field-046",
+        "field-047",
+        "field-050",
+        "field-074",
+        "field-086"
+      ]
+    },
+    {
+      "count": 13,
+      "extra_data_needed": "GPS-only trajectory, INS/DR/PDR estimates, raw IMU/PDR/vitals records, trajectory-diff metrics",
+      "gap": "gps_ins_dr_estimates_or_sensor_vitals_record",
+      "label": "GPS/INS/DR 軌跡與 sensor records",
+      "question_ids": [
+        "seed-031",
+        "seed-033",
+        "seed-034",
+        "seed-035",
+        "seed-036",
+        "seed-037",
+        "seed-038",
+        "seed-039",
+        "seed-040",
+        "seed-045",
+        "seed-050",
+        "seed-076",
+        "field-019"
+      ]
+    },
+    {
+      "count": 10,
+      "extra_data_needed": "phone/watch/headlamp/powerbank battery, offline map state, food/water/fuel inventory, expected remaining time",
+      "gap": "equipment_inventory_or_battery_telemetry",
+      "label": "裝備/電量/資源 telemetry",
+      "question_ids": [
+        "field-061",
+        "field-062",
+        "field-063",
+        "field-064",
+        "field-066",
+        "field-067",
+        "field-068",
+        "field-069",
+        "field-070",
+        "field-079"
+      ]
+    },
+    {
+      "count": 10,
+      "extra_data_needed": "transport ingress records, parser output, router decisions, filter handoff, timestamps, latency/loss counters",
+      "gap": "runtime_ingress_router_trace",
+      "label": "Runtime ingress/router trace",
+      "question_ids": [
+        "seed-043",
+        "seed-048",
+        "seed-049",
+        "seed-051",
+        "seed-052",
+        "seed-058",
+        "seed-060",
+        "seed-092",
+        "seed-093",
+        "seed-094"
+      ]
+    },
+    {
+      "count": 8,
+      "extra_data_needed": "risk candidate status, admission decision, persistence state, operator review, no-mutation proof",
+      "gap": "safety_candidate_or_admission_state",
+      "label": "Safety candidate/admission state",
+      "question_ids": [
+        "seed-014",
+        "seed-071",
+        "seed-072",
+        "seed-074",
+        "seed-075",
+        "seed-079",
+        "seed-080",
+        "seed-100"
+      ]
+    },
+    {
+      "count": 8,
+      "extra_data_needed": "domain-specific source package or tool input contract must be defined and populated",
+      "gap": "tool_specific_evidence_not_verified",
+      "label": "工具專屬 evidence 尚未驗證",
+      "question_ids": [
+        "seed-032",
+        "field-027",
+        "field-029",
+        "field-057",
+        "field-071",
+        "field-072",
+        "field-076",
+        "field-083"
+      ]
+    },
+    {
+      "count": 7,
+      "extra_data_needed": "team member positions, last-heard timestamps, check-in schedule, rendezvous plan, comms state",
+      "gap": "team_member_positions_and_last_heard",
+      "label": "隊伍位置與最後回報",
+      "question_ids": [
+        "field-051",
+        "field-052",
+        "field-053",
+        "field-054",
+        "field-056",
+        "field-089",
+        "field-096"
+      ]
+    },
+    {
+      "count": 7,
+      "extra_data_needed": "heart rate, HRV/body battery/source values, activity/pace trend, baseline-relative thresholds, privacy scope",
+      "gap": "wearable_vitals_and_baseline",
+      "label": "穿戴式生命徵象與 baseline",
+      "question_ids": [
+        "seed-006",
+        "seed-047",
+        "seed-062",
+        "seed-068",
+        "seed-069",
+        "seed-070",
+        "field-059"
+      ]
+    },
+    {
+      "count": 6,
+      "extra_data_needed": "completed journey log, warnings/events timeline, trajectory/corridor diff, incident package candidates, post-trip review notes",
+      "gap": "completed_journey_or_incident_record",
+      "label": "完成旅程/事故紀錄",
+      "question_ids": [
+        "field-091",
+        "field-092",
+        "field-097",
+        "field-098",
+        "field-099",
+        "field-100"
+      ]
+    },
+    {
+      "count": 5,
+      "extra_data_needed": "injury/lost/incident context, emergency playbook context, operator/留守 authorization ref before outbound action",
+      "gap": "incident_context_or_authorization_ref",
+      "label": "事故情境與授權",
+      "question_ids": [
+        "field-077",
+        "field-082",
+        "field-084",
+        "field-085",
+        "field-090"
+      ]
+    },
+    {
+      "count": 5,
+      "extra_data_needed": "source provenance, review queue, conflict report, unanswered context requirements",
+      "gap": "review_queue_or_provenance_report",
+      "label": "Review/provenance/conflict report",
+      "question_ids": [
+        "seed-019",
+        "seed-020",
+        "seed-029",
+        "seed-097",
+        "seed-099"
+      ]
+    }
+  ],
+  "question_count": 200,
+  "questions": [
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "pretrip_route",
+      "current_tools": [
+        "pydantic_ai.tool.search_scout_route_structure.v0"
+      ],
+      "id": "seed-006",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "heart rate, HRV/body battery/source values, activity/pace trend, baseline-relative thresholds, privacy scope",
+          "gap": "wearable_vitals_and_baseline",
+          "label": "穿戴式生命徵象與 baseline"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "heart rate, HRV/body battery/source values, activity/pace trend, baseline-relative thresholds, privacy scope",
+        "gap": "wearable_vitals_and_baseline",
+        "label": "穿戴式生命徵象與 baseline"
+      },
+      "question": "哪些 CP 附近適合休息？",
+      "recommended_tools": [
+        {
+          "label": "energy/vitals",
+          "tool_id": "scout.ai.energy_vitals.assess.v0"
+        }
+      ],
+      "source_set": "assistant_seed_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "pretrip_route",
+      "current_tools": [
+        "pydantic_ai.tool.search_scout_route_structure.v0"
+      ],
+      "id": "seed-007",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "forecast/nowcast, rain/wind/fog/temp/daylight, valid time/TTL, route-local exposure context",
+          "gap": "fresh_weather_or_nowcast_with_ttl",
+          "label": "即時天氣/預報與 TTL"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "forecast/nowcast, rain/wind/fog/temp/daylight, valid time/TTL, route-local exposure context",
+        "gap": "fresh_weather_or_nowcast_with_ttl",
+        "label": "即時天氣/預報與 TTL"
+      },
+      "question": "哪些 CP 附近適合紮營？",
+      "recommended_tools": [
+        {
+          "label": "weather window",
+          "tool_id": "scout.ai.weather_window.assess.v0"
+        }
+      ],
+      "source_set": "assistant_seed_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "workspace_evidence",
+      "current_tools": [
+        "pydantic_ai.tool.search_scout_workspace_catalog.v0"
+      ],
+      "id": "seed-014",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "risk candidate status, admission decision, persistence state, operator review, no-mutation proof",
+          "gap": "safety_candidate_or_admission_state",
+          "label": "Safety candidate/admission state"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "risk candidate status, admission decision, persistence state, operator review, no-mutation proof",
+        "gap": "safety_candidate_or_admission_state",
+        "label": "Safety candidate/admission state"
+      },
+      "question": "哪些資料可以當 runtime safety truth？",
+      "recommended_tools": [
+        {
+          "label": "safety boundary",
+          "tool_id": "scout.ai.safety_boundary.explain.v0"
+        }
+      ],
+      "source_set": "assistant_seed_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "workspace_evidence",
+      "current_tools": [
+        "pydantic_ai.tool.search_scout_workspace_catalog.v0"
+      ],
+      "id": "seed-019",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "source provenance, review queue, conflict report, unanswered context requirements",
+          "gap": "review_queue_or_provenance_report",
+          "label": "Review/provenance/conflict report"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "source provenance, review queue, conflict report, unanswered context requirements",
+        "gap": "review_queue_or_provenance_report",
+        "label": "Review/provenance/conflict report"
+      },
+      "question": "哪些資料來源互相矛盾？",
+      "recommended_tools": [
+        {
+          "label": "review/provenance gap",
+          "tool_id": "scout.ai.review_gap.assess.v0"
+        }
+      ],
+      "source_set": "assistant_seed_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "workspace_evidence",
+      "current_tools": [
+        "pydantic_ai.tool.search_scout_workspace_catalog.v0"
+      ],
+      "id": "seed-020",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "source provenance, review queue, conflict report, unanswered context requirements",
+          "gap": "review_queue_or_provenance_report",
+          "label": "Review/provenance/conflict report"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "source provenance, review queue, conflict report, unanswered context requirements",
+        "gap": "review_queue_or_provenance_report",
+        "label": "Review/provenance/conflict report"
+      },
+      "question": "哪些資料缺少 provenance？",
+      "recommended_tools": [
+        {
+          "label": "review/provenance gap",
+          "tool_id": "scout.ai.review_gap.assess.v0"
+        }
+      ],
+      "source_set": "assistant_seed_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "risk_terrain",
+      "current_tools": [
+        "pydantic_ai.tool.search_scout_risk_scores.v0"
+      ],
+      "id": "seed-027",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "forecast/nowcast, rain/wind/fog/temp/daylight, valid time/TTL, route-local exposure context",
+          "gap": "fresh_weather_or_nowcast_with_ttl",
+          "label": "即時天氣/預報與 TTL"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "forecast/nowcast, rain/wind/fog/temp/daylight, valid time/TTL, route-local exposure context",
+        "gap": "fresh_weather_or_nowcast_with_ttl",
+        "label": "即時天氣/預報與 TTL"
+      },
+      "question": "哪些地方下雨後風險會變高？",
+      "recommended_tools": [
+        {
+          "label": "weather window",
+          "tool_id": "scout.ai.weather_window.assess.v0"
+        }
+      ],
+      "source_set": "assistant_seed_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "risk_terrain",
+      "current_tools": [],
+      "id": "seed-029",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "source provenance, review queue, conflict report, unanswered context requirements",
+          "gap": "review_queue_or_provenance_report",
+          "label": "Review/provenance/conflict report"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "source provenance, review queue, conflict report, unanswered context requirements",
+        "gap": "review_queue_or_provenance_report",
+        "label": "Review/provenance/conflict report"
+      },
+      "question": "哪些點需要人工複核？",
+      "recommended_tools": [
+        {
+          "label": "review/provenance gap",
+          "tool_id": "scout.ai.review_gap.assess.v0"
+        }
+      ],
+      "source_set": "assistant_seed_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "risk_terrain",
+      "current_tools": [
+        "pydantic_ai.tool.search_scout_risk_scores.v0"
+      ],
+      "id": "seed-030",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "timestamped current lat/lon/elevation, route progress, nearest CP/segment",
+          "gap": "current_position",
+          "label": "目前位置"
+        },
+        {
+          "extra_data_needed": "HDOP/VDOP, horizontal accuracy, fix type, satellite/CN0 or provider confidence",
+          "gap": "gnss_accuracy",
+          "label": "GNSS 精度"
+        },
+        {
+          "extra_data_needed": "recent INS/DR estimates, heading/course, step/PDR samples, uncertainty, last anchor",
+          "gap": "ins_dr_recent_samples",
+          "label": "近期 INS/DR/PDR 狀態"
+        },
+        {
+          "extra_data_needed": "risk candidate status, admission decision, persistence state, operator review, no-mutation proof",
+          "gap": "safety_candidate_or_admission_state",
+          "label": "Safety candidate/admission state"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "timestamped current lat/lon/elevation, route progress, nearest CP/segment",
+        "gap": "current_position",
+        "label": "目前位置"
+      },
+      "question": "哪些風險目前只是候選，不能觸發 Ln？",
+      "recommended_tools": [
+        {
+          "label": "live navigation state",
+          "tool_id": "scout.ai.live_navigation_state.assess.v0"
+        },
+        {
+          "label": "safety boundary",
+          "tool_id": "scout.ai.safety_boundary.explain.v0"
+        }
+      ],
+      "source_set": "assistant_seed_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "ins_dr_gps",
+      "current_tools": [],
+      "id": "seed-031",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "GPS-only trajectory, INS/DR/PDR estimates, raw IMU/PDR/vitals records, trajectory-diff metrics",
+          "gap": "gps_ins_dr_estimates_or_sensor_vitals_record",
+          "label": "GPS/INS/DR 軌跡與 sensor records"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "GPS-only trajectory, INS/DR/PDR estimates, raw IMU/PDR/vitals records, trajectory-diff metrics",
+        "gap": "gps_ins_dr_estimates_or_sensor_vitals_record",
+        "label": "GPS/INS/DR 軌跡與 sensor records"
+      },
+      "question": "GPS-only 軌跡和 INS/DR 軌跡差多少？",
+      "recommended_tools": [
+        {
+          "label": "live navigation state",
+          "tool_id": "scout.ai.live_navigation_state.assess.v0"
+        },
+        {
+          "label": "INS/DR trace",
+          "tool_id": "scout.ai.ins_dr_trace.analyze.v0"
+        }
+      ],
+      "source_set": "assistant_seed_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "ins_dr_gps",
+      "current_tools": [],
+      "id": "seed-032",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "domain-specific source package or tool input contract must be defined and populated",
+          "gap": "tool_specific_evidence_not_verified",
+          "label": "工具專屬 evidence 尚未驗證"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "domain-specific source package or tool input contract must be defined and populated",
+        "gap": "tool_specific_evidence_not_verified",
+        "label": "工具專屬 evidence 尚未驗證"
+      },
+      "question": "哪些地方 GPS 訊號不好？",
+      "recommended_tools": [
+        {
+          "label": "live navigation state",
+          "tool_id": "scout.ai.live_navigation_state.assess.v0"
+        }
+      ],
+      "source_set": "assistant_seed_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "ins_dr_gps",
+      "current_tools": [],
+      "id": "seed-033",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "GPS-only trajectory, INS/DR/PDR estimates, raw IMU/PDR/vitals records, trajectory-diff metrics",
+          "gap": "gps_ins_dr_estimates_or_sensor_vitals_record",
+          "label": "GPS/INS/DR 軌跡與 sensor records"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "GPS-only trajectory, INS/DR/PDR estimates, raw IMU/PDR/vitals records, trajectory-diff metrics",
+        "gap": "gps_ins_dr_estimates_or_sensor_vitals_record",
+        "label": "GPS/INS/DR 軌跡與 sensor records"
+      },
+      "question": "哪些地方 INS/DR 需要重新 anchor？",
+      "recommended_tools": [
+        {
+          "label": "INS/DR trace",
+          "tool_id": "scout.ai.ins_dr_trace.analyze.v0"
+        }
+      ],
+      "source_set": "assistant_seed_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "ins_dr_gps",
+      "current_tools": [],
+      "id": "seed-034",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "GPS-only trajectory, INS/DR/PDR estimates, raw IMU/PDR/vitals records, trajectory-diff metrics",
+          "gap": "gps_ins_dr_estimates_or_sensor_vitals_record",
+          "label": "GPS/INS/DR 軌跡與 sensor records"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "GPS-only trajectory, INS/DR/PDR estimates, raw IMU/PDR/vitals records, trajectory-diff metrics",
+        "gap": "gps_ins_dr_estimates_or_sensor_vitals_record",
+        "label": "GPS/INS/DR 軌跡與 sensor records"
+      },
+      "question": "哪些估計點 uncertainty 太大？",
+      "recommended_tools": [
+        {
+          "label": "INS/DR trace",
+          "tool_id": "scout.ai.ins_dr_trace.analyze.v0"
+        }
+      ],
+      "source_set": "assistant_seed_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "ins_dr_gps",
+      "current_tools": [],
+      "id": "seed-035",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "GPS-only trajectory, INS/DR/PDR estimates, raw IMU/PDR/vitals records, trajectory-diff metrics",
+          "gap": "gps_ins_dr_estimates_or_sensor_vitals_record",
+          "label": "GPS/INS/DR 軌跡與 sensor records"
+        },
+        {
+          "extra_data_needed": "risk candidate status, admission decision, persistence state, operator review, no-mutation proof",
+          "gap": "safety_candidate_or_admission_state",
+          "label": "Safety candidate/admission state"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "GPS-only trajectory, INS/DR/PDR estimates, raw IMU/PDR/vitals records, trajectory-diff metrics",
+        "gap": "gps_ins_dr_estimates_or_sensor_vitals_record",
+        "label": "GPS/INS/DR 軌跡與 sensor records"
+      },
+      "question": "哪些軌跡偏差可能誤判離線？",
+      "recommended_tools": [
+        {
+          "label": "INS/DR trace",
+          "tool_id": "scout.ai.ins_dr_trace.analyze.v0"
+        },
+        {
+          "label": "safety boundary",
+          "tool_id": "scout.ai.safety_boundary.explain.v0"
+        }
+      ],
+      "source_set": "assistant_seed_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "ins_dr_gps",
+      "current_tools": [],
+      "id": "seed-036",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "GPS-only trajectory, INS/DR/PDR estimates, raw IMU/PDR/vitals records, trajectory-diff metrics",
+          "gap": "gps_ins_dr_estimates_or_sensor_vitals_record",
+          "label": "GPS/INS/DR 軌跡與 sensor records"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "GPS-only trajectory, INS/DR/PDR estimates, raw IMU/PDR/vitals records, trajectory-diff metrics",
+        "gap": "gps_ins_dr_estimates_or_sensor_vitals_record",
+        "label": "GPS/INS/DR 軌跡與 sensor records"
+      },
+      "question": "有沒有 z 字形 DR 路徑？原因可能是什麼？",
+      "recommended_tools": [
+        {
+          "label": "INS/DR trace",
+          "tool_id": "scout.ai.ins_dr_trace.analyze.v0"
+        }
+      ],
+      "source_set": "assistant_seed_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "ins_dr_gps",
+      "current_tools": [],
+      "id": "seed-037",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "GPS-only trajectory, INS/DR/PDR estimates, raw IMU/PDR/vitals records, trajectory-diff metrics",
+          "gap": "gps_ins_dr_estimates_or_sensor_vitals_record",
+          "label": "GPS/INS/DR 軌跡與 sensor records"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "GPS-only trajectory, INS/DR/PDR estimates, raw IMU/PDR/vitals records, trajectory-diff metrics",
+        "gap": "gps_ins_dr_estimates_or_sensor_vitals_record",
+        "label": "GPS/INS/DR 軌跡與 sensor records"
+      },
+      "question": "沒有 GPS 的地方是否仍有 PDR/IMU？",
+      "recommended_tools": [
+        {
+          "label": "live navigation state",
+          "tool_id": "scout.ai.live_navigation_state.assess.v0"
+        },
+        {
+          "label": "INS/DR trace",
+          "tool_id": "scout.ai.ins_dr_trace.analyze.v0"
+        }
+      ],
+      "source_set": "assistant_seed_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "ins_dr_gps",
+      "current_tools": [
+        "pydantic_ai.tool.search_scout_route_structure.v0"
+      ],
+      "id": "seed-038",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "GPS-only trajectory, INS/DR/PDR estimates, raw IMU/PDR/vitals records, trajectory-diff metrics",
+          "gap": "gps_ins_dr_estimates_or_sensor_vitals_record",
+          "label": "GPS/INS/DR 軌跡與 sensor records"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "GPS-only trajectory, INS/DR/PDR estimates, raw IMU/PDR/vitals records, trajectory-diff metrics",
+        "gap": "gps_ins_dr_estimates_or_sensor_vitals_record",
+        "label": "GPS/INS/DR 軌跡與 sensor records"
+      },
+      "question": "wearable PDR 能不能補室內路段？",
+      "recommended_tools": [
+        {
+          "label": "live navigation state",
+          "tool_id": "scout.ai.live_navigation_state.assess.v0"
+        },
+        {
+          "label": "INS/DR trace",
+          "tool_id": "scout.ai.ins_dr_trace.analyze.v0"
+        }
+      ],
+      "source_set": "assistant_seed_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "ins_dr_gps",
+      "current_tools": [],
+      "id": "seed-039",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "GPS-only trajectory, INS/DR/PDR estimates, raw IMU/PDR/vitals records, trajectory-diff metrics",
+          "gap": "gps_ins_dr_estimates_or_sensor_vitals_record",
+          "label": "GPS/INS/DR 軌跡與 sensor records"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "GPS-only trajectory, INS/DR/PDR estimates, raw IMU/PDR/vitals records, trajectory-diff metrics",
+        "gap": "gps_ins_dr_estimates_or_sensor_vitals_record",
+        "label": "GPS/INS/DR 軌跡與 sensor records"
+      },
+      "question": "哪些 estimate 是 vendor-fused？",
+      "recommended_tools": [
+        {
+          "label": "INS/DR trace",
+          "tool_id": "scout.ai.ins_dr_trace.analyze.v0"
+        }
+      ],
+      "source_set": "assistant_seed_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "ins_dr_gps",
+      "current_tools": [],
+      "id": "seed-040",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "GPS-only trajectory, INS/DR/PDR estimates, raw IMU/PDR/vitals records, trajectory-diff metrics",
+          "gap": "gps_ins_dr_estimates_or_sensor_vitals_record",
+          "label": "GPS/INS/DR 軌跡與 sensor records"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "GPS-only trajectory, INS/DR/PDR estimates, raw IMU/PDR/vitals records, trajectory-diff metrics",
+        "gap": "gps_ins_dr_estimates_or_sensor_vitals_record",
+        "label": "GPS/INS/DR 軌跡與 sensor records"
+      },
+      "question": "哪些 estimate 有 raw IMU baseline？",
+      "recommended_tools": [
+        {
+          "label": "live navigation state",
+          "tool_id": "scout.ai.live_navigation_state.assess.v0"
+        },
+        {
+          "label": "INS/DR trace",
+          "tool_id": "scout.ai.ins_dr_trace.analyze.v0"
+        }
+      ],
+      "source_set": "assistant_seed_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "sensor_wearable",
+      "current_tools": [],
+      "id": "seed-041",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "timestamped current lat/lon/elevation, route progress, nearest CP/segment",
+          "gap": "current_position",
+          "label": "目前位置"
+        },
+        {
+          "extra_data_needed": "HDOP/VDOP, horizontal accuracy, fix type, satellite/CN0 or provider confidence",
+          "gap": "gnss_accuracy",
+          "label": "GNSS 精度"
+        },
+        {
+          "extra_data_needed": "recent INS/DR estimates, heading/course, step/PDR samples, uncertainty, last anchor",
+          "gap": "ins_dr_recent_samples",
+          "label": "近期 INS/DR/PDR 狀態"
+        },
+        {
+          "extra_data_needed": "transport ingress records, parser output, router decisions, filter handoff, timestamps, latency/loss counters",
+          "gap": "runtime_ingress_router_trace",
+          "label": "Runtime ingress/router trace"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "timestamped current lat/lon/elevation, route progress, nearest CP/segment",
+        "gap": "current_position",
+        "label": "目前位置"
+      },
+      "question": "目前有哪些 Sensor Logger observation？",
+      "recommended_tools": [
+        {
+          "label": "live navigation state",
+          "tool_id": "scout.ai.live_navigation_state.assess.v0"
+        },
+        {
+          "label": "runtime ingress/router",
+          "tool_id": "scout.ai.runtime_ingress_status.search.v0"
+        }
+      ],
+      "source_set": "assistant_seed_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "sensor_wearable",
+      "current_tools": [],
+      "id": "seed-042",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "timestamped current lat/lon/elevation, route progress, nearest CP/segment",
+          "gap": "current_position",
+          "label": "目前位置"
+        },
+        {
+          "extra_data_needed": "HDOP/VDOP, horizontal accuracy, fix type, satellite/CN0 or provider confidence",
+          "gap": "gnss_accuracy",
+          "label": "GNSS 精度"
+        },
+        {
+          "extra_data_needed": "recent INS/DR estimates, heading/course, step/PDR samples, uncertainty, last anchor",
+          "gap": "ins_dr_recent_samples",
+          "label": "近期 INS/DR/PDR 狀態"
+        },
+        {
+          "extra_data_needed": "transport ingress records, parser output, router decisions, filter handoff, timestamps, latency/loss counters",
+          "gap": "runtime_ingress_router_trace",
+          "label": "Runtime ingress/router trace"
+        },
+        {
+          "extra_data_needed": "heart rate, HRV/body battery/source values, activity/pace trend, baseline-relative thresholds, privacy scope",
+          "gap": "wearable_vitals_and_baseline",
+          "label": "穿戴式生命徵象與 baseline"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "timestamped current lat/lon/elevation, route progress, nearest CP/segment",
+        "gap": "current_position",
+        "label": "目前位置"
+      },
+      "question": "目前有哪些 Sensor/Vitals records？",
+      "recommended_tools": [
+        {
+          "label": "live navigation state",
+          "tool_id": "scout.ai.live_navigation_state.assess.v0"
+        },
+        {
+          "label": "energy/vitals",
+          "tool_id": "scout.ai.energy_vitals.assess.v0"
+        },
+        {
+          "label": "runtime ingress/router",
+          "tool_id": "scout.ai.runtime_ingress_status.search.v0"
+        }
+      ],
+      "source_set": "assistant_seed_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "sensor_wearable",
+      "current_tools": [],
+      "id": "seed-043",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "transport ingress records, parser output, router decisions, filter handoff, timestamps, latency/loss counters",
+          "gap": "runtime_ingress_router_trace",
+          "label": "Runtime ingress/router trace"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "transport ingress records, parser output, router decisions, filter handoff, timestamps, latency/loss counters",
+        "gap": "runtime_ingress_router_trace",
+        "label": "Runtime ingress/router trace"
+      },
+      "question": "Apple Watch 傳回了哪些 sensor？",
+      "recommended_tools": [
+        {
+          "label": "runtime ingress/router",
+          "tool_id": "scout.ai.runtime_ingress_status.search.v0"
+        }
+      ],
+      "source_set": "assistant_seed_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "sensor_wearable",
+      "current_tools": [
+        "pydantic_ai.tool.search_scout_workspace_catalog.v0"
+      ],
+      "id": "seed-045",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "GPS-only trajectory, INS/DR/PDR estimates, raw IMU/PDR/vitals records, trajectory-diff metrics",
+          "gap": "gps_ins_dr_estimates_or_sensor_vitals_record",
+          "label": "GPS/INS/DR 軌跡與 sensor records"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "GPS-only trajectory, INS/DR/PDR estimates, raw IMU/PDR/vitals records, trajectory-diff metrics",
+        "gap": "gps_ins_dr_estimates_or_sensor_vitals_record",
+        "label": "GPS/INS/DR 軌跡與 sensor records"
+      },
+      "question": "哪些資料是 pedometer/PDR？",
+      "recommended_tools": [
+        {
+          "label": "live navigation state",
+          "tool_id": "scout.ai.live_navigation_state.assess.v0"
+        },
+        {
+          "label": "INS/DR trace",
+          "tool_id": "scout.ai.ins_dr_trace.analyze.v0"
+        }
+      ],
+      "source_set": "assistant_seed_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "sensor_wearable",
+      "current_tools": [
+        "pydantic_ai.tool.search_scout_workspace_catalog.v0"
+      ],
+      "id": "seed-047",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "heart rate, HRV/body battery/source values, activity/pace trend, baseline-relative thresholds, privacy scope",
+          "gap": "wearable_vitals_and_baseline",
+          "label": "穿戴式生命徵象與 baseline"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "heart rate, HRV/body battery/source values, activity/pace trend, baseline-relative thresholds, privacy scope",
+        "gap": "wearable_vitals_and_baseline",
+        "label": "穿戴式生命徵象與 baseline"
+      },
+      "question": "哪些資料是 heart rate 或 vitals？",
+      "recommended_tools": [
+        {
+          "label": "energy/vitals",
+          "tool_id": "scout.ai.energy_vitals.assess.v0"
+        }
+      ],
+      "source_set": "assistant_seed_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "sensor_wearable",
+      "current_tools": [],
+      "id": "seed-048",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "transport ingress records, parser output, router decisions, filter handoff, timestamps, latency/loss counters",
+          "gap": "runtime_ingress_router_trace",
+          "label": "Runtime ingress/router trace"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "transport ingress records, parser output, router decisions, filter handoff, timestamps, latency/loss counters",
+        "gap": "runtime_ingress_router_trace",
+        "label": "Runtime ingress/router trace"
+      },
+      "question": "哪些 sensor 缺 timestamp？",
+      "recommended_tools": [
+        {
+          "label": "runtime ingress/router",
+          "tool_id": "scout.ai.runtime_ingress_status.search.v0"
+        }
+      ],
+      "source_set": "assistant_seed_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "sensor_wearable",
+      "current_tools": [],
+      "id": "seed-049",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "transport ingress records, parser output, router decisions, filter handoff, timestamps, latency/loss counters",
+          "gap": "runtime_ingress_router_trace",
+          "label": "Runtime ingress/router trace"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "transport ingress records, parser output, router decisions, filter handoff, timestamps, latency/loss counters",
+        "gap": "runtime_ingress_router_trace",
+        "label": "Runtime ingress/router trace"
+      },
+      "question": "哪些 message 有 gap 或 duplicate？",
+      "recommended_tools": [
+        {
+          "label": "runtime ingress/router",
+          "tool_id": "scout.ai.runtime_ingress_status.search.v0"
+        }
+      ],
+      "source_set": "assistant_seed_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "sensor_wearable",
+      "current_tools": [
+        "pydantic_ai.tool.search_scout_workspace_catalog.v0"
+      ],
+      "id": "seed-050",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "GPS-only trajectory, INS/DR/PDR estimates, raw IMU/PDR/vitals records, trajectory-diff metrics",
+          "gap": "gps_ins_dr_estimates_or_sensor_vitals_record",
+          "label": "GPS/INS/DR 軌跡與 sensor records"
+        },
+        {
+          "extra_data_needed": "transport ingress records, parser output, router decisions, filter handoff, timestamps, latency/loss counters",
+          "gap": "runtime_ingress_router_trace",
+          "label": "Runtime ingress/router trace"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "GPS-only trajectory, INS/DR/PDR estimates, raw IMU/PDR/vitals records, trajectory-diff metrics",
+        "gap": "gps_ins_dr_estimates_or_sensor_vitals_record",
+        "label": "GPS/INS/DR 軌跡與 sensor records"
+      },
+      "question": "哪些 sensor 資料被 router 派給 INS/DR？",
+      "recommended_tools": [
+        {
+          "label": "INS/DR trace",
+          "tool_id": "scout.ai.ins_dr_trace.analyze.v0"
+        },
+        {
+          "label": "runtime ingress/router",
+          "tool_id": "scout.ai.runtime_ingress_status.search.v0"
+        }
+      ],
+      "source_set": "assistant_seed_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "transport_router",
+      "current_tools": [
+        "pydantic_ai.tool.search_scout_workspace_catalog.v0"
+      ],
+      "id": "seed-051",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "transport ingress records, parser output, router decisions, filter handoff, timestamps, latency/loss counters",
+          "gap": "runtime_ingress_router_trace",
+          "label": "Runtime ingress/router trace"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "transport ingress records, parser output, router decisions, filter handoff, timestamps, latency/loss counters",
+        "gap": "runtime_ingress_router_trace",
+        "label": "Runtime ingress/router trace"
+      },
+      "question": "MQTT 現在有收到資料嗎？",
+      "recommended_tools": [
+        {
+          "label": "runtime ingress/router",
+          "tool_id": "scout.ai.runtime_ingress_status.search.v0"
+        }
+      ],
+      "source_set": "assistant_seed_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "transport_router",
+      "current_tools": [],
+      "id": "seed-052",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "transport ingress records, parser output, router decisions, filter handoff, timestamps, latency/loss counters",
+          "gap": "runtime_ingress_router_trace",
+          "label": "Runtime ingress/router trace"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "transport ingress records, parser output, router decisions, filter handoff, timestamps, latency/loss counters",
+        "gap": "runtime_ingress_router_trace",
+        "label": "Runtime ingress/router trace"
+      },
+      "question": "MQTT message routing latency 是多少？",
+      "recommended_tools": [
+        {
+          "label": "runtime ingress/router",
+          "tool_id": "scout.ai.runtime_ingress_status.search.v0"
+        }
+      ],
+      "source_set": "assistant_seed_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "transport_router",
+      "current_tools": [],
+      "id": "seed-058",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "transport ingress records, parser output, router decisions, filter handoff, timestamps, latency/loss counters",
+          "gap": "runtime_ingress_router_trace",
+          "label": "Runtime ingress/router trace"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "transport ingress records, parser output, router decisions, filter handoff, timestamps, latency/loss counters",
+        "gap": "runtime_ingress_router_trace",
+        "label": "Runtime ingress/router trace"
+      },
+      "question": "router 的 match reason 是什麼？",
+      "recommended_tools": [
+        {
+          "label": "runtime ingress/router",
+          "tool_id": "scout.ai.runtime_ingress_status.search.v0"
+        }
+      ],
+      "source_set": "assistant_seed_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "transport_router",
+      "current_tools": [
+        "pydantic_ai.tool.search_scout_workspace_catalog.v0"
+      ],
+      "id": "seed-059",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "timestamped current lat/lon/elevation, route progress, nearest CP/segment",
+          "gap": "current_position",
+          "label": "目前位置"
+        },
+        {
+          "extra_data_needed": "HDOP/VDOP, horizontal accuracy, fix type, satellite/CN0 or provider confidence",
+          "gap": "gnss_accuracy",
+          "label": "GNSS 精度"
+        },
+        {
+          "extra_data_needed": "recent INS/DR estimates, heading/course, step/PDR samples, uncertainty, last anchor",
+          "gap": "ins_dr_recent_samples",
+          "label": "近期 INS/DR/PDR 狀態"
+        },
+        {
+          "extra_data_needed": "transport ingress records, parser output, router decisions, filter handoff, timestamps, latency/loss counters",
+          "gap": "runtime_ingress_router_trace",
+          "label": "Runtime ingress/router trace"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "timestamped current lat/lon/elevation, route progress, nearest CP/segment",
+        "gap": "current_position",
+        "label": "目前位置"
+      },
+      "question": "目前高頻資料適合 pipeline 還是 skill router？",
+      "recommended_tools": [
+        {
+          "label": "live navigation state",
+          "tool_id": "scout.ai.live_navigation_state.assess.v0"
+        },
+        {
+          "label": "runtime ingress/router",
+          "tool_id": "scout.ai.runtime_ingress_status.search.v0"
+        }
+      ],
+      "source_set": "assistant_seed_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "transport_router",
+      "current_tools": [],
+      "id": "seed-060",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "transport ingress records, parser output, router decisions, filter handoff, timestamps, latency/loss counters",
+          "gap": "runtime_ingress_router_trace",
+          "label": "Runtime ingress/router trace"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "transport ingress records, parser output, router decisions, filter handoff, timestamps, latency/loss counters",
+        "gap": "runtime_ingress_router_trace",
+        "label": "Runtime ingress/router trace"
+      },
+      "question": "transport service 有沒有發送 outbound packet？",
+      "recommended_tools": [
+        {
+          "label": "runtime ingress/router",
+          "tool_id": "scout.ai.runtime_ingress_status.search.v0"
+        }
+      ],
+      "source_set": "assistant_seed_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "energy_vitals",
+      "current_tools": [],
+      "id": "seed-061",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "timestamped current lat/lon/elevation, route progress, nearest CP/segment",
+          "gap": "current_position",
+          "label": "目前位置"
+        },
+        {
+          "extra_data_needed": "HDOP/VDOP, horizontal accuracy, fix type, satellite/CN0 or provider confidence",
+          "gap": "gnss_accuracy",
+          "label": "GNSS 精度"
+        },
+        {
+          "extra_data_needed": "recent INS/DR estimates, heading/course, step/PDR samples, uncertainty, last anchor",
+          "gap": "ins_dr_recent_samples",
+          "label": "近期 INS/DR/PDR 狀態"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "timestamped current lat/lon/elevation, route progress, nearest CP/segment",
+        "gap": "current_position",
+        "label": "目前位置"
+      },
+      "question": "目前 energy reserve 狀態如何？",
+      "recommended_tools": [
+        {
+          "label": "live navigation state",
+          "tool_id": "scout.ai.live_navigation_state.assess.v0"
+        }
+      ],
+      "source_set": "assistant_seed_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "energy_vitals",
+      "current_tools": [],
+      "id": "seed-062",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "heart rate, HRV/body battery/source values, activity/pace trend, baseline-relative thresholds, privacy scope",
+          "gap": "wearable_vitals_and_baseline",
+          "label": "穿戴式生命徵象與 baseline"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "heart rate, HRV/body battery/source values, activity/pace trend, baseline-relative thresholds, privacy scope",
+        "gap": "wearable_vitals_and_baseline",
+        "label": "穿戴式生命徵象與 baseline"
+      },
+      "question": "哪些 vitals 只是 source value？",
+      "recommended_tools": [
+        {
+          "label": "energy/vitals",
+          "tool_id": "scout.ai.energy_vitals.assess.v0"
+        }
+      ],
+      "source_set": "assistant_seed_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "energy_vitals",
+      "current_tools": [],
+      "id": "seed-065",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "timestamped current lat/lon/elevation, route progress, nearest CP/segment",
+          "gap": "current_position",
+          "label": "目前位置"
+        },
+        {
+          "extra_data_needed": "HDOP/VDOP, horizontal accuracy, fix type, satellite/CN0 or provider confidence",
+          "gap": "gnss_accuracy",
+          "label": "GNSS 精度"
+        },
+        {
+          "extra_data_needed": "recent INS/DR estimates, heading/course, step/PDR samples, uncertainty, last anchor",
+          "gap": "ins_dr_recent_samples",
+          "label": "近期 INS/DR/PDR 狀態"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "timestamped current lat/lon/elevation, route progress, nearest CP/segment",
+        "gap": "current_position",
+        "label": "目前位置"
+      },
+      "question": "目前有沒有 baseline-relative advisory？",
+      "recommended_tools": [
+        {
+          "label": "live navigation state",
+          "tool_id": "scout.ai.live_navigation_state.assess.v0"
+        }
+      ],
+      "source_set": "assistant_seed_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "energy_vitals",
+      "current_tools": [],
+      "id": "seed-068",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "heart rate, HRV/body battery/source values, activity/pace trend, baseline-relative thresholds, privacy scope",
+          "gap": "wearable_vitals_and_baseline",
+          "label": "穿戴式生命徵象與 baseline"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "heart rate, HRV/body battery/source values, activity/pace trend, baseline-relative thresholds, privacy scope",
+        "gap": "wearable_vitals_and_baseline",
+        "label": "穿戴式生命徵象與 baseline"
+      },
+      "question": "哪些 health evidence 只能進 pretrip/admin？",
+      "recommended_tools": [
+        {
+          "label": "energy/vitals",
+          "tool_id": "scout.ai.energy_vitals.assess.v0"
+        }
+      ],
+      "source_set": "assistant_seed_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "energy_vitals",
+      "current_tools": [],
+      "id": "seed-069",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "heart rate, HRV/body battery/source values, activity/pace trend, baseline-relative thresholds, privacy scope",
+          "gap": "wearable_vitals_and_baseline",
+          "label": "穿戴式生命徵象與 baseline"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "heart rate, HRV/body battery/source values, activity/pace trend, baseline-relative thresholds, privacy scope",
+        "gap": "wearable_vitals_and_baseline",
+        "label": "穿戴式生命徵象與 baseline"
+      },
+      "question": "Garmin Body Battery 能不能當 Scout truth？",
+      "recommended_tools": [
+        {
+          "label": "energy/vitals",
+          "tool_id": "scout.ai.energy_vitals.assess.v0"
+        }
+      ],
+      "source_set": "assistant_seed_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "energy_vitals",
+      "current_tools": [],
+      "id": "seed-070",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "heart rate, HRV/body battery/source values, activity/pace trend, baseline-relative thresholds, privacy scope",
+          "gap": "wearable_vitals_and_baseline",
+          "label": "穿戴式生命徵象與 baseline"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "heart rate, HRV/body battery/source values, activity/pace trend, baseline-relative thresholds, privacy scope",
+        "gap": "wearable_vitals_and_baseline",
+        "label": "穿戴式生命徵象與 baseline"
+      },
+      "question": "哪些 vitals 需要 privacy boundary？",
+      "recommended_tools": [
+        {
+          "label": "energy/vitals",
+          "tool_id": "scout.ai.energy_vitals.assess.v0"
+        }
+      ],
+      "source_set": "assistant_seed_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "safety_admission",
+      "current_tools": [],
+      "id": "seed-071",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "risk candidate status, admission decision, persistence state, operator review, no-mutation proof",
+          "gap": "safety_candidate_or_admission_state",
+          "label": "Safety candidate/admission state"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "risk candidate status, admission decision, persistence state, operator review, no-mutation proof",
+        "gap": "safety_candidate_or_admission_state",
+        "label": "Safety candidate/admission state"
+      },
+      "question": "哪些 evidence 不可以直接觸發 Ln？",
+      "recommended_tools": [
+        {
+          "label": "safety boundary",
+          "tool_id": "scout.ai.safety_boundary.explain.v0"
+        }
+      ],
+      "source_set": "assistant_seed_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "safety_admission",
+      "current_tools": [],
+      "id": "seed-072",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "risk candidate status, admission decision, persistence state, operator review, no-mutation proof",
+          "gap": "safety_candidate_or_admission_state",
+          "label": "Safety candidate/admission state"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "risk candidate status, admission decision, persistence state, operator review, no-mutation proof",
+        "gap": "safety_candidate_or_admission_state",
+        "label": "Safety candidate/admission state"
+      },
+      "question": "哪些條件才可能進 safety admission？",
+      "recommended_tools": [
+        {
+          "label": "safety boundary",
+          "tool_id": "scout.ai.safety_boundary.explain.v0"
+        }
+      ],
+      "source_set": "assistant_seed_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "safety_admission",
+      "current_tools": [],
+      "id": "seed-073",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "timestamped current lat/lon/elevation, route progress, nearest CP/segment",
+          "gap": "current_position",
+          "label": "目前位置"
+        },
+        {
+          "extra_data_needed": "HDOP/VDOP, horizontal accuracy, fix type, satellite/CN0 or provider confidence",
+          "gap": "gnss_accuracy",
+          "label": "GNSS 精度"
+        },
+        {
+          "extra_data_needed": "recent INS/DR estimates, heading/course, step/PDR samples, uncertainty, last anchor",
+          "gap": "ins_dr_recent_samples",
+          "label": "近期 INS/DR/PDR 狀態"
+        },
+        {
+          "extra_data_needed": "risk candidate status, admission decision, persistence state, operator review, no-mutation proof",
+          "gap": "safety_candidate_or_admission_state",
+          "label": "Safety candidate/admission state"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "timestamped current lat/lon/elevation, route progress, nearest CP/segment",
+        "gap": "current_position",
+        "label": "目前位置"
+      },
+      "question": "目前是否有呼叫 /safety/*？",
+      "recommended_tools": [
+        {
+          "label": "live navigation state",
+          "tool_id": "scout.ai.live_navigation_state.assess.v0"
+        },
+        {
+          "label": "safety boundary",
+          "tool_id": "scout.ai.safety_boundary.explain.v0"
+        }
+      ],
+      "source_set": "assistant_seed_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "safety_admission",
+      "current_tools": [],
+      "id": "seed-074",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "risk candidate status, admission decision, persistence state, operator review, no-mutation proof",
+          "gap": "safety_candidate_or_admission_state",
+          "label": "Safety candidate/admission state"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "risk candidate status, admission decision, persistence state, operator review, no-mutation proof",
+        "gap": "safety_candidate_or_admission_state",
+        "label": "Safety candidate/admission state"
+      },
+      "question": "有沒有改 Phase 1 L0-L4 狀態？",
+      "recommended_tools": [
+        {
+          "label": "safety boundary",
+          "tool_id": "scout.ai.safety_boundary.explain.v0"
+        }
+      ],
+      "source_set": "assistant_seed_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "safety_admission",
+      "current_tools": [],
+      "id": "seed-075",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "risk candidate status, admission decision, persistence state, operator review, no-mutation proof",
+          "gap": "safety_candidate_or_admission_state",
+          "label": "Safety candidate/admission state"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "risk candidate status, admission decision, persistence state, operator review, no-mutation proof",
+        "gap": "safety_candidate_or_admission_state",
+        "label": "Safety candidate/admission state"
+      },
+      "question": "哪些 off-route 判斷仍需要 persistence？",
+      "recommended_tools": [
+        {
+          "label": "safety boundary",
+          "tool_id": "scout.ai.safety_boundary.explain.v0"
+        }
+      ],
+      "source_set": "assistant_seed_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "safety_admission",
+      "current_tools": [],
+      "id": "seed-076",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "GPS-only trajectory, INS/DR/PDR estimates, raw IMU/PDR/vitals records, trajectory-diff metrics",
+          "gap": "gps_ins_dr_estimates_or_sensor_vitals_record",
+          "label": "GPS/INS/DR 軌跡與 sensor records"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "GPS-only trajectory, INS/DR/PDR estimates, raw IMU/PDR/vitals records, trajectory-diff metrics",
+        "gap": "gps_ins_dr_estimates_or_sensor_vitals_record",
+        "label": "GPS/INS/DR 軌跡與 sensor records"
+      },
+      "question": "哪些軌跡偏差可能是假警報？",
+      "recommended_tools": [
+        {
+          "label": "INS/DR trace",
+          "tool_id": "scout.ai.ins_dr_trace.analyze.v0"
+        }
+      ],
+      "source_set": "assistant_seed_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "safety_admission",
+      "current_tools": [
+        "pydantic_ai.tool.search_scout_risk_scores.v0"
+      ],
+      "id": "seed-077",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "timestamped current lat/lon/elevation, route progress, nearest CP/segment",
+          "gap": "current_position",
+          "label": "目前位置"
+        },
+        {
+          "extra_data_needed": "HDOP/VDOP, horizontal accuracy, fix type, satellite/CN0 or provider confidence",
+          "gap": "gnss_accuracy",
+          "label": "GNSS 精度"
+        },
+        {
+          "extra_data_needed": "recent INS/DR estimates, heading/course, step/PDR samples, uncertainty, last anchor",
+          "gap": "ins_dr_recent_samples",
+          "label": "近期 INS/DR/PDR 狀態"
+        },
+        {
+          "extra_data_needed": "risk candidate status, admission decision, persistence state, operator review, no-mutation proof",
+          "gap": "safety_candidate_or_admission_state",
+          "label": "Safety candidate/admission state"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "timestamped current lat/lon/elevation, route progress, nearest CP/segment",
+        "gap": "current_position",
+        "label": "目前位置"
+      },
+      "question": "目前有沒有不該觸發墜崖警報的點？",
+      "recommended_tools": [
+        {
+          "label": "live navigation state",
+          "tool_id": "scout.ai.live_navigation_state.assess.v0"
+        },
+        {
+          "label": "safety boundary",
+          "tool_id": "scout.ai.safety_boundary.explain.v0"
+        }
+      ],
+      "source_set": "assistant_seed_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "safety_admission",
+      "current_tools": [
+        "pydantic_ai.tool.search_scout_evidence_fulltext.v0",
+        "pydantic_ai.tool.search_scout_risk_scores.v0"
+      ],
+      "id": "seed-079",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "risk candidate status, admission decision, persistence state, operator review, no-mutation proof",
+          "gap": "safety_candidate_or_admission_state",
+          "label": "Safety candidate/admission state"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "risk candidate status, admission decision, persistence state, operator review, no-mutation proof",
+        "gap": "safety_candidate_or_admission_state",
+        "label": "Safety candidate/admission state"
+      },
+      "question": "哪些候選風險需要 operator review？",
+      "recommended_tools": [
+        {
+          "label": "safety boundary",
+          "tool_id": "scout.ai.safety_boundary.explain.v0"
+        }
+      ],
+      "source_set": "assistant_seed_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "safety_admission",
+      "current_tools": [],
+      "id": "seed-080",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "risk candidate status, admission decision, persistence state, operator review, no-mutation proof",
+          "gap": "safety_candidate_or_admission_state",
+          "label": "Safety candidate/admission state"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "risk candidate status, admission decision, persistence state, operator review, no-mutation proof",
+        "gap": "safety_candidate_or_admission_state",
+        "label": "Safety candidate/admission state"
+      },
+      "question": "哪些 safety boundary 已被明確保留？",
+      "recommended_tools": [
+        {
+          "label": "safety boundary",
+          "tool_id": "scout.ai.safety_boundary.explain.v0"
+        }
+      ],
+      "source_set": "assistant_seed_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "weather_camp",
+      "current_tools": [],
+      "id": "seed-083",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "forecast/nowcast, rain/wind/fog/temp/daylight, valid time/TTL, route-local exposure context",
+          "gap": "fresh_weather_or_nowcast_with_ttl",
+          "label": "即時天氣/預報與 TTL"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "forecast/nowcast, rain/wind/fog/temp/daylight, valid time/TTL, route-local exposure context",
+        "gap": "fresh_weather_or_nowcast_with_ttl",
+        "label": "即時天氣/預報與 TTL"
+      },
+      "question": "什麼時候應該提早紮營？",
+      "recommended_tools": [
+        {
+          "label": "weather window",
+          "tool_id": "scout.ai.weather_window.assess.v0"
+        }
+      ],
+      "source_set": "assistant_seed_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "weather_camp",
+      "current_tools": [
+        "pydantic_ai.tool.search_scout_workspace_catalog.v0"
+      ],
+      "id": "seed-084",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "forecast/nowcast, rain/wind/fog/temp/daylight, valid time/TTL, route-local exposure context",
+          "gap": "fresh_weather_or_nowcast_with_ttl",
+          "label": "即時天氣/預報與 TTL"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "forecast/nowcast, rain/wind/fog/temp/daylight, valid time/TTL, route-local exposure context",
+        "gap": "fresh_weather_or_nowcast_with_ttl",
+        "label": "即時天氣/預報與 TTL"
+      },
+      "question": "哪些天氣資料是 forecast candidate？",
+      "recommended_tools": [
+        {
+          "label": "weather window",
+          "tool_id": "scout.ai.weather_window.assess.v0"
+        }
+      ],
+      "source_set": "assistant_seed_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "weather_camp",
+      "current_tools": [],
+      "id": "seed-085",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "forecast/nowcast, rain/wind/fog/temp/daylight, valid time/TTL, route-local exposure context",
+          "gap": "fresh_weather_or_nowcast_with_ttl",
+          "label": "即時天氣/預報與 TTL"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "forecast/nowcast, rain/wind/fog/temp/daylight, valid time/TTL, route-local exposure context",
+        "gap": "fresh_weather_or_nowcast_with_ttl",
+        "label": "即時天氣/預報與 TTL"
+      },
+      "question": "天氣建議能不能直接觸發安全狀態？",
+      "recommended_tools": [
+        {
+          "label": "weather window",
+          "tool_id": "scout.ai.weather_window.assess.v0"
+        }
+      ],
+      "source_set": "assistant_seed_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "weather_camp",
+      "current_tools": [],
+      "id": "seed-087",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "forecast/nowcast, rain/wind/fog/temp/daylight, valid time/TTL, route-local exposure context",
+          "gap": "fresh_weather_or_nowcast_with_ttl",
+          "label": "即時天氣/預報與 TTL"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "forecast/nowcast, rain/wind/fog/temp/daylight, valid time/TTL, route-local exposure context",
+        "gap": "fresh_weather_or_nowcast_with_ttl",
+        "label": "即時天氣/預報與 TTL"
+      },
+      "question": "哪些地點可能不適合紮營？",
+      "recommended_tools": [
+        {
+          "label": "weather window",
+          "tool_id": "scout.ai.weather_window.assess.v0"
+        }
+      ],
+      "source_set": "assistant_seed_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "weather_camp",
+      "current_tools": [
+        "pydantic_ai.tool.search_scout_risk_scores.v0",
+        "pydantic_ai.tool.search_scout_terrain_scores.v0"
+      ],
+      "id": "seed-088",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "forecast/nowcast, rain/wind/fog/temp/daylight, valid time/TTL, route-local exposure context",
+          "gap": "fresh_weather_or_nowcast_with_ttl",
+          "label": "即時天氣/預報與 TTL"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "forecast/nowcast, rain/wind/fog/temp/daylight, valid time/TTL, route-local exposure context",
+        "gap": "fresh_weather_or_nowcast_with_ttl",
+        "label": "即時天氣/預報與 TTL"
+      },
+      "question": "天氣與地形風險是否重疊？",
+      "recommended_tools": [
+        {
+          "label": "weather window",
+          "tool_id": "scout.ai.weather_window.assess.v0"
+        }
+      ],
+      "source_set": "assistant_seed_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "weather_camp",
+      "current_tools": [],
+      "id": "seed-089",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "forecast/nowcast, rain/wind/fog/temp/daylight, valid time/TTL, route-local exposure context",
+          "gap": "fresh_weather_or_nowcast_with_ttl",
+          "label": "即時天氣/預報與 TTL"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "forecast/nowcast, rain/wind/fog/temp/daylight, valid time/TTL, route-local exposure context",
+        "gap": "fresh_weather_or_nowcast_with_ttl",
+        "label": "即時天氣/預報與 TTL"
+      },
+      "question": "是否需要延後出發？",
+      "recommended_tools": [
+        {
+          "label": "route readiness",
+          "tool_id": "scout.ai.route_readiness.assess.v0"
+        },
+        {
+          "label": "weather window",
+          "tool_id": "scout.ai.weather_window.assess.v0"
+        }
+      ],
+      "source_set": "assistant_seed_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "weather_camp",
+      "current_tools": [],
+      "id": "seed-090",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "forecast/nowcast, rain/wind/fog/temp/daylight, valid time/TTL, route-local exposure context",
+          "gap": "fresh_weather_or_nowcast_with_ttl",
+          "label": "即時天氣/預報與 TTL"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "forecast/nowcast, rain/wind/fog/temp/daylight, valid time/TTL, route-local exposure context",
+        "gap": "fresh_weather_or_nowcast_with_ttl",
+        "label": "即時天氣/預報與 TTL"
+      },
+      "question": "有哪些 weather evidence 缺少有效期限？",
+      "recommended_tools": [
+        {
+          "label": "weather window",
+          "tool_id": "scout.ai.weather_window.assess.v0"
+        }
+      ],
+      "source_set": "assistant_seed_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "admin_debug_ai",
+      "current_tools": [],
+      "id": "seed-091",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "timestamped current lat/lon/elevation, route progress, nearest CP/segment",
+          "gap": "current_position",
+          "label": "目前位置"
+        },
+        {
+          "extra_data_needed": "HDOP/VDOP, horizontal accuracy, fix type, satellite/CN0 or provider confidence",
+          "gap": "gnss_accuracy",
+          "label": "GNSS 精度"
+        },
+        {
+          "extra_data_needed": "recent INS/DR estimates, heading/course, step/PDR samples, uncertainty, last anchor",
+          "gap": "ins_dr_recent_samples",
+          "label": "近期 INS/DR/PDR 狀態"
+        },
+        {
+          "extra_data_needed": "transport ingress records, parser output, router decisions, filter handoff, timestamps, latency/loss counters",
+          "gap": "runtime_ingress_router_trace",
+          "label": "Runtime ingress/router trace"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "timestamped current lat/lon/elevation, route progress, nearest CP/segment",
+        "gap": "current_position",
+        "label": "目前位置"
+      },
+      "question": "Scout AI 目前使用哪個 provider？",
+      "recommended_tools": [
+        {
+          "label": "live navigation state",
+          "tool_id": "scout.ai.live_navigation_state.assess.v0"
+        },
+        {
+          "label": "runtime ingress/router",
+          "tool_id": "scout.ai.runtime_ingress_status.search.v0"
+        }
+      ],
+      "source_set": "assistant_seed_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "admin_debug_ai",
+      "current_tools": [],
+      "id": "seed-092",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "transport ingress records, parser output, router decisions, filter handoff, timestamps, latency/loss counters",
+          "gap": "runtime_ingress_router_trace",
+          "label": "Runtime ingress/router trace"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "transport ingress records, parser output, router decisions, filter handoff, timestamps, latency/loss counters",
+        "gap": "runtime_ingress_router_trace",
+        "label": "Runtime ingress/router trace"
+      },
+      "question": "Pydantic AI 是否啟用？",
+      "recommended_tools": [
+        {
+          "label": "runtime ingress/router",
+          "tool_id": "scout.ai.runtime_ingress_status.search.v0"
+        }
+      ],
+      "source_set": "assistant_seed_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "admin_debug_ai",
+      "current_tools": [],
+      "id": "seed-093",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "transport ingress records, parser output, router decisions, filter handoff, timestamps, latency/loss counters",
+          "gap": "runtime_ingress_router_trace",
+          "label": "Runtime ingress/router trace"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "transport ingress records, parser output, router decisions, filter handoff, timestamps, latency/loss counters",
+        "gap": "runtime_ingress_router_trace",
+        "label": "Runtime ingress/router trace"
+      },
+      "question": "assistant status 正常嗎？",
+      "recommended_tools": [
+        {
+          "label": "runtime ingress/router",
+          "tool_id": "scout.ai.runtime_ingress_status.search.v0"
+        }
+      ],
+      "source_set": "assistant_seed_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "admin_debug_ai",
+      "current_tools": [],
+      "id": "seed-094",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "transport ingress records, parser output, router decisions, filter handoff, timestamps, latency/loss counters",
+          "gap": "runtime_ingress_router_trace",
+          "label": "Runtime ingress/router trace"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "transport ingress records, parser output, router decisions, filter handoff, timestamps, latency/loss counters",
+        "gap": "runtime_ingress_router_trace",
+        "label": "Runtime ingress/router trace"
+      },
+      "question": "如果 provider 失敗，fallback 會怎麼回答？",
+      "recommended_tools": [
+        {
+          "label": "runtime ingress/router",
+          "tool_id": "scout.ai.runtime_ingress_status.search.v0"
+        }
+      ],
+      "source_set": "assistant_seed_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "admin_debug_ai",
+      "current_tools": [],
+      "id": "seed-095",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "timestamped current lat/lon/elevation, route progress, nearest CP/segment",
+          "gap": "current_position",
+          "label": "目前位置"
+        },
+        {
+          "extra_data_needed": "HDOP/VDOP, horizontal accuracy, fix type, satellite/CN0 or provider confidence",
+          "gap": "gnss_accuracy",
+          "label": "GNSS 精度"
+        },
+        {
+          "extra_data_needed": "recent INS/DR estimates, heading/course, step/PDR samples, uncertainty, last anchor",
+          "gap": "ins_dr_recent_samples",
+          "label": "近期 INS/DR/PDR 狀態"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "timestamped current lat/lon/elevation, route progress, nearest CP/segment",
+        "gap": "current_position",
+        "label": "目前位置"
+      },
+      "question": "目前有哪些 deterministic tools 可用？",
+      "recommended_tools": [
+        {
+          "label": "live navigation state",
+          "tool_id": "scout.ai.live_navigation_state.assess.v0"
+        }
+      ],
+      "source_set": "assistant_seed_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "admin_debug_ai",
+      "current_tools": [],
+      "id": "seed-097",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "source provenance, review queue, conflict report, unanswered context requirements",
+          "gap": "review_queue_or_provenance_report",
+          "label": "Review/provenance/conflict report"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "source provenance, review queue, conflict report, unanswered context requirements",
+        "gap": "review_queue_or_provenance_report",
+        "label": "Review/provenance/conflict report"
+      },
+      "question": "這個回答引用了哪些 sources？",
+      "recommended_tools": [
+        {
+          "label": "review/provenance gap",
+          "tool_id": "scout.ai.review_gap.assess.v0"
+        }
+      ],
+      "source_set": "assistant_seed_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "admin_debug_ai",
+      "current_tools": [],
+      "id": "seed-098",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "timestamped current lat/lon/elevation, route progress, nearest CP/segment",
+          "gap": "current_position",
+          "label": "目前位置"
+        },
+        {
+          "extra_data_needed": "HDOP/VDOP, horizontal accuracy, fix type, satellite/CN0 or provider confidence",
+          "gap": "gnss_accuracy",
+          "label": "GNSS 精度"
+        },
+        {
+          "extra_data_needed": "recent INS/DR estimates, heading/course, step/PDR samples, uncertainty, last anchor",
+          "gap": "ins_dr_recent_samples",
+          "label": "近期 INS/DR/PDR 狀態"
+        },
+        {
+          "extra_data_needed": "transport ingress records, parser output, router decisions, filter handoff, timestamps, latency/loss counters",
+          "gap": "runtime_ingress_router_trace",
+          "label": "Runtime ingress/router trace"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "timestamped current lat/lon/elevation, route progress, nearest CP/segment",
+        "gap": "current_position",
+        "label": "目前位置"
+      },
+      "question": "哪些 context 目前缺失？",
+      "recommended_tools": [
+        {
+          "label": "live navigation state",
+          "tool_id": "scout.ai.live_navigation_state.assess.v0"
+        },
+        {
+          "label": "runtime ingress/router",
+          "tool_id": "scout.ai.runtime_ingress_status.search.v0"
+        }
+      ],
+      "source_set": "assistant_seed_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "admin_debug_ai",
+      "current_tools": [
+        "pydantic_ai.tool.search_scout_workspace_catalog.v0"
+      ],
+      "id": "seed-099",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "source provenance, review queue, conflict report, unanswered context requirements",
+          "gap": "review_queue_or_provenance_report",
+          "label": "Review/provenance/conflict report"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "source provenance, review queue, conflict report, unanswered context requirements",
+        "gap": "review_queue_or_provenance_report",
+        "label": "Review/provenance/conflict report"
+      },
+      "question": "哪些 workspace 搜尋結果最相關？",
+      "recommended_tools": [
+        {
+          "label": "review/provenance gap",
+          "tool_id": "scout.ai.review_gap.assess.v0"
+        }
+      ],
+      "source_set": "assistant_seed_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "admin_debug_ai",
+      "current_tools": [],
+      "id": "seed-100",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "risk candidate status, admission decision, persistence state, operator review, no-mutation proof",
+          "gap": "safety_candidate_or_admission_state",
+          "label": "Safety candidate/admission state"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "risk candidate status, admission decision, persistence state, operator review, no-mutation proof",
+        "gap": "safety_candidate_or_admission_state",
+        "label": "Safety candidate/admission state"
+      },
+      "question": "這個回答有沒有越界成 safety mutation 或 outbound send？",
+      "recommended_tools": [
+        {
+          "label": "safety boundary",
+          "tool_id": "scout.ai.safety_boundary.explain.v0"
+        }
+      ],
+      "source_set": "assistant_seed_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "field_pretrip",
+      "current_tools": [
+        "pydantic_ai.tool.search_scout_route_structure.v0"
+      ],
+      "id": "field-001",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "fitness baseline, expected pace, load, acclimatization, skill level, water/food plan, risk tolerance",
+          "gap": "user_or_team_baseline_profile",
+          "label": "個人/隊伍 baseline profile"
+        },
+        {
+          "extra_data_needed": "heart rate, HRV/body battery/source values, activity/pace trend, baseline-relative thresholds, privacy scope",
+          "gap": "wearable_vitals_and_baseline",
+          "label": "穿戴式生命徵象與 baseline"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "fitness baseline, expected pace, load, acclimatization, skill level, water/food plan, risk tolerance",
+        "gap": "user_or_team_baseline_profile",
+        "label": "個人/隊伍 baseline profile"
+      },
+      "question": "這條路線對我的體能來說會不會太硬？",
+      "recommended_tools": [
+        {
+          "label": "route readiness",
+          "tool_id": "scout.ai.route_readiness.assess.v0"
+        },
+        {
+          "label": "energy/vitals",
+          "tool_id": "scout.ai.energy_vitals.assess.v0"
+        }
+      ],
+      "source_set": "user_field_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "field_pretrip",
+      "current_tools": [],
+      "id": "field-002",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "fitness baseline, expected pace, load, acclimatization, skill level, water/food plan, risk tolerance",
+          "gap": "user_or_team_baseline_profile",
+          "label": "個人/隊伍 baseline profile"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "fitness baseline, expected pace, load, acclimatization, skill level, water/food plan, risk tolerance",
+        "gap": "user_or_team_baseline_profile",
+        "label": "個人/隊伍 baseline profile"
+      },
+      "question": "我今天的配速有足夠 buffer 嗎？",
+      "recommended_tools": [
+        {
+          "label": "route readiness",
+          "tool_id": "scout.ai.route_readiness.assess.v0"
+        }
+      ],
+      "source_set": "user_field_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "field_pretrip",
+      "current_tools": [
+        "pydantic_ai.tool.search_scout_risk_scores.v0"
+      ],
+      "id": "field-006",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "forecast/nowcast, rain/wind/fog/temp/daylight, valid time/TTL, route-local exposure context",
+          "gap": "fresh_weather_or_nowcast_with_ttl",
+          "label": "即時天氣/預報與 TTL"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "forecast/nowcast, rain/wind/fog/temp/daylight, valid time/TTL, route-local exposure context",
+        "gap": "fresh_weather_or_nowcast_with_ttl",
+        "label": "即時天氣/預報與 TTL"
+      },
+      "question": "哪些地方下雨後會變危險？",
+      "recommended_tools": [
+        {
+          "label": "weather window",
+          "tool_id": "scout.ai.weather_window.assess.v0"
+        }
+      ],
+      "source_set": "user_field_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "field_pretrip",
+      "current_tools": [],
+      "id": "field-009",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "fitness baseline, expected pace, load, acclimatization, skill level, water/food plan, risk tolerance",
+          "gap": "user_or_team_baseline_profile",
+          "label": "個人/隊伍 baseline profile"
+        },
+        {
+          "extra_data_needed": "heart rate, HRV/body battery/source values, activity/pace trend, baseline-relative thresholds, privacy scope",
+          "gap": "wearable_vitals_and_baseline",
+          "label": "穿戴式生命徵象與 baseline"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "fitness baseline, expected pace, load, acclimatization, skill level, water/food plan, risk tolerance",
+        "gap": "user_or_team_baseline_profile",
+        "label": "個人/隊伍 baseline profile"
+      },
+      "question": "我需要準備多少水和補給？",
+      "recommended_tools": [
+        {
+          "label": "route readiness",
+          "tool_id": "scout.ai.route_readiness.assess.v0"
+        }
+      ],
+      "source_set": "user_field_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "field_pretrip",
+      "current_tools": [],
+      "id": "field-010",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "fitness baseline, expected pace, load, acclimatization, skill level, water/food plan, risk tolerance",
+          "gap": "user_or_team_baseline_profile",
+          "label": "個人/隊伍 baseline profile"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "fitness baseline, expected pace, load, acclimatization, skill level, water/food plan, risk tolerance",
+        "gap": "user_or_team_baseline_profile",
+        "label": "個人/隊伍 baseline profile"
+      },
+      "question": "如果我晚出發一小時，是否還能安全完成？",
+      "recommended_tools": [
+        {
+          "label": "route readiness",
+          "tool_id": "scout.ai.route_readiness.assess.v0"
+        }
+      ],
+      "source_set": "user_field_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "field_terrain_route",
+      "current_tools": [
+        "pydantic_ai.tool.search_scout_terrain_scores.v0"
+      ],
+      "id": "field-011",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "timestamped current lat/lon/elevation, route progress, nearest CP/segment",
+          "gap": "current_position",
+          "label": "目前位置"
+        },
+        {
+          "extra_data_needed": "HDOP/VDOP, horizontal accuracy, fix type, satellite/CN0 or provider confidence",
+          "gap": "gnss_accuracy",
+          "label": "GNSS 精度"
+        },
+        {
+          "extra_data_needed": "recent INS/DR estimates, heading/course, step/PDR samples, uncertainty, last anchor",
+          "gap": "ins_dr_recent_samples",
+          "label": "近期 INS/DR/PDR 狀態"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "timestamped current lat/lon/elevation, route progress, nearest CP/segment",
+        "gap": "current_position",
+        "label": "目前位置"
+      },
+      "question": "前方是不是稜線轉折點？",
+      "recommended_tools": [
+        {
+          "label": "live navigation state",
+          "tool_id": "scout.ai.live_navigation_state.assess.v0"
+        }
+      ],
+      "source_set": "user_field_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "field_terrain_route",
+      "current_tools": [
+        "pydantic_ai.tool.search_scout_terrain_scores.v0"
+      ],
+      "id": "field-012",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "timestamped current lat/lon/elevation, route progress, nearest CP/segment",
+          "gap": "current_position",
+          "label": "目前位置"
+        },
+        {
+          "extra_data_needed": "HDOP/VDOP, horizontal accuracy, fix type, satellite/CN0 or provider confidence",
+          "gap": "gnss_accuracy",
+          "label": "GNSS 精度"
+        },
+        {
+          "extra_data_needed": "recent INS/DR estimates, heading/course, step/PDR samples, uncertainty, last anchor",
+          "gap": "ins_dr_recent_samples",
+          "label": "近期 INS/DR/PDR 狀態"
+        },
+        {
+          "extra_data_needed": "fitness baseline, expected pace, load, acclimatization, skill level, water/food plan, risk tolerance",
+          "gap": "user_or_team_baseline_profile",
+          "label": "個人/隊伍 baseline profile"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "timestamped current lat/lon/elevation, route progress, nearest CP/segment",
+        "gap": "current_position",
+        "label": "目前位置"
+      },
+      "question": "我是不是快接近崩壁或碎石坡？",
+      "recommended_tools": [],
+      "source_set": "user_field_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "field_terrain_route",
+      "current_tools": [
+        "pydantic_ai.tool.search_scout_route_structure.v0",
+        "pydantic_ai.tool.search_scout_risk_scores.v0"
+      ],
+      "id": "field-016",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "timestamped current lat/lon/elevation, route progress, nearest CP/segment",
+          "gap": "current_position",
+          "label": "目前位置"
+        },
+        {
+          "extra_data_needed": "HDOP/VDOP, horizontal accuracy, fix type, satellite/CN0 or provider confidence",
+          "gap": "gnss_accuracy",
+          "label": "GNSS 精度"
+        },
+        {
+          "extra_data_needed": "recent INS/DR estimates, heading/course, step/PDR samples, uncertainty, last anchor",
+          "gap": "ins_dr_recent_samples",
+          "label": "近期 INS/DR/PDR 狀態"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "timestamped current lat/lon/elevation, route progress, nearest CP/segment",
+        "gap": "current_position",
+        "label": "目前位置"
+      },
+      "question": "我現在是不是離主路太近但站在危險邊緣？",
+      "recommended_tools": [
+        {
+          "label": "live navigation state",
+          "tool_id": "scout.ai.live_navigation_state.assess.v0"
+        }
+      ],
+      "source_set": "user_field_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "field_terrain_route",
+      "current_tools": [
+        "pydantic_ai.tool.search_scout_evidence_fulltext.v0"
+      ],
+      "id": "field-019",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "GPS-only trajectory, INS/DR/PDR estimates, raw IMU/PDR/vitals records, trajectory-diff metrics",
+          "gap": "gps_ins_dr_estimates_or_sensor_vitals_record",
+          "label": "GPS/INS/DR 軌跡與 sensor records"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "GPS-only trajectory, INS/DR/PDR estimates, raw IMU/PDR/vitals records, trajectory-diff metrics",
+        "gap": "gps_ins_dr_estimates_or_sensor_vitals_record",
+        "label": "GPS/INS/DR 軌跡與 sensor records"
+      },
+      "question": "歷史 GPX 這裡的軌跡分散嗎？",
+      "recommended_tools": [
+        {
+          "label": "INS/DR trace",
+          "tool_id": "scout.ai.ins_dr_trace.analyze.v0"
+        }
+      ],
+      "source_set": "user_field_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "field_navigation",
+      "current_tools": [
+        "pydantic_ai.tool.search_scout_route_structure.v0"
+      ],
+      "id": "field-021",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "timestamped current lat/lon/elevation, route progress, nearest CP/segment",
+          "gap": "current_position",
+          "label": "目前位置"
+        },
+        {
+          "extra_data_needed": "HDOP/VDOP, horizontal accuracy, fix type, satellite/CN0 or provider confidence",
+          "gap": "gnss_accuracy",
+          "label": "GNSS 精度"
+        },
+        {
+          "extra_data_needed": "recent INS/DR estimates, heading/course, step/PDR samples, uncertainty, last anchor",
+          "gap": "ins_dr_recent_samples",
+          "label": "近期 INS/DR/PDR 狀態"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "timestamped current lat/lon/elevation, route progress, nearest CP/segment",
+        "gap": "current_position",
+        "label": "目前位置"
+      },
+      "question": "我現在是不是偏離路線？",
+      "recommended_tools": [
+        {
+          "label": "live navigation state",
+          "tool_id": "scout.ai.live_navigation_state.assess.v0"
+        }
+      ],
+      "source_set": "user_field_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "field_navigation",
+      "current_tools": [],
+      "id": "field-022",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "timestamped current lat/lon/elevation, route progress, nearest CP/segment",
+          "gap": "current_position",
+          "label": "目前位置"
+        },
+        {
+          "extra_data_needed": "HDOP/VDOP, horizontal accuracy, fix type, satellite/CN0 or provider confidence",
+          "gap": "gnss_accuracy",
+          "label": "GNSS 精度"
+        },
+        {
+          "extra_data_needed": "recent INS/DR estimates, heading/course, step/PDR samples, uncertainty, last anchor",
+          "gap": "ins_dr_recent_samples",
+          "label": "近期 INS/DR/PDR 狀態"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "timestamped current lat/lon/elevation, route progress, nearest CP/segment",
+        "gap": "current_position",
+        "label": "目前位置"
+      },
+      "question": "GPS 誤差會不會太大，不能相信？",
+      "recommended_tools": [
+        {
+          "label": "live navigation state",
+          "tool_id": "scout.ai.live_navigation_state.assess.v0"
+        }
+      ],
+      "source_set": "user_field_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "field_navigation",
+      "current_tools": [],
+      "id": "field-023",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "timestamped current lat/lon/elevation, route progress, nearest CP/segment",
+          "gap": "current_position",
+          "label": "目前位置"
+        },
+        {
+          "extra_data_needed": "HDOP/VDOP, horizontal accuracy, fix type, satellite/CN0 or provider confidence",
+          "gap": "gnss_accuracy",
+          "label": "GNSS 精度"
+        },
+        {
+          "extra_data_needed": "recent INS/DR estimates, heading/course, step/PDR samples, uncertainty, last anchor",
+          "gap": "ins_dr_recent_samples",
+          "label": "近期 INS/DR/PDR 狀態"
+        },
+        {
+          "extra_data_needed": "GPS-only trajectory, INS/DR/PDR estimates, raw IMU/PDR/vitals records, trajectory-diff metrics",
+          "gap": "gps_ins_dr_estimates_or_sensor_vitals_record",
+          "label": "GPS/INS/DR 軌跡與 sensor records"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "timestamped current lat/lon/elevation, route progress, nearest CP/segment",
+        "gap": "current_position",
+        "label": "目前位置"
+      },
+      "question": "IMU/PDR 推估跟 GPS 是否一致？",
+      "recommended_tools": [
+        {
+          "label": "live navigation state",
+          "tool_id": "scout.ai.live_navigation_state.assess.v0"
+        },
+        {
+          "label": "INS/DR trace",
+          "tool_id": "scout.ai.ins_dr_trace.analyze.v0"
+        }
+      ],
+      "source_set": "user_field_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "field_navigation",
+      "current_tools": [],
+      "id": "field-024",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "timestamped current lat/lon/elevation, route progress, nearest CP/segment",
+          "gap": "current_position",
+          "label": "目前位置"
+        },
+        {
+          "extra_data_needed": "HDOP/VDOP, horizontal accuracy, fix type, satellite/CN0 or provider confidence",
+          "gap": "gnss_accuracy",
+          "label": "GNSS 精度"
+        },
+        {
+          "extra_data_needed": "recent INS/DR estimates, heading/course, step/PDR samples, uncertainty, last anchor",
+          "gap": "ins_dr_recent_samples",
+          "label": "近期 INS/DR/PDR 狀態"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "timestamped current lat/lon/elevation, route progress, nearest CP/segment",
+        "gap": "current_position",
+        "label": "目前位置"
+      },
+      "question": "我現在的方向是不是正在遠離主線？",
+      "recommended_tools": [
+        {
+          "label": "live navigation state",
+          "tool_id": "scout.ai.live_navigation_state.assess.v0"
+        }
+      ],
+      "source_set": "user_field_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "field_navigation",
+      "current_tools": [
+        "pydantic_ai.tool.search_scout_route_structure.v0"
+      ],
+      "id": "field-025",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "timestamped current lat/lon/elevation, route progress, nearest CP/segment",
+          "gap": "current_position",
+          "label": "目前位置"
+        },
+        {
+          "extra_data_needed": "HDOP/VDOP, horizontal accuracy, fix type, satellite/CN0 or provider confidence",
+          "gap": "gnss_accuracy",
+          "label": "GNSS 精度"
+        },
+        {
+          "extra_data_needed": "recent INS/DR estimates, heading/course, step/PDR samples, uncertainty, last anchor",
+          "gap": "ins_dr_recent_samples",
+          "label": "近期 INS/DR/PDR 狀態"
+        },
+        {
+          "extra_data_needed": "fitness baseline, expected pace, load, acclimatization, skill level, water/food plan, risk tolerance",
+          "gap": "user_or_team_baseline_profile",
+          "label": "個人/隊伍 baseline profile"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "timestamped current lat/lon/elevation, route progress, nearest CP/segment",
+        "gap": "current_position",
+        "label": "目前位置"
+      },
+      "question": "我是不是錯過轉彎點？",
+      "recommended_tools": [
+        {
+          "label": "live navigation state",
+          "tool_id": "scout.ai.live_navigation_state.assess.v0"
+        }
+      ],
+      "source_set": "user_field_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "field_navigation",
+      "current_tools": [],
+      "id": "field-026",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "fitness baseline, expected pace, load, acclimatization, skill level, water/food plan, risk tolerance",
+          "gap": "user_or_team_baseline_profile",
+          "label": "個人/隊伍 baseline profile"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "fitness baseline, expected pace, load, acclimatization, skill level, water/food plan, risk tolerance",
+        "gap": "user_or_team_baseline_profile",
+        "label": "個人/隊伍 baseline profile"
+      },
+      "question": "我該回到上一個確定點嗎？",
+      "recommended_tools": [],
+      "source_set": "user_field_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "field_navigation",
+      "current_tools": [],
+      "id": "field-027",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "domain-specific source package or tool input contract must be defined and populated",
+          "gap": "tool_specific_evidence_not_verified",
+          "label": "工具專屬 evidence 尚未驗證"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "domain-specific source package or tool input contract must be defined and populated",
+        "gap": "tool_specific_evidence_not_verified",
+        "label": "工具專屬 evidence 尚未驗證"
+      },
+      "question": "我還能修正回主線嗎？",
+      "recommended_tools": [
+        {
+          "label": "live navigation state",
+          "tool_id": "scout.ai.live_navigation_state.assess.v0"
+        }
+      ],
+      "source_set": "user_field_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "field_navigation",
+      "current_tools": [
+        "pydantic_ai.tool.search_scout_risk_scores.v0",
+        "pydantic_ai.tool.search_scout_terrain_scores.v0"
+      ],
+      "id": "field-028",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "timestamped current lat/lon/elevation, route progress, nearest CP/segment",
+          "gap": "current_position",
+          "label": "目前位置"
+        },
+        {
+          "extra_data_needed": "HDOP/VDOP, horizontal accuracy, fix type, satellite/CN0 or provider confidence",
+          "gap": "gnss_accuracy",
+          "label": "GNSS 精度"
+        },
+        {
+          "extra_data_needed": "recent INS/DR estimates, heading/course, step/PDR samples, uncertainty, last anchor",
+          "gap": "ins_dr_recent_samples",
+          "label": "近期 INS/DR/PDR 狀態"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "timestamped current lat/lon/elevation, route progress, nearest CP/segment",
+        "gap": "current_position",
+        "label": "目前位置"
+      },
+      "question": "我現在繼續下切是否危險？",
+      "recommended_tools": [
+        {
+          "label": "live navigation state",
+          "tool_id": "scout.ai.live_navigation_state.assess.v0"
+        }
+      ],
+      "source_set": "user_field_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "field_navigation",
+      "current_tools": [],
+      "id": "field-029",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "domain-specific source package or tool input contract must be defined and populated",
+          "gap": "tool_specific_evidence_not_verified",
+          "label": "工具專屬 evidence 尚未驗證"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "domain-specific source package or tool input contract must be defined and populated",
+        "gap": "tool_specific_evidence_not_verified",
+        "label": "工具專屬 evidence 尚未驗證"
+      },
+      "question": "這個偏離是正常 GPS drift 還是真的走錯？",
+      "recommended_tools": [
+        {
+          "label": "live navigation state",
+          "tool_id": "scout.ai.live_navigation_state.assess.v0"
+        }
+      ],
+      "source_set": "user_field_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "field_weather_environment",
+      "current_tools": [],
+      "id": "field-031",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "forecast/nowcast, rain/wind/fog/temp/daylight, valid time/TTL, route-local exposure context",
+          "gap": "fresh_weather_or_nowcast_with_ttl",
+          "label": "即時天氣/預報與 TTL"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "forecast/nowcast, rain/wind/fog/temp/daylight, valid time/TTL, route-local exposure context",
+        "gap": "fresh_weather_or_nowcast_with_ttl",
+        "label": "即時天氣/預報與 TTL"
+      },
+      "question": "白牆下這段還適合走嗎？",
+      "recommended_tools": [
+        {
+          "label": "weather window",
+          "tool_id": "scout.ai.weather_window.assess.v0"
+        }
+      ],
+      "source_set": "user_field_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "field_weather_environment",
+      "current_tools": [],
+      "id": "field-033",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "forecast/nowcast, rain/wind/fog/temp/daylight, valid time/TTL, route-local exposure context",
+          "gap": "fresh_weather_or_nowcast_with_ttl",
+          "label": "即時天氣/預報與 TTL"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "forecast/nowcast, rain/wind/fog/temp/daylight, valid time/TTL, route-local exposure context",
+        "gap": "fresh_weather_or_nowcast_with_ttl",
+        "label": "即時天氣/預報與 TTL"
+      },
+      "question": "日落前我還能到下一個安全點嗎？",
+      "recommended_tools": [
+        {
+          "label": "weather window",
+          "tool_id": "scout.ai.weather_window.assess.v0"
+        }
+      ],
+      "source_set": "user_field_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "field_weather_environment",
+      "current_tools": [],
+      "id": "field-034",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "forecast/nowcast, rain/wind/fog/temp/daylight, valid time/TTL, route-local exposure context",
+          "gap": "fresh_weather_or_nowcast_with_ttl",
+          "label": "即時天氣/預報與 TTL"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "forecast/nowcast, rain/wind/fog/temp/daylight, valid time/TTL, route-local exposure context",
+        "gap": "fresh_weather_or_nowcast_with_ttl",
+        "label": "即時天氣/預報與 TTL"
+      },
+      "question": "這段如果起霧會不會容易失向？",
+      "recommended_tools": [
+        {
+          "label": "weather window",
+          "tool_id": "scout.ai.weather_window.assess.v0"
+        }
+      ],
+      "source_set": "user_field_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "field_weather_environment",
+      "current_tools": [],
+      "id": "field-035",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "forecast/nowcast, rain/wind/fog/temp/daylight, valid time/TTL, route-local exposure context",
+          "gap": "fresh_weather_or_nowcast_with_ttl",
+          "label": "即時天氣/預報與 TTL"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "forecast/nowcast, rain/wind/fog/temp/daylight, valid time/TTL, route-local exposure context",
+        "gap": "fresh_weather_or_nowcast_with_ttl",
+        "label": "即時天氣/預報與 TTL"
+      },
+      "question": "今天的天氣窗口是否足夠？",
+      "recommended_tools": [
+        {
+          "label": "weather window",
+          "tool_id": "scout.ai.weather_window.assess.v0"
+        }
+      ],
+      "source_set": "user_field_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "field_weather_environment",
+      "current_tools": [
+        "pydantic_ai.tool.search_scout_route_structure.v0"
+      ],
+      "id": "field-036",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "forecast/nowcast, rain/wind/fog/temp/daylight, valid time/TTL, route-local exposure context",
+          "gap": "fresh_weather_or_nowcast_with_ttl",
+          "label": "即時天氣/預報與 TTL"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "forecast/nowcast, rain/wind/fog/temp/daylight, valid time/TTL, route-local exposure context",
+        "gap": "fresh_weather_or_nowcast_with_ttl",
+        "label": "即時天氣/預報與 TTL"
+      },
+      "question": "溪水暴漲會不會阻斷路線？",
+      "recommended_tools": [
+        {
+          "label": "route readiness",
+          "tool_id": "scout.ai.route_readiness.assess.v0"
+        },
+        {
+          "label": "weather window",
+          "tool_id": "scout.ai.weather_window.assess.v0"
+        }
+      ],
+      "source_set": "user_field_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "field_weather_environment",
+      "current_tools": [
+        "pydantic_ai.tool.search_scout_risk_scores.v0"
+      ],
+      "id": "field-037",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "forecast/nowcast, rain/wind/fog/temp/daylight, valid time/TTL, route-local exposure context",
+          "gap": "fresh_weather_or_nowcast_with_ttl",
+          "label": "即時天氣/預報與 TTL"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "forecast/nowcast, rain/wind/fog/temp/daylight, valid time/TTL, route-local exposure context",
+        "gap": "fresh_weather_or_nowcast_with_ttl",
+        "label": "即時天氣/預報與 TTL"
+      },
+      "question": "這段下雨後會變成落石區嗎？",
+      "recommended_tools": [
+        {
+          "label": "weather window",
+          "tool_id": "scout.ai.weather_window.assess.v0"
+        }
+      ],
+      "source_set": "user_field_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "field_weather_environment",
+      "current_tools": [],
+      "id": "field-038",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "forecast/nowcast, rain/wind/fog/temp/daylight, valid time/TTL, route-local exposure context",
+          "gap": "fresh_weather_or_nowcast_with_ttl",
+          "label": "即時天氣/預報與 TTL"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "forecast/nowcast, rain/wind/fog/temp/daylight, valid time/TTL, route-local exposure context",
+        "gap": "fresh_weather_or_nowcast_with_ttl",
+        "label": "即時天氣/預報與 TTL"
+      },
+      "question": "現在停下來會不會變冷太快？",
+      "recommended_tools": [
+        {
+          "label": "weather window",
+          "tool_id": "scout.ai.weather_window.assess.v0"
+        }
+      ],
+      "source_set": "user_field_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "field_weather_environment",
+      "current_tools": [
+        "pydantic_ai.tool.search_scout_risk_scores.v0"
+      ],
+      "id": "field-039",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "forecast/nowcast, rain/wind/fog/temp/daylight, valid time/TTL, route-local exposure context",
+          "gap": "fresh_weather_or_nowcast_with_ttl",
+          "label": "即時天氣/預報與 TTL"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "forecast/nowcast, rain/wind/fog/temp/daylight, valid time/TTL, route-local exposure context",
+        "gap": "fresh_weather_or_nowcast_with_ttl",
+        "label": "即時天氣/預報與 TTL"
+      },
+      "question": "風寒和濕衣是否已經構成風險？",
+      "recommended_tools": [
+        {
+          "label": "weather window",
+          "tool_id": "scout.ai.weather_window.assess.v0"
+        }
+      ],
+      "source_set": "user_field_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "field_weather_environment",
+      "current_tools": [],
+      "id": "field-040",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "fitness baseline, expected pace, load, acclimatization, skill level, water/food plan, risk tolerance",
+          "gap": "user_or_team_baseline_profile",
+          "label": "個人/隊伍 baseline profile"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "fitness baseline, expected pace, load, acclimatization, skill level, water/food plan, risk tolerance",
+        "gap": "user_or_team_baseline_profile",
+        "label": "個人/隊伍 baseline profile"
+      },
+      "question": "我是不是該提前撤退？",
+      "recommended_tools": [
+        {
+          "label": "weather window",
+          "tool_id": "scout.ai.weather_window.assess.v0"
+        }
+      ],
+      "source_set": "user_field_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "field_energy_state",
+      "current_tools": [],
+      "id": "field-041",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "fitness baseline, expected pace, load, acclimatization, skill level, water/food plan, risk tolerance",
+          "gap": "user_or_team_baseline_profile",
+          "label": "個人/隊伍 baseline profile"
+        },
+        {
+          "extra_data_needed": "heart rate, HRV/body battery/source values, activity/pace trend, baseline-relative thresholds, privacy scope",
+          "gap": "wearable_vitals_and_baseline",
+          "label": "穿戴式生命徵象與 baseline"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "fitness baseline, expected pace, load, acclimatization, skill level, water/food plan, risk tolerance",
+        "gap": "user_or_team_baseline_profile",
+        "label": "個人/隊伍 baseline profile"
+      },
+      "question": "我的速度下降是不是異常？",
+      "recommended_tools": [
+        {
+          "label": "energy/vitals",
+          "tool_id": "scout.ai.energy_vitals.assess.v0"
+        }
+      ],
+      "source_set": "user_field_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "field_energy_state",
+      "current_tools": [],
+      "id": "field-042",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "timestamped current lat/lon/elevation, route progress, nearest CP/segment",
+          "gap": "current_position",
+          "label": "目前位置"
+        },
+        {
+          "extra_data_needed": "HDOP/VDOP, horizontal accuracy, fix type, satellite/CN0 or provider confidence",
+          "gap": "gnss_accuracy",
+          "label": "GNSS 精度"
+        },
+        {
+          "extra_data_needed": "recent INS/DR estimates, heading/course, step/PDR samples, uncertainty, last anchor",
+          "gap": "ins_dr_recent_samples",
+          "label": "近期 INS/DR/PDR 狀態"
+        },
+        {
+          "extra_data_needed": "heart rate, HRV/body battery/source values, activity/pace trend, baseline-relative thresholds, privacy scope",
+          "gap": "wearable_vitals_and_baseline",
+          "label": "穿戴式生命徵象與 baseline"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "timestamped current lat/lon/elevation, route progress, nearest CP/segment",
+        "gap": "current_position",
+        "label": "目前位置"
+      },
+      "question": "我現在是不是太累不適合繼續下坡？",
+      "recommended_tools": [
+        {
+          "label": "live navigation state",
+          "tool_id": "scout.ai.live_navigation_state.assess.v0"
+        },
+        {
+          "label": "energy/vitals",
+          "tool_id": "scout.ai.energy_vitals.assess.v0"
+        }
+      ],
+      "source_set": "user_field_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "field_energy_state",
+      "current_tools": [],
+      "id": "field-044",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "fitness baseline, expected pace, load, acclimatization, skill level, water/food plan, risk tolerance",
+          "gap": "user_or_team_baseline_profile",
+          "label": "個人/隊伍 baseline profile"
+        },
+        {
+          "extra_data_needed": "heart rate, HRV/body battery/source values, activity/pace trend, baseline-relative thresholds, privacy scope",
+          "gap": "wearable_vitals_and_baseline",
+          "label": "穿戴式生命徵象與 baseline"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "fitness baseline, expected pace, load, acclimatization, skill level, water/food plan, risk tolerance",
+        "gap": "user_or_team_baseline_profile",
+        "label": "個人/隊伍 baseline profile"
+      },
+      "question": "我是不是正在決策品質下降？",
+      "recommended_tools": [
+        {
+          "label": "energy/vitals",
+          "tool_id": "scout.ai.energy_vitals.assess.v0"
+        }
+      ],
+      "source_set": "user_field_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "field_energy_state",
+      "current_tools": [],
+      "id": "field-045",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "fitness baseline, expected pace, load, acclimatization, skill level, water/food plan, risk tolerance",
+          "gap": "user_or_team_baseline_profile",
+          "label": "個人/隊伍 baseline profile"
+        },
+        {
+          "extra_data_needed": "heart rate, HRV/body battery/source values, activity/pace trend, baseline-relative thresholds, privacy scope",
+          "gap": "wearable_vitals_and_baseline",
+          "label": "穿戴式生命徵象與 baseline"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "fitness baseline, expected pace, load, acclimatization, skill level, water/food plan, risk tolerance",
+        "gap": "user_or_team_baseline_profile",
+        "label": "個人/隊伍 baseline profile"
+      },
+      "question": "我今天補水不足嗎？",
+      "recommended_tools": [
+        {
+          "label": "route readiness",
+          "tool_id": "scout.ai.route_readiness.assess.v0"
+        },
+        {
+          "label": "energy/vitals",
+          "tool_id": "scout.ai.energy_vitals.assess.v0"
+        }
+      ],
+      "source_set": "user_field_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "field_energy_state",
+      "current_tools": [],
+      "id": "field-046",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "fitness baseline, expected pace, load, acclimatization, skill level, water/food plan, risk tolerance",
+          "gap": "user_or_team_baseline_profile",
+          "label": "個人/隊伍 baseline profile"
+        },
+        {
+          "extra_data_needed": "heart rate, HRV/body battery/source values, activity/pace trend, baseline-relative thresholds, privacy scope",
+          "gap": "wearable_vitals_and_baseline",
+          "label": "穿戴式生命徵象與 baseline"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "fitness baseline, expected pace, load, acclimatization, skill level, water/food plan, risk tolerance",
+        "gap": "user_or_team_baseline_profile",
+        "label": "個人/隊伍 baseline profile"
+      },
+      "question": "我補給吃得夠嗎？",
+      "recommended_tools": [
+        {
+          "label": "route readiness",
+          "tool_id": "scout.ai.route_readiness.assess.v0"
+        }
+      ],
+      "source_set": "user_field_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "field_energy_state",
+      "current_tools": [
+        "pydantic_ai.tool.search_scout_risk_scores.v0"
+      ],
+      "id": "field-047",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "fitness baseline, expected pace, load, acclimatization, skill level, water/food plan, risk tolerance",
+          "gap": "user_or_team_baseline_profile",
+          "label": "個人/隊伍 baseline profile"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "fitness baseline, expected pace, load, acclimatization, skill level, water/food plan, risk tolerance",
+        "gap": "user_or_team_baseline_profile",
+        "label": "個人/隊伍 baseline profile"
+      },
+      "question": "我是不是有高海拔不適風險？",
+      "recommended_tools": [],
+      "source_set": "user_field_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "field_energy_state",
+      "current_tools": [],
+      "id": "field-049",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "timestamped current lat/lon/elevation, route progress, nearest CP/segment",
+          "gap": "current_position",
+          "label": "目前位置"
+        },
+        {
+          "extra_data_needed": "HDOP/VDOP, horizontal accuracy, fix type, satellite/CN0 or provider confidence",
+          "gap": "gnss_accuracy",
+          "label": "GNSS 精度"
+        },
+        {
+          "extra_data_needed": "recent INS/DR estimates, heading/course, step/PDR samples, uncertainty, last anchor",
+          "gap": "ins_dr_recent_samples",
+          "label": "近期 INS/DR/PDR 狀態"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "timestamped current lat/lon/elevation, route progress, nearest CP/segment",
+        "gap": "current_position",
+        "label": "目前位置"
+      },
+      "question": "我現在適合繼續上升嗎？",
+      "recommended_tools": [
+        {
+          "label": "live navigation state",
+          "tool_id": "scout.ai.live_navigation_state.assess.v0"
+        },
+        {
+          "label": "energy/vitals",
+          "tool_id": "scout.ai.energy_vitals.assess.v0"
+        }
+      ],
+      "source_set": "user_field_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "field_energy_state",
+      "current_tools": [],
+      "id": "field-050",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "fitness baseline, expected pace, load, acclimatization, skill level, water/food plan, risk tolerance",
+          "gap": "user_or_team_baseline_profile",
+          "label": "個人/隊伍 baseline profile"
+        },
+        {
+          "extra_data_needed": "heart rate, HRV/body battery/source values, activity/pace trend, baseline-relative thresholds, privacy scope",
+          "gap": "wearable_vitals_and_baseline",
+          "label": "穿戴式生命徵象與 baseline"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "fitness baseline, expected pace, load, acclimatization, skill level, water/food plan, risk tolerance",
+        "gap": "user_or_team_baseline_profile",
+        "label": "個人/隊伍 baseline profile"
+      },
+      "question": "我是不是該原地休息或下撤？",
+      "recommended_tools": [
+        {
+          "label": "energy/vitals",
+          "tool_id": "scout.ai.energy_vitals.assess.v0"
+        }
+      ],
+      "source_set": "user_field_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "field_team_guardian",
+      "current_tools": [],
+      "id": "field-051",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "team member positions, last-heard timestamps, check-in schedule, rendezvous plan, comms state",
+          "gap": "team_member_positions_and_last_heard",
+          "label": "隊伍位置與最後回報"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "team member positions, last-heard timestamps, check-in schedule, rendezvous plan, comms state",
+        "gap": "team_member_positions_and_last_heard",
+        "label": "隊伍位置與最後回報"
+      },
+      "question": "隊友距離我太遠了嗎？",
+      "recommended_tools": [
+        {
+          "label": "team status",
+          "tool_id": "scout.ai.team_status.assess.v0"
+        }
+      ],
+      "source_set": "user_field_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "field_team_guardian",
+      "current_tools": [],
+      "id": "field-052",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "team member positions, last-heard timestamps, check-in schedule, rendezvous plan, comms state",
+          "gap": "team_member_positions_and_last_heard",
+          "label": "隊伍位置與最後回報"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "team member positions, last-heard timestamps, check-in schedule, rendezvous plan, comms state",
+        "gap": "team_member_positions_and_last_heard",
+        "label": "隊伍位置與最後回報"
+      },
+      "question": "後隊是不是停止移動太久？",
+      "recommended_tools": [
+        {
+          "label": "team status",
+          "tool_id": "scout.ai.team_status.assess.v0"
+        }
+      ],
+      "source_set": "user_field_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "field_team_guardian",
+      "current_tools": [],
+      "id": "field-053",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "team member positions, last-heard timestamps, check-in schedule, rendezvous plan, comms state",
+          "gap": "team_member_positions_and_last_heard",
+          "label": "隊伍位置與最後回報"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "team member positions, last-heard timestamps, check-in schedule, rendezvous plan, comms state",
+        "gap": "team_member_positions_and_last_heard",
+        "label": "隊伍位置與最後回報"
+      },
+      "question": "我們是否已經形成隊伍分離事件？",
+      "recommended_tools": [
+        {
+          "label": "team status",
+          "tool_id": "scout.ai.team_status.assess.v0"
+        }
+      ],
+      "source_set": "user_field_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "field_team_guardian",
+      "current_tools": [],
+      "id": "field-054",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "team member positions, last-heard timestamps, check-in schedule, rendezvous plan, comms state",
+          "gap": "team_member_positions_and_last_heard",
+          "label": "隊伍位置與最後回報"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "team member positions, last-heard timestamps, check-in schedule, rendezvous plan, comms state",
+        "gap": "team_member_positions_and_last_heard",
+        "label": "隊伍位置與最後回報"
+      },
+      "question": "有人沒抵達約定山屋，該怎麼辦？",
+      "recommended_tools": [
+        {
+          "label": "team status",
+          "tool_id": "scout.ai.team_status.assess.v0"
+        }
+      ],
+      "source_set": "user_field_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "field_team_guardian",
+      "current_tools": [],
+      "id": "field-056",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "team member positions, last-heard timestamps, check-in schedule, rendezvous plan, comms state",
+          "gap": "team_member_positions_and_last_heard",
+          "label": "隊伍位置與最後回報"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "team member positions, last-heard timestamps, check-in schedule, rendezvous plan, comms state",
+        "gap": "team_member_positions_and_last_heard",
+        "label": "隊伍位置與最後回報"
+      },
+      "question": "我的定時回報是不是逾時了？",
+      "recommended_tools": [
+        {
+          "label": "team status",
+          "tool_id": "scout.ai.team_status.assess.v0"
+        }
+      ],
+      "source_set": "user_field_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "field_team_guardian",
+      "current_tools": [],
+      "id": "field-057",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "domain-specific source package or tool input contract must be defined and populated",
+          "gap": "tool_specific_evidence_not_verified",
+          "label": "工具專屬 evidence 尚未驗證"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "domain-specific source package or tool input contract must be defined and populated",
+        "gap": "tool_specific_evidence_not_verified",
+        "label": "工具專屬 evidence 尚未驗證"
+      },
+      "question": "最後一次有效位置是哪裡？",
+      "recommended_tools": [
+        {
+          "label": "team status",
+          "tool_id": "scout.ai.team_status.assess.v0"
+        }
+      ],
+      "source_set": "user_field_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "field_team_guardian",
+      "current_tools": [],
+      "id": "field-058",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "timestamped current lat/lon/elevation, route progress, nearest CP/segment",
+          "gap": "current_position",
+          "label": "目前位置"
+        },
+        {
+          "extra_data_needed": "HDOP/VDOP, horizontal accuracy, fix type, satellite/CN0 or provider confidence",
+          "gap": "gnss_accuracy",
+          "label": "GNSS 精度"
+        },
+        {
+          "extra_data_needed": "recent INS/DR estimates, heading/course, step/PDR samples, uncertainty, last anchor",
+          "gap": "ins_dr_recent_samples",
+          "label": "近期 INS/DR/PDR 狀態"
+        },
+        {
+          "extra_data_needed": "team member positions, last-heard timestamps, check-in schedule, rendezvous plan, comms state",
+          "gap": "team_member_positions_and_last_heard",
+          "label": "隊伍位置與最後回報"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "timestamped current lat/lon/elevation, route progress, nearest CP/segment",
+        "gap": "current_position",
+        "label": "目前位置"
+      },
+      "question": "隊伍目前誰最需要協助？",
+      "recommended_tools": [
+        {
+          "label": "live navigation state",
+          "tool_id": "scout.ai.live_navigation_state.assess.v0"
+        },
+        {
+          "label": "team status",
+          "tool_id": "scout.ai.team_status.assess.v0"
+        }
+      ],
+      "source_set": "user_field_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "field_team_guardian",
+      "current_tools": [],
+      "id": "field-059",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "heart rate, HRV/body battery/source values, activity/pace trend, baseline-relative thresholds, privacy scope",
+          "gap": "wearable_vitals_and_baseline",
+          "label": "穿戴式生命徵象與 baseline"
+        },
+        {
+          "extra_data_needed": "team member positions, last-heard timestamps, check-in schedule, rendezvous plan, comms state",
+          "gap": "team_member_positions_and_last_heard",
+          "label": "隊伍位置與最後回報"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "heart rate, HRV/body battery/source values, activity/pace trend, baseline-relative thresholds, privacy scope",
+        "gap": "wearable_vitals_and_baseline",
+        "label": "穿戴式生命徵象與 baseline"
+      },
+      "question": "我們應該集合還是各自下撤？",
+      "recommended_tools": [
+        {
+          "label": "energy/vitals",
+          "tool_id": "scout.ai.energy_vitals.assess.v0"
+        },
+        {
+          "label": "team status",
+          "tool_id": "scout.ai.team_status.assess.v0"
+        }
+      ],
+      "source_set": "user_field_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "field_equipment_resource",
+      "current_tools": [],
+      "id": "field-061",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "phone/watch/headlamp/powerbank battery, offline map state, food/water/fuel inventory, expected remaining time",
+          "gap": "equipment_inventory_or_battery_telemetry",
+          "label": "裝備/電量/資源 telemetry"
+        },
+        {
+          "extra_data_needed": "injury/lost/incident context, emergency playbook context, operator/留守 authorization ref before outbound action",
+          "gap": "incident_context_or_authorization_ref",
+          "label": "事故情境與授權"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "phone/watch/headlamp/powerbank battery, offline map state, food/water/fuel inventory, expected remaining time",
+        "gap": "equipment_inventory_or_battery_telemetry",
+        "label": "裝備/電量/資源 telemetry"
+      },
+      "question": "我的手機電量還夠求救嗎？",
+      "recommended_tools": [
+        {
+          "label": "equipment/resource",
+          "tool_id": "scout.ai.equipment_resource.assess.v0"
+        },
+        {
+          "label": "survival/incident playbook",
+          "tool_id": "scout.ai.survival_incident_playbook.explain.v0"
+        }
+      ],
+      "source_set": "user_field_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "field_equipment_resource",
+      "current_tools": [],
+      "id": "field-062",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "phone/watch/headlamp/powerbank battery, offline map state, food/water/fuel inventory, expected remaining time",
+          "gap": "equipment_inventory_or_battery_telemetry",
+          "label": "裝備/電量/資源 telemetry"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "phone/watch/headlamp/powerbank battery, offline map state, food/water/fuel inventory, expected remaining time",
+        "gap": "equipment_inventory_or_battery_telemetry",
+        "label": "裝備/電量/資源 telemetry"
+      },
+      "question": "手錶沒電後還能怎麼定位？",
+      "recommended_tools": [
+        {
+          "label": "equipment/resource",
+          "tool_id": "scout.ai.equipment_resource.assess.v0"
+        }
+      ],
+      "source_set": "user_field_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "field_equipment_resource",
+      "current_tools": [],
+      "id": "field-063",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "phone/watch/headlamp/powerbank battery, offline map state, food/water/fuel inventory, expected remaining time",
+          "gap": "equipment_inventory_or_battery_telemetry",
+          "label": "裝備/電量/資源 telemetry"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "phone/watch/headlamp/powerbank battery, offline map state, food/water/fuel inventory, expected remaining time",
+        "gap": "equipment_inventory_or_battery_telemetry",
+        "label": "裝備/電量/資源 telemetry"
+      },
+      "question": "頭燈電量是否足夠走完下一段？",
+      "recommended_tools": [
+        {
+          "label": "equipment/resource",
+          "tool_id": "scout.ai.equipment_resource.assess.v0"
+        }
+      ],
+      "source_set": "user_field_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "field_equipment_resource",
+      "current_tools": [],
+      "id": "field-064",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "phone/watch/headlamp/powerbank battery, offline map state, food/water/fuel inventory, expected remaining time",
+          "gap": "equipment_inventory_or_battery_telemetry",
+          "label": "裝備/電量/資源 telemetry"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "phone/watch/headlamp/powerbank battery, offline map state, food/water/fuel inventory, expected remaining time",
+        "gap": "equipment_inventory_or_battery_telemetry",
+        "label": "裝備/電量/資源 telemetry"
+      },
+      "question": "行動電源是否應該保留給通訊？",
+      "recommended_tools": [
+        {
+          "label": "equipment/resource",
+          "tool_id": "scout.ai.equipment_resource.assess.v0"
+        }
+      ],
+      "source_set": "user_field_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "field_equipment_resource",
+      "current_tools": [],
+      "id": "field-065",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "timestamped current lat/lon/elevation, route progress, nearest CP/segment",
+          "gap": "current_position",
+          "label": "目前位置"
+        },
+        {
+          "extra_data_needed": "HDOP/VDOP, horizontal accuracy, fix type, satellite/CN0 or provider confidence",
+          "gap": "gnss_accuracy",
+          "label": "GNSS 精度"
+        },
+        {
+          "extra_data_needed": "recent INS/DR estimates, heading/course, step/PDR samples, uncertainty, last anchor",
+          "gap": "ins_dr_recent_samples",
+          "label": "近期 INS/DR/PDR 狀態"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "timestamped current lat/lon/elevation, route progress, nearest CP/segment",
+        "gap": "current_position",
+        "label": "目前位置"
+      },
+      "question": "我現在是否該關閉耗電功能？",
+      "recommended_tools": [
+        {
+          "label": "live navigation state",
+          "tool_id": "scout.ai.live_navigation_state.assess.v0"
+        }
+      ],
+      "source_set": "user_field_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "field_equipment_resource",
+      "current_tools": [],
+      "id": "field-066",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "phone/watch/headlamp/powerbank battery, offline map state, food/water/fuel inventory, expected remaining time",
+          "gap": "equipment_inventory_or_battery_telemetry",
+          "label": "裝備/電量/資源 telemetry"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "phone/watch/headlamp/powerbank battery, offline map state, food/water/fuel inventory, expected remaining time",
+        "gap": "equipment_inventory_or_battery_telemetry",
+        "label": "裝備/電量/資源 telemetry"
+      },
+      "question": "離線地圖是否已載入？",
+      "recommended_tools": [
+        {
+          "label": "equipment/resource",
+          "tool_id": "scout.ai.equipment_resource.assess.v0"
+        }
+      ],
+      "source_set": "user_field_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "field_equipment_resource",
+      "current_tools": [
+        "pydantic_ai.tool.search_scout_workspace_catalog.v0"
+      ],
+      "id": "field-067",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "phone/watch/headlamp/powerbank battery, offline map state, food/water/fuel inventory, expected remaining time",
+          "gap": "equipment_inventory_or_battery_telemetry",
+          "label": "裝備/電量/資源 telemetry"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "phone/watch/headlamp/powerbank battery, offline map state, food/water/fuel inventory, expected remaining time",
+        "gap": "equipment_inventory_or_battery_telemetry",
+        "label": "裝備/電量/資源 telemetry"
+      },
+      "question": "我是否有第二套導航工具？",
+      "recommended_tools": [
+        {
+          "label": "equipment/resource",
+          "tool_id": "scout.ai.equipment_resource.assess.v0"
+        }
+      ],
+      "source_set": "user_field_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "field_equipment_resource",
+      "current_tools": [],
+      "id": "field-068",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "phone/watch/headlamp/powerbank battery, offline map state, food/water/fuel inventory, expected remaining time",
+          "gap": "equipment_inventory_or_battery_telemetry",
+          "label": "裝備/電量/資源 telemetry"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "phone/watch/headlamp/powerbank battery, offline map state, food/water/fuel inventory, expected remaining time",
+        "gap": "equipment_inventory_or_battery_telemetry",
+        "label": "裝備/電量/資源 telemetry"
+      },
+      "question": "裝備濕掉後是否該停止前進？",
+      "recommended_tools": [
+        {
+          "label": "equipment/resource",
+          "tool_id": "scout.ai.equipment_resource.assess.v0"
+        }
+      ],
+      "source_set": "user_field_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "field_equipment_resource",
+      "current_tools": [],
+      "id": "field-069",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "phone/watch/headlamp/powerbank battery, offline map state, food/water/fuel inventory, expected remaining time",
+          "gap": "equipment_inventory_or_battery_telemetry",
+          "label": "裝備/電量/資源 telemetry"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "phone/watch/headlamp/powerbank battery, offline map state, food/water/fuel inventory, expected remaining time",
+        "gap": "equipment_inventory_or_battery_telemetry",
+        "label": "裝備/電量/資源 telemetry"
+      },
+      "question": "水剩多少才必須撤退？",
+      "recommended_tools": [
+        {
+          "label": "route readiness",
+          "tool_id": "scout.ai.route_readiness.assess.v0"
+        },
+        {
+          "label": "weather window",
+          "tool_id": "scout.ai.weather_window.assess.v0"
+        },
+        {
+          "label": "equipment/resource",
+          "tool_id": "scout.ai.equipment_resource.assess.v0"
+        }
+      ],
+      "source_set": "user_field_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "field_equipment_resource",
+      "current_tools": [],
+      "id": "field-070",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "phone/watch/headlamp/powerbank battery, offline map state, food/water/fuel inventory, expected remaining time",
+          "gap": "equipment_inventory_or_battery_telemetry",
+          "label": "裝備/電量/資源 telemetry"
+        },
+        {
+          "extra_data_needed": "injury/lost/incident context, emergency playbook context, operator/留守 authorization ref before outbound action",
+          "gap": "incident_context_or_authorization_ref",
+          "label": "事故情境與授權"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "phone/watch/headlamp/powerbank battery, offline map state, food/water/fuel inventory, expected remaining time",
+        "gap": "equipment_inventory_or_battery_telemetry",
+        "label": "裝備/電量/資源 telemetry"
+      },
+      "question": "瓦斯/食物是否足夠等待救援？",
+      "recommended_tools": [
+        {
+          "label": "equipment/resource",
+          "tool_id": "scout.ai.equipment_resource.assess.v0"
+        }
+      ],
+      "source_set": "user_field_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "field_lost_survival",
+      "current_tools": [],
+      "id": "field-071",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "domain-specific source package or tool input contract must be defined and populated",
+          "gap": "tool_specific_evidence_not_verified",
+          "label": "工具專屬 evidence 尚未驗證"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "domain-specific source package or tool input contract must be defined and populated",
+        "gap": "tool_specific_evidence_not_verified",
+        "label": "工具專屬 evidence 尚未驗證"
+      },
+      "question": "我不確定自己在哪，第一步該做什麼？",
+      "recommended_tools": [
+        {
+          "label": "survival/incident playbook",
+          "tool_id": "scout.ai.survival_incident_playbook.explain.v0"
+        }
+      ],
+      "source_set": "user_field_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "field_lost_survival",
+      "current_tools": [],
+      "id": "field-072",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "domain-specific source package or tool input contract must be defined and populated",
+          "gap": "tool_specific_evidence_not_verified",
+          "label": "工具專屬 evidence 尚未驗證"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "domain-specific source package or tool input contract must be defined and populated",
+        "gap": "tool_specific_evidence_not_verified",
+        "label": "工具專屬 evidence 尚未驗證"
+      },
+      "question": "我應該原地等待還是找路？",
+      "recommended_tools": [
+        {
+          "label": "survival/incident playbook",
+          "tool_id": "scout.ai.survival_incident_playbook.explain.v0"
+        }
+      ],
+      "source_set": "user_field_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "field_lost_survival",
+      "current_tools": [
+        "pydantic_ai.tool.search_scout_terrain_scores.v0"
+      ],
+      "id": "field-074",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "fitness baseline, expected pace, load, acclimatization, skill level, water/food plan, risk tolerance",
+          "gap": "user_or_team_baseline_profile",
+          "label": "個人/隊伍 baseline profile"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "fitness baseline, expected pace, load, acclimatization, skill level, water/food plan, risk tolerance",
+        "gap": "user_or_team_baseline_profile",
+        "label": "個人/隊伍 baseline profile"
+      },
+      "question": "我該往稜線上移動找訊號嗎？",
+      "recommended_tools": [
+        {
+          "label": "survival/incident playbook",
+          "tool_id": "scout.ai.survival_incident_playbook.explain.v0"
+        }
+      ],
+      "source_set": "user_field_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "field_lost_survival",
+      "current_tools": [],
+      "id": "field-076",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "domain-specific source package or tool input contract must be defined and populated",
+          "gap": "tool_specific_evidence_not_verified",
+          "label": "工具專屬 evidence 尚未驗證"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "domain-specific source package or tool input contract must be defined and populated",
+        "gap": "tool_specific_evidence_not_verified",
+        "label": "工具專屬 evidence 尚未驗證"
+      },
+      "question": "我要怎麼建立可視標記？",
+      "recommended_tools": [
+        {
+          "label": "survival/incident playbook",
+          "tool_id": "scout.ai.survival_incident_playbook.explain.v0"
+        }
+      ],
+      "source_set": "user_field_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "field_lost_survival",
+      "current_tools": [
+        "pydantic_ai.tool.search_scout_evidence_fulltext.v0"
+      ],
+      "id": "field-077",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "injury/lost/incident context, emergency playbook context, operator/留守 authorization ref before outbound action",
+          "gap": "incident_context_or_authorization_ref",
+          "label": "事故情境與授權"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "injury/lost/incident context, emergency playbook context, operator/留守 authorization ref before outbound action",
+        "gap": "incident_context_or_authorization_ref",
+        "label": "事故情境與授權"
+      },
+      "question": "我應該保存哪些證據給搜救？",
+      "recommended_tools": [
+        {
+          "label": "survival/incident playbook",
+          "tool_id": "scout.ai.survival_incident_playbook.explain.v0"
+        }
+      ],
+      "source_set": "user_field_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "field_lost_survival",
+      "current_tools": [],
+      "id": "field-079",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "phone/watch/headlamp/powerbank battery, offline map state, food/water/fuel inventory, expected remaining time",
+          "gap": "equipment_inventory_or_battery_telemetry",
+          "label": "裝備/電量/資源 telemetry"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "phone/watch/headlamp/powerbank battery, offline map state, food/water/fuel inventory, expected remaining time",
+        "gap": "equipment_inventory_or_battery_telemetry",
+        "label": "裝備/電量/資源 telemetry"
+      },
+      "question": "如果手機只剩 5%，怎麼用最有效？",
+      "recommended_tools": [
+        {
+          "label": "equipment/resource",
+          "tool_id": "scout.ai.equipment_resource.assess.v0"
+        }
+      ],
+      "source_set": "user_field_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "field_accident_rescue",
+      "current_tools": [],
+      "id": "field-082",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "injury/lost/incident context, emergency playbook context, operator/留守 authorization ref before outbound action",
+          "gap": "incident_context_or_authorization_ref",
+          "label": "事故情境與授權"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "injury/lost/incident context, emergency playbook context, operator/留守 authorization ref before outbound action",
+        "gap": "incident_context_or_authorization_ref",
+        "label": "事故情境與授權"
+      },
+      "question": "求救訊息要包含哪些欄位？",
+      "recommended_tools": [
+        {
+          "label": "survival/incident playbook",
+          "tool_id": "scout.ai.survival_incident_playbook.explain.v0"
+        }
+      ],
+      "source_set": "user_field_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "field_accident_rescue",
+      "current_tools": [],
+      "id": "field-083",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "domain-specific source package or tool input contract must be defined and populated",
+          "gap": "tool_specific_evidence_not_verified",
+          "label": "工具專屬 evidence 尚未驗證"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "domain-specific source package or tool input contract must be defined and populated",
+        "gap": "tool_specific_evidence_not_verified",
+        "label": "工具專屬 evidence 尚未驗證"
+      },
+      "question": "我應該報座標還是地標？",
+      "recommended_tools": [
+        {
+          "label": "survival/incident playbook",
+          "tool_id": "scout.ai.survival_incident_playbook.explain.v0"
+        }
+      ],
+      "source_set": "user_field_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "field_accident_rescue",
+      "current_tools": [],
+      "id": "field-084",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "injury/lost/incident context, emergency playbook context, operator/留守 authorization ref before outbound action",
+          "gap": "incident_context_or_authorization_ref",
+          "label": "事故情境與授權"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "injury/lost/incident context, emergency playbook context, operator/留守 authorization ref before outbound action",
+        "gap": "incident_context_or_authorization_ref",
+        "label": "事故情境與授權"
+      },
+      "question": "直升機是否有可能吊掛？",
+      "recommended_tools": [
+        {
+          "label": "survival/incident playbook",
+          "tool_id": "scout.ai.survival_incident_playbook.explain.v0"
+        }
+      ],
+      "source_set": "user_field_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "field_accident_rescue",
+      "current_tools": [
+        "pydantic_ai.tool.search_scout_terrain_scores.v0"
+      ],
+      "id": "field-085",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "injury/lost/incident context, emergency playbook context, operator/留守 authorization ref before outbound action",
+          "gap": "incident_context_or_authorization_ref",
+          "label": "事故情境與授權"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "injury/lost/incident context, emergency playbook context, operator/留守 authorization ref before outbound action",
+        "gap": "incident_context_or_authorization_ref",
+        "label": "事故情境與授權"
+      },
+      "question": "這個地形搜救員能接近嗎？",
+      "recommended_tools": [],
+      "source_set": "user_field_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "field_accident_rescue",
+      "current_tools": [],
+      "id": "field-086",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "fitness baseline, expected pace, load, acclimatization, skill level, water/food plan, risk tolerance",
+          "gap": "user_or_team_baseline_profile",
+          "label": "個人/隊伍 baseline profile"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "fitness baseline, expected pace, load, acclimatization, skill level, water/food plan, risk tolerance",
+        "gap": "user_or_team_baseline_profile",
+        "label": "個人/隊伍 baseline profile"
+      },
+      "question": "我該移動到更開闊的地方嗎？",
+      "recommended_tools": [],
+      "source_set": "user_field_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "field_accident_rescue",
+      "current_tools": [],
+      "id": "field-089",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "team member positions, last-heard timestamps, check-in schedule, rendezvous plan, comms state",
+          "gap": "team_member_positions_and_last_heard",
+          "label": "隊伍位置與最後回報"
+        },
+        {
+          "extra_data_needed": "injury/lost/incident context, emergency playbook context, operator/留守 authorization ref before outbound action",
+          "gap": "incident_context_or_authorization_ref",
+          "label": "事故情境與授權"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "team member positions, last-heard timestamps, check-in schedule, rendezvous plan, comms state",
+        "gap": "team_member_positions_and_last_heard",
+        "label": "隊伍位置與最後回報"
+      },
+      "question": "哪些資訊要給留守人轉報？",
+      "recommended_tools": [
+        {
+          "label": "team status",
+          "tool_id": "scout.ai.team_status.assess.v0"
+        }
+      ],
+      "source_set": "user_field_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "field_accident_rescue",
+      "current_tools": [],
+      "id": "field-090",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "injury/lost/incident context, emergency playbook context, operator/留守 authorization ref before outbound action",
+          "gap": "incident_context_or_authorization_ref",
+          "label": "事故情境與授權"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "injury/lost/incident context, emergency playbook context, operator/留守 authorization ref before outbound action",
+        "gap": "incident_context_or_authorization_ref",
+        "label": "事故情境與授權"
+      },
+      "question": "救援不會立刻到，我們該怎麼撐過夜？",
+      "recommended_tools": [
+        {
+          "label": "survival/incident playbook",
+          "tool_id": "scout.ai.survival_incident_playbook.explain.v0"
+        }
+      ],
+      "source_set": "user_field_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "field_post_trip",
+      "current_tools": [
+        "pydantic_ai.tool.search_scout_risk_scores.v0"
+      ],
+      "id": "field-091",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "completed journey log, warnings/events timeline, trajectory/corridor diff, incident package candidates, post-trip review notes",
+          "gap": "completed_journey_or_incident_record",
+          "label": "完成旅程/事故紀錄"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "completed journey log, warnings/events timeline, trajectory/corridor diff, incident package candidates, post-trip review notes",
+        "gap": "completed_journey_or_incident_record",
+        "label": "完成旅程/事故紀錄"
+      },
+      "question": "這次最早的風險訊號是什麼？",
+      "recommended_tools": [
+        {
+          "label": "post-trip review",
+          "tool_id": "scout.ai.post_trip_review.assess.v0"
+        }
+      ],
+      "source_set": "user_field_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "field_post_trip",
+      "current_tools": [],
+      "id": "field-092",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "completed journey log, warnings/events timeline, trajectory/corridor diff, incident package candidates, post-trip review notes",
+          "gap": "completed_journey_or_incident_record",
+          "label": "完成旅程/事故紀錄"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "completed journey log, warnings/events timeline, trajectory/corridor diff, incident package candidates, post-trip review notes",
+        "gap": "completed_journey_or_incident_record",
+        "label": "完成旅程/事故紀錄"
+      },
+      "question": "Scout 哪個 warning 應該更早出現？",
+      "recommended_tools": [
+        {
+          "label": "post-trip review",
+          "tool_id": "scout.ai.post_trip_review.assess.v0"
+        }
+      ],
+      "source_set": "user_field_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "field_post_trip",
+      "current_tools": [
+        "pydantic_ai.tool.search_scout_risk_scores.v0"
+      ],
+      "id": "field-096",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "team member positions, last-heard timestamps, check-in schedule, rendezvous plan, comms state",
+          "gap": "team_member_positions_and_last_heard",
+          "label": "隊伍位置與最後回報"
+        },
+        {
+          "extra_data_needed": "completed journey log, warnings/events timeline, trajectory/corridor diff, incident package candidates, post-trip review notes",
+          "gap": "completed_journey_or_incident_record",
+          "label": "完成旅程/事故紀錄"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "team member positions, last-heard timestamps, check-in schedule, rendezvous plan, comms state",
+        "gap": "team_member_positions_and_last_heard",
+        "label": "隊伍位置與最後回報"
+      },
+      "question": "這次是迷途、滑墜、資源不足還是隊伍治理問題？",
+      "recommended_tools": [
+        {
+          "label": "team status",
+          "tool_id": "scout.ai.team_status.assess.v0"
+        }
+      ],
+      "source_set": "user_field_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "field_post_trip",
+      "current_tools": [
+        "pydantic_ai.tool.search_scout_workspace_catalog.v0",
+        "pydantic_ai.tool.search_scout_evidence_fulltext.v0"
+      ],
+      "id": "field-097",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "completed journey log, warnings/events timeline, trajectory/corridor diff, incident package candidates, post-trip review notes",
+          "gap": "completed_journey_or_incident_record",
+          "label": "完成旅程/事故紀錄"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "completed journey log, warnings/events timeline, trajectory/corridor diff, incident package candidates, post-trip review notes",
+        "gap": "completed_journey_or_incident_record",
+        "label": "完成旅程/事故紀錄"
+      },
+      "question": "哪些資料應該進 incident package？",
+      "recommended_tools": [
+        {
+          "label": "post-trip review",
+          "tool_id": "scout.ai.post_trip_review.assess.v0"
+        }
+      ],
+      "source_set": "user_field_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "field_post_trip",
+      "current_tools": [
+        "pydantic_ai.tool.search_scout_evidence_fulltext.v0"
+      ],
+      "id": "field-098",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "completed journey log, warnings/events timeline, trajectory/corridor diff, incident package candidates, post-trip review notes",
+          "gap": "completed_journey_or_incident_record",
+          "label": "完成旅程/事故紀錄"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "completed journey log, warnings/events timeline, trajectory/corridor diff, incident package candidates, post-trip review notes",
+        "gap": "completed_journey_or_incident_record",
+        "label": "完成旅程/事故紀錄"
+      },
+      "question": "這個案例應該變成 field case 嗎？",
+      "recommended_tools": [
+        {
+          "label": "post-trip review",
+          "tool_id": "scout.ai.post_trip_review.assess.v0"
+        }
+      ],
+      "source_set": "user_field_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "field_post_trip",
+      "current_tools": [
+        "pydantic_ai.tool.search_scout_evidence_fulltext.v0"
+      ],
+      "id": "field-099",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "completed journey log, warnings/events timeline, trajectory/corridor diff, incident package candidates, post-trip review notes",
+          "gap": "completed_journey_or_incident_record",
+          "label": "完成旅程/事故紀錄"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "completed journey log, warnings/events timeline, trajectory/corridor diff, incident package candidates, post-trip review notes",
+        "gap": "completed_journey_or_incident_record",
+        "label": "完成旅程/事故紀錄"
+      },
+      "question": "哪些 spec 需要被更新？",
+      "recommended_tools": [],
+      "source_set": "user_field_100"
+    },
+    {
+      "cannot_answer_reason": "A tool can structure the answer, but the required live/private/external evidence is not guaranteed present.",
+      "category": "field_post_trip",
+      "current_tools": [],
+      "id": "field-100",
+      "missing_evidence": [
+        {
+          "extra_data_needed": "completed journey log, warnings/events timeline, trajectory/corridor diff, incident package candidates, post-trip review notes",
+          "gap": "completed_journey_or_incident_record",
+          "label": "完成旅程/事故紀錄"
+        }
+      ],
+      "primary_missing_evidence": {
+        "extra_data_needed": "completed journey log, warnings/events timeline, trajectory/corridor diff, incident package candidates, post-trip review notes",
+        "gap": "completed_journey_or_incident_record",
+        "label": "完成旅程/事故紀錄"
+      },
+      "question": "下次行前規劃要改哪三件事？",
+      "recommended_tools": [
+        {
+          "label": "post-trip review",
+          "tool_id": "scout.ai.post_trip_review.assess.v0"
+        }
+      ],
+      "source_set": "user_field_100"
+    }
+  ],
+  "recommended_tool_summary": [
+    {
+      "count": 31,
+      "label": "live navigation state",
+      "question_ids": [
+        "seed-030",
+        "seed-031",
+        "seed-032",
+        "seed-037",
+        "seed-038",
+        "seed-040",
+        "seed-041",
+        "seed-042",
+        "seed-045",
+        "seed-059",
+        "seed-061",
+        "seed-065",
+        "seed-073",
+        "seed-077",
+        "seed-091",
+        "seed-095",
+        "seed-098",
+        "field-011",
+        "field-016",
+        "field-021",
+        "field-022",
+        "field-023",
+        "field-024",
+        "field-025",
+        "field-027",
+        "field-028",
+        "field-029",
+        "field-042",
+        "field-049",
+        "field-058",
+        "field-065"
+      ],
+      "tool_id": "scout.ai.live_navigation_state.assess.v0"
+    },
+    {
+      "count": 20,
+      "label": "weather window",
+      "question_ids": [
+        "seed-007",
+        "seed-027",
+        "seed-083",
+        "seed-084",
+        "seed-085",
+        "seed-087",
+        "seed-088",
+        "seed-089",
+        "seed-090",
+        "field-006",
+        "field-031",
+        "field-033",
+        "field-034",
+        "field-035",
+        "field-036",
+        "field-037",
+        "field-038",
+        "field-039",
+        "field-040",
+        "field-069"
+      ],
+      "tool_id": "scout.ai.weather_window.assess.v0"
+    },
+    {
+      "count": 16,
+      "label": "runtime ingress/router",
+      "question_ids": [
+        "seed-041",
+        "seed-042",
+        "seed-043",
+        "seed-048",
+        "seed-049",
+        "seed-050",
+        "seed-051",
+        "seed-052",
+        "seed-058",
+        "seed-059",
+        "seed-060",
+        "seed-091",
+        "seed-092",
+        "seed-093",
+        "seed-094",
+        "seed-098"
+      ],
+      "tool_id": "scout.ai.runtime_ingress_status.search.v0"
+    },
+    {
+      "count": 15,
+      "label": "energy/vitals",
+      "question_ids": [
+        "seed-006",
+        "seed-042",
+        "seed-047",
+        "seed-062",
+        "seed-068",
+        "seed-069",
+        "seed-070",
+        "field-001",
+        "field-041",
+        "field-042",
+        "field-044",
+        "field-045",
+        "field-049",
+        "field-050",
+        "field-059"
+      ],
+      "tool_id": "scout.ai.energy_vitals.assess.v0"
+    },
+    {
+      "count": 14,
+      "label": "INS/DR trace",
+      "question_ids": [
+        "seed-031",
+        "seed-033",
+        "seed-034",
+        "seed-035",
+        "seed-036",
+        "seed-037",
+        "seed-038",
+        "seed-039",
+        "seed-040",
+        "seed-045",
+        "seed-050",
+        "seed-076",
+        "field-019",
+        "field-023"
+      ],
+      "tool_id": "scout.ai.ins_dr_trace.analyze.v0"
+    },
+    {
+      "count": 12,
+      "label": "safety boundary",
+      "question_ids": [
+        "seed-014",
+        "seed-030",
+        "seed-035",
+        "seed-071",
+        "seed-072",
+        "seed-073",
+        "seed-074",
+        "seed-075",
+        "seed-077",
+        "seed-079",
+        "seed-080",
+        "seed-100"
+      ],
+      "tool_id": "scout.ai.safety_boundary.explain.v0"
+    },
+    {
+      "count": 10,
+      "label": "equipment/resource",
+      "question_ids": [
+        "field-061",
+        "field-062",
+        "field-063",
+        "field-064",
+        "field-066",
+        "field-067",
+        "field-068",
+        "field-069",
+        "field-070",
+        "field-079"
+      ],
+      "tool_id": "scout.ai.equipment_resource.assess.v0"
+    },
+    {
+      "count": 10,
+      "label": "survival/incident playbook",
+      "question_ids": [
+        "field-061",
+        "field-071",
+        "field-072",
+        "field-074",
+        "field-076",
+        "field-077",
+        "field-082",
+        "field-083",
+        "field-084",
+        "field-090"
+      ],
+      "tool_id": "scout.ai.survival_incident_playbook.explain.v0"
+    },
+    {
+      "count": 10,
+      "label": "team status",
+      "question_ids": [
+        "field-051",
+        "field-052",
+        "field-053",
+        "field-054",
+        "field-056",
+        "field-057",
+        "field-058",
+        "field-059",
+        "field-089",
+        "field-096"
+      ],
+      "tool_id": "scout.ai.team_status.assess.v0"
+    },
+    {
+      "count": 9,
+      "label": "route readiness",
+      "question_ids": [
+        "seed-089",
+        "field-001",
+        "field-002",
+        "field-009",
+        "field-010",
+        "field-036",
+        "field-045",
+        "field-046",
+        "field-069"
+      ],
+      "tool_id": "scout.ai.route_readiness.assess.v0"
+    },
+    {
+      "count": 5,
+      "label": "post-trip review",
+      "question_ids": [
+        "field-091",
+        "field-092",
+        "field-097",
+        "field-098",
+        "field-100"
+      ],
+      "tool_id": "scout.ai.post_trip_review.assess.v0"
+    },
+    {
+      "count": 5,
+      "label": "review/provenance gap",
+      "question_ids": [
+        "seed-019",
+        "seed-020",
+        "seed-029",
+        "seed-097",
+        "seed-099"
+      ],
+      "tool_id": "scout.ai.review_gap.assess.v0"
+    }
+  ],
+  "requires_missing_evidence_count": 135,
+  "source_corpus_path": "docs/specs/scout-ai-200-question-corpus.json",
+  "source_eval_artifact": "scout_ai_question_answerability_eval.v0"
+}

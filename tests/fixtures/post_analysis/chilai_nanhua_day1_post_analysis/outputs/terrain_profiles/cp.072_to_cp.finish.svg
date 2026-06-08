@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="220" height="56" viewBox="0 0 220 56" role="img">
+<title>cp.072_to_cp.finish terrain profile</title>
+<rect x="0" y="0" width="220" height="56" fill="#171b20"/>
+<rect x="10.0" y="8" width="9.7" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="19.7" y="8" width="7.4" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="27.1" y="8" width="6.9" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="34.0" y="8" width="8.9" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="42.9" y="8" width="7.1" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="50.0" y="8" width="8.1" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="58.1" y="8" width="7.5" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="65.6" y="8" width="7.0" height="34" fill="#c6e86b" opacity="0.28"/>
+<rect x="72.6" y="8" width="10.5" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="83.1" y="8" width="8.2" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="91.4" y="8" width="7.4" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="98.7" y="8" width="7.7" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="106.4" y="8" width="10.5" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="116.9" y="8" width="8.0" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="124.9" y="8" width="6.6" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="131.5" y="8" width="6.6" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="138.2" y="8" width="6.6" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="144.8" y="8" width="6.3" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="151.1" y="8" width="8.6" height="34" fill="#f2d84b" opacity="0.28"/>
+<rect x="159.7" y="8" width="6.4" height="34" fill="#f2d84b" opacity="0.28"/>
+<rect x="166.1" y="8" width="8.4" height="34" fill="#f6a044" opacity="0.28"/>
+<rect x="174.6" y="8" width="7.2" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="181.7" y="8" width="6.6" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="188.3" y="8" width="6.4" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="194.7" y="8" width="7.3" height="34" fill="#9ee6a0" opacity="0.28"/>
+<rect x="201.9" y="8" width="8.1" height="34" fill="#9ee6a0" opacity="0.28"/>
+<polyline points="10.0,8.0 19.7,14.2 27.1,15.7 34.0,13.5 42.9,13.0 50.0,15.6 58.1,16.5 65.6,16.8 72.6,13.1 83.1,18.1 91.4,18.0 98.7,14.3 106.4,13.8 116.9,19.6 124.9,21.5 131.5,22.1 138.2,20.5 144.8,21.4 151.1,23.2 159.7,24.1 166.1,20.2 174.6,27.1 181.7,35.8 188.3,37.7 194.7,40.1 201.9,39.9 210.0,42.0" fill="none" stroke="#f4f7fb" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<text x="10" y="52" fill="#9aa4b2" font-size="9">watch</text>
+<text x="210" y="52" text-anchor="end" fill="#9aa4b2" font-size="9">1218-1239m</text>
+</svg>

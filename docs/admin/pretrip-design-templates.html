@@ -1,0 +1,739 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Scout Pretrip UI Templates</title>
+  <style>
+    :root {
+      --ink: #18212c;
+      --muted: #66758a;
+      --line: #d8e0ea;
+      --paper: #f5f7fa;
+      --panel: #ffffff;
+      --route: #176b7a;
+      --safe: #2f6f4e;
+      --warn: #9a6700;
+      --danger: #b23a48;
+      --review: #6f56a8;
+      --night: #182231;
+      --night-line: #334157;
+      --night-panel: #202b3a;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--paper);
+      font: 14px/1.45 ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    button, input, select {
+      font: inherit;
+    }
+    button, input, select, a {
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: rgba(23, 107, 122, .14);
+    }
+    button:focus-visible,
+    input:focus-visible,
+    select:focus-visible,
+    a:focus-visible {
+      outline: 2px solid var(--route);
+      outline-offset: 2px;
+    }
+    .page-shell {
+      min-height: 100vh;
+      display: grid;
+      grid-template-rows: auto 1fr;
+    }
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 18px;
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(245, 247, 250, .92);
+      backdrop-filter: blur(12px);
+    }
+    h1, h2, h3, p { margin: 0; }
+    h1 { font-size: 17px; letter-spacing: .02em; }
+    .topbar p {
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .template-nav {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+    .template-nav a {
+      min-height: 32px;
+      display: inline-flex;
+      align-items: center;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #fff;
+      color: var(--ink);
+      padding: 4px 10px;
+      text-decoration: none;
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .template-nav a:hover {
+      border-color: var(--route);
+      color: var(--route);
+    }
+    .gallery {
+      display: grid;
+      gap: 28px;
+      width: min(1440px, 100%);
+      margin: 0 auto;
+      padding: 22px;
+    }
+    .template {
+      display: grid;
+      gap: 12px;
+    }
+    .template-head {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 16px;
+      align-items: end;
+    }
+    .template-head h2 {
+      font-size: 20px;
+    }
+    .template-head p {
+      color: var(--muted);
+      max-width: 760px;
+    }
+    .score {
+      display: grid;
+      grid-template-columns: repeat(3, auto);
+      gap: 6px;
+      justify-content: end;
+    }
+    .score span {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #fff;
+      padding: 4px 8px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+    .mock {
+      min-height: 620px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: var(--panel);
+      box-shadow: 0 20px 60px rgba(31, 45, 61, .08);
+      overflow: hidden;
+    }
+    .metric-row {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 6px;
+    }
+    .metric {
+      min-width: 0;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfcfe;
+      padding: 7px 9px;
+    }
+    .metric small {
+      display: block;
+      color: var(--muted);
+      font-size: 10px;
+      text-transform: uppercase;
+    }
+    .metric strong {
+      display: block;
+      margin-top: 1px;
+      font-size: 16px;
+    }
+    .btn, .chip, .field, .select {
+      min-height: 34px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      color: var(--ink);
+      padding: 6px 10px;
+    }
+    .btn {
+      cursor: default;
+      font-weight: 700;
+    }
+    .btn.primary {
+      border-color: var(--route);
+      background: #eaf5f6;
+      color: var(--route);
+    }
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .field, .select {
+      display: flex;
+      align-items: center;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .map-card {
+      position: relative;
+      min-height: 280px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      overflow: hidden;
+      background:
+        linear-gradient(135deg, rgba(23, 107, 122, .12), rgba(122, 92, 18, .08)),
+        repeating-linear-gradient(0deg, transparent 0 34px, rgba(24, 33, 44, .05) 35px),
+        repeating-linear-gradient(90deg, transparent 0 34px, rgba(24, 33, 44, .05) 35px),
+        #f7fafb;
+    }
+    .map-card svg {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+    }
+    .map-legend {
+      position: absolute;
+      right: 12px;
+      bottom: 12px;
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      max-width: 55%;
+    }
+    .map-legend span {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, .92);
+      padding: 3px 7px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .list {
+      display: grid;
+      gap: 7px;
+    }
+    .item {
+      min-width: 0;
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      background: #fff;
+      padding: 8px;
+    }
+    .item b {
+      display: block;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .item small {
+      color: var(--muted);
+    }
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      display: inline-block;
+      border-radius: 50%;
+      background: var(--route);
+    }
+    .status-dot.warn { background: var(--warn); }
+    .status-dot.danger { background: var(--danger); }
+    .status-dot.review { background: var(--review); }
+
+    .board {
+      display: grid;
+      grid-template-columns: 300px minmax(0, 1fr) 320px;
+      height: 620px;
+    }
+    .board aside,
+    .board main,
+    .board .right {
+      min-width: 0;
+      padding: 14px;
+      border-right: 1px solid var(--line);
+      overflow: auto;
+    }
+    .board .right { border-right: 0; }
+    .board .title {
+      display: grid;
+      gap: 2px;
+      margin-bottom: 12px;
+    }
+    .board .search-stack {
+      display: grid;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .board .toolbar {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 10px;
+    }
+    .review-band {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin: 10px 0;
+    }
+    .review-card {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 9px;
+      background: #fbfcfe;
+    }
+    .review-card strong { font-size: 18px; }
+
+    .canvas {
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      height: 620px;
+      background: #f8fafb;
+    }
+    .canvas .rail {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto auto;
+      gap: 10px;
+      align-items: center;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+      background: #fff;
+    }
+    .canvas .map-card {
+      height: 100%;
+      border: 0;
+      border-radius: 0;
+    }
+    .floating-panel {
+      position: absolute;
+      left: 18px;
+      top: 18px;
+      width: 310px;
+      display: grid;
+      gap: 8px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: rgba(255, 255, 255, .94);
+      padding: 12px;
+      box-shadow: 0 16px 40px rgba(31, 45, 61, .14);
+    }
+    .floating-actions {
+      position: absolute;
+      right: 18px;
+      top: 18px;
+      display: grid;
+      gap: 8px;
+    }
+
+    .console {
+      display: grid;
+      grid-template-columns: 360px minmax(0, 1fr);
+      height: 620px;
+      background: var(--night);
+      color: #edf3f8;
+    }
+    .console .sidebar,
+    .console .work {
+      min-width: 0;
+      padding: 14px;
+      overflow: auto;
+    }
+    .console .sidebar {
+      border-right: 1px solid var(--night-line);
+      background: #151e2a;
+    }
+    .console .metric,
+    .console .item,
+    .console .btn,
+    .console .field,
+    .console .select {
+      border-color: var(--night-line);
+      background: var(--night-panel);
+      color: #edf3f8;
+    }
+    .console small,
+    .console .field,
+    .console .select {
+      color: #9faec0;
+    }
+    .console .lane-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .lane {
+      min-height: 480px;
+      border: 1px solid var(--night-line);
+      border-radius: 12px;
+      background: #1b2533;
+      padding: 10px;
+    }
+    .lane h3 {
+      margin-bottom: 8px;
+      font-size: 13px;
+      color: #ced8e4;
+      text-transform: uppercase;
+    }
+
+    .compact {
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      height: 620px;
+    }
+    .compact .commandbar {
+      display: grid;
+      grid-template-columns: minmax(180px, 260px) minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: center;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+    }
+    .compact .body {
+      display: grid;
+      grid-template-columns: 280px minmax(0, 1fr) 280px;
+      min-height: 0;
+    }
+    .compact .body > * {
+      min-width: 0;
+      padding: 12px;
+      border-right: 1px solid var(--line);
+      overflow: auto;
+    }
+    .compact .body > *:last-child { border-right: 0; }
+    .dense-metrics {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 6px;
+    }
+    @media (max-width: 900px) {
+      .topbar,
+      .template-head {
+        grid-template-columns: 1fr;
+        display: grid;
+        align-items: start;
+      }
+      .template-nav,
+      .score {
+        justify-content: start;
+      }
+      .mock,
+      .board,
+      .canvas,
+      .console,
+      .compact {
+        height: auto;
+        min-height: 0;
+      }
+      .board,
+      .console,
+      .compact .body {
+        grid-template-columns: 1fr;
+      }
+      .board aside,
+      .board main,
+      .board .right,
+      .console .sidebar,
+      .compact .body > * {
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+      }
+      .metric-row,
+      .console .lane-grid,
+      .dense-metrics {
+        grid-template-columns: 1fr 1fr;
+      }
+      .canvas .rail,
+      .compact .commandbar {
+        grid-template-columns: 1fr;
+      }
+      .floating-panel,
+      .floating-actions {
+        position: static;
+        width: auto;
+        margin: 10px;
+      }
+      .canvas .map-card { min-height: 430px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page-shell">
+    <header class="topbar">
+      <div>
+        <h1>Scout Pretrip UI Templates</h1>
+        <p>Static design gallery for current planning, review, workspace, GPX import, map, and assistant functions.</p>
+      </div>
+      <nav class="template-nav" aria-label="Template navigation">
+        <a href="#mission-board">Mission Board</a>
+        <a href="#map-canvas">Map Canvas</a>
+        <a href="#review-console">Review Console</a>
+        <a href="#compact-ops">Compact Ops</a>
+      </nav>
+    </header>
+
+    <main class="gallery">
+      <section id="mission-board" class="template">
+        <div class="template-head">
+          <div>
+            <h2>01 Mission Board</h2>
+            <p>General-user default. Search and feature browsing stay visible; lower-frequency actions sit in compact menus.</p>
+          </div>
+          <div class="score">
+            <span>Default</span><span>Low Text</span><span>Balanced</span>
+          </div>
+        </div>
+        <div class="mock board">
+          <aside>
+            <div class="title">
+              <h3>Pretrip</h3>
+              <small>Chilai-Nanhua Day 1</small>
+            </div>
+            <div class="search-stack">
+              <div class="field">Search CP or segment...</div>
+              <div class="select">All features</div>
+              <div class="select">All statuses</div>
+            </div>
+            <div class="list">
+              <div class="item"><b><span class="status-dot"></span> CP Start</b><small>roadhead / verified</small></div>
+              <div class="item"><b><span class="status-dot review"></span> CP Ridge</b><small>field verify requested</small></div>
+              <div class="item"><b><span class="status-dot warn"></span> Segment 04</b><small>weather and terrain review</small></div>
+              <div class="item"><b><span class="status-dot"></span> Reference GPX</b><small>candidate corridor</small></div>
+            </div>
+          </aside>
+          <main>
+            <div class="metric-row">
+              <div class="metric"><small>Ready</small><strong>OK</strong></div>
+              <div class="metric"><small>Block</small><strong>0</strong></div>
+              <div class="metric"><small>Warn</small><strong>3</strong></div>
+              <div class="metric"><small>Review</small><strong>5</strong></div>
+              <div class="metric"><small>Package</small><strong>Draft</strong></div>
+              <div class="metric"><small>Runtime</small><strong>Closed</strong></div>
+            </div>
+            <div class="toolbar">
+              <button class="btn primary" type="button">Layers 9/14</button>
+              <button class="btn" type="button">Fit</button>
+              <button class="btn" type="button">Edit</button>
+              <button class="btn" type="button">Workspace</button>
+            </div>
+            <div class="map-card" aria-label="Template map preview">
+              <svg viewBox="0 0 800 420" aria-hidden="true">
+                <path d="M70 320 C180 250 210 120 350 170 S520 320 715 110" fill="none" stroke="#176b7a" stroke-width="10" stroke-linecap="round"/>
+                <path d="M110 340 C230 305 320 225 430 245 S560 270 700 150" fill="none" stroke="#7a5c12" stroke-width="4" stroke-dasharray="12 10"/>
+                <path d="M335 164 L372 160 L395 186 L364 210 L330 195 Z" fill="rgba(178,58,72,.14)" stroke="#b23a48" stroke-width="3"/>
+                <circle cx="70" cy="320" r="12" fill="#b23a48"/>
+                <circle cx="350" cy="170" r="12" fill="#b23a48"/>
+                <circle cx="715" cy="110" r="12" fill="#b23a48"/>
+              </svg>
+              <div class="map-legend"><span>Route</span><span>Ref GPX</span><span>Hazard</span><span>Weather</span></div>
+            </div>
+          </main>
+          <div class="right">
+            <div class="review-band">
+              <div class="review-card"><small>Blocker</small><strong>0</strong></div>
+              <div class="review-card"><small>Warning</small><strong>3</strong></div>
+              <div class="review-card"><small>Review</small><strong>5</strong></div>
+            </div>
+            <div class="list">
+              <div class="item"><b>Selected evidence</b><small>CP Ridge needs source confidence check.</small></div>
+              <div class="item"><b>Assistant</b><small>Collapsed by default; opens on demand.</small></div>
+              <div class="item"><b>Import GPX</b><small>Separate tab, not in the main scan path.</small></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="map-canvas" class="template">
+        <div class="template-head">
+          <div>
+            <h2>02 Map Canvas</h2>
+            <p>Best when route geometry is the primary task. The map owns the screen; feature search floats as a compact working panel.</p>
+          </div>
+          <div class="score">
+            <span>Visual</span><span>Map First</span><span>Low Chrome</span>
+          </div>
+        </div>
+        <div class="mock canvas">
+          <div class="rail">
+            <div class="metric-row">
+              <div class="metric"><small>Ready</small><strong>OK</strong></div>
+              <div class="metric"><small>Warn</small><strong>3</strong></div>
+              <div class="metric"><small>Review</small><strong>5</strong></div>
+              <div class="metric"><small>Runtime</small><strong>Closed</strong></div>
+              <div class="metric"><small>Layer</small><strong>9/14</strong></div>
+              <div class="metric"><small>Gate</small><strong>P4.5</strong></div>
+            </div>
+            <button class="btn primary" type="button">Review</button>
+            <button class="btn" type="button">Workspace</button>
+          </div>
+          <div class="map-card">
+            <svg viewBox="0 0 1000 560" aria-hidden="true">
+              <path d="M75 455 C170 330 225 255 310 245 C410 233 455 330 552 312 C680 287 735 130 908 88" fill="none" stroke="#176b7a" stroke-width="14" stroke-linecap="round"/>
+              <path d="M130 480 C260 422 405 375 525 375 C680 374 760 230 930 122" fill="none" stroke="#7a5c12" stroke-width="6" stroke-dasharray="16 12"/>
+              <path d="M490 282 L580 302 L606 360 L530 396 L475 346 Z" fill="rgba(178,58,72,.15)" stroke="#b23a48" stroke-width="4"/>
+              <circle cx="75" cy="455" r="15" fill="#b23a48"/>
+              <circle cx="310" cy="245" r="15" fill="#b23a48"/>
+              <circle cx="552" cy="312" r="15" fill="#b23a48"/>
+              <circle cx="908" cy="88" r="15" fill="#b23a48"/>
+            </svg>
+            <div class="floating-panel">
+              <h3>Features</h3>
+              <div class="field">Search CP or segment...</div>
+              <div class="chip">CP Ridge <span class="status-dot review"></span></div>
+              <div class="chip">Segment 04 <span class="status-dot warn"></span></div>
+              <div class="chip">Reference GPX <span class="status-dot"></span></div>
+            </div>
+            <div class="floating-actions">
+              <button class="btn primary" type="button">Layers</button>
+              <button class="btn" type="button">Fit</button>
+              <button class="btn" type="button">Edit</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="review-console" class="template">
+        <div class="template-head">
+          <div>
+            <h2>03 Review Console</h2>
+            <p>Best for expert review sessions. It makes blockers, warnings, provenance, and local workspace decisions the main workflow.</p>
+          </div>
+          <div class="score">
+            <span>Expert</span><span>Queue First</span><span>Dense</span>
+          </div>
+        </div>
+        <div class="mock console">
+          <aside class="sidebar">
+            <div class="title">
+              <h3>Review Queue</h3>
+              <small>Candidate-only; runtime closed</small>
+            </div>
+            <div class="metric-row">
+              <div class="metric"><small>Block</small><strong>0</strong></div>
+              <div class="metric"><small>Warn</small><strong>3</strong></div>
+              <div class="metric"><small>Review</small><strong>5</strong></div>
+              <div class="metric"><small>Field</small><strong>2</strong></div>
+              <div class="metric"><small>Pkg</small><strong>Draft</strong></div>
+              <div class="metric"><small>Run</small><strong>Off</strong></div>
+            </div>
+            <div class="search-stack">
+              <div class="field">Search review...</div>
+              <div class="select">All severities</div>
+              <button class="btn primary" type="button">Next</button>
+            </div>
+            <div class="list">
+              <div class="item"><b>Weather confidence</b><small>Segment 04 / warning</small></div>
+              <div class="item"><b>Retreat evidence</b><small>CP Ridge / review</small></div>
+              <div class="item"><b>Reference GPX</b><small>corridor mismatch</small></div>
+            </div>
+          </aside>
+          <main class="work">
+            <div class="lane-grid">
+              <div class="lane">
+                <h3>Evidence</h3>
+                <div class="list">
+                  <div class="item"><b>Route note</b><small>source ref: note.014</small></div>
+                  <div class="item"><b>Overpass</b><small>219 candidates</small></div>
+                  <div class="item"><b>DTM</b><small>metadata only</small></div>
+                </div>
+              </div>
+              <div class="lane">
+                <h3>Decision</h3>
+                <div class="list">
+                  <button class="btn primary" type="button">Accept</button>
+                  <button class="btn" type="button">Correct</button>
+                  <button class="btn" type="button">Reject</button>
+                  <button class="btn" type="button">Assumptions</button>
+                </div>
+              </div>
+              <div class="lane">
+                <h3>Workspace</h3>
+                <div class="list">
+                  <div class="item"><b>Local write</b><small>review decision log only</small></div>
+                  <div class="item"><b>Apply plan</b><small>preview before final package</small></div>
+                  <div class="item"><b>Assistant</b><small>read-only explanation</small></div>
+                </div>
+              </div>
+            </div>
+          </main>
+        </div>
+      </section>
+
+      <section id="compact-ops" class="template">
+        <div class="template-head">
+          <div>
+            <h2>04 Compact Ops</h2>
+            <p>Lowest visual weight. Best when the user already knows the tool and wants fast scanning, keyboarding, and minimal labels.</p>
+          </div>
+          <div class="score">
+            <span>Power User</span><span>Small Text</span><span>Fast</span>
+          </div>
+        </div>
+        <div class="mock compact">
+          <div class="commandbar">
+            <h3>Pretrip</h3>
+            <div class="field">Search CP, segment, source, review...</div>
+            <div class="toolbar">
+              <button class="btn primary" type="button">Layers 9/14</button>
+              <button class="btn" type="button">Review 5</button>
+              <button class="btn" type="button">Work</button>
+              <button class="btn" type="button">AI</button>
+            </div>
+          </div>
+          <div class="body">
+            <aside>
+              <div class="dense-metrics">
+                <div class="metric"><small>OK</small><strong>Ready</strong></div>
+                <div class="metric"><small>B</small><strong>0</strong></div>
+                <div class="metric"><small>W</small><strong>3</strong></div>
+                <div class="metric"><small>R</small><strong>5</strong></div>
+              </div>
+              <div class="list">
+                <div class="item"><b>CP Start</b><small>verified</small></div>
+                <div class="item"><b>CP Ridge</b><small>review</small></div>
+                <div class="item"><b>Seg 04</b><small>warning</small></div>
+              </div>
+            </aside>
+            <main>
+              <div class="map-card">
+                <svg viewBox="0 0 760 420" aria-hidden="true">
+                  <path d="M62 345 C205 222 280 172 390 210 C500 247 565 160 698 88" fill="none" stroke="#176b7a" stroke-width="12" stroke-linecap="round"/>
+                  <path d="M135 365 C250 318 375 272 500 255 C595 241 660 165 720 115" fill="none" stroke="#7a5c12" stroke-width="5" stroke-dasharray="14 9"/>
+                  <circle cx="62" cy="345" r="12" fill="#b23a48"/>
+                  <circle cx="390" cy="210" r="12" fill="#b23a48"/>
+                  <circle cx="698" cy="88" r="12" fill="#b23a48"/>
+                </svg>
+              </div>
+            </main>
+            <aside>
+              <div class="list">
+                <div class="item"><b>Review</b><small>next: weather confidence</small></div>
+                <div class="item"><b>Import</b><small>GPX panel collapsed</small></div>
+                <div class="item"><b>Runtime</b><small>closed until P4.5</small></div>
+              </div>
+            </aside>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

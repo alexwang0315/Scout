@@ -1,0 +1,132 @@
+{
+  "artifact_kind": "pretrip_expert_contribution_log",
+  "boundary": {
+    "brain_writeback_allowed": false,
+    "candidate_set_edit_intent_only": true,
+    "external_api_calls_made": false,
+    "external_import_edit_intent_only": true,
+    "memory_seed_candidate_only": true,
+    "mission_graph_mutation_allowed": false,
+    "notes": [
+      "Expert contributions record admin edits to AI-generated candidates and import requests.",
+      "This artifact is an intent log and memory-seed candidate, not a final candidate-set mutation.",
+      "Accepted contributions may later train future candidate generation or seed Phase 2 memory through an explicit reviewed import path."
+    ],
+    "package_mutation_allowed": false,
+    "phase1_runtime_mutation_allowed": false,
+    "phase2_writeback_allowed": false,
+    "raw_payloads_embedded": false,
+    "requires_human_review_before_apply": true,
+    "runtime_mutation_allowed": false
+  },
+  "counts": {
+    "brain_writeback_count": 0,
+    "candidate_set_edit_count": 2,
+    "contribution_count": 3,
+    "external_import_edit_count": 1,
+    "memory_seed_candidate_count": 3,
+    "raw_payload_count": 0
+  },
+  "log_id": "expert_contribution_log.chilai_nanhua_day1.v0",
+  "notes": [
+    "Phase 4 expert-contribution fixture for admin candidate-set and external-import edits.",
+    "No raw reports, crawled pages, final MissionGraph changes, or Brain writeback are embedded."
+  ],
+  "project_id": "chilai_nanhua_day1",
+  "records": [
+    {
+      "ai_assist": {
+        "interpretation_id": "model_interpretation.expert_contribution.add_checkpoint.trail_condition_reference.v0",
+        "interpretation_kind": "ModelInterpretation",
+        "memory_seed_candidate": true,
+        "memory_writeback_allowed": false,
+        "proposed_memory_tags": [
+          "taiwan_mountain_route_planning",
+          "expert_added_checkpoint",
+          "recent_hiker_report"
+        ],
+        "summary": "If accepted, remember this admin as a contributor whose recent trail-condition checkpoints can improve future candidate generation."
+      },
+      "applied_to_fixture_candidate_set": false,
+      "applied_to_fixture_external_import_queue": false,
+      "applies_to_candidate_set": true,
+      "applies_to_external_import_queue": false,
+      "contribution_id": "expert_contribution.chilai_nanhua_day1.add_checkpoint.trail_condition_reference.v0",
+      "contributor_alias": "trip_leader",
+      "contributor_role": "admin_expert",
+      "created_at": "2026-05-15T22:30:00+08:00",
+      "evidence_status": "field_observation_pending",
+      "operation": "add_candidate",
+      "rationale": "Fresh trail condition reports can be richer than static map sources, but must remain review-gated until the admin accepts exact placement.",
+      "review_state": "needs_human_review",
+      "source_surface": "admin_candidate_set",
+      "summary": "Admin may add route-specific checkpoints when recent hiker reports identify decision points missing from AI-generated candidates.",
+      "target_artifact_ref": "candidates/checkpoints.json",
+      "target_kind": "checkpoint_candidate",
+      "target_ref": "admin_added_checkpoint.chilai_nanhua_day1.trail_condition_reference.v0"
+    },
+    {
+      "ai_assist": {
+        "interpretation_id": "model_interpretation.expert_contribution.retreat.return_to_entry.v0",
+        "interpretation_kind": "ModelInterpretation",
+        "memory_seed_candidate": true,
+        "memory_writeback_allowed": false,
+        "proposed_memory_tags": [
+          "route_retreat_semantics",
+          "return_to_entry_default",
+          "admin_route_expertise"
+        ],
+        "summary": "If accepted, prefer return-to-entry retreat assumptions for similar routes unless reviewed evidence indicates practical exit alternatives."
+      },
+      "applied_to_fixture_candidate_set": false,
+      "applied_to_fixture_external_import_queue": false,
+      "applies_to_candidate_set": true,
+      "applies_to_external_import_queue": false,
+      "contribution_id": "expert_contribution.chilai_nanhua_day1.update_retreat.return_to_entry.v0",
+      "contributor_alias": "trip_leader",
+      "contributor_role": "admin_expert",
+      "created_at": "2026-05-15T22:35:00+08:00",
+      "evidence_status": "admin_claim",
+      "operation": "update_candidate",
+      "rationale": "The trail is mostly out-and-back for practical retreat planning after entering the mountain area.",
+      "review_state": "needs_human_review",
+      "source_surface": "admin_candidate_set",
+      "summary": "Admin clarified that this route should default to return-to-entry retreat rather than assuming multiple descent exits.",
+      "target_artifact_ref": "candidates/retreat_routes.json",
+      "target_kind": "retreat_route_candidate",
+      "target_ref": "retreat.chilai_nanhua_day1.return_to_entry"
+    },
+    {
+      "ai_assist": {
+        "interpretation_id": "model_interpretation.expert_contribution.import.recent_hiker_report.v0",
+        "interpretation_kind": "ModelInterpretation",
+        "memory_seed_candidate": true,
+        "memory_writeback_allowed": false,
+        "proposed_memory_tags": [
+          "community_route_condition_reference",
+          "external_import_request",
+          "human_review_required"
+        ],
+        "summary": "If accepted, remember that this admin values recent route-condition reports as candidate-generation evidence, not as automatic field truth."
+      },
+      "applied_to_fixture_candidate_set": false,
+      "applied_to_fixture_external_import_queue": false,
+      "applies_to_candidate_set": false,
+      "applies_to_external_import_queue": true,
+      "contribution_id": "expert_contribution.chilai_nanhua_day1.add_import.recent_hiker_report.v0",
+      "contributor_alias": "trip_leader",
+      "contributor_role": "admin_expert",
+      "created_at": "2026-05-15T22:40:00+08:00",
+      "evidence_status": "community_report_reference",
+      "operation": "add_import_request",
+      "rationale": "Recent human reports can explain route features that base maps, DTM, and guide timing do not capture.",
+      "review_state": "needs_human_review",
+      "source_surface": "admin_external_import_queue",
+      "summary": "Admin may add URL-only import requests for recent hiker condition reports as planning references.",
+      "target_artifact_ref": "outputs/external_import_queue.json",
+      "target_kind": "external_import_request",
+      "target_ref": "external_import.chilai_nanhua_day1.recent_hiker_report.placeholder"
+    }
+  ],
+  "status": "candidate_memory_seed_only"
+}

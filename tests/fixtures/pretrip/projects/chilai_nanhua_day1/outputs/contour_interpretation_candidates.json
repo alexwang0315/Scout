@@ -1,0 +1,101 @@
+{
+  "artifact_id": "contour_interpretation.chilai_nanhua_day1.v0",
+  "candidates": [
+    {
+      "candidate_id": "contour.g11.seg_001_003",
+      "accepted_planning_assumption_allowed": false,
+      "admin_review_required": true,
+      "candidate_origin": "manual_baseline",
+      "confidence": "low",
+      "contour_density_notes": [
+        "Manual candidate notes that the first route portion should be reviewed for close contour spacing against DTM segment coverage.",
+        "No contour lines were extracted or counted by software in this fixture."
+      ],
+      "human_review_required": true,
+      "interpretation_mode": "manual",
+      "not_observed_fact": true,
+      "notes": "Metadata-only candidate linked to the G11_hiking image-map and DTM baseline refs; not compiled into runtime safety facts.",
+      "review_lifecycle": {
+        "corrected_candidate_ref": null,
+        "human_review_ref": null,
+        "lifecycle_status": "admin_review_pending",
+        "review_decision": null
+      },
+      "source_artifact_refs": {
+        "dtm_coverage_summary_ref": "dtm_coverage.chilai_nanhua_day1.20m",
+        "image_artifact_ref": "artifact.photo.g11_hiking",
+        "segment_dtm_coverage_ref": "terrain_summary.chilai_nanhua_day1.20m"
+      },
+      "status": "candidate",
+      "target_refs": {
+        "checkpoint_candidate_refs": [
+          "cp.start",
+          "cp.003"
+        ],
+        "route_artifact_ref": "artifact.gpx.chilai_nanhua_day1",
+        "segment_candidate_refs": [
+          "seg.001",
+          "seg.002",
+          "seg.003"
+        ]
+      },
+      "terrain_shape_notes": [
+        "Review whether the image-map suggests a convex climb or spur transition before relying on ETA assumptions.",
+        "Treat this as an interpretation prompt only; DTM metadata remains the baseline for deterministic terrain coverage."
+      ]
+    },
+    {
+      "candidate_id": "contour.g11.seg_006_008",
+      "accepted_planning_assumption_allowed": false,
+      "admin_review_required": true,
+      "candidate_origin": "ai_assisted_model",
+      "confidence": "unknown",
+      "contour_density_notes": [
+        "Potential denser-contour area should be checked by a human against the image-map and segment DTM coverage.",
+        "No OCR, image processing, or AI extraction result is stored here."
+      ],
+      "human_review_required": true,
+      "interpretation_mode": "ai_assisted",
+      "not_observed_fact": true,
+      "notes": "AI-assisted is allowed only as a candidate source label; this fixture stores no model output payload or observed fact.",
+      "review_lifecycle": {
+        "corrected_candidate_ref": null,
+        "human_review_ref": null,
+        "lifecycle_status": "admin_review_pending",
+        "review_decision": null
+      },
+      "source_artifact_refs": {
+        "dtm_coverage_summary_ref": "dtm_coverage.chilai_nanhua_day1.20m",
+        "image_artifact_ref": "artifact.photo.g11_hiking",
+        "segment_dtm_coverage_ref": "terrain_summary.chilai_nanhua_day1.20m"
+      },
+      "status": "candidate",
+      "target_refs": {
+        "checkpoint_candidate_refs": [
+          "cp.005",
+          "cp.008"
+        ],
+        "route_artifact_ref": "artifact.gpx.chilai_nanhua_day1",
+        "segment_candidate_refs": [
+          "seg.006",
+          "seg.007",
+          "seg.008"
+        ]
+      },
+      "terrain_shape_notes": [
+        "Candidate review should compare whether the image-map implies ridge-side traversal versus direct ascent.",
+        "Any accepted terrain meaning must remain human-reviewed before downstream use."
+      ]
+    }
+  ],
+  "not_observed_fact": true,
+  "notes": "Candidate-only metadata for manual-baseline or AI-assisted contour interpretation. Admin review has not accepted, rejected, or corrected these candidates. The raw G11_hiking image is referenced by artifact id only and is not embedded.",
+  "project_id": "chilai_nanhua_day1",
+  "route_artifact_ref": "artifact.gpx.chilai_nanhua_day1",
+  "source_artifact_refs": [
+    "artifact.photo.g11_hiking",
+    "dtm_coverage.chilai_nanhua_day1.20m",
+    "terrain_summary.chilai_nanhua_day1.20m"
+  ],
+  "status": "candidate"
+}

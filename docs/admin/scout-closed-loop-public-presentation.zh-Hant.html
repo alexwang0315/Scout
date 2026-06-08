@@ -1,0 +1,706 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Scout 三閉環運作模型</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f6f7f4;
+      --paper: #ffffff;
+      --ink: #18211f;
+      --muted: #5f6d67;
+      --line: #d8dfda;
+      --green: #126451;
+      --green-strong: #0d4d3e;
+      --blue: #265f94;
+      --gold: #9a6a16;
+      --red: #9b3f32;
+      --soft-green: #e7f2ed;
+      --soft-blue: #e8f0f7;
+      --soft-gold: #f5eddc;
+      --soft-red: #f6e7e3;
+      --shadow: 0 18px 42px rgba(24, 33, 31, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", "PingFang TC", sans-serif;
+      line-height: 1.65;
+    }
+
+    a {
+      color: var(--green-strong);
+      text-decoration-thickness: 2px;
+      text-underline-offset: 3px;
+    }
+
+    header {
+      background: #122b25;
+      color: #f8fbf8;
+      padding: 54px 24px 42px;
+    }
+
+    .wrap {
+      width: min(1160px, calc(100% - 40px));
+      margin: 0 auto;
+    }
+
+    .eyebrow {
+      margin: 0 0 12px;
+      color: #b8d9cf;
+      font-size: 0.82rem;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 0;
+      max-width: 920px;
+      font-size: clamp(2.35rem, 5vw, 5rem);
+      line-height: 1.08;
+      letter-spacing: 0;
+    }
+
+    .hero-copy {
+      max-width: 850px;
+      margin: 20px 0 0;
+      color: #d9e8e2;
+      font-size: 1.14rem;
+    }
+
+    .hero-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 28px;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 34px;
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      border-radius: 999px;
+      padding: 6px 13px;
+      color: #edf6f2;
+      background: rgba(255, 255, 255, 0.08);
+      font-size: 0.92rem;
+      font-weight: 700;
+      max-width: 100%;
+      white-space: normal;
+      text-decoration: none;
+    }
+
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      background: rgba(246, 247, 244, 0.94);
+      border-bottom: 1px solid var(--line);
+      backdrop-filter: blur(10px);
+    }
+
+    nav .wrap {
+      display: flex;
+      gap: 10px;
+      overflow-x: auto;
+      padding: 10px 0;
+    }
+
+    nav a {
+      flex: 0 0 auto;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 7px 10px;
+      background: var(--paper);
+      color: var(--green-strong);
+      text-decoration: none;
+      font-size: 0.88rem;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    main {
+      padding: 32px 0 60px;
+    }
+
+    .slide {
+      margin: 0 0 28px;
+      padding: 30px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--paper);
+      box-shadow: var(--shadow);
+    }
+
+    .slide.soft {
+      background: #f9fbf8;
+      box-shadow: none;
+    }
+
+    .slide h2 {
+      margin: 0 0 12px;
+      font-size: clamp(1.6rem, 3vw, 2.55rem);
+      line-height: 1.2;
+      letter-spacing: 0;
+    }
+
+    .lead {
+      max-width: 890px;
+      margin: 0;
+      color: var(--muted);
+      font-size: 1.05rem;
+    }
+
+    .grid-3,
+    .grid-4 {
+      display: grid;
+      gap: 14px;
+      margin-top: 20px;
+    }
+
+    .grid-3 {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .grid-4 {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .tile {
+      min-height: 142px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      padding: 16px;
+    }
+
+    .tile strong {
+      display: block;
+      margin-bottom: 8px;
+      color: var(--ink);
+      font-size: 1rem;
+    }
+
+    .tile p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.94rem;
+    }
+
+    .tag {
+      display: inline-block;
+      margin-bottom: 9px;
+      border-radius: 999px;
+      padding: 4px 9px;
+      font-size: 0.78rem;
+      font-weight: 800;
+    }
+
+    .alpha {
+      color: var(--green-strong);
+      background: var(--soft-green);
+    }
+
+    .release {
+      color: var(--blue);
+      background: var(--soft-blue);
+    }
+
+    .guard {
+      color: var(--red);
+      background: var(--soft-red);
+    }
+
+    .evidence {
+      color: var(--gold);
+      background: var(--soft-gold);
+    }
+
+    .loop-row {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(140px, 1fr));
+      gap: 10px;
+      margin: 22px 0 0;
+      overflow-x: auto;
+      padding-bottom: 4px;
+    }
+
+    .node {
+      min-height: 108px;
+      border: 2px solid var(--line);
+      border-radius: 8px;
+      padding: 14px 24px 14px 14px;
+      background: #fff;
+      position: relative;
+      overflow-wrap: anywhere;
+    }
+
+    .node::after {
+      content: ">";
+      position: absolute;
+      right: 8px;
+      top: 38px;
+      color: var(--muted);
+      font-weight: 900;
+    }
+
+    .node:last-child::after {
+      content: "";
+    }
+
+    .node b {
+      display: block;
+      color: var(--ink);
+      font-size: 0.98rem;
+    }
+
+    .node span {
+      display: block;
+      margin-top: 5px;
+      color: var(--muted);
+      font-size: 0.86rem;
+    }
+
+    .node.green {
+      border-color: #9bc9b8;
+      background: #f5fbf8;
+    }
+
+    .node.blue {
+      border-color: #a9c5dd;
+      background: #f5f9fc;
+    }
+
+    .node.gold {
+      border-color: #dac18a;
+      background: #fffaf0;
+    }
+
+    .split {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(320px, 0.8fr);
+      gap: 24px;
+      align-items: start;
+    }
+
+    ul {
+      padding-left: 22px;
+      margin: 12px 0 0;
+    }
+
+    li {
+      margin: 7px 0;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 16px;
+      font-size: 0.94rem;
+    }
+
+    th,
+    td {
+      border-bottom: 1px solid var(--line);
+      padding: 11px 10px;
+      vertical-align: top;
+      text-align: left;
+      overflow-wrap: anywhere;
+    }
+
+    th {
+      background: #edf4f1;
+      color: #20352f;
+      font-weight: 800;
+    }
+
+    .boundary {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+      margin-top: 20px;
+    }
+
+    .boundary .tile {
+      min-height: 170px;
+    }
+
+    .footer {
+      border-top: 1px solid var(--line);
+      padding: 28px 0 40px;
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+
+    @media (max-width: 900px) {
+      .grid-3,
+      .grid-4,
+      .split,
+      .boundary {
+        grid-template-columns: 1fr;
+      }
+
+      .slide {
+        padding: 22px;
+        overflow: hidden;
+      }
+
+      table {
+        display: block;
+        max-width: 100%;
+        overflow-x: auto;
+      }
+
+      th,
+      td {
+        min-width: 180px;
+      }
+    }
+
+    @media print {
+      nav {
+        display: none;
+      }
+
+      body {
+        background: #fff;
+      }
+
+      header,
+      .slide {
+        break-inside: avoid;
+        box-shadow: none;
+      }
+
+      .slide {
+        min-height: 88vh;
+        page-break-after: always;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap">
+      <p class="eyebrow">Scout 公開簡報</p>
+      <h1>Scout 三閉環運作模型</h1>
+      <p class="hero-copy">
+        Scout 的目標不是只做一個地圖頁面，而是成為具備路線感知的戶外同行系統：
+        出發前協助規劃，行程中提供可觀測的安全裝置能力，回來後把經驗整理成下一次規劃的依據。
+        所有 AI 與資料推論都必須停留在可追溯、可審核的邊界內。
+      </p>
+      <div class="hero-meta" aria-label="簡報範圍">
+        <span class="pill">Alpha：第一＋第二閉環</span>
+        <span class="pill">正式 release 前：workspace 轉移</span>
+        <span class="pill">候選證據、人工審核、runtime 邊界</span>
+        <a class="pill" href="scout-closed-loop-public-presentation.html">English version</a>
+      </div>
+    </div>
+  </header>
+
+  <nav aria-label="簡報導覽">
+    <div class="wrap">
+      <a href="#loops">三個閉環</a>
+      <a href="#alpha">Alpha 範圍</a>
+      <a href="#pretrip">Pre-trip</a>
+      <a href="#ontrip">On-trip</a>
+      <a href="#postanalysis">Post-analysis</a>
+      <a href="#workspace">Workspace 轉移</a>
+      <a href="#boundaries">邊界</a>
+      <a href="#specs">規格索引</a>
+    </div>
+  </nav>
+
+  <main class="wrap">
+    <section class="slide" id="loops">
+      <p class="eyebrow">運作模型</p>
+      <h2>三個閉環把 Scout 從地圖工具推進成會累積經驗的戶外系統。</h2>
+      <p class="lead">
+        目前的產品結構可以分成三條閉環。Alpha 至少必須交付第一與第二閉環；
+        第三閉環可以在正式 release 前完成，作為官方 workspace 轉移與生態系資料的基礎。
+      </p>
+      <div class="grid-3">
+        <div class="tile">
+          <span class="tag alpha">Alpha 必備</span>
+          <strong>1. 攀爬經驗累積閉環</strong>
+          <p>從 pre-trip reviewed plan、completed trip、Capability Timeline 到 Energy Reserve，再回到下一次 pre-trip 建議；這個閉環不觸發 live safety 或硬體作動。</p>
+        </div>
+        <div class="tile">
+          <span class="tag alpha">Alpha 核心</span>
+          <strong>2. On-Trip Scout Safe Device</strong>
+          <p>行程中的真實節點打卡、硬體感知、空間印記播放、本地提醒、通訊行動與搜尋黑盒證據。</p>
+        </div>
+        <div class="tile">
+          <span class="tag release">Release 前完成</span>
+          <strong>3. Workspace 轉移與生態系</strong>
+          <p>Scout A 到 Scout B 的官方 workspace template 匯出/匯入，以及 opt-in 的聚合生態系資訊。</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide" id="alpha">
+      <p class="eyebrow">Alpha 邊界</p>
+      <h2>Alpha 不能只證明 pre-trip；它必須證明 on-trip foundation。</h2>
+      <p class="lead">
+        第一閉環證明 Scout 能從完成的行程學習。第二閉環證明使用者仍在路上時，
+        Scout 是一個有計畫節點、有硬體狀態、有行動紀錄、有提醒能力的安全裝置。
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>閉環</th>
+            <th>Alpha 期待</th>
+            <th>必須守住的邊界</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>攀爬經驗累積</td>
+            <td>能看到 reviewed plan、completed trip record、admin post-analysis、Energy Reserve / Energy Limit feedback、下一次 pre-trip candidates。</td>
+            <td>只屬於事前準備與事後分析：不呼叫 live <code>/safety/*</code>、不做硬體作動、不進行真實打卡/送出，也不把 replay record 重新執行。</td>
+          </tr>
+          <tr>
+            <td>On-Trip Scout Safe Device</td>
+            <td>能處理 reviewed plan nodes、真實硬體/軟體狀態、Ln action traces、實體打卡、本地 cues、通訊/團隊狀態、INS/PDR 路線產生與 search black-box refs。</td>
+            <td>這是真實行動閉環，但行動仍需 runtime handoff、Ln policy、operator confirmation 與 provider policy gate。</td>
+          </tr>
+          <tr>
+            <td>Workspace 轉移與生態系</td>
+            <td>可等到正式 release 前；除非 alpha 測試明確需要 Scout A 到 Scout B template transfer。</td>
+            <td>匯入 template 只是候選證據，不會變成另一位使用者的 runtime truth 或 capability profile。</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="slide" id="pretrip">
+      <p class="eyebrow">第一閉環：出發前</p>
+      <h2>Pre-trip 把分散的路線資料整理成可審核的計畫。</h2>
+      <div class="loop-row" aria-label="pretrip 閉環">
+        <div class="node green"><b>來源資料</b><span>GPX、DEM/DTM、影像、OSM/Overpass、route notes、文章</span></div>
+        <div class="node green"><b>候選證據</b><span>CP、MCP、POI、hazards、terrain、risk、route notes</span></div>
+        <div class="node green"><b>Pydantic AI 輔助</b><span>分群、解釋、標示衝突、呼叫 deterministic tools</span></div>
+        <div class="node green"><b>人工審核</b><span>接受、拒絕、拆分、降級，或要求更多證據</span></div>
+        <div class="node green"><b>Reviewed package</b><span>路線、CP、政策、圖層、metadata、handoff refs</span></div>
+      </div>
+      <div class="grid-3">
+        <div class="tile">
+          <strong>MCP 壓縮大量 CP。</strong>
+          <p>Major Critical Point 是給人看的主線節點，讓長距離路線不需要一點一點看完所有 candidate。</p>
+        </div>
+        <div class="tile">
+          <strong>Terrain 與 risk 分開。</strong>
+          <p>Hillshade、坡度、等高線與高度分層是地形 evidence；risk heat 是路線相關的 candidate risk。</p>
+        </div>
+        <div class="tile">
+          <strong>AI 是整理者，不是裁判。</strong>
+          <p>Pydantic AI 可以整理與解釋證據，但只有 reviewed artifact 才能往下一階段前進。</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide" id="ontrip">
+      <p class="eyebrow">第二閉環：行程中</p>
+      <h2>Scout 在路上是一個 safe device loop，不只是錄軌器。</h2>
+      <p class="lead">
+        Reviewed plan 在現場會變成可執行、可觀測的結構：Scout 追蹤計畫節點，
+        記錄硬體與軟體狀態，執行被允許的實體/裝置行動，說明為什麼做出提醒或紀錄，並保留必要的 black-box evidence。
+      </p>
+      <div class="loop-row" aria-label="on-trip 閉環">
+        <div class="node blue"><b>Reviewed plan nodes</b><span>CP、MCP、休息、危險、通訊、團隊照看</span></div>
+        <div class="node blue"><b>硬體感知</b><span>GNSS、IMU、PDR、電池、radio、wearable、儲存狀態</span></div>
+        <div class="node blue"><b>真實行動</b><span>打卡、cue、空間印記播放、INS/PDR route update</span></div>
+        <div class="node blue"><b>通訊 gate</b><span>operator-approved status、SOS、incident report、provider send</span></div>
+        <div class="node blue"><b>黑盒證據</b><span>最小事件包、last known node、trace、device status</span></div>
+      </div>
+      <div class="grid-4">
+        <div class="tile"><strong>打卡</strong><p>節點抵達、離開、missed timing 與 segment capsule state。</p></div>
+        <div class="tile"><strong>團隊照看</strong><p>集合提示、落後成員檢查、休息需求與 buddy-check 紀錄。</p></div>
+        <div class="tile"><strong>通訊</strong><p>訊號點、relay opportunity、queued messages 與 provider gate。</p></div>
+        <div class="tile"><strong>搜尋證據</strong><p>保留之後可取回的 local evidence refs，預設不公開 raw private payload。</p></div>
+      </div>
+    </section>
+
+    <section class="slide" id="postanalysis">
+      <p class="eyebrow">第一閉環：回程後</p>
+      <h2>Post-analysis 把完成的行程轉成下一次規劃訊號。</h2>
+      <div class="split">
+        <div>
+          <p class="lead">
+            Capability Timeline 只能從 completed user track 或 Scout runtime record 產生，
+            不能拿公開 reference GPX 當作使用者能力證據。它會整理分段節奏、移動/休息/總時間與信心限制。
+          </p>
+          <ul>
+            <li>Completed trip workspace 是個人能力證據的來源。</li>
+            <li>Energy Reserve 描述相對於個人基線的體能餘裕。</li>
+            <li>Energy Limit 把餘裕轉成下一次規劃的保守限制。</li>
+            <li>下一次 pre-trip 可以得到休息、打卡、ETA buffer、turnaround gate 等候選建議。</li>
+          </ul>
+        </div>
+        <div class="tile">
+          <span class="tag evidence">僅作證據</span>
+          <strong>不是醫療產品，也不是自動核准。</strong>
+          <p>Energy 輸出可以輔助規劃與現場 advisory cue，但不能診斷、排名或變成 runtime safety truth。</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide" id="workspace">
+      <p class="eyebrow">第三閉環：release 前</p>
+      <h2>Workspace 轉移讓 Scout 知識可以流動，但不複製信任。</h2>
+      <p class="lead">
+        Scout workspace template 會比公開 GPX 更豐富：它可以包含 Scout 時間、route notes、
+        reviewed CP/MCP、risk/terrain refs 與 redaction policy。匯入到另一台 Scout 後，
+        它仍然只是 pre-trip candidate evidence。
+      </p>
+      <div class="loop-row" aria-label="workspace transfer 閉環">
+        <div class="node gold"><b>Scout A workspace</b><span>Reviewed 或 completed 的本地 evidence</span></div>
+        <div class="node gold"><b>官方匯出</b><span>Manifest、hashes、redaction report、sharing policy</span></div>
+        <div class="node gold"><b>Scout B 匯入</b><span>進入 pre-trip workspace 的 candidate template evidence</span></div>
+        <div class="node gold"><b>本地審核</b><span>重新 validation、map prep、stale checks、departure gate</span></div>
+        <div class="node gold"><b>生態系訊號</b><span>Opt-in 的聚合 route intelligence</span></div>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>可以轉移</th>
+            <th>預設應移除或粗化</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Route family、reviewed nodes、Scout-time summaries、route notes、terrain/risk refs、source attribution。</td>
+            <td>Raw GPX、精確時間戳、raw wearable payload、private identity、完整 incident packages。</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="slide" id="boundaries">
+      <p class="eyebrow">安全與信任邊界</p>
+      <h2>核心規則：證據可以輔助，審核可以提升，runtime 必須明確。</h2>
+      <div class="boundary">
+        <div class="tile">
+          <span class="tag evidence">Evidence</span>
+          <strong>預設都是 candidate-only</strong>
+          <p>Pre-trip CP、MCP、terrain、risk、route-note、AI output 與 template imports 都必須保留 provenance。</p>
+        </div>
+        <div class="tile">
+          <span class="tag alpha">Review</span>
+          <strong>人工與 AI 輔助審核</strong>
+          <p>審核可以接受、拒絕、拆分、降級或要求更多 context；AI 只協助整理工作。</p>
+        </div>
+        <div class="tile">
+          <span class="tag guard">Runtime</span>
+          <strong>不可靜默改寫</strong>
+          <p>Departure、runtime handoff、outbound send、incident report 都必須明確、可稽核並受 policy gate 控制。</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <p class="eyebrow">已規格化的開發成果</p>
+      <h2>三個閉環建立在這段時間已拆開的規格基礎上。</h2>
+      <div class="grid-3">
+        <div class="tile">
+          <strong>規劃智慧</strong>
+          <p>Pre-trip admin、historical GPX importer、route-corridor preparation、Overpass/OSM、MCP synthesis、terrain visualization、risk layers。</p>
+        </div>
+        <div class="tile">
+          <strong>行程中可觀測性</strong>
+          <p>Runtime readiness/debug tooling、admin GIS map operations、device stream admission、hardware status、on-trip debug projection。</p>
+        </div>
+        <div class="tile">
+          <strong>行後學習</strong>
+          <p>Capability Timeline、Energy Reserve / Energy Limit、Companion Match、reviewed lessons、future pre-trip suggestions。</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide" id="specs">
+      <p class="eyebrow">規格索引</p>
+      <h2>這份簡報對應的主要規格文件。</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>主題</th>
+            <th>規格</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>三閉環模型</td>
+            <td><a href="../specs/scout-closed-loop-operating-cycle.md">docs/specs/scout-closed-loop-operating-cycle.md</a></td>
+          </tr>
+          <tr>
+            <td>Pre-trip workspace 與 alpha policy</td>
+            <td><a href="../specs/pre-trip-planning-admin.md">docs/specs/pre-trip-planning-admin.md</a></td>
+          </tr>
+          <tr>
+            <td>Capability Timeline</td>
+            <td><a href="../specs/post-analysis-capability-timeline.md">docs/specs/post-analysis-capability-timeline.md</a></td>
+          </tr>
+          <tr>
+            <td>Energy Reserve 與 companion match</td>
+            <td><a href="../specs/scout-body-battery-and-companion-match.md">docs/specs/scout-body-battery-and-companion-match.md</a></td>
+          </tr>
+          <tr>
+            <td>Runtime debug 與 on-trip observability</td>
+            <td><a href="../specs/phase-3-5-runtime-readiness-debug-tooling.md">docs/specs/phase-3-5-runtime-readiness-debug-tooling.md</a></td>
+          </tr>
+          <tr>
+            <td>Departure / runtime handoff</td>
+            <td><a href="../specs/phase-4-5-departure-runtime-handoff.md">docs/specs/phase-4-5-departure-runtime-handoff.md</a></td>
+          </tr>
+          <tr>
+            <td>Real device streams</td>
+            <td><a href="../specs/phase-4-6-real-device-continuous-stream.md">docs/specs/phase-4-6-real-device-continuous-stream.md</a></td>
+          </tr>
+          <tr>
+            <td>Trail black box foundation</td>
+            <td><a href="../specs/phase-1-trail-black-box.md">docs/specs/phase-1-trail-black-box.md</a></td>
+          </tr>
+          <tr>
+            <td>Terrain、map、risk、MCP</td>
+            <td>
+              <a href="../specs/pretrip-layer-preparation.md">pretrip-layer-preparation.md</a>、
+              <a href="../specs/pretrip-route-corridor-map-preparation.md">pretrip-route-corridor-map-preparation.md</a>、
+              <a href="../specs/admin-gis-map-operations.md">admin-gis-map-operations.md</a>、
+              <a href="../specs/pretrip-major-critical-point-synthesis.md">pretrip-major-critical-point-synthesis.md</a>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="slide soft">
+      <p class="eyebrow">結語</p>
+      <h2>Scout 的公開承諾，是一個可稽核的戶外 operating loop。</h2>
+      <p class="lead">
+        Scout 應該讓使用者出發前準備得更好、在路上更容易被自己與團隊照看、回來後能把經驗留給下一次。
+        Alpha 應先證明規劃與 on-trip 兩條閉環；正式 release 前再補上官方 workspace transfer，
+        讓路線知識能在生態系中累積，同時不複製私密資料或未審核的信任。
+      </p>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="wrap">
+      <p>
+        公開簡報草案。本文件刻意不包含 raw route payload、private health samples、incident contents、
+        device credentials 或 live safety activation details。
+      </p>
+    </div>
+  </footer>
+</body>
+</html>

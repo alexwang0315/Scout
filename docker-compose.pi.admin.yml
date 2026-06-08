@@ -1,0 +1,58 @@
+services:
+  scout-phase4-admin:
+    platform: linux/arm64
+    build:
+      context: .
+      dockerfile: Dockerfile.pi.admin
+    image: scout-fusion/pi-phase4-admin:preview
+    container_name: scout-pi-phase4-admin
+    restart: unless-stopped
+    env_file:
+      - /data/scout/secrets/live-runtime.env
+    environment:
+      SCOUT_DATA_ROOT: /data/scout
+      SCOUT_RUNTIME_PROFILE: pi-phase4-admin-preview
+      SCOUT_SAFETY_ENABLED: "false"
+      SCOUT_SAFETY_INCIDENT_STORE: /data/scout/incidents
+      SCOUT_PRETRIP_WORKSPACE_ROOT: /data/scout/admin/pretrip-workspaces
+      SCOUT_ADMIN_OSM_TILE_CACHE_ROOT: /data/scout/osm-tiles
+      SCOUT_ADMIN_RASTER_TILE_CACHE_ROOT: /data/scout/raster-tiles
+      SCOUT_ADMIN_OSM_TILE_FALLBACK: "true"
+      SCOUT_ADMIN_RASTER_TILE_FALLBACK: "true"
+      SCOUT_ADMIN_AUTH_REQUIRED: "${SCOUT_ADMIN_AUTH_REQUIRED:-true}"
+      SCOUT_ADMIN_BASIC_USERNAME: "${SCOUT_ADMIN_BASIC_USERNAME:-scout-admin}"
+      SCOUT_ADMIN_ACCESS_TOKEN_FILE: /data/scout/admin/secrets/phase4-admin-token
+      SCOUT_INGRESS_OBSERVER_SUPERVISOR_ENABLED: "${SCOUT_INGRESS_OBSERVER_SUPERVISOR_ENABLED:-true}"
+      SCOUT_SENSORLOGGER_MQTT_AUTOSTART: "${SCOUT_SENSORLOGGER_MQTT_AUTOSTART:-true}"
+      SCOUT_SENSORLOGGER_MQTT_ENV_FILE: "${SCOUT_SENSORLOGGER_MQTT_ENV_FILE:-/data/scout/secrets/sensorlogger-mqtt.env}"
+      SCOUT_SENSORLOGGER_MQTT_EVIDENCE_DIR: "${SCOUT_SENSORLOGGER_MQTT_EVIDENCE_DIR:-/data/scout/admin/ingress/sensorlogger_mqtt}"
+      SCOUT_SENSORLOGGER_MQTT_LOG_PATH: "${SCOUT_SENSORLOGGER_MQTT_LOG_PATH:-/data/scout/admin/ingress/sensorlogger-mqtt-observer.log}"
+      SCOUT_DEBUG_API_ENABLED: "${SCOUT_DEBUG_API_ENABLED:-true}"
+      SCOUT_DEBUG_LOG_PATH: "${SCOUT_DEBUG_LOG_PATH:-/data/scout/admin/debug/runtime-debug-events.jsonl}"
+      SCOUT_AI_ASSISTANT_ENABLED: "1"
+      SCOUT_AI_ASSISTANT_PROVIDER: pydantic_ai
+      SCOUT_AI_ASSISTANT_CONFIG_PATH: /data/scout/config/assistant-models.json
+      SCOUT_WEATHER_API_ENABLED: "${SCOUT_WEATHER_API_ENABLED:-false}"
+      SCOUT_WEATHER_API_PROVIDER: open_meteo
+      SCOUT_PORT: "9099"
+      SCOUT_LOG_LEVEL: info
+    ports:
+      - "9110:9099"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - type: bind
+        source: /data/scout
+        target: /data/scout
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import json, urllib.request; r=urllib.request.urlopen('http://127.0.0.1:9099/health', timeout=3); raise SystemExit(0 if json.load(r).get('status') == 'ok' else 1)",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s

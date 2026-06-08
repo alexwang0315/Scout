@@ -10,7 +10,7 @@ from concurrent.futures import ThreadPoolExecutor
 logging.basicConfig(level=logging.WARNING, format='%(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
 
-async def test_queue_monitoring():
+async def _run_queue_monitoring_check():
     """Test that queue monitoring triggers warning at >50 items"""
     print("=== Queue Monitoring Test ===")
     
@@ -39,5 +39,10 @@ async def test_queue_monitoring():
     
     print("=== Test Passed ===")
 
+
+def test_queue_monitoring():
+    asyncio.run(_run_queue_monitoring_check())
+
+
 if __name__ == "__main__":
-    asyncio.run(test_queue_monitoring())
+    asyncio.run(_run_queue_monitoring_check())

@@ -1,0 +1,774 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Scout Hardware Readiness</title>
+  <link rel="icon" href="data:,">
+  <style>
+    :root {
+      --bg: #121923;
+      --surface: #151e2a;
+      --panel: #202b3a;
+      --panel-strong: #253244;
+      --border: #334157;
+      --text: #edf3f8;
+      --muted: #9faec0;
+      --accent: #4fb7a6;
+      --warn: #d8a43e;
+      --bad: #e17368;
+      --ok: #79b878;
+      --focus: #86b7ff;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      font: 13px/1.42 ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    h1, h2, h3, p { margin: 0; }
+    h1 { font-size: 17px; font-weight: 750; letter-spacing: .01em; }
+    h2 { font-size: 13px; font-weight: 750; letter-spacing: .04em; text-transform: uppercase; }
+    h3 { font-size: 12px; font-weight: 750; letter-spacing: .04em; text-transform: uppercase; }
+    button, textarea { font: inherit; }
+    button, textarea { touch-action: manipulation; }
+    button:focus-visible,
+    textarea:focus-visible {
+      outline: 2px solid var(--focus);
+      outline-offset: 2px;
+    }
+
+    .shell {
+      display: grid;
+      grid-template-columns: minmax(620px, 1fr) minmax(360px, 420px);
+      min-height: 100vh;
+    }
+
+    .main,
+    .side {
+      min-width: 0;
+      padding: 14px;
+    }
+
+    .main {
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      gap: 10px;
+    }
+
+    .side {
+      border-left: 1px solid var(--border);
+      background: var(--surface);
+      overflow: auto;
+    }
+
+    .toolbar,
+    .panel,
+    .assistant-panel {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--panel);
+    }
+
+    .toolbar {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 12px;
+      align-items: center;
+    }
+
+    .meta,
+    .hint,
+    .assistant-status {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .boundary-strip {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto auto;
+      gap: 8px;
+      align-items: center;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: #101722;
+      padding: 10px 12px;
+    }
+
+    .readiness-workbench {
+      display: grid;
+      grid-template-columns: 250px minmax(0, 1fr);
+      min-height: 0;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      background: var(--surface);
+    }
+
+    .readiness-rail,
+    .readiness-stage {
+      min-width: 0;
+      padding: 12px;
+      overflow: auto;
+    }
+
+    .readiness-rail {
+      border-right: 1px solid var(--border);
+      background: #111a25;
+    }
+
+    .readiness-stage {
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      gap: 10px;
+    }
+
+    .summary-grid,
+    .provider-grid {
+      display: grid;
+      gap: 6px;
+    }
+
+    .summary-grid {
+      grid-template-columns: 1fr 1fr;
+      margin-top: 10px;
+    }
+
+    .provider-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .panel > .provider-grid,
+    .panel > .list {
+      margin-top: 0;
+      padding: 10px;
+    }
+
+    .metric,
+    .provider-card,
+    .assistant-field,
+    .assistant-answer,
+    .assistant-limitations,
+    .assistant-sources,
+    .assistant-control {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 9px;
+      background: var(--panel);
+    }
+
+    .metric span,
+    .provider-card span,
+    .assistant-field span {
+      display: block;
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 750;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+    }
+
+    .metric strong,
+    .provider-card strong,
+    .assistant-field strong,
+    .assistant-field small {
+      display: block;
+      margin-top: 2px;
+      overflow-wrap: anywhere;
+    }
+
+    .metric strong {
+      font-size: 18px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .provider-card {
+      cursor: pointer;
+      text-align: left;
+      color: var(--text);
+      min-height: 116px;
+    }
+
+    .provider-card.is-selected {
+      border-color: var(--focus);
+      box-shadow: inset 0 0 0 1px var(--focus);
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      width: fit-content;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 3px 8px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 750;
+      letter-spacing: .03em;
+      text-transform: uppercase;
+    }
+
+    .pill.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 45%, var(--border)); }
+    .pill.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 45%, var(--border)); }
+    .pill.bad { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 45%, var(--border)); }
+
+    .list {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .assistant-panel {
+      display: grid;
+      gap: 10px;
+      padding: 12px;
+      background: #111a25;
+    }
+
+    .assistant-head {
+      display: flex;
+      align-items: start;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .assistant-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .assistant-control {
+      display: grid;
+      gap: 8px;
+    }
+
+    .assistant-question {
+      width: 100%;
+      min-height: 74px;
+      resize: vertical;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: #101314;
+      color: var(--text);
+      padding: 9px 10px;
+    }
+
+    .assistant-actions {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .assistant-button,
+    .assistant-prompts button {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--panel);
+      color: var(--text);
+      padding: 8px 10px;
+      cursor: pointer;
+    }
+
+    .assistant-button:hover,
+    .assistant-prompts button:hover {
+      border-color: var(--focus);
+    }
+
+    .assistant-prompts,
+    .assistant-list {
+      display: grid;
+      gap: 6px;
+      margin: 8px 0 0;
+      padding-left: 18px;
+    }
+
+    .assistant-prompts {
+      padding-left: 0;
+      list-style: none;
+    }
+
+    .assistant-answer p,
+    .assistant-list li {
+      overflow-wrap: anywhere;
+    }
+
+    @media (max-width: 1160px) {
+      .shell { grid-template-columns: 1fr; }
+      .side { border-left: 0; border-top: 1px solid var(--border); }
+    }
+
+    @media (max-width: 960px) {
+      .boundary-strip,
+      .readiness-workbench { grid-template-columns: 1fr; }
+      .readiness-rail { border-right: 0; border-bottom: 1px solid var(--border); }
+      .summary-grid,
+      .provider-grid,
+      .list,
+      .assistant-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <main class="main">
+      <header class="toolbar" data-ui-style="template-console">
+        <div>
+          <h1>Scout Hardware Readiness</h1>
+          <p class="meta">Provider dry-run review. Fixture-backed. No control path.</p>
+        </div>
+        <span class="pill warn">read-only</span>
+      </header>
+
+      <section class="readiness-workbench" data-layout="provider-first-console" aria-label="Provider readiness console">
+        <aside class="readiness-rail" aria-label="Hardware readiness summary">
+          <div>
+            <h2>Readiness</h2>
+            <p class="hint">Fixture-backed Pi/provider dry-run visibility.</p>
+          </div>
+          <div class="summary-grid">
+            <div class="metric"><span>Interfaces</span><strong id="interfaceCount">0</strong></div>
+            <div class="metric"><span>Providers</span><strong id="providerCount">0</strong></div>
+            <div class="metric"><span>Degraded</span><strong id="degradedProviderCount">0</strong></div>
+            <div class="metric"><span>Replay</span><strong id="replayEventCount">0</strong></div>
+            <div class="metric"><span>Mock</span><strong id="mockMessageCount">0</strong></div>
+          </div>
+        </aside>
+
+        <div class="readiness-stage">
+          <section class="boundary-strip" data-boundary="no-hardware-provider-mutation" aria-label="Read-only hardware boundary">
+            <div>
+              <h2>Boundary</h2>
+              <p class="hint">No hardware control, provider control, real SOS, outbound transport, Phase 1 runtime writes, or Phase 2 Brain writes.</p>
+            </div>
+            <span class="pill warn">fixture-backed</span>
+            <span class="pill">assistant visible</span>
+          </section>
+
+          <section class="panel" aria-label="Provider readiness list">
+            <div class="toolbar">
+              <div>
+                <h2>Providers</h2>
+                <p class="hint">Select context only.</p>
+              </div>
+              <span id="selectedProviderLabel" class="pill">none selected</span>
+            </div>
+            <div id="providerGrid" class="provider-grid"></div>
+          </section>
+
+          <section class="panel" aria-label="Hardware interface inventory">
+            <div class="toolbar">
+              <div>
+                <h2>Interfaces</h2>
+                <p class="hint">GPIO, I2C, I2S/TTS, Bluetooth, UART, battery, GNSS, IMU, USB, and SSD metadata.</p>
+              </div>
+              <span class="pill">metadata-only</span>
+            </div>
+            <div id="interfaceGrid" class="provider-grid"></div>
+          </section>
+
+          <section class="panel" aria-label="Read-only readiness evidence">
+            <div class="toolbar">
+              <div>
+                <h2>Evidence</h2>
+                <p class="hint">Replay, debug events, and mock queue are explanatory only.</p>
+              </div>
+            </div>
+            <div id="evidenceList" class="list"></div>
+          </section>
+        </div>
+      </section>
+    </main>
+
+    <aside class="side">
+      <!-- assistant-shell:start -->
+      <article id="assistantPanel" class="assistant-panel" data-assistant-surface="hardware_readiness" data-assistant-boundary="read-only model interpretation" data-assistant-default-visible="true" aria-label="Read-only hardware readiness assistant">
+        <div class="assistant-head">
+          <div>
+            <h2>Hardware Readiness Assistant</h2>
+            <p class="meta">read-only model interpretation.</p>
+          </div>
+          <span class="pill">surface: hardware_readiness</span>
+        </div>
+        <div class="assistant-grid">
+          <div class="assistant-field">
+            <span>Surface</span>
+            <strong>hardware readiness assistant</strong>
+          </div>
+          <div class="assistant-field">
+            <span>Read-only boundary</span>
+            <strong>read-only model interpretation</strong>
+          </div>
+          <div class="assistant-field">
+            <span>Provider</span>
+            <strong id="assistantProviderStatus">checking provider status</strong>
+            <small id="assistantProviderStatusDetail">No token value is shown.</small>
+          </div>
+          <div class="assistant-field">
+            <span>Context</span>
+            <strong>fixture-backed provider dry-run</strong>
+          </div>
+        </div>
+        <section class="assistant-sources" aria-label="Assistant suggested questions">
+          <h3>Suggested questions</h3>
+          <p class="meta">Suggestions follow selected provider readiness context.</p>
+          <ul id="assistantPromptSuggestions" class="assistant-prompts" aria-label="Suggested assistant questions">
+            <li><button type="button" data-assistant-question="Why is this provider degraded?" title="Why is this provider degraded?" aria-label="Why is this provider degraded?">Why degraded?</button></li>
+            <li><button type="button" data-assistant-question="What dry-run evidence supports this readiness state?" title="What dry-run evidence supports this readiness state?" aria-label="What dry-run evidence supports this readiness state?">Evidence?</button></li>
+            <li><button type="button" data-assistant-question="What remains blocked before live hardware?" title="What remains blocked before live hardware?" aria-label="What remains blocked before live hardware?">Blockers?</button></li>
+          </ul>
+        </section>
+        <section class="assistant-control" aria-label="Ask assistant">
+          <label for="assistantQuestionInput">Question</label>
+          <textarea id="assistantQuestionInput" class="assistant-question" rows="3">Why is this provider degraded?</textarea>
+          <div class="assistant-actions">
+            <button id="assistantAskButton" class="assistant-button" type="button">Ask read-only assistant</button>
+            <span id="assistantStatus" class="assistant-status">Assistant query is read-only and uses fixture-backed readiness context.</span>
+          </div>
+        </section>
+        <section class="assistant-answer" aria-label="Assistant answer">
+          <h3>Answer</h3>
+          <p id="assistantAnswerText">This shell explains provider health, sample replay, runtime debug events, and mock transport queue without controlling hardware or providers.</p>
+        </section>
+        <section class="assistant-sources" aria-label="Assistant context transparency">
+          <h3>Context</h3>
+          <ul id="assistantContextList" class="assistant-list">
+            <li>surface: hardware_readiness</li>
+            <li>selected_artifact_id: selected provider</li>
+            <li>provider status hides token values</li>
+          </ul>
+        </section>
+        <section class="assistant-sources" aria-label="Assistant offline fallback schema">
+          <h3>Offline fallback</h3>
+          <ul id="assistantOfflineFallbackList" class="assistant-list">
+            <li>No offline fallback schema returned.</li>
+          </ul>
+        </section>
+        <section class="assistant-sources" aria-label="Assistant workflow audit">
+          <h3>Workflow</h3>
+          <ul id="assistantWorkflowStatusList" class="assistant-list">
+            <li>Workflow readiness status not loaded.</li>
+          </ul>
+          <ul id="assistantWorkflowList" class="assistant-list">
+            <li>No full workflow summary returned.</li>
+          </ul>
+        </section>
+        <section class="assistant-limitations" aria-label="Assistant limitations">
+          <h3>Limitations</h3>
+          <ul id="assistantLimitationsList" class="assistant-list">
+            <li>No hardware control or provider control.</li>
+            <li>No real SOS, SMS, satellite, or outbound transport.</li>
+            <li>No Pi, Docker, k3s, MQTT, NATS, Coral, or Jetson deployment is started.</li>
+            <li>No Phase 1 runtime or Phase 2 Brain state is changed.</li>
+          </ul>
+        </section>
+        <section class="assistant-sources" aria-label="Assistant sources">
+          <h3>Sources</h3>
+          <ul id="assistantSourcesList" class="assistant-list">
+            <li>provider health fixture</li>
+            <li>sample replay timeline</li>
+            <li>runtime debug event fixture</li>
+            <li>mock transport queue</li>
+          </ul>
+        </section>
+      </article>
+      <!-- assistant-shell:end -->
+    </aside>
+  </div>
+
+  <script src="/admin/scout-assistant-ui.js"></script>
+  <script>
+    const state = {
+      view: null,
+      selectedProviderRef: ""
+    };
+
+    function apiBase() {
+      const params = new URLSearchParams(location.search);
+      const override = params.get("apiBase") || localStorage.getItem("scout.adminApiBase");
+      if (override) return override.replace(/\/$/, "");
+      if (location.protocol === "file:") return "http://scout.local:9100";
+      return "";
+    }
+
+    function statusClass(status) {
+      const value = String(status || "").toLowerCase();
+      if (["failed", "unavailable", "degraded"].includes(value)) return "pill bad";
+      if (["warning", "queued"].includes(value)) return "pill warn";
+      if (["available", "ok", "completed"].includes(value)) return "pill ok";
+      return "pill";
+    }
+
+    function selectedProvider() {
+      return (state.view?.provider_health || []).find(provider => provider.provider_ref === state.selectedProviderRef) || null;
+    }
+
+    function selectedProviderRef() {
+      return state.selectedProviderRef || selectedProvider()?.provider_ref || "";
+    }
+
+    function renderSummary(view) {
+      document.getElementById("interfaceCount").textContent = view.summary.interface_count || 0;
+      document.getElementById("providerCount").textContent = view.summary.provider_count || 0;
+      document.getElementById("degradedProviderCount").textContent = view.summary.degraded_provider_count || 0;
+      document.getElementById("replayEventCount").textContent = view.summary.sample_replay_event_count || 0;
+      document.getElementById("mockMessageCount").textContent = view.summary.mock_message_count || 0;
+    }
+
+    function renderProviders(view) {
+      const grid = document.getElementById("providerGrid");
+      grid.textContent = "";
+      view.provider_health.forEach(provider => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "provider-card";
+        button.dataset.providerRef = provider.provider_ref;
+        button.classList.toggle("is-selected", provider.provider_ref === state.selectedProviderRef);
+        button.innerHTML = `
+          <span>${provider.provider_type || "provider"}</span>
+          <strong>${provider.provider_ref}</strong>
+          <p class="${statusClass(provider.status)}">${provider.status || "unknown"}</p>
+          <p class="hint">${provider.degraded_reason || provider.last_seen_at || "fixture provider record"}</p>
+        `;
+        button.addEventListener("click", () => selectProvider(provider.provider_ref));
+        grid.appendChild(button);
+      });
+      document.getElementById("selectedProviderLabel").textContent = state.selectedProviderRef || "none selected";
+    }
+
+    function interfaceDetail(interfaceItem) {
+      const boundary = interfaceItem.boundary || {};
+      const parts = [
+        `activity=${interfaceItem.signal_activity || "unknown"}`,
+        `last_seen=${interfaceItem.last_seen_at || "not reported"}`,
+        `manual_drive=${interfaceItem.manual_drive_allowed ? "allowed" : "blocked"}`
+      ];
+      const lines = interfaceItem.observed_lines || [];
+      if (lines.length) {
+        const writable = lines.filter(line => line.manual_read_allowed && line.manual_write_allowed);
+        const advanced = lines.filter(line => line.pull_control === "reserved_advanced_use");
+        parts.push(`gpio_lines=${lines.length}`);
+        parts.push(`rw_lines=${writable.length}`);
+        if (advanced.length) parts.push(`advanced=${advanced.map(line => line.header_label).join(", ")}`);
+        parts.push(`lines=${lines.map(line => `${line.line_ref}:${line.pull_state}`).join(", ")}`);
+      }
+      if (Object.prototype.hasOwnProperty.call(boundary, "gpioset_command_enabled")) {
+        parts.push(`gpioset_enabled=${boundary.gpioset_command_enabled ? "true" : "false"}`);
+      }
+      if (Object.prototype.hasOwnProperty.call(boundary, "wiring_manifest_confirmed")) {
+        parts.push(`wiring_confirmed=${boundary.wiring_manifest_confirmed ? "true" : "false"}`);
+      }
+      if (boundary.high_low_drive_deferred_until_wiring_confirmed) {
+        parts.push("drive_gate=wiring_manifest_required");
+      }
+      const addresses = interfaceItem.detected_addresses || [];
+      if (addresses.length) parts.push(`addresses=${addresses.join(", ")}`);
+      const connected = interfaceItem.connected_devices || [];
+      if (connected.length) parts.push(`connected=${connected.join(", ")}`);
+      const devices = interfaceItem.devices || [];
+      if (devices.length) {
+        parts.push(`devices=${devices.map(device => device.id || device.label || "device").join(", ")}`);
+      }
+      const details = interfaceItem.details || {};
+      Object.entries(details).slice(0, 5).forEach(([key, value]) => {
+        if (value !== null && value !== undefined && value !== "") parts.push(`${key}=${value}`);
+      });
+      return parts.join(" | ");
+    }
+
+    function renderInterfaces(view) {
+      const grid = document.getElementById("interfaceGrid");
+      grid.textContent = "";
+      (view.interface_inventory || []).forEach(interfaceItem => {
+        const node = document.createElement("div");
+        node.className = "provider-card";
+        node.innerHTML = `
+          <span>${interfaceItem.interface_type || "interface"}</span>
+          <strong>${interfaceItem.interface_ref}</strong>
+          <p class="${statusClass(interfaceItem.status)}">${interfaceItem.status || "unknown"}</p>
+          <p class="hint">${interfaceDetail(interfaceItem)}</p>
+        `;
+        grid.appendChild(node);
+      });
+    }
+
+    function renderEvidence(view) {
+      const list = document.getElementById("evidenceList");
+      list.textContent = "";
+      [
+        ...(view.sample_replay_timeline || []),
+        ...(view.runtime_debug_events || []),
+        ...(view.mock_transport_queue || [])
+      ].forEach(item => {
+        const node = document.createElement("div");
+        node.className = "metric";
+        node.innerHTML = `
+          <span>${item.evidence_type || item.kind || item.category || "evidence"}</span>
+          <strong>${item.event_id || item.message_id || item.source_id || "fixture"}</strong>
+          <p class="hint">${item.summary || item.body_preview || item.state || "read-only fixture evidence"}</p>
+        `;
+        list.appendChild(node);
+      });
+    }
+
+    function selectProvider(providerRef) {
+      state.selectedProviderRef = providerRef;
+      renderProviders(state.view);
+      renderAssistantPromptSuggestions(selectedProvider());
+    }
+
+    function suggestedAssistantQuestions(provider) {
+      const ref = provider?.provider_ref || "this provider";
+      return [
+        `Why is ${ref} degraded?`,
+        "What dry-run evidence supports this readiness state?",
+        "What remains blocked before live hardware?"
+      ];
+    }
+    function assistantQuestionLabel(question) {
+      if (question.startsWith("Why is ")) return "Why degraded?";
+      if (question.startsWith("What dry-run evidence")) return "Evidence?";
+      if (question.startsWith("What remains blocked")) return "Blockers?";
+      return "Ask";
+    }
+
+    function renderAssistantPromptSuggestions(provider) {
+      const list = document.getElementById("assistantPromptSuggestions");
+      list.textContent = "";
+      suggestedAssistantQuestions(provider).forEach(question => {
+        const li = document.createElement("li");
+        const button = document.createElement("button");
+        button.type = "button";
+        button.dataset.assistantQuestion = question;
+        button.title = question;
+        button.setAttribute("aria-label", question);
+        button.textContent = assistantQuestionLabel(question);
+        li.appendChild(button);
+        list.appendChild(li);
+      });
+    }
+
+    function assistantQueryPayload(question) {
+      return {
+        surface: "hardware_readiness",
+        question,
+        selected_artifact_id: selectedProviderRef() || null
+      };
+    }
+
+    function setAssistantStatus(message, mode = "") {
+      const status = document.getElementById("assistantStatus");
+      status.textContent = message;
+      status.classList.toggle("is-error", mode === "error");
+    }
+
+    async function loadAssistantStatus() {
+      try {
+        const status = await window.ScoutAssistantUI.fetchJson("/assistant/status", {apiBase});
+        window.ScoutAssistantUI.renderProviderStatus(status);
+        window.ScoutAssistantUI.renderWorkflowStatus(status);
+      } catch (error) {
+        window.ScoutAssistantUI.renderProviderStatusFailure(error);
+      }
+    }
+
+    function renderAssistantContext(payload, queryPayload) {
+      const sources = payload.sources || [];
+      const contextSummary = sources[0]?.context_summary || {};
+      const selectedProviderContext = contextSummary.selected_provider || null;
+      const items = [
+        `surface: ${queryPayload.surface}`,
+        `selected_artifact_id: ${queryPayload.selected_artifact_id || "none"}`,
+        `source_count: ${sources.length}`
+      ];
+      if (selectedProviderContext) {
+        items.push(`selected_provider: ${selectedProviderContext.provider_ref || "unknown"} | ${selectedProviderContext.status || "unknown"}`);
+      }
+      sources.filter(source => source.selected).slice(0, 4).forEach(source => {
+        items.push(`selected source: ${source.source_id} | ${source.evidence_type || "unknown"}`);
+      });
+      items.push(...window.ScoutAssistantUI.observabilityItems(payload));
+      window.ScoutAssistantUI.renderList("assistantContextList", items, "No context refs returned.");
+    }
+
+    function renderAssistantResponse(payload, queryPayload = assistantQueryPayload("")) {
+      document.getElementById("assistantAnswerText").textContent = payload.answer || "No assistant answer returned.";
+      renderAssistantContext(payload, queryPayload);
+      window.ScoutAssistantUI.renderOfflineFallback(payload);
+      window.ScoutAssistantUI.renderWorkflowSummary(payload);
+      window.ScoutAssistantUI.renderList(
+        "assistantLimitationsList",
+        payload.limitations || [],
+        "No limitations returned by assistant provider."
+      );
+      window.ScoutAssistantUI.renderList(
+        "assistantSourcesList",
+        window.ScoutAssistantUI.sourceItems(payload),
+        "No source refs returned."
+      );
+      setAssistantStatus(
+        payload.read_only && payload.model_interpretation
+          ? "Read-only model interpretation returned."
+          : "Assistant response returned without expected read-only labels.",
+        payload.read_only && payload.model_interpretation ? "" : "error"
+      );
+    }
+
+    async function submitAssistantQuery(question) {
+      const resolvedQuestion = String(question || "").trim();
+      if (!resolvedQuestion) {
+        setAssistantStatus("Enter a question before querying the read-only assistant.", "error");
+        return;
+      }
+      document.getElementById("assistantQuestionInput").value = resolvedQuestion;
+      document.getElementById("assistantAskButton").disabled = true;
+      setAssistantStatus("Querying read-only assistant...");
+      try {
+        const queryPayload = assistantQueryPayload(resolvedQuestion);
+        const payload = await window.ScoutAssistantUI.postJson("/assistant/query", queryPayload, {apiBase});
+        renderAssistantResponse(payload, queryPayload);
+      } catch (error) {
+        document.getElementById("assistantAnswerText").textContent =
+          "Assistant query failed safely. No hardware, provider, outbound, Phase 1, or Brain state was changed.";
+        window.ScoutAssistantUI.renderList("assistantLimitationsList", [error.message || String(error)], "Assistant query failed.");
+        window.ScoutAssistantUI.renderList("assistantContextList", [
+          "surface: hardware_readiness",
+          `selected_artifact_id: ${selectedProviderRef() || "none"}`
+        ], "No selected provider context.");
+        window.ScoutAssistantUI.renderList("assistantSourcesList", [
+          selectedProviderRef() || "hardware readiness fixture"
+        ], "No selected provider context.");
+        window.ScoutAssistantUI.renderOfflineFallback({});
+        window.ScoutAssistantUI.renderWorkflowSummary({});
+        setAssistantStatus("Assistant query failed", "error");
+      } finally {
+        document.getElementById("assistantAskButton").disabled = false;
+      }
+    }
+
+    async function loadHardwareReadiness() {
+      const view = await window.ScoutAssistantUI.fetchJson("/admin/hardware-readiness/context", {apiBase});
+      state.view = view;
+      state.selectedProviderRef = view.selected_provider?.provider_ref || view.provider_health?.[0]?.provider_ref || "";
+      renderSummary(view);
+      renderProviders(view);
+      renderInterfaces(view);
+      renderEvidence(view);
+      renderAssistantPromptSuggestions(selectedProvider());
+    }
+
+    window.ScoutAssistantUI.bindQuestionControls({submit: submitAssistantQuery});
+    loadAssistantStatus();
+    loadHardwareReadiness().catch(error => {
+      document.getElementById("evidenceList").textContent = `Failed to load readiness fixture: ${error.message || error}`;
+    });
+  </script>
+</body>
+</html>

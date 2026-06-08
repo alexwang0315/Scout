@@ -1,0 +1,163 @@
+{
+  "apply_summary": {
+    "accepted_candidate_refs": [
+      "contour.g11.seg_001_003"
+    ],
+    "compiles_mission_graph": false,
+    "corrected_candidate_refs": [
+      "policy_candidate.chilai_nanhua_day1.seg.001"
+    ],
+    "notes": [
+      "Apply summary is a fixture-only administrative summary, not a package patch.",
+      "No Phase 1 runtime state, Phase 2 Brain state, source artifact, or MissionGraph output is mutated."
+    ],
+    "package_mutation_count": 0,
+    "phase1_runtime_mutation_allowed": false,
+    "phase2_writeback_allowed": false,
+    "rejected_candidate_refs": [
+      "poi_readiness_policy.chilai_nanhua_day1.route_corridor_poi_coverage"
+    ],
+    "runtime_mutation_count": 0,
+    "source_refs": [
+      "outputs/contour_interpretation_candidates.json",
+      "outputs/poi_readiness_candidates.json",
+      "outputs/segment_policy_candidates.json"
+    ]
+  },
+  "artifact_kind": "pretrip_review_decision_log",
+  "boundary": {
+    "admin_api_integration": false,
+    "append_only": true,
+    "compiles_mission_graph": false,
+    "external_api_calls_made": false,
+    "notes": [
+      "Decision log accepts, corrects, or rejects selected draft review actions only.",
+      "Records are append-only pointers to review queue items and candidate refs.",
+      "No raw source payloads, external API calls, admin API writes, package mutation, runtime mutation, Phase 2 writeback, or MissionGraph compile is performed."
+    ],
+    "package_mutation_allowed": false,
+    "phase1_runtime_mutation_allowed": false,
+    "phase2_writeback_allowed": false,
+    "raw_payloads_embedded": false,
+    "runtime_mutation_allowed": false,
+    "source_mutation_allowed": false
+  },
+  "counts": {
+    "accepted_count": 1,
+    "action_count": 3,
+    "corrected_count": 1,
+    "package_mutation_count": 0,
+    "raw_payloads_embedded": false,
+    "rejected_count": 1,
+    "runtime_mutation_count": 0,
+    "source_ref_count": 3
+  },
+  "decisions": [
+    {
+      "append_only": true,
+      "candidate_ref": "contour.g11.seg_001_003",
+      "compiles_mission_graph": false,
+      "correction": null,
+      "decided_at": "2026-05-15T10:00:00+08:00",
+      "decision": "accepted",
+      "decision_id": "review_decision.chilai_nanhua_day1.accepted.contour.g11.seg_001_003",
+      "draft_action_id": "review_draft.chilai_nanhua_day1.contour.contour.g11.seg_001_003",
+      "package_mutation_allowed": false,
+      "phase1_runtime_mutation_allowed": false,
+      "phase2_writeback_allowed": false,
+      "raw_payloads_embedded": false,
+      "reviewer_alias": "trip_leader",
+      "runtime_mutation_allowed": false,
+      "source_mutation_allowed": false,
+      "source_review_queue_item_refs": [
+        {
+          "candidate_ref": "contour.g11.seg_001_003",
+          "item_id": "review_queue.chilai_nanhua_day1.contour.contour.g11.seg_001_003",
+          "review_queue_manifest_id": "review_queue.chilai_nanhua_day1.v0",
+          "source_ref": "outputs/contour_interpretation_candidates.json"
+        }
+      ],
+      "summary": "Accepted contour review note as candidate-only planning context.",
+      "target_ids": [
+        "seg.001",
+        "seg.002",
+        "seg.003"
+      ]
+    },
+    {
+      "append_only": true,
+      "candidate_ref": "policy_candidate.chilai_nanhua_day1.seg.001",
+      "compiles_mission_graph": false,
+      "correction": {
+        "field_updates": {
+          "review_state_after_edit": "accepted_with_human_correction",
+          "water_available": "reviewer_confirmed_unknown"
+        },
+        "replacement_ref_ids": [
+          "review_queue.chilai_nanhua_day1.segment_policy.policy_candidate.chilai_nanhua_day1.seg.001"
+        ],
+        "summary": "Keep the conservative daylight and retreat flags, but require water status to remain reviewer-confirmed."
+      },
+      "decided_at": "2026-05-15T10:05:00+08:00",
+      "decision": "corrected",
+      "decision_id": "review_decision.chilai_nanhua_day1.corrected.policy_candidate.chilai_nanhua_day1.seg.001",
+      "draft_action_id": "review_draft.chilai_nanhua_day1.segment_policy.policy_candidate.chilai_nanhua_day1.seg.001",
+      "package_mutation_allowed": false,
+      "phase1_runtime_mutation_allowed": false,
+      "phase2_writeback_allowed": false,
+      "raw_payloads_embedded": false,
+      "reviewer_alias": "trip_leader",
+      "runtime_mutation_allowed": false,
+      "source_mutation_allowed": false,
+      "source_review_queue_item_refs": [
+        {
+          "candidate_ref": "policy_candidate.chilai_nanhua_day1.seg.001",
+          "item_id": "review_queue.chilai_nanhua_day1.segment_policy.policy_candidate.chilai_nanhua_day1.seg.001",
+          "review_queue_manifest_id": "review_queue.chilai_nanhua_day1.v0",
+          "source_ref": "outputs/segment_policy_candidates.json"
+        }
+      ],
+      "summary": "Corrected segment policy review fields while keeping them candidate-only.",
+      "target_ids": [
+        "seg.001"
+      ]
+    },
+    {
+      "append_only": true,
+      "candidate_ref": "poi_readiness_policy.chilai_nanhua_day1.route_corridor_poi_coverage",
+      "compiles_mission_graph": false,
+      "correction": null,
+      "decided_at": "2026-05-15T10:10:00+08:00",
+      "decision": "rejected",
+      "decision_id": "review_decision.chilai_nanhua_day1.rejected.poi_readiness_policy.chilai_nanhua_day1.route_corridor_poi_coverage",
+      "draft_action_id": "review_draft.chilai_nanhua_day1.poi_readiness.poi_readiness_policy.chilai_nanhua_day1.route_corridor_poi_coverage",
+      "package_mutation_allowed": false,
+      "phase1_runtime_mutation_allowed": false,
+      "phase2_writeback_allowed": false,
+      "raw_payloads_embedded": false,
+      "reviewer_alias": "trip_leader",
+      "runtime_mutation_allowed": false,
+      "source_mutation_allowed": false,
+      "source_review_queue_item_refs": [
+        {
+          "candidate_ref": "poi_readiness_policy.chilai_nanhua_day1.route_corridor_poi_coverage",
+          "item_id": "review_draft.chilai_nanhua_day1.poi_readiness.poi_readiness_policy.chilai_nanhua_day1.route_corridor_poi_coverage",
+          "review_queue_manifest_id": "review_draft_log.chilai_nanhua_day1.v0",
+          "source_ref": "outputs/poi_readiness_candidates.json"
+        }
+      ],
+      "summary": "Rejected POI corridor policy edit as insufficient for accepted planning assumptions.",
+      "target_ids": [
+        "route_corridor_poi_coverage"
+      ]
+    }
+  ],
+  "log_id": "review_decision_log.chilai_nanhua_day1.v0",
+  "notes": [
+    "Representative Phase 4 slice A fixture for accepted admin review decisions.",
+    "Uses the current three Chilai review draft actions as the complete input set."
+  ],
+  "project_id": "chilai_nanhua_day1",
+  "source_draft_log_ref": "reviews/review_draft_log.json",
+  "source_review_queue_manifest_ref": "outputs/review_queue_manifest.json"
+}

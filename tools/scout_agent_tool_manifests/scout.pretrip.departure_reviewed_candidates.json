@@ -1,0 +1,45 @@
+{
+  "id": "scout.pretrip.departure_reviewed_candidates",
+  "version": "0.1.0",
+  "description": "Build a reviewed-candidates package addendum from the local review decision apply plan without approving departure or activating runtime.",
+  "command": {
+    "argv": [
+      "{python}",
+      "-m",
+      "scout_agent_builtin_tools",
+      "pretrip-departure-reviewed-candidates",
+      "--input",
+      "{input}",
+      "--json"
+    ],
+    "dry_run_argument": "--dry-run"
+  },
+  "mode": "package_write",
+  "input_schema_ref": "schemas/scout_agent/pretrip_departure_reviewed_candidates.request.json",
+  "output_schema_ref": "schemas/scout_agent/tool_result.json",
+  "allowed_reads": [
+    "pretrip.workspace.project",
+    "pretrip.review_decision_apply_plan"
+  ],
+  "allowed_writes": [
+    "pretrip.workspace.departure_reviewed_candidates"
+  ],
+  "forbidden_writes": [
+    "phase1.runtime",
+    "phase2.brain.observed_facts",
+    "live.safety_api",
+    "runtime.session"
+  ],
+  "requires_authorization": {
+    "kind": "user_or_operator"
+  },
+  "trace": {
+    "required": true,
+    "event_kind": "agent_tool_invocation"
+  },
+  "metadata": {
+    "package_addendum_only": true,
+    "runtime_activation_allowed": false,
+    "runtime_safety_truth": false
+  }
+}
