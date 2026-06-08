@@ -42,10 +42,22 @@ boundary. It:
 It does not provide OS-level isolation, container isolation, syscall filtering,
 or a complete network/file-system security boundary.
 
+## Hardware Smoke Policy
+
+The Scout AI OS hardware smoke profile is a readiness and audit layer. It may
+run API, local Pydantic AI, session-local UI operation, generated capability
+metadata, sandbox rejection, and notification dry-run checks on a Scout host.
+It may also validate supplied hardware/mobile evidence JSON.
+
+It must not control hardware, send external notifications, mutate Phase 1
+L0-L4 safety truth, call live `/safety/*` mutation routes, perform runtime
+ingest, or install generated runtime code. Evidence that reports any of those
+effects as `true` is blocked by the profile.
+
 ## Remaining Non-Implementation
 
 - generated code is not installed as an executable production capability;
-- external notification providers are not implemented;
+- live external notification providers are not implemented;
 - model output cannot mutate Scout L0-L4 safety truth;
 - payments, deletion, credential access, and production writes remain denied by
   default.

@@ -1,0 +1,94 @@
+name: scout.ui.action_plan
+description: Build allowlisted session-local UI action plans for Scout admin, debug, and pretrip surfaces.
+version: 0.1.0
+runtime: browser
+risk_level: low
+input_schema:
+  type: object
+  required:
+    - surface
+    - request_text
+  properties:
+    surface:
+      type: string
+      enum:
+        - admin
+        - debug
+        - pretrip
+    request_text:
+      type: string
+    preset:
+      type:
+        - string
+        - "null"
+    target_kind:
+      type:
+        - string
+        - "null"
+    target_ref:
+      type:
+        - string
+        - "null"
+    query:
+      type:
+        - string
+        - "null"
+    tab:
+      type:
+        - string
+        - "null"
+output_schema:
+  type: object
+  required:
+    - artifact_kind
+    - artifact_version
+    - status
+    - surface
+    - actions
+    - boundary
+  properties:
+    artifact_kind:
+      const: scout_ui_action_plan
+    artifact_version:
+      const: scout_ui_action_plan.v0
+    status:
+      type: string
+      enum:
+        - planned
+        - unsupported
+    surface:
+      type: string
+    actions:
+      type: array
+      items:
+        type: object
+    boundary:
+      type: object
+permissions:
+  - session_local_ui
+  - read_only_evidence_query
+  - workspace_write_intent.confirmation_required
+dependencies:
+  - POST /admin/ui-action-plan
+  - window.ScoutAssistantUI.applyUiActionPlan
+examples:
+  - input:
+      surface: pretrip
+      request_text: 請幫我關掉所有地圖圖層，只留下 risk score 相關圖層。
+    output:
+      artifact_kind: scout_ui_action_plan
+      artifact_version: scout_ui_action_plan.v0
+      status: planned
+test_cases:
+  - name: risk_only_layers_are_session_local
+    input:
+      surface: pretrip
+      request_text: 請幫我關掉所有地圖圖層，只留下 risk score 相關圖層。
+    expected_status: planned
+  - name: workspace_write_intents_require_confirmation
+    input:
+      surface: pretrip
+      request_text: 用目前地圖點新增一個 CP。
+    expected_status: planned
+    requires_confirmation: true
+install_scope: session

@@ -1,9 +1,16 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from scout.runtime import ActionExecutor, RuntimeExecutor, Scheduler
+from scout.runtime import (
+    ActionExecutor,
+    BackgroundScheduler,
+    RuntimeExecutor,
+    RuntimeTickResult,
+    Scheduler,
+)
 from scout.schemas import (
     ActionSpec,
     ActionType,
@@ -20,11 +27,14 @@ from scout.schemas import (
 )
 from scout.services import (
     CapabilityRegistry,
+    DryRunNotificationProvider,
+    MemoryNotificationProvider,
     NotificationGateway,
     PermissionGate,
     WorkflowStore,
     open_database,
 )
+from scout.ui_action_plan import build_scout_ui_action_plan
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -33,6 +43,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def make_workflow(
     *,
     lifecycle: WorkflowLifecycle = WorkflowLifecycle.ONE_SHOT,
+    runtime: RuntimeTarget = RuntimeTarget.PI,
     trigger: TriggerSpec | None = None,
     permissions: PermissionSpec | None = None,
     actions: list[ActionSpec] | None = None,
@@ -52,7 +63,7 @@ def make_workflow(
             )
         ],
         lifecycle=lifecycle,
-        runtime=RuntimeTarget.PI,
+        runtime=runtime,
         permissions=permissions or PermissionSpec(),
     )
 
@@ -116,6 +127,119 @@ def test_permission_gate_denies_high_risk_generated_capability() -> None:
     assert decision.requires_user_approval is False
 
 
+def test_permission_gate_allows_session_local_ui_action_plan() -> None:
+    plan = build_scout_ui_action_plan(
+        surface="pretrip",
+        request_text="請幫我關掉所有地圖圖層，只留下 risk score 相關圖層。",
+    )
+
+    decision = PermissionGate().evaluate_ui_action_plan(plan)
+
+    assert decision.allowed is True
+    assert decision.requires_user_approval is False
+    assert "session-local" in decision.reason
+
+
+def test_permission_gate_requires_confirmation_for_workspace_ui_intent() -> None:
+    plan = build_scout_ui_action_plan(
+        surface="pretrip",
+        request_text="用目前地圖點新增一個 CP。",
+    )
+
+    decision = PermissionGate().evaluate_ui_action_plan(plan)
+
+    assert decision.allowed is True
+    assert decision.requires_user_approval is True
+    assert "workspace write intent" in decision.reason
+
+
+def test_permission_gate_denies_forbidden_ui_action_plan() -> None:
+    plan = build_scout_ui_action_plan(
+        surface="debug",
+        request_text="請直接觸發 Ln 並發送 SOS",
+    )
+
+    decision = PermissionGate().evaluate_ui_action_plan(plan)
+
+    assert decision.allowed is False
+    assert decision.requires_user_approval is False
+    assert "forbidden_runtime_or_outbound_action" in decision.reason
+
+
+def test_permission_gate_allows_low_risk_ui_action_workflow() -> None:
+    workflow = make_workflow(
+        lifecycle=WorkflowLifecycle.SESSION_SCOPED,
+        runtime=RuntimeTarget.BROWSER,
+        permissions=PermissionSpec(required=["session_local_ui"]),
+        actions=[
+            ActionSpec(
+                type=ActionType.UI_ACTION,
+                description="Plan risk-only layer visibility.",
+                config={
+                    "surface": "pretrip",
+                    "request_text": "請幫我關掉所有地圖圖層，只留下 risk score 相關圖層。",
+                },
+            )
+        ],
+    )
+
+    decision = PermissionGate().evaluate_workflow(workflow)
+
+    assert decision.allowed is True
+    assert decision.requires_user_approval is False
+    assert decision.reason == "low-risk workflow"
+
+
+def test_permission_gate_requires_confirmation_for_ui_workflow_workspace_intent() -> None:
+    plan = build_scout_ui_action_plan(
+        surface="pretrip",
+        request_text="刪除目前選取的 CP。",
+    )
+    workflow = make_workflow(
+        lifecycle=WorkflowLifecycle.SESSION_SCOPED,
+        runtime=RuntimeTarget.BROWSER,
+        permissions=PermissionSpec(required=["session_local_ui"]),
+        actions=[
+            ActionSpec(
+                type=ActionType.UI_ACTION,
+                description="Delete selected checkpoint as a workspace review intent.",
+                config={"ui_action_plan": plan},
+            )
+        ],
+    )
+
+    decision = PermissionGate().evaluate_workflow(workflow)
+
+    assert decision.allowed is True
+    assert decision.requires_user_approval is True
+    assert "workspace write intent" in decision.reason
+
+
+def test_permission_gate_denies_forbidden_ui_action_workflow() -> None:
+    plan = build_scout_ui_action_plan(
+        surface="debug",
+        request_text="請直接觸發 Ln 並發送 SOS",
+    )
+    workflow = make_workflow(
+        lifecycle=WorkflowLifecycle.SESSION_SCOPED,
+        runtime=RuntimeTarget.BROWSER,
+        permissions=PermissionSpec(required=["session_local_ui"]),
+        actions=[
+            ActionSpec(
+                type=ActionType.UI_ACTION,
+                description="Plan forbidden outbound safety mutation.",
+                config={"ui_action_plan": plan},
+            )
+        ],
+    )
+
+    decision = PermissionGate().evaluate_workflow(workflow)
+
+    assert decision.allowed is False
+    assert decision.requires_user_approval is False
+    assert "UI action denied" in decision.reason
+
+
 def test_notification_gateway_logs_and_records_event(tmp_path: Path, capsys) -> None:
     workflow_store, _executor = make_runtime(tmp_path)
     workflow_id = workflow_store.install(make_workflow(), user_id="user-1")
@@ -129,12 +253,39 @@ def test_notification_gateway_logs_and_records_event(tmp_path: Path, capsys) -> 
     )
 
     assert result.sent is True
+    assert result.provider == "stdout"
     assert "Scout: Check route." in capsys.readouterr().out
-    events = workflow_store._connection.execute(  # noqa: SLF001
-        "SELECT event_type FROM workflow_events WHERE workflow_id = ?",
-        (workflow_id,),
-    ).fetchall()
-    assert "notification.sent" in [row["event_type"] for row in events]
+    events = workflow_store.list_events(workflow_id)
+    notification_event = next(
+        event for event in events if event["event_type"] == "notification.sent"
+    )
+    assert notification_event["payload"]["provider"] == "stdout"
+    assert notification_event["payload"]["sent"] is True
+
+
+def test_notification_gateway_supports_memory_provider(capsys) -> None:
+    provider = MemoryNotificationProvider()
+    gateway = NotificationGateway(provider=provider)
+
+    result = gateway.send("user-1", "Scout", "Check camp.")
+
+    assert result.provider == "memory"
+    assert provider.notifications == [result]
+    assert capsys.readouterr().out == ""
+
+
+def test_notification_gateway_supports_external_transport_dry_run(capsys) -> None:
+    provider = DryRunNotificationProvider("telegram")
+    gateway = NotificationGateway(provider=provider)
+
+    result = gateway.send("user-1", "Scout", "Dry-run message.")
+
+    assert result.provider == "dry_run:telegram"
+    assert result.sent is False
+    assert result.metadata["dry_run"] is True
+    assert result.metadata["transport"] == "telegram"
+    assert provider.notifications == [result]
+    assert capsys.readouterr().out == ""
 
 
 def test_runtime_tick_executes_due_one_shot_notification(tmp_path: Path) -> None:
@@ -199,3 +350,69 @@ def test_runtime_executes_low_risk_builtin_capability(tmp_path: Path) -> None:
     result = executor.tick(now)
 
     assert result.results[0].events[0]["payload"] == {"ok": True}
+
+
+def test_runtime_executes_ui_action_as_session_local_plan(tmp_path: Path) -> None:
+    workflow_store, executor = make_runtime(tmp_path)
+    workflow_id = workflow_store.install(
+        make_workflow(
+            lifecycle=WorkflowLifecycle.SESSION_SCOPED,
+            runtime=RuntimeTarget.BROWSER,
+            permissions=PermissionSpec(required=["session_local_ui"]),
+            actions=[
+                ActionSpec(
+                    type=ActionType.UI_ACTION,
+                    description="Plan risk-only layer visibility.",
+                    config={
+                        "surface": "pretrip",
+                        "request_text": "請幫我關掉所有地圖圖層，只留下 risk score 相關圖層。",
+                    },
+                )
+            ],
+        ),
+        user_id="user-1",
+    )
+    now = datetime.now(UTC)
+    workflow_store.set_next_run_at(workflow_id, now - timedelta(seconds=1))
+
+    result = executor.tick(now)
+
+    assert result.ran == 1
+    assert result.results[0].status == "scheduled"
+    action_result = result.results[0].events[0]
+    assert action_result["status"] == "planned"
+    assert action_result["action_type"] == "ui_action"
+    assert action_result["artifact_version"] == "scout_ui_action_plan.v0"
+    assert action_result["session_only"] is True
+    assert action_result["application_required"] == (
+        "window.ScoutAssistantUI.applyUiActionPlan"
+    )
+    assert action_result["ui_action_plan"]["actions"][0]["action_kind"] == (
+        "set_layer_preset"
+    )
+
+
+def test_background_scheduler_lifecycle_ticks_and_stops() -> None:
+    class CountingScheduler:
+        def __init__(self) -> None:
+            self.count = 0
+
+        def tick(self) -> RuntimeTickResult:
+            self.count += 1
+            return RuntimeTickResult(checked=0, ran=0, paused=0, failed=0)
+
+    async def run_lifecycle() -> None:
+        scheduler = CountingScheduler()
+        background = BackgroundScheduler(scheduler, interval_seconds=0.01)
+
+        await background.start()
+        await asyncio.sleep(0.03)
+        assert background.running is True
+        await background.stop()
+
+        assert background.running is False
+        assert scheduler.count >= 1
+        assert background.tick_count == scheduler.count
+        assert background.status()["running"] is False
+
+    asyncio.run(run_lifecycle())
