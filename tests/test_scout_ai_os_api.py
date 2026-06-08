@@ -1,0 +1,126 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+from fastapi.testclient import TestClient
+
+from scout.api.routes import create_app
+
+
+def make_client(tmp_path: Path) -> TestClient:
+    app = create_app(
+        tmp_path / "api.sqlite",
+        root=Path(__file__).resolve().parents[1],
+        eval_jsonl_path=tmp_path / "evals" / "workflow_compiler.jsonl",
+    )
+    return TestClient(app)
+
+
+def test_request_installs_low_risk_workflow_and_learning_artifact(
+    tmp_path: Path,
+) -> None:
+    client = make_client(tmp_path)
+
+    response = client.post(
+        "/requests",
+        json={
+            "user_id": "user-1",
+            "user_text": "Remind me in 10 minutes.",
+            "active_context": {"now": "2026-06-08T00:00:00+00:00"},
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "installed"
+    workflow_id = payload["workflow_id"]
+
+    workflows = client.get("/workflows", params={"user_id": "user-1"}).json()
+    assert workflows["workflows"][0]["id"] == workflow_id
+
+    artifact_payload = client.get("/learning-artifacts").json()
+    assert artifact_payload["learning_artifacts"]
+
+
+def test_request_needing_approval_saves_pending_workflow(tmp_path: Path) -> None:
+    client = make_client(tmp_path)
+
+    response = client.post(
+        "/requests",
+        json={
+            "user_id": "user-1",
+            "user_text": "Notify me 100 meters before the next campsite.",
+            "active_context": {},
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "needs_approval"
+
+    workflow_id = payload["workflow_id"]
+    approve = client.post(
+        f"/workflows/{workflow_id}/approve",
+        json={"user_id": "user-1", "approval_note": "Trip only."},
+    )
+    assert approve.status_code == 200
+    loaded = client.get(f"/workflows/{workflow_id}").json()
+    assert loaded["workflow"]["status"] == "active"
+
+
+def test_cancel_workflow_and_list_capabilities(tmp_path: Path) -> None:
+    client = make_client(tmp_path)
+    created = client.post(
+        "/requests",
+        json={
+            "user_id": "user-1",
+            "user_text": "Remind me in 10 minutes.",
+            "active_context": {"now": "2026-06-08T00:00:00+00:00"},
+        },
+    ).json()
+
+    cancelled = client.post(
+        f"/workflows/{created['workflow_id']}/cancel",
+        json={"user_id": "user-1", "reason": "No longer needed."},
+    )
+
+    assert cancelled.status_code == 200
+    capabilities = client.get("/capabilities").json()["capabilities"]
+    assert {capability["name"] for capability in capabilities} >= {
+        "manual_notification",
+        "time_reminder",
+        "json_transform",
+    }
+
+
+def test_learning_artifact_approval_endpoint_appends_eval_case(
+    tmp_path: Path,
+) -> None:
+    client = make_client(tmp_path)
+    client.post(
+        "/requests",
+        json={
+            "user_id": "user-1",
+            "user_text": "Remind me in 10 minutes.",
+            "active_context": {"now": "2026-06-08T00:00:00+00:00"},
+        },
+    )
+    artifact = client.get("/learning-artifacts").json()["learning_artifacts"][0]
+
+    approved = client.post(
+        f"/learning-artifacts/{artifact['id']}/approve",
+        json={"user_id": "user-1", "approval_note": "Looks reusable."},
+    )
+
+    assert approved.status_code == 200
+    assert approved.json()["status"] == "approved"
+    assert (tmp_path / "evals" / "workflow_compiler.jsonl").exists()
+
+
+def test_runtime_tick_endpoint_returns_summary(tmp_path: Path) -> None:
+    client = make_client(tmp_path)
+
+    response = client.post("/runtime/tick")
+
+    assert response.status_code == 200
+    assert response.json()["checked"] == 0

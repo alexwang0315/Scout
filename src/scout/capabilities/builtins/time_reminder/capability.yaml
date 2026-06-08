@@ -1,0 +1,31 @@
+name: time_reminder
+description: Persist metadata for a time-based reminder capability candidate.
+version: 0.1.0
+runtime: python
+risk_level: low
+input_schema:
+  type: object
+  required:
+    - run_at
+    - message
+  properties:
+    run_at:
+      type: string
+      format: date-time
+    message:
+      type: string
+output_schema:
+  type: object
+  properties:
+    scheduled:
+      type: boolean
+permissions: []
+dependencies: []
+examples:
+  - input:
+      run_at: "2026-06-08T08:00:00+00:00"
+      message: Check weather.
+    output:
+      scheduled: false
+test_cases: []
+install_scope: user
