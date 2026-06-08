@@ -1,0 +1,457 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Scout Pretrip MCP 使用說明</title>
+  <style>
+    :root {
+      --ink: #14211f;
+      --muted: #5f6f6a;
+      --line: #d9e2df;
+      --paper: #f8faf9;
+      --panel: #ffffff;
+      --mcp: #0b5d4c;
+      --cp: #315f9e;
+      --warning: #b25f00;
+      --danger: #9f2f2f;
+      --soft: #e7f1ee;
+      --code: #102621;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--paper);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.6;
+    }
+    header {
+      background: #0f2d28;
+      color: white;
+      padding: 44px 24px 36px;
+    }
+    .wrap {
+      max-width: 1120px;
+      margin: 0 auto;
+    }
+    .eyebrow {
+      margin: 0 0 10px;
+      color: #b9d8cf;
+      font-size: 13px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      font-weight: 700;
+    }
+    h1 {
+      margin: 0;
+      font-size: clamp(32px, 5vw, 56px);
+      line-height: 1.05;
+      letter-spacing: 0;
+      max-width: 900px;
+    }
+    .lead {
+      margin: 18px 0 0;
+      max-width: 850px;
+      color: #e7f4f0;
+      font-size: 18px;
+    }
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      background: rgba(248, 250, 249, .94);
+      border-bottom: 1px solid var(--line);
+      backdrop-filter: blur(10px);
+    }
+    nav .wrap {
+      display: flex;
+      gap: 10px;
+      overflow-x: auto;
+      padding: 10px 24px;
+    }
+    nav a {
+      color: var(--mcp);
+      text-decoration: none;
+      white-space: nowrap;
+      font-weight: 700;
+      font-size: 14px;
+      padding: 7px 10px;
+      border: 1px solid var(--line);
+      background: white;
+      border-radius: 6px;
+    }
+    main {
+      padding: 30px 24px 56px;
+    }
+    section {
+      margin: 0 0 28px;
+      padding: 28px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+    h2 {
+      margin: 0 0 14px;
+      font-size: 26px;
+      letter-spacing: 0;
+    }
+    h3 {
+      margin: 24px 0 10px;
+      font-size: 19px;
+      letter-spacing: 0;
+    }
+    p { margin: 10px 0; }
+    ul, ol { padding-left: 22px; }
+    li { margin: 6px 0; }
+    code {
+      color: var(--code);
+      background: #edf4f2;
+      padding: 2px 5px;
+      border-radius: 4px;
+      font-size: .94em;
+    }
+    pre {
+      overflow-x: auto;
+      color: #e8fff7;
+      background: #0f211e;
+      padding: 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 14px 0;
+      font-size: 14px;
+    }
+    th, td {
+      text-align: left;
+      vertical-align: top;
+      padding: 10px;
+      border-bottom: 1px solid var(--line);
+    }
+    th {
+      background: #eef5f3;
+      color: #203b36;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+      margin: 18px 0;
+    }
+    .metric {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 16px;
+      background: #fbfdfc;
+    }
+    .metric span {
+      display: block;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+    .metric strong {
+      display: block;
+      margin-top: 4px;
+      color: var(--mcp);
+      font-size: 30px;
+      line-height: 1;
+    }
+    .bar-chart {
+      display: grid;
+      gap: 12px;
+      margin: 18px 0;
+    }
+    .bar-row {
+      display: grid;
+      grid-template-columns: 160px 1fr 64px;
+      gap: 12px;
+      align-items: center;
+      font-size: 14px;
+    }
+    .bar-track {
+      height: 16px;
+      background: #e4ece9;
+      border-radius: 6px;
+      overflow: hidden;
+      border: 1px solid var(--line);
+    }
+    .bar {
+      height: 100%;
+      background: var(--cp);
+    }
+    .bar.mcp { background: var(--mcp); }
+    .bar.suppressed { background: var(--warning); }
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 10px;
+      margin: 18px 0;
+    }
+    .flow div {
+      min-height: 96px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 12px;
+      background: var(--soft);
+      border: 1px solid #c8ddd7;
+      border-radius: 8px;
+      font-weight: 700;
+    }
+    .route {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(0, 1fr));
+      gap: 8px;
+      align-items: stretch;
+      margin: 18px 0;
+    }
+    .anchor {
+      padding: 10px;
+      min-height: 76px;
+      border: 1px solid var(--line);
+      border-top: 5px solid var(--mcp);
+      border-radius: 8px;
+      background: white;
+      font-size: 13px;
+      font-weight: 700;
+    }
+    .callout {
+      border-left: 5px solid var(--mcp);
+      background: #edf7f4;
+      padding: 14px 16px;
+      border-radius: 6px;
+      margin: 16px 0;
+    }
+    .warning {
+      border-left-color: var(--warning);
+      background: #fff5e8;
+    }
+    .danger {
+      border-left-color: var(--danger);
+      background: #fff0f0;
+    }
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    footer {
+      color: var(--muted);
+      border-top: 1px solid var(--line);
+      padding: 24px;
+      font-size: 14px;
+    }
+    @media (max-width: 860px) {
+      section { padding: 20px; }
+      .grid, .two-col, .flow, .route { grid-template-columns: 1fr; }
+      .bar-row { grid-template-columns: 120px 1fr 46px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap">
+      <p class="eyebrow">Scout Pretrip Planning</p>
+      <h1>Major Critical Point Synthesis 使用說明</h1>
+      <p class="lead">MCP 是行前規劃的「主要關鍵點」合成層：把大量 CP、命名點、地形風險、來源摘要與 OCR 標籤整理成少數人類可讀的行程錨點。它幫助 briefing、timeline、群體會合與 review，但不取代安全 CP 打卡點。</p>
+    </div>
+  </header>
+
+  <nav>
+    <div class="wrap">
+      <a href="#purpose">用途</a>
+      <a href="#not-cp">不是 CP 替代品</a>
+      <a href="#policy">挑選規則</a>
+      <a href="#ui">UI 操作</a>
+      <a href="#cli">CLI</a>
+      <a href="#schema">Artifact Schema</a>
+      <a href="#review">審查建議</a>
+    </div>
+  </nav>
+
+  <main class="wrap">
+    <section id="purpose">
+      <h2>這個功能在做什麼</h2>
+      <p>MCP 會在行前規劃階段，把大量 <code>Checkpoint Candidate</code>、<code>Named Point</code>、公開來源摘要、OCR 地圖標籤、地形/風險線索與 Scout 既有 CP support，壓縮成少數「行程錨點」。</p>
+      <div class="grid">
+        <div class="metric"><span>Dense CP</span><strong>110</strong><p>fixture 中的原始檢查點候選。</p></div>
+        <div class="metric"><span>MCP</span><strong>6</strong><p>合成後的人類可讀主要關鍵點。</p></div>
+        <div class="metric"><span>Linked / Suppressed</span><strong>2</strong><p>因 1000m spacing 被 primary MCP 吸收或連結。</p></div>
+      </div>
+      <div class="bar-chart" aria-label="Dense CP to MCP compression chart">
+        <div class="bar-row"><span>Dense CP candidates</span><div class="bar-track"><div class="bar" style="width:100%"></div></div><strong>110</strong></div>
+        <div class="bar-row"><span>MCP candidates</span><div class="bar-track"><div class="bar mcp" style="width:5.5%"></div></div><strong>6</strong></div>
+        <div class="bar-row"><span>Suppressed linked</span><div class="bar-track"><div class="bar suppressed" style="width:1.8%"></div></div><strong>2</strong></div>
+      </div>
+      <p>這個壓縮不是丟棄安全細節，而是把「系統需要的細節」和「人需要記住的路線主結構」分層。</p>
+    </section>
+
+    <section id="not-cp">
+      <h2>MCP 不是取代安全 CP 打卡點</h2>
+      <div class="two-col">
+        <div class="callout">
+          <h3>CP 是系統細節</h3>
+          <p>Dense CP 用於細緻路線檢查、導航、風險 review、Phase 1 checkpoint 到達判斷與 runtime planning handoff。CP 可以很多，因為它服務的是系統與 reviewer。</p>
+        </div>
+        <div class="callout">
+          <h3>MCP 是人類錨點</h3>
+          <p>MCP 用於行前 briefing、timeline anchors、群體會合點、補水點、重大地形或決策點。MCP 要少，因為它服務的是領隊與一般隊員的共同語言。</p>
+        </div>
+      </div>
+      <div class="route" aria-label="Example route anchors">
+        <div class="anchor">登山口</div>
+        <div class="anchor">舊林道叉路</div>
+        <div class="anchor">黑水塘</div>
+        <div class="anchor">大崩壁</div>
+        <div class="anchor">隱蔽樹林區</div>
+        <div class="anchor">啞口觀景點</div>
+        <div class="anchor">稜線通訊點</div>
+      </div>
+      <p>這些 MCP 可用於集合、補水、拍照休息、風險提醒、radio check 或 post-analysis timeline 對齊；但它們不會自動改寫 safety CP check-in，也不會自動編譯 Final MissionGraph。</p>
+    </section>
+
+    <section id="policy">
+      <h2>MCP 如何被挑出來</h2>
+      <p>目前 MCP 預設 class 包含：岔路、營地/山屋/人造物、取水點、極高危險地形、隱蔽樹林/易迷路區、大景/登山口/啞口、橋樑/隧道/繩索/固定設施、行動網路通訊點。</p>
+      <table>
+        <thead><tr><th>Policy</th><th>預設值</th><th>意義</th></tr></thead>
+        <tbody>
+          <tr><td><code>min_spacing_m</code></td><td>1000</td><td>MCP 之間預設至少間隔 1000m；太近時選 primary，其餘保留為 linked/suppressed。</td></tr>
+          <tr><td><code>scout_cp_support_radius_m</code></td><td>250</td><td>MCP 附近 250m 內應有 Scout CP support。</td></tr>
+          <tr><td><code>np_min_mention_ratio</code></td><td>0.05</td><td>命名點至少出現在 5% accepted evidence pages。</td></tr>
+          <tr><td><code>np_min_accepted_evidence_pages</code></td><td>11</td><td>accepted evidence page count 需大於 10。</td></tr>
+          <tr><td>Mandatory source families</td><td>PTT Hiking、健行筆記、上河文化</td><td>必須嘗試；缺口會記錄，且 confidence 不可升到 high。</td></tr>
+        </tbody>
+      </table>
+      <p>Scoring 是 deterministic，不由模型直接決定真相。分項包含 <code>type_weight</code>、<code>named_point_support</code>、<code>source_family_diversity</code>、<code>scout_cp_support</code>、<code>terrain_risk_support</code>、<code>stale_source_penalty</code>、<code>coordinate_uncertainty_penalty</code>。</p>
+      <div class="flow" aria-label="MCP synthesis flow">
+        <div>Named point evidence</div>
+        <div>Scout CP / route / risk</div>
+        <div>Deterministic synthesis</div>
+        <div>MCP artifacts</div>
+        <div>Human review</div>
+      </div>
+      <div class="callout warning">
+        <strong>Boundary:</strong> MCP 是 pretrip candidate-only evidence。它不呼叫 <code>/safety/*</code>，不改 Phase 1 runtime truth，不編譯 Final MissionGraph，不嵌入完整 copyrighted article 或完整 map image。
+      </div>
+    </section>
+
+    <section id="ui">
+      <h2>UI 上怎麼操作</h2>
+      <h3>啟動 admin server</h3>
+      <pre><code>PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. ./venv/bin/python -m uvicorn \
+  admin_api:create_admin_app --factory --host 127.0.0.1 --port 9099</code></pre>
+      <p>打開 <code>http://127.0.0.1:9099/admin/pretrip</code>。</p>
+
+      <h3>查看 MCP layer</h3>
+      <ol>
+        <li>在地圖工具列打開 <code>Layers</code>。</li>
+        <li>確認 <code>MCP</code> checkbox 已勾選。</li>
+        <li>在左側 evidence tree 打開 <code>Major Critical Points</code>。</li>
+        <li>點選 MCP 查看 detail JSON；雙擊項目會讓地圖 focus 到該 MCP。</li>
+      </ol>
+      <p>每個 MCP 摘要會顯示 confidence、CP support、route distance、mention ratio、accepted evidence pages、source families 與 suppressed count。</p>
+
+      <h3>寫入 workspace-only review action</h3>
+      <p>切到 <code>Review</code> tab，打開 <code>Workspace actions</code>，先選一個 MCP，再使用：</p>
+      <table>
+        <thead><tr><th>Button</th><th>Decision</th><th>用途</th></tr></thead>
+        <tbody>
+          <tr><td><code>MCP accept</code></td><td><code>accepted</code></td><td>接受此 MCP 作為 planning anchor。</td></tr>
+          <tr><td><code>MCP link</code></td><td><code>linked</code></td><td>連結到既有 CP candidate；UI 會提示輸入 CP id。</td></tr>
+          <tr><td><code>MCP split</code></td><td><code>split</code></td><td>將過度合併的 MCP 拆成多個 target ids。</td></tr>
+          <tr><td><code>MCP down</code></td><td><code>downgraded</code></td><td>降級並記錄原因，例如缺 source-family 或需現地確認。</td></tr>
+          <tr><td><code>MCP reject</code></td><td><code>rejected</code></td><td>拒絕此 MCP candidate。</td></tr>
+        </tbody>
+      </table>
+      <p>Review action 只寫本機 workspace log；不寫 fixture、不改 Final MissionGraph、不改 runtime、不呼叫 <code>/safety/*</code>。</p>
+
+      <h3>/admin/debug</h3>
+      <p><code>/admin/debug</code> 可以顯示 MCP planning projection 或 debug-projection events，用於排查資料來源與 projection 是否齊全。它仍然是 read-only debug context，不是 trip planning decision surface。</p>
+    </section>
+
+    <section id="cli">
+      <h2>CLI 怎麼使用</h2>
+      <p>以下命令都使用 fixture-backed data，不需要 live network。</p>
+      <h3>產生 retrieval preview</h3>
+      <pre><code>PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. ./venv/bin/python -m pretrip_mcp_synthesis \
+  search-preview \
+  --named-point-evidence tests/fixtures/pretrip/mcp/named_point_evidence.json \
+  --route-name "奇萊南華" \
+  --output-dir /tmp/scout-mcp-out</code></pre>
+      <p>輸出 <code>/tmp/scout-mcp-out/mcp_retrieval_plan.json</code>。</p>
+
+      <h3>合成 MCP candidates</h3>
+      <pre><code>PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. ./venv/bin/python -m pretrip_mcp_synthesis \
+  synthesize \
+  --project-root tests/fixtures/pretrip/projects/chilai_nanhua_day1 \
+  --named-point-evidence tests/fixtures/pretrip/mcp/named_point_evidence.json \
+  --output-dir /tmp/scout-mcp-out \
+  --min-spacing-m 1000 \
+  --scout-cp-support-radius-m 250 \
+  --np-min-mention-ratio 0.05 \
+  --np-min-evidence-pages 11</code></pre>
+      <p>輸出 <code>/tmp/scout-mcp-out/mcp_candidates.json</code>。</p>
+
+      <h3>正規化 OCR labels</h3>
+      <pre><code>PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. ./venv/bin/python -m pretrip_mcp_synthesis \
+  normalize-ocr \
+  --named-point-evidence tests/fixtures/pretrip/mcp/named_point_evidence.json \
+  --output-dir /tmp/scout-mcp-out</code></pre>
+      <p>輸出 <code>/tmp/scout-mcp-out/mcp_ocr_labels.json</code>。</p>
+
+      <h3>對照 Scout CP support</h3>
+      <pre><code>PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. ./venv/bin/python -m pretrip_mcp_synthesis \
+  reconcile-support \
+  --mcp-candidates /tmp/scout-mcp-out/mcp_candidates.json \
+  --output-dir /tmp/scout-mcp-out</code></pre>
+      <p>輸出 <code>/tmp/scout-mcp-out/mcp_cp_support_reconciliation.json</code>。</p>
+    </section>
+
+    <section id="schema">
+      <h2>Artifact schema 摘要</h2>
+      <table>
+        <thead><tr><th>Artifact</th><th>主要內容</th><th>邊界</th></tr></thead>
+        <tbody>
+          <tr><td><code>mcp_candidates.json</code></td><td>MCP count、dense CP count、policy、candidate list、mention ratio、source-family coverage、nearest CP、spacing suppression、score components。</td><td><code>candidate_only=true</code>、<code>runtime_safety_truth=false</code>、<code>compile_allowed=false</code></td></tr>
+          <tr><td><code>mcp_retrieval_plan.json</code></td><td>search/fetch/structured extraction plan、queries、fetch summaries、tool contracts、source-family attempts。</td><td><code>fixture_backed=true</code>、<code>live_network_performed=false</code>、<code>truth_decision_allowed=false</code></td></tr>
+          <tr><td><code>mcp_ocr_labels.json</code></td><td>OCR label text、source image hash、bbox、confidence、source ref。</td><td><code>human_review_required=true</code>、不嵌入完整 map image</td></tr>
+          <tr><td><code>mcp_cp_support_reconciliation.json</code></td><td>每個 MCP 的 CP support status、nearest Scout CP、suggested insertion、spacing suppression details。</td><td>沒有 support 時只能 suggested insertion / review-required</td></tr>
+          <tr><td><code>mcp_review_actions.json</code></td><td>本機 workspace append-only review log，包含 accepted、linked、split、downgraded、rejected。</td><td>不代表 Final MissionGraph compile 或 runtime handoff</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="review">
+      <h2>管理者審查建議</h2>
+      <ol>
+        <li>先看 <code>source_family_coverage</code>：PTT Hiking、健行筆記、上河文化是否都有嘗試；缺 mandatory family 時 confidence 不應為 high。</li>
+        <li>再看 <code>mention_ratio</code> 與 <code>accepted_evidence_page_count</code>：是否超過 5% 與 10 頁門檻。</li>
+        <li>檢查 <code>nearest_scout_cp</code>：250m 內是否有 Scout CP support；沒有時只能 suggested insertion / review-required。</li>
+        <li>檢查 <code>nearby_points_suppressed_by_spacing</code>：1000m 內被壓制的點是否語意接近；若水源與危險地形太近但操作意義不同，應 split 或保留 linked details。</li>
+        <li>看 <code>score_components</code>：高分是否來自合理因素，而不是單一來源或低品質座標。</li>
+        <li>最後看 <code>boundary</code>：確認 candidate-only、runtime_safety_truth=false、compile_allowed=false。</li>
+      </ol>
+      <div class="callout danger">
+        <strong>一般隊員說法：</strong> MCP 不是新的安全打卡規則，而是這趟路線最值得記住的幾個錨點。若 Scout runtime 或領隊安全規則另有 CP check-in，仍以那些 CP 和人工判斷為準。
+      </div>
+      <h3>驗證命令</h3>
+      <pre><code>PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. ./venv/bin/python -m pytest \
+  tests/test_pretrip_mcp_synthesis.py -q</code></pre>
+      <pre><code>PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. ./venv/bin/python -m pytest \
+  tests/test_pretrip_admin_view.py tests/test_pretrip_admin_page.py -q</code></pre>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">Scout MCP documentation. Static HTML page; no external article body, live network, or map image embedded.</div>
+  </footer>
+</body>
+</html>

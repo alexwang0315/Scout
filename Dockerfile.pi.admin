@@ -1,0 +1,219 @@
+# syntax=docker/dockerfile:1
+ARG TARGETPLATFORM=linux/arm64
+FROM --platform=$TARGETPLATFORM python:3.12-slim-bookworm
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    SCOUT_DATA_ROOT=/data/scout \
+    SCOUT_RUNTIME_PROFILE=pi-phase4-admin-preview \
+    SCOUT_SAFETY_ENABLED=false \
+    SCOUT_SAFETY_INCIDENT_STORE=/data/scout/incidents \
+    SCOUT_PRETRIP_WORKSPACE_ROOT=/data/scout/admin/pretrip-workspaces \
+    SCOUT_ADMIN_OSM_TILE_CACHE_ROOT=/data/scout/osm-tiles \
+    SCOUT_ADMIN_RASTER_TILE_CACHE_ROOT=/data/scout/raster-tiles \
+    SCOUT_ADMIN_OSM_TILE_FALLBACK=true \
+    SCOUT_ADMIN_RASTER_TILE_FALLBACK=true \
+    SCOUT_ADMIN_AUTH_REQUIRED=true \
+    SCOUT_ADMIN_BASIC_USERNAME=scout-admin \
+    SCOUT_ADMIN_ACCESS_TOKEN_FILE=/data/scout/admin/secrets/phase4-admin-token \
+    SCOUT_INGRESS_OBSERVER_SUPERVISOR_ENABLED=true \
+    SCOUT_SENSORLOGGER_MQTT_ENV_FILE=/data/scout/secrets/sensorlogger-mqtt.env \
+    SCOUT_SENSORLOGGER_MQTT_EVIDENCE_DIR=/data/scout/admin/ingress/sensorlogger_mqtt \
+    SCOUT_SENSORLOGGER_MQTT_LOG_PATH=/data/scout/admin/ingress/sensorlogger-mqtt-observer.log \
+    SCOUT_AI_ASSISTANT_ENABLED=1 \
+    SCOUT_AI_ASSISTANT_PROVIDER=pydantic_ai \
+    SCOUT_AI_ASSISTANT_CONFIG_PATH=/data/scout/config/assistant-models.json \
+    SCOUT_WEATHER_API_ENABLED=false \
+    SCOUT_WEATHER_API_PROVIDER=open_meteo \
+    SCOUT_PORT=9099 \
+    SCOUT_LOG_LEVEL=info
+
+WORKDIR /app
+
+COPY requirements.pi.admin.txt .
+RUN pip install --no-cache-dir -r requirements.pi.admin.txt
+
+COPY \
+    admin_after_action.py \
+    admin_api.py \
+    admin_assistant_context.py \
+    admin_basemap_tiles.py \
+    admin_evidence_timeline.py \
+    admin_imagery_sources.py \
+    admin_local_raster_tiles.py \
+    admin_map_layers.py \
+    admin_tile_cache_builder.py \
+    admin_tile_proxy.py \
+    admin_weather_overlay.py \
+    assistant_api.py \
+    assistant_context.py \
+    assistant_model_config.py \
+    assistant_models.py \
+    assistant_offline_fallback_contract.py \
+    assistant_pydantic_provider.py \
+    assistant_provider.py \
+    assistant_skill_router.py \
+    checkpoint_manager.py \
+    communication_provider.py \
+    communication_tool.py \
+    debug_assistant_context.py \
+    debug_api.py \
+    environment_provider.py \
+    geo_utils.py \
+    go_no_go.py \
+    hardware_readiness_admin_view.py \
+    hardware_readiness_api.py \
+    hardware_readiness_assistant_context.py \
+    incident_package.py \
+    incident_store.py \
+    ingress_observer_supervisor.py \
+    ins_dr_input_adapter.py \
+    ins_dr_navigation.py \
+    mission_graph.py \
+    mission_models.py \
+    mission_progress.py \
+    mobile_wearable_ingress_debug.py \
+    observation_adapter.py \
+    offline_map.py \
+    offline_map_models.py \
+    pdr_fallback.py \
+    phase2_brain_models.py \
+    phase2_refs.py \
+    phase2_store_utils.py \
+    phase46_live_replay_debug_projector.py \
+    phase4_admin_runtime.py \
+    post_analysis_capability.py \
+    post_analysis_capability_models.py \
+    post_analysis_completed_trip_recordings.py \
+    post_analysis_completed_trip_scenarios.py \
+    post_analysis_energy_feedback.py \
+    post_analysis_rest_detection.py \
+    post_analysis_route_slicing.py \
+    post_analysis_scout_reaction_simulation.py \
+    pretrip_admin_view.py \
+    pretrip_assistant_context.py \
+    pretrip_brain_seed.py \
+    pretrip_candidate_generation.py \
+    pretrip_departure_reviewed_candidates.py \
+    pretrip_energy_projection.py \
+    pretrip_eta_plan.py \
+    pretrip_expert_contribution.py \
+    pretrip_expert_contribution_apply_plan.py \
+    pretrip_geojson_import.py \
+    pretrip_gpx_corpus.py \
+    pretrip_gpx_filter.py \
+    pretrip_import.py \
+    pretrip_layer_preparation.py \
+    pretrip_mcp_models.py \
+    pretrip_mcp_review.py \
+    pretrip_mcp_synthesis.py \
+    pretrip_mission_compiler.py \
+    pretrip_models.py \
+    pretrip_overpass_ingest.py \
+    pretrip_route_comparison.py \
+    pretrip_source_ingest.py \
+    pretrip_gis_perception.py \
+    pretrip_review_models.py \
+    pretrip_review_queue.py \
+    pretrip_review_decision_apply.py \
+    pretrip_review_decision_apply_store.py \
+    pretrip_review_decision_log.py \
+    pretrip_review_decision_store.py \
+    pretrip_review_draft_fixture.py \
+    pretrip_risk_attribution_diagnostic.py \
+    pretrip_risk_heatmap.py \
+    pretrip_runtime_handoff_metadata.py \
+    pretrip_route_note_candidates.py \
+    pretrip_route_note_disposition_store.py \
+    pretrip_route_note_ln_proposals.py \
+    pretrip_route_note_review_options.py \
+    pretrip_route_note_reviewed_assumptions.py \
+    pretrip_segment_policy.py \
+    pretrip_spatial_imprint_export.py \
+    pretrip_terrain_summary.py \
+    pretrip_weather_daylight.py \
+    pretrip_workspace_edit.py \
+    pretrip_workspace_project.py \
+    provider_context.py \
+    recording_policy_runtime.py \
+    replay_runner.py \
+    resource_provider.py \
+    risk_rules.py \
+    route_matching.py \
+    route_progress.py \
+    runtime_artifact_resolution.py \
+    runtime_debug_log.py \
+    runtime_debug_models.py \
+    scout_agent_debug_projection.py \
+    scout_agent_kb.py \
+    safety_models.py \
+    safety_state_machine.py \
+    scout_agent_models.py \
+    scout_agent_tools.py \
+    scout_agent_trace.py \
+    scout_companion_match_admin.py \
+    scout_companion_match_models.py \
+    scout_energy_baseline.py \
+    scout_energy_field_cue.py \
+    scout_energy_models.py \
+    scout_energy_reserve.py \
+    scout_energy_reserve_monitor.py \
+    scout_hardware_readiness_live_probe.py \
+    scout_map_perception_tool.py \
+    scout_mobile_handoff.py \
+    scout_risk_score_tool.py \
+    scout_terrain_score_tool.py \
+    scout_wearable_adapters.py \
+    scout_wearable_admin.py \
+    scout_wearable_daily_home.py \
+    scout_wearable_live_frames.py \
+    scout_wearable_provider_transport.py \
+    scout_wearable_raw_importers.py \
+    scout_wearable_validator.py \
+    scout_workspace_search_tools.py \
+    skill_registry.py \
+    skill_registry_models.py \
+    spatial_imprint_debug_projection.py \
+    spatial_imprint_models.py \
+    spatial_imprint_store.py \
+    voice_cue_models.py \
+    ./
+
+COPY tools/pydantic_ai_cloud_latency_benchmark.py ./tools/
+COPY tools/scout_agent_tool_manifests/ ./tools/scout_agent_tool_manifests/
+
+COPY docs/admin/phase1-after-action.html ./docs/admin/
+COPY docs/admin/phase-3-5-runtime-debug.html ./docs/admin/
+COPY docs/admin/phase-3-6-hardware-readiness.html ./docs/admin/
+COPY docs/admin/phase4-pretrip-planning.html ./docs/admin/
+COPY docs/admin/scout-assistant-ui.js ./docs/admin/
+
+COPY scout-risk-engine/scout_codex_package/ ./scout-risk-engine/scout_codex_package/
+RUN pip install --no-cache-dir ./scout-risk-engine/scout_codex_package
+
+COPY tests/fixtures/pretrip/projects/chilai_nanhua_day1/ ./tests/fixtures/pretrip/projects/chilai_nanhua_day1/
+COPY tests/fixtures/pretrip/mcp/ ./tests/fixtures/pretrip/mcp/
+COPY tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/ ./tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/
+COPY tests/fixtures/hardware/readiness_context.json ./tests/fixtures/hardware/readiness_context.json
+COPY tests/fixtures/field_cases/scout_260512_golden.json ./tests/fixtures/field_cases/
+COPY tests/fixtures/maps/scout_260512_overpass_map_context.geojson ./tests/fixtures/maps/
+COPY tests/fixtures/mission_context/scout_260512_field_normal.json ./tests/fixtures/mission_context/
+COPY tests/fixtures/mission_graph/scout_260512_field_mission.json ./tests/fixtures/mission_graph/
+COPY tests/fixtures/risk_rules/scout_260512_field_rules.json ./tests/fixtures/risk_rules/
+COPY tests/fixtures/route_progress/scout_260512_field_config.json ./tests/fixtures/route_progress/
+COPY tests/fixtures/routes/scout_260512_field_route.gpx ./tests/fixtures/routes/
+
+RUN useradd --create-home --uid 1000 scout \
+    && mkdir -p /data/scout/admin/pretrip-workspaces /data/scout/incidents \
+        /data/scout/admin/secrets /data/scout/osm-tiles /data/scout/raster-tiles \
+        /data/scout/logs /data/scout/admin/ingress \
+    && chown -R scout:scout /data/scout /app
+
+USER scout
+
+EXPOSE 9099
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+    CMD python -c "import json, urllib.request; r=urllib.request.urlopen('http://127.0.0.1:9099/health', timeout=3); raise SystemExit(0 if json.load(r).get('status') == 'ok' else 1)"
+
+CMD ["python", "-m", "uvicorn", "phase4_admin_runtime:app", "--host", "0.0.0.0", "--port", "9099"]

@@ -1,0 +1,736 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Scout Closed Loop Operating Model</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f6f7f4;
+      --paper: #ffffff;
+      --ink: #18211f;
+      --muted: #5f6d67;
+      --line: #d8dfda;
+      --green: #126451;
+      --green-strong: #0d4d3e;
+      --blue: #265f94;
+      --gold: #9a6a16;
+      --red: #9b3f32;
+      --soft-green: #e7f2ed;
+      --soft-blue: #e8f0f7;
+      --soft-gold: #f5eddc;
+      --soft-red: #f6e7e3;
+      --shadow: 0 18px 42px rgba(24, 33, 31, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", "PingFang TC", sans-serif;
+      line-height: 1.58;
+    }
+
+    a {
+      color: var(--green-strong);
+      text-decoration-thickness: 2px;
+      text-underline-offset: 3px;
+    }
+
+    header {
+      background: #122b25;
+      color: #f8fbf8;
+      padding: 54px 24px 42px;
+    }
+
+    .wrap {
+      width: min(1160px, calc(100% - 40px));
+      margin: 0 auto;
+    }
+
+    .eyebrow {
+      margin: 0 0 12px;
+      color: #b8d9cf;
+      font-size: 0.82rem;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 0;
+      max-width: 920px;
+      font-size: clamp(2.35rem, 5vw, 5rem);
+      line-height: 1.02;
+      letter-spacing: 0;
+    }
+
+    .hero-copy {
+      max-width: 850px;
+      margin: 20px 0 0;
+      color: #d9e8e2;
+      font-size: 1.14rem;
+    }
+
+    .hero-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 28px;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 34px;
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      border-radius: 999px;
+      padding: 6px 13px;
+      color: #edf6f2;
+      background: rgba(255, 255, 255, 0.08);
+      font-size: 0.92rem;
+      font-weight: 700;
+      max-width: 100%;
+      white-space: normal;
+      text-decoration: none;
+    }
+
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      background: rgba(246, 247, 244, 0.94);
+      border-bottom: 1px solid var(--line);
+      backdrop-filter: blur(10px);
+    }
+
+    nav .wrap {
+      display: flex;
+      gap: 10px;
+      overflow-x: auto;
+      padding: 10px 0;
+    }
+
+    nav a {
+      flex: 0 0 auto;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 7px 10px;
+      background: var(--paper);
+      color: var(--green-strong);
+      text-decoration: none;
+      font-size: 0.88rem;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    main {
+      padding: 32px 0 60px;
+    }
+
+    .slide {
+      margin: 0 0 28px;
+      padding: 30px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--paper);
+      box-shadow: var(--shadow);
+    }
+
+    .slide.soft {
+      background: #f9fbf8;
+      box-shadow: none;
+    }
+
+    .slide h2 {
+      margin: 0 0 12px;
+      font-size: clamp(1.6rem, 3vw, 2.55rem);
+      line-height: 1.13;
+      letter-spacing: 0;
+    }
+
+    .slide h3 {
+      margin: 24px 0 10px;
+      font-size: 1.16rem;
+      line-height: 1.25;
+      letter-spacing: 0;
+    }
+
+    .lead {
+      max-width: 890px;
+      margin: 0;
+      color: var(--muted);
+      font-size: 1.05rem;
+    }
+
+    .grid-3,
+    .grid-4,
+    .grid-2 {
+      display: grid;
+      gap: 14px;
+      margin-top: 20px;
+    }
+
+    .grid-2 {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .grid-3 {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .grid-4 {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .tile {
+      min-height: 142px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      padding: 16px;
+    }
+
+    .tile strong {
+      display: block;
+      margin-bottom: 8px;
+      color: var(--ink);
+      font-size: 1rem;
+    }
+
+    .tile p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.94rem;
+    }
+
+    .tag {
+      display: inline-block;
+      margin-bottom: 9px;
+      border-radius: 999px;
+      padding: 4px 9px;
+      font-size: 0.78rem;
+      font-weight: 800;
+    }
+
+    .alpha {
+      color: var(--green-strong);
+      background: var(--soft-green);
+    }
+
+    .release {
+      color: var(--blue);
+      background: var(--soft-blue);
+    }
+
+    .guard {
+      color: var(--red);
+      background: var(--soft-red);
+    }
+
+    .evidence {
+      color: var(--gold);
+      background: var(--soft-gold);
+    }
+
+    .loop-row {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(140px, 1fr));
+      gap: 10px;
+      margin: 22px 0 0;
+      overflow-x: auto;
+      padding-bottom: 4px;
+    }
+
+    .node {
+      min-height: 108px;
+      border: 2px solid var(--line);
+      border-radius: 8px;
+      padding: 14px 24px 14px 14px;
+      background: #fff;
+      position: relative;
+      overflow-wrap: anywhere;
+    }
+
+    .node::after {
+      content: ">";
+      position: absolute;
+      right: 8px;
+      top: 38px;
+      color: var(--muted);
+      font-weight: 900;
+    }
+
+    .node:last-child::after {
+      content: "";
+    }
+
+    .node b {
+      display: block;
+      color: var(--ink);
+      font-size: 0.98rem;
+    }
+
+    .node span {
+      display: block;
+      margin-top: 5px;
+      color: var(--muted);
+      font-size: 0.86rem;
+    }
+
+    .node.green {
+      border-color: #9bc9b8;
+      background: #f5fbf8;
+    }
+
+    .node.blue {
+      border-color: #a9c5dd;
+      background: #f5f9fc;
+    }
+
+    .node.gold {
+      border-color: #dac18a;
+      background: #fffaf0;
+    }
+
+    .node.red {
+      border-color: #d7aaa2;
+      background: #fff7f5;
+    }
+
+    .split {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(320px, 0.8fr);
+      gap: 24px;
+      align-items: start;
+    }
+
+    ul {
+      padding-left: 22px;
+      margin: 12px 0 0;
+    }
+
+    li {
+      margin: 7px 0;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 16px;
+      font-size: 0.94rem;
+    }
+
+    th,
+    td {
+      border-bottom: 1px solid var(--line);
+      padding: 11px 10px;
+      vertical-align: top;
+      text-align: left;
+      overflow-wrap: anywhere;
+    }
+
+    th {
+      background: #edf4f1;
+      color: #20352f;
+      font-weight: 800;
+    }
+
+    code {
+      border-radius: 4px;
+      padding: 2px 5px;
+      background: #eef3f0;
+      color: #142b25;
+      font-size: 0.92em;
+    }
+
+    .boundary {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+      margin-top: 20px;
+    }
+
+    .boundary .tile {
+      min-height: 170px;
+    }
+
+    .footer {
+      border-top: 1px solid var(--line);
+      padding: 28px 0 40px;
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+
+    @media (max-width: 900px) {
+      .grid-2,
+      .grid-3,
+      .grid-4,
+      .split,
+      .boundary {
+        grid-template-columns: 1fr;
+      }
+
+      .slide {
+        padding: 22px;
+        overflow: hidden;
+      }
+
+      table {
+        display: block;
+        max-width: 100%;
+        overflow-x: auto;
+      }
+
+      th,
+      td {
+        min-width: 180px;
+      }
+    }
+
+    @media print {
+      nav {
+        display: none;
+      }
+
+      body {
+        background: #fff;
+      }
+
+      header,
+      .slide {
+        break-inside: avoid;
+        box-shadow: none;
+      }
+
+      .slide {
+        min-height: 88vh;
+        page-break-after: always;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap">
+      <p class="eyebrow">Scout public presentation</p>
+      <h1>Scout Closed Loop Operating Model</h1>
+      <p class="hero-copy">
+        Scout is being shaped as a route-aware outdoor companion: it helps people plan before a trip,
+        stay oriented and observable during the trip, and learn from completed trips without turning
+        AI suggestions into unreviewed safety truth.
+      </p>
+      <div class="hero-meta" aria-label="presentation scope">
+        <span class="pill">Alpha: Loop 1 + Loop 2</span>
+        <span class="pill">Release-before: Workspace transfer</span>
+        <span class="pill">Candidate evidence, human review, runtime boundary</span>
+        <a class="pill" href="scout-closed-loop-public-presentation.zh-Hant.html">繁體中文版</a>
+      </div>
+    </div>
+  </header>
+
+  <nav aria-label="Deck navigation">
+    <div class="wrap">
+      <a href="#loops">Three Loops</a>
+      <a href="#alpha">Alpha Scope</a>
+      <a href="#pretrip">Pre-trip</a>
+      <a href="#ontrip">On-trip</a>
+      <a href="#postanalysis">Post-analysis</a>
+      <a href="#workspace">Workspace Transfer</a>
+      <a href="#boundaries">Boundaries</a>
+      <a href="#specs">Spec Map</a>
+    </div>
+  </nav>
+
+  <main class="wrap">
+    <section class="slide" id="loops">
+      <p class="eyebrow">Operating model</p>
+      <h2>Three loops turn Scout from a map viewer into a learning field system.</h2>
+      <p class="lead">
+        The product model is organized around three loops. Alpha should prove the first two.
+        The third can land before release as the official transfer and ecosystem layer.
+        Alpha must ship Loop 1 and Loop 2.
+      </p>
+      <div class="grid-3">
+        <div class="tile">
+          <span class="tag alpha">Alpha required</span>
+          <strong>1. Climbing Experience Accumulation</strong>
+          <p>Reviewed pre-trip plans, completed trip records, Capability Timeline, Energy Reserve, and next-plan suggestions. This loop does not trigger live safety or hardware actions.</p>
+        </div>
+        <div class="tile">
+          <span class="tag alpha">Alpha foundation</span>
+          <strong>2. On-Trip Scout Safe Device</strong>
+          <p>Real plan-node check-ins, hardware sensing, Spatial Imprint playback, local cues, communication actions, and black-box evidence under runtime gates.</p>
+        </div>
+        <div class="tile">
+          <span class="tag release">Release-before</span>
+          <strong>3. Workspace Transfer And Ecosystem</strong>
+          <p>Official Scout A to Scout B workspace template export/import, plus opt-in aggregate ecosystem contribution.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide" id="alpha">
+      <p class="eyebrow">Alpha boundary</p>
+      <h2>Alpha is not complete without the on-trip foundation.</h2>
+      <p class="lead">
+        The first loop proves Scout can learn from completed trips. The second loop proves Scout is
+        useful while the user is still on the route. That second loop is the minimum on-trip Scout foundation.
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>Loop</th>
+            <th>Alpha expectation</th>
+            <th>What must stay bounded</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Climbing Experience Accumulation</td>
+            <td>Pre-trip reviewed plan, completed trip record, post-analysis in admin, Energy Reserve / Energy Limit feedback, next pre-trip candidates.</td>
+            <td>Planning/post-analysis only: no live <code>/safety/*</code>, no hardware actuation, no real check-in/send, and no replayed action is executed again.</td>
+          </tr>
+          <tr>
+            <td>On-Trip Scout Safe Device</td>
+            <td>Reviewed plan nodes, real hardware/software status, Ln action traces, physical check-ins, local cues, communication/team-care state, INS/PDR route generation, and search black-box refs.</td>
+            <td>This is the real action loop, but actions remain gated by runtime handoff, Ln policy, operator confirmation, and provider policy.</td>
+          </tr>
+          <tr>
+            <td>Workspace Transfer And Ecosystem</td>
+            <td>May wait until before broader release unless a specific alpha test needs Scout A to Scout B template transfer.</td>
+            <td>Imported templates are candidate evidence only, not another user's runtime truth or capability profile.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="slide" id="pretrip">
+      <p class="eyebrow">Loop 1: before departure</p>
+      <h2>Pre-trip turns fragmented route knowledge into a reviewed plan.</h2>
+      <div class="loop-row" aria-label="pretrip loop">
+        <div class="node green"><b>Source material</b><span>GPX, DEM/DTM, imagery, OSM/Overpass, notes, articles</span></div>
+        <div class="node green"><b>Candidate evidence</b><span>CP, MCP, POI, hazards, terrain, risk, route notes</span></div>
+        <div class="node green"><b>Pydantic AI review aid</b><span>Cluster, explain, flag conflicts, call deterministic tools</span></div>
+        <div class="node green"><b>Human review</b><span>Accept, reject, split, downgrade, or require more evidence</span></div>
+        <div class="node green"><b>Reviewed package</b><span>Route, CPs, policies, layers, metadata, handoff refs</span></div>
+      </div>
+      <div class="grid-3">
+        <div class="tile">
+          <strong>MCP compresses dense CPs.</strong>
+          <p>Major Critical Points give reviewers a human-scale layer above dense candidate points.</p>
+        </div>
+        <div class="tile">
+          <strong>Terrain and risk stay separate.</strong>
+          <p>Hillshade, slope, contours, and elevation tint are terrain evidence. Risk heat is route-specific candidate risk.</p>
+        </div>
+        <div class="tile">
+          <strong>AI is synthesis, not authority.</strong>
+          <p>Pydantic AI can explain and organize evidence, but reviewed artifacts decide what enters the package.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide" id="ontrip">
+      <p class="eyebrow">Loop 2: during the trip</p>
+      <h2>Scout on-trip is a safe device loop, not just a recorder.</h2>
+      <p class="lead">
+        The reviewed plan becomes a live field structure: Scout watches for plan-node state, records
+        hardware evidence, performs allowed physical/device actions, exposes why an action happened,
+        and preserves black-box context.
+      </p>
+      <div class="loop-row" aria-label="on-trip loop">
+        <div class="node blue"><b>Reviewed plan nodes</b><span>CP, MCP, rest, hazard, communication, team-care</span></div>
+        <div class="node blue"><b>Hardware sensing</b><span>GNSS, IMU, PDR, battery, radio, wearable, storage</span></div>
+        <div class="node blue"><b>Real actions</b><span>Check-in, cue, Spatial Imprint playback, INS/PDR route update</span></div>
+        <div class="node blue"><b>Communication gate</b><span>Operator-approved status, SOS, incident report, provider send</span></div>
+        <div class="node blue"><b>Black-box evidence</b><span>Minimal event package, last known node, trace, device status</span></div>
+      </div>
+      <div class="grid-4">
+        <div class="tile"><strong>Check-in</strong><p>Plan-node arrival, departure, missed timing, and segment capsule state.</p></div>
+        <div class="tile"><strong>Team care</strong><p>Regroup prompts, member-lag checks, rest needs, and buddy-check records.</p></div>
+        <div class="tile"><strong>Communication</strong><p>Known signal points, relay opportunity, queued messages, and provider gates.</p></div>
+        <div class="tile"><strong>Search evidence</strong><p>Local evidence refs for later retrieval without exposing private raw payloads by default.</p></div>
+      </div>
+    </section>
+
+    <section class="slide" id="postanalysis">
+      <p class="eyebrow">Loop 1: after return</p>
+      <h2>Post-analysis turns completed trips into future planning signal.</h2>
+      <div class="split">
+        <div>
+          <p class="lead">
+            Capability Timeline is generated from a completed user track or Scout runtime record, not
+            from public reference GPX. It produces segment rhythm, moving/rest/elapsed time, and
+            confidence notes that can feed future planning after review.
+          </p>
+          <ul>
+            <li>Completed trip workspace is the source of personal capability evidence.</li>
+            <li>Energy Reserve describes baseline-relative margin.</li>
+            <li>Energy Limit converts that margin into conservative planning constraints.</li>
+            <li>Next pre-trip receives proposed rest, check-in, ETA buffer, or turnaround candidates.</li>
+          </ul>
+        </div>
+        <div class="tile">
+          <span class="tag evidence">Evidence only</span>
+          <strong>Not a medical device, not automatic approval.</strong>
+          <p>Energy outputs can guide planning and field advisory cues, but they do not diagnose, rank people, or become runtime safety truth.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide" id="workspace">
+      <p class="eyebrow">Loop 3: release-before</p>
+      <h2>Workspace transfer makes Scout knowledge portable without copying trust.</h2>
+      <p class="lead">
+        A Scout workspace can become a richer template than public GPX: it can include Scout time,
+        route notes, reviewed CP/MCPs, risk/terrain refs, and redaction policy. On import, it still
+        becomes candidate evidence for the receiving Scout.
+      </p>
+      <div class="loop-row" aria-label="workspace transfer loop">
+        <div class="node gold"><b>Scout A workspace</b><span>Reviewed or completed local evidence</span></div>
+        <div class="node gold"><b>Official export</b><span>Manifest, hashes, redaction report, sharing policy</span></div>
+        <div class="node gold"><b>Scout B import</b><span>Candidate template evidence in pre-trip workspace</span></div>
+        <div class="node gold"><b>Local review</b><span>Re-run validation, map prep, stale checks, departure gate</span></div>
+        <div class="node gold"><b>Ecosystem signal</b><span>Opt-in aggregate route intelligence</span></div>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Can transfer</th>
+            <th>Should be redacted or excluded by default</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Route family, reviewed nodes, Scout-time summaries, route notes, terrain/risk refs, source attribution.</td>
+            <td>Raw GPX, exact timestamps, raw wearable payloads, private identity, full incident packages.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="slide" id="boundaries">
+      <p class="eyebrow">Safety and trust boundaries</p>
+      <h2>The core rule: evidence can inform, review can promote, runtime must remain explicit.</h2>
+      <div class="boundary">
+        <div class="tile">
+          <span class="tag evidence">Evidence</span>
+          <strong>Candidate-only by default</strong>
+          <p>Pre-trip CP, MCP, terrain, risk, route-note, AI, and template imports start as evidence with provenance.</p>
+        </div>
+        <div class="tile">
+          <span class="tag alpha">Review</span>
+          <strong>Human/AI-assisted review gates</strong>
+          <p>Review can accept, reject, split, downgrade, or ask for more context. AI helps organize the work.</p>
+        </div>
+        <div class="tile">
+          <span class="tag guard">Runtime</span>
+          <strong>No silent mutation</strong>
+          <p>Departure, runtime handoff, outbound sends, and incident reports stay explicit, auditable, and policy gated.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <p class="eyebrow">What has been specified</p>
+      <h2>The closed loops sit on top of concrete specification work.</h2>
+      <div class="grid-3">
+        <div class="tile">
+          <strong>Planning intelligence</strong>
+          <p>Pre-trip admin, historical GPX import, route-corridor preparation, Overpass/OSM, MCP synthesis, terrain visualization, and risk layers.</p>
+        </div>
+        <div class="tile">
+          <strong>Runtime observability</strong>
+          <p>Runtime readiness/debug tooling, admin GIS map operations, device stream admission, hardware status, and on-trip debug projection.</p>
+        </div>
+        <div class="tile">
+          <strong>After-action learning</strong>
+          <p>Capability Timeline, Energy Reserve / Energy Limit, companion match concepts, reviewed lessons, and future pre-trip suggestions.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide" id="specs">
+      <p class="eyebrow">Spec map</p>
+      <h2>Source documents behind this presentation.</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Area</th>
+            <th>Spec</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Closed loop model</td>
+            <td><a href="../specs/scout-closed-loop-operating-cycle.md">docs/specs/scout-closed-loop-operating-cycle.md</a></td>
+          </tr>
+          <tr>
+            <td>Pre-trip workspace and alpha policy</td>
+            <td><a href="../specs/pre-trip-planning-admin.md">docs/specs/pre-trip-planning-admin.md</a></td>
+          </tr>
+          <tr>
+            <td>Capability Timeline</td>
+            <td><a href="../specs/post-analysis-capability-timeline.md">docs/specs/post-analysis-capability-timeline.md</a></td>
+          </tr>
+          <tr>
+            <td>Energy Reserve and companion match</td>
+            <td><a href="../specs/scout-body-battery-and-companion-match.md">docs/specs/scout-body-battery-and-companion-match.md</a></td>
+          </tr>
+          <tr>
+            <td>Runtime debug and on-trip observability</td>
+            <td><a href="../specs/phase-3-5-runtime-readiness-debug-tooling.md">docs/specs/phase-3-5-runtime-readiness-debug-tooling.md</a></td>
+          </tr>
+          <tr>
+            <td>Departure and runtime handoff</td>
+            <td><a href="../specs/phase-4-5-departure-runtime-handoff.md">docs/specs/phase-4-5-departure-runtime-handoff.md</a></td>
+          </tr>
+          <tr>
+            <td>Real device streams</td>
+            <td><a href="../specs/phase-4-6-real-device-continuous-stream.md">docs/specs/phase-4-6-real-device-continuous-stream.md</a></td>
+          </tr>
+          <tr>
+            <td>Trail black box foundation</td>
+            <td><a href="../specs/phase-1-trail-black-box.md">docs/specs/phase-1-trail-black-box.md</a></td>
+          </tr>
+          <tr>
+            <td>Terrain, map, risk, MCP</td>
+            <td>
+              <a href="../specs/pretrip-layer-preparation.md">pretrip-layer-preparation.md</a>,
+              <a href="../specs/pretrip-route-corridor-map-preparation.md">pretrip-route-corridor-map-preparation.md</a>,
+              <a href="../specs/admin-gis-map-operations.md">admin-gis-map-operations.md</a>,
+              <a href="../specs/pretrip-major-critical-point-synthesis.md">pretrip-major-critical-point-synthesis.md</a>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="slide soft">
+      <p class="eyebrow">Closing</p>
+      <h2>Scout's public promise is an auditable outdoor operating loop.</h2>
+      <p class="lead">
+        Scout should help people prepare better, notice more during the route, and learn after return.
+        The alpha milestone should prove the planning and on-trip loops. The broader release can then
+        add official workspace transfer so route knowledge accumulates across the ecosystem without
+        copying private data or unreviewed trust.
+      </p>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="wrap">
+      <p>
+        Public presentation draft. This document intentionally avoids raw route payloads, private
+        health samples, incident contents, device credentials, and live safety activation details.
+      </p>
+    </div>
+  </footer>
+</body>
+</html>

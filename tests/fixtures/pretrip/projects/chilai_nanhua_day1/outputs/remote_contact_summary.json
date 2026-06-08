@@ -1,0 +1,45 @@
+{
+  "artifact_kind": "remote_contact_predeparture_summary",
+  "audience": "remote_contacts",
+  "conservative_notes": [
+    "Shareable summary only; raw GPX, DTM, photo, and incident/sample payloads are intentionally excluded.",
+    "ETA uses route-guide timing with total elapsed time including normal rest; sun-window validation is not included in this artifact.",
+    "Remote contacts should treat the turn-back and return-to-entry times as check-in expectations, not as live safety status."
+  ],
+  "project_id": "chilai_nanhua_day1",
+  "readiness": {
+    "finding_count": 0,
+    "status": "ready"
+  },
+  "retreat_route_summary": {
+    "confidence": "high",
+    "distance_m": 162559.51,
+    "expected_use": "both",
+    "label": "Return to entry via reversed primary route",
+    "retreat_type": "return_to_entry",
+    "reversed_from_primary_route": true,
+    "review_state": "accepted",
+    "summary": "Return to entry via reversed primary route; reversed primary route; 162.56 km; expected use: both."
+  },
+  "route": {
+    "day1_target_eta": "2013-10-08T18:28:50+08:00",
+    "day1_target_name": "天池山莊",
+    "planned_start": "2013-10-08T11:58:50+08:00",
+    "return_to_entry_eta": "2013-10-08T16:38:50+08:00",
+    "route_name": "2013-10-08 10:58:50 每日記錄",
+    "turn_back_checkpoint_eta": "2013-10-08T14:58:50+08:00",
+    "turn_back_checkpoint_name": "雲海保線所"
+  },
+  "source_package": {
+    "package_id": "pretrip.chilai_nanhua_day1.v0",
+    "package_ref": "outputs/pretrip_package.reviewed.json",
+    "planned_eta_ref": "outputs/planned_eta.json",
+    "planning_reference_count": 3,
+    "project_id": "chilai_nanhua_day1",
+    "readiness_report_ref": "outputs/readiness_report.json",
+    "source_artifact_count": 2,
+    "status": "reviewed",
+    "version": "0.1.0"
+  },
+  "summary_id": "remote_contact_summary.chilai_nanhua_day1.v0"
+}

@@ -1,0 +1,42 @@
+{
+  "id": "scout.voice.preview",
+  "version": "0.1.0",
+  "description": "Build a local TTS command plan preview for a voice cue without rendering, playback, or remote outbound send.",
+  "command": {
+    "argv": [
+      "{python}",
+      "-m",
+      "scout_agent_builtin_tools",
+      "voice-preview",
+      "--input",
+      "{input}",
+      "--output",
+      "{output}",
+      "--json"
+    ],
+    "dry_run_argument": null
+  },
+  "mode": "outbound_preview",
+  "input_schema_ref": "schemas/scout_agent/voice_preview.request.json",
+  "output_schema_ref": "schemas/scout_agent/tool_result.json",
+  "allowed_reads": [
+    "voice.tts_config"
+  ],
+  "allowed_writes": [
+    "voice.preview_artifact"
+  ],
+  "forbidden_writes": [
+    "phase1.runtime",
+    "phase2.brain.observed_facts",
+    "live.safety_api",
+    "real.outbound_transport",
+    "hardware.control"
+  ],
+  "requires_authorization": {
+    "kind": "none"
+  },
+  "trace": {
+    "required": true,
+    "event_kind": "agent_tool_invocation"
+  }
+}

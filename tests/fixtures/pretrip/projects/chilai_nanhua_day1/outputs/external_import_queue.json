@@ -1,0 +1,104 @@
+{
+  "artifact_kind": "pretrip_external_import_queue",
+  "boundary": {
+    "authoritative_without_review": false,
+    "embeds_raw_payloads": false,
+    "fetches_remote_content": false,
+    "no_crawler": true,
+    "no_network": true,
+    "notes": [
+      "Queue models requested imports only; it performs no fetch, crawl, scrape, or snapshot.",
+      "Rows are Artifact/planning-reference candidates and model-interpretation inputs.",
+      "External references are not authoritative until human review and deterministic calculation."
+    ],
+    "produces_derived_measurements": false,
+    "produces_observed_facts": false
+  },
+  "counts": {
+    "crawler_enabled_count": 0,
+    "network_call_count": 0,
+    "observed_fact_count": 0,
+    "pending_count": 3,
+    "raw_payloads_embedded": false,
+    "request_count": 3
+  },
+  "notes": [
+    "Phase 4 next slice B external import request queue artifact.",
+    "This fixture is intentionally URL-only and does not include raw website payloads."
+  ],
+  "phase": "Phase 4",
+  "project_id": "chilai_nanhua_day1",
+  "queue_id": "external_import_queue.chilai_nanhua_day1.v0",
+  "requests": [
+    {
+      "artifact_candidate_only": true,
+      "authoritative_until_reviewed": false,
+      "crawler_enabled": false,
+      "derived_measurement_candidate": false,
+      "intended_treatment": [
+        "planning_reference",
+        "model_interpretation_input",
+        "human_review_required"
+      ],
+      "network_call_count": 0,
+      "notes": "Reference product precedent only. Store as an Artifact/planning reference candidate; do not treat the site as field truth or fetch it in this slice.",
+      "observed_fact_candidate": false,
+      "raw_payload_embedded": false,
+      "request_id": "external_import.chilai_nanhua_day1.joyhike_main_site",
+      "requested_artifact_kind": "planning_reference",
+      "review_requirement": "human_review_required",
+      "source_id": "source.joyhike.main_site",
+      "source_kind": "web_reference",
+      "source_url": "https://joyhike.com/",
+      "status": "pending",
+      "title": "Joyhike main site"
+    },
+    {
+      "artifact_candidate_only": true,
+      "authoritative_until_reviewed": false,
+      "crawler_enabled": false,
+      "derived_measurement_candidate": false,
+      "intended_treatment": [
+        "planning_reference",
+        "model_interpretation_input",
+        "human_review_required"
+      ],
+      "network_call_count": 0,
+      "notes": "Planning-method reference only. Any route difficulty or ETA interpretation remains ModelInterpretation input until human review and deterministic calculation.",
+      "observed_fact_candidate": false,
+      "raw_payload_embedded": false,
+      "request_id": "external_import.chilai_nanhua_day1.joyhike_route_planning_model",
+      "requested_artifact_kind": "planning_reference",
+      "review_requirement": "human_review_required",
+      "source_id": "source.joyhike.blog",
+      "source_kind": "route_planning_reference",
+      "source_url": "https://blog.joyhike.com/2022/05/trailslevel.html",
+      "status": "pending",
+      "title": "Joyhike route-planning model blog"
+    },
+    {
+      "artifact_candidate_only": true,
+      "authoritative_until_reviewed": false,
+      "crawler_enabled": false,
+      "derived_measurement_candidate": false,
+      "intended_treatment": [
+        "planning_reference",
+        "model_interpretation_input",
+        "human_review_required"
+      ],
+      "network_call_count": 0,
+      "notes": "Community timing reference only. The queue embeds no article payload and creates no observed fact or derived measurement until review and deterministic timing work happen elsewhere.",
+      "observed_fact_candidate": false,
+      "raw_payload_embedded": false,
+      "request_id": "external_import.chilai_nanhua_day1.ptt_sunriver_timing",
+      "requested_artifact_kind": "planning_reference",
+      "review_requirement": "human_review_required",
+      "source_id": "source.ptt.sunriver_timing",
+      "source_kind": "community_article",
+      "source_url": "https://www.ptt.cc/bbs/Hiking/M.1696430399.A.151.html",
+      "status": "pending",
+      "title": "PTT Hiking Sunriver timing article"
+    }
+  ],
+  "status": "pending_human_review"
+}

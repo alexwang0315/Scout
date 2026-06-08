@@ -16,22 +16,26 @@ class PDREngine:
         """根據 IMU 資料更新位置，回傳 (x, y)。"""
         # 1. 時間戳 (秒)
         ts_raw = imu_data.get("motionTimestamp_sinceReboot")
-        current_time = (ts_raw / 1e9) if ts_raw is not None else 0.0
+        current_time = self._normalize_timestamp(ts_raw)
         if self.last_time is None:
             self.last_time = current_time
         dt = max(current_time - self.last_time, 0.0)
         self.last_time = current_time
 
-        # 2. 角速度 → 角度變化
-        gyro_z = float(imu_data.get("gyroRotationZ", 0.0))
-        self.heading = (self.heading + gyro_z * dt) % (2 * math.pi)
+        # 2. 方向更新：有絕對 heading 時優先使用，否則用 gyro 積分。
+        heading_deg = self._extract_heading_degrees(imu_data)
+        if heading_deg is not None:
+            self.heading = math.radians(heading_deg)
+        else:
+            gyro_z = self._to_float(imu_data.get("gyroRotationZ"), 0.0)
+            self.heading = (self.heading + gyro_z * dt) % (2 * math.pi)
 
         # 3. 加速度 → 步態檢測與位移
-        ax = float(imu_data.get("accelerometerAccelerationX", 0.0))
-        ay = float(imu_data.get("accelerometerAccelerationY", 0.0))
-        az = float(imu_data.get("accelerometerAccelerationZ", 0.0))
+        ax = self._to_float(imu_data.get("accelerometerAccelerationX"), 0.0)
+        ay = self._to_float(imu_data.get("accelerometerAccelerationY"), 0.0)
+        az = self._to_float(imu_data.get("accelerometerAccelerationZ"), 0.0)
         acc_mag = math.sqrt(ax**2 + ay**2 + az**2)
-        if acc_mag > 1.5:                     # 簡易閾值判斷步態
+        if acc_mag > 1.2:                     # Apple Watch accelerometer uses G units.
             step_len = self.step_length
             dx = step_len * math.cos(self.heading)
             dy = step_len * math.sin(self.heading)
@@ -46,6 +50,29 @@ class PDREngine:
             "source": "pdr"
         })
         return self.x, self.y
+
+    @staticmethod
+    def _to_float(value, default: float = 0.0) -> float:
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return default
+
+    def _normalize_timestamp(self, value) -> float:
+        """SensorLog may send seconds, milliseconds, or nanoseconds since reboot."""
+        ts = self._to_float(value, 0.0)
+        if ts > 1_000_000_000:
+            return ts / 1_000_000_000
+        if ts > 1_000_000:
+            return ts / 1_000
+        return ts
+
+    def _extract_heading_degrees(self, imu_data: Dict) -> float | None:
+        for key in ("motionHeading", "locationCourse", "locationTrueHeading", "locationMagneticHeading"):
+            heading = self._to_float(imu_data.get(key), -1.0)
+            if heading >= 0:
+                return heading % 360
+        return None
 
     def update_position(self, distance: float, heading: float, time_val: float = None) -> Tuple[float, float]:
         """根據距離與絕對航向更新位置，支援舊版 /pdr/update 資料流。"""

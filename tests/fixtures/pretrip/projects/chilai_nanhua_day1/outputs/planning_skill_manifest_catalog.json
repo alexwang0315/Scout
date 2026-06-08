@@ -1,0 +1,313 @@
+{
+  "artifact_kind": "planning_skill_manifest_catalog",
+  "catalog_id": "planning_skill_manifest_catalog.chilai_nanhua_day1.v0",
+  "manifests": [
+    {
+      "allowed_input_refs": [
+        {
+          "ref": "normalized/routes/route_summary.json",
+          "ref_key": "route_summary_ref",
+          "required": true
+        },
+        {
+          "ref": "candidates/planning_references.json",
+          "ref_key": "planning_references_ref",
+          "required": true
+        }
+      ],
+      "allowed_output_refs": [
+        {
+          "ref": "outputs/pretrip_package.json",
+          "ref_key": "package_ref",
+          "required": true
+        },
+        {
+          "ref": "candidates/checkpoints.json",
+          "ref_key": "checkpoint_candidates_ref",
+          "required": true
+        },
+        {
+          "ref": "candidates/segments.json",
+          "ref_key": "segment_candidates_ref",
+          "required": true
+        },
+        {
+          "ref": "candidates/retreat_routes.json",
+          "ref_key": "retreat_routes_ref",
+          "required": true
+        }
+      ],
+      "allowed_write_scope": [
+        "pretrip.workspace.normalized",
+        "pretrip.workspace.candidates",
+        "pretrip.workspace.outputs",
+        "brain.skill_run_records"
+      ],
+      "brain_writeback_policy": {
+        "allowed_node_types": [
+          "SkillRunRecord"
+        ],
+        "automatic_brain_write_allowed": false,
+        "explicit_operator_writeback_required": true,
+        "model_interpretation_write_allowed": false,
+        "observed_fact_write_allowed": false
+      },
+      "description": "Register project evidence and produce normalized candidate planning artifacts by reference.",
+      "failure_policy": {
+        "degrade_to": null,
+        "on_error": "record_failure",
+        "retry_max_attempts": 0
+      },
+      "raw_payloads_embedded": false,
+      "review_requirement": {
+        "candidate_outputs_only": true,
+        "required": true,
+        "reviewer_role": "human_operator",
+        "stage": "before_phase1_compile"
+      },
+      "runtime_mutation_policy": {
+        "final_mission_graph_write_allowed": false,
+        "final_recording_policy_write_allowed": false,
+        "final_risk_rule_write_allowed": false,
+        "live_safety_endpoint_calls_allowed": false,
+        "phase1_runtime_mutation_allowed": false
+      },
+      "skill_id": "pretrip-source-ingest",
+      "status": "candidate",
+      "version": "0.1.0"
+    },
+    {
+      "allowed_input_refs": [
+        {
+          "ref": "outputs/pretrip_package.json",
+          "ref_key": "package_ref",
+          "required": true
+        },
+        {
+          "ref": "normalized/routes/route_summary.json",
+          "ref_key": "route_summary_ref",
+          "required": true
+        }
+      ],
+      "allowed_output_refs": [
+        {
+          "ref": "candidates/checkpoints.json",
+          "ref_key": "checkpoint_candidates_ref",
+          "required": true
+        },
+        {
+          "ref": "candidates/segments.json",
+          "ref_key": "segment_candidates_ref",
+          "required": true
+        }
+      ],
+      "allowed_write_scope": [
+        "pretrip.workspace.candidates",
+        "brain.skill_run_records"
+      ],
+      "brain_writeback_policy": {
+        "allowed_node_types": [
+          "SkillRunRecord"
+        ],
+        "automatic_brain_write_allowed": false,
+        "explicit_operator_writeback_required": true,
+        "model_interpretation_write_allowed": false,
+        "observed_fact_write_allowed": false
+      },
+      "description": "Suggest checkpoint and segment candidate artifacts from reviewed project refs.",
+      "failure_policy": {
+        "degrade_to": null,
+        "on_error": "record_failure",
+        "retry_max_attempts": 0
+      },
+      "raw_payloads_embedded": false,
+      "review_requirement": {
+        "candidate_outputs_only": true,
+        "required": true,
+        "reviewer_role": "human_operator",
+        "stage": "before_phase1_compile"
+      },
+      "runtime_mutation_policy": {
+        "final_mission_graph_write_allowed": false,
+        "final_recording_policy_write_allowed": false,
+        "final_risk_rule_write_allowed": false,
+        "live_safety_endpoint_calls_allowed": false,
+        "phase1_runtime_mutation_allowed": false
+      },
+      "skill_id": "pretrip-cp-segment-suggest",
+      "status": "candidate",
+      "version": "0.1.0"
+    },
+    {
+      "allowed_input_refs": [
+        {
+          "ref": "normalized/map/map_context.geojson",
+          "ref_key": "map_context_ref",
+          "required": true
+        }
+      ],
+      "allowed_output_refs": [
+        {
+          "ref": "candidates/map_candidates.json",
+          "ref_key": "map_candidates_ref",
+          "required": true
+        }
+      ],
+      "allowed_write_scope": [
+        "pretrip.workspace.candidates",
+        "brain.skill_run_records"
+      ],
+      "brain_writeback_policy": {
+        "allowed_node_types": [
+          "SkillRunRecord"
+        ],
+        "automatic_brain_write_allowed": false,
+        "explicit_operator_writeback_required": true,
+        "model_interpretation_write_allowed": false,
+        "observed_fact_write_allowed": false
+      },
+      "description": "Import map-context refs into candidate POI, hazard, and corridor artifacts.",
+      "failure_policy": {
+        "degrade_to": null,
+        "on_error": "defer",
+        "retry_max_attempts": 0
+      },
+      "raw_payloads_embedded": false,
+      "review_requirement": {
+        "candidate_outputs_only": true,
+        "required": true,
+        "reviewer_role": "human_operator",
+        "stage": "before_phase1_compile"
+      },
+      "runtime_mutation_policy": {
+        "final_mission_graph_write_allowed": false,
+        "final_recording_policy_write_allowed": false,
+        "final_risk_rule_write_allowed": false,
+        "live_safety_endpoint_calls_allowed": false,
+        "phase1_runtime_mutation_allowed": false
+      },
+      "skill_id": "pretrip-map-import",
+      "status": "candidate",
+      "version": "0.1.0"
+    },
+    {
+      "allowed_input_refs": [
+        {
+          "ref": "outputs/pretrip_package.reviewed.json",
+          "ref_key": "reviewed_package_ref",
+          "required": true
+        },
+        {
+          "ref": "reviews/human_reviews.json",
+          "ref_key": "human_reviews_ref",
+          "required": true
+        }
+      ],
+      "allowed_output_refs": [
+        {
+          "ref": "outputs/compiled_mission_graph.reviewed.json",
+          "ref_key": "compiled_mission_graph_reviewed_ref",
+          "required": true
+        }
+      ],
+      "allowed_write_scope": [
+        "pretrip.workspace.outputs",
+        "brain.skill_run_records"
+      ],
+      "brain_writeback_policy": {
+        "allowed_node_types": [
+          "SkillRunRecord"
+        ],
+        "automatic_brain_write_allowed": false,
+        "explicit_operator_writeback_required": true,
+        "model_interpretation_write_allowed": false,
+        "observed_fact_write_allowed": false
+      },
+      "description": "Compile reviewed planning refs into a reviewed MissionGraph artifact ref without touching live runtime.",
+      "failure_policy": {
+        "degrade_to": null,
+        "on_error": "defer",
+        "retry_max_attempts": 0
+      },
+      "raw_payloads_embedded": false,
+      "review_requirement": {
+        "candidate_outputs_only": true,
+        "required": true,
+        "reviewer_role": "human_operator",
+        "stage": "before_phase1_compile"
+      },
+      "runtime_mutation_policy": {
+        "final_mission_graph_write_allowed": false,
+        "final_recording_policy_write_allowed": false,
+        "final_risk_rule_write_allowed": false,
+        "live_safety_endpoint_calls_allowed": false,
+        "phase1_runtime_mutation_allowed": false
+      },
+      "skill_id": "pretrip-mission-compile",
+      "status": "candidate",
+      "version": "0.1.0"
+    },
+    {
+      "allowed_input_refs": [
+        {
+          "ref": "outputs/pretrip_package.reviewed.json",
+          "ref_key": "reviewed_package_ref",
+          "required": true
+        },
+        {
+          "ref": "reviews/human_reviews.json",
+          "ref_key": "human_reviews_ref",
+          "required": true
+        }
+      ],
+      "allowed_output_refs": [
+        {
+          "ref": "outputs/brain_seed_nodes.json",
+          "ref_key": "brain_seed_nodes_ref",
+          "required": true
+        }
+      ],
+      "allowed_write_scope": [
+        "pretrip.workspace.outputs",
+        "brain.skill_run_records"
+      ],
+      "brain_writeback_policy": {
+        "allowed_node_types": [
+          "SkillRunRecord"
+        ],
+        "automatic_brain_write_allowed": false,
+        "explicit_operator_writeback_required": true,
+        "model_interpretation_write_allowed": false,
+        "observed_fact_write_allowed": false
+      },
+      "description": "Export reviewed planning evidence as candidate Brain seed nodes for explicit operator import.",
+      "failure_policy": {
+        "degrade_to": null,
+        "on_error": "record_failure",
+        "retry_max_attempts": 0
+      },
+      "raw_payloads_embedded": false,
+      "review_requirement": {
+        "candidate_outputs_only": true,
+        "required": true,
+        "reviewer_role": "human_operator",
+        "stage": "before_brain_seed_import"
+      },
+      "runtime_mutation_policy": {
+        "final_mission_graph_write_allowed": false,
+        "final_recording_policy_write_allowed": false,
+        "final_risk_rule_write_allowed": false,
+        "live_safety_endpoint_calls_allowed": false,
+        "phase1_runtime_mutation_allowed": false
+      },
+      "skill_id": "pretrip-brain-seed-export",
+      "status": "candidate",
+      "version": "0.1.0"
+    }
+  ],
+  "project_id": "chilai_nanhua_day1",
+  "raw_payloads_embedded": false,
+  "skill_config_manifest_ref": "candidates/skill_config_manifest.json",
+  "source_project_ref": "project.json",
+  "version": "0.1.0"
+}

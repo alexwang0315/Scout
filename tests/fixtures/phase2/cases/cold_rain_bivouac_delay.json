@@ -1,0 +1,77 @@
+{
+  "case_id": "case.phase2.cold_rain_bivouac_delay",
+  "title": "Cold rain bivouac delay before nightfall",
+  "incident_type": "weather exposure and delayed exit",
+  "location": "High forest trail below an alpine meadow",
+  "route_context": "Multi-hour descent with deteriorating rain, falling temperature, and limited daylight.",
+  "incident_at": "2026-02-22T17:20:00+08:00",
+  "timeline": [
+    {
+      "label": "T-180",
+      "minutes_to_incident": -180,
+      "safety_level": "L1",
+      "summary": "Rain intensified while the team was still above the forest junction.",
+      "evidence_refs": ["fact.rain.intensifying", "measurement.temperature.drop"],
+      "artifact_refs": ["artifact.weather_report.local_station"]
+    },
+    {
+      "label": "T-120",
+      "minutes_to_incident": -120,
+      "safety_level": "L1",
+      "summary": "Route progress showed the team was behind the daylight plan but still moving.",
+      "evidence_refs": ["measurement.progress.behind_plan.35m"],
+      "artifact_refs": ["artifact.route_progress.replay"]
+    },
+    {
+      "label": "T-60",
+      "minutes_to_incident": -60,
+      "safety_level": "L2",
+      "summary": "Replay linked cold rain, slow descent, and remaining daylight into an exposure risk summary.",
+      "evidence_refs": ["interpretation.exposure_risk.local_model"],
+      "artifact_refs": ["artifact.case_replay.exposure_summary"]
+    },
+    {
+      "label": "T-30",
+      "minutes_to_incident": -30,
+      "safety_level": "L2",
+      "summary": "Replay referenced a local option set for controlled bivouac, assisted descent, or timed retreat to the forest junction.",
+      "evidence_refs": ["option_set.cold_rain_bivouac"],
+      "artifact_refs": ["artifact.option_set.local_json"],
+      "option_set_ref": "option_set.cold_rain_bivouac"
+    },
+    {
+      "label": "T-0",
+      "minutes_to_incident": 0,
+      "safety_level": "L3",
+      "summary": "Incident package marked delayed exit and exposure concern as daylight ended.",
+      "evidence_refs": ["artifact.incident_package.cold_rain_delay"]
+    }
+  ],
+  "post_incident_evidence": [
+    {
+      "id": "post.cold_rain.after_action",
+      "captured_after_minutes": 240,
+      "evidence_type": "after_action_note",
+      "summary": "After-action notes said earlier packaging of rain, pace, and daylight would likely have improved shelter and communication choices.",
+      "artifact_refs": ["artifact.after_action.exposure_note"]
+    },
+    {
+      "id": "post.cold_rain.weather",
+      "captured_after_minutes": 300,
+      "evidence_type": "weather_report",
+      "summary": "Weather history confirmed falling temperature and persistent rain during the final descent window.",
+      "artifact_refs": ["artifact.weather_history.confirmed"]
+    }
+  ],
+  "baseline_summary": "Baseline tracking recognized the late exit only near nightfall.",
+  "replay_summary": "Phase 2 replay connected pace, weather, daylight, and a local option set before the exposure incident package.",
+  "known_outcome_summary": "The party exited later with minor cold exposure concerns; this fixture does not assert that any outcome was certain.",
+  "assessment": {
+    "evidence_improved": true,
+    "earlier_awareness_minutes": 60,
+    "decision_window_minutes": 30,
+    "likely_outcome_improvement": true,
+    "guaranteed_outcome": false,
+    "rationale": "Replay may have improved the likely outcome by creating earlier exposure awareness and a bounded decision window before nightfall."
+  }
+}

@@ -1,0 +1,691 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Scout 行後能力時間軸使用說明</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f7f8f5;
+      --surface: #ffffff;
+      --surface-soft: #eef5f1;
+      --ink: #202521;
+      --muted: #5d6a63;
+      --line: #d5ded8;
+      --accent: #156f60;
+      --accent-strong: #0f594d;
+      --warn: #b65b18;
+      --sky: #2f6f93;
+      --violet: #6750a4;
+      --shadow: 0 18px 40px rgba(30, 45, 38, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", "PingFang TC", sans-serif;
+      line-height: 1.65;
+    }
+
+    a {
+      color: var(--accent-strong);
+      text-decoration-thickness: 2px;
+      text-underline-offset: 3px;
+    }
+
+    .hero {
+      background: #16382f;
+      color: #f8fbf8;
+      padding: 48px 24px 42px;
+    }
+
+    .hero-inner,
+    main,
+    .footer-inner {
+      width: min(1120px, calc(100% - 40px));
+      margin: 0 auto;
+    }
+
+    .eyebrow {
+      margin: 0 0 12px;
+      color: #b9ded4;
+      font-size: 0.9rem;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 0;
+      max-width: 900px;
+      font-size: clamp(2rem, 4vw, 4.1rem);
+      line-height: 1.05;
+      letter-spacing: 0;
+    }
+
+    .hero-copy {
+      max-width: 760px;
+      margin: 18px 0 0;
+      color: #dce8e3;
+      font-size: 1.12rem;
+    }
+
+    .hero-summary {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+      margin-top: 30px;
+    }
+
+    .hero-summary div {
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 8px;
+      padding: 14px 16px;
+    }
+
+    .hero-summary strong {
+      display: block;
+      color: #ffffff;
+      font-size: 1rem;
+    }
+
+    .hero-summary span {
+      display: block;
+      margin-top: 4px;
+      color: #cbdcd5;
+      font-size: 0.94rem;
+    }
+
+    main {
+      padding: 32px 0 56px;
+    }
+
+    .band {
+      margin: 24px 0;
+      padding: 28px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+    }
+
+    .band.soft {
+      background: var(--surface-soft);
+      box-shadow: none;
+    }
+
+    .band h2 {
+      margin: 0 0 12px;
+      font-size: 1.55rem;
+      line-height: 1.2;
+      letter-spacing: 0;
+    }
+
+    .band h3 {
+      margin: 22px 0 10px;
+      font-size: 1.12rem;
+      line-height: 1.25;
+      letter-spacing: 0;
+    }
+
+    .lead {
+      margin: 0;
+      max-width: 820px;
+      color: var(--muted);
+      font-size: 1.04rem;
+    }
+
+    .split {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(320px, 0.86fr);
+      gap: 28px;
+      align-items: start;
+    }
+
+    .steps {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 22px;
+    }
+
+    .step {
+      min-height: 140px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #ffffff;
+      padding: 16px;
+    }
+
+    .step-num {
+      display: inline-grid;
+      place-items: center;
+      width: 30px;
+      height: 30px;
+      border-radius: 999px;
+      background: var(--accent);
+      color: #fff;
+      font-weight: 800;
+      font-size: 0.9rem;
+    }
+
+    .step strong {
+      display: block;
+      margin-top: 12px;
+      font-size: 1.02rem;
+    }
+
+    .step p {
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 18px;
+    }
+
+    .metric {
+      border-left: 4px solid var(--accent);
+      background: #fff;
+      border-radius: 8px;
+      padding: 14px 16px;
+    }
+
+    .metric:nth-child(2) {
+      border-left-color: var(--sky);
+    }
+
+    .metric:nth-child(3) {
+      border-left-color: var(--warn);
+    }
+
+    .metric strong {
+      display: block;
+      font-size: 1.05rem;
+    }
+
+    .metric span {
+      display: block;
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 0.94rem;
+    }
+
+    .callout {
+      border: 1px solid #e1bf98;
+      border-left: 5px solid var(--warn);
+      background: #fff7ed;
+      border-radius: 8px;
+      padding: 16px 18px;
+      margin-top: 18px;
+    }
+
+    .callout strong {
+      display: block;
+      color: #74340d;
+      margin-bottom: 4px;
+    }
+
+    .visual {
+      width: 100%;
+      border: 1px solid var(--line);
+      background: #fbfcfa;
+      border-radius: 8px;
+      padding: 14px;
+      overflow: hidden;
+    }
+
+    .visual svg {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+
+    .ui-list,
+    .plain-list {
+      padding-left: 1.2rem;
+      margin: 12px 0 0;
+    }
+
+    .ui-list li,
+    .plain-list li {
+      margin: 7px 0;
+    }
+
+    .path {
+      display: inline-block;
+      padding: 2px 7px;
+      border-radius: 6px;
+      background: #eef2f6;
+      color: #273240;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.92em;
+    }
+
+    .outputs {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 18px;
+    }
+
+    .output {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      padding: 14px 16px;
+    }
+
+    .output strong {
+      display: block;
+    }
+
+    .output span {
+      display: block;
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    .command {
+      margin-top: 14px;
+      border: 1px solid #cfd8d2;
+      border-radius: 8px;
+      background: #17241f;
+      color: #eef8f4;
+      padding: 16px;
+      overflow-x: auto;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.88rem;
+      line-height: 1.55;
+      white-space: pre;
+    }
+
+    .small-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 16px;
+      font-size: 0.96rem;
+    }
+
+    .small-table th,
+    .small-table td {
+      border-bottom: 1px solid var(--line);
+      padding: 10px 8px;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    .small-table th {
+      color: #34443d;
+      font-weight: 800;
+      background: #f1f5f2;
+    }
+
+    .privacy-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+      margin-top: 18px;
+    }
+
+    .privacy-box {
+      border-radius: 8px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      background: #fff;
+    }
+
+    .privacy-box.no {
+      border-color: #f1c7b2;
+      background: #fff8f4;
+    }
+
+    .privacy-box h3 {
+      margin-top: 0;
+    }
+
+    footer {
+      border-top: 1px solid var(--line);
+      background: #ffffff;
+      padding: 20px 0;
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+
+    @media (max-width: 860px) {
+      .hero-summary,
+      .split,
+      .steps,
+      .metric-grid,
+      .outputs,
+      .privacy-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .hero {
+        padding-top: 34px;
+      }
+
+      .band {
+        padding: 20px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="hero">
+    <div class="hero-inner">
+      <p class="eyebrow">Scout Post-Analysis</p>
+      <h1>行後能力時間軸：看懂自己這次怎麼走完路線</h1>
+      <p class="hero-copy">
+        這個功能會把完成後的路線記錄整理成容易閱讀的時間軸，讓你知道每一段花了多少移動時間、休息多久，以及哪些資料可以安全地分享給同行者參考。
+      </p>
+      <div class="hero-summary" aria-label="功能摘要">
+        <div>
+          <strong>回顧節奏</strong>
+          <span>看出是走得慢、休息多，還是哪一段特別花時間。</span>
+        </div>
+        <div>
+          <strong>保留隱私</strong>
+          <span>預設不分享原始 GPX、精確時間、事故細節。</span>
+        </div>
+        <div>
+          <strong>只做參考</strong>
+          <span>這不是安全保證，也不會影響行進中的安全判斷。</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="band split" aria-labelledby="what-it-does">
+      <div>
+        <h2 id="what-it-does">它會幫你回答什麼問題</h2>
+        <p class="lead">
+          完成路線後，Scout 會把你實際走過的記錄切成幾個路段，並把總時間、移動時間、休息時間分開。這樣你不用只看一個總花費時間，也能知道自己的實際行進節奏。
+        </p>
+        <div class="metric-grid">
+          <div class="metric">
+            <strong>移動時間</strong>
+            <span>扣掉明顯休息後，真正用在移動上的時間。</span>
+          </div>
+          <div class="metric">
+            <strong>總時間</strong>
+            <span>從一個檢查點到下一個檢查點的完整花費時間。</span>
+          </div>
+          <div class="metric">
+            <strong>休息時間</strong>
+            <span>系統偵測到你停留在同一小範圍內的時間。</span>
+          </div>
+        </div>
+      </div>
+      <div class="visual" aria-label="路線時間軸示意圖">
+        <svg viewBox="0 0 620 300" role="img">
+          <rect x="24" y="24" width="572" height="252" rx="10" fill="#ffffff" stroke="#d5ded8"></rect>
+          <line x1="100" y1="150" x2="300" y2="150" stroke="#156f60" stroke-width="8" stroke-linecap="round"></line>
+          <line x1="300" y1="150" x2="510" y2="150" stroke="#2f6f93" stroke-width="8" stroke-linecap="round"></line>
+          <circle cx="100" cy="150" r="22" fill="#16382f"></circle>
+          <circle cx="300" cy="150" r="22" fill="#16382f"></circle>
+          <circle cx="510" cy="150" r="22" fill="#16382f"></circle>
+          <circle cx="405" cy="150" r="12" fill="#b65b18"></circle>
+          <text x="100" y="96" text-anchor="middle" font-size="18" font-weight="700" fill="#202521">起點</text>
+          <text x="300" y="96" text-anchor="middle" font-size="18" font-weight="700" fill="#202521">中途點</text>
+          <text x="510" y="96" text-anchor="middle" font-size="18" font-weight="700" fill="#202521">終點</text>
+          <text x="200" y="132" text-anchor="middle" font-size="15" fill="#156f60">移動 15 分</text>
+          <text x="405" y="132" text-anchor="middle" font-size="15" fill="#2f6f93">移動 15 分</text>
+          <text x="405" y="188" text-anchor="middle" font-size="15" fill="#8b3f10">休息 7 分</text>
+          <text x="200" y="212" text-anchor="middle" font-size="14" fill="#5d6a63">總時間 15 分</text>
+          <text x="405" y="212" text-anchor="middle" font-size="14" fill="#5d6a63">總時間 22 分</text>
+          <text x="310" y="254" text-anchor="middle" font-size="14" fill="#5d6a63">示意：每段會分開顯示移動、總時間與休息。</text>
+        </svg>
+      </div>
+    </section>
+
+    <section class="band soft" aria-labelledby="boundary">
+      <h2 id="boundary">先記住：這不是安全判斷</h2>
+      <p class="lead">
+        行後能力時間軸只是在安全回來後整理已完成的紀錄。它可以當作回顧和未來規劃參考，但不會決定你現在是否安全，也不會自動批准下一次出發。
+      </p>
+      <div class="privacy-grid">
+        <div class="privacy-box">
+          <h3>它會做</h3>
+          <ul class="plain-list">
+            <li>讀取你完成後的路線紀錄。</li>
+            <li>把路線拆成幾段來看。</li>
+            <li>顯示移動、休息與總時間。</li>
+            <li>產生可追溯的行後分析檔案。</li>
+          </ul>
+        </div>
+        <div class="privacy-box no">
+          <h3>它不會做</h3>
+          <ul class="plain-list">
+            <li>不會改變行進中的安全狀態。</li>
+            <li>不會重寫已完成的事故或任務紀錄。</li>
+            <li>不會預設公開原始 GPX 或精確時間。</li>
+            <li>不會把一次紀錄當成永久能力標籤。</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="band" aria-labelledby="workflow">
+      <h2 id="workflow">一般使用流程</h2>
+      <p class="lead">你可以把它想成「完成路線 → 產生分析 → 在後台查看 → 決定是否分享摘要」。</p>
+      <div class="steps">
+        <div class="step">
+          <span class="step-num">1</span>
+          <strong>完成路線</strong>
+          <p>Scout 或使用者匯入完成後的 GPX 紀錄。</p>
+        </div>
+        <div class="step">
+          <span class="step-num">2</span>
+          <strong>產生分析</strong>
+          <p>系統切分路段，計算移動、休息與總時間。</p>
+        </div>
+        <div class="step">
+          <span class="step-num">3</span>
+          <strong>在 /admin 查看</strong>
+          <p>用時間軸看每一段表現，點選路段查看細節。</p>
+        </div>
+        <div class="step">
+          <span class="step-num">4</span>
+          <strong>選擇是否分享</strong>
+          <p>只分享粗略摘要，並先看清楚會包含與排除哪些資訊。</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="band split" aria-labelledby="ui">
+      <div>
+        <h2 id="ui">在畫面上怎麼看</h2>
+        <h3>在 /admin 看行後分析</h3>
+        <ol class="ui-list">
+          <li>打開 Scout admin 頁面。</li>
+          <li>在左側證據清單選擇 <span class="path">Capability Timeline</span>。</li>
+          <li>右側會出現路線時間軸。</li>
+          <li>點選任一路段，可以看到該段的移動時間、總時間、休息時間、距離與可信度。</li>
+          <li>往下看 Share Preview，確認分享摘要會包含什麼、排除什麼。</li>
+        </ol>
+
+        <h3>在 /admin/pretrip 看未來規劃參考</h3>
+        <p>
+          如果後續要規劃類似路線，pretrip 頁面可以讀入這份行後能力時間軸，作為人工檢查時的參考。它不會自動調整 ETA，也不會自動改任務圖。
+        </p>
+      </div>
+      <div class="visual" aria-label="UI 面板示意圖">
+        <svg viewBox="0 0 620 420" role="img">
+          <rect x="20" y="20" width="580" height="380" rx="10" fill="#ffffff" stroke="#d5ded8"></rect>
+          <rect x="42" y="48" width="160" height="324" rx="8" fill="#eef5f1" stroke="#d5ded8"></rect>
+          <rect x="228" y="48" width="348" height="324" rx="8" fill="#fbfcfa" stroke="#d5ded8"></rect>
+          <text x="62" y="82" font-size="16" font-weight="700" fill="#202521">證據清單</text>
+          <rect x="58" y="108" width="128" height="34" rx="6" fill="#ffffff" stroke="#d5ded8"></rect>
+          <text x="70" y="130" font-size="13" fill="#5d6a63">Route</text>
+          <rect x="58" y="154" width="128" height="40" rx="6" fill="#156f60"></rect>
+          <text x="70" y="179" font-size="13" fill="#ffffff">Capability Timeline</text>
+          <rect x="58" y="206" width="128" height="34" rx="6" fill="#ffffff" stroke="#d5ded8"></rect>
+          <text x="70" y="228" font-size="13" fill="#5d6a63">Rest intervals</text>
+          <text x="254" y="82" font-size="18" font-weight="700" fill="#202521">時間軸面板</text>
+          <line x1="268" y1="142" x2="392" y2="142" stroke="#156f60" stroke-width="7" stroke-linecap="round"></line>
+          <line x1="392" y1="142" x2="536" y2="142" stroke="#2f6f93" stroke-width="7" stroke-linecap="round"></line>
+          <circle cx="268" cy="142" r="16" fill="#16382f"></circle>
+          <circle cx="392" cy="142" r="16" fill="#16382f"></circle>
+          <circle cx="536" cy="142" r="16" fill="#16382f"></circle>
+          <circle cx="464" cy="142" r="10" fill="#b65b18"></circle>
+          <text x="330" y="120" text-anchor="middle" font-size="12" fill="#156f60">moving</text>
+          <text x="464" y="120" text-anchor="middle" font-size="12" fill="#2f6f93">moving + rest</text>
+          <rect x="252" y="190" width="300" height="42" rx="6" fill="#ffffff" stroke="#d5ded8"></rect>
+          <text x="270" y="216" font-size="13" fill="#202521">移動 30 分｜休息 7 分｜總時間 37 分</text>
+          <rect x="252" y="248" width="300" height="76" rx="6" fill="#fff8f4" stroke="#f1c7b2"></rect>
+          <text x="270" y="274" font-size="13" font-weight="700" fill="#74340d">分享預覽</text>
+          <text x="270" y="300" font-size="12" fill="#5d6a63">包含：粗略距離、移動時間、可信度</text>
+          <text x="270" y="320" font-size="12" fill="#5d6a63">排除：原始 GPX、精確時間、事故細節</text>
+        </svg>
+      </div>
+    </section>
+
+    <section class="band" aria-labelledby="cli">
+      <h2 id="cli">進階：用命令列產生分析檔</h2>
+      <p class="lead">
+        一般使用者通常只需要在畫面上查看。如果你是操作員，或要先用本機檔案產生分析，可以用下面的命令。你只要準備完成後的 GPX、路線檢查點資料、輸出資料夾。
+      </p>
+      <div class="command">PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. ./venv/bin/python -m post_analysis_capability \
+  --case-id my_completed_route \
+  --completed-track-gpx /path/to/completed_track.gpx \
+  --checkpoint-definitions /path/to/checkpoints.json \
+  --output-dir /path/to/output_folder</div>
+
+      <div class="callout">
+        <strong>目前 repo fixture</strong>
+        <code>chilai_nanhua_day1_post_analysis</code> 已改用
+        <code>能高安東軍.gpx.gpx</code> golden completed GPX 重建，清理後包含 74 個節點、
+        73 條 segment edge、62 個偵測休息區間；清理證據寫在
+        <code>gpx_cleaning_report.json</code>。
+      </div>
+
+      <table class="small-table">
+        <thead>
+          <tr>
+            <th>你要提供</th>
+            <th>代表什麼</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="path">completed_track.gpx</span></td>
+            <td>你完成路線後的 GPS 軌跡。</td>
+          </tr>
+          <tr>
+            <td><span class="path">checkpoints.json</span></td>
+            <td>路線上的檢查點與分段資料。</td>
+          </tr>
+          <tr>
+            <td><span class="path">output_folder</span></td>
+            <td>分析結果要放在哪個資料夾。</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="callout">
+        <strong>如果要分享摘要</strong>
+        系統會先產生分享預覽。真正匯出分享檔時，必須明確確認；不會偷偷公開原始路線。
+      </div>
+    </section>
+
+    <section class="band" aria-labelledby="outputs">
+      <h2 id="outputs">產出的檔案會做什麼</h2>
+      <p class="lead">輸出資料夾會出現幾個檔案。一般使用者不需要手動打開全部，知道用途即可。</p>
+      <div class="outputs">
+        <div class="output">
+          <strong>capability_timeline.json</strong>
+          <span>完整時間軸資料，給後台畫面顯示每個路段。</span>
+        </div>
+        <div class="output">
+          <strong>capability_capsule.json</strong>
+          <span>粗略能力摘要，可作為分享或同行參考的基礎。</span>
+        </div>
+        <div class="output">
+          <strong>capability_share_preview.json</strong>
+          <span>分享前預覽，列出會包含與排除的資訊。</span>
+        </div>
+        <div class="output">
+          <strong>capability_segments.csv</strong>
+          <span>每一段的表格摘要，方便人工檢查或匯入試算表。</span>
+        </div>
+        <div class="output">
+          <strong>capability_route_time_comparison.json</strong>
+          <span>如果有參考步程時間，會顯示資訊性比較。</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="band split" aria-labelledby="privacy">
+      <div>
+        <h2 id="privacy">分享前會保護什麼</h2>
+        <p class="lead">
+          分享用的能力摘要只保留粗略表現，不預設公開敏感紀錄。這讓你可以和可能同行的人討論節奏，而不必交出完整路線軌跡。
+        </p>
+        <ul class="plain-list">
+          <li>不包含原始 GPX。</li>
+          <li>不包含精確時間戳。</li>
+          <li>不包含精確座標。</li>
+          <li>不包含事故細節。</li>
+          <li>不包含私人備註或住家/工作路徑。</li>
+        </ul>
+      </div>
+      <div class="visual" aria-label="分享內容示意圖">
+        <svg viewBox="0 0 620 320" role="img">
+          <rect x="28" y="28" width="250" height="264" rx="10" fill="#eef5f1" stroke="#d5ded8"></rect>
+          <rect x="342" y="28" width="250" height="264" rx="10" fill="#fff8f4" stroke="#f1c7b2"></rect>
+          <text x="153" y="68" text-anchor="middle" font-size="18" font-weight="700" fill="#156f60">可以分享</text>
+          <text x="467" y="68" text-anchor="middle" font-size="18" font-weight="700" fill="#8b3f10">預設排除</text>
+          <text x="58" y="112" font-size="15" fill="#202521">粗略距離</text>
+          <text x="58" y="150" font-size="15" fill="#202521">移動時間</text>
+          <text x="58" y="188" font-size="15" fill="#202521">休息時間</text>
+          <text x="58" y="226" font-size="15" fill="#202521">可信度</text>
+          <text x="372" y="112" font-size="15" fill="#202521">原始 GPX</text>
+          <text x="372" y="150" font-size="15" fill="#202521">精確時間</text>
+          <text x="372" y="188" font-size="15" fill="#202521">精確座標</text>
+          <text x="372" y="226" font-size="15" fill="#202521">事故細節</text>
+          <path d="M288 160 H332" stroke="#5d6a63" stroke-width="3" stroke-linecap="round"></path>
+          <path d="M322 150 L334 160 L322 170" fill="none" stroke="#5d6a63" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></path>
+          <text x="310" y="260" text-anchor="middle" font-size="13" fill="#5d6a63">分享前先看預覽</text>
+        </svg>
+      </div>
+    </section>
+
+    <section class="band soft" aria-labelledby="faq">
+      <h2 id="faq">常見問題</h2>
+      <h3>它可以直接告訴我下次能不能走某條路嗎？</h3>
+      <p>不可以。它只能當作回顧與規劃參考。下次路線仍要看天氣、隊伍、裝備、體力、撤退點與實際地形。</p>
+
+      <h3>慢慢走會被當成休息嗎？</h3>
+      <p>不一定。系統不只看速度，也看你是否停留在同一小範圍內。如果你慢慢移動但持續離開原地，通常仍會被視為移動。</p>
+
+      <h3>為什麼有些路段可信度比較低？</h3>
+      <p>可能是 GPS 記錄不完整、時間資料缺漏、路線點太少，或檢查點附近有多個可能匹配位置。這些情況會在畫面上顯示限制說明。</p>
+
+      <h3>這會影響 Scout 行進中的安全判斷嗎？</h3>
+      <p>不會。它只讀取完成後資料，不會改變行進中的安全狀態。</p>
+    </section>
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+      Scout Post-Analysis Capability Timeline 使用者說明。這份文件說明使用方式與資料效果；詳細工程規格請見
+      <a href="../specs/post-analysis-capability-timeline.md">post-analysis-capability-timeline.md</a>。
+    </div>
+  </footer>
+</body>
+</html>

@@ -1,0 +1,1188 @@
+{
+  "artifact_kind": "pretrip_reference_track_summary",
+  "boundary": {
+    "candidate_evidence_only": true,
+    "compiled_into_mission_graph": false,
+    "golden_route_is_reference_evidence": true,
+    "live_network_required": false,
+    "pretrip_actual_user_track_available": false,
+    "raw_gpx_copied_to_repo": false,
+    "reference_tracks_authoritative": false,
+    "runtime_safety_truth": false,
+    "unwalked_route_sections_require_danger_review": true,
+    "unwalked_route_sections_require_manual_waypoints": true
+  },
+  "golden_route": {
+    "artifact_id": "artifact.gpx.chilai_nanhua_day1",
+    "bbox_wgs84": {
+      "max_lat": 24.053969560191035,
+      "max_lon": 121.28102609887719,
+      "min_lat": 23.872665725648403,
+      "min_lon": 121.17726685479283
+    },
+    "distance_m": 55174.67,
+    "elevation_range_m": {
+      "max": 3350.81,
+      "min": 1216.69
+    },
+    "point_count": 2612,
+    "pretrip_actual_user_track": false,
+    "role": "golden_route_reference",
+    "route_name": "2013-10-08 10:58:50 每日記錄",
+    "runtime_safety_truth": false,
+    "sha256": "83acf3731adba38c5cf96772e1adc506979ba69999d778235b575a2549e319d4",
+    "size_bytes": 484448,
+    "source_uri": "/private/tmp/scout_import_check_current/chilai_nanhua_day1/normalized/routes/filtered/primary.能高安東軍縱走_gpx.speed_filtered.gpx",
+    "timestamp_range": {
+      "ended_at": "2013-10-13T06:23:04Z",
+      "started_at": "2013-10-08T02:58:50Z"
+    }
+  },
+  "notes": [
+    "reference tracks（參考軌跡）只作為 pre-trip evidence，不是 runtime safety truth（現場安全真相）。",
+    "原始 GPX 保留在本機來源資料夾；repo fixture 只保存可重算的 metadata、hash、bbox、距離與點數。",
+    "Golden route（出發前選定的主參考路線）不是使用者已走過的軌跡；平安返回後才由 post-analysis 匯入 actual track 取代。",
+    "未曾發生的路徑或叉路必須由手動畫航點產生，並觸發 danger review（危險審查）而不是自動成為安全路線。"
+  ],
+  "primary_route": {
+    "artifact_id": "artifact.gpx.chilai_nanhua_day1",
+    "bbox_wgs84": {
+      "max_lat": 24.053969560191035,
+      "max_lon": 121.28102609887719,
+      "min_lat": 23.872665725648403,
+      "min_lon": 121.17726685479283
+    },
+    "distance_m": 55174.67,
+    "elevation_range_m": {
+      "max": 3350.81,
+      "min": 1216.69
+    },
+    "point_count": 2612,
+    "route_name": "2013-10-08 10:58:50 每日記錄",
+    "sha256": "83acf3731adba38c5cf96772e1adc506979ba69999d778235b575a2549e319d4",
+    "size_bytes": 484448,
+    "source_uri": "/private/tmp/scout_import_check_current/chilai_nanhua_day1/normalized/routes/filtered/primary.能高安東軍縱走_gpx.speed_filtered.gpx",
+    "timestamp_range": {
+      "ended_at": "2013-10-13T06:23:04Z",
+      "started_at": "2013-10-08T02:58:50Z"
+    }
+  },
+  "project_id": "chilai_nanhua_day1",
+  "reference_track_count": 23,
+  "reference_tracks": [
+    {
+      "bbox_comparison": {
+        "comparison_overlap_ratio": 0.071871,
+        "intersection_area_degrees2": 0.0007999327,
+        "intersection_wgs84": {
+          "max_lat": 24.0539696,
+          "max_lon": 121.2810261,
+          "min_lat": 24.0418284,
+          "min_lon": 121.2151403
+        },
+        "overlaps": true,
+        "primary_overlap_ratio": 0.042523
+      },
+      "distance_delta_m": -29853.51,
+      "point_count_delta": -1188,
+      "reference_id": "artifact.gpx.chilai_nanhua_day1.reference.001",
+      "role": "reference_track",
+      "route": {
+        "artifact_id": "artifact.gpx.chilai_nanhua_day1.reference.001",
+        "bbox_wgs84": {
+          "max_lat": 24.1396153,
+          "max_lon": 121.3289608,
+          "min_lat": 24.0418284,
+          "min_lon": 121.2151403
+        },
+        "distance_m": 25321.16,
+        "elevation_range_m": {
+          "max": 3425.8,
+          "min": 2021.31
+        },
+        "point_count": 1424,
+        "route_name": "ACTIVE LOG 002",
+        "sha256": "da2f8a8b8dc8e3d8c3c464badb6173b883245704ce329c63011de5a3db61ff0a",
+        "size_bytes": 211558,
+        "source_uri": "/private/tmp/scout_import_check_current/chilai_nanhua_day1/normalized/routes/filtered/reference_001.20161119_20奇萊連峰.speed_filtered.gpx",
+        "timestamp_range": {
+          "ended_at": "2016-11-20T07:58:39Z",
+          "started_at": "2016-11-18T11:54:17Z"
+        }
+      },
+      "source_use_treatment": {
+        "authoritative_for_mission": false,
+        "compiled_into_mission_graph": false,
+        "derived_summary_only": true,
+        "raw_source_versioned": false,
+        "reference_track_only": true,
+        "runtime_safety_truth": false
+      }
+    },
+    {
+      "bbox_comparison": {
+        "comparison_overlap_ratio": 0.999829,
+        "intersection_area_degrees2": 0.0049349363,
+        "intersection_wgs84": {
+          "max_lat": 23.95339,
+          "max_lon": 121.2704181,
+          "min_lat": 23.9004123,
+          "min_lon": 121.1772669
+        },
+        "overlaps": true,
+        "primary_overlap_ratio": 0.26233
+      },
+      "distance_delta_m": -3049.46,
+      "point_count_delta": 8925,
+      "reference_id": "artifact.gpx.chilai_nanhua_day1.reference.002",
+      "role": "reference_track",
+      "route": {
+        "artifact_id": "artifact.gpx.chilai_nanhua_day1.reference.002",
+        "bbox_wgs84": {
+          "max_lat": 23.95339,
+          "max_lon": 121.2704181,
+          "min_lat": 23.9004123,
+          "min_lon": 121.177251
+        },
+        "distance_m": 52125.21,
+        "elevation_range_m": {
+          "max": 2996.6,
+          "min": 1197.4
+        },
+        "point_count": 11537,
+        "route_name": "00",
+        "sha256": "e062b37ffe8324b290300958f868d3f816365ee2e97518bb4ffdcb187f200655",
+        "size_bytes": 1679251,
+        "source_uri": "/private/tmp/scout_import_check_current/chilai_nanhua_day1/normalized/routes/filtered/reference_002.2024-09-14馬君山_萬里池_萬馬線__ㄚ國_p.speed_filtered.gpx",
+        "timestamp_range": {
+          "ended_at": null,
+          "started_at": "2024-09-15T00:18:05Z"
+        }
+      },
+      "source_use_treatment": {
+        "authoritative_for_mission": false,
+        "compiled_into_mission_graph": false,
+        "derived_summary_only": true,
+        "raw_source_versioned": false,
+        "reference_track_only": true,
+        "runtime_safety_truth": false
+      }
+    },
+    {
+      "bbox_comparison": {
+        "comparison_overlap_ratio": 0.918194,
+        "intersection_area_degrees2": 0.0166309876,
+        "intersection_wgs84": {
+          "max_lat": 24.0539696,
+          "max_lon": 121.2810261,
+          "min_lat": 23.8726997,
+          "min_lon": 121.189279
+        },
+        "overlaps": true,
+        "primary_overlap_ratio": 0.884065
+      },
+      "distance_delta_m": -1762.43,
+      "point_count_delta": -496,
+      "reference_id": "artifact.gpx.chilai_nanhua_day1.reference.003",
+      "role": "reference_track",
+      "route": {
+        "artifact_id": "artifact.gpx.chilai_nanhua_day1.reference.003",
+        "bbox_wgs84": {
+          "max_lat": 24.061253266,
+          "max_lon": 121.285340432,
+          "min_lat": 23.872699672,
+          "min_lon": 121.189279044
+        },
+        "distance_m": 53412.24,
+        "elevation_range_m": {
+          "max": 9074.02,
+          "min": 1146.51
+        },
+        "point_count": 2116,
+        "route_name": "ACTIVE LOG 001",
+        "sha256": "d8c61af2245824d392a348bc83f916830314d59081776b9046a43fd6645e3eda",
+        "size_bytes": 265649,
+        "source_uri": "/private/tmp/scout_import_check_current/chilai_nanhua_day1/normalized/routes/filtered/reference_003.990418能高安東軍GDB檔.speed_filtered.gpx",
+        "timestamp_range": {
+          "ended_at": "2010-04-23T03:38:49Z",
+          "started_at": "2010-04-17T23:08:15Z"
+        }
+      },
+      "source_use_treatment": {
+        "authoritative_for_mission": false,
+        "compiled_into_mission_graph": false,
+        "derived_summary_only": true,
+        "raw_source_versioned": false,
+        "reference_track_only": true,
+        "runtime_safety_truth": false
+      }
+    },
+    {
+      "bbox_comparison": {
+        "comparison_overlap_ratio": 0.08066,
+        "intersection_area_degrees2": 0.0009621247,
+        "intersection_wgs84": {
+          "max_lat": 24.0539696,
+          "max_lon": 121.2810261,
+          "min_lat": 24.039347,
+          "min_lon": 121.215229
+        },
+        "overlaps": true,
+        "primary_overlap_ratio": 0.051144
+      },
+      "distance_delta_m": 19864.72,
+      "point_count_delta": -195,
+      "reference_id": "artifact.gpx.chilai_nanhua_day1.reference.004",
+      "role": "reference_track",
+      "route": {
+        "artifact_id": "artifact.gpx.chilai_nanhua_day1.reference.004",
+        "bbox_wgs84": {
+          "max_lat": 24.139285013,
+          "max_lon": 121.334585035,
+          "min_lat": 24.039346995,
+          "min_lon": 121.215228997
+        },
+        "distance_m": 75039.39,
+        "elevation_range_m": {
+          "max": 3604.46,
+          "min": 2000.63
+        },
+        "point_count": 2417,
+        "route_name": "ACTIVE LOG052000",
+        "sha256": "bea057b72f1378cd2e2ce5ca46f068cc8e524d7f697352f9da51f1dd09ee64fe",
+        "size_bytes": 291576,
+        "source_uri": "/private/tmp/scout_import_check_current/chilai_nanhua_day1/normalized/routes/filtered/reference_004.C_Documents_and_Settings_Administrator_桌面_20111127-29_gdb-GPX自動轉檔.speed_filtered.gpx",
+        "timestamp_range": {
+          "ended_at": "2011-11-28T07:48:49Z",
+          "started_at": "2011-11-25T21:20:00Z"
+        }
+      },
+      "source_use_treatment": {
+        "authoritative_for_mission": false,
+        "compiled_into_mission_graph": false,
+        "derived_summary_only": true,
+        "raw_source_versioned": false,
+        "reference_track_only": true,
+        "runtime_safety_truth": false
+      }
+    },
+    {
+      "bbox_comparison": {
+        "comparison_overlap_ratio": 0.553462,
+        "intersection_area_degrees2": 0.0032467188,
+        "intersection_wgs84": {
+          "max_lat": 24.0539696,
+          "max_lon": 121.2810261,
+          "min_lat": 24.0226787,
+          "min_lon": 121.1772669
+        },
+        "overlaps": true,
+        "primary_overlap_ratio": 0.172588
+      },
+      "distance_delta_m": -31792.45,
+      "point_count_delta": -747,
+      "reference_id": "artifact.gpx.chilai_nanhua_day1.reference.005",
+      "role": "reference_track",
+      "route": {
+        "artifact_id": "artifact.gpx.chilai_nanhua_day1.reference.005",
+        "bbox_wgs84": {
+          "max_lat": 24.061311521,
+          "max_lon": 121.284195883,
+          "min_lat": 24.022678742,
+          "min_lon": 121.132350666
+        },
+        "distance_m": 23382.22,
+        "elevation_range_m": {
+          "max": 3347.93,
+          "min": 1126.32
+        },
+        "point_count": 1865,
+        "route_name": "2014-10-(09-10)",
+        "sha256": "85ba7eee1570050624ab5faf8eba762899d234677238c802650c97ad2079d48b",
+        "size_bytes": 264582,
+        "source_uri": "/private/tmp/scout_import_check_current/chilai_nanhua_day1/normalized/routes/filtered/reference_005.C_UsersltcDesktop20141010奇萊南峰_gdb.speed_filtered.gpx",
+        "timestamp_range": {
+          "ended_at": "2014-10-10T09:45:53Z",
+          "started_at": "2014-10-09T11:16:34Z"
+        }
+      },
+      "source_use_treatment": {
+        "authoritative_for_mission": false,
+        "compiled_into_mission_graph": false,
+        "derived_summary_only": true,
+        "raw_source_versioned": false,
+        "reference_track_only": true,
+        "runtime_safety_truth": false
+      }
+    },
+    {
+      "bbox_comparison": {
+        "comparison_overlap_ratio": 0.734504,
+        "intersection_area_degrees2": 0.000744138,
+        "intersection_wgs84": {
+          "max_lat": 24.0539696,
+          "max_lon": 121.279733,
+          "min_lat": 24.043594,
+          "min_lon": 121.208013
+        },
+        "overlaps": true,
+        "primary_overlap_ratio": 0.039557
+      },
+      "distance_delta_m": -41386.82,
+      "point_count_delta": 4278,
+      "reference_id": "artifact.gpx.chilai_nanhua_day1.reference.006",
+      "role": "reference_track",
+      "route": {
+        "artifact_id": "artifact.gpx.chilai_nanhua_day1.reference.006",
+        "bbox_wgs84": {
+          "max_lat": 24.05772,
+          "max_lon": 121.279733,
+          "min_lat": 24.043594,
+          "min_lon": 121.208013
+        },
+        "distance_m": 13787.85,
+        "elevation_range_m": {
+          "max": 2888.82,
+          "min": 1941.27
+        },
+        "point_count": 6890,
+        "route_name": "登山",
+        "sha256": "ba5be36dce18ec532f762ca64dbb494e96346b51dd7606df6acffc9a055d7ed2",
+        "size_bytes": 1892660,
+        "source_uri": "/private/tmp/scout_import_check_current/chilai_nanhua_day1/normalized/routes/filtered/reference_006.GoLife_Run_gpx_2016-11-12.speed_filtered.gpx",
+        "timestamp_range": {
+          "ended_at": "2016-11-12T08:47:41Z",
+          "started_at": "2016-11-12T00:40:19Z"
+        }
+      },
+      "source_use_treatment": {
+        "authoritative_for_mission": false,
+        "compiled_into_mission_graph": false,
+        "derived_summary_only": true,
+        "raw_source_versioned": false,
+        "reference_track_only": true,
+        "runtime_safety_truth": false
+      }
+    },
+    {
+      "bbox_comparison": {
+        "comparison_overlap_ratio": 0.866003,
+        "intersection_area_degrees2": 0.0031116785,
+        "intersection_wgs84": {
+          "max_lat": 24.0539696,
+          "max_lon": 121.2810261,
+          "min_lat": 24.006735,
+          "min_lon": 121.215149
+        },
+        "overlaps": true,
+        "primary_overlap_ratio": 0.16541
+      },
+      "distance_delta_m": -20267.68,
+      "point_count_delta": 352,
+      "reference_id": "artifact.gpx.chilai_nanhua_day1.reference.007",
+      "role": "reference_track",
+      "route": {
+        "artifact_id": "artifact.gpx.chilai_nanhua_day1.reference.007",
+        "bbox_wgs84": {
+          "max_lat": 24.057929004,
+          "max_lon": 121.28533599,
+          "min_lat": 24.006735021,
+          "min_lon": 121.215149034
+        },
+        "distance_m": 34906.99,
+        "elevation_range_m": {
+          "max": 3286.9,
+          "min": 1999.2
+        },
+        "point_count": 2964,
+        "route_name": "D1 屯原至天池山莊",
+        "sha256": "82e39f36b181ded3befa57e278b378ce00e66c02b2470a4c131bb9e8abe0d0b0",
+        "size_bytes": 415743,
+        "source_uri": "/private/tmp/scout_import_check_current/chilai_nanhua_day1/normalized/routes/filtered/reference_007.Lucky_200226_卡賀爾山_深堀山_p.speed_filtered.gpx",
+        "timestamp_range": {
+          "ended_at": "2020-02-28T09:25:08Z",
+          "started_at": "2020-02-26T02:39:32Z"
+        }
+      },
+      "source_use_treatment": {
+        "authoritative_for_mission": false,
+        "compiled_into_mission_graph": false,
+        "derived_summary_only": true,
+        "raw_source_versioned": false,
+        "reference_track_only": true,
+        "runtime_safety_truth": false
+      }
+    },
+    {
+      "bbox_comparison": {
+        "comparison_overlap_ratio": 0.960178,
+        "intersection_area_degrees2": 0.0187969544,
+        "intersection_wgs84": {
+          "max_lat": 24.0538251,
+          "max_lon": 121.2810261,
+          "min_lat": 23.8726657,
+          "min_lon": 121.1772669
+        },
+        "overlaps": true,
+        "primary_overlap_ratio": 0.999203
+      },
+      "distance_delta_m": 10046.26,
+      "point_count_delta": -112,
+      "reference_id": "artifact.gpx.chilai_nanhua_day1.reference.008",
+      "role": "reference_track",
+      "route": {
+        "artifact_id": "artifact.gpx.chilai_nanhua_day1.reference.008",
+        "bbox_wgs84": {
+          "max_lat": 24.05382514,
+          "max_lon": 121.281737471,
+          "min_lat": 23.872632282,
+          "min_lon": 121.173694991
+        },
+        "distance_m": 65220.93,
+        "elevation_range_m": {
+          "max": 3368.6,
+          "min": 1208.51
+        },
+        "point_count": 2500,
+        "route_name": "22日屯原光被",
+        "sha256": "e811040c7f666551773edca76bfb3b2d682a5bb588d37ad60474de0dc8e686e5",
+        "size_bytes": 222450,
+        "source_uri": "/private/tmp/scout_import_check_current/chilai_nanhua_day1/normalized/routes/filtered/reference_008.chen661能高安東軍5天-GPX自動轉檔.speed_filtered.gpx",
+        "timestamp_range": {
+          "ended_at": null,
+          "started_at": null
+        }
+      },
+      "source_use_treatment": {
+        "authoritative_for_mission": false,
+        "compiled_into_mission_graph": false,
+        "derived_summary_only": true,
+        "raw_source_versioned": false,
+        "reference_track_only": true,
+        "runtime_safety_truth": false
+      }
+    },
+    {
+      "bbox_comparison": {
+        "comparison_overlap_ratio": 0.396457,
+        "intersection_area_degrees2": 0.0019448169,
+        "intersection_wgs84": {
+          "max_lat": 24.0539696,
+          "max_lon": 121.240623,
+          "min_lat": 24.023273,
+          "min_lon": 121.1772669
+        },
+        "overlaps": true,
+        "primary_overlap_ratio": 0.103382
+      },
+      "distance_delta_m": 7814.29,
+      "point_count_delta": -2042,
+      "reference_id": "artifact.gpx.chilai_nanhua_day1.reference.009",
+      "role": "reference_track",
+      "route": {
+        "artifact_id": "artifact.gpx.chilai_nanhua_day1.reference.009",
+        "bbox_wgs84": {
+          "max_lat": 24.089978971,
+          "max_lon": 121.240622979,
+          "min_lat": 24.023273019,
+          "min_lon": 121.167084016
+        },
+        "distance_m": 62988.96,
+        "elevation_range_m": {
+          "max": 2666.83,
+          "min": 1080.66
+        },
+        "point_count": 570,
+        "route_name": "金牌的廬山三寶",
+        "sha256": "7e3eb8629a1be85ef05d2b34149fa9694c0b854b9c8290694cf1c853bba3bce5",
+        "size_bytes": 72144,
+        "source_uri": "/private/tmp/scout_import_check_current/chilai_nanhua_day1/normalized/routes/filtered/reference_009.一日廬山3寶_金牌__gdb.speed_filtered.gpx",
+        "timestamp_range": {
+          "ended_at": "2012-10-23T09:34:29Z",
+          "started_at": "2012-10-22T22:46:15Z"
+        }
+      },
+      "source_use_treatment": {
+        "authoritative_for_mission": false,
+        "compiled_into_mission_graph": false,
+        "derived_summary_only": true,
+        "raw_source_versioned": false,
+        "reference_track_only": true,
+        "runtime_safety_truth": false
+      }
+    },
+    {
+      "bbox_comparison": {
+        "comparison_overlap_ratio": 0.0,
+        "intersection_area_degrees2": 0.0,
+        "intersection_wgs84": null,
+        "overlaps": false,
+        "primary_overlap_ratio": 0.0
+      },
+      "distance_delta_m": -26475.36,
+      "point_count_delta": 356,
+      "reference_id": "artifact.gpx.chilai_nanhua_day1.reference.010",
+      "role": "reference_track",
+      "route": {
+        "artifact_id": "artifact.gpx.chilai_nanhua_day1.reference.010",
+        "bbox_wgs84": {
+          "max_lat": 23.297221586,
+          "max_lon": 121.033488968,
+          "min_lat": 23.246395653,
+          "min_lon": 120.981242135
+        },
+        "distance_m": 28699.31,
+        "elevation_range_m": {
+          "max": 3610.85,
+          "min": 2314.99
+        },
+        "point_count": 2968,
+        "route_name": "松景步道+嘉明",
+        "sha256": "85462047f580d2130e264ab31f0e6005a77a62de4494b29dd85610ac0cdac1d0",
+        "size_bytes": 449049,
+        "source_uri": "/private/tmp/scout_import_check_current/chilai_nanhua_day1/normalized/routes/filtered/reference_010.嘉明湖_含軌跡檔.speed_filtered.gpx",
+        "timestamp_range": {
+          "ended_at": "2009-03-15T03:53:59Z",
+          "started_at": null
+        }
+      },
+      "source_use_treatment": {
+        "authoritative_for_mission": false,
+        "compiled_into_mission_graph": false,
+        "derived_summary_only": true,
+        "raw_source_versioned": false,
+        "reference_track_only": true,
+        "runtime_safety_truth": false
+      }
+    },
+    {
+      "bbox_comparison": {
+        "comparison_overlap_ratio": 0.0,
+        "intersection_area_degrees2": 0.0,
+        "intersection_wgs84": null,
+        "overlaps": false,
+        "primary_overlap_ratio": 0.0
+      },
+      "distance_delta_m": -32576.62,
+      "point_count_delta": -768,
+      "reference_id": "artifact.gpx.chilai_nanhua_day1.reference.011",
+      "role": "reference_track",
+      "route": {
+        "artifact_id": "artifact.gpx.chilai_nanhua_day1.reference.011",
+        "bbox_wgs84": {
+          "max_lat": 24.139505457,
+          "max_lon": 121.334725935,
+          "min_lat": 24.085991532,
+          "min_lon": 121.286219023
+        },
+        "distance_m": 22598.05,
+        "elevation_range_m": {
+          "max": 3621.42,
+          "min": 2728.36
+        },
+        "point_count": 1844,
+        "route_name": "1.奇萊登山口到主北三叉路口",
+        "sha256": "8858a934897542c25320edf6d1fc0b8b3a00a9ea6175133a299e6657b1332455",
+        "size_bytes": 405531,
+        "source_uri": "/private/tmp/scout_import_check_current/chilai_nanhua_day1/normalized/routes/filtered/reference_011.奇萊主北航跡圖-GPX自動轉檔.speed_filtered.gpx",
+        "timestamp_range": {
+          "ended_at": "2009-09-12T10:09:27Z",
+          "started_at": "2009-09-10T23:17:52Z"
+        }
+      },
+      "source_use_treatment": {
+        "authoritative_for_mission": false,
+        "compiled_into_mission_graph": false,
+        "derived_summary_only": true,
+        "raw_source_versioned": false,
+        "reference_track_only": true,
+        "runtime_safety_truth": false
+      }
+    },
+    {
+      "bbox_comparison": {
+        "comparison_overlap_ratio": 0.053687,
+        "intersection_area_degrees2": 0.0009699616,
+        "intersection_wgs84": {
+          "max_lat": 24.0539696,
+          "max_lon": 121.2810261,
+          "min_lat": 24.0392377,
+          "min_lon": 121.2151852
+        },
+        "overlaps": true,
+        "primary_overlap_ratio": 0.051561
+      },
+      "distance_delta_m": 33937.9,
+      "point_count_delta": 1675,
+      "reference_id": "artifact.gpx.chilai_nanhua_day1.reference.012",
+      "role": "reference_track",
+      "route": {
+        "artifact_id": "artifact.gpx.chilai_nanhua_day1.reference.012",
+        "bbox_wgs84": {
+          "max_lat": 24.180530934,
+          "max_lon": 121.343053356,
+          "min_lat": 24.039237695,
+          "min_lon": 121.215185244
+        },
+        "distance_m": 89112.57,
+        "elevation_range_m": {
+          "max": 3619.02,
+          "min": 1947.29
+        },
+        "point_count": 4287,
+        "route_name": "ACTIVE LOG 007",
+        "sha256": "ccf9f79ef64625233cf5ed49f38a32bc4f7121bc3beb4743bc128dc2a819d6a3",
+        "size_bytes": 524556,
+        "source_uri": "/private/tmp/scout_import_check_current/chilai_nanhua_day1/normalized/routes/filtered/reference_012.奇萊北壁下屏風山.speed_filtered.gpx",
+        "timestamp_range": {
+          "ended_at": null,
+          "started_at": "2007-06-16T03:47:19Z"
+        }
+      },
+      "source_use_treatment": {
+        "authoritative_for_mission": false,
+        "compiled_into_mission_graph": false,
+        "derived_summary_only": true,
+        "raw_source_versioned": false,
+        "reference_track_only": true,
+        "runtime_safety_truth": false
+      }
+    },
+    {
+      "bbox_comparison": {
+        "comparison_overlap_ratio": 0.617819,
+        "intersection_area_degrees2": 0.0009605232,
+        "intersection_wgs84": {
+          "max_lat": 24.0539696,
+          "max_lon": 121.2810261,
+          "min_lat": 24.039383,
+          "min_lon": 121.2151764
+        },
+        "overlaps": true,
+        "primary_overlap_ratio": 0.051059
+      },
+      "distance_delta_m": -17811.4,
+      "point_count_delta": -1308,
+      "reference_id": "artifact.gpx.chilai_nanhua_day1.reference.013",
+      "role": "reference_track",
+      "route": {
+        "artifact_id": "artifact.gpx.chilai_nanhua_day1.reference.013",
+        "bbox_wgs84": {
+          "max_lat": 24.061268019,
+          "max_lon": 121.286216006,
+          "min_lat": 24.039383037,
+          "min_lon": 121.215176443
+        },
+        "distance_m": 37363.27,
+        "elevation_range_m": {
+          "max": 3357.06,
+          "min": 1977.41
+        },
+        "point_count": 1304,
+        "route_name": "航跡 001",
+        "sha256": "2163ef98b96b3edfc31f0660a6f703b60ca17095692958cb8860cdbfce15b1fc",
+        "size_bytes": 162609,
+        "source_uri": "/private/tmp/scout_import_check_current/chilai_nanhua_day1/normalized/routes/filtered/reference_013.奇萊南峰_南華山_光被八表碑.speed_filtered.gpx",
+        "timestamp_range": {
+          "ended_at": "2010-08-14T22:01:28Z",
+          "started_at": "2010-08-14T06:24:34Z"
+        }
+      },
+      "source_use_treatment": {
+        "authoritative_for_mission": false,
+        "compiled_into_mission_graph": false,
+        "derived_summary_only": true,
+        "raw_source_versioned": false,
+        "reference_track_only": true,
+        "runtime_safety_truth": false
+      }
+    },
+    {
+      "bbox_comparison": {
+        "comparison_overlap_ratio": 0.665779,
+        "intersection_area_degrees2": 0.0014573513,
+        "intersection_wgs84": {
+          "max_lat": 24.0539696,
+          "max_lon": 121.2810261,
+          "min_lat": 24.0361867,
+          "min_lon": 121.1990737
+        },
+        "overlaps": true,
+        "primary_overlap_ratio": 0.077469
+      },
+      "distance_delta_m": -28665.82,
+      "point_count_delta": -429,
+      "reference_id": "artifact.gpx.chilai_nanhua_day1.reference.014",
+      "role": "reference_track",
+      "route": {
+        "artifact_id": "artifact.gpx.chilai_nanhua_day1.reference.014",
+        "bbox_wgs84": {
+          "max_lat": 24.061302384,
+          "max_lon": 121.286227992,
+          "min_lat": 24.036186682,
+          "min_lon": 121.199073717
+        },
+        "distance_m": 26508.85,
+        "elevation_range_m": {
+          "max": 3358.5,
+          "min": 1497.87
+        },
+        "point_count": 2183,
+        "route_name": "1.屯原車程",
+        "sha256": "be98db779fffed26ea1d5d0b1d8b1dbfbd51a251cf53331d5d0d4bf5dd257293",
+        "size_bytes": 263405,
+        "source_uri": "/private/tmp/scout_import_check_current/chilai_nanhua_day1/normalized/routes/filtered/reference_014.奇萊南峰南華山_金牌__gdb-GPX自動轉檔.speed_filtered.gpx",
+        "timestamp_range": {
+          "ended_at": "2013-12-07T02:01:34Z",
+          "started_at": "2013-12-06T00:17:35Z"
+        }
+      },
+      "source_use_treatment": {
+        "authoritative_for_mission": false,
+        "compiled_into_mission_graph": false,
+        "derived_summary_only": true,
+        "raw_source_versioned": false,
+        "reference_track_only": true,
+        "runtime_safety_truth": false
+      }
+    },
+    {
+      "bbox_comparison": {
+        "comparison_overlap_ratio": 0.617818,
+        "intersection_area_degrees2": 0.0009605232,
+        "intersection_wgs84": {
+          "max_lat": 24.0539696,
+          "max_lon": 121.2810261,
+          "min_lat": 24.039383,
+          "min_lon": 121.2151764
+        },
+        "overlaps": true,
+        "primary_overlap_ratio": 0.051059
+      },
+      "distance_delta_m": -17848.56,
+      "point_count_delta": -1312,
+      "reference_id": "artifact.gpx.chilai_nanhua_day1.reference.015",
+      "role": "reference_track",
+      "route": {
+        "artifact_id": "artifact.gpx.chilai_nanhua_day1.reference.015",
+        "bbox_wgs84": {
+          "max_lat": 24.061268,
+          "max_lon": 121.286216,
+          "min_lat": 24.039383,
+          "min_lon": 121.2151764
+        },
+        "distance_m": 37326.11,
+        "elevation_range_m": {
+          "max": 3357.06,
+          "min": 1977.41
+        },
+        "point_count": 1300,
+        "route_name": "航跡 001",
+        "sha256": "c25cbd8d273db9cdfbd11e82c56807a9e052bc267925c7c44ac2cf3cf7c9d94a",
+        "size_bytes": 190837,
+        "source_uri": "/private/tmp/scout_import_check_current/chilai_nanhua_day1/normalized/routes/filtered/reference_015.奇萊南華_gpx.speed_filtered.gpx",
+        "timestamp_range": {
+          "ended_at": "2010-08-14T22:01:28Z",
+          "started_at": "2010-08-14T06:24:34Z"
+        }
+      },
+      "source_use_treatment": {
+        "authoritative_for_mission": false,
+        "compiled_into_mission_graph": false,
+        "derived_summary_only": true,
+        "raw_source_versioned": false,
+        "reference_track_only": true,
+        "runtime_safety_truth": false
+      }
+    },
+    {
+      "bbox_comparison": {
+        "comparison_overlap_ratio": 0.0,
+        "intersection_area_degrees2": 0.0,
+        "intersection_wgs84": null,
+        "overlaps": false,
+        "primary_overlap_ratio": 0.0
+      },
+      "distance_delta_m": -27696.31,
+      "point_count_delta": 1247,
+      "reference_id": "artifact.gpx.chilai_nanhua_day1.reference.016",
+      "role": "reference_track",
+      "route": {
+        "artifact_id": "artifact.gpx.chilai_nanhua_day1.reference.016",
+        "bbox_wgs84": {
+          "max_lat": 24.449981293,
+          "max_lon": 121.321348418,
+          "min_lat": 24.396884786,
+          "min_lon": 121.266801255
+        },
+        "distance_m": 27478.36,
+        "elevation_range_m": {
+          "max": 3551.73,
+          "min": 1892.97
+        },
+        "point_count": 3859,
+        "route_name": "ACTIVE LOG",
+        "sha256": "afaf50d41a2fdfb32ffa5992608cf0aa619f7c84b2ef3128ee36b88905822f87",
+        "size_bytes": 641037,
+        "source_uri": "/private/tmp/scout_import_check_current/chilai_nanhua_day1/normalized/routes/filtered/reference_016.武陵四秀航跡圖.speed_filtered.gpx",
+        "timestamp_range": {
+          "ended_at": "2009-07-04T04:23:00Z",
+          "started_at": "2009-07-02T21:37:04Z"
+        }
+      },
+      "source_use_treatment": {
+        "authoritative_for_mission": false,
+        "compiled_into_mission_graph": false,
+        "derived_summary_only": true,
+        "raw_source_versioned": false,
+        "reference_track_only": true,
+        "runtime_safety_truth": false
+      }
+    },
+    {
+      "bbox_comparison": {
+        "comparison_overlap_ratio": 0.999998,
+        "intersection_area_degrees2": 0.0030071546,
+        "intersection_wgs84": {
+          "max_lat": 23.945468,
+          "max_lon": 121.238948,
+          "min_lat": 23.886857,
+          "min_lon": 121.187641
+        },
+        "overlaps": true,
+        "primary_overlap_ratio": 0.159853
+      },
+      "distance_delta_m": -43323.12,
+      "point_count_delta": -929,
+      "reference_id": "artifact.gpx.chilai_nanhua_day1.reference.017",
+      "role": "reference_track",
+      "route": {
+        "artifact_id": "artifact.gpx.chilai_nanhua_day1.reference.017",
+        "bbox_wgs84": {
+          "max_lat": 23.945468003,
+          "max_lon": 121.238948023,
+          "min_lat": 23.886856958,
+          "min_lon": 121.187640969
+        },
+        "distance_m": 11851.55,
+        "elevation_range_m": {
+          "max": 2021.31,
+          "min": 1271.0
+        },
+        "point_count": 1683,
+        "route_name": "目前航跡: 25 12 2010 10:11",
+        "sha256": "c1d348ac8bfe5dea1b2e04c7abb7ce6ef39abbb252bea3ac09764e6a5f5fc264",
+        "size_bytes": 228228,
+        "source_uri": "/private/tmp/scout_import_check_current/chilai_nanhua_day1/normalized/routes/filtered/reference_017.竹林營地.speed_filtered.gpx",
+        "timestamp_range": {
+          "ended_at": "2010-12-26T02:47:06Z",
+          "started_at": "2010-12-25T02:11:06Z"
+        }
+      },
+      "source_use_treatment": {
+        "authoritative_for_mission": false,
+        "compiled_into_mission_graph": false,
+        "derived_summary_only": true,
+        "raw_source_versioned": false,
+        "reference_track_only": true,
+        "runtime_safety_truth": false
+      }
+    },
+    {
+      "bbox_comparison": {
+        "comparison_overlap_ratio": 0.961602,
+        "intersection_area_degrees2": 0.0188004926,
+        "intersection_wgs84": {
+          "max_lat": 24.053909,
+          "max_lon": 121.2810261,
+          "min_lat": 23.8727155,
+          "min_lon": 121.1772669
+        },
+        "overlaps": true,
+        "primary_overlap_ratio": 0.999391
+      },
+      "distance_delta_m": 7171.15,
+      "point_count_delta": 4692,
+      "reference_id": "artifact.gpx.chilai_nanhua_day1.reference.018",
+      "role": "reference_track",
+      "route": {
+        "artifact_id": "artifact.gpx.chilai_nanhua_day1.reference.018",
+        "bbox_wgs84": {
+          "max_lat": 24.053908959,
+          "max_lon": 121.281543514,
+          "min_lat": 23.872715514,
+          "min_lon": 121.173641095
+        },
+        "distance_m": 62345.82,
+        "elevation_range_m": {
+          "max": 3348.89,
+          "min": 1201.3
+        },
+        "point_count": 7304,
+        "route_name": "屯原-天池山莊",
+        "sha256": "6f5008c65588df13cdc9c4090faabdb7b39929b79bfb9d47cb03032fa7282206",
+        "size_bytes": 1064464,
+        "source_uri": "/private/tmp/scout_import_check_current/chilai_nanhua_day1/normalized/routes/filtered/reference_018.能高.speed_filtered.gpx",
+        "timestamp_range": {
+          "ended_at": "2013-03-16T05:14:20Z",
+          "started_at": "2010-05-19T21:42:58Z"
+        }
+      },
+      "source_use_treatment": {
+        "authoritative_for_mission": false,
+        "compiled_into_mission_graph": false,
+        "derived_summary_only": true,
+        "raw_source_versioned": false,
+        "reference_track_only": true,
+        "runtime_safety_truth": false
+      }
+    },
+    {
+      "bbox_comparison": {
+        "comparison_overlap_ratio": 0.824326,
+        "intersection_area_degrees2": 0.0188119476,
+        "intersection_wgs84": {
+          "max_lat": 24.0539696,
+          "max_lon": 121.2810261,
+          "min_lat": 23.8726657,
+          "min_lon": 121.1772669
+        },
+        "overlaps": true,
+        "primary_overlap_ratio": 1.0
+      },
+      "distance_delta_m": 7794.22,
+      "point_count_delta": -799,
+      "reference_id": "artifact.gpx.chilai_nanhua_day1.reference.019",
+      "role": "reference_track",
+      "route": {
+        "artifact_id": "artifact.gpx.chilai_nanhua_day1.reference.019",
+        "bbox_wgs84": {
+          "max_lat": 24.055917263,
+          "max_lon": 121.286122799,
+          "min_lat": 23.872613003,
+          "min_lon": 121.161624799
+        },
+        "distance_m": 62968.89,
+        "elevation_range_m": {
+          "max": 3352.74,
+          "min": 1196.02
+        },
+        "point_count": 1813,
+        "route_name": "07能高安東軍-011-登山口=>天池山莊 =13.9K",
+        "sha256": "d06f0d880bea9f38d1afb3c86c4031f8944836e8299b1dee7d788ae58e817665",
+        "size_bytes": 213933,
+        "source_uri": "/private/tmp/scout_import_check_current/chilai_nanhua_day1/normalized/routes/filtered/reference_019.能高安東軍-GPX自動轉檔.speed_filtered.gpx",
+        "timestamp_range": {
+          "ended_at": "2009-01-31T04:46:15Z",
+          "started_at": null
+        }
+      },
+      "source_use_treatment": {
+        "authoritative_for_mission": false,
+        "compiled_into_mission_graph": false,
+        "derived_summary_only": true,
+        "raw_source_versioned": false,
+        "reference_track_only": true,
+        "runtime_safety_truth": false
+      }
+    },
+    {
+      "bbox_comparison": {
+        "comparison_overlap_ratio": 0.598784,
+        "intersection_area_degrees2": 0.0188094263,
+        "intersection_wgs84": {
+          "max_lat": 24.0539696,
+          "max_lon": 121.2810261,
+          "min_lat": 23.87269,
+          "min_lon": 121.1772669
+        },
+        "overlaps": true,
+        "primary_overlap_ratio": 0.999866
+      },
+      "distance_delta_m": 43680.6,
+      "point_count_delta": 4172,
+      "reference_id": "artifact.gpx.chilai_nanhua_day1.reference.020",
+      "role": "reference_track",
+      "route": {
+        "artifact_id": "artifact.gpx.chilai_nanhua_day1.reference.020",
+        "bbox_wgs84": {
+          "max_lat": 24.061244,
+          "max_lon": 121.286234,
+          "min_lat": 23.87269,
+          "min_lon": 121.119636
+        },
+        "distance_m": 98855.27,
+        "elevation_range_m": {
+          "max": 3366.2,
+          "min": 896.04
+        },
+        "point_count": 6784,
+        "route_name": "12能高安東軍00",
+        "sha256": "52fb1916e50429a09d37edb2d6b5b3e0c00b209ee950d7940052546df2c93e78",
+        "size_bytes": 984524,
+        "source_uri": "/private/tmp/scout_import_check_current/chilai_nanhua_day1/normalized/routes/filtered/reference_020.能高安東軍_gpx.speed_filtered.gpx",
+        "timestamp_range": {
+          "ended_at": "2010-05-23T09:34:28Z",
+          "started_at": "2010-05-19T10:33:04Z"
+        }
+      },
+      "source_use_treatment": {
+        "authoritative_for_mission": false,
+        "compiled_into_mission_graph": false,
+        "derived_summary_only": true,
+        "raw_source_versioned": false,
+        "reference_track_only": true,
+        "runtime_safety_truth": false
+      }
+    },
+    {
+      "bbox_comparison": {
+        "comparison_overlap_ratio": 0.917592,
+        "intersection_area_degrees2": 0.0187919172,
+        "intersection_wgs84": {
+          "max_lat": 24.0539696,
+          "max_lon": 121.2810261,
+          "min_lat": 23.8726905,
+          "min_lon": 121.1773632
+        },
+        "overlaps": true,
+        "primary_overlap_ratio": 0.998935
+      },
+      "distance_delta_m": 144614.01,
+      "point_count_delta": -384,
+      "reference_id": "artifact.gpx.chilai_nanhua_day1.reference.021",
+      "role": "reference_track",
+      "route": {
+        "artifact_id": "artifact.gpx.chilai_nanhua_day1.reference.021",
+        "bbox_wgs84": {
+          "max_lat": 24.060924025,
+          "max_lon": 121.286162026,
+          "min_lat": 23.872690536,
+          "min_lon": 121.177363163
+        },
+        "distance_m": 199788.68,
+        "elevation_range_m": {
+          "max": 3360.91,
+          "min": 1214.76
+        },
+        "point_count": 2228,
+        "route_name": "2010能安D41能",
+        "sha256": "f88de6a8195171aa77499ac2bec8661cfcc4f0d54adb056166bdad84ba237689",
+        "size_bytes": 232487,
+        "source_uri": "/private/tmp/scout_import_check_current/chilai_nanhua_day1/normalized/routes/filtered/reference_021.能高安東軍金杏真路.speed_filtered.gpx",
+        "timestamp_range": {
+          "ended_at": "2013-09-11T09:20:13Z",
+          "started_at": null
+        }
+      },
+      "source_use_treatment": {
+        "authoritative_for_mission": false,
+        "compiled_into_mission_graph": false,
+        "derived_summary_only": true,
+        "raw_source_versioned": false,
+        "reference_track_only": true,
+        "runtime_safety_truth": false
+      }
+    },
+    {
+      "bbox_comparison": {
+        "comparison_overlap_ratio": 0.954384,
+        "intersection_area_degrees2": 0.0032427483,
+        "intersection_wgs84": {
+          "max_lat": 24.0534529,
+          "max_lon": 121.2810261,
+          "min_lat": 24.0047141,
+          "min_lon": 121.2144929
+        },
+        "overlaps": true,
+        "primary_overlap_ratio": 0.172377
+      },
+      "distance_delta_m": -24107.01,
+      "point_count_delta": -487,
+      "reference_id": "artifact.gpx.chilai_nanhua_day1.reference.022",
+      "role": "reference_track",
+      "route": {
+        "artifact_id": "artifact.gpx.chilai_nanhua_day1.reference.022",
+        "bbox_wgs84": {
+          "max_lat": 24.0534529,
+          "max_lon": 121.284206193,
+          "min_lat": 24.004714144,
+          "min_lon": 121.214492898
+        },
+        "distance_m": 31067.66,
+        "elevation_range_m": {
+          "max": 3090.29,
+          "min": 2009.29
+        },
+        "point_count": 2125,
+        "route_name": "ACTIVE LOG",
+        "sha256": "f54d721e577a8539cbac867b366be4a4fca777e4ae4655b2d3a7edb0dd7e5188",
+        "size_bytes": 250786,
+        "source_uri": "/private/tmp/scout_import_check_current/chilai_nanhua_day1/normalized/routes/filtered/reference_022.航跡檔給想去人參考-GPX自動轉檔.speed_filtered.gpx",
+        "timestamp_range": {
+          "ended_at": "2008-08-23T23:05:47Z",
+          "started_at": "2008-08-16T21:10:07Z"
+        }
+      },
+      "source_use_treatment": {
+        "authoritative_for_mission": false,
+        "compiled_into_mission_graph": false,
+        "derived_summary_only": true,
+        "raw_source_versioned": false,
+        "reference_track_only": true,
+        "runtime_safety_truth": false
+      }
+    },
+    {
+      "bbox_comparison": {
+        "comparison_overlap_ratio": 0.314858,
+        "intersection_area_degrees2": 0.0047823944,
+        "intersection_wgs84": {
+          "max_lat": 24.0539696,
+          "max_lon": 121.2810261,
+          "min_lat": 23.9571302,
+          "min_lon": 121.2316413
+        },
+        "overlaps": true,
+        "primary_overlap_ratio": 0.254221
+      },
+      "distance_delta_m": 8958.4,
+      "point_count_delta": 1372,
+      "reference_id": "artifact.gpx.chilai_nanhua_day1.reference.023",
+      "role": "reference_track",
+      "route": {
+        "artifact_id": "artifact.gpx.chilai_nanhua_day1.reference.023",
+        "bbox_wgs84": {
+          "max_lat": 24.056041399,
+          "max_lon": 121.385204019,
+          "min_lat": 23.957130248,
+          "min_lon": 121.231641266
+        },
+        "distance_m": 64133.07,
+        "elevation_range_m": {
+          "max": 3349.37,
+          "min": 562.03
+        },
+        "point_count": 3984,
+        "route_name": "000 下溪d1",
+        "sha256": "024fd8da6f2342f3120653570ae72382fdde5a21dda62759f00d39c3bf2785b9",
+        "size_bytes": 490996,
+        "source_uri": "/private/tmp/scout_import_check_current/chilai_nanhua_day1/normalized/routes/filtered/reference_023.行跡檔_-GPX自動轉檔.speed_filtered.gpx",
+        "timestamp_range": {
+          "ended_at": "2011-11-01T20:42:05Z",
+          "started_at": "2010-10-02T22:20:16Z"
+        }
+      },
+      "source_use_treatment": {
+        "authoritative_for_mission": false,
+        "compiled_into_mission_graph": false,
+        "derived_summary_only": true,
+        "raw_source_versioned": false,
+        "reference_track_only": true,
+        "runtime_safety_truth": false
+      }
+    }
+  ],
+  "route_role": "golden_route",
+  "schema_version": "0.1.0"
+}

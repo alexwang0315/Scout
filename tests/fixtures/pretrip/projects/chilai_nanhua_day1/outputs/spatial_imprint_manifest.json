@@ -1,0 +1,53 @@
+{
+  "artifact_kind": "pretrip_spatial_imprint_export_manifest",
+  "boundary": {
+    "compiles_mission_graph": false,
+    "final_mission_graph_mutation_allowed": false,
+    "hardware_control_allowed": false,
+    "notes": [
+      "Spatial Imprint export / 空間印記匯出 is a reviewed pretrip addendum.",
+      "Trigger evaluation remains deterministic and advisory.",
+      "This exporter does not activate runtime, call safety APIs, or control hardware."
+    ],
+    "package_addendum_candidate": true,
+    "phase1_runtime_mutation_allowed": false,
+    "phase2_writeback_allowed": false,
+    "remote_outbound_send_allowed": false,
+    "reviewed_pretrip_addendum": true,
+    "runtime_activation_allowed": false,
+    "runtime_safety_truth": false,
+    "safety_api_calls_allowed": false
+  },
+  "candidates_ref": "candidates/spatial_imprints.json",
+  "counts": {
+    "accepted_count": 3,
+    "candidate_count": 4,
+    "corrected_count": 0,
+    "disabled_count": 1,
+    "hardware_control_count": 0,
+    "phase1_runtime_mutation_count": 0,
+    "rejected_count": 0,
+    "remote_outbound_send_count": 0,
+    "review_record_count": 4,
+    "reviewed_imprint_count": 3,
+    "runtime_truth_count": 0,
+    "safety_api_call_count": 0
+  },
+  "disabled_audit_refs": [
+    "spatial_imprint.chilai.rest_point.073"
+  ],
+  "notes": [
+    "Reviewed spatial imprints remain advisory cues and are not Phase 1 safety truth.",
+    "Runtime loading must still pass the departure/runtime handoff chain."
+  ],
+  "project_id": "chilai_nanhua_day1",
+  "rejected_audit_refs": [],
+  "reviewed_imprint_ids": [
+    "spatial_imprint.chilai.collapse_wall.017",
+    "spatial_imprint.chilai.confusing_turn.042",
+    "spatial_imprint.chilai.high_risk_segment.061"
+  ],
+  "reviews_ref": "reviews/spatial_imprint_reviews.json",
+  "schema_version": "0.1.0",
+  "spatial_imprint_set_ref": "outputs/spatial_imprint_set.json"
+}

@@ -1,0 +1,54 @@
+{
+  "artifact_kind": "scout_wearable_sanitized_import",
+  "artifact_version": "wearable_sanitized_import.v1",
+  "source_format": "apple_health_export_summary",
+  "activity_id": "adapter.apple_health.hike.001",
+  "activity_type": "hiking",
+  "activity_date": "2026-05-25",
+  "duration_s": 6900,
+  "moving_time_s": 6300,
+  "distance_m": 7400,
+  "ascent_m": 480,
+  "descent_m": 470,
+  "rest_event_count": 1,
+  "rest_duration_min": [9],
+  "late_activity_fatigue_decay": 0.11,
+  "session_rpe": 5.5,
+  "heart_rate": {
+    "sample_count": 5,
+    "avg_bpm": 130,
+    "p90_bpm": 154,
+    "zone_minutes": {
+      "z1": 22,
+      "z2": 54,
+      "z3": 24,
+      "z4": 5,
+      "z5": 0
+    },
+    "samples": [
+      {"offset_s": 0, "bpm": 95, "quality": "high"},
+      {"offset_s": 1200, "bpm": 123, "quality": "high"},
+      {"offset_s": 2700, "bpm": 137, "quality": "medium"},
+      {"offset_s": 4500, "bpm": 149, "quality": "medium"},
+      {"offset_s": 6300, "bpm": 126, "quality": "high"}
+    ]
+  },
+  "body_energy_provider_values": {
+    "garmin_body_battery_start": null,
+    "garmin_body_battery_end": null,
+    "garmin_stress_avg": null,
+    "source_value_only": true,
+    "scout_truth": false
+  },
+  "data_quality": {
+    "heart_rate_confidence": "high",
+    "gps_confidence": "medium",
+    "missing_hr_seconds": 0,
+    "missing_hr_intervals": [],
+    "sample_cadence_s": 1200,
+    "provider_value_confidence": "low",
+    "limitations": [
+      "sanitized Apple Health workout summary fixture"
+    ]
+  }
+}

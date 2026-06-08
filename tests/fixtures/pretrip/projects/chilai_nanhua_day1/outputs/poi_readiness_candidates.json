@@ -1,0 +1,30 @@
+{
+  "artifact_id": "poi_readiness_candidates.chilai_nanhua_day1.v0",
+  "artifact_kind": "poi_readiness_candidates",
+  "counts": {
+    "blocker_candidate_count": 0,
+    "finding_candidate_count": 0,
+    "policy_candidate_count": 1,
+    "route_corridor_poi_count": 2,
+    "warning_candidate_count": 0
+  },
+  "findings": [],
+  "notes": [
+    "Candidate-only POI route-corridor coverage policy output.",
+    "This artifact is separate from readiness_report_ref and must not create hard readiness blockers."
+  ],
+  "policy_candidates": [
+    {
+      "candidate_only": true,
+      "category": "route_corridor_poi_coverage",
+      "corridor_distance_m": 1000.0,
+      "message": "No POI candidates are within 1000m of the route corridor.",
+      "minimum_poi_count": 1,
+      "notes": "Candidate-only Phase 4 policy signal; does not mutate hard pre-trip readiness.",
+      "severity": "warning"
+    }
+  ],
+  "policy_version": "0.1.0",
+  "project_id": "chilai_nanhua_day1",
+  "status": "candidate_only"
+}

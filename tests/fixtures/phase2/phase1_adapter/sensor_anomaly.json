@@ -1,0 +1,101 @@
+{
+  "incident_id": "incident_sensor_anomaly_1778649600",
+  "trigger_level": "L1_WATCH",
+  "triggered_at": 1778649600.0,
+  "trigger_event": {
+    "event_type": "sensor_anomaly",
+    "level": "L1_WATCH",
+    "timestamp": 1778649600.0,
+    "reason": "Altitude and motion streams diverged from recent route trend.",
+    "confidence": 0.72,
+    "details": {
+      "sensor": "barometer",
+      "elevation_delta_m": 46.0
+    }
+  },
+  "raw_window_start": 1778649300.0,
+  "raw_window_end": 1778649900.0,
+  "raw_samples": [
+    {
+      "timestamp": 1778649300.0,
+      "source": "watch",
+      "lat": 24.151,
+      "lon": 121.29,
+      "elevation_m": 1650.0,
+      "gps_horizontal_accuracy_m": 11.0,
+      "raw": {
+        "position_estimate": {
+          "source": "gps",
+          "progress_m": 3020.0
+        }
+      }
+    },
+    {
+      "timestamp": 1778649600.0,
+      "source": "watch",
+      "lat": 24.1512,
+      "lon": 121.2901,
+      "elevation_m": 1696.0,
+      "gps_horizontal_accuracy_m": 11.0,
+      "raw": {
+        "barometer_status": "spike",
+        "position_estimate": {
+          "source": "gps",
+          "progress_m": 3036.0
+        }
+      }
+    }
+  ],
+  "segment_capsule_ids": [
+    "capsule.segment.ridge_loop.return_trail.20260513T104000"
+  ],
+  "safety_transitions": [
+    {
+      "from_level": "L0_NORMAL",
+      "to_level": "L1_WATCH",
+      "timestamp": 1778649600.0,
+      "reason": "Sensor anomaly requires degraded confidence tracking.",
+      "event": {
+        "event_type": "sensor_anomaly",
+        "level": "L1_WATCH",
+        "timestamp": 1778649600.0,
+        "reason": "Altitude and motion streams diverged from recent route trend.",
+        "confidence": 0.72,
+        "details": {
+          "sensor": "barometer",
+          "elevation_delta_m": 46.0
+        }
+      }
+    }
+  ],
+  "ai_summary_input": {
+    "event": {
+      "event_type": "sensor_anomaly",
+      "level": "L1_WATCH",
+      "timestamp": 1778649600.0,
+      "reason": "Altitude and motion streams diverged from recent route trend.",
+      "confidence": 0.72,
+      "details": {
+        "sensor": "barometer",
+        "elevation_delta_m": 46.0
+      }
+    },
+    "route_evidence": {
+      "timestamp": "2026-05-13T10:40:00+08:00",
+      "position_estimate": {
+        "source": "gps",
+        "progress_m": 3036.0
+      }
+    },
+    "raw_window": {
+      "start": 1778649300.0,
+      "end": 1778649900.0,
+      "sample_count": 2
+    },
+    "segment_capsules": {
+      "capsule_ids": [
+        "capsule.segment.ridge_loop.return_trail.20260513T104000"
+      ]
+    }
+  }
+}

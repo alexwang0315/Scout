@@ -1,0 +1,39 @@
+{
+  "artifact_kind": "scout_risk_route_ribbon",
+  "boundary": {
+    "candidate_only": true,
+    "interpolated_surface": false,
+    "route_aligned_samples_only": true,
+    "runtime_safety_truth": false
+  },
+  "crs": {
+    "geometry": "EPSG:4326"
+  },
+  "score_field": "pretrip_risk",
+  "score_surface_type": "route_aligned_risk_ribbon",
+  "segment_count": 841,
+  "skipped_pair_count": 0,
+  "source_route_risk_ref": "out/chilai_overpass/route_risk.geojson",
+  "source_route_risk_sha256": "97fe1fc83ecec083928c855ab2987f2e41b2ac4db95042ec0170dd96331606d3",
+  "source_sample_count": 842,
+  "style": {
+    "extreme": {
+      "min": 80,
+      "stroke": "#dc2626"
+    },
+    "high": {
+      "max_exclusive": 80,
+      "min": 60,
+      "stroke": "#f97316"
+    },
+    "low": {
+      "max_exclusive": 40,
+      "stroke": "#8fb7a1"
+    },
+    "moderate": {
+      "max_exclusive": 60,
+      "min": 40,
+      "stroke": "#eab308"
+    }
+  }
+}

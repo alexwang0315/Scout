@@ -1,0 +1,128 @@
+{
+  "artifact_kind": "pretrip_reduced_metadata_only_golden_cases",
+  "case_count": 4,
+  "cases": [
+    {
+      "candidate_refs": [
+        "readiness_candidate.route_exists.no_dtm.no_alternate",
+        "source_requirement.dtm_or_terrain_metadata",
+        "source_requirement.route_corridor_poi_coverage"
+      ],
+      "case_id": "pretrip_golden.missing_evidence_readiness.v0",
+      "expected_boundary": {
+        "crawler_enabled": false,
+        "network_call_count": 0,
+        "observed_fact_created": false,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "raw_payloads_embedded": false,
+        "runtime_mutation_allowed": false
+      },
+      "expected_outcome": {
+        "compiles_to_final_mission_graph": false,
+        "hard_readiness_status": "not_ready_until_review",
+        "requires_human_review": true,
+        "warning_or_blocker": "warning_or_blocker_depends_on_trip_duration"
+      },
+      "source_refs": [
+        "metadata://route_summary.present",
+        "metadata://dtm_coverage.absent",
+        "metadata://alternate_or_retreat_route.absent"
+      ],
+      "spec_case": "missing_evidence_readiness"
+    },
+    {
+      "candidate_refs": [
+        "map_candidate.model_hazard.unreviewed",
+        "mission_compile_guard.safety_critical_model_candidate"
+      ],
+      "case_id": "pretrip_golden.unreviewed_model_hazard.v0",
+      "expected_boundary": {
+        "crawler_enabled": false,
+        "network_call_count": 0,
+        "observed_fact_created": false,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "raw_payloads_embedded": false,
+        "runtime_mutation_allowed": false
+      },
+      "expected_outcome": {
+        "compiles_to_final_mission_graph": false,
+        "requires_human_review": true,
+        "safety_critical_runtime_input": false,
+        "warning_or_blocker": "review"
+      },
+      "source_refs": [
+        "metadata://ai_assisted_map_interpretation",
+        "metadata://human_review.absent"
+      ],
+      "spec_case": "unreviewed_model_hazard"
+    },
+    {
+      "candidate_refs": [
+        "imagery_reference.satellite_or_photo.metadata_only",
+        "contour_interpretation.review_prompt"
+      ],
+      "case_id": "pretrip_golden.imagery_reference_only.v0",
+      "expected_boundary": {
+        "crawler_enabled": false,
+        "network_call_count": 0,
+        "observed_fact_created": false,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "raw_payloads_embedded": false,
+        "runtime_mutation_allowed": false
+      },
+      "expected_outcome": {
+        "accepted_planning_assumption": false,
+        "derived_measurement_created": false,
+        "requires_human_review": true,
+        "warning_or_blocker": "review"
+      },
+      "source_refs": [
+        "metadata://image_uri_or_local_path.redacted",
+        "metadata://image_hash_or_dimensions.optional",
+        "metadata://raw_image_payload.absent"
+      ],
+      "spec_case": "imagery_reference_only"
+    },
+    {
+      "candidate_refs": [
+        "source_ingest.local_gpx.metadata",
+        "external_import_request.webpage_or_article.metadata",
+        "route_guide_timing.reference_only",
+        "expert_contribution.conversation_note.memory_seed_candidate"
+      ],
+      "case_id": "pretrip_golden.ai_project_synthesis.v0",
+      "expected_boundary": {
+        "crawler_enabled": false,
+        "network_call_count": 0,
+        "observed_fact_created": false,
+        "phase1_runtime_mutation_allowed": false,
+        "phase2_writeback_allowed": false,
+        "raw_payloads_embedded": false,
+        "runtime_mutation_allowed": false
+      },
+      "expected_outcome": {
+        "compiles_to_final_mission_graph": false,
+        "direct_brain_writeback": false,
+        "requires_human_review": true,
+        "warning_or_blocker": "review"
+      },
+      "source_refs": [
+        "metadata://local_gpx.summary_only",
+        "metadata://external_article.url_only",
+        "metadata://route_guide_timing.fields_only",
+        "metadata://conversation_note.summary_only"
+      ],
+      "spec_case": "ai_project_synthesis"
+    }
+  ],
+  "manifest_id": "pretrip.reduced_metadata_only_golden_cases.v0",
+  "notes": [
+    "These reduced cases are metadata-only boundary guards for Phase 4 planning semantics.",
+    "They do not contain raw GPX, DTM, imagery, web page, article, or conversation payloads.",
+    "They are not release-gate fixtures and do not authorize runtime, package, MissionGraph, crawler, or Brain writeback behavior."
+  ],
+  "schema_version": "0.1.0"
+}

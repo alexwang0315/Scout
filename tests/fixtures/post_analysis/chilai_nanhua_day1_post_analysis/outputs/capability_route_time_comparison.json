@@ -1,0 +1,26 @@
+{
+  "artifact_kind": "post_analysis_route_time_comparison",
+  "artifact_version": "route_time_comparison.v1",
+  "boundary": {
+    "incident_package_rewrite_allowed": false,
+    "mission_graph_rewrite_allowed": false,
+    "phase1_runtime_mutation_allowed": false,
+    "post_analysis_only": true,
+    "raw_track_shared_by_default": false,
+    "runtime_safety_truth": false,
+    "safety_api_calls_allowed": false
+  },
+  "case_id": "chilai_nanhua_day1_post_analysis",
+  "comparison_basis": "moving_time",
+  "route_family": "nenggao_andongjun",
+  "route_time_source": "tests/fixtures/post_analysis/chilai_nanhua_day1_post_analysis/route_time_entries.json",
+  "segments": [],
+  "summary": {
+    "comparison_count": 0,
+    "faster_than_guide_count": 0,
+    "fastest_relative_delta_min": null,
+    "informational_only": true,
+    "slower_than_guide_count": 0,
+    "slowest_relative_delta_min": null
+  }
+}

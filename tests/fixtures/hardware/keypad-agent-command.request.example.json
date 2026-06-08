@@ -1,0 +1,15 @@
+{
+  "dry_run": true,
+  "simulate_keys": [
+    "S1",
+    "S15",
+    "S4",
+    "S15"
+  ],
+  "oled_status": true,
+  "oled_dry_run": true,
+  "led_status": true,
+  "led_dry_run": true,
+  "dispatch_confirmed_local": true,
+  "duration_seconds": 0
+}

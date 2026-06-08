@@ -3,6 +3,7 @@ import logging
 import os
 from contextlib import asynccontextmanager
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 import matplotlib
@@ -14,11 +15,44 @@ from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
 from agent import sos_agent
+from admin_api import create_admin_router
+from assistant_api import (
+    create_assistant_provider_from_env,
+    create_assistant_provider_status,
+    create_assistant_router,
+)
+from assistant_context import (
+    augment_sources_with_configured_live_navigation_evidence,
+    assistant_source_refs_from_context,
+    create_assistant_context_resolver,
+)
+from assistant_models import AssistantSurface, ScoutAssistantQuery
+from assistant_skill_router import augment_pretrip_sources_with_local_evidence_search
+from debug_api import create_debug_page_router, create_debug_router
+from hardware_readiness_api import create_hardware_readiness_router
 from imu_api import router as imu_router
 from macos_wifi import MacOSWifiWorld
 from pdr_engine import pdr
+from phase1_incident_bridge import phase1_incident_bridge_from_env
+from phase2_admin_api import create_phase2_admin_router
+from pretrip_assistant_context import build_pretrip_assistant_context
+from runtime_debug_log import FileRuntimeDebugEventLog
+from runtime_stream_controls import RuntimeStreamControlStore
+from runtime_stream_status_surface import create_runtime_stream_status_router
+from runtime_stream_telemetry import RuntimeStreamTelemetryStore
+from runtime_stream_transport_api import create_runtime_stream_transport_router
 from sensor_decoder import SensorLogDecoder
 from movement_summary import MovementAggregator, RawSensorSample
+from safety_api import (
+    SafetyApiSnapshot,
+    SafetyObservationAdmissionConfig,
+    create_safety_router,
+)
+from safety_models import SafetyState
+from safety_runtime_session import SafetyRuntimeSession
+from server_safety_observation_admission_config import (
+    create_safety_observation_admission_config_from_env,
+)
 from shared_queue import pdr_event_queue
 from visualize_signal import generate_heatmap
 
@@ -26,6 +60,59 @@ load_dotenv(os.path.expanduser("~/scout-fusion/.env"))
 
 DEBUG = os.getenv("SCOUT_DEBUG", "false").lower() == "true"
 PORT = int(os.getenv("SCOUT_PORT", "9099"))
+SCOUT_SAFETY_ENABLED = os.getenv("SCOUT_SAFETY_ENABLED", "true").lower() == "true"
+SCOUT_ROOT = Path(__file__).resolve().parent
+SCOUT_SAFETY_MISSION_GRAPH = Path(
+    os.getenv(
+        "SCOUT_SAFETY_MISSION_GRAPH",
+        str(SCOUT_ROOT / "tests" / "fixtures" / "mission_graph" / "normal_climb_mission.json"),
+    )
+)
+SCOUT_SAFETY_ROUTE_PROGRESS_CONFIG = os.getenv("SCOUT_SAFETY_ROUTE_PROGRESS_CONFIG")
+SCOUT_SAFETY_INCIDENT_STORE = Path(
+    os.getenv("SCOUT_SAFETY_INCIDENT_STORE", os.path.expanduser("~/.scout-fusion/incidents"))
+)
+SCOUT_PHASE2_ADMIN_API_ENABLED = os.getenv("SCOUT_PHASE2_ADMIN_API_ENABLED", "false")
+SCOUT_PHASE2_BRAIN_STORE_ROOT = os.getenv("SCOUT_PHASE2_BRAIN_STORE_ROOT")
+SCOUT_DEBUG_API_ENABLED = os.getenv("SCOUT_DEBUG_API_ENABLED", "false")
+SCOUT_DEBUG_LOG_PATH = os.getenv("SCOUT_DEBUG_LOG_PATH")
+SCOUT_AGENT_TRACE_LOG_PATH = os.getenv("SCOUT_AGENT_TRACE_LOG_PATH")
+SCOUT_MOBILE_WEARABLE_INGRESS_STATUS_PATH = os.getenv(
+    "SCOUT_MOBILE_WEARABLE_INGRESS_STATUS_PATH"
+)
+SCOUT_SENSORLOGGER_MQTT_EVIDENCE_DIR = os.getenv("SCOUT_SENSORLOGGER_MQTT_EVIDENCE_DIR")
+SCOUT_SPATIAL_IMPRINT_STORE_PATH = os.getenv("SCOUT_SPATIAL_IMPRINT_STORE_PATH")
+SCOUT_SPATIAL_IMPRINT_TRIGGER_REPORT_PATH = os.getenv(
+    "SCOUT_SPATIAL_IMPRINT_TRIGGER_REPORT_PATH"
+)
+SCOUT_AI_ASSISTANT_ENABLED = os.getenv("SCOUT_AI_ASSISTANT_ENABLED", "false")
+SCOUT_AI_ASSISTANT_PROVIDER = os.getenv("SCOUT_AI_ASSISTANT_PROVIDER", "mock")
+SCOUT_AI_ASSISTANT_CONFIG_PATH = os.getenv("SCOUT_AI_ASSISTANT_CONFIG_PATH")
+SCOUT_SAFETY_OBSERVATION_ADMISSION_ENABLED = os.getenv(
+    "SCOUT_SAFETY_OBSERVATION_ADMISSION_ENABLED",
+    "false",
+)
+SCOUT_SAFETY_OBSERVATION_ADMISSION_SECRET = os.getenv(
+    "SCOUT_SAFETY_OBSERVATION_ADMISSION_SECRET"
+)
+SCOUT_SAFETY_OBSERVATION_ADMISSION_SECRET_FILE = os.getenv(
+    "SCOUT_SAFETY_OBSERVATION_ADMISSION_SECRET_FILE"
+)
+SCOUT_RUNTIME_STREAM_STATUS_ENABLED = os.getenv(
+    "SCOUT_RUNTIME_STREAM_STATUS_ENABLED",
+    "false",
+)
+SCOUT_RUNTIME_STREAM_TRANSPORT_ENABLED = os.getenv(
+    "SCOUT_RUNTIME_STREAM_TRANSPORT_ENABLED",
+    "false",
+)
+SCOUT_RUNTIME_STREAM_CONTROL_TOKEN = os.getenv("SCOUT_RUNTIME_STREAM_CONTROL_TOKEN")
+SCOUT_RUNTIME_STREAM_CONTROL_TOKEN_FILE = os.getenv("SCOUT_RUNTIME_STREAM_CONTROL_TOKEN_FILE")
+SCOUT_HARDWARE_PROVIDER_CONTROL_TOKEN = os.getenv("SCOUT_HARDWARE_PROVIDER_CONTROL_TOKEN")
+SCOUT_HARDWARE_PROVIDER_CONTROL_TOKEN_FILE = os.getenv(
+    "SCOUT_HARDWARE_PROVIDER_CONTROL_TOKEN_FILE"
+)
+SCOUT_PRETRIP_WORKSPACE_ROOT = os.getenv("SCOUT_PRETRIP_WORKSPACE_ROOT")
 
 log_level = logging.DEBUG if DEBUG else logging.INFO
 logging.basicConfig(level=log_level, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -35,6 +122,9 @@ logger = logging.getLogger("S.C.O.U.T.")
 # Ship the summary to agent logic when ready.
 movement_agg = MovementAggregator(samples_per_summary=20)
 
+
+def _is_true_like(value: str | None) -> bool:
+    return value is not None and value.strip().lower() in {"1", "true", "yes", "y", "on"}
 
 
 @asynccontextmanager
@@ -72,6 +162,36 @@ executor = ThreadPoolExecutor(max_workers=4)
 last_instruction = "等待初始化..."
 latest_summary_result: Optional[Dict[str, Any]] = None
 _worker_task: Optional[asyncio.Task] = None
+safety_runtime_session: Optional[SafetyRuntimeSession] = None
+safety_observation_admission_config: Optional[SafetyObservationAdmissionConfig] = None
+safety_observation_admission_config_error: Optional[Exception] = None
+runtime_stream_telemetry_store = RuntimeStreamTelemetryStore()
+runtime_stream_control_store = RuntimeStreamControlStore()
+
+try:
+    safety_observation_admission_config = create_safety_observation_admission_config_from_env(
+        os.environ
+    )
+    if safety_observation_admission_config is not None:
+        logger.info("Signed safety observation admission enabled")
+except ValueError as exc:
+    safety_observation_admission_config_error = exc
+    logger.exception("Signed safety observation admission misconfigured; safety runtime will fail closed")
+
+if SCOUT_SAFETY_ENABLED:
+    try:
+        if safety_observation_admission_config_error is not None:
+            raise safety_observation_admission_config_error
+        incident_bridge = phase1_incident_bridge_from_env(os.environ)
+        safety_runtime_session = SafetyRuntimeSession(
+            SCOUT_SAFETY_MISSION_GRAPH,
+            route_progress_config_path=SCOUT_SAFETY_ROUTE_PROGRESS_CONFIG,
+            incident_store_path=SCOUT_SAFETY_INCIDENT_STORE,
+            incident_bridge=incident_bridge,
+        )
+        logger.info("Phase 1 safety runtime enabled: %s", SCOUT_SAFETY_MISSION_GRAPH)
+    except Exception as exc:
+        logger.exception("Phase 1 safety runtime disabled after initialization failure: %s", exc)
 
 
 def _result_text(result: Any) -> str:
@@ -83,6 +203,222 @@ def _latest_pose() -> Dict[str, float]:
         last = pdr.pdr_trajectory[-1]
         return {"x": float(last["x"]), "y": float(last["y"])}
     return {"x": float(pdr.x), "y": float(pdr.y)}
+
+
+def _optional_float(value: Any) -> Optional[float]:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _include_phase2_admin_router(app: FastAPI) -> None:
+    if not _is_true_like(SCOUT_PHASE2_ADMIN_API_ENABLED):
+        logger.info("Phase 2 admin API disabled")
+        return
+
+    if not SCOUT_PHASE2_BRAIN_STORE_ROOT or not SCOUT_PHASE2_BRAIN_STORE_ROOT.strip():
+        logger.warning(
+            "Phase 2 admin API enabled but SCOUT_PHASE2_BRAIN_STORE_ROOT is missing; skipping router mount"
+        )
+        return
+
+    brain_store_root = Path(SCOUT_PHASE2_BRAIN_STORE_ROOT)
+    app.include_router(create_phase2_admin_router(brain_store_root=brain_store_root))
+    logger.info("Phase 2 admin API enabled: %s", brain_store_root)
+
+
+def _include_debug_router(app: FastAPI) -> None:
+    if not _is_true_like(SCOUT_DEBUG_API_ENABLED):
+        logger.info("Phase 3.5 debug API disabled")
+        return
+
+    debug_log = FileRuntimeDebugEventLog(SCOUT_DEBUG_LOG_PATH) if SCOUT_DEBUG_LOG_PATH else None
+    app.include_router(
+        create_debug_router(
+            debug_log=debug_log,
+            agent_trace_log_path=SCOUT_AGENT_TRACE_LOG_PATH,
+            mobile_wearable_ingress_status_path=_mobile_wearable_ingress_status_path(),
+            spatial_imprint_store_path=SCOUT_SPATIAL_IMPRINT_STORE_PATH,
+            spatial_imprint_trigger_report_path=SCOUT_SPATIAL_IMPRINT_TRIGGER_REPORT_PATH,
+        )
+    )
+    app.include_router(create_debug_page_router())
+    logger.info(
+        "Phase 3.5 debug API enabled%s%s%s%s",
+        f": {SCOUT_DEBUG_LOG_PATH}" if SCOUT_DEBUG_LOG_PATH else "",
+        f" with agent trace {SCOUT_AGENT_TRACE_LOG_PATH}" if SCOUT_AGENT_TRACE_LOG_PATH else "",
+        f" with spatial imprint store {SCOUT_SPATIAL_IMPRINT_STORE_PATH}" if SCOUT_SPATIAL_IMPRINT_STORE_PATH else "",
+        f" with spatial imprint trigger report {SCOUT_SPATIAL_IMPRINT_TRIGGER_REPORT_PATH}" if SCOUT_SPATIAL_IMPRINT_TRIGGER_REPORT_PATH else "",
+    )
+
+
+def _mobile_wearable_ingress_status_path() -> Path:
+    explicit_path = (SCOUT_MOBILE_WEARABLE_INGRESS_STATUS_PATH or "").strip()
+    if explicit_path:
+        return Path(explicit_path).expanduser()
+    evidence_dir = (SCOUT_SENSORLOGGER_MQTT_EVIDENCE_DIR or "").strip()
+    if evidence_dir:
+        return Path(evidence_dir).expanduser() / "sensorlogger_mqtt_status.json"
+    return SCOUT_ROOT / "artifacts" / "mobile_wearable" / "sensorlogger_mqtt" / "sensorlogger_mqtt_status.json"
+
+
+def _include_assistant_router(app: FastAPI) -> None:
+    if not _is_true_like(SCOUT_AI_ASSISTANT_ENABLED):
+        logger.info("Scout assistant API disabled")
+        return
+
+    debug_log = FileRuntimeDebugEventLog(SCOUT_DEBUG_LOG_PATH) if SCOUT_DEBUG_LOG_PATH else None
+    provider = create_assistant_provider_from_env(os.environ)
+    app.include_router(
+        create_assistant_router(
+            provider=provider,
+            context_resolver=_create_server_assistant_context_resolver(
+                debug_event_log=debug_log,
+            ),
+            provider_status=create_assistant_provider_status(provider=provider, environ=os.environ),
+        )
+    )
+    logger.info(
+        "Scout assistant API enabled with %s provider%s",
+        SCOUT_AI_ASSISTANT_PROVIDER,
+        f" and config {SCOUT_AI_ASSISTANT_CONFIG_PATH}" if SCOUT_AI_ASSISTANT_CONFIG_PATH else "",
+    )
+
+
+def _create_server_assistant_context_resolver(
+    *,
+    debug_event_log: FileRuntimeDebugEventLog | None,
+):
+    workspace_root = (
+        Path(SCOUT_PRETRIP_WORKSPACE_ROOT).expanduser()
+        if SCOUT_PRETRIP_WORKSPACE_ROOT
+        else None
+    )
+    live_navigation_evidence_dir = (
+        Path(SCOUT_SENSORLOGGER_MQTT_EVIDENCE_DIR).expanduser()
+        if SCOUT_SENSORLOGGER_MQTT_EVIDENCE_DIR
+        else None
+    )
+    fallback_resolver = create_assistant_context_resolver(
+        debug_event_log=debug_event_log,
+        pretrip_workspace_root=workspace_root,
+        live_navigation_evidence_dir=live_navigation_evidence_dir,
+    )
+
+    def resolve(query: ScoutAssistantQuery):
+        if query.surface == AssistantSurface.PRETRIP:
+            project_id = query.project_id or query.context_ref
+            project_root = _server_pretrip_project_root(workspace_root, project_id)
+            if project_root is not None:
+                try:
+                    context = build_pretrip_assistant_context(
+                        project_id,
+                        project_root=project_root,
+                        selected_source_id=query.selected_artifact_id,
+                    )
+                    sources = assistant_source_refs_from_context(context, query=query)
+                    sources = augment_sources_with_configured_live_navigation_evidence(
+                        query,
+                        sources=sources,
+                        evidence_dir=live_navigation_evidence_dir,
+                        project_root=project_root,
+                    )
+                    return augment_pretrip_sources_with_local_evidence_search(
+                        query,
+                        sources=sources,
+                        project_root=project_root,
+                    )
+                except (FileNotFoundError, KeyError, ModuleNotFoundError, ValueError):
+                    pass
+        return fallback_resolver(query)
+
+    return resolve
+
+
+def _server_pretrip_project_root(
+    workspace_root: Path | None,
+    project_id: str | None,
+) -> Path | None:
+    if workspace_root is None or not project_id:
+        return None
+    candidate = workspace_root / project_id
+    if (candidate / "project.json").exists():
+        return candidate
+    return None
+
+
+def _include_runtime_stream_transport_router(app: FastAPI) -> None:
+    if not _is_true_like(SCOUT_RUNTIME_STREAM_TRANSPORT_ENABLED):
+        logger.info("Runtime stream transport API disabled by explicit launch guard")
+        return
+    if safety_runtime_session is None:
+        logger.info("Runtime stream transport API disabled because safety runtime is unavailable")
+        return
+    if safety_observation_admission_config is None:
+        logger.info("Runtime stream transport API disabled because signed admission is unavailable")
+        return
+
+    app.include_router(
+        create_runtime_stream_transport_router(
+            runtime_session=safety_runtime_session,
+            observation_admission_config=safety_observation_admission_config,
+            telemetry_store=runtime_stream_telemetry_store,
+            control_store=runtime_stream_control_store,
+            control_bearer_token=_runtime_stream_control_token_from_env(),
+        )
+    )
+    logger.info("Runtime stream transport API enabled")
+
+
+def _include_runtime_stream_status_router(app: FastAPI) -> None:
+    if not _is_true_like(SCOUT_RUNTIME_STREAM_STATUS_ENABLED):
+        logger.info("Runtime stream read-only status API disabled")
+        return
+
+    app.include_router(
+        create_runtime_stream_status_router(
+            telemetry_store=runtime_stream_telemetry_store,
+            control_store=runtime_stream_control_store,
+            admission_state=(
+                safety_observation_admission_config.state
+                if safety_observation_admission_config is not None
+                else None
+            ),
+            transport_routes_mounted=_runtime_stream_transport_ready(),
+        )
+    )
+    logger.info("Runtime stream read-only status API enabled")
+
+
+def _runtime_stream_transport_ready() -> bool:
+    return (
+        _is_true_like(SCOUT_RUNTIME_STREAM_TRANSPORT_ENABLED)
+        and safety_runtime_session is not None
+        and safety_observation_admission_config is not None
+    )
+
+
+def _runtime_stream_control_token_from_env() -> str:
+    token = (SCOUT_RUNTIME_STREAM_CONTROL_TOKEN or "").strip()
+    if token:
+        return token
+    token_file = (SCOUT_RUNTIME_STREAM_CONTROL_TOKEN_FILE or "").strip()
+    if token_file:
+        try:
+            return Path(token_file).expanduser().read_text(encoding="utf-8").strip()
+        except OSError:
+            return ""
+    token = (SCOUT_HARDWARE_PROVIDER_CONTROL_TOKEN or "").strip()
+    if token:
+        return token
+    token_file = (SCOUT_HARDWARE_PROVIDER_CONTROL_TOKEN_FILE or "").strip()
+    if not token_file:
+        return ""
+    try:
+        return Path(token_file).expanduser().read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
 
 
 async def process_movement_summary(summary: Any) -> Dict[str, Any]:
@@ -187,6 +523,30 @@ async def ai_decision_worker() -> None:
 
 
 app.include_router(imu_router)
+app.include_router(
+    create_admin_router(
+        incident_store_path=SCOUT_SAFETY_INCIDENT_STORE,
+        pretrip_workspace_root=(
+            Path(SCOUT_PRETRIP_WORKSPACE_ROOT).expanduser()
+            if SCOUT_PRETRIP_WORKSPACE_ROOT
+            else None
+        ),
+    )
+)
+app.include_router(create_hardware_readiness_router())
+app.include_router(
+    create_safety_router(
+        SafetyApiSnapshot(safety_state=SafetyState()),
+        incident_store=safety_runtime_session.incident_store if safety_runtime_session else None,
+        runtime_session=safety_runtime_session,
+        observation_admission_config=safety_observation_admission_config,
+    )
+)
+_include_runtime_stream_status_router(app)
+_include_runtime_stream_transport_router(app)
+_include_phase2_admin_router(app)
+_include_debug_router(app)
+_include_assistant_router(app)
 
 
 @app.get("/")
@@ -232,15 +592,13 @@ async def update_pdr(request: Request) -> Dict[str, Any]:
             logger.debug("Incoming PDR data: %s", raw_data)
 
         decoded = SensorLogDecoder().decode(raw_data)
-        if decoded is None:
-            return {"status": "skipped", "reason": "Malformed PDR data"}
-
-        # ----------------------
-        # 新增：將 IMU 原始數據聚合為 MovementSummary，並呼叫本地決策
-        # ----------------------
+        imu_points = 0
         if "imu_data" in raw_data:
             imu_list = raw_data["imu_data"]
             for imu in imu_list:
+                if not isinstance(imu, dict):
+                    continue
+
                 sample = RawSensorSample(
                     accX=imu.get("accX") or imu.get("accelerometerAccelerationX", 0.0),
                     accY=imu.get("accY") or imu.get("accelerometerAccelerationY", 0.0),
@@ -252,10 +610,24 @@ async def update_pdr(request: Request) -> Dict[str, Any]:
                 if summary:
                     latest_summary_result = await process_movement_summary(summary)
                     logger.info("Movement summary processed: %s", latest_summary_result)
-        # ----------------------
 
+                lat = _optional_float(imu.get("locationLatitude"))
+                lon = _optional_float(imu.get("locationLongitude"))
+                if lat is not None and lon is not None:
+                    pdr.add_gps_point(lat=lat, lon=lon)
 
-        curr_x, curr_y = pdr.update_position(decoded.distance, decoded.heading)
+                pdr.update_from_imu(imu)
+                imu_points += 1
+
+        if decoded is None and imu_points == 0:
+            return {"status": "skipped", "reason": "Malformed PDR data"}
+
+        if decoded is not None and (decoded.distance != 0 or imu_points == 0):
+            curr_x, curr_y = pdr.update_position(decoded.distance, decoded.heading)
+        else:
+            pose = _latest_pose()
+            curr_x, curr_y = pose["x"], pose["y"]
+
         loop = asyncio.get_event_loop()
         snapshot = await loop.run_in_executor(executor, world.get_full_snapshot)
 
@@ -278,7 +650,7 @@ async def update_pdr(request: Request) -> Dict[str, Any]:
             logger.warning("PDR event queue is full; dropping AI decision event")
             queued = False
 
-        return {"status": "success", "pose": event["pose"], "queued_for_ai": queued}
+        return {"status": "success", "pose": event["pose"], "queued_for_ai": queued, "imu_points": imu_points}
     except Exception as exc:
         logger.exception("PDR update failed: %s", exc)
         return {"status": "error", "detail": str(exc)}

@@ -1,0 +1,50 @@
+{
+  "policy_id": "policy.same_day_loop",
+  "version": "2026-05-13.1",
+  "contexts": [
+    {
+      "route_types": ["loop", "out_and_back"],
+      "duration_classes": ["same_day"],
+      "skill_overrides": {
+        "retreat-decision-support": {
+          "min_safety_level": "L2"
+        }
+      }
+    }
+  ],
+  "skills": {
+    "device-capability-check": {
+      "min_safety_level": "L0"
+    },
+    "team-checkin-summary": {
+      "min_safety_level": "L0",
+      "noise_control": {
+        "cooldown_minutes": 15,
+        "suppress_if_recently_acknowledged": true,
+        "acknowledgement_window_minutes": 30,
+        "require_new_evidence": true
+      }
+    },
+    "retreat-decision-support": {
+      "min_safety_level": "L2",
+      "noise_control": {
+        "cooldown_minutes": 30,
+        "suppress_if_recently_acknowledged": true,
+        "acknowledgement_window_minutes": 45,
+        "require_new_evidence": true
+      },
+      "defer_when": [
+        {
+          "activity": ["resting"],
+          "reason": "defer intrusive decision support while team is actively resting"
+        }
+      ],
+      "degrade_when": [
+        {
+          "team_state": ["communication_degraded"],
+          "reason": "communication degraded; produce local option set only"
+        }
+      ]
+    }
+  }
+}

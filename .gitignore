@@ -66,3 +66,19 @@ dmypy.json
 
 # Legacy nested Scout copy
 Scout/
+!src/
+!src/scout/
+!src/scout/**
+!skills/
+!skills/scout/
+!skills/scout/*.yaml
+
+# Scout local captures and heavyweight map data
+PdrSample/
+catographydata/
+sensor-logger-streaming-demo-app/
+tmp/
+trajectory_map.png
+
+# Local operator setup helpers
+install_skills.sh

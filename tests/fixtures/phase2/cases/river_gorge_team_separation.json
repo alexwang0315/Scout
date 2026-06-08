@@ -1,0 +1,68 @@
+{
+  "case_id": "case.phase2.river_gorge_team_separation",
+  "title": "River gorge team separation after missed check-in",
+  "incident_type": "possible team separation",
+  "location": "Steep river gorge approach trail",
+  "route_context": "Same-day traverse with one narrow gorge segment and intermittent communication.",
+  "incident_at": "2026-03-09T14:10:00+08:00",
+  "timeline": [
+    {
+      "label": "T-180",
+      "minutes_to_incident": -180,
+      "safety_level": "L0",
+      "summary": "All members were near the gorge entrance and the latest status was fresh.",
+      "evidence_refs": ["remote_status.20260309T111000"],
+      "remote_status_ref": "remote_status.20260309T111000"
+    },
+    {
+      "label": "T-120",
+      "minutes_to_incident": -120,
+      "safety_level": "L1",
+      "summary": "One member's position stopped updating while another member continued along the gorge segment.",
+      "evidence_refs": ["fact.member_b.stale", "fact.member_a.progressing"],
+      "remote_status_ref": "remote_status.20260309T121000"
+    },
+    {
+      "label": "T-60",
+      "minutes_to_incident": -60,
+      "safety_level": "L2",
+      "summary": "Replay identified possible separation from diverging freshness and checkpoint states.",
+      "evidence_refs": ["event.possible_team_separation.member_b"],
+      "artifact_refs": ["artifact.remote_status.diff"]
+    },
+    {
+      "label": "T-30",
+      "minutes_to_incident": -30,
+      "safety_level": "L2",
+      "summary": "Local artifact references were enough to raise earlier awareness, but no executable skill run is part of this replay.",
+      "evidence_refs": ["artifact.case_replay.local_awareness"]
+    },
+    {
+      "label": "T-0",
+      "minutes_to_incident": 0,
+      "safety_level": "L3",
+      "summary": "Incident package marked possible separation when the team failed to regroup at the gorge exit.",
+      "evidence_refs": ["artifact.incident_package.gorge_separation"]
+    }
+  ],
+  "post_incident_evidence": [
+    {
+      "id": "post.gorge.track_merge",
+      "captured_after_minutes": 180,
+      "evidence_type": "track_log",
+      "summary": "Merged tracks showed one member waited near a side drainage while the other continued to the exit checkpoint.",
+      "artifact_refs": ["artifact.merged_tracks.after_action"]
+    }
+  ],
+  "baseline_summary": "Baseline incident handling treated the missed regroup as the first strong signal.",
+  "replay_summary": "Phase 2 replay surfaced possible separation from stale remote status and diverging checkpoint state before T-0.",
+  "known_outcome_summary": "The team regrouped later with external help from companions; the replay does not assert a certain rescue result.",
+  "assessment": {
+    "evidence_improved": true,
+    "earlier_awareness_minutes": 60,
+    "decision_window_minutes": 0,
+    "likely_outcome_improvement": false,
+    "guaranteed_outcome": false,
+    "rationale": "Replay provided earlier awareness of possible separation, but did not create a concrete decision window from the available facts."
+  }
+}

@@ -1,0 +1,124 @@
+# Scout terrain risk profile configuration.
+# All outputs remain candidate-only planning evidence, not runtime safety truth.
+
+schema_version = "scout_risk.terrain_risk_profile_config.v1"
+
+[route_preparation]
+# sample_interval_m: route risk sample spacing along the selected route.
+sample_interval_m = 20.0
+# overpass_corridor_m: maximum distance from the reference GPX corridor for selecting OSM trail vertices.
+overpass_corridor_m = 35.0
+# overpass_reference_interval_m: resampling interval for the reference GPX used only as an alignment prior.
+overpass_reference_interval_m = 20.0
+# dem_buffer_m: extra DTM clip buffer around the selected route.
+dem_buffer_m = 140.0
+# dtm_pixel_size_m: expected DTM grid spacing for Taiwan 20m DEM/DTM tiles.
+dtm_pixel_size_m = 20.0
+
+[terrain_features]
+# radius_m: local DEM analysis radius for relief/drop/continuity features.
+radius_m = 100.0
+# slope_score_scale_degrees: slope angle mapped to a 100-point slope score.
+slope_score_scale_degrees = 45.0
+# downhill_drop_score_scale_m: downhill drop mapped to a 100-point score.
+downhill_drop_score_scale_m = 100.0
+# local_relief_score_scale_m: local relief mapped to a 100-point score.
+local_relief_score_scale_m = 150.0
+# contour_density_relief_score_scale_m: relief proxy mapped to contour-density score until contour extraction exists.
+contour_density_relief_score_scale_m = 100.0
+
+[teii]
+# base_weight: weighted-average contribution to final TEII_20m.
+base_weight = 0.70
+# peak_weight: strongest single terrain feature contribution to final TEII_20m.
+peak_weight = 0.30
+
+[teii.weights]
+# slope_macro: macro slope pressure.
+slope_macro = 0.25
+# downhill_drop_100m: local downhill exposure pressure.
+downhill_drop_100m = 0.25
+# local_relief_100m: local terrain relief pressure.
+local_relief_100m = 0.20
+# contour_density: proxy for contour/terrain complexity.
+contour_density = 0.15
+# slope_continuity: sustained slope pressure around the route.
+slope_continuity = 0.15
+
+[route_risk]
+# cp_radius_m: CP/SCP note influence radius around each route sample.
+cp_radius_m = 60.0
+# lec_radius_m: local exposure context radius around each route sample.
+lec_radius_m = 40.0
+# lec_percentile: percentile of nearby TEII used as local exposure context.
+lec_percentile = 90.0
+# tri_radius_cells: TEII grid-cell radius for terrain risk index clustering.
+tri_radius_cells = 2
+# tri_high_threshold: TEII threshold counted as high terrain pressure in TRI.
+tri_high_threshold = 70.0
+# tri_high_ratio_weight: weight for nearby high-TEII cell ratio.
+tri_high_ratio_weight = 0.60
+# tri_mean_weight: weight for nearby mean TEII.
+tri_mean_weight = 0.40
+# sri_previous_sample_count: number of previous samples used for sudden-risk-increase scoring.
+sri_previous_sample_count = 3
+# sri_scale: TEII jump mapped to a 100-point sudden-risk-increase score.
+sri_scale = 50.0
+# terrain_blend_*: weighted terrain-risk blend before optional TEII floor.
+terrain_blend_teii_weight = 0.65
+terrain_blend_tri_weight = 0.20
+terrain_blend_sri_weight = 0.10
+terrain_blend_lec_weight = 0.05
+# terrain_risk_floor_to_teii: final terrain risk is at least the current TEII_20m.
+terrain_risk_floor_to_teii = true
+# pretrip_*: final candidate pretrip risk blend between terrain risk and CP/SCP evidence.
+pretrip_terrain_weight = 0.80
+pretrip_scp_weight = 0.20
+# risk_level_thresholds: minimum scores for L2, L3, L4, and L5.
+risk_level_thresholds = [20.0, 40.0, 60.0, 80.0]
+# TEII explanation thresholds for candidate-only human-readable notes.
+teii_extreme_threshold = 80.0
+teii_low_tolerance_threshold = 60.0
+teii_caution_threshold = 40.0
+
+[scp]
+# keyword_bonus_per_extra_keyword: extra SCP score for each matched hazard keyword after the first.
+keyword_bonus_per_extra_keyword = 3.0
+# keyword_bonus_cap: maximum keyword bonus added to the hazard base score.
+keyword_bonus_cap = 10.0
+# located_confidence: score multiplier when a CP note has coordinates.
+located_confidence = 1.0
+# missing_location_confidence: score multiplier when a CP note lacks coordinates.
+missing_location_confidence = 0.75
+
+[scp.hazard_base_scores]
+# collapse: collapse/landslide/rockfall terms.
+collapse = 95.0
+# exposure: cliff/ridge exposure terms.
+exposure = 90.0
+# climbing: rope/scrambling/steep movement terms.
+climbing = 72.0
+# reroute: detour/route-blocked terms.
+reroute = 82.0
+# valley_water: stream/gully/wet crossing terms.
+valley_water = 70.0
+# navigation: unclear-track/junction/navigation terms.
+navigation = 68.0
+# vegetation: dense vegetation/deadfall terms.
+vegetation = 48.0
+
+[cp_note_keywords]
+# collapse: keywords that mark collapse or landslide evidence.
+collapse = ["大崩壁", "崩塌", "坍方", "土石流", "崩溝", "落石"]
+# exposure: keywords that mark cliff or exposed terrain evidence.
+exposure = ["危崖", "斷崖", "瘦稜", "曝露", "兩側深谷"]
+# climbing: keywords that mark scrambling or steep movement evidence.
+climbing = ["拉繩", "攀岩", "手腳並用", "陡上", "陡下"]
+# reroute: keywords that mark route changes or blocked route evidence.
+reroute = ["高繞", "低繞", "改道", "不可通行", "路基流失"]
+# valley_water: keywords that mark stream/gully/wet crossing evidence.
+valley_water = ["溪溝", "過溪", "下切", "溯溪", "瀑布", "濕滑"]
+# navigation: keywords that mark route-finding uncertainty.
+navigation = ["路跡不明", "易迷", "岔路", "布條少", "獸徑"]
+# vegetation: keywords that mark vegetation or deadfall friction.
+vegetation = ["箭竹", "芒草", "咬人貓", "倒木", "藤蔓"]

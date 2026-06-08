@@ -1,0 +1,55 @@
+{
+  "id": "scout.ai.assistant_workflow_eval.run",
+  "version": "0.1.0",
+  "description": "Run bounded Scout AI assistant workflow eval cases against deterministic read-only evidence and fallback behavior.",
+  "command": {
+    "argv": [
+      "{python}",
+      "-m",
+      "scout_agent_builtin_tools",
+      "ai-assistant-workflow-eval",
+      "--input",
+      "{input}",
+      "--json"
+    ],
+    "dry_run_argument": null
+  },
+  "mode": "local_evidence_query",
+  "input_schema_ref": "schemas/scout_agent/ai_assistant_workflow_eval.request.json",
+  "output_schema_ref": "schemas/scout_agent/tool_result.json",
+  "allowed_reads": [
+    "assistant.question_corpus",
+    "assistant.workflow_eval",
+    "assistant.tool_registry",
+    "assistant.tool_contracts",
+    "pretrip.workspace.project",
+    "pretrip.workspace.candidates",
+    "pretrip.workspace.reviews",
+    "pretrip.workspace.outputs"
+  ],
+  "allowed_writes": [],
+  "forbidden_writes": [
+    "phase1.runtime",
+    "phase2.brain.observed_facts",
+    "live.safety_api",
+    "transport.egress",
+    "hardware.device",
+    "pretrip.workspace"
+  ],
+  "requires_authorization": {
+    "kind": "none"
+  },
+  "trace": {
+    "required": true,
+    "event_kind": "agent_tool_invocation"
+  },
+  "metadata": {
+    "read_only": true,
+    "runtime_safety_truth": false,
+    "runtime_activation_allowed": false,
+    "outbound_send_allowed": false,
+    "hardware_control_allowed": false,
+    "raw_payloads_embedded": false,
+    "model_output_is_runtime_truth": false
+  }
+}

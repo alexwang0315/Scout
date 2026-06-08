@@ -1,0 +1,44 @@
+{
+  "artifact_kind": "scout_wearable_sanitized_import",
+  "artifact_version": "wearable_sanitized_import.v1",
+  "source_format": "gpx_derived_summary",
+  "activity_id": "adapter.gpx.summary.001",
+  "activity_type": "hiking",
+  "activity_date": "2026-05-03",
+  "duration_s": 4800,
+  "moving_time_s": 4500,
+  "distance_m": 5100,
+  "ascent_m": 290,
+  "descent_m": 285,
+  "rest_event_count": 1,
+  "rest_duration_min": [5],
+  "late_activity_fatigue_decay": 0.1,
+  "session_rpe": 5,
+  "heart_rate": {
+    "sample_count": 0,
+    "avg_bpm": null,
+    "p90_bpm": null,
+    "zone_minutes": {},
+    "samples": []
+  },
+  "body_energy_provider_values": {
+    "garmin_body_battery_start": null,
+    "garmin_body_battery_end": null,
+    "garmin_stress_avg": null,
+    "source_value_only": true,
+    "scout_truth": false
+  },
+  "data_quality": {
+    "heart_rate_confidence": "low",
+    "gps_confidence": "medium",
+    "missing_hr_seconds": 4500,
+    "missing_hr_intervals": [
+      {"start_offset_s": 0, "end_offset_s": 4500}
+    ],
+    "sample_cadence_s": null,
+    "provider_value_confidence": "low",
+    "limitations": [
+      "derived from sanitized GPX summary; route geometry is not stored"
+    ]
+  }
+}

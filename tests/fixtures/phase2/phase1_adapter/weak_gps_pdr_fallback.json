@@ -1,0 +1,101 @@
+{
+  "incident_id": "incident_weak_gps_pdr_fallback_1778646600",
+  "trigger_level": "L1_WATCH",
+  "triggered_at": 1778646600.0,
+  "trigger_event": {
+    "event_type": "weak_gps",
+    "level": "L1_WATCH",
+    "timestamp": 1778646600.0,
+    "reason": "GPS degraded under canopy and position estimate switched to PDR fallback.",
+    "confidence": 0.82,
+    "details": {
+      "fallback_source": "pdr",
+      "gps_horizontal_accuracy_m": 65.0
+    }
+  },
+  "raw_window_start": 1778646300.0,
+  "raw_window_end": 1778646900.0,
+  "raw_samples": [
+    {
+      "timestamp": 1778646300.0,
+      "source": "watch",
+      "lat": 24.146,
+      "lon": 121.285,
+      "pdr_x_m": 4.0,
+      "pdr_y_m": 8.0,
+      "gps_horizontal_accuracy_m": 48.0,
+      "raw": {
+        "position_estimate": {
+          "source": "gps",
+          "progress_m": 2260.0
+        }
+      }
+    },
+    {
+      "timestamp": 1778646600.0,
+      "source": "watch",
+      "pdr_x_m": 22.0,
+      "pdr_y_m": 41.0,
+      "gps_horizontal_accuracy_m": 65.0,
+      "raw": {
+        "position_estimate": {
+          "source": "pdr",
+          "progress_m": 2304.0
+        }
+      }
+    }
+  ],
+  "segment_capsule_ids": [
+    "capsule.segment.ridge_loop.water_gap_to_forest.20260513T095000"
+  ],
+  "safety_transitions": [
+    {
+      "from_level": "L0_NORMAL",
+      "to_level": "L1_WATCH",
+      "timestamp": 1778646600.0,
+      "reason": "Position uncertainty degraded to PDR fallback.",
+      "event": {
+        "event_type": "weak_gps",
+        "level": "L1_WATCH",
+        "timestamp": 1778646600.0,
+        "reason": "GPS degraded under canopy and position estimate switched to PDR fallback.",
+        "confidence": 0.82,
+        "details": {
+          "fallback_source": "pdr",
+          "gps_horizontal_accuracy_m": 65.0
+        }
+      }
+    }
+  ],
+  "ai_summary_input": {
+    "event": {
+      "event_type": "weak_gps",
+      "level": "L1_WATCH",
+      "timestamp": 1778646600.0,
+      "reason": "GPS degraded under canopy and position estimate switched to PDR fallback.",
+      "confidence": 0.82,
+      "details": {
+        "fallback_source": "pdr",
+        "gps_horizontal_accuracy_m": 65.0
+      }
+    },
+    "route_evidence": {
+      "timestamp": "2026-05-13T09:50:00+08:00",
+      "gps_horizontal_accuracy_m": 65.0,
+      "position_estimate": {
+        "source": "pdr",
+        "progress_m": 2304.0
+      }
+    },
+    "raw_window": {
+      "start": 1778646300.0,
+      "end": 1778646900.0,
+      "sample_count": 2
+    },
+    "segment_capsules": {
+      "capsule_ids": [
+        "capsule.segment.ridge_loop.water_gap_to_forest.20260513T095000"
+      ]
+    }
+  }
+}

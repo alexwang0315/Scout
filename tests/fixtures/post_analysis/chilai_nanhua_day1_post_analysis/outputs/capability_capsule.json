@@ -1,0 +1,37 @@
+{
+  "artifact_kind": "post_analysis_capability_capsule",
+  "artifact_version": "capability_capsule.v1",
+  "ascent_m": 7930.7,
+  "ascent_m_per_hour_moving": 234.78,
+  "boundary": {
+    "incident_package_rewrite_allowed": false,
+    "mission_graph_rewrite_allowed": false,
+    "phase1_runtime_mutation_allowed": false,
+    "post_analysis_only": true,
+    "raw_track_shared_by_default": false,
+    "runtime_safety_truth": false,
+    "safety_api_calls_allowed": false
+  },
+  "case_id": "chilai_nanhua_day1_post_analysis",
+  "confidence": "medium",
+  "descent_m": 7908.02,
+  "descent_m_per_hour_moving": 234.11,
+  "distance_km": 108.67,
+  "elapsed_time_min": 5701,
+  "exact_timestamps_shared": false,
+  "incident_details_shared": false,
+  "limitations": [
+    "rest detection is deterministic and rule-based",
+    "weather, pack weight, and team waiting are not normalized",
+    "capability capsule excludes raw GPX, exact timestamps, and incident details",
+    "one or more completed track timestamp gaps exceed policy",
+    "one or more checkpoint matches have multiple plausible clusters"
+  ],
+  "moving_pace_min_per_km": 18.65,
+  "moving_time_min": 2027,
+  "raw_track_shared": false,
+  "rest_time_min": 3675,
+  "route_family": "nenggao_andongjun",
+  "source_scope": "completed_run_summary_only",
+  "terrain_adjusted_level": "unclassified"
+}

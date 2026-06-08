@@ -1,0 +1,23 @@
+{
+  "payload": {
+    "loggingTime": "2026-05-11T00:52:12.450000Z",
+    "locationLatitude": "25.063521",
+    "locationLongitude": "121.653987",
+    "locationAltitude": "34.38",
+    "locationSpeed": "0.8",
+    "locationCourse": "90.0",
+    "locationHorizontalAccuracy": "8.0",
+    "accelerometerAccelerationX": "0.01",
+    "accelerometerAccelerationY": "0.02",
+    "accelerometerAccelerationZ": "0.98",
+    "motionYaw": "0.0",
+    "motionPitch": "0.0",
+    "motionRoll": "0.0",
+    "batteryLevel": "0.90",
+    "pedometerDistance": "0.0",
+    "pedometerNumberOfSteps": "0"
+  },
+  "device": "apple_watch",
+  "source": "fixture_hardware_smoke_canonical",
+  "received_at": 1778450000.0
+}

@@ -1,0 +1,148 @@
+{
+  "artifact_id": "plan_validation_candidates.chilai_nanhua_day1.v0",
+  "artifact_kind": "plan_validation_candidates",
+  "counts": {
+    "blocker_candidate_count": 0,
+    "finding_candidate_count": 6,
+    "source_ref_count": 8,
+    "warning_candidate_count": 6
+  },
+  "findings": [
+    {
+      "candidate_id": "plan_validation.chilai_nanhua_day1.resource_plan.warning_candidates.01",
+      "candidate_only": true,
+      "evidence_summary": {
+        "blocks_existing_eta_or_readiness": false,
+        "device_count": 4,
+        "equipment_count": 4,
+        "hard_readiness_mutation_allowed": false
+      },
+      "hard_readiness_mutation_allowed": false,
+      "message": "teammate phone start battery needs confirmation",
+      "missing_any": [],
+      "rule_id": "resource_plan_warning_candidate",
+      "severity": "warning",
+      "source_artifact_kind": "resource_plan",
+      "source_ref": "outputs/resource_plan.json"
+    },
+    {
+      "candidate_id": "plan_validation.chilai_nanhua_day1.resource_plan.warning_candidates.02",
+      "candidate_only": true,
+      "evidence_summary": {
+        "blocks_existing_eta_or_readiness": false,
+        "device_count": 4,
+        "equipment_count": 4,
+        "hard_readiness_mutation_allowed": false
+      },
+      "hard_readiness_mutation_allowed": false,
+      "message": "water carry and refill plan needs reviewer confirmation",
+      "missing_any": [],
+      "rule_id": "resource_plan_warning_candidate",
+      "severity": "warning",
+      "source_artifact_kind": "resource_plan",
+      "source_ref": "outputs/resource_plan.json"
+    },
+    {
+      "candidate_id": "plan_validation.chilai_nanhua_day1.resource_plan.warning_candidates.03",
+      "candidate_only": true,
+      "evidence_summary": {
+        "blocks_existing_eta_or_readiness": false,
+        "device_count": 4,
+        "equipment_count": 4,
+        "hard_readiness_mutation_allowed": false
+      },
+      "hard_readiness_mutation_allowed": false,
+      "message": "headlamp set count is a planning placeholder",
+      "missing_any": [],
+      "rule_id": "resource_plan_warning_candidate",
+      "severity": "warning",
+      "source_artifact_kind": "resource_plan",
+      "source_ref": "outputs/resource_plan.json"
+    },
+    {
+      "candidate_id": "plan_validation.chilai_nanhua_day1.segment_policy.human_review_required",
+      "candidate_only": true,
+      "evidence_summary": {
+        "candidate_count": 109,
+        "candidate_only_count": 109,
+        "compile_boundary": "candidate_only_not_runtime",
+        "human_review_required_count": 109
+      },
+      "hard_readiness_mutation_allowed": false,
+      "message": "Segment policy candidates require human review before compile-time use.",
+      "missing_any": [
+        "accepted_segment_policy_reviews"
+      ],
+      "rule_id": "segment_policy_candidates_require_human_review",
+      "severity": "warning",
+      "source_artifact_kind": "segment_policy_candidates",
+      "source_ref": "outputs/segment_policy_candidates.json"
+    },
+    {
+      "candidate_id": "plan_validation.chilai_nanhua_day1.segment_policy.daylight_review",
+      "candidate_only": true,
+      "evidence_summary": {
+        "candidate_count": 109,
+        "requires_daylight_count": 109,
+        "retreat_available_count": 2,
+        "signal_expected_count": 1
+      },
+      "hard_readiness_mutation_allowed": false,
+      "message": "Segment policies require daylight but only candidate weather/daylight evidence is present.",
+      "missing_any": [
+        "reviewed_daylight_window"
+      ],
+      "rule_id": "segment_policy_requires_reviewed_daylight",
+      "severity": "warning",
+      "source_artifact_kind": "segment_policy_candidates",
+      "source_ref": "outputs/segment_policy_candidates.json"
+    },
+    {
+      "candidate_id": "plan_validation.chilai_nanhua_day1.weather_daylight_placeholder",
+      "candidate_only": true,
+      "evidence_summary": {
+        "authoritative_weather_computed": false,
+        "confidence": "unknown",
+        "daylight_source_status": "manual_placeholder",
+        "external_api_calls_made": false,
+        "human_review_required": true,
+        "staleness": "placeholder",
+        "validation_status": "human_review_required",
+        "weather_source_status": "manual_placeholder"
+      },
+      "hard_readiness_mutation_allowed": false,
+      "message": "Weather/daylight evidence is placeholder-only and needs review before go/no-go planning.",
+      "missing_any": [
+        "reviewed_weather_window",
+        "reviewed_daylight_window"
+      ],
+      "rule_id": "weather_daylight_placeholder_requires_review",
+      "severity": "warning",
+      "source_artifact_kind": "weather_daylight_evidence",
+      "source_ref": "outputs/weather_daylight_evidence.json"
+    }
+  ],
+  "hard_readiness_finding_count": 0,
+  "hard_readiness_mutation_allowed": false,
+  "hard_readiness_ref": "outputs/readiness_report.json",
+  "hard_readiness_status": "ready",
+  "notes": [
+    "Candidate-only Phase 4 plan validation rollup.",
+    "This report summarizes existing planning gaps and does not mutate outputs/readiness_report.json.",
+    "Findings contain sanitized evidence summaries only; source artifacts remain the authoritative payloads."
+  ],
+  "policy_version": "0.1.0",
+  "project_id": "chilai_nanhua_day1",
+  "raw_payloads_embedded": false,
+  "source_refs": [
+    "outputs/readiness_report.json",
+    "outputs/weather_daylight_evidence.json",
+    "outputs/resource_plan.json",
+    "outputs/poi_readiness_candidates.json",
+    "outputs/segment_policy_candidates.json",
+    "candidates/skill_config_manifest.json",
+    "outputs/pretrip_package.reviewed.json",
+    "outputs/pretrip_package.json"
+  ],
+  "status": "candidate_only"
+}

@@ -1,0 +1,209 @@
+{
+  "artifact_kind": "pretrip_runtime_handoff_metadata",
+  "boundary": {
+    "bridge_mutation_allowed": false,
+    "candidate_metadata_only": true,
+    "departure_approval_granted": false,
+    "departure_gate_required_before_runtime": true,
+    "external_api_calls_made": false,
+    "final_runtime_write_allowed": false,
+    "incident_package_imported": false,
+    "live_runtime_read_allowed": false,
+    "notes": [
+      "Candidate metadata handoff only; no Phase 1 runtime state is mutated.",
+      "Reviewed package metadata is not departure approval; the departure gate remains required.",
+      "No safety endpoint is called and no Phase 3 bridge behavior is changed.",
+      "No final runtime manifest or MissionGraph write is performed by this builder."
+    ],
+    "phase1_runtime_mutation_allowed": false,
+    "phase2_writeback_allowed": false,
+    "raw_payloads_embedded": false,
+    "reviewed_package_is_not_departure_approval": true,
+    "runtime_handoff_operator_trigger_required": true,
+    "safety_api_calls_allowed": false
+  },
+  "counts": {
+    "bridge_mutation_count": 0,
+    "human_review_count": 245,
+    "readiness_ref_count": 3,
+    "route_ref_count": 4,
+    "route_source_count": 1,
+    "runtime_write_count": 0,
+    "safety_call_count": 0
+  },
+  "integration_notes": [
+    "Main integration can later register this as a project artifact and release-check input.",
+    "This slice intentionally leaves shared generators and release gates unchanged."
+  ],
+  "manifest_id": "runtime_handoff_metadata.chilai_nanhua_day1.v0",
+  "package": {
+    "departure_approval_granted": false,
+    "departure_gate_required_before_runtime": true,
+    "human_review_count": 245,
+    "package_id": "pretrip.chilai_nanhua_day1.v0",
+    "package_ref": {
+      "artifact_kind": "pretrip_package",
+      "exists": true,
+      "ref": "outputs/pretrip_package.json",
+      "ref_key": "package_ref",
+      "sha256": "d548e26099d75516744805c75f717b03742f0d8549994a6bbe216da2227ae2e9",
+      "status": "candidate",
+      "summary": {
+        "checkpoint_candidate_count": 110,
+        "departure_approval_granted": null,
+        "human_review_count": null,
+        "package_id": "pretrip.chilai_nanhua_day1.v0",
+        "reviewed_package_is_not_departure_approval": null,
+        "segment_candidate_count": 109,
+        "source_artifact_count": 2,
+        "status": "candidate",
+        "version": "0.1.0"
+      }
+    },
+    "project_id": "chilai_nanhua_day1",
+    "reviewed_package_is_not_departure_approval": true,
+    "reviewed_package_ref": {
+      "artifact_kind": "reviewed_pretrip_package",
+      "exists": true,
+      "ref": "outputs/pretrip_package.reviewed.json",
+      "ref_key": "reviewed_package_ref",
+      "sha256": "0a90965f216de5699b9c932f4dab7cd13c482b785b23fff69b3ae1ec0b958fee",
+      "status": "reviewed",
+      "summary": {
+        "checkpoint_candidate_count": 110,
+        "departure_approval_granted": null,
+        "human_review_count": null,
+        "package_id": "pretrip.chilai_nanhua_day1.v0",
+        "reviewed_package_is_not_departure_approval": null,
+        "segment_candidate_count": 109,
+        "source_artifact_count": 2,
+        "status": "reviewed",
+        "version": "0.1.0"
+      }
+    },
+    "status": "reviewed",
+    "version": "0.1.0"
+  },
+  "plan_version_id": "pretrip.chilai_nanhua_day1.v0:0.1.0",
+  "project_id": "chilai_nanhua_day1",
+  "readiness_refs": [
+    {
+      "artifact_kind": "readiness_report",
+      "exists": true,
+      "ref": "outputs/readiness_report.json",
+      "ref_key": "readiness_report_ref",
+      "sha256": "0ee8e517b1e912f0c1e3664ee381b9d1870739bce1f52c4231a467251550fae5",
+      "status": "ready",
+      "summary": {
+        "finding_count": 0,
+        "status": "ready"
+      }
+    },
+    {
+      "artifact_kind": "plan_validation_candidates",
+      "exists": true,
+      "ref": "outputs/plan_validation_candidates.json",
+      "ref_key": "plan_validation_candidates_ref",
+      "sha256": "3aa2b16f0eaf2973cb89e671f7708f147175ba81e25ec713c464e5215a89c20a",
+      "status": "candidate_only",
+      "summary": {
+        "finding_count": 6,
+        "hard_readiness_mutation_allowed": false,
+        "hard_readiness_status": "ready",
+        "status": "candidate_only"
+      }
+    },
+    {
+      "artifact_kind": "poi_readiness_candidates",
+      "exists": true,
+      "ref": "outputs/poi_readiness_candidates.json",
+      "ref_key": "poi_readiness_candidates_ref",
+      "sha256": "5a5b24dcb6b3cfe2bb668b5e10949d7940cb4e17ff2dc059e303c583bfa7b302",
+      "status": "candidate_only",
+      "summary": {
+        "blocker_candidate_count": 0,
+        "finding_candidate_count": 0,
+        "status": "candidate_only"
+      }
+    }
+  ],
+  "reviewed_mission_graph_ref": {
+    "artifact_kind": "compiled_mission_graph_reviewed",
+    "exists": true,
+    "ref": "outputs/compiled_mission_graph.reviewed.json",
+    "ref_key": "compiled_mission_graph_reviewed_ref",
+    "sha256": "d9e32c51fad625e6ff96d6d1283dcb1540f5b5a789d68e2c2ce45549dd83d957",
+    "status": null,
+    "summary": {
+      "checkpoint_count": 110,
+      "diversion_point_count": 1,
+      "mission_id": "mission.chilai_nanhua_day1.0.1.0",
+      "name": "2013-10-08 10:58:50 每日記錄",
+      "route_source": "artifact:gpx:chilai_nanhua_day1",
+      "segment_count": 109
+    }
+  },
+  "route_refs": [
+    {
+      "artifact_kind": "route_summary",
+      "exists": true,
+      "ref": "normalized/routes/route_summary.json",
+      "ref_key": "route_summary_ref",
+      "sha256": "13ccdd2559fe62ee8de1b8020a4c8a417ffaef70f915fe500ee1acbd6f112cee",
+      "status": null,
+      "summary": {
+        "artifact_id": "artifact:gpx:chilai_nanhua_day1",
+        "distance_m": 162559.51,
+        "point_count": 6909,
+        "route_name": "2013-10-08 10:58:50 每日記錄"
+      }
+    },
+    {
+      "artifact_kind": "route_comparison",
+      "exists": true,
+      "ref": "outputs/route_comparison.json",
+      "ref_key": "route_comparison_ref",
+      "sha256": "3ecc614a7cc496651734b140356ae67b35d1787f4025a07aa38238bb771616fb",
+      "status": null,
+      "summary": {
+        "classification": "comparison_only",
+        "comparison_id": "route_comparison.chilai_nanhua_day1.similar_gpx.v0",
+        "distance_delta_m": -5053.24,
+        "point_count_delta": -1275
+      }
+    },
+    {
+      "artifact_kind": "planning_references",
+      "exists": true,
+      "ref": "candidates/planning_references.json",
+      "ref_key": "planning_references_ref",
+      "sha256": "3058bc6763d89955ec4c93c97451a81a7b8d691bef73f94982fb45fac4b362ab",
+      "status": null,
+      "summary": {
+        "item_count": 3
+      }
+    },
+    {
+      "artifact_kind": "route_guide_timing_candidates",
+      "exists": true,
+      "ref": "candidates/route_guide_timing.json",
+      "ref_key": "route_guide_timing_ref",
+      "sha256": "0d418dcc2d236236749bb9ef84a8d6a97ecedec454ce9f8e4cb8b3cdf2bf32c4",
+      "status": null,
+      "summary": {
+        "item_count": 19
+      }
+    }
+  ],
+  "route_source_refs": [
+    {
+      "artifact_id": "artifact:gpx:chilai_nanhua_day1",
+      "kind": "gpx",
+      "media_type": "application/gpx+xml",
+      "sha256": "a270bbc769c9c521c4bb839a6230fb3760c37478c5b3ebe57f36f5d8755f6ee7",
+      "size_bytes": 1186689,
+      "source_ref": "artifact:gpx:chilai_nanhua_day1"
+    }
+  ],
+  "status": "candidate_metadata_only"
+}

@@ -1,0 +1,331 @@
+{
+  "artifact_kind": "hardware_provider_contract_manifest",
+  "boundary": {
+    "brain_write_allowed": false,
+    "endpoint_calls": [],
+    "fixture_backed": true,
+    "incident_store_write_allowed": false,
+    "live_io_allowed": false,
+    "network_calls_allowed": false,
+    "observed_fact_write_allowed": false,
+    "outbound_send_allowed": false,
+    "phase1_safety_decision_mutation_allowed": false,
+    "provider_control_allowed": false,
+    "read_only": true,
+    "safety_mutation_calls_allowed": false
+  },
+  "contract_version": "hardware_provider_contract.v0",
+  "manifest_id": "hardware_provider_contract.pi5_step1.fixture.v0",
+  "providers": [
+    {
+      "controls_provider": false,
+      "degraded_behaviors": [
+        {
+          "blocks_runtime_start": false,
+          "calls_safety_mutation": false,
+          "controls_provider": false,
+          "degradation_code": "gnss.fixture_missing",
+          "evidence_behavior": "read_only_manifest_status_only",
+          "operator_guidance": "Keep the runtime started and inspect fixture coverage before enabling live GNSS.",
+          "phase1_behavior": "no_phase1_safety_decision_change",
+          "projected_status": "unavailable",
+          "runtime_behavior": "continue_with_provider_status_projection",
+          "sends_outbound": false,
+          "trigger": "fixture file missing or unreadable",
+          "writes_brain": false,
+          "writes_incident_store": false,
+          "writes_observed_fact": false
+        },
+        {
+          "degradation_code": "gnss.accuracy_degraded",
+          "operator_guidance": "Surface degraded accuracy as provider status only; do not change Phase 1 decisions from this contract.",
+          "projected_status": "degraded",
+          "trigger": "position accuracy exceeds fixture threshold"
+        }
+      ],
+      "display_name": "Fixture GNSS position provider",
+      "domain": "gnss",
+      "evidence": {
+        "normalized_fields": [
+          {
+            "description": "WGS84 latitude",
+            "field_name": "position.latitude",
+            "unit": "degree"
+          },
+          {
+            "description": "WGS84 longitude",
+            "field_name": "position.longitude",
+            "unit": "degree"
+          },
+          {
+            "description": "Horizontal accuracy",
+            "field_name": "position.accuracy_m",
+            "unit": "meter"
+          },
+          {
+            "description": "GNSS sample timestamp",
+            "field_name": "position.timestamp_utc"
+          }
+        ],
+        "phase1_safety_decision_change_allowed": false,
+        "source_payload_fields": [
+          "latitude",
+          "longitude",
+          "horizontal_accuracy_m",
+          "timestamp_utc"
+        ],
+        "writes_brain": false,
+        "writes_incident_store": false,
+        "writes_observed_fact": false
+      },
+      "expected_message_rate_per_minute": null,
+      "expected_sample_rate_hz": 1.0,
+      "live_io_allowed": false,
+      "polling_allowed": false,
+      "provider_mode": "fixture",
+      "provider_ref": "provider.gnss.fixture.v0",
+      "required_for_runtime_start": false,
+      "required_permissions": [],
+      "status": "available",
+      "transport": "fixture"
+    },
+    {
+      "controls_provider": false,
+      "degraded_behaviors": [
+        {
+          "degradation_code": "imu.fixture_missing",
+          "operator_guidance": "Continue with provider status projection and fixture replay evidence only.",
+          "projected_status": "unavailable",
+          "trigger": "fixture file missing or unreadable"
+        },
+        {
+          "degradation_code": "imu.sample_gap",
+          "operator_guidance": "Mark motion continuity as degraded without writing a new fact or changing safety decisions.",
+          "projected_status": "degraded",
+          "trigger": "sample gap exceeds fixture threshold"
+        }
+      ],
+      "display_name": "Fixture IMU motion provider",
+      "domain": "imu",
+      "evidence": {
+        "normalized_fields": [
+          {
+            "description": "Acceleration on x axis",
+            "field_name": "imu.acceleration_x",
+            "unit": "mps2"
+          },
+          {
+            "description": "Acceleration on y axis",
+            "field_name": "imu.acceleration_y",
+            "unit": "mps2"
+          },
+          {
+            "description": "Rotation around z axis",
+            "field_name": "imu.gyro_z",
+            "unit": "rad_per_s"
+          },
+          {
+            "description": "IMU sample timestamp",
+            "field_name": "imu.timestamp_utc"
+          }
+        ],
+        "phase1_safety_decision_change_allowed": false,
+        "source_payload_fields": [
+          "accelerometerAccelerationX",
+          "accelerometerAccelerationY",
+          "gyroRotationZ",
+          "timestamp_utc"
+        ],
+        "writes_brain": false,
+        "writes_incident_store": false,
+        "writes_observed_fact": false
+      },
+      "expected_message_rate_per_minute": null,
+      "expected_sample_rate_hz": 50.0,
+      "live_io_allowed": false,
+      "polling_allowed": false,
+      "provider_mode": "fixture",
+      "provider_ref": "provider.imu.fixture.v0",
+      "required_for_runtime_start": false,
+      "required_permissions": [],
+      "status": "available",
+      "transport": "fixture"
+    },
+    {
+      "controls_provider": false,
+      "degraded_behaviors": [
+        {
+          "degradation_code": "battery.stale_sample",
+          "operator_guidance": "Show stale battery telemetry as degraded provider status only.",
+          "projected_status": "degraded",
+          "trigger": "battery sample is older than readiness window"
+        },
+        {
+          "degradation_code": "battery.fixture_missing",
+          "operator_guidance": "Keep runtime alive and require manual battery verification outside this contract.",
+          "projected_status": "unavailable",
+          "trigger": "fixture file missing or unreadable"
+        }
+      ],
+      "display_name": "Fixture battery telemetry provider",
+      "domain": "battery",
+      "evidence": {
+        "normalized_fields": [
+          {
+            "description": "Battery level percentage",
+            "field_name": "battery.level_pct",
+            "unit": "percent"
+          },
+          {
+            "description": "Charging state",
+            "field_name": "battery.charging_state"
+          },
+          {
+            "description": "Estimated remaining runtime",
+            "field_name": "battery.estimated_runtime_min",
+            "required": false,
+            "unit": "minute"
+          }
+        ],
+        "phase1_safety_decision_change_allowed": false,
+        "source_payload_fields": [
+          "batteryLevel",
+          "batteryState",
+          "estimated_runtime_min"
+        ],
+        "writes_brain": false,
+        "writes_incident_store": false,
+        "writes_observed_fact": false
+      },
+      "expected_message_rate_per_minute": null,
+      "expected_sample_rate_hz": 0.016,
+      "live_io_allowed": false,
+      "polling_allowed": false,
+      "provider_mode": "fixture",
+      "provider_ref": "provider.battery.fixture.v0",
+      "required_for_runtime_start": false,
+      "required_permissions": [],
+      "status": "degraded",
+      "transport": "fixture"
+    },
+    {
+      "controls_provider": false,
+      "degraded_behaviors": [
+        {
+          "degradation_code": "ble.bridge_unavailable",
+          "operator_guidance": "Keep local runtime behavior independent from phone bridge availability.",
+          "projected_status": "unavailable",
+          "trigger": "phone bridge fixture reports no paired bridge"
+        },
+        {
+          "degradation_code": "ble.rssi_degraded",
+          "operator_guidance": "Report weak bridge signal as degraded status only.",
+          "projected_status": "degraded",
+          "trigger": "fixture RSSI falls below readiness threshold"
+        }
+      ],
+      "display_name": "Fixture BLE phone bridge provider",
+      "domain": "ble",
+      "evidence": {
+        "normalized_fields": [
+          {
+            "description": "Bridge connection state",
+            "field_name": "ble.bridge_state"
+          },
+          {
+            "description": "Last bridge observation timestamp",
+            "field_name": "ble.last_seen_at"
+          },
+          {
+            "description": "Received signal strength",
+            "field_name": "ble.rssi_dbm",
+            "required": false,
+            "unit": "dbm"
+          }
+        ],
+        "phase1_safety_decision_change_allowed": false,
+        "source_payload_fields": [
+          "bridge_state",
+          "last_seen_at",
+          "rssi_dbm"
+        ],
+        "writes_brain": false,
+        "writes_incident_store": false,
+        "writes_observed_fact": false
+      },
+      "expected_message_rate_per_minute": 1.0,
+      "expected_sample_rate_hz": null,
+      "live_io_allowed": false,
+      "polling_allowed": false,
+      "provider_mode": "fixture",
+      "provider_ref": "provider.ble.fixture.v0",
+      "required_for_runtime_start": false,
+      "required_permissions": [],
+      "status": "unavailable",
+      "transport": "fixture"
+    },
+    {
+      "controls_provider": false,
+      "degraded_behaviors": [
+        {
+          "degradation_code": "cellular.no_service",
+          "operator_guidance": "Record remote-status capability as degraded and do not send outbound messages.",
+          "projected_status": "degraded",
+          "trigger": "cellular fixture reports no registered service"
+        },
+        {
+          "degradation_code": "cellular.fixture_missing",
+          "operator_guidance": "Keep local safety runtime independent from cellular provider availability.",
+          "projected_status": "unavailable",
+          "trigger": "fixture file missing or unreadable"
+        }
+      ],
+      "display_name": "Fixture cellular remote-status provider",
+      "domain": "cellular",
+      "evidence": {
+        "normalized_fields": [
+          {
+            "description": "Cellular registration state",
+            "field_name": "cellular.registration_state"
+          },
+          {
+            "description": "Signal quality class",
+            "field_name": "cellular.signal_quality"
+          },
+          {
+            "description": "Remote status latency class",
+            "field_name": "cellular.latency_class",
+            "required": false
+          },
+          {
+            "description": "Last successful status send timestamp from fixture evidence",
+            "field_name": "cellular.last_successful_send_at",
+            "required": false
+          }
+        ],
+        "phase1_safety_decision_change_allowed": false,
+        "source_payload_fields": [
+          "registration_state",
+          "signal_quality",
+          "latency_class",
+          "last_successful_send_at"
+        ],
+        "writes_brain": false,
+        "writes_incident_store": false,
+        "writes_observed_fact": false
+      },
+      "expected_message_rate_per_minute": 0.2,
+      "expected_sample_rate_hz": null,
+      "live_io_allowed": false,
+      "polling_allowed": false,
+      "provider_mode": "fixture",
+      "provider_ref": "provider.cellular.fixture.v0",
+      "required_for_runtime_start": false,
+      "required_permissions": [],
+      "status": "degraded",
+      "transport": "fixture"
+    }
+  ],
+  "source_path": "tests/fixtures/hardware/provider_contract.example.json",
+  "status": "fixture_contract_ready_not_connected"
+}

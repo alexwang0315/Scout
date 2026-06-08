@@ -1,0 +1,35 @@
+{
+  "artifact_type": "manual_only_pi_ollama_verification",
+  "timestamp": "2026-05-19T00:00:00+08:00",
+  "runtime_profile": "pi-field",
+  "assistant_provider": "pydantic_ai",
+  "config_path_ref": "/Users/alexwang0315/.scout/assistant-models.json",
+  "fallback_to_local_on_error": true,
+  "ollama_tags_checked": true,
+  "local_model_name": "qwen2.5:0.5b",
+  "operator_observed_latency_ms": 5700,
+  "assistant_status": {
+    "local_fallback_mode": "pi_field_manual_opt_in",
+    "manual_verification_required": true,
+    "local_fallback_max_concurrency": 1,
+    "readiness_starts_local_model": false,
+    "local_model_listener_required_for_readiness": false,
+    "status_model_switch_allowed": false,
+    "token_values_exposed": false
+  },
+  "assistant_response": {
+    "model_profile_used": "local",
+    "failover_reason": "manual_observation",
+    "read_only": true,
+    "model_interpretation": true
+  },
+  "boundary_observation": {
+    "phase1_state_changed": false,
+    "observed_fact_written": false,
+    "phase2_brain_written": false,
+    "incident_store_written": false,
+    "review_decision_changed": false,
+    "outbound_sent": false,
+    "hardware_controlled": false
+  }
+}

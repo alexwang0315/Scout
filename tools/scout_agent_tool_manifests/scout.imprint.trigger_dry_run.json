@@ -1,0 +1,37 @@
+{
+  "id": "scout.imprint.trigger_dry_run",
+  "version": "0.1.0",
+  "description": "Evaluate a spatial imprint set against a fixture trigger context and return predicate match details without runtime mutation.",
+  "command": {
+    "argv": [
+      "{python}",
+      "-m",
+      "scout_agent_builtin_tools",
+      "spatial-imprint-trigger-dry-run",
+      "--input",
+      "{input}",
+      "--json"
+    ],
+    "dry_run_argument": null
+  },
+  "mode": "decision_support",
+  "input_schema_ref": "schemas/scout_agent/spatial_imprint_trigger_dry_run.request.json",
+  "output_schema_ref": "schemas/scout_agent/tool_result.json",
+  "allowed_reads": [
+    "pretrip.spatial_imprint_set",
+    "runtime.fixture_trigger_context"
+  ],
+  "allowed_writes": [],
+  "forbidden_writes": [
+    "phase1.runtime",
+    "phase2.brain.observed_facts",
+    "live.safety_api"
+  ],
+  "requires_authorization": {
+    "kind": "none"
+  },
+  "trace": {
+    "required": true,
+    "event_kind": "agent_tool_invocation"
+  }
+}
