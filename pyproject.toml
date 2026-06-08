@@ -16,12 +16,17 @@ dependencies = [
 
 [project.scripts]
 scout-ai-os-pydantic-smoke = "scout.cli.pydantic_smoke:main"
+scout-ai-os-evals = "scout.evals.regression:main"
+scout-ai-os-hardware-smoke = "scout.cli.hardware_smoke:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+"scout.evals" = ["*.json"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src", "."]

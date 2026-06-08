@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -17,6 +18,16 @@ from scout.schemas.capability import (
 
 def _now_iso() -> str:
     return datetime.now(UTC).isoformat()
+
+
+@dataclass(frozen=True)
+class CapabilityRecord:
+    name: str
+    version: str
+    spec: CapabilitySpec
+    status: str
+    installed_at: str
+    source: str
 
 
 class CapabilityRegistry:
@@ -98,19 +109,60 @@ class CapabilityRegistry:
         return matches
 
     def get(self, name: str) -> CapabilitySpec | None:
+        record = self.get_record(name)
+        return record.spec if record else None
+
+    def get_record(self, name: str) -> CapabilityRecord | None:
         row = self._connection.execute(
-            "SELECT spec_json FROM capabilities WHERE name = ?",
+            "SELECT * FROM capabilities WHERE name = ?",
             (name,),
         ).fetchone()
         if row is None:
             return None
-        return CapabilitySpec.model_validate_json(row["spec_json"])
+        return self._row_to_record(row)
 
     def list_all(self) -> list[CapabilitySpec]:
+        return [record.spec for record in self.list_records()]
+
+    def list_records(self) -> list[CapabilityRecord]:
         rows = self._connection.execute(
-            "SELECT spec_json FROM capabilities ORDER BY name ASC"
+            "SELECT * FROM capabilities ORDER BY name ASC"
         ).fetchall()
-        return [CapabilitySpec.model_validate_json(row["spec_json"]) for row in rows]
+        return [self._row_to_record(row) for row in rows]
+
+    def approve_generated_candidate(self, name: str) -> CapabilityRecord:
+        record = self.get_record(name)
+        if record is None:
+            raise KeyError(f"capability not found: {name}")
+        if record.status != "candidate" or record.source != "generated_candidate":
+            raise ValueError("only generated capability candidates can be approved")
+
+        self._connection.execute(
+            """
+            UPDATE capabilities
+            SET status = 'installed',
+                source = 'generated_approved',
+                installed_at = ?
+            WHERE name = ?
+            """,
+            (_now_iso(), name),
+        )
+        self._connection.commit()
+        approved = self.get_record(name)
+        if approved is None:
+            raise KeyError(f"capability not found after approval: {name}")
+        return approved
+
+    @staticmethod
+    def _row_to_record(row: sqlite3.Row) -> CapabilityRecord:
+        return CapabilityRecord(
+            name=row["name"],
+            version=row["version"],
+            spec=CapabilitySpec.model_validate_json(row["spec_json"]),
+            status=row["status"],
+            installed_at=row["installed_at"],
+            source=row["source"],
+        )
 
 
-__all__ = ["CapabilityRegistry"]
+__all__ = ["CapabilityRecord", "CapabilityRegistry"]

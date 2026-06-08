@@ -8,7 +8,11 @@ from scout.schemas.capability import (
     CapabilitySpec,
     GeneratedCapabilityPackage,
 )
-from scout.services.sandbox_runner import SandboxRunner
+from scout.services.sandbox_runner import (
+    MAX_FILE_BYTES,
+    MAX_PACKAGE_FILES,
+    SandboxRunner,
+)
 
 
 def make_package(
@@ -131,6 +135,41 @@ def test_sandbox_runner_blocks_unsafe_paths_before_writing() -> None:
 
     assert result.passed is False
     assert any("not a safe path" in finding for finding in result.security_findings)
+    assert result.resource_usage["files_written"] == 0
+
+
+def test_sandbox_runner_blocks_too_many_generated_files() -> None:
+    result = SandboxRunner().run(
+        make_package(
+            files={
+                f"module_{index}.py": "def run(payload): return payload\n"
+                for index in range(MAX_PACKAGE_FILES + 1)
+            }
+        )
+    )
+
+    assert result.passed is False
+    assert any("files; limit" in finding for finding in result.security_findings)
+    assert result.resource_usage["files_written"] == 0
+
+
+def test_sandbox_runner_blocks_oversized_generated_file() -> None:
+    result = SandboxRunner().run(
+        make_package(
+            files={
+                "implementation.py": (
+                    "PAYLOAD = "
+                    + repr("x" * (MAX_FILE_BYTES + 1))
+                    + "\n\n"
+                    + "def run(payload):\n"
+                    + "    return payload\n"
+                )
+            }
+        )
+    )
+
+    assert result.passed is False
+    assert any("bytes; limit" in finding for finding in result.security_findings)
     assert result.resource_usage["files_written"] == 0
 
 

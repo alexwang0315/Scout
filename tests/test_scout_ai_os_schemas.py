@@ -95,6 +95,34 @@ def test_workflow_requires_at_least_one_action() -> None:
         )
 
 
+def test_workflow_accepts_session_local_ui_action_contract() -> None:
+    workflow = WorkflowSpec(
+        name="Pretrip map layer action",
+        source_utterance="Only show risk score layers.",
+        user_goal="Plan a session-local browser UI action.",
+        trigger=TriggerSpec(type=TriggerType.MANUAL, description="Manual"),
+        actions=[
+            ActionSpec(
+                type=ActionType.UI_ACTION,
+                description="Plan risk-only layer visibility.",
+                config={
+                    "surface": "pretrip",
+                    "request_text": "請幫我關掉所有地圖圖層，只留下 risk score 相關圖層。",
+                },
+            )
+        ],
+        lifecycle=WorkflowLifecycle.SESSION_SCOPED,
+        runtime=RuntimeTarget.BROWSER,
+        permissions=PermissionSpec(required=["session_local_ui"]),
+    )
+
+    dumped = workflow.model_dump(mode="json")
+
+    assert workflow.actions[0].type is ActionType.UI_ACTION
+    assert dumped["actions"][0]["type"] == "ui_action"
+    assert dumped["runtime"] == "browser"
+
+
 def test_workflow_rejects_unknown_fields() -> None:
     with pytest.raises(ValidationError):
         TriggerSpec(

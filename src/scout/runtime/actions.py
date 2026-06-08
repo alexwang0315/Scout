@@ -9,6 +9,11 @@ from scout.schemas.workflow import ActionSpec, ActionType, WorkflowSpec
 from scout.services.capability_registry import CapabilityRegistry
 from scout.services.notification_gateway import NotificationGateway
 from scout.services.workflow_store import WorkflowRecord
+from scout.ui_action_plan import (
+    ARTIFACT_KIND,
+    ARTIFACT_VERSION,
+    build_scout_ui_action_plan,
+)
 
 
 class ActionExecutor:
@@ -27,6 +32,8 @@ class ActionExecutor:
             return self._execute_notify(record, action)
         if action.type is ActionType.ASK_USER:
             return self._execute_ask_user(record, action)
+        if action.type is ActionType.UI_ACTION:
+            return self._execute_ui_action(action)
         if action.type is ActionType.RUN_CAPABILITY:
             return self._execute_builtin_capability(record.workflow, action)
         return {
@@ -73,6 +80,48 @@ class ActionExecutor:
             "notification_id": result.notification_id,
         }
 
+    def _execute_ui_action(self, action: ActionSpec) -> dict[str, Any]:
+        plan = action.config.get("ui_action_plan")
+        if not isinstance(plan, dict):
+            surface = str(action.config.get("surface") or "")
+            request_text = str(action.config.get("request_text") or action.description)
+            if not surface:
+                return {
+                    "status": "unsupported",
+                    "action_type": action.type.value,
+                    "message": "UI action requires ui_action_plan or surface/request_text config.",
+                }
+            try:
+                plan = build_scout_ui_action_plan(
+                    surface=surface,
+                    request_text=request_text,
+                    preset=_string_or_none(action.config.get("preset")),
+                    target_kind=_string_or_none(action.config.get("target_kind")),
+                    target_ref=_string_or_none(action.config.get("target_ref")),
+                    query=_string_or_none(action.config.get("query")),
+                    tab=_string_or_none(action.config.get("tab")),
+                )
+            except ValueError as exc:
+                return {
+                    "status": "unsupported",
+                    "action_type": action.type.value,
+                    "message": str(exc),
+                }
+
+        return {
+            "status": str(plan.get("status") or "planned"),
+            "action_type": action.type.value,
+            "artifact_kind": str(plan.get("artifact_kind") or ARTIFACT_KIND),
+            "artifact_version": str(plan.get("artifact_version") or ARTIFACT_VERSION),
+            "application_required": (
+                plan.get("front_end_executor", {}).get("global")
+                if isinstance(plan.get("front_end_executor"), dict)
+                else None
+            ),
+            "session_only": True,
+            "ui_action_plan": plan,
+        }
+
     def _execute_builtin_capability(
         self,
         workflow: WorkflowSpec,
@@ -94,6 +143,10 @@ class ActionExecutor:
         if spec.name in {"manual_notification", "time_reminder"}:
             return {"status": "metadata_only", "capability": spec.name}
         return {"status": "unsupported", "capability": spec.name}
+
+
+def _string_or_none(value: Any) -> str | None:
+    return value if isinstance(value, str) else None
 
 
 __all__ = ["ActionExecutor"]

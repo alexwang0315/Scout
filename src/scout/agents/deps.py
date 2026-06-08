@@ -192,6 +192,8 @@ class DeterministicScoutAgentProvider:
         for action in workflow.actions:
             if action.type in {ActionType.NOTIFY, ActionType.ASK_USER}:
                 required.append("manual_notification")
+            elif action.type is ActionType.UI_ACTION:
+                required.append("scout.ui.action_plan")
             elif action.type is ActionType.RUN_CAPABILITY:
                 capability = action.config.get("capability")
                 if isinstance(capability, str):

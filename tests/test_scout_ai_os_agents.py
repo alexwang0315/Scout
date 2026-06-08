@@ -10,10 +10,13 @@ from scout.agents import (
     DeterministicScoutAgentProvider,
     ExecutionPlannerAgent,
     LearningAgent,
+    ModelPolicyMode,
+    ModelPolicySource,
     PydanticScoutAgentProvider,
     ScoutAgentRequest,
     ScoutDeps,
     WorkflowCompilerAgent,
+    resolve_model_policy,
 )
 from scout.schemas import (
     ActionSpec,
@@ -92,6 +95,72 @@ def test_pydantic_ai_provider_runs_workflow_compiler_agent(tmp_path: Path) -> No
     assert workflow.permissions.required == ["notification.send"]
 
 
+def test_model_policy_defaults_to_local_function_model() -> None:
+    policy = resolve_model_policy(env={})
+
+    assert policy.mode is ModelPolicyMode.LOCAL_FUNCTION
+    assert policy.source is ModelPolicySource.DEFAULT
+    assert policy.model_for_agent is None
+    assert policy.requires_network is False
+    assert policy.missing_credential_env == []
+    assert policy.timeout_seconds == 30.0
+    assert policy.max_cost_usd is None
+    assert policy.fallback_model == "local FunctionModel"
+
+
+def test_model_policy_normalizes_openrouter_alias_and_checks_key() -> None:
+    policy = resolve_model_policy("gpt-4o-mini", env={})
+
+    assert policy.mode is ModelPolicyMode.EXTERNAL_PYDANTIC_AI
+    assert policy.source is ModelPolicySource.EXPLICIT
+    assert policy.model_for_agent == "openrouter:openai/gpt-4o-mini"
+    assert policy.required_credential_env == ["OPENROUTER_API_KEY"]
+    assert policy.missing_credential_env == ["OPENROUTER_API_KEY"]
+
+    with_key = resolve_model_policy(
+        "gemma3-27b",
+        env={"OPENROUTER_API_KEY": "sk-test-secret"},
+    )
+    assert with_key.model_for_agent == "openrouter:google/gemma-3-27b-it"
+    assert with_key.missing_credential_env == []
+    assert "sk-test-secret" not in str(with_key.model_dump(mode="json"))
+
+
+def test_model_policy_uses_env_model_when_explicit_model_is_absent() -> None:
+    policy = resolve_model_policy(
+        env={
+            "SCOUT_AI_OS_MODEL": "openrouter:openai/gpt-4o-mini",
+            "OPENROUTER_API_KEY": "sk-test-secret",
+        },
+    )
+
+    assert policy.source is ModelPolicySource.ENV
+    assert policy.model_for_agent == "openrouter:openai/gpt-4o-mini"
+    assert policy.missing_credential_env == []
+
+
+def test_model_policy_reports_rollout_timeout_budget_and_fallback() -> None:
+    policy = resolve_model_policy(
+        "openrouter:openai/gpt-4o-mini",
+        env={
+            "OPENROUTER_API_KEY": "sk-test-secret",
+            "SCOUT_AI_OS_MODEL_TIMEOUT_SECONDS": "12.5",
+            "SCOUT_AI_OS_MODEL_MAX_COST_USD": "0.02",
+            "SCOUT_AI_OS_MODEL_FALLBACK": "gemma3-27b",
+        },
+    )
+
+    assert policy.timeout_seconds == 12.5
+    assert policy.max_cost_usd == 0.02
+    assert policy.fallback_model == "openrouter:google/gemma-3-27b-it"
+    assert "sk-test-secret" not in str(policy.model_dump(mode="json"))
+
+
+def test_model_policy_rejects_invalid_timeout() -> None:
+    with pytest.raises(ValueError, match="SCOUT_AI_OS_MODEL_TIMEOUT_SECONDS"):
+        resolve_model_policy(env={"SCOUT_AI_OS_MODEL_TIMEOUT_SECONDS": "0"})
+
+
 def test_workflow_compiler_rejects_sensitive_output_without_approval(
     tmp_path: Path,
 ) -> None:
@@ -139,6 +208,38 @@ def test_execution_planner_prefers_existing_capabilities(tmp_path: Path) -> None
     )
 
     assert plan.required_capabilities == ["manual_notification"]
+    assert plan.missing_capabilities == []
+
+
+def test_execution_planner_maps_ui_action_to_builtin_capability(tmp_path: Path) -> None:
+    deps = make_deps(tmp_path)
+    workflow = WorkflowSpec(
+        name="Pretrip UI action",
+        source_utterance="Only show risk score layers.",
+        user_goal="Plan a browser-local UI action.",
+        trigger=TriggerSpec(type=TriggerType.MANUAL, description="Manual"),
+        actions=[
+            ActionSpec(
+                type=ActionType.UI_ACTION,
+                description="Plan risk-only layer visibility.",
+                config={
+                    "surface": "pretrip",
+                    "request_text": "請幫我關掉所有地圖圖層，只留下 risk score 相關圖層。",
+                },
+            )
+        ],
+        lifecycle=WorkflowLifecycle.SESSION_SCOPED,
+        runtime=RuntimeTarget.BROWSER,
+        permissions=PermissionSpec(required=["session_local_ui"]),
+    )
+
+    plan = ExecutionPlannerAgent(DeterministicScoutAgentProvider()).plan(
+        workflow,
+        deps,
+    )
+
+    assert plan.mode is PlanMode.USE_EXISTING
+    assert plan.required_capabilities == ["scout.ui.action_plan"]
     assert plan.missing_capabilities == []
 
 

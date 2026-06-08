@@ -15,6 +15,9 @@ from scout.schemas.runtime import SandboxResult
 
 
 DEFAULT_TIMEOUT_SECONDS = 10.0
+MAX_PACKAGE_FILES = 20
+MAX_FILE_BYTES = 32_768
+MAX_PACKAGE_BYTES = 65_536
 DISALLOWED_PATTERNS: tuple[str, ...] = (
     "subprocess",
     "os.system",
@@ -119,9 +122,23 @@ def _package_findings(package: GeneratedCapabilityPackage) -> list[str]:
     if not package.tests:
         findings.append("Generated package has no sandbox tests.")
 
+    file_count = len(package.files) + len(package.tests)
+    if file_count > MAX_PACKAGE_FILES:
+        findings.append(
+            f"Generated package has {file_count} files; limit is {MAX_PACKAGE_FILES}."
+        )
+
+    total_bytes = 0
     seen_paths: dict[str, str] = {}
     for group_name, files in (("file", package.files), ("test", package.tests)):
         for relative_path, content in files.items():
+            size_bytes = len(content.encode("utf-8"))
+            total_bytes += size_bytes
+            if size_bytes > MAX_FILE_BYTES:
+                findings.append(
+                    f"{group_name}:{relative_path} is {size_bytes} bytes; "
+                    f"limit is {MAX_FILE_BYTES}."
+                )
             safe_path = _safe_relative_path(relative_path)
             if safe_path is None:
                 findings.append(f"{group_name}:{relative_path} is not a safe path.")
@@ -140,6 +157,10 @@ def _package_findings(package: GeneratedCapabilityPackage) -> list[str]:
             findings.extend(
                 _disallowed_pattern_findings(group_name, relative_path, content)
             )
+    if total_bytes > MAX_PACKAGE_BYTES:
+        findings.append(
+            f"Generated package is {total_bytes} bytes; limit is {MAX_PACKAGE_BYTES}."
+        )
     return findings
 
 
@@ -283,5 +304,8 @@ def _resource_usage(
 __all__ = [
     "DEFAULT_TIMEOUT_SECONDS",
     "DISALLOWED_PATTERNS",
+    "MAX_FILE_BYTES",
+    "MAX_PACKAGE_BYTES",
+    "MAX_PACKAGE_FILES",
     "SandboxRunner",
 ]

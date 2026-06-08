@@ -12,7 +12,7 @@ from typing import Any
 
 from fastapi.testclient import TestClient
 
-from scout.agents import PydanticScoutAgentProvider
+from scout.agents import PydanticScoutAgentProvider, resolve_model_policy
 from scout.api.routes import create_app
 
 
@@ -36,6 +36,11 @@ def main(argv: list[str] | None = None) -> int:
         "--now",
         default="2026-06-08T00:00:00+00:00",
         help="ISO timestamp passed as active_context.now.",
+    )
+    parser.add_argument(
+        "--surface",
+        default=None,
+        help="Optional admin/debug/pretrip UI surface for UI operation smoke requests.",
     )
     parser.add_argument(
         "--repo-root",
@@ -64,6 +69,7 @@ def main(argv: list[str] | None = None) -> int:
         user_text=args.user_text,
         user_id=args.user_id,
         now=args.now,
+        surface=args.surface,
         repo_root=Path(args.repo_root),
         env_file=Path(args.env_file) if args.env_file else None,
         model=args.model,
@@ -78,13 +84,34 @@ def run_smoke(
     user_id: str,
     now: str,
     repo_root: Path,
+    surface: str | None = None,
     env_file: Path | None = None,
     model: Any | None = None,
 ) -> dict[str, Any]:
     loaded_env_file = _load_env_file(env_file or repo_root / ".env")
+    model_policy = resolve_model_policy(model)
+    if model_policy.missing_credential_env:
+        return {
+            "provider": "PydanticScoutAgentProvider",
+            "pydantic_ai_version": version("pydantic-ai"),
+            "model": model_policy.display_name,
+            "model_policy": model_policy.model_dump(mode="json"),
+            "env_file_loaded": loaded_env_file,
+            "openrouter_api_key_present": bool(os.getenv("OPENROUTER_API_KEY")),
+            "request_status": "model_config_blocked",
+            "workflow_id": None,
+            "workflow_count": 0,
+            "runtime_tick": None,
+        }
+
     with TemporaryDirectory(prefix="scout-ai-os-pydantic-smoke-") as tmp:
         tmp_path = Path(tmp)
-        provider = PydanticScoutAgentProvider(model=model)
+        provider_model = (
+            model
+            if model is not None and not isinstance(model, str)
+            else model_policy.model_for_agent
+        )
+        provider = PydanticScoutAgentProvider(model=provider_model)
         app = create_app(
             tmp_path / "scout_ai_os.sqlite",
             root=repo_root,
@@ -93,12 +120,16 @@ def run_smoke(
         )
         client = TestClient(app)
 
+        active_context = {"now": now}
+        if surface:
+            active_context["surface"] = surface
+
         created = client.post(
             "/requests",
             json={
                 "user_id": user_id,
                 "user_text": user_text,
-                "active_context": {"now": now},
+                "active_context": active_context,
             },
         )
         created.raise_for_status()
@@ -111,23 +142,43 @@ def run_smoke(
         tick = client.post("/runtime/tick")
         tick.raise_for_status()
 
-        workflow_payload = workflows.json()["workflows"][0]["workflow"]
+        workflow_records = workflows.json()["workflows"]
+        workflow_payload = (
+            workflow_records[0]["workflow"] if workflow_records else None
+        )
+        route_payload = created_payload.get("route") or {}
+        ui_action_plan = created_payload.get("ui_action_plan") or {}
+        ui_actions = ui_action_plan.get("actions") or []
         return {
             "app_title": app.title,
             "provider": "PydanticScoutAgentProvider",
             "pydantic_ai_version": version("pydantic-ai"),
-            "model": model or "local FunctionModel",
+            "model": model_policy.display_name,
+            "model_policy": model_policy.model_dump(mode="json"),
             "env_file_loaded": loaded_env_file,
             "openrouter_api_key_present": bool(os.getenv("OPENROUTER_API_KEY")),
             "request_status": created_payload["status"],
-            "workflow_id": created_payload["workflow_id"],
-            "workflow_name": workflow_payload["name"],
-            "trigger_type": workflow_payload["trigger"]["type"],
-            "permission_required": workflow_payload["permissions"]["required"],
-            "approval_required": workflow_payload["permissions"][
-                "approval_required"
-            ],
-            "workflow_count": len(workflows.json()["workflows"]),
+            "workflow_id": created_payload.get("workflow_id"),
+            "workflow_name": workflow_payload["name"] if workflow_payload else None,
+            "trigger_type": (
+                workflow_payload["trigger"]["type"] if workflow_payload else None
+            ),
+            "permission_required": (
+                workflow_payload["permissions"]["required"] if workflow_payload else []
+            ),
+            "approval_required": (
+                workflow_payload["permissions"]["approval_required"]
+                if workflow_payload
+                else bool((route_payload.get("permission") or {}).get("requires_user_approval"))
+            ),
+            "workflow_count": len(workflow_records),
+            "route_class": route_payload.get("route_class"),
+            "ui_action_plan_status": ui_action_plan.get("status"),
+            "ui_action_kind": (
+                ui_actions[0].get("action_kind")
+                if ui_actions and isinstance(ui_actions[0], dict)
+                else None
+            ),
             "capability_count": len(capabilities.json()["capabilities"]),
             "runtime_tick": tick.json(),
         }

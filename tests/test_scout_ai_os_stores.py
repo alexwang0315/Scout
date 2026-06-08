@@ -139,11 +139,15 @@ def test_capability_registry_load_search_get_and_install(tmp_path: Path) -> None
     assert {spec.name for spec in all_specs} == {
         "json_transform",
         "manual_notification",
+        "scout.ui.action_plan",
         "time_reminder",
     }
     assert registry.get("time_reminder") is not None
     assert [spec.name for spec in registry.search("notification")] == [
         "manual_notification"
+    ]
+    assert [spec.name for spec in registry.search("session local ui")] == [
+        "scout.ui.action_plan"
     ]
 
     registry.install(
@@ -188,6 +192,12 @@ def test_capability_registry_records_generated_package_as_candidate(
     ).fetchone()
     assert row["status"] == "candidate"
     assert row["source"] == "generated_candidate"
+
+    approved = registry.approve_generated_candidate("generated_candidate")
+
+    assert approved.status == "installed"
+    assert approved.source == "generated_approved"
+    assert registry.get_record("generated_candidate").status == "installed"
 
 
 def test_memory_store_add_list_get_and_search(tmp_path: Path) -> None:

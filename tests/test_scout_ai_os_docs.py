@@ -17,10 +17,15 @@ def test_scout_ai_os_docs_reflect_phase_9_completion() -> None:
         "docs/ARCHITECTURE.md",
         "docs/API.md",
         "docs/SECURITY_MODEL.md",
+        "docs/SCOUT_AI_OS_HARDWARE_SMOKE.md",
         "README.md",
     ]:
         source = read(relative_path)
-        assert "Phase 9" in source or "Phase 0-9" in source, relative_path
+        assert (
+            "Phase 9" in source
+            or "Phase 0-9" in source
+            or "Hardware Smoke Profile" in source
+        ), relative_path
 
 
 def test_scout_ai_os_docs_preserve_mvp_safety_limits() -> None:
@@ -37,6 +42,7 @@ def test_scout_ai_os_docs_preserve_mvp_safety_limits() -> None:
         "no mutation of Scout Phase 1 L0-L4 safety truth",
         "generated code network access by default",
         "external notification",
+        "scout-ai-os-hardware-smoke",
     ]
     for token in required:
         assert token in combined
