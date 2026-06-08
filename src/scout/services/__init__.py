@@ -10,7 +10,11 @@ from scout.services.db import (
     open_database,
 )
 from scout.services.generated_runtime_installer import (
+    GENERATED_RUNTIME_DISPATCH_BOUNDARY,
     GENERATED_RUNTIME_INSTALL_APPROVAL_PHRASE,
+    GeneratedRuntimeDispatcher,
+    GeneratedRuntimeDispatchRequest,
+    GeneratedRuntimeDispatchResult,
     GeneratedRuntimeInstallApproval,
     GeneratedRuntimeInstallPlan,
     GeneratedRuntimeInstallRecord,
@@ -26,6 +30,7 @@ from scout.services.notification_gateway import (
     LOW_RISK_NOTIFICATION_PRIORITIES,
     MemoryExternalNotificationTransport,
     MemoryNotificationProvider,
+    NotificationAuditRecord,
     NotificationGateway,
     NotificationProvider,
     NotificationResult,
@@ -33,6 +38,7 @@ from scout.services.notification_gateway import (
     OperatorConfirmedNotificationProvider,
     OperatorNotificationApproval,
     StdoutNotificationProvider,
+    TelegramNotificationTransport,
 )
 from scout.services.permission_gate import PermissionGate
 from scout.services.workflow_store import WorkflowRecord, WorkflowStore
@@ -43,7 +49,11 @@ __all__ = [
     "ApplicationRouter",
     "CapabilityRecord",
     "DryRunNotificationProvider",
+    "GENERATED_RUNTIME_DISPATCH_BOUNDARY",
     "GENERATED_RUNTIME_INSTALL_APPROVAL_PHRASE",
+    "GeneratedRuntimeDispatcher",
+    "GeneratedRuntimeDispatchRequest",
+    "GeneratedRuntimeDispatchResult",
     "GeneratedRuntimeInstallApproval",
     "GeneratedRuntimeInstallPlan",
     "GeneratedRuntimeInstallRecord",
@@ -56,6 +66,7 @@ __all__ = [
     "MemoryItem",
     "MemoryStore",
     "MemoryNotificationProvider",
+    "NotificationAuditRecord",
     "NotificationGateway",
     "NotificationProvider",
     "NotificationResult",
@@ -68,6 +79,7 @@ __all__ = [
     "RuntimeIsolationProfile",
     "RoutedRequest",
     "StdoutNotificationProvider",
+    "TelegramNotificationTransport",
     "WorkflowRecord",
     "WorkflowStore",
     "connect_database",

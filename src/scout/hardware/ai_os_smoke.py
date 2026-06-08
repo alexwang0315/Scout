@@ -10,11 +10,16 @@ from importlib.metadata import version
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any, Literal
+from urllib.parse import urlparse
 
 from fastapi.testclient import TestClient
 
 from scout.agents import resolve_model_policy
-from scout.agents.model_gateway import ModelCallLedger, ModelSlaGateway
+from scout.agents.model_gateway import (
+    ModelCallLedger,
+    ModelProviderHealthMonitor,
+    ModelSlaGateway,
+)
 from scout.agents.model_policy import ModelPolicy
 from scout.api.routes import create_app
 from scout.cli.pydantic_smoke import run_smoke
@@ -30,6 +35,8 @@ from scout.schemas.capability import (
 from scout.services import (
     DryRunNotificationProvider,
     GENERATED_RUNTIME_INSTALL_APPROVAL_PHRASE,
+    GeneratedRuntimeDispatcher,
+    GeneratedRuntimeDispatchRequest,
     GeneratedRuntimeInstallApproval,
     GeneratedRuntimeInstaller,
     MemoryExternalNotificationTransport,
@@ -38,11 +45,23 @@ from scout.services import (
     OperatorConfirmedNotificationProvider,
     OperatorNotificationApproval,
     RuntimeIsolationProfile,
+    TelegramNotificationTransport,
 )
 from scout.services.sandbox_runner import SandboxRunner
 
 
 CheckStatus = Literal["passed", "blocked", "skipped", "failed"]
+
+
+class _SmokeHttpResponse:
+    status = 200
+
+    def __enter__(self) -> "_SmokeHttpResponse":
+        return self
+
+    def __exit__(self, *_args: object) -> None:
+        return None
+
 
 HARDWARE_SMOKE_BOUNDARY: dict[str, Any] = {
     "profile_scope": "scout_ai_os_hardware_smoke",
@@ -526,13 +545,55 @@ def _check_operator_confirmed_notification_gate() -> HardwareSmokeCheck:
         priority="low",
         metadata={"workflow_id": "hardware-smoke-workflow", "risk": "low"},
     )
-    if not result.sent or not result.metadata.get("operator_confirmed"):
+    telegram_calls: list[Any] = []
+
+    def fake_urlopen(req: Any, *, timeout: float) -> _SmokeHttpResponse:
+        telegram_calls.append((req, timeout))
+        return _SmokeHttpResponse()
+
+    telegram_transport = TelegramNotificationTransport(
+        bot_token="hardware-smoke-token",
+        chat_id="hardware-smoke-chat",
+        urlopen=fake_urlopen,
+    )
+    telegram_provider = OperatorConfirmedNotificationProvider(
+        telegram_transport,
+        approval=OperatorNotificationApproval(
+            approved_by="hardware-smoke-operator",
+            recipient_id="hardware-smoke-user",
+            phrase=OPERATOR_NOTIFICATION_APPROVAL_PHRASE,
+            reason="Hardware smoke low-risk Telegram adapter proof.",
+        ),
+        allowed_user_ids={"hardware-smoke-user"},
+        min_interval_seconds=1.0,
+    )
+    telegram_gateway = NotificationGateway(provider=telegram_provider)
+    telegram_result = telegram_gateway.send(
+        "hardware-smoke-user",
+        "Scout hardware smoke",
+        "Telegram adapter proof without live network.",
+        priority="low",
+        metadata={"workflow_id": "hardware-smoke-workflow", "risk": "low"},
+    )
+    request_host = None
+    if telegram_calls:
+        request_host = urlparse(telegram_calls[0][0].full_url).hostname
+    if (
+        not result.sent
+        or not result.metadata.get("operator_confirmed")
+        or not telegram_result.sent
+        or request_host != "api.telegram.org"
+    ):
         return _check(
             "operator_confirmed_notification_gate",
             "H5",
             "failed",
             "Operator-confirmed notification provider did not deliver the low-risk message.",
-            result.__dict__,
+            {
+                "memory_result": result.__dict__,
+                "telegram_result": telegram_result.__dict__,
+                "telegram_request_host": request_host,
+            },
         )
     return _check(
         "operator_confirmed_notification_gate",
@@ -544,6 +605,13 @@ def _check_operator_confirmed_notification_gate() -> HardwareSmokeCheck:
             "sent": result.sent,
             "operator_confirmed": result.metadata.get("operator_confirmed"),
             "transport": result.metadata.get("transport"),
+            "telegram_adapter_verified": True,
+            "telegram_provider": telegram_result.provider,
+            "telegram_api_host": telegram_result.metadata.get("telegram_api_host"),
+            "telegram_chat_id_hash_present": bool(
+                telegram_result.metadata.get("telegram_chat_id_hash")
+            ),
+            "audit_records": len(provider.audit_log) + len(telegram_provider.audit_log),
             "live_network_verified": False,
         },
     )
@@ -690,11 +758,25 @@ def _check_generated_runtime_install_gate() -> HardwareSmokeCheck:
         isolation_profile=isolation_profile,
         approval=approval,
     )
+    dispatch_result = GeneratedRuntimeDispatcher(SandboxRunner()).dispatch_proof(
+        package=package,
+        install_record=installed,
+        request=GeneratedRuntimeDispatchRequest(
+            install_id=installed.install_id,
+            capability_name=installed.capability_name,
+            payload={"hardware_smoke": True},
+        ),
+    )
     revoked = installer.revoke(installed.install_id)
     rolled_back = installer.rollback(installed.install_id)
     if (
         installed.runtime_code_executed
         or installed.active_runtime_dispatch_enabled
+        or dispatch_result.status != "completed"
+        or not dispatch_result.proof_runtime_code_executed
+        or dispatch_result.active_runtime_dispatch_enabled
+        or dispatch_result.safety_api_called
+        or dispatch_result.outbound_sent
         or revoked.status != "revoked"
         or rolled_back.status != "rolled_back"
     ):
@@ -705,6 +787,7 @@ def _check_generated_runtime_install_gate() -> HardwareSmokeCheck:
             "Generated runtime install lifecycle crossed the runtime dispatch boundary.",
             {
                 "installed": installed.model_dump(mode="json"),
+                "dispatch": dispatch_result.model_dump(mode="json"),
                 "revoked": revoked.model_dump(mode="json"),
                 "rolled_back": rolled_back.model_dump(mode="json"),
             },
@@ -717,8 +800,17 @@ def _check_generated_runtime_install_gate() -> HardwareSmokeCheck:
         {
             "metadata_approval_supported": True,
             "runtime_install_lifecycle_supported": True,
+            "runtime_dispatch_proof_supported": True,
             "runtime_code_executed": installed.runtime_code_executed,
+            "proof_runtime_code_executed": dispatch_result.proof_runtime_code_executed,
             "active_runtime_dispatch_enabled": installed.active_runtime_dispatch_enabled,
+            "dispatch_active_runtime_dispatch_enabled": (
+                dispatch_result.active_runtime_dispatch_enabled
+            ),
+            "dispatch_safety_api_called": dispatch_result.safety_api_called,
+            "dispatch_outbound_sent": dispatch_result.outbound_sent,
+            "dispatch_status": dispatch_result.status,
+            "dispatch_output": dispatch_result.output,
             "artifact_hash": installed.artifact_hash,
             "install_status": installed.status,
             "revoke_status": revoked.status,
@@ -750,15 +842,48 @@ def _check_external_model_sla_gate(model_policy: dict[str, Any]) -> HardwareSmok
         blocked_provider_call,
         fallback_call=lambda: "fallback",
     )
-    if result.status != "budget_fallback" or provider_called:
+    circuit_calls = 0
+    health_monitor = ModelProviderHealthMonitor(failure_threshold=1)
+
+    def failing_provider_call() -> str:
+        nonlocal circuit_calls
+        circuit_calls += 1
+        raise RuntimeError("hardware smoke provider unavailable")
+
+    circuit_open_result = ModelSlaGateway(
+        policy,
+        health_monitor=health_monitor,
+    ).run_sync(
+        "hardware-smoke-sla-circuit-open",
+        failing_provider_call,
+        fallback_call=lambda: "fallback",
+    )
+    circuit_result = ModelSlaGateway(
+        policy,
+        health_monitor=health_monitor,
+    ).run_sync(
+        "hardware-smoke-sla-circuit-fallback",
+        failing_provider_call,
+        fallback_call=lambda: "fallback",
+    )
+    if (
+        result.status != "budget_fallback"
+        or provider_called
+        or circuit_open_result.status != "error_fallback"
+        or circuit_result.status != "circuit_fallback"
+        or circuit_calls != 1
+    ):
         return _check(
             "external_model_sla_gate",
             "H8",
             "failed",
-            "Model SLA gateway did not enforce budget before provider execution.",
+            "Model SLA gateway did not enforce budget or circuit breaker behavior.",
             {
                 "provider_called": provider_called,
                 "model_sla": result.to_metadata(),
+                "circuit_open_sla": circuit_open_result.to_metadata(),
+                "circuit_sla": circuit_result.to_metadata(),
+                "circuit_calls": circuit_calls,
             },
         )
     return _check(
@@ -773,8 +898,13 @@ def _check_external_model_sla_gate(model_policy: dict[str, Any]) -> HardwareSmok
             "fallback_model": model_policy["fallback_model"],
             "live_sla_enforced": True,
             "budget_preflight_verified": True,
+            "provider_health_monitor_verified": True,
+            "circuit_breaker_verified": True,
             "provider_called": provider_called,
+            "circuit_provider_calls": circuit_calls,
             "model_sla": result.to_metadata(),
+            "circuit_open_sla": circuit_open_result.to_metadata(),
+            "circuit_sla": circuit_result.to_metadata(),
         },
     )
 
@@ -849,8 +979,18 @@ def _summary(checks: list[HardwareSmokeCheck]) -> dict[str, Any]:
         "hardware_ready_for_safe_smoke": counts["failed"] == 0,
         "runtime_install_ready": _check_status(checks, "generated_runtime_install_gate")
         == "passed",
+        "generated_runtime_dispatch_proof_ready": _check_status(
+            checks,
+            "generated_runtime_install_gate",
+        )
+        == "passed",
         "generated_runtime_dispatch_ready": False,
         "live_external_notification_ready": _check_status(
+            checks,
+            "operator_confirmed_notification_gate",
+        )
+        == "passed",
+        "live_external_notification_adapter_ready": _check_status(
             checks,
             "operator_confirmed_notification_gate",
         )

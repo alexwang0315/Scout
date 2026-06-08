@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -35,6 +36,7 @@ from scout.services import (
     OperatorConfirmedNotificationProvider,
     OperatorNotificationApproval,
     PermissionGate,
+    TelegramNotificationTransport,
     WorkflowStore,
     open_database,
 )
@@ -42,6 +44,16 @@ from scout.ui_action_plan import build_scout_ui_action_plan
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+class _FakeTelegramResponse:
+    status = 200
+
+    def __enter__(self) -> "_FakeTelegramResponse":
+        return self
+
+    def __exit__(self, *_args: object) -> None:
+        return None
 
 
 def make_workflow(
@@ -313,6 +325,78 @@ def test_operator_confirmed_notification_provider_sends_low_risk_path() -> None:
     assert result.metadata["operator_confirmed"] is True
     assert result.metadata["transport"] == "external_memory"
     assert transport.notifications[0].sent is True
+
+
+def test_telegram_notification_transport_sends_redacted_payload() -> None:
+    calls: list[object] = []
+
+    def fake_urlopen(req: object, *, timeout: float) -> _FakeTelegramResponse:
+        calls.append((req, timeout))
+        return _FakeTelegramResponse()
+
+    transport = TelegramNotificationTransport(
+        bot_token="secret-token",
+        chat_id="12345",
+        urlopen=fake_urlopen,
+    )
+    provider = OperatorConfirmedNotificationProvider(
+        transport,
+        approval=OperatorNotificationApproval(
+            approved_by="operator-1",
+            recipient_id="user-1",
+            phrase=OPERATOR_NOTIFICATION_APPROVAL_PHRASE,
+            reason="Manual low-risk Telegram proof.",
+        ),
+        allowed_user_ids={"user-1"},
+    )
+    gateway = NotificationGateway(provider=provider)
+
+    result = gateway.send(
+        "user-1",
+        "Scout",
+        "Telegram adapter proof.",
+        priority="low",
+        metadata={"api_token": "must-redact"},
+    )
+
+    req, timeout = calls[0]
+    payload = json.loads(req.data.decode("utf-8"))
+    assert result.sent is True
+    assert result.provider == "operator_confirmed:telegram"
+    assert req.full_url == "https://api.telegram.org/botsecret-token/sendMessage"
+    assert timeout == 10.0
+    assert payload["chat_id"] == "12345"
+    assert "Telegram adapter proof." in payload["text"]
+    assert result.metadata["telegram_bot_token_present"] is True
+    assert result.metadata["telegram_chat_id_hash"] != "12345"
+    assert provider.audit_log[0].metadata["api_token"] == "[redacted]"
+
+
+def test_operator_confirmed_notification_provider_rate_limits_repeated_send() -> None:
+    now = 100.0
+    transport = MemoryExternalNotificationTransport()
+    provider = OperatorConfirmedNotificationProvider(
+        transport,
+        approval=OperatorNotificationApproval(
+            approved_by="operator-1",
+            recipient_id="user-1",
+            phrase=OPERATOR_NOTIFICATION_APPROVAL_PHRASE,
+            reason="Manual low-risk smoke.",
+        ),
+        allowed_user_ids={"user-1"},
+        min_interval_seconds=60,
+        clock=lambda: now,
+    )
+    gateway = NotificationGateway(provider=provider)
+
+    first = gateway.send("user-1", "Scout", "First.", priority="low")
+    second = gateway.send("user-1", "Scout", "Second.", priority="low")
+
+    assert first.sent is True
+    assert second.sent is False
+    assert second.metadata["blocked_reason"] == "rate_limited"
+    assert len(transport.notifications) == 1
+    assert provider.audit_log[-1].blocked_reason == "rate_limited"
 
 
 def test_operator_confirmed_notification_provider_blocks_bad_phrase() -> None:
