@@ -105,6 +105,7 @@ def test_model_policy_defaults_to_local_function_model() -> None:
     assert policy.missing_credential_env == []
     assert policy.timeout_seconds == 30.0
     assert policy.max_cost_usd is None
+    assert policy.estimated_call_cost_usd == 0.0
     assert policy.fallback_model == "local FunctionModel"
 
 
@@ -152,8 +153,21 @@ def test_model_policy_reports_rollout_timeout_budget_and_fallback() -> None:
 
     assert policy.timeout_seconds == 12.5
     assert policy.max_cost_usd == 0.02
+    assert policy.estimated_call_cost_usd == 0.001
     assert policy.fallback_model == "openrouter:google/gemma-3-27b-it"
     assert "sk-test-secret" not in str(policy.model_dump(mode="json"))
+
+
+def test_model_policy_reports_estimated_call_cost() -> None:
+    policy = resolve_model_policy(
+        "openrouter:openai/gpt-4o-mini",
+        env={
+            "OPENROUTER_API_KEY": "sk-test-secret",
+            "SCOUT_AI_OS_MODEL_ESTIMATED_CALL_COST_USD": "0.004",
+        },
+    )
+
+    assert policy.estimated_call_cost_usd == 0.004
 
 
 def test_model_policy_rejects_invalid_timeout() -> None:

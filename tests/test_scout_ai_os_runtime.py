@@ -26,10 +26,14 @@ from scout.schemas import (
     WorkflowSpec,
 )
 from scout.services import (
+    MemoryExternalNotificationTransport,
     CapabilityRegistry,
     DryRunNotificationProvider,
     MemoryNotificationProvider,
     NotificationGateway,
+    OPERATOR_NOTIFICATION_APPROVAL_PHRASE,
+    OperatorConfirmedNotificationProvider,
+    OperatorNotificationApproval,
     PermissionGate,
     WorkflowStore,
     open_database,
@@ -286,6 +290,69 @@ def test_notification_gateway_supports_external_transport_dry_run(capsys) -> Non
     assert result.metadata["transport"] == "telegram"
     assert provider.notifications == [result]
     assert capsys.readouterr().out == ""
+
+
+def test_operator_confirmed_notification_provider_sends_low_risk_path() -> None:
+    transport = MemoryExternalNotificationTransport()
+    provider = OperatorConfirmedNotificationProvider(
+        transport,
+        approval=OperatorNotificationApproval(
+            approved_by="operator-1",
+            recipient_id="user-1",
+            phrase=OPERATOR_NOTIFICATION_APPROVAL_PHRASE,
+            reason="Manual low-risk smoke.",
+        ),
+        allowed_user_ids={"user-1"},
+    )
+    gateway = NotificationGateway(provider=provider)
+
+    result = gateway.send("user-1", "Scout", "Operator-confirmed.", priority="low")
+
+    assert result.sent is True
+    assert result.provider == "operator_confirmed:external_memory"
+    assert result.metadata["operator_confirmed"] is True
+    assert result.metadata["transport"] == "external_memory"
+    assert transport.notifications[0].sent is True
+
+
+def test_operator_confirmed_notification_provider_blocks_bad_phrase() -> None:
+    transport = MemoryExternalNotificationTransport()
+    provider = OperatorConfirmedNotificationProvider(
+        transport,
+        approval=OperatorNotificationApproval(
+            approved_by="operator-1",
+            recipient_id="user-1",
+            phrase="send it",
+        ),
+        allowed_user_ids={"user-1"},
+    )
+    gateway = NotificationGateway(provider=provider)
+
+    result = gateway.send("user-1", "Scout", "Should not send.", priority="low")
+
+    assert result.sent is False
+    assert result.metadata["blocked_reason"] == "approval_phrase_mismatch"
+    assert transport.notifications == []
+
+
+def test_operator_confirmed_notification_provider_blocks_high_priority() -> None:
+    transport = MemoryExternalNotificationTransport()
+    provider = OperatorConfirmedNotificationProvider(
+        transport,
+        approval=OperatorNotificationApproval(
+            approved_by="operator-1",
+            recipient_id="user-1",
+            phrase=OPERATOR_NOTIFICATION_APPROVAL_PHRASE,
+        ),
+        allowed_user_ids={"user-1"},
+    )
+    gateway = NotificationGateway(provider=provider)
+
+    result = gateway.send("user-1", "Scout", "Too risky.", priority="critical")
+
+    assert result.sent is False
+    assert result.metadata["blocked_reason"] == "priority_not_low_risk"
+    assert transport.notifications == []
 
 
 def test_runtime_tick_executes_due_one_shot_notification(tmp_path: Path) -> None:

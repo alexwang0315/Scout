@@ -111,7 +111,10 @@ def run_smoke(
             if model is not None and not isinstance(model, str)
             else model_policy.model_for_agent
         )
-        provider = PydanticScoutAgentProvider(model=provider_model)
+        provider = PydanticScoutAgentProvider(
+            model=provider_model,
+            model_policy=model_policy,
+        )
         app = create_app(
             tmp_path / "scout_ai_os.sqlite",
             root=repo_root,
@@ -155,6 +158,11 @@ def run_smoke(
             "pydantic_ai_version": version("pydantic-ai"),
             "model": model_policy.display_name,
             "model_policy": model_policy.model_dump(mode="json"),
+            "model_sla": (
+                provider.last_sla_result.to_metadata()
+                if provider.last_sla_result is not None
+                else None
+            ),
             "env_file_loaded": loaded_env_file,
             "openrouter_api_key_present": bool(os.getenv("OPENROUTER_API_KEY")),
             "request_status": created_payload["status"],

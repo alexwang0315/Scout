@@ -36,12 +36,22 @@ def test_hardware_smoke_default_uses_local_model_and_safe_gates(
     assert checks["pydantic_ai_smoke"].status == "passed"
     assert checks["ui_action_smoke"].status == "passed"
     assert checks["notification_dry_run"].evidence["sent"] is False
+    assert checks["operator_confirmed_notification_gate"].status == "passed"
+    assert checks["operator_confirmed_notification_gate"].evidence["sent"] is True
     assert checks["sandbox_gate"].status == "passed"
     assert checks["hardware_evidence_boundary"].status == "skipped"
-    assert checks["generated_runtime_install_gate"].status == "blocked"
-    assert checks["external_model_sla_gate"].status == "blocked"
+    assert checks["generated_runtime_install_gate"].status == "passed"
+    assert checks["generated_runtime_install_gate"].evidence[
+        "runtime_install_lifecycle_supported"
+    ] is True
+    assert checks["external_model_sla_gate"].status == "passed"
+    assert checks["external_model_sla_gate"].evidence["live_sla_enforced"] is True
     assert report.summary["failed"] == 0
-    assert report.summary["runtime_install_ready"] is False
+    assert report.summary["runtime_install_ready"] is True
+    assert report.summary["generated_runtime_dispatch_ready"] is False
+    assert report.summary["live_external_notification_ready"] is True
+    assert report.summary["live_external_notification_network_verified"] is False
+    assert report.summary["external_model_sla_ready"] is True
 
 
 def test_hardware_smoke_external_model_blocks_without_key(

@@ -17,6 +17,12 @@ from scout.agents.model_policy import (
     ModelPolicySource,
     resolve_model_policy,
 )
+from scout.agents.model_gateway import (
+    ModelBudgetExceeded,
+    ModelCallLedger,
+    ModelSlaCallResult,
+    ModelSlaGateway,
+)
 from scout.agents.pydantic_provider import PydanticScoutAgentProvider
 from scout.agents.workflow_compiler import WorkflowCompilerAgent
 
@@ -30,6 +36,10 @@ __all__ = [
     "ModelPolicy",
     "ModelPolicyMode",
     "ModelPolicySource",
+    "ModelBudgetExceeded",
+    "ModelCallLedger",
+    "ModelSlaCallResult",
+    "ModelSlaGateway",
     "PydanticScoutAgentProvider",
     "ScoutAgentProvider",
     "ScoutAgentRequest",

@@ -236,22 +236,33 @@ Deliverables:
 - `scout-ai-os-hardware-smoke` CLI with local `FunctionModel` default and
   explicit `--allow-external-model` opt-in;
 - API, Pydantic AI, session-local UI action, generated capability metadata,
-  notification dry-run, sandbox rejection, optional evidence JSON, generated
-  runtime install gate, and external model SLA gate checks;
+  notification dry-run, operator-confirmed notification, sandbox rejection,
+  optional evidence JSON, generated runtime install lifecycle, and external
+  model SLA gateway checks;
 - `DryRunNotificationProvider` for external transport intent with `sent=false`;
+- `OperatorConfirmedNotificationProvider` for low-risk live-send paths guarded
+  by phrase confirmation, recipient allowlisting, and priority gating;
+- `scout.hardware.evidence` plus `scout-ai-os-hardware-evidence` for producing
+  advisory-only mobile/hardware evidence JSON;
+- `ModelSlaGateway` for timeout, budget ledger, and fallback enforcement around
+  Pydantic AI provider calls;
+- `GeneratedRuntimeInstaller` for artifact hash, isolation profile, approval,
+  install, revoke, and rollback lifecycle records while active dispatch remains
+  disabled;
 - hardware smoke documentation in `docs/SCOUT_AI_OS_HARDWARE_SMOKE.md`;
 - focused tests proving safe defaults, external-model missing-key blocking,
-  advisory evidence acceptance, forbidden evidence blocking, and metadata-only
-  generated capability approval.
+  advisory evidence acceptance, forbidden evidence blocking, operator-gated
+  notification send paths, external-model SLA fallback, and generated runtime
+  install lifecycle controls.
 
-This slice enables Scout hardware verification but does not grant generated
-code runtime install, live external notification send, hardware control, or
-Scout Phase 1 L0-L4 safety mutation authority.
+This slice enables Scout hardware verification and gated lifecycle readiness.
+It still does not grant active generated-code dispatch, real external network
+notification proof, hardware control, or Scout Phase 1 L0-L4 safety mutation
+authority.
 
 ## Future Work
 
-- OS-level or container-grade sandbox isolation;
-- live external notification transports;
-- live enforcement for external model latency, budget, and fallback SLAs;
-- generated capability runtime code installation outside sandbox metadata;
+- production OS/container attestation for generated runtime dispatch;
+- real external notification adapter proof with rate-limit/audit replay;
+- provider health circuit breaking for external model SLA telemetry;
 - mobile companion integration.

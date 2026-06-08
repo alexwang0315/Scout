@@ -14,8 +14,10 @@ SCOUT_MODEL_ENV = "SCOUT_AI_OS_MODEL"
 OPENROUTER_KEY_ENV = "OPENROUTER_API_KEY"
 MODEL_TIMEOUT_ENV = "SCOUT_AI_OS_MODEL_TIMEOUT_SECONDS"
 MODEL_MAX_COST_ENV = "SCOUT_AI_OS_MODEL_MAX_COST_USD"
+MODEL_ESTIMATED_CALL_COST_ENV = "SCOUT_AI_OS_MODEL_ESTIMATED_CALL_COST_USD"
 MODEL_FALLBACK_ENV = "SCOUT_AI_OS_MODEL_FALLBACK"
 DEFAULT_MODEL_TIMEOUT_SECONDS = 30.0
+DEFAULT_EXTERNAL_MODEL_ESTIMATED_CALL_COST_USD = 0.001
 
 
 class ModelPolicyMode(str, Enum):
@@ -42,6 +44,7 @@ class ModelPolicy(SchemaModel):
     missing_credential_env: list[str] = []
     timeout_seconds: float = DEFAULT_MODEL_TIMEOUT_SECONDS
     max_cost_usd: float | None = None
+    estimated_call_cost_usd: float = 0.0
     fallback_model: str = DEFAULT_LOCAL_MODEL_LABEL
 
     @property
@@ -68,6 +71,11 @@ def resolve_model_policy(
         MODEL_MAX_COST_ENV,
         minimum=0.0,
     )
+    estimated_call_cost_usd = _optional_float_env(
+        env_map,
+        MODEL_ESTIMATED_CALL_COST_ENV,
+        minimum=0.0,
+    )
     fallback_model = _normalize_fallback_model(env_map.get(MODEL_FALLBACK_ENV))
     if model is not None:
         requested = str(model).strip()
@@ -86,6 +94,7 @@ def resolve_model_policy(
             requires_network=False,
             timeout_seconds=timeout_seconds,
             max_cost_usd=max_cost_usd,
+            estimated_call_cost_usd=estimated_call_cost_usd or 0.0,
             fallback_model=fallback_model,
         )
 
@@ -105,6 +114,11 @@ def resolve_model_policy(
         missing_credential_env=missing_credential_env,
         timeout_seconds=timeout_seconds,
         max_cost_usd=max_cost_usd,
+        estimated_call_cost_usd=(
+            estimated_call_cost_usd
+            if estimated_call_cost_usd is not None
+            else DEFAULT_EXTERNAL_MODEL_ESTIMATED_CALL_COST_USD
+        ),
         fallback_model=fallback_model,
     )
 
