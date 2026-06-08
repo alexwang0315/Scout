@@ -10,6 +10,7 @@ from scout.agents import (
     DeterministicScoutAgentProvider,
     ExecutionPlannerAgent,
     LearningAgent,
+    PydanticScoutAgentProvider,
     ScoutAgentRequest,
     ScoutDeps,
     WorkflowCompilerAgent,
@@ -77,6 +78,17 @@ def test_deterministic_workflow_compiler_returns_typed_location_workflow(
     assert workflow.trigger.type is TriggerType.LOCATION
     assert "location.read" in workflow.permissions.required
     assert workflow.permissions.approval_required is True
+
+
+def test_pydantic_ai_provider_runs_workflow_compiler_agent(tmp_path: Path) -> None:
+    workflow = WorkflowCompilerAgent(PydanticScoutAgentProvider()).compile(
+        "Remind me in 10 minutes.",
+        make_deps(tmp_path),
+    )
+
+    assert workflow.trigger.type is TriggerType.TIME
+    assert workflow.actions[0].type is ActionType.NOTIFY
+    assert workflow.permissions.required == ["notification.send"]
 
 
 def test_workflow_compiler_rejects_sensitive_output_without_approval(

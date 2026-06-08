@@ -182,7 +182,8 @@ Deliverables:
 
 - production-grade sandbox isolation;
 - richer external notification providers;
-- real Pydantic AI provider wiring;
+- external cloud/local LLM model selection beyond the local Pydantic AI
+  FunctionModel smoke path;
 - generated capability approval/install workflow beyond metadata candidates;
 - Pydantic Evals dataset expansion;
 - background scheduler lifecycle management;

@@ -49,6 +49,18 @@ MVP limits: no production-grade sandbox isolation, no live LLM requirement, no
 external notification provider, no generated-code production install path, and
 no mutation of Scout Phase 1 L0-L4 safety truth.
 
+Mac-side Pydantic AI smoke:
+
+```bash
+./venv/bin/python -m pip install -e .
+./venv/bin/scout-ai-os-pydantic-smoke
+```
+
+The smoke command uses `PydanticScoutAgentProvider` and Pydantic AI's local
+`FunctionModel` by default, so it exercises `pydantic_ai.Agent` and typed Scout
+outputs without requiring cloud credentials. Pass `--model ...` only when an
+external Pydantic AI model provider is configured in the environment.
+
 ## Phase 1 Status
 
 Phase 1 is at release-candidate status on the `codex/phase-1-trail-black-box` branch.
