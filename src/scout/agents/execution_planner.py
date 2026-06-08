@@ -55,6 +55,7 @@ class ExecutionPlannerAgent:
             self._provider.run(request),
             ExecutionPlan,
         )
+        plan = _repair_execution_plan(plan)
         _assert_execution_plan_safety(plan)
         return plan
 
@@ -67,6 +68,22 @@ def _planning_prompt(*, workflow: WorkflowSpec, deps: ScoutDeps) -> str:
         "output": "ExecutionPlan",
     }
     return json.dumps(payload, sort_keys=True)
+
+
+def _repair_execution_plan(plan: ExecutionPlan) -> ExecutionPlan:
+    if not plan.workflow.permissions.approval_required or plan.approval_message:
+        return plan
+
+    updates: dict[str, Any] = {
+        "approval_message": "Approve this workflow before installation.",
+    }
+    if plan.mode not in {
+        PlanMode.ASK_PERMISSION,
+        PlanMode.ASK_CLARIFICATION,
+        PlanMode.REFUSE_AUTOMATION,
+    }:
+        updates["mode"] = PlanMode.ASK_PERMISSION
+    return plan.model_copy(update=updates)
 
 
 def _assert_execution_plan_safety(plan: ExecutionPlan) -> None:
