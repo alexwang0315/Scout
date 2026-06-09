@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Scout AI Mac Chat</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <main class="app-shell">
+    <section class="server-panel" aria-label="Scout server status">
+      <div class="panel-head">
+        <div>
+          <h1>Scout AI</h1>
+          <p class="hint">Mac</p>
+        </div>
+        <span id="serverState" class="state-pill">checking</span>
+      </div>
+
+      <div class="status-grid">
+        <div class="status-field">
+          <span>Server</span>
+          <strong id="serverUrl">scout.local</strong>
+        </div>
+        <div class="status-field">
+          <span>Latency</span>
+          <strong id="serverLatency">--</strong>
+        </div>
+        <div class="status-field">
+          <span>Capabilities</span>
+          <strong id="capabilityCount">--</strong>
+        </div>
+        <div class="status-field">
+          <span>UI bridge</span>
+          <strong id="uiBridgeState">--</strong>
+        </div>
+      </div>
+
+      <section class="surface-section" aria-label="Surface">
+        <h2>Surface</h2>
+        <div class="segmented" role="radiogroup" aria-label="Scout surface">
+          <button type="button" class="segment active" data-surface="pretrip" role="radio" aria-checked="true">Pretrip</button>
+          <button type="button" class="segment" data-surface="debug" role="radio" aria-checked="false">Debug</button>
+          <button type="button" class="segment" data-surface="admin" role="radio" aria-checked="false">Admin</button>
+        </div>
+      </section>
+
+      <section class="prompt-section" aria-label="Suggested prompts">
+        <h2>Prompts</h2>
+        <div id="promptList" class="prompt-list">
+          <button type="button" data-prompt="請幫我關掉所有地圖圖層，只留下 risk score 相關圖層。">Risk layers</button>
+          <button type="button" data-prompt="請把地圖移到 CP003 附近。">Focus CP003</button>
+          <button type="button" data-prompt="Review queue 只顯示 blocker。">Blockers</button>
+          <button type="button" data-prompt="Remind me in 10 minutes.">Reminder</button>
+        </div>
+      </section>
+
+      <section class="boundary-section" aria-label="Boundary">
+        <h2>Boundary</h2>
+        <ul id="boundaryList" class="compact-list">
+          <li>No safety runtime mutation.</li>
+          <li>No outbound send from Mac UI.</li>
+          <li>No hardware control from Mac UI.</li>
+        </ul>
+      </section>
+
+      <div class="panel-actions">
+        <button id="refreshButton" type="button" class="secondary-button">Reconnect</button>
+        <button id="clearButton" type="button" class="secondary-button">Clear</button>
+      </div>
+    </section>
+
+    <section class="chat-panel" aria-label="Scout AI conversation">
+      <div class="panel-head">
+        <div>
+          <h2>Conversation</h2>
+          <p id="chatStatus" class="hint">Ready.</p>
+        </div>
+      </div>
+
+      <div id="messages" class="messages" aria-live="polite">
+        <article class="message assistant">
+          <div class="message-meta">Scout AI server</div>
+          <div class="message-body">
+            <p>Ready.</p>
+          </div>
+        </article>
+      </div>
+
+      <form id="chatForm" class="composer" aria-label="Ask Scout AI">
+        <label for="messageInput">Message</label>
+        <textarea id="messageInput" rows="3">請幫我關掉所有地圖圖層，只留下 risk score 相關圖層。</textarea>
+        <div class="composer-actions">
+          <button id="sendButton" type="submit" class="primary-button">Send</button>
+        </div>
+      </form>
+    </section>
+
+    <aside class="detail-panel" aria-label="Scout response detail">
+      <div class="panel-head">
+        <div>
+          <h2>Detail</h2>
+          <p class="hint">Latest response.</p>
+        </div>
+      </div>
+
+      <section class="detail-section">
+        <h3>Route</h3>
+        <ul id="routeList" class="compact-list">
+          <li>No request yet.</li>
+        </ul>
+      </section>
+
+      <section class="detail-section">
+        <h3>Permission</h3>
+        <ul id="permissionList" class="compact-list">
+          <li>No decision yet.</li>
+        </ul>
+      </section>
+
+      <section class="detail-section">
+        <h3>Action</h3>
+        <ul id="actionList" class="compact-list">
+          <li>No action plan yet.</li>
+        </ul>
+      </section>
+
+      <details class="json-detail">
+        <summary>JSON</summary>
+        <pre id="rawJson">{}</pre>
+      </details>
+    </aside>
+  </main>
+  <script src="/static/app.js"></script>
+</body>
+</html>
