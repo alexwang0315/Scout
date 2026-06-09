@@ -12,6 +12,7 @@ dependencies = [
     "pydantic>=2",
     "pydantic-ai",
     "pyyaml",
+    "uvicorn",
 ]
 
 [project.scripts]
@@ -19,6 +20,7 @@ scout-ai-os-pydantic-smoke = "scout.cli.pydantic_smoke:main"
 scout-ai-os-evals = "scout.evals.regression:main"
 scout-ai-os-hardware-evidence = "scout.cli.hardware_evidence:main"
 scout-ai-os-hardware-smoke = "scout.cli.hardware_smoke:main"
+scout-ai-os-mac-chat = "scout.cli.mac_chat:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
@@ -28,6 +30,7 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 "scout.evals" = ["*.json"]
+"scout.mac_chat" = ["static/*"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src", "."]
