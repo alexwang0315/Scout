@@ -70,6 +70,14 @@ Hardware-safe Scout AI OS smoke:
 ./venv/bin/scout-ai-os-hardware-smoke --repo-root /Users/alexwang0315/scout-fusion
 ```
 
+Mac-side chat UI against a Scout hardware AI server:
+
+```bash
+./venv/bin/scout-ai-os-mac-chat --target-url http://scout.local:9120
+```
+
+See `docs/SCOUT_AI_MAC_CHAT.md` for the hardware server command and UI boundary.
+
 This produces a JSON readiness report for a Scout host. The default run forces
 the local Pydantic AI `FunctionModel`, verifies API/UI/capability/sandbox/
 notification-dry-run gates, operator-confirmed notification gating, generated
