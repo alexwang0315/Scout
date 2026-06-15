@@ -32,6 +32,12 @@ def test_route_architecture_builds_candidate_cp_graph_and_decision() -> None:
         "可依 CP Graph 推進，但必須保留折返窗口。"
     )
     assert "不得在難點群前消耗 buffer" in result["decision_output"]["firstLayer"]["limit"]
+    alternatives = result["decision_output"]["secondLayer"]["alternativeActions"]
+    assert alternatives
+    assert any("折返" in item or "撤退" in item for item in alternatives)
+    assert all("return to entry" not in item for item in alternatives)
+    assert all("turn back at" not in item for item in alternatives)
+    assert all("shorten route" not in item for item in alternatives)
     assert result["decision_output"]["runtimeSafetyTruth"] is False
     assert result["missing_fields"] == []
     assert result["cp_graph"]["node_count"] == 124
@@ -71,7 +77,7 @@ def test_route_architecture_changes_plan_after_turn_back_eta() -> None:
     assert result["route_decision"]["turn_back_checkpoint"][
         "turn_back_checkpoint_name"
     ] == "雲海保線所"
-    assert "turn-back ETA" in result["route_decision"]["main_reasons"][0]
+    assert "折返 ETA" in result["route_decision"]["main_reasons"][0]
     assert "CHANGE_PLAN" in result["field_answer"]
     assert result["boundary"]["runtime_safety_truth"] is False
 
@@ -162,7 +168,7 @@ def test_route_architecture_computes_cp_schedule_delta_from_planned_eta() -> Non
         "decision_output"
     ]["firstLayer"]["limit"]
     assert result["decision_output"]["cost"]["scheduleDeltaMinutes"] == 11.2
-    assert "schedule delta 11.2 minutes" in result["decision_output"][
+    assert "時程差約 11.2 分鐘" in result["decision_output"][
         "firstLayer"
     ]["reason"]
     assert result["decision_output"]["runtimeSafetyTruth"] is False
@@ -184,7 +190,7 @@ def test_route_architecture_changes_plan_after_missed_checkpoint_deadline() -> N
     )
     assert result["route_decision"]["target_checkpoint"] == "CP4"
     assert result["route_decision"]["checkpoint_deadline"] == "11:30"
-    assert "target checkpoint CP4" in result["route_decision"]["main_reasons"][0]
+    assert "目標 checkpoint CP4" in result["route_decision"]["main_reasons"][0]
     assert result["boundary"]["runtime_safety_truth"] is False
 
 
@@ -201,8 +207,8 @@ def test_route_architecture_changes_plan_for_hut_checkin_pressure() -> None:
         "建議改變計畫，先處理外部 deadline 壓力。"
     )
     assert result["route_decision"]["deadline_pressure"] == "hut_checkin"
-    assert "hut check-in" in result["route_decision"]["main_reasons"][0]
-    assert "external deadline pressure" in result["field_answer"]
+    assert "山屋報到" in result["route_decision"]["main_reasons"][0]
+    assert "外部 deadline 壓力" in result["field_answer"]
     assert result["boundary"]["runtime_safety_truth"] is False
 
 
@@ -216,7 +222,7 @@ def test_route_architecture_changes_plan_for_transport_deadline_pressure() -> No
     assert result["answerability"] == "route_architecture_available"
     assert result["decision"] == "CHANGE_PLAN"
     assert result["route_decision"]["deadline_pressure"] == "transport_last_service"
-    assert "transport last service" in result["route_decision"]["main_reasons"][0]
+    assert "交通末班/接駁 deadline" in result["route_decision"]["main_reasons"][0]
     assert result["boundary"]["runtime_safety_truth"] is False
 
 

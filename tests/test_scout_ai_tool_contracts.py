@@ -382,7 +382,9 @@ def test_execute_route_architecture_detects_current_turnback_checkpoint() -> Non
     assert result.payload["decision_output"]["firstLayer"]["decision"] == (
         "不建議照原路線往後段推進。"
     )
-    assert "current CP matches" in result.payload["decision_output"]["firstLayer"]["reason"]
+    assert "目前 CP 符合計畫折返 checkpoint" in result.payload[
+        "decision_output"
+    ]["firstLayer"]["reason"]
     assert result.payload["decision_output"]["runtimeSafetyTruth"] is False
     assert result.boundary.live_safety_api_calls_allowed is False
 
@@ -407,8 +409,8 @@ def test_execute_route_architecture_compares_local_turnback_clock() -> None:
     assert result.payload["decision"] == "CHANGE_PLAN"
     assert result.payload["missing_fields"] == []
     reason = result.payload["decision_output"]["firstLayer"]["reason"]
-    assert "current_time is at or past" in reason
-    assert "current CP matches" in reason
+    assert "目前時間已到或超過折返 ETA" in reason
+    assert "目前 CP 符合計畫折返 checkpoint" in reason
     assert result.payload["decision_output"]["runtimeSafetyTruth"] is False
     assert result.boundary.live_safety_api_calls_allowed is False
 
