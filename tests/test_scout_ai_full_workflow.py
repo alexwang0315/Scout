@@ -488,12 +488,13 @@ def test_full_workflow_preserves_contextual_permission_decision_object() -> None
     )
 
     assert result.answerability == "partial_evidence_with_missing_context"
-    assert result.selected_tool_count == 1
-    assert result.executed_tool_count == 1
-    assert result.completed_tool_count == 1
-    assert result.missing_evidence_count == 1
-    assert result.sources[0]["tool_id"] == CONTEXTUAL_PERMISSION_TOOL_ID
-    summary = result.sources[0]["top_result_summary"]
+    assert result.selected_tool_count == 6
+    assert result.executed_tool_count == 6
+    assert result.completed_tool_count == 6
+    assert result.missing_evidence_count == 4
+    _assert_on_route_micro_decision_support_sources(result)
+    contextual = _workflow_source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
+    summary = contextual["top_result_summary"]
     assert summary["decision"] == "NO_GO"
     assert summary["decision_object"] == summary["contextual_permission"]
     assert summary["decision_output"]["decisionObjectSchema"] == "ContextualPermission"
@@ -524,11 +525,12 @@ def test_full_workflow_allows_bounded_tripod_permission() -> None:
         limit=3,
     )
 
-    assert result.answerability == "evidence_available"
-    assert result.selected_tool_count == 1
-    assert result.executed_tool_count == 1
-    assert result.completed_tool_count == 1
-    assert result.missing_evidence_count == 0
+    assert result.answerability == "partial_evidence_with_missing_context"
+    assert result.selected_tool_count == 6
+    assert result.executed_tool_count == 6
+    assert result.completed_tool_count == 6
+    assert result.missing_evidence_count == 3
+    _assert_on_route_micro_decision_support_sources(result)
     contextual = _workflow_source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
     summary = contextual["top_result_summary"]
     assert summary["action"] == "tripod"
@@ -551,13 +553,14 @@ def test_full_workflow_prices_extra_stop_time_against_buffer() -> None:
         limit=3,
     )
 
-    assert result.answerability == "evidence_available"
-    assert result.selected_tool_count == 1
-    assert result.executed_tool_count == 1
-    assert result.completed_tool_count == 1
+    assert result.answerability == "partial_evidence_with_missing_context"
+    assert result.selected_tool_count == 6
+    assert result.executed_tool_count == 6
+    assert result.completed_tool_count == 6
+    assert result.missing_evidence_count == 3
+    _assert_on_route_micro_decision_support_sources(result)
     assert result.failed_tool_count == 0
-    source = result.sources[0]
-    assert source["tool_id"] == CONTEXTUAL_PERMISSION_TOOL_ID
+    source = _workflow_source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
     assert source["top_result_summary"]["action"] == "stop"
     assert source["top_result_summary"]["decision"] == "CONDITIONAL_GO"
     assert source["top_result_summary"]["allowed"] is True
@@ -593,10 +596,13 @@ def test_full_workflow_routes_generic_leave_by_to_contextual_stop() -> None:
     )
 
     assert result.answerability == "partial_evidence_with_missing_context"
-    assert result.selected_tool_count == 1
+    assert result.selected_tool_count == 6
+    assert result.executed_tool_count == 6
+    assert result.completed_tool_count == 6
+    assert result.missing_evidence_count == 4
+    _assert_on_route_micro_decision_support_sources(result)
     assert result.failed_tool_count == 0
-    source = result.sources[0]
-    assert source["tool_id"] == CONTEXTUAL_PERMISSION_TOOL_ID
+    source = _workflow_source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
     assert source["top_result_summary"]["action"] == "stop"
     assert source["top_result_summary"]["decision"] == "NO_GO"
     assert source["missing_fields"] == ["remaining_safety_buffer_minutes"]
@@ -617,10 +623,13 @@ def test_full_workflow_reports_requested_stop_cost_when_buffer_missing() -> None
     )
 
     assert result.answerability == "partial_evidence_with_missing_context"
-    assert result.selected_tool_count == 1
+    assert result.selected_tool_count == 6
+    assert result.executed_tool_count == 6
+    assert result.completed_tool_count == 6
+    assert result.missing_evidence_count == 4
+    _assert_on_route_micro_decision_support_sources(result)
     assert result.failed_tool_count == 0
-    source = result.sources[0]
-    assert source["tool_id"] == CONTEXTUAL_PERMISSION_TOOL_ID
+    source = _workflow_source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
     assert source["top_result_summary"]["action"] == "stop"
     assert source["top_result_summary"]["decision"] == "NO_GO"
     assert source["missing_fields"] == ["remaining_safety_buffer_minutes"]
@@ -649,13 +658,13 @@ def test_full_workflow_prices_film_stop_budget_phrase_with_next_cp() -> None:
         limit=3,
     )
 
-    assert result.answerability == "evidence_available"
-    assert result.selected_tool_count == 1
-    assert result.executed_tool_count == 1
-    assert result.completed_tool_count == 1
-    assert result.missing_evidence_count == 0
-    source = result.sources[0]
-    assert source["tool_id"] == CONTEXTUAL_PERMISSION_TOOL_ID
+    assert result.answerability == "partial_evidence_with_missing_context"
+    assert result.selected_tool_count == 6
+    assert result.executed_tool_count == 6
+    assert result.completed_tool_count == 6
+    assert result.missing_evidence_count == 3
+    _assert_on_route_micro_decision_support_sources(result)
+    source = _workflow_source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
     assert source["top_result_summary"]["action"] == "film"
     assert source["top_result_summary"]["decision"] == "CONDITIONAL_GO"
     assert source["top_result_summary"]["allowed"] is True
@@ -681,7 +690,12 @@ def test_full_workflow_uses_local_clock_for_stop_deadline() -> None:
         limit=3,
     )
 
-    assert result.answerability == "evidence_available"
+    assert result.answerability == "partial_evidence_with_missing_context"
+    assert result.selected_tool_count == 6
+    assert result.executed_tool_count == 6
+    assert result.completed_tool_count == 6
+    assert result.missing_evidence_count == 3
+    _assert_on_route_micro_decision_support_sources(result)
     assert result.decision_output["answerSourceToolId"] == CONTEXTUAL_PERMISSION_TOOL_ID
     assert result.decision_output["action"] == "stop"
     assert result.decision_output["decision"] == "CONDITIONAL_GO"
@@ -706,7 +720,11 @@ def test_full_workflow_routes_abstract_buffer_cost_to_contextual_permission() ->
     )
 
     assert result.answerability == "partial_evidence_with_missing_context"
-    assert result.selected_tool_count == 1
+    assert result.selected_tool_count == 6
+    assert result.executed_tool_count == 6
+    assert result.completed_tool_count == 6
+    assert result.missing_evidence_count == 4
+    _assert_on_route_micro_decision_support_sources(result)
     contextual = _workflow_source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
     assert contextual["top_result_summary"]["action"] == "stop"
     assert contextual["top_result_summary"]["decision"] == "NO_GO"
@@ -728,10 +746,11 @@ def test_full_workflow_treats_fog_photo_as_wait_permission() -> None:
     )
 
     assert result.answerability == "partial_evidence_with_missing_context"
-    assert result.selected_tool_count == 2
-    assert result.executed_tool_count == 2
-    assert result.completed_tool_count == 2
-    assert result.missing_evidence_count == 2
+    assert result.selected_tool_count == 6
+    assert result.executed_tool_count == 6
+    assert result.completed_tool_count == 6
+    assert result.missing_evidence_count == 4
+    _assert_on_route_micro_decision_support_sources(result)
     weather = _workflow_source(result, WEATHER_WINDOW_TOOL_ID)
     contextual = _workflow_source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
     assert weather["top_result_summary"]["decision"] == "DELAY"
@@ -756,7 +775,11 @@ def test_full_workflow_prioritizes_weather_delay_over_generic_continue() -> None
     )
 
     assert result.answerability == "partial_evidence_with_missing_context"
-    assert result.selected_tool_count == 2
+    assert result.selected_tool_count == 6
+    assert result.executed_tool_count == 6
+    assert result.completed_tool_count == 6
+    assert result.missing_evidence_count == 3
+    _assert_on_route_micro_decision_support_sources(result)
     assert result.failed_tool_count == 0
     weather = _workflow_source(result, WEATHER_WINDOW_TOOL_ID)
     contextual = _workflow_source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
@@ -781,11 +804,12 @@ def test_full_workflow_allows_bounded_teammate_wait() -> None:
         limit=3,
     )
 
-    assert result.answerability == "evidence_available"
-    assert result.selected_tool_count == 1
-    assert result.executed_tool_count == 1
-    assert result.completed_tool_count == 1
-    assert result.missing_evidence_count == 0
+    assert result.answerability == "partial_evidence_with_missing_context"
+    assert result.selected_tool_count == 6
+    assert result.executed_tool_count == 6
+    assert result.completed_tool_count == 6
+    assert result.missing_evidence_count == 3
+    _assert_on_route_micro_decision_support_sources(result)
     contextual = _workflow_source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
     summary = contextual["top_result_summary"]
     assert summary["action"] == "wait_teammate"
@@ -809,10 +833,11 @@ def test_full_workflow_blocks_wind_exposed_lunch() -> None:
     )
 
     assert result.answerability == "partial_evidence_with_missing_context"
-    assert result.selected_tool_count == 2
-    assert result.executed_tool_count == 2
-    assert result.completed_tool_count == 2
-    assert result.missing_evidence_count == 2
+    assert result.selected_tool_count == 6
+    assert result.executed_tool_count == 6
+    assert result.completed_tool_count == 6
+    assert result.missing_evidence_count == 4
+    _assert_on_route_micro_decision_support_sources(result)
     weather = _workflow_source(result, WEATHER_WINDOW_TOOL_ID)
     contextual = _workflow_source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
     assert weather["top_result_summary"]["decision"] == "DELAY"
@@ -860,10 +885,11 @@ def test_full_workflow_escalates_stream_surge_crossing() -> None:
     )
 
     assert result.answerability == "partial_evidence_with_missing_context"
-    assert result.selected_tool_count == 2
-    assert result.executed_tool_count == 2
-    assert result.completed_tool_count == 2
-    assert result.missing_evidence_count == 2
+    assert result.selected_tool_count == 6
+    assert result.executed_tool_count == 6
+    assert result.completed_tool_count == 6
+    assert result.missing_evidence_count == 4
+    _assert_on_route_micro_decision_support_sources(result)
     weather = _workflow_source(result, WEATHER_WINDOW_TOOL_ID)
     contextual = _workflow_source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
     assert weather["top_result_summary"]["decision"] == "DELAY"
@@ -920,13 +946,14 @@ def test_full_workflow_blocks_split_team_summit_question() -> None:
         limit=3,
     )
 
-    assert result.answerability == "evidence_available"
-    assert result.selected_tool_count == 1
-    assert result.executed_tool_count == 1
-    assert result.completed_tool_count == 1
-    assert result.missing_evidence_count == 0
-    assert result.sources[0]["tool_id"] == CONTEXTUAL_PERMISSION_TOOL_ID
-    summary = result.sources[0]["top_result_summary"]
+    assert result.answerability == "partial_evidence_with_missing_context"
+    assert result.selected_tool_count == 6
+    assert result.executed_tool_count == 6
+    assert result.completed_tool_count == 6
+    assert result.missing_evidence_count == 3
+    _assert_on_route_micro_decision_support_sources(result)
+    contextual = _workflow_source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
+    summary = contextual["top_result_summary"]
     assert summary["action"] == "split_team"
     assert summary["decision"] == "NO_GO"
     assert summary["allowed"] is False
@@ -948,10 +975,11 @@ def test_full_workflow_uses_rain_gear_micro_decision() -> None:
     )
 
     assert result.answerability == "partial_evidence_with_missing_context"
-    assert result.selected_tool_count == 3
-    assert result.executed_tool_count == 3
-    assert result.completed_tool_count == 3
-    assert result.missing_evidence_count == 2
+    assert result.selected_tool_count == 7
+    assert result.executed_tool_count == 7
+    assert result.completed_tool_count == 7
+    assert result.missing_evidence_count == 4
+    _assert_on_route_micro_decision_support_sources(result)
     contextual = _workflow_source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
     summary = contextual["top_result_summary"]
     assert summary["action"] == "wear_rain_gear"
@@ -987,10 +1015,11 @@ def test_full_workflow_blocks_shortcut_reroute_question() -> None:
     )
 
     assert result.answerability == "partial_evidence_with_missing_context"
-    assert result.selected_tool_count == 3
-    assert result.executed_tool_count == 3
-    assert result.completed_tool_count == 3
-    assert result.missing_evidence_count == 2
+    assert result.selected_tool_count == 6
+    assert result.executed_tool_count == 6
+    assert result.completed_tool_count == 6
+    assert result.missing_evidence_count == 4
+    _assert_on_route_micro_decision_support_sources(result)
     contextual = _workflow_source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
     summary = contextual["top_result_summary"]
     assert summary["action"] == "reroute"
@@ -1018,11 +1047,12 @@ def test_full_workflow_blocks_unreviewed_retreat_window_continue() -> None:
         limit=4,
     )
 
-    assert result.answerability == "evidence_available"
-    assert result.selected_tool_count == 1
-    assert result.executed_tool_count == 1
-    assert result.completed_tool_count == 1
-    assert result.missing_evidence_count == 0
+    assert result.answerability == "partial_evidence_with_missing_context"
+    assert result.selected_tool_count == 6
+    assert result.executed_tool_count == 6
+    assert result.completed_tool_count == 6
+    assert result.missing_evidence_count == 3
+    _assert_on_route_micro_decision_support_sources(result)
     contextual = _workflow_source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
     summary = contextual["top_result_summary"]
     assert summary["action"] == "continue"
@@ -1046,11 +1076,12 @@ def test_full_workflow_blocks_unreviewed_continue_forward() -> None:
         limit=4,
     )
 
-    assert result.answerability == "evidence_available"
-    assert result.selected_tool_count == 1
-    assert result.executed_tool_count == 1
-    assert result.completed_tool_count == 1
-    assert result.missing_evidence_count == 0
+    assert result.answerability == "partial_evidence_with_missing_context"
+    assert result.selected_tool_count == 6
+    assert result.executed_tool_count == 6
+    assert result.completed_tool_count == 6
+    assert result.missing_evidence_count == 3
+    _assert_on_route_micro_decision_support_sources(result)
     contextual = _workflow_source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
     summary = contextual["top_result_summary"]
     assert summary["action"] == "continue"
@@ -1076,10 +1107,11 @@ def test_full_workflow_uses_direct_retreat_micro_decision() -> None:
     )
 
     assert result.answerability == "partial_evidence_with_missing_context"
-    assert result.selected_tool_count == 3
-    assert result.executed_tool_count == 3
-    assert result.completed_tool_count == 3
-    assert result.missing_evidence_count == 2
+    assert result.selected_tool_count == 7
+    assert result.executed_tool_count == 7
+    assert result.completed_tool_count == 7
+    assert result.missing_evidence_count == 4
+    _assert_on_route_micro_decision_support_sources(result)
     contextual = _workflow_source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
     summary = contextual["top_result_summary"]
     assert summary["action"] == "retreat"
@@ -1113,10 +1145,11 @@ def test_full_workflow_uses_micro_decision_for_weather_fatigue_retreat() -> None
     )
 
     assert result.answerability == "partial_evidence_with_missing_context"
-    assert result.selected_tool_count == 4
-    assert result.executed_tool_count == 4
-    assert result.completed_tool_count == 4
-    assert result.missing_evidence_count == 3
+    assert result.selected_tool_count == 7
+    assert result.executed_tool_count == 7
+    assert result.completed_tool_count == 7
+    assert result.missing_evidence_count == 4
+    _assert_on_route_micro_decision_support_sources(result)
     contextual = _workflow_source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
     summary = contextual["top_result_summary"]
     assert summary["action"] == "retreat"
@@ -1395,10 +1428,11 @@ def test_full_workflow_prioritizes_pace_guardian_for_delayed_summit() -> None:
     )
 
     assert result.answerability == "partial_evidence_with_missing_context"
-    assert result.selected_tool_count == 2
-    assert result.executed_tool_count == 2
-    assert result.completed_tool_count == 2
-    assert result.missing_evidence_count == 2
+    assert result.selected_tool_count == 6
+    assert result.executed_tool_count == 6
+    assert result.completed_tool_count == 6
+    assert result.missing_evidence_count == 4
+    _assert_on_route_micro_decision_support_sources(result)
     pace = _workflow_source(result, PACE_GUARDIAN_TOOL_ID)
     contextual = _workflow_source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
     assert pace["top_result_summary"]["decision"] == "NO_GO"
@@ -1428,8 +1462,11 @@ def test_full_workflow_prioritizes_pace_for_slowed_continue_question() -> None:
     )
 
     assert result.answerability == "partial_evidence_with_missing_context"
-    assert result.selected_tool_count == 2
-    assert result.completed_tool_count == 2
+    assert result.selected_tool_count == 6
+    assert result.executed_tool_count == 6
+    assert result.completed_tool_count == 6
+    assert result.missing_evidence_count == 3
+    _assert_on_route_micro_decision_support_sources(result)
     pace = _workflow_source(result, PACE_GUARDIAN_TOOL_ID)
     contextual = _workflow_source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
     assert pace["top_result_summary"]["decision"] == "NO_GO"
@@ -1457,8 +1494,11 @@ def test_full_workflow_routes_time_to_summit_to_micro_decision() -> None:
     )
 
     assert result.answerability == "partial_evidence_with_missing_context"
-    assert result.selected_tool_count == 2
-    assert result.completed_tool_count == 2
+    assert result.selected_tool_count == 6
+    assert result.executed_tool_count == 6
+    assert result.completed_tool_count == 6
+    assert result.missing_evidence_count == 4
+    _assert_on_route_micro_decision_support_sources(result)
     pace = _workflow_source(result, PACE_GUARDIAN_TOOL_ID)
     contextual = _workflow_source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
     assert pace["top_result_summary"]["decision"] == "NO_GO"
@@ -1481,9 +1521,11 @@ def test_full_workflow_blocks_daylight_summit_pressure() -> None:
     )
 
     assert result.answerability == "partial_evidence_with_missing_context"
-    assert result.selected_tool_count == 3
-    assert result.executed_tool_count == 3
-    assert result.completed_tool_count == 3
+    assert result.selected_tool_count == 7
+    assert result.executed_tool_count == 7
+    assert result.completed_tool_count == 7
+    assert result.missing_evidence_count == 5
+    _assert_on_route_micro_decision_support_sources(result)
     assert result.failed_tool_count == 0
     weather = _workflow_source(result, WEATHER_WINDOW_TOOL_ID)
     media = _workflow_source(result, MEDIA_LITERACY_TOOL_ID)
@@ -2636,9 +2678,11 @@ def test_full_workflow_prioritizes_media_literacy_for_social_detour() -> None:
     )
 
     assert result.answerability == "partial_evidence_with_missing_context"
-    assert result.selected_tool_count == 2
-    assert result.executed_tool_count == 2
-    assert result.completed_tool_count == 2
+    assert result.selected_tool_count == 7
+    assert result.executed_tool_count == 7
+    assert result.completed_tool_count == 7
+    assert result.missing_evidence_count == 5
+    _assert_on_route_micro_decision_support_sources(result)
     assert result.failed_tool_count == 0
     media = _workflow_source(result, MEDIA_LITERACY_TOOL_ID)
     contextual = _workflow_source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
@@ -2698,8 +2742,11 @@ def test_full_workflow_blocks_sunk_cost_summit_pressure() -> None:
     )
 
     assert result.answerability == "partial_evidence_with_missing_context"
-    assert result.selected_tool_count == 3
-    assert result.completed_tool_count == 3
+    assert result.selected_tool_count == 7
+    assert result.executed_tool_count == 7
+    assert result.completed_tool_count == 7
+    assert result.missing_evidence_count == 5
+    _assert_on_route_micro_decision_support_sources(result)
     media = _workflow_source(result, MEDIA_LITERACY_TOOL_ID)
     pace = _workflow_source(result, PACE_GUARDIAN_TOOL_ID)
     contextual = _workflow_source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
@@ -2762,9 +2809,11 @@ def test_full_workflow_blocks_exposed_photo_pressure() -> None:
     )
 
     assert result.answerability == "partial_evidence_with_missing_context"
-    assert result.selected_tool_count == 3
-    assert result.executed_tool_count == 3
-    assert result.completed_tool_count == 3
+    assert result.selected_tool_count == 8
+    assert result.executed_tool_count == 8
+    assert result.completed_tool_count == 8
+    assert result.missing_evidence_count == 6
+    _assert_on_route_micro_decision_support_sources(result)
     assert result.failed_tool_count == 0
     media = _workflow_source(result, MEDIA_LITERACY_TOOL_ID)
     contextual = _workflow_source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
@@ -3390,8 +3439,27 @@ def _write_pace_coefficient_project(tmp_path: Path) -> Path:
     return project_root
 
 
+def _assert_on_route_micro_decision_support_sources(result) -> None:
+    live_navigation = _workflow_source(result, LIVE_NAVIGATION_STATE_TOOL_ID)
+    route_architecture = _workflow_source(result, ROUTE_ARCHITECTURE_TOOL_ID)
+    weather = _workflow_source(result, WEATHER_WINDOW_TOOL_ID)
+    pace = _workflow_source(result, PACE_GUARDIAN_TOOL_ID)
+    risk = _workflow_source(result, RISK_SCORE_TOOL_ID)
+
+    assert live_navigation["collection_status"] == "completed"
+    assert "lat" in live_navigation["missing_fields"]
+    assert route_architecture["collection_status"] == "completed"
+    assert weather["collection_status"] == "completed"
+    assert "route_weather_package" in weather["missing_fields"]
+    assert pace["collection_status"] == "completed"
+    assert pace["missing_fields"] == ["member_pace_profile"]
+    assert risk["collection_status"] == "completed"
+
+
 def _workflow_source(result, tool_id: str):
-    matches = [source for source in result.sources if source["tool_id"] == tool_id]
+    matches = [
+        source for source in result.sources if source["tool_id"] == tool_id
+    ]
     assert len(matches) == 1, result.sources
     return matches[0]
 

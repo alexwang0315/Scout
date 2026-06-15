@@ -247,7 +247,10 @@ def plan_scout_ai_tools(
                 "Question asks whether candidate risk can affect Ln/safety admission or must remain advisory.",
             )
         )
-    if _looks_like_contextual_permission_question(normalized_question):
+    if (
+        _looks_like_contextual_permission_question(normalized_question)
+        and not six_power_overview_question
+    ):
         selected.append(
             (
                 CONTEXTUAL_PERMISSION_TOOL_ID,
@@ -255,6 +258,7 @@ def plan_scout_ai_tools(
                 "whether an action is allowed, for how long, what it costs, and the next step.",
             )
         )
+        _append_on_route_micro_decision_support_tools(selected)
     if route_context_question:
         selected.append(
             (
@@ -350,6 +354,41 @@ def _append_standard_six_power_tools(selected: list[tuple[str, str]]) -> None:
         ),
     )
     for tool_id, reason in six_power_tools:
+        if not _has_tool(selected, tool_id):
+            selected.append((tool_id, reason))
+
+
+def _append_on_route_micro_decision_support_tools(
+    selected: list[tuple[str, str]],
+) -> None:
+    support_tools = (
+        (
+            LIVE_NAVIGATION_STATE_TOOL_ID,
+            "On-route micro-decisions need current position, CP delta, "
+            "GNSS quality, heading, and live navigation uncertainty evidence.",
+        ),
+        (
+            ROUTE_ARCHITECTURE_TOOL_ID,
+            "On-route micro-decisions need CP Graph, hard-point, retreat, "
+            "turn-back, and time-pressure evidence.",
+        ),
+        (
+            WEATHER_WINDOW_TOOL_ID,
+            "On-route micro-decisions need weather-change and daylight-buffer "
+            "evidence before permission synthesis.",
+        ),
+        (
+            PACE_GUARDIAN_TOOL_ID,
+            "On-route micro-decisions need slowest-member pace, speed decay, "
+            "delay, and team-rest evidence.",
+        ),
+        (
+            RISK_SCORE_TOOL_ID,
+            "On-route micro-decisions need forward route-risk evidence before "
+            "treating a user action as low consequence.",
+        ),
+    )
+    for tool_id, reason in support_tools:
         if not _has_tool(selected, tool_id):
             selected.append((tool_id, reason))
 

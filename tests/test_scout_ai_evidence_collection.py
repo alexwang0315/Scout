@@ -346,10 +346,11 @@ def test_evidence_collection_keeps_contextual_permission_decision_object() -> No
         limit=3,
     )
 
-    assert result.selected_tool_count == 1
-    assert result.executed_tool_count == 1
-    assert result.completed_tool_count == 1
+    assert result.selected_tool_count == 6
+    assert result.executed_tool_count == 6
+    assert result.completed_tool_count == 6
     assert result.missing_input_count == 0
+    _assert_on_route_micro_decision_support_records(result)
 
     contextual = _record(result, CONTEXTUAL_PERMISSION_TOOL_ID)
     assert contextual.collection_status == "completed"
@@ -373,10 +374,11 @@ def test_evidence_collection_keeps_tripod_micro_decision() -> None:
         limit=3,
     )
 
-    assert result.selected_tool_count == 1
-    assert result.executed_tool_count == 1
-    assert result.completed_tool_count == 1
+    assert result.selected_tool_count == 6
+    assert result.executed_tool_count == 6
+    assert result.completed_tool_count == 6
     assert result.missing_input_count == 0
+    _assert_on_route_micro_decision_support_records(result)
 
     contextual = _record(result, CONTEXTUAL_PERMISSION_TOOL_ID)
     assert contextual.collection_status == "completed"
@@ -399,10 +401,11 @@ def test_evidence_collection_keeps_teammate_wait_micro_decision() -> None:
         limit=3,
     )
 
-    assert result.selected_tool_count == 1
-    assert result.executed_tool_count == 1
-    assert result.completed_tool_count == 1
+    assert result.selected_tool_count == 6
+    assert result.executed_tool_count == 6
+    assert result.completed_tool_count == 6
     assert result.missing_input_count == 0
+    _assert_on_route_micro_decision_support_records(result)
 
     contextual = _record(result, CONTEXTUAL_PERMISSION_TOOL_ID)
     assert contextual.collection_status == "completed"
@@ -425,10 +428,11 @@ def test_evidence_collection_keeps_split_team_micro_decision() -> None:
         limit=3,
     )
 
-    assert result.selected_tool_count == 1
-    assert result.executed_tool_count == 1
-    assert result.completed_tool_count == 1
+    assert result.selected_tool_count == 6
+    assert result.executed_tool_count == 6
+    assert result.completed_tool_count == 6
     assert result.missing_input_count == 0
+    _assert_on_route_micro_decision_support_records(result)
 
     contextual = _record(result, CONTEXTUAL_PERMISSION_TOOL_ID)
     assert contextual.collection_status == "completed"
@@ -451,10 +455,11 @@ def test_evidence_collection_keeps_rain_gear_micro_decision() -> None:
         limit=4,
     )
 
-    assert result.selected_tool_count == 3
-    assert result.executed_tool_count == 3
-    assert result.completed_tool_count == 3
+    assert result.selected_tool_count == 7
+    assert result.executed_tool_count == 7
+    assert result.completed_tool_count == 7
     assert result.missing_input_count == 0
+    _assert_on_route_micro_decision_support_records(result)
 
     contextual = _record(result, CONTEXTUAL_PERMISSION_TOOL_ID)
     assert contextual.collection_status == "completed"
@@ -487,10 +492,11 @@ def test_evidence_collection_blocks_shortcut_reroute_micro_decision() -> None:
         limit=5,
     )
 
-    assert result.selected_tool_count == 3
-    assert result.executed_tool_count == 3
-    assert result.completed_tool_count == 3
+    assert result.selected_tool_count == 6
+    assert result.executed_tool_count == 6
+    assert result.completed_tool_count == 6
     assert result.missing_input_count == 0
+    _assert_on_route_micro_decision_support_records(result)
 
     route = _record(result, ROUTE_ARCHITECTURE_TOOL_ID)
     nav = _record(result, LIVE_NAVIGATION_STATE_TOOL_ID)
@@ -518,10 +524,11 @@ def test_evidence_collection_blocks_continue_forward_micro_decision() -> None:
         limit=4,
     )
 
-    assert result.selected_tool_count == 1
-    assert result.executed_tool_count == 1
-    assert result.completed_tool_count == 1
+    assert result.selected_tool_count == 6
+    assert result.executed_tool_count == 6
+    assert result.completed_tool_count == 6
     assert result.missing_input_count == 0
+    _assert_on_route_micro_decision_support_records(result)
 
     contextual = _record(result, CONTEXTUAL_PERMISSION_TOOL_ID)
     assert contextual.collection_status == "completed"
@@ -545,10 +552,11 @@ def test_evidence_collection_keeps_direct_retreat_micro_decision() -> None:
         limit=5,
     )
 
-    assert result.selected_tool_count == 3
-    assert result.executed_tool_count == 3
-    assert result.completed_tool_count == 3
+    assert result.selected_tool_count == 7
+    assert result.executed_tool_count == 7
+    assert result.completed_tool_count == 7
     assert result.missing_input_count == 0
+    _assert_on_route_micro_decision_support_records(result)
 
     energy = _record(result, ENERGY_VITALS_TOOL_ID)
     pace = _record(result, PACE_GUARDIAN_TOOL_ID)
@@ -1152,8 +1160,27 @@ def test_evidence_collection_builtin_rejects_blank_question(tmp_path: Path) -> N
     assert payload["boundary"]["runtime_safety_truth"] is False
 
 
+def _assert_on_route_micro_decision_support_records(result) -> None:
+    live_navigation = _record(result, LIVE_NAVIGATION_STATE_TOOL_ID)
+    route_architecture = _record(result, ROUTE_ARCHITECTURE_TOOL_ID)
+    weather = _record(result, WEATHER_WINDOW_TOOL_ID)
+    pace = _record(result, PACE_GUARDIAN_TOOL_ID)
+    risk = _record(result, RISK_SCORE_TOOL_ID)
+
+    assert live_navigation.collection_status == "completed"
+    assert "lat" in live_navigation.missing_fields
+    assert route_architecture.collection_status == "completed"
+    assert weather.collection_status == "completed"
+    assert "route_weather_package" in weather.missing_fields
+    assert pace.collection_status == "completed"
+    assert pace.missing_fields == ["member_pace_profile"]
+    assert risk.collection_status == "completed"
+
+
 def _record(result, tool_id: str):
-    matches = [record for record in result.evidence_records if record.tool_id == tool_id]
+    matches = [
+        record for record in result.evidence_records if record.tool_id == tool_id
+    ]
     assert len(matches) == 1, result.model_dump(mode="json")
     return matches[0]
 
