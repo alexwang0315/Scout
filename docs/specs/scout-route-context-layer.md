@@ -54,6 +54,9 @@ normalized/context/route_context/
   route_context_evidence.json
   source_manifest.json
   route_context_pack.json
+  crawl_seed_plan.json
+outputs/briefings/
+  route_context_briefing.html
 candidates/
   route_context_points.json
 ```
@@ -61,11 +64,30 @@ candidates/
 `route_context_evidence.json` is the provenance and collection summary.
 `source_manifest.json` is the source status, hash, cache, and missing-source
 report. `route_context_pack.json` is the offline pack index used by Scout AI
-tools. `route_context_points.json` is the candidate point list for map/UI/review.
+tools. `crawl_seed_plan.json` records route-wide search seeds and route-note
+seeds for later crawler/connector runs. `route_context_briefing.html` is the
+reader-facing briefing for operators. `route_context_points.json` is the
+candidate point list for map/UI/review.
 
 ## Input Sources
 
-The first MVP reads only workspace-local artifacts:
+The first MVP reads only workspace-local artifacts and records source tiers:
+
+- P0 baseline sources: Forestry and Nature Conservation Agency trail data,
+  Taiwan Mountain Forest open data, the mountain permit portal, national park
+  route status, NLSC DEM/DTM/topographic maps, CWA CODiS/open data, NCDR
+  disaster potential data, Fire Agency mountain rescue cases, TBN biodiversity
+  data, and Academia Sinica historical maps.
+- P1 expansion sources: National Culture Memory Bank, Taiwan Memory,
+  indigenous trail spatial data, Geology Cloud, OSM/Overpass/full-history,
+  RudyMap, map-generator or hiker GPX, Hiking Biji, Hikingbook, and
+  登山補給站.
+- P2 Scout-owned sources: completed user GPX, off-route records, stay points,
+  photo points, voice notes, IMU anomalies, barometric altitude changes,
+  front/rear team distance, team stretch records, and user feedback such as
+  worth-stopping or not-worth-stopping.
+
+Current local artifacts:
 
 - `outputs/mcp/mcp_candidates.json`
 - `outputs/mcp/named_point_evidence.json`
@@ -77,6 +99,12 @@ The first MVP reads only workspace-local artifacts:
 - `normalized/routes/route_summary.json`
 
 Missing optional sources must be recorded as source gaps, not hidden.
+
+Route notes are P2 seed material by default. They may seed P0/P1 searches, but
+they should not become briefing conclusions or representative route-context
+points unless a human explicitly promotes them or another source corroborates
+the point. For the Chilai/Nanhua alpha workspace, the broad route keyword seed is
+`chilai_nanhua_day1` plus `奇萊-南華`, `奇萊南華`, and `奇萊南峰 南華山`.
 
 Future source connectors may add official trails, historical maps, cultural
 archives, biodiversity data, weather/season evidence, disaster records, and
@@ -119,6 +147,8 @@ Each `route_context_points.json` point must include:
 - `runtime_safety_truth = false`
 - `phase1_runtime_mutation_allowed = false`
 - `phase2_brain_writeback_allowed = false`
+- `source_tier`
+- `promotion_basis`
 
 The `observation_score` is a pretrip candidate score:
 
@@ -159,10 +189,13 @@ the answer must say so.
 
 ## MVP Acceptance
 
-- Running the collector after GPX import writes all four canonical artifacts.
+- Running the collector after GPX import writes route context evidence, source
+  manifest, context pack, crawl seed plan, route context points, and the HTML
+  route context briefing.
 - Missing web/raster evidence is visible in `source_manifest.json`.
 - MCP and named-point evidence are merged without losing source provenance.
-- Route notes are filtered to meaningful route context candidates.
+- Route notes are filtered to meaningful crawler seeds by default and are not
+  promoted into representative context points unless explicitly requested.
 - Sensitive cultural labels receive fuzzy or hidden coordinate display policy.
 - Existing `scout.ai.route_context.assess.v0` can read the canonical
   `candidates/route_context_points.json`.

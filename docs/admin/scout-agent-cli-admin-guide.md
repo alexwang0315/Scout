@@ -144,13 +144,18 @@ the workspace and does not call `/safety/*` or promote runtime truth.
 ```bash
 python -m scout_cli pretrip route-context-collect \
   --project-root /data/scout/admin/pretrip-workspaces/chilai_nanhua_day1 \
+  --route-keyword "奇萊-南華" \
+  --route-note-point-policy seed_only \
   --limit-route-notes 80 \
   --json
 ```
 
 In full Scout rebuilds, run it after `prepare-layers` so route-context output
-can include MCP/named-point evidence, route notes, and normalized layer evidence
-such as web/raster labels.
+can include MCP/named-point evidence and normalized layer evidence such as
+web/raster labels. Route notes are seed material by default; they are written to
+`normalized/context/route_context/crawl_seed_plan.json` for later crawler or
+connector work, while the operator-facing summary is written to
+`outputs/briefings/route_context_briefing.html`.
 
 ## Route Architecture Collection
 

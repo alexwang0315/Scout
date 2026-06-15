@@ -56,6 +56,8 @@ OPTIONAL_ROUTE_CONTEXT_REFS = {
     "route_context_evidence_ref": "normalized/context/route_context/route_context_evidence.json",
     "route_context_source_manifest_ref": "normalized/context/route_context/source_manifest.json",
     "route_context_pack_ref": "normalized/context/route_context/route_context_pack.json",
+    "route_context_crawl_seed_plan_ref": "normalized/context/route_context/crawl_seed_plan.json",
+    "route_context_briefing_ref": "outputs/briefings/route_context_briefing.html",
     "route_context_points_ref": "candidates/route_context_points.json",
 }
 
@@ -501,12 +503,18 @@ def _check_route_context_refs(
     payloads = {
         key: _load_json_ref(project_root, project, key, errors)
         for key in OPTIONAL_ROUTE_CONTEXT_REFS
-        if project.get(key)
+        if project.get(key) and key != "route_context_briefing_ref"
     }
     evidence = payloads.get("route_context_evidence_ref") or {}
     source_manifest = payloads.get("route_context_source_manifest_ref") or {}
     pack = payloads.get("route_context_pack_ref") or {}
+    crawl_seed_plan = payloads.get("route_context_crawl_seed_plan_ref") or {}
     points = payloads.get("route_context_points_ref") or {}
+    briefing_summary = _check_route_context_briefing(
+        project_root,
+        project,
+        errors,
+    )
 
     _check_route_context_artifact_kind(
         evidence,
@@ -524,6 +532,12 @@ def _check_route_context_refs(
         pack,
         "pretrip_route_context_pack",
         "route_context_pack_ref",
+        errors,
+    )
+    _check_route_context_artifact_kind(
+        crawl_seed_plan,
+        "pretrip_route_context_crawl_seed_plan",
+        "route_context_crawl_seed_plan_ref",
         errors,
     )
     _check_route_context_artifact_kind(
@@ -578,9 +592,40 @@ def _check_route_context_refs(
             if isinstance(points, dict)
             else None
         ),
+        "crawl_seed_count": crawl_seed_plan.get("seed_count")
+        if isinstance(crawl_seed_plan, dict)
+        else None,
+        "route_note_seed_count": crawl_seed_plan.get("route_note_seed_count")
+        if isinstance(crawl_seed_plan, dict)
+        else None,
+        "briefing_available": briefing_summary["available"],
+        "briefing_size_bytes": briefing_summary.get("size_bytes"),
         "live_fetch_performed": cache_policy.get("live_fetch_performed"),
         "candidate_only": _route_context_candidate_only(points),
         "runtime_safety_truth": _route_context_runtime_truth(points),
+    }
+
+
+def _check_route_context_briefing(
+    project_root: Path,
+    project: dict[str, Any],
+    errors: list[str],
+) -> dict[str, Any]:
+    ref = project.get("route_context_briefing_ref")
+    if not ref:
+        return {"available": False}
+    path = Path(ref) if Path(ref).is_absolute() else project_root / ref
+    if not path.exists():
+        errors.append(f"route context briefing missing: {path}")
+        return {"available": False}
+    size_bytes = path.stat().st_size
+    if size_bytes <= 200:
+        errors.append(f"route context briefing looks too small: {path}")
+    return {
+        "available": True,
+        "ref": ref,
+        "size_bytes": size_bytes,
+        "content_type": "text/html",
     }
 
 
