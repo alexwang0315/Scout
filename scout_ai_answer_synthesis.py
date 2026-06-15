@@ -202,6 +202,7 @@ def _source_from_record(record: dict[str, Any]) -> ScoutAiAnswerSource:
         "readiness_governance",
         "pretrip_decision_package",
         "weather_daylight_state",
+        "route_briefing",
         "route_context",
         "media_literacy",
         "media_bias_analysis",

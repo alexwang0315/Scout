@@ -359,6 +359,24 @@ def test_planner_selects_route_context_for_experience_guide_question() -> None:
     assert item.boundary.runtime_safety_truth is False
 
 
+def test_planner_selects_route_context_for_route_briefing_questions() -> None:
+    questions = [
+        "奇萊南華建議幾天？",
+        "沿途有哪些歷史、文化、自然、地形、季節觀察？",
+        "哪些點值得停 3 分鐘？",
+    ]
+
+    for question in questions:
+        plan = plan_scout_ai_tools(_query(question), project_root=PROJECT_ROOT)
+        item = _single_tool(plan, ROUTE_CONTEXT_TOOL_ID)
+        assert item.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+        assert item.implementation_status == "ready_current_tool"
+        assert item.request is not None
+        assert item.request["tool_id"] == ROUTE_CONTEXT_TOOL_ID
+        assert item.missing_fields == []
+        assert item.boundary.runtime_safety_truth is False
+
+
 def test_planner_selects_pace_guardian_for_team_pace_fit_question() -> None:
     plan = plan_scout_ai_tools(
         _query("隊伍腳程是否能準時抵達下一個 CP？最慢者需要前移午餐點嗎？"),

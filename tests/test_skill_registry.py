@@ -27,6 +27,7 @@ class SkillRegistryTests(unittest.TestCase):
                 "ins-dr-wearable-route-constrained",
                 "latest-team-position-check",
                 "remote-status-json",
+                "route-briefing-compose",
                 "team-checkin-summary",
                 "team-rendezvous-beacon",
             ],

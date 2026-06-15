@@ -476,6 +476,36 @@ def test_answer_synthesis_uses_route_context_field_answer_without_guessing() -> 
     assert "runtime safety truth" in result.answer
 
 
+def test_answer_synthesis_uses_route_briefing_compose_context(
+    tmp_path: Path,
+) -> None:
+    project_root = _write_route_briefing_project(tmp_path)
+
+    result = collect_and_synthesize_scout_ai_answer(
+        "哪些點值得停 3 分鐘？",
+        project_root=project_root,
+        project_id="chilai_nanhua_briefing",
+        limit=4,
+    )
+
+    assert result.answerability == "evidence_available"
+    assert result.completed_source_count == 1
+    assert result.missing_evidence_count == 0
+    source = _source(result, ROUTE_CONTEXT_TOOL_ID)
+    briefing = source.top_result_summary["route_briefing"]
+    assert briefing["available"] is True
+    assert briefing["candidate_only"] is True
+    assert briefing["runtime_safety_truth"] is False
+    assert source.top_result_summary["route_context"]["route_briefing"] == briefing
+    assert result.decision_output["answerSourceToolId"] == ROUTE_CONTEXT_TOOL_ID
+    assert "候選 3 分鐘觀察點" in result.answer
+    assert "雲海保線所" in result.answer
+    assert "松原駐在所、木炭窯" in result.answer
+    assert "光被八表" in result.answer
+    assert "不是現場停留授權" in result.answer
+    assert "runtime safety truth" in result.answer
+
+
 def test_answer_synthesis_uses_pace_guardian_field_answer_without_guessing(
     tmp_path: Path,
 ) -> None:
@@ -1202,6 +1232,30 @@ def test_answer_synthesis_builtin_rejects_blank_question_without_evidence_collec
     assert payload["status"] == "failed"
     assert "non-empty question" in payload["error"]
     assert payload["boundary"]["runtime_safety_truth"] is False
+
+
+def _write_route_briefing_project(tmp_path: Path) -> Path:
+    project_root = tmp_path / "route_briefing_project"
+    project_root.mkdir()
+    route_briefing_fixture = (
+        ROOT
+        / "tests"
+        / "fixtures"
+        / "pretrip"
+        / "route_briefing"
+        / "chilai_nanhua_research.json"
+    )
+    (project_root / "project.json").write_text(
+        json.dumps(
+            {
+                "project_id": "chilai_nanhua_briefing",
+                "route_briefing_research_ref": str(route_briefing_fixture),
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    return project_root
 
 
 def _source(result, tool_id: str):

@@ -43,6 +43,14 @@ FIELD_OBSERVATION = (
     / "field_observations"
     / "high_hr_drift.json"
 )
+ROUTE_BRIEFING_FIXTURE = (
+    ROOT
+    / "tests"
+    / "fixtures"
+    / "pretrip"
+    / "route_briefing"
+    / "chilai_nanhua_research.json"
+)
 
 
 def test_tool_registry_lists_current_and_future_contracts() -> None:
@@ -124,6 +132,7 @@ def test_tool_registry_lists_current_and_future_contracts() -> None:
         ROUTE_READINESS_TOOL_ID
     ].aliases
     assert "scout.ai.experience_guide.assess" in by_id[ROUTE_CONTEXT_TOOL_ID].aliases
+    assert "route_briefing_path" in by_id[ROUTE_CONTEXT_TOOL_ID].optional_fields
     assert "scout.ai.cp_graph.assess" in by_id[ROUTE_ARCHITECTURE_TOOL_ID].aliases
     assert "scout.ai.device_resource.assess" in by_id[EQUIPMENT_RESOURCE_TOOL_ID].aliases
     assert "scout.ai.team_pace_fit.assess" in by_id[PACE_GUARDIAN_TOOL_ID].aliases
@@ -1353,6 +1362,57 @@ def test_execute_route_context_assessor_returns_experience_guide_candidates() ->
     assert result.payload["boundary"]["runtime_safety_truth"] is False
     assert result.boundary.live_safety_api_calls_allowed is False
     assert result.missing_fields == []
+
+
+def test_execute_route_context_assessor_reads_route_briefing_compose_fixture(
+    tmp_path: Path,
+) -> None:
+    project_root = tmp_path / "route_briefing_project"
+    project_root.mkdir()
+    (project_root / "project.json").write_text(
+        json.dumps({"project_id": "chilai_nanhua_briefing"}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    result = execute_scout_ai_tool(
+        {
+            "tool_id": ROUTE_CONTEXT_TOOL_ID,
+            "project_root": str(project_root),
+            "query": "奇萊南華建議幾天？",
+            "arguments": {"route_briefing_path": str(ROUTE_BRIEFING_FIXTURE)},
+            "limit": 4,
+        }
+    )
+
+    assert result.status == "completed"
+    assert result.tool_id == ROUTE_CONTEXT_TOOL_ID
+    assert result.payload["answerability"] == "route_context_available"
+    assert "2 天 1 夜" in result.payload["field_answer"]
+    assert "3 天 2 夜" in result.payload["field_answer"]
+    briefing = result.payload["route_context"]["route_briefing"]
+    assert briefing["available"] is True
+    assert briefing["candidate_only"] is True
+    assert briefing["runtime_safety_truth"] is False
+    assert briefing["network_calls_made"] is False
+    assert result.payload["boundary"]["runtime_safety_truth"] is False
+    assert result.payload["boundary"]["live_safety_api_calls_allowed"] is False
+    assert result.missing_fields == []
+
+    layers_result = execute_scout_ai_tool(
+        {
+            "tool_id": ROUTE_CONTEXT_TOOL_ID,
+            "project_root": str(project_root),
+            "query": "沿途有哪些歷史、文化、自然、地形、季節觀察？",
+            "arguments": {"route_briefing_path": str(ROUTE_BRIEFING_FIXTURE)},
+            "limit": 4,
+        }
+    )
+
+    assert layers_result.status == "completed"
+    assert layers_result.payload["answerability"] == "route_context_available"
+    for layer_name in ("歷史層", "文化層", "自然層", "地形層", "季節層"):
+        assert layer_name in layers_result.payload["field_answer"]
+    assert layers_result.payload["boundary"]["runtime_safety_truth"] is False
 
 
 def test_agent_manifest_runs_tool_registry_and_tool_run(tmp_path: Path) -> None:
