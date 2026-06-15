@@ -768,6 +768,20 @@ def test_planner_passes_turnback_current_context_to_route_architecture() -> None
     assert item.boundary.runtime_safety_truth is False
 
 
+def test_planner_passes_local_turnback_time_to_route_architecture() -> None:
+    plan = plan_scout_ai_tools(
+        _query("現在 15:10 在雲海保線所，現在是不是折返點？"),
+        project_root=PROJECT_ROOT,
+    )
+
+    item = _single_tool(plan, ROUTE_ARCHITECTURE_TOOL_ID)
+    assert item.request is not None
+    assert item.request["arguments"] == {
+        "current_time": "15:10",
+        "current_cp_id": "雲海保線所",
+    }
+
+
 def test_planner_selects_energy_vitals_contract_only_for_health_question() -> None:
     plan = plan_scout_ai_tools(
         _query("我現在心率偏高又很累，需要休息嗎?"),

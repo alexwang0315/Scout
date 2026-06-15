@@ -377,6 +377,32 @@ def test_execute_route_architecture_detects_current_turnback_checkpoint() -> Non
     assert result.boundary.live_safety_api_calls_allowed is False
 
 
+def test_execute_route_architecture_compares_local_turnback_clock() -> None:
+    result = execute_scout_ai_tool(
+        {
+            "tool_id": "scout.ai.cp_graph.assess",
+            "project_root": str(PROJECT_ROOT),
+            "query": "現在是不是折返點？",
+            "arguments": {
+                "current_cp_id": "雲海保線所",
+                "current_time": "15:10",
+            },
+            "limit": 4,
+        }
+    )
+
+    assert result.status == "completed"
+    assert result.tool_id == ROUTE_ARCHITECTURE_TOOL_ID
+    assert result.payload["answerability"] == "route_architecture_available"
+    assert result.payload["decision"] == "CHANGE_PLAN"
+    assert result.payload["missing_fields"] == []
+    reason = result.payload["decision_output"]["firstLayer"]["reason"]
+    assert "current_time is at or past" in reason
+    assert "current CP matches" in reason
+    assert result.payload["decision_output"]["runtimeSafetyTruth"] is False
+    assert result.boundary.live_safety_api_calls_allowed is False
+
+
 def test_execute_equipment_resource_alias_returns_resource_decision() -> None:
     result = execute_scout_ai_tool(
         {

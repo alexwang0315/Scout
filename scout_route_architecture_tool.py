@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 from datetime import datetime
 from pathlib import Path
 from statistics import mean
@@ -379,8 +380,6 @@ def _route_decision(
     missing_graph = not route_architecture["graph_completeness"]["has_cp_graph"]
     turn_back = route_architecture.get("turn_back")
     turn_back = turn_back if isinstance(turn_back, dict) else {}
-    now = _parse_datetime(current_time)
-    turn_back_time = _parse_datetime(turn_back.get("turn_back_eta"))
     at_turn_back_node = _matches_cp_or_label(
         current_cp_id,
         turn_back.get("turn_back_checkpoint_name"),
@@ -422,7 +421,10 @@ def _route_decision(
             "candidate_only": True,
             "runtime_safety_truth": False,
         }
-    if turn_back_time and now and now >= turn_back_time:
+    if _current_time_at_or_past_turn_back(
+        current_time,
+        turn_back.get("turn_back_eta"),
+    ):
         reasons.append(f"current_time is at or past turn-back ETA {turn_back.get('turn_back_eta')}")
     if at_turn_back_node:
         reasons.append("current CP matches the planned turn-back checkpoint.")
@@ -995,6 +997,38 @@ def _parse_datetime(value: Any) -> datetime | None:
         return datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError:
         return None
+
+
+def _current_time_at_or_past_turn_back(
+    current_time: Any,
+    turn_back_eta: Any,
+) -> bool:
+    current = _parse_datetime(current_time)
+    turn_back = _parse_datetime(turn_back_eta)
+    if current is not None and turn_back is not None:
+        return current >= turn_back
+    current_clock = _local_clock_minutes(current_time)
+    turn_back_clock = _local_clock_minutes(turn_back_eta)
+    if current_clock is None or turn_back_clock is None:
+        return False
+    return current_clock >= turn_back_clock
+
+
+def _local_clock_minutes(value: Any) -> float | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    parsed = _parse_datetime(value)
+    if parsed is not None:
+        return parsed.hour * 60 + parsed.minute + parsed.second / 60
+    match = re.search(r"(?<!\d)(\d{1,2})[:：](\d{2})(?::(\d{2}))?", value)
+    if not match:
+        return None
+    hour = int(match.group(1))
+    minute = int(match.group(2))
+    second = int(match.group(3) or 0)
+    if hour > 23 or minute > 59 or second > 59:
+        return None
+    return hour * 60 + minute + second / 60
 
 
 def _bounded_limit(limit: int) -> int:
