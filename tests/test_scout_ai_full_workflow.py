@@ -168,6 +168,60 @@ def test_full_workflow_runs_weather_tool_and_reports_missing_fresh_evidence() ->
     assert "runtime safety truth" in result.answer
 
 
+def test_full_workflow_surfaces_standard_six_power_coverage_overview() -> None:
+    result = run_scout_ai_full_workflow(
+        "請檢視 Scout 對六力的實作狀態：探索力、自信力、勇氣力、路線力、天氣力、地圖力。",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=8,
+    )
+
+    source_ids = {source["tool_id"] for source in result.sources}
+    assert {
+        ROUTE_CONTEXT_TOOL_ID,
+        PACE_GUARDIAN_TOOL_ID,
+        CONTEXTUAL_PERMISSION_TOOL_ID,
+        ROUTE_ARCHITECTURE_TOOL_ID,
+        WEATHER_WINDOW_TOOL_ID,
+        NAVIGATION_TERRAIN_TOOL_ID,
+    }.issubset(source_ids)
+    assert result.selected_tool_count == 6
+    assert result.completed_tool_count == 6
+    assert result.decision_output["answerSourceToolId"] == (
+        "scout.ai.standard_six_power_overview.v0"
+    )
+    assert result.decision_output["decision"] == "GUIDED_ONLY"
+    assert result.decision_output["runtimeSafetyTruth"] is False
+    assert result.answer.startswith("六力覆蓋檢視：")
+    for label in ("探索力", "自信力", "勇氣力", "路線力", "天氣力", "地圖力"):
+        assert label in result.answer
+    assert "不輸出單一靜態分數" in result.answer
+    assert "可以繼續前進" not in result.answer
+    assert "地圖力判斷：建議" not in result.answer
+    assert result.workflow_policy.model_provider_used is False
+    assert result.boundary.runtime_safety_truth is False
+
+
+def test_full_workflow_routes_scout_ai_meta_power_to_six_capability_tools() -> None:
+    result = run_scout_ai_full_workflow(
+        "Scout AI 力如何把六力轉成動態決策，而不是靜態分數表？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=8,
+    )
+
+    assert result.selected_tool_count == 6
+    assert result.completed_tool_count == 6
+    assert result.decision_output["answerSourceToolId"] == (
+        "scout.ai.standard_six_power_overview.v0"
+    )
+    assert result.decision_output["decision"] == "GUIDED_ONLY"
+    assert "tool planning -> evidence collection" in result.answer
+    assert "deterministic answer synthesis" in result.answer
+    assert "不輸出單一靜態分數" in result.answer
+    assert "可以繼續前進" not in result.answer
+
+
 def test_full_workflow_uses_daylight_buffer_weather_decision() -> None:
     result = run_scout_ai_full_workflow(
         "日照 buffer 是否下降？",

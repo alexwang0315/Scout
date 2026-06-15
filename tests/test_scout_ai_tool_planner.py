@@ -1715,6 +1715,44 @@ def test_planner_selects_ins_dr_trace_for_gps_dr_trajectory_question() -> None:
     assert item.boundary.runtime_safety_truth is False
 
 
+def test_planner_routes_standard_six_power_overview_to_all_six_capabilities() -> None:
+    plan = plan_scout_ai_tools(
+        _query("請檢視 Scout 對六力的實作狀態：探索力、自信力、勇氣力、路線力、天氣力、地圖力。"),
+        project_root=PROJECT_ROOT,
+        limit=8,
+    )
+
+    assert _tool_ids(plan) == {
+        ROUTE_CONTEXT_TOOL_ID,
+        PACE_GUARDIAN_TOOL_ID,
+        CONTEXTUAL_PERMISSION_TOOL_ID,
+        ROUTE_ARCHITECTURE_TOOL_ID,
+        WEATHER_WINDOW_TOOL_ID,
+        NAVIGATION_TERRAIN_TOOL_ID,
+    }
+    for item in plan.selected_tools:
+        assert item.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+        assert item.request is not None
+        assert item.boundary.runtime_safety_truth is False
+
+
+def test_planner_routes_scout_ai_meta_power_to_six_capability_tools() -> None:
+    plan = plan_scout_ai_tools(
+        _query("Scout AI 力如何把六力轉成動態決策，而不是靜態分數表？"),
+        project_root=PROJECT_ROOT,
+        limit=8,
+    )
+
+    tool_ids = _tool_ids(plan)
+    assert ROUTE_CONTEXT_TOOL_ID in tool_ids
+    assert PACE_GUARDIAN_TOOL_ID in tool_ids
+    assert CONTEXTUAL_PERMISSION_TOOL_ID in tool_ids
+    assert ROUTE_ARCHITECTURE_TOOL_ID in tool_ids
+    assert WEATHER_WINDOW_TOOL_ID in tool_ids
+    assert NAVIGATION_TERRAIN_TOOL_ID in tool_ids
+    assert len(tool_ids) == 6
+
+
 def _query(question: str) -> ScoutAssistantQuery:
     return ScoutAssistantQuery(
         surface=AssistantSurface.PRETRIP,

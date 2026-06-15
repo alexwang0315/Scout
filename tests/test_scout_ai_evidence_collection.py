@@ -267,7 +267,10 @@ def test_evidence_collection_keeps_heat_exposure_weather_rule(tmp_path: Path) ->
     rule = payload["weather_to_decision"]["route_sensitive_weather_rule"]
     assert rule["rule"] == "high_heat_exposure_water_timing_review"
     assert rule["segment_ids"] == ["heat.exposed.1"]
-    assert "water margin" in payload["weather_to_decision"]["action_limit"]
+    assert "水量餘裕" in payload["weather_to_decision"]["action_limit"]
+    assert "不得照原高溫曝曬時段推進" in payload["weather_to_decision"][
+        "action_limit"
+    ]
     assert payload["decision_output"]["decision"] == "CHANGE_PLAN"
     assert weather.missing_fields == []
     assert weather.boundary.runtime_safety_truth is False
@@ -294,7 +297,9 @@ def test_evidence_collection_keeps_forecast_source_disagreement_rule(
     rule = payload["weather_to_decision"]["route_sensitive_weather_rule"]
     assert rule["rule"] == "forecast_source_disagreement_conservative_review"
     assert rule["segment_ids"] == ["forecast.conflict.1"]
-    assert "favorable forecast" in payload["weather_to_decision"]["action_limit"]
+    assert "不得用單一樂觀預報授權" in payload["weather_to_decision"][
+        "action_limit"
+    ]
     assert payload["decision_output"]["decision"] == "DELAY"
     assert weather.missing_fields == []
     assert weather.boundary.runtime_safety_truth is False
@@ -548,7 +553,7 @@ def test_evidence_collection_keeps_direct_retreat_micro_decision() -> None:
     assert payload["action"] == "retreat"
     assert payload["decision"] == "GO"
     assert payload["allowed"] is True
-    assert payload["decision_output"]["firstLayer"]["decision"] == "可以撤退。"
+    assert payload["decision_output"]["firstLayer"]["decision"] == "建議撤退。"
     assert contextual.boundary.runtime_safety_truth is False
 
 
