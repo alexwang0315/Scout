@@ -16,6 +16,7 @@ from scout_contextual_permission_tool import CONTEXTUAL_PERMISSION_TOOL_ID
 from scout_route_context_tool import ROUTE_CONTEXT_TOOL_ID
 from scout_route_architecture_tool import ROUTE_ARCHITECTURE_TOOL_ID
 from scout_pace_guardian_tool import PACE_GUARDIAN_TOOL_ID
+from scout_equipment_resource_tool import EQUIPMENT_RESOURCE_TOOL_ID
 from scout_weather_window_tool import WEATHER_WINDOW_TOOL_ID
 
 
@@ -173,6 +174,9 @@ def _source_from_record(record: dict[str, Any]) -> ScoutAiAnswerSource:
         "route_architecture",
         "cp_graph",
         "route_decision",
+        "equipment_resource",
+        "resource_readiness",
+        "resource_state",
         "pace_guardian",
         "team_pace_fit",
         "weather_to_decision",
@@ -247,6 +251,9 @@ def _answer_text(
     route_architecture_answer = _route_architecture_answer(completed_sources)
     if route_architecture_answer:
         parts.append(route_architecture_answer)
+    equipment_resource_answer = _equipment_resource_answer(completed_sources)
+    if equipment_resource_answer:
+        parts.append(equipment_resource_answer)
     pace_guardian_answer = _pace_guardian_answer(completed_sources)
     if pace_guardian_answer:
         parts.append(pace_guardian_answer)
@@ -349,6 +356,16 @@ def _route_architecture_answer(sources: list[ScoutAiAnswerSource]) -> str | None
     return None
 
 
+def _equipment_resource_answer(sources: list[ScoutAiAnswerSource]) -> str | None:
+    for source in sources:
+        if source.tool_id != EQUIPMENT_RESOURCE_TOOL_ID:
+            continue
+        field_answer = source.top_result_summary.get("field_answer")
+        if isinstance(field_answer, str) and field_answer.strip():
+            return field_answer.strip()
+    return None
+
+
 def _pace_guardian_answer(sources: list[ScoutAiAnswerSource]) -> str | None:
     for source in sources:
         if source.tool_id != PACE_GUARDIAN_TOOL_ID:
@@ -410,6 +427,11 @@ def _top_result_summary(value: Any) -> dict[str, Any]:
         "cp_graph",
         "route_decision",
         "pace_guardian",
+        "equipment_resource",
+        "resource_readiness",
+        "resource_state",
+        "critical_gaps",
+        "warning_gaps",
         "route_type",
         "turn_back",
         "retreat_option_count",

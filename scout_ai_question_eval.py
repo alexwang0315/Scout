@@ -59,6 +59,10 @@ CURRENT_TOOLS = {
         "label": "pace guardian / team pace fit",
         "evidence_scope": "slowest-member pace fit, team rest rhythm, delay, next-CP schedule pressure, and change-plan guidance",
     },
+    "scout.ai.equipment_resource.assess.v0": {
+        "label": "equipment/resource intelligence",
+        "evidence_scope": "device battery, offline map and GPX readiness, lighting, backup power, water, food, critical gear gaps, and conservative equipment/resource decisions",
+    },
     "scout.ai.route_architecture.assess.v0": {
         "label": "route architecture / CP Graph",
         "evidence_scope": "candidate CP Graph, hard points, retreat options, turn-back checkpoint, route forgiveness, and alternative/short-route structure",
@@ -458,6 +462,7 @@ _CURRENT_TOOL_TERMS = (
     ("scout.ai.live_navigation_state.assess.v0", ("我現在", "現在是不是", "目前", "前方", "gps", "gnss", "imu", "pdr", "方向", "偏離", "轉彎點", "精確導航", "主線", "下切", "岔路", "走對", "回主線")),
     ("scout.ai.route_context.assess.v0", ("值得看", "觀察點", "適合拍攝", "大景", "地名故事", "路線脈絡", "自然觀察", "experience guide", "route context", "viewpoint")),
     ("scout.ai.pace_guardian.assess.v0", ("pace guardian", "team pace fit", "readiness pace fit", "最慢者", "最慢成員", "腳程差", "隊伍腳程", "隊伍速度", "隊伍節奏", "休息節奏", "午餐點", "午餐前移", "需要加快", "落後", "晚了", "縮短行程", "改短版", "直接撤退", "能準時抵達", "下一個 cp", "隊友很累", "後隊", "快慢組")),
+    ("scout.ai.equipment_resource.assess.v0", ("手機電量", "手機只剩", "電量", "手錶電量", "頭燈", "備用燈", "行動電源", "離線地圖", "gpx", "第二套導航", "裝備", "水剩", "水還剩", "水量", "食物", "行動糧", "瓦斯", "雨衣", "保暖層", "急救包")),
     ("scout.ai.route_architecture.assess.v0", ("route architecture", "cp graph", "checkpoint graph", "路線結構", "行程結構", "cp圖", "撤退點", "撤退路線", "折返點", "最晚折返", "難點位置", "難點在哪", "容錯率", "低容錯", "替代路線", "短版路線", "岔路可以切", "回頭成本")),
 )
 

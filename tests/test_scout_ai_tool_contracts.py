@@ -10,6 +10,7 @@ from scout_energy_vitals_tool import ENERGY_VITALS_TOOL_ID
 from scout_contextual_permission_tool import CONTEXTUAL_PERMISSION_TOOL_ID
 from scout_route_context_tool import ROUTE_CONTEXT_TOOL_ID
 from scout_route_architecture_tool import ROUTE_ARCHITECTURE_TOOL_ID
+from scout_equipment_resource_tool import EQUIPMENT_RESOURCE_TOOL_ID
 from scout_pace_guardian_tool import PACE_GUARDIAN_TOOL_ID
 from scout_ai_tool_contracts import tool_registry_output
 from scout_ai_tool_executor import execute_scout_ai_tool
@@ -48,6 +49,7 @@ def test_tool_registry_lists_current_and_future_contracts() -> None:
     assert CONTEXTUAL_PERMISSION_TOOL_ID in by_id
     assert ROUTE_CONTEXT_TOOL_ID in by_id
     assert ROUTE_ARCHITECTURE_TOOL_ID in by_id
+    assert EQUIPMENT_RESOURCE_TOOL_ID in by_id
     assert PACE_GUARDIAN_TOOL_ID in by_id
     assert ENERGY_VITALS_TOOL_ID in by_id
     assert by_id["pydantic_ai.tool.search_scout_risk_scores.v0"].implementation_status == (
@@ -77,6 +79,9 @@ def test_tool_registry_lists_current_and_future_contracts() -> None:
     assert by_id[ROUTE_ARCHITECTURE_TOOL_ID].implementation_status == (
         "ready_current_tool"
     )
+    assert by_id[EQUIPMENT_RESOURCE_TOOL_ID].implementation_status == (
+        "ready_current_tool"
+    )
     assert by_id[PACE_GUARDIAN_TOOL_ID].implementation_status == (
         "ready_current_tool"
     )
@@ -86,11 +91,12 @@ def test_tool_registry_lists_current_and_future_contracts() -> None:
     ].aliases
     assert "scout.ai.experience_guide.assess" in by_id[ROUTE_CONTEXT_TOOL_ID].aliases
     assert "scout.ai.cp_graph.assess" in by_id[ROUTE_ARCHITECTURE_TOOL_ID].aliases
+    assert "scout.ai.device_resource.assess" in by_id[EQUIPMENT_RESOURCE_TOOL_ID].aliases
     assert "scout.ai.team_pace_fit.assess" in by_id[PACE_GUARDIAN_TOOL_ID].aliases
-    assert registry.ready_current_tool_count >= 10
+    assert registry.ready_current_tool_count >= 11
     assert registry.executable_tool_count >= registry.ready_current_tool_count
     assert registry.contract_only_tool_count >= 1
-    assert registry.implementation_status_counts["ready_current_tool"] >= 10
+    assert registry.implementation_status_counts["ready_current_tool"] >= 11
     assert "ready_current_tool" in registry.tool_ids_by_status
     assert "scout.ai.weather_window.assess.v0" not in registry.missing_evidence_fields_by_tool
     assert registry.boundary.runtime_safety_truth is False
@@ -189,6 +195,30 @@ def test_execute_route_architecture_alias_returns_cp_graph_decision() -> None:
     assert result.payload["route_architecture"]["turn_back"][
         "turn_back_checkpoint_name"
     ] == "雲海保線所"
+    assert result.payload["boundary"]["runtime_safety_truth"] is False
+    assert result.boundary.live_safety_api_calls_allowed is False
+
+
+def test_execute_equipment_resource_alias_returns_resource_decision() -> None:
+    result = execute_scout_ai_tool(
+        {
+            "tool_id": "scout.ai.device_resource.assess",
+            "project_root": str(PROJECT_ROOT),
+            "query": "手機電量和頭燈水量夠嗎？",
+        }
+    )
+
+    assert result.status == "completed"
+    assert result.tool_id == EQUIPMENT_RESOURCE_TOOL_ID
+    assert result.implementation_status == "ready_current_tool"
+    assert result.output_artifact_kind == "scout_ai_equipment_resource_tool_output"
+    assert result.payload["artifact_kind"] == "scout_ai_equipment_resource_tool_output"
+    assert result.payload["answerability"] == "equipment_resource_missing_required_fields"
+    assert result.payload["decision"] == "DELAY"
+    assert result.payload["equipment_resource"]["role"] == (
+        "Equipment / Resource Intelligence"
+    )
+    assert "water_liters" in result.missing_fields
     assert result.payload["boundary"]["runtime_safety_truth"] is False
     assert result.boundary.live_safety_api_calls_allowed is False
 
