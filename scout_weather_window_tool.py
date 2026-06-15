@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from statistics import mean
@@ -488,6 +489,7 @@ def _weather_to_decision(
 ) -> dict[str, Any]:
     highest = _highest_risk_segment(segments)
     alert_codes = sorted({code for alert in wx_alerts for code in _string_list(alert.get("code"))})
+    route_sensitive_delay = _route_sensitive_weather_delay(segments)
     if missing_fields:
         decision = "DELAY"
         main_reasons = [
@@ -497,6 +499,29 @@ def _weather_to_decision(
         action_limit = "Do not authorize departure, camping, summit, exposed ridge, or creek decisions from placeholder weather."
         next_action = "補齊 fresh provider、TTL、valid-time 與 route_weather_package；完成前採保守延後。"
         alternatives = ["delay until fresh route weather package is reviewed", "choose lower-exposure fallback route"]
+    elif route_sensitive_delay:
+        decision = "DELAY"
+        crossing_count = route_sensitive_delay["creek_crossing_count"]
+        main_reasons = [
+            (
+                "route contains "
+                f"{crossing_count:g} creek-crossing point"
+                + ("s" if crossing_count != 1 else "")
+                + " after previous-24h rainfall"
+            ),
+            "team has no creek-crossing experience",
+            "rainfall can raise creek, wet-terrain, rockfall, collapse, and loose-soil risk",
+        ]
+        action_limit = (
+            "Do not depart on the original creek-crossing plan until water level, "
+            "recent route reports, and team crossing capability are reviewed."
+        )
+        next_action = "建議延期 48 小時或改走低風險替代路線，並重新確認溪流水位與近期路況。"
+        alternatives = [
+            "delay 48 hours",
+            "choose a lower-risk route without creek crossings",
+            "use a guided-only creek-crossing plan after route review",
+        ]
     else:
         decision = _weather_decision_from_risk(highest=highest, risk_summary=risk_summary)
         main_reasons = _weather_decision_reasons(
@@ -521,10 +546,14 @@ def _weather_to_decision(
         "next_action": next_action,
         "alternatives": alternatives,
         "route_specific_conditions": _route_specific_conditions(alert_codes, highest=highest),
+        "route_sensitive_weather_rule": route_sensitive_delay,
         "highest_risk_segment": _compact_segment(highest) if highest else None,
         "wx_alert_count": len(wx_alerts),
         "warnings": warnings[:3],
-        "weather_buffer_impact": _weather_buffer_impact(decision),
+        "weather_buffer_impact": _weather_buffer_impact(
+            decision,
+            missing_fields=bool(missing_fields),
+        ),
     }
 
 
@@ -805,13 +834,124 @@ def _route_specific_conditions(
     return conditions[:6]
 
 
-def _weather_buffer_impact(decision: str) -> str:
+def _route_sensitive_weather_delay(
+    segments: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    if not segments:
+        return None
+    text = " ".join(_segment_weather_text(item) for item in segments).lower()
+    if not _mentions_previous_24h_rain(text):
+        return None
+    if not _mentions_no_creek_crossing_experience(text):
+        return None
+    crossing_segments = [
+        item for item in segments if _mentions_creek_crossing(_segment_weather_text(item))
+    ]
+    crossing_count = max(
+        len(crossing_segments),
+        _explicit_creek_crossing_count(text),
+    )
+    if crossing_count <= 0:
+        return None
+    return {
+        "rule": "previous_24h_rain_creek_crossing_no_experience",
+        "creek_crossing_count": crossing_count,
+        "segment_ids": [
+            str(item.get("segment_id"))
+            for item in crossing_segments[:6]
+            if item.get("segment_id") is not None
+        ],
+    }
+
+
+def _segment_weather_text(item: dict[str, Any]) -> str:
+    parts = [
+        str(item.get("segment_id") or ""),
+        str(item.get("message") or ""),
+        *_string_list(item.get("factors")),
+    ]
+    return " ".join(part for part in parts if part)
+
+
+def _mentions_previous_24h_rain(text: str) -> bool:
+    normalized = text.replace(" ", "")
+    return any(
+        needle in normalized
+        for needle in (
+            "前24小時",
+            "過去24小時",
+            "previous24h",
+            "previous24hours",
+            "last24h",
+            "last24hours",
+            "24hrain",
+            "24hourrain",
+        )
+    ) and any(
+        needle in normalized
+        for needle in ("雨", "降雨", "rain", "precip")
+    )
+
+
+def _mentions_no_creek_crossing_experience(text: str) -> bool:
+    normalized = text.replace(" ", "")
+    return any(
+        needle in normalized
+        for needle in (
+            "沒有渡溪經驗",
+            "無渡溪經驗",
+            "無過溪經驗",
+            "沒有過溪經驗",
+            "隊伍沒有渡溪經驗",
+            "隊伍無渡溪經驗",
+            "nocreekcrossingexperience",
+            "nostreamcrossingexperience",
+            "inexperiencedcreekcrossing",
+            "inexperiencedstreamcrossing",
+        )
+    )
+
+
+def _mentions_creek_crossing(text: str) -> bool:
+    normalized = text.replace(" ", "")
+    return any(
+        needle in normalized
+        for needle in (
+            "渡溪",
+            "過溪",
+            "溪水",
+            "溪谷",
+            "creekcrossing",
+            "streamcrossing",
+            "rivercrossing",
+        )
+    )
+
+
+def _explicit_creek_crossing_count(text: str) -> int:
+    normalized = text.replace(" ", "")
+    match = re.search(r"(\d+)處(?:渡溪|過溪|溪流)", normalized)
+    if match:
+        return int(match.group(1))
+    for label, count in (("兩處", 2), ("二處", 2), ("三處", 3), ("四處", 4)):
+        if label + "渡溪" in normalized or label + "過溪" in normalized:
+            return count
+    return 0
+
+
+def _weather_buffer_impact(
+    decision: str,
+    *,
+    missing_fields: bool,
+) -> str:
     if decision in {"NO_GO", "CHANGE_PLAN"}:
         return "weather buffer is not available for discretionary delay or exposure"
     if decision == "CONDITIONAL_GO":
         return "weather buffer must be reserved for CP re-check and retreat option"
     if decision == "DELAY":
-        return "weather buffer cannot be computed from incomplete evidence"
+        if missing_fields:
+            return "weather buffer cannot be computed from incomplete evidence"
+        return "weather buffer must be preserved until route-specific weather risk is re-reviewed"
     return "weather buffer currently not consumed by a decision restriction"
 
 
