@@ -57,8 +57,12 @@ OPTIONAL_PROJECT_ARTIFACTS: tuple[tuple[str, str], ...] = (
     ("route_context_evidence", "route_context_evidence_ref"),
     ("route_context_source_manifest", "route_context_source_manifest_ref"),
     ("route_context_pack", "route_context_pack_ref"),
+    ("route_context_crawl_seed_plan", "route_context_crawl_seed_plan_ref"),
+    ("route_context_briefing", "route_context_briefing_ref"),
     ("route_context_points", "route_context_points_ref"),
     ("route_architecture", "route_architecture_ref"),
+    ("pace_coefficients", "pace_coefficients_ref"),
+    ("team_pace_fit", "team_pace_fit_ref"),
     ("route_weather_package", "route_weather_package_ref"),
     ("weather_source_manifest", "weather_source_manifest_ref"),
     ("weather_decision_candidates", "weather_decision_candidates_ref"),
@@ -154,6 +158,16 @@ def _project_artifact_entry(
         return entry
 
     entry["sha256"] = _sha256_file(artifact_path)
+    if artifact_kind == "route_context_briefing":
+        entry.update(
+            {
+                "content_type": "text/html",
+                "size_bytes": artifact_path.stat().st_size,
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+            }
+        )
+        return entry
     payload = _load_json(artifact_path)
     entry.update(_project_artifact_summary(artifact_kind, payload))
     return entry
@@ -310,6 +324,25 @@ def _project_artifact_summary(artifact_kind: str, payload: Any) -> dict[str, Any
             "runtime_safety_truth": boundary.get("runtime_safety_truth"),
         }
 
+    if artifact_kind == "route_context_crawl_seed_plan":
+        seed_policy = payload.get("route_note_seed_policy", {})
+        boundary = payload.get("boundary", {})
+        return {
+            "project_id": payload.get("project_id"),
+            "schema_version": payload.get("schema_version"),
+            "seed_count": payload.get("seed_count"),
+            "route_note_seed_count": payload.get("route_note_seed_count"),
+            "route_keywords": payload.get("route_keywords"),
+            "source_tier_count": len(payload.get("source_tiers", [])),
+            "route_notes_are_conclusion": seed_policy.get("route_notes_are_conclusion"),
+            "route_notes_are_seed_material": seed_policy.get(
+                "route_notes_are_seed_material"
+            ),
+            "route_note_point_policy": seed_policy.get("route_note_point_policy"),
+            "candidate_only": boundary.get("candidate_only"),
+            "runtime_safety_truth": boundary.get("runtime_safety_truth"),
+        }
+
     if artifact_kind == "route_context_points":
         counts = payload.get("counts", {})
         boundary = payload.get("boundary", {})
@@ -353,6 +386,46 @@ def _project_artifact_summary(artifact_kind: str, payload: Any) -> dict[str, Any
             "raw_route_geometry_embedded": cp_graph.get("raw_route_geometry_embedded")
             if isinstance(cp_graph, dict)
             else None,
+            "candidate_only": boundary.get("candidate_only"),
+            "runtime_safety_truth": boundary.get("runtime_safety_truth"),
+        }
+
+    if artifact_kind == "pace_coefficients":
+        counts = payload.get("counts", {})
+        boundary = payload.get("boundary", {})
+        return {
+            "project_id": payload.get("project_id"),
+            "schema_version": payload.get("schema_version"),
+            "status": payload.get("status"),
+            "coefficient_schema_count": payload.get("coefficient_schema_count"),
+            "member_coefficient_count": counts.get("member_coefficient_count"),
+            "missing_field_count": counts.get("missing_field_count"),
+            "candidate_only": boundary.get("candidate_only"),
+            "runtime_safety_truth": boundary.get("runtime_safety_truth"),
+            "average_pace_used": boundary.get("average_pace_used"),
+        }
+
+    if artifact_kind == "team_pace_fit":
+        counts = payload.get("counts", {})
+        boundary = payload.get("boundary", {})
+        pace_fit = payload.get("team_pace_fit", {})
+        pace_guardian = payload.get("pace_guardian", {})
+        return {
+            "project_id": payload.get("project_id"),
+            "schema_version": payload.get("schema_version"),
+            "decision": payload.get("decision"),
+            "answerability": payload.get("answerability"),
+            "member_count": counts.get("member_count"),
+            "members_with_pace_count": counts.get("members_with_pace_count"),
+            "vulnerable_member_count": counts.get("vulnerable_member_count"),
+            "missing_field_count": counts.get("missing_field_count"),
+            "pace_gap_ratio": pace_fit.get("pace_gap_ratio")
+            if isinstance(pace_fit, dict)
+            else None,
+            "average_pace_used": pace_guardian.get("average_pace_used")
+            if isinstance(pace_guardian, dict)
+            else boundary.get("average_pace_used"),
+            "human_review_required": payload.get("human_review_required"),
             "candidate_only": boundary.get("candidate_only"),
             "runtime_safety_truth": boundary.get("runtime_safety_truth"),
         }

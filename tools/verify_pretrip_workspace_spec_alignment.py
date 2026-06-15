@@ -63,6 +63,11 @@ OPTIONAL_ROUTE_ARCHITECTURE_REFS = {
     "route_architecture_ref": "normalized/architecture/route_architecture.json",
 }
 
+OPTIONAL_PACE_FIT_REFS = {
+    "pace_coefficients_ref": "normalized/pace/pace_coefficients.json",
+    "team_pace_fit_ref": "normalized/pace/team_pace_fit.json",
+}
+
 OPTIONAL_WEATHER_DECISION_REFS = {
     "weather_source_manifest_ref": "normalized/weather/weather_source_manifest.json",
     "weather_decision_candidates_ref": "candidates/weather_decision_candidates.json",
@@ -160,6 +165,7 @@ def main(argv: list[str] | None = None) -> int:
     layer_candidate_artifacts: dict[str, dict[str, Any] | None] = {}
     route_context_summary = {"checked": False, "available": False}
     route_architecture_summary = {"checked": False, "available": False}
+    pace_fit_summary = {"checked": False, "available": False}
     weather_decision_summary = {"checked": False, "available": False}
     contextual_permission_summary = {"checked": False, "available": False}
     api_summary = {"checked": False}
@@ -278,6 +284,11 @@ def main(argv: list[str] | None = None) -> int:
                 project,
                 errors,
             )
+            pace_fit_summary = _check_pace_fit_refs(
+                project_root,
+                project,
+                errors,
+            )
             weather_decision_summary = _check_weather_decision_refs(
                 project_root,
                 project,
@@ -342,6 +353,7 @@ def main(argv: list[str] | None = None) -> int:
         "semantic_judgements": _semantic_judgement_summary(semantic_judgements),
         "route_context": route_context_summary,
         "route_architecture": route_architecture_summary,
+        "pace_fit": pace_fit_summary,
         "weather_decision": weather_decision_summary,
         "contextual_permission": contextual_permission_summary,
         "layer_candidates": {
@@ -749,6 +761,228 @@ def _route_architecture_candidate_only(payload: Any) -> bool | None:
 
 
 def _route_architecture_runtime_truth(payload: Any) -> bool | None:
+    if not isinstance(payload, dict):
+        return None
+    boundary = payload.get("boundary") if isinstance(payload.get("boundary"), dict) else {}
+    if "runtime_safety_truth" in boundary:
+        return boundary.get("runtime_safety_truth")
+    return payload.get("runtime_safety_truth")
+
+
+def _check_pace_fit_refs(
+    project_root: Path,
+    project: dict[str, Any],
+    errors: list[str],
+) -> dict[str, Any]:
+    present_refs = {
+        key: project.get(key)
+        for key in OPTIONAL_PACE_FIT_REFS
+        if project.get(key)
+    }
+    if not present_refs:
+        return {"checked": True, "available": False}
+
+    missing_ref_keys = [key for key in OPTIONAL_PACE_FIT_REFS if not project.get(key)]
+    if missing_ref_keys:
+        errors.append(
+            "pace fit refs are partial; missing: " + ", ".join(sorted(missing_ref_keys))
+        )
+
+    for key, expected in sorted(OPTIONAL_PACE_FIT_REFS.items()):
+        ref = project.get(key)
+        if ref and ref != expected:
+            errors.append(f"unexpected pace fit ref for {key}: {ref} != {expected}")
+
+    payloads = {
+        key: _load_json_ref(project_root, project, key, errors)
+        for key in OPTIONAL_PACE_FIT_REFS
+        if project.get(key)
+    }
+    coefficients = payloads.get("pace_coefficients_ref")
+    coefficients = coefficients if isinstance(coefficients, dict) else {}
+    team_fit = payloads.get("team_pace_fit_ref")
+    team_fit = team_fit if isinstance(team_fit, dict) else {}
+
+    _check_pace_fit_artifact_kind(
+        coefficients,
+        "pretrip_pace_coefficients",
+        "pace_coefficients_ref",
+        errors,
+    )
+    _check_pace_fit_artifact_kind(
+        team_fit,
+        "pretrip_team_pace_fit",
+        "team_pace_fit_ref",
+        errors,
+    )
+    for key, payload in payloads.items():
+        _check_pace_fit_boundary(payload, key, errors)
+
+    coefficient_schema = (
+        coefficients.get("coefficient_schema")
+        if isinstance(coefficients.get("coefficient_schema"), list)
+        else []
+    )
+    indicator_ids = {
+        item.get("indicator_id")
+        for item in coefficient_schema
+        if isinstance(item, dict)
+    }
+    required_indicators = {
+        "flat_speed_mps",
+        "ascent_speed_vertical_m_per_hour",
+        "descent_speed_mps",
+        "technical_terrain_slowdown_ratio",
+        "rest_frequency_minutes",
+        "late_trip_decay_ratio",
+        "load_impact_ratio",
+        "weather_impact_ratio",
+        "experience_credibility",
+    }
+    missing_indicators = sorted(required_indicators - indicator_ids)
+    if missing_indicators:
+        errors.append(
+            "pace coefficient schema missing indicators: "
+            + ", ".join(missing_indicators)
+        )
+    if coefficients.get("coefficient_schema_count") not in {None, len(coefficient_schema)}:
+        errors.append(
+            "pace coefficient schema_count mismatch: "
+            f"{coefficients.get('coefficient_schema_count')} != {len(coefficient_schema)}"
+        )
+
+    member_coefficients = (
+        coefficients.get("member_coefficients")
+        if isinstance(coefficients.get("member_coefficients"), list)
+        else []
+    )
+    coefficient_counts = (
+        coefficients.get("counts") if isinstance(coefficients.get("counts"), dict) else {}
+    )
+    if (
+        coefficient_counts.get("member_coefficient_count") is not None
+        and coefficient_counts.get("member_coefficient_count") != len(member_coefficients)
+    ):
+        errors.append(
+            "pace coefficient member_coefficient_count mismatch: "
+            f"counts={coefficient_counts.get('member_coefficient_count')} "
+            f"members={len(member_coefficients)}"
+        )
+    for member in member_coefficients:
+        if not isinstance(member, dict):
+            continue
+        member_label = member.get("label") or member.get("member_id") or "unknown"
+        if member.get("raw_health_payload_embedded") is not False:
+            errors.append(f"pace coefficient member {member_label} embeds raw health payload")
+        if member.get("medical_diagnosis") is not False:
+            errors.append(f"pace coefficient member {member_label} claims medical diagnosis")
+
+    counts = team_fit.get("counts") if isinstance(team_fit.get("counts"), dict) else {}
+    pace_fit = (
+        team_fit.get("team_pace_fit")
+        if isinstance(team_fit.get("team_pace_fit"), dict)
+        else {}
+    )
+    pace_guardian = (
+        team_fit.get("pace_guardian")
+        if isinstance(team_fit.get("pace_guardian"), dict)
+        else {}
+    )
+    if team_fit.get("human_review_required") is not True:
+        errors.append("team pace fit artifact must require human review")
+    if pace_fit.get("average_pace_used") is not False:
+        errors.append("team pace fit must set average_pace_used=false")
+    if pace_guardian.get("average_pace_used") is not False:
+        errors.append("pace guardian artifact must set average_pace_used=false")
+
+    project_member_count = project.get("team_pace_fit_member_count")
+    if (
+        project_member_count is not None
+        and counts.get("member_count") is not None
+        and project_member_count != counts.get("member_count")
+    ):
+        errors.append(
+            "team_pace_fit_member_count mismatch: "
+            f"project={project_member_count} artifact={counts.get('member_count')}"
+        )
+    project_vulnerable_count = project.get("team_pace_fit_vulnerable_member_count")
+    if (
+        project_vulnerable_count is not None
+        and counts.get("vulnerable_member_count") is not None
+        and project_vulnerable_count != counts.get("vulnerable_member_count")
+    ):
+        errors.append(
+            "team_pace_fit_vulnerable_member_count mismatch: "
+            f"project={project_vulnerable_count} artifact={counts.get('vulnerable_member_count')}"
+        )
+
+    return {
+        "checked": True,
+        "available": True,
+        "decision": team_fit.get("decision"),
+        "answerability": team_fit.get("answerability"),
+        "member_count": counts.get("member_count"),
+        "members_with_pace_count": counts.get("members_with_pace_count"),
+        "vulnerable_member_count": counts.get("vulnerable_member_count"),
+        "pace_gap_ratio": pace_fit.get("pace_gap_ratio"),
+        "coefficient_schema_count": len(coefficient_schema),
+        "member_coefficient_count": len(member_coefficients),
+        "candidate_only": _pace_fit_candidate_only(team_fit),
+        "runtime_safety_truth": _pace_fit_runtime_truth(team_fit),
+        "average_pace_used": pace_guardian.get("average_pace_used"),
+    }
+
+
+def _check_pace_fit_artifact_kind(
+    payload: Any,
+    expected: str,
+    ref_key: str,
+    errors: list[str],
+) -> None:
+    if not isinstance(payload, dict):
+        errors.append(f"pace fit artifact payload missing for {ref_key}")
+        return
+    if payload.get("artifact_kind") != expected:
+        errors.append(
+            f"pace fit artifact kind mismatch for {ref_key}: {payload.get('artifact_kind')} != {expected}"
+        )
+
+
+def _check_pace_fit_boundary(
+    payload: Any,
+    ref_key: str,
+    errors: list[str],
+) -> None:
+    if not isinstance(payload, dict):
+        return
+    boundary = payload.get("boundary") if isinstance(payload.get("boundary"), dict) else {}
+    if payload.get("runtime_safety_truth") is True or boundary.get("runtime_safety_truth") is True:
+        errors.append(f"{ref_key} claims runtime_safety_truth=true")
+    for key in (
+        "phase1_runtime_mutation_allowed",
+        "phase2_brain_writeback_allowed",
+        "live_safety_api_calls_allowed",
+        "external_api_calls_made",
+        "outbound_send_allowed",
+        "hardware_control_allowed",
+        "raw_payloads_embedded",
+        "raw_health_payload_embedded",
+        "medical_diagnosis",
+    ):
+        if boundary.get(key) is True:
+            errors.append(f"{ref_key} sets {key}=true")
+    if boundary.get("average_pace_used") is not False:
+        errors.append(f"{ref_key} must set average_pace_used=false")
+
+
+def _pace_fit_candidate_only(payload: Any) -> bool | None:
+    if not isinstance(payload, dict):
+        return None
+    boundary = payload.get("boundary") if isinstance(payload.get("boundary"), dict) else {}
+    return boundary.get("candidate_only")
+
+
+def _pace_fit_runtime_truth(payload: Any) -> bool | None:
     if not isinstance(payload, dict):
         return None
     boundary = payload.get("boundary") if isinstance(payload.get("boundary"), dict) else {}

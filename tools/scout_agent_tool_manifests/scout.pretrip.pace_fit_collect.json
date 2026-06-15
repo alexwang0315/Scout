@@ -1,0 +1,55 @@
+{
+  "id": "scout.pretrip.pace_fit_collect",
+  "version": "0.1.0",
+  "description": "Collect Readiness & Pace Fit evidence into the Scout pretrip workspace layout.",
+  "command": {
+    "argv": [
+      "{python}",
+      "-m",
+      "scout_agent_builtin_tools",
+      "pretrip-pace-fit-collect",
+      "--input",
+      "{input}",
+      "--json"
+    ],
+    "dry_run_argument": "--dry-run"
+  },
+  "mode": "workspace_write",
+  "input_schema_ref": "schemas/scout_agent/pretrip_pace_fit_collect.request.json",
+  "output_schema_ref": "schemas/scout_agent/tool_result.json",
+  "allowed_reads": [
+    "pretrip.workspace.project",
+    "pretrip.workspace.outputs.team_status",
+    "pretrip.workspace.outputs.resource_plan",
+    "pretrip.workspace.outputs.planned_eta",
+    "pretrip.workspace.outputs.energy_vitals",
+    "pretrip.workspace.outputs.readiness_report",
+    "pretrip.workspace.outputs.timing_measurements",
+    "pretrip.workspace.weather_daylight_evidence"
+  ],
+  "allowed_writes": [
+    "pretrip.workspace.normalized.pace.pace_coefficients",
+    "pretrip.workspace.normalized.pace.team_pace_fit"
+  ],
+  "forbidden_writes": [
+    "phase1.runtime",
+    "phase2.brain.observed_facts",
+    "live.safety_api"
+  ],
+  "requires_authorization": {
+    "kind": "user_or_operator"
+  },
+  "trace": {
+    "required": true,
+    "event_kind": "agent_tool_invocation"
+  },
+  "metadata": {
+    "standard_alignment": "SCOUT_OUTDOOR_AI_AGENT_STANDARD Sec. 7 Readiness & Pace Fit",
+    "workspace_layout_section": "Outdoor AI Agent Data Placement",
+    "network_policy": "no_live_network_fetch",
+    "candidate_only": true,
+    "runtime_safety_truth": false,
+    "medical_diagnosis": false,
+    "average_pace_used": false
+  }
+}

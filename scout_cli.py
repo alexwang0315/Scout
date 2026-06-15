@@ -219,6 +219,13 @@ def _add_pretrip_group(subparsers: argparse._SubParsersAction) -> None:
     route_context.add_argument("--workspace-root", type=Path, default=None)
     route_context.add_argument("--limit-route-notes", type=int, default=80)
     route_context.add_argument("--no-route-notes", action="store_true")
+    route_context.add_argument(
+        "--route-note-point-policy",
+        choices=("seed_only", "promote_representative"),
+        default="seed_only",
+    )
+    route_context.add_argument("--route-keyword", default=None)
+    route_context.add_argument("--no-briefing", action="store_true")
     route_context.add_argument("--collected-at", default=None)
     route_context.add_argument("--dry-run", action="store_true")
     route_context.add_argument("--authorized-by", default=None)
@@ -237,6 +244,22 @@ def _add_pretrip_group(subparsers: argparse._SubParsersAction) -> None:
     route_architecture.add_argument("--authorized-by", default=None)
     route_architecture.add_argument("--output", type=Path, default=None)
     route_architecture.add_argument("--json", action="store_true")
+    pace_fit = pretrip_sub.add_parser("pace-fit-collect")
+    pace_fit.add_argument("--project-root", type=Path, default=None)
+    pace_fit.add_argument("--project-id", default=None)
+    pace_fit.add_argument("--workspace-root", type=Path, default=None)
+    pace_fit.add_argument("--team-members-json", default=None)
+    pace_fit.add_argument("--current-time", default=None)
+    pace_fit.add_argument("--next-cp-id", default=None)
+    pace_fit.add_argument("--minutes-to-next-cp", default=None)
+    pace_fit.add_argument("--current-delay-minutes", default=None)
+    pace_fit.add_argument("--leader-accepts-slowest-basis", default=None)
+    pace_fit.add_argument("--team-rest-sync", default=None)
+    pace_fit.add_argument("--generated-at", default=None)
+    pace_fit.add_argument("--dry-run", action="store_true")
+    pace_fit.add_argument("--authorized-by", default=None)
+    pace_fit.add_argument("--output", type=Path, default=None)
+    pace_fit.add_argument("--json", action="store_true")
     weather_decision = pretrip_sub.add_parser("weather-decision-collect")
     weather_decision.add_argument("--project-root", type=Path, default=None)
     weather_decision.add_argument("--project-id", default=None)
@@ -620,11 +643,15 @@ def _tool_request_for_args(args: argparse.Namespace) -> tuple[str, dict[str, Any
         request = {
             "include_route_notes": not args.no_route_notes,
             "limit_route_notes": args.limit_route_notes,
+            "route_note_point_policy": args.route_note_point_policy,
+            "write_briefing": not args.no_briefing,
         }
         _set_path(request, "project_root", args.project_root)
         _set_path(request, "workspace_root", args.workspace_root)
         if args.project_id:
             request["project_id"] = args.project_id
+        if args.route_keyword:
+            request["route_keyword"] = args.route_keyword
         if args.collected_at:
             request["collected_at"] = args.collected_at
         return "scout.pretrip.route_context_collect", request
@@ -643,6 +670,30 @@ def _tool_request_for_args(args: argparse.Namespace) -> tuple[str, dict[str, Any
         if args.generated_at:
             request["generated_at"] = args.generated_at
         return "scout.pretrip.route_architecture_collect", request
+    if group == "pretrip" and args.pretrip_command == "pace-fit-collect":
+        request = {}
+        _set_path(request, "project_root", args.project_root)
+        _set_path(request, "workspace_root", args.workspace_root)
+        if args.project_id:
+            request["project_id"] = args.project_id
+        if args.team_members_json:
+            members = json.loads(args.team_members_json)
+            if not isinstance(members, list):
+                raise ValueError("--team-members-json must decode to a list")
+            request["team_members"] = members
+        for key in (
+            "current_time",
+            "next_cp_id",
+            "minutes_to_next_cp",
+            "current_delay_minutes",
+            "leader_accepts_slowest_basis",
+            "team_rest_sync",
+            "generated_at",
+        ):
+            value = getattr(args, key)
+            if value is not None:
+                request[key] = value
+        return "scout.pretrip.pace_fit_collect", request
     if group == "pretrip" and args.pretrip_command == "weather-decision-collect":
         request = {"provider": args.provider}
         _set_path(request, "project_root", args.project_root)
