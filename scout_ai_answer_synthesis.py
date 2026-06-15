@@ -1166,10 +1166,17 @@ def _pretrip_decision_package_answer(package: dict[str, Any]) -> str | None:
     decision = outputs.get("pretrip_decision")
     top_risks = _summarize_risk_reasons(outputs.get("top_risk_sources"))
     required_conditions = _summarize_text_items(outputs.get("required_conditions"), limit=2)
+    suggested_stops = _summarize_suggested_stops(outputs.get("suggested_stop_points"))
     stop_limits = _summarize_stop_limits(
         outputs.get("not_recommended_stop_points"),
         limits=limits,
     )
+    alternatives = _summarize_text_items(
+        outputs.get("alternatives_or_short_routes"),
+        limit=2,
+    )
+    checklist_gaps = _summarize_pretrip_checklist_gaps(outputs.get("pretrip_checklist"))
+    residual_risk = _summarize_text_items(outputs.get("residual_risk"), limit=3)
     pieces = []
     if decision:
         pieces.append(f"標準出發前決策包：decision={decision}")
@@ -1191,6 +1198,14 @@ def _pretrip_decision_package_answer(package: dict[str, Any]) -> str | None:
         )
     if stop_limits:
         pieces.append(f"停留限制={stop_limits}")
+    if suggested_stops:
+        pieces.append(f"建議停留/重評點={suggested_stops}")
+    if alternatives:
+        pieces.append(f"替代/短版={alternatives}")
+    if checklist_gaps:
+        pieces.append(f"行前 checklist 缺口={checklist_gaps}")
+    if residual_risk:
+        pieces.append(f"殘餘風險={residual_risk}")
     if not pieces:
         return None
     return "；".join(pieces) + "。"
@@ -1230,6 +1245,36 @@ def _summarize_stop_limits(value: Any, *, limits: dict[str, Any]) -> str:
     if buffer_cost:
         parts.append(str(buffer_cost))
     return " / ".join(parts)
+
+
+def _summarize_suggested_stops(value: Any) -> str:
+    if not isinstance(value, list):
+        return ""
+    parts = []
+    for item in value[:2]:
+        if not isinstance(item, dict):
+            continue
+        label = item.get("label")
+        policy = item.get("policy")
+        latest_leave = item.get("latest_leave_time")
+        text = " ".join(str(part) for part in (label, policy, latest_leave) if part)
+        if text:
+            parts.append(text)
+    return " / ".join(parts)
+
+
+def _summarize_pretrip_checklist_gaps(value: Any) -> str:
+    if not isinstance(value, list):
+        return ""
+    gaps = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        status = str(item.get("status") or "")
+        label = item.get("item")
+        if label and status != "complete":
+            gaps.append(f"{label}={status}")
+    return " / ".join(gaps[:5])
 
 
 def _route_context_answer(sources: list[ScoutAiAnswerSource]) -> str | None:
