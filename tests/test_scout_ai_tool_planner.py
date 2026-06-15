@@ -121,6 +121,33 @@ def test_planner_selects_route_readiness_for_pretrip_go_no_go_question() -> None
     assert item.boundary.runtime_safety_truth is False
 
 
+def test_planner_passes_explicit_route_readiness_inputs_as_arguments() -> None:
+    plan = plan_scout_ai_tools(
+        _query(
+            "beginner transportconfirmed slowestbasisconfirmed "
+            "departuretimeconfirmed wxconfirmed sunok gearconfirmed rcconfirmed "
+            "pretrip Go/No-Go 可以自主出發嗎？"
+        ),
+        project_root=PROJECT_ROOT,
+    )
+
+    item = _single_tool(plan, ROUTE_READINESS_TOOL_ID)
+    assert item.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+    assert item.request is not None
+    assert item.request["tool_id"] == ROUTE_READINESS_TOOL_ID
+    assert item.request["arguments"] == {
+        "user_experience_level": "beginner",
+        "transport_access_plan": "user_confirmed",
+        "team_slowest_basis_confirmed": True,
+        "departure_time_confirmed": True,
+        "weather_reviewed": True,
+        "daylight_reviewed": True,
+        "equipment_confirmed": True,
+        "remote_contact_confirmed": True,
+    }
+    assert _tool_ids(plan) == {ROUTE_READINESS_TOOL_ID}
+
+
 def test_planner_selects_media_literacy_for_social_photo_bias_question() -> None:
     plan = plan_scout_ai_tools(
         _query("IG 大崩壁美照會不會誤導？"),

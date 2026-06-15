@@ -195,6 +195,8 @@ def _source_from_record(record: dict[str, Any]) -> ScoutAiAnswerSource:
         "provided_fields",
         "quality_flags",
         "route_readiness",
+        "route_demand_profile",
+        "guided_only_gate",
         "departure_gate",
         "readiness_state",
         "readiness_governance",
@@ -530,8 +532,9 @@ def _decision_source_priority(source: ScoutAiAnswerSource) -> tuple[int, str]:
         SAFETY_BOUNDARY_TOOL_ID,
     }:
         return (0, source.tool_id)
+    if source.tool_id == ROUTE_READINESS_TOOL_ID:
+        return (5, source.tool_id)
     if source.tool_id in {
-        ROUTE_READINESS_TOOL_ID,
         WEATHER_WINDOW_TOOL_ID,
         LIVE_NAVIGATION_STATE_TOOL_ID,
         PACE_GUARDIAN_TOOL_ID,
@@ -789,6 +792,10 @@ def _pretrip_first_layer_limit(
 ) -> str:
     turnaround = _turnaround_limit_text(latest_turnaround)
     if not allowed or decision in {"DELAY", "NO_GO", "CHANGE_PLAN", "ESCALATE"}:
+        if decision == "GUIDED_ONLY":
+            if turnaround:
+                return f"不得自主出發；僅可改成合格帶領或等效審核控制。{turnaround}"
+            return "不得自主出發；僅可改成合格帶領或等效審核控制。"
         if turnaround:
             return f"不得出發或增加停留；補齊缺口並重跑 departure gate。{turnaround}"
         return "不得出發或增加停留；補齊缺口並重跑 departure gate。"

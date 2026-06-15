@@ -152,6 +152,13 @@ limits, and traceability. It remains candidate-only decision support: it does
 not grant departure approval, runtime handoff, `/safety/*`, SOS, outbound send,
 or hardware control.
 
+Route readiness can now emit `GUIDED_ONLY` when required inputs are otherwise
+present but a low-experience user asks about a high-demand route, such as a long
+high-mountain route with large elevation range or advanced terrain indicators.
+This does not approve the route; it blocks autonomous departure and redirects the
+plan toward qualified guide/leader support, equivalent reviewed controls, a
+shorter route, or a lower-demand training route.
+
 Scout AI answer synthesis and full workflow artifacts also expose top-level
 `decision_output`, aligned to Sec. 16 and Sec. 17. When a tool already returns a
 native decision object, including route readiness, Scout AI preserves it.

@@ -158,6 +158,7 @@ def assess_scout_route_readiness(
         weather_state=weather_state,
         input_coverage=input_coverage,
         missing_fields=missing_fields,
+        direct=direct,
     )
     decision = _decision(governance=governance, missing_fields=missing_fields)
     answerability = (
@@ -216,6 +217,8 @@ def assess_scout_route_readiness(
         "decision_output": decision_output,
         "field_answer": field_answer,
         "missing_fields": missing_fields,
+        "route_demand_profile": route_state["route_demand_profile"],
+        "guided_only_gate": governance["guided_only_gate"],
         "route_readiness": {
             "role": "Pre-Trip Route Readiness / Departure Gate",
             "candidate_only": True,
@@ -228,6 +231,7 @@ def assess_scout_route_readiness(
             "required_conditions": governance["required_conditions"],
             "alternative_actions": governance["alternative_actions"],
             "next_action": governance["next_action"],
+            "guided_only_gate": governance["guided_only_gate"],
         },
         "departure_gate": {
             "candidate_only": True,
@@ -424,6 +428,8 @@ def _decision_limit_phrase(
         return "必須改線、改日期或降低目標 CP；不得照原計畫出發。"
     if decision == "ESCALATE":
         return "交由人工領隊/留守確認；Scout 不自動批准出發、通知或報案。"
+    if decision == "GUIDED_ONLY":
+        return "不得自主出發；只可在合格嚮導、領隊或等效審核控制下重新進入出發門檢。"
     if decision == "CONDITIONAL_GO":
         deadline = limits.get("must_leave_by") or route_state.get("turn_back_checkpoint_eta")
         if deadline:
@@ -545,6 +551,70 @@ def _route_state(
             package_boundary.get("reviewed_package_is_not_departure_approval")
         ),
         "route_comparison_only": bool(route_comparison),
+        "route_demand_profile": _route_demand_profile(
+            project=project,
+            route_summary=package_route_summary,
+            mission_graph=mission_graph,
+        ),
+    }
+
+
+def _route_demand_profile(
+    *,
+    project: dict[str, Any],
+    route_summary: dict[str, Any],
+    mission_graph: dict[str, Any],
+) -> dict[str, Any]:
+    route_name = " ".join(
+        text
+        for text in (
+            _first_text(project.get("route_name")),
+            _first_text(route_summary.get("route_name")),
+            _first_text(mission_graph.get("name")),
+            _first_text(mission_graph.get("route_source")),
+        )
+        if text
+    )
+    distance_m = _float_or_none(route_summary.get("distance_m"))
+    elevation_max_m = _float_or_none(route_summary.get("elevation_max_m"))
+    elevation_min_m = _float_or_none(route_summary.get("elevation_min_m"))
+    elevation_range_m = (
+        round(elevation_max_m - elevation_min_m, 2)
+        if elevation_max_m is not None and elevation_min_m is not None
+        else None
+    )
+    segments = _list_of_dicts(mission_graph.get("segments"))
+    max_segment_gain_m = _max_float_from_dicts(segments, "elevation_gain_m")
+    max_segment_loss_m = _max_float_from_dicts(segments, "elevation_loss_m")
+
+    demand_reasons: list[str] = []
+    if distance_m is not None and distance_m >= 20000:
+        demand_reasons.append(f"long_route_distance_m={distance_m:g}")
+    if elevation_max_m is not None and elevation_max_m >= 3000:
+        demand_reasons.append(f"high_mountain_elevation_max_m={elevation_max_m:g}")
+    if elevation_range_m is not None and elevation_range_m >= 1200:
+        demand_reasons.append(f"large_elevation_range_m={elevation_range_m:g}")
+    if max_segment_gain_m is not None and max_segment_gain_m >= 200:
+        demand_reasons.append(f"steep_segment_gain_m={max_segment_gain_m:g}")
+    if max_segment_loss_m is not None and max_segment_loss_m >= 250:
+        demand_reasons.append(f"steep_segment_loss_m={max_segment_loss_m:g}")
+    if _has_any_text(route_name, ("縱走", "高山", "曝露", "崩壁", "拉繩", "溪谷", "technical", "exposed")):
+        demand_reasons.append("route_name_or_source_indicates_advanced_terrain")
+
+    route_demand = (
+        "high" if len(demand_reasons) >= 2 else "moderate" if demand_reasons else "unknown"
+    )
+    return {
+        "route_demand": route_demand,
+        "distance_m": distance_m,
+        "elevation_max_m": elevation_max_m,
+        "elevation_range_m": elevation_range_m,
+        "max_segment_gain_m": max_segment_gain_m,
+        "max_segment_loss_m": max_segment_loss_m,
+        "demand_reasons": _dedupe(demand_reasons),
+        "requires_guided_for_low_experience": route_demand == "high",
+        "candidate_only": True,
+        "runtime_safety_truth": False,
     }
 
 
@@ -745,11 +815,22 @@ def _governance(
     weather_state: dict[str, Any],
     input_coverage: dict[str, bool],
     missing_fields: list[str],
+    direct: dict[str, Any],
 ) -> dict[str, Any]:
     critical_gaps: list[str] = []
     warning_gaps: list[str] = []
     required_conditions: list[str] = []
     alternative_actions: list[str] = []
+    user_experience = _normalized_experience_level(direct.get("user_experience_level"))
+    route_demand_profile = (
+        route_state.get("route_demand_profile")
+        if isinstance(route_state.get("route_demand_profile"), dict)
+        else {}
+    )
+    guided_only_required = (
+        bool(route_demand_profile.get("requires_guided_for_low_experience"))
+        and user_experience in {"beginner", "novice", "first_time", "low"}
+    )
 
     if readiness_state["status"] == "blocked" or readiness_state["blocker_count"]:
         critical_gaps.append("Hard readiness report contains blocker findings.")
@@ -765,10 +846,23 @@ def _governance(
 
     if readiness_state["status"] == "warning" or readiness_state["warning_count"]:
         warning_gaps.append("Hard readiness report contains warning findings.")
+    if guided_only_required:
+        warning_gaps.append(
+            "Route demand is high for a beginner or low-experience user; autonomous departure is not recommended."
+        )
+        required_conditions.append(
+            "Use a qualified guide, experienced leader, or equivalent reviewed controls before considering this route."
+        )
+        alternative_actions.append(
+            "Switch to a guided trip, lower-demand route, shorter route, or training route."
+        )
     if route_state.get("departure_gate_required_before_runtime"):
         warning_gaps.append("Reviewed planning package is not departure approval.")
         required_conditions.append("Run an explicit departure gate before runtime handoff.")
-    if route_state.get("team_multiplier_status") == "not_derived_no_human_stats":
+    if (
+        route_state.get("team_multiplier_status") == "not_derived_no_human_stats"
+        and not input_coverage.get("slowest_team_basis")
+    ):
         warning_gaps.append("Team multiplier / slowest-member basis is not derived.")
         required_conditions.append("Confirm slowest team member basis before Go/No-Go.")
     if route_state.get("daylight_policy_status") == "not_evaluated_requires_sun_window":
@@ -811,7 +905,14 @@ def _governance(
             critical_gaps=critical_gaps,
             missing_fields=missing_fields,
             warning_gaps=warning_gaps,
+            guided_only_required=guided_only_required,
         ),
+        "guided_only_gate": {
+            "required": guided_only_required,
+            "user_experience_level": user_experience,
+            "route_demand_profile": route_demand_profile,
+            "autonomous_departure_allowed": False if guided_only_required else None,
+        },
         "candidate_only": True,
         "runtime_safety_truth": False,
         "departure_approval_granted": False,
@@ -823,6 +924,8 @@ def _decision(*, governance: dict[str, Any], missing_fields: list[str]) -> str:
         return "NO_GO"
     if missing_fields:
         return "DELAY"
+    if governance.get("guided_only_gate", {}).get("required"):
+        return "GUIDED_ONLY"
     if governance["warning_gaps"] or governance["required_conditions"]:
         return "CONDITIONAL_GO"
     return "GO"
@@ -879,6 +982,7 @@ def _pretrip_decision_package(
         "answerability": answerability,
         "required_outputs": {
             "pretrip_decision": decision,
+            "guided_only_gate": governance.get("guided_only_gate"),
             "top_risk_sources": top_risks,
             "required_conditions": required_conditions,
             "cp_graph": {
@@ -905,6 +1009,7 @@ def _pretrip_decision_package(
         },
         "decision_limits": {
             "allowed": decision in {"GO", "CONDITIONAL_GO"},
+            "autonomous_departure_allowed": decision not in {"GUIDED_ONLY", "NO_GO", "DELAY", "CHANGE_PLAN", "ESCALATE"},
             "must_leave_by": route_state.get("turn_back_checkpoint_eta"),
             "turnaround_checkpoint": route_state.get("turn_back_checkpoint_node_name"),
             "buffer_cost_statement": _buffer_cost_statement(
@@ -941,7 +1046,7 @@ def _pretrip_decision_package(
             "uncertainty_handled_conservatively": answerability.endswith(
                 "missing_required_fields"
             )
-            or decision in {"DELAY", "NO_GO", "CHANGE_PLAN", "ESCALATE"},
+            or decision in {"GUIDED_ONLY", "DELAY", "NO_GO", "CHANGE_PLAN", "ESCALATE"},
             "slowest_member_basis_required": bool(
                 input_coverage.get("slowest_team_basis")
             )
@@ -1073,7 +1178,15 @@ def _stop_policy(
                 "rationale": "Required inputs, review state, or buffer limits are not fully proven.",
             }
         )
-    if decision in {"NO_GO", "DELAY", "CHANGE_PLAN", "ESCALATE"}:
+    if decision == "GUIDED_ONLY":
+        not_recommended.append(
+            {
+                "label": "Autonomous departure without qualified guide or reviewed controls",
+                "policy": "not_recommended_guided_only",
+                "rationale": "Current pre-trip decision requires guided or equivalent support.",
+            }
+        )
+    if decision in {"NO_GO", "DELAY", "CHANGE_PLAN", "ESCALATE", "GUIDED_ONLY"}:
         not_recommended.append(
             {
                 "label": "Leaving the trailhead under the original plan",
@@ -1144,6 +1257,11 @@ def _buffer_cost_statement(
             "No discretionary stop, photo, lunch, summit, or waiting buffer is granted "
             "until required gaps are resolved and the departure gate is rerun."
         )
+    if decision == "GUIDED_ONLY":
+        return (
+            "No autonomous route, stop, summit, photo, lunch, or waiting buffer is granted "
+            "until guide support or equivalent reviewed controls are confirmed."
+        )
     if missing_fields or governance["warning_gaps"]:
         return (
             "Any discretionary stop consumes route/daylight buffer and must stay within "
@@ -1176,6 +1294,20 @@ def _field_answer(
             + "、".join(missing_fields)
             + "；Scout 不能在路線、日期、隊伍、經驗、裝備、交通、天氣/日照或最慢者基準不完整時給出出發批准。"
         )
+    if decision == "GUIDED_ONLY":
+        gate = governance.get("guided_only_gate", {})
+        demand = gate.get("route_demand_profile") if isinstance(gate, dict) else {}
+        demand_reasons = (
+            demand.get("demand_reasons") if isinstance(demand, dict) else []
+        )
+        reason_text = "；".join(str(reason) for reason in demand_reasons[:2]) or "路線需求高於目前自主經驗。"
+        return (
+            "出發前判斷：建議 GUIDED_ONLY。"
+            f"{reason_text} "
+            "以目前使用者經驗，不建議自主出發；只能改成合格嚮導、經驗領隊或等效審核控制下的方案。 "
+            f"下一步：{governance['next_action']} "
+            "此為 pre-trip route readiness 候選判斷，不是 departure approval 或 runtime safety truth；不會啟動 runtime handoff、/safety、SOS、outbound send 或硬體控制。"
+        )
     reasons = governance["critical_gaps"] or governance["warning_gaps"] or ["出發前資料未顯示主要阻礙。"]
     return (
         f"出發前判斷：建議 {decision}。"
@@ -1190,11 +1322,14 @@ def _next_action(
     critical_gaps: list[str],
     missing_fields: list[str],
     warning_gaps: list[str],
+    guided_only_required: bool = False,
 ) -> str:
     if critical_gaps:
         return "先解除 hard blocker 或重新規劃，不進入出發。"
     if missing_fields:
         return "補齊出發前必要輸入與人工 review，再重新評估。"
+    if guided_only_required:
+        return "改成合格嚮導/經驗領隊帶領，或改選較短、低曝露、低海拔的訓練路線。"
     if warning_gaps:
         return "通過人工 departure gate 並保留替代路線/撤退策略後才可條件式出發。"
     return "完成人工 departure gate 後，才允許進入 runtime handoff。"
@@ -1266,6 +1401,15 @@ def _list_of_dicts(value: Any) -> list[dict[str, Any]]:
     return [item for item in value if isinstance(item, dict)]
 
 
+def _max_float_from_dicts(items: list[dict[str, Any]], key: str) -> float | None:
+    values = [
+        parsed
+        for item in items
+        if (parsed := _float_or_none(item.get(key))) is not None
+    ]
+    return round(max(values), 2) if values else None
+
+
 def _items_need_review(items: list[dict[str, Any]]) -> list[str]:
     result = []
     for item in items:
@@ -1299,6 +1443,15 @@ def _first_text(*values: Any) -> str | None:
     return None
 
 
+def _float_or_none(value: Any) -> float | None:
+    if isinstance(value, bool) or value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _first_bool(*values: Any) -> bool | None:
     for value in values:
         parsed = _bool_or_none(value)
@@ -1325,6 +1478,28 @@ def _int_or_zero(value: Any) -> int:
         return int(value)
     except (TypeError, ValueError):
         return 0
+
+
+def _normalized_experience_level(value: Any) -> str | None:
+    text = str(value or "").strip().lower().replace(" ", "_")
+    if not text:
+        return None
+    if text in {"beginner", "novice", "first_time", "first-timer", "low"}:
+        return text.replace("-", "_")
+    if any(fragment in text for fragment in ("新手", "初學", "初次", "第一次")):
+        return "beginner"
+    if any(fragment in text for fragment in ("低經驗", "經驗不足", "不熟")):
+        return "low"
+    if any(fragment in text for fragment in ("intermediate", "中級", "regular")):
+        return "intermediate"
+    if any(fragment in text for fragment in ("advanced", "experienced", "資深", "高經驗")):
+        return "advanced"
+    return text
+
+
+def _has_any_text(value: str, fragments: tuple[str, ...]) -> bool:
+    normalized = value.lower().replace(" ", "")
+    return any(fragment.lower().replace(" ", "") in normalized for fragment in fragments)
 
 
 def _dedupe(values: list[str]) -> list[str]:
