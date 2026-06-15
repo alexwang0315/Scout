@@ -255,6 +255,9 @@ EXECUTABLE_TOOL_ALIASES: dict[str, list[str]] = {
     ],
     SAFETY_BOUNDARY_TOOL_ID: [
         "scout.ai.safety_boundary.explain",
+        "scout.ai.safety_boundary.assess",
+        "scout.ai.runtime_admission.assess",
+        "scout.ai.admission_boundary.assess",
     ],
     ENERGY_VITALS_TOOL_ID: [
         "scout.ai.energy_vitals.assess",
@@ -561,6 +564,14 @@ def _contract_from_raw(tool_id: str, raw: dict[str, Any]) -> ScoutAiToolContract
         existing_support = [
             *_as_str_list(raw.get("existing_support")),
             "scout_runtime_ingress_status_tool.py read-only ingress/router trace assessor",
+        ]
+    elif tool_id == SAFETY_BOUNDARY_TOOL_ID:
+        status = ScoutAiToolImplementationStatus.READY_CURRENT_TOOL
+        required_fields = list(SAFETY_ADMISSION_REQUIRED_FIELDS)
+        implementation_gap = None
+        existing_support = [
+            *_as_str_list(raw.get("existing_support")),
+            "scout_safety_boundary_tool.py read-only current safety admission boundary assessor",
         ]
     else:
         required_fields = _as_str_list(raw.get("required_fields"))
