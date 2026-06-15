@@ -765,6 +765,28 @@ def test_answer_synthesis_detects_natural_turnback_current_context() -> None:
     assert "runtime safety truth" in result.answer
 
 
+def test_answer_synthesis_detects_local_clock_turnback_context() -> None:
+    result = collect_and_synthesize_scout_ai_answer(
+        "現在 15:10 在雲海保線所，現在是不是折返點？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=4,
+    )
+
+    assert result.answerability == "evidence_available"
+    route = _source(result, ROUTE_ARCHITECTURE_TOOL_ID)
+    assert route.missing_fields == []
+    assert route.top_result_summary["decision"] == "CHANGE_PLAN"
+    assert result.decision_output["answerSourceToolId"] == ROUTE_ARCHITECTURE_TOOL_ID
+    assert result.decision_output["decision"] == "CHANGE_PLAN"
+    assert "current_time is at or past" in result.decision_output["firstLayer"][
+        "reason"
+    ]
+    assert "current CP matches" in result.decision_output["firstLayer"]["reason"]
+    assert result.decision_output["runtimeSafetyTruth"] is False
+    assert "runtime safety truth" in result.answer
+
+
 def test_answer_synthesis_uses_live_navigation_field_answer_without_guessing() -> None:
     result = collect_and_synthesize_scout_ai_answer(
         "我現在是不是偏離路線？",

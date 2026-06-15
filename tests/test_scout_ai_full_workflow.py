@@ -792,6 +792,30 @@ def test_full_workflow_detects_natural_turnback_current_context() -> None:
     assert result.boundary.runtime_safety_truth is False
 
 
+def test_full_workflow_detects_local_clock_turnback_context() -> None:
+    result = run_scout_ai_full_workflow(
+        "現在 15:10 在雲海保線所，現在是不是折返點？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=4,
+    )
+
+    assert result.answerability == "evidence_available"
+    assert result.failed_tool_count == 0
+    source_by_tool = {source["tool_id"]: source for source in result.sources}
+    route = source_by_tool[ROUTE_ARCHITECTURE_TOOL_ID]
+    assert route["missing_fields"] == []
+    assert route["top_result_summary"]["decision"] == "CHANGE_PLAN"
+    assert result.decision_output["answerSourceToolId"] == ROUTE_ARCHITECTURE_TOOL_ID
+    assert result.decision_output["decision"] == "CHANGE_PLAN"
+    assert "current_time is at or past" in result.decision_output["firstLayer"][
+        "reason"
+    ]
+    assert "current CP matches" in result.decision_output["firstLayer"]["reason"]
+    assert result.decision_output["runtimeSafetyTruth"] is False
+    assert result.boundary.runtime_safety_truth is False
+
+
 def test_full_workflow_runs_live_navigation_uncertainty_question() -> None:
     result = run_scout_ai_full_workflow(
         "我現在是不是偏離路線？",
