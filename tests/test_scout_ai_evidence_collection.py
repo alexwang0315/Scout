@@ -8,7 +8,7 @@ from scout_ai_evidence_collection import (
     ARTIFACT_VERSION,
     collect_scout_ai_evidence,
 )
-from scout_ai_tool_planner import WEATHER_WINDOW_TOOL_ID
+from scout_ai_tool_planner import LIVE_NAVIGATION_STATE_TOOL_ID, WEATHER_WINDOW_TOOL_ID
 from scout_pace_guardian_tool import PACE_GUARDIAN_TOOL_ID
 from scout_route_architecture_tool import ROUTE_ARCHITECTURE_TOOL_ID
 from scout_route_context_tool import ROUTE_CONTEXT_TOOL_ID
@@ -209,6 +209,32 @@ def test_evidence_collection_keeps_route_architecture_cp_graph_payload() -> None
     assert payload["cp_graph"]["node_count"] == 124
     assert payload["cp_graph"]["edge_count"] == 123
     assert route_architecture.boundary.runtime_safety_truth is False
+
+
+def test_evidence_collection_keeps_live_navigation_decision_payload() -> None:
+    result = collect_scout_ai_evidence(
+        "我現在是不是偏離路線？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=3,
+    )
+
+    assert result.selected_tool_count == 1
+    assert result.executed_tool_count == 1
+    assert result.completed_tool_count == 1
+    assert result.missing_input_count == 0
+
+    navigation = _record(result, LIVE_NAVIGATION_STATE_TOOL_ID)
+    assert navigation.collection_status == "completed"
+    assert navigation.result is not None
+    payload = navigation.result["payload"]
+    assert payload["answerability"] == "snapshot_missing_required_fields"
+    assert payload["decision"] == "DELAY"
+    assert payload["navigation_terrain"]["role"] == "Navigation & Terrain Intelligence"
+    assert payload["navigation_decision"]["route_fit_status"] == "route_fit_unknown"
+    assert "lat" in navigation.missing_fields
+    assert "lon" in navigation.missing_fields
+    assert navigation.boundary.runtime_safety_truth is False
 
 
 def test_evidence_collection_reports_empty_collection_when_no_tool_matches() -> None:

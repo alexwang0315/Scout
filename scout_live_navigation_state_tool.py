@@ -88,43 +88,88 @@ def assess_scout_live_navigation_state(
         field for field in LIVE_NAVIGATION_REQUIRED_FIELDS if _is_missing(provided[field])
     ]
     available_position = not _is_missing(lat) and not _is_missing(lon)
+    provided_fields = {
+        field: value for field, value in provided.items() if not _is_missing(value)
+    }
+    quality_flags = _quality_flags(
+        hdop=hdop,
+        horizontal_accuracy_m=horizontal_accuracy_m,
+        fix_quality=fix_quality,
+        satellite_count=satellite_count,
+        uncertainty_m=uncertainty_m,
+    )
+    route_query_plan = _route_query_plan(
+        available_position=available_position,
+        missing_fields=missing_fields,
+    )
+    navigation_decision = _navigation_decision(
+        query=query,
+        missing_fields=missing_fields,
+        provided=provided,
+        quality_flags=quality_flags,
+    )
+    navigation_terrain = _navigation_terrain(
+        provided=provided,
+        missing_fields=missing_fields,
+        quality_flags=quality_flags,
+        route_query_plan=route_query_plan,
+        navigation_decision=navigation_decision,
+        query=query,
+    )
+    field_answer = _field_answer(
+        decision=navigation_decision,
+        missing_fields=missing_fields,
+    )
     return {
+        "artifact_kind": LIVE_NAVIGATION_STATE_OUTPUT_KIND,
         "tool_id": LIVE_NAVIGATION_STATE_TOOL_ID,
         "status": "completed",
         "project_id": project_id,
         "query": query,
         "assessment_kind": "read_only_live_navigation_snapshot",
+        "source_status": "caller_provided_snapshot" if provided_fields else "missing_snapshot",
         "answerability": (
             "snapshot_evidence_available"
             if not missing_fields
             else "snapshot_missing_required_fields"
         ),
+        "decision": navigation_decision["decision"],
+        "field_answer": field_answer,
         "missing_fields": missing_fields,
-        "provided_fields": {
-            field: value
-            for field, value in provided.items()
-            if not _is_missing(value)
-        },
-        "route_query_plan": _route_query_plan(
-            available_position=available_position,
-            missing_fields=missing_fields,
-        ),
-        "quality_flags": _quality_flags(
-            hdop=hdop,
-            horizontal_accuracy_m=horizontal_accuracy_m,
-            fix_quality=fix_quality,
-            satellite_count=satellite_count,
-            uncertainty_m=uncertainty_m,
-        ),
+        "provided_fields": provided_fields,
+        "navigation_terrain": navigation_terrain,
+        "navigation_decision": navigation_decision,
+        "route_query_plan": route_query_plan,
+        "quality_flags": quality_flags,
+        "result_count": 1,
         "results": [
             {
                 "label": "live navigation state assessor",
-                "snippet": (
-                    "caller-provided snapshot only; no live hardware read; "
-                    "must not mutate /safety/* or send outbound; missing_fields="
-                    + ",".join(missing_fields)
+                "decision": navigation_decision["decision"],
+                "answerability": (
+                    "snapshot_evidence_available"
+                    if not missing_fields
+                    else "snapshot_missing_required_fields"
                 ),
+                "route_fit_status": navigation_terrain["location_fit"][
+                    "route_fit_status"
+                ],
+                "position_quality_status": navigation_terrain["location_fit"][
+                    "position_quality_status"
+                ],
+                "field_answer": field_answer,
+                "candidate_only": True,
+                "runtime_safety_truth": False,
             }
+        ],
+        "standard_alignment": [
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 11 Navigation & Terrain Intelligence",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 14 Micro-Decision Agent",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 18.2 on-route recalculation",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 19 navigation uncertainty questions",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 22 required development standards",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 23 acceptance criteria",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 24.1 MVP on-route route decisions",
         ],
         "source_report": [
             {
@@ -139,6 +184,245 @@ def assess_scout_live_navigation_state(
         ],
         "boundary": _closed_boundary(),
     }
+
+
+def _navigation_terrain(
+    *,
+    provided: dict[str, object],
+    missing_fields: list[str],
+    quality_flags: dict[str, Any],
+    route_query_plan: dict[str, Any],
+    navigation_decision: dict[str, Any],
+    query: str,
+) -> dict[str, Any]:
+    distance = _float_or_none(provided.get("nearest_route_distance_m"))
+    accuracy = _float_or_none(provided.get("horizontal_accuracy_m"))
+    uncertainty = _float_or_none(provided.get("uncertainty_m"))
+    return {
+        "role": "Navigation & Terrain Intelligence",
+        "basis": "caller_provided_snapshot_only",
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+        "location_fit": {
+            "nearest_route_distance_m": distance,
+            "route_progress_m": _float_or_none(provided.get("route_progress_m")),
+            "nearest_cp_id": provided.get("nearest_cp_id"),
+            "route_fit_status": _route_fit_status(
+                nearest_route_distance_m=distance,
+                horizontal_accuracy_m=accuracy,
+                uncertainty_m=uncertainty,
+            ),
+            "position_quality_status": _position_quality_status(
+                quality_flags=quality_flags,
+                missing_fields=missing_fields,
+            ),
+            "quality_flags": quality_flags,
+        },
+        "terrain_caution_flags": _terrain_caution_flags(query),
+        "guidance": navigation_decision,
+        "followup_plan": route_query_plan,
+        "map_boundary": {
+            "offline_map_or_gpx_truth_claimed": False,
+            "candidate_snapshot_only": True,
+            "requires_map_or_route_followup_for_turn_confirmation": True,
+        },
+    }
+
+
+def _navigation_decision(
+    *,
+    query: str,
+    missing_fields: list[str],
+    provided: dict[str, object],
+    quality_flags: dict[str, Any],
+) -> dict[str, Any]:
+    distance = _float_or_none(provided.get("nearest_route_distance_m"))
+    accuracy = _float_or_none(provided.get("horizontal_accuracy_m"))
+    uncertainty = _float_or_none(provided.get("uncertainty_m"))
+    route_fit_status = _route_fit_status(
+        nearest_route_distance_m=distance,
+        horizontal_accuracy_m=accuracy,
+        uncertainty_m=uncertainty,
+    )
+    quality_status = _position_quality_status(
+        quality_flags=quality_flags,
+        missing_fields=missing_fields,
+    )
+    terrain_flags = _terrain_caution_flags(query)
+    reasons: list[str] = []
+
+    if "lat" in missing_fields or "lon" in missing_fields:
+        return _decision_payload(
+            decision="DELAY",
+            reasons=["lat/lon are missing, so Scout cannot verify route fit."],
+            next_action="先取得可靠位置，再判斷是否走對、是否偏離或是否能回主線。",
+            action_limit="Do not infer turn, off-route, or down-cut decisions without position.",
+            route_fit_status=route_fit_status,
+            position_quality_status=quality_status,
+            terrain_flags=terrain_flags,
+        )
+
+    if "downcut_or_stream_channel" in terrain_flags or "leave_main_route_request" in terrain_flags:
+        reasons.append("question asks about leaving the main route or down-cutting terrain.")
+        if route_fit_status in {"off_route_candidate", "route_fit_unknown"}:
+            reasons.append(f"route_fit_status={route_fit_status}.")
+        return _decision_payload(
+            decision="NO_GO",
+            reasons=reasons,
+            next_action="不要下切溪谷、乾溝或離開主線；回到最近可信 CP、開闊點或原路 anchor 重新定位。",
+            action_limit="Scout cannot authorize shortcut/down-cut movement from a candidate snapshot.",
+            route_fit_status=route_fit_status,
+            position_quality_status=quality_status,
+            terrain_flags=terrain_flags,
+        )
+
+    if quality_status in {"poor_quality", "partial_quality"}:
+        reasons.append(f"position_quality_status={quality_status}.")
+        return _decision_payload(
+            decision="GUIDED_ONLY",
+            reasons=reasons,
+            next_action="只能做保守引導：停止擴大偏差，核對離線地圖、GPX、地形與上一個可信 anchor。",
+            action_limit="Do not confirm a branch or descent decision until GNSS/INS-DR quality improves.",
+            route_fit_status=route_fit_status,
+            position_quality_status=quality_status,
+            terrain_flags=terrain_flags,
+        )
+
+    if route_fit_status == "off_route_candidate":
+        reasons.append(f"nearest_route_distance_m={distance} exceeds route-fit threshold.")
+        return _decision_payload(
+            decision="CHANGE_PLAN",
+            reasons=reasons,
+            next_action="先停止往前推進，回到上一個可信 CP 或原路 anchor，再重新比對方向與路線走廊。",
+            action_limit="Do not continue into unknown terrain while off-route candidate remains unresolved.",
+            route_fit_status=route_fit_status,
+            position_quality_status=quality_status,
+            terrain_flags=terrain_flags,
+        )
+
+    if route_fit_status in {"near_corridor_edge", "route_fit_unknown"} or "branch_or_mainline_check" in terrain_flags:
+        reasons.append(f"route_fit_status={route_fit_status}.")
+        return _decision_payload(
+            decision="CONDITIONAL_GO",
+            reasons=reasons,
+            next_action="沿主線或最近可信路線走廊前進到下一個 CP；持續核對 heading、GPX、地形線與岔路標記。",
+            action_limit="Do not leave the mapped corridor; re-check at the next CP or within a few minutes.",
+            route_fit_status=route_fit_status,
+            position_quality_status=quality_status,
+            terrain_flags=terrain_flags,
+        )
+
+    reasons.append("position quality and route-fit snapshot are usable.")
+    return _decision_payload(
+        decision="GO",
+        reasons=reasons,
+        next_action="維持在路線走廊內前進，下一個 CP 再重新計算位置、heading 與 terrain risk。",
+        action_limit="GO is candidate-only and remains bounded by terrain, weather, pace, and map evidence.",
+        route_fit_status=route_fit_status,
+        position_quality_status=quality_status,
+        terrain_flags=terrain_flags,
+    )
+
+
+def _decision_payload(
+    *,
+    decision: str,
+    reasons: list[str],
+    next_action: str,
+    action_limit: str,
+    route_fit_status: str,
+    position_quality_status: str,
+    terrain_flags: list[str],
+) -> dict[str, Any]:
+    return {
+        "decision": decision,
+        "main_reasons": reasons[:3],
+        "next_action": next_action,
+        "action_limit": action_limit,
+        "route_fit_status": route_fit_status,
+        "position_quality_status": position_quality_status,
+        "terrain_caution_flags": terrain_flags,
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+    }
+
+
+def _field_answer(
+    *,
+    decision: dict[str, Any],
+    missing_fields: list[str],
+) -> str:
+    reasons = decision.get("main_reasons")
+    reason_text = "；".join(str(item) for item in reasons[:2]) if isinstance(reasons, list) else ""
+    if not reason_text and missing_fields:
+        reason_text = "缺少 " + "、".join(missing_fields[:5])
+    elif not reason_text:
+        reason_text = f"route_fit_status={decision.get('route_fit_status')}"
+    return (
+        f"地形導航判斷：建議 {decision['decision']}。{reason_text} "
+        f"下一步：{decision['next_action']} "
+        "此為 Navigation & Terrain 候選判斷，不是 runtime safety truth；不得觸發 /safety、SOS、outbound send 或硬體控制。"
+    )
+
+
+def _route_fit_status(
+    *,
+    nearest_route_distance_m: float | None,
+    horizontal_accuracy_m: float | None,
+    uncertainty_m: float | None,
+) -> str:
+    if nearest_route_distance_m is None:
+        return "route_fit_unknown"
+    margin = max(
+        value for value in (horizontal_accuracy_m, uncertainty_m, 10.0) if value is not None
+    )
+    near_edge_threshold = max(20.0, margin * 1.5)
+    off_route_threshold = max(60.0, margin * 3.0)
+    if nearest_route_distance_m > off_route_threshold:
+        return "off_route_candidate"
+    if nearest_route_distance_m > near_edge_threshold:
+        return "near_corridor_edge"
+    return "on_route_corridor"
+
+
+def _position_quality_status(
+    *,
+    quality_flags: dict[str, Any],
+    missing_fields: list[str],
+) -> str:
+    usable_keys = (
+        "hdop_usable",
+        "horizontal_accuracy_usable",
+        "satellite_count_usable",
+        "uncertainty_usable",
+        "fix_quality_usable",
+    )
+    for key in usable_keys:
+        if quality_flags.get(key) is False:
+            return "poor_quality"
+    critical_missing = {
+        "horizontal_accuracy_m",
+        "fix_quality",
+        "satellite_count",
+        "uncertainty_m",
+    }
+    if critical_missing.intersection(missing_fields):
+        return "partial_quality"
+    return "usable_quality"
+
+
+def _terrain_caution_flags(query: str) -> list[str]:
+    normalized = str(query or "").lower().replace(" ", "")
+    flags = []
+    if _has_any(normalized, ("下切", "溪谷", "乾溝", "溝谷", "stream", "gully")):
+        flags.append("downcut_or_stream_channel")
+    if _has_any(normalized, ("離開主線", "捷徑", "切西瓜", "切路", "shortcut")):
+        flags.append("leave_main_route_request")
+    if _has_any(normalized, ("岔路", "走對", "轉彎", "主線", "branch", "turn")):
+        flags.append("branch_or_mainline_check")
+    if _has_any(normalized, ("崩壁", "落石", "碎石", "陡坡", "稜線", "terrain", "slope")):
+        flags.append("terrain_risk_context")
+    return flags
 
 
 def _route_query_plan(
@@ -231,6 +515,10 @@ def _int_or_none(value: object) -> int | None:
         return int(value)  # type: ignore[arg-type]
     except (TypeError, ValueError):
         return None
+
+
+def _has_any(text: str, fragments: tuple[str, ...]) -> bool:
+    return any(fragment.lower().replace(" ", "") in text for fragment in fragments)
 
 
 def _closed_boundary() -> dict[str, bool]:

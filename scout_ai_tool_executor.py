@@ -517,6 +517,7 @@ def _source_report_refs(payload: dict[str, Any]) -> list[dict[str, Any]]:
 
 def _completed_missing_fields(tool_id: str, payload: dict[str, Any]) -> list[str]:
     if tool_id not in {
+        LIVE_NAVIGATION_STATE_TOOL_ID,
         WEATHER_WINDOW_TOOL_ID,
         CONTEXTUAL_PERMISSION_TOOL_ID,
         PACE_GUARDIAN_TOOL_ID,

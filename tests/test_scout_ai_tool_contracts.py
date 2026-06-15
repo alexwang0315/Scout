@@ -60,7 +60,7 @@ def test_tool_registry_lists_current_and_future_contracts() -> None:
         "ready_current_tool"
     )
     assert by_id["scout.ai.live_navigation_state.assess.v0"].implementation_status == (
-        "partial_existing_surface"
+        "ready_current_tool"
     )
     assert by_id["scout.ai.safety_boundary.explain.v0"].implementation_status == (
         "boundary_explain_only"
@@ -231,12 +231,15 @@ def test_execute_live_navigation_state_assessor_returns_read_only_missing_fields
 
     assert result.status == "completed"
     assert result.tool_id == "scout.ai.live_navigation_state.assess.v0"
-    assert result.implementation_status == "partial_existing_surface"
+    assert result.implementation_status == "ready_current_tool"
     assert result.output_artifact_kind == "scout_ai_live_navigation_state_tool_output"
     assert result.payload["artifact_kind"] == "scout_ai_live_navigation_state_tool_output"
     assert result.payload["tool_id"] == "scout.ai.live_navigation_state.assess.v0"
     assert result.payload["assessment_kind"] == "read_only_live_navigation_snapshot"
     assert result.payload["answerability"] == "snapshot_missing_required_fields"
+    assert result.payload["decision"] == "DELAY"
+    assert "地形導航判斷" in result.payload["field_answer"]
+    assert "lat" in result.missing_fields
     assert "lat" in result.payload["missing_fields"]
     assert "lon" in result.payload["missing_fields"]
     assert "horizontal_accuracy_m" in result.payload["missing_fields"]
@@ -248,6 +251,51 @@ def test_execute_live_navigation_state_assessor_returns_read_only_missing_fields
     assert result.payload["boundary"]["outbound_send_performed"] is False
     assert result.boundary.live_safety_api_calls_allowed is False
     assert result.boundary.phase1_safety_mutation_allowed is False
+
+
+def test_execute_live_navigation_state_assessor_returns_navigation_decision() -> None:
+    result = execute_scout_ai_tool(
+        {
+            "tool_id": "scout.ai.live_navigation_state.assess",
+            "project_root": str(PROJECT_ROOT),
+            "query": "剛剛岔路我有走對嗎？現在要不要回主線？",
+            "arguments": {
+                "observed_at": "2026-06-15T08:00:00+08:00",
+                "lat": 24.0509,
+                "lon": 121.216,
+                "elevation_m": 2220,
+                "source": "caller_fixture",
+                "hdop": 0.9,
+                "horizontal_accuracy_m": 5,
+                "fix_quality": "3d",
+                "satellite_count": 12,
+                "max_cno_dbhz": 38,
+                "heading_deg": 94,
+                "course_deg": 96,
+                "speed_mps": 0.82,
+                "nearest_route_distance_m": 8,
+                "route_progress_m": 1200,
+                "nearest_cp_id": "cp.004",
+                "ins_dr_source": "pdr_anchor",
+                "confidence": 0.82,
+                "uncertainty_m": 8,
+                "last_anchor_at": "2026-06-15T07:58:00+08:00",
+            },
+        }
+    )
+
+    assert result.status == "completed"
+    assert result.tool_id == "scout.ai.live_navigation_state.assess.v0"
+    assert result.payload["answerability"] == "snapshot_evidence_available"
+    assert result.payload["decision"] == "CONDITIONAL_GO"
+    assert result.payload["navigation_terrain"]["role"] == (
+        "Navigation & Terrain Intelligence"
+    )
+    assert result.payload["navigation_decision"]["route_fit_status"] == (
+        "on_route_corridor"
+    )
+    assert result.missing_fields == []
+    assert result.boundary.runtime_safety_truth is False
 
 
 def test_execute_ins_dr_trace_analyzer_returns_read_only_missing_evidence() -> None:

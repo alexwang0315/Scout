@@ -1666,7 +1666,7 @@ def _workflow_eval_case_from_question_item(
                 ),
             },
             expected_tool_registry_tool_ids_by_status={
-                "partial_existing_surface": (LIVE_NAVIGATION_STATE_TOOL_ID,),
+                "ready_current_tool": (LIVE_NAVIGATION_STATE_TOOL_ID,),
                 "boundary_explain_only": (SAFETY_BOUNDARY_TOOL_ID,),
             },
             expected_limitation_fragments=(f"resolved_by={PRETRIP_TOOL_PLANNER_SKILL_ID}",),

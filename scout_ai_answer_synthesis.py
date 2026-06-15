@@ -11,6 +11,7 @@ from scout_ai_evidence_collection import (
     collect_scout_ai_evidence,
 )
 from scout_ai_tool_contracts import ScoutAiToolBaseModel, ScoutAiToolBoundary
+from scout_live_navigation_state_tool import LIVE_NAVIGATION_STATE_TOOL_ID
 from scout_contextual_permission_tool import CONTEXTUAL_PERMISSION_TOOL_ID
 from scout_route_context_tool import ROUTE_CONTEXT_TOOL_ID
 from scout_route_architecture_tool import ROUTE_ARCHITECTURE_TOOL_ID
@@ -164,6 +165,10 @@ def _source_from_record(record: dict[str, Any]) -> ScoutAiAnswerSource:
     top_summary = _top_result_summary(results[0] if results else payload)
     for key in (
         "field_answer",
+        "navigation_terrain",
+        "navigation_decision",
+        "provided_fields",
+        "quality_flags",
         "route_context",
         "route_architecture",
         "cp_graph",
@@ -233,6 +238,9 @@ def _answer_text(
     contextual_answer = _contextual_permission_answer(completed_sources)
     if contextual_answer:
         parts.append(contextual_answer)
+    navigation_answer = _live_navigation_answer(completed_sources)
+    if navigation_answer:
+        parts.append(navigation_answer)
     route_context_answer = _route_context_answer(completed_sources)
     if route_context_answer:
         parts.append(route_context_answer)
@@ -311,6 +319,16 @@ def _contextual_permission_answer(sources: list[ScoutAiAnswerSource]) -> str | N
     return None
 
 
+def _live_navigation_answer(sources: list[ScoutAiAnswerSource]) -> str | None:
+    for source in sources:
+        if source.tool_id != LIVE_NAVIGATION_STATE_TOOL_ID:
+            continue
+        field_answer = source.top_result_summary.get("field_answer")
+        if isinstance(field_answer, str) and field_answer.strip():
+            return field_answer.strip()
+    return None
+
+
 def _route_context_answer(sources: list[ScoutAiAnswerSource]) -> str | None:
     for source in sources:
         if source.tool_id != ROUTE_CONTEXT_TOOL_ID:
@@ -381,6 +399,12 @@ def _top_result_summary(value: Any) -> dict[str, Any]:
         "contextual_permission",
         "risk_budget",
         "risk_budget_source",
+        "navigation_terrain",
+        "navigation_decision",
+        "provided_fields",
+        "quality_flags",
+        "route_fit_status",
+        "position_quality_status",
         "route_context",
         "route_architecture",
         "cp_graph",
