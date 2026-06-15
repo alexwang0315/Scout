@@ -183,6 +183,28 @@ def test_pace_guardian_reports_missing_member_pace_from_resource_plan() -> None:
     assert result["boundary"]["runtime_safety_truth"] is False
 
 
+def test_pace_guardian_uses_query_reported_vulnerable_member_conditions() -> None:
+    result = assess_scout_pace_guardian(
+        PROJECT_ROOT,
+        query="有人膝蓋痛又睡眠不足，還能照原計畫嗎？",
+    )
+
+    assert result["answerability"] == "pace_fit_missing_required_fields"
+    assert result["decision"] == "NO_GO"
+    assert result["missing_fields"] == ["member_pace_profile"]
+    assert result["team_pace_fit"]["query_reported_vulnerabilities"] == [
+        "knee_pain",
+        "sleep_debt",
+    ]
+    assert "使用者回報隊伍脆弱環節" in result["team_pace_fit"]["main_reasons"][1]
+    assert result["decision_output"]["firstLayer"]["decision"] == (
+        "不建議照原計畫推進。"
+    )
+    assert "膝蓋痛" in result["decision_output"]["firstLayer"]["reason"]
+    assert "睡眠不足" in result["field_answer"]
+    assert result["boundary"]["runtime_safety_truth"] is False
+
+
 def test_pace_guardian_derives_minutes_to_next_cp_from_planned_eta() -> None:
     result = assess_scout_pace_guardian(
         PROJECT_ROOT,
