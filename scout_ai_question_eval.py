@@ -91,6 +91,10 @@ CURRENT_TOOLS = {
         "label": "survival/incident playbook explainer",
         "evidence_scope": "lost, injury, exposure, rescue, and SOS-preparation questions answered as read-only conservative playbooks without outbound send or safety mutation",
     },
+    "scout.ai.runtime_ingress_status.search.v0": {
+        "label": "runtime ingress/router/status search",
+        "evidence_scope": "read-only persisted ingress, router dispatch, filter output, latency, MQTT/Sensor Logger, and assistant/provider pipeline status evidence",
+    },
 }
 
 

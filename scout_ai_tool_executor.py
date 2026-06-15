@@ -31,6 +31,7 @@ from scout_route_architecture_tool import ROUTE_ARCHITECTURE_TOOL_ID
 from scout_media_literacy_tool import MEDIA_LITERACY_TOOL_ID
 from scout_survival_incident_playbook_tool import SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID
 from scout_terrain_score_tool import TERRAIN_SCORE_TOOL_ID
+from scout_runtime_ingress_status_tool import RUNTIME_INGRESS_STATUS_TOOL_ID
 
 
 EXECUTABLE_TOOL_IDS = set(EXECUTABLE_TOOL_ALIASES)
@@ -725,6 +726,34 @@ def _execute_ready_current_tool(tool_id: str, arguments: dict[str, Any]) -> dict
             limit=limit,
         )
 
+    if tool_id == RUNTIME_INGRESS_STATUS_TOOL_ID:
+        from scout_runtime_ingress_status_tool import (
+            assess_scout_runtime_ingress_status,
+        )
+
+        return assess_scout_runtime_ingress_status(
+            project_root,
+            query=query,
+            observer_status_path=_str_or_none(
+                arguments.get("observer_status_path") or arguments.get("status_path")
+            ),
+            ingress_index_path=_str_or_none(arguments.get("ingress_index_path")),
+            application_routes_path=_str_or_none(
+                arguments.get("application_routes_path")
+            ),
+            filter_outputs_path=_str_or_none(arguments.get("filter_outputs_path")),
+            latency_path=_str_or_none(arguments.get("latency_path")),
+            transport_type=_str_or_none(arguments.get("transport_type")),
+            adapter_id=_str_or_none(arguments.get("adapter_id")),
+            topic_or_channel=_str_or_none(arguments.get("topic_or_channel")),
+            message_id=arguments.get("message_id"),
+            payload_sha256=_str_or_none(arguments.get("payload_sha256")),
+            route_target=_str_or_none(arguments.get("route_target")),
+            dispatch_status=_str_or_none(arguments.get("dispatch_status")),
+            include_recent_records=_bool_or_none(arguments.get("include_recent_records")),
+            limit=limit,
+        )
+
     raise ValueError(f"tool is not executable: {tool_id}")
 
 
@@ -799,6 +828,7 @@ def _completed_missing_fields(tool_id: str, payload: dict[str, Any]) -> list[str
         SAFETY_BOUNDARY_TOOL_ID,
         MAP_PERCEPTION_TOOL_ID,
         INS_DR_TRACE_TOOL_ID,
+        RUNTIME_INGRESS_STATUS_TOOL_ID,
     }:
         return []
     value = payload.get("missing_fields")
