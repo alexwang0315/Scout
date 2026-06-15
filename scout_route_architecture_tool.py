@@ -138,6 +138,7 @@ def assess_scout_route_architecture(
         cp_nodes=cp_nodes,
         requires_turn_back_status=_looks_like_turn_back_status_question(query),
         requires_checkpoint_deadline_status=_looks_like_checkpoint_deadline_question(query),
+        external_deadline_pressure_kind=_external_deadline_pressure_kind(query),
     )
     graph_missing_fields = _missing_fields(cp_nodes=cp_nodes, graph_edges=graph_edges)
     decision_missing_fields = _string_list(route_decision.get("missing_fields"))
@@ -378,6 +379,7 @@ def _route_decision(
     cp_nodes: list[dict[str, Any]],
     requires_turn_back_status: bool,
     requires_checkpoint_deadline_status: bool,
+    external_deadline_pressure_kind: str | None,
 ) -> dict[str, Any]:
     missing_graph = not route_architecture["graph_completeness"]["has_cp_graph"]
     turn_back = route_architecture.get("turn_back")
@@ -455,6 +457,29 @@ def _route_decision(
             "turn_back_checkpoint": turn_back,
             "target_checkpoint": target_cp_id,
             "checkpoint_deadline": current_time,
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+        }
+    if external_deadline_pressure_kind:
+        return {
+            "decision": "CHANGE_PLAN",
+            "main_reasons": [
+                "external deadline pressure was reported for "
+                + _external_deadline_pressure_label(external_deadline_pressure_kind)
+                + ".",
+                "External deadlines reduce daylight, retreat, pace, and route buffer.",
+            ],
+            "next_action": (
+                "不要照原計畫硬推；改短版、直接前往最近安全 CP/山屋，"
+                "並人工確認住宿、接駁或留守回報方案。"
+            ),
+            "action_limit": (
+                "Original route continuation is not recommended while external "
+                "deadline pressure is unresolved."
+            ),
+            "first_layer_decision": "建議改變計畫，先處理外部 deadline 壓力。",
+            "turn_back_checkpoint": turn_back,
+            "deadline_pressure": external_deadline_pressure_kind,
             "candidate_only": True,
             "runtime_safety_truth": False,
         }
@@ -947,6 +972,62 @@ def _looks_like_checkpoint_deadline_question(query: str) -> bool:
         )
     )
     return has_missed_checkpoint and has_turnback_intent
+
+
+def _external_deadline_pressure_kind(query: str) -> str | None:
+    normalized = "".join(str(query).lower().split())
+    pressure_terms = (
+        "快到了",
+        "快到",
+        "趕不上",
+        "來不及",
+        "逼近",
+        "是否需要改計畫",
+        "需要改計畫",
+        "改計畫",
+        "照原計畫",
+        "原計畫",
+        "deadline",
+        "timepressure",
+    )
+    if not any(term in normalized for term in pressure_terms):
+        return None
+    if any(
+        term in normalized
+        for term in (
+            "山屋報到",
+            "報到時間",
+            "山屋入住",
+            "入住時間",
+            "hutcheckin",
+            "hutdeadline",
+            "check-in",
+            "checkin",
+        )
+    ):
+        return "hut_checkin"
+    if any(
+        term in normalized
+        for term in (
+            "交通末班",
+            "末班車",
+            "末班",
+            "接駁末班",
+            "lastbus",
+            "lasttransport",
+            "transportdeadline",
+        )
+    ):
+        return "transport_last_service"
+    return None
+
+
+def _external_deadline_pressure_label(kind: str) -> str:
+    if kind == "hut_checkin":
+        return "hut check-in"
+    if kind == "transport_last_service":
+        return "transport last service"
+    return "external deadline"
 
 
 def _load_project_json(
