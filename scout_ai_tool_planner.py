@@ -29,6 +29,7 @@ from scout_team_status_tool import TEAM_STATUS_TOOL_ID
 from scout_post_trip_review_tool import POST_TRIP_REVIEW_TOOL_ID
 from scout_route_architecture_tool import ROUTE_ARCHITECTURE_TOOL_ID
 from scout_media_literacy_tool import MEDIA_LITERACY_TOOL_ID
+from scout_survival_incident_playbook_tool import SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID
 from scout_workspace_search_tools import (
     MAJOR_POINT_TOOL_ID,
     ROUTE_STRUCTURE_TOOL_ID,
@@ -199,6 +200,13 @@ def plan_scout_ai_tools(
             (
                 MEDIA_LITERACY_TOOL_ID,
                 "Question asks for Media Literacy / Bias Sentinel: social photos, videos, guides, check-in pressure, speed claims, season mismatch, or copying guided/pro content.",
+            )
+        )
+    if _looks_like_survival_incident_playbook_question(normalized_question):
+        selected.append(
+            (
+                SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID,
+                "Question asks for Survival / Incident Playbook: lost-position, injury, cold exposure, SOS/rescue preparation, evidence preservation, or what not to do in an incident.",
             )
         )
     if _looks_like_live_navigation_state_question(normalized_question):
@@ -879,6 +887,37 @@ def _looks_like_safety_boundary_question(text: str) -> bool:
             "候選",
             "admission",
             "persistence",
+        ),
+    )
+
+
+def _looks_like_survival_incident_playbook_question(text: str) -> bool:
+    return _has_any(
+        text,
+        (
+            "survivalplaybook",
+            "incidentplaybook",
+            "sosplaybook",
+            "不確定自己在哪",
+            "迷路",
+            "原地等待",
+            "找路",
+            "下切溪谷",
+            "找訊號",
+            "可視標記",
+            "保存哪些證據",
+            "分享給誰",
+            "求救",
+            "報座標",
+            "地標",
+            "直升機",
+            "傷者",
+            "受傷",
+            "撐過夜",
+            "報案",
+            "失溫",
+            "sos",
+            "rescue",
         ),
     )
 

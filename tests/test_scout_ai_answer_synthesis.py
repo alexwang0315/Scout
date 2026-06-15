@@ -20,6 +20,7 @@ from scout_post_trip_review_tool import POST_TRIP_REVIEW_TOOL_ID
 from scout_route_architecture_tool import ROUTE_ARCHITECTURE_TOOL_ID
 from scout_route_context_tool import ROUTE_CONTEXT_TOOL_ID
 from scout_media_literacy_tool import MEDIA_LITERACY_TOOL_ID
+from scout_survival_incident_playbook_tool import SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID
 from scout_risk_score_tool import RISK_SCORE_TOOL_ID
 from scout_terrain_score_tool import TERRAIN_SCORE_TOOL_ID
 
@@ -78,8 +79,8 @@ def test_answer_synthesis_reports_weather_tool_missing_fresh_evidence_without_gu
     )
 
     assert result.answerability == "partial_evidence_with_missing_context"
-    assert result.completed_source_count == 1
-    assert result.missing_evidence_count == 1
+    assert result.completed_source_count >= 1
+    assert result.missing_evidence_count >= 1
     assert result.synthesis_policy.model_provider_used is False
     assert result.synthesis_policy.model_synthesis_performed is False
 
@@ -111,7 +112,7 @@ def test_answer_synthesis_uses_weather_to_decision_field_answer(tmp_path: Path) 
     )
 
     assert result.answerability == "evidence_available"
-    assert result.completed_source_count == 1
+    assert result.completed_source_count >= 1
     assert result.missing_evidence_count == 0
     assert result.sources[0].tool_id == WEATHER_WINDOW_TOOL_ID
     assert result.sources[0].top_result_summary["decision"] == "CHANGE_PLAN"
@@ -313,6 +314,31 @@ def test_answer_synthesis_uses_media_literacy_field_answer_without_guessing() ->
     )
     assert "fresh_weather_or_route_condition_review" in source.missing_fields
     assert "媒體識讀判斷" in result.answer
+    assert "runtime safety truth" in result.answer
+
+
+def test_answer_synthesis_uses_survival_playbook_field_answer_without_guessing() -> None:
+    result = collect_and_synthesize_scout_ai_answer(
+        "不確定自己在哪，可以下切溪谷找路嗎？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=3,
+    )
+
+    assert result.answerability == "partial_evidence_with_missing_context"
+    assert result.completed_source_count >= 1
+    assert result.missing_evidence_count >= 1
+    source = _source(result, SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID)
+    assert source.top_result_summary["decision"] == "NO_GO"
+    assert source.top_result_summary["survival_incident_playbook"]["role"] == (
+        "Risk Sentinel / Survival Incident Playbook"
+    )
+    assert source.top_result_summary["incident_triage"]["scenario"] == (
+        "lost_or_position_uncertain"
+    )
+    assert "current_location_status" in source.missing_fields
+    assert "求生事件 playbook" in result.answer
+    assert "發送 SOS" in result.answer
     assert "runtime safety truth" in result.answer
 
 

@@ -26,6 +26,7 @@ from scout_team_status_tool import TEAM_STATUS_TOOL_ID
 from scout_post_trip_review_tool import POST_TRIP_REVIEW_TOOL_ID
 from scout_route_architecture_tool import ROUTE_ARCHITECTURE_TOOL_ID
 from scout_media_literacy_tool import MEDIA_LITERACY_TOOL_ID
+from scout_survival_incident_playbook_tool import SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID
 
 
 EXECUTABLE_TOOL_IDS = set(EXECUTABLE_TOOL_ALIASES)
@@ -532,6 +533,31 @@ def _execute_ready_current_tool(tool_id: str, arguments: dict[str, Any]) -> dict
             limit=limit,
         )
 
+    if tool_id == SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID:
+        from scout_survival_incident_playbook_tool import (
+            explain_scout_survival_incident_playbook,
+        )
+
+        return explain_scout_survival_incident_playbook(
+            project_root,
+            query=query,
+            incident_type=_str_or_none(arguments.get("incident_type")),
+            current_location_status=_str_or_none(
+                arguments.get("current_location_status")
+            ),
+            injury_status=_str_or_none(arguments.get("injury_status")),
+            team_status=_str_or_none(arguments.get("team_status")),
+            communication_status=_str_or_none(arguments.get("communication_status")),
+            weather_exposure=_str_or_none(arguments.get("weather_exposure")),
+            overnight_risk=_str_or_none(arguments.get("overnight_risk")),
+            operator_authorization_ref=_str_or_none(
+                arguments.get("operator_authorization_ref")
+            ),
+            emergency_playbook_path=_str_or_none(
+                arguments.get("emergency_playbook_path")
+            ),
+        )
+
     if tool_id == EQUIPMENT_RESOURCE_TOOL_ID:
         from scout_equipment_resource_tool import assess_scout_equipment_resource
 
@@ -693,6 +719,7 @@ def _completed_missing_fields(tool_id: str, payload: dict[str, Any]) -> list[str
         TEAM_STATUS_TOOL_ID,
         POST_TRIP_REVIEW_TOOL_ID,
         MEDIA_LITERACY_TOOL_ID,
+        SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID,
     }:
         return []
     value = payload.get("missing_fields")

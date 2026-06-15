@@ -83,6 +83,10 @@ CURRENT_TOOLS = {
         "label": "media literacy / bias sentinel",
         "evidence_scope": "social photo/video/check-in pressure, success-story, season, weather, equipment, guide, speed, and image-scale bias detection with conservative action guidance",
     },
+    "scout.ai.survival_incident_playbook.explain.v0": {
+        "label": "survival/incident playbook explainer",
+        "evidence_scope": "lost, injury, exposure, rescue, and SOS-preparation questions answered as read-only conservative playbooks without outbound send or safety mutation",
+    },
 }
 
 
@@ -488,6 +492,7 @@ _CURRENT_TOOL_TERMS = (
     ("scout.ai.post_trip_review.assess.v0", ("行後", "回顧", "覆盤", "事後", "完成行程", "實際cp", "實際通過", "實際耗時", "停留時間", "比預期慢", "路段比預期", "體感難度", "near miss", "nearmiss", "裝備缺口", "天氣與路況", "下次行前", "下一次規劃", "模型更新", "能力摘要", "capability timeline", "capability capsule", "incident package", "field case")),
     ("scout.ai.route_architecture.assess.v0", ("route architecture", "cp graph", "checkpoint graph", "路線結構", "行程結構", "cp圖", "撤退點", "撤退路線", "折返點", "最晚折返", "難點位置", "難點在哪", "容錯率", "低容錯", "替代路線", "短版路線", "岔路可以切", "回頭成本")),
     ("scout.ai.media_literacy.assess.v0", ("ig", "instagram", "網紅", "美照", "熱門照片", "打卡", "朝聖", "攻略說", "網路上都說", "影片看起來", "照片看起來", "成功者", "乾季照片", "晴天影片", "輕裝", "專業帶隊", "嚮導", "媒體偏誤", "社群", "checkin", "social photo", "media bias", "survivorship bias")),
+    ("scout.ai.survival_incident_playbook.explain.v0", ("不確定自己在哪", "原地等待", "找路", "下切溪谷", "找訊號", "可視標記", "保存哪些證據", "分享給誰", "求救", "報座標", "地標", "直升機", "傷者", "撐過夜", "報案", "迷路", "失溫", "sos", "rescue")),
 )
 
 
