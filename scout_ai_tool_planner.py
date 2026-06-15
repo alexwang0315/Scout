@@ -33,6 +33,7 @@ from scout_review_gap_tool import REVIEW_GAP_TOOL_ID
 from scout_route_architecture_tool import ROUTE_ARCHITECTURE_TOOL_ID
 from scout_media_literacy_tool import MEDIA_LITERACY_TOOL_ID
 from scout_survival_incident_playbook_tool import SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID
+from scout_runtime_ingress_status_tool import RUNTIME_INGRESS_STATUS_TOOL_ID
 from scout_workspace_search_tools import (
     MAJOR_POINT_TOOL_ID,
     ROUTE_STRUCTURE_TOOL_ID,
@@ -246,6 +247,13 @@ def plan_scout_ai_tools(
             (
                 LIVE_NAVIGATION_STATE_TOOL_ID,
                 "Question needs current live navigation state such as position, GNSS quality, heading, or INS/DR uncertainty.",
+            )
+        )
+    if _looks_like_runtime_ingress_status_question(normalized_question):
+        selected.append(
+            (
+                RUNTIME_INGRESS_STATUS_TOOL_ID,
+                "Question asks for read-only runtime ingress/router/provider pipeline status, data gaps, latency, or Sensor Logger/MQTT trace evidence.",
             )
         )
     if _looks_like_safety_boundary_question(normalized_question):
@@ -2716,6 +2724,52 @@ def _looks_like_live_navigation_state_question(text: str) -> bool:
             "溪谷",
         ),
     )
+
+
+def _looks_like_runtime_ingress_status_question(text: str) -> bool:
+    if _looks_like_post_trip_review_question(text):
+        return False
+    direct_terms = (
+        "runtimeingress",
+        "ingressstatus",
+        "routerstatus",
+        "sensorlogger",
+        "mqtt",
+        "封包",
+        "掉包",
+        "丟包",
+        "缺timestamp",
+        "timestamp缺",
+        "duplicatemessage",
+        "messagegap",
+        "routinglatency",
+        "routerlatency",
+        "latency",
+        "pipeline",
+        "派發",
+        "接入",
+        "路由",
+        "路由器",
+        "transportservice",
+        "outboundpacket",
+        "sensor/vitals",
+        "applewatch傳回",
+        "applewatch資料",
+    )
+    if _has_any(text, direct_terms):
+        return True
+    provider_runtime_terms = (
+        "scoutai目前使用哪個provider",
+        "scoutai使用哪個provider",
+        "目前使用哪個provider",
+        "assistantstatus",
+        "assistant狀態",
+        "pydanticai",
+        "provider失敗",
+        "fallback會怎麼回答",
+        "fallback怎麼回答",
+    )
+    return _has_any(text, provider_runtime_terms)
 
 
 def _looks_like_safety_boundary_question(text: str) -> bool:

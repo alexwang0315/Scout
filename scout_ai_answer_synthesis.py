@@ -29,6 +29,7 @@ from scout_map_perception_tool import MAP_PERCEPTION_TOOL_ID
 from scout_navigation_terrain_tool import NAVIGATION_TERRAIN_TOOL_ID
 from scout_ins_dr_trace_tool import INS_DR_TRACE_TOOL_ID
 from scout_risk_score_tool import RISK_SCORE_TOOL_ID
+from scout_runtime_ingress_status_tool import RUNTIME_INGRESS_STATUS_TOOL_ID
 from scout_workspace_search_tools import MAJOR_POINT_TOOL_ID
 
 
@@ -272,6 +273,10 @@ def _source_from_record(record: dict[str, Any]) -> ScoutAiAnswerSource:
         "review_governance",
         "provenance_summary",
         "privacy_share_policy",
+        "runtime_ingress_status",
+        "ingress_status",
+        "router_trace",
+        "latency_status",
         "pace_guardian",
         "team_pace_fit",
         "schedule_pressure",
@@ -416,6 +421,9 @@ def _answer_text(
         review_gap_answer = _review_gap_answer(completed_sources)
         if review_gap_answer:
             parts.append(review_gap_answer)
+        runtime_ingress_answer = _runtime_ingress_status_answer(completed_sources)
+        if runtime_ingress_answer:
+            parts.append(runtime_ingress_answer)
         pace_guardian_answer = _pace_guardian_answer(completed_sources)
         if pace_guardian_answer:
             parts.append(pace_guardian_answer)
@@ -915,6 +923,10 @@ def _decision_source_priority(
         return (-1, source.tool_id)
     if source.tool_id == REVIEW_GAP_TOOL_ID and _looks_like_review_gap_question(question):
         return (-1, source.tool_id)
+    if source.tool_id == RUNTIME_INGRESS_STATUS_TOOL_ID and _looks_like_runtime_ingress_question(
+        question
+    ):
+        return (-1, source.tool_id)
     if source.tool_id == RISK_SCORE_TOOL_ID and _looks_like_forward_risk_segment_question(
         question
     ):
@@ -974,6 +986,7 @@ def _decision_source_priority(
         ROUTE_ARCHITECTURE_TOOL_ID,
         ROUTE_CONTEXT_TOOL_ID,
         POST_TRIP_REVIEW_TOOL_ID,
+        RUNTIME_INGRESS_STATUS_TOOL_ID,
     }:
         return (10, source.tool_id)
     return (20, source.tool_id)
@@ -1076,6 +1089,38 @@ def _looks_like_review_gap_question(question: str) -> bool:
             "審核缺口",
             "證據缺口",
         )
+    )
+
+
+def _looks_like_runtime_ingress_question(question: str) -> bool:
+    text = _normalize_question_text(question)
+    return _text_has_any(
+        text,
+        (
+            "runtimeingress",
+            "ingressstatus",
+            "routerstatus",
+            "sensorlogger",
+            "mqtt",
+            "封包",
+            "掉包",
+            "timestamp",
+            "routinglatency",
+            "latency",
+            "pipeline",
+            "派發",
+            "接入",
+            "路由",
+            "transportservice",
+            "outboundpacket",
+            "sensor/vitals",
+            "applewatch",
+            "assistantstatus",
+            "pydanticai",
+            "目前使用哪個provider",
+            "provider失敗",
+            "fallback",
+        ),
     )
 
 
@@ -1861,6 +1906,16 @@ def _review_gap_answer(sources: list[ScoutAiAnswerSource]) -> str | None:
             f"樣本={'; '.join(sample_items) or '無'}。"
             f"下一步={'; '.join(required_actions[:2]) or '保持 candidate-only，不升格為 runtime safety truth'}。"
         )
+    return None
+
+
+def _runtime_ingress_status_answer(sources: list[ScoutAiAnswerSource]) -> str | None:
+    for source in sources:
+        if source.tool_id != RUNTIME_INGRESS_STATUS_TOOL_ID:
+            continue
+        field_answer = source.top_result_summary.get("field_answer")
+        if isinstance(field_answer, str) and field_answer.strip():
+            return field_answer.strip()
     return None
 
 
