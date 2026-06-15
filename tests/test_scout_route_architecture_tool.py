@@ -95,6 +95,27 @@ def test_route_architecture_delays_retreat_point_status_without_current_context(
     assert result["boundary"]["runtime_safety_truth"] is False
 
 
+def test_route_architecture_delays_retreat_window_status_without_current_context() -> None:
+    result = assess_scout_route_architecture(
+        PROJECT_ROOT,
+        query="撤退點是否即將失去？",
+        limit=2,
+    )
+
+    assert result["answerability"] == "route_architecture_missing_current_context"
+    assert result["decision"] == "DELAY"
+    assert result["missing_fields"] == ["current_cp_id", "current_time"]
+    assert result["decision_output"]["firstLayer"]["decision"] == (
+        "無法確認撤退點是否即將失去。"
+    )
+    assert "current_cp_id" in result["decision_output"]["firstLayer"]["reason"]
+    assert "撤退窗口仍可用" in result["decision_output"]["firstLayer"]["limit"]
+    assert "不能確認撤退點是否即將失去" in result["field_answer"]
+    assert result["decision_output"]["allowed"] is False
+    assert result["decision_output"]["runtimeSafetyTruth"] is False
+    assert result["boundary"]["runtime_safety_truth"] is False
+
+
 def test_route_architecture_changes_plan_after_missed_checkpoint_deadline() -> None:
     result = assess_scout_route_architecture(
         PROJECT_ROOT,
