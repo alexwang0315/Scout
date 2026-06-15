@@ -333,6 +333,10 @@ def _plan_item(
         overrides = _team_status_request_overrides(query.question)
         if overrides:
             request["arguments"] = overrides
+    if request is not None and contract.tool_id == POST_TRIP_REVIEW_TOOL_ID:
+        overrides = _post_trip_review_request_overrides(query.question)
+        if overrides:
+            request["arguments"] = overrides
     return ScoutAiToolPlanItem(
         tool_id=contract.tool_id,
         label=contract.label,
@@ -753,6 +757,140 @@ def _equipment_resource_request_overrides(question: str) -> dict[str, Any]:
     ):
         overrides["gpx_loaded"] = True
     return overrides
+
+
+def _post_trip_review_request_overrides(question: str) -> dict[str, Any]:
+    normalized = _normalize(question)
+    overrides: dict[str, Any] = {}
+    if _has_any(
+        normalized,
+        ("比預期難", "比想像難", "很難", "體感難", "subjectivedifficultyhard"),
+    ):
+        overrides["subjective_difficulty"] = "harder_than_expected"
+    elif _has_any(normalized, ("符合預期", "難度符合", "subjectivedifficultyexpected")):
+        overrides["subjective_difficulty"] = "as_expected"
+    elif _has_any(normalized, ("比預期簡單", "不難", "subjectivedifficultyeasy")):
+        overrides["subjective_difficulty"] = "easier_than_expected"
+
+    near_miss_events = _post_trip_event_phrases(
+        question,
+        normalized,
+        source="near_miss",
+    )
+    if near_miss_events:
+        overrides["near_miss_events"] = near_miss_events
+
+    incident_events = _post_trip_event_phrases(
+        question,
+        normalized,
+        source="incident",
+    )
+    if incident_events:
+        overrides["incident_events"] = incident_events
+
+    equipment_gaps = _post_trip_equipment_gaps(question, normalized)
+    if equipment_gaps:
+        overrides["equipment_gaps"] = equipment_gaps
+
+    route_notes = _post_trip_route_condition_notes(question, normalized)
+    if route_notes:
+        overrides["route_condition_notes"] = route_notes
+
+    if _has_any(
+        normalized,
+        ("天氣不符", "路況不符", "比預報早", "比預期差", "weathermismatch"),
+    ):
+        overrides["weather_matched_expectation"] = False
+    elif _has_any(normalized, ("天氣符合", "路況符合", "符合預報")):
+        overrides["weather_matched_expectation"] = True
+
+    context_updates = _post_trip_route_context_updates(question, normalized)
+    if context_updates:
+        overrides["route_context_updates"] = context_updates
+
+    if _has_any(normalized, ("下次", "下一次", "回寫", "更新", "調整", "檢討")):
+        overrides["user_feedback_items"] = ["review_for_next_pretrip"]
+    return overrides
+
+
+def _post_trip_event_phrases(
+    question: str,
+    normalized: str,
+    *,
+    source: str,
+) -> list[str]:
+    phrases: list[str] = []
+
+    def add(label: str) -> None:
+        if label not in phrases:
+            phrases.append(label)
+
+    near_miss_terms = (
+        "差點迷路",
+        "差點錯過岔路",
+        "差點走錯",
+        "摸黑前差點",
+        "差點滑倒",
+        "near miss",
+        "nearmiss",
+    )
+    incident_terms = (
+        "滑倒",
+        "跌倒",
+        "摔倒",
+        "失溫",
+        "高山症",
+        "受傷",
+        "裝備失效",
+        "頭燈失效",
+    )
+    shared_terms = (
+        "摸黑",
+        "迷路",
+        "錯過岔路",
+        "脫隊",
+        "走散",
+        "失聯",
+    )
+    terms = near_miss_terms if source == "near_miss" else incident_terms
+    for term in (*terms, *shared_terms):
+        if _has_any(normalized, (term,)):
+            add(term)
+    if not phrases and _has_any(normalized, ("near", "incident", "事件")):
+        add(question)
+    return phrases
+
+
+def _post_trip_equipment_gaps(question: str, normalized: str) -> list[str]:
+    gaps: list[str] = []
+    for term in (
+        "裝備失效",
+        "頭燈失效",
+        "頭燈電量不足",
+        "手機沒電",
+        "手套不足",
+        "雨衣不足",
+        "電量不足",
+    ):
+        if _has_any(normalized, (term,)):
+            gaps.append(term)
+    if not gaps and _has_any(normalized, ("裝備缺口", "equipmentgap")):
+        gaps.append(question)
+    return _dedupe(gaps)
+
+
+def _post_trip_route_condition_notes(question: str, normalized: str) -> list[str]:
+    notes: list[str] = []
+    for term in ("濕冷", "低溫", "午後霧", "霧氣比預報早", "路況不符", "天氣不符"):
+        if _has_any(normalized, (term,)):
+            notes.append(term)
+    return _dedupe(notes)
+
+
+def _post_trip_route_context_updates(question: str, normalized: str) -> list[str]:
+    if _has_any(normalized, ("路線脈絡", "補充展望", "集合空間", "危險岔路需要標記")):
+        return [question]
+    return []
 
 
 def _states_phone_battery_dead(normalized_question: str) -> bool:
@@ -1307,6 +1445,8 @@ def _looks_like_navigation_terrain_question(text: str) -> bool:
 
 
 def _looks_like_weather_question(text: str) -> bool:
+    if _looks_like_post_trip_review_question(text):
+        return False
     return _has_any(
         text,
         (
@@ -1603,6 +1743,8 @@ def _looks_like_pace_guardian_question(text: str) -> bool:
 
 
 def _looks_like_equipment_resource_question(text: str) -> bool:
+    if _looks_like_post_trip_review_question(text):
+        return False
     return _has_any(
         text,
         (
@@ -1640,6 +1782,8 @@ def _looks_like_equipment_resource_question(text: str) -> bool:
 
 
 def _looks_like_team_status_question(text: str) -> bool:
+    if _looks_like_post_trip_review_question(text):
+        return False
     if _looks_like_pace_guardian_question(text) and not _has_any(
         text,
         (
@@ -1784,6 +1928,8 @@ def _looks_like_ins_dr_trace_question(text: str) -> bool:
 
 
 def _looks_like_live_navigation_state_question(text: str) -> bool:
+    if _looks_like_post_trip_review_question(text):
+        return False
     return _has_any(
         text,
         (
@@ -2081,6 +2227,17 @@ def _has_any(text: str, fragments: tuple[str, ...]) -> bool:
 
 def _has_tool(selected: list[tuple[str, str]], tool_id: str) -> bool:
     return any(item_tool_id == tool_id for item_tool_id, _ in selected)
+
+
+def _dedupe(values: list[str]) -> list[str]:
+    seen = set()
+    result = []
+    for value in values:
+        if value in seen:
+            continue
+        seen.add(value)
+        result.append(value)
+    return result
 
 
 def _dedupe_selected(selected: list[tuple[str, str]]) -> list[tuple[str, str]]:
