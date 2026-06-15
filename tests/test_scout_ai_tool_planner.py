@@ -504,6 +504,44 @@ def test_planner_routes_tripod_permission_to_contextual_action() -> None:
     assert contextual.boundary.runtime_safety_truth is False
 
 
+def test_planner_routes_photo_stop_budget_phrase_to_contextual_action() -> None:
+    plan = plan_scout_ai_tools(
+        _query("我們現在還有 21 分鐘安全 buffer，可以多停 10 分鐘拍照嗎？"),
+        project_root=PROJECT_ROOT,
+    )
+
+    contextual = _single_tool(plan, CONTEXTUAL_PERMISSION_TOOL_ID)
+    assert contextual.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+    assert contextual.request is not None
+    assert contextual.request["arguments"] == {
+        "action": "photo",
+        "requested_duration_minutes": 10.0,
+        "remaining_safety_buffer_minutes": 21.0,
+    }
+    assert contextual.boundary.runtime_safety_truth is False
+
+
+def test_planner_routes_film_stop_with_cp_budget_to_contextual_action() -> None:
+    plan = plan_scout_ai_tools(
+        _query(
+            "前方 CP4 約 42 分鐘，安全 buffer 剩 21 分鐘，可以停 6 分鐘拍影片嗎？"
+        ),
+        project_root=PROJECT_ROOT,
+    )
+
+    contextual = _single_tool(plan, CONTEXTUAL_PERMISSION_TOOL_ID)
+    assert contextual.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+    assert contextual.request is not None
+    assert contextual.request["arguments"] == {
+        "action": "film",
+        "requested_duration_minutes": 6.0,
+        "remaining_safety_buffer_minutes": 21.0,
+        "next_cp_id": "CP4",
+        "minutes_to_next_cp": 42.0,
+    }
+    assert contextual.boundary.runtime_safety_truth is False
+
+
 def test_planner_selects_weather_and_contextual_for_wind_lunch() -> None:
     plan = plan_scout_ai_tools(
         _query("這裡是風口，我們可以在這裡吃午餐嗎？"),
