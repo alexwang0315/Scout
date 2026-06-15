@@ -182,6 +182,35 @@ def test_answer_synthesis_uses_weather_to_decision_field_answer(tmp_path: Path) 
     assert "runtime safety truth" in result.answer
 
 
+def test_answer_synthesis_surfaces_heat_exposure_weather_decision(
+    tmp_path: Path,
+) -> None:
+    project_root = _write_heat_exposure_project(tmp_path)
+
+    result = collect_and_synthesize_scout_ai_answer(
+        "高溫曝曬，天氣決策怎麼看？",
+        project_root=project_root,
+        project_id="heat_exposure_project",
+        limit=3,
+    )
+
+    assert result.answerability == "evidence_available"
+    assert result.completed_source_count == 1
+    assert result.missing_evidence_count == 0
+    source = _source(result, WEATHER_WINDOW_TOOL_ID)
+    assert source.top_result_summary["decision"] == "CHANGE_PLAN"
+    rule = source.top_result_summary["weather_to_decision"][
+        "route_sensitive_weather_rule"
+    ]
+    assert rule["rule"] == "high_heat_exposure_water_timing_review"
+    assert rule["segment_ids"] == ["heat.exposed.1"]
+    assert result.decision_output["answerSourceToolId"] == WEATHER_WINDOW_TOOL_ID
+    assert result.decision_output["decision"] == "CHANGE_PLAN"
+    assert "water margin" in result.decision_output["firstLayer"]["limit"]
+    assert "補足水量" in result.answer
+    assert "runtime safety truth" in result.answer
+
+
 def test_answer_synthesis_delays_recent_rain_creek_crossing_without_experience(
     tmp_path: Path,
 ) -> None:
@@ -1848,6 +1877,67 @@ def _write_route_weather_project(tmp_path: Path) -> Path:
                         "riskLevel": "HIGH",
                         "factors": ["午後雷雨", "稜線暴露", "低能見度可能"],
                         "message": "此路段有雷雨、低能見度與稜線暴露疊加。",
+                    }
+                ],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    return project_root
+
+
+def _write_heat_exposure_project(tmp_path: Path) -> Path:
+    project_root = tmp_path / "heat_exposure_project"
+    outputs = project_root / "outputs"
+    outputs.mkdir(parents=True)
+    (project_root / "project.json").write_text(
+        json.dumps(
+            {
+                "project_id": "heat_exposure_project",
+                "route_weather_package_ref": "outputs/route_weather_package.json",
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    (outputs / "route_weather_package.json").write_text(
+        json.dumps(
+            {
+                "artifact_kind": "route_weather_package",
+                "status": "candidate_only",
+                "routeId": "fixture-route",
+                "generatedAt": "2099-06-07T08:00:00Z",
+                "issued_at": "2099-06-07T08:00:00Z",
+                "valid_from": "2099-06-07T08:00:00Z",
+                "valid_to": "2099-06-10T08:00:00Z",
+                "validUntil": "2099-06-10T08:00:00Z",
+                "ttl_s": 259200,
+                "provider": "fixture_cwa_server_side_ingestor",
+                "authoritative_weather_computed": True,
+                "external_api_calls_made": True,
+                "human_review_required": False,
+                "weather_window": {
+                    "summary": "午後高溫曝曬，水量與遮蔽需要重新規劃",
+                    "valid_from": "2099-06-07T08:00:00Z",
+                    "valid_to": "2099-06-10T08:00:00Z",
+                    "source_status": "server_side_fixture",
+                },
+                "segments": [
+                    {
+                        "segmentId": "heat.exposed.1",
+                        "etaFrom": "2099-06-08T04:30:00Z",
+                        "etaTo": "2099-06-08T05:20:00Z",
+                        "temperatureC": 33.5,
+                        "heatIndexC": 36.0,
+                        "shadeStatus": "limited",
+                        "waterMarginLiters": 0.4,
+                        "terrainRisk": 0.35,
+                        "weatherRisk": 0.62,
+                        "finalRisk": 0.62,
+                        "riskLevel": "MODERATE",
+                        "factors": ["高溫曝曬", "水量偏低", "無遮蔽", "午後炎熱時段"],
+                        "message": "午後高溫與曝曬會放大中暑、補水與遮蔽需求。",
                     }
                 ],
             },
