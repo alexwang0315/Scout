@@ -1,0 +1,62 @@
+name: Scout Skill Governance
+
+on:
+  pull_request:
+    paths:
+      - ".codex/checklist.yaml"
+      - ".github/PULL_REQUEST_TEMPLATE/scout-skill.md"
+      - ".github/workflows/scout-skill-governance.yml"
+      - "Makefile"
+      - "requirements-dev.txt"
+      - "scripts/codex_checklist_validate.py"
+      - "skills/**"
+      - "tests/test_example_scout_skill_schemas.py"
+      - "docs/*_scout_skill-api.md"
+      - "observability/*_scout_skill-events.md"
+      - "docs/example_scout_skill-api.md"
+      - "observability/example_scout_skill-events.md"
+  push:
+    branches:
+      - main
+    paths:
+      - ".codex/checklist.yaml"
+      - ".github/PULL_REQUEST_TEMPLATE/scout-skill.md"
+      - ".github/workflows/scout-skill-governance.yml"
+      - "Makefile"
+      - "requirements-dev.txt"
+      - "scripts/codex_checklist_validate.py"
+      - "skills/**"
+      - "tests/test_example_scout_skill_schemas.py"
+      - "docs/*_scout_skill-api.md"
+      - "observability/*_scout_skill-events.md"
+      - "docs/example_scout_skill-api.md"
+      - "observability/example_scout_skill-events.md"
+
+permissions:
+  contents: read
+
+jobs:
+  governance:
+    name: Governance Checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: requirements-dev.txt
+
+      - name: Install dependencies
+        run: make install
+
+      - name: Run starter pack tests
+        run: make test
+
+      - name: Run governance validator
+        run: make governance
