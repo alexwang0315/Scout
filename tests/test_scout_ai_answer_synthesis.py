@@ -941,6 +941,37 @@ def test_answer_synthesis_uses_route_readiness_field_answer_without_guessing() -
     assert "runtime safety truth" in result.answer
 
 
+def test_answer_synthesis_changes_plan_for_latest_return_limit() -> None:
+    result = collect_and_synthesize_scout_ai_answer(
+        "最晚回程接駁是 16:30，這個行程可以嗎？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=3,
+    )
+
+    assert result.answerability == "partial_evidence_with_missing_context"
+    assert result.completed_source_count == 1
+    source = result.sources[0]
+    assert source.tool_id == ROUTE_READINESS_TOOL_ID
+    assert source.top_result_summary["decision"] == "CHANGE_PLAN"
+    deadline = source.top_result_summary["readiness_governance"][
+        "transport_deadline"
+    ]
+    assert deadline["resolved_deadline"] == "2013-10-08T16:30:00+08:00"
+    assert deadline["target_eta"] == "2013-10-08T18:28:50+08:00"
+    assert deadline["conflict"] is True
+    assert result.decision_output["answerSourceToolId"] == ROUTE_READINESS_TOOL_ID
+    assert result.decision_output["decision"] == "CHANGE_PLAN"
+    assert result.decision_output["firstLayer"]["decision"] == "建議改變計畫。"
+    assert "Target ETA 2013-10-08T18:28:50+08:00" in result.decision_output[
+        "firstLayer"
+    ]["reason"]
+    assert result.decision_output["cost"]["latestReturnDeadline"] == (
+        "2013-10-08T16:30:00+08:00"
+    )
+    assert result.decision_output["runtimeSafetyTruth"] is False
+
+
 def test_answer_synthesis_preserves_guided_only_route_readiness_decision() -> None:
     result = collect_and_synthesize_scout_ai_answer(
         "beginner transportconfirmed slowestbasisconfirmed "

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +19,7 @@ ROUTE_READINESS_OPTIONAL_FIELDS = (
     "route_comparison_path",
     "user_experience_level",
     "transport_access_plan",
+    "latest_return_time",
     "team_slowest_basis_confirmed",
     "departure_time_confirmed",
     "weather_reviewed",
@@ -40,6 +42,7 @@ def assess_scout_route_readiness(
     route_comparison_path: str | None = None,
     user_experience_level: str | None = None,
     transport_access_plan: str | None = None,
+    latest_return_time: str | None = None,
     team_slowest_basis_confirmed: bool | str | None = None,
     departure_time_confirmed: bool | str | None = None,
     weather_reviewed: bool | str | None = None,
@@ -124,6 +127,7 @@ def assess_scout_route_readiness(
     direct = {
         "user_experience_level": user_experience_level,
         "transport_access_plan": transport_access_plan,
+        "latest_return_time": latest_return_time,
         "team_slowest_basis_confirmed": _bool_or_none(team_slowest_basis_confirmed),
         "departure_time_confirmed": _bool_or_none(departure_time_confirmed),
         "weather_reviewed": _bool_or_none(weather_reviewed),
@@ -356,6 +360,10 @@ def _decision_output(
             "retreatImpact": "Turnaround and alternatives must remain visible before runtime handoff.",
             "teamPaceImpact": "Slowest or most vulnerable member basis is required.",
             "latestTurnaroundCheckpoint": route_state.get("turn_back_checkpoint_node_name"),
+            "latestReturnDeadline": governance.get("transport_deadline", {}).get(
+                "resolved_deadline"
+            ),
+            "targetEta": route_state.get("target_eta"),
             "mustLeaveBy": limits.get("must_leave_by"),
             "bufferCostStatement": limits.get("buffer_cost_statement"),
         },
@@ -471,6 +479,7 @@ def _decision_details(
         f"cp_graph_available={bool(route_state.get('mission_graph_available'))}",
         f"checkpoint_count={route_state.get('checkpoint_count')}",
         f"segment_count={route_state.get('segment_count')}",
+        f"target_eta={route_state.get('target_eta')}",
         f"latest_turnaround={latest_turnaround.get('checkpoint_name')}",
         f"latest_turnaround_deadline={latest_turnaround.get('deadline')}",
     ]
@@ -758,7 +767,10 @@ def _input_coverage(
         "team": bool(resource_state.get("team_member_count")),
         "user_experience": bool(_first_text(direct.get("user_experience_level"))),
         "equipment": bool(resource_state.get("equipment_count")),
-        "transport_access": bool(_first_text(direct.get("transport_access_plan"))),
+        "transport_access": bool(
+            _first_text(direct.get("transport_access_plan"))
+            or _first_text(direct.get("latest_return_time"))
+        ),
         "planned_departure_time": bool(route_state.get("planned_start_time")),
         "weather": bool(weather_state.get("available")),
         "daylight": bool(weather_state.get("available")),
@@ -822,6 +834,14 @@ def _governance(
     required_conditions: list[str] = []
     alternative_actions: list[str] = []
     user_experience = _normalized_experience_level(direct.get("user_experience_level"))
+    latest_return_deadline = _latest_return_deadline(
+        direct.get("latest_return_time"),
+        route_state=route_state,
+    )
+    transport_deadline_conflict = _transport_deadline_conflict(
+        latest_return_deadline=latest_return_deadline,
+        route_state=route_state,
+    )
     route_demand_profile = (
         route_state.get("route_demand_profile")
         if isinstance(route_state.get("route_demand_profile"), dict)
@@ -844,6 +864,16 @@ def _governance(
     if resource_state.get("blocker_candidates"):
         critical_gaps.extend(resource_state["blocker_candidates"][:3])
 
+    if transport_deadline_conflict:
+        warning_gaps.append(
+            "Planned target ETA is later than the latest return transport limit."
+        )
+        required_conditions.append(
+            "Change the route, target CP, date, departure time, or transport plan before departure."
+        )
+        alternative_actions.append(
+            "Shorten the route or set an earlier turn-back checkpoint that preserves the return transport deadline."
+        )
     if readiness_state["status"] == "warning" or readiness_state["warning_count"]:
         warning_gaps.append("Hard readiness report contains warning findings.")
     if guided_only_required:
@@ -913,6 +943,13 @@ def _governance(
             "route_demand_profile": route_demand_profile,
             "autonomous_departure_allowed": False if guided_only_required else None,
         },
+        "transport_deadline": {
+            "latest_return_time": _first_text(direct.get("latest_return_time")),
+            "resolved_deadline": latest_return_deadline,
+            "target_eta": route_state.get("target_eta"),
+            "conflict": transport_deadline_conflict,
+        },
+        "plan_change_required": transport_deadline_conflict,
         "candidate_only": True,
         "runtime_safety_truth": False,
         "departure_approval_granted": False,
@@ -922,6 +959,8 @@ def _governance(
 def _decision(*, governance: dict[str, Any], missing_fields: list[str]) -> str:
     if governance["critical_gaps"]:
         return "NO_GO"
+    if governance.get("plan_change_required"):
+        return "CHANGE_PLAN"
     if missing_fields:
         return "DELAY"
     if governance.get("guided_only_gate", {}).get("required"):
@@ -929,6 +968,45 @@ def _decision(*, governance: dict[str, Any], missing_fields: list[str]) -> str:
     if governance["warning_gaps"] or governance["required_conditions"]:
         return "CONDITIONAL_GO"
     return "GO"
+
+
+def _latest_return_deadline(
+    value: Any,
+    *,
+    route_state: dict[str, Any],
+) -> str | None:
+    text = _first_text(value)
+    if not text:
+        return None
+    parsed = _parse_datetime(text)
+    if parsed is not None:
+        return parsed.isoformat()
+    if ":" not in text:
+        return text
+    hour_text, minute_text = text.split(":", 1)
+    try:
+        hour = int(hour_text)
+        minute = int(minute_text[:2])
+    except ValueError:
+        return text
+    base = _parse_datetime(route_state.get("target_eta")) or _parse_datetime(
+        route_state.get("planned_start_time")
+    )
+    if base is None:
+        return text
+    return base.replace(hour=hour, minute=minute, second=0, microsecond=0).isoformat()
+
+
+def _transport_deadline_conflict(
+    *,
+    latest_return_deadline: str | None,
+    route_state: dict[str, Any],
+) -> bool:
+    deadline = _parse_datetime(latest_return_deadline)
+    target_eta = _parse_datetime(route_state.get("target_eta"))
+    if deadline is None or target_eta is None:
+        return False
+    return target_eta > deadline
 
 
 def _pretrip_decision_package(
@@ -1071,6 +1149,21 @@ def _top_risk_sources(
                 "severity": "critical",
                 "source": "readiness_governance",
                 "reason": reason,
+            }
+        )
+    transport_deadline = governance.get("transport_deadline")
+    if isinstance(transport_deadline, dict) and transport_deadline.get("conflict"):
+        risks.append(
+            {
+                "severity": "plan_change_required",
+                "source": "transport_deadline",
+                "reason": (
+                    "Target ETA "
+                    + str(transport_deadline.get("target_eta"))
+                    + " is later than latest return deadline "
+                    + str(transport_deadline.get("resolved_deadline"))
+                    + "."
+                ),
             }
         )
     for field in missing_fields:
@@ -1441,6 +1534,16 @@ def _first_text(*values: Any) -> str | None:
         if text:
             return text
     return None
+
+
+def _parse_datetime(value: Any) -> datetime | None:
+    text = _first_text(value)
+    if not text:
+        return None
+    try:
+        return datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
 
 
 def _float_or_none(value: Any) -> float | None:

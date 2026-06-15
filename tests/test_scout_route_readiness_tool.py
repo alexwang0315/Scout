@@ -59,6 +59,36 @@ def test_route_readiness_fixture_delays_without_required_pretrip_reviews() -> No
     assert package["acceptance_coverage"]["explicit_decision"] is True
 
 
+def test_route_readiness_changes_plan_when_latest_return_is_before_target_eta() -> None:
+    result = assess_scout_route_readiness(
+        PROJECT_ROOT,
+        query="最晚回程接駁是 16:30，這個行程可以嗎？",
+        latest_return_time="16:30",
+        transport_access_plan="latest_return_user_provided",
+    )
+
+    assert result["answerability"] == "route_readiness_missing_required_fields"
+    assert result["decision"] == "CHANGE_PLAN"
+    assert "transport_access_plan" not in result["missing_fields"]
+    deadline = result["readiness_governance"]["transport_deadline"]
+    assert deadline["latest_return_time"] == "16:30"
+    assert deadline["resolved_deadline"] == "2013-10-08T16:30:00+08:00"
+    assert deadline["target_eta"] == "2013-10-08T18:28:50+08:00"
+    assert deadline["conflict"] is True
+    package = result["pretrip_decision_package"]
+    assert package["required_outputs"]["pretrip_decision"] == "CHANGE_PLAN"
+    assert package["required_outputs"]["top_risk_sources"][0]["source"] == (
+        "transport_deadline"
+    )
+    assert result["decision_output"]["cost"]["latestReturnDeadline"] == (
+        "2013-10-08T16:30:00+08:00"
+    )
+    assert result["decision_output"]["cost"]["targetEta"] == (
+        "2013-10-08T18:28:50+08:00"
+    )
+    assert result["decision_output"]["runtimeSafetyTruth"] is False
+
+
 def test_route_readiness_no_go_for_hard_readiness_blocker(tmp_path: Path) -> None:
     project_root = _ready_project(tmp_path, readiness_status="blocked")
 
