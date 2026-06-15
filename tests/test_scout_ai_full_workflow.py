@@ -1306,6 +1306,26 @@ def test_full_workflow_runs_route_architecture_cp_graph_question() -> None:
     assert result.boundary.runtime_safety_truth is False
 
 
+def test_full_workflow_explains_route_forgiveness_and_retreat_options() -> None:
+    result = run_scout_ai_full_workflow(
+        "走錯或變天時還有退路嗎？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=4,
+    )
+
+    assert result.answerability == "evidence_available"
+    assert result.selected_tool_count == 1
+    assert result.sources[0]["tool_id"] == ROUTE_ARCHITECTURE_TOOL_ID
+    assert result.decision_output["answerSourceToolId"] == ROUTE_ARCHITECTURE_TOOL_ID
+    assert result.decision_output["decision"] == "CONDITIONAL_GO"
+    assert "seg.050" in result.decision_output["firstLayer"]["reason"]
+    assert "候選撤退路線" in result.answer
+    assert "雲海保線所" in result.answer
+    assert "no_segment_retreat" in result.answer
+    assert result.boundary.runtime_safety_truth is False
+
+
 def test_full_workflow_uses_route_architecture_for_turnback_status() -> None:
     result = run_scout_ai_full_workflow(
         "現在是不是折返點？",

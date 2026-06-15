@@ -45,6 +45,11 @@ def test_route_architecture_builds_candidate_cp_graph_and_decision() -> None:
     assert result["route_decision"]["runtime_safety_truth"] is False
     assert "路線結構判斷" in result["field_answer"]
     assert "CP Graph" in result["field_answer"]
+    assert "雲海保線所" in result["field_answer"]
+    assert "候選撤退路線" in result["field_answer"]
+    assert "seg.050" in result["field_answer"]
+    assert "中段難點" in result["field_answer"]
+    assert "後段/回程難點" in result["field_answer"]
     assert result["boundary"]["runtime_safety_truth"] is False
     assert result["boundary"]["safety_api_called"] is False
     assert result["boundary"]["outbound_send_performed"] is False

@@ -1238,6 +1238,25 @@ def test_answer_synthesis_uses_route_architecture_field_answer_without_guessing(
     assert "runtime safety truth" in result.answer
 
 
+def test_answer_synthesis_explains_route_hard_point_phase_and_retreat_options() -> None:
+    result = collect_and_synthesize_scout_ai_answer(
+        "這條路線難點在前段、中段還是回程？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=4,
+    )
+
+    assert result.answerability == "evidence_available"
+    assert result.sources[0].tool_id == ROUTE_ARCHITECTURE_TOOL_ID
+    assert result.decision_output["answerSourceToolId"] == ROUTE_ARCHITECTURE_TOOL_ID
+    assert result.decision_output["decision"] == "CONDITIONAL_GO"
+    assert "seg.050" in result.decision_output["firstLayer"]["reason"]
+    assert "中段難點" in result.answer
+    assert "後段/回程難點" in result.answer
+    assert "候選撤退路線" in result.answer
+    assert "雲海保線所" in result.answer
+
+
 def test_answer_synthesis_uses_route_architecture_for_turnback_status() -> None:
     result = collect_and_synthesize_scout_ai_answer(
         "現在是不是折返點？",
