@@ -170,6 +170,27 @@ STANDARD_IMPLEMENTATION_COVERAGE = (
     },
 )
 
+STANDARD_SYNTHESIS_COVERAGE = (
+    {
+        "label": "產品身份 / 決策層定位",
+        "sections": "0-3,26-27,30",
+        "source_id": PRODUCT_IDENTITY_STANDARD_SOURCE_ID,
+        "gap": (
+            "已由 deterministic standard formatter 回答 Scout 是戶外活動 AI 決策層、"
+            "不是路線資料庫/天氣工具/風險 dashboard；UI/UX 仍需端到端驗收。"
+        ),
+    },
+    {
+        "label": "標準術語 / Glossary",
+        "sections": "29",
+        "source_id": STANDARD_GLOSSARY_SOURCE_ID,
+        "gap": (
+            "已由 deterministic glossary formatter 回答 CP、CP Graph、Risk Budget、"
+            "Scout Pace Coefficient、Veto/Permission Power 與 Micro-Decision Agent。"
+        ),
+    },
+)
+
 STANDARD_GLOSSARY_ENTRIES = (
     {
         "term": "CP",
@@ -1797,10 +1818,17 @@ def _standard_gap_overview_decision_output(
         _standard_gap_coverage_line(group, sources=sources)
         for group in STANDARD_IMPLEMENTATION_COVERAGE
     ]
+    synthesis_lines = [
+        _standard_synthesis_coverage_line(group)
+        for group in STANDARD_SYNTHESIS_COVERAGE
+    ]
     complete_group_count = sum(
         1
         for group in STANDARD_IMPLEMENTATION_COVERAGE
         if _standard_gap_group_has_source(group, sources=sources)
+    ) + len(STANDARD_SYNTHESIS_COVERAGE)
+    standard_group_count = (
+        len(STANDARD_IMPLEMENTATION_COVERAGE) + len(STANDARD_SYNTHESIS_COVERAGE)
     )
     missing_tool_ids = {
         str(item.get("tool_id"))
@@ -1817,7 +1845,7 @@ def _standard_gap_overview_decision_output(
         else "本次標準覆蓋工具都有 deterministic evidence path 可檢視。"
     )
     standard_gap_summary = (
-        f"{complete_group_count}/{len(STANDARD_IMPLEMENTATION_COVERAGE)} 個標準能力群"
+        f"{complete_group_count}/{standard_group_count} 個標準能力群"
         "已有本次完成的 deterministic source。"
     )
     return {
@@ -1834,7 +1862,7 @@ def _standard_gap_overview_decision_output(
         ],
         "cost": {
             "coveredStandardGroupCount": complete_group_count,
-            "standardGroupCount": len(STANDARD_IMPLEMENTATION_COVERAGE),
+            "standardGroupCount": standard_group_count,
             "missingEvidenceToolCount": len(missing_tool_ids),
             "runtimeSafetyTruthImpact": "No runtime safety truth was created or changed.",
         },
@@ -1859,6 +1887,7 @@ def _standard_gap_overview_decision_output(
             "details": [
                 "六力狀態：" + "；".join(six_power_lines),
                 *coverage_lines,
+                *synthesis_lines,
             ],
             "uncertaintyNotes": [
                 _missing_evidence_text(item) for item in missing_evidence
@@ -1904,6 +1933,10 @@ def _standard_gap_overview_answer(
         _standard_gap_coverage_line(group, sources=sources)
         for group in STANDARD_IMPLEMENTATION_COVERAGE
     ]
+    synthesis_lines = [
+        _standard_synthesis_coverage_line(group)
+        for group in STANDARD_SYNTHESIS_COVERAGE
+    ]
     six_power_lines = [
         _six_power_status_line(label, system_name, tool_ids, sources=sources)
         for label, system_name, tool_ids in STANDARD_SIX_POWER_COVERAGE
@@ -1922,7 +1955,7 @@ def _standard_gap_overview_answer(
         "標準差異檢視：六力都有實作在 Scout AI 工具/證據/答案路徑內："
         + "；".join(six_power_lines)
         + "。主要標準群："
-        + "；".join(coverage_lines)
+        + "；".join([*coverage_lines, *synthesis_lines])
         + "。主要仍需補強：產品北極星、文案與 UI/UX 原則不能只靠工具矩陣證明；"
         "raw search/catalog evidence 不能取代 ContextualPermission；fixture 通過不等於真實路線資料已完整。"
         + missing_summary
@@ -1954,6 +1987,17 @@ def _standard_gap_coverage_line(
     joined_tools = " + ".join(source.tool_id for source in matched_sources)
     gap = str(group.get("gap") or "")
     return f"{label}(sections {sections}) 已實作並可查詢 ({joined_tools})；{gap}"
+
+
+def _standard_synthesis_coverage_line(group: dict[str, Any]) -> str:
+    label = str(group.get("label") or "標準 formatter")
+    sections = str(group.get("sections") or "unknown")
+    source_id = str(group.get("source_id") or "unknown")
+    gap = str(group.get("gap") or "")
+    return (
+        f"{label}(sections {sections}) 已實作為 deterministic synthesis formatter "
+        f"({source_id})；{gap}"
+    )
 
 
 def _standard_gap_group_has_source(
