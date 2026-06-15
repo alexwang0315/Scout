@@ -961,6 +961,26 @@ def test_answer_synthesis_uses_post_trip_review_field_answer_without_guessing() 
     assert "runtime safety truth" in result.answer
 
 
+def test_answer_synthesis_routes_trip_end_debrief_to_post_trip_review() -> None:
+    result = collect_and_synthesize_scout_ai_answer(
+        "這次旅行結束後要怎麼檢討？哪些經驗要回寫到下次規劃？",
+        project_root=POST_ANALYSIS_ROOT,
+        project_id="chilai_nanhua_day1_post_analysis",
+        limit=3,
+    )
+
+    assert result.answerability == "partial_evidence_with_missing_context"
+    assert result.completed_source_count == 1
+    assert result.sources[0].tool_id == POST_TRIP_REVIEW_TOOL_ID
+    assert result.decision_output["answerSourceToolId"] == POST_TRIP_REVIEW_TOOL_ID
+    assert result.decision_output["decision"] == "DELAY"
+    assert result.decision_output["firstLayer"]["decision"] == "暫緩學習寫回。"
+    assert result.decision_output["runtimeSafetyTruth"] is False
+    assert "subjective_difficulty" in result.sources[0].missing_fields
+    assert "行後回顧" in result.answer
+    assert "runtime safety truth" in result.answer
+
+
 def test_answer_synthesis_uses_safety_boundary_decision_output() -> None:
     result = collect_and_synthesize_scout_ai_answer(
         "哪些風險目前只是候選，不能觸發 Ln？",

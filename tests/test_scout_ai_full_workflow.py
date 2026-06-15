@@ -988,6 +988,26 @@ def test_full_workflow_runs_post_trip_review_question() -> None:
     assert result.boundary.runtime_safety_truth is False
 
 
+def test_full_workflow_routes_trip_end_debrief_to_post_trip_review() -> None:
+    result = run_scout_ai_full_workflow(
+        "這次旅行結束後要怎麼檢討？哪些經驗要回寫到下次規劃？",
+        project_root=POST_ANALYSIS_ROOT,
+        project_id="chilai_nanhua_day1_post_analysis",
+        limit=3,
+    )
+
+    assert result.answerability == "partial_evidence_with_missing_context"
+    assert result.selected_tool_count == 1
+    assert result.executed_tool_count == 1
+    assert result.completed_tool_count == 1
+    assert result.sources[0]["tool_id"] == POST_TRIP_REVIEW_TOOL_ID
+    assert result.decision_output["answerSourceToolId"] == POST_TRIP_REVIEW_TOOL_ID
+    assert result.decision_output["decision"] == "DELAY"
+    assert result.decision_output["firstLayer"]["decision"] == "暫緩學習寫回。"
+    assert "行後回顧" in result.answer
+    assert result.boundary.runtime_safety_truth is False
+
+
 def test_full_workflow_runs_safety_boundary_question() -> None:
     result = run_scout_ai_full_workflow(
         "哪些風險目前只是候選，不能觸發 Ln？",

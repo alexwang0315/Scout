@@ -456,6 +456,21 @@ def test_planner_selects_post_trip_review_for_after_action_question() -> None:
     assert item.boundary.runtime_safety_truth is False
 
 
+def test_planner_selects_post_trip_review_for_trip_end_debrief_question() -> None:
+    plan = plan_scout_ai_tools(
+        _query("這次旅行結束後要怎麼檢討？哪些經驗要回寫到下次規劃？"),
+        project_root=PROJECT_ROOT,
+    )
+
+    item = _single_tool(plan, POST_TRIP_REVIEW_TOOL_ID)
+    assert item.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+    assert item.implementation_status == "ready_current_tool"
+    assert item.request is not None
+    assert item.request["tool_id"] == POST_TRIP_REVIEW_TOOL_ID
+    assert item.missing_fields == []
+    assert item.boundary.runtime_safety_truth is False
+
+
 def test_planner_selects_route_architecture_for_cp_graph_question() -> None:
     plan = plan_scout_ai_tools(
         _query("下一個撤退點在哪？這條路線的難點在哪裡？"),
