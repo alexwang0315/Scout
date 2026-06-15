@@ -19,6 +19,7 @@ from scout_pace_guardian_tool import PACE_GUARDIAN_TOOL_ID
 from scout_equipment_resource_tool import EQUIPMENT_RESOURCE_TOOL_ID
 from scout_team_status_tool import TEAM_STATUS_TOOL_ID
 from scout_post_trip_review_tool import POST_TRIP_REVIEW_TOOL_ID
+from scout_review_gap_tool import REVIEW_GAP_TOOL_ID
 from scout_route_architecture_tool import ROUTE_ARCHITECTURE_TOOL_ID
 from scout_route_context_tool import ROUTE_CONTEXT_TOOL_ID
 from scout_contextual_permission_tool import CONTEXTUAL_PERMISSION_TOOL_ID
@@ -785,6 +786,29 @@ def test_evidence_collection_keeps_navigation_terrain_readiness_payload() -> Non
     assert payload["decision_output"]["decision"] == "GUIDED_ONLY"
     assert payload["decision_output"]["firstLayer"]["decision"] == "不建議自主前往。"
     assert navigation.boundary.runtime_safety_truth is False
+
+
+def test_evidence_collection_keeps_review_gap_payload() -> None:
+    result = collect_scout_ai_evidence(
+        "哪些天氣證據還沒有人工審核，不能升格為出發依據？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=4,
+    )
+
+    review_gap = _record(result, REVIEW_GAP_TOOL_ID)
+    assert review_gap.collection_status == "completed"
+    assert review_gap.result is not None
+    payload = review_gap.result["payload"]
+    assert payload["answerability"] == "review_gap_found"
+    assert payload["decision"] == "DELAY"
+    assert payload["review_gap"]["counts"]["unresolved_review_count"] == 1
+    assert payload["review_gap"]["unpromoted_evidence"][0]["category"] == (
+        "weather_daylight"
+    )
+    assert payload["review_governance"]["review_write_performed"] is False
+    assert payload["decision_output"]["answerability"] == "review_gap_found"
+    assert review_gap.boundary.runtime_safety_truth is False
 
 
 def test_evidence_collection_keeps_ins_dr_trace_decision_output() -> None:

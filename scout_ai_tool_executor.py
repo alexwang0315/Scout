@@ -26,6 +26,7 @@ from scout_pace_guardian_tool import PACE_GUARDIAN_TOOL_ID
 from scout_equipment_resource_tool import EQUIPMENT_RESOURCE_TOOL_ID
 from scout_team_status_tool import TEAM_STATUS_TOOL_ID
 from scout_post_trip_review_tool import POST_TRIP_REVIEW_TOOL_ID
+from scout_review_gap_tool import REVIEW_GAP_TOOL_ID
 from scout_route_architecture_tool import ROUTE_ARCHITECTURE_TOOL_ID
 from scout_media_literacy_tool import MEDIA_LITERACY_TOOL_ID
 from scout_survival_incident_playbook_tool import SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID
@@ -695,6 +696,35 @@ def _execute_ready_current_tool(tool_id: str, arguments: dict[str, Any]) -> dict
             user_feedback_items=_raw_list_arg(arguments, "user_feedback_items"),
         )
 
+    if tool_id == REVIEW_GAP_TOOL_ID:
+        from scout_review_gap_tool import assess_scout_review_gap
+
+        return assess_scout_review_gap(
+            project_root,
+            query=query,
+            review_queue_manifest_path=_str_or_none(
+                arguments.get("review_queue_manifest_path")
+            ),
+            human_reviews_path=_str_or_none(arguments.get("human_reviews_path")),
+            review_decision_log_path=_str_or_none(
+                arguments.get("review_decision_log_path")
+            ),
+            review_decision_apply_plan_path=_str_or_none(
+                arguments.get("review_decision_apply_plan_path")
+            ),
+            route_note_review_options_path=_str_or_none(
+                arguments.get("route_note_review_options_path")
+            ),
+            source_ref=_str_or_none(arguments.get("source_ref")),
+            source_artifact_kind=_str_or_none(arguments.get("source_artifact_kind")),
+            category=_str_or_none(arguments.get("category")),
+            severity=_str_or_none(arguments.get("severity")),
+            include_decision_recorded=_bool_or_none(
+                arguments.get("include_decision_recorded")
+            ),
+            limit=limit,
+        )
+
     raise ValueError(f"tool is not executable: {tool_id}")
 
 
@@ -761,6 +791,7 @@ def _completed_missing_fields(tool_id: str, payload: dict[str, Any]) -> list[str
         EQUIPMENT_RESOURCE_TOOL_ID,
         TEAM_STATUS_TOOL_ID,
         POST_TRIP_REVIEW_TOOL_ID,
+        REVIEW_GAP_TOOL_ID,
         ROUTE_ARCHITECTURE_TOOL_ID,
         MEDIA_LITERACY_TOOL_ID,
         SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID,

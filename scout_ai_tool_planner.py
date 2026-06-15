@@ -29,6 +29,7 @@ from scout_pace_guardian_tool import PACE_GUARDIAN_TOOL_ID
 from scout_equipment_resource_tool import EQUIPMENT_RESOURCE_TOOL_ID
 from scout_team_status_tool import TEAM_STATUS_TOOL_ID
 from scout_post_trip_review_tool import POST_TRIP_REVIEW_TOOL_ID
+from scout_review_gap_tool import REVIEW_GAP_TOOL_ID
 from scout_route_architecture_tool import ROUTE_ARCHITECTURE_TOOL_ID
 from scout_media_literacy_tool import MEDIA_LITERACY_TOOL_ID
 from scout_survival_incident_playbook_tool import SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID
@@ -217,6 +218,13 @@ def plan_scout_ai_tools(
             (
                 POST_TRIP_REVIEW_TOOL_ID,
                 "Question asks for Post-Trip Review / learning governance: completed-trip evidence, after-action candidates, actual CP timing, slow segments, near miss, equipment gaps, or next-plan model updates.",
+            )
+        )
+    if _looks_like_review_gap_question(normalized_question):
+        selected.append(
+            (
+                REVIEW_GAP_TOOL_ID,
+                "Question asks for Review / Provenance Gap assessment: which candidate evidence cannot yet be promoted, which source refs need human review, or why evidence remains non-authoritative.",
             )
         )
     if _looks_like_media_literacy_question(normalized_question):
@@ -462,6 +470,10 @@ def _plan_item(
             request["arguments"] = overrides
     if request is not None and contract.tool_id == POST_TRIP_REVIEW_TOOL_ID:
         overrides = _post_trip_review_request_overrides(query.question)
+        if overrides:
+            request["arguments"] = overrides
+    if request is not None and contract.tool_id == REVIEW_GAP_TOOL_ID:
+        overrides = _review_gap_request_overrides(query.question)
         if overrides:
             request["arguments"] = overrides
     return ScoutAiToolPlanItem(
@@ -1153,6 +1165,31 @@ def _post_trip_route_context_updates(question: str, normalized: str) -> list[str
     ) and _has_any(normalized, ("補充", "回寫", "更新", "標記")):
         return [question]
     return []
+
+
+def _review_gap_request_overrides(question: str) -> dict[str, Any]:
+    normalized = _normalize(question)
+    overrides: dict[str, Any] = {}
+    category_terms = (
+        ("weather_daylight", ("天氣", "日照", "weather", "daylight")),
+        ("route_note", ("路線筆記", "routenote", "route note")),
+        ("segment_policy", ("路段", "segment", "segmentpolicy")),
+        ("contour_interpretation", ("等高線", "contour")),
+        ("departure_bundle", ("出發包", "出發bundle", "departurebundle")),
+        ("plan_validation", ("planvalidation", "計畫驗證", "檢查表")),
+        ("runtime_handoff", ("runtimehandoff", "runtime handoff", "交接")),
+    )
+    for category, terms in category_terms:
+        if _has_any(normalized, terms):
+            overrides["category"] = category
+            break
+    if _has_any(normalized, ("blocker", "阻擋", "封鎖")):
+        overrides["severity"] = "blocker"
+    elif _has_any(normalized, ("warning", "警告", "警示")):
+        overrides["severity"] = "warning"
+    if _has_any(normalized, ("已審核", "decisionrecorded", "包含已決策")):
+        overrides["include_decision_recorded"] = True
+    return overrides
 
 
 def _states_phone_battery_dead(normalized_question: str) -> bool:
@@ -2523,6 +2560,57 @@ def _looks_like_post_trip_review_question(text: str) -> bool:
             "capability capsule",
             "incident package",
             "field case",
+        ),
+    )
+
+
+def _looks_like_review_gap_question(text: str) -> bool:
+    if _looks_like_post_trip_review_question(text) and not _has_any(
+        text,
+        (
+            "reviewqueue",
+            "review queue",
+            "provenance",
+            "來源追溯",
+            "證據追溯",
+            "可追溯",
+            "人工審核",
+            "humanreview",
+            "不能升格",
+            "尚未升格",
+            "升格",
+            "不能當依據",
+            "reviewgap",
+            "review gap",
+        ),
+    ):
+        return False
+    return _has_any(
+        text,
+        (
+            "reviewgap",
+            "review gap",
+            "reviewqueue",
+            "review queue",
+            "provenance",
+            "provenancegap",
+            "reviewprovenance",
+            "人工審核",
+            "humanreview",
+            "來源追溯",
+            "證據追溯",
+            "可追溯",
+            "哪些證據還不能",
+            "哪些證據不能",
+            "不能升格",
+            "尚未升格",
+            "升格為決策",
+            "不能當依據",
+            "不能作為依據",
+            "為什麼不能用",
+            "review缺口",
+            "審核缺口",
+            "證據缺口",
         ),
     )
 

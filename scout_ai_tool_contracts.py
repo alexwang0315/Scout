@@ -73,6 +73,12 @@ from scout_post_trip_review_tool import (
     POST_TRIP_REVIEW_OUTPUT_KIND,
     POST_TRIP_REVIEW_TOOL_ID,
 )
+from scout_review_gap_tool import (
+    REVIEW_GAP_OPTIONAL_FIELDS,
+    REVIEW_GAP_OUTPUT_KIND,
+    REVIEW_GAP_REQUIRED_FIELDS,
+    REVIEW_GAP_TOOL_ID,
+)
 from scout_route_architecture_tool import (
     ROUTE_ARCHITECTURE_OPTIONAL_FIELDS,
     ROUTE_ARCHITECTURE_OUTPUT_KIND,
@@ -278,6 +284,11 @@ EXECUTABLE_TOOL_ALIASES: dict[str, list[str]] = {
         "scout.ai.after_action.assess",
         "scout.ai.learning_review.assess",
     ],
+    REVIEW_GAP_TOOL_ID: [
+        "scout.ai.review_gap.assess",
+        "scout.ai.provenance_gap.assess",
+        "scout.ai.review_provenance.assess",
+    ],
     ROUTE_ARCHITECTURE_TOOL_ID: [
         "scout.ai.route_architecture.assess",
         "scout.ai.cp_graph.assess",
@@ -317,6 +328,7 @@ EXECUTABLE_OUTPUT_KINDS: dict[str, str] = {
     EQUIPMENT_RESOURCE_TOOL_ID: EQUIPMENT_RESOURCE_OUTPUT_KIND,
     TEAM_STATUS_TOOL_ID: TEAM_STATUS_OUTPUT_KIND,
     POST_TRIP_REVIEW_TOOL_ID: POST_TRIP_REVIEW_OUTPUT_KIND,
+    REVIEW_GAP_TOOL_ID: REVIEW_GAP_OUTPUT_KIND,
     ROUTE_ARCHITECTURE_TOOL_ID: ROUTE_ARCHITECTURE_OUTPUT_KIND,
     MEDIA_LITERACY_TOOL_ID: MEDIA_LITERACY_OUTPUT_KIND,
     SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID: SURVIVAL_INCIDENT_PLAYBOOK_OUTPUT_KIND,
@@ -498,6 +510,14 @@ def _contract_from_raw(tool_id: str, raw: dict[str, Any]) -> ScoutAiToolContract
             *_as_str_list(raw.get("existing_support")),
             "scout_weather_window_tool.py read-only route weather package assessor",
         ]
+    elif tool_id == REVIEW_GAP_TOOL_ID:
+        status = ScoutAiToolImplementationStatus.READY_CURRENT_TOOL
+        required_fields = list(REVIEW_GAP_REQUIRED_FIELDS)
+        implementation_gap = None
+        existing_support = [
+            *_as_str_list(raw.get("existing_support")),
+            "scout_review_gap_tool.py compact review/provenance gap assessor",
+        ]
     else:
         required_fields = _as_str_list(raw.get("required_fields"))
         implementation_gap = (
@@ -657,6 +677,8 @@ def _optional_fields_for(tool_id: str) -> list[str]:
         return list(TEAM_STATUS_OPTIONAL_FIELDS)
     if tool_id == POST_TRIP_REVIEW_TOOL_ID:
         return list(POST_TRIP_REVIEW_OPTIONAL_FIELDS)
+    if tool_id == REVIEW_GAP_TOOL_ID:
+        return list(REVIEW_GAP_OPTIONAL_FIELDS)
     if tool_id == ROUTE_ARCHITECTURE_TOOL_ID:
         return list(ROUTE_ARCHITECTURE_OPTIONAL_FIELDS)
     if tool_id == MEDIA_LITERACY_TOOL_ID:

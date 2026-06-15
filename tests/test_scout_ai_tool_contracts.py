@@ -15,6 +15,7 @@ from scout_equipment_resource_tool import EQUIPMENT_RESOURCE_TOOL_ID
 from scout_pace_guardian_tool import PACE_GUARDIAN_TOOL_ID
 from scout_team_status_tool import TEAM_STATUS_TOOL_ID
 from scout_post_trip_review_tool import POST_TRIP_REVIEW_TOOL_ID
+from scout_review_gap_tool import REVIEW_GAP_TOOL_ID
 from scout_media_literacy_tool import MEDIA_LITERACY_TOOL_ID
 from scout_survival_incident_playbook_tool import SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID
 from scout_safety_boundary_tool import SAFETY_BOUNDARY_TOOL_ID
@@ -75,6 +76,7 @@ def test_tool_registry_lists_current_and_future_contracts() -> None:
     assert PACE_GUARDIAN_TOOL_ID in by_id
     assert TEAM_STATUS_TOOL_ID in by_id
     assert POST_TRIP_REVIEW_TOOL_ID in by_id
+    assert REVIEW_GAP_TOOL_ID in by_id
     assert MEDIA_LITERACY_TOOL_ID in by_id
     assert SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID in by_id
     assert ENERGY_VITALS_TOOL_ID in by_id
@@ -123,6 +125,7 @@ def test_tool_registry_lists_current_and_future_contracts() -> None:
     assert by_id[POST_TRIP_REVIEW_TOOL_ID].implementation_status == (
         "ready_current_tool"
     )
+    assert by_id[REVIEW_GAP_TOOL_ID].implementation_status == "ready_current_tool"
     assert by_id[MEDIA_LITERACY_TOOL_ID].implementation_status == (
         "ready_current_tool"
     )
@@ -156,6 +159,8 @@ def test_tool_registry_lists_current_and_future_contracts() -> None:
     assert "scout.ai.team_pace_fit.assess" in by_id[PACE_GUARDIAN_TOOL_ID].aliases
     assert "scout.ai.team_guardian.assess" in by_id[TEAM_STATUS_TOOL_ID].aliases
     assert "scout.ai.after_action.assess" in by_id[POST_TRIP_REVIEW_TOOL_ID].aliases
+    assert "scout.ai.provenance_gap.assess" in by_id[REVIEW_GAP_TOOL_ID].aliases
+    assert "category" in by_id[REVIEW_GAP_TOOL_ID].optional_fields
     assert "scout.ai.media_bias.assess" in by_id[MEDIA_LITERACY_TOOL_ID].aliases
     assert "scout.ai.sos_playbook.explain" in by_id[
         SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID
@@ -628,6 +633,26 @@ def test_execute_navigation_terrain_blocks_unknown_junctions_and_risk_layers() -
     assert result.payload["decision_output"]["firstLayer"]["decision"] == (
         "不建議自主前往。"
     )
+    assert result.boundary.runtime_safety_truth is False
+
+
+def test_execute_review_gap_alias_returns_provenance_gap_decision() -> None:
+    result = execute_scout_ai_tool(
+        {
+            "tool_id": "scout.ai.provenance_gap.assess",
+            "project_root": str(PROJECT_ROOT),
+            "query": "哪些天氣證據還沒有人工審核，不能升格為出發依據？",
+            "arguments": {"category": "weather_daylight"},
+        }
+    )
+
+    assert result.status == "completed"
+    assert result.tool_id == REVIEW_GAP_TOOL_ID
+    assert result.output_artifact_kind == "scout_ai_review_gap_tool_output"
+    assert result.payload["decision"] == "DELAY"
+    assert result.payload["review_gap"]["counts"]["unresolved_review_count"] == 1
+    assert result.payload["review_governance"]["review_write_performed"] is False
+    assert result.payload["decision_output"]["reviewWritePerformed"] is False
     assert result.boundary.runtime_safety_truth is False
 
 
