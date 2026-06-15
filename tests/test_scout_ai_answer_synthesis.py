@@ -31,6 +31,7 @@ from scout_terrain_score_tool import TERRAIN_SCORE_TOOL_ID
 from scout_safety_boundary_tool import SAFETY_BOUNDARY_TOOL_ID
 from scout_map_perception_tool import MAP_PERCEPTION_TOOL_ID
 from scout_ins_dr_trace_tool import INS_DR_TRACE_TOOL_ID
+from scout_workspace_search_tools import MAJOR_POINT_TOOL_ID
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -1475,6 +1476,37 @@ def test_answer_synthesis_uses_equipment_resource_field_answer_without_guessing(
     assert "water_liters" in result.sources[0].missing_fields
     assert "裝備資源判斷" in result.answer
     assert "runtime safety truth" in result.answer
+
+
+def test_answer_synthesis_routes_water_refill_to_major_point_and_resource_answer() -> None:
+    result = collect_and_synthesize_scout_ai_answer(
+        "哪裡可以補水？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=6,
+    )
+
+    source_ids = {source.tool_id for source in result.sources}
+    assert MAJOR_POINT_TOOL_ID in source_ids
+    assert EQUIPMENT_RESOURCE_TOOL_ID in source_ids
+    assert ENERGY_VITALS_TOOL_ID in source_ids
+
+    major_point = _source(result, MAJOR_POINT_TOOL_ID)
+    assert major_point.top_result_summary["label"] == "黑水塘"
+    assert major_point.top_result_summary["answerability"] == "major_points_available"
+    assert major_point.top_result_summary["field_answer"].startswith(
+        "候選補水/水源點：黑水塘"
+    )
+
+    equipment = _source(result, EQUIPMENT_RESOURCE_TOOL_ID)
+    assert equipment.top_result_summary["equipment_resource"]["role"] == (
+        "Equipment / Resource Intelligence"
+    )
+    assert result.decision_output["answerSourceToolId"] == EQUIPMENT_RESOURCE_TOOL_ID
+    assert result.decision_output["decision"] == "DELAY"
+    assert "候選補水/水源點：黑水塘" in result.answer
+    assert "裝備資源判斷" in result.answer
+    assert "不是現場取水" in result.answer
 
 
 def test_answer_synthesis_blocks_continuing_with_dead_phone_even_if_watch_has_battery() -> None:

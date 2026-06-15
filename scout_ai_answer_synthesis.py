@@ -27,6 +27,7 @@ from scout_safety_boundary_tool import SAFETY_BOUNDARY_TOOL_ID
 from scout_map_perception_tool import MAP_PERCEPTION_TOOL_ID
 from scout_navigation_terrain_tool import NAVIGATION_TERRAIN_TOOL_ID
 from scout_ins_dr_trace_tool import INS_DR_TRACE_TOOL_ID
+from scout_workspace_search_tools import MAJOR_POINT_TOOL_ID
 
 
 ARTIFACT_KIND = "scout_ai_answer_synthesis"
@@ -338,6 +339,9 @@ def _answer_text(
     route_context_answer = _route_context_answer(completed_sources)
     if route_context_answer:
         parts.append(route_context_answer)
+    major_point_answer = _major_point_answer(completed_sources)
+    if major_point_answer:
+        parts.append(major_point_answer)
     media_literacy_answer = _media_literacy_answer(completed_sources)
     if media_literacy_answer:
         parts.append(media_literacy_answer)
@@ -1091,6 +1095,16 @@ def _summarize_stop_limits(value: Any, *, limits: dict[str, Any]) -> str:
 def _route_context_answer(sources: list[ScoutAiAnswerSource]) -> str | None:
     for source in sources:
         if source.tool_id != ROUTE_CONTEXT_TOOL_ID:
+            continue
+        field_answer = source.top_result_summary.get("field_answer")
+        if isinstance(field_answer, str) and field_answer.strip():
+            return field_answer.strip()
+    return None
+
+
+def _major_point_answer(sources: list[ScoutAiAnswerSource]) -> str | None:
+    for source in sources:
+        if source.tool_id != MAJOR_POINT_TOOL_ID:
             continue
         field_answer = source.top_result_summary.get("field_answer")
         if isinstance(field_answer, str) and field_answer.strip():

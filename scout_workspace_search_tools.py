@@ -238,11 +238,15 @@ def search_project_major_points(
             str(item.get("label") or item.get("candidate_id")),
         )
     )
+    results = filtered[:resolved_limit]
     return {
         "tool_id": MAJOR_POINT_TOOL_ID,
         "status": "completed",
         "project_id": project_id,
         "query": query,
+        "answerability": (
+            "major_points_available" if results else "major_points_missing_evidence"
+        ),
         "filters": {
             "cp": resolved_cp,
             "point_kinds": sorted(resolved_kinds) if resolved_kinds else None,
@@ -257,8 +261,13 @@ def search_project_major_points(
         },
         "searched_point_count": len(items),
         "matched_point_count": len(filtered),
-        "result_count": len(filtered[:resolved_limit]),
-        "results": filtered[:resolved_limit],
+        "result_count": len(results),
+        "field_answer": _major_point_field_answer(
+            results,
+            query=query,
+            point_kinds=resolved_kinds,
+        ),
+        "results": results,
         "boundary": _closed_boundary(),
     }
 
@@ -447,12 +456,13 @@ def _major_point_items(
         for point in linked_named_points:
             aliases.extend(point.get("aliases", []) if isinstance(point.get("aliases"), list) else [])
         label = str(raw.get("label") or mcp_id)
+        classes = raw.get("mcp_classes", [])
         items.append(
             {
                 "evidence_type": "major_point",
                 "candidate_id": mcp_id,
                 "label": label,
-                "point_classes": raw.get("mcp_classes", []),
+                "point_classes": classes,
                 "aliases": aliases,
                 "lat": _optional_float(raw.get("lat")),
                 "lon": _optional_float(raw.get("lon")),
@@ -474,7 +484,8 @@ def _major_point_items(
                     for part in (
                         mcp_id,
                         label,
-                        " ".join(raw.get("mcp_classes", [])),
+                        " ".join(classes),
+                        _point_class_alias_text(classes),
                         " ".join(raw.get("linked_cp_candidates", [])),
                         " ".join(aliases),
                         support.get("recommendation") if isinstance(support, dict) else None,
@@ -519,12 +530,13 @@ def _major_point_items(
     for point in named_points.values():
         route_position = point.get("route_position") if isinstance(point.get("route_position"), dict) else {}
         label = str(point.get("canonical_name") or point.get("named_point_id") or "")
+        classes = point.get("point_class", [])
         items.append(
             {
                 "evidence_type": "named_point",
                 "candidate_id": point.get("named_point_id"),
                 "label": label,
-                "point_classes": point.get("point_class", []),
+                "point_classes": classes,
                 "aliases": point.get("aliases", []),
                 "lat": _optional_float(route_position.get("lat")),
                 "lon": _optional_float(route_position.get("lon")),
@@ -540,7 +552,8 @@ def _major_point_items(
                         point.get("named_point_id"),
                         label,
                         " ".join(point.get("aliases", [])),
-                        " ".join(point.get("point_class", [])),
+                        " ".join(classes),
+                        _point_class_alias_text(classes),
                     )
                     if part
                 ),
@@ -557,6 +570,98 @@ def _major_point_items(
         }
     )
     return items, report
+
+
+def _major_point_field_answer(
+    results: list[dict[str, Any]],
+    *,
+    query: str,
+    point_kinds: set[str],
+) -> str:
+    water_query = _major_point_water_query(query, point_kinds=point_kinds)
+    if not results:
+        if water_query:
+            return (
+                "候選補水/水源點：目前工作區沒有可匹配的 water_source MCP；"
+                "不得把未知水源當作可用補給。"
+            )
+        return "候選重要點：目前工作區沒有可匹配的 MCP / named point。"
+
+    scoped_results = (
+        [
+            item
+            for item in results
+            if "water_source"
+            in {str(kind).lower() for kind in item.get("point_classes", [])}
+        ]
+        if water_query
+        else results
+    )
+    scoped_results = scoped_results or results
+    labels = [_major_point_brief(item) for item in scoped_results[:3]]
+    prefix = "候選補水/水源點" if water_query else "候選重要點"
+    return (
+        f"{prefix}：" + "；".join(labels)
+        + "。此為 Major Point 候選證據，不是現場取水、停留或 runtime safety truth；"
+        "取水前仍需確認水況、處理方式、停留 buffer 與路線風險。"
+    )
+
+
+def _major_point_water_query(query: str, *, point_kinds: set[str]) -> bool:
+    if "water_source" in point_kinds:
+        return True
+    normalized = query.lower().replace(" ", "")
+    return any(
+        token in normalized
+        for token in (
+            "補水",
+            "取水",
+            "裝水",
+            "水源",
+            "飲水點",
+            "waterpoint",
+            "watersource",
+            "refillwater",
+        )
+    )
+
+
+def _major_point_brief(item: dict[str, Any]) -> str:
+    label = str(item.get("label") or item.get("candidate_id") or "unknown")
+    nearest_cp = item.get("nearest_cp_candidate_id")
+    distance = _optional_float(item.get("distance_m"))
+    details = []
+    if nearest_cp:
+        details.append(f"nearest CP {nearest_cp}")
+    if distance is not None:
+        details.append(f"route distance {distance:g} m")
+    return label + (f"（{', '.join(details)}）" if details else "")
+
+
+def _point_class_alias_text(classes: Any) -> str:
+    if not isinstance(classes, list):
+        return ""
+    aliases: list[str] = []
+    for raw in classes:
+        value = str(raw).lower()
+        if value == "water_source":
+            aliases.extend(
+                [
+                    "水源",
+                    "補水",
+                    "取水",
+                    "裝水",
+                    "飲水點",
+                    "water point",
+                    "water source",
+                    "refill water",
+                ]
+            )
+        elif value == "camp_hut_structure":
+            aliases.extend(["營地", "山屋", "保線所", "可停留建物"])
+        elif value == "fork_junction":
+            aliases.extend(["岔路", "叉路", "路口"])
+    return " ".join(aliases)
 
 
 def _load_named_points(

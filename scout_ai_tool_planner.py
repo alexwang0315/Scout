@@ -342,6 +342,10 @@ def _plan_item(
         overrides = _route_architecture_request_overrides(query.question)
         if overrides:
             request["arguments"] = overrides
+    if request is not None and contract.tool_id == MAJOR_POINT_TOOL_ID:
+        overrides = _major_point_request_overrides(query.question)
+        if overrides:
+            request["arguments"] = overrides
     if request is not None and contract.tool_id == MEDIA_LITERACY_TOOL_ID:
         overrides = _media_literacy_request_overrides(query.question)
         if overrides:
@@ -465,6 +469,13 @@ def _route_architecture_request_overrides(question: str) -> dict[str, Any]:
     if target_cp:
         overrides["target_cp_id"] = target_cp
     return overrides
+
+
+def _major_point_request_overrides(question: str) -> dict[str, Any]:
+    normalized = _normalize(question)
+    if _looks_like_water_point_question(normalized):
+        return {"point_kinds": ["water_source"]}
+    return {}
 
 
 def _media_literacy_request_overrides(question: str) -> dict[str, Any]:
@@ -1447,6 +1458,13 @@ def _looks_like_major_point_question(text: str) -> bool:
             "majorcritical",
             "namedpoint",
             "水源",
+            "補水",
+            "取水",
+            "裝水",
+            "飲水點",
+            "waterpoint",
+            "watersource",
+            "refillwater",
             "水塘",
             "營地",
             "山屋",
@@ -1456,6 +1474,26 @@ def _looks_like_major_point_question(text: str) -> bool:
             "附近",
         ),
     ) and not _looks_like_weather_question(text)
+
+
+def _looks_like_water_point_question(text: str) -> bool:
+    return _has_any(
+        text,
+        (
+            "補水",
+            "取水",
+            "裝水",
+            "水源",
+            "飲水點",
+            "哪裡有水",
+            "哪裡可以補",
+            "waterpoint",
+            "watersource",
+            "water source",
+            "refillwater",
+            "refill water",
+        ),
+    )
 
 
 def _looks_like_external_deadline_pressure_question(text: str) -> bool:
@@ -2120,7 +2158,7 @@ def _looks_like_pace_guardian_question(text: str) -> bool:
 def _looks_like_equipment_resource_question(text: str) -> bool:
     if _looks_like_post_trip_review_question(text):
         return False
-    return _has_any(
+    return _looks_like_water_point_question(text) or _has_any(
         text,
         (
             "equipmentresource",
