@@ -12,6 +12,7 @@ from scout_ai_answer_synthesis import (
 from scout_ai_evidence_collection import collect_scout_ai_evidence
 from scout_ai_tool_planner import WEATHER_WINDOW_TOOL_ID
 from scout_contextual_permission_tool import CONTEXTUAL_PERMISSION_TOOL_ID
+from scout_pace_guardian_tool import PACE_GUARDIAN_TOOL_ID
 from scout_route_context_tool import ROUTE_CONTEXT_TOOL_ID
 from scout_risk_score_tool import RISK_SCORE_TOOL_ID
 from scout_terrain_score_tool import TERRAIN_SCORE_TOOL_ID
@@ -134,6 +135,37 @@ def test_answer_synthesis_uses_route_context_field_answer_without_guessing() -> 
     assert "runtime safety truth" in result.answer
 
 
+def test_answer_synthesis_uses_pace_guardian_field_answer_without_guessing(
+    tmp_path: Path,
+) -> None:
+    project_root = _write_team_pace_project(tmp_path)
+
+    result = collect_and_synthesize_scout_ai_answer(
+        "隊伍腳程是否能準時抵達下一個 CP？最慢者需要前移午餐點嗎？",
+        project_root=project_root,
+        project_id="team_pace_project",
+        limit=4,
+    )
+
+    assert result.answerability == "evidence_available"
+    assert result.completed_source_count == 1
+    assert result.missing_evidence_count == 0
+    assert result.sources[0].tool_id == PACE_GUARDIAN_TOOL_ID
+    assert result.sources[0].top_result_summary["answerability"] == (
+        "pace_fit_decision_available"
+    )
+    assert result.sources[0].top_result_summary["pace_guardian"]["role"] == (
+        "Pace Guardian"
+    )
+    assert result.sources[0].top_result_summary["team_pace_fit"]["slowest_member"][
+        "label"
+    ] == "New teammate"
+    assert "腳程守門員" in result.answer
+    assert "不使用平均腳程" in result.answer
+    assert "contextual permission" in result.answer
+    assert "runtime safety truth" in result.answer
+
+
 def test_answer_synthesis_reports_no_registry_tool_selected_as_insufficient_evidence() -> None:
     result = collect_and_synthesize_scout_ai_answer(
         "請用一句話描述登山心情",
@@ -231,6 +263,54 @@ def test_answer_synthesis_builtin_manifest_and_payload_are_read_only(
     assert payload["boundary"]["workspace_file_write_allowed"] is False
     assert payload["boundary"]["model_provider_used"] is False
     assert payload["boundary"]["model_synthesis_performed"] is False
+
+
+def _write_team_pace_project(tmp_path: Path) -> Path:
+    project_root = tmp_path / "team_pace_project"
+    outputs = project_root / "outputs"
+    outputs.mkdir(parents=True)
+    (project_root / "project.json").write_text(
+        json.dumps(
+            {
+                "project_id": "team_pace_project",
+                "team_status_ref": "outputs/team_status.json",
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    (outputs / "team_status.json").write_text(
+        json.dumps(
+            {
+                "artifact_kind": "scout_team_status",
+                "source_status": "candidate_only",
+                "leader_accepts_slowest_basis": False,
+                "team_rest_sync": "mismatched",
+                "schedule": {"current_delay_minutes": 22},
+                "members": [
+                    {
+                        "member_id": "leader",
+                        "display_label": "Leader",
+                        "pace_mps": 1.15,
+                        "reserve_minutes": 55,
+                        "fatigue_band": "normal",
+                    },
+                    {
+                        "member_id": "teammate",
+                        "display_label": "New teammate",
+                        "pace_mps": 0.60,
+                        "reserve_minutes": 8,
+                        "fatigue_band": "tired",
+                        "rest_need_minutes": 12,
+                        "first_time_similar_route": True,
+                    },
+                ],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    return project_root
 
 
 def test_answer_synthesis_builtin_rejects_blank_question_without_evidence_collection(

@@ -9,6 +9,7 @@ from scout_ai_tool_planner import (
     INS_DR_TRACE_TOOL_ID,
     LIVE_NAVIGATION_STATE_TOOL_ID,
     ROUTE_CONTEXT_TOOL_ID,
+    PACE_GUARDIAN_TOOL_ID,
     SAFETY_BOUNDARY_TOOL_ID,
     WEATHER_WINDOW_TOOL_ID,
     ScoutAiToolPlanItemStatus,
@@ -126,6 +127,22 @@ def test_planner_selects_route_context_for_experience_guide_question() -> None:
     assert item.implementation_status == "ready_current_tool"
     assert item.request is not None
     assert item.request["tool_id"] == ROUTE_CONTEXT_TOOL_ID
+    assert item.missing_fields == []
+    assert CONTEXTUAL_PERMISSION_TOOL_ID not in _tool_ids(plan)
+    assert item.boundary.runtime_safety_truth is False
+
+
+def test_planner_selects_pace_guardian_for_team_pace_fit_question() -> None:
+    plan = plan_scout_ai_tools(
+        _query("隊伍腳程是否能準時抵達下一個 CP？最慢者需要前移午餐點嗎？"),
+        project_root=PROJECT_ROOT,
+    )
+
+    item = _single_tool(plan, PACE_GUARDIAN_TOOL_ID)
+    assert item.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+    assert item.implementation_status == "ready_current_tool"
+    assert item.request is not None
+    assert item.request["tool_id"] == PACE_GUARDIAN_TOOL_ID
     assert item.missing_fields == []
     assert CONTEXTUAL_PERMISSION_TOOL_ID not in _tool_ids(plan)
     assert item.boundary.runtime_safety_truth is False

@@ -19,6 +19,7 @@ from scout_energy_vitals_tool import ENERGY_VITALS_TOOL_ID
 from scout_weather_window_tool import WEATHER_WINDOW_TOOL_ID
 from scout_contextual_permission_tool import CONTEXTUAL_PERMISSION_TOOL_ID
 from scout_route_context_tool import ROUTE_CONTEXT_TOOL_ID
+from scout_pace_guardian_tool import PACE_GUARDIAN_TOOL_ID
 
 
 EXECUTABLE_TOOL_IDS = set(EXECUTABLE_TOOL_ALIASES)
@@ -409,6 +410,30 @@ def _execute_ready_current_tool(tool_id: str, arguments: dict[str, Any]) -> dict
             limit=limit,
         )
 
+    if tool_id == PACE_GUARDIAN_TOOL_ID:
+        from scout_pace_guardian_tool import assess_scout_pace_guardian
+
+        return assess_scout_pace_guardian(
+            project_root,
+            query=query,
+            team_members=_raw_list_arg(arguments, "team_members"),
+            current_time=_str_or_none(arguments.get("current_time")),
+            next_cp_id=_str_or_none(arguments.get("next_cp_id")),
+            minutes_to_next_cp=_float_or_none(arguments.get("minutes_to_next_cp")),
+            current_delay_minutes=_float_or_none(
+                arguments.get("current_delay_minutes")
+            ),
+            leader_accepts_slowest_basis=_bool_or_none(
+                arguments.get("leader_accepts_slowest_basis")
+            ),
+            team_rest_sync=_str_or_none(arguments.get("team_rest_sync")),
+            team_status_path=_str_or_none(arguments.get("team_status_path")),
+            resource_plan_path=_str_or_none(arguments.get("resource_plan_path")),
+            planned_eta_path=_str_or_none(arguments.get("planned_eta_path")),
+            energy_vitals_path=_str_or_none(arguments.get("energy_vitals_path")),
+            readiness_report_path=_str_or_none(arguments.get("readiness_report_path")),
+        )
+
     raise ValueError(f"tool is not executable: {tool_id}")
 
 
@@ -465,7 +490,11 @@ def _source_report_refs(payload: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _completed_missing_fields(tool_id: str, payload: dict[str, Any]) -> list[str]:
-    if tool_id not in {WEATHER_WINDOW_TOOL_ID, CONTEXTUAL_PERMISSION_TOOL_ID}:
+    if tool_id not in {
+        WEATHER_WINDOW_TOOL_ID,
+        CONTEXTUAL_PERMISSION_TOOL_ID,
+        PACE_GUARDIAN_TOOL_ID,
+    }:
         return []
     value = payload.get("missing_fields")
     if isinstance(value, list):
@@ -490,6 +519,13 @@ def _list_arg(arguments: dict[str, Any], key: str) -> list[str] | None:
         return [str(item) for item in value if str(item).strip()]
     if isinstance(value, str):
         return [part.strip() for part in value.split(",") if part.strip()]
+    return None
+
+
+def _raw_list_arg(arguments: dict[str, Any], key: str) -> list[Any] | None:
+    value = arguments.get(key)
+    if isinstance(value, list):
+        return value
     return None
 
 
