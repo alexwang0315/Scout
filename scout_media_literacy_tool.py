@@ -421,7 +421,9 @@ def _missing_fields(
         missing.append("route_context_or_target_point")
     bias_ids = {str(item["bias_id"]) for item in biases}
     if bias_ids & {"season_weather_bias", "beauty_photo_bias", "check_in_pressure"}:
-        if not input_state["weather_reviewed"]:
+        if not input_state["weather_reviewed"] and not input_state[
+            "route_condition_reviewed"
+        ]:
             missing.append("fresh_weather_or_route_condition_review")
     if bias_ids & {"speed_bias", "guided_party_bias", "equipment_bias"}:
         if not input_state["user_experience_available"]:

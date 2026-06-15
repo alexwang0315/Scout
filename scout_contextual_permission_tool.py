@@ -1620,6 +1620,30 @@ def _looks_like_exposed_media_pressure(
         return False
     if terrain_risk_level in _HIGH_RISK_LEVELS:
         return True
+    if _has_any(
+        text,
+        (
+            "乾季",
+            "晴天",
+            "雨季",
+            "熱門照片",
+            "ig",
+            "instagram",
+            "社群",
+        ),
+    ) and _has_any(
+        text,
+        (
+            "濕滑",
+            "泥濘",
+            "今天",
+            "繞去",
+            "離開主線",
+            "旁邊",
+            "支線",
+        ),
+    ):
+        return True
     return _has_any(
         text,
         (
@@ -1632,6 +1656,8 @@ def _looks_like_exposed_media_pressure(
             "崩壁",
             "落石",
             "滑墜",
+            "濕滑",
+            "泥濘",
             "exposed",
             "cliff",
             "steep",

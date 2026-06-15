@@ -278,6 +278,25 @@ def test_planner_selects_media_and_contextual_for_social_detour_question() -> No
     assert contextual.request["tool_id"] == CONTEXTUAL_PERMISSION_TOOL_ID
 
 
+def test_planner_passes_media_detour_buffer_to_media_and_contextual() -> None:
+    plan = plan_scout_ai_tools(
+        _query("看到乾季晴天美照，但今天濕滑又只剩 18 分鐘 buffer，可以繞去拍嗎？"),
+        project_root=PROJECT_ROOT,
+    )
+
+    media = _single_tool(plan, MEDIA_LITERACY_TOOL_ID)
+    assert media.request is not None
+    assert media.request["arguments"] == {
+        "remaining_safety_buffer_minutes": 18.0,
+        "route_condition_reviewed": True,
+    }
+
+    contextual = _single_tool(plan, CONTEXTUAL_PERMISSION_TOOL_ID)
+    assert contextual.request is not None
+    assert contextual.request["arguments"]["action"] == "reroute"
+    assert contextual.request["arguments"]["remaining_safety_buffer_minutes"] == 18.0
+
+
 def test_planner_selects_media_and_contextual_for_exposed_photo_pressure() -> None:
     plan = plan_scout_ai_tools(
         _query("前方是高曝露陡坡，但照片很好看，可以去拍嗎？"),

@@ -1180,6 +1180,34 @@ def test_answer_synthesis_prioritizes_media_literacy_for_social_detour() -> None
     assert "runtime safety truth" in result.answer
 
 
+def test_answer_synthesis_blocks_seasonal_photo_detour_with_buffer() -> None:
+    result = collect_and_synthesize_scout_ai_answer(
+        "看到乾季晴天美照，但今天濕滑又只剩 18 分鐘 buffer，可以繞去拍嗎？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=5,
+    )
+
+    assert result.answerability == "partial_evidence_with_missing_context"
+    media = _source(result, MEDIA_LITERACY_TOOL_ID)
+    contextual = _source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
+    assert media.top_result_summary["decision"] == "NO_GO"
+    assert media.top_result_summary["media_bias_analysis"]["input_state"][
+        "remaining_safety_buffer_minutes"
+    ] == 18
+    assert media.top_result_summary["media_bias_analysis"]["input_state"][
+        "route_condition_reviewed"
+    ] is True
+    assert contextual.top_result_summary["action"] == "reroute"
+    assert contextual.top_result_summary["decision"] == "NO_GO"
+    assert contextual.top_result_summary["allowed"] is False
+    assert result.decision_output["answerSourceToolId"] == MEDIA_LITERACY_TOOL_ID
+    assert result.decision_output["decision"] == "NO_GO"
+    assert result.decision_output["allowed"] is False
+    assert "season_weather_bias" in result.answer
+    assert "runtime safety truth" in result.answer
+
+
 def test_answer_synthesis_blocks_exposed_photo_pressure() -> None:
     result = collect_and_synthesize_scout_ai_answer(
         "前方是高曝露陡坡，但照片很好看，可以去拍嗎？",

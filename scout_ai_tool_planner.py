@@ -309,6 +309,10 @@ def _plan_item(
         overrides = _route_architecture_request_overrides(query.question)
         if overrides:
             request["arguments"] = overrides
+    if request is not None and contract.tool_id == MEDIA_LITERACY_TOOL_ID:
+        overrides = _media_literacy_request_overrides(query.question)
+        if overrides:
+            request["arguments"] = overrides
     if request is not None and contract.tool_id == CONTEXTUAL_PERMISSION_TOOL_ID:
         overrides = _contextual_permission_request_overrides(query.question)
         if overrides:
@@ -417,6 +421,29 @@ def _route_architecture_request_overrides(question: str) -> dict[str, Any]:
     current_cp = _extract_current_cp_label(question)
     if current_cp:
         overrides["current_cp_id"] = current_cp
+    return overrides
+
+
+def _media_literacy_request_overrides(question: str) -> dict[str, Any]:
+    normalized = _normalize(question)
+    overrides: dict[str, Any] = {}
+    buffer_minutes = _extract_safety_buffer_minutes(normalized)
+    if buffer_minutes is not None:
+        overrides["remaining_safety_buffer_minutes"] = buffer_minutes
+    if _has_any(
+        normalized,
+        (
+            "地面濕滑",
+            "今天濕滑",
+            "濕滑",
+            "泥濘",
+            "曝露邊坡",
+            "暴露邊坡",
+            "高曝露",
+            "落石",
+        ),
+    ):
+        overrides["route_condition_reviewed"] = True
     return overrides
 
 
