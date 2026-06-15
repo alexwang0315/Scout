@@ -697,6 +697,34 @@ def test_full_workflow_blocks_shortcut_reroute_question() -> None:
     assert result.boundary.runtime_safety_truth is False
 
 
+def test_full_workflow_blocks_unreviewed_retreat_window_continue() -> None:
+    result = run_scout_ai_full_workflow(
+        "撤退窗口快失去了，現在能不能繼續？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=4,
+    )
+
+    assert result.answerability == "evidence_available"
+    assert result.selected_tool_count == 1
+    assert result.executed_tool_count == 1
+    assert result.completed_tool_count == 1
+    assert result.missing_evidence_count == 0
+    contextual = _workflow_source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
+    summary = contextual["top_result_summary"]
+    assert summary["action"] == "continue"
+    assert summary["decision"] == "NO_GO"
+    assert summary["allowed"] is False
+    assert result.decision_output["answerSourceToolId"] == CONTEXTUAL_PERMISSION_TOOL_ID
+    assert result.decision_output["action"] == "continue"
+    assert result.decision_output["decision"] == "NO_GO"
+    assert result.decision_output["allowed"] is False
+    assert result.decision_output["firstLayer"]["decision"] == "不建議繼續前進。"
+    assert "不能授權快速通過" in result.decision_output["firstLayer"]["reason"]
+    assert "最近安全 CP" in result.decision_output["firstLayer"]["nextStep"]
+    assert result.boundary.runtime_safety_truth is False
+
+
 def test_full_workflow_uses_direct_retreat_micro_decision() -> None:
     result = run_scout_ai_full_workflow(
         "隊友很累，要不要直接撤退？",

@@ -692,6 +692,27 @@ def _permission(
             residual_risk=["若風雨持續增強，仍需重新評估撤退或改線。"],
         )
 
+    if action == OutdoorAction.CONTINUE and _looks_like_risk_sentinel_continue(query):
+        return _no_go_permission(
+            action=action,
+            decision=ScoutDecision.NO_GO,
+            reason=(
+                "缺少可追溯的前方路段風險、目前位置與撤退窗口證據，"
+                "Scout 不能授權快速通過或繼續推進。"
+            ),
+            next_action="先留在或退回最近安全 CP，補齊位置、路段風險與撤退窗口後再判斷。",
+            confidence=ConfidenceLevel.LOW,
+            uncertainty_notes=[
+                "Risk Sentinel requires route segment, location, retreat-window, and current-condition evidence.",
+                "資料不足時 Scout 依標準採保守判斷，不把快速通過當成安全授權。",
+            ],
+            alternative_actions=[
+                "退回最近安全 CP",
+                "等待領隊確認路段風險",
+                "改走已審核替代路線或撤退",
+            ],
+        )
+
     if action in _BUDGET_ACTIONS:
         authorized = int(budget.authorized_duration_minutes)
         minimum = _MINIMUM_USEFUL_DURATION_BY_ACTION.get(action, 1)
@@ -1557,6 +1578,27 @@ def _is_high_risk_action(
     if terrain_risk_level in _HIGH_RISK_LEVELS:
         return True
     return _has_any(query.lower(), ("暴漲", "濕滑", "落石", "滑墜", "曝露", "暴露"))
+
+
+def _looks_like_risk_sentinel_continue(query: str) -> bool:
+    text = query.lower().replace(" ", "")
+    return _has_any(
+        text,
+        (
+            "快速通過",
+            "快通過",
+            "迅速通過",
+            "這段要不要快速通過",
+            "撤退窗口",
+            "高風險路段",
+            "前方高風險",
+            "落石",
+            "落石區",
+            "通訊死角",
+            "能不能繼續",
+            "現在能不能繼續",
+        ),
+    )
 
 
 def _high_risk_reason(action: OutdoorAction, terrain_risk_level: str | None) -> str:

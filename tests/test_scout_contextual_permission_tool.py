@@ -554,6 +554,26 @@ def test_contextual_permission_escalates_stream_surge_without_buffer() -> None:
     assert result["boundary"]["runtime_safety_truth"] is False
 
 
+def test_contextual_permission_blocks_unreviewed_fast_passage_request() -> None:
+    result = assess_scout_contextual_permission(
+        PROJECT_ROOT,
+        query="這段要不要快速通過？",
+    )
+
+    assert result["answerability"] == "contextual_permission_decision_available"
+    assert result["action"] == "continue"
+    assert result["decision"] == "NO_GO"
+    assert result["allowed"] is False
+    assert result["decision_output"]["firstLayer"]["decision"] == "不建議繼續前進。"
+    assert "不能授權快速通過" in result["decision_output"]["firstLayer"]["reason"]
+    assert "最近安全 CP" in result["decision_output"]["firstLayer"]["nextStep"]
+    assert any(
+        "Risk Sentinel requires" in note
+        for note in result["decision_output"]["secondLayer"]["uncertaintyNotes"]
+    )
+    assert result["boundary"]["runtime_safety_truth"] is False
+
+
 def test_contextual_permission_output_kind_constant() -> None:
     assert CONTEXTUAL_PERMISSION_OUTPUT_KIND == (
         "scout_ai_contextual_permission_tool_output"

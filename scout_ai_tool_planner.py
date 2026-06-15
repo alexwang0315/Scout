@@ -597,6 +597,34 @@ def _contextual_permission_action_override(normalized_question: str) -> str | No
         return "split_team"
     if _has_any(normalized_question, ("攻頂", "山頂", "summit")):
         return "summit"
+    if _has_any(
+        normalized_question,
+        (
+            "落石",
+            "落石區",
+            "滑墜",
+            "曝露",
+            "暴露",
+            "曝露稜線",
+            "暴露稜線",
+            "高風險路段",
+            "高風險",
+        ),
+    ):
+        return "enter_exposed_section"
+    if _has_any(
+        normalized_question,
+        (
+            "快速通過",
+            "快通過",
+            "迅速通過",
+            "撤退窗口",
+            "能不能繼續",
+            "現在能不能繼續",
+            "可以繼續",
+        ),
+    ):
+        return "continue"
     if _has_any(normalized_question, ("撤退", "折返", "下撤", "retreat")):
         return "retreat"
     if _has_any(normalized_question, ("穿雨衣", "雨衣", "raingear")):
@@ -2133,6 +2161,16 @@ def _looks_like_contextual_permission_question(text: str) -> bool:
             "能不能渡溪",
             "溪水暴漲",
             "水位暴漲",
+            "快速通過",
+            "快通過",
+            "迅速通過",
+            "這段要不要快速通過",
+            "落石",
+            "落石區",
+            "高風險路段",
+            "撤退窗口",
+            "能不能繼續",
+            "現在能不能繼續",
             "旁邊那個點很好拍",
             "如果多停",
             "多停",
