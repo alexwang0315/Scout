@@ -277,6 +277,11 @@ layer names whether continuing through the route structure is conditional,
 delayed, or should change plan, while the second layer exposes CP Graph size,
 turn-back point, hard-point pressure, retreat-option count, required conditions,
 and alternatives. It remains CP-graph advisory evidence, not runtime admission.
+Sec. 19.1 turn-back status questions such as "現在是不是折返點？" are routed
+here rather than to contextual permission: without current CP/position and
+current time, Scout returns `DELAY`, names `current_cp_id` and `current_time` as
+missing context, and forbids treating the answer as permission to continue past
+the planned turn-back point.
 
 `scout.ai.post_trip_review.assess.v0` returns a native `decision_output` and a
 `post_trip_learning_package` for Sec. 20 post-trip review. The package groups the

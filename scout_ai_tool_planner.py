@@ -1028,7 +1028,6 @@ def _looks_like_contextual_permission_question(text: str) -> bool:
             "能不能分隊",
             "可以改走支線",
             "這個岔路可以切",
-            "現在是不是折返點",
             "可以繞去",
             "旁邊那個點很好拍",
             "如果多停",

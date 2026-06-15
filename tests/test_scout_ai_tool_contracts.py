@@ -282,6 +282,60 @@ def test_execute_route_architecture_alias_returns_cp_graph_decision() -> None:
     assert result.boundary.live_safety_api_calls_allowed is False
 
 
+def test_execute_route_architecture_requires_current_context_for_turnback_status() -> None:
+    result = execute_scout_ai_tool(
+        {
+            "tool_id": "scout.ai.cp_graph.assess",
+            "project_root": str(PROJECT_ROOT),
+            "query": "現在是不是折返點？",
+            "limit": 4,
+        }
+    )
+
+    assert result.status == "completed"
+    assert result.tool_id == ROUTE_ARCHITECTURE_TOOL_ID
+    assert result.payload["answerability"] == "route_architecture_missing_current_context"
+    assert result.payload["decision"] == "DELAY"
+    assert result.payload["missing_fields"] == ["current_cp_id", "current_time"]
+    assert result.missing_fields == ["current_cp_id", "current_time"]
+    assert result.payload["decision_output"]["firstLayer"]["decision"] == (
+        "無法確認現在是否為折返點。"
+    )
+    assert "雲海保線所" in result.payload["decision_output"]["firstLayer"]["reason"]
+    assert result.payload["decision_output"]["allowed"] is False
+    assert result.payload["decision_output"]["runtimeSafetyTruth"] is False
+    assert result.payload["route_decision"]["runtime_safety_truth"] is False
+    assert result.boundary.live_safety_api_calls_allowed is False
+
+
+def test_execute_route_architecture_detects_current_turnback_checkpoint() -> None:
+    result = execute_scout_ai_tool(
+        {
+            "tool_id": "scout.ai.cp_graph.assess",
+            "project_root": str(PROJECT_ROOT),
+            "query": "現在是不是折返點？",
+            "arguments": {
+                "current_cp_id": "雲海保線所",
+                "current_time": "2013-10-08T14:59:00+08:00",
+            },
+            "limit": 4,
+        }
+    )
+
+    assert result.status == "completed"
+    assert result.tool_id == ROUTE_ARCHITECTURE_TOOL_ID
+    assert result.payload["answerability"] == "route_architecture_available"
+    assert result.payload["decision"] == "CHANGE_PLAN"
+    assert result.payload["missing_fields"] == []
+    assert result.missing_fields == []
+    assert result.payload["decision_output"]["firstLayer"]["decision"] == (
+        "不建議照原路線往後段推進。"
+    )
+    assert "current CP matches" in result.payload["decision_output"]["firstLayer"]["reason"]
+    assert result.payload["decision_output"]["runtimeSafetyTruth"] is False
+    assert result.boundary.live_safety_api_calls_allowed is False
+
+
 def test_execute_equipment_resource_alias_returns_resource_decision() -> None:
     result = execute_scout_ai_tool(
         {
