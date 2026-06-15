@@ -613,6 +613,10 @@ def _decision_source_priority(source: ScoutAiAnswerSource) -> tuple[int, str]:
         if isinstance(schedule, dict) and schedule.get("current_delay_minutes") is not None:
             return (1, source.tool_id)
     if source.tool_id == CONTEXTUAL_PERMISSION_TOOL_ID:
+        decision = str(source.top_result_summary.get("decision") or "").upper()
+        action = str(source.top_result_summary.get("action") or "").lower()
+        if decision == "GO" and action == "continue":
+            return (12, source.tool_id)
         return (2, source.tool_id)
     if source.tool_id == ROUTE_ARCHITECTURE_TOOL_ID:
         route_decision = source.top_result_summary.get("route_decision")
