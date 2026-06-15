@@ -19,6 +19,7 @@ from scout_ai_tool_planner import (
     TEAM_STATUS_TOOL_ID,
     POST_TRIP_REVIEW_TOOL_ID,
     REVIEW_GAP_TOOL_ID,
+    RUNTIME_INGRESS_STATUS_TOOL_ID,
     SAFETY_BOUNDARY_TOOL_ID,
     WEATHER_WINDOW_TOOL_ID,
     ScoutAiToolPlanItemStatus,
@@ -1778,6 +1779,42 @@ def test_planner_routes_standard_six_power_overview_to_all_six_capabilities() ->
         WEATHER_WINDOW_TOOL_ID,
         NAVIGATION_TERRAIN_TOOL_ID,
     }
+    for item in plan.selected_tools:
+        assert item.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+        assert item.request is not None
+        assert item.boundary.runtime_safety_truth is False
+
+
+def test_planner_routes_standard_gap_overview_to_core_standard_tools() -> None:
+    plan = plan_scout_ai_tools(
+        _query(
+            "請以 SCOUT_OUTDOOR_AI_AGENT_STANDARD 為基準，檢視目前 Scout 體系還缺哪些東西，六力是否都有實作？"
+        ),
+        project_root=PROJECT_ROOT,
+        limit=8,
+    )
+
+    tool_ids = _tool_ids(plan)
+    assert {
+        ROUTE_CONTEXT_TOOL_ID,
+        PACE_GUARDIAN_TOOL_ID,
+        ROUTE_READINESS_TOOL_ID,
+        CONTEXTUAL_PERMISSION_TOOL_ID,
+        ROUTE_ARCHITECTURE_TOOL_ID,
+        WEATHER_WINDOW_TOOL_ID,
+        NAVIGATION_TERRAIN_TOOL_ID,
+        LIVE_NAVIGATION_STATE_TOOL_ID,
+        RISK_SCORE_TOOL_ID,
+        ENERGY_VITALS_TOOL_ID,
+        EQUIPMENT_RESOURCE_TOOL_ID,
+        TEAM_STATUS_TOOL_ID,
+        POST_TRIP_REVIEW_TOOL_ID,
+        MEDIA_LITERACY_TOOL_ID,
+        SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID,
+        SAFETY_BOUNDARY_TOOL_ID,
+        REVIEW_GAP_TOOL_ID,
+        RUNTIME_INGRESS_STATUS_TOOL_ID,
+    }.issubset(tool_ids)
     for item in plan.selected_tools:
         assert item.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
         assert item.request is not None
