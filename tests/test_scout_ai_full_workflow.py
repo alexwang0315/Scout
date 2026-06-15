@@ -290,6 +290,32 @@ def test_full_workflow_preserves_contextual_permission_decision_object() -> None
     assert result.boundary.runtime_safety_truth is False
 
 
+def test_full_workflow_allows_bounded_tripod_permission() -> None:
+    result = run_scout_ai_full_workflow(
+        "現在 2026-06-07T13:36:00+08:00，安全 buffer 還有 21 分鐘，可以架腳架 4 分鐘嗎？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=3,
+    )
+
+    assert result.answerability == "evidence_available"
+    assert result.selected_tool_count == 1
+    assert result.executed_tool_count == 1
+    assert result.completed_tool_count == 1
+    assert result.missing_evidence_count == 0
+    contextual = _workflow_source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
+    summary = contextual["top_result_summary"]
+    assert summary["action"] == "tripod"
+    assert summary["decision"] == "CONDITIONAL_GO"
+    assert summary["allowed"] is True
+    assert summary["max_duration_minutes"] == 4
+    assert result.decision_output["answerSourceToolId"] == CONTEXTUAL_PERMISSION_TOOL_ID
+    assert result.decision_output["action"] == "tripod"
+    assert result.decision_output["firstLayer"]["decision"] == "可以，最多 4 分鐘。"
+    assert "收起腳架" in result.answer
+    assert result.boundary.runtime_safety_truth is False
+
+
 def test_full_workflow_prices_extra_stop_time_against_buffer() -> None:
     result = run_scout_ai_full_workflow(
         "現在 2026-06-07T13:36:00+08:00，安全 buffer 還有 21 分鐘，"

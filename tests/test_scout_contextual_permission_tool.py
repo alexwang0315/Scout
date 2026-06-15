@@ -131,6 +131,66 @@ def test_contextual_permission_allows_fog_wait_with_bounded_photo_cutoff() -> No
     assert result["boundary"]["runtime_safety_truth"] is False
 
 
+def test_contextual_permission_allows_tripod_only_with_bounded_cutoff() -> None:
+    result = assess_scout_contextual_permission(
+        PROJECT_ROOT,
+        query="可以架腳架 4 分鐘嗎？",
+        current_time="2026-06-07T13:36:00+08:00",
+        current_cp_id="CP3",
+        next_cp_id="CP4",
+        remaining_safety_buffer_minutes=21,
+        requested_duration_minutes=4,
+        next_segment_uncertainty_minutes=5,
+        weather_reserve_minutes=3,
+        communication_status="ok",
+        equipment_status="ok",
+    )
+
+    assert result["answerability"] == "contextual_permission_decision_available"
+    assert result["action"] == "tripod"
+    assert result["decision"] == "CONDITIONAL_GO"
+    assert result["allowed"] is True
+    assert result["max_duration_minutes"] == 4
+    assert result["leave_by"] == "2026-06-07T13:40:00+08:00"
+    assert result["decision_output"]["action"] == "tripod"
+    assert result["decision_output"]["firstLayer"]["decision"] == "可以，最多 4 分鐘。"
+    assert "收起腳架" in result["decision_output"]["firstLayer"]["nextStep"]
+    assert any(
+        "不得在風口" in condition
+        for condition in result["decision_output"]["secondLayer"][
+            "requiredConditions"
+        ]
+    )
+    assert any(
+        "強風" in risk
+        for risk in result["decision_output"]["secondLayer"]["residualRisk"]
+    )
+    assert result["contextual_permission"]["cost"]["timeBufferChangeMinutes"] == -4
+    assert result["risk_budget"]["bufferAfterActionMinutes"] == 17
+    assert result["boundary"]["runtime_safety_truth"] is False
+
+
+def test_contextual_permission_blocks_wind_exposed_tripod_even_with_buffer() -> None:
+    result = assess_scout_contextual_permission(
+        PROJECT_ROOT,
+        query="這裡是風口強風，可以架腳架嗎？",
+        current_time="2026-06-07T13:36:00+08:00",
+        remaining_safety_buffer_minutes=30,
+        communication_status="ok",
+        equipment_status="ok",
+    )
+
+    assert result["answerability"] == "contextual_permission_decision_available"
+    assert result["action"] == "tripod"
+    assert result["decision"] == "NO_GO"
+    assert result["allowed"] is False
+    assert result["missing_fields"] == []
+    assert result["decision_output"]["firstLayer"]["decision"] == "不建議架腳架。"
+    assert "腳架會增加停留時間" in result["decision_output"]["firstLayer"]["reason"]
+    assert "不要架腳架" in result["decision_output"]["firstLayer"]["nextStep"]
+    assert result["boundary"]["runtime_safety_truth"] is False
+
+
 def test_contextual_permission_blocks_wind_exposed_lunch_even_with_buffer() -> None:
     result = assess_scout_contextual_permission(
         PROJECT_ROOT,

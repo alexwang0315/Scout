@@ -273,6 +273,29 @@ def test_answer_synthesis_uses_contextual_permission_field_answer_without_guessi
     assert "runtime safety truth" in result.answer
 
 
+def test_answer_synthesis_allows_bounded_tripod_permission() -> None:
+    result = collect_and_synthesize_scout_ai_answer(
+        "現在 2026-06-07T13:36:00+08:00，安全 buffer 還有 21 分鐘，可以架腳架 4 分鐘嗎？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=3,
+    )
+
+    assert result.answerability == "evidence_available"
+    assert result.completed_source_count == 1
+    assert result.missing_evidence_count == 0
+    source = _source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
+    assert source.top_result_summary["action"] == "tripod"
+    assert source.top_result_summary["decision"] == "CONDITIONAL_GO"
+    assert source.top_result_summary["allowed"] is True
+    assert source.top_result_summary["max_duration_minutes"] == 4
+    assert result.decision_output["answerSourceToolId"] == CONTEXTUAL_PERMISSION_TOOL_ID
+    assert result.decision_output["action"] == "tripod"
+    assert result.decision_output["firstLayer"]["decision"] == "可以，最多 4 分鐘。"
+    assert "收起腳架" in result.answer
+    assert "runtime safety truth" in result.answer
+
+
 def test_answer_synthesis_prices_extra_stop_time_against_buffer() -> None:
     result = collect_and_synthesize_scout_ai_answer(
         "現在 2026-06-07T13:36:00+08:00，安全 buffer 還有 21 分鐘，"
