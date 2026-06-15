@@ -7,6 +7,7 @@ from typing import Any
 
 LIVE_NAVIGATION_STATE_TOOL_ID = "scout.ai.live_navigation_state.assess.v0"
 LIVE_NAVIGATION_STATE_OUTPUT_KIND = "scout_ai_live_navigation_state_tool_output"
+NMEA_ROUTE_RISK_PROBE_TOOL_ID = "assistant_skill.live_navigation.nmea_route_risk.v0"
 
 LIVE_NAVIGATION_REQUIRED_FIELDS = (
     "observed_at",

@@ -16,6 +16,7 @@ from scout_live_navigation_state_tool import (
     LIVE_NAVIGATION_REQUIRED_FIELDS,
     LIVE_NAVIGATION_STATE_OUTPUT_KIND,
     LIVE_NAVIGATION_STATE_TOOL_ID,
+    NMEA_ROUTE_RISK_PROBE_TOOL_ID,
 )
 from scout_navigation_terrain_tool import (
     NAVIGATION_TERRAIN_OPTIONAL_FIELDS,
@@ -242,6 +243,11 @@ EXECUTABLE_TOOL_ALIASES: dict[str, list[str]] = {
     LIVE_NAVIGATION_STATE_TOOL_ID: [
         "scout.ai.live_navigation_state.assess",
     ],
+    NMEA_ROUTE_RISK_PROBE_TOOL_ID: [
+        "assistant_skill.live_navigation.nmea_route_risk",
+        "scout.ai.nmea_live_navigation_probe.assess",
+        "scout.ai.live_navigation.nmea_route_risk",
+    ],
     NAVIGATION_TERRAIN_TOOL_ID: [
         "scout.ai.navigation_terrain.assess",
         "scout.ai.map_readiness.assess",
@@ -329,6 +335,7 @@ EXECUTABLE_OUTPUT_KINDS: dict[str, str] = {
     "pydantic_ai.tool.search_scout_map_perception.v0": "scout_ai_map_perception_tool_output",
     INS_DR_TRACE_TOOL_ID: INS_DR_TRACE_OUTPUT_KIND,
     LIVE_NAVIGATION_STATE_TOOL_ID: LIVE_NAVIGATION_STATE_OUTPUT_KIND,
+    NMEA_ROUTE_RISK_PROBE_TOOL_ID: LIVE_NAVIGATION_STATE_OUTPUT_KIND,
     NAVIGATION_TERRAIN_TOOL_ID: NAVIGATION_TERRAIN_OUTPUT_KIND,
     SAFETY_BOUNDARY_TOOL_ID: SAFETY_BOUNDARY_OUTPUT_KIND,
     ENERGY_VITALS_TOOL_ID: ENERGY_VITALS_OUTPUT_KIND,
@@ -539,6 +546,14 @@ def _contract_from_raw(tool_id: str, raw: dict[str, Any]) -> ScoutAiToolContract
             *_as_str_list(raw.get("existing_support")),
             "scout_review_gap_tool.py compact review/provenance gap assessor",
         ]
+    elif tool_id == NMEA_ROUTE_RISK_PROBE_TOOL_ID:
+        status = ScoutAiToolImplementationStatus.READY_CURRENT_TOOL
+        required_fields = list(LIVE_NAVIGATION_REQUIRED_FIELDS)
+        implementation_gap = None
+        existing_support = [
+            *_as_str_list(raw.get("existing_support")),
+            "scout_live_navigation_state_tool.py general read-only live navigation assessor supersedes the scenario probe gap",
+        ]
     elif tool_id == RUNTIME_INGRESS_STATUS_TOOL_ID:
         status = ScoutAiToolImplementationStatus.READY_CURRENT_TOOL
         required_fields = list(RUNTIME_INGRESS_STATUS_REQUIRED_FIELDS)
@@ -680,6 +695,8 @@ def _optional_fields_for(tool_id: str) -> list[str]:
             "max_interpolation_gap_s",
         ]
     if tool_id == LIVE_NAVIGATION_STATE_TOOL_ID:
+        return list(LIVE_NAVIGATION_REQUIRED_FIELDS)
+    if tool_id == NMEA_ROUTE_RISK_PROBE_TOOL_ID:
         return list(LIVE_NAVIGATION_REQUIRED_FIELDS)
     if tool_id == NAVIGATION_TERRAIN_TOOL_ID:
         return list(NAVIGATION_TERRAIN_OPTIONAL_FIELDS)

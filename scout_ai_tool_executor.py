@@ -13,7 +13,10 @@ from scout_ai_tool_contracts import (
     resolve_scout_ai_tool_id,
 )
 from scout_safety_boundary_tool import SAFETY_BOUNDARY_TOOL_ID
-from scout_live_navigation_state_tool import LIVE_NAVIGATION_STATE_TOOL_ID
+from scout_live_navigation_state_tool import (
+    LIVE_NAVIGATION_STATE_TOOL_ID,
+    NMEA_ROUTE_RISK_PROBE_TOOL_ID,
+)
 from scout_navigation_terrain_tool import NAVIGATION_TERRAIN_TOOL_ID
 from scout_ins_dr_trace_tool import INS_DR_TRACE_TOOL_ID
 from scout_energy_vitals_tool import ENERGY_VITALS_TOOL_ID
@@ -304,10 +307,10 @@ def _execute_ready_current_tool(tool_id: str, arguments: dict[str, Any]) -> dict
             ),
         )
 
-    if tool_id == LIVE_NAVIGATION_STATE_TOOL_ID:
+    if tool_id in {LIVE_NAVIGATION_STATE_TOOL_ID, NMEA_ROUTE_RISK_PROBE_TOOL_ID}:
         from scout_live_navigation_state_tool import assess_scout_live_navigation_state
 
-        return assess_scout_live_navigation_state(
+        payload = assess_scout_live_navigation_state(
             project_root,
             query=query,
             observed_at=_str_or_none(arguments.get("observed_at")),
@@ -335,6 +338,14 @@ def _execute_ready_current_tool(tool_id: str, arguments: dict[str, Any]) -> dict
             uncertainty_m=_float_or_none(arguments.get("uncertainty_m")),
             last_anchor_at=_str_or_none(arguments.get("last_anchor_at")),
         )
+        if tool_id == NMEA_ROUTE_RISK_PROBE_TOOL_ID:
+            payload = {
+                **payload,
+                "tool_id": NMEA_ROUTE_RISK_PROBE_TOOL_ID,
+                "compatibility_delegate_tool_id": LIVE_NAVIGATION_STATE_TOOL_ID,
+                "assessment_kind": "read_only_nmea_route_risk_probe_compat",
+            }
+        return payload
 
     if tool_id == NAVIGATION_TERRAIN_TOOL_ID:
         from scout_navigation_terrain_tool import assess_scout_navigation_terrain
@@ -829,6 +840,7 @@ def _completed_missing_fields(tool_id: str, payload: dict[str, Any]) -> list[str
         MAP_PERCEPTION_TOOL_ID,
         INS_DR_TRACE_TOOL_ID,
         RUNTIME_INGRESS_STATUS_TOOL_ID,
+        NMEA_ROUTE_RISK_PROBE_TOOL_ID,
     }:
         return []
     value = payload.get("missing_fields")
