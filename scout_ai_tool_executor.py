@@ -380,6 +380,8 @@ def _execute_ready_current_tool(tool_id: str, arguments: dict[str, Any]) -> dict
                 arguments.get("weather_daylight_evidence_path")
             ),
             plan_validation_path=_str_or_none(arguments.get("plan_validation_path")),
+            energy_vitals_path=_str_or_none(arguments.get("energy_vitals_path")),
+            team_status_path=_str_or_none(arguments.get("team_status_path")),
         )
 
     raise ValueError(f"tool is not executable: {tool_id}")
