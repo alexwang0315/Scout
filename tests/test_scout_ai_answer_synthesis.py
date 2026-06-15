@@ -3461,10 +3461,14 @@ def test_answer_synthesis_surfaces_standard_gap_overview_before_six_power() -> N
     )
     assert result.decision_output["decision"] == "GUIDED_ONLY"
     assert result.decision_output["runtimeSafetyTruth"] is False
-    assert result.decision_output["cost"]["standardGroupCount"] == 8
+    assert result.decision_output["cost"]["standardGroupCount"] == 10
     assert "標準差異檢視：" in result.answer
     assert "六力都有實作在 Scout AI 工具/證據/答案路徑內" in result.answer
     assert "產品北極星" in result.answer
+    assert "產品身份 / 決策層定位" in result.answer
+    assert "scout.ai.product_identity_standard.v0" in result.answer
+    assert "標準術語 / Glossary" in result.answer
+    assert "scout.ai.standard_glossary.v0" in result.answer
     assert "raw search/catalog evidence 不能取代 ContextualPermission" in result.answer
     assert "不是出發批准或 runtime safety truth" in result.answer
     assert "六力覆蓋檢視：" not in result.answer
