@@ -297,16 +297,18 @@ def _answer_text(
     answerability: str,
     decision_output: dict[str, Any],
 ) -> str:
-    parts = [
-        "Scout AI read-only answer draft: deterministic evidence was collected before synthesis.",
-        f"Question: {question}",
+    parts = []
+    completed_sources = [
+        source for source in sources if source.collection_status == "completed"
     ]
-    completed_sources = [source for source in sources if source.collection_status == "completed"]
+    frontline_answer = _decision_output_text(decision_output)
+    if frontline_answer:
+        parts.append(frontline_answer)
     primary_answer = _field_answer_for_tool(
         completed_sources,
         str(decision_output.get("answerSourceToolId") or ""),
     )
-    if primary_answer:
+    if primary_answer and primary_answer != frontline_answer:
         parts.append(primary_answer)
     contextual_answer = (
         None
@@ -388,9 +390,39 @@ def _answer_text(
             "A field conclusion should not be inferred until the missing evidence is provided."
         )
     parts.append(
+        "Traceability: deterministic evidence was collected before synthesis by Scout AI tools. "
+        f"Question: {question}"
+    )
+    parts.append(
         "This is candidate/planning evidence only, not runtime safety truth; it cannot trigger Ln, /safety/*, SOS, beacon, outbound send, or hardware control."
     )
     return " ".join(_dedupe_answer_parts(parts))
+
+
+def _decision_output_text(decision_output: dict[str, Any]) -> str | None:
+    text = decision_output.get("text")
+    if isinstance(text, str) and text.strip():
+        return text.strip()
+    first_layer = decision_output.get("firstLayer")
+    if not isinstance(first_layer, dict):
+        return None
+    decision = first_layer.get("decision")
+    limit = first_layer.get("limit")
+    reason = first_layer.get("reason")
+    next_step = first_layer.get("nextStep")
+    if not any(
+        isinstance(value, str) and value.strip()
+        for value in (decision, limit, reason, next_step)
+    ):
+        return None
+    return "\n".join(
+        (
+            f"[決策] {str(decision or '暫緩判斷。')}",
+            f"[限制] {str(limit or '不得把此回答當成現場授權。')}",
+            f"[原因] {str(reason or '缺少可追溯的 Scout 決策證據。')}",
+            f"[下一步] {str(next_step or '補齊 deterministic Scout evidence，再重新詢問。')}",
+        )
+    )
 
 
 def _field_answer_for_tool(

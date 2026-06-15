@@ -395,6 +395,8 @@ def test_full_workflow_preserves_contextual_permission_decision_object() -> None
     assert answer_step.summary["decision_output_source_tool"] == (
         CONTEXTUAL_PERMISSION_TOOL_ID
     )
+    assert result.answer.startswith("[決策] 不建議拍影片。")
+    assert not result.answer.startswith("Scout AI read-only answer draft")
     assert "[決策] 不建議拍影片。" in result.answer
     assert "runtime safety truth" in result.answer
     assert result.boundary.runtime_safety_truth is False
@@ -1232,6 +1234,8 @@ def test_full_workflow_prioritizes_pace_for_slowed_continue_question() -> None:
     assert result.decision_output["action"] == "pace_adjustment"
     assert result.decision_output["decision"] == "NO_GO"
     assert result.decision_output["cost"]["scheduleDelayMinutes"] == 25.0
+    assert result.answer.startswith("[決策] 不建議用目前腳程資料繼續判斷。")
+    assert not result.answer.startswith("Scout AI read-only answer draft")
     first_answer_block = result.answer.split(" Collected evidence: ")[0]
     assert "腳程守門員" in first_answer_block
     assert "[決策] 可以繼續前進。" not in first_answer_block
