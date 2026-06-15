@@ -1315,6 +1315,47 @@ def test_answer_synthesis_preserves_guided_only_route_readiness_decision() -> No
     assert "runtime safety truth" in result.answer
 
 
+def test_answer_synthesis_guided_only_for_high_risk_non_goal_route_readiness() -> None:
+    result = collect_and_synthesize_scout_ai_answer(
+        "雪地技術攀登，出發前 Go/No-Go 可以自主出發嗎？"
+        "advanced transportconfirmed slowestbasisconfirmed departuretimeconfirmed "
+        "wxconfirmed sunok gearconfirmed rcconfirmed",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=3,
+    )
+
+    assert result.answerability == "evidence_available"
+    assert result.completed_source_count == 1
+    assert result.missing_evidence_count == 0
+    source = result.sources[0]
+    assert source.tool_id == ROUTE_READINESS_TOOL_ID
+    assert source.top_result_summary["decision"] == "GUIDED_ONLY"
+    profile = source.top_result_summary["user_goal_profile"]
+    assert profile["high_risk_non_goal"] is True
+    assert profile["high_risk_non_goal_domains"] == ["snow", "technical_climb"]
+    governance = source.top_result_summary["readiness_governance"]
+    assert governance["high_risk_domain_gate"]["required"] is True
+    assert governance["high_risk_domain_gate"]["domain_labels"] == [
+        "雪地",
+        "技術攀登",
+    ]
+    package = source.top_result_summary["pretrip_decision_package"]
+    required = package["required_outputs"]
+    assert required["pretrip_decision"] == "GUIDED_ONLY"
+    assert required["top_risk_sources"][0]["source"] == (
+        "mvp_non_goal_high_risk_domain"
+    )
+    assert package["decision_limits"]["autonomous_departure_allowed"] is False
+    assert result.decision_output["answerSourceToolId"] == ROUTE_READINESS_TOOL_ID
+    assert result.decision_output["decision"] == "GUIDED_ONLY"
+    assert result.decision_output["allowed"] is False
+    assert "不得自主出發" in result.decision_output["firstLayer"]["limit"]
+    assert "GUIDED_ONLY" in result.answer
+    assert "雪地" in result.answer
+    assert "runtime safety truth" in result.answer
+
+
 def test_answer_synthesis_surfaces_route_readiness_user_goal_controls() -> None:
     result = collect_and_synthesize_scout_ai_answer(
         "親子拍攝目標，出發前 Go/No-Go 可以出發嗎？我是中級，"

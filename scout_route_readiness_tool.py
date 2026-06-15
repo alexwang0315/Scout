@@ -842,6 +842,8 @@ def _governance(
     alternative_actions: list[str] = []
     user_experience = _normalized_experience_level(direct.get("user_experience_level"))
     user_goal_profile = _goal_profile(direct.get("user_goal"))
+    high_risk_domains = list(user_goal_profile["high_risk_non_goal_domains"])
+    high_risk_domain_required = bool(high_risk_domains)
     latest_return_deadline = _latest_return_deadline(
         direct.get("latest_return_time"),
         route_state=route_state,
@@ -893,6 +895,17 @@ def _governance(
         )
         alternative_actions.append(
             "Switch to a guided trip, lower-demand route, shorter route, or training route."
+        )
+    if high_risk_domain_required:
+        domain_text = "、".join(_goal_label(domain) for domain in high_risk_domains)
+        warning_gaps.append(
+            f"使用者目標包含 MVP non-goal 高風險領域：{domain_text}；不得給出自主出發 permission。"
+        )
+        required_conditions.append(
+            "高風險領域只能改成合格嚮導、專家課程、官方資訊與人工審核控制下的方案。"
+        )
+        alternative_actions.append(
+            "改選非雪地、非技術攀登、非高風險溯溪的中級山路線，或延後到專業帶領活動。"
         )
     if user_goal_profile["photo_or_social_goal"]:
         warning_gaps.append(
@@ -970,12 +983,27 @@ def _governance(
             missing_fields=missing_fields,
             warning_gaps=warning_gaps,
             guided_only_required=guided_only_required,
+            high_risk_domain_required=high_risk_domain_required,
         ),
         "guided_only_gate": {
-            "required": guided_only_required,
+            "required": guided_only_required or high_risk_domain_required,
             "user_experience_level": user_experience,
             "route_demand_profile": route_demand_profile,
-            "autonomous_departure_allowed": False if guided_only_required else None,
+            "autonomous_departure_allowed": False
+            if guided_only_required or high_risk_domain_required
+            else None,
+            "reason": "high_risk_non_goal_domain"
+            if high_risk_domain_required
+            else "low_experience_high_route_demand"
+            if guided_only_required
+            else None,
+        },
+        "high_risk_domain_gate": {
+            "required": high_risk_domain_required,
+            "domains": high_risk_domains,
+            "domain_labels": [_goal_label(domain) for domain in high_risk_domains],
+            "standard_alignment": "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 24.2 MVP non-goals and high-risk domains",
+            "autonomous_departure_allowed": False if high_risk_domain_required else None,
         },
         "user_goal_profile": user_goal_profile,
         "transport_deadline": {
@@ -996,6 +1024,8 @@ def _decision(*, governance: dict[str, Any], missing_fields: list[str]) -> str:
         return "NO_GO"
     if governance.get("plan_change_required"):
         return "CHANGE_PLAN"
+    if governance.get("high_risk_domain_gate", {}).get("required"):
+        return "GUIDED_ONLY"
     if missing_fields:
         return "DELAY"
     if governance.get("guided_only_gate", {}).get("required"):
@@ -1187,6 +1217,20 @@ def _top_risk_sources(
                 "reason": reason,
             }
         )
+    high_risk_gate = governance.get("high_risk_domain_gate")
+    if isinstance(high_risk_gate, dict) and high_risk_gate.get("required"):
+        labels = high_risk_gate.get("domain_labels")
+        label_text = "、".join(str(label) for label in labels if str(label).strip())
+        risks.append(
+            {
+                "severity": "guided_only",
+                "source": "mvp_non_goal_high_risk_domain",
+                "reason": (
+                    "User goal enters Scout MVP high-risk/non-goal domain"
+                    + (f": {label_text}." if label_text else ".")
+                ),
+            }
+        )
     transport_deadline = governance.get("transport_deadline")
     if isinstance(transport_deadline, dict) and transport_deadline.get("conflict"):
         risks.append(
@@ -1330,6 +1374,18 @@ def _stop_policy(
                     "goal_labels": goal_labels,
                 }
             )
+        if goal_profile.get("high_risk_non_goal"):
+            not_recommended.append(
+                {
+                    "label": "Autonomous high-risk MVP non-goal activity",
+                    "policy": "not_recommended_high_risk_non_goal",
+                    "rationale": (
+                        "Snow, technical climbing, high-risk stream, or open-water activity "
+                        "requires professional/guided controls before Scout can consider it."
+                    ),
+                    "goal_labels": goal_labels,
+                }
+            )
     if missing_fields or governance["warning_gaps"] or decision not in {"GO"}:
         not_recommended.append(
             {
@@ -1458,10 +1514,23 @@ def _field_answer(
     if decision == "GUIDED_ONLY":
         gate = governance.get("guided_only_gate", {})
         demand = gate.get("route_demand_profile") if isinstance(gate, dict) else {}
-        demand_reasons = (
-            demand.get("demand_reasons") if isinstance(demand, dict) else []
+        high_risk_gate = governance.get("high_risk_domain_gate", {})
+        high_risk_labels = (
+            high_risk_gate.get("domain_labels")
+            if isinstance(high_risk_gate, dict)
+            else []
         )
-        reason_text = "；".join(str(reason) for reason in demand_reasons[:2]) or "路線需求高於目前自主經驗。"
+        if high_risk_labels:
+            reason_text = (
+                "使用者目標屬 Scout MVP non-goal 高風險領域："
+                + "、".join(str(label) for label in high_risk_labels[:3])
+                + "。"
+            )
+        else:
+            demand_reasons = (
+                demand.get("demand_reasons") if isinstance(demand, dict) else []
+            )
+            reason_text = "；".join(str(reason) for reason in demand_reasons[:2]) or "路線需求高於目前自主經驗。"
         return (
             "出發前判斷：建議 GUIDED_ONLY。"
             f"{reason_text} "
@@ -1484,13 +1553,16 @@ def _next_action(
     missing_fields: list[str],
     warning_gaps: list[str],
     guided_only_required: bool = False,
+    high_risk_domain_required: bool = False,
 ) -> str:
     if critical_gaps:
         return "先解除 hard blocker 或重新規劃，不進入出發。"
-    if missing_fields:
-        return "補齊出發前必要輸入與人工 review，再重新評估。"
+    if high_risk_domain_required:
+        return "改成合格嚮導/專家課程/官方資訊支援的方案，或改選較低風險的 MVP 支援路線。"
     if guided_only_required:
         return "改成合格嚮導/經驗領隊帶領，或改選較短、低曝露、低海拔的訓練路線。"
+    if missing_fields:
+        return "補齊出發前必要輸入與人工 review，再重新評估。"
     if warning_gaps:
         return "通過人工 departure gate 並保留替代路線/撤退策略後才可條件式出發。"
     return "完成人工 departure gate 後，才允許進入 runtime handoff。"
@@ -1672,6 +1744,11 @@ def _goal_profile(value: Any) -> dict[str, Any]:
     raw_goal = _first_text(value)
     goals = _normalized_goals(raw_goal)
     goal_labels = [_goal_label(goal) for goal in goals]
+    high_risk_domains = [
+        goal
+        for goal in goals
+        if goal in {"snow", "technical_climb", "high_risk_stream", "open_water"}
+    ]
     return {
         "candidate_only": True,
         "runtime_safety_truth": False,
@@ -1682,6 +1759,8 @@ def _goal_profile(value: Any) -> dict[str, Any]:
         "photo_or_social_goal": bool(set(goals) & {"photo", "slow", "social"}),
         "family_or_child_goal": bool(set(goals) & {"family", "child"}),
         "training_goal": "training" in goals,
+        "high_risk_non_goal": bool(high_risk_domains),
+        "high_risk_non_goal_domains": high_risk_domains,
     }
 
 
@@ -1713,6 +1792,37 @@ def _normalized_goals(value: str | None) -> list[str]:
         add("family")
     if _has_any_text(text, ("社交", "朋友", "團體", "social", "friends")):
         add("social")
+    if _has_any_text(text, ("雪地", "雪季", "雪訓", "snow", "snowfield")):
+        add("snow")
+    if _has_any_text(
+        text,
+        (
+            "技術攀登",
+            "技術攀爬",
+            "技術路線",
+            "攀岩",
+            "攀登",
+            "technical_climb",
+            "technicalclimb",
+            "technicalclimbing",
+            "climbing",
+        ),
+    ):
+        add("technical_climb")
+    if _has_any_text(
+        text,
+        (
+            "高風險溯溪",
+            "溯溪",
+            "溪降",
+            "high_risk_stream",
+            "canyoning",
+            "canyoneering",
+        ),
+    ):
+        add("high_risk_stream")
+    if _has_any_text(text, ("海域", "海泳", "海上", "open_water", "openwater", "ocean")):
+        add("open_water")
     return goals
 
 
@@ -1725,6 +1835,10 @@ def _goal_label(goal: str) -> str:
         "family": "親子/家庭",
         "child": "親子/家庭",
         "social": "社交",
+        "snow": "雪地",
+        "technical_climb": "技術攀登",
+        "high_risk_stream": "高風險溯溪",
+        "open_water": "海域活動",
     }
     return labels.get(goal, goal)
 

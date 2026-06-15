@@ -1376,6 +1376,48 @@ def test_full_workflow_runs_guided_only_route_readiness_question() -> None:
     assert result.boundary.runtime_safety_truth is False
 
 
+def test_full_workflow_guided_only_for_high_risk_non_goal_route_readiness() -> None:
+    result = run_scout_ai_full_workflow(
+        "雪地技術攀登，出發前 Go/No-Go 可以自主出發嗎？"
+        "advanced transportconfirmed slowestbasisconfirmed departuretimeconfirmed "
+        "wxconfirmed sunok gearconfirmed rcconfirmed",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=3,
+    )
+
+    assert result.answerability == "evidence_available"
+    assert result.selected_tool_count == 1
+    assert result.executed_tool_count == 1
+    assert result.completed_tool_count == 1
+    assert result.failed_tool_count == 0
+    assert result.missing_evidence_count == 0
+    source = result.sources[0]
+    assert source["tool_id"] == ROUTE_READINESS_TOOL_ID
+    summary = source["top_result_summary"]
+    assert summary["decision"] == "GUIDED_ONLY"
+    assert summary["user_goal_profile"]["high_risk_non_goal"] is True
+    assert summary["user_goal_profile"]["high_risk_non_goal_domains"] == [
+        "snow",
+        "technical_climb",
+    ]
+    gate = summary["readiness_governance"]["high_risk_domain_gate"]
+    assert gate["required"] is True
+    assert gate["domain_labels"] == ["雪地", "技術攀登"]
+    package = summary["pretrip_decision_package"]
+    assert package["required_outputs"]["pretrip_decision"] == "GUIDED_ONLY"
+    assert package["decision_limits"]["autonomous_departure_allowed"] is False
+    assert result.decision_output["answerSourceToolId"] == ROUTE_READINESS_TOOL_ID
+    assert result.decision_output["decision"] == "GUIDED_ONLY"
+    assert result.decision_output["allowed"] is False
+    assert "不得自主出發" in result.decision_output["firstLayer"]["limit"]
+    answer_step = result.workflow_steps[-1]
+    assert answer_step.summary["decision_output_source_tool"] == ROUTE_READINESS_TOOL_ID
+    assert "GUIDED_ONLY" in result.answer
+    assert "雪地" in result.answer
+    assert result.boundary.runtime_safety_truth is False
+
+
 def test_full_workflow_surfaces_route_readiness_user_goal_controls() -> None:
     result = run_scout_ai_full_workflow(
         "親子拍攝目標，出發前 Go/No-Go 可以出發嗎？我是中級，"
