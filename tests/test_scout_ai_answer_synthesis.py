@@ -1284,6 +1284,33 @@ def test_answer_synthesis_uses_route_architecture_for_turnback_status() -> None:
     assert "runtime safety truth" in result.answer
 
 
+def test_answer_synthesis_delays_retreat_point_status_without_current_context() -> None:
+    result = collect_and_synthesize_scout_ai_answer(
+        "現在是不是撤退點？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=4,
+    )
+
+    assert result.answerability == "partial_evidence_with_missing_context"
+    assert result.completed_source_count == 1
+    assert result.missing_evidence_count == 1
+    assert result.sources[0].tool_id == ROUTE_ARCHITECTURE_TOOL_ID
+    assert result.sources[0].missing_fields == ["current_cp_id", "current_time"]
+    assert result.sources[0].top_result_summary["answerability"] == (
+        "route_architecture_missing_current_context"
+    )
+    assert result.sources[0].top_result_summary["decision"] == "DELAY"
+    assert result.decision_output["answerSourceToolId"] == ROUTE_ARCHITECTURE_TOOL_ID
+    assert result.decision_output["decision"] == "DELAY"
+    assert result.decision_output["firstLayer"]["decision"] == (
+        "無法確認現在是否為撤退點。"
+    )
+    assert "current_cp_id、current_time" in result.answer
+    assert "雲海保線所" in result.decision_output["firstLayer"]["reason"]
+    assert "runtime safety truth" in result.answer
+
+
 def test_answer_synthesis_detects_natural_turnback_current_context() -> None:
     result = collect_and_synthesize_scout_ai_answer(
         "現在 2013-10-08T15:10:00+08:00 在雲海保線所，現在是不是折返點？",
