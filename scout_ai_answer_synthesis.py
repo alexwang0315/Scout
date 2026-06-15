@@ -675,6 +675,10 @@ def _decision_source_priority(
     *,
     question: str = "",
 ) -> tuple[int, str]:
+    if source.tool_id == POST_TRIP_REVIEW_TOOL_ID and _looks_like_post_trip_review_question(
+        question
+    ):
+        return (-1, source.tool_id)
     if source.tool_id == RISK_SCORE_TOOL_ID and _looks_like_forward_risk_segment_question(
         question
     ):
@@ -745,6 +749,49 @@ def _looks_like_forward_risk_segment_question(question: str) -> bool:
         any(term in text for term in ("前方", "下一段", "這段"))
         and any(term in text for term in ("高風險路段", "危險路段", "風險路段"))
         and not any(term in text for term in ("能不能", "要不要", "可以", "還能"))
+    )
+
+
+def _looks_like_post_trip_review_question(question: str) -> bool:
+    text = str(question or "").lower().replace(" ", "")
+    return any(
+        term in text
+        for term in (
+            "posttripreview",
+            "afteraction",
+            "learningreview",
+            "行後",
+            "回顧",
+            "檢討",
+            "復盤",
+            "覆盤",
+            "事後",
+            "旅行結束",
+            "行程結束",
+            "結束後",
+            "完成行程",
+            "心得",
+            "實際cp",
+            "實際通過",
+            "實際耗時",
+            "停留時間",
+            "比預期慢",
+            "路段比預期",
+            "體感難度",
+            "nearmiss",
+            "裝備缺口",
+            "天氣與路況",
+            "下次行前",
+            "下一次規劃",
+            "模型更新",
+            "回寫",
+            "學習寫回",
+            "能力摘要",
+            "capabilitytimeline",
+            "capabilitycapsule",
+            "incidentpackage",
+            "fieldcase",
+        )
     )
 
 

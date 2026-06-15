@@ -1436,6 +1436,8 @@ def _looks_like_route_structure_question(text: str) -> bool:
 
 
 def _looks_like_route_architecture_question(text: str) -> bool:
+    if _looks_like_post_trip_review_question(text):
+        return False
     return _has_any(
         text,
         (
@@ -2492,6 +2494,10 @@ def _looks_like_safety_boundary_question(text: str) -> bool:
 
 
 def _looks_like_survival_incident_playbook_question(text: str) -> bool:
+    if _looks_like_post_trip_review_question(
+        text,
+    ) and not _looks_like_active_survival_incident_question(text):
+        return False
     if _looks_like_weather_hazard_risk_question(
         text,
     ) and not _looks_like_active_survival_incident_question(text):
@@ -2556,6 +2562,8 @@ def _looks_like_weather_hazard_risk_question(text: str) -> bool:
 
 
 def _looks_like_active_survival_incident_question(text: str) -> bool:
+    if _looks_like_post_trip_review_question(text):
+        return False
     return _has_any(
         text,
         (
