@@ -105,7 +105,7 @@ flowchart LR
 | `local_evidence_query` | Read local evidence only | release checks, KB query, debug trace tail |
 | `decision_support` | Compute advice without writing runtime truth | readiness, trigger dry-run, shelter direction |
 | `proposal_write` | Write candidate-only proposals | CP add/delete proposal preview |
-| `workspace_write` | Write local workspace or trace artifacts | import GPX, collect route context, prepare layers, append note, plant imprint |
+| `workspace_write` | Write local workspace or trace artifacts | import GPX, collect route context/weather decisions, prepare layers, append note, plant imprint |
 | `package_write` | Write package/handoff artifacts without runtime activation | reviewed candidates, runtime export/handoff |
 | `outbound_preview` | Preview or mock outbound/voice only | voice preview, mock queue |
 | `ephemeral_safety_action` | Short-lived advisory action | shelter direction |
@@ -120,7 +120,7 @@ Current manifest count is reported by `scout_cli tools list --json`.
 | checks | `scout.checks.pretrip_release`, `scout.checks.runtime_readiness` | Read-only release/readiness reports |
 | kb | `scout.kb.build`, `scout.kb.query`, `scout.kb.pretrip_view_summary`, `scout.kb.hardware_readiness_summary` | Offline evidence index and summaries |
 | local evidence | `scout.local_evidence.status` | Local trip state summary |
-| pretrip | `scout.pretrip.import_gpx`, `scout.pretrip.route_context_collect`, `scout.pretrip.prepare_layers`, `scout.pretrip.artifact_manifest`, `scout.pretrip.readiness`, `scout.pretrip.decision_register`, `scout.pretrip.workspace_edit`, `scout.pretrip.review_append_decisions`, `scout.pretrip.departure_reviewed_candidates`, `scout.pretrip.runtime_handoff`, `scout.pretrip.runtime_export` | Pretrip workspace, route context, review, handoff/export |
+| pretrip | `scout.pretrip.import_gpx`, `scout.pretrip.route_context_collect`, `scout.pretrip.weather_decision_collect`, `scout.pretrip.prepare_layers`, `scout.pretrip.artifact_manifest`, `scout.pretrip.readiness`, `scout.pretrip.decision_register`, `scout.pretrip.workspace_edit`, `scout.pretrip.review_append_decisions`, `scout.pretrip.departure_reviewed_candidates`, `scout.pretrip.runtime_handoff`, `scout.pretrip.runtime_export` | Pretrip workspace, route context, weather decision, review, handoff/export |
 | cp | `scout.cp.proposal_preview`, `scout.cp.propose_add`, `scout.cp.propose_delete`, `scout.cp.apply_reviewed_delta` | CP proposal and reviewed deltas |
 | risk | `scout.risk.attribution`, `scout.risk.heatmap` | Candidate-only risk diagnostics |
 | map | `scout.map.raster_source`, `scout.map.raster_tiles`, `scout.map.tile_cache_plan` | Local raster/tile planning and cache prep |
@@ -150,6 +150,31 @@ python -m scout_cli pretrip route-context-collect \
 In full Scout rebuilds, run it after `prepare-layers` so route-context output
 can include MCP/named-point evidence, route notes, and normalized layer evidence
 such as web/raster labels.
+
+## Weather Decision Collection
+
+Weather decision collection is a Sec. 10 pretrip enrichment flow. It reads
+workspace-local weather points, warnings, route segments, and weather/daylight
+evidence, then writes candidate-only decision artifacts. It does not fetch CWA
+directly, expose API keys, call `/safety/*`, or promote runtime truth.
+
+```bash
+python -m scout_cli pretrip weather-decision-collect \
+  --project-root /data/scout/admin/pretrip-workspaces/chilai_nanhua_day1 \
+  --weather-points normalized/weather/forecast_snapshots.json \
+  --default-township 仁愛鄉 \
+  --json
+```
+
+The canonical outputs are:
+
+- `outputs/route_weather_package.json`
+- `normalized/weather/weather_source_manifest.json`
+- `candidates/weather_decision_candidates.json`
+
+When fresh local weather points are missing, the flow still writes a conservative
+`DELAY` candidate with explicit missing fields so Scout AI does not infer a
+route weather decision from a placeholder.
 
 ## Common CLI Pattern
 

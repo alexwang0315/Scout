@@ -158,6 +158,8 @@ def run_builtin_tool(argv: Sequence[str] | None = None) -> tuple[int, dict[str, 
         return _pretrip_import_gpx(args)
     if args.command == "pretrip-route-context-collect":
         return _pretrip_route_context_collect(args)
+    if args.command == "pretrip-weather-decision-collect":
+        return _pretrip_weather_decision_collect(args)
     if args.command == "pretrip-prepare-layers":
         return _pretrip_prepare_layers(args)
     if args.command == "pretrip-artifact-manifest":
@@ -411,6 +413,11 @@ def _build_parser() -> argparse.ArgumentParser:
     route_context_parser.add_argument("--input", type=Path, required=True)
     route_context_parser.add_argument("--dry-run", action="store_true")
     route_context_parser.add_argument("--json", action="store_true")
+
+    weather_decision_parser = subparsers.add_parser("pretrip-weather-decision-collect")
+    weather_decision_parser.add_argument("--input", type=Path, required=True)
+    weather_decision_parser.add_argument("--dry-run", action="store_true")
+    weather_decision_parser.add_argument("--json", action="store_true")
 
     prepare_layers_parser = subparsers.add_parser("pretrip-prepare-layers")
     prepare_layers_parser.add_argument("--input", type=Path, required=True)
@@ -2468,6 +2475,51 @@ def _pretrip_route_context_collect(args: argparse.Namespace) -> tuple[int, dict[
                 "candidate_only": True,
                 "raw_payloads_embedded": False,
                 "network_calls_made": False,
+            },
+        },
+    )
+
+
+def _pretrip_weather_decision_collect(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
+    from pretrip_weather_decision_collection import collect_pretrip_weather_decision
+
+    request = _load_json(args.input)
+    project_root = _optional_path(request.get("project_root"))
+    if project_root is None:
+        project_id = request.get("project_id")
+        workspace_root = _optional_path(request.get("workspace_root"))
+        if project_id and workspace_root:
+            project_root = workspace_root / str(project_id)
+    if project_root is None:
+        return 2, _error_payload(
+            "weather decision collection requires project_root or workspace_root plus project_id"
+        )
+
+    result = collect_pretrip_weather_decision(
+        project_root,
+        dry_run=bool(args.dry_run),
+        weather_points_path=request.get("weather_points_path"),
+        warnings_path=request.get("warnings_path"),
+        route_segments_path=request.get("route_segments_path"),
+        default_township=request.get("default_township"),
+        generated_at=request.get("generated_at"),
+        valid_until=request.get("valid_until"),
+        provider=str(request.get("provider") or "workspace_local_weather_points"),
+    )
+    return (
+        0,
+        {
+            "artifact_kind": "scout_pretrip_weather_decision_collect_tool_output",
+            "status": "completed",
+            "dry_run": bool(args.dry_run),
+            "result": result,
+            "boundary": {
+                **_closed_boundary(),
+                "workspace_file_mutation_allowed": not bool(args.dry_run),
+                "candidate_only": True,
+                "raw_payloads_embedded": False,
+                "network_calls_made": False,
+                "client_cwa_api_key_allowed": False,
             },
         },
     )

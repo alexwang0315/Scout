@@ -59,6 +59,12 @@ OPTIONAL_ROUTE_CONTEXT_REFS = {
     "route_context_points_ref": "candidates/route_context_points.json",
 }
 
+OPTIONAL_WEATHER_DECISION_REFS = {
+    "weather_source_manifest_ref": "normalized/weather/weather_source_manifest.json",
+    "weather_decision_candidates_ref": "candidates/weather_decision_candidates.json",
+    "route_weather_package_ref": "outputs/route_weather_package.json",
+}
+
 WORKSPACE_LAYOUT_SCHEMA_VERSION = "scout.workspace.v1"
 
 REQUIRED_PRETRIP_DIRS = {
@@ -144,6 +150,7 @@ def main(argv: list[str] | None = None) -> int:
     map_preparation_artifacts: dict[str, dict[str, Any] | None] = {}
     layer_candidate_artifacts: dict[str, dict[str, Any] | None] = {}
     route_context_summary = {"checked": False, "available": False}
+    weather_decision_summary = {"checked": False, "available": False}
     api_summary = {"checked": False}
     tile_summary = {"checked": False}
 
@@ -255,6 +262,11 @@ def main(argv: list[str] | None = None) -> int:
                 project,
                 errors,
             )
+            weather_decision_summary = _check_weather_decision_refs(
+                project_root,
+                project,
+                errors,
+            )
             admin_headers = _admin_headers(args.admin_bearer_token_file, errors)
             api_summary = _check_admin_api(
                 args.admin_base_url,
@@ -308,6 +320,7 @@ def main(argv: list[str] | None = None) -> int:
         ),
         "semantic_judgements": _semantic_judgement_summary(semantic_judgements),
         "route_context": route_context_summary,
+        "weather_decision": weather_decision_summary,
         "layer_candidates": {
             key: _candidate_artifact_summary(value)
             for key, value in layer_candidate_artifacts.items()
@@ -577,6 +590,180 @@ def _route_context_candidate_only(payload: Any) -> bool | None:
 
 
 def _route_context_runtime_truth(payload: Any) -> bool | None:
+    if not isinstance(payload, dict):
+        return None
+    boundary = payload.get("boundary") if isinstance(payload.get("boundary"), dict) else {}
+    if "runtime_safety_truth" in boundary:
+        return boundary.get("runtime_safety_truth")
+    return payload.get("runtime_safety_truth")
+
+
+def _check_weather_decision_refs(
+    project_root: Path,
+    project: dict[str, Any],
+    errors: list[str],
+) -> dict[str, Any]:
+    present_refs = {
+        key: project.get(key)
+        for key in OPTIONAL_WEATHER_DECISION_REFS
+        if project.get(key)
+    }
+    if not present_refs:
+        return {"checked": True, "available": False}
+
+    required_ref_keys = {
+        "weather_source_manifest_ref",
+        "weather_decision_candidates_ref",
+    }
+    missing_required = sorted(key for key in required_ref_keys if not project.get(key))
+    if missing_required:
+        errors.append(
+            "weather decision refs are partial; missing: "
+            + ", ".join(missing_required)
+        )
+
+    for key, expected in sorted(OPTIONAL_WEATHER_DECISION_REFS.items()):
+        ref = project.get(key)
+        if ref and ref != expected:
+            errors.append(f"unexpected weather decision ref for {key}: {ref} != {expected}")
+
+    payloads = {
+        key: _load_json_ref(project_root, project, key, errors)
+        for key in OPTIONAL_WEATHER_DECISION_REFS
+        if project.get(key)
+    }
+    source_manifest = payloads.get("weather_source_manifest_ref") or {}
+    candidates = payloads.get("weather_decision_candidates_ref") or {}
+    route_package = payloads.get("route_weather_package_ref") or {}
+
+    _check_weather_artifact_kind(
+        source_manifest,
+        "pretrip_weather_source_manifest",
+        "weather_source_manifest_ref",
+        errors,
+    )
+    _check_weather_artifact_kind(
+        candidates,
+        "pretrip_weather_decision_candidates",
+        "weather_decision_candidates_ref",
+        errors,
+    )
+    if "route_weather_package_ref" in payloads:
+        _check_weather_artifact_kind(
+            route_package,
+            "route_weather_package",
+            "route_weather_package_ref",
+            errors,
+        )
+
+    for key, payload in payloads.items():
+        _check_weather_boundary(payload, key, errors)
+
+    candidate_count = (
+        candidates.get("counts", {}).get("candidate_count")
+        if isinstance(candidates, dict)
+        else None
+    )
+    project_count = project.get("weather_decision_candidate_count")
+    if (
+        project_count is not None
+        and candidate_count is not None
+        and project_count != candidate_count
+    ):
+        errors.append(
+            f"weather_decision_candidate_count mismatch: project={project_count} candidates={candidate_count}"
+        )
+    cache_policy = (
+        source_manifest.get("cache_policy", {})
+        if isinstance(source_manifest, dict)
+        else {}
+    )
+    if cache_policy.get("live_fetch_performed") is True:
+        errors.append("weather source manifest claims live_fetch_performed=true")
+    if cache_policy.get("client_cwa_api_key_allowed") is True:
+        errors.append("weather source manifest exposes client CWA API key access")
+
+    first_candidate = {}
+    if isinstance(candidates, dict) and isinstance(candidates.get("candidates"), list):
+        first_candidate = (
+            candidates["candidates"][0]
+            if candidates["candidates"]
+            and isinstance(candidates["candidates"][0], dict)
+            else {}
+        )
+
+    return {
+        "checked": True,
+        "available": True,
+        "candidate_count": candidate_count,
+        "project_candidate_count": project_count,
+        "decision": first_candidate.get("decision"),
+        "answerability": first_candidate.get("answerability"),
+        "missing_field_count": (
+            candidates.get("counts", {}).get("missing_field_count")
+            if isinstance(candidates, dict)
+            else None
+        ),
+        "route_weather_segment_count": len(route_package.get("segments", []))
+        if isinstance(route_package, dict)
+        else None,
+        "source_report_count": len(source_manifest.get("source_report", []))
+        if isinstance(source_manifest, dict)
+        else None,
+        "required_missing_source_count": len(
+            source_manifest.get("required_missing_source_kinds", [])
+        )
+        if isinstance(source_manifest, dict)
+        else None,
+        "live_fetch_performed": cache_policy.get("live_fetch_performed"),
+        "candidate_only": _weather_candidate_only(candidates),
+        "runtime_safety_truth": _weather_runtime_truth(candidates),
+    }
+
+
+def _check_weather_artifact_kind(
+    payload: Any,
+    expected: str,
+    ref_key: str,
+    errors: list[str],
+) -> None:
+    if not isinstance(payload, dict):
+        errors.append(f"weather artifact payload missing for {ref_key}")
+        return
+    if payload.get("artifact_kind") != expected:
+        errors.append(
+            f"weather artifact kind mismatch for {ref_key}: {payload.get('artifact_kind')} != {expected}"
+        )
+
+
+def _check_weather_boundary(
+    payload: Any,
+    ref_key: str,
+    errors: list[str],
+) -> None:
+    if not isinstance(payload, dict):
+        return
+    boundary = payload.get("boundary") if isinstance(payload.get("boundary"), dict) else {}
+    if payload.get("runtime_safety_truth") is True or boundary.get("runtime_safety_truth") is True:
+        errors.append(f"{ref_key} claims runtime_safety_truth=true")
+    if boundary.get("phase1_runtime_mutation_allowed") is True:
+        errors.append(f"{ref_key} allows phase1 runtime mutation")
+    if boundary.get("phase2_brain_writeback_allowed") is True:
+        errors.append(f"{ref_key} allows phase2 brain writeback")
+    if boundary.get("live_safety_api_calls_allowed") is True:
+        errors.append(f"{ref_key} allows live safety API calls")
+    if boundary.get("client_cwa_api_key_allowed") is True:
+        errors.append(f"{ref_key} allows client CWA API key access")
+
+
+def _weather_candidate_only(payload: Any) -> bool | None:
+    if not isinstance(payload, dict):
+        return None
+    boundary = payload.get("boundary") if isinstance(payload.get("boundary"), dict) else {}
+    return boundary.get("candidate_only")
+
+
+def _weather_runtime_truth(payload: Any) -> bool | None:
     if not isinstance(payload, dict):
         return None
     boundary = payload.get("boundary") if isinstance(payload.get("boundary"), dict) else {}
@@ -1007,6 +1194,8 @@ def _check_required_project_refs(
     errors: list[str],
 ) -> None:
     for key, expected in REQUIRED_PROJECT_REFS.items():
+        if key in {"imagery_manifest_ref", "raster_tile_manifest_ref"} and _uses_wmts_runtime_imagery(project):
+            continue
         ref = project.get(key)
         if not ref:
             errors.append(f"project missing ref key: {key}")
@@ -1099,7 +1288,10 @@ def _check_layer_preparation(
     for layer_id in sorted(REQUIRED_READY_LAYERS & set(layers)):
         layer = layers[layer_id]
         status = layer.get("status")
-        if status not in {"ready", "ready_from_project_ref", "projection_ready"}:
+        ready_statuses = {"ready", "ready_from_project_ref", "projection_ready"}
+        if layer_id == "imagery":
+            ready_statuses.add("wmts_runtime_only")
+        if status not in ready_statuses:
             errors.append(f"layer {layer_id} not ready: {status}")
         source_ref_count = len(layer.get("source_refs", []))
         lifecycle_ref_count = (
@@ -1144,6 +1336,8 @@ def _check_layer_projection(
     if not imagery:
         errors.append("map layer projection missing imagery layer")
         return
+    if _is_wmts_runtime_imagery_layer(imagery):
+        return
     bbox = imagery.get("raster_bbox_wgs84")
     if not isinstance(bbox, dict):
         errors.append("imagery projection missing raster_bbox_wgs84")
@@ -1155,6 +1349,24 @@ def _check_layer_projection(
         errors.append("imagery projection missing raster_tile_zoom_range")
     if not imagery.get("local_raster_tile_url_template"):
         errors.append("imagery projection missing local raster tile template")
+
+
+def _uses_wmts_runtime_imagery(project: dict[str, Any]) -> bool:
+    return bool(project.get("imagery_source_id")) and not (
+        project.get("imagery_manifest_ref") or project.get("raster_tile_manifest_ref")
+    )
+
+
+def _is_wmts_runtime_imagery_layer(layer: dict[str, Any]) -> bool:
+    return (
+        layer.get("status") == "wmts_runtime_only"
+        and layer.get("raster_tile_delivery") == "direct_wmts_runtime"
+        and layer.get("imagery_source_kind") == "wmts_tile"
+        and any(
+            isinstance(ref, dict) and ref.get("source_kind") == "wmts_tile"
+            for ref in layer.get("source_refs", [])
+        )
+    )
 
 
 def _check_map_preparation_artifacts(
