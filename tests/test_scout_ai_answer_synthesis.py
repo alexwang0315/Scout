@@ -582,9 +582,9 @@ def test_answer_synthesis_prioritizes_weather_delay_over_generic_continue() -> N
     assert result.decision_output["answerSourceToolId"] == WEATHER_WINDOW_TOOL_ID
     assert result.decision_output["decision"] == "DELAY"
     assert result.decision_output["firstLayer"]["decision"] == (
-        "建議延後天氣判斷。"
+        "無法確認日照 buffer 是否下降。"
     )
-    assert "fresh weather" in result.decision_output["firstLayer"]["reason"]
+    assert "reviewed daylight window" in result.decision_output["firstLayer"]["reason"]
 
 
 def test_answer_synthesis_allows_bounded_teammate_wait() -> None:
@@ -910,7 +910,6 @@ def test_answer_synthesis_uses_micro_decision_for_weather_fatigue_retreat() -> N
     assert result.decision_output["firstLayer"]["decision"] == "可以撤退。"
     assert "開始撤退" in result.answer
     assert "腳程守門員" in result.answer
-    assert "天氣決策" in result.answer
     assert "runtime safety truth" in result.answer
 
 
@@ -1294,7 +1293,7 @@ def test_answer_synthesis_blocks_daylight_summit_pressure() -> None:
         "不建議因為已經投入時間而繼續前進或攻頂。"
     )
     assert "已投入時間" in result.decision_output["firstLayer"]["limit"]
-    assert "天氣決策" in result.answer
+    assert "日照 buffer 判斷" in result.answer
     assert "sunk_cost_bias" in result.answer
     assert "runtime safety truth" in result.answer
 

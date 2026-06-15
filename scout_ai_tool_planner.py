@@ -342,6 +342,10 @@ def _plan_item(
         overrides = _route_architecture_request_overrides(query.question)
         if overrides:
             request["arguments"] = overrides
+    if request is not None and contract.tool_id == WEATHER_WINDOW_TOOL_ID:
+        overrides = _weather_window_request_overrides(query.question)
+        if overrides:
+            request["arguments"] = overrides
     if request is not None and contract.tool_id == MAJOR_POINT_TOOL_ID:
         overrides = _major_point_request_overrides(query.question)
         if overrides:
@@ -468,6 +472,17 @@ def _route_architecture_request_overrides(question: str) -> dict[str, Any]:
     target_cp = _extract_target_cp_label(question)
     if target_cp:
         overrides["target_cp_id"] = target_cp
+    return overrides
+
+
+def _weather_window_request_overrides(question: str) -> dict[str, Any]:
+    normalized = _normalize(question)
+    overrides: dict[str, Any] = {}
+    current_time = _extract_iso_datetime(question)
+    if not current_time:
+        current_time = _extract_clock_time(normalized)
+    if current_time:
+        overrides["current_time"] = current_time
     return overrides
 
 
