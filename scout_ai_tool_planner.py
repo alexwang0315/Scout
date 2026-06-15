@@ -343,6 +343,23 @@ def _route_readiness_request_overrides(question: str) -> dict[str, Any]:
         overrides["user_experience_level"] = experience
     if _has_any(normalized, ("交通已確認", "接駁已確認", "transportconfirmed")):
         overrides["transport_access_plan"] = "user_confirmed"
+    latest_return_time = _extract_clock_time(normalized)
+    if latest_return_time and _has_any(
+        normalized,
+        (
+            "最晚回程",
+            "回程接駁",
+            "回程限制",
+            "最晚接駁",
+            "接駁",
+            "交通",
+            "latestreturn",
+            "returnlimit",
+            "shuttle",
+        ),
+    ):
+        overrides["latest_return_time"] = latest_return_time
+        overrides.setdefault("transport_access_plan", "latest_return_user_provided")
     if _has_any(
         normalized,
         (
@@ -450,6 +467,17 @@ def _extract_minutes(normalized_question: str) -> float | None:
     if not match:
         return None
     return float(match.group(1))
+
+
+def _extract_clock_time(normalized_question: str) -> str | None:
+    match = re.search(r"(\d{1,2})[:：](\d{2})", normalized_question)
+    if not match:
+        return None
+    hour = int(match.group(1))
+    minute = int(match.group(2))
+    if hour > 23 or minute > 59:
+        return None
+    return f"{hour:02d}:{minute:02d}"
 
 
 def _asks_to_use_average_pace(normalized_question: str) -> bool:
@@ -1020,6 +1048,13 @@ def _looks_like_route_readiness_question(text: str) -> bool:
             "能不能自主出發",
             "不建議自主前往",
             "自主前往",
+            "交通方式",
+            "交通",
+            "接駁",
+            "最晚回程",
+            "回程限制",
+            "回程接駁",
+            "最晚接駁",
             "可以自己去",
             "能不能自己去",
             "自己去嗎",

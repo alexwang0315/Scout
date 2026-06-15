@@ -284,6 +284,7 @@ def _execute_ready_current_tool(tool_id: str, arguments: dict[str, Any]) -> dict
             transport_access_plan=_str_or_none(
                 arguments.get("transport_access_plan")
             ),
+            latest_return_time=_str_or_none(arguments.get("latest_return_time")),
             team_slowest_basis_confirmed=_bool_or_none(
                 arguments.get("team_slowest_basis_confirmed")
             ),

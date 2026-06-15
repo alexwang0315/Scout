@@ -149,6 +149,23 @@ def test_planner_passes_explicit_route_readiness_inputs_as_arguments() -> None:
     assert _tool_ids(plan) == {ROUTE_READINESS_TOOL_ID}
 
 
+def test_planner_routes_latest_return_limit_to_route_readiness() -> None:
+    plan = plan_scout_ai_tools(
+        _query("最晚回程接駁是 16:30，這個行程可以嗎？"),
+        project_root=PROJECT_ROOT,
+    )
+
+    item = _single_tool(plan, ROUTE_READINESS_TOOL_ID)
+    assert item.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+    assert item.request is not None
+    assert item.request["tool_id"] == ROUTE_READINESS_TOOL_ID
+    assert item.request["arguments"] == {
+        "latest_return_time": "16:30",
+        "transport_access_plan": "latest_return_user_provided",
+    }
+    assert item.boundary.runtime_safety_truth is False
+
+
 def test_planner_routes_missing_offline_map_departure_to_readiness_and_equipment() -> None:
     plan = plan_scout_ai_tools(
         _query("我沒下載離線地圖，可以自主出發嗎？"),
