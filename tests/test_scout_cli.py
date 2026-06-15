@@ -6,6 +6,10 @@ from pathlib import Path
 
 from scout_agent_trace import load_agent_trace
 from scout_cli import run_scout_cli
+from pretrip_route_context_collection import (
+    ROUTE_CONTEXT_PACK_REF,
+    ROUTE_CONTEXT_POINTS_REF,
+)
 from tests.test_admin_local_raster_source import _write_sample_geotiff
 
 
@@ -394,6 +398,49 @@ def test_scout_pretrip_read_only_facades_expose_manifest_readiness_and_register(
     register_output = json.loads(register_payload["outputs"]["stdout"])
     assert register_output["summary"]["resolved_count"] == 16
     assert register_output["boundary"]["runtime_activation_allowed"] is False
+
+
+def test_scout_pretrip_route_context_collect_facade(tmp_path: Path) -> None:
+    project_root = tmp_path / "chilai_nanhua_day1"
+    shutil.copytree(CHILAI_PROJECT, project_root)
+
+    dry_exit, dry_payload = run_scout_cli(
+        [
+            "pretrip",
+            "route-context-collect",
+            "--project-root",
+            str(project_root),
+            "--limit-route-notes",
+            "8",
+            "--dry-run",
+            "--json",
+        ]
+    )
+    assert dry_exit == 0
+    dry_output = json.loads(dry_payload["outputs"]["stdout"])
+    assert dry_output["result"]["writes_performed"] is False
+    assert not (project_root / ROUTE_CONTEXT_POINTS_REF).exists()
+
+    exit_code, payload = run_scout_cli(
+        [
+            "pretrip",
+            "route-context-collect",
+            "--project-root",
+            str(project_root),
+            "--limit-route-notes",
+            "8",
+            "--authorized-by",
+            "operator.alex",
+            "--json",
+        ]
+    )
+
+    assert exit_code == 0
+    output = json.loads(payload["outputs"]["stdout"])
+    assert output["artifact_kind"] == "scout_pretrip_route_context_collect_tool_output"
+    assert output["result"]["writes_performed"] is True
+    assert (project_root / ROUTE_CONTEXT_PACK_REF).is_file()
+    assert (project_root / ROUTE_CONTEXT_POINTS_REF).is_file()
 
 
 def test_scout_cp_apply_reviewed_delta_facade(tmp_path: Path) -> None:

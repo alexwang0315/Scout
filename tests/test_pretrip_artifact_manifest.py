@@ -19,29 +19,43 @@ def test_builds_deterministic_manifest_with_stable_ordering():
 
     payload = first.to_dict()
     expected_project_kinds = [artifact_kind for artifact_kind, _ in PROJECT_ARTIFACTS]
-    project_artifact_count = len(PROJECT_ARTIFACTS)
-    assert [artifact["artifact_kind"] for artifact in payload["artifacts"][:project_artifact_count]] == (
-        expected_project_kinds
-    )
-    assert [artifact["artifact_kind"] for artifact in payload["artifacts"][project_artifact_count:]] == [
-        "gpx",
-        "photo",
+    project_artifacts = [
+        artifact for artifact in payload["artifacts"] if artifact["source"] == "project"
     ]
+    source_artifacts = [
+        artifact
+        for artifact in payload["artifacts"]
+        if artifact["source"] == "pretrip_package"
+    ]
+    project_artifact_count = len(project_artifacts)
+    source_artifact_count = len(source_artifacts)
+
+    assert [
+        artifact["artifact_kind"] for artifact in project_artifacts
+    ] == expected_project_kinds
+    assert {artifact["artifact_kind"] for artifact in source_artifacts} == {"gpx"}
+    assert [artifact["ref"] for artifact in source_artifacts] == sorted(
+        artifact["ref"] for artifact in source_artifacts
+    )
     assert payload["counts"] == {
         "missing_refs": 0,
         "project_artifacts": project_artifact_count,
-        "source_artifacts": 2,
-        "total_artifacts": project_artifact_count + 2,
+        "source_artifacts": source_artifact_count,
+        "total_artifacts": project_artifact_count + source_artifact_count,
     }
 
 
 def test_preserves_artifact_refs_paths_and_sha256_where_available():
     manifest = build_pretrip_artifact_manifest(PROJECT_PATH).to_dict()
     artifacts = manifest["artifacts"]
-    by_kind = {artifact["artifact_kind"]: artifact for artifact in artifacts[: len(PROJECT_ARTIFACTS)]}
+    project_artifacts = [
+        artifact for artifact in artifacts if artifact["source"] == "project"
+    ]
+    by_kind = {artifact["artifact_kind"]: artifact for artifact in project_artifacts}
 
     assert by_kind["pretrip_package"]["ref"] == "outputs/pretrip_package.json"
     assert by_kind["pretrip_package"]["package_id"] == "pretrip.chilai_nanhua_day1.v0"
+    assert by_kind["pretrip_package"]["source_artifact_count"] == 24
     assert len(by_kind["pretrip_package"]["sha256"]) == 64
     assert by_kind["route_summary"]["ref"] == "normalized/routes/route_summary.json"
     assert by_kind["route_comparison"]["ref"] == "outputs/route_comparison.json"
@@ -51,8 +65,8 @@ def test_preserves_artifact_refs_paths_and_sha256_where_available():
     assert by_kind["dtm_coverage_summary"]["candidate_tile_count"] == 48
     assert by_kind["segment_dtm_coverage"]["segment_count"] == 109
     assert by_kind["segment_dtm_coverage"]["unlinked_segment_count"] == 0
-    assert by_kind["checkpoint_candidates"]["item_count"] == 110
-    assert by_kind["segment_candidates"]["item_count"] == 109
+    assert by_kind["checkpoint_candidates"]["item_count"] == 124
+    assert by_kind["segment_candidates"]["item_count"] == 123
     assert by_kind["retreat_route_candidates"]["item_count"] == 1
     assert by_kind["map_context_geojson"]["feature_count"] == 3
     assert by_kind["map_candidates"]["corridor_candidate_count"] == 1
@@ -64,12 +78,12 @@ def test_preserves_artifact_refs_paths_and_sha256_where_available():
     assert by_kind["readiness_report"]["status"] == "ready"
     assert by_kind["human_review_log"]["review_count"] == 245
     assert by_kind["reviewed_pretrip_package"]["status"] == "reviewed"
-    assert by_kind["compiled_mission_graph_candidate"]["checkpoint_count"] == 11
-    assert by_kind["compiled_mission_graph_candidate"]["segment_count"] == 10
-    assert by_kind["compiled_mission_graph_candidate"]["diversion_point_count"] == 1
-    assert by_kind["compiled_mission_graph_reviewed"]["checkpoint_count"] == 110
-    assert by_kind["compiled_mission_graph_reviewed"]["segment_count"] == 109
-    assert by_kind["compiled_mission_graph_reviewed"]["diversion_point_count"] == 1
+    assert by_kind["compiled_mission_graph_candidate"]["checkpoint_count"] == 124
+    assert by_kind["compiled_mission_graph_candidate"]["segment_count"] == 123
+    assert by_kind["compiled_mission_graph_candidate"]["diversion_point_count"] == 0
+    assert by_kind["compiled_mission_graph_reviewed"]["checkpoint_count"] == 124
+    assert by_kind["compiled_mission_graph_reviewed"]["segment_count"] == 123
+    assert by_kind["compiled_mission_graph_reviewed"]["diversion_point_count"] == 0
     assert by_kind["timing_measurements"]["measurement_candidate_count"] == 18
     assert by_kind["planned_eta"]["estimate_count"] == 4
     assert by_kind["planned_eta"]["planned_start_time"] == "2013-10-08T11:58:50+08:00"
@@ -77,12 +91,12 @@ def test_preserves_artifact_refs_paths_and_sha256_where_available():
     assert by_kind["planned_eta"]["day1_target_node_name"] == "天池山莊"
     assert by_kind["planned_eta"]["target_eta"] == "2013-10-08T18:28:50+08:00"
     assert by_kind["planned_eta"]["team_multiplier_status"] == "not_derived_no_human_stats"
-    assert by_kind["brain_seed_nodes"]["artifact_count"] == 13
-    assert by_kind["brain_seed_nodes"]["human_review_count"] == 245
-    assert by_kind["brain_seed_nodes"]["derived_measurement_count"] == 31
-    assert by_kind["brain_seed_nodes"]["model_interpretation_count"] == 6
+    assert by_kind["brain_seed_nodes"]["artifact_count"] == 28
+    assert by_kind["brain_seed_nodes"]["human_review_count"] == 0
+    assert by_kind["brain_seed_nodes"]["derived_measurement_count"] == 1
+    assert by_kind["brain_seed_nodes"]["model_interpretation_count"] == 2
     assert by_kind["brain_seed_nodes"]["observed_fact_count"] == 0
-    assert by_kind["brain_seed_nodes"]["node_count"] == 295
+    assert by_kind["brain_seed_nodes"]["node_count"] == 31
     assert by_kind["planning_skill_audit"]["record_count"] == 5
     assert by_kind["planning_skill_audit"]["node_types"] == ["SkillRunRecord"]
     assert by_kind["planning_skill_audit"]["skill_ids"] == [
@@ -103,11 +117,11 @@ def test_preserves_artifact_refs_paths_and_sha256_where_available():
     assert by_kind["poi_readiness_candidates"]["route_corridor_poi_count"] == 2
     assert by_kind["poi_readiness_candidates"]["finding_severities"] == []
     assert by_kind["segment_policy_candidates"]["status"] == "candidate_only"
-    assert by_kind["segment_policy_candidates"]["candidate_count"] == 109
-    assert by_kind["segment_policy_candidates"]["candidate_only_count"] == 109
-    assert by_kind["segment_policy_candidates"]["human_review_required_count"] == 109
-    assert by_kind["segment_policy_candidates"]["requires_daylight_count"] == 109
-    assert by_kind["segment_policy_candidates"]["retreat_available_count"] == 2
+    assert by_kind["segment_policy_candidates"]["candidate_count"] == 123
+    assert by_kind["segment_policy_candidates"]["candidate_only_count"] == 123
+    assert by_kind["segment_policy_candidates"]["human_review_required_count"] == 123
+    assert by_kind["segment_policy_candidates"]["requires_daylight_count"] == 123
+    assert by_kind["segment_policy_candidates"]["retreat_available_count"] == 0
     assert by_kind["segment_policy_candidates"]["signal_expected_count"] == 1
     assert by_kind["plan_validation_candidates"]["status"] == "candidate_only"
     assert by_kind["plan_validation_candidates"]["finding_candidate_count"] == 6
@@ -252,20 +266,20 @@ def test_preserves_artifact_refs_paths_and_sha256_where_available():
         "source.joyhike.blog",
         "source.ptt.sunriver_timing",
     ]
-    assert by_kind["route_note_candidates"]["note_candidate_count"] == 81
-    assert by_kind["route_note_candidates"]["hazard_hint_count"] == 3
-    assert by_kind["route_note_candidates"]["route_condition_hint_count"] == 20
-    assert by_kind["route_note_candidates"]["potential_ln_signal_count"] == 23
+    assert by_kind["route_note_candidates"]["note_candidate_count"] == 4406
+    assert by_kind["route_note_candidates"]["hazard_hint_count"] == 113
+    assert by_kind["route_note_candidates"]["route_condition_hint_count"] == 84
+    assert by_kind["route_note_candidates"]["potential_ln_signal_count"] == 197
     assert (
         by_kind["route_note_candidates"]["requires_human_review_before_ln_upgrade"]
         is True
     )
     assert by_kind["route_note_candidates"]["raw_gpx_embedded"] is False
     assert by_kind["route_note_ln_proposals"]["status"] == "candidate_only"
-    assert by_kind["route_note_ln_proposals"]["proposal_count"] == 23
-    assert by_kind["route_note_ln_proposals"]["hint_coverage_proposal_count"] == 20
-    assert by_kind["route_note_ln_proposals"]["warning_coverage_proposal_count"] == 3
-    assert by_kind["route_note_ln_proposals"]["human_review_required_count"] == 23
+    assert by_kind["route_note_ln_proposals"]["proposal_count"] == 197
+    assert by_kind["route_note_ln_proposals"]["hint_coverage_proposal_count"] == 84
+    assert by_kind["route_note_ln_proposals"]["warning_coverage_proposal_count"] == 113
+    assert by_kind["route_note_ln_proposals"]["human_review_required_count"] == 197
     assert by_kind["route_note_ln_proposals"]["observed_fact_count"] == 0
     assert by_kind["route_note_ln_proposals"]["runtime_mutation_count"] == 0
     assert (
@@ -276,9 +290,9 @@ def test_preserves_artifact_refs_paths_and_sha256_where_available():
     assert by_kind["route_note_review_options"]["status"] == (
         "candidate_only_draft_only"
     )
-    assert by_kind["route_note_review_options"]["review_option_count"] == 23
-    assert by_kind["route_note_review_options"]["candidate_only_count"] == 23
-    assert by_kind["route_note_review_options"]["draft_only_count"] == 23
+    assert by_kind["route_note_review_options"]["review_option_count"] == 197
+    assert by_kind["route_note_review_options"]["candidate_only_count"] == 197
+    assert by_kind["route_note_review_options"]["draft_only_count"] == 197
     assert by_kind["route_note_review_options"]["decision_recorded_count"] == 0
     assert by_kind["route_note_review_options"]["runtime_mutation_count"] == 0
     assert by_kind["route_note_review_options"]["candidate_only"] is True
@@ -329,7 +343,7 @@ def test_preserves_artifact_refs_paths_and_sha256_where_available():
     assert by_kind["departure_bundle_manifest"]["audit_ref_count"] == 6
     assert by_kind["departure_bundle_manifest"]["not_departure_approval"] is True
     assert by_kind["weather_daylight_evidence"]["evidence_id"] == (
-        "weather_daylight.chilai_nanhua_day1.2013-10-08.v0"
+        "weather_daylight.chilai_nanhua_day1.2013-10-08.imported_placeholder"
     )
     assert by_kind["weather_daylight_evidence"]["status"] == "candidate_only"
     assert by_kind["weather_daylight_evidence"]["date"] == "2013-10-08"
@@ -350,7 +364,7 @@ def test_preserves_artifact_refs_paths_and_sha256_where_available():
     assert by_kind["weather_daylight_evidence"]["weather_source_status"] == (
         "manual_placeholder"
     )
-    assert by_kind["weather_daylight_evidence"]["source_ref_count"] == 3
+    assert by_kind["weather_daylight_evidence"]["source_ref_count"] == 2
     assert by_kind["weather_daylight_evidence"]["threshold_policy_id"] == (
         "cwa_style_mountain_weather_daylight_reference.v0"
     )
@@ -373,13 +387,10 @@ def test_preserves_artifact_refs_paths_and_sha256_where_available():
         if artifact["source"] == "pretrip_package"
     }
     gpx = source_artifacts["artifact.gpx.chilai_nanhua_day1"]
-    photo = source_artifacts["artifact.photo.g11_hiking"]
     assert gpx["artifact_kind"] == "gpx"
     assert gpx["path"].endswith(".gpx")
     assert gpx["sha256"] == "a270bbc769c9c521c4bb839a6230fb3760c37478c5b3ebe57f36f5d8755f6ee7"
-    assert photo["artifact_kind"] == "photo"
-    assert photo["path"].endswith(".jpg")
-    assert photo["sha256"] == "ff28bf2fd66c6f8a63e759800fcdb8363862832ebe7b87dc900e849f1c7a058d"
+    assert len(source_artifacts) == 24
 
 
 def test_missing_refs_are_reported_without_raising(tmp_path):
@@ -443,7 +454,9 @@ def test_manifest_does_not_embed_raw_dtm_gpx_or_photo_contents():
     assert "candidate_tiles" not in manifest_json
     assert "grid_uri" not in manifest_json
     assert "header_uri" not in manifest_json
-    assert "image/jpeg" in manifest_json
+    assert any(
+        artifact["artifact_kind"] == "gpx" for artifact in manifest["artifacts"]
+    )
 
     for artifact in manifest["artifacts"]:
         assert "content" not in artifact

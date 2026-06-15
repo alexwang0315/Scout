@@ -105,7 +105,7 @@ flowchart LR
 | `local_evidence_query` | Read local evidence only | release checks, KB query, debug trace tail |
 | `decision_support` | Compute advice without writing runtime truth | readiness, trigger dry-run, shelter direction |
 | `proposal_write` | Write candidate-only proposals | CP add/delete proposal preview |
-| `workspace_write` | Write local workspace or trace artifacts | import GPX, prepare layers, append note, plant imprint |
+| `workspace_write` | Write local workspace or trace artifacts | import GPX, collect route context, prepare layers, append note, plant imprint |
 | `package_write` | Write package/handoff artifacts without runtime activation | reviewed candidates, runtime export/handoff |
 | `outbound_preview` | Preview or mock outbound/voice only | voice preview, mock queue |
 | `ephemeral_safety_action` | Short-lived advisory action | shelter direction |
@@ -113,14 +113,14 @@ flowchart LR
 
 ## Registered Tool Inventory
 
-Current manifest count: 44.
+Current manifest count is reported by `scout_cli tools list --json`.
 
 | Group | Tool IDs | Primary use |
 | --- | --- | --- |
 | checks | `scout.checks.pretrip_release`, `scout.checks.runtime_readiness` | Read-only release/readiness reports |
 | kb | `scout.kb.build`, `scout.kb.query`, `scout.kb.pretrip_view_summary`, `scout.kb.hardware_readiness_summary` | Offline evidence index and summaries |
 | local evidence | `scout.local_evidence.status` | Local trip state summary |
-| pretrip | `scout.pretrip.import_gpx`, `scout.pretrip.prepare_layers`, `scout.pretrip.artifact_manifest`, `scout.pretrip.readiness`, `scout.pretrip.decision_register`, `scout.pretrip.workspace_edit`, `scout.pretrip.review_append_decisions`, `scout.pretrip.departure_reviewed_candidates`, `scout.pretrip.runtime_handoff`, `scout.pretrip.runtime_export` | Pretrip workspace, review, handoff/export |
+| pretrip | `scout.pretrip.import_gpx`, `scout.pretrip.route_context_collect`, `scout.pretrip.prepare_layers`, `scout.pretrip.artifact_manifest`, `scout.pretrip.readiness`, `scout.pretrip.decision_register`, `scout.pretrip.workspace_edit`, `scout.pretrip.review_append_decisions`, `scout.pretrip.departure_reviewed_candidates`, `scout.pretrip.runtime_handoff`, `scout.pretrip.runtime_export` | Pretrip workspace, route context, review, handoff/export |
 | cp | `scout.cp.proposal_preview`, `scout.cp.propose_add`, `scout.cp.propose_delete`, `scout.cp.apply_reviewed_delta` | CP proposal and reviewed deltas |
 | risk | `scout.risk.attribution`, `scout.risk.heatmap` | Candidate-only risk diagnostics |
 | map | `scout.map.raster_source`, `scout.map.raster_tiles`, `scout.map.tile_cache_plan` | Local raster/tile planning and cache prep |
@@ -133,6 +133,23 @@ Current manifest count: 44.
 | safety action | `scout.safety_action.shelter_direction` | Advisory shelter/rest direction from local evidence |
 | sos | `scout.sos.playbook_run` | Mock-only SOS delegated playbook after explicit SOS activation |
 | evidence | `scout.evidence.sensorlog_to_gpx` | Convert local SensorLog export to GPX |
+
+## Route Context Collection
+
+Route context collection is a post-import enrichment tool for
+`SCOUT_OUTDOOR_AI_AGENT_STANDARD` Sec. 6. It writes candidate-only evidence into
+the workspace and does not call `/safety/*` or promote runtime truth.
+
+```bash
+python -m scout_cli pretrip route-context-collect \
+  --project-root /data/scout/admin/pretrip-workspaces/chilai_nanhua_day1 \
+  --limit-route-notes 80 \
+  --json
+```
+
+In full Scout rebuilds, run it after `prepare-layers` so route-context output
+can include MCP/named-point evidence, route notes, and normalized layer evidence
+such as web/raster labels.
 
 ## Common CLI Pattern
 

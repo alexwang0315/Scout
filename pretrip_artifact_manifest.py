@@ -53,6 +53,13 @@ PROJECT_ARTIFACTS: tuple[tuple[str, str], ...] = (
     ("contour_interpretation_candidates", "contour_interpretation_candidates_ref"),
 )
 
+OPTIONAL_PROJECT_ARTIFACTS: tuple[tuple[str, str], ...] = (
+    ("route_context_evidence", "route_context_evidence_ref"),
+    ("route_context_source_manifest", "route_context_source_manifest_ref"),
+    ("route_context_pack", "route_context_pack_ref"),
+    ("route_context_points", "route_context_points_ref"),
+)
+
 
 @dataclass(frozen=True)
 class PreTripArtifactManifest:
@@ -84,6 +91,11 @@ def build_pretrip_artifact_manifest(project_json_path: Path | str) -> PreTripArt
         _project_artifact_entry(project_root, project, artifact_kind, ref_key)
         for artifact_kind, ref_key in PROJECT_ARTIFACTS
     ]
+    artifacts.extend(
+        _project_artifact_entry(project_root, project, artifact_kind, ref_key)
+        for artifact_kind, ref_key in OPTIONAL_PROJECT_ARTIFACTS
+        if project.get(ref_key)
+    )
 
     package_entry = next(
         entry for entry in artifacts if entry["artifact_kind"] == "pretrip_package"
@@ -92,7 +104,9 @@ def build_pretrip_artifact_manifest(project_json_path: Path | str) -> PreTripArt
 
     counts = {
         "total_artifacts": len(artifacts),
-        "project_artifacts": len(PROJECT_ARTIFACTS),
+        "project_artifacts": sum(
+            1 for artifact in artifacts if artifact.get("source") == "project"
+        ),
         "source_artifacts": sum(
             1 for artifact in artifacts if artifact.get("source") == "pretrip_package"
         ),
@@ -228,6 +242,82 @@ def _project_artifact_summary(artifact_kind: str, payload: Any) -> dict[str, Any
             "review_options_only": boundary.get("review_options_only"),
             "decision_recording_allowed": boundary.get("decision_recording_allowed"),
             "raw_gpx_embedded": boundary.get("raw_gpx_embedded"),
+        }
+
+    if artifact_kind == "route_context_evidence":
+        counts = payload.get("counts", {})
+        boundary = payload.get("boundary", {})
+        return {
+            "project_id": payload.get("project_id"),
+            "schema_version": payload.get("schema_version"),
+            "route_context_point_count": counts.get("route_context_point_count"),
+            "source_report_count": len(payload.get("source_report", [])),
+            "route_context_points_ref": payload.get("route_context_points_ref"),
+            "source_manifest_ref": payload.get("source_manifest_ref"),
+            "route_context_pack_ref": payload.get("route_context_pack_ref"),
+            "candidate_only": boundary.get("candidate_only"),
+            "runtime_safety_truth": boundary.get("runtime_safety_truth"),
+            "live_safety_api_calls_allowed": boundary.get(
+                "live_safety_api_calls_allowed"
+            ),
+        }
+
+    if artifact_kind == "route_context_source_manifest":
+        cache_policy = payload.get("cache_policy", {})
+        boundary = payload.get("boundary", {})
+        return {
+            "project_id": payload.get("project_id"),
+            "schema_version": payload.get("schema_version"),
+            "source_report_count": len(payload.get("source_report", [])),
+            "required_missing_source_count": len(
+                payload.get("required_missing_source_kinds", [])
+            ),
+            "optional_missing_source_count": len(
+                payload.get("optional_missing_source_kinds", [])
+            ),
+            "cache_mode": cache_policy.get("mode"),
+            "live_fetch_performed": cache_policy.get("live_fetch_performed"),
+            "candidate_only": boundary.get("candidate_only"),
+            "runtime_safety_truth": boundary.get("runtime_safety_truth"),
+        }
+
+    if artifact_kind == "route_context_pack":
+        route_summary = payload.get("route_summary", {})
+        query_policy = payload.get("query_policy", {})
+        boundary = payload.get("boundary", {})
+        return {
+            "project_id": payload.get("project_id"),
+            "schema_version": payload.get("schema_version"),
+            "point_count": payload.get("point_count"),
+            "route_context_points_ref": payload.get("route_context_points_ref"),
+            "source_manifest_ref": payload.get("source_manifest_ref"),
+            "route_summary_ref": payload.get("route_summary_ref"),
+            "route_distance_m": route_summary.get("distance_m"),
+            "raw_route_points_embedded": route_summary.get(
+                "raw_route_points_embedded"
+            ),
+            "query_mode": query_policy.get("mode"),
+            "stop_or_delay_advice_requires_contextual_permission": query_policy.get(
+                "stop_or_delay_advice_requires_contextual_permission"
+            ),
+            "candidate_only": boundary.get("candidate_only"),
+            "runtime_safety_truth": boundary.get("runtime_safety_truth"),
+        }
+
+    if artifact_kind == "route_context_points":
+        counts = payload.get("counts", {})
+        boundary = payload.get("boundary", {})
+        return {
+            "project_id": payload.get("project_id"),
+            "schema_version": payload.get("schema_version"),
+            "point_count": payload.get("point_count"),
+            "by_sec6_layer": counts.get("by_sec6_layer"),
+            "by_sensitivity_level": counts.get("by_sensitivity_level"),
+            "by_stop_advisory_candidate": counts.get(
+                "by_stop_advisory_candidate"
+            ),
+            "candidate_only": boundary.get("candidate_only"),
+            "runtime_safety_truth": boundary.get("runtime_safety_truth"),
         }
 
     if artifact_kind == "route_comparison":
