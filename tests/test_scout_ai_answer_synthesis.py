@@ -693,6 +693,34 @@ def test_answer_synthesis_uses_media_literacy_field_answer_without_guessing() ->
     assert "runtime safety truth" in result.answer
 
 
+def test_answer_synthesis_prioritizes_media_literacy_for_social_detour() -> None:
+    result = collect_and_synthesize_scout_ai_answer(
+        "大家都說旁邊那個點很好拍，可以繞去嗎？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=5,
+    )
+
+    assert result.answerability == "partial_evidence_with_missing_context"
+    media = _source(result, MEDIA_LITERACY_TOOL_ID)
+    contextual = _source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
+    assert media.top_result_summary["action"] == "reroute"
+    assert media.top_result_summary["decision"] == "NO_GO"
+    assert media.top_result_summary["decision_output"]["action"] == "reroute"
+    assert contextual.top_result_summary["action"] == "reroute"
+    assert contextual.top_result_summary["decision"] in {"NO_GO", "CHANGE_PLAN"}
+    assert result.decision_output["answerSourceToolId"] == MEDIA_LITERACY_TOOL_ID
+    assert result.decision_output["action"] == "reroute"
+    assert result.decision_output["decision"] == "NO_GO"
+    assert result.decision_output["allowed"] is False
+    assert result.decision_output["firstLayer"]["decision"] == (
+        "不建議為媒體點位停留或改線。"
+    )
+    assert "媒體識讀判斷" in result.answer
+    assert "beauty_photo_bias" in result.answer
+    assert "runtime safety truth" in result.answer
+
+
 def test_answer_synthesis_uses_survival_playbook_field_answer_without_guessing() -> None:
     result = collect_and_synthesize_scout_ai_answer(
         "不確定自己在哪，可以下切溪谷找路嗎？",

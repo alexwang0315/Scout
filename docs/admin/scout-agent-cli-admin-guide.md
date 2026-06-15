@@ -228,6 +228,11 @@ equipment, season/weather, and image-scale bias into a concrete decision about
 whether the user may treat the media target as an action objective. It remains a
 read-only bias sentinel; actual stopping, filming, waiting, or rerouting still
 requires contextual permission.
+Sec. 25.5 social-photo detours such as "大家都說旁邊那個點很好拍，可以繞去嗎？"
+route through both media literacy and contextual permission. The media decision
+is primary for the first layer: it marks the action as `reroute`, returns
+`NO_GO`, and names the media-bias pressure before any buffer math can normalize
+the detour.
 
 `scout.ai.pace_guardian.assess.v0` returns a native `decision_output` for Sec. 7
 and Sec. 15.1 Pace Guardian questions. The first layer states whether the party
