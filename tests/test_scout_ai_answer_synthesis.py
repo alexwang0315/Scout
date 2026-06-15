@@ -399,12 +399,21 @@ def test_answer_synthesis_uses_contextual_permission_field_answer_without_guessi
     assert result.decision_output["decision"] == "NO_GO"
     assert result.decision_output["allowed"] is False
     assert result.decision_output["firstLayer"]["decision"] == "不建議拍影片。"
+    data_confidence = result.decision_output["dataConfidence"]
+    assert data_confidence["level"] == "medium"
+    assert data_confidence["label"] == "中等"
+    assert data_confidence["missingEvidenceCount"] == 4
+    assert "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 28.3 Data Confidence" in (
+        data_confidence["standardAlignment"]
+    )
+    assert "Scout 採保守判斷" in result.decision_output["uncertaintyNotes"][0]
     assert result.decision_output["runtimeSafetyTruth"] is False
     assert "remaining_safety_buffer_minutes" in source.missing_fields
     assert result.answer.startswith("[決策] 不建議拍影片。")
     assert not result.answer.startswith("Scout AI read-only answer draft")
     assert "[決策] 不建議拍影片。" in result.answer
     assert "不建議拍影片" in result.answer
+    assert "信心：中等" in result.answer
     assert "remaining_safety_buffer_minutes" in result.answer
     assert "runtime safety truth" in result.answer
 
@@ -2863,8 +2872,14 @@ def test_answer_synthesis_reports_no_registry_tool_selected_as_insufficient_evid
     assert result.evidence_collection["evidence_records"] == []
     assert result.synthesis_policy.model_provider_used is False
     assert result.synthesis_policy.model_synthesis_performed is False
+    data_confidence = result.decision_output["dataConfidence"]
+    assert data_confidence["level"] == "low"
+    assert data_confidence["label"] == "低"
+    assert data_confidence["completedSourceCount"] == 0
+    assert data_confidence["missingEvidenceCount"] == 0
     assert "No registry-backed Scout AI tool was selected" in result.answer
     assert "no deterministic evidence" in result.answer
+    assert "信心：低" in result.answer
     assert "runtime safety truth" in result.answer
     assert "answerability=no_registry_tool_selected" in result.limitations
     assert result.boundary.runtime_safety_truth is False
@@ -3355,6 +3370,10 @@ def test_answer_synthesis_surfaces_standard_six_power_coverage_overview() -> Non
         "scout.ai.standard_six_power_overview.v0"
     )
     assert result.decision_output["decision"] == "GUIDED_ONLY"
+    assert result.decision_output["dataConfidence"]["level"] == "medium"
+    assert result.decision_output["dataConfidence"]["missingEvidenceCount"] == (
+        result.missing_evidence_count
+    )
     assert "六力已接成 Scout AI 動態決策入口" in result.decision_output["firstLayer"][
         "decision"
     ]
@@ -3366,6 +3385,7 @@ def test_answer_synthesis_surfaces_standard_six_power_coverage_overview() -> Non
     assert PACE_GUARDIAN_TOOL_ID in result.answer
     assert ROUTE_READINESS_TOOL_ID in result.answer
     assert "不輸出單一靜態分數" in result.answer
+    assert "信心：中等" in result.answer
     assert "No registry-backed Scout AI tool" not in result.answer
     assert "可以繼續前進" not in result.answer
     assert "地圖力判斷：建議" not in result.answer
