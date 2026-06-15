@@ -1616,6 +1616,11 @@ def test_full_workflow_runs_route_architecture_cp_graph_question() -> None:
         "Route Architecture Intelligence"
     )
     assert result.sources[0]["top_result_summary"]["cp_graph"]["node_count"] == 124
+    cp_node = result.sources[0]["top_result_summary"]["cp_graph"]["nodes"][0]
+    assert cp_node["cpId"] == cp_node["cp_id"]
+    assert cp_node["safeToStop"] in {True, False}
+    assert "photoVideoSuitability" in cp_node
+    assert "no_stop_without_contextual_permission" in cp_node["decisionTriggers"]
     assert result.decision_output["answerSourceToolId"] == ROUTE_ARCHITECTURE_TOOL_ID
     assert result.decision_output["decision"] == "CONDITIONAL_GO"
     assert result.decision_output["firstLayer"]["decision"] == (
