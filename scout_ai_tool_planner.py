@@ -1130,6 +1130,18 @@ def _navigation_terrain_request_overrides(question: str) -> dict[str, Any]:
 
 
 def _states_missing_offline_map(normalized_question: str) -> bool:
+    if _has_any(
+        normalized_question,
+        (
+            "有沒有下載離線地圖",
+            "是否下載離線地圖",
+            "離線地圖有沒有下載",
+            "離線地圖是否下載",
+            "有沒有離線地圖",
+            "是否有離線地圖",
+        ),
+    ):
+        return False
     return _has_any(
         normalized_question,
         (
@@ -1148,6 +1160,18 @@ def _states_missing_offline_map(normalized_question: str) -> bool:
 
 
 def _states_missing_gpx(normalized_question: str) -> bool:
+    if _has_any(
+        normalized_question,
+        (
+            "有沒有載入gpx",
+            "是否載入gpx",
+            "gpx有沒有載入",
+            "gpx是否載入",
+            "有沒有gpx",
+            "是否有gpx",
+        ),
+    ):
+        return False
     return _has_any(
         normalized_question,
         (
@@ -1457,6 +1481,17 @@ def _looks_like_navigation_terrain_question(text: str) -> bool:
             "地圖力",
             "地圖需求",
             "地形判讀",
+            "離線地圖",
+            "離線導航",
+            "gpx",
+            "路線檔",
+            "軌跡檔",
+            "沒訊號",
+            "無訊號",
+            "沒有訊號",
+            "沒網路",
+            "無網路",
+            "還能導航",
             "撤退方向",
             "定位備援",
             "第二套定位",
@@ -1476,6 +1511,20 @@ def _looks_like_navigation_terrain_question(text: str) -> bool:
             "地圖力",
             "地圖需求",
             "地圖力需求",
+            "離線地圖",
+            "離線導航",
+            "下載離線地圖",
+            "使用離線地圖",
+            "gpx",
+            "gpx軌跡",
+            "路線檔",
+            "軌跡檔",
+            "沒訊號",
+            "無訊號",
+            "沒有訊號",
+            "沒網路",
+            "無網路",
+            "還能導航",
             "熟悉離線地圖",
             "只有一個人熟悉離線地圖",
             "只有一人熟悉離線地圖",

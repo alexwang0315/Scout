@@ -1217,9 +1217,16 @@ def test_answer_synthesis_blocks_autonomous_departure_without_offline_map() -> N
     )
 
     source_ids = {source.tool_id for source in result.sources}
+    assert NAVIGATION_TERRAIN_TOOL_ID in source_ids
     assert ROUTE_READINESS_TOOL_ID in source_ids
     assert EQUIPMENT_RESOURCE_TOOL_ID in source_ids
     assert MAP_PERCEPTION_TOOL_ID not in source_ids
+
+    navigation = _source(result, NAVIGATION_TERRAIN_TOOL_ID)
+    assert navigation.top_result_summary["decision"] == "GUIDED_ONLY"
+    assert navigation.top_result_summary["map_readiness"][
+        "offline_map_downloaded"
+    ] is False
 
     equipment = _source(result, EQUIPMENT_RESOURCE_TOOL_ID)
     assert equipment.top_result_summary["decision"] == "NO_GO"
@@ -1234,6 +1241,59 @@ def test_answer_synthesis_blocks_autonomous_departure_without_offline_map() -> N
     )
     assert "不得照原計畫出發" in result.decision_output["firstLayer"]["limit"]
     assert "離線地圖未就緒" in result.answer
+    assert "runtime safety truth" in result.answer
+
+
+def test_answer_synthesis_routes_offline_map_gpx_check_to_navigation_readiness() -> None:
+    result = collect_and_synthesize_scout_ai_answer(
+        "我有沒有下載離線地圖和 GPX？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=4,
+    )
+
+    source_ids = {source.tool_id for source in result.sources}
+    assert NAVIGATION_TERRAIN_TOOL_ID in source_ids
+    assert EQUIPMENT_RESOURCE_TOOL_ID in source_ids
+
+    navigation = _source(result, NAVIGATION_TERRAIN_TOOL_ID)
+    map_readiness = navigation.top_result_summary["map_readiness"]
+    assert navigation.top_result_summary["decision"] == "CONDITIONAL_GO"
+    assert map_readiness["offline_map_downloaded"] is None
+    assert map_readiness["gpx_loaded_on_device"] is None
+
+    equipment = _source(result, EQUIPMENT_RESOURCE_TOOL_ID)
+    assert equipment.top_result_summary["resource_state"]["offline_map_ready"] is True
+    assert equipment.top_result_summary["resource_state"]["gpx_loaded"] is None
+    assert equipment.top_result_summary["decision"] == "DELAY"
+
+    assert "地圖力判斷" in result.answer
+    assert "裝備資源判斷" in result.answer
+    assert "offline_map_downloaded" in result.answer
+    assert "gpx_loaded_on_device" in result.answer
+    assert "runtime safety truth" in result.answer
+
+
+def test_answer_synthesis_routes_no_signal_navigation_to_map_readiness() -> None:
+    result = collect_and_synthesize_scout_ai_answer(
+        "沒訊號時我還能導航嗎？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=4,
+    )
+
+    assert result.answerability == "evidence_available"
+    assert result.completed_source_count == 1
+    assert result.missing_evidence_count == 0
+    navigation = _source(result, NAVIGATION_TERRAIN_TOOL_ID)
+    assert navigation.top_result_summary["decision"] == "CONDITIONAL_GO"
+    assert navigation.top_result_summary["map_readiness"][
+        "offline_tile_manifest_available"
+    ] is False
+    assert result.decision_output["answerSourceToolId"] == NAVIGATION_TERRAIN_TOOL_ID
+    assert result.decision_output["decision"] == "CONDITIONAL_GO"
+    assert "地圖力判斷" in result.answer
+    assert "offline_map_downloaded" in result.answer
     assert "runtime safety truth" in result.answer
 
 

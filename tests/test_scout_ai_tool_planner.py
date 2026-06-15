@@ -227,16 +227,23 @@ def test_planner_routes_stop_policy_question_to_route_readiness() -> None:
         assert item.boundary.runtime_safety_truth is False
 
 
-def test_planner_routes_missing_offline_map_departure_to_readiness_and_equipment() -> None:
+def test_planner_routes_missing_offline_map_departure_to_navigation_and_equipment() -> None:
     plan = plan_scout_ai_tools(
         _query("我沒下載離線地圖，可以自主出發嗎？"),
         project_root=PROJECT_ROOT,
     )
 
     tool_ids = _tool_ids(plan)
+    assert NAVIGATION_TERRAIN_TOOL_ID in tool_ids
     assert ROUTE_READINESS_TOOL_ID in tool_ids
     assert EQUIPMENT_RESOURCE_TOOL_ID in tool_ids
     assert MAP_PERCEPTION_TOOL_ID not in tool_ids
+
+    navigation = _single_tool(plan, NAVIGATION_TERRAIN_TOOL_ID)
+    assert navigation.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+    assert navigation.request is not None
+    assert navigation.request["arguments"] == {"offline_map_downloaded": False}
+    assert navigation.boundary.runtime_safety_truth is False
 
     readiness = _single_tool(plan, ROUTE_READINESS_TOOL_ID)
     assert readiness.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
@@ -248,6 +255,41 @@ def test_planner_routes_missing_offline_map_departure_to_readiness_and_equipment
     assert equipment.request is not None
     assert equipment.request["arguments"] == {"offline_map_ready": False}
     assert equipment.boundary.runtime_safety_truth is False
+
+
+def test_planner_routes_offline_map_gpx_check_to_navigation_without_false_missing() -> None:
+    plan = plan_scout_ai_tools(
+        _query("我有沒有下載離線地圖和 GPX？"),
+        project_root=PROJECT_ROOT,
+    )
+
+    tool_ids = _tool_ids(plan)
+    assert NAVIGATION_TERRAIN_TOOL_ID in tool_ids
+    assert EQUIPMENT_RESOURCE_TOOL_ID in tool_ids
+    assert MAP_PERCEPTION_TOOL_ID not in tool_ids
+
+    navigation = _single_tool(plan, NAVIGATION_TERRAIN_TOOL_ID)
+    assert navigation.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+    assert navigation.request is not None
+    assert navigation.request.get("arguments", {}) == {}
+
+    equipment = _single_tool(plan, EQUIPMENT_RESOURCE_TOOL_ID)
+    assert equipment.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+    assert equipment.request is not None
+    assert equipment.request.get("arguments", {}) == {}
+
+
+def test_planner_routes_no_signal_navigation_question_to_navigation_terrain() -> None:
+    plan = plan_scout_ai_tools(
+        _query("沒訊號時我還能導航嗎？"),
+        project_root=PROJECT_ROOT,
+    )
+
+    navigation = _single_tool(plan, NAVIGATION_TERRAIN_TOOL_ID)
+    assert navigation.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+    assert navigation.request is not None
+    assert navigation.request.get("arguments", {}) == {}
+    assert navigation.boundary.runtime_safety_truth is False
 
 
 def test_planner_routes_navigation_terrain_backup_positioning_question() -> None:
