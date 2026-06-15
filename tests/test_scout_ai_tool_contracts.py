@@ -1072,6 +1072,31 @@ def test_execute_contextual_permission_assessor_prices_extra_stop_time() -> None
     assert result.payload["boundary"]["runtime_safety_truth"] is False
 
 
+def test_execute_contextual_permission_assessor_uses_local_clock_deadline() -> None:
+    result = execute_scout_ai_tool(
+        {
+            "tool_id": "scout.ai.contextual_permission.assess",
+            "project_root": str(PROJECT_ROOT),
+            "query": "如果多停 10 分鐘，代價是什麼？",
+            "arguments": {
+                "current_time": "13:36",
+                "remaining_safety_buffer_minutes": 21,
+            },
+        }
+    )
+
+    assert result.status == "completed"
+    assert result.payload["action"] == "stop"
+    assert result.payload["decision"] == "CONDITIONAL_GO"
+    assert result.payload["max_duration_minutes"] == 10
+    assert result.payload["leave_by"] == "13:46"
+    assert result.payload["decision_output"]["leaveBy"] == "13:46"
+    assert result.payload["decision_output"]["firstLayer"]["limit"] == (
+        "最多 10 分鐘，13:46 前離開。"
+    )
+    assert result.payload["boundary"]["runtime_safety_truth"] is False
+
+
 def test_execute_contextual_permission_assessor_blocks_split_team_summit() -> None:
     result = execute_scout_ai_tool(
         {

@@ -1970,9 +1970,26 @@ def _default_team_pace_impact(budget: RiskBudget) -> str | None:
 
 def _leave_by(current_time: str | None, max_duration_minutes: int) -> str | None:
     parsed = _parse_datetime(current_time)
-    if parsed is None:
+    if parsed is not None:
+        return (parsed + timedelta(minutes=max_duration_minutes)).isoformat()
+    return _local_clock_leave_by(current_time, max_duration_minutes)
+
+
+def _local_clock_leave_by(
+    current_time: str | None,
+    max_duration_minutes: int,
+) -> str | None:
+    if not current_time:
         return None
-    return (parsed + timedelta(minutes=max_duration_minutes)).isoformat()
+    match = re.fullmatch(r"(\d{1,2})[:：](\d{2})", current_time.strip())
+    if not match:
+        return None
+    hour = int(match.group(1))
+    minute = int(match.group(2))
+    if hour > 23 or minute > 59:
+        return None
+    total_minutes = (hour * 60 + minute + max_duration_minutes) % (24 * 60)
+    return f"{total_minutes // 60:02d}:{total_minutes % 60:02d}"
 
 
 def _parse_datetime(value: str | None) -> datetime | None:

@@ -476,6 +476,8 @@ def _contextual_permission_request_overrides(question: str) -> dict[str, Any]:
     if buffer_minutes is not None:
         overrides["remaining_safety_buffer_minutes"] = buffer_minutes
     current_time = _extract_iso_datetime(question)
+    if not current_time:
+        current_time = _extract_clock_time(normalized)
     if current_time:
         overrides["current_time"] = current_time
     return overrides
