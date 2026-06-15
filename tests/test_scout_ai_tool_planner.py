@@ -346,6 +346,20 @@ def test_planner_routes_stop_policy_question_to_route_readiness() -> None:
         assert item.boundary.runtime_safety_truth is False
 
 
+def test_planner_routes_top_risk_sources_to_route_readiness() -> None:
+    plan = plan_scout_ai_tools(
+        _query("主要風險來源前三項是什麼？"),
+        project_root=PROJECT_ROOT,
+    )
+
+    item = _single_tool(plan, ROUTE_READINESS_TOOL_ID)
+    assert item.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+    assert item.implementation_status == "ready_current_tool"
+    assert item.request is not None
+    assert item.request["tool_id"] == ROUTE_READINESS_TOOL_ID
+    assert item.boundary.runtime_safety_truth is False
+
+
 def test_planner_routes_missing_offline_map_departure_to_navigation_and_equipment() -> None:
     plan = plan_scout_ai_tools(
         _query("我沒下載離線地圖，可以自主出發嗎？"),
