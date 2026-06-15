@@ -712,10 +712,19 @@ def test_evidence_collection_keeps_route_readiness_payload() -> None:
         limit=3,
     )
 
-    assert result.selected_tool_count == 1
-    assert result.executed_tool_count == 1
-    assert result.completed_tool_count == 1
+    assert result.selected_tool_count == 6
+    assert result.executed_tool_count == 6
+    assert result.completed_tool_count == 6
     assert result.missing_input_count == 0
+    tool_ids = {record.tool_id for record in result.evidence_records}
+    assert {
+        ROUTE_READINESS_TOOL_ID,
+        ROUTE_ARCHITECTURE_TOOL_ID,
+        NAVIGATION_TERRAIN_TOOL_ID,
+        WEATHER_WINDOW_TOOL_ID,
+        PACE_GUARDIAN_TOOL_ID,
+        EQUIPMENT_RESOURCE_TOOL_ID,
+    }.issubset(tool_ids)
 
     readiness = _record(result, ROUTE_READINESS_TOOL_ID)
     assert readiness.collection_status == "completed"
