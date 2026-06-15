@@ -650,6 +650,33 @@ def test_full_workflow_runs_pace_guardian_team_pace_question(tmp_path: Path) -> 
     assert result.boundary.runtime_safety_truth is False
 
 
+def test_full_workflow_surfaces_scout_pace_coefficient(tmp_path: Path) -> None:
+    project_root = _write_pace_coefficient_project(tmp_path)
+
+    result = run_scout_ai_full_workflow(
+        "最慢者的 Scout Pace Coefficient 在碎石下坡和負重下還能照原計畫嗎？",
+        project_root=project_root,
+        project_id="pace_coefficient_project",
+        limit=4,
+    )
+
+    source = _workflow_source(result, PACE_GUARDIAN_TOOL_ID)
+    assert source["top_result_summary"]["decision"] == "CONDITIONAL_GO"
+    coefficients = source["top_result_summary"]["team_pace_fit"][
+        "scout_pace_coefficients"
+    ]
+    assert coefficients[0]["label"] == "Slowest member"
+    assert coefficients[0]["technical_terrain_slowdown_ratio"] == 0.35
+    assert "Scout Pace Coefficient" in result.answer
+    assert "技術地形降速率" in result.answer
+    assert "負重" in result.answer
+    assert result.decision_output["answerSourceToolId"] == PACE_GUARDIAN_TOOL_ID
+    assert result.decision_output["cost"]["paceCoefficientImpact"].startswith(
+        "Scout Pace Coefficient considered"
+    )
+    assert result.boundary.runtime_safety_truth is False
+
+
 def test_full_workflow_routes_average_pace_bias_to_pace_guardian() -> None:
     result = run_scout_ai_full_workflow(
         "我們平均腳程還可以，可以用平均速度估嗎？",
@@ -1704,6 +1731,60 @@ def _write_team_pace_project(tmp_path: Path) -> Path:
                         "fatigue_band": "tired",
                         "rest_need_minutes": 12,
                         "first_time_similar_route": True,
+                    },
+                ],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    return project_root
+
+
+def _write_pace_coefficient_project(tmp_path: Path) -> Path:
+    project_root = tmp_path / "pace_coefficient_project"
+    outputs = project_root / "outputs"
+    outputs.mkdir(parents=True)
+    (project_root / "project.json").write_text(
+        json.dumps(
+            {
+                "project_id": "pace_coefficient_project",
+                "team_status_ref": "outputs/team_status.json",
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    (outputs / "team_status.json").write_text(
+        json.dumps(
+            {
+                "artifact_kind": "scout_team_status",
+                "source_status": "candidate_only",
+                "leader_accepts_slowest_basis": True,
+                "team_rest_sync": "synced",
+                "members": [
+                    {
+                        "member_id": "leader",
+                        "display_label": "Leader",
+                        "pace_mps": 1.05,
+                        "reserve_minutes": 70,
+                    },
+                    {
+                        "member_id": "slowest",
+                        "display_label": "Slowest member",
+                        "pace_mps": 0.72,
+                        "reserve_minutes": 45,
+                        "flat_speed_mps": 1.0,
+                        "uphill_speed_mps": 0.55,
+                        "downhill_speed_mps": 0.48,
+                        "technical_terrain_slowdown_ratio": 0.35,
+                        "rest_frequency_minutes": 50,
+                        "late_trip_speed_decay_ratio": 0.28,
+                        "pack_weight_kg": 11,
+                        "load_slowdown_ratio": 0.2,
+                        "weather_slowdown_ratio": 0.18,
+                        "experience_credibility": "low",
+                        "self_report_gap_ratio": 0.24,
                     },
                 ],
             },

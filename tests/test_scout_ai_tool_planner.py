@@ -577,6 +577,20 @@ def test_planner_selects_pace_guardian_for_team_pace_fit_question() -> None:
     assert item.boundary.runtime_safety_truth is False
 
 
+def test_planner_selects_pace_guardian_for_scout_pace_coefficient_question() -> None:
+    plan = plan_scout_ai_tools(
+        _query("最慢者的 Scout Pace Coefficient 在碎石下坡和負重下還能照原計畫嗎？"),
+        project_root=PROJECT_ROOT,
+    )
+
+    item = _single_tool(plan, PACE_GUARDIAN_TOOL_ID)
+    assert item.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+    assert item.implementation_status == "ready_current_tool"
+    assert item.request is not None
+    assert item.request["tool_id"] == PACE_GUARDIAN_TOOL_ID
+    assert item.boundary.runtime_safety_truth is False
+
+
 def test_planner_selects_pace_guardian_for_average_pace_bias_question() -> None:
     plan = plan_scout_ai_tools(
         _query("我們平均腳程還可以，可以用平均速度估嗎？"),
