@@ -180,7 +180,7 @@ def plan_scout_ai_tools(
             (
                 PACE_GUARDIAN_TOOL_ID,
                 "Question asks for Pace Guardian / Team Pace Fit: "
-                "slowest-member pacing, delay, rest rhythm, lunch-point movement, shortening the route, or whether the team can still reach the next CP.",
+                "slowest-member pacing, delay/ahead-of-plan pace, rest rhythm, lunch-point movement, shortening the route, or whether the team can still reach the next CP.",
             )
         )
     if _looks_like_equipment_resource_question(normalized_question):
@@ -457,6 +457,9 @@ def _media_literacy_request_overrides(question: str) -> dict[str, Any]:
 def _pace_guardian_request_overrides(question: str) -> dict[str, Any]:
     normalized = _normalize(question)
     overrides: dict[str, Any] = {}
+    schedule_delta = _pace_guardian_schedule_delta_minutes(question)
+    if schedule_delta is not None:
+        overrides["current_delay_minutes"] = schedule_delta
     if _asks_to_use_average_pace(normalized):
         overrides["leader_accepts_slowest_basis"] = False
     if _has_any(
@@ -474,6 +477,28 @@ def _pace_guardian_request_overrides(question: str) -> dict[str, Any]:
     ):
         overrides["leader_accepts_slowest_basis"] = True
     return overrides
+
+
+def _pace_guardian_schedule_delta_minutes(question: str) -> float | None:
+    text = str(question or "")
+    ahead_patterns = (
+        r"(?:比(?:原)?計畫快|比預定快|提前|提早|ahead(?:\s+by)?|early(?:\s+by)?)\s*([0-9]+(?:\.[0-9]+)?)\s*(?:分鐘|分|mins?|minutes?)",
+        r"([0-9]+(?:\.[0-9]+)?)\s*(?:分鐘|分|mins?|minutes?)\s*(?:ahead|early)",
+    )
+    for pattern in ahead_patterns:
+        match = re.search(pattern, text, flags=re.IGNORECASE)
+        if match:
+            return -float(match.group(1))
+
+    delay_patterns = (
+        r"(?:晚了|落後|delay(?:ed)?(?:\s+by)?)\s*([0-9]+(?:\.[0-9]+)?)\s*(?:分鐘|分|mins?|minutes?)",
+        r"([0-9]+(?:\.[0-9]+)?)\s*(?:分鐘|分|mins?|minutes?)\s*(?:delay|late|behind)",
+    )
+    for pattern in delay_patterns:
+        match = re.search(pattern, text, flags=re.IGNORECASE)
+        if match:
+            return float(match.group(1))
+    return None
 
 
 def _team_status_request_overrides(question: str) -> dict[str, Any]:
@@ -1718,12 +1743,26 @@ def _looks_like_pace_guardian_question(text: str) -> bool:
             "用平均",
             "比預估慢",
             "比預期慢",
+            "比計畫快",
+            "比原計畫快",
+            "比預定快",
+            "走太快",
+            "走得太快",
+            "太快",
+            "提早",
+            "提前",
+            "ahead",
+            "early",
             "休息節奏",
             "午餐點",
             "午餐前移",
             "前移午餐",
             "需要加快",
             "是否需要加快",
+            "需要放慢",
+            "慢一點",
+            "放慢",
+            "原節奏",
             "落後",
             "晚了",
             "縮短行程",

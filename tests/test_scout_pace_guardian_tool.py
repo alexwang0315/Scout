@@ -122,6 +122,46 @@ def test_pace_guardian_surfaces_scout_pace_coefficient_drag() -> None:
     assert result["boundary"]["runtime_safety_truth"] is False
 
 
+def test_pace_guardian_treats_ahead_of_plan_as_controlled_pace_condition() -> None:
+    result = assess_scout_pace_guardian(
+        PROJECT_ROOT,
+        query="目前比計畫快 20 分鐘，可以繼續照原節奏嗎？",
+        team_members=[
+            {
+                "member_id": "leader",
+                "display_label": "Leader",
+                "pace_mps": 1.0,
+                "reserve_minutes": 60,
+            },
+            {
+                "member_id": "slow",
+                "display_label": "Slow member",
+                "pace_mps": 0.72,
+                "reserve_minutes": 40,
+            },
+        ],
+        current_delay_minutes=-20,
+        leader_accepts_slowest_basis=True,
+    )
+
+    assert result["answerability"] == "pace_fit_decision_available"
+    assert result["decision"] == "CONDITIONAL_GO"
+    reasons = " ".join(result["team_pace_fit"]["main_reasons"])
+    assert "比計畫快約 20 分鐘" in reasons
+    assert "不是免費 buffer" in reasons
+    assert result["schedule_pressure"]["current_delay_minutes"] == -20.0
+    assert result["decision_output"]["cost"]["scheduleDelayMinutes"] == -20.0
+    assert result["decision_output"]["cost"]["scheduleAheadMinutes"] == 20.0
+    assert result["decision_output"]["firstLayer"]["decision"] == (
+        "可繼續，但必須以最慢者控速。"
+    )
+    assert "降回最慢者可恢復節奏" in result["decision_output"]["firstLayer"][
+        "nextStep"
+    ]
+    assert result["decision_output"]["runtimeSafetyTruth"] is False
+    assert result["boundary"]["runtime_safety_truth"] is False
+
+
 def test_pace_guardian_reports_missing_member_pace_from_resource_plan() -> None:
     result = assess_scout_pace_guardian(
         PROJECT_ROOT,

@@ -826,6 +826,30 @@ def test_answer_synthesis_routes_slowest_member_original_plan_to_pace_guardian()
     assert "腳程守門員" in result.answer
 
 
+def test_answer_synthesis_routes_ahead_of_plan_pace_to_pace_guardian() -> None:
+    result = collect_and_synthesize_scout_ai_answer(
+        "目前比計畫快 20 分鐘，可以繼續照原節奏嗎？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=4,
+    )
+
+    assert result.answerability == "partial_evidence_with_missing_context"
+    assert result.completed_source_count == 1
+    assert result.missing_evidence_count == 1
+    pace = _source(result, PACE_GUARDIAN_TOOL_ID)
+    assert pace.top_result_summary["decision"] == "NO_GO"
+    assert pace.top_result_summary["schedule_pressure"]["current_delay_minutes"] == -20.0
+    assert result.decision_output["answerSourceToolId"] == PACE_GUARDIAN_TOOL_ID
+    assert result.decision_output["decision"] == "NO_GO"
+    assert result.decision_output["cost"]["scheduleDelayMinutes"] == -20.0
+    assert result.decision_output["cost"]["scheduleAheadMinutes"] == 20.0
+    assert "比計畫快約 20 分鐘" in result.decision_output["firstLayer"]["reason"]
+    assert "不是免費 buffer" in result.decision_output["firstLayer"]["reason"]
+    assert "腳程守門員" in result.answer
+    assert "runtime safety truth" in result.answer
+
+
 def test_answer_synthesis_prioritizes_pace_guardian_for_delayed_summit() -> None:
     result = collect_and_synthesize_scout_ai_answer(
         "我們晚了 30 分鐘，還可以繼續攻頂嗎？",
