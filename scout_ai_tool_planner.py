@@ -86,6 +86,7 @@ def plan_scout_ai_tools(
     contracts = default_tool_contracts()
     normalized_question = _normalize(query.question)
     selected: list[tuple[str, str]] = []
+    route_context_question = _looks_like_route_context_question(normalized_question)
     pretrip_go_no_go = _looks_like_pretrip_go_no_go_question(
         normalized_question,
     ) and not _has_complete_route_readiness_confirmation_bundle(normalized_question)
@@ -104,9 +105,10 @@ def plan_scout_ai_tools(
                 "Question asks about an MCP, named place, campsite, water point, or CP support relationship.",
             )
         )
-    if _looks_like_route_structure_question(normalized_question) and not _has_tool(
-        selected,
-        MAJOR_POINT_TOOL_ID,
+    if (
+        _looks_like_route_structure_question(normalized_question)
+        and not route_context_question
+        and not _has_tool(selected, MAJOR_POINT_TOOL_ID)
     ):
         selected.append(
             (
@@ -129,7 +131,10 @@ def plan_scout_ai_tools(
                 "Question asks about danger, route risk score, high-risk locations, or hazard candidates.",
             )
         )
-    if _looks_like_terrain_question(normalized_question):
+    if (
+        _looks_like_terrain_question(normalized_question)
+        and not route_context_question
+    ):
         selected.append(
             (
                 TERRAIN_SCORE_TOOL_ID,
@@ -245,7 +250,7 @@ def plan_scout_ai_tools(
                 "whether an action is allowed, for how long, what it costs, and the next step.",
             )
         )
-    if _looks_like_route_context_question(normalized_question):
+    if route_context_question:
         selected.append(
             (
                 ROUTE_CONTEXT_TOOL_ID,
@@ -2786,6 +2791,7 @@ def _looks_like_route_context_question(text: str) -> bool:
         (
             "值得看",
             "看什麼",
+            "看風景",
             "有什麼好看",
             "觀察點",
             "下一個觀察",
@@ -2796,6 +2802,11 @@ def _looks_like_route_context_question(text: str) -> bool:
             "大景",
             "地名故事",
             "路線脈絡",
+            "自然脈絡",
+            "人文脈絡",
+            "地形脈絡",
+            "自然人文",
+            "自然、人文",
             "行程簡報",
             "活動簡報",
             "建議幾天",
@@ -2820,9 +2831,14 @@ def _looks_like_route_context_question(text: str) -> bool:
             "隘勇線",
             "地方傳說",
             "土地使用",
+            "停下來看風景",
+            "不要只衝山頂",
+            "不只攻頂",
+            "不只是攻頂",
             "停3分鐘",
             "停三分鐘",
             "值得停",
+            "人文",
             "文化",
             "歷史",
             "自然觀察",

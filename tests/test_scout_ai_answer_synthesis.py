@@ -972,25 +972,32 @@ def test_answer_synthesis_uses_route_context_field_answer_without_guessing() -> 
 
 
 def test_answer_synthesis_uses_route_context_for_standard_context_layers() -> None:
-    result = collect_and_synthesize_scout_ai_answer(
+    questions = [
         "有哪些原住民族地名或舊社脈絡？",
-        project_root=PROJECT_ROOT,
-        project_id="chilai_nanhua_day1",
-        limit=4,
-    )
+        "這條路線有哪些自然、人文或地形脈絡？",
+        "哪裡適合停下來看風景，不要只衝山頂？",
+    ]
 
-    assert result.answerability == "evidence_available"
-    assert result.completed_source_count == 1
-    assert result.missing_evidence_count == 0
-    source = _source(result, ROUTE_CONTEXT_TOOL_ID)
-    assert source.top_result_summary["answerability"] == "route_context_available"
-    assert source.top_result_summary["decision"] == "CONDITIONAL_GO"
-    assert source.top_result_summary["route_context"]["role"] == "Experience Guide"
-    assert result.decision_output["answerSourceToolId"] == ROUTE_CONTEXT_TOOL_ID
-    assert result.decision_output["decision"] == "CONDITIONAL_GO"
-    assert "候選路線脈絡" in result.answer
-    assert "Experience Guide 候選" in result.answer
-    assert "runtime safety truth" in result.answer
+    for question in questions:
+        result = collect_and_synthesize_scout_ai_answer(
+            question,
+            project_root=PROJECT_ROOT,
+            project_id="chilai_nanhua_day1",
+            limit=4,
+        )
+
+        assert result.answerability == "evidence_available"
+        assert result.completed_source_count == 1
+        assert result.missing_evidence_count == 0
+        source = _source(result, ROUTE_CONTEXT_TOOL_ID)
+        assert source.top_result_summary["answerability"] == "route_context_available"
+        assert source.top_result_summary["decision"] == "CONDITIONAL_GO"
+        assert source.top_result_summary["route_context"]["role"] == "Experience Guide"
+        assert result.decision_output["answerSourceToolId"] == ROUTE_CONTEXT_TOOL_ID
+        assert result.decision_output["decision"] == "CONDITIONAL_GO"
+        assert "候選路線脈絡" in result.answer
+        assert "Experience Guide 候選" in result.answer
+        assert "runtime safety truth" in result.answer
 
 
 def test_answer_synthesis_uses_route_briefing_compose_context(

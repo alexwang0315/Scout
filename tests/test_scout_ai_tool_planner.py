@@ -1071,6 +1071,8 @@ def test_planner_selects_route_context_for_standard_context_layers() -> None:
     questions = [
         "這段林相變化有什麼可以觀察？",
         "有哪些原住民族地名或舊社脈絡？",
+        "這條路線有哪些自然、人文或地形脈絡？",
+        "哪裡適合停下來看風景，不要只衝山頂？",
     ]
 
     for question in questions:
@@ -1082,6 +1084,7 @@ def test_planner_selects_route_context_for_standard_context_layers() -> None:
         assert item.request["tool_id"] == ROUTE_CONTEXT_TOOL_ID
         assert item.missing_fields == []
         assert item.boundary.runtime_safety_truth is False
+        assert TERRAIN_SCORE_TOOL_ID not in _tool_ids(plan)
 
 
 def test_planner_selects_pace_guardian_for_team_pace_fit_question() -> None:
