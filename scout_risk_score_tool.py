@@ -107,12 +107,56 @@ def search_project_risk_scores(
     _attach_baseline_calibration_pairs(filtered, loaded_items)
     filtered.sort(key=_sort_key(resolved_sort))
     results = filtered[:resolved_limit]
+    compact_results = [_compact_result(item) for item in results]
+    answerability = (
+        "risk_score_decision_available"
+        if compact_results
+        else "risk_score_missing_evidence"
+    )
+    decision = _risk_decision(compact_results)
+    field_answer = _field_answer(
+        decision=decision,
+        results=compact_results,
+        answerability=answerability,
+    )
+    decision_output = _decision_output(
+        decision=decision,
+        results=compact_results,
+        summaries=summaries,
+        filters={
+            "min_score": resolved_min_score,
+            "risk_bucket": resolved_bucket,
+            "distance_km_min": resolved_distance_min,
+            "distance_km_max": resolved_distance_max,
+            "cp": resolved_cp,
+            "lat": resolved_lat,
+            "lon": resolved_lon,
+            "radius_m": resolved_radius_m,
+            "sort": resolved_sort,
+        },
+        answerability=answerability,
+        field_answer=field_answer,
+    )
 
     return {
         "tool_id": RISK_SCORE_TOOL_ID,
         "status": "completed",
         "project_id": project_id,
         "query": query,
+        "source_status": "candidate_only",
+        "answerability": answerability,
+        "decision": decision,
+        "decision_output": decision_output,
+        "field_answer": field_answer,
+        "risk_decision": {
+            "role": "Risk Score / Route Hazard Decision",
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+            "decision": decision,
+            "decision_output": decision_output,
+            "highest_risk_result": compact_results[0] if compact_results else None,
+            "next_action": decision_output["nextAction"],
+        },
         "surface": resolved_surface,
         "filters": {
             "min_score": resolved_min_score,
@@ -131,7 +175,14 @@ def search_project_risk_scores(
         "searched_score_count": len(loaded_items),
         "matched_score_count": len(filtered),
         "result_count": len(results),
-        "results": [_compact_result(item) for item in results],
+        "results": compact_results,
+        "standard_alignment": [
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 15.2 Risk Sentinel",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 16 required decision output format",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 17 ContextualPermission schema",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 23 acceptance criteria",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 28.3 data confidence",
+        ],
         "boundary": _closed_boundary(),
     }
 
@@ -458,6 +509,287 @@ def _surface_summaries(items: list[dict[str, Any]]) -> dict[str, Any]:
             "bucket_counts": bucket_counts,
         }
     return summaries
+
+
+def _risk_decision(results: list[dict[str, Any]]) -> str:
+    if not results:
+        return "DELAY"
+    top = results[0]
+    rank = _bucket_rank(top.get("risk_bucket")) or 0
+    score = _score_100(top.get("score"))
+    if rank >= 4 or score >= 90.0:
+        return "NO_GO"
+    if rank >= 3 or score >= 70.0:
+        return "CHANGE_PLAN"
+    if rank >= 2 or score >= 40.0:
+        return "CONDITIONAL_GO"
+    return "GO"
+
+
+def _field_answer(
+    *,
+    decision: str,
+    results: list[dict[str, Any]],
+    answerability: str,
+) -> str:
+    if not results:
+        return (
+            "風險分數判斷：建議 DELAY。沒有匹配到可追溯的風險分數結果；"
+            "Scout 不能用空資料推論路段安全。"
+        )
+    top = results[0]
+    location = _result_location(top)
+    return (
+        f"風險分數判斷：建議 {decision}。最高候選風險位於 {location}，"
+        f"score={top.get('score')}、bucket={top.get('risk_bucket') or 'unknown'}。"
+        f"下一步：{_next_action(decision=decision)} "
+        f"answerability={answerability}；此為候選風險證據，不是 runtime safety truth。"
+    )
+
+
+def _decision_output(
+    *,
+    decision: str,
+    results: list[dict[str, Any]],
+    summaries: dict[str, Any],
+    filters: dict[str, Any],
+    answerability: str,
+    field_answer: str,
+) -> dict[str, Any]:
+    allowed = decision in {"GO", "CONDITIONAL_GO"}
+    top = results[0] if results else {}
+    reasons = _decision_reasons(decision=decision, results=results)
+    uncertainty_notes = _uncertainty_notes(results=results, summaries=summaries)
+    first_layer = {
+        "decision": _decision_phrase(decision=decision, allowed=allowed),
+        "limit": _decision_limit_phrase(decision=decision, top=top),
+        "reason": " / ".join(reasons[:2]),
+        "nextStep": _next_action(decision=decision),
+    }
+    residual_risk = [
+        "Risk scores are candidate planning evidence only.",
+        (
+            "Terrain, weather, pace, team status, and runtime observations can "
+            "change the final decision."
+        ),
+        "No /safety, SOS, outbound send, runtime mutation, or hardware control was performed.",
+    ]
+    second_layer = {
+        "details": _decision_details(
+            top=top,
+            results=results,
+            filters=filters,
+            field_answer=field_answer,
+        ),
+        "uncertaintyNotes": uncertainty_notes,
+        "residualRisk": residual_risk,
+        "requiredConditions": _required_conditions(decision=decision),
+        "alternativeActions": _alternative_actions(decision=decision),
+    }
+    return {
+        "role": "Risk Sentinel",
+        "format": "SCOUT_OUTDOOR_AI_AGENT_STANDARD.section16",
+        "decisionObjectSchema": "ContextualPermission",
+        "text": "\n".join(
+            (
+                f"[決策] {first_layer['decision']}",
+                f"[限制] {first_layer['limit']}",
+                f"[原因] {first_layer['reason']}",
+                f"[下一步] {first_layer['nextStep']}",
+            )
+        ),
+        "firstLayer": first_layer,
+        "secondLayer": second_layer,
+        "action": "risk_score_route_hazard_review",
+        "decision": decision,
+        "allowed": allowed,
+        "locationConstraint": first_layer["limit"],
+        "mainReasons": reasons[:3],
+        "cost": {
+            "highestScore": top.get("score"),
+            "highestScore100": _score_100(top.get("score")) if top else None,
+            "highestRiskBucket": top.get("risk_bucket"),
+            "highestDistanceKm": top.get("distance_km"),
+            "matchedScoreCount": len(results),
+            "timeBufferChangeMinutes": 0 if not allowed else None,
+            "bufferPolicy": (
+                "Unplanned stops, photo goals, and summit pushes are not granted "
+                "by risk scores."
+            ),
+        },
+        "nextAction": first_layer["nextStep"],
+        "confidence": "low" if uncertainty_notes else "medium",
+        "uncertaintyNotes": uncertainty_notes,
+        "residualRisk": residual_risk,
+        "requiredConditions": second_layer["requiredConditions"],
+        "alternativeActions": second_layer["alternativeActions"],
+        "answerability": answerability,
+        "runtimeSafetyTruth": False,
+        "standardAlignment": [
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 15.2 Risk Sentinel",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 16 required decision output format",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 17 ContextualPermission schema",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 23 acceptance criteria",
+        ],
+    }
+
+
+def _decision_reasons(
+    *,
+    decision: str,
+    results: list[dict[str, Any]],
+) -> list[str]:
+    if not results:
+        return ["沒有匹配到可追溯的風險分數結果。"]
+    top = results[0]
+    reasons = [
+        (
+            f"最高候選風險 score={top.get('score')} "
+            f"bucket={top.get('risk_bucket') or 'unknown'}。"
+        ),
+        f"位置：{_result_location(top)}。",
+    ]
+    if decision in {"NO_GO", "CHANGE_PLAN"}:
+        reasons.append("分數或 bucket 已達需要改變路線/通過策略的保守門檻。")
+    elif decision == "CONDITIONAL_GO":
+        reasons.append("分數或 bucket 顯示需要條件式通過與重查。")
+    else:
+        reasons.append("目前匹配結果未達高風險門檻。")
+    return _dedupe(reasons)
+
+
+def _uncertainty_notes(
+    *,
+    results: list[dict[str, Any]],
+    summaries: dict[str, Any],
+) -> list[str]:
+    notes = []
+    if not results:
+        notes.append("No matching risk score result was available.")
+    baseline = summaries.get("baseline") if isinstance(summaries, dict) else None
+    calibration = summaries.get("calibration") if isinstance(summaries, dict) else None
+    if not isinstance(baseline, dict) or not baseline.get("available"):
+        notes.append("Baseline risk scores are not available.")
+    if not isinstance(calibration, dict) or not calibration.get("available"):
+        notes.append("Calibrated risk heatmap is not available.")
+    if results and results[0].get("paired_calibration_score") is None:
+        notes.append("Top result may not have paired calibration evidence.")
+    return _dedupe(notes)
+
+
+def _decision_phrase(*, decision: str, allowed: bool) -> str:
+    if decision == "NO_GO":
+        return "不建議進入最高風險路段。"
+    if decision == "CHANGE_PLAN":
+        return "建議改變路線或通過策略。"
+    if decision == "CONDITIONAL_GO":
+        return "可有條件通過，但必須縮短停留並重查。"
+    if decision == "GO" and allowed:
+        return "可作為低風險候選路段通過。"
+    return "暫緩風險分數判斷。"
+
+
+def _decision_limit_phrase(*, decision: str, top: dict[str, Any]) -> str:
+    location = _result_location(top) if top else "目前查詢範圍"
+    if decision == "NO_GO":
+        return f"{location} 不得作為原計畫通過或停留目標；先改線、撤退或人工複核。"
+    if decision == "CHANGE_PLAN":
+        return f"{location} 不得直接照原節奏通過；先改線、縮短目標或設定人工確認點。"
+    if decision == "CONDITIONAL_GO":
+        return f"{location} 只能快速通過，不得為拍照、休息或攻頂增加停留；下一 CP 前重查。"
+    if decision == "GO":
+        return "仍需依天氣、日照、隊伍與 CP Graph 重查；此回答不是停留授權。"
+    return "補齊可追溯風險分數前，不得把此回答當成路線 permission。"
+
+
+def _next_action(*, decision: str) -> str:
+    if decision == "NO_GO":
+        return "改線、撤退到上一個安全 CP，或交由人工複核後重新規劃。"
+    if decision == "CHANGE_PLAN":
+        return "改短版/替代路線，並用 terrain、weather、pace 與 route readiness 重新評估。"
+    if decision == "CONDITIONAL_GO":
+        return "快速通過並在下一 CP 前重查風險、天氣與隊伍狀態。"
+    if decision == "GO":
+        return "維持保守節奏，下一 CP 或條件改變時重查。"
+    return "補齊風險分數與校準證據後再判斷。"
+
+
+def _required_conditions(*, decision: str) -> list[str]:
+    conditions = [
+        "不得將風險分數升格為 runtime safety truth。",
+        "通過前仍需核對 terrain、weather/daylight、pace、team status 與 route readiness。",
+    ]
+    if decision in {"NO_GO", "CHANGE_PLAN"}:
+        conditions.append("必須提出改線、撤退或人工複核方案。")
+    if decision == "CONDITIONAL_GO":
+        conditions.append("不得增加非必要停留；下一 CP 前必須重查。")
+    return conditions
+
+
+def _alternative_actions(*, decision: str) -> list[str]:
+    if decision == "NO_GO":
+        return ["改線。", "撤回上一個安全 CP。", "延期或交由人工複核。"]
+    if decision == "CHANGE_PLAN":
+        return ["改短版。", "避開最高風險段。", "改由更保守 CP Graph 重新排程。"]
+    if decision == "CONDITIONAL_GO":
+        return ["快速通過。", "降低速度與隊伍間距。", "在下一 CP 重查後再決定。"]
+    if decision == "GO":
+        return ["維持原路線但保守通過。", "若天氣或隊伍狀態改變則重新評估。"]
+    return ["補齊 baseline/calibration 風險證據。", "改問具體 CP 或里程範圍。"]
+
+
+def _decision_details(
+    *,
+    top: dict[str, Any],
+    results: list[dict[str, Any]],
+    filters: dict[str, Any],
+    field_answer: str,
+) -> list[str]:
+    details = [field_answer, f"matched_result_count={len(results)}"]
+    if top:
+        details.extend(
+            [
+                f"top_score={top.get('score')}",
+                f"top_bucket={top.get('risk_bucket')}",
+                f"top_distance_km={top.get('distance_km')}",
+                f"top_surface={top.get('surface')}",
+            ]
+        )
+    details.append("filters=" + json.dumps(filters, ensure_ascii=False, sort_keys=True))
+    return details
+
+
+def _result_location(item: dict[str, Any]) -> str:
+    if item.get("distance_km") is not None:
+        return f"{item.get('distance_km')} km"
+    if item.get("segment_id"):
+        return f"segment {item.get('segment_id')}"
+    if item.get("sample_id"):
+        return f"sample {item.get('sample_id')}"
+    if item.get("lat") is not None and item.get("lon") is not None:
+        return f"{item.get('lat')},{item.get('lon')}"
+    return "查詢範圍內"
+
+
+def _score_100(value: Any) -> float:
+    score = _optional_float(value)
+    if score is None:
+        return 0.0
+    if 0.0 <= score <= 1.0:
+        return score * 100.0
+    return score
+
+
+def _dedupe(values: list[str]) -> list[str]:
+    seen = set()
+    result = []
+    for value in values:
+        text = str(value).strip()
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        result.append(text)
+    return result
 
 
 def _parse_query_filters(query: str) -> dict[str, Any]:
