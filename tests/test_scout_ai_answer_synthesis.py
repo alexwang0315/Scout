@@ -247,6 +247,33 @@ def test_answer_synthesis_uses_contextual_permission_field_answer_without_guessi
     assert "runtime safety truth" in result.answer
 
 
+def test_answer_synthesis_treats_fog_photo_as_wait_permission() -> None:
+    result = collect_and_synthesize_scout_ai_answer(
+        "可以等霧散再拍照嗎？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=6,
+    )
+
+    assert result.answerability == "partial_evidence_with_missing_context"
+    assert result.completed_source_count == 2
+    assert result.missing_evidence_count == 2
+    weather = _source(result, WEATHER_WINDOW_TOOL_ID)
+    contextual = _source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
+    assert weather.top_result_summary["decision"] == "DELAY"
+    assert contextual.top_result_summary["action"] == "wait"
+    assert contextual.top_result_summary["decision"] == "NO_GO"
+    assert contextual.missing_fields == ["remaining_safety_buffer_minutes"]
+    assert result.decision_output["answerSourceToolId"] == CONTEXTUAL_PERMISSION_TOOL_ID
+    assert result.decision_output["action"] == "wait"
+    assert result.decision_output["decision"] == "NO_GO"
+    assert result.decision_output["allowed"] is False
+    assert result.decision_output["firstLayer"]["decision"] == "不建議等待。"
+    assert "不建議等待" in result.answer
+    assert "remaining_safety_buffer_minutes" in result.answer
+    assert "runtime safety truth" in result.answer
+
+
 def test_answer_synthesis_blocks_split_team_micro_decision() -> None:
     result = collect_and_synthesize_scout_ai_answer(
         "可以讓走得快的人先去山頂嗎？",
