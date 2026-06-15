@@ -7,6 +7,7 @@ from pathlib import Path
 from scout_agent_trace import load_agent_trace
 from scout_cli import run_scout_cli
 from pretrip_contextual_permission_collection import CONTEXTUAL_PERMISSION_RULES_REF
+from pretrip_route_architecture_collection import ROUTE_ARCHITECTURE_REF
 from pretrip_route_context_collection import (
     ROUTE_CONTEXT_PACK_REF,
     ROUTE_CONTEXT_POINTS_REF,
@@ -446,6 +447,51 @@ def test_scout_pretrip_route_context_collect_facade(tmp_path: Path) -> None:
     assert output["result"]["writes_performed"] is True
     assert (project_root / ROUTE_CONTEXT_PACK_REF).is_file()
     assert (project_root / ROUTE_CONTEXT_POINTS_REF).is_file()
+
+
+def test_scout_pretrip_route_architecture_collect_facade(tmp_path: Path) -> None:
+    project_root = tmp_path / "chilai_nanhua_day1"
+    shutil.copytree(CHILAI_PROJECT, project_root)
+
+    dry_exit, dry_payload = run_scout_cli(
+        [
+            "pretrip",
+            "route-architecture-collect",
+            "--project-root",
+            str(project_root),
+            "--limit",
+            "8",
+            "--dry-run",
+            "--json",
+        ]
+    )
+    assert dry_exit == 0
+    dry_output = json.loads(dry_payload["outputs"]["stdout"])
+    assert dry_output["result"]["writes_performed"] is False
+    assert not (project_root / ROUTE_ARCHITECTURE_REF).exists()
+
+    exit_code, payload = run_scout_cli(
+        [
+            "pretrip",
+            "route-architecture-collect",
+            "--project-root",
+            str(project_root),
+            "--current-time",
+            "2013-10-08T15:05:00+08:00",
+            "--limit",
+            "8",
+            "--authorized-by",
+            "operator.alex",
+            "--json",
+        ]
+    )
+
+    assert exit_code == 0
+    output = json.loads(payload["outputs"]["stdout"])
+    assert output["artifact_kind"] == "scout_pretrip_route_architecture_collect_tool_output"
+    assert output["result"]["decision"] == "CHANGE_PLAN"
+    assert output["result"]["writes_performed"] is True
+    assert (project_root / ROUTE_ARCHITECTURE_REF).is_file()
 
 
 def test_scout_pretrip_weather_decision_collect_facade(tmp_path: Path) -> None:

@@ -158,6 +158,8 @@ def run_builtin_tool(argv: Sequence[str] | None = None) -> tuple[int, dict[str, 
         return _pretrip_import_gpx(args)
     if args.command == "pretrip-route-context-collect":
         return _pretrip_route_context_collect(args)
+    if args.command == "pretrip-route-architecture-collect":
+        return _pretrip_route_architecture_collect(args)
     if args.command == "pretrip-weather-decision-collect":
         return _pretrip_weather_decision_collect(args)
     if args.command == "pretrip-contextual-permission-collect":
@@ -415,6 +417,11 @@ def _build_parser() -> argparse.ArgumentParser:
     route_context_parser.add_argument("--input", type=Path, required=True)
     route_context_parser.add_argument("--dry-run", action="store_true")
     route_context_parser.add_argument("--json", action="store_true")
+
+    route_architecture_parser = subparsers.add_parser("pretrip-route-architecture-collect")
+    route_architecture_parser.add_argument("--input", type=Path, required=True)
+    route_architecture_parser.add_argument("--dry-run", action="store_true")
+    route_architecture_parser.add_argument("--json", action="store_true")
 
     weather_decision_parser = subparsers.add_parser("pretrip-weather-decision-collect")
     weather_decision_parser.add_argument("--input", type=Path, required=True)
@@ -2484,6 +2491,53 @@ def _pretrip_route_context_collect(args: argparse.Namespace) -> tuple[int, dict[
                 "candidate_only": True,
                 "raw_payloads_embedded": False,
                 "network_calls_made": False,
+            },
+        },
+    )
+
+
+def _pretrip_route_architecture_collect(
+    args: argparse.Namespace,
+) -> tuple[int, dict[str, Any]]:
+    from pretrip_route_architecture_collection import (
+        collect_pretrip_route_architecture,
+    )
+
+    request = _load_json(args.input)
+    project_root = _optional_path(request.get("project_root"))
+    if project_root is None:
+        project_id = request.get("project_id")
+        workspace_root = _optional_path(request.get("workspace_root"))
+        if project_id and workspace_root:
+            project_root = workspace_root / str(project_id)
+    if project_root is None:
+        return 2, _error_payload(
+            "route architecture collection requires project_root or workspace_root plus project_id"
+        )
+
+    result = collect_pretrip_route_architecture(
+        project_root,
+        dry_run=bool(args.dry_run),
+        current_cp_id=request.get("current_cp_id"),
+        current_time=request.get("current_time"),
+        target_cp_id=request.get("target_cp_id"),
+        limit=int(request.get("limit", 12)),
+        generated_at=request.get("generated_at"),
+    )
+    return (
+        0,
+        {
+            "artifact_kind": "scout_pretrip_route_architecture_collect_tool_output",
+            "status": "completed",
+            "dry_run": bool(args.dry_run),
+            "result": result,
+            "boundary": {
+                **_closed_boundary(),
+                "workspace_file_mutation_allowed": not bool(args.dry_run),
+                "candidate_only": True,
+                "raw_payloads_embedded": False,
+                "network_calls_made": False,
+                "live_safety_api_calls_allowed": False,
             },
         },
     )

@@ -59,6 +59,10 @@ OPTIONAL_ROUTE_CONTEXT_REFS = {
     "route_context_points_ref": "candidates/route_context_points.json",
 }
 
+OPTIONAL_ROUTE_ARCHITECTURE_REFS = {
+    "route_architecture_ref": "normalized/architecture/route_architecture.json",
+}
+
 OPTIONAL_WEATHER_DECISION_REFS = {
     "weather_source_manifest_ref": "normalized/weather/weather_source_manifest.json",
     "weather_decision_candidates_ref": "candidates/weather_decision_candidates.json",
@@ -155,6 +159,7 @@ def main(argv: list[str] | None = None) -> int:
     map_preparation_artifacts: dict[str, dict[str, Any] | None] = {}
     layer_candidate_artifacts: dict[str, dict[str, Any] | None] = {}
     route_context_summary = {"checked": False, "available": False}
+    route_architecture_summary = {"checked": False, "available": False}
     weather_decision_summary = {"checked": False, "available": False}
     contextual_permission_summary = {"checked": False, "available": False}
     api_summary = {"checked": False}
@@ -268,6 +273,11 @@ def main(argv: list[str] | None = None) -> int:
                 project,
                 errors,
             )
+            route_architecture_summary = _check_route_architecture_refs(
+                project_root,
+                project,
+                errors,
+            )
             weather_decision_summary = _check_weather_decision_refs(
                 project_root,
                 project,
@@ -331,6 +341,7 @@ def main(argv: list[str] | None = None) -> int:
         ),
         "semantic_judgements": _semantic_judgement_summary(semantic_judgements),
         "route_context": route_context_summary,
+        "route_architecture": route_architecture_summary,
         "weather_decision": weather_decision_summary,
         "contextual_permission": contextual_permission_summary,
         "layer_candidates": {
@@ -602,6 +613,142 @@ def _route_context_candidate_only(payload: Any) -> bool | None:
 
 
 def _route_context_runtime_truth(payload: Any) -> bool | None:
+    if not isinstance(payload, dict):
+        return None
+    boundary = payload.get("boundary") if isinstance(payload.get("boundary"), dict) else {}
+    if "runtime_safety_truth" in boundary:
+        return boundary.get("runtime_safety_truth")
+    return payload.get("runtime_safety_truth")
+
+
+def _check_route_architecture_refs(
+    project_root: Path,
+    project: dict[str, Any],
+    errors: list[str],
+) -> dict[str, Any]:
+    present_refs = {
+        key: project.get(key)
+        for key in OPTIONAL_ROUTE_ARCHITECTURE_REFS
+        if project.get(key)
+    }
+    if not present_refs:
+        return {"checked": True, "available": False}
+
+    for key, expected in sorted(OPTIONAL_ROUTE_ARCHITECTURE_REFS.items()):
+        ref = project.get(key)
+        if ref and ref != expected:
+            errors.append(f"unexpected route architecture ref for {key}: {ref} != {expected}")
+
+    payload = _load_json_ref(project_root, project, "route_architecture_ref", errors)
+    if not isinstance(payload, dict):
+        errors.append("route architecture artifact payload missing")
+        return {"checked": True, "available": False}
+    if payload.get("artifact_kind") != "pretrip_route_architecture":
+        errors.append(
+            "route architecture artifact kind mismatch: "
+            f"{payload.get('artifact_kind')} != pretrip_route_architecture"
+        )
+    _check_route_architecture_boundary(payload, "route_architecture_ref", errors)
+
+    counts = payload.get("counts") if isinstance(payload.get("counts"), dict) else {}
+    cp_graph = payload.get("cp_graph") if isinstance(payload.get("cp_graph"), dict) else {}
+    architecture = (
+        payload.get("route_architecture")
+        if isinstance(payload.get("route_architecture"), dict)
+        else {}
+    )
+    hard_points = architecture.get("hard_points")
+    hard_points = hard_points if isinstance(hard_points, list) else []
+    retreat_count = architecture.get("retreat_option_count")
+    if counts.get("checkpoint_count") != cp_graph.get("node_count"):
+        errors.append(
+            "route architecture checkpoint_count mismatch: "
+            f"counts={counts.get('checkpoint_count')} cp_graph={cp_graph.get('node_count')}"
+        )
+    if counts.get("segment_count") != cp_graph.get("edge_count"):
+        errors.append(
+            "route architecture segment_count mismatch: "
+            f"counts={counts.get('segment_count')} cp_graph={cp_graph.get('edge_count')}"
+        )
+    if counts.get("hard_point_count") != len(hard_points):
+        errors.append(
+            "route architecture hard_point_count mismatch: "
+            f"counts={counts.get('hard_point_count')} hard_points={len(hard_points)}"
+        )
+    project_hard_point_count = project.get("route_architecture_hard_point_count")
+    if (
+        project_hard_point_count is not None
+        and counts.get("hard_point_count") is not None
+        and project_hard_point_count != counts.get("hard_point_count")
+    ):
+        errors.append(
+            "route_architecture_hard_point_count mismatch: "
+            f"project={project_hard_point_count} artifact={counts.get('hard_point_count')}"
+        )
+    project_retreat_count = project.get("route_architecture_retreat_option_count")
+    if (
+        project_retreat_count is not None
+        and retreat_count is not None
+        and project_retreat_count != retreat_count
+    ):
+        errors.append(
+            "route_architecture_retreat_option_count mismatch: "
+            f"project={project_retreat_count} artifact={retreat_count}"
+        )
+    if cp_graph.get("raw_route_geometry_embedded") is not False:
+        errors.append("route architecture cp_graph must set raw_route_geometry_embedded=false")
+    if payload.get("human_review_required") is not True:
+        errors.append("route architecture artifact must require human review")
+    for point in hard_points:
+        if isinstance(point, dict) and point.get("runtime_safety_truth") is not False:
+            errors.append("route architecture hard point must set runtime_safety_truth=false")
+
+    return {
+        "checked": True,
+        "available": True,
+        "decision": payload.get("decision"),
+        "answerability": payload.get("answerability"),
+        "route_type": architecture.get("route_type"),
+        "checkpoint_count": counts.get("checkpoint_count"),
+        "segment_count": counts.get("segment_count"),
+        "hard_point_count": counts.get("hard_point_count"),
+        "retreat_option_count": counts.get("retreat_option_count"),
+        "alternative_plan_option_count": counts.get("alternative_plan_option_count"),
+        "candidate_only": _route_architecture_candidate_only(payload),
+        "runtime_safety_truth": _route_architecture_runtime_truth(payload),
+    }
+
+
+def _check_route_architecture_boundary(
+    payload: Any,
+    ref_key: str,
+    errors: list[str],
+) -> None:
+    if not isinstance(payload, dict):
+        return
+    boundary = payload.get("boundary") if isinstance(payload.get("boundary"), dict) else {}
+    if payload.get("runtime_safety_truth") is True or boundary.get("runtime_safety_truth") is True:
+        errors.append(f"{ref_key} claims runtime_safety_truth=true")
+    for key in (
+        "phase1_runtime_mutation_allowed",
+        "phase2_brain_writeback_allowed",
+        "live_safety_api_calls_allowed",
+        "external_api_calls_made",
+        "outbound_send_allowed",
+        "hardware_control_allowed",
+    ):
+        if boundary.get(key) is True:
+            errors.append(f"{ref_key} sets {key}=true")
+
+
+def _route_architecture_candidate_only(payload: Any) -> bool | None:
+    if not isinstance(payload, dict):
+        return None
+    boundary = payload.get("boundary") if isinstance(payload.get("boundary"), dict) else {}
+    return boundary.get("candidate_only")
+
+
+def _route_architecture_runtime_truth(payload: Any) -> bool | None:
     if not isinstance(payload, dict):
         return None
     boundary = payload.get("boundary") if isinstance(payload.get("boundary"), dict) else {}

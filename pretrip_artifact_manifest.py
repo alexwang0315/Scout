@@ -58,6 +58,7 @@ OPTIONAL_PROJECT_ARTIFACTS: tuple[tuple[str, str], ...] = (
     ("route_context_source_manifest", "route_context_source_manifest_ref"),
     ("route_context_pack", "route_context_pack_ref"),
     ("route_context_points", "route_context_points_ref"),
+    ("route_architecture", "route_architecture_ref"),
     ("route_weather_package", "route_weather_package_ref"),
     ("weather_source_manifest", "weather_source_manifest_ref"),
     ("weather_decision_candidates", "weather_decision_candidates_ref"),
@@ -321,6 +322,37 @@ def _project_artifact_summary(artifact_kind: str, payload: Any) -> dict[str, Any
             "by_stop_advisory_candidate": counts.get(
                 "by_stop_advisory_candidate"
             ),
+            "candidate_only": boundary.get("candidate_only"),
+            "runtime_safety_truth": boundary.get("runtime_safety_truth"),
+        }
+
+    if artifact_kind == "route_architecture":
+        counts = payload.get("counts", {})
+        boundary = payload.get("boundary", {})
+        route_architecture = payload.get("route_architecture", {})
+        route_decision = payload.get("route_decision", {})
+        cp_graph = payload.get("cp_graph", {})
+        return {
+            "project_id": payload.get("project_id"),
+            "schema_version": payload.get("schema_version"),
+            "decision": payload.get("decision"),
+            "answerability": payload.get("answerability"),
+            "route_type": route_architecture.get("route_type")
+            if isinstance(route_architecture, dict)
+            else None,
+            "checkpoint_count": counts.get("checkpoint_count"),
+            "segment_count": counts.get("segment_count"),
+            "hard_point_count": counts.get("hard_point_count"),
+            "retreat_option_count": counts.get("retreat_option_count"),
+            "alternative_plan_option_count": counts.get(
+                "alternative_plan_option_count"
+            ),
+            "next_action": route_decision.get("next_action")
+            if isinstance(route_decision, dict)
+            else None,
+            "raw_route_geometry_embedded": cp_graph.get("raw_route_geometry_embedded")
+            if isinstance(cp_graph, dict)
+            else None,
             "candidate_only": boundary.get("candidate_only"),
             "runtime_safety_truth": boundary.get("runtime_safety_truth"),
         }
