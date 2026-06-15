@@ -345,6 +345,9 @@ def _answer_text(
         parts.append(six_power_overview)
     if frontline_answer:
         parts.append(frontline_answer)
+    data_confidence_answer = _data_confidence_answer(decision_output)
+    if data_confidence_answer:
+        parts.append(data_confidence_answer)
     primary_answer = _field_answer_for_tool(
         completed_sources,
         str(decision_output.get("answerSourceToolId") or ""),
@@ -497,6 +500,140 @@ def _alternative_actions_line(decision_output: dict[str, Any]) -> str | None:
         if safe_alternatives:
             return "[替代] " + "、".join(safe_alternatives)
     return None
+
+
+def _data_confidence_answer(decision_output: dict[str, Any]) -> str | None:
+    data_confidence = decision_output.get("dataConfidence")
+    if not isinstance(data_confidence, dict):
+        return None
+    label = _first_text(data_confidence.get("label"))
+    level = _first_text(data_confidence.get("level"))
+    notes = _text_list(data_confidence.get("uncertaintyNotes"))
+    if not label and level:
+        label = _confidence_label(level)
+    if not label and not notes:
+        return None
+    note = notes[0] if notes else "此判斷仍是 deterministic Scout evidence 的候選輸出。"
+    return f"信心：{label or '低'}。{note}"
+
+
+def _with_data_confidence(
+    output: dict[str, Any],
+    *,
+    sources: list[ScoutAiAnswerSource],
+    missing_evidence: list[dict[str, Any]],
+    answerability: str,
+) -> dict[str, Any]:
+    result = dict(output)
+    data_confidence = _data_confidence_summary(
+        output=result,
+        sources=sources,
+        missing_evidence=missing_evidence,
+        answerability=answerability,
+    )
+    result["dataConfidence"] = data_confidence
+    result.setdefault("confidence", data_confidence["level"])
+    uncertainty_notes = _dedupe_text_values(
+        [
+            *_text_list(result.get("uncertaintyNotes")),
+            *_text_list(data_confidence.get("uncertaintyNotes")),
+        ]
+    )
+    result["uncertaintyNotes"] = uncertainty_notes
+    second_layer = result.get("secondLayer")
+    if isinstance(second_layer, dict):
+        result["secondLayer"] = {
+            **second_layer,
+            "uncertaintyNotes": _dedupe_text_values(
+                [
+                    *_text_list(second_layer.get("uncertaintyNotes")),
+                    *_text_list(data_confidence.get("uncertaintyNotes")),
+                ]
+            ),
+        }
+    return result
+
+
+def _data_confidence_summary(
+    *,
+    output: dict[str, Any],
+    sources: list[ScoutAiAnswerSource],
+    missing_evidence: list[dict[str, Any]],
+    answerability: str,
+) -> dict[str, Any]:
+    completed_count = sum(1 for source in sources if source.collection_status == "completed")
+    failed_count = sum(
+        1
+        for source in sources
+        if source.collection_status
+        not in {"completed", "contract_gap", "missing_input", "not_implemented"}
+    )
+    native_confidence = _first_text(output.get("confidence"))
+    native_level = str(native_confidence or "").lower()
+    if failed_count or answerability in {
+        "evidence_collection_failed",
+        "missing_evidence",
+        "no_registry_tool_selected",
+        "insufficient_evidence",
+    }:
+        level = "low"
+    elif missing_evidence:
+        level = "medium" if completed_count else "low"
+    elif native_level in {"low", "medium", "high"}:
+        level = native_level
+    elif completed_count:
+        level = "high"
+    else:
+        level = "low"
+
+    notes: list[str] = []
+    if missing_evidence:
+        notes.append(
+            f"部分 Scout evidence 可用，但仍有 {len(missing_evidence)} 個資料缺口；Scout 採保守判斷。"
+        )
+        notes.extend(_missing_evidence_text(item) for item in missing_evidence[:3])
+    elif completed_count:
+        notes.append(
+            f"{completed_count} 個 deterministic Scout evidence source 已完成；"
+            "仍不可視為 runtime safety truth。"
+        )
+    else:
+        notes.append("沒有完成的 deterministic Scout evidence source；不得推論現場安全。")
+    notes.extend(_text_list(output.get("uncertaintyNotes"))[:3])
+
+    return {
+        "level": level,
+        "label": _confidence_label(level),
+        "answerability": answerability,
+        "completedSourceCount": completed_count,
+        "missingEvidenceCount": len(missing_evidence),
+        "failedSourceCount": failed_count,
+        "uncertaintyNotes": _dedupe_text_values(notes)[:6],
+        "standardAlignment": [
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 28.3 Data Confidence",
+        ],
+    }
+
+
+def _confidence_label(level: str) -> str:
+    normalized = str(level or "").lower()
+    if normalized == "high":
+        return "高"
+    if normalized == "medium":
+        return "中等"
+    return "低"
+
+
+def _dedupe_text_values(values: list[str]) -> list[str]:
+    seen = set()
+    result = []
+    for value in values:
+        text = str(value).strip()
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        result.append(text)
+    return result
 
 
 def _field_answer_for_tool(
@@ -668,8 +805,13 @@ def _answer_decision_output(
         source for source in sources if source.collection_status == "completed"
     ]
     if _looks_like_standard_six_power_overview_question(question) and completed_sources:
-        return _six_power_overview_decision_output(
-            sources=completed_sources,
+        return _with_data_confidence(
+            _six_power_overview_decision_output(
+                sources=completed_sources,
+                missing_evidence=missing_evidence,
+                answerability=answerability,
+            ),
+            sources=sources,
             missing_evidence=missing_evidence,
             answerability=answerability,
         )
@@ -680,19 +822,26 @@ def _answer_decision_output(
     for source in decision_sources:
         native = source.top_result_summary.get("decision_output")
         if isinstance(native, dict) and native:
-            return {
-                **native,
-                "answerSourceToolId": source.tool_id,
-                "answerability": answerability,
-                "runtimeSafetyTruth": False,
-                "standardAlignment": _decision_output_standard_alignment(),
-            }
+            return _with_data_confidence(
+                {
+                    **native,
+                    "answerSourceToolId": source.tool_id,
+                    "answerability": answerability,
+                    "runtimeSafetyTruth": False,
+                    "standardAlignment": _decision_output_standard_alignment(),
+                },
+                sources=sources,
+                missing_evidence=missing_evidence,
+                answerability=answerability,
+            )
     for source in decision_sources:
         package = source.top_result_summary.get("pretrip_decision_package")
         if isinstance(package, dict) and package:
             return _decision_output_from_pretrip_package(
                 source=source,
                 package=package,
+                sources=sources,
+                missing_evidence=missing_evidence,
                 answerability=answerability,
             )
     for source in decision_sources:
@@ -702,39 +851,51 @@ def _answer_decision_output(
             answerability=answerability,
         )
         if output:
-            return output
-    return {
-        "decisionObjectSchema": "ContextualPermission",
-        "answerSourceToolId": None,
-        "action": "continue",
-        "decision": "DELAY" if missing_evidence else "ESCALATE",
-        "allowed": False,
-        "mainReasons": [
-            "No deterministic Scout decision source was available for this answer."
-        ],
-        "nextAction": "補齊 deterministic Scout evidence，再重新詢問。",
-        "confidence": "low",
-        "uncertaintyNotes": [
-            _missing_evidence_text(item) for item in missing_evidence
-        ],
-        "firstLayer": {
-            "decision": "暫緩判斷。",
-            "limit": "不得把此回答當成現場授權。",
-            "reason": "缺少可追溯的 Scout 決策證據。",
-            "nextStep": "補齊 deterministic Scout evidence，再重新詢問。",
-        },
-        "secondLayer": {
-            "details": [],
+            return _with_data_confidence(
+                output,
+                sources=sources,
+                missing_evidence=missing_evidence,
+                answerability=answerability,
+            )
+    return _with_data_confidence(
+        {
+            "decisionObjectSchema": "ContextualPermission",
+            "answerSourceToolId": None,
+            "action": "continue",
+            "decision": "DELAY" if missing_evidence else "ESCALATE",
+            "allowed": False,
+            "mainReasons": [
+                "No deterministic Scout decision source was available for this answer."
+            ],
+            "nextAction": "補齊 deterministic Scout evidence，再重新詢問。",
+            "confidence": "low",
             "uncertaintyNotes": [
                 _missing_evidence_text(item) for item in missing_evidence
             ],
-            "residualRisk": ["No runtime safety truth was created."],
-            "requiredConditions": ["Provide deterministic Scout evidence."],
-            "alternativeActions": ["Ask a narrower question with available workspace evidence."],
+            "firstLayer": {
+                "decision": "暫緩判斷。",
+                "limit": "不得把此回答當成現場授權。",
+                "reason": "缺少可追溯的 Scout 決策證據。",
+                "nextStep": "補齊 deterministic Scout evidence，再重新詢問。",
+            },
+            "secondLayer": {
+                "details": [],
+                "uncertaintyNotes": [
+                    _missing_evidence_text(item) for item in missing_evidence
+                ],
+                "residualRisk": ["No runtime safety truth was created."],
+                "requiredConditions": ["Provide deterministic Scout evidence."],
+                "alternativeActions": [
+                    "Ask a narrower question with available workspace evidence."
+                ],
+            },
+            "runtimeSafetyTruth": False,
+            "standardAlignment": _decision_output_standard_alignment(),
         },
-        "runtimeSafetyTruth": False,
-        "standardAlignment": _decision_output_standard_alignment(),
-    }
+        sources=sources,
+        missing_evidence=missing_evidence,
+        answerability=answerability,
+    )
 
 
 def _decision_source_priority(
@@ -866,6 +1027,8 @@ def _decision_output_from_pretrip_package(
     *,
     source: ScoutAiAnswerSource,
     package: dict[str, Any],
+    sources: list[ScoutAiAnswerSource],
+    missing_evidence: list[dict[str, Any]],
     answerability: str,
 ) -> dict[str, Any]:
     outputs = (
@@ -912,43 +1075,50 @@ def _decision_output_from_pretrip_package(
         )
         if detail
     ]
-    return {
-        "decisionObjectSchema": "ContextualPermission",
-        "answerSourceToolId": source.tool_id,
-        "answerability": answerability,
-        "action": "continue",
-        "decision": decision,
-        "allowed": allowed,
-        "mainReasons": main_reasons
-        or ["Pre-trip readiness decision package did not expose top risks."],
-        "cost": {
-            "timeBufferChangeMinutes": 0 if not allowed else None,
-            "daylightImpact": "Departure remains gated by daylight and review evidence.",
-            "retreatImpact": "Turnaround and alternatives must remain visible before runtime handoff.",
-            "teamPaceImpact": "Slowest or most vulnerable member basis is required.",
-        },
-        "nextAction": next_action,
-        "confidence": "low" if uncertainty_notes else "medium",
-        "uncertaintyNotes": uncertainty_notes,
-        "residualRisk": residual_risk,
-        "requiredConditions": required_conditions,
-        "alternativeActions": alternatives,
-        "firstLayer": {
-            "decision": _decision_phrase(decision=decision, allowed=allowed),
-            "limit": limit,
-            "reason": " / ".join((main_reasons or ["缺少前三風險摘要"])[:2]),
-            "nextStep": next_action,
-        },
-        "secondLayer": {
-            "details": details,
+    return _with_data_confidence(
+        {
+            "decisionObjectSchema": "ContextualPermission",
+            "answerSourceToolId": source.tool_id,
+            "answerability": answerability,
+            "action": "continue",
+            "decision": decision,
+            "allowed": allowed,
+            "mainReasons": main_reasons
+            or ["Pre-trip readiness decision package did not expose top risks."],
+            "cost": {
+                "timeBufferChangeMinutes": 0 if not allowed else None,
+                "daylightImpact": "Departure remains gated by daylight and review evidence.",
+                "retreatImpact": (
+                    "Turnaround and alternatives must remain visible before runtime handoff."
+                ),
+                "teamPaceImpact": "Slowest or most vulnerable member basis is required.",
+            },
+            "nextAction": next_action,
+            "confidence": "low" if uncertainty_notes else "medium",
             "uncertaintyNotes": uncertainty_notes,
             "residualRisk": residual_risk,
             "requiredConditions": required_conditions,
             "alternativeActions": alternatives,
+            "firstLayer": {
+                "decision": _decision_phrase(decision=decision, allowed=allowed),
+                "limit": limit,
+                "reason": " / ".join((main_reasons or ["缺少前三風險摘要"])[:2]),
+                "nextStep": next_action,
+            },
+            "secondLayer": {
+                "details": details,
+                "uncertaintyNotes": uncertainty_notes,
+                "residualRisk": residual_risk,
+                "requiredConditions": required_conditions,
+                "alternativeActions": alternatives,
+            },
+            "runtimeSafetyTruth": False,
+            "standardAlignment": _decision_output_standard_alignment(),
         },
-        "runtimeSafetyTruth": False,
-        "standardAlignment": _decision_output_standard_alignment(),
-    }
+        sources=sources,
+        missing_evidence=missing_evidence,
+        answerability=answerability,
+    )
 
 
 def _generic_decision_output_from_source(
@@ -1194,6 +1364,7 @@ def _decision_output_standard_alignment() -> list[str]:
         "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 16 required decision output format",
         "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 17 ContextualPermission schema",
         "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 23 acceptance criteria",
+        "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 28.3 Data Confidence",
     ]
 
 

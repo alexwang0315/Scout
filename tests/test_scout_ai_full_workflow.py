@@ -192,6 +192,10 @@ def test_full_workflow_surfaces_standard_six_power_coverage_overview() -> None:
         "scout.ai.standard_six_power_overview.v0"
     )
     assert result.decision_output["decision"] == "GUIDED_ONLY"
+    assert result.decision_output["dataConfidence"]["level"] == "medium"
+    assert result.decision_output["dataConfidence"]["missingEvidenceCount"] == (
+        result.missing_evidence_count
+    )
     assert result.decision_output["runtimeSafetyTruth"] is False
     assert result.answer.startswith("六力覆蓋檢視：")
     for label in ("探索力", "自信力", "勇氣力", "路線力", "天氣力", "地圖力"):
@@ -199,6 +203,7 @@ def test_full_workflow_surfaces_standard_six_power_coverage_overview() -> None:
     assert PACE_GUARDIAN_TOOL_ID in result.answer
     assert ROUTE_READINESS_TOOL_ID in result.answer
     assert "不輸出單一靜態分數" in result.answer
+    assert "信心：中等" in result.answer
     assert "可以繼續前進" not in result.answer
     assert "地圖力判斷：建議" not in result.answer
     assert result.workflow_policy.model_provider_used is False
