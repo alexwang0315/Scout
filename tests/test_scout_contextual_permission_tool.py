@@ -55,6 +55,13 @@ def test_contextual_permission_allows_film_with_bounded_deadline_and_cost() -> N
 
     decision_output = result["decision_output"]
     assert decision_output["decisionObjectSchema"] == "ContextualPermission"
+    assert decision_output["action"] == "film"
+    assert decision_output["decision"] == "CONDITIONAL_GO"
+    assert decision_output["allowed"] is True
+    assert decision_output["maxDurationMinutes"] == 6
+    assert decision_output["leaveBy"] == "2026-06-07T13:42:00+08:00"
+    assert decision_output["cost"]["timeBufferChangeMinutes"] == -6
+    assert decision_output["confidence"] == "medium"
     assert decision_output["runtimeSafetyTruth"] is False
     assert decision_output["firstLayer"]["decision"] == "可以，最多 6 分鐘。"
     assert "2026-06-07T13:42:00+08:00" in decision_output["firstLayer"]["limit"]
@@ -96,6 +103,9 @@ def test_contextual_permission_missing_buffer_is_conservative_no_go() -> None:
     assert result["decision_output"]["firstLayer"]["limit"] == (
         "不授權此行動；不要消耗停留或改線 buffer。"
     )
+    assert result["decision_output"]["action"] == "film"
+    assert result["decision_output"]["decision"] == "NO_GO"
+    assert result["decision_output"]["allowed"] is False
     assert result["decision_output"]["secondLayer"]["alternativeActions"]
 
 
@@ -112,6 +122,10 @@ def test_contextual_permission_allows_rain_gear_without_buffer() -> None:
     assert result["missing_fields"] == []
     assert result["contextual_permission"]["cost"]["timeBufferChangeMinutes"] == 0
     assert result["decision_output"]["decisionObjectSchema"] == "ContextualPermission"
+    assert result["decision_output"]["action"] == "wear_rain_gear"
+    assert result["decision_output"]["decision"] == "GO"
+    assert result["decision_output"]["allowed"] is True
+    assert result["decision_output"]["cost"]["timeBufferChangeMinutes"] == 0
     assert result["decision_output"]["firstLayer"]["decision"] == "可以穿雨具。"
     assert result["decision_output"]["firstLayer"]["limit"] == (
         "不額外消耗停留 buffer；執行後立即回到原定節奏。"
@@ -133,6 +147,9 @@ def test_contextual_permission_blocks_unreviewed_shortcut_reroute() -> None:
     assert result["allowed"] is False
     assert result["missing_fields"] == ["remaining_safety_buffer_minutes"]
     assert result["decision_output"]["decisionObjectSchema"] == "ContextualPermission"
+    assert result["decision_output"]["action"] == "reroute"
+    assert result["decision_output"]["decision"] == "NO_GO"
+    assert result["decision_output"]["allowed"] is False
     assert result["decision_output"]["firstLayer"]["decision"] == "不建議改線。"
     assert result["decision_output"]["firstLayer"]["limit"] == (
         "不授權此行動；不要消耗停留或改線 buffer。"
@@ -155,6 +172,10 @@ def test_contextual_permission_allows_direct_retreat_for_tired_teammate() -> Non
     assert result["missing_fields"] == []
     assert result["contextual_permission"]["cost"]["timeBufferChangeMinutes"] == 0
     assert result["decision_output"]["decisionObjectSchema"] == "ContextualPermission"
+    assert result["decision_output"]["action"] == "retreat"
+    assert result["decision_output"]["decision"] == "GO"
+    assert result["decision_output"]["allowed"] is True
+    assert result["decision_output"]["cost"]["timeBufferChangeMinutes"] == 0
     assert result["decision_output"]["firstLayer"]["decision"] == "可以撤退。"
     assert "保持隊伍完整" in result["decision_output"]["firstLayer"]["nextStep"]
     assert result["decision_output"]["runtimeSafetyTruth"] is False

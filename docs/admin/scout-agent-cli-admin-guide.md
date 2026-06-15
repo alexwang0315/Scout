@@ -427,6 +427,10 @@ weather/daylight, validation, energy, team, route-context, and weather-decision
 evidence. The output is candidate-only permission rules such as whether the user
 can stop, film, eat lunch, wait, continue toward a summit, or must avoid a high
 risk crossing.
+The native `decision_output` preserves both first-layer field text and
+machine-readable `action`, `decision`, `allowed`, deadline, and cost fields, so
+answer synthesis and full workflow outputs can satisfy Sec. 23 without scraping
+Chinese prose.
 
 For Sec. 19.1 split-team questions such as whether faster members can go ahead
 to summit, `scout.ai.contextual_permission.assess.v0` resolves the request as
