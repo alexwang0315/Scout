@@ -207,6 +207,85 @@ def test_route_readiness_conditions_family_photo_goal_even_when_reviewed(
     assert result["decision_output"]["runtimeSafetyTruth"] is False
 
 
+def test_route_readiness_guided_only_for_high_risk_mvp_non_goal(
+    tmp_path: Path,
+) -> None:
+    project_root = _ready_project(tmp_path)
+
+    result = assess_scout_route_readiness(
+        project_root,
+        query="雪地技術攀登，出發前 Go/No-Go 可以自主出發嗎？",
+        user_experience_level="advanced",
+        user_goal="雪地技術攀登",
+        transport_access_plan="confirmed shuttle",
+        team_slowest_basis_confirmed=True,
+        departure_time_confirmed=True,
+        weather_reviewed=True,
+        daylight_reviewed=True,
+        equipment_confirmed=True,
+        remote_contact_confirmed=True,
+    )
+
+    assert result["answerability"] == "route_readiness_decision_available"
+    assert result["decision"] == "GUIDED_ONLY"
+    assert result["missing_fields"] == []
+    profile = result["user_goal_profile"]
+    assert set(profile["goals"]) == {"snow", "technical_climb"}
+    assert profile["high_risk_non_goal"] is True
+    assert profile["high_risk_non_goal_domains"] == ["snow", "technical_climb"]
+    gate = result["readiness_governance"]["high_risk_domain_gate"]
+    assert gate["required"] is True
+    assert gate["domain_labels"] == ["雪地", "技術攀登"]
+    assert gate["autonomous_departure_allowed"] is False
+    assert result["guided_only_gate"]["required"] is True
+    assert result["guided_only_gate"]["reason"] == "high_risk_non_goal_domain"
+    assert any(
+        "高風險領域" in gap
+        for gap in result["readiness_governance"]["warning_gaps"]
+    )
+    package = result["pretrip_decision_package"]
+    outputs = package["required_outputs"]
+    assert outputs["pretrip_decision"] == "GUIDED_ONLY"
+    assert outputs["user_goal_profile"]["goal_labels"] == ["雪地", "技術攀登"]
+    assert outputs["top_risk_sources"][0]["source"] == (
+        "mvp_non_goal_high_risk_domain"
+    )
+    assert any(
+        item["policy"] == "not_recommended_high_risk_non_goal"
+        for item in outputs["not_recommended_stop_points"]
+    )
+    assert package["decision_limits"]["autonomous_departure_allowed"] is False
+    assert result["decision_output"]["decision"] == "GUIDED_ONLY"
+    assert result["decision_output"]["allowed"] is False
+    assert "不得自主出發" in result["decision_output"]["firstLayer"]["limit"]
+    assert "雪地" in result["field_answer"]
+    assert result["decision_output"]["runtimeSafetyTruth"] is False
+
+    stream_result = assess_scout_route_readiness(
+        project_root,
+        query="高風險溯溪，出發前 Go/No-Go 可以自主出發嗎？",
+        user_experience_level="advanced",
+        user_goal="高風險溯溪",
+        transport_access_plan="confirmed shuttle",
+        team_slowest_basis_confirmed=True,
+        departure_time_confirmed=True,
+        weather_reviewed=True,
+        daylight_reviewed=True,
+        equipment_confirmed=True,
+        remote_contact_confirmed=True,
+    )
+
+    assert stream_result["decision"] == "GUIDED_ONLY"
+    assert stream_result["missing_fields"] == []
+    assert stream_result["user_goal_profile"]["high_risk_non_goal_domains"] == [
+        "high_risk_stream"
+    ]
+    assert stream_result["readiness_governance"]["high_risk_domain_gate"][
+        "domain_labels"
+    ] == ["高風險溯溪"]
+    assert stream_result["decision_output"]["runtimeSafetyTruth"] is False
+
+
 def test_route_readiness_output_kind_constant() -> None:
     assert ROUTE_READINESS_OUTPUT_KIND == "scout_ai_route_readiness_tool_output"
 

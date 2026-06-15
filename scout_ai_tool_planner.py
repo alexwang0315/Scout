@@ -1019,6 +1019,32 @@ def _route_readiness_user_goal(normalized_question: str) -> str | None:
         add("family")
     if _has_any(normalized_question, ("社交", "朋友", "團體", "social", "friends")):
         add("social")
+    if _has_any(
+        normalized_question,
+        ("雪地", "雪季", "雪訓", "snow", "snowfield"),
+    ):
+        add("snow")
+    if _has_any(
+        normalized_question,
+        (
+            "技術攀登",
+            "技術攀爬",
+            "技術路線",
+            "攀岩",
+            "攀登",
+            "technicalclimb",
+            "technicalclimbing",
+            "climbing",
+        ),
+    ):
+        add("technical_climb")
+    if _has_any(
+        normalized_question,
+        ("高風險溯溪", "溯溪", "溪降", "canyoning", "canyoneering"),
+    ):
+        add("high_risk_stream")
+    if _has_any(normalized_question, ("海域", "海泳", "海上", "openwater", "ocean")):
+        add("open_water")
     return ",".join(goals) if goals else None
 
 

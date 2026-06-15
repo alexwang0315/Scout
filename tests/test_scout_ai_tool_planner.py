@@ -164,6 +164,34 @@ def test_planner_passes_family_photo_goal_to_route_readiness() -> None:
     assert item.request["arguments"]["user_goal"] == "photo,family"
 
 
+def test_planner_passes_high_risk_domain_goal_to_route_readiness() -> None:
+    plan = plan_scout_ai_tools(
+        _query(
+            "雪地技術攀登，出發前 Go/No-Go 可以自主出發嗎？"
+            "advanced transportconfirmed slowestbasisconfirmed "
+            "departuretimeconfirmed wxconfirmed sunok gearconfirmed rcconfirmed"
+        ),
+        project_root=PROJECT_ROOT,
+    )
+
+    item = _single_tool(plan, ROUTE_READINESS_TOOL_ID)
+    assert item.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+    assert item.request is not None
+    assert item.request["tool_id"] == ROUTE_READINESS_TOOL_ID
+    assert item.request["arguments"] == {
+        "user_experience_level": "advanced",
+        "user_goal": "snow,technical_climb",
+        "transport_access_plan": "user_confirmed",
+        "team_slowest_basis_confirmed": True,
+        "departure_time_confirmed": True,
+        "weather_reviewed": True,
+        "daylight_reviewed": True,
+        "equipment_confirmed": True,
+        "remote_contact_confirmed": True,
+    }
+    assert item.boundary.runtime_safety_truth is False
+
+
 def test_planner_routes_latest_return_limit_to_route_readiness() -> None:
     plan = plan_scout_ai_tools(
         _query("最晚回程接駁是 16:30，這個行程可以嗎？"),
