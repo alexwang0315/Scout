@@ -420,6 +420,8 @@ def _asks_to_use_average_pace(normalized_question: str) -> bool:
 def _equipment_resource_request_overrides(question: str) -> dict[str, Any]:
     normalized = _normalize(question)
     overrides: dict[str, Any] = {}
+    if _states_phone_battery_dead(normalized):
+        overrides["phone_battery_percent"] = 0
     if _states_missing_offline_map(normalized):
         overrides["offline_map_ready"] = False
     if _has_any(
@@ -440,6 +442,22 @@ def _equipment_resource_request_overrides(question: str) -> dict[str, Any]:
     ):
         overrides["gpx_loaded"] = True
     return overrides
+
+
+def _states_phone_battery_dead(normalized_question: str) -> bool:
+    return _has_any(
+        normalized_question,
+        (
+            "手機沒電",
+            "手機沒電了",
+            "手機完全沒電",
+            "手機已經沒電",
+            "手機無電",
+            "手機電量耗盡",
+            "phonebatterydead",
+            "phonedead",
+        ),
+    )
 
 
 def _navigation_terrain_request_overrides(question: str) -> dict[str, Any]:
@@ -1136,7 +1154,12 @@ def _looks_like_equipment_resource_question(text: str) -> bool:
             "gearreadiness",
             "手機電量",
             "手機只剩",
+            "手機沒電",
+            "手機完全沒電",
+            "手機電量耗盡",
             "電量",
+            "沒電",
+            "手錶",
             "手錶電量",
             "頭燈",
             "備用燈",

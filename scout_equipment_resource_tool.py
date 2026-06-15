@@ -289,12 +289,27 @@ def _readiness(
     alternative_actions: list[str] = []
 
     phone_battery = _float_or_none(resource_state.get("phone_battery_percent"))
+    watch_battery = _float_or_none(resource_state.get("watch_battery_percent"))
     power_bank = _float_or_none(resource_state.get("power_bank_percent"))
     if phone_battery is not None:
-        if phone_battery <= CRITICAL_PHONE_BATTERY_PCT and not _has_usable_power_bank(power_bank):
+        if phone_battery <= 0:
+            if watch_battery is not None:
+                critical_gaps.append(
+                    "主要手機已無可用電量；手錶有電不能單獨取代主要離線地圖、GPX、通訊與回報能力。"
+                )
+            else:
+                critical_gaps.append("主要手機已無可用電量。")
+            required_conditions.append(
+                "先恢復主要手機電量，或切換到已審核的備援導航與通訊方案。"
+            )
+            alternative_actions.append("原地補電、改短線、撤退或採 GUIDED_ONLY。")
+        elif phone_battery <= CRITICAL_PHONE_BATTERY_PCT and not _has_usable_power_bank(power_bank):
             critical_gaps.append("手機電量過低且沒有可靠行動電源。")
             required_conditions.append("補足手機電量或確認可用行動電源。")
             alternative_actions.append("改短路線、延後出發或採 GUIDED_ONLY。")
+        elif phone_battery <= CRITICAL_PHONE_BATTERY_PCT:
+            warning_gaps.append("手機電量極低，即使有行動電源也需先補電再推進。")
+            required_conditions.append("停下來補電並確認主要導航與通訊恢復。")
         elif phone_battery <= LOW_PHONE_BATTERY_PCT:
             warning_gaps.append("手機電量偏低，需保留導航與回報電量。")
             required_conditions.append("開啟省電模式並指定備援導航裝置。")

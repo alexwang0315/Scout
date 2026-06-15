@@ -511,6 +511,23 @@ def test_planner_selects_equipment_resource_for_device_and_water_question() -> N
     assert item.boundary.runtime_safety_truth is False
 
 
+def test_planner_routes_dead_phone_watch_battery_to_equipment_resource() -> None:
+    plan = plan_scout_ai_tools(
+        _query("如果手機沒電但手錶還有電，可以繼續嗎？"),
+        project_root=PROJECT_ROOT,
+    )
+
+    tool_ids = _tool_ids(plan)
+    assert EQUIPMENT_RESOURCE_TOOL_ID in tool_ids
+    assert PACE_GUARDIAN_TOOL_ID not in tool_ids
+
+    equipment = _single_tool(plan, EQUIPMENT_RESOURCE_TOOL_ID)
+    assert equipment.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+    assert equipment.request is not None
+    assert equipment.request["arguments"] == {"phone_battery_percent": 0}
+    assert equipment.boundary.runtime_safety_truth is False
+
+
 def test_planner_selects_team_status_for_rear_group_and_checkin_question() -> None:
     plan = plan_scout_ai_tools(
         _query("後隊在哪？最後一次有效位置多久前？留守回報準備好了嗎？"),

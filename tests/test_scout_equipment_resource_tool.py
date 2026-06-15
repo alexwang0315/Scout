@@ -88,6 +88,34 @@ def test_equipment_resource_no_go_for_missing_offline_map_even_with_other_missin
     assert result["decision_output"]["runtimeSafetyTruth"] is False
 
 
+def test_equipment_resource_no_go_when_phone_dead_even_if_watch_has_battery() -> None:
+    result = assess_scout_equipment_resource(
+        PROJECT_ROOT,
+        query="如果手機沒電但手錶還有電，可以繼續嗎？",
+        phone_battery_percent=0,
+        watch_battery_percent=80,
+        power_bank_percent=100,
+        offline_map_ready=True,
+        gpx_loaded=True,
+        headlamp_ready=True,
+        water_liters=1.5,
+        food_hours=4.0,
+    )
+
+    assert result["answerability"] == "equipment_resource_decision_available"
+    assert result["decision"] == "NO_GO"
+    assert result["decision_output"]["decision"] == "NO_GO"
+    assert result["decision_output"]["allowed"] is False
+    assert result["resource_state"]["phone_battery_percent"] == 0.0
+    assert result["resource_state"]["watch_battery_percent"] == 80.0
+    assert any(
+        "手錶有電不能單獨取代" in gap
+        for gap in result["resource_readiness"]["critical_gaps"]
+    )
+    assert "主要手機已無可用電量" in result["field_answer"]
+    assert result["equipment_resource"]["runtime_safety_truth"] is False
+
+
 def test_equipment_resource_go_when_direct_required_resources_are_ready(tmp_path: Path) -> None:
     project_root = tmp_path / "equipment_ready_project"
     project_root.mkdir()

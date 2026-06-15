@@ -273,6 +273,10 @@ truth by itself.
 Questions that state a missing offline map or unloaded GPX, such as
 "我沒下載離線地圖，可以自主出發嗎？", route through route readiness plus this
 equipment gate and must not be answered by candidate map OCR/perception alone.
+Questions that state the primary phone is dead, such as "手機沒電但手錶還有電，
+可以繼續嗎？", also route here and return `NO_GO`: watch battery alone does not
+replace primary offline maps, GPX navigation, communication, and check-in
+capability.
 
 `scout.ai.navigation_terrain.assess.v0` is the read-only Scout AI Sec. 11
 navigation-terrain assessor. It dry-runs the existing navigation terrain
