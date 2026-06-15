@@ -25,6 +25,7 @@ from scout_media_literacy_tool import MEDIA_LITERACY_TOOL_ID
 from scout_survival_incident_playbook_tool import SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID
 from scout_risk_score_tool import RISK_SCORE_TOOL_ID
 from scout_terrain_score_tool import TERRAIN_SCORE_TOOL_ID
+from scout_safety_boundary_tool import SAFETY_BOUNDARY_TOOL_ID
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -549,6 +550,34 @@ def test_evidence_collection_keeps_post_trip_review_payload() -> None:
     assert payload["completed_trip_summary"]["edge_count"] == 73
     assert "subjective_difficulty" in post_trip.missing_fields
     assert post_trip.boundary.runtime_safety_truth is False
+
+
+def test_evidence_collection_keeps_safety_boundary_decision_output() -> None:
+    result = collect_scout_ai_evidence(
+        "哪些風險目前只是候選，不能觸發 Ln？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=3,
+    )
+
+    assert result.selected_tool_count == 3
+    assert result.executed_tool_count == 3
+    assert result.completed_tool_count == 3
+    safety = _record(result, SAFETY_BOUNDARY_TOOL_ID)
+    payload = safety.result["payload"]
+    assert payload["answerability"] == "safety_boundary_missing_required_fields"
+    assert payload["decision"] == "DELAY"
+    assert payload["decision_output"]["decisionObjectSchema"] == "ContextualPermission"
+    assert payload["decision_output"]["decision"] == "DELAY"
+    assert payload["decision_output"]["allowed"] is False
+    assert payload["decision_output"]["runtimeSafetyTruth"] is False
+    assert payload["safety_boundary"]["role"] == (
+        "Safety Boundary / Runtime Admission Guard"
+    )
+    assert "admission_state" in safety.missing_fields
+    assert "operator_review_status" in safety.missing_fields
+    assert safety.boundary.runtime_safety_truth is False
+    assert safety.boundary.live_safety_api_calls_allowed is False
 
 
 def test_evidence_collection_reports_empty_collection_when_no_tool_matches() -> None:
