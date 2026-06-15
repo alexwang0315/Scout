@@ -183,6 +183,7 @@ scout-risk-engine/scout_codex_package/tests/__pycache__/**
 !scout_wearable_raw_importers.py
 !scout_wearable_validator.py
 !scout_workspace_search_tools.py
+!skill_registry.py
 !spatial_imprint_debug_projection.py
 !spatial_imprint_models.py
 !spatial_imprint_store.py
