@@ -59,8 +59,8 @@ def test_departure_gate_refs_reviewed_package_graph_and_gate_inputs():
         "outputs/compiled_mission_graph.reviewed.json"
     )
     assert refs["compiled_mission_graph_reviewed_ref"]["summary"] == {
-        "checkpoint_count": 110,
-        "segment_count": 109,
+        "checkpoint_count": 124,
+        "segment_count": 123,
     }
     assert refs["readiness_report_ref"]["summary"] == {
         "finding_count": 0,
