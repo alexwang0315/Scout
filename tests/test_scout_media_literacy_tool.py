@@ -111,5 +111,31 @@ def test_media_literacy_guided_content_requires_guided_or_equivalent_support() -
     assert result["boundary"]["live_safety_api_calls_allowed"] is False
 
 
+def test_media_literacy_blocks_sunk_cost_summit_pressure() -> None:
+    result = assess_scout_media_literacy(
+        PROJECT_ROOT,
+        query="已經快到山頂了，不攻頂會不會很可惜？",
+    )
+
+    assert result["decision"] == "NO_GO"
+    assert result["allowed"] is False
+    assert result["action"] == "summit"
+    bias_ids = {bias["bias_id"] for bias in result["media_literacy"]["detected_biases"]}
+    assert "sunk_cost_bias" in bias_ids
+    assert "route_context_or_target_point" in result["missing_fields"]
+    assert result["decision_output"]["decision"] == "NO_GO"
+    assert result["decision_output"]["action"] == "summit"
+    assert result["decision_output"]["firstLayer"]["decision"] == (
+        "不建議因為已經投入時間而繼續前進或攻頂。"
+    )
+    assert "已投入時間" in result["decision_output"]["firstLayer"]["limit"]
+    assert any(
+        "最近安全 CP" in action
+        for action in result["decision_output"]["alternativeActions"]
+    )
+    assert result["decision_output"]["runtimeSafetyTruth"] is False
+    assert result["boundary"]["runtime_safety_truth"] is False
+
+
 def test_media_literacy_output_kind_constant() -> None:
     assert MEDIA_LITERACY_OUTPUT_KIND == "scout_ai_media_literacy_tool_output"

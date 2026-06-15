@@ -496,6 +496,29 @@ def test_planner_routes_media_speed_bias_to_media_and_pace_guardian() -> None:
     assert pace.boundary.runtime_safety_truth is False
 
 
+def test_planner_routes_sunk_cost_summit_pressure_to_bias_and_micro_decision() -> None:
+    plan = plan_scout_ai_tools(
+        _query("已經快到山頂了，不攻頂會不會很可惜？"),
+        project_root=PROJECT_ROOT,
+    )
+
+    tool_ids = _tool_ids(plan)
+    assert MEDIA_LITERACY_TOOL_ID in tool_ids
+    assert PACE_GUARDIAN_TOOL_ID in tool_ids
+    assert CONTEXTUAL_PERMISSION_TOOL_ID in tool_ids
+
+    media = _single_tool(plan, MEDIA_LITERACY_TOOL_ID)
+    assert media.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+    assert media.request is not None
+    assert media.request["tool_id"] == MEDIA_LITERACY_TOOL_ID
+    assert media.boundary.runtime_safety_truth is False
+
+    contextual = _single_tool(plan, CONTEXTUAL_PERMISSION_TOOL_ID)
+    assert contextual.request is not None
+    assert contextual.request["arguments"] == {"action": "summit"}
+    assert contextual.boundary.runtime_safety_truth is False
+
+
 def test_planner_selects_survival_playbook_for_lost_position_question() -> None:
     plan = plan_scout_ai_tools(
         _query("不確定自己在哪，可以下切溪谷找路嗎？"),

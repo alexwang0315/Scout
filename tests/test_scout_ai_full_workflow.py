@@ -1082,24 +1082,37 @@ def test_full_workflow_blocks_daylight_summit_pressure() -> None:
     )
 
     assert result.answerability == "partial_evidence_with_missing_context"
-    assert result.selected_tool_count == 2
-    assert result.executed_tool_count == 2
-    assert result.completed_tool_count == 2
+    assert result.selected_tool_count == 3
+    assert result.executed_tool_count == 3
+    assert result.completed_tool_count == 3
     assert result.failed_tool_count == 0
     weather = _workflow_source(result, WEATHER_WINDOW_TOOL_ID)
+    media = _workflow_source(result, MEDIA_LITERACY_TOOL_ID)
     contextual = _workflow_source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
     assert weather["top_result_summary"]["decision"] == "DELAY"
     assert "route_weather_package" in weather["missing_fields"]
+    bias_ids = {
+        item["bias_id"]
+        for item in media["top_result_summary"]["media_bias_analysis"][
+            "detected_biases"
+        ]
+    }
+    assert "sunk_cost_bias" in bias_ids
+    assert media["top_result_summary"]["action"] == "summit"
+    assert media["top_result_summary"]["decision"] == "NO_GO"
     assert contextual["top_result_summary"]["action"] == "summit"
     assert contextual["top_result_summary"]["decision"] == "NO_GO"
     assert "remaining_safety_buffer_minutes" in contextual["missing_fields"]
-    assert result.decision_output["answerSourceToolId"] == CONTEXTUAL_PERMISSION_TOOL_ID
+    assert result.decision_output["answerSourceToolId"] == MEDIA_LITERACY_TOOL_ID
     assert result.decision_output["action"] == "summit"
     assert result.decision_output["decision"] == "NO_GO"
     assert result.decision_output["allowed"] is False
-    assert result.decision_output["firstLayer"]["decision"] == "不建議攻頂。"
-    assert "不要繼續攻頂" in result.decision_output["firstLayer"]["nextStep"]
+    assert result.decision_output["firstLayer"]["decision"] == (
+        "不建議因為已經投入時間而繼續前進或攻頂。"
+    )
+    assert "已投入時間" in result.decision_output["firstLayer"]["limit"]
     assert "天氣決策" in result.answer
+    assert "sunk_cost_bias" in result.answer
     assert result.boundary.runtime_safety_truth is False
 
 
@@ -1876,6 +1889,41 @@ def test_full_workflow_routes_media_speed_bias_to_pace_adjustment() -> None:
     assert result.decision_output["decision"] == "NO_GO"
     assert "媒體識讀判斷" in result.answer
     assert "腳程守門員" in result.answer
+    assert result.boundary.runtime_safety_truth is False
+
+
+def test_full_workflow_blocks_sunk_cost_summit_pressure() -> None:
+    result = run_scout_ai_full_workflow(
+        "已經快到山頂了，不攻頂會不會很可惜？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=6,
+    )
+
+    assert result.answerability == "partial_evidence_with_missing_context"
+    assert result.selected_tool_count == 3
+    assert result.completed_tool_count == 3
+    media = _workflow_source(result, MEDIA_LITERACY_TOOL_ID)
+    pace = _workflow_source(result, PACE_GUARDIAN_TOOL_ID)
+    contextual = _workflow_source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
+    bias_ids = {
+        item["bias_id"]
+        for item in media["top_result_summary"]["media_bias_analysis"][
+            "detected_biases"
+        ]
+    }
+    assert "sunk_cost_bias" in bias_ids
+    assert media["top_result_summary"]["action"] == "summit"
+    assert media["top_result_summary"]["decision"] == "NO_GO"
+    assert pace["top_result_summary"]["decision"] == "NO_GO"
+    assert contextual["top_result_summary"]["action"] == "summit"
+    assert result.decision_output["answerSourceToolId"] == MEDIA_LITERACY_TOOL_ID
+    assert result.decision_output["action"] == "summit"
+    assert result.decision_output["decision"] == "NO_GO"
+    assert result.decision_output["firstLayer"]["decision"] == (
+        "不建議因為已經投入時間而繼續前進或攻頂。"
+    )
+    assert "sunk_cost_bias" in result.answer
     assert result.boundary.runtime_safety_truth is False
 
 

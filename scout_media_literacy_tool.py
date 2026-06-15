@@ -213,6 +213,29 @@ def _detect_biases(text: str) -> list[dict[str, Any]]:
             "只看到完成者敘事，可能忽略撤退、迷路、受傷或低能見度案例。",
         ),
         (
+            "sunk_cost_bias",
+            (
+                "來都來了",
+                "都走到這裡",
+                "好不容易",
+                "不想白走",
+                "白走",
+                "可惜",
+                "不攻頂",
+                "快到山頂",
+                "山頂只差一點",
+                "還差一點到山頂",
+                "只差一點到山頂",
+                "只差一點就完登",
+                "再撐一下",
+                "已經花了",
+                "花了很多時間",
+                "不要撤退",
+                "不想撤退",
+            ),
+            "已投入時間或快到目標不是安全證據，容易把撤退、日照與隊伍 buffer 讓位給沉沒成本。",
+        ),
+        (
             "season_weather_bias",
             ("乾季", "晴天", "雨季", "花季", "楓紅", "雲海", "雪季", "影片天氣"),
             "不同季節與天氣窗口會改變地面、風、霧雨、溪水與曝露風險。",
@@ -448,6 +471,7 @@ def _decision(
         "beauty_photo_bias",
         "check_in_pressure",
         "survivorship_bias",
+        "sunk_cost_bias",
         "image_scale_bias",
     }:
         return "NO_GO"
@@ -456,6 +480,7 @@ def _decision(
     if missing_fields and bias_ids & {
         "beauty_photo_bias",
         "check_in_pressure",
+        "sunk_cost_bias",
         "image_scale_bias",
     }:
         return "NO_GO"
@@ -485,7 +510,7 @@ def _guidance(
         actions.insert(0, "Only consider this plan with qualified guide support or equivalent reviewed controls.")
     return {
         "counter_bias_actions": actions,
-        "next_action": _next_action(decision),
+        "next_action": _next_action(decision, biases=biases),
         "risk_reframe": _risk_reframe(biases, matches),
     }
 
@@ -530,10 +555,14 @@ def _decision_output(
         missing_fields=missing_fields,
         input_state=input_state,
     )
-    alternatives = _alternative_actions(decision=decision, matches=matches)
+    alternatives = _alternative_actions(
+        decision=decision,
+        matches=matches,
+        biases=biases,
+    )
     first_layer = {
-        "decision": _decision_phrase(decision),
-        "limit": _limit_phrase(decision),
+        "decision": _decision_phrase(decision, biases=biases),
+        "limit": _limit_phrase(decision, biases=biases),
         "reason": " / ".join(reasons[:2]),
         "nextStep": guidance["next_action"],
     }
@@ -570,7 +599,7 @@ def _decision_output(
         "action": _decision_action(biases=biases, input_state=input_state),
         "decision": decision,
         "allowed": allowed,
-        "locationConstraint": _limit_phrase(decision),
+        "locationConstraint": _limit_phrase(decision, biases=biases),
         "mainReasons": reasons[:3],
         "cost": {
             "timeBufferChangeMinutes": 0 if not allowed else None,
@@ -629,8 +658,15 @@ def _alternative_actions(
     *,
     decision: str,
     matches: list[dict[str, Any]],
+    biases: list[dict[str, Any]],
 ) -> list[str]:
     safe_points = [str(item.get("label")) for item in matches[:2] if item.get("label")]
+    if decision == "NO_GO" and _has_sunk_cost_pressure(biases):
+        return [
+            "停止用已投入時間或快到山頂作為決策理由。",
+            "改以前一個或最近安全 CP、撤退點、短版路線重新評估。",
+            "若仍想攻頂，必須重新通過 CP Graph、天氣、日照、最慢者與 contextual permission。",
+        ]
     if decision == "NO_GO":
         return [
             "取消媒體點位繞行或停留。",
@@ -684,7 +720,9 @@ def _second_layer_details(
     return details
 
 
-def _decision_phrase(decision: str) -> str:
+def _decision_phrase(decision: str, *, biases: list[dict[str, Any]]) -> str:
+    if decision == "NO_GO" and _has_sunk_cost_pressure(biases):
+        return "不建議因為已經投入時間而繼續前進或攻頂。"
     if decision == "NO_GO":
         return "不建議為媒體點位停留或改線。"
     if decision == "GUIDED_ONLY":
@@ -696,7 +734,9 @@ def _decision_phrase(decision: str) -> str:
     return "建議延後判斷。"
 
 
-def _limit_phrase(decision: str) -> str:
+def _limit_phrase(decision: str, *, biases: list[dict[str, Any]]) -> str:
+    if decision == "NO_GO" and _has_sunk_cost_pressure(biases):
+        return "不得把已投入時間、快到山頂或不想白走當成繼續理由。"
     if decision == "NO_GO":
         return "不得為拍照、打卡或美照期待離開主線、增加停留或繞行。"
     if decision == "GUIDED_ONLY":
@@ -716,6 +756,22 @@ def _has_photo_pressure(biases: list[dict[str, Any]]) -> bool:
 def _has_speed_pressure(biases: list[dict[str, Any]]) -> bool:
     ids = {str(item.get("bias_id")) for item in biases}
     return "speed_bias" in ids
+
+
+def _has_sunk_cost_pressure(biases: list[dict[str, Any]]) -> bool:
+    ids = {str(item.get("bias_id")) for item in biases}
+    return "sunk_cost_bias" in ids
+
+
+def _has_summit_pressure(biases: list[dict[str, Any]]) -> bool:
+    terms = set()
+    for bias in biases:
+        matched_terms = bias.get("matched_terms")
+        if not isinstance(matched_terms, list):
+            continue
+        terms.update(str(term) for term in matched_terms)
+    text = _normalize(_joined_text(terms))
+    return _has_any(text, ("攻頂", "山頂", "完登", "不攻頂"))
 
 
 def _has_reroute_pressure(text: str) -> bool:
@@ -750,6 +806,16 @@ def _has_detour_or_stop_pressure(text: str) -> bool:
             "很好拍",
             "拍照",
             "拍攝",
+            "攻頂",
+            "山頂",
+            "完登",
+            "撤退",
+            "折返",
+            "可惜",
+            "白走",
+            "再撐",
+            "繼續",
+            "撐一下",
             "reroute",
             "shortcut",
             "checkin",
@@ -764,6 +830,8 @@ def _decision_action(
 ) -> str:
     if input_state.get("reroute_pressure"):
         return "reroute"
+    if _has_sunk_cost_pressure(biases):
+        return "summit" if _has_summit_pressure(biases) else "continue"
     if _has_speed_pressure(biases) and not input_state.get("detour_or_stop_pressure"):
         return "pace_adjustment"
     if _has_photo_pressure(biases):
@@ -804,6 +872,8 @@ def _bias_pressure_level(biases: list[dict[str, Any]], matches: list[dict[str, A
 def _risk_reframe(biases: list[dict[str, Any]], matches: list[dict[str, Any]]) -> str:
     if any(item.get("risk_context") for item in matches):
         return "Treat the media target as exposure/risk evidence first, not as an experience objective."
+    if _has_sunk_cost_pressure(biases):
+        return "Treat already-spent effort as non-safety evidence; reassess from current buffer, daylight, weather, pace, and retreat options."
     if any(item["bias_id"] == "speed_bias" for item in biases):
         return "Treat route-time claims as capability-specific, not as your team's baseline."
     if biases:
@@ -811,7 +881,9 @@ def _risk_reframe(biases: list[dict[str, Any]], matches: list[dict[str, Any]]) -
     return "No clear media trigger was found; do not infer permission from this tool alone."
 
 
-def _next_action(decision: str) -> str:
+def _next_action(decision: str, *, biases: list[dict[str, Any]] | None = None) -> str:
+    if decision == "NO_GO" and _has_sunk_cost_pressure(biases or []):
+        return "不要用已投入時間或快到山頂作為繼續理由；改以最近安全 CP、撤退或短版方案重新評估。"
     if decision == "NO_GO":
         return "不要為媒體點位改線或停留；改用安全主線、下一 CP 或已審核觀察點。"
     if decision == "GUIDED_ONLY":
