@@ -547,6 +547,51 @@ def test_answer_synthesis_uses_pace_guardian_field_answer_without_guessing(
     assert "runtime safety truth" in result.answer
 
 
+def test_answer_synthesis_routes_average_pace_bias_to_pace_guardian() -> None:
+    result = collect_and_synthesize_scout_ai_answer(
+        "我們平均腳程還可以，可以用平均速度估嗎？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=4,
+    )
+
+    assert result.answerability == "partial_evidence_with_missing_context"
+    assert result.completed_source_count == 1
+    assert result.missing_evidence_count == 1
+    assert result.sources[0].tool_id == PACE_GUARDIAN_TOOL_ID
+    assert result.sources[0].top_result_summary["decision"] == "NO_GO"
+    assert result.sources[0].top_result_summary["pace_guardian"][
+        "average_pace_used"
+    ] is False
+    assert result.decision_output["answerSourceToolId"] == PACE_GUARDIAN_TOOL_ID
+    assert result.decision_output["decision"] == "NO_GO"
+    assert result.decision_output["allowed"] is False
+    assert result.decision_output["firstLayer"]["decision"] == (
+        "不建議用目前腳程資料繼續判斷。"
+    )
+    assert "不要用平均腳程" in result.decision_output["firstLayer"]["limit"]
+    assert "member_pace_profile" in result.sources[0].missing_fields
+    assert "腳程守門員" in result.answer
+
+
+def test_answer_synthesis_routes_slowest_member_original_plan_to_pace_guardian() -> None:
+    result = collect_and_synthesize_scout_ai_answer(
+        "隊伍最慢的人比預估慢很多，可以繼續原計畫嗎？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=4,
+    )
+
+    assert result.answerability == "partial_evidence_with_missing_context"
+    assert result.completed_source_count == 1
+    assert result.sources[0].tool_id == PACE_GUARDIAN_TOOL_ID
+    assert result.decision_output["answerSourceToolId"] == PACE_GUARDIAN_TOOL_ID
+    assert result.decision_output["decision"] == "NO_GO"
+    assert result.decision_output["allowed"] is False
+    assert "member_pace_profile" in result.sources[0].missing_fields
+    assert "腳程守門員" in result.answer
+
+
 def test_answer_synthesis_prioritizes_pace_guardian_for_delayed_summit() -> None:
     result = collect_and_synthesize_scout_ai_answer(
         "我們晚了 30 分鐘，還可以繼續攻頂嗎？",

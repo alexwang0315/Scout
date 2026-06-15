@@ -300,6 +300,10 @@ def _plan_item(
         overrides = _equipment_resource_request_overrides(query.question)
         if overrides:
             request["arguments"] = overrides
+    if request is not None and contract.tool_id == PACE_GUARDIAN_TOOL_ID:
+        overrides = _pace_guardian_request_overrides(query.question)
+        if overrides:
+            request["arguments"] = overrides
     return ScoutAiToolPlanItem(
         tool_id=contract.tool_id,
         label=contract.label,
@@ -358,6 +362,47 @@ def _route_readiness_request_overrides(question: str) -> dict[str, Any]:
     ):
         overrides["remote_contact_confirmed"] = True
     return overrides
+
+
+def _pace_guardian_request_overrides(question: str) -> dict[str, Any]:
+    normalized = _normalize(question)
+    overrides: dict[str, Any] = {}
+    if _asks_to_use_average_pace(normalized):
+        overrides["leader_accepts_slowest_basis"] = False
+    if _has_any(
+        normalized,
+        (
+            "以最慢者",
+            "以最慢的人",
+            "以最慢隊員",
+            "最慢者為基準",
+            "最慢的人為基準",
+            "最慢隊員為基準",
+            "slowestbasisconfirmed",
+            "slowestmemberconfirmed",
+        ),
+    ):
+        overrides["leader_accepts_slowest_basis"] = True
+    return overrides
+
+
+def _asks_to_use_average_pace(normalized_question: str) -> bool:
+    return _has_any(
+        normalized_question,
+        (
+            "平均腳程",
+            "平均速度",
+            "平均配速",
+            "平均值",
+            "用平均估",
+            "用平均速度",
+            "用平均腳程",
+            "用平均配速",
+            "照平均",
+            "teamaveragepace",
+            "averagepace",
+        ),
+    )
 
 
 def _equipment_resource_request_overrides(question: str) -> dict[str, Any]:
@@ -737,18 +782,44 @@ def _looks_like_energy_vitals_question(text: str) -> bool:
 
 
 def _looks_like_pace_guardian_question(text: str) -> bool:
+    if _looks_like_post_trip_review_question(text) and not _has_any(
+        text,
+        (
+            "現在",
+            "可以繼續",
+            "能不能繼續",
+            "原計畫",
+            "隊伍",
+            "最慢",
+            "平均腳程",
+            "平均速度",
+            "平均配速",
+            "晚了",
+            "落後",
+        ),
+    ):
+        return False
     if _looks_like_contextual_permission_question(text) and not _has_any(
         text,
         (
             "隊友",
             "隊伍",
             "最慢",
+            "最慢的人",
+            "最慢隊員",
             "腳程",
+            "平均腳程",
+            "平均速度",
+            "平均配速",
+            "平均值",
+            "用平均",
             "落後",
             "晚了",
             "午餐點",
             "前移",
             "縮短行程",
+            "原計畫",
+            "繼續原計畫",
         ),
     ):
         return False
@@ -798,12 +869,22 @@ def _looks_like_pace_guardian_question(text: str) -> bool:
             "readinesspacefit",
             "最慢者",
             "最慢成員",
+            "最慢的人",
+            "最慢隊員",
+            "最脆弱成員",
             "走最慢",
             "最快",
             "腳程差",
             "隊伍腳程",
             "隊伍速度",
             "隊伍節奏",
+            "平均腳程",
+            "平均速度",
+            "平均配速",
+            "平均值",
+            "用平均",
+            "比預估慢",
+            "比預期慢",
             "休息節奏",
             "午餐點",
             "午餐前移",
@@ -814,6 +895,8 @@ def _looks_like_pace_guardian_question(text: str) -> bool:
             "晚了",
             "縮短行程",
             "改短版",
+            "原計畫",
+            "繼續原計畫",
             "直接撤退",
             "能準時抵達",
             "下一個cp",

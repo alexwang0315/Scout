@@ -416,6 +416,35 @@ def test_planner_selects_pace_guardian_for_team_pace_fit_question() -> None:
     assert item.boundary.runtime_safety_truth is False
 
 
+def test_planner_selects_pace_guardian_for_average_pace_bias_question() -> None:
+    plan = plan_scout_ai_tools(
+        _query("我們平均腳程還可以，可以用平均速度估嗎？"),
+        project_root=PROJECT_ROOT,
+    )
+
+    item = _single_tool(plan, PACE_GUARDIAN_TOOL_ID)
+    assert item.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+    assert item.implementation_status == "ready_current_tool"
+    assert item.request is not None
+    assert item.request["tool_id"] == PACE_GUARDIAN_TOOL_ID
+    assert item.request["arguments"] == {"leader_accepts_slowest_basis": False}
+    assert item.boundary.runtime_safety_truth is False
+
+
+def test_planner_selects_pace_guardian_for_slowest_member_original_plan_question() -> None:
+    plan = plan_scout_ai_tools(
+        _query("隊伍最慢的人比預估慢很多，可以繼續原計畫嗎？"),
+        project_root=PROJECT_ROOT,
+    )
+
+    item = _single_tool(plan, PACE_GUARDIAN_TOOL_ID)
+    assert item.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+    assert item.implementation_status == "ready_current_tool"
+    assert item.request is not None
+    assert item.request["tool_id"] == PACE_GUARDIAN_TOOL_ID
+    assert item.boundary.runtime_safety_truth is False
+
+
 def test_planner_selects_pace_and_contextual_for_delayed_summit_question() -> None:
     plan = plan_scout_ai_tools(
         _query("我們晚了 30 分鐘，還可以繼續攻頂嗎？"),
