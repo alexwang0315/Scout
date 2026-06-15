@@ -29,6 +29,7 @@ ENV/
 # IDE
 .vscode/
 .idea/
+docs/.obsidian/
 *.swp
 *.swo
 *~
