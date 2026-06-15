@@ -58,6 +58,7 @@ OPTIONAL_PROJECT_ARTIFACTS: tuple[tuple[str, str], ...] = (
     ("route_context_source_manifest", "route_context_source_manifest_ref"),
     ("route_context_pack", "route_context_pack_ref"),
     ("route_context_crawl_seed_plan", "route_context_crawl_seed_plan_ref"),
+    ("route_context_media_manifest", "route_context_media_manifest_ref"),
     ("route_context_briefing", "route_context_briefing_ref"),
     ("route_context_points", "route_context_points_ref"),
     ("route_architecture", "route_architecture_ref"),
@@ -341,6 +342,38 @@ def _project_artifact_summary(artifact_kind: str, payload: Any) -> dict[str, Any
                 "route_notes_are_seed_material"
             ),
             "route_note_point_policy": seed_policy.get("route_note_point_policy"),
+            "candidate_only": boundary.get("candidate_only"),
+            "runtime_safety_truth": boundary.get("runtime_safety_truth"),
+        }
+
+    if artifact_kind == "route_context_media_manifest":
+        boundary = payload.get("boundary", {})
+        image_curation = payload.get("image_curation", {})
+        visual_readiness = payload.get("visual_readiness", {})
+        if not isinstance(visual_readiness, dict):
+            visual_readiness = {}
+        return {
+            "project_id": payload.get("project_id"),
+            "schema_version": payload.get("schema_version"),
+            "media_count": payload.get("media_count"),
+            "available_media_count": payload.get("available_media_count"),
+            "duplicate_media_count": payload.get("duplicate_media_count"),
+            "overflow_media_count": payload.get("overflow_media_count"),
+            "anchored_media_count": payload.get("anchored_media_count"),
+            "route_point_media_count": payload.get("route_point_media_count"),
+            "gallery_image_count": len(payload.get("gallery_images", [])),
+            "image_coverage_status": image_curation.get("coverage_status"),
+            "visual_readiness_status": visual_readiness.get("status"),
+            "visual_readiness_label": visual_readiness.get("label"),
+            "visual_quality_gate": visual_readiness.get("quality_gate"),
+            "missing_image_count_to_target": visual_readiness.get(
+                "missing_image_count_to_target"
+            ),
+            "target_min_gallery_images": image_curation.get("target_min_gallery_images"),
+            "target_max_gallery_images": image_curation.get("target_max_gallery_images"),
+            "missing_context_layers": image_curation.get("missing_context_layers"),
+            "has_hero_image": bool(payload.get("hero_image")),
+            "raw_image_embedded": boundary.get("raw_image_embedded"),
             "candidate_only": boundary.get("candidate_only"),
             "runtime_safety_truth": boundary.get("runtime_safety_truth"),
         }

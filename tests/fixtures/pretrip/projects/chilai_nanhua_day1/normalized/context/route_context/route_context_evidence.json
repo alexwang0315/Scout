@@ -1,0 +1,219 @@
+{
+  "artifact_kind": "pretrip_route_context_evidence",
+  "boundary": {
+    "candidate_only": true,
+    "compile_allowed": false,
+    "live_safety_api_calls_allowed": false,
+    "phase1_runtime_mutation_allowed": false,
+    "phase2_brain_writeback_allowed": false,
+    "raw_payloads_embedded": false,
+    "runtime_safety_truth": false,
+    "safety_api_called": false,
+    "source_fulltext_embedded": false,
+    "workspace_file_mutation_allowed": true
+  },
+  "counts": {
+    "by_context_kind": {
+      "natural_context": 2,
+      "navigation_context": 1,
+      "resource_context": 3,
+      "risk_context": 2,
+      "route_context": 2,
+      "viewpoint": 1
+    },
+    "by_evidence_family": {
+      "article": 9,
+      "map_label": 1,
+      "mcp_candidates": 6,
+      "named_point": 8,
+      "named_point_evidence": 8,
+      "ocr": 1,
+      "ocr_label_evidence": 1,
+      "web_case_evidence": 1
+    },
+    "by_evidence_type": {
+      "major_critical_point": 6,
+      "named_point": 3,
+      "ocr_map_label": 1,
+      "web_case_evidence": 1
+    },
+    "by_sec6_layer": {
+      "cultural": 7,
+      "historical": 5,
+      "natural": 4,
+      "observation_point": 1,
+      "route_context": 1,
+      "seasonal": 4,
+      "terrain": 5
+    },
+    "by_sensitivity_level": {
+      "cultural_review": 4,
+      "public": 7
+    },
+    "by_source_tier": {
+      "P0": 1,
+      "P1": 10
+    },
+    "by_stop_advisory_candidate": {
+      "context_reference_only": 5,
+      "low_priority_context_reference": 1,
+      "pass_through_or_minimize_exposure": 2,
+      "short_stop_requires_contextual_permission": 3
+    },
+    "candidate_only": true,
+    "route_context_point_count": 11,
+    "runtime_safety_truth": false
+  },
+  "crawl_seed_plan_ref": "normalized/context/route_context/crawl_seed_plan.json",
+  "generated_at": "2026-06-15T00:00:00Z",
+  "import_manifest_ref": "outputs/import_manifest.json",
+  "import_manifest_summary": {
+    "artifact_kind": "pretrip_import_manifest",
+    "candidate_only": true,
+    "counts": {
+      "checkpoint_candidate_count": 124,
+      "gis_perception_checkpoint_candidate_count": 660,
+      "route_point_count": 2612,
+      "segment_candidate_count": 123
+    },
+    "gpx_speed_filter_applied": true,
+    "import_stage": "pretrip",
+    "runtime_safety_truth": false
+  },
+  "project_id": "chilai_nanhua_day1",
+  "project_update_suggestions": {
+    "route_context_briefing_ref": "outputs/briefings/route_context_briefing.html",
+    "route_context_crawl_seed_plan_ref": "normalized/context/route_context/crawl_seed_plan.json",
+    "route_context_evidence_ref": "normalized/context/route_context/route_context_evidence.json",
+    "route_context_media_manifest_ref": "normalized/context/route_context/media_manifest.json",
+    "route_context_pack_ref": "normalized/context/route_context/route_context_pack.json",
+    "route_context_point_count": 11,
+    "route_context_points_ref": "candidates/route_context_points.json",
+    "route_context_source_manifest_ref": "normalized/context/route_context/source_manifest.json"
+  },
+  "route_context_briefing_ref": "outputs/briefings/route_context_briefing.html",
+  "route_context_media_manifest_ref": "normalized/context/route_context/media_manifest.json",
+  "route_context_pack_ref": "normalized/context/route_context/route_context_pack.json",
+  "route_context_points_ref": "candidates/route_context_points.json",
+  "schema_version": "route_context_collection.v1",
+  "source_manifest_ref": "normalized/context/route_context/source_manifest.json",
+  "source_report": [
+    {
+      "candidate_only": true,
+      "conclusion_role": "representative_candidate",
+      "loaded_count": 6,
+      "required_by_standard_sec6": true,
+      "runtime_safety_truth": false,
+      "sha256": "51e7882dfb8bdd3fbc2c2257bfcca758459f612efa8bfcb9e6df012a9bf2f553",
+      "source_kind": "mcp_candidates",
+      "source_path": "outputs/mcp/mcp_candidates.json",
+      "source_tier": "P1",
+      "status": "loaded"
+    },
+    {
+      "candidate_only": true,
+      "conclusion_role": "representative_candidate",
+      "loaded_count": 8,
+      "required_by_standard_sec6": true,
+      "runtime_safety_truth": false,
+      "sha256": "a84c44ef13b1aeaea6fe58a23628e8e0107a44b8cca623a395cad8b637f1d86d",
+      "source_kind": "named_point_evidence",
+      "source_path": "outputs/mcp/named_point_evidence.json",
+      "source_tier": "P1",
+      "status": "loaded"
+    },
+    {
+      "candidate_only": true,
+      "conclusion_role": "representative_candidate_after_review",
+      "loaded_count": 1,
+      "required_by_standard_sec6": false,
+      "runtime_safety_truth": false,
+      "sha256": "7931015667a4585bbc460cef35ecf8c32768be47ec491361f2de142f6afd93c9",
+      "source_kind": "ocr_label_evidence",
+      "source_path": "outputs/mcp/mcp_ocr_labels.json",
+      "source_tier": "P1",
+      "status": "loaded"
+    },
+    {
+      "candidate_only": true,
+      "conclusion_role": "primary_briefing_evidence",
+      "loaded_count": 1,
+      "required_by_standard_sec6": false,
+      "runtime_safety_truth": false,
+      "sha256": "ddc6162cf52bfe9f8ac7a0e68b6a4fcd617b23e228e157b86df4a11c3a32d225",
+      "source_kind": "web_case_evidence",
+      "source_path": "outputs/layers/normalized/web_case_evidence.json",
+      "source_tier": "P0",
+      "source_tier_counts": {
+        "P0": 1
+      },
+      "status": "loaded"
+    },
+    {
+      "candidate_only": true,
+      "conclusion_role": "representative_candidate_after_review",
+      "loaded_count": 0,
+      "required_by_standard_sec6": false,
+      "runtime_safety_truth": false,
+      "sha256": null,
+      "source_kind": "raster_label_evidence",
+      "source_path": "outputs/layers/normalized/raster_label_evidence.geojson",
+      "source_tier": "P1",
+      "status": "missing"
+    },
+    {
+      "candidate_only": true,
+      "conclusion_role": "seed_only",
+      "loaded_count": 4406,
+      "required_by_standard_sec6": false,
+      "runtime_safety_truth": false,
+      "sha256": "ef2ae8d21e76685c899ea4035faafa5da11490e7e014c0be0aa12c788e43e50d",
+      "source_kind": "route_note_candidates",
+      "source_path": "candidates/route_note_candidates.json",
+      "source_tier": "P2",
+      "status": "loaded"
+    },
+    {
+      "candidate_only": true,
+      "conclusion_role": "provenance_only",
+      "loaded_count": 1,
+      "required_by_standard_sec6": false,
+      "runtime_safety_truth": false,
+      "sha256": "cd604e835fb9ab057f43e35c5308b0162b51c62d27c6b0bc74fba6066218d705",
+      "source_kind": "import_manifest",
+      "source_path": "outputs/import_manifest.json",
+      "source_tier": "P2",
+      "status": "loaded"
+    },
+    {
+      "candidate_only": true,
+      "conclusion_role": "route_scope",
+      "loaded_count": 1,
+      "required_by_standard_sec6": false,
+      "runtime_safety_truth": false,
+      "sha256": "28685bac2d466fb732395815b040c19ae536373dac760093731e7d533fdb10e8",
+      "source_kind": "route_summary",
+      "source_path": "normalized/routes/route_summary.json",
+      "source_tier": "P2",
+      "status": "loaded"
+    }
+  ],
+  "source_status": "candidate_only",
+  "standard_alignment": {
+    "canonical_refs": [
+      "normalized/context/route_context/*.json",
+      "normalized/context/route_context/route_context_pack.json",
+      "normalized/context/route_context/source_manifest.json",
+      "normalized/context/route_context/crawl_seed_plan.json",
+      "normalized/context/route_context/media_manifest.json",
+      "outputs/briefings/route_context_briefing.html",
+      "candidates/route_context_points.json",
+      "outputs/mcp/named_point_evidence.json",
+      "outputs/layers/normalized/web_case_evidence.json",
+      "outputs/layers/normalized/raster_label_evidence.geojson"
+    ],
+    "section": "Sec. 6 Route Context Intelligence",
+    "standard": "SCOUT_OUTDOOR_AI_AGENT_STANDARD",
+    "workspace_layout_section": "Outdoor AI Agent Data Placement"
+  }
+}
