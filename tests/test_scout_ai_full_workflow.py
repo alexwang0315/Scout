@@ -8,7 +8,11 @@ from scout_ai_full_workflow import (
     ARTIFACT_VERSION,
     run_scout_ai_full_workflow,
 )
-from scout_ai_tool_planner import LIVE_NAVIGATION_STATE_TOOL_ID, WEATHER_WINDOW_TOOL_ID
+from scout_ai_tool_planner import (
+    ENERGY_VITALS_TOOL_ID,
+    LIVE_NAVIGATION_STATE_TOOL_ID,
+    WEATHER_WINDOW_TOOL_ID,
+)
 from scout_pace_guardian_tool import PACE_GUARDIAN_TOOL_ID
 from scout_equipment_resource_tool import EQUIPMENT_RESOURCE_TOOL_ID
 from scout_team_status_tool import TEAM_STATUS_TOOL_ID
@@ -111,6 +115,33 @@ def test_full_workflow_runs_weather_tool_and_reports_missing_fresh_evidence() ->
     assert "ttl_s" in result.missing_evidence[0]["missing_fields"]
     assert "weather_placeholder_only" in result.answer
     assert "runtime safety truth" in result.answer
+
+
+def test_full_workflow_preserves_energy_vitals_decision_output() -> None:
+    result = run_scout_ai_full_workflow(
+        "我現在心率偏高又很累，需要休息嗎?",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=3,
+    )
+
+    assert result.answerability == "partial_evidence_with_missing_context"
+    assert result.sources[0]["tool_id"] == ENERGY_VITALS_TOOL_ID
+    assert result.sources[0]["collection_status"] == "completed"
+    summary = result.sources[0]["top_result_summary"]
+    assert summary["decision"] == "DELAY"
+    assert summary["decision_output"]["decisionObjectSchema"] == "ContextualPermission"
+    assert result.decision_output["decisionObjectSchema"] == "ContextualPermission"
+    assert result.decision_output["answerSourceToolId"] == ENERGY_VITALS_TOOL_ID
+    assert result.decision_output["decision"] == "DELAY"
+    assert result.decision_output["allowed"] is False
+    assert result.decision_output["firstLayer"]["decision"] == (
+        "建議延後體能/穿戴判斷。"
+    )
+    assert result.decision_output["runtimeSafetyTruth"] is False
+    answer_step = result.workflow_steps[-1]
+    assert answer_step.summary["decision_output_schema"] == "ContextualPermission"
+    assert answer_step.summary["decision_output_source_tool"] == ENERGY_VITALS_TOOL_ID
 
 
 def test_full_workflow_runs_weather_to_decision_question(tmp_path: Path) -> None:

@@ -416,6 +416,12 @@ def test_pretrip_tool_plan_hydrates_energy_vitals_snapshot_source() -> None:
     assert "reserve_score" in energy_summary["hydration"]["field_names"]
     assert latest["status"] == "completed"
     assert latest["answerability"] == "energy_vitals_advisory_available"
+    assert latest["decision"] == "CONDITIONAL_GO"
+    assert latest["decision_output"]["decisionObjectSchema"] == "ContextualPermission"
+    assert latest["decision_output"]["decision"] == "CONDITIONAL_GO"
+    assert latest["decision_output"]["allowed"] is True
+    assert latest["decision_output"]["runtimeSafetyTruth"] is False
+    assert "短休最多 10 分鐘" in latest["decision_output"]["firstLayer"]["limit"]
     assert latest["missing_fields"] == []
     assert latest["provided_fields"]["heart_rate_bpm"] == 162.0
     assert latest["advisory"]["cue_band"] == "rest_suggested"
@@ -532,6 +538,10 @@ def test_pretrip_tool_plan_augmentation_reads_sensor_vitals_jsonl_for_energy_sna
     assert latest["time_window"]["heart_rate_trend"]["delta"] == 14.0
     assert latest["time_window"]["record_gap_count"] == 0
     assert latest["advisory"]["cue_band"] == "rest_suggested"
+    assert latest["decision"] == "CONDITIONAL_GO"
+    assert latest["decision_output"]["decisionObjectSchema"] == "ContextualPermission"
+    assert latest["decision_output"]["decision"] == "CONDITIONAL_GO"
+    assert latest["decision_output"]["runtimeSafetyTruth"] is False
     assert latest["boundary"]["medical_diagnosis"] is False
     assert latest["boundary"]["safety_api_called"] is False
     assert latest["boundary"]["outbound_send_performed"] is False

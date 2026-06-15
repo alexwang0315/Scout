@@ -197,6 +197,14 @@ missing member position, overdue check-in, split team, unreliable communication,
 and remote-contact review gaps into first-layer team decisions while explicitly
 blocking automatic remote messages, SOS, `/safety/*`, or hardware control.
 
+`scout.ai.energy_vitals.assess.v0` returns a native `decision_output` for
+Energy / Vitals advisory questions. It converts normalized wearable reserve,
+heart-rate drift, and freshness gaps into Go / Conditional / Change Plan / Delay
+style field decisions with explicit rest duration and recheck limits. The output
+is advisory and privacy-preserving; it never makes a medical diagnosis, promotes
+provider values to Scout safety truth, or triggers `/safety/*`, SOS, outbound
+send, live provider calls, or hardware control.
+
 `scout.ai.survival_incident_playbook.explain.v0` returns a native
 `decision_output` for Risk Sentinel incident playbook questions. Lost-position,
 injury, cold-exposure, and SOS-preparation scenarios produce a first-layer
