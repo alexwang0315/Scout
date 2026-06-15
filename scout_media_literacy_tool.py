@@ -332,7 +332,9 @@ def _match_context_points(
             normalized_term = _normalize(term)
             if len(normalized_term) < 2:
                 continue
-            if normalized_term in label:
+            if label and len(label) >= 2 and label in normalized_term:
+                score += 8.0
+            elif normalized_term in label:
                 score += 8.0
             elif normalized_term in search:
                 score += 3.0
@@ -438,6 +440,12 @@ def _decision(
         return "NO_GO"
     if bias_ids & {"guided_party_bias"} and input_state.get("guided_party") is not True:
         return "GUIDED_ONLY"
+    if missing_fields and bias_ids & {
+        "beauty_photo_bias",
+        "check_in_pressure",
+        "image_scale_bias",
+    }:
+        return "NO_GO"
     if missing_fields:
         return "DELAY"
     if bias_ids:

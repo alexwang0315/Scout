@@ -148,6 +148,29 @@ def test_planner_passes_explicit_route_readiness_inputs_as_arguments() -> None:
     assert _tool_ids(plan) == {ROUTE_READINESS_TOOL_ID}
 
 
+def test_planner_routes_missing_offline_map_departure_to_readiness_and_equipment() -> None:
+    plan = plan_scout_ai_tools(
+        _query("我沒下載離線地圖，可以自主出發嗎？"),
+        project_root=PROJECT_ROOT,
+    )
+
+    tool_ids = _tool_ids(plan)
+    assert ROUTE_READINESS_TOOL_ID in tool_ids
+    assert EQUIPMENT_RESOURCE_TOOL_ID in tool_ids
+    assert MAP_PERCEPTION_TOOL_ID not in tool_ids
+
+    readiness = _single_tool(plan, ROUTE_READINESS_TOOL_ID)
+    assert readiness.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+    assert readiness.request is not None
+    assert readiness.request["arguments"] == {"equipment_confirmed": False}
+
+    equipment = _single_tool(plan, EQUIPMENT_RESOURCE_TOOL_ID)
+    assert equipment.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+    assert equipment.request is not None
+    assert equipment.request["arguments"] == {"offline_map_ready": False}
+    assert equipment.boundary.runtime_safety_truth is False
+
+
 def test_planner_selects_media_literacy_for_social_photo_bias_question() -> None:
     plan = plan_scout_ai_tools(
         _query("IG 大崩壁美照會不會誤導？"),

@@ -726,6 +726,41 @@ def test_full_workflow_runs_equipment_resource_question() -> None:
     assert result.boundary.runtime_safety_truth is False
 
 
+def test_full_workflow_blocks_autonomous_departure_without_offline_map() -> None:
+    result = run_scout_ai_full_workflow(
+        "我沒下載離線地圖，可以自主出發嗎？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=4,
+    )
+
+    source_ids = {source["tool_id"] for source in result.sources}
+    assert ROUTE_READINESS_TOOL_ID in source_ids
+    assert EQUIPMENT_RESOURCE_TOOL_ID in source_ids
+    assert MAP_PERCEPTION_TOOL_ID not in source_ids
+
+    equipment = next(
+        source
+        for source in result.sources
+        if source["tool_id"] == EQUIPMENT_RESOURCE_TOOL_ID
+    )
+    assert equipment["top_result_summary"]["decision"] == "NO_GO"
+    assert equipment["top_result_summary"]["resource_state"]["offline_map_ready"] is False
+
+    assert result.decision_output["answerSourceToolId"] == EQUIPMENT_RESOURCE_TOOL_ID
+    assert result.decision_output["decision"] == "NO_GO"
+    assert result.decision_output["allowed"] is False
+    assert result.decision_output["firstLayer"]["decision"] == (
+        "不建議照原計畫出發或推進。"
+    )
+    assert "離線地圖未就緒" in result.answer
+    answer_step = result.workflow_steps[-1]
+    assert answer_step.summary["decision_output_source_tool"] == (
+        EQUIPMENT_RESOURCE_TOOL_ID
+    )
+    assert result.boundary.runtime_safety_truth is False
+
+
 def test_full_workflow_runs_route_readiness_question() -> None:
     result = run_scout_ai_full_workflow(
         "出發前 Go/No-Go 可以出發嗎？",
