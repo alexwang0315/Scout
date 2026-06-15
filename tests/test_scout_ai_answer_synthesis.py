@@ -378,18 +378,19 @@ def test_answer_synthesis_uses_contextual_permission_field_answer_without_guessi
     )
 
     assert result.answerability == "partial_evidence_with_missing_context"
-    assert result.completed_source_count == 1
-    assert result.missing_evidence_count == 1
-    assert result.sources[0].tool_id == CONTEXTUAL_PERMISSION_TOOL_ID
-    assert result.sources[0].top_result_summary["decision"] == "NO_GO"
-    assert result.sources[0].top_result_summary["allowed"] is False
-    assert result.sources[0].top_result_summary["decision_object"] == (
-        result.sources[0].top_result_summary["contextual_permission"]
+    assert result.completed_source_count == 6
+    assert result.missing_evidence_count == 4
+    _assert_on_route_micro_decision_support_sources(result)
+    source = _source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
+    assert source.top_result_summary["decision"] == "NO_GO"
+    assert source.top_result_summary["allowed"] is False
+    assert source.top_result_summary["decision_object"] == (
+        source.top_result_summary["contextual_permission"]
     )
-    assert result.sources[0].top_result_summary["decision_output"][
+    assert source.top_result_summary["decision_output"][
         "decisionObjectSchema"
     ] == "ContextualPermission"
-    assert result.sources[0].top_result_summary["decision_output"]["firstLayer"][
+    assert source.top_result_summary["decision_output"]["firstLayer"][
         "decision"
     ] == "不建議拍影片。"
     assert result.decision_output["decisionObjectSchema"] == "ContextualPermission"
@@ -399,7 +400,7 @@ def test_answer_synthesis_uses_contextual_permission_field_answer_without_guessi
     assert result.decision_output["allowed"] is False
     assert result.decision_output["firstLayer"]["decision"] == "不建議拍影片。"
     assert result.decision_output["runtimeSafetyTruth"] is False
-    assert "remaining_safety_buffer_minutes" in result.sources[0].missing_fields
+    assert "remaining_safety_buffer_minutes" in source.missing_fields
     assert result.answer.startswith("[決策] 不建議拍影片。")
     assert not result.answer.startswith("Scout AI read-only answer draft")
     assert "[決策] 不建議拍影片。" in result.answer
@@ -416,9 +417,10 @@ def test_answer_synthesis_allows_bounded_tripod_permission() -> None:
         limit=3,
     )
 
-    assert result.answerability == "evidence_available"
-    assert result.completed_source_count == 1
-    assert result.missing_evidence_count == 0
+    assert result.answerability == "partial_evidence_with_missing_context"
+    assert result.completed_source_count == 6
+    assert result.missing_evidence_count == 3
+    _assert_on_route_micro_decision_support_sources(result)
     source = _source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
     assert source.top_result_summary["action"] == "tripod"
     assert source.top_result_summary["decision"] == "CONDITIONAL_GO"
@@ -440,10 +442,11 @@ def test_answer_synthesis_prices_extra_stop_time_against_buffer() -> None:
         limit=3,
     )
 
-    assert result.answerability == "evidence_available"
-    assert result.completed_source_count == 1
-    source = result.sources[0]
-    assert source.tool_id == CONTEXTUAL_PERMISSION_TOOL_ID
+    assert result.answerability == "partial_evidence_with_missing_context"
+    assert result.completed_source_count == 6
+    assert result.missing_evidence_count == 3
+    _assert_on_route_micro_decision_support_sources(result)
+    source = _source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
     assert source.top_result_summary["action"] == "stop"
     assert source.top_result_summary["decision"] == "CONDITIONAL_GO"
     assert source.top_result_summary["allowed"] is True
@@ -542,9 +545,10 @@ def test_answer_synthesis_prices_photo_stop_budget_phrase() -> None:
         limit=3,
     )
 
-    assert result.answerability == "evidence_available"
-    assert result.completed_source_count == 1
-    assert result.missing_evidence_count == 0
+    assert result.answerability == "partial_evidence_with_missing_context"
+    assert result.completed_source_count == 6
+    assert result.missing_evidence_count == 3
+    _assert_on_route_micro_decision_support_sources(result)
     source = _source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
     assert source.top_result_summary["action"] == "photo"
     assert source.top_result_summary["decision"] == "CONDITIONAL_GO"
@@ -570,8 +574,9 @@ def test_answer_synthesis_treats_fog_photo_as_wait_permission() -> None:
     )
 
     assert result.answerability == "partial_evidence_with_missing_context"
-    assert result.completed_source_count == 2
-    assert result.missing_evidence_count == 2
+    assert result.completed_source_count == 6
+    assert result.missing_evidence_count == 4
+    _assert_on_route_micro_decision_support_sources(result)
     weather = _source(result, WEATHER_WINDOW_TOOL_ID)
     contextual = _source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
     assert weather.top_result_summary["decision"] == "DELAY"
@@ -618,9 +623,10 @@ def test_answer_synthesis_allows_bounded_teammate_wait() -> None:
         limit=3,
     )
 
-    assert result.answerability == "evidence_available"
-    assert result.completed_source_count == 1
-    assert result.missing_evidence_count == 0
+    assert result.answerability == "partial_evidence_with_missing_context"
+    assert result.completed_source_count == 6
+    assert result.missing_evidence_count == 3
+    _assert_on_route_micro_decision_support_sources(result)
     source = _source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
     assert source.top_result_summary["action"] == "wait_teammate"
     assert source.top_result_summary["decision"] == "CONDITIONAL_GO"
@@ -643,8 +649,9 @@ def test_answer_synthesis_blocks_wind_exposed_lunch() -> None:
     )
 
     assert result.answerability == "partial_evidence_with_missing_context"
-    assert result.completed_source_count == 2
-    assert result.missing_evidence_count == 2
+    assert result.completed_source_count == 6
+    assert result.missing_evidence_count == 4
+    _assert_on_route_micro_decision_support_sources(result)
     weather = _source(result, WEATHER_WINDOW_TOOL_ID)
     contextual = _source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
     assert weather.top_result_summary["decision"] == "DELAY"
@@ -691,8 +698,9 @@ def test_answer_synthesis_escalates_stream_surge_crossing() -> None:
     )
 
     assert result.answerability == "partial_evidence_with_missing_context"
-    assert result.completed_source_count == 2
-    assert result.missing_evidence_count == 2
+    assert result.completed_source_count == 6
+    assert result.missing_evidence_count == 4
+    _assert_on_route_micro_decision_support_sources(result)
     weather = _source(result, WEATHER_WINDOW_TOOL_ID)
     contextual = _source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
     assert weather.top_result_summary["decision"] == "DELAY"
@@ -748,11 +756,12 @@ def test_answer_synthesis_blocks_split_team_micro_decision() -> None:
         limit=3,
     )
 
-    assert result.answerability == "evidence_available"
-    assert result.completed_source_count == 1
-    assert result.missing_evidence_count == 0
-    assert result.sources[0].tool_id == CONTEXTUAL_PERMISSION_TOOL_ID
-    summary = result.sources[0].top_result_summary
+    assert result.answerability == "partial_evidence_with_missing_context"
+    assert result.completed_source_count == 6
+    assert result.missing_evidence_count == 3
+    _assert_on_route_micro_decision_support_sources(result)
+    source = _source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
+    summary = source.top_result_summary
     assert summary["action"] == "split_team"
     assert summary["decision"] == "NO_GO"
     assert summary["allowed"] is False
@@ -774,8 +783,9 @@ def test_answer_synthesis_uses_rain_gear_micro_decision_before_missing_context()
     )
 
     assert result.answerability == "partial_evidence_with_missing_context"
-    assert result.completed_source_count == 3
-    assert result.missing_evidence_count == 2
+    assert result.completed_source_count == 7
+    assert result.missing_evidence_count == 4
+    _assert_on_route_micro_decision_support_sources(result)
     source = _source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
     summary = source.top_result_summary
     assert summary["action"] == "wear_rain_gear"
@@ -812,8 +822,9 @@ def test_answer_synthesis_blocks_shortcut_reroute_micro_decision() -> None:
     )
 
     assert result.answerability == "partial_evidence_with_missing_context"
-    assert result.completed_source_count == 3
-    assert result.missing_evidence_count == 2
+    assert result.completed_source_count == 6
+    assert result.missing_evidence_count == 4
+    _assert_on_route_micro_decision_support_sources(result)
     source = _source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
     summary = source.top_result_summary
     assert summary["action"] == "reroute"
@@ -844,7 +855,9 @@ def test_answer_synthesis_blocks_rockfall_fast_passage() -> None:
     )
 
     assert result.answerability == "partial_evidence_with_missing_context"
-    assert result.completed_source_count == 1
+    assert result.completed_source_count == 6
+    assert result.missing_evidence_count == 4
+    _assert_on_route_micro_decision_support_sources(result)
     source = _source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
     summary = source.top_result_summary
     assert summary["action"] == "enter_exposed_section"
@@ -867,9 +880,10 @@ def test_answer_synthesis_blocks_unreviewed_continue_forward() -> None:
         limit=4,
     )
 
-    assert result.answerability == "evidence_available"
-    assert result.completed_source_count == 1
-    assert result.missing_evidence_count == 0
+    assert result.answerability == "partial_evidence_with_missing_context"
+    assert result.completed_source_count == 6
+    assert result.missing_evidence_count == 3
+    _assert_on_route_micro_decision_support_sources(result)
     source = _source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
     summary = source.top_result_summary
     assert summary["action"] == "continue"
@@ -895,8 +909,9 @@ def test_answer_synthesis_uses_direct_retreat_micro_decision() -> None:
     )
 
     assert result.answerability == "partial_evidence_with_missing_context"
-    assert result.completed_source_count == 3
-    assert result.missing_evidence_count == 2
+    assert result.completed_source_count == 7
+    assert result.missing_evidence_count == 4
+    _assert_on_route_micro_decision_support_sources(result)
     source = _source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
     summary = source.top_result_summary
     assert summary["action"] == "retreat"
@@ -932,8 +947,9 @@ def test_answer_synthesis_uses_micro_decision_for_weather_fatigue_retreat() -> N
     )
 
     assert result.answerability == "partial_evidence_with_missing_context"
-    assert result.completed_source_count == 4
-    assert result.missing_evidence_count == 3
+    assert result.completed_source_count == 7
+    assert result.missing_evidence_count == 4
+    _assert_on_route_micro_decision_support_sources(result)
     contextual = _source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
     summary = contextual.top_result_summary
     assert summary["action"] == "retreat"
@@ -1244,8 +1260,9 @@ def test_answer_synthesis_prioritizes_pace_guardian_for_delayed_summit() -> None
     )
 
     assert result.answerability == "partial_evidence_with_missing_context"
-    assert result.completed_source_count == 2
-    assert result.missing_evidence_count == 2
+    assert result.completed_source_count == 6
+    assert result.missing_evidence_count == 4
+    _assert_on_route_micro_decision_support_sources(result)
     pace = _source(result, PACE_GUARDIAN_TOOL_ID)
     contextual = _source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
     assert pace.top_result_summary["decision"] == "NO_GO"
@@ -1325,7 +1342,9 @@ def test_answer_synthesis_blocks_daylight_summit_pressure() -> None:
     )
 
     assert result.answerability == "partial_evidence_with_missing_context"
-    assert result.completed_source_count == 3
+    assert result.completed_source_count == 7
+    assert result.missing_evidence_count == 5
+    _assert_on_route_micro_decision_support_sources(result)
     weather = _source(result, WEATHER_WINDOW_TOOL_ID)
     media = _source(result, MEDIA_LITERACY_TOOL_ID)
     contextual = _source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
@@ -3395,7 +3414,26 @@ def _write_route_briefing_project(tmp_path: Path) -> Path:
     return project_root
 
 
+def _assert_on_route_micro_decision_support_sources(result) -> None:
+    live_navigation = _source(result, LIVE_NAVIGATION_STATE_TOOL_ID)
+    route_architecture = _source(result, ROUTE_ARCHITECTURE_TOOL_ID)
+    weather = _source(result, WEATHER_WINDOW_TOOL_ID)
+    pace = _source(result, PACE_GUARDIAN_TOOL_ID)
+    risk = _source(result, RISK_SCORE_TOOL_ID)
+
+    assert live_navigation.collection_status == "completed"
+    assert "lat" in live_navigation.missing_fields
+    assert route_architecture.collection_status == "completed"
+    assert weather.collection_status == "completed"
+    assert "route_weather_package" in weather.missing_fields
+    assert pace.collection_status == "completed"
+    assert pace.missing_fields == ["member_pace_profile"]
+    assert risk.collection_status == "completed"
+
+
 def _source(result, tool_id: str):
-    matches = [source for source in result.sources if source.tool_id == tool_id]
+    matches = [
+        source for source in result.sources if source.tool_id == tool_id
+    ]
     assert len(matches) == 1, result.model_dump(mode="json")
     return matches[0]

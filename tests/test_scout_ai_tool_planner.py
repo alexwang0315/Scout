@@ -676,7 +676,12 @@ def test_planner_selects_contextual_permission_for_micro_decision() -> None:
     assert item.required_fields == ["project_root"]
     assert item.missing_fields == []
     assert item.boundary.runtime_safety_truth is False
-    assert WEATHER_WINDOW_TOOL_ID not in _tool_ids(plan)
+    tool_ids = _tool_ids(plan)
+    assert LIVE_NAVIGATION_STATE_TOOL_ID in tool_ids
+    assert ROUTE_ARCHITECTURE_TOOL_ID in tool_ids
+    assert WEATHER_WINDOW_TOOL_ID in tool_ids
+    assert PACE_GUARDIAN_TOOL_ID in tool_ids
+    assert RISK_SCORE_TOOL_ID in tool_ids
 
 
 def test_planner_passes_stop_duration_and_buffer_to_contextual_permission() -> None:
@@ -1256,7 +1261,10 @@ def test_planner_selects_weather_and_contextual_for_daylight_summit_pressure() -
         tool_ids = _tool_ids(plan)
         assert WEATHER_WINDOW_TOOL_ID in tool_ids
         assert CONTEXTUAL_PERMISSION_TOOL_ID in tool_ids
-        assert PACE_GUARDIAN_TOOL_ID not in tool_ids
+        assert PACE_GUARDIAN_TOOL_ID in tool_ids
+        assert LIVE_NAVIGATION_STATE_TOOL_ID in tool_ids
+        assert ROUTE_ARCHITECTURE_TOOL_ID in tool_ids
+        assert RISK_SCORE_TOOL_ID in tool_ids
 
         weather = _single_tool(plan, WEATHER_WINDOW_TOOL_ID)
         assert weather.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
