@@ -38,6 +38,7 @@ ARTIFACT_KIND = "scout_ai_answer_synthesis"
 ARTIFACT_VERSION = "scout_ai_answer_synthesis.v0"
 STANDARD_GAP_OVERVIEW_SOURCE_ID = "scout.ai.standard_gap_overview.v0"
 PRODUCT_IDENTITY_STANDARD_SOURCE_ID = "scout.ai.product_identity_standard.v0"
+STANDARD_GLOSSARY_SOURCE_ID = "scout.ai.standard_glossary.v0"
 
 STANDARD_SIX_POWER_COVERAGE = (
     (
@@ -169,6 +170,62 @@ STANDARD_IMPLEMENTATION_COVERAGE = (
     },
 )
 
+STANDARD_GLOSSARY_ENTRIES = (
+    {
+        "term": "CP",
+        "aliases": ("cp", "checkpoint", "檢查點", "決策節點"),
+        "definition": "Checkpoint，路線中的決策節點。",
+        "operational_limit": "CP 本身不是授權；每個 CP 都要重新看時間、天氣、隊伍與撤退條件。",
+    },
+    {
+        "term": "CP Graph",
+        "aliases": ("cpgraph", "checkpointgraph", "checkpoint graph"),
+        "definition": "由多個 CP 與路段構成的行程決策圖。",
+        "operational_limit": "CP Graph 用來拆解、監控與撤退決策，不只是 GPX 線或景點列表。",
+    },
+    {
+        "term": "Risk Budget",
+        "aliases": ("riskbudget", "風險預算"),
+        "definition": "可被停留、拍攝、等待、攻頂或改線消耗的安全餘裕，包含時間、日照、天氣、撤退、隊伍與不確定性 buffer。",
+        "operational_limit": "Risk Budget 小於等於 0 時，不應授權可選停留或額外目標。",
+    },
+    {
+        "term": "Scout Pace Coefficient",
+        "aliases": ("scoutpacecoefficient", "pacecoefficient", "腳程係數"),
+        "definition": "Scout 對個人腳程、地形折損、疲勞衰退與休息需求的估計。",
+        "operational_limit": "隊伍決策必須以最慢者與最脆弱環節為基準，不能用平均腳程掩蓋風險。",
+    },
+    {
+        "term": "Residual Risk",
+        "aliases": ("residualrisk", "剩餘風險", "殘餘風險"),
+        "definition": "即使遵守 Scout 建議後仍然存在的剩餘風險。",
+        "operational_limit": "Residual Risk 必須被明講，不能用可以或看起來安全取代。",
+    },
+    {
+        "term": "Veto Power",
+        "aliases": ("vetopower", "veto"),
+        "definition": "Scout 對高風險行為明確否決的能力。",
+        "operational_limit": "Scout 可以清楚說不要去、不要停留、該撤退或需要升級處理。",
+    },
+    {
+        "term": "Permission Power",
+        "aliases": ("permissionpower", "permission"),
+        "definition": "Scout 允許某行為的能力；必須被條件與限制約束。",
+        "operational_limit": "允許只能是條件式，例如最多多久、何時離開、在哪裡做、消耗什麼 buffer。",
+    },
+    {
+        "term": "Micro-Decision Agent",
+        "aliases": (
+            "microdecisionagent",
+            "micro-decisionagent",
+            "微決策agent",
+            "微決策代理",
+        ),
+        "definition": "處理戶外行進中小型但高影響決策的 AI agent。",
+        "operational_limit": "它要把模糊問題轉成有時間、有位置、有條件、有後果的下一步決策。",
+    },
+)
+
 
 class ScoutAiAnswerSynthesisPolicy(ScoutAiToolBaseModel):
     evidence_collection_required: Literal[True] = True
@@ -274,6 +331,8 @@ def synthesize_scout_ai_answer_from_evidence(
     )
     if _looks_like_product_identity_question(collection.question):
         answerability = "standard_product_identity"
+    if _looks_like_standard_glossary_question(collection.question):
+        answerability = "standard_glossary"
     limitations = _limitations(answerability)
     decision_output = _answer_decision_output(
         collection.question,
@@ -447,6 +506,7 @@ def _answer_text(
     ]
     frontline_answer = _decision_output_text(decision_output)
     product_identity_answer = _product_identity_answer(question)
+    standard_glossary_answer = _standard_glossary_answer(question)
     standard_gap_overview = _standard_gap_overview_answer(
         question,
         sources=completed_sources,
@@ -459,6 +519,8 @@ def _answer_text(
     )
     if product_identity_answer:
         parts.append(product_identity_answer)
+    elif standard_glossary_answer:
+        parts.append(standard_glossary_answer)
     elif standard_gap_overview:
         parts.append(standard_gap_overview)
     elif six_power_overview:
@@ -474,7 +536,12 @@ def _answer_text(
     )
     if primary_answer and not _answer_part_already_covered(primary_answer, parts):
         parts.append(primary_answer)
-    if not product_identity_answer and not six_power_overview and not standard_gap_overview:
+    if (
+        not product_identity_answer
+        and not standard_glossary_answer
+        and not six_power_overview
+        and not standard_gap_overview
+    ):
         contextual_answer = (
             None
             if _should_skip_secondary_contextual_answer(
@@ -571,6 +638,11 @@ def _answer_text(
     if answerability == "standard_product_identity":
         parts.append(
             "Traceability: deterministic Scout outdoor standard formatter was used before synthesis. "
+            f"Question: {question}"
+        )
+    elif answerability == "standard_glossary":
+        parts.append(
+            "Traceability: deterministic Scout outdoor standard glossary formatter was used before synthesis. "
             f"Question: {question}"
         )
     else:
@@ -702,7 +774,7 @@ def _data_confidence_summary(
     )
     native_confidence = _first_text(output.get("confidence"))
     native_level = str(native_confidence or "").lower()
-    if answerability == "standard_product_identity":
+    if answerability in {"standard_product_identity", "standard_glossary"}:
         level = "medium"
     elif failed_count or answerability in {
         "evidence_collection_failed",
@@ -724,6 +796,11 @@ def _data_confidence_summary(
     if answerability == "standard_product_identity":
         notes.append(
             "產品身份依 SCOUT_OUTDOOR_AI_AGENT_STANDARD deterministic formatter 回答；"
+            "未檢查路線、天氣、隊伍或 runtime evidence。"
+        )
+    elif answerability == "standard_glossary":
+        notes.append(
+            "術語依 SCOUT_OUTDOOR_AI_AGENT_STANDARD section 29 glossary formatter 回答；"
             "未檢查路線、天氣、隊伍或 runtime evidence。"
         )
     elif missing_evidence:
@@ -932,6 +1009,14 @@ def _limitations(answerability: str) -> list[str]:
             "Product identity output was not promoted to runtime safety truth.",
             "No /safety/* call, Phase 1 mutation, Brain/ObservedFact/HumanReview write, outbound send, or hardware control was performed.",
         ]
+    if answerability == "standard_glossary":
+        return [
+            f"answerability={answerability}",
+            "Deterministic Scout outdoor standard glossary formatter was used before answer synthesis.",
+            "This glossary answer does not inspect route, weather, team, or runtime evidence.",
+            "Glossary output was not promoted to runtime safety truth.",
+            "No /safety/* call, Phase 1 mutation, Brain/ObservedFact/HumanReview write, outbound send, or hardware control was performed.",
+        ]
     return [
         f"answerability={answerability}",
         "Deterministic Scout AI tools were used before answer synthesis.",
@@ -954,6 +1039,16 @@ def _answer_decision_output(
     if _looks_like_product_identity_question(question):
         return _with_data_confidence(
             _product_identity_decision_output(answerability=answerability),
+            sources=sources,
+            missing_evidence=missing_evidence,
+            answerability=answerability,
+        )
+    if _looks_like_standard_glossary_question(question):
+        return _with_data_confidence(
+            _standard_glossary_decision_output(
+                question=question,
+                answerability=answerability,
+            ),
             sources=sources,
             missing_evidence=missing_evidence,
             answerability=answerability,
@@ -1429,6 +1524,139 @@ def _generic_decision_output_from_source(
         "runtimeSafetyTruth": False,
         "standardAlignment": _decision_output_standard_alignment(),
     }
+
+
+def _standard_glossary_decision_output(
+    *,
+    question: str,
+    answerability: str,
+) -> dict[str, Any]:
+    entries = _matched_standard_glossary_entries(question)
+    detail_lines = [
+        f"{entry['term']}: {entry['definition']} {entry['operational_limit']}"
+        for entry in entries
+    ]
+    first_layer = {
+        "decision": "這是 Scout 標準術語解釋，不是現場行動授權。",
+        "limit": (
+            "Glossary answer 只能定義概念；具體出發、停留、攻頂、改線或撤退仍要回到"
+            "對應 decision tool。"
+        ),
+        "reason": "；".join(detail_lines[:2]),
+        "nextStep": "把術語套回具體情境時，重新詢問 Route Readiness、Contextual Permission 或相關 Scout tool。",
+    }
+    residual_risk = [
+        "術語解釋不檢查 route/date/team/weather/equipment evidence。",
+        "概念理解不能替代現場 decision output 或 runtime safety truth。",
+    ]
+    required_conditions = [
+        "使用這些術語時，必須保留明確 decision、限制、原因、下一步與 residual risk。",
+        "Veto Power 可以明確否決；Permission Power 必須被條件、時間、位置與 buffer 成本約束。",
+    ]
+    alternative_actions = [
+        "改問標準缺口總覽，檢視章節覆蓋。",
+        "改問具體微決策，例如能否停留、等霧、午餐或攻頂。",
+        "改問 CP Graph 或 Route Readiness，取得具體路線 evidence。",
+    ]
+    return {
+        "decisionObjectSchema": "ContextualPermission",
+        "answerSourceToolId": STANDARD_GLOSSARY_SOURCE_ID,
+        "answerability": answerability,
+        "role": "Scout Standard Glossary",
+        "format": "SCOUT_OUTDOOR_AI_AGENT_STANDARD.section16",
+        "action": "explain_standard_glossary",
+        "decision": "GUIDED_ONLY",
+        "allowed": False,
+        "text": "\n".join(
+            (
+                f"[決策] {first_layer['decision']}",
+                f"[限制] {first_layer['limit']}",
+                f"[原因] {first_layer['reason']}",
+                f"[下一步] {first_layer['nextStep']}",
+            )
+        ),
+        "firstLayer": first_layer,
+        "secondLayer": {
+            "details": detail_lines,
+            "uncertaintyNotes": [
+                "This glossary answer does not inspect live route/weather/team evidence."
+            ],
+            "residualRisk": residual_risk,
+            "requiredConditions": required_conditions,
+            "alternativeActions": alternative_actions,
+        },
+        "mainReasons": detail_lines,
+        "cost": {
+            "timeBufferChangeMinutes": 0,
+            "runtimeSafetyTruthImpact": "No runtime safety truth was created or changed.",
+            "conceptOnly": True,
+        },
+        "nextAction": first_layer["nextStep"],
+        "confidence": "medium",
+        "uncertaintyNotes": [
+            "Glossary was answered from SCOUT_OUTDOOR_AI_AGENT_STANDARD section 29."
+        ],
+        "residualRisk": residual_risk,
+        "requiredConditions": required_conditions,
+        "alternativeActions": alternative_actions,
+        "runtimeSafetyTruth": False,
+        "standardAlignment": [
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 16 required decision output format",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 17 ContextualPermission schema",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 29 Glossary",
+        ],
+    }
+
+
+def _standard_glossary_answer(question: str) -> str | None:
+    if not _looks_like_standard_glossary_question(question):
+        return None
+    entries = _matched_standard_glossary_entries(question)
+    definitions = "；".join(
+        f"{entry['term']}：{entry['definition']} {entry['operational_limit']}"
+        for entry in entries
+    )
+    return (
+        "標準術語："
+        + definitions
+        + " 限制：這是 Section 29 glossary 的概念解釋，不是出發批准、現場 permission "
+        "或 runtime safety truth；具體行動仍必須回到 Route Readiness、"
+        "Contextual Permission 或對應 Scout decision tool。"
+    )
+
+
+def _matched_standard_glossary_entries(question: str) -> list[dict[str, Any]]:
+    text = _normalize_question_text(question)
+    matched = [
+        entry
+        for entry in STANDARD_GLOSSARY_ENTRIES
+        if _text_has_any(text, tuple(str(alias) for alias in entry["aliases"]))
+    ]
+    if matched:
+        return matched
+    return list(STANDARD_GLOSSARY_ENTRIES)
+
+
+def _looks_like_standard_glossary_question(question: str) -> bool:
+    text = _normalize_question_text(question)
+    glossary_aliases = tuple(
+        str(alias)
+        for entry in STANDARD_GLOSSARY_ENTRIES
+        for alias in entry["aliases"]
+    )
+    concept_terms = (
+        "是什麼",
+        "什麼是",
+        "定義",
+        "意思",
+        "差在哪",
+        "差異",
+        "glossary",
+        "術語",
+        "名詞",
+        "解釋",
+    )
+    return _text_has_any(text, glossary_aliases) and _text_has_any(text, concept_terms)
 
 
 def _product_identity_decision_output(*, answerability: str) -> dict[str, Any]:

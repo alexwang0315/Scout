@@ -426,6 +426,34 @@ def test_product_identity_answers_standard_north_star_and_must_not_become() -> N
     assert result.boundary.runtime_safety_truth is False
 
 
+def test_standard_glossary_terms_are_explainable_without_operational_detour() -> None:
+    result = run_scout_ai_full_workflow(
+        "CP Graph、Risk Budget、Scout Pace Coefficient、Veto Power 和 Permission Power 是什麼？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=8,
+    )
+
+    decision_output = result.decision_output
+    assert result.selected_tool_count == 0
+    assert result.answerability == "standard_glossary"
+    assert decision_output["answerSourceToolId"] == "scout.ai.standard_glossary.v0"
+    assert decision_output["decision"] == "GUIDED_ONLY"
+    assert decision_output["allowed"] is False
+    assert decision_output["runtimeSafetyTruth"] is False
+    _assert_standard_output(decision_output)
+    assert "CP Graph" in result.answer
+    assert "Risk Budget" in result.answer
+    assert "Scout Pace Coefficient" in result.answer
+    assert "Veto Power" in result.answer
+    assert "Permission Power" in result.answer
+    assert "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 29" in " ".join(
+        decision_output["standardAlignment"]
+    )
+    assert "風險分數判斷" not in result.answer
+    assert result.boundary.runtime_safety_truth is False
+
+
 @pytest.mark.parametrize(
     (
         "scenario",
