@@ -199,6 +199,27 @@ def test_full_workflow_runs_weather_to_decision_question(tmp_path: Path) -> None
     assert result.boundary.runtime_safety_truth is False
 
 
+def test_full_workflow_keeps_cold_exposure_risk_as_weather_decision() -> None:
+    result = run_scout_ai_full_workflow(
+        "強風低溫會不會讓稜線失溫風險升高？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=5,
+    )
+
+    source_ids = {source["tool_id"] for source in result.sources}
+    assert WEATHER_WINDOW_TOOL_ID in source_ids
+    assert NAVIGATION_TERRAIN_TOOL_ID in source_ids
+    assert SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID not in source_ids
+    weather = _workflow_source(result, WEATHER_WINDOW_TOOL_ID)
+    assert weather["top_result_summary"]["decision"] == "DELAY"
+    assert result.decision_output["answerSourceToolId"] == WEATHER_WINDOW_TOOL_ID
+    assert result.decision_output["decision"] == "DELAY"
+    assert "天氣決策" in result.answer
+    assert "失溫" in result.answer
+    assert result.boundary.runtime_safety_truth is False
+
+
 def test_full_workflow_delays_recent_rain_creek_crossing_without_experience(
     tmp_path: Path,
 ) -> None:

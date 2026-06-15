@@ -182,6 +182,28 @@ def test_answer_synthesis_uses_weather_to_decision_field_answer(tmp_path: Path) 
     assert "runtime safety truth" in result.answer
 
 
+def test_answer_synthesis_keeps_cold_exposure_risk_as_weather_decision() -> None:
+    result = collect_and_synthesize_scout_ai_answer(
+        "強風低溫會不會讓稜線失溫風險升高？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=5,
+    )
+
+    source_ids = {source.tool_id for source in result.sources}
+    assert WEATHER_WINDOW_TOOL_ID in source_ids
+    assert NAVIGATION_TERRAIN_TOOL_ID in source_ids
+    assert SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID not in source_ids
+
+    weather = _source(result, WEATHER_WINDOW_TOOL_ID)
+    assert weather.top_result_summary["decision"] == "DELAY"
+    assert result.decision_output["answerSourceToolId"] == WEATHER_WINDOW_TOOL_ID
+    assert result.decision_output["decision"] == "DELAY"
+    assert "天氣決策" in result.answer
+    assert "失溫" in result.answer
+    assert "runtime safety truth" in result.answer
+
+
 def test_answer_synthesis_surfaces_heat_exposure_weather_decision(
     tmp_path: Path,
 ) -> None:
