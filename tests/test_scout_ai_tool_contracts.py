@@ -1138,6 +1138,35 @@ def test_execute_contextual_permission_assessor_blocks_wind_exposed_lunch() -> N
     assert result.boundary.runtime_safety_truth is False
 
 
+def test_execute_contextual_permission_assessor_escalates_stream_surge_crossing() -> None:
+    result = execute_scout_ai_tool(
+        {
+            "tool_id": "scout.ai.contextual_permission.assess",
+            "project_root": str(PROJECT_ROOT),
+            "query": "前方溪水暴漲，還能過溪嗎？",
+        }
+    )
+
+    assert result.status == "completed"
+    assert result.tool_id == CONTEXTUAL_PERMISSION_TOOL_ID
+    assert result.payload["answerability"] == (
+        "contextual_permission_missing_required_fields"
+    )
+    assert result.payload["action"] == "cross_stream"
+    assert result.payload["decision"] == "ESCALATE"
+    assert result.payload["allowed"] is False
+    assert result.payload["missing_fields"] == ["remaining_safety_buffer_minutes"]
+    assert result.payload["decision_output"]["firstLayer"]["decision"] == (
+        "需要升級處理，不建議渡溪。"
+    )
+    assert "高後果情境" in result.payload["decision_output"]["firstLayer"]["reason"]
+    assert "停止進入溪谷" in result.payload["decision_output"]["firstLayer"][
+        "nextStep"
+    ]
+    assert result.payload["decision_output"]["runtimeSafetyTruth"] is False
+    assert result.boundary.runtime_safety_truth is False
+
+
 def test_execute_contextual_permission_assessor_blocks_shortcut_reroute() -> None:
     result = execute_scout_ai_tool(
         {

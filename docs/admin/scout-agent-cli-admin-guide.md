@@ -201,6 +201,10 @@ route-weather risk into Go / Delay / Change Plan / No-Go style field decisions,
 preserves the weather action limit, and carries route-specific conditions,
 required conditions, and alternatives without calling live providers or mutating
 runtime safety truth.
+Stream-surge crossing questions such as "前方溪水暴漲，還能過溪嗎？" route
+through Weather Window and contextual permission. Contextual permission treats
+stream crossing as a high-consequence action and returns `ESCALATE` before any
+generic missing-buffer path can normalize the risk.
 
 `scout.ai.risk_scores.search` / `pydantic_ai.tool.search_scout_risk_scores.v0`
 returns a native `decision_output` for route risk-score queries. It still

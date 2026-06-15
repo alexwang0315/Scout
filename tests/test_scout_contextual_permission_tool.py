@@ -402,6 +402,32 @@ def test_contextual_permission_escalates_high_risk_stream_crossing() -> None:
     assert "不要渡溪" in result["contextual_permission"]["alternativeActions"]
 
 
+def test_contextual_permission_escalates_stream_surge_without_buffer() -> None:
+    result = assess_scout_contextual_permission(
+        PROJECT_ROOT,
+        query="前方溪水暴漲，還能過溪嗎？",
+    )
+
+    assert result["answerability"] == "contextual_permission_missing_required_fields"
+    assert result["action"] == "cross_stream"
+    assert result["decision"] == "ESCALATE"
+    assert result["allowed"] is False
+    assert result["missing_fields"] == ["remaining_safety_buffer_minutes"]
+    assert result["decision_output"]["firstLayer"]["decision"] == (
+        "需要升級處理，不建議渡溪。"
+    )
+    assert "高後果情境" in result["decision_output"]["firstLayer"]["reason"]
+    assert "停止進入溪谷" in result["decision_output"]["firstLayer"]["nextStep"]
+    assert any(
+        "高後果地形先採保守禁止" in note
+        for note in result["decision_output"]["secondLayer"]["uncertaintyNotes"]
+    )
+    assert "不要渡溪" in result["decision_output"]["secondLayer"][
+        "alternativeActions"
+    ]
+    assert result["boundary"]["runtime_safety_truth"] is False
+
+
 def test_contextual_permission_output_kind_constant() -> None:
     assert CONTEXTUAL_PERMISSION_OUTPUT_KIND == (
         "scout_ai_contextual_permission_tool_output"
