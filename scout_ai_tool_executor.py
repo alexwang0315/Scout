@@ -349,11 +349,17 @@ def _execute_ready_current_tool(tool_id: str, arguments: dict[str, Any]) -> dict
             terrain_feature_skill_confirmed=_bool_or_none(
                 arguments.get("terrain_feature_skill_confirmed")
             ),
+            junction_points_known=_bool_or_none(
+                arguments.get("junction_points_known")
+            ),
             retreat_direction_understood=_bool_or_none(
                 arguments.get("retreat_direction_understood")
             ),
             backup_positioning_available=_bool_or_none(
                 arguments.get("backup_positioning_available")
+            ),
+            terrain_risk_layers_understood=_bool_or_none(
+                arguments.get("terrain_risk_layers_understood")
             ),
             team_map_user_count=_int_or_none(arguments.get("team_map_user_count")),
         )

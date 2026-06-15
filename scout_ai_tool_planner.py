@@ -827,6 +827,30 @@ def _navigation_terrain_request_overrides(question: str) -> dict[str, Any]:
     if _has_any(
         normalized,
         (
+            "不知道岔路點",
+            "不清楚岔路點",
+            "不熟岔路點",
+            "岔路點不知道",
+            "岔路不會判斷",
+            "junctionpointsunknown",
+            "branchpointsunknown",
+        ),
+    ):
+        overrides["junction_points_known"] = False
+    if _has_any(
+        normalized,
+        (
+            "知道岔路點",
+            "岔路點已確認",
+            "岔路已確認",
+            "junctionpointsknown",
+            "branchpointsknown",
+        ),
+    ) and "junction_points_known" not in overrides:
+        overrides["junction_points_known"] = True
+    if _has_any(
+        normalized,
+        (
             "不知道撤退方向",
             "不清楚撤退方向",
             "撤退方向不知道",
@@ -867,6 +891,28 @@ def _navigation_terrain_request_overrides(question: str) -> dict[str, Any]:
         ),
     ) and "backup_positioning_available" not in overrides:
         overrides["backup_positioning_available"] = True
+    if _has_any(
+        normalized,
+        (
+            "看不懂地形風險圖層",
+            "不懂地形風險圖層",
+            "不會看地形風險圖層",
+            "不懂風險圖層",
+            "不會判斷崩壁溪谷陡坡曝露圖層",
+            "terrainrisklayersfalse",
+        ),
+    ):
+        overrides["terrain_risk_layers_understood"] = False
+    if _has_any(
+        normalized,
+        (
+            "看得懂地形風險圖層",
+            "地形風險圖層已確認",
+            "知道崩壁溪谷陡坡曝露圖層",
+            "terrainrisklayersconfirmed",
+        ),
+    ) and "terrain_risk_layers_understood" not in overrides:
+        overrides["terrain_risk_layers_understood"] = True
     if _has_any(
         normalized,
         (
@@ -1177,6 +1223,9 @@ def _looks_like_navigation_terrain_question(text: str) -> bool:
             "只有一人熟悉離線地圖",
             "等高線",
             "地形判讀",
+            "岔路點",
+            "地形風險圖層",
+            "風險圖層",
             "稜線",
             "谷線",
             "鞍部",

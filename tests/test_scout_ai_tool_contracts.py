@@ -146,6 +146,12 @@ def test_tool_registry_lists_current_and_future_contracts() -> None:
     assert "scout.ai.map_readiness.assess" in by_id[
         NAVIGATION_TERRAIN_TOOL_ID
     ].aliases
+    assert "junction_points_known" in by_id[
+        NAVIGATION_TERRAIN_TOOL_ID
+    ].optional_fields
+    assert "terrain_risk_layers_understood" in by_id[
+        NAVIGATION_TERRAIN_TOOL_ID
+    ].optional_fields
     assert "scout.ai.team_pace_fit.assess" in by_id[PACE_GUARDIAN_TOOL_ID].aliases
     assert "scout.ai.team_guardian.assess" in by_id[TEAM_STATUS_TOOL_ID].aliases
     assert "scout.ai.after_action.assess" in by_id[POST_TRIP_REVIEW_TOOL_ID].aliases
@@ -586,6 +592,37 @@ def test_execute_navigation_terrain_alias_returns_map_readiness_decision() -> No
         "backup_positioning_available"
     ] is False
     assert result.payload["debug_collection"]["writes_performed"] is False
+    assert result.boundary.runtime_safety_truth is False
+
+
+def test_execute_navigation_terrain_blocks_unknown_junctions_and_risk_layers() -> None:
+    result = execute_scout_ai_tool(
+        {
+            "tool_id": "scout.ai.navigation_terrain.assess",
+            "project_root": str(PROJECT_ROOT),
+            "query": "不知道岔路點，也看不懂地形風險圖層，可以自主前往嗎？",
+            "arguments": {
+                "offline_map_downloaded": True,
+                "gpx_loaded_on_device": True,
+                "contour_skill_confirmed": True,
+                "terrain_feature_skill_confirmed": True,
+                "junction_points_known": False,
+                "retreat_direction_understood": True,
+                "backup_positioning_available": True,
+                "terrain_risk_layers_understood": False,
+                "team_map_user_count": 2,
+            },
+        }
+    )
+
+    assert result.status == "completed"
+    assert result.payload["decision"] == "GUIDED_ONLY"
+    assert result.payload["missing_fields"] == []
+    assert result.payload["map_readiness"]["junction_points_known"] is False
+    assert result.payload["map_readiness"]["terrain_risk_layers_understood"] is False
+    assert result.payload["decision_output"]["firstLayer"]["decision"] == (
+        "不建議自主前往。"
+    )
     assert result.boundary.runtime_safety_truth is False
 
 

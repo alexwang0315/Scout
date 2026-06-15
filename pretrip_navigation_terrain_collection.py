@@ -43,8 +43,10 @@ def collect_pretrip_navigation_terrain(
     gpx_loaded_on_device: bool | str | None = None,
     contour_skill_confirmed: bool | str | None = None,
     terrain_feature_skill_confirmed: bool | str | None = None,
+    junction_points_known: bool | str | None = None,
     retreat_direction_understood: bool | str | None = None,
     backup_positioning_available: bool | str | None = None,
+    terrain_risk_layers_understood: bool | str | None = None,
     team_map_user_count: int | str | None = None,
     generated_at: str | None = None,
 ) -> dict[str, Any]:
@@ -73,8 +75,12 @@ def collect_pretrip_navigation_terrain(
         "gpx_loaded_on_device": _bool_or_none(gpx_loaded_on_device),
         "contour_skill_confirmed": _bool_or_none(contour_skill_confirmed),
         "terrain_feature_skill_confirmed": _bool_or_none(terrain_feature_skill_confirmed),
+        "junction_points_known": _bool_or_none(junction_points_known),
         "retreat_direction_understood": _bool_or_none(retreat_direction_understood),
         "backup_positioning_available": _bool_or_none(backup_positioning_available),
+        "terrain_risk_layers_understood": _bool_or_none(
+            terrain_risk_layers_understood
+        ),
         "team_map_user_count": _int_or_none(team_map_user_count),
     }
     demand = _navigation_demand(workspace)
@@ -107,8 +113,12 @@ def collect_pretrip_navigation_terrain(
             "gpx_loaded_on_device": capability["gpx_loaded_on_device"],
             "map_context_available": workspace["map_context_available"],
             "reference_track_available": workspace["reference_track_available"],
+            "junction_points_known": capability["junction_points_known"],
             "retreat_routes_available": workspace["retreat_routes_available"],
             "risk_layers_available": workspace["risk_layers_available"],
+            "terrain_risk_layers_understood": capability[
+                "terrain_risk_layers_understood"
+            ],
             "terrain_layers_available": workspace["terrain_layers_available"],
             "offline_tile_manifest_available": workspace["offline_tile_manifest_available"],
             "wmts_runtime_imagery_only": workspace["wmts_runtime_imagery_only"],
@@ -150,6 +160,10 @@ def collect_pretrip_navigation_terrain(
             "contour_skill_confirmed": capability["contour_skill_confirmed"],
             "terrain_feature_skill_confirmed": capability[
                 "terrain_feature_skill_confirmed"
+            ],
+            "junction_points_known": capability["junction_points_known"],
+            "terrain_risk_layers_understood": capability[
+                "terrain_risk_layers_understood"
             ],
             "high_demand_requires_guided_or_training": demand["demand_level"] == "high",
         },
@@ -330,10 +344,17 @@ def _required_actions(
         actions.append("Confirm contour-reading competence or assign a guide.")
     if capability["terrain_feature_skill_confirmed"] is not True:
         actions.append("Confirm ridge/valley/saddle terrain-feature recognition.")
+    if capability["junction_points_known"] is not True:
+        actions.append("Review junction and branch-point decisions before departure.")
     if capability["retreat_direction_understood"] is not True:
         actions.append("Review retreat direction and nearest retreat candidates.")
     if capability["backup_positioning_available"] is not True:
         actions.append("Prepare backup positioning before relying on GNSS/phone navigation.")
+    if capability["terrain_risk_layers_understood"] is not True:
+        actions.append(
+            "Confirm terrain risk layer literacy for cliffs, creeks, steep slopes, "
+            "and exposure."
+        )
     if (
         capability["team_map_user_count"] is not None
         and capability["team_map_user_count"] < 2
@@ -362,8 +383,10 @@ def _decision(
             "gpx_loaded_on_device",
             "contour_skill_confirmed",
             "terrain_feature_skill_confirmed",
+            "junction_points_known",
             "retreat_direction_understood",
             "backup_positioning_available",
+            "terrain_risk_layers_understood",
         )
     ):
         return "GUIDED_ONLY"
@@ -496,8 +519,10 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--gpx-loaded-on-device", default=None)
     parser.add_argument("--contour-skill-confirmed", default=None)
     parser.add_argument("--terrain-feature-skill-confirmed", default=None)
+    parser.add_argument("--junction-points-known", default=None)
     parser.add_argument("--retreat-direction-understood", default=None)
     parser.add_argument("--backup-positioning-available", default=None)
+    parser.add_argument("--terrain-risk-layers-understood", default=None)
     parser.add_argument("--team-map-user-count", default=None)
     parser.add_argument("--generated-at", default=None)
     return parser
@@ -512,8 +537,10 @@ def main(argv: list[str] | None = None) -> int:
         gpx_loaded_on_device=args.gpx_loaded_on_device,
         contour_skill_confirmed=args.contour_skill_confirmed,
         terrain_feature_skill_confirmed=args.terrain_feature_skill_confirmed,
+        junction_points_known=args.junction_points_known,
         retreat_direction_understood=args.retreat_direction_understood,
         backup_positioning_available=args.backup_positioning_available,
+        terrain_risk_layers_understood=args.terrain_risk_layers_understood,
         team_map_user_count=args.team_map_user_count,
         generated_at=args.generated_at,
     )

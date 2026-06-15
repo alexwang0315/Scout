@@ -268,8 +268,10 @@ def _add_pretrip_group(subparsers: argparse._SubParsersAction) -> None:
     navigation_terrain.add_argument("--gpx-loaded-on-device", default=None)
     navigation_terrain.add_argument("--contour-skill-confirmed", default=None)
     navigation_terrain.add_argument("--terrain-feature-skill-confirmed", default=None)
+    navigation_terrain.add_argument("--junction-points-known", default=None)
     navigation_terrain.add_argument("--retreat-direction-understood", default=None)
     navigation_terrain.add_argument("--backup-positioning-available", default=None)
+    navigation_terrain.add_argument("--terrain-risk-layers-understood", default=None)
     navigation_terrain.add_argument("--team-map-user-count", default=None)
     navigation_terrain.add_argument("--generated-at", default=None)
     navigation_terrain.add_argument("--dry-run", action="store_true")
@@ -721,8 +723,10 @@ def _tool_request_for_args(args: argparse.Namespace) -> tuple[str, dict[str, Any
             "gpx_loaded_on_device",
             "contour_skill_confirmed",
             "terrain_feature_skill_confirmed",
+            "junction_points_known",
             "retreat_direction_understood",
             "backup_positioning_available",
+            "terrain_risk_layers_understood",
             "team_map_user_count",
             "generated_at",
         ):
