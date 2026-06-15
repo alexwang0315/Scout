@@ -430,6 +430,13 @@ decision, not a discretionary time-budget permission: Scout does not need a
 remaining-buffer estimate to block splitting the team, and the next action keeps
 the party together under the slowest or most vulnerable member basis.
 
+For Sec. 19.1 rain-gear questions such as whether the user should put on a rain
+jacket now, the same tool resolves the request as `wear_rain_gear` and returns a
+bounded `GO`: put on rain gear in place, do not spend stop buffer, and return to
+the planned rhythm immediately. Weather and equipment tools may still contribute
+missing-context evidence, but the first-layer micro-decision remains the
+rain-gear action.
+
 ```bash
 python -m scout_cli pretrip contextual-permission-collect \
   --project-root /data/scout/admin/pretrip-workspaces/chilai_nanhua_day1 \

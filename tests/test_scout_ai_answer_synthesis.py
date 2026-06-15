@@ -266,6 +266,30 @@ def test_answer_synthesis_blocks_split_team_micro_decision() -> None:
     assert "runtime safety truth" in result.answer
 
 
+def test_answer_synthesis_uses_rain_gear_micro_decision_before_missing_context() -> None:
+    result = collect_and_synthesize_scout_ai_answer(
+        "前面下雨了，要不要穿雨衣？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=4,
+    )
+
+    assert result.answerability == "partial_evidence_with_missing_context"
+    assert result.completed_source_count == 3
+    assert result.missing_evidence_count == 2
+    source = _source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
+    summary = source.top_result_summary
+    assert summary["action"] == "wear_rain_gear"
+    assert summary["decision"] == "GO"
+    assert summary["allowed"] is True
+    assert source.missing_fields == []
+    assert result.decision_output["answerSourceToolId"] == CONTEXTUAL_PERMISSION_TOOL_ID
+    assert result.decision_output["firstLayer"]["decision"] == "可以穿雨具。"
+    assert "不額外消耗停留 buffer" in result.answer
+    assert "Missing evidence" in result.answer
+    assert "runtime safety truth" in result.answer
+
+
 def test_answer_synthesis_uses_route_context_field_answer_without_guessing() -> None:
     result = collect_and_synthesize_scout_ai_answer(
         "下一個觀察點在哪？哪裡適合拍攝大景？",

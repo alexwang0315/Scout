@@ -99,6 +99,28 @@ def test_contextual_permission_missing_buffer_is_conservative_no_go() -> None:
     assert result["decision_output"]["secondLayer"]["alternativeActions"]
 
 
+def test_contextual_permission_allows_rain_gear_without_buffer() -> None:
+    result = assess_scout_contextual_permission(
+        PROJECT_ROOT,
+        query="前面下雨了，要不要穿雨衣？",
+    )
+
+    assert result["answerability"] == "contextual_permission_decision_available"
+    assert result["action"] == "wear_rain_gear"
+    assert result["decision"] == "GO"
+    assert result["allowed"] is True
+    assert result["missing_fields"] == []
+    assert result["contextual_permission"]["cost"]["timeBufferChangeMinutes"] == 0
+    assert result["decision_output"]["decisionObjectSchema"] == "ContextualPermission"
+    assert result["decision_output"]["firstLayer"]["decision"] == "可以穿雨具。"
+    assert result["decision_output"]["firstLayer"]["limit"] == (
+        "不額外消耗停留 buffer；執行後立即回到原定節奏。"
+    )
+    assert result["decision_output"]["runtimeSafetyTruth"] is False
+    assert "就地穿上雨具" in result["field_answer"]
+    assert result["boundary"]["runtime_safety_truth"] is False
+
+
 def test_contextual_permission_derives_candidate_buffer_from_planned_eta() -> None:
     result = assess_scout_contextual_permission(
         PROJECT_ROOT,

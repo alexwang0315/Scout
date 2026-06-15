@@ -908,6 +908,34 @@ def test_execute_contextual_permission_assessor_blocks_split_team_summit() -> No
     assert result.boundary.runtime_safety_truth is False
 
 
+def test_execute_contextual_permission_assessor_allows_rain_gear_micro_decision() -> None:
+    result = execute_scout_ai_tool(
+        {
+            "tool_id": "scout.ai.contextual_permission.assess",
+            "project_root": str(PROJECT_ROOT),
+            "query": "前面下雨了，要不要穿雨衣？",
+        }
+    )
+
+    assert result.status == "completed"
+    assert result.tool_id == CONTEXTUAL_PERMISSION_TOOL_ID
+    assert result.payload["answerability"] == "contextual_permission_decision_available"
+    assert result.payload["action"] == "wear_rain_gear"
+    assert result.payload["decision"] == "GO"
+    assert result.payload["allowed"] is True
+    assert result.payload["missing_fields"] == []
+    assert result.payload["decision_object"] == result.payload["contextual_permission"]
+    assert result.payload["decision_output"]["decisionObjectSchema"] == (
+        "ContextualPermission"
+    )
+    assert result.payload["decision_output"]["firstLayer"]["decision"] == (
+        "可以穿雨具。"
+    )
+    assert result.payload["decision_output"]["runtimeSafetyTruth"] is False
+    assert "不額外消耗停留 buffer" in result.payload["field_answer"]
+    assert result.boundary.runtime_safety_truth is False
+
+
 def test_execute_survival_playbook_alias_returns_boundary_safe_guidance() -> None:
     result = execute_scout_ai_tool(
         {
