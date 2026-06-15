@@ -472,6 +472,30 @@ def test_planner_selects_media_and_contextual_for_exposed_photo_pressure() -> No
     assert contextual.boundary.runtime_safety_truth is False
 
 
+def test_planner_routes_media_speed_bias_to_media_and_pace_guardian() -> None:
+    plan = plan_scout_ai_tools(
+        _query("這個網紅影片說兩小時可到，我們可以照這個速度嗎？"),
+        project_root=PROJECT_ROOT,
+    )
+
+    tool_ids = _tool_ids(plan)
+    assert MEDIA_LITERACY_TOOL_ID in tool_ids
+    assert PACE_GUARDIAN_TOOL_ID in tool_ids
+    assert CONTEXTUAL_PERMISSION_TOOL_ID not in tool_ids
+
+    media = _single_tool(plan, MEDIA_LITERACY_TOOL_ID)
+    assert media.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+    assert media.request is not None
+    assert media.request["tool_id"] == MEDIA_LITERACY_TOOL_ID
+    assert media.boundary.runtime_safety_truth is False
+
+    pace = _single_tool(plan, PACE_GUARDIAN_TOOL_ID)
+    assert pace.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+    assert pace.request is not None
+    assert pace.request["tool_id"] == PACE_GUARDIAN_TOOL_ID
+    assert pace.boundary.runtime_safety_truth is False
+
+
 def test_planner_selects_survival_playbook_for_lost_position_question() -> None:
     plan = plan_scout_ai_tools(
         _query("不確定自己在哪，可以下切溪谷找路嗎？"),
@@ -954,6 +978,42 @@ def test_planner_selects_pace_and_contextual_for_delayed_summit_question() -> No
     assert pace.request is not None
     assert pace.request["tool_id"] == PACE_GUARDIAN_TOOL_ID
     assert pace.boundary.runtime_safety_truth is False
+
+
+def test_planner_routes_slower_than_expected_continue_to_pace_and_contextual() -> None:
+    plan = plan_scout_ai_tools(
+        _query("走到這裡比預計慢 25 分鐘，還能繼續嗎？"),
+        project_root=PROJECT_ROOT,
+    )
+
+    tool_ids = _tool_ids(plan)
+    assert PACE_GUARDIAN_TOOL_ID in tool_ids
+    assert CONTEXTUAL_PERMISSION_TOOL_ID in tool_ids
+
+    pace = _single_tool(plan, PACE_GUARDIAN_TOOL_ID)
+    assert pace.request is not None
+    assert pace.request["arguments"] == {"current_delay_minutes": 25.0}
+
+    contextual = _single_tool(plan, CONTEXTUAL_PERMISSION_TOOL_ID)
+    assert contextual.request is not None
+    assert contextual.request["arguments"] == {"action": "continue"}
+    assert contextual.boundary.runtime_safety_truth is False
+
+
+def test_planner_routes_time_to_summit_to_pace_and_contextual() -> None:
+    plan = plan_scout_ai_tools(
+        _query("現在是否還有時間攻頂？"),
+        project_root=PROJECT_ROOT,
+    )
+
+    tool_ids = _tool_ids(plan)
+    assert PACE_GUARDIAN_TOOL_ID in tool_ids
+    assert CONTEXTUAL_PERMISSION_TOOL_ID in tool_ids
+
+    contextual = _single_tool(plan, CONTEXTUAL_PERMISSION_TOOL_ID)
+    assert contextual.request is not None
+    assert contextual.request["arguments"] == {"action": "summit"}
+    assert contextual.boundary.runtime_safety_truth is False
 
 
 def test_planner_selects_weather_and_contextual_for_daylight_summit_pressure() -> None:

@@ -713,6 +713,11 @@ def _has_photo_pressure(biases: list[dict[str, Any]]) -> bool:
     return bool(ids & {"beauty_photo_bias", "check_in_pressure", "image_scale_bias"})
 
 
+def _has_speed_pressure(biases: list[dict[str, Any]]) -> bool:
+    ids = {str(item.get("bias_id")) for item in biases}
+    return "speed_bias" in ids
+
+
 def _has_reroute_pressure(text: str) -> bool:
     return _has_any(
         _normalize(text),
@@ -759,6 +764,8 @@ def _decision_action(
 ) -> str:
     if input_state.get("reroute_pressure"):
         return "reroute"
+    if _has_speed_pressure(biases) and not input_state.get("detour_or_stop_pressure"):
+        return "pace_adjustment"
     if _has_photo_pressure(biases):
         return "photo"
     return "continue"
