@@ -62,6 +62,29 @@ def test_planner_selects_major_points_for_named_place_cp_question() -> None:
     assert ROUTE_STRUCTURE_TOOL_ID not in _tool_ids(plan)
 
 
+def test_planner_routes_water_refill_to_major_point_and_resource_tools() -> None:
+    plan = plan_scout_ai_tools(
+        _query("哪裡可以補水？"),
+        project_root=PROJECT_ROOT,
+    )
+
+    tool_ids = _tool_ids(plan)
+    assert MAJOR_POINT_TOOL_ID in tool_ids
+    assert EQUIPMENT_RESOURCE_TOOL_ID in tool_ids
+    assert ENERGY_VITALS_TOOL_ID in tool_ids
+
+    major_point = _single_tool(plan, MAJOR_POINT_TOOL_ID)
+    assert major_point.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+    assert major_point.request is not None
+    assert major_point.request["arguments"] == {"point_kinds": ["water_source"]}
+
+    equipment = _single_tool(plan, EQUIPMENT_RESOURCE_TOOL_ID)
+    assert equipment.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+    assert equipment.request is not None
+    assert equipment.request["tool_id"] == EQUIPMENT_RESOURCE_TOOL_ID
+    assert equipment.boundary.runtime_safety_truth is False
+
+
 def test_planner_prioritizes_map_perception_for_annotation_questions() -> None:
     plan = plan_scout_ai_tools(
         _query("CP001 附近有沒有標註?"),

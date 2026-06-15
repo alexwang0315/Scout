@@ -73,6 +73,23 @@ def test_major_point_search_finds_heishuitang_near_cp002() -> None:
     assert first["runtime_safety_truth"] is False
 
 
+def test_major_point_search_treats_water_refill_as_water_source_lookup() -> None:
+    result = search_project_major_points(
+        PROJECT_ROOT,
+        query="哪裡可以補水？",
+        limit=5,
+    )
+
+    assert result["tool_id"] == MAJOR_POINT_TOOL_ID
+    assert result["answerability"] == "major_points_available"
+    assert result["result_count"] >= 1
+    assert result["results"][0]["label"] == "黑水塘"
+    assert "water_source" in result["results"][0]["point_classes"]
+    assert result["field_answer"].startswith("候選補水/水源點：黑水塘")
+    assert "不是現場取水" in result["field_answer"]
+    assert result["boundary"]["runtime_safety_truth"] is False
+
+
 def test_evidence_fulltext_wraps_local_evidence_index() -> None:
     result = search_project_evidence_fulltext(
         PROJECT_ROOT,
