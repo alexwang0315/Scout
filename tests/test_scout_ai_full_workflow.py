@@ -1020,7 +1020,9 @@ def test_full_workflow_uses_direct_retreat_micro_decision() -> None:
     assert result.decision_output["action"] == "retreat"
     assert result.decision_output["decision"] == "GO"
     assert result.decision_output["allowed"] is True
-    assert result.decision_output["firstLayer"]["decision"] == "可以撤退。"
+    assert result.decision_output["firstLayer"]["decision"] == "建議撤退。"
+    assert "保持隊伍完整" in result.decision_output["firstLayer"]["limit"]
+    assert "建議撤退" in result.answer
     assert "保持隊伍完整" in result.answer
     assert result.boundary.runtime_safety_truth is False
 
@@ -1052,7 +1054,9 @@ def test_full_workflow_uses_micro_decision_for_weather_fatigue_retreat() -> None
     assert result.decision_output["action"] == "retreat"
     assert result.decision_output["decision"] == "GO"
     assert result.decision_output["allowed"] is True
-    assert result.decision_output["firstLayer"]["decision"] == "可以撤退。"
+    assert result.decision_output["firstLayer"]["decision"] == "建議撤退。"
+    assert "保持隊伍完整" in result.decision_output["firstLayer"]["limit"]
+    assert "建議撤退" in result.answer
     assert "開始撤退" in result.answer
     assert result.boundary.runtime_safety_truth is False
 

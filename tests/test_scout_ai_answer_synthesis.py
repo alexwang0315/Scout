@@ -897,7 +897,9 @@ def test_answer_synthesis_uses_direct_retreat_micro_decision() -> None:
     assert result.decision_output["action"] == "retreat"
     assert result.decision_output["decision"] == "GO"
     assert result.decision_output["allowed"] is True
-    assert result.decision_output["firstLayer"]["decision"] == "可以撤退。"
+    assert result.decision_output["firstLayer"]["decision"] == "建議撤退。"
+    assert "保持隊伍完整" in result.decision_output["firstLayer"]["limit"]
+    assert "建議撤退" in result.answer
     assert "開始撤退" in result.answer
     assert "Missing evidence" in result.answer
     assert "runtime safety truth" in result.answer
@@ -929,7 +931,9 @@ def test_answer_synthesis_uses_micro_decision_for_weather_fatigue_retreat() -> N
     assert result.decision_output["action"] == "retreat"
     assert result.decision_output["decision"] == "GO"
     assert result.decision_output["allowed"] is True
-    assert result.decision_output["firstLayer"]["decision"] == "可以撤退。"
+    assert result.decision_output["firstLayer"]["decision"] == "建議撤退。"
+    assert "保持隊伍完整" in result.decision_output["firstLayer"]["limit"]
+    assert "建議撤退" in result.answer
     assert "開始撤退" in result.answer
     assert "腳程守門員" in result.answer
     assert "runtime safety truth" in result.answer
