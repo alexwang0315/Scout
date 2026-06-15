@@ -51,6 +51,10 @@ CURRENT_TOOLS = {
         "label": "route context / experience guide",
         "evidence_scope": "candidate route context, named points, spatial imprints, rest-area candidates, and observation/photo context",
     },
+    "scout.ai.pace_guardian.assess.v0": {
+        "label": "pace guardian / team pace fit",
+        "evidence_scope": "slowest-member pace fit, team rest rhythm, delay, next-CP schedule pressure, and change-plan guidance",
+    },
 }
 
 
@@ -382,6 +386,8 @@ def _missing_evidence(question: str, recommended_tools: list[str]) -> list[str]:
         missing.append("fresh_weather_or_nowcast_with_ttl")
     if _has_any(question, _PRIVATE_PROFILE_TERMS):
         missing.append("user_or_team_baseline_profile")
+    if _has_any(question, _PACE_PROFILE_TERMS):
+        missing.append("user_or_team_baseline_profile")
     if _has_any(question, _VITALS_TERMS):
         missing.append("wearable_vitals_and_baseline")
     if _has_any(question, _TEAM_TERMS):
@@ -442,6 +448,7 @@ _CURRENT_TOOL_TERMS = (
     ("pydantic_ai.tool.search_scout_terrain_scores.v0", ("坡度", "地形", "稜線", "崩壁", "碎石", "乾溝", "溪谷", "下切", "等高線", "slope", "terrain")),
     ("pydantic_ai.tool.search_scout_map_perception.v0", ("ocr", "annotation", "標註", "圖磚", "影像", "景觀點", "拍照", "contour", "被看見")),
     ("scout.ai.route_context.assess.v0", ("值得看", "觀察點", "適合拍攝", "大景", "地名故事", "路線脈絡", "自然觀察", "experience guide", "route context", "viewpoint")),
+    ("scout.ai.pace_guardian.assess.v0", ("pace guardian", "team pace fit", "readiness pace fit", "最慢者", "最慢成員", "腳程差", "隊伍腳程", "隊伍速度", "隊伍節奏", "休息節奏", "午餐點", "午餐前移", "需要加快", "落後", "晚了", "縮短行程", "改短版", "直接撤退", "能準時抵達", "下一個 cp", "隊友很累", "後隊", "快慢組")),
 )
 
 
@@ -468,6 +475,7 @@ _SAFETY_BOUNDARY_TERMS = ("ln", "safety", "/safety", "phase 1", "l0", "l1", "l2"
 _REVIEW_GAP_TERMS = ("人工複核", "複核", "互相矛盾", "provenance", "缺少什麼", "缺少哪些", "context 缺失", "最相關", "不能回答", "可信度", "sources", "引用")
 _WEATHER_TERMS = ("天氣", "下雨", "白牆", "風雨", "日落", "起霧", "溪水", "風寒", "濕衣", "暴漲", "落石區", "紮營", "延後出發", "有效期限", "變冷")
 _PRIVATE_PROFILE_TERMS = ("我的體能", "我的速度", "我今天", "我需要", "我晚出發", "我補", "我是不是", "我該")
+_PACE_PROFILE_TERMS = ("最慢者", "最慢成員", "腳程差", "隊伍腳程", "隊伍速度", "隊伍節奏", "休息節奏", "午餐點", "午餐前移", "縮短行程", "改短版", "能準時抵達", "下一個 cp")
 _VITALS_TERMS = ("心率", "高山症", "補水", "補給", "太累", "速度下降", "決策品質", "休息", "下撤", "體能", "vitals", "health evidence", "source value", "body battery", "privacy boundary")
 _TEAM_TERMS = ("隊友", "後隊", "隊伍", "留守", "回報", "約定山屋", "集合")
 _EQUIPMENT_TERMS = ("手機電量", "手機只剩", "5%", "手錶", "頭燈", "行動電源", "離線地圖", "第二套導航", "裝備", "水剩", "瓦斯", "食物")

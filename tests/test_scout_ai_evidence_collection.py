@@ -9,6 +9,7 @@ from scout_ai_evidence_collection import (
     collect_scout_ai_evidence,
 )
 from scout_ai_tool_planner import WEATHER_WINDOW_TOOL_ID
+from scout_pace_guardian_tool import PACE_GUARDIAN_TOOL_ID
 from scout_route_context_tool import ROUTE_CONTEXT_TOOL_ID
 from scout_risk_score_tool import RISK_SCORE_TOOL_ID
 from scout_terrain_score_tool import TERRAIN_SCORE_TOOL_ID
@@ -119,6 +120,39 @@ def test_evidence_collection_executes_route_context_tool_without_model_synthesis
     assert route_context.boundary.runtime_safety_truth is False
 
 
+def test_evidence_collection_executes_pace_guardian_tool_without_model_synthesis(
+    tmp_path: Path,
+) -> None:
+    project_root = _write_team_pace_project(tmp_path)
+
+    result = collect_scout_ai_evidence(
+        "隊伍腳程是否能準時抵達下一個 CP？最慢者需要前移午餐點嗎？",
+        project_root=project_root,
+        project_id="team_pace_project",
+        limit=4,
+    )
+
+    assert result.selected_tool_count == 1
+    assert result.executed_tool_count == 1
+    assert result.completed_tool_count == 1
+    assert result.contract_gap_count == 0
+    assert result.execution_policy.ready_tools_executed is True
+    assert result.execution_policy.model_synthesis_performed is False
+
+    pace = _record(result, PACE_GUARDIAN_TOOL_ID)
+    assert pace.collection_status == "completed"
+    assert pace.result is not None
+    payload = pace.result["payload"]
+    assert payload["answerability"] == "pace_fit_decision_available"
+    assert payload["source_status"] == "candidate_only"
+    assert payload["decision"] == "CHANGE_PLAN"
+    assert payload["pace_guardian"]["role"] == "Pace Guardian"
+    assert payload["pace_guardian"]["average_pace_used"] is False
+    assert payload["team_pace_fit"]["slowest_member"]["label"] == "New teammate"
+    assert payload["team_pace_fit"]["pace_gap_ratio"] == 1.92
+    assert pace.boundary.runtime_safety_truth is False
+
+
 def test_evidence_collection_reports_empty_collection_when_no_tool_matches() -> None:
     result = collect_scout_ai_evidence(
         "請用一句話描述登山心情",
@@ -218,3 +252,51 @@ def _record(result, tool_id: str):
     matches = [record for record in result.evidence_records if record.tool_id == tool_id]
     assert len(matches) == 1, result.model_dump(mode="json")
     return matches[0]
+
+
+def _write_team_pace_project(tmp_path: Path) -> Path:
+    project_root = tmp_path / "team_pace_project"
+    outputs = project_root / "outputs"
+    outputs.mkdir(parents=True)
+    (project_root / "project.json").write_text(
+        json.dumps(
+            {
+                "project_id": "team_pace_project",
+                "team_status_ref": "outputs/team_status.json",
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    (outputs / "team_status.json").write_text(
+        json.dumps(
+            {
+                "artifact_kind": "scout_team_status",
+                "source_status": "candidate_only",
+                "leader_accepts_slowest_basis": False,
+                "team_rest_sync": "mismatched",
+                "schedule": {"current_delay_minutes": 22},
+                "members": [
+                    {
+                        "member_id": "leader",
+                        "display_label": "Leader",
+                        "pace_mps": 1.15,
+                        "reserve_minutes": 55,
+                        "fatigue_band": "normal",
+                    },
+                    {
+                        "member_id": "teammate",
+                        "display_label": "New teammate",
+                        "pace_mps": 0.60,
+                        "reserve_minutes": 8,
+                        "fatigue_band": "tired",
+                        "rest_need_minutes": 12,
+                        "first_time_similar_route": True,
+                    },
+                ],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    return project_root

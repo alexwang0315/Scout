@@ -22,6 +22,7 @@ from scout_terrain_score_tool import TERRAIN_SCORE_TOOL_ID
 from scout_weather_window_tool import WEATHER_WINDOW_TOOL_ID
 from scout_contextual_permission_tool import CONTEXTUAL_PERMISSION_TOOL_ID
 from scout_route_context_tool import ROUTE_CONTEXT_TOOL_ID
+from scout_pace_guardian_tool import PACE_GUARDIAN_TOOL_ID
 from scout_workspace_search_tools import (
     MAJOR_POINT_TOOL_ID,
     ROUTE_STRUCTURE_TOOL_ID,
@@ -141,6 +142,14 @@ def plan_scout_ai_tools(
             (
                 ENERGY_VITALS_TOOL_ID,
                 "Question asks about energy reserve, fatigue, heart rate, vitals, hydration, nutrition, or whether to rest.",
+            )
+        )
+    if _looks_like_pace_guardian_question(normalized_question):
+        selected.append(
+            (
+                PACE_GUARDIAN_TOOL_ID,
+                "Question asks for Pace Guardian / Team Pace Fit: "
+                "slowest-member pacing, delay, rest rhythm, lunch-point movement, shortening the route, or whether the team can still reach the next CP.",
             )
         )
     if _looks_like_live_navigation_state_question(normalized_question):
@@ -429,6 +438,57 @@ def _looks_like_energy_vitals_question(text: str) -> bool:
             "高山症",
             "下撤",
             "決策品質",
+        ),
+    )
+
+
+def _looks_like_pace_guardian_question(text: str) -> bool:
+    if _looks_like_contextual_permission_question(text) and not _has_any(
+        text,
+        (
+            "隊友",
+            "隊伍",
+            "最慢",
+            "腳程",
+            "落後",
+            "午餐點",
+            "前移",
+            "縮短行程",
+        ),
+    ):
+        return False
+    return _has_any(
+        text,
+        (
+            "paceguardian",
+            "teampacefit",
+            "readinesspacefit",
+            "最慢者",
+            "最慢成員",
+            "走最慢",
+            "最快",
+            "腳程差",
+            "隊伍腳程",
+            "隊伍速度",
+            "隊伍節奏",
+            "休息節奏",
+            "午餐點",
+            "午餐前移",
+            "前移午餐",
+            "需要加快",
+            "是否需要加快",
+            "落後",
+            "晚了",
+            "縮短行程",
+            "改短版",
+            "直接撤退",
+            "能準時抵達",
+            "下一個cp",
+            "隊友很累",
+            "隊友太累",
+            "後隊",
+            "快慢組",
+            "分隊",
         ),
     )
 

@@ -9,6 +9,7 @@ from scout_energy_reserve import write_energy_reserve_artifacts
 from scout_energy_vitals_tool import ENERGY_VITALS_TOOL_ID
 from scout_contextual_permission_tool import CONTEXTUAL_PERMISSION_TOOL_ID
 from scout_route_context_tool import ROUTE_CONTEXT_TOOL_ID
+from scout_pace_guardian_tool import PACE_GUARDIAN_TOOL_ID
 from scout_ai_tool_contracts import tool_registry_output
 from scout_ai_tool_executor import execute_scout_ai_tool
 
@@ -45,6 +46,7 @@ def test_tool_registry_lists_current_and_future_contracts() -> None:
     assert "scout.ai.safety_boundary.explain.v0" in by_id
     assert CONTEXTUAL_PERMISSION_TOOL_ID in by_id
     assert ROUTE_CONTEXT_TOOL_ID in by_id
+    assert PACE_GUARDIAN_TOOL_ID in by_id
     assert ENERGY_VITALS_TOOL_ID in by_id
     assert by_id["pydantic_ai.tool.search_scout_risk_scores.v0"].implementation_status == (
         "ready_current_tool"
@@ -70,15 +72,19 @@ def test_tool_registry_lists_current_and_future_contracts() -> None:
     assert by_id[ROUTE_CONTEXT_TOOL_ID].implementation_status == (
         "ready_current_tool"
     )
+    assert by_id[PACE_GUARDIAN_TOOL_ID].implementation_status == (
+        "ready_current_tool"
+    )
     assert "scout.ai.energy_vitals.assess" in by_id[ENERGY_VITALS_TOOL_ID].aliases
     assert "scout.ai.micro_decision.assess" in by_id[
         CONTEXTUAL_PERMISSION_TOOL_ID
     ].aliases
     assert "scout.ai.experience_guide.assess" in by_id[ROUTE_CONTEXT_TOOL_ID].aliases
-    assert registry.ready_current_tool_count >= 8
+    assert "scout.ai.team_pace_fit.assess" in by_id[PACE_GUARDIAN_TOOL_ID].aliases
+    assert registry.ready_current_tool_count >= 9
     assert registry.executable_tool_count >= registry.ready_current_tool_count
     assert registry.contract_only_tool_count >= 1
-    assert registry.implementation_status_counts["ready_current_tool"] >= 8
+    assert registry.implementation_status_counts["ready_current_tool"] >= 9
     assert "ready_current_tool" in registry.tool_ids_by_status
     assert "scout.ai.weather_window.assess.v0" not in registry.missing_evidence_fields_by_tool
     assert registry.boundary.runtime_safety_truth is False
@@ -117,6 +123,42 @@ def test_execute_ready_current_tool_returns_uniform_result() -> None:
     assert result.payload["summaries"]["baseline"]["available"] is True
     assert result.boundary.runtime_safety_truth is False
     assert result.boundary.phase1_safety_mutation_allowed is False
+
+
+def test_execute_pace_guardian_alias_returns_team_pace_fit_decision() -> None:
+    result = execute_scout_ai_tool(
+        {
+            "tool_id": "scout.ai.team_pace_fit.assess",
+            "project_root": str(PROJECT_ROOT),
+            "query": "隊伍腳程是否能準時抵達下一個 CP？",
+            "arguments": {
+                "team_members": [
+                    {"member_id": "lead", "display_label": "Lead", "pace_mps": 1.1},
+                    {
+                        "member_id": "slow",
+                        "display_label": "Slow member",
+                        "pace_mps": 0.6,
+                        "reserve_minutes": 9,
+                        "fatigue_band": "tired",
+                    },
+                ],
+                "minutes_to_next_cp": 20,
+                "leader_accepts_slowest_basis": True,
+            },
+        }
+    )
+
+    assert result.status == "completed"
+    assert result.tool_id == PACE_GUARDIAN_TOOL_ID
+    assert result.implementation_status == "ready_current_tool"
+    assert result.output_artifact_kind == "scout_ai_pace_guardian_tool_output"
+    assert result.payload["artifact_kind"] == "scout_ai_pace_guardian_tool_output"
+    assert result.payload["answerability"] == "pace_fit_decision_available"
+    assert result.payload["decision"] == "CHANGE_PLAN"
+    assert result.payload["pace_guardian"]["average_pace_used"] is False
+    assert result.payload["team_pace_fit"]["slowest_member"]["label"] == "Slow member"
+    assert result.payload["boundary"]["runtime_safety_truth"] is False
+    assert result.boundary.live_safety_api_calls_allowed is False
 
 
 def test_execute_weather_tool_returns_read_only_weather_evidence_gap() -> None:

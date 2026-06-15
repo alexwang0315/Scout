@@ -67,6 +67,14 @@ def test_question_eval_classifies_current_tools_and_missing_live_evidence() -> N
             "question": "下一個觀察點在哪？哪裡適合拍攝大景？",
         }
     )
+    pace_guardian_eval = evaluate_question(
+        {
+            "id": "q-pace-guardian",
+            "source_set": "test",
+            "category": "team_pace_fit",
+            "question": "隊伍腳程是否能準時抵達下一個 CP？最慢者需要前移午餐點嗎？",
+        }
+    )
 
     assert route_eval.answerability == "answerable_by_current_read_only_tools"
     assert "pydantic_ai.tool.search_scout_route_structure.v0" in route_eval.current_tool_ids
@@ -76,6 +84,9 @@ def test_question_eval_classifies_current_tools_and_missing_live_evidence() -> N
     assert "current_position" in live_eval.missing_evidence
     assert route_context_eval.answerability == "answerable_by_current_read_only_tools"
     assert "scout.ai.route_context.assess.v0" in route_context_eval.current_tool_ids
+    assert pace_guardian_eval.answerability == "requires_missing_evidence"
+    assert "scout.ai.pace_guardian.assess.v0" in pace_guardian_eval.current_tool_ids
+    assert "user_or_team_baseline_profile" in pace_guardian_eval.missing_evidence
     assert rescue_eval.answerability == "blocked_for_direct_action_can_only_explain"
     assert rescue_eval.safety_boundary["outbound_send_performed"] is False
 
