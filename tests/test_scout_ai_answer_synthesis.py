@@ -484,6 +484,40 @@ def test_answer_synthesis_uses_route_readiness_field_answer_without_guessing() -
     assert "runtime safety truth" in result.answer
 
 
+def test_answer_synthesis_preserves_guided_only_route_readiness_decision() -> None:
+    result = collect_and_synthesize_scout_ai_answer(
+        "beginner transportconfirmed slowestbasisconfirmed "
+        "departuretimeconfirmed wxconfirmed sunok gearconfirmed rcconfirmed "
+        "pretrip Go/No-Go 可以自主出發嗎？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=3,
+    )
+
+    assert result.answerability == "evidence_available"
+    assert result.completed_source_count == 1
+    assert result.missing_evidence_count == 0
+    assert result.sources[0].tool_id == ROUTE_READINESS_TOOL_ID
+    assert result.sources[0].top_result_summary["decision"] == "GUIDED_ONLY"
+    assert result.sources[0].top_result_summary["guided_only_gate"]["required"] is True
+    assert result.sources[0].top_result_summary["route_demand_profile"][
+        "route_demand"
+    ] == "high"
+    package = result.sources[0].top_result_summary["pretrip_decision_package"]
+    assert package["required_outputs"]["pretrip_decision"] == "GUIDED_ONLY"
+    assert package["decision_limits"]["autonomous_departure_allowed"] is False
+    assert result.decision_output["answerSourceToolId"] == ROUTE_READINESS_TOOL_ID
+    assert result.decision_output["decision"] == "GUIDED_ONLY"
+    assert result.decision_output["allowed"] is False
+    assert result.decision_output["firstLayer"]["decision"] == (
+        "只建議在合格帶領下進入。"
+    )
+    assert "不得自主出發" in result.decision_output["firstLayer"]["limit"]
+    assert "GUIDED_ONLY" in result.answer
+    assert "不建議自主出發" in result.answer
+    assert "runtime safety truth" in result.answer
+
+
 def test_answer_synthesis_uses_media_literacy_field_answer_without_guessing() -> None:
     result = collect_and_synthesize_scout_ai_answer(
         "IG 大崩壁美照會不會誤導？",

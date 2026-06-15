@@ -391,6 +391,52 @@ def test_execute_route_readiness_alias_returns_departure_gate_decision() -> None
     assert result.boundary.live_safety_api_calls_allowed is False
 
 
+def test_execute_route_readiness_returns_guided_only_for_beginner_high_demand_route() -> None:
+    result = execute_scout_ai_tool(
+        {
+            "tool_id": "scout.ai.route_readiness.assess",
+            "project_root": str(PROJECT_ROOT),
+            "query": "beginner pretrip Go/No-Go 可以自主出發嗎？",
+            "arguments": {
+                "user_experience_level": "beginner",
+                "transport_access_plan": "user_confirmed",
+                "team_slowest_basis_confirmed": True,
+                "departure_time_confirmed": True,
+                "weather_reviewed": True,
+                "daylight_reviewed": True,
+                "equipment_confirmed": True,
+                "remote_contact_confirmed": True,
+            },
+        }
+    )
+
+    assert result.status == "completed"
+    assert result.tool_id == ROUTE_READINESS_TOOL_ID
+    assert result.payload["answerability"] == "route_readiness_decision_available"
+    assert result.payload["decision"] == "GUIDED_ONLY"
+    assert result.payload["allowed"] is False
+    assert result.payload["missing_fields"] == []
+    assert result.payload["decision_output"]["decision"] == "GUIDED_ONLY"
+    assert result.payload["decision_output"]["allowed"] is False
+    assert result.payload["decision_output"]["firstLayer"]["decision"] == (
+        "只建議在合格帶領下進入。"
+    )
+    assert "不得自主出發" in result.payload["decision_output"]["firstLayer"]["limit"]
+    assert result.payload["guided_only_gate"]["required"] is True
+    assert result.payload["guided_only_gate"]["autonomous_departure_allowed"] is False
+    demand = result.payload["route_demand_profile"]
+    assert demand["route_demand"] == "high"
+    assert demand["requires_guided_for_low_experience"] is True
+    package = result.payload["pretrip_decision_package"]
+    assert package["required_outputs"]["pretrip_decision"] == "GUIDED_ONLY"
+    assert package["required_outputs"]["guided_only_gate"]["required"] is True
+    assert package["decision_limits"]["allowed"] is False
+    assert package["decision_limits"]["autonomous_departure_allowed"] is False
+    assert result.payload["departure_gate"]["approval_granted"] is False
+    assert result.payload["boundary"]["runtime_handoff_performed"] is False
+    assert result.boundary.runtime_safety_truth is False
+
+
 def test_execute_media_literacy_alias_returns_bias_decision() -> None:
     result = execute_scout_ai_tool(
         {

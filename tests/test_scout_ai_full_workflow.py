@@ -506,6 +506,45 @@ def test_full_workflow_runs_route_readiness_question() -> None:
     assert result.boundary.runtime_safety_truth is False
 
 
+def test_full_workflow_runs_guided_only_route_readiness_question() -> None:
+    result = run_scout_ai_full_workflow(
+        "beginner transportconfirmed slowestbasisconfirmed "
+        "departuretimeconfirmed wxconfirmed sunok gearconfirmed rcconfirmed "
+        "pretrip Go/No-Go 可以自主出發嗎？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=3,
+    )
+
+    assert result.answerability == "evidence_available"
+    assert result.selected_tool_count == 1
+    assert result.executed_tool_count == 1
+    assert result.completed_tool_count == 1
+    assert result.failed_tool_count == 0
+    assert result.missing_evidence_count == 0
+    assert result.sources[0]["tool_id"] == ROUTE_READINESS_TOOL_ID
+    summary = result.sources[0]["top_result_summary"]
+    assert summary["decision"] == "GUIDED_ONLY"
+    assert summary["guided_only_gate"]["required"] is True
+    assert summary["route_demand_profile"]["route_demand"] == "high"
+    package = summary["pretrip_decision_package"]
+    assert package["required_outputs"]["pretrip_decision"] == "GUIDED_ONLY"
+    assert package["decision_limits"]["autonomous_departure_allowed"] is False
+    assert result.decision_output["answerSourceToolId"] == ROUTE_READINESS_TOOL_ID
+    assert result.decision_output["decision"] == "GUIDED_ONLY"
+    assert result.decision_output["allowed"] is False
+    assert result.decision_output["firstLayer"]["decision"] == (
+        "只建議在合格帶領下進入。"
+    )
+    assert "不得自主出發" in result.decision_output["firstLayer"]["limit"]
+    answer_step = result.workflow_steps[-1]
+    assert answer_step.summary["decision_output_schema"] == "ContextualPermission"
+    assert answer_step.summary["decision_output_source_tool"] == ROUTE_READINESS_TOOL_ID
+    assert "GUIDED_ONLY" in result.answer
+    assert "不建議自主出發" in result.answer
+    assert result.boundary.runtime_safety_truth is False
+
+
 def test_full_workflow_runs_media_literacy_question() -> None:
     result = run_scout_ai_full_workflow(
         "IG 大崩壁美照會不會誤導？",

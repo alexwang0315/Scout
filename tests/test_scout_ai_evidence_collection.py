@@ -475,6 +475,40 @@ def test_evidence_collection_keeps_route_readiness_payload() -> None:
     assert readiness.boundary.runtime_safety_truth is False
 
 
+def test_evidence_collection_keeps_guided_only_route_readiness_payload() -> None:
+    result = collect_scout_ai_evidence(
+        "beginner transportconfirmed slowestbasisconfirmed "
+        "departuretimeconfirmed wxconfirmed sunok gearconfirmed rcconfirmed "
+        "pretrip Go/No-Go 可以自主出發嗎？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=3,
+    )
+
+    assert result.selected_tool_count == 1
+    assert result.executed_tool_count == 1
+    assert result.completed_tool_count == 1
+    assert result.failed_tool_count == 0
+    readiness = _record(result, ROUTE_READINESS_TOOL_ID)
+    assert readiness.collection_status == "completed"
+    assert readiness.missing_fields == []
+    assert readiness.result is not None
+    payload = readiness.result["payload"]
+    assert payload["answerability"] == "route_readiness_decision_available"
+    assert payload["decision"] == "GUIDED_ONLY"
+    assert payload["decision_output"]["decision"] == "GUIDED_ONLY"
+    assert payload["decision_output"]["allowed"] is False
+    assert payload["guided_only_gate"]["required"] is True
+    assert payload["route_demand_profile"]["route_demand"] == "high"
+    assert payload["pretrip_decision_package"]["required_outputs"][
+        "pretrip_decision"
+    ] == "GUIDED_ONLY"
+    assert payload["pretrip_decision_package"]["decision_limits"][
+        "autonomous_departure_allowed"
+    ] is False
+    assert readiness.boundary.runtime_safety_truth is False
+
+
 def test_evidence_collection_keeps_media_literacy_payload() -> None:
     result = collect_scout_ai_evidence(
         "IG 大崩壁美照會不會誤導？",

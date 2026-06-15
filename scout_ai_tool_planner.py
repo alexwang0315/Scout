@@ -145,18 +145,18 @@ def plan_scout_ai_tools(
                 "Question asks about GPS-vs-INS/DR trajectory difference, PDR dropout coverage, zigzag, uncertainty, anchors, or fused estimate provenance.",
             )
         )
-    if _looks_like_weather_question(normalized_question):
-        selected.append(
-            (
-                WEATHER_WINDOW_TOOL_ID,
-                "Question asks about weather window, rain, thunderstorm, fog, wind, or whether to camp/shelter.",
-            )
-        )
     if _looks_like_route_readiness_question(normalized_question):
         selected.append(
             (
                 ROUTE_READINESS_TOOL_ID,
                 "Question asks for pre-trip Route Readiness / departure Go-No-Go: route/date/team/experience/equipment/transport/weather/daylight and CP Graph readiness.",
+            )
+        )
+    if _looks_like_weather_question(normalized_question):
+        selected.append(
+            (
+                WEATHER_WINDOW_TOOL_ID,
+                "Question asks about weather window, rain, thunderstorm, fog, wind, or whether to camp/shelter.",
             )
         )
     if _looks_like_energy_vitals_question(normalized_question):
@@ -292,6 +292,10 @@ def _plan_item(
         if status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
         else None
     )
+    if request is not None and contract.tool_id == ROUTE_READINESS_TOOL_ID:
+        overrides = _route_readiness_request_overrides(query.question)
+        if overrides:
+            request["arguments"] = overrides
     return ScoutAiToolPlanItem(
         tool_id=contract.tool_id,
         label=contract.label,
@@ -304,6 +308,65 @@ def _plan_item(
         output_artifact_kind=contract.output_artifact_kind,
         request=request,
     )
+
+
+def _route_readiness_request_overrides(question: str) -> dict[str, Any]:
+    normalized = _normalize(question)
+    overrides: dict[str, Any] = {}
+    experience = _route_readiness_experience_level(normalized)
+    if experience:
+        overrides["user_experience_level"] = experience
+    if _has_any(normalized, ("交通已確認", "接駁已確認", "transportconfirmed")):
+        overrides["transport_access_plan"] = "user_confirmed"
+    if _has_any(
+        normalized,
+        (
+            "最慢者已確認",
+            "以最慢者",
+            "最脆弱成員",
+            "slowestmemberconfirmed",
+            "slowestbasisconfirmed",
+        ),
+    ):
+        overrides["team_slowest_basis_confirmed"] = True
+    if _has_any(normalized, ("出發時間已確認", "departuretimeconfirmed")):
+        overrides["departure_time_confirmed"] = True
+    if _has_any(
+        normalized,
+        ("天氣已確認", "weatherreviewed", "weatherconfirmed", "wxconfirmed"),
+    ):
+        overrides["weather_reviewed"] = True
+    if _has_any(
+        normalized,
+        ("日照已確認", "daylightreviewed", "daylightconfirmed", "daylightok", "sunok"),
+    ):
+        overrides["daylight_reviewed"] = True
+    if _has_any(
+        normalized,
+        ("裝備已確認", "equipmentreviewed", "equipmentconfirmed", "gearconfirmed"),
+    ):
+        overrides["equipment_confirmed"] = True
+    if _has_any(
+        normalized,
+        ("留守已確認", "緊急聯絡已確認", "remotecontactconfirmed", "rcconfirmed"),
+    ):
+        overrides["remote_contact_confirmed"] = True
+    return overrides
+
+
+def _route_readiness_experience_level(normalized_question: str) -> str | None:
+    if _has_any(
+        normalized_question,
+        ("我是新手", "我們是新手", "初次", "第一次", "beginner", "novice"),
+    ):
+        return "beginner"
+    if _has_any(normalized_question, ("低經驗", "經驗不足", "lowexperience")):
+        return "low"
+    if _has_any(normalized_question, ("中級", "intermediate")):
+        return "intermediate"
+    if _has_any(normalized_question, ("高經驗", "資深", "advanced", "experienced")):
+        return "advanced"
+    return None
 
 
 def _missing_fields(

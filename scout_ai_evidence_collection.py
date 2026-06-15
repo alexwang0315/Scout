@@ -248,6 +248,8 @@ def _compact_payload(
         "quality_flags",
         "weather_window",
         "route_readiness",
+        "route_demand_profile",
+        "guided_only_gate",
         "departure_gate",
         "readiness_state",
         "readiness_governance",
