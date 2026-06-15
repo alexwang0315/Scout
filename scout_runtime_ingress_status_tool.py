@@ -501,19 +501,56 @@ def _decision_output(
         if allowed
         else "補齊 runtime ingress/router trace，或先修復 MQTT/Sensor Logger/router pipeline。"
     )
+    uncertainty_notes = [
+        *[f"Missing field: {field}" for field in missing_fields],
+        *health_findings,
+    ]
+    residual_risk = [
+        "Observer/debug projection can lag behind live process state.",
+        "Candidate data-confidence evidence cannot mutate /safety/* or outbound state.",
+    ]
+    required_conditions = [
+        "Use persisted status/index traces only.",
+        "Do not embed raw payloads or credential values.",
+    ]
+    if allowed:
+        required_conditions.append(
+            "Treat ingress/router status as candidate evidence, not live safety approval."
+        )
+    else:
+        required_conditions.append(
+            "Restore readable runtime ingress/router traces before using live-source claims."
+        )
+    alternative_actions = [
+        "Open hardware/debug panel or runtime logs for operator diagnosis.",
+        "Ask a narrower question with explicit status/index paths.",
+    ]
     return {
+        "role": "Runtime Ingress Status Agent",
+        "format": "SCOUT_OUTDOOR_AI_AGENT_STANDARD.section16",
         "decisionObjectSchema": "ContextualPermission",
+        "text": "\n".join(
+            (
+                f"[決策] {'可作為候選 runtime data-confidence evidence。' if allowed else '暫緩 runtime ingress 狀態判斷。'}",
+                "[限制] 不得把 ingress/router trace 當成安全授權或 Phase 1 runtime truth。",
+                f"[原因] {field_answer}",
+                f"[下一步] {next_action}",
+            )
+        ),
         "action": "runtime_ingress_status_review",
         "decision": decision,
         "allowed": allowed,
         "answerability": answerability,
         "mainReasons": [field_answer],
+        "cost": {
+            "timeBufferChangeMinutes": 0,
+            "runtimeIngressImpact": "Read-only review of persisted ingress/router status traces.",
+            "safetyTruthImpact": "No runtime safety truth was created or changed.",
+            "outboundImpact": "No outbound send was performed.",
+        },
         "nextAction": next_action,
         "confidence": "medium" if allowed and not missing_fields else "low",
-        "uncertaintyNotes": [
-            *[f"Missing field: {field}" for field in missing_fields],
-            *health_findings[:4],
-        ],
+        "uncertaintyNotes": uncertainty_notes[:4],
         "firstLayer": {
             "decision": "可作為候選 runtime data-confidence evidence。"
             if allowed
@@ -524,23 +561,19 @@ def _decision_output(
         },
         "secondLayer": {
             "details": [field_answer],
-            "uncertaintyNotes": [
-                *[f"Missing field: {field}" for field in missing_fields],
-                *health_findings,
-            ],
-            "residualRisk": [
-                "Observer/debug projection can lag behind live process state.",
-                "Candidate data-confidence evidence cannot mutate /safety/* or outbound state.",
-            ],
-            "requiredConditions": [
-                "Use persisted status/index traces only.",
-                "Do not embed raw payloads or credential values.",
-            ],
-            "alternativeActions": [
-                "Open hardware/debug panel or runtime logs for operator diagnosis.",
-                "Ask a narrower question with explicit status/index paths.",
-            ],
+            "uncertaintyNotes": uncertainty_notes,
+            "residualRisk": residual_risk,
+            "requiredConditions": required_conditions,
+            "alternativeActions": alternative_actions,
         },
+        "residualRisk": residual_risk,
+        "requiredConditions": required_conditions,
+        "alternativeActions": alternative_actions,
+        "standardAlignment": [
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 16 required decision output format",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 17 ContextualPermission schema",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 22 runtime/safety truth boundary",
+        ],
         "runtimeSafetyTruth": False,
     }
 
