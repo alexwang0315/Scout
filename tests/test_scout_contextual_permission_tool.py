@@ -72,6 +72,12 @@ def test_contextual_permission_allows_film_with_bounded_deadline_and_cost() -> N
     assert decision_output["leaveBy"] == "2026-06-07T13:42:00+08:00"
     assert decision_output["locationConstraint"] == "留在步道內側或既有路線走廊內"
     assert decision_output["cost"]["timeBufferChangeMinutes"] == -6
+    assert decision_output["mainReasons"] == permission["mainReasons"]
+    assert decision_output["nextAction"] == permission["nextAction"]
+    assert decision_output["uncertaintyNotes"] == permission["uncertaintyNotes"]
+    assert decision_output["residualRisk"] == permission["residualRisk"]
+    assert decision_output["requiredConditions"] == permission["requiredConditions"]
+    assert decision_output["alternativeActions"] == permission["alternativeActions"]
     assert decision_output["confidence"] == "medium"
     assert decision_output["runtimeSafetyTruth"] is False
     assert decision_output["firstLayer"]["decision"] == "可以，最多 6 分鐘。"

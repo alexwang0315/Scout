@@ -187,7 +187,22 @@ class ScoutDecisionOutput(ScoutContextualBaseModel):
     leave_by: str | None = Field(default=None, alias="leaveBy")
     location_constraint: str | None = Field(default=None, alias="locationConstraint")
     cost: ContextualPermissionCost | None = None
+    main_reasons: list[str] = Field(default_factory=list, alias="mainReasons")
+    next_action: str = Field(min_length=1, alias="nextAction")
     confidence: ConfidenceLevel
+    uncertainty_notes: list[str] = Field(
+        default_factory=list,
+        alias="uncertaintyNotes",
+    )
+    residual_risk: list[str] = Field(default_factory=list, alias="residualRisk")
+    required_conditions: list[str] = Field(
+        default_factory=list,
+        alias="requiredConditions",
+    )
+    alternative_actions: list[str] = Field(
+        default_factory=list,
+        alias="alternativeActions",
+    )
     text: str = Field(min_length=1)
     first_layer: DecisionOutputFirstLayer = Field(alias="firstLayer")
     second_layer: DecisionOutputSecondLayer = Field(alias="secondLayer")
@@ -2249,7 +2264,13 @@ def _decision_output(
         leave_by=permission.leave_by,
         location_constraint=permission.location_constraint,
         cost=permission.cost,
+        main_reasons=list(permission.main_reasons),
+        next_action=permission.next_action,
         confidence=permission.confidence,
+        uncertainty_notes=list(permission.uncertainty_notes),
+        residual_risk=list(permission.residual_risk),
+        required_conditions=list(permission.required_conditions),
+        alternative_actions=list(permission.alternative_actions),
         text=text,
         first_layer=first_layer,
         second_layer=second_layer,
