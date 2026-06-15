@@ -160,6 +160,8 @@ def run_builtin_tool(argv: Sequence[str] | None = None) -> tuple[int, dict[str, 
         return _pretrip_route_context_collect(args)
     if args.command == "pretrip-route-architecture-collect":
         return _pretrip_route_architecture_collect(args)
+    if args.command == "pretrip-pace-fit-collect":
+        return _pretrip_pace_fit_collect(args)
     if args.command == "pretrip-weather-decision-collect":
         return _pretrip_weather_decision_collect(args)
     if args.command == "pretrip-contextual-permission-collect":
@@ -422,6 +424,11 @@ def _build_parser() -> argparse.ArgumentParser:
     route_architecture_parser.add_argument("--input", type=Path, required=True)
     route_architecture_parser.add_argument("--dry-run", action="store_true")
     route_architecture_parser.add_argument("--json", action="store_true")
+
+    pace_fit_parser = subparsers.add_parser("pretrip-pace-fit-collect")
+    pace_fit_parser.add_argument("--input", type=Path, required=True)
+    pace_fit_parser.add_argument("--dry-run", action="store_true")
+    pace_fit_parser.add_argument("--json", action="store_true")
 
     weather_decision_parser = subparsers.add_parser("pretrip-weather-decision-collect")
     weather_decision_parser.add_argument("--input", type=Path, required=True)
@@ -2476,6 +2483,9 @@ def _pretrip_route_context_collect(args: argparse.Namespace) -> tuple[int, dict[
         dry_run=bool(args.dry_run),
         include_route_notes=bool(request.get("include_route_notes", True)),
         limit_route_notes=int(request.get("limit_route_notes", 80)),
+        route_note_point_policy=str(request.get("route_note_point_policy") or "seed_only"),
+        route_keyword=request.get("route_keyword"),
+        write_briefing=bool(request.get("write_briefing", True)),
         collected_at=request.get("collected_at"),
     )
     return (
@@ -2538,6 +2548,58 @@ def _pretrip_route_architecture_collect(
                 "raw_payloads_embedded": False,
                 "network_calls_made": False,
                 "live_safety_api_calls_allowed": False,
+            },
+        },
+    )
+
+
+def _pretrip_pace_fit_collect(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
+    from pretrip_pace_fit_collection import collect_pretrip_pace_fit
+
+    request = _load_json(args.input)
+    project_root = _optional_path(request.get("project_root"))
+    if project_root is None:
+        project_id = request.get("project_id")
+        workspace_root = _optional_path(request.get("workspace_root"))
+        if project_id and workspace_root:
+            project_root = workspace_root / str(project_id)
+    if project_root is None:
+        return 2, _error_payload(
+            "pace fit collection requires project_root or workspace_root plus project_id"
+        )
+
+    team_members = request.get("team_members")
+    if not isinstance(team_members, list):
+        team_members = None
+    result = collect_pretrip_pace_fit(
+        project_root,
+        dry_run=bool(args.dry_run),
+        team_members=team_members,
+        current_time=request.get("current_time"),
+        next_cp_id=request.get("next_cp_id"),
+        minutes_to_next_cp=request.get("minutes_to_next_cp"),
+        current_delay_minutes=request.get("current_delay_minutes"),
+        leader_accepts_slowest_basis=request.get("leader_accepts_slowest_basis"),
+        team_rest_sync=request.get("team_rest_sync"),
+        generated_at=request.get("generated_at"),
+    )
+    return (
+        0,
+        {
+            "artifact_kind": "scout_pretrip_pace_fit_collect_tool_output",
+            "status": "completed",
+            "dry_run": bool(args.dry_run),
+            "result": result,
+            "boundary": {
+                **_closed_boundary(),
+                "workspace_file_mutation_allowed": not bool(args.dry_run),
+                "candidate_only": True,
+                "raw_payloads_embedded": False,
+                "raw_health_payload_embedded": False,
+                "network_calls_made": False,
+                "live_safety_api_calls_allowed": False,
+                "medical_diagnosis": False,
+                "average_pace_used": False,
             },
         },
     )

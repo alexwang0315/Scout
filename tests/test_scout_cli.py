@@ -7,6 +7,7 @@ from pathlib import Path
 from scout_agent_trace import load_agent_trace
 from scout_cli import run_scout_cli
 from pretrip_contextual_permission_collection import CONTEXTUAL_PERMISSION_RULES_REF
+from pretrip_pace_fit_collection import TEAM_PACE_FIT_REF
 from pretrip_route_architecture_collection import ROUTE_ARCHITECTURE_REF
 from pretrip_route_context_collection import (
     ROUTE_CONTEXT_PACK_REF,
@@ -492,6 +493,89 @@ def test_scout_pretrip_route_architecture_collect_facade(tmp_path: Path) -> None
     assert output["result"]["decision"] == "CHANGE_PLAN"
     assert output["result"]["writes_performed"] is True
     assert (project_root / ROUTE_ARCHITECTURE_REF).is_file()
+
+
+def test_scout_pretrip_pace_fit_collect_facade(tmp_path: Path) -> None:
+    project_root = tmp_path / "chilai_nanhua_day1"
+    shutil.copytree(CHILAI_PROJECT, project_root)
+    team_members_json = json.dumps(
+        [
+            {
+                "member_id": "leader",
+                "display_label": "Leader",
+                "pace_mps": 1.15,
+                "reserve_minutes": 55,
+                "fatigue_band": "normal",
+            },
+            {
+                "member_id": "teammate",
+                "display_label": "New teammate",
+                "pace_mps": 0.58,
+                "reserve_minutes": 8,
+                "fatigue_band": "tired",
+                "rest_need_minutes": 12,
+                "first_time_similar_route": True,
+                "conditions": ["sleep_debt", "knee_pain"],
+            },
+        ],
+        ensure_ascii=False,
+    )
+
+    dry_exit, dry_payload = run_scout_cli(
+        [
+            "pretrip",
+            "pace-fit-collect",
+            "--project-root",
+            str(project_root),
+            "--team-members-json",
+            team_members_json,
+            "--minutes-to-next-cp",
+            "24",
+            "--current-delay-minutes",
+            "22",
+            "--leader-accepts-slowest-basis",
+            "false",
+            "--team-rest-sync",
+            "mismatched",
+            "--dry-run",
+            "--json",
+        ]
+    )
+    assert dry_exit == 0
+    dry_output = json.loads(dry_payload["outputs"]["stdout"])
+    assert dry_output["result"]["writes_performed"] is False
+    assert not (project_root / TEAM_PACE_FIT_REF).exists()
+
+    exit_code, payload = run_scout_cli(
+        [
+            "pretrip",
+            "pace-fit-collect",
+            "--project-root",
+            str(project_root),
+            "--team-members-json",
+            team_members_json,
+            "--minutes-to-next-cp",
+            "24",
+            "--current-delay-minutes",
+            "22",
+            "--leader-accepts-slowest-basis",
+            "false",
+            "--team-rest-sync",
+            "mismatched",
+            "--authorized-by",
+            "operator.alex",
+            "--json",
+        ]
+    )
+
+    assert exit_code == 0
+    output = json.loads(payload["outputs"]["stdout"])
+    assert output["artifact_kind"] == "scout_pretrip_pace_fit_collect_tool_output"
+    assert output["result"]["decision"] == "CHANGE_PLAN"
+    assert output["result"]["writes_performed"] is True
+    assert output["result"]["member_count"] == 2
+    assert output["result"]["boundary"]["average_pace_used"] is False
+    assert (project_root / TEAM_PACE_FIT_REF).is_file()
 
 
 def test_scout_pretrip_weather_decision_collect_facade(tmp_path: Path) -> None:
