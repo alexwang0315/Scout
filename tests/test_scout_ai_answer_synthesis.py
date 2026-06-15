@@ -372,6 +372,8 @@ def test_answer_synthesis_uses_contextual_permission_field_answer_without_guessi
     assert result.decision_output["firstLayer"]["decision"] == "不建議拍影片。"
     assert result.decision_output["runtimeSafetyTruth"] is False
     assert "remaining_safety_buffer_minutes" in result.sources[0].missing_fields
+    assert result.answer.startswith("[決策] 不建議拍影片。")
+    assert not result.answer.startswith("Scout AI read-only answer draft")
     assert "[決策] 不建議拍影片。" in result.answer
     assert "不建議拍影片" in result.answer
     assert "remaining_safety_buffer_minutes" in result.answer
@@ -1167,6 +1169,8 @@ def test_answer_synthesis_prioritizes_pace_for_slowed_continue_question() -> Non
     assert result.decision_output["action"] == "pace_adjustment"
     assert result.decision_output["decision"] == "NO_GO"
     assert result.decision_output["cost"]["scheduleDelayMinutes"] == 25.0
+    assert result.answer.startswith("[決策] 不建議用目前腳程資料繼續判斷。")
+    assert not result.answer.startswith("Scout AI read-only answer draft")
     first_answer_block = result.answer.split(" Collected evidence: ")[0]
     assert "腳程守門員" in first_answer_block
     assert "[決策] 可以繼續前進。" not in first_answer_block
