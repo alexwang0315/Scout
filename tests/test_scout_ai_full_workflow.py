@@ -216,7 +216,8 @@ def test_full_workflow_uses_query_reported_recent_rain_weather_decision() -> Non
     assert result.decision_output["firstLayer"]["decision"] == (
         "不建議照原計畫通過。"
     )
-    assert "previous-24h rainfall" in result.decision_output["firstLayer"]["reason"]
+    assert "前 24 小時降雨" in result.decision_output["firstLayer"]["reason"]
+    assert "不得把原路線視為已核准" in result.decision_output["firstLayer"]["limit"]
     assert result.decision_output["runtimeSafetyTruth"] is False
     assert result.boundary.runtime_safety_truth is False
 
@@ -354,7 +355,7 @@ def test_full_workflow_changes_plan_for_heat_exposure_weather(
     assert rule["segment_ids"] == ["heat.exposed.1"]
     assert result.decision_output["answerSourceToolId"] == WEATHER_WINDOW_TOOL_ID
     assert result.decision_output["decision"] == "CHANGE_PLAN"
-    assert "water margin" in result.decision_output["firstLayer"]["limit"]
+    assert "水量餘裕" in result.decision_output["firstLayer"]["limit"]
     assert "補足水量" in result.answer
     assert result.boundary.runtime_safety_truth is False
 
@@ -385,7 +386,7 @@ def test_full_workflow_delays_forecast_source_disagreement_weather(
     assert rule["segment_ids"] == ["forecast.conflict.1"]
     assert result.decision_output["answerSourceToolId"] == WEATHER_WINDOW_TOOL_ID
     assert result.decision_output["decision"] == "DELAY"
-    assert "favorable forecast" in result.decision_output["firstLayer"]["limit"]
+    assert "單一樂觀預報" in result.decision_output["firstLayer"]["limit"]
     assert "來源仍不一致" in result.answer
     assert result.boundary.runtime_safety_truth is False
 
