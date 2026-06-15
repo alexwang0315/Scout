@@ -135,13 +135,17 @@ def assess_scout_route_architecture(
         route_architecture=route_architecture,
         planned_eta=planned_eta,
         cp_nodes=cp_nodes,
+        requires_turn_back_status=_looks_like_turn_back_status_question(query),
     )
-    missing_fields = _missing_fields(cp_nodes=cp_nodes, graph_edges=graph_edges)
-    answerability = (
-        "route_architecture_available"
-        if not missing_fields
-        else "route_architecture_missing_cp_graph"
-    )
+    graph_missing_fields = _missing_fields(cp_nodes=cp_nodes, graph_edges=graph_edges)
+    decision_missing_fields = _string_list(route_decision.get("missing_fields"))
+    missing_fields = _dedupe(graph_missing_fields + decision_missing_fields)
+    if graph_missing_fields:
+        answerability = "route_architecture_missing_cp_graph"
+    elif decision_missing_fields:
+        answerability = "route_architecture_missing_current_context"
+    else:
+        answerability = "route_architecture_available"
     field_answer = _field_answer(
         answerability=answerability,
         decision=route_decision,
@@ -370,6 +374,7 @@ def _route_decision(
     route_architecture: dict[str, Any],
     planned_eta: dict[str, Any],
     cp_nodes: list[dict[str, Any]],
+    requires_turn_back_status: bool,
 ) -> dict[str, Any]:
     missing_graph = not route_architecture["graph_completeness"]["has_cp_graph"]
     turn_back = route_architecture.get("turn_back")
@@ -393,6 +398,27 @@ def _route_decision(
             "main_reasons": ["CP Graph is missing or incomplete."],
             "next_action": "補齊 checkpoint/segment graph 後再回答撤退、折返或替代路線問題。",
             "action_limit": "Do not infer route architecture decisions from route name or distance only.",
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+        }
+    if requires_turn_back_status and not current_cp_id and not current_time:
+        reasons = [
+            "current_cp_id and current_time are required to determine whether this is the turn-back point.",
+        ]
+        if turn_back.get("turn_back_checkpoint_name"):
+            reasons.append(
+                "planned turn-back checkpoint is "
+                + str(turn_back.get("turn_back_checkpoint_name"))
+                + f" at {turn_back.get('turn_back_eta')}"
+            )
+        return {
+            "decision": "DELAY",
+            "main_reasons": reasons,
+            "next_action": "先確認目前 CP、可靠定位與當前時間；確認前不要往折返點後方推進。",
+            "action_limit": "不得把此回答當成已通過折返點或可繼續推進的授權。",
+            "first_layer_decision": "無法確認現在是否為折返點。",
+            "missing_fields": ["current_cp_id", "current_time"],
+            "turn_back_checkpoint": turn_back,
             "candidate_only": True,
             "runtime_safety_truth": False,
         }
@@ -440,6 +466,14 @@ def _field_answer(
     decision: dict[str, Any],
     missing_fields: list[str],
 ) -> str:
+    if missing_fields and answerability == "route_architecture_missing_current_context":
+        return (
+            "路線結構判斷：建議 DELAY。缺少 "
+            + "、".join(missing_fields)
+            + "，Scout 不能確認現在是否已到折返點。"
+            + f" 下一步：{decision['next_action']} "
+            + "此為 Route Architecture / CP Graph 候選判斷，不是 runtime safety truth；不得觸發 /safety、SOS、outbound send 或硬體控制。"
+        )
     if missing_fields:
         return (
             "路線結構判斷：建議 DELAY。缺少 "
@@ -477,7 +511,10 @@ def _decision_output(
     )
     alternatives = _string_list(route_architecture.get("alternative_plan_options"))
     first_layer = {
-        "decision": _decision_phrase(decision_label, allowed=allowed),
+        "decision": str(
+            decision.get("first_layer_decision")
+            or _decision_phrase(decision_label, allowed=allowed)
+        ),
         "limit": _decision_limit_phrase(
             decision=decision_label,
             route_decision=decision,
@@ -538,6 +575,7 @@ def _decision_output(
             "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 12 Checkpoint Graph",
             "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 16 required decision output format",
             "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 17 ContextualPermission schema",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 19 on-route recalculation",
             "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 23 acceptance criteria",
         ],
         "runtimeSafetyTruth": False,
@@ -592,7 +630,10 @@ def _decision_limit_phrase(
     if decision == "CHANGE_PLAN":
         return "未完成人工覆核前，不建議延續原路線到折返點後方或更高成本後段。"
     if decision == "DELAY":
-        return "不得只依路線名稱、距離或爬升做撤退、折返或替代路線判斷。"
+        return str(
+            route_decision.get("action_limit")
+            or "不得只依路線名稱、距離或爬升做撤退、折返或替代路線判斷。"
+        )
     if decision == "CONDITIONAL_GO" and route_architecture.get("hard_points"):
         return "不得在難點群前消耗 buffer；通過前後都要重新檢查時間、天氣與隊伍速度。"
     if decision == "CONDITIONAL_GO":
@@ -824,6 +865,21 @@ def _missing_fields(
     if not graph_edges:
         missing.append("segment_candidates")
     return missing
+
+
+def _looks_like_turn_back_status_question(query: str) -> bool:
+    normalized = "".join(str(query).lower().split())
+    return any(
+        phrase in normalized
+        for phrase in (
+            "現在是不是折返點",
+            "是不是折返點",
+            "到折返點了嗎",
+            "已經到折返點",
+            "turn-backpoint",
+            "turnbackpoint",
+        )
+    )
 
 
 def _load_project_json(

@@ -721,6 +721,7 @@ def _completed_missing_fields(tool_id: str, payload: dict[str, Any]) -> list[str
         EQUIPMENT_RESOURCE_TOOL_ID,
         TEAM_STATUS_TOOL_ID,
         POST_TRIP_REVIEW_TOOL_ID,
+        ROUTE_ARCHITECTURE_TOOL_ID,
         MEDIA_LITERACY_TOOL_ID,
         SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID,
         TERRAIN_SCORE_TOOL_ID,
