@@ -770,6 +770,32 @@ def test_answer_synthesis_uses_equipment_resource_field_answer_without_guessing(
     assert "runtime safety truth" in result.answer
 
 
+def test_answer_synthesis_blocks_continuing_with_dead_phone_even_if_watch_has_battery() -> None:
+    result = collect_and_synthesize_scout_ai_answer(
+        "如果手機沒電但手錶還有電，可以繼續嗎？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=4,
+    )
+
+    assert result.answerability == "partial_evidence_with_missing_context"
+    assert result.completed_source_count == 1
+    assert result.sources[0].tool_id == EQUIPMENT_RESOURCE_TOOL_ID
+    assert result.sources[0].top_result_summary["decision"] == "NO_GO"
+    assert result.sources[0].top_result_summary["resource_state"][
+        "phone_battery_percent"
+    ] == 0.0
+    assert result.decision_output["answerSourceToolId"] == EQUIPMENT_RESOURCE_TOOL_ID
+    assert result.decision_output["decision"] == "NO_GO"
+    assert result.decision_output["allowed"] is False
+    assert result.decision_output["firstLayer"]["decision"] == (
+        "不建議照原計畫出發或推進。"
+    )
+    assert "主要手機已無可用電量" in result.answer
+    assert "手錶有電不能單獨取代" in result.answer
+    assert "runtime safety truth" in result.answer
+
+
 def test_answer_synthesis_blocks_autonomous_departure_without_offline_map() -> None:
     result = collect_and_synthesize_scout_ai_answer(
         "我沒下載離線地圖，可以自主出發嗎？",
