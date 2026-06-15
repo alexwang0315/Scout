@@ -513,6 +513,42 @@ def test_execute_media_literacy_alias_returns_bias_decision() -> None:
     assert result.boundary.live_safety_api_calls_allowed is False
 
 
+def test_execute_media_literacy_blocks_social_photo_detour() -> None:
+    result = execute_scout_ai_tool(
+        {
+            "tool_id": "scout.ai.media_bias.assess",
+            "project_root": str(PROJECT_ROOT),
+            "query": "大家都說旁邊那個點很好拍，可以繞去嗎？",
+        }
+    )
+
+    assert result.status == "completed"
+    assert result.tool_id == MEDIA_LITERACY_TOOL_ID
+    assert result.payload["answerability"] == "media_literacy_missing_context"
+    assert result.payload["action"] == "reroute"
+    assert result.payload["decision"] == "NO_GO"
+    assert result.payload["allowed"] is False
+    assert result.payload["decision_output"]["action"] == "reroute"
+    assert result.payload["decision_output"]["decision"] == "NO_GO"
+    assert result.payload["decision_output"]["allowed"] is False
+    assert result.payload["decision_output"]["firstLayer"]["decision"] == (
+        "不建議為媒體點位停留或改線。"
+    )
+    bias_ids = {
+        item["bias_id"]
+        for item in result.payload["media_bias_analysis"]["detected_biases"]
+    }
+    assert {"beauty_photo_bias", "survivorship_bias"} <= bias_ids
+    assert result.payload["media_bias_analysis"]["input_state"][
+        "reroute_pressure"
+    ] is True
+    assert result.payload["media_bias_analysis"]["input_state"][
+        "detour_or_stop_pressure"
+    ] is True
+    assert "route_context_or_target_point" in result.missing_fields
+    assert result.payload["boundary"]["runtime_safety_truth"] is False
+
+
 def test_execute_weather_tool_returns_read_only_weather_evidence_gap() -> None:
     result = execute_scout_ai_tool(
         {

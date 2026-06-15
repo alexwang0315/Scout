@@ -164,6 +164,29 @@ def test_planner_selects_media_literacy_for_social_photo_bias_question() -> None
     assert ROUTE_CONTEXT_TOOL_ID not in _tool_ids(plan)
 
 
+def test_planner_selects_media_and_contextual_for_social_detour_question() -> None:
+    plan = plan_scout_ai_tools(
+        _query("大家都說旁邊那個點很好拍，可以繞去嗎？"),
+        project_root=PROJECT_ROOT,
+    )
+
+    tool_ids = _tool_ids(plan)
+    assert MEDIA_LITERACY_TOOL_ID in tool_ids
+    assert CONTEXTUAL_PERMISSION_TOOL_ID in tool_ids
+
+    media = _single_tool(plan, MEDIA_LITERACY_TOOL_ID)
+    assert media.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+    assert media.implementation_status == "ready_current_tool"
+    assert media.request is not None
+    assert media.request["tool_id"] == MEDIA_LITERACY_TOOL_ID
+    assert media.boundary.runtime_safety_truth is False
+
+    contextual = _single_tool(plan, CONTEXTUAL_PERMISSION_TOOL_ID)
+    assert contextual.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+    assert contextual.request is not None
+    assert contextual.request["tool_id"] == CONTEXTUAL_PERMISSION_TOOL_ID
+
+
 def test_planner_selects_survival_playbook_for_lost_position_question() -> None:
     plan = plan_scout_ai_tools(
         _query("不確定自己在哪，可以下切溪谷找路嗎？"),

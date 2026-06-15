@@ -735,6 +735,37 @@ def test_full_workflow_runs_media_literacy_question() -> None:
     assert result.boundary.runtime_safety_truth is False
 
 
+def test_full_workflow_prioritizes_media_literacy_for_social_detour() -> None:
+    result = run_scout_ai_full_workflow(
+        "大家都說旁邊那個點很好拍，可以繞去嗎？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=5,
+    )
+
+    assert result.answerability == "partial_evidence_with_missing_context"
+    assert result.selected_tool_count == 2
+    assert result.executed_tool_count == 2
+    assert result.completed_tool_count == 2
+    assert result.failed_tool_count == 0
+    media = _workflow_source(result, MEDIA_LITERACY_TOOL_ID)
+    contextual = _workflow_source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
+    assert media["top_result_summary"]["action"] == "reroute"
+    assert media["top_result_summary"]["decision"] == "NO_GO"
+    assert media["top_result_summary"]["decision_output"]["action"] == "reroute"
+    assert contextual["top_result_summary"]["action"] == "reroute"
+    assert result.decision_output["answerSourceToolId"] == MEDIA_LITERACY_TOOL_ID
+    assert result.decision_output["action"] == "reroute"
+    assert result.decision_output["decision"] == "NO_GO"
+    assert result.decision_output["allowed"] is False
+    assert result.decision_output["firstLayer"]["decision"] == (
+        "不建議為媒體點位停留或改線。"
+    )
+    assert "媒體識讀判斷" in result.answer
+    assert "beauty_photo_bias" in result.answer
+    assert result.boundary.runtime_safety_truth is False
+
+
 def test_full_workflow_runs_survival_playbook_question() -> None:
     result = run_scout_ai_full_workflow(
         "不確定自己在哪，可以下切溪谷找路嗎？",

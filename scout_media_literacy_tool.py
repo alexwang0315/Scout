@@ -72,6 +72,8 @@ def assess_scout_media_literacy(
     input_state = {
         "media_trigger_detected": bool(biases),
         "target_context_available": bool(matches),
+        "reroute_pressure": _has_reroute_pressure(text),
+        "detour_or_stop_pressure": _has_detour_or_stop_pressure(text),
         "route_condition_reviewed": bool(_bool_or_none(route_condition_reviewed)),
         "weather_reviewed": bool(weather_state["weather_reviewed"]),
         "user_experience_available": bool(_first_text(user_experience_level)),
@@ -128,6 +130,7 @@ def assess_scout_media_literacy(
         "assessment_kind": "read_only_media_literacy",
         "answerability": answerability,
         "source_status": "candidate_only",
+        "action": decision_output["action"],
         "decision": decision,
         "allowed": decision in {"GO", "CONDITIONAL_GO"},
         "field_answer": field_answer,
@@ -138,6 +141,7 @@ def assess_scout_media_literacy(
             "candidate_only": True,
             "runtime_safety_truth": False,
             "decision": decision,
+            "action": decision_output["action"],
             "detected_biases": biases,
             "counter_bias_actions": guidance["counter_bias_actions"],
             "next_action": guidance["next_action"],
@@ -157,6 +161,7 @@ def assess_scout_media_literacy(
         "results": [
             {
                 "label": "media literacy bias assessment",
+                "action": decision_output["action"],
                 "decision": decision,
                 "answerability": answerability,
                 "detected_biases": biases,
@@ -183,7 +188,7 @@ def _detect_biases(text: str) -> list[dict[str, Any]]:
     definitions = [
         (
             "beauty_photo_bias",
-            ("美照", "照片", "ig", "instagram", "網美", "漂亮", "大景", "熱門照片"),
+            ("美照", "照片", "ig", "instagram", "網美", "漂亮", "大景", "熱門照片", "很好拍"),
             "只看到展望或照片效果，可能低估泥濘、曝曬、落差與通過成本。",
         ),
         (
@@ -424,6 +429,13 @@ def _decision(
     risky_target = any(item.get("risk_context") for item in matches)
     if risky_target and bias_ids & {"beauty_photo_bias", "check_in_pressure", "image_scale_bias"}:
         return "NO_GO"
+    if input_state.get("detour_or_stop_pressure") and bias_ids & {
+        "beauty_photo_bias",
+        "check_in_pressure",
+        "survivorship_bias",
+        "image_scale_bias",
+    }:
+        return "NO_GO"
     if bias_ids & {"guided_party_bias"} and input_state.get("guided_party") is not True:
         return "GUIDED_ONLY"
     if missing_fields:
@@ -534,7 +546,7 @@ def _decision_output(
         ),
         "firstLayer": first_layer,
         "secondLayer": second_layer,
-        "action": "photo" if _has_photo_pressure(biases) else "continue",
+        "action": _decision_action(biases=biases, input_state=input_state),
         "decision": decision,
         "allowed": allowed,
         "locationConstraint": _limit_phrase(decision),
@@ -678,6 +690,53 @@ def _limit_phrase(decision: str) -> str:
 def _has_photo_pressure(biases: list[dict[str, Any]]) -> bool:
     ids = {str(item.get("bias_id")) for item in biases}
     return bool(ids & {"beauty_photo_bias", "check_in_pressure", "image_scale_bias"})
+
+
+def _has_reroute_pressure(text: str) -> bool:
+    return _has_any(
+        _normalize(text),
+        (
+            "繞去",
+            "改線",
+            "支線",
+            "岔路",
+            "reroute",
+            "shortcut",
+        ),
+    )
+
+
+def _has_detour_or_stop_pressure(text: str) -> bool:
+    return _has_any(
+        _normalize(text),
+        (
+            "繞去",
+            "改線",
+            "支線",
+            "岔路",
+            "打卡",
+            "停留",
+            "等",
+            "很好拍",
+            "拍照",
+            "拍攝",
+            "reroute",
+            "shortcut",
+            "checkin",
+        ),
+    )
+
+
+def _decision_action(
+    *,
+    biases: list[dict[str, Any]],
+    input_state: dict[str, Any],
+) -> str:
+    if input_state.get("reroute_pressure"):
+        return "reroute"
+    if _has_photo_pressure(biases):
+        return "photo"
+    return "continue"
 
 
 def _context_kind(classes: list[str], label: str) -> str:

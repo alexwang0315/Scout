@@ -526,12 +526,14 @@ def _decision_source_priority(source: ScoutAiAnswerSource) -> tuple[int, str]:
             return (10, source.tool_id)
         return (50, source.tool_id)
     if source.tool_id in {
-        CONTEXTUAL_PERMISSION_TOOL_ID,
-        MEDIA_LITERACY_TOOL_ID,
         SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID,
         SAFETY_BOUNDARY_TOOL_ID,
     }:
         return (0, source.tool_id)
+    if source.tool_id == MEDIA_LITERACY_TOOL_ID:
+        return (1, source.tool_id)
+    if source.tool_id == CONTEXTUAL_PERMISSION_TOOL_ID:
+        return (2, source.tool_id)
     if source.tool_id == ROUTE_READINESS_TOOL_ID:
         return (5, source.tool_id)
     if source.tool_id in {

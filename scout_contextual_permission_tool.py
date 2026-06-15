@@ -1346,6 +1346,11 @@ def _resolve_action(action: str | None, query: str) -> OutdoorAction:
     text = query.lower()
     if _has_any(text, ("拍影片", "拍片", "影片", "video", "film", "架腳架")):
         return OutdoorAction.FILM
+    if _has_any(
+        text,
+        ("改線", "繞去", "支線", "岔路", "切過去", "捷徑", "reroute", "shortcut"),
+    ):
+        return OutdoorAction.REROUTE
     if _has_any(text, ("拍照", "照片", "photo", "攝影", "拍攝", "很好拍")):
         return OutdoorAction.PHOTO
     if _has_any(text, ("午餐", "吃午餐", "吃飯", "lunch")):
@@ -1367,11 +1372,6 @@ def _resolve_action(action: str | None, query: str) -> OutdoorAction:
         return OutdoorAction.CROSS_STREAM
     if _has_any(text, ("曝露", "暴露", "邊坡", "exposed")):
         return OutdoorAction.ENTER_EXPOSED_SECTION
-    if _has_any(
-        text,
-        ("改線", "繞去", "支線", "岔路", "切過去", "捷徑", "reroute", "shortcut"),
-    ):
-        return OutdoorAction.REROUTE
     if _has_any(text, ("休息", "rest")):
         return OutdoorAction.REST
     if _has_any(text, ("停多久", "停下", "停留", "可以停", "能不能停", "stop")):
