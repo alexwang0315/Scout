@@ -425,6 +425,9 @@ def _compact_weather_window(value: dict[str, Any]) -> dict[str, Any]:
             "wind_summary",
             "thunderstorm_risk",
             "source_status",
+            "source_consistency",
+            "confidence",
+            "forecast_sources",
             "notes",
             "hazard_notes",
         )
@@ -512,7 +515,13 @@ def _weather_to_decision(
     highest = _highest_risk_segment(segments)
     alert_codes = sorted({code for alert in wx_alerts for code in _string_list(alert.get("code"))})
     route_sensitive_delay = _route_sensitive_weather_delay(segments)
+    source_disagreement = _route_sensitive_source_disagreement(
+        weather_window=weather_window,
+        segments=segments,
+    )
     heat_change_plan = _route_sensitive_heat_change_plan(segments)
+    if source_disagreement and "SOURCE_CONFLICT" not in alert_codes:
+        alert_codes.append("SOURCE_CONFLICT")
     if missing_fields:
         decision = "DELAY"
         main_reasons = [
@@ -544,6 +553,25 @@ def _weather_to_decision(
             "delay 48 hours",
             "choose a lower-risk route without creek crossings",
             "use a guided-only creek-crossing plan after route review",
+        ]
+    elif source_disagreement:
+        decision = "DELAY"
+        main_reasons = [
+            "forecast sources disagree enough to reduce weather confidence",
+            "route-sensitive weather decision needs source reconciliation",
+            "do not treat the favorable forecast as authoritative",
+        ]
+        action_limit = (
+            "Do not authorize departure, summit, exposed ridge, creek, or camp "
+            "decisions from a favorable forecast until sources are reconciled."
+        )
+        next_action = (
+            "先比對官方預報、路線天氣包與人工審核；若來源仍不一致，延後或改低曝露替代路線。"
+        )
+        alternatives = [
+            "delay until forecast sources converge",
+            "choose a conservative lower-exposure route",
+            "run human weather review before route-sensitive decisions",
         ]
     elif heat_change_plan:
         decision = "CHANGE_PLAN"
@@ -588,7 +616,9 @@ def _weather_to_decision(
         "next_action": next_action,
         "alternatives": alternatives,
         "route_specific_conditions": _route_specific_conditions(alert_codes, highest=highest),
-        "route_sensitive_weather_rule": route_sensitive_delay or heat_change_plan,
+        "route_sensitive_weather_rule": (
+            route_sensitive_delay or source_disagreement or heat_change_plan
+        ),
         "highest_risk_segment": _compact_segment(highest) if highest else None,
         "wx_alert_count": len(wx_alerts),
         "warnings": warnings[:3],
@@ -875,6 +905,7 @@ def _route_specific_conditions(
         "WIND": "strong wind exposure",
         "COLD": "cold stress / hypothermia context",
         "HEAT": "heat exposure / hydration demand",
+        "SOURCE_CONFLICT": "forecast source disagreement / uncertainty",
         "TERRAIN": "terrain interaction",
     }.items():
         if code in alert_codes:
@@ -912,6 +943,43 @@ def _route_sensitive_weather_delay(
             str(item.get("segment_id"))
             for item in crossing_segments[:6]
             if item.get("segment_id") is not None
+        ],
+    }
+
+
+def _route_sensitive_source_disagreement(
+    *,
+    weather_window: dict[str, Any],
+    segments: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    texts = [
+        str(weather_window.get("summary") or ""),
+        str(weather_window.get("source_status") or ""),
+        str(weather_window.get("source_consistency") or ""),
+        str(weather_window.get("confidence") or ""),
+        *_string_list(weather_window.get("notes")),
+        *_string_list(weather_window.get("hazard_notes")),
+        *(_segment_weather_text(item) for item in segments),
+    ]
+    joined = " ".join(text for text in texts if text)
+    if not _mentions_source_disagreement(joined):
+        return None
+    segment_ids = [
+        str(item.get("segment_id"))
+        for item in segments
+        if item.get("segment_id") is not None
+        and _mentions_source_disagreement(_segment_weather_text(item))
+    ]
+    providers = _forecast_provider_names(weather_window=weather_window, segments=segments)
+    return {
+        "rule": "forecast_source_disagreement_conservative_review",
+        "segment_ids": segment_ids[:6],
+        "conflicting_sources": providers[:6],
+        "source_count": len(providers) if providers else None,
+        "required_reviews": [
+            "compare official forecast sources",
+            "apply conservative weather window",
+            "human review before route-sensitive decision",
         ],
     }
 
@@ -972,13 +1040,65 @@ def _route_sensitive_heat_change_plan(
 
 
 def _segment_weather_text(item: dict[str, Any]) -> str:
+    source = item.get("source") if isinstance(item.get("source"), dict) else {}
     parts = [
         str(item.get("segment_id") or ""),
         str(item.get("message") or ""),
         str(item.get("shade_status") or ""),
+        str(source.get("provider") or ""),
+        str(source.get("source_status") or ""),
+        str(source.get("source_consistency") or ""),
         *_string_list(item.get("factors")),
     ]
     return " ".join(part for part in parts if part)
+
+
+def _mentions_source_disagreement(text: str) -> bool:
+    normalized = text.replace(" ", "").lower()
+    return any(
+        needle in normalized
+        for needle in (
+            "預報來源不一致",
+            "預報不一致",
+            "來源不一致",
+            "來源衝突",
+            "預報衝突",
+            "sourceconflict",
+            "sourcedisagreement",
+            "forecastconflict",
+            "forecastdisagreement",
+            "forecastmismatch",
+            "providerconflict",
+            "providerdisagreement",
+            "inconsistentforecast",
+            "conflictingforecast",
+        )
+    )
+
+
+def _forecast_provider_names(
+    *,
+    weather_window: dict[str, Any],
+    segments: list[dict[str, Any]],
+) -> list[str]:
+    providers: list[str] = []
+
+    def add(value: Any) -> None:
+        text = str(value or "").strip()
+        if text and text not in providers:
+            providers.append(text)
+
+    raw_sources = weather_window.get("forecast_sources")
+    if isinstance(raw_sources, list):
+        for item in raw_sources:
+            if isinstance(item, dict):
+                add(item.get("provider") or item.get("source_id") or item.get("name"))
+            else:
+                add(item)
+    for item in segments:
+        source = item.get("source") if isinstance(item.get("source"), dict) else {}
+        add(source.get("provider") or source.get("source_id") or source.get("name"))
+    return providers
 
 
 def _has_heat_signal(
@@ -1390,6 +1510,15 @@ def _alert_codes(item: dict[str, Any]) -> list[str]:
             "酷熱",
             "中暑",
             "曝曬",
+        ),
+        "SOURCE_CONFLICT": (
+            "source conflict",
+            "source disagreement",
+            "forecast conflict",
+            "forecast disagreement",
+            "預報來源不一致",
+            "來源不一致",
+            "預報衝突",
         ),
         "TERRAIN": ("cliff", "slope", "terrain", "稜線", "崩", "溪", "坡"),
     }.items():
