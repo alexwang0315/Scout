@@ -2313,7 +2313,47 @@ def test_full_workflow_surfaces_pretrip_stop_policy() -> None:
     assert answer_step.summary["decision_output_source_tool"] == ROUTE_READINESS_TOOL_ID
     assert "標準出發前決策包" in result.answer
     assert "停留限制" in result.answer
+    assert "建議停留/重評點" in result.answer
+    assert "雲海保線所" in result.answer
     assert "runtime safety truth" in result.answer
+    assert result.boundary.runtime_safety_truth is False
+
+
+def test_full_workflow_surfaces_pretrip_checklist_gaps() -> None:
+    result = run_scout_ai_full_workflow(
+        "行前 checklist 還缺什麼？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=4,
+    )
+
+    source = _workflow_source(result, ROUTE_READINESS_TOOL_ID)
+    checklist = source["top_result_summary"]["pretrip_decision_package"][
+        "required_outputs"
+    ]["pretrip_checklist"]
+    assert any(item["status"] != "complete" for item in checklist)
+    assert result.decision_output["answerSourceToolId"] == ROUTE_READINESS_TOOL_ID
+    assert "行前 checklist 缺口" in result.answer
+    assert "Member experience reviewed=missing_or_needs_review" in result.answer
+    assert result.boundary.runtime_safety_truth is False
+
+
+def test_full_workflow_routes_residual_risk_to_route_readiness_package() -> None:
+    result = run_scout_ai_full_workflow(
+        "殘餘風險有哪些？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=4,
+    )
+
+    source = _workflow_source(result, ROUTE_READINESS_TOOL_ID)
+    residual_risk = source["top_result_summary"]["pretrip_decision_package"][
+        "required_outputs"
+    ]["residual_risk"]
+    assert residual_risk
+    assert result.decision_output["answerSourceToolId"] == ROUTE_READINESS_TOOL_ID
+    assert "殘餘風險" in result.answer
+    assert "Reviewed planning package is not departure approval" in result.answer
     assert result.boundary.runtime_safety_truth is False
 
 
