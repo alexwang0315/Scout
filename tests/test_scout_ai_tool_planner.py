@@ -1169,6 +1169,27 @@ def test_planner_routes_unanswered_message_to_team_status_with_overdue_minutes()
     assert item.boundary.runtime_safety_truth is False
 
 
+def test_planner_routes_rear_group_lost_contact_to_team_status_not_pace() -> None:
+    plan = plan_scout_ai_tools(
+        _query("後隊失聯 50 分鐘，是否需要升級處理？"),
+        project_root=PROJECT_ROOT,
+    )
+
+    tool_ids = _tool_ids(plan)
+    assert TEAM_STATUS_TOOL_ID in tool_ids
+    assert PACE_GUARDIAN_TOOL_ID not in tool_ids
+
+    item = _single_tool(plan, TEAM_STATUS_TOOL_ID)
+    assert item.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+    assert item.request is not None
+    assert item.request["arguments"] == {
+        "communication_status": "unknown",
+        "checkin_overdue_minutes": 50.0,
+        "last_heard_minutes": 50.0,
+    }
+    assert item.boundary.runtime_safety_truth is False
+
+
 def test_planner_selects_post_trip_review_for_after_action_question() -> None:
     plan = plan_scout_ai_tools(
         _query("行後回顧要更新哪些下一次規劃？實際耗時哪裡比預期慢？"),
