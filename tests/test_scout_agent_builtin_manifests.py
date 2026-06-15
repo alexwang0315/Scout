@@ -989,8 +989,8 @@ def test_builtin_kb_pretrip_view_summary_reads_chilai_project_root(tmp_path: Pat
     summary = json.loads(payload["outputs"]["stdout"])
     assert summary["artifact_kind"] == "scout_kb_pretrip_view_summary"
     assert summary["project_id"] == "chilai_nanhua_day1"
-    assert summary["candidate_counts"]["checkpoints"] == 110
-    assert summary["candidate_counts"]["segments"] == 109
+    assert summary["candidate_counts"]["checkpoints"] == 124
+    assert summary["candidate_counts"]["segments"] == 123
     assert summary["review_queue_item_count"] > 0
     assert summary["boundary"]["live_safety_api_calls_allowed"] is False
 
