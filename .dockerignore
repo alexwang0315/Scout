@@ -12,6 +12,8 @@
 scout-risk-engine/scout_codex_package/.pytest_cache/**
 scout-risk-engine/scout_codex_package/out/**
 scout-risk-engine/scout_codex_package/tests/__pycache__/**
+!scout_ai_*.py
+!scout_*_tool.py
 !checkpoint_manager.py
 !communication_provider.py
 !communication_tool.py
