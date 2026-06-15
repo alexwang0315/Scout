@@ -86,6 +86,9 @@ def plan_scout_ai_tools(
     contracts = default_tool_contracts()
     normalized_question = _normalize(query.question)
     selected: list[tuple[str, str]] = []
+    pretrip_go_no_go = _looks_like_pretrip_go_no_go_question(
+        normalized_question,
+    ) and not _has_complete_route_readiness_confirmation_bundle(normalized_question)
 
     if _looks_like_workspace_catalog_question(normalized_question):
         selected.append(
@@ -161,6 +164,8 @@ def plan_scout_ai_tools(
                 "Question asks for pre-trip Route Readiness / departure Go-No-Go: route/date/team/experience/equipment/transport/weather/daylight and CP Graph readiness.",
             )
         )
+    if pretrip_go_no_go:
+        _append_pretrip_go_no_go_support_tools(selected)
     if _looks_like_weather_question(normalized_question):
         selected.append(
             (
@@ -272,6 +277,34 @@ def plan_scout_ai_tools(
         selected_tools=items,
         planner_notes=notes,
     )
+
+
+def _append_pretrip_go_no_go_support_tools(selected: list[tuple[str, str]]) -> None:
+    support_tools = (
+        (
+            ROUTE_ARCHITECTURE_TOOL_ID,
+            "Pre-trip Go/No-Go needs CP Graph, hard points, retreat points, turn-back pressure, and alternative route structure.",
+        ),
+        (
+            NAVIGATION_TERRAIN_TOOL_ID,
+            "Pre-trip Go/No-Go needs offline map, GPX, contour literacy, retreat direction, and positioning backup evidence.",
+        ),
+        (
+            WEATHER_WINDOW_TOOL_ID,
+            "Pre-trip Go/No-Go needs weather, daylight, recent route-condition, and route-specific weather-risk evidence.",
+        ),
+        (
+            PACE_GUARDIAN_TOOL_ID,
+            "Pre-trip Go/No-Go needs slowest-member pace and team pace fit evidence.",
+        ),
+        (
+            EQUIPMENT_RESOURCE_TOOL_ID,
+            "Pre-trip Go/No-Go needs equipment, device, offline map, GPX, water, food, and critical resource evidence.",
+        ),
+    )
+    for tool_id, reason in support_tools:
+        if not _has_tool(selected, tool_id):
+            selected.append((tool_id, reason))
 
 
 def _plan_item(
@@ -1666,6 +1699,72 @@ def _looks_like_route_readiness_question(text: str) -> bool:
             "go no go",
             "gonogo",
         ),
+    )
+
+
+def _looks_like_pretrip_go_no_go_question(text: str) -> bool:
+    if _has_any(
+        text,
+        (
+            "建議停留點",
+            "不建議停留點",
+            "停留限制",
+            "停留點",
+            "最晚回程",
+            "回程限制",
+            "回程接駁",
+            "最晚接駁",
+            "交通方式",
+        ),
+    ) and not _has_any(
+        text,
+        (
+            "go/no-go",
+            "gono",
+            "可以出發",
+            "能出發",
+            "要不要出發",
+            "是否出發",
+            "出發決策",
+        ),
+    ):
+        return False
+    return _has_any(
+        text,
+        (
+            "go/no-go",
+            "pretripgonogo",
+            "gono",
+            "go no go",
+            "gonogo",
+            "可以出發",
+            "能出發",
+            "可以自主出發",
+            "能不能自主出發",
+            "要不要出發",
+            "是否出發",
+            "出發決策",
+            "出發前決策",
+            "請做出發前決策",
+            "這個隊伍明天可以出發",
+            "整合天氣",
+            "整合天氣、日落",
+        ),
+    )
+
+
+def _has_complete_route_readiness_confirmation_bundle(text: str) -> bool:
+    return all(
+        _has_any(text, terms)
+        for terms in (
+            ("transportconfirmed", "交通已確認", "接駁已確認"),
+            ("slowestbasisconfirmed", "最慢者已確認", "最慢隊員已確認"),
+            ("departuretimeconfirmed", "出發時間已確認"),
+            ("wxconfirmed", "weatherconfirmed", "weatherreviewed", "天氣已確認"),
+            ("sunok", "daylightconfirmed", "日照已確認"),
+            ("gearconfirmed", "裝備已確認"),
+            ("rcconfirmed", "remotecontactconfirmed", "留守已確認"),
+        )
     )
 
 

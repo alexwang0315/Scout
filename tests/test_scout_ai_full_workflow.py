@@ -1456,12 +1456,21 @@ def test_full_workflow_runs_route_readiness_question() -> None:
     )
 
     assert result.answerability == "partial_evidence_with_missing_context"
-    assert result.selected_tool_count == 1
-    assert result.executed_tool_count == 1
-    assert result.completed_tool_count == 1
+    assert result.selected_tool_count == 6
+    assert result.executed_tool_count == 6
+    assert result.completed_tool_count == 6
     assert result.contract_gap_count == 0
     assert result.failed_tool_count == 0
-    assert result.missing_evidence_count == 1
+    assert result.missing_evidence_count == 4
+    source_ids = {source["tool_id"] for source in result.sources}
+    assert {
+        ROUTE_READINESS_TOOL_ID,
+        ROUTE_ARCHITECTURE_TOOL_ID,
+        NAVIGATION_TERRAIN_TOOL_ID,
+        WEATHER_WINDOW_TOOL_ID,
+        PACE_GUARDIAN_TOOL_ID,
+        EQUIPMENT_RESOURCE_TOOL_ID,
+    }.issubset(source_ids)
     assert result.sources[0]["tool_id"] == ROUTE_READINESS_TOOL_ID
     assert result.sources[0]["top_result_summary"]["decision"] == "DELAY"
     assert result.sources[0]["top_result_summary"]["route_readiness"]["role"] == (
@@ -1492,6 +1501,34 @@ def test_full_workflow_runs_route_readiness_question() -> None:
     assert "標準出發前決策包" in result.answer
     assert "停留限制" in result.answer
     assert "runtime safety truth" in result.answer
+    assert result.boundary.runtime_safety_truth is False
+
+
+def test_full_workflow_expands_generic_pretrip_departure_to_mvp_evidence() -> None:
+    result = run_scout_ai_full_workflow(
+        "這個隊伍明天可以出發嗎？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=6,
+    )
+
+    source_ids = {source["tool_id"] for source in result.sources}
+    assert {
+        ROUTE_READINESS_TOOL_ID,
+        ROUTE_ARCHITECTURE_TOOL_ID,
+        NAVIGATION_TERRAIN_TOOL_ID,
+        WEATHER_WINDOW_TOOL_ID,
+        PACE_GUARDIAN_TOOL_ID,
+        EQUIPMENT_RESOURCE_TOOL_ID,
+    }.issubset(source_ids)
+    assert result.decision_output["answerSourceToolId"] == ROUTE_READINESS_TOOL_ID
+    assert result.decision_output["decision"] == "DELAY"
+    assert "出發前判斷" in result.answer
+    assert "路線結構判斷" in result.answer
+    assert "地圖力判斷" in result.answer
+    assert "天氣決策" in result.answer
+    assert "腳程守門員" in result.answer
+    assert "裝備資源判斷" in result.answer
     assert result.boundary.runtime_safety_truth is False
 
 

@@ -551,13 +551,13 @@ def _decision_source_priority(source: ScoutAiAnswerSource) -> tuple[int, str]:
             return (1, source.tool_id)
     if source.tool_id == CONTEXTUAL_PERMISSION_TOOL_ID:
         return (2, source.tool_id)
+    if source.tool_id == ROUTE_READINESS_TOOL_ID:
+        return (4, source.tool_id)
     if source.tool_id == WEATHER_WINDOW_TOOL_ID:
         decision = str(source.top_result_summary.get("decision") or "").upper()
         if decision in {"DELAY", "CHANGE_PLAN", "NO_GO", "ESCALATE"}:
-            return (3, source.tool_id)
+            return (5, source.tool_id)
         return (10, source.tool_id)
-    if source.tool_id == ROUTE_READINESS_TOOL_ID:
-        return (5, source.tool_id)
     if source.tool_id == NAVIGATION_TERRAIN_TOOL_ID:
         decision = str(source.top_result_summary.get("decision") or "").upper()
         if decision in {"GUIDED_ONLY", "CHANGE_PLAN", "NO_GO"}:

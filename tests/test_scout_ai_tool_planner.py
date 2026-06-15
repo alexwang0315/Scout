@@ -136,6 +136,16 @@ def test_planner_selects_route_readiness_for_pretrip_go_no_go_question() -> None
         project_root=PROJECT_ROOT,
     )
 
+    tool_ids = _tool_ids(plan)
+    assert {
+        ROUTE_READINESS_TOOL_ID,
+        ROUTE_ARCHITECTURE_TOOL_ID,
+        NAVIGATION_TERRAIN_TOOL_ID,
+        WEATHER_WINDOW_TOOL_ID,
+        PACE_GUARDIAN_TOOL_ID,
+        EQUIPMENT_RESOURCE_TOOL_ID,
+    }.issubset(tool_ids)
+
     item = _single_tool(plan, ROUTE_READINESS_TOOL_ID)
     assert item.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
     assert item.implementation_status == "ready_current_tool"
@@ -171,6 +181,22 @@ def test_planner_passes_explicit_route_readiness_inputs_as_arguments() -> None:
         "remote_contact_confirmed": True,
     }
     assert _tool_ids(plan) == {ROUTE_READINESS_TOOL_ID}
+
+
+def test_planner_expands_generic_pretrip_departure_to_mvp_support_tools() -> None:
+    plan = plan_scout_ai_tools(
+        _query("這個隊伍明天可以出發嗎？"),
+        project_root=PROJECT_ROOT,
+    )
+
+    assert _tool_ids(plan) == {
+        ROUTE_READINESS_TOOL_ID,
+        ROUTE_ARCHITECTURE_TOOL_ID,
+        NAVIGATION_TERRAIN_TOOL_ID,
+        WEATHER_WINDOW_TOOL_ID,
+        PACE_GUARDIAN_TOOL_ID,
+        EQUIPMENT_RESOURCE_TOOL_ID,
+    }
 
 
 def test_planner_passes_family_photo_goal_to_route_readiness() -> None:
