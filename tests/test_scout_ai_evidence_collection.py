@@ -100,6 +100,39 @@ def test_evidence_collection_executes_ready_risk_and_terrain_tools() -> None:
     assert terrain.result["payload"]["summaries"]
 
 
+def test_evidence_collection_keeps_forward_high_risk_segment_as_risk_sentinel() -> None:
+    result = collect_scout_ai_evidence(
+        "前方是否有高風險路段？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=6,
+    )
+
+    assert result.selected_tool_count == 2
+    assert result.executed_tool_count == 2
+    assert result.completed_tool_count == 2
+    assert result.missing_input_count == 0
+
+    risk = _record(result, RISK_SCORE_TOOL_ID)
+    nav = _record(result, LIVE_NAVIGATION_STATE_TOOL_ID)
+    assert risk.collection_status == "completed"
+    assert risk.result is not None
+    risk_payload = risk.result["payload"]
+    assert risk_payload["decision"] == "CHANGE_PLAN"
+    assert risk_payload["decision_output"]["firstLayer"]["decision"] == (
+        "建議改變路線或通過策略。"
+    )
+    assert risk_payload["risk_decision"]["highest_risk_result"]["risk_bucket"] == (
+        "high"
+    )
+    assert nav.collection_status == "completed"
+    assert "lat" in nav.missing_fields
+    assert all(
+        record.tool_id != CONTEXTUAL_PERMISSION_TOOL_ID
+        for record in result.evidence_records
+    )
+
+
 def test_evidence_collection_executes_weather_tool_without_model_synthesis() -> None:
     result = collect_scout_ai_evidence(
         "明天午後雷雨是否要紮營?",

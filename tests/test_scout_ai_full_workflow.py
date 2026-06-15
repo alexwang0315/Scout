@@ -105,6 +105,35 @@ def test_full_workflow_runs_risk_and_terrain_question_end_to_end() -> None:
     assert any("no model provider was called" in item for item in result.limitations)
 
 
+def test_full_workflow_uses_risk_sentinel_for_forward_high_risk_segment() -> None:
+    result = run_scout_ai_full_workflow(
+        "前方是否有高風險路段？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=6,
+    )
+
+    assert result.answerability == "partial_evidence_with_missing_context"
+    assert result.selected_tool_count == 2
+    assert result.executed_tool_count == 2
+    assert result.completed_tool_count == 2
+    assert result.missing_evidence_count == 1
+    source_ids = {source["tool_id"] for source in result.sources}
+    assert RISK_SCORE_TOOL_ID in source_ids
+    assert LIVE_NAVIGATION_STATE_TOOL_ID in source_ids
+    assert CONTEXTUAL_PERMISSION_TOOL_ID not in source_ids
+    nav_source = _workflow_source(result, LIVE_NAVIGATION_STATE_TOOL_ID)
+    assert "lat" in nav_source["missing_fields"]
+    assert result.decision_output["answerSourceToolId"] == RISK_SCORE_TOOL_ID
+    assert result.decision_output["decision"] == "CHANGE_PLAN"
+    assert result.decision_output["firstLayer"]["decision"] == (
+        "建議改變路線或通過策略。"
+    )
+    assert "最高候選風險" in result.decision_output["firstLayer"]["reason"]
+    assert "不建議進入曝露地形。" not in result.answer
+    assert "runtime safety truth" in result.answer
+
+
 def test_full_workflow_runs_weather_tool_and_reports_missing_fresh_evidence() -> None:
     result = run_scout_ai_full_workflow(
         "明天午後雷雨是否要紮營?",

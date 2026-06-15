@@ -114,6 +114,23 @@ def test_planner_selects_risk_and_terrain_for_dangerous_terrain_question() -> No
         assert item.request["query"] == "危險地形在哪些位置?"
 
 
+def test_planner_routes_forward_high_risk_segment_to_risk_sentinel() -> None:
+    plan = plan_scout_ai_tools(
+        _query("前方是否有高風險路段？"),
+        project_root=PROJECT_ROOT,
+    )
+
+    tool_ids = _tool_ids(plan)
+    assert RISK_SCORE_TOOL_ID in tool_ids
+    assert LIVE_NAVIGATION_STATE_TOOL_ID in tool_ids
+    assert CONTEXTUAL_PERMISSION_TOOL_ID not in tool_ids
+
+    risk = _single_tool(plan, RISK_SCORE_TOOL_ID)
+    assert risk.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+    assert risk.request is not None
+    assert risk.request["query"] == "前方是否有高風險路段？"
+
+
 def test_planner_selects_weather_ready_tool_for_weather_questions() -> None:
     plan = plan_scout_ai_tools(
         _query("明天午後雷雨是否要紮營?"),

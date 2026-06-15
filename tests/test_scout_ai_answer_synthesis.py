@@ -94,6 +94,33 @@ def test_answer_synthesis_uses_completed_risk_and_terrain_evidence() -> None:
     assert any("no model provider was called" in item for item in result.limitations)
 
 
+def test_answer_synthesis_uses_risk_sentinel_for_forward_high_risk_segment() -> None:
+    result = collect_and_synthesize_scout_ai_answer(
+        "前方是否有高風險路段？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=6,
+    )
+
+    assert result.answerability == "partial_evidence_with_missing_context"
+    assert result.completed_source_count == 2
+    assert result.missing_evidence_count == 1
+    source_ids = {source.tool_id for source in result.sources}
+    assert RISK_SCORE_TOOL_ID in source_ids
+    assert LIVE_NAVIGATION_STATE_TOOL_ID in source_ids
+    assert CONTEXTUAL_PERMISSION_TOOL_ID not in source_ids
+    nav_source = _source(result, LIVE_NAVIGATION_STATE_TOOL_ID)
+    assert "lat" in nav_source.missing_fields
+    assert result.decision_output["answerSourceToolId"] == RISK_SCORE_TOOL_ID
+    assert result.decision_output["decision"] == "CHANGE_PLAN"
+    assert result.decision_output["firstLayer"]["decision"] == (
+        "建議改變路線或通過策略。"
+    )
+    assert "最高候選風險" in result.decision_output["firstLayer"]["reason"]
+    assert "不建議進入曝露地形。" not in result.answer
+    assert "runtime safety truth" in result.answer
+
+
 def test_answer_synthesis_reports_weather_tool_missing_fresh_evidence_without_guessing() -> None:
     result = collect_and_synthesize_scout_ai_answer(
         "明天午後雷雨是否要紮營?",
