@@ -224,6 +224,21 @@ def _add_pretrip_group(subparsers: argparse._SubParsersAction) -> None:
     route_context.add_argument("--authorized-by", default=None)
     route_context.add_argument("--output", type=Path, default=None)
     route_context.add_argument("--json", action="store_true")
+    weather_decision = pretrip_sub.add_parser("weather-decision-collect")
+    weather_decision.add_argument("--project-root", type=Path, default=None)
+    weather_decision.add_argument("--project-id", default=None)
+    weather_decision.add_argument("--workspace-root", type=Path, default=None)
+    weather_decision.add_argument("--weather-points", dest="weather_points_path", default=None)
+    weather_decision.add_argument("--warnings", dest="warnings_path", default=None)
+    weather_decision.add_argument("--route-segments", dest="route_segments_path", default=None)
+    weather_decision.add_argument("--default-township", default=None)
+    weather_decision.add_argument("--generated-at", default=None)
+    weather_decision.add_argument("--valid-until", default=None)
+    weather_decision.add_argument("--provider", default="workspace_local_weather_points")
+    weather_decision.add_argument("--dry-run", action="store_true")
+    weather_decision.add_argument("--authorized-by", default=None)
+    weather_decision.add_argument("--output", type=Path, default=None)
+    weather_decision.add_argument("--json", action="store_true")
     layers = pretrip_sub.add_parser("prepare-layers")
     layers.add_argument("--project-root", type=Path, default=None)
     layers.add_argument("--project-id", default=None)
@@ -578,6 +593,25 @@ def _tool_request_for_args(args: argparse.Namespace) -> tuple[str, dict[str, Any
         if args.collected_at:
             request["collected_at"] = args.collected_at
         return "scout.pretrip.route_context_collect", request
+    if group == "pretrip" and args.pretrip_command == "weather-decision-collect":
+        request = {"provider": args.provider}
+        _set_path(request, "project_root", args.project_root)
+        _set_path(request, "workspace_root", args.workspace_root)
+        if args.project_id:
+            request["project_id"] = args.project_id
+        if args.weather_points_path:
+            request["weather_points_path"] = args.weather_points_path
+        if args.warnings_path:
+            request["warnings_path"] = args.warnings_path
+        if args.route_segments_path:
+            request["route_segments_path"] = args.route_segments_path
+        if args.default_township:
+            request["default_township"] = args.default_township
+        if args.generated_at:
+            request["generated_at"] = args.generated_at
+        if args.valid_until:
+            request["valid_until"] = args.valid_until
+        return "scout.pretrip.weather_decision_collect", request
     if group == "pretrip" and args.pretrip_command == "prepare-layers":
         request = {"profile": args.profile}
         _set_path(request, "project_root", args.project_root)

@@ -58,6 +58,9 @@ OPTIONAL_PROJECT_ARTIFACTS: tuple[tuple[str, str], ...] = (
     ("route_context_source_manifest", "route_context_source_manifest_ref"),
     ("route_context_pack", "route_context_pack_ref"),
     ("route_context_points", "route_context_points_ref"),
+    ("route_weather_package", "route_weather_package_ref"),
+    ("weather_source_manifest", "weather_source_manifest_ref"),
+    ("weather_decision_candidates", "weather_decision_candidates_ref"),
 )
 
 
@@ -316,6 +319,69 @@ def _project_artifact_summary(artifact_kind: str, payload: Any) -> dict[str, Any
             "by_stop_advisory_candidate": counts.get(
                 "by_stop_advisory_candidate"
             ),
+            "candidate_only": boundary.get("candidate_only"),
+            "runtime_safety_truth": boundary.get("runtime_safety_truth"),
+        }
+
+    if artifact_kind == "route_weather_package":
+        return {
+            "route_id": payload.get("routeId") or payload.get("route_id"),
+            "status": payload.get("status"),
+            "provider": payload.get("provider"),
+            "issued_at": payload.get("issued_at"),
+            "valid_from": payload.get("valid_from") or payload.get("validFrom"),
+            "valid_to": payload.get("valid_to") or payload.get("validTo"),
+            "ttl_s": payload.get("ttl_s"),
+            "segment_count": len(payload.get("segments", [])),
+            "wx_alert_count": len(payload.get("wx_alerts", [])),
+            "human_review_required": payload.get("human_review_required"),
+            "authoritative_weather_computed": payload.get(
+                "authoritative_weather_computed"
+            ),
+            "external_api_calls_made": payload.get("external_api_calls_made"),
+            "runtime_safety_truth": payload.get("boundary", {}).get(
+                "runtime_safety_truth"
+            ),
+            "candidate_only": payload.get("boundary", {}).get("candidate_only"),
+        }
+
+    if artifact_kind == "weather_source_manifest":
+        cache_policy = payload.get("cache_policy", {})
+        boundary = payload.get("boundary", {})
+        return {
+            "project_id": payload.get("project_id"),
+            "schema_version": payload.get("schema_version"),
+            "source_report_count": len(payload.get("source_report", [])),
+            "required_missing_source_count": len(
+                payload.get("required_missing_source_kinds", [])
+            ),
+            "optional_missing_source_count": len(
+                payload.get("optional_missing_source_kinds", [])
+            ),
+            "cache_mode": cache_policy.get("mode"),
+            "live_fetch_performed": cache_policy.get("live_fetch_performed"),
+            "client_cwa_api_key_allowed": cache_policy.get(
+                "client_cwa_api_key_allowed"
+            ),
+            "candidate_only": boundary.get("candidate_only"),
+            "runtime_safety_truth": boundary.get("runtime_safety_truth"),
+        }
+
+    if artifact_kind == "weather_decision_candidates":
+        counts = payload.get("counts", {})
+        boundary = payload.get("boundary", {})
+        candidates = payload.get("candidates", [])
+        first = candidates[0] if candidates and isinstance(candidates[0], dict) else {}
+        return {
+            "project_id": payload.get("project_id"),
+            "schema_version": payload.get("schema_version"),
+            "candidate_count": counts.get("candidate_count"),
+            "missing_field_count": counts.get("missing_field_count"),
+            "warning_count": counts.get("warning_count"),
+            "wx_alert_count": counts.get("wx_alert_count"),
+            "first_decision": first.get("decision"),
+            "first_answerability": first.get("answerability"),
+            "human_review_required": first.get("human_review_required"),
             "candidate_only": boundary.get("candidate_only"),
             "runtime_safety_truth": boundary.get("runtime_safety_truth"),
         }
