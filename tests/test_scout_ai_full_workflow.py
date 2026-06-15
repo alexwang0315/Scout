@@ -16,6 +16,7 @@ from scout_post_trip_review_tool import POST_TRIP_REVIEW_TOOL_ID
 from scout_route_readiness_tool import ROUTE_READINESS_TOOL_ID
 from scout_route_architecture_tool import ROUTE_ARCHITECTURE_TOOL_ID
 from scout_route_context_tool import ROUTE_CONTEXT_TOOL_ID
+from scout_contextual_permission_tool import CONTEXTUAL_PERMISSION_TOOL_ID
 from scout_media_literacy_tool import MEDIA_LITERACY_TOOL_ID
 from scout_risk_score_tool import RISK_SCORE_TOOL_ID
 from scout_terrain_score_tool import TERRAIN_SCORE_TOOL_ID
@@ -133,6 +134,30 @@ def test_full_workflow_runs_weather_to_decision_question(tmp_path: Path) -> None
     )
     assert "天氣決策" in result.answer
     assert "CHANGE_PLAN" in result.answer
+    assert "runtime safety truth" in result.answer
+    assert result.boundary.runtime_safety_truth is False
+
+
+def test_full_workflow_preserves_contextual_permission_decision_object() -> None:
+    result = run_scout_ai_full_workflow(
+        "我可以在這裡停下來拍一段影片嗎?",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=3,
+    )
+
+    assert result.answerability == "partial_evidence_with_missing_context"
+    assert result.selected_tool_count == 1
+    assert result.executed_tool_count == 1
+    assert result.completed_tool_count == 1
+    assert result.missing_evidence_count == 1
+    assert result.sources[0]["tool_id"] == CONTEXTUAL_PERMISSION_TOOL_ID
+    summary = result.sources[0]["top_result_summary"]
+    assert summary["decision"] == "NO_GO"
+    assert summary["decision_object"] == summary["contextual_permission"]
+    assert summary["decision_output"]["decisionObjectSchema"] == "ContextualPermission"
+    assert summary["decision_output"]["firstLayer"]["decision"] == "不建議拍影片。"
+    assert "[決策] 不建議拍影片。" in result.answer
     assert "runtime safety truth" in result.answer
     assert result.boundary.runtime_safety_truth is False
 

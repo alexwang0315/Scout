@@ -202,6 +202,9 @@ def _source_from_record(record: dict[str, Any]) -> ScoutAiAnswerSource:
         "team_pace_fit",
         "weather_to_decision",
         "decision",
+        "decision_object",
+        "decision_output",
+        "contextual_permission",
         "answerability",
         "source_status",
     ):
@@ -481,6 +484,8 @@ def _top_result_summary(value: Any) -> dict[str, Any]:
         "weather_window",
         "weather_to_decision",
         "decision",
+        "decision_object",
+        "decision_output",
         "allowed",
         "action",
         "max_duration_minutes",

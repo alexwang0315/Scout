@@ -137,7 +137,17 @@ def test_answer_synthesis_uses_contextual_permission_field_answer_without_guessi
     assert result.sources[0].tool_id == CONTEXTUAL_PERMISSION_TOOL_ID
     assert result.sources[0].top_result_summary["decision"] == "NO_GO"
     assert result.sources[0].top_result_summary["allowed"] is False
+    assert result.sources[0].top_result_summary["decision_object"] == (
+        result.sources[0].top_result_summary["contextual_permission"]
+    )
+    assert result.sources[0].top_result_summary["decision_output"][
+        "decisionObjectSchema"
+    ] == "ContextualPermission"
+    assert result.sources[0].top_result_summary["decision_output"]["firstLayer"][
+        "decision"
+    ] == "不建議拍影片。"
     assert "remaining_safety_buffer_minutes" in result.sources[0].missing_fields
+    assert "[決策] 不建議拍影片。" in result.answer
     assert "不建議拍影片" in result.answer
     assert "remaining_safety_buffer_minutes" in result.answer
     assert "runtime safety truth" in result.answer
