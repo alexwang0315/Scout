@@ -15,6 +15,7 @@ from scout_energy_reserve import write_energy_reserve_artifacts
 
 
 ROOT = Path(__file__).resolve().parents[1]
+SCOUT_AGENT_TOOL_MANIFEST_DIR = ROOT / "tools" / "scout_agent_tool_manifests"
 CASE_ID = "scout_260512_field_golden"
 PRETRIP_CASE_ID = "chilai_nanhua_day1"
 WEARABLE_FIXTURE_ROOT = ROOT / "tests" / "fixtures" / "wearables"
@@ -186,7 +187,17 @@ class AdminAfterActionTests(unittest.TestCase):
             payload["gis_perception_timeline"]["counts"]["checkpoint_candidate_count"],
             111,
         )
-        self.assertEqual(payload["scout_agent_skills"]["counts"]["tool_count"], 45)
+        expected_tool_count = len(
+            [
+                *SCOUT_AGENT_TOOL_MANIFEST_DIR.glob("*.json"),
+                *SCOUT_AGENT_TOOL_MANIFEST_DIR.glob("*.yaml"),
+                *SCOUT_AGENT_TOOL_MANIFEST_DIR.glob("*.yml"),
+            ]
+        )
+        self.assertEqual(
+            payload["scout_agent_skills"]["counts"]["tool_count"],
+            expected_tool_count,
+        )
         self.assertFalse(
             payload["scout_agent_skills"]["boundary"]["tool_execution_allowed_from_ui"]
         )
@@ -585,7 +596,7 @@ class AdminAfterActionTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.headers["cache-control"], "no-store")
         self.assertIn("Scout Phase 1 Admin", response.text)
-        self.assertIn(f"/admin/cases/${{CASE_ID}}", response.text)
+        self.assertIn("/admin/cases/${CASE_ID}", response.text)
         self.assertIn('id="energyReserveMonitor"', response.text)
         self.assertIn("renderEnergyReserveMonitor", response.text)
         self.assertIn("hoverHint", response.text)

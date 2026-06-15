@@ -445,6 +445,7 @@ def _execute_ready_current_tool(tool_id: str, arguments: dict[str, Any]) -> dict
             distance_m_min=_float_or_none(arguments.get("distance_m_min")),
             distance_m_max=_float_or_none(arguments.get("distance_m_max")),
             route_context_path=_str_or_none(arguments.get("route_context_path")),
+            route_briefing_path=_str_or_none(arguments.get("route_briefing_path")),
             spatial_imprints_path=_str_or_none(
                 arguments.get("spatial_imprints_path")
             ),

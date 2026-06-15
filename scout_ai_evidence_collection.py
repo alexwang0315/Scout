@@ -285,6 +285,7 @@ def _compact_payload(
         "paired_fix_count",
         "risk_budget",
         "risk_budget_source",
+        "route_briefing",
         "route_context",
         "route_architecture",
         "cp_graph",

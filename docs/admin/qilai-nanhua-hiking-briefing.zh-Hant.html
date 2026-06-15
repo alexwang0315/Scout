@@ -1,0 +1,1343 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>奇萊南華登山活動簡報</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #edf2ef;
+      --paper: #fffefa;
+      --ink: #17201b;
+      --muted: #58615b;
+      --line: #cfd8d2;
+      --forest: #1f5b47;
+      --forest-dark: #143a31;
+      --sky: #286d9d;
+      --gold: #b07920;
+      --rust: #9b4434;
+      --moss: #6b7f39;
+      --ice: #e9f2f3;
+      --sand: #f2e0bd;
+      --shadow: 0 20px 50px rgba(32, 36, 28, 0.12);
+      --radius: 8px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      background:
+        linear-gradient(90deg, rgba(31, 91, 71, 0.06) 1px, transparent 1px),
+        linear-gradient(0deg, rgba(31, 91, 71, 0.05) 1px, transparent 1px),
+        var(--bg);
+      background-size: 28px 28px;
+      color: var(--ink);
+      font-family: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif;
+      line-height: 1.58;
+      letter-spacing: 0;
+    }
+
+    a {
+      color: var(--sky);
+      text-underline-offset: 3px;
+      text-decoration-thickness: 2px;
+    }
+
+    .hero {
+      min-height: 92vh;
+      display: grid;
+      align-items: end;
+      position: relative;
+      isolation: isolate;
+      color: #fffaf0;
+      background: #13221d;
+      overflow: hidden;
+    }
+
+    .hero::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: -2;
+      background-image:
+        linear-gradient(90deg, rgba(11, 24, 20, 0.72), rgba(11, 24, 20, 0.16) 58%, rgba(11, 24, 20, 0.72)),
+        url("https://recreation.forest.gov.tw/Files/RT/Photo/064/05/%E8%83%BD%E9%AB%98%E8%B6%8A%E5%B6%BA%E9%81%93%E5%85%89%E6%89%B9%E5%85%AB%E8%A1%A8%E9%9B%B2%E6%B5%B7%E6%97%A5%E5%87%BA.JPG");
+      background-size: cover;
+      background-position: center;
+    }
+
+    .hero::after {
+      content: "";
+      position: absolute;
+      inset: auto 0 0;
+      height: 34%;
+      z-index: -1;
+      background: linear-gradient(0deg, rgba(8, 18, 14, 0.82), transparent);
+    }
+
+    .wrap {
+      width: min(1160px, calc(100% - 40px));
+      margin: 0 auto;
+    }
+
+    .hero .wrap {
+      padding: 82px 0 72px;
+    }
+
+    .eyebrow {
+      margin: 0 0 12px;
+      color: #f2c46f;
+      font-size: 13px;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 0;
+      max-width: 920px;
+      font-family: "Noto Serif TC", "Songti TC", "PMingLiU", serif;
+      font-size: clamp(44px, 8vw, 96px);
+      line-height: 0.98;
+      font-weight: 900;
+      letter-spacing: 0;
+    }
+
+    h2 {
+      margin: 0;
+      font-family: "Noto Serif TC", "Songti TC", "PMingLiU", serif;
+      font-size: clamp(30px, 4.6vw, 58px);
+      line-height: 1.08;
+      letter-spacing: 0;
+    }
+
+    h3 {
+      margin: 0 0 8px;
+      font-size: 20px;
+      line-height: 1.24;
+      letter-spacing: 0;
+    }
+
+    p {
+      margin: 0;
+    }
+
+    .hero-copy {
+      max-width: 780px;
+      margin-top: 22px;
+      color: #f4ead8;
+      font-size: clamp(17px, 2.1vw, 23px);
+    }
+
+    .meta-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 28px;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 34px;
+      border: 1px solid rgba(255, 250, 240, 0.38);
+      border-radius: 999px;
+      padding: 6px 12px;
+      background: rgba(255, 255, 255, 0.11);
+      color: #fffaf0;
+      font-size: 14px;
+      font-weight: 800;
+      backdrop-filter: blur(8px);
+    }
+
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      border-bottom: 1px solid rgba(211, 205, 188, 0.9);
+      background: rgba(237, 242, 239, 0.94);
+      backdrop-filter: blur(12px);
+    }
+
+    nav .wrap {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding: 10px 0;
+    }
+
+    nav a {
+      flex: 0 0 auto;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 8px 10px;
+      background: var(--paper);
+      color: var(--forest-dark);
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 850;
+      white-space: nowrap;
+    }
+
+    main {
+      padding: 34px 0 80px;
+    }
+
+    .slide {
+      min-height: min(760px, calc(100vh - 100px));
+      display: grid;
+      align-content: center;
+      margin: 0 0 30px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: rgba(255, 253, 246, 0.96);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .slide-inner {
+      padding: clamp(24px, 4.5vw, 54px);
+    }
+
+    .slide-head {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 20px;
+      align-items: end;
+      margin-bottom: 28px;
+    }
+
+    .kicker {
+      margin-bottom: 10px;
+      color: var(--gold);
+      font-size: 13px;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    .lead {
+      max-width: 860px;
+      color: var(--muted);
+      font-size: 18px;
+    }
+
+    .stamp {
+      width: 118px;
+      min-height: 118px;
+      display: grid;
+      place-items: center;
+      border: 2px solid var(--gold);
+      border-radius: 50%;
+      color: var(--forest-dark);
+      font-weight: 900;
+      text-align: center;
+      line-height: 1.22;
+      transform: rotate(-7deg);
+      background: #fff8e6;
+    }
+
+    .decision-grid {
+      display: grid;
+      grid-template-columns: 1.15fr 0.9fr 0.9fr;
+      gap: 14px;
+      margin-top: 26px;
+    }
+
+    .decision {
+      display: grid;
+      gap: 14px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 20px;
+      background: #fffdf8;
+    }
+
+    .decision.primary {
+      color: #fffaf0;
+      background: var(--forest-dark);
+      border-color: var(--forest-dark);
+    }
+
+    .decision.primary .muted,
+    .decision.primary small {
+      color: #dbe8df;
+    }
+
+    .decision strong {
+      display: block;
+      font-family: "Noto Serif TC", "Songti TC", "PMingLiU", serif;
+      font-size: clamp(32px, 5.2vw, 62px);
+      line-height: 0.98;
+      letter-spacing: 0;
+    }
+
+    .decision small,
+    .muted {
+      color: var(--muted);
+    }
+
+    .alert {
+      margin-top: 18px;
+      border-left: 5px solid var(--rust);
+      padding: 12px 15px;
+      background: #fff0e9;
+      color: #54261e;
+      font-weight: 760;
+    }
+
+    .image-band {
+      display: grid;
+      grid-template-columns: 1.25fr 0.75fr;
+      gap: 0;
+      min-height: 650px;
+    }
+
+    .photo {
+      position: relative;
+      min-height: 300px;
+      overflow: hidden;
+      background: #d7d0bf;
+    }
+
+    .photo img {
+      width: 100%;
+      height: 100%;
+      display: block;
+      object-fit: cover;
+    }
+
+    .photo figcaption {
+      position: absolute;
+      left: 14px;
+      bottom: 12px;
+      max-width: calc(100% - 28px);
+      border-radius: 6px;
+      padding: 6px 9px;
+      color: #fffaf0;
+      background: rgba(12, 23, 19, 0.72);
+      font-size: 12px;
+    }
+
+    .photo-panel {
+      display: grid;
+      align-content: center;
+      gap: 20px;
+      padding: clamp(24px, 4vw, 48px);
+      color: #fffaf0;
+      background: var(--forest-dark);
+    }
+
+    .stat-strip {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 24px;
+    }
+
+    .stat {
+      border: 1px solid rgba(255, 250, 240, 0.22);
+      border-radius: var(--radius);
+      padding: 14px;
+      background: rgba(255, 255, 255, 0.08);
+    }
+
+    .stat b {
+      display: block;
+      color: #f1c36b;
+      font-size: 26px;
+      line-height: 1.05;
+    }
+
+    .stat span {
+      display: block;
+      margin-top: 6px;
+      color: #d9e6de;
+      font-size: 13px;
+    }
+
+    .route-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-top: 26px;
+    }
+
+    .day-card {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 20px;
+      background: #fffdf8;
+    }
+
+    .day-card h3 {
+      color: var(--forest-dark);
+      font-size: 22px;
+    }
+
+    .steps {
+      display: grid;
+      gap: 11px;
+      margin-top: 16px;
+    }
+
+    .step {
+      display: grid;
+      grid-template-columns: 86px 1fr;
+      gap: 12px;
+      align-items: start;
+      border-top: 1px solid #e6dfcf;
+      padding-top: 11px;
+    }
+
+    .time {
+      color: var(--gold);
+      font-weight: 900;
+    }
+
+    .map-card {
+      display: grid;
+      grid-template-columns: 0.9fr 1.1fr;
+      gap: 20px;
+      align-items: center;
+      margin-top: 26px;
+    }
+
+    .route-line {
+      position: relative;
+      display: grid;
+      gap: 12px;
+      padding-left: 26px;
+    }
+
+    .route-line::before {
+      content: "";
+      position: absolute;
+      top: 10px;
+      bottom: 10px;
+      left: 8px;
+      width: 3px;
+      background: linear-gradient(var(--forest), var(--gold), var(--sky));
+      border-radius: 99px;
+    }
+
+    .waypoint {
+      position: relative;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 12px 14px;
+      background: #fffdf8;
+    }
+
+    .waypoint::before {
+      content: "";
+      position: absolute;
+      left: -23px;
+      top: 18px;
+      width: 13px;
+      height: 13px;
+      border: 3px solid var(--paper);
+      border-radius: 50%;
+      background: var(--forest);
+      box-shadow: 0 0 0 1px var(--forest);
+    }
+
+    .waypoint b {
+      display: block;
+      color: var(--forest-dark);
+    }
+
+    .waypoint span {
+      display: block;
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .layers {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+      margin-top: 26px;
+    }
+
+    .layer {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 17px;
+      background: #fffdf8;
+    }
+
+    .layer h3 {
+      color: var(--forest-dark);
+    }
+
+    .layer p,
+    .spot p,
+    .risk p {
+      color: var(--muted);
+      font-size: 15px;
+    }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      min-height: 26px;
+      border-radius: 999px;
+      padding: 4px 9px;
+      margin-bottom: 10px;
+      color: #fff;
+      background: var(--forest);
+      font-size: 12px;
+      font-weight: 900;
+    }
+
+    .tag.gold {
+      background: var(--gold);
+    }
+
+    .tag.sky {
+      background: var(--sky);
+    }
+
+    .tag.rust {
+      background: var(--rust);
+    }
+
+    .gallery {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 26px;
+    }
+
+    .gallery .photo {
+      min-height: 250px;
+      border-radius: var(--radius);
+      border: 1px solid var(--line);
+    }
+
+    .spots {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+      margin-top: 26px;
+    }
+
+    .spot {
+      display: grid;
+      grid-template-columns: 74px 1fr;
+      gap: 14px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 16px;
+      background: #fffdf8;
+    }
+
+    .spot .minute {
+      display: grid;
+      place-items: center;
+      width: 58px;
+      height: 58px;
+      border-radius: 50%;
+      color: #fffaf0;
+      background: var(--forest-dark);
+      font-size: 20px;
+      font-weight: 900;
+      line-height: 1;
+    }
+
+    .risk-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+      margin-top: 26px;
+    }
+
+    .risk {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 18px;
+      background: #fffdf8;
+    }
+
+    .risk strong {
+      display: block;
+      color: var(--rust);
+      font-size: 22px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 24px;
+      overflow: hidden;
+      border-radius: var(--radius);
+      background: #fffdf8;
+    }
+
+    th,
+    td {
+      border-bottom: 1px solid var(--line);
+      padding: 12px 13px;
+      text-align: left;
+      vertical-align: top;
+      font-size: 15px;
+      word-break: keep-all;
+      overflow-wrap: normal;
+    }
+
+    th {
+      color: #fffaf0;
+      background: var(--forest-dark);
+      font-weight: 900;
+    }
+
+    tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .source-list {
+      display: grid;
+      gap: 12px;
+      margin-top: 24px;
+      padding: 0;
+      list-style: none;
+    }
+
+    .source-list li {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 14px;
+      background: #fffdf8;
+    }
+
+    .source-list b {
+      display: block;
+      margin-bottom: 4px;
+      color: var(--forest-dark);
+    }
+
+    .footnote {
+      margin-top: 20px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .controls {
+      position: fixed;
+      right: 18px;
+      bottom: 18px;
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border: 1px solid rgba(211, 205, 188, 0.95);
+      border-radius: 999px;
+      padding: 7px;
+      background: rgba(255, 253, 246, 0.92);
+      box-shadow: 0 12px 34px rgba(23, 32, 27, 0.16);
+      backdrop-filter: blur(10px);
+    }
+
+    .controls button {
+      min-width: 38px;
+      height: 38px;
+      border: 0;
+      border-radius: 50%;
+      color: #fffaf0;
+      background: var(--forest-dark);
+      font-size: 20px;
+      font-weight: 900;
+      cursor: pointer;
+    }
+
+    .controls span {
+      min-width: 58px;
+      color: var(--forest-dark);
+      font-size: 13px;
+      font-weight: 900;
+      text-align: center;
+    }
+
+    @media (max-width: 980px) {
+      .image-band,
+      .map-card,
+      .route-grid,
+      .decision-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .layers,
+      .gallery,
+      .risk-grid,
+      .stat-strip {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .slide {
+        min-height: 0;
+      }
+    }
+
+    @media (max-width: 680px) {
+      .wrap {
+        width: min(100% - 24px, 1160px);
+      }
+
+      .hero .wrap {
+        padding-bottom: 48px;
+      }
+
+      .slide-head {
+        grid-template-columns: 1fr;
+      }
+
+      .stamp {
+        width: 96px;
+        min-height: 96px;
+      }
+
+      .layers,
+      .gallery,
+      .risk-grid,
+      .stat-strip,
+      .spots {
+        grid-template-columns: 1fr;
+      }
+
+      .spot {
+        grid-template-columns: 58px 1fr;
+      }
+
+      .step {
+        grid-template-columns: 1fr;
+      }
+
+      table {
+        display: block;
+        border-radius: 0;
+        background: transparent;
+      }
+
+      thead {
+        display: none;
+      }
+
+      tbody,
+      tr,
+      td {
+        display: block;
+        width: 100%;
+      }
+
+      tr {
+        margin-bottom: 12px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        padding: 12px;
+        background: #fffefa;
+      }
+
+      td {
+        border-bottom: 1px solid var(--line);
+        padding: 10px 0;
+        white-space: normal;
+        word-break: normal;
+      }
+
+      td::before {
+        content: attr(data-label);
+        display: block;
+        margin-bottom: 3px;
+        color: var(--gold);
+        font-size: 12px;
+        font-weight: 900;
+        text-transform: uppercase;
+      }
+
+      tr:last-child,
+      td:last-child {
+        border-bottom: 0;
+      }
+
+      .controls {
+        left: 50%;
+        right: auto;
+        transform: translateX(-50%);
+      }
+    }
+
+    @media print {
+      body {
+        background: #fff;
+      }
+
+      nav,
+      .controls {
+        display: none;
+      }
+
+      .hero,
+      .slide {
+        min-height: auto;
+        box-shadow: none;
+        page-break-after: always;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="hero" id="top">
+    <div class="wrap">
+      <p class="eyebrow">Qilai South Peak + Mt. Nanhua briefing</p>
+      <h1>奇萊南華登山活動簡報</h1>
+      <p class="hero-copy">一條適合用「趕路以外的眼睛」走的百岳入門路線：能高越嶺警備道、雲海保線所、天池山莊、高山草坡、南華山與光被八表。</p>
+      <div class="meta-row" aria-label="route summary">
+        <span class="pill">建議 2 天 1 夜</span>
+        <span class="pill">慢走觀察 3 天 2 夜</span>
+        <span class="pill">奇萊南峰 3358 m</span>
+        <span class="pill">南華山 3184 m</span>
+        <span class="pill">資料更新：2026-06-15</span>
+      </div>
+    </div>
+  </header>
+
+  <nav aria-label="簡報導覽">
+    <div class="wrap">
+      <a href="#days">天數結論</a>
+      <a href="#status">現況</a>
+      <a href="#route">路線</a>
+      <a href="#sights">景點</a>
+      <a href="#layers">脈絡層</a>
+      <a href="#p2">P2 Scout資料</a>
+      <a href="#stops">觀察點</a>
+      <a href="#risk">風險</a>
+      <a href="#schedule">行程</a>
+      <a href="#sources">來源</a>
+    </div>
+  </nav>
+
+  <main class="wrap">
+    <section class="slide" id="days">
+      <div class="slide-inner">
+        <div class="slide-head">
+          <div>
+            <p class="kicker">Trip length decision</p>
+            <h2>預計幾天可以完成？</h2>
+          </div>
+          <div class="stamp">建議<br>2D1N</div>
+        </div>
+        <p class="lead">奇萊南華最常見也最穩妥的安排是 2 天 1 夜：第一天到天池山莊，第二天輕裝登奇萊南峰、南華山，再回程。若活動目標包含歷史、生態、地形觀察，3 天 2 夜會更適合。</p>
+        <div class="decision-grid">
+          <article class="decision primary">
+            <div>
+              <strong>2 天 1 夜</strong>
+              <p class="muted">標準活動方案</p>
+            </div>
+            <p>可完成兩座百岳與主要景點，但第二天較長，需清晨出發並控管回程時間。</p>
+            <small>適合：一般有過夜裝備與中級山經驗者。</small>
+          </article>
+          <article class="decision">
+            <div>
+              <strong>3 天 2 夜</strong>
+              <p class="muted">觀察型方案</p>
+            </div>
+            <p>把光被八表、日出、雲海、歷史遺構與植被觀察拆開，不必在第二天壓縮所有內容。</p>
+            <small>適合：教學、親友團、攝影或首次高山過夜。</small>
+          </article>
+          <article class="decision">
+            <div>
+              <strong>1 日</strong>
+              <p class="muted">只給熟手</p>
+            </div>
+            <p>可行但路程長、海拔高，且雲天宮線前段爬升與雨後落石風險會放大失誤成本。</p>
+            <small>適合：熟悉路線、體能強、天候穩定且有撤退紀律者。</small>
+          </article>
+        </div>
+        <div class="alert">活動簡報建議採 3 天 2 夜設計，實際執行可依隊伍體能壓縮為 2 天 1 夜。</div>
+      </div>
+    </section>
+
+    <section class="slide" id="status">
+      <div class="image-band">
+        <figure class="photo">
+          <img src="https://recreation.forest.gov.tw/Files/RT/Photo/064/05/064.jpg" alt="能高越嶺道高山景觀">
+          <figcaption>照片來源：台灣山林悠遊網，能高越嶺道西段</figcaption>
+        </figure>
+        <div class="photo-panel">
+          <div>
+            <p class="kicker">Current access notes</p>
+            <h2>先看現況，再排行程</h2>
+          </div>
+          <p>官方 2026-06-11 公告：能高越嶺步道西段及天池山莊自 2026-06-13 起開放。台灣山林悠遊網在 2026-06-15 顯示「全線開放」，但同頁也顯示梅雨天氣，出發前仍要重查公告、天氣與道路。</p>
+          <div class="stat-strip">
+            <div class="stat"><b>0K</b><span>雲天宮登山口暨服務站</span></div>
+            <div class="stat"><b>4.3K</b><span>雲海保線所</span></div>
+            <div class="stat"><b>13.1K</b><span>天池山莊暨營地</span></div>
+            <div class="stat"><b>15.5K</b><span>光被八表</span></div>
+          </div>
+          <p class="footnote">雲天宮線前段約 3 公里落差 350 公尺，官方提醒需提早出發、雨後快速通過落石或崩塌處。</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide" id="route">
+      <div class="slide-inner">
+        <div class="slide-head">
+          <div>
+            <p class="kicker">Route structure</p>
+            <h2>兩天一夜標準路線</h2>
+          </div>
+        </div>
+        <p class="lead">路線主軸是能高越嶺道西段加上奇萊南峰、南華山支線。第一天重點是進山、適應海拔、留足餘裕；第二天重點是清晨輕裝攻頂與午後安全下撤。</p>
+        <div class="route-grid">
+          <article class="day-card">
+            <h3>D1：進山到天池山莊</h3>
+            <div class="steps">
+              <div class="step"><span class="time">0K</span><span>雲天宮登山口暨服務站，完成報到或登山登記。</span></div>
+              <div class="step"><span class="time">約 4.3K</span><span>雲海保線所：休息、補水、看雲霧與舊保線建築。</span></div>
+              <div class="step"><span class="time">約 7.8K</span><span>松原駐在所、木炭窯遺址：日治警備道與山林生活痕跡。</span></div>
+              <div class="step"><span class="time">13.1K</span><span>天池山莊：住宿、晚餐、確認隔日天氣與撤退時間。</span></div>
+            </div>
+          </article>
+          <article class="day-card">
+            <h3>D2：雙峰與回程</h3>
+            <div class="steps">
+              <div class="step"><span class="time">清晨</span><span>天池山莊到天池岔路，視天候先走奇萊南峰或南華山。</span></div>
+              <div class="step"><span class="time">3358 m</span><span>奇萊南峰：高山草坡、中央山脈展望、黃金大草原日出。</span></div>
+              <div class="step"><span class="time">3184 m</span><span>南華山：又稱能高北峰，稜線狹長，視野開闊。</span></div>
+              <div class="step"><span class="time">可加走</span><span>光被八表紀念碑，再回天池山莊收裝下山。</span></div>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide" id="sights">
+      <div class="slide-inner">
+        <div class="slide-head">
+          <div>
+            <p class="kicker">Highlights</p>
+            <h2>沿途特別景點</h2>
+          </div>
+        </div>
+        <div class="gallery">
+          <figure class="photo">
+            <img loading="lazy" src="https://recreation.forest.gov.tw/Files/RT/Photo/064/05/%E9%9B%B2%E6%B5%B7%E4%BF%9D%E7%B7%9A%E6%89%80.JPG" alt="雲海保線所">
+            <figcaption>雲海保線所：中繼休息點與雲霧展望</figcaption>
+          </figure>
+          <figure class="photo">
+            <img loading="lazy" src="https://recreation.forest.gov.tw/Files/RT/Photo/064/05/%E5%A4%A9%E6%B1%A0%E5%B1%B1%E8%8E%8A.JPG" alt="天池山莊">
+            <figcaption>天池山莊：能高越嶺道 13.1K 山屋</figcaption>
+          </figure>
+          <figure class="photo">
+            <img loading="lazy" src="https://recreation.forest.gov.tw/Files/RT/Photo/064/05/%E8%83%BD%E9%AB%98%E8%B6%8A%E5%B6%BA%E9%81%93%E5%85%89%E6%89%B9%E5%85%AB%E8%A1%A8%E9%9B%B2%E6%B5%B7%E6%97%A5%E5%87%BA.JPG" alt="光被八表雲海日出">
+            <figcaption>雲海日出：高山草坡與能高鞍部展望</figcaption>
+          </figure>
+          <figure class="photo">
+            <img loading="lazy" src="https://recreation.forest.gov.tw/Files/RT/Photo/064/05/%E5%85%89%E6%89%B9%E5%85%AB%E8%A1%A8%E6%97%A5%E5%87%BA.JPG" alt="光被八表日出">
+            <figcaption>光被八表方向：東西輸電工程紀念地標</figcaption>
+          </figure>
+        </div>
+        <table aria-label="景點重點">
+          <thead>
+            <tr>
+              <th>點位</th>
+              <th>看什麼</th>
+              <th>活動提示</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td data-label="點位">雲天宮線前段</td>
+              <td data-label="看什麼">新入口、高繞、前段爬升，能理解路線因崩塌而調整的現實。</td>
+              <td data-label="活動提示">早出發；不要在落石或崩塌處停留拍照。</td>
+            </tr>
+            <tr>
+              <td data-label="點位">雲海保線所</td>
+              <td data-label="看什麼">保線工作站、雲霧翻騰、山脈視野。</td>
+              <td data-label="活動提示">第一個 3 分鐘觀察點，檢查隊伍狀態。</td>
+            </tr>
+            <tr>
+              <td data-label="點位">松原駐在所、木炭窯</td>
+              <td data-label="看什麼">舊警備道、駐在所平臺、山區能源與生活痕跡。</td>
+              <td data-label="活動提示">只觀察，不踩入脆弱遺構。</td>
+            </tr>
+            <tr>
+              <td data-label="點位">天池山莊、天池</td>
+              <td data-label="看什麼">避風山坳、晨昏光線、山屋運補與宿營管理。</td>
+              <td data-label="活動提示">作為高山症、補水、保暖、隔日天氣判斷點。</td>
+            </tr>
+            <tr>
+              <td data-label="點位">奇萊南峰、南華山</td>
+              <td data-label="看什麼">草坡、稜線、鞍部、中央山脈縱深視野。</td>
+              <td data-label="活動提示">風大低溫；拍照後快速保暖。</td>
+            </tr>
+            <tr>
+              <td data-label="點位">光被八表</td>
+              <td data-label="看什麼">東西輸電紀念、縣界、能高鞍部、歷史碑體。</td>
+              <td data-label="活動提示">適合講工程史與地形分水嶺。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="slide" id="layers">
+      <div class="slide-inner">
+        <div class="slide-head">
+          <div>
+            <p class="kicker">Context layers</p>
+            <h2>把路線拆成六個脈絡層</h2>
+          </div>
+        </div>
+        <p class="lead">這份活動的主題不是「打卡兩座百岳」，而是讓隊員知道每一段路為什麼存在、怎麼變成今天的樣子，以及在哪些地方該慢下來。</p>
+        <div class="layers">
+          <article class="layer">
+            <span class="tag">歷史層</span>
+            <h3>社路、警備道、保線路</h3>
+            <p>能高越嶺道先是賽德克族遷徙、狩獵與交易路徑；日治時期擴建為警備道路；戰後又成為台電東西輸電與保線路。</p>
+          </article>
+          <article class="layer">
+            <span class="tag gold">文化層</span>
+            <h3>地名與山名</h3>
+            <p>南華山又稱能高北峰，舊稱「楠花山」，與石楠花、能高山群地名連在一起；路線也保留原住民族社路與日治地名層疊。</p>
+          </article>
+          <article class="layer">
+            <span class="tag sky">自然層</span>
+            <h3>林相、鳥類、山椒魚</h3>
+            <p>從中海拔林相逐步進入高山草坡與箭竹，沿線常見山鳥，天池山莊周邊溪谷與碎石環境也有山椒魚棲地紀錄。</p>
+          </article>
+          <article class="layer">
+            <span class="tag rust">地形層</span>
+            <h3>鞍部、稜線、崩壁</h3>
+            <p>雲天宮線是崩塌後的重要替代入口；光被八表所在能高鞍部是中央山脈主脊與縣界地標，稜線風、午後霧、崩塌地都會影響節奏。</p>
+          </article>
+          <article class="layer">
+            <span class="tag">季節層</span>
+            <h3>梅雨、低溫、雲海</h3>
+            <p>夏秋可看瀑布與草坡，冬季有低溫與結冰風險；梅雨或颱風後土石鬆動，路況判斷優先於完成山頭。</p>
+          </article>
+          <article class="layer">
+            <span class="tag gold">觀察層</span>
+            <h3>停 3 分鐘的地方</h3>
+            <p>雲海保線所、松原遺址、天池山莊晨昏、奇萊南峰草坡、南華山稜線與光被八表，都值得安排短暫解說與隊伍重整。</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide" id="p2">
+      <div class="slide-inner">
+        <div class="slide-head">
+          <div>
+            <p class="kicker">P2 Scout-owned context</p>
+            <h2>把完成旅程變成下一次的路線脈絡</h2>
+          </div>
+        </div>
+        <p class="lead">P0/P1 回答「公開世界怎麼描述奇萊南華」，P2 則回答「Scout 實際走過後，這條路對這個隊伍代表什麼」。本次公開簡報不假造 P2 證據；以下是匯入 completed trip 後應累積的資料槽與使用方式。</p>
+        <div class="risk-grid">
+          <article class="risk">
+            <strong>實走軌跡與偏航</strong>
+            <p>使用者 GPX、分段耗時、偏航紀錄與折返點，可回饋雲海保線所、松原駐在所、天池山莊到雙峰稜線的 pace fit 與 route note。</p>
+          </article>
+          <article class="risk">
+            <strong>停留、照片、語音註記</strong>
+            <p>停留點、拍照點、語音註記與「值得停 3 分鐘」回報，可把公開景點轉成更貼近隊伍記憶的 observation point。</p>
+          </article>
+          <article class="risk">
+            <strong>IMU / PDR / 氣壓高度</strong>
+            <p>步態異常、氣壓高度變化、坡段通過節奏與定位品質，能補足 GPX 在林相、雲霧、山屋周邊或稜線風口的盲點。</p>
+          </article>
+          <article class="risk">
+            <strong>隊伍狀態</strong>
+            <p>前鋒/後衛距離、隊伍拉長、長時間低速、休息營地與補水行為，可標記下一輪 pretrip 的 regroup point 與 body battery 參考。</p>
+          </article>
+          <article class="risk">
+            <strong>Scout action log</strong>
+            <p>打卡、提醒、模型提示詞、skill 使用、通訊嘗試與最小事件包，屬於 Scout 黑盒子紀錄；可做事後分析，不直接變成安全真相。</p>
+          </article>
+          <article class="risk">
+            <strong>人工 review 後才進包</strong>
+            <p>P2 先作為候選 evidence。只有經使用者或 AI 輔助 review 的片段，才可進入下一次 reviewed trip package 或 route context briefing。</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="slide-inner">
+        <div class="slide-head">
+          <div>
+            <p class="kicker">Route as a story</p>
+            <h2>從入口到鞍部的敘事線</h2>
+          </div>
+        </div>
+        <div class="map-card">
+          <div class="route-line" aria-label="route narrative">
+            <div class="waypoint"><b>雲天宮登山口</b><span>新的入口與報到點，先建立風險意識。</span></div>
+            <div class="waypoint"><b>雲海保線所</b><span>雲霧、保線歷史與第一段體能檢核。</span></div>
+            <div class="waypoint"><b>松原駐在所、木炭窯</b><span>警備道如何變成可以閱讀的遺構。</span></div>
+            <div class="waypoint"><b>天池山莊</b><span>住宿、補給、天氣判斷與高山夜間節奏。</span></div>
+            <div class="waypoint"><b>奇萊南峰、南華山</b><span>草坡、三角點、中央山脈視野。</span></div>
+            <div class="waypoint"><b>光被八表</b><span>能高鞍部與東西輸電工程的地標。</span></div>
+          </div>
+          <figure class="photo">
+            <img loading="lazy" src="https://recreation.forest.gov.tw/Files/RT/Photo/064/01/%E8%83%BD%E9%AB%98%E8%B6%8A%E5%B6%BA%E5%B0%8E%E8%A6%BD%E5%9C%B0%E5%9C%96202510-ok-0310%E4%BF%AE.jpg" alt="能高越嶺道西段導覽圖">
+            <figcaption>官方導覽圖：台灣山林悠遊網，能高越嶺道西段</figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide" id="stops">
+      <div class="slide-inner">
+        <div class="slide-head">
+          <div>
+            <p class="kicker">3-minute observation stops</p>
+            <h2>哪些地方值得停 3 分鐘？</h2>
+          </div>
+        </div>
+        <div class="spots">
+          <article class="spot">
+            <span class="minute">3</span>
+            <div>
+              <h3>雲海保線所</h3>
+              <p>看雲霧是否正在越嶺，順便檢查隊員水量、腳程、衣物與呼吸。</p>
+            </div>
+          </article>
+          <article class="spot">
+            <span class="minute">3</span>
+            <div>
+              <h3>松原駐在所、木炭窯</h3>
+              <p>把「古道」從抽象名詞變成可觀察的平臺、駁坎與燃料使用痕跡。</p>
+            </div>
+          </article>
+          <article class="spot">
+            <span class="minute">3</span>
+            <div>
+              <h3>天池山莊外</h3>
+              <p>看風向、雲底高度、午後霧線與隔天凌晨出發條件，不只把山屋當住宿。</p>
+            </div>
+          </article>
+          <article class="spot">
+            <span class="minute">3</span>
+            <div>
+              <h3>奇萊南峰草坡</h3>
+              <p>觀察光線如何掃過草坡、箭竹與稜線，也注意風寒與隊員保暖。</p>
+            </div>
+          </article>
+          <article class="spot">
+            <span class="minute">3</span>
+            <div>
+              <h3>南華山稜線</h3>
+              <p>辨識鞍部、谷線、風口與能高主峰方向，讓地形不只是背景。</p>
+            </div>
+          </article>
+          <article class="spot">
+            <span class="minute">3</span>
+            <div>
+              <h3>光被八表</h3>
+              <p>用紀念碑講東西輸電、縣界、分水嶺與山區工程，不只拍合照。</p>
+            </div>
+          </article>
+        </div>
+        <div class="alert">不建議停留：崩塌地、落石區、狹窄邊坡、隊伍後方已拉長的路段。這些地方只做安全通過，不做解說。</div>
+      </div>
+    </section>
+
+    <section class="slide" id="risk">
+      <div class="slide-inner">
+        <div class="slide-head">
+          <div>
+            <p class="kicker">Operational guardrails</p>
+            <h2>活動風險與行政事項</h2>
+          </div>
+        </div>
+        <div class="risk-grid">
+          <article class="risk">
+            <strong>公告優先</strong>
+            <p>出發前一天重查天池山莊最新消息、台灣山林悠遊網、道路與天氣。若有豪雨、颱風、地震後路況不明，改期比硬走更合理。</p>
+          </article>
+          <article class="risk">
+            <strong>申請分流</strong>
+            <p>天池山莊住宿需線上申請；攀登奇萊南峰需另向國家公園申請入園，南華山與天池山莊周邊本身不屬太魯閣入園範圍。</p>
+          </article>
+          <article class="risk">
+            <strong>服務站報到</strong>
+            <p>能高越嶺西段 0K 為雲天宮登山口暨服務站；住宿或單日往返都要依規定登記。</p>
+          </article>
+          <article class="risk">
+            <strong>高山症</strong>
+            <p>天池山莊約 2860 m，奇萊南峰 3358 m；頭痛、噁心、步態異常不該被解讀成體能差。</p>
+          </article>
+          <article class="risk">
+            <strong>午後與夜間</strong>
+            <p>第二天很長，若天氣差或隊伍速度不足，應砍掉光被八表或單峰，而不是摸黑硬下。</p>
+          </article>
+          <article class="risk">
+            <strong>無痕山林</strong>
+            <p>指定宿營、垃圾與廚餘帶下山、禁喧鬧與播放音樂，不干擾野生動物與山屋秩序。</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide" id="schedule">
+      <div class="slide-inner">
+        <div class="slide-head">
+          <div>
+            <p class="kicker">Recommended itinerary</p>
+            <h2>建議行程版本</h2>
+          </div>
+        </div>
+        <table aria-label="行程版本">
+          <thead>
+            <tr>
+              <th>版本</th>
+              <th>安排</th>
+              <th>優點</th>
+              <th>取捨</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td data-label="版本"><b>標準 2 天 1 夜</b></td>
+              <td data-label="安排">D1 雲天宮線進天池山莊；D2 奇萊南峰、南華山，視時間加光被八表後下山。</td>
+              <td data-label="優點">住宿一次即可完成雙峰，最符合多數隊伍假期。</td>
+              <td data-label="取捨">D2 長，觀察時間有限；需嚴格設定折返時間。</td>
+            </tr>
+            <tr>
+              <td data-label="版本"><b>觀察 3 天 2 夜</b></td>
+              <td data-label="安排">D1 進天池；D2 雙峰與光被八表；D3 雲海、遺構與植物觀察後下山。</td>
+              <td data-label="優點">最符合這份簡報的脈絡層設計，隊伍壓力小。</td>
+              <td data-label="取捨">需連續住宿名額與更多食物裝備管理。</td>
+            </tr>
+            <tr>
+              <td data-label="版本"><b>壓縮 1 日</b></td>
+              <td data-label="安排">凌晨起登，雙峰折返，通常不安排深入解說。</td>
+              <td data-label="優點">不用抽山屋。</td>
+              <td data-label="取捨">不建議作為一般活動；天候、體能、摸黑與高山症風險高。</td>
+            </tr>
+          </tbody>
+        </table>
+        <p class="footnote">若目標是「登山活動」而非單純百岳打卡，建議把 3 天 2 夜作為理想版，2 天 1 夜作為可執行版。</p>
+      </div>
+    </section>
+
+    <section class="slide" id="sources">
+      <div class="slide-inner">
+        <div class="slide-head">
+          <div>
+            <p class="kicker">Source-backed deck</p>
+            <h2>資料來源與使用方式</h2>
+          </div>
+        </div>
+        <ul class="source-list">
+          <li>
+            <b>天池山莊最新消息：能高越嶺步道西段及天池山莊 115 年 6 月 13 日起開放</b>
+            <a href="https://tconline.forest.gov.tw/news/index.php?id=521&amp;mode=data">https://tconline.forest.gov.tw/news/index.php?id=521&amp;mode=data</a>
+            <p class="muted">用於現況、雨後土石鬆動、易落石區快速通過提醒。</p>
+          </li>
+          <li>
+            <b>天池山莊公告：雲天宮線難度增強</b>
+            <a href="https://tconline.forest.gov.tw/news/index.php?id=505&amp;mode=data">https://tconline.forest.gov.tw/news/index.php?id=505&amp;mode=data</a>
+            <p class="muted">用於雲天宮服務站、前段 3 公里落差 350 公尺、提早出發與風險評估。</p>
+          </li>
+          <li>
+            <b>台灣山林悠遊網：能高越嶺道西段</b>
+            <a href="https://recreation.forest.gov.tw/Trail/RT?tr_id=064">https://recreation.forest.gov.tw/Trail/RT?tr_id=064</a>
+            <p class="muted">用於路線背景、社路/警備道/保線路、步道距離、景觀照片與開放狀態。</p>
+          </li>
+          <li>
+            <b>天池山莊住宿申請作業須知</b>
+            <a href="https://tconline.forest.gov.tw/ifa/?parent_id=253">https://tconline.forest.gov.tw/ifa/?parent_id=253</a>
+            <p class="muted">用於雲天宮 0K、雲海 4.3K、天池山莊 13.1K、光被八表 15.5K、床位與申請規則。</p>
+          </li>
+          <li>
+            <b>臺灣登山申請一站式服務網：太魯閣路線查詢</b>
+            <a href="https://hike.taiwan.gov.tw/bed_5.aspx">https://hike.taiwan.gov.tw/bed_5.aspx</a>
+            <p class="muted">用於奇萊南峰入園申請、南華山與天池山莊周邊入園範圍說明。</p>
+          </li>
+          <li>
+            <b>健行筆記：奇萊南峰步道、南華山步道</b>
+            <a href="https://hiking.biji.co/index.php?act=detail&amp;id=430&amp;q=trail">https://hiking.biji.co/index.php?act=detail&amp;id=430&amp;q=trail</a>
+            <p class="muted">用於雙峰高度、2 天往返、傳統路線分段時間、雲海保線所與松原駐在所說明。</p>
+          </li>
+          <li>
+            <b>國家文化記憶庫：光被八表紀念碑</b>
+            <a href="https://tcmb.culture.tw/zh-tw/detail?id=625957&amp;indexCode=Culture_Place">https://tcmb.culture.tw/zh-tw/detail?id=625957&amp;indexCode=Culture_Place</a>
+            <p class="muted">用於光被八表、能高鞍部、東西輸電與紀念碑歷史脈絡。</p>
+          </li>
+          <li>
+            <b>農業部：穿越時空的步道－能高越嶺道</b>
+            <a href="https://www.moa.gov.tw/ws.php?id=2446808">https://www.moa.gov.tw/ws.php?id=2446808</a>
+            <p class="muted">用於塔羅灣溪、雲海、植物群系、能高瀑布與天池山莊描述交叉驗證。</p>
+          </li>
+        </ul>
+        <div class="alert">P2 Scout 自有資料不是公開來源：包含 completed trip GPX、偏航、停留、照片、語音、IMU/PDR、氣壓高度、隊伍距離與 Scout action log。它們在本簡報中只作下一輪 pretrip 的候選 evidence，需經 review 才能進入 reviewed trip package，不得直接作為 runtime safety truth。</div>
+        <p class="footnote">路況與開放狀態高度變動；此簡報保存的是 2026-06-15 查核版本，實際活動前請重新查詢官方公告。</p>
+      </div>
+    </section>
+  </main>
+
+  <div class="controls" aria-label="簡報控制">
+    <button type="button" id="prev" aria-label="上一頁">‹</button>
+    <span id="counter">1 / 11</span>
+    <button type="button" id="next" aria-label="下一頁">›</button>
+  </div>
+
+  <script>
+    const slides = Array.from(document.querySelectorAll(".slide"));
+    const counter = document.getElementById("counter");
+    let current = 0;
+
+    function setCurrent(index) {
+      current = Math.max(0, Math.min(slides.length - 1, index));
+      slides[current].scrollIntoView({ behavior: "smooth", block: "start" });
+      counter.textContent = `${current + 1} / ${slides.length}`;
+    }
+
+    document.getElementById("prev").addEventListener("click", () => setCurrent(current - 1));
+    document.getElementById("next").addEventListener("click", () => setCurrent(current + 1));
+
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "ArrowRight" || event.key === "PageDown") {
+        event.preventDefault();
+        setCurrent(current + 1);
+      }
+      if (event.key === "ArrowLeft" || event.key === "PageUp") {
+        event.preventDefault();
+        setCurrent(current - 1);
+      }
+      if (event.key === "Home") {
+        event.preventDefault();
+        setCurrent(0);
+      }
+      if (event.key === "End") {
+        event.preventDefault();
+        setCurrent(slides.length - 1);
+      }
+    });
+
+    const observer = new IntersectionObserver((entries) => {
+      const visible = entries
+        .filter((entry) => entry.isIntersecting)
+        .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+      if (!visible) return;
+      current = slides.indexOf(visible.target);
+      counter.textContent = `${current + 1} / ${slides.length}`;
+    }, { threshold: [0.45, 0.65] });
+
+    slides.forEach((slide) => observer.observe(slide));
+    counter.textContent = `1 / ${slides.length}`;
+  </script>
+</body>
+</html>

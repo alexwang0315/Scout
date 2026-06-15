@@ -16,6 +16,7 @@ ROUTE_CONTEXT_OPTIONAL_FIELDS = (
     "distance_m_min",
     "distance_m_max",
     "route_context_path",
+    "route_briefing_path",
     "spatial_imprints_path",
     "rest_area_candidates_path",
     "mcp_candidates_path",
@@ -35,6 +36,7 @@ def assess_scout_route_context(
     distance_m_min: float | int | str | None = None,
     distance_m_max: float | int | str | None = None,
     route_context_path: str | None = None,
+    route_briefing_path: str | None = None,
     spatial_imprints_path: str | None = None,
     rest_area_candidates_path: str | None = None,
     mcp_candidates_path: str | None = None,
@@ -53,6 +55,22 @@ def assess_scout_route_context(
 
     items: list[dict[str, Any]] = []
     source_report: list[dict[str, Any]] = []
+    route_briefing_payload, route_briefing_source_path = _route_briefing_payload(
+        root,
+        project,
+        explicit_path=route_briefing_path,
+        source_report=source_report,
+    )
+    route_briefing = _route_briefing_summary(
+        route_briefing_payload,
+        route_briefing_source_path,
+    )
+    items.extend(
+        _route_briefing_items(
+            route_briefing_payload,
+            source_path=route_briefing_source_path,
+        )
+    )
     route_context_items = _route_context_point_items(
         root,
         project,
@@ -131,10 +149,16 @@ def assess_scout_route_context(
         )
     )
     results = filtered[:resolved_limit]
+    briefing_answer = _route_briefing_field_answer(route_briefing, query=query)
     answerability = (
-        "route_context_available" if results else "route_context_missing_evidence"
+        "route_context_available"
+        if results or briefing_answer
+        else "route_context_missing_evidence"
     )
-    field_answer = _field_answer(results, answerability=answerability)
+    field_answer = briefing_answer or _field_answer(
+        results,
+        answerability=answerability,
+    )
     decision_output = _decision_output(
         results=results,
         answerability=answerability,
@@ -159,10 +183,12 @@ def assess_scout_route_context(
             "context_hints": sorted(hints),
         },
         "field_answer": field_answer,
+        "route_briefing": route_briefing,
         "route_context": {
             "role": "Experience Guide",
             "candidate_only": True,
             "runtime_safety_truth": False,
+            "route_briefing": route_briefing,
             "decision_output": decision_output,
             "top_context_points": results[:3],
             "stop_permission_required": True,
@@ -181,6 +207,305 @@ def assess_scout_route_context(
             "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 20.2 Route Context Intelligence updates",
         ],
         "boundary": _closed_boundary(),
+    }
+
+
+def _route_briefing_payload(
+    root: Path,
+    project: dict[str, Any],
+    *,
+    explicit_path: str | None,
+    source_report: list[dict[str, Any]],
+) -> tuple[dict[str, Any], str]:
+    refs = _route_briefing_refs(project, explicit_path=explicit_path)
+    for ref in refs:
+        payload, source_path = _load_project_json(root, ref)
+        loaded_count = 1 if payload else 0
+        if loaded_count:
+            source_report.append(
+                _source_report("route_briefing_compose", source_path, loaded_count)
+            )
+            return payload, source_path
+    source_path = refs[0] if refs else "route_briefing_research_ref"
+    source_report.append(_source_report("route_briefing_compose", source_path, 0))
+    return {}, source_path
+
+
+def _route_briefing_refs(
+    project: dict[str, Any],
+    *,
+    explicit_path: str | None,
+) -> list[str]:
+    refs: list[str] = []
+    for value in (
+        explicit_path,
+        project.get("route_briefing_research_ref"),
+        project.get("route_briefing_compose_ref"),
+        project.get("route_briefing_candidate_ref"),
+        project.get("pretrip_route_briefing_ref"),
+        project.get("route_briefing_ref"),
+        "normalized/context/route_context/route_briefing_research.json",
+        "outputs/briefings/route_briefing_research.json",
+    ):
+        if not isinstance(value, str) or not value.strip():
+            continue
+        if value.strip().lower().endswith((".html", ".htm")):
+            continue
+        if value not in refs:
+            refs.append(value)
+    return refs
+
+
+def _route_briefing_summary(
+    payload: dict[str, Any],
+    source_path: str,
+) -> dict[str, Any]:
+    if not payload:
+        return {
+            "available": False,
+            "source_path": source_path,
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+            "network_calls_made": False,
+            "requires_operator_source_review": True,
+        }
+    route_summary = payload.get("route_summary")
+    route_summary = route_summary if isinstance(route_summary, dict) else {}
+    return {
+        "available": True,
+        "title": payload.get("title"),
+        "route_id": payload.get("route_id"),
+        "project_id": payload.get("project_id"),
+        "generated_at": payload.get("generated_at"),
+        "recommended_days": route_summary.get("recommended_days"),
+        "summary": route_summary.get("summary"),
+        "current_status": route_summary.get("current_status"),
+        "season_note": route_summary.get("season_note"),
+        "risk_note": route_summary.get("risk_note"),
+        "context_layers": _bounded_context_layers(payload.get("context_layers")),
+        "observation_stops": _bounded_observation_stops(
+            payload.get("observation_stops")
+        ),
+        "itinerary_options": _bounded_itinerary_options(
+            payload.get("itinerary_options")
+        ),
+        "source_refs": _bounded_source_refs(payload.get("source_refs")),
+        "source_path": source_path,
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+        "model_output_is_runtime_truth": False,
+        "network_calls_made": False,
+        "requires_operator_source_review": True,
+    }
+
+
+def _route_briefing_items(
+    payload: dict[str, Any],
+    *,
+    source_path: str,
+) -> list[dict[str, Any]]:
+    if not payload:
+        return []
+    items: list[dict[str, Any]] = []
+    source_refs = _bounded_source_refs(payload.get("source_refs"))
+    route_points = payload.get("route_points")
+    if isinstance(route_points, list):
+        for index, raw in enumerate(route_points):
+            if not isinstance(raw, dict):
+                continue
+            label = str(raw.get("name") or f"route briefing point {index + 1}")
+            guidance = _join_text(
+                raw.get("why_it_matters"),
+                raw.get("observation_prompt"),
+            )
+            safety_note = str(raw.get("safety_note") or "")
+            classes = [
+                "route_briefing",
+                "route_point",
+                "briefing",
+                "行前簡報",
+                "路線脈絡",
+            ]
+            items.append(
+                _route_briefing_item(
+                    evidence_type="route_briefing_route_point",
+                    context_kind=_context_kind(classes, label=label),
+                    candidate_id=f"route_briefing_point:{index + 1}",
+                    label=label,
+                    classes=classes,
+                    guidance=guidance or _guidance_for("route_context", label),
+                    stop_guidance=safety_note
+                    or "這是行前候選路線脈絡，不是現場停留授權。",
+                    source_path=source_path,
+                    source_refs=source_refs,
+                    search_parts=[
+                        label,
+                        guidance,
+                        safety_note,
+                        "沿途 歷史 文化 自然 地形 季節觀察 活動簡報",
+                    ],
+                    experience_score=18.0,
+                )
+            )
+
+    observation_stops = payload.get("observation_stops")
+    if isinstance(observation_stops, list):
+        for index, raw in enumerate(observation_stops):
+            if not isinstance(raw, dict):
+                continue
+            label = str(raw.get("name") or f"observation stop {index + 1}")
+            minutes = _float_or_none(raw.get("minutes"))
+            observe = str(raw.get("observe") or "")
+            do_not_stop_if = str(raw.get("do_not_stop_if") or "")
+            classes = [
+                "route_briefing",
+                "observation_stop",
+                "viewpoint",
+                "停3分鐘",
+                "停 3 分鐘",
+                "三分鐘",
+                "值得停",
+                "briefing",
+            ]
+            items.append(
+                _route_briefing_item(
+                    evidence_type="route_briefing_observation_stop",
+                    context_kind="viewpoint",
+                    candidate_id=f"route_briefing_stop:{index + 1}",
+                    label=label,
+                    classes=classes,
+                    guidance=observe or f"{label} 是候選 3 分鐘觀察點。",
+                    stop_guidance=(
+                        f"候選停留 {minutes:g} 分鐘；{do_not_stop_if}"
+                        if minutes is not None
+                        else do_not_stop_if
+                    )
+                    or "這是行前候選停留點，不是現場停留授權。",
+                    source_path=source_path,
+                    source_refs=source_refs,
+                    search_parts=[
+                        label,
+                        observe,
+                        do_not_stop_if,
+                        "哪些點值得停3分鐘 停三分鐘 observation stop",
+                    ],
+                    experience_score=26.0,
+                )
+            )
+
+    context_layers = payload.get("context_layers")
+    if isinstance(context_layers, dict):
+        for index, (layer_name, layer_items) in enumerate(context_layers.items()):
+            lines = _str_list(layer_items)
+            classes = [
+                "route_briefing",
+                "context_layer",
+                str(layer_name),
+                "歷史",
+                "文化",
+                "自然",
+                "地形",
+                "季節",
+            ]
+            label = str(layer_name)
+            items.append(
+                _route_briefing_item(
+                    evidence_type="route_briefing_context_layer",
+                    context_kind=_context_kind(classes, label=label),
+                    candidate_id=f"route_briefing_layer:{index + 1}",
+                    label=label,
+                    classes=classes,
+                    guidance="；".join(lines[:3]),
+                    stop_guidance="這是行前脈絡層，不是現場停留授權。",
+                    source_path=source_path,
+                    source_refs=source_refs,
+                    search_parts=[
+                        label,
+                        lines,
+                        "沿途有哪些歷史文化自然地形季節觀察",
+                    ],
+                    experience_score=15.0,
+                )
+            )
+
+    itinerary_options = payload.get("itinerary_options")
+    if isinstance(itinerary_options, list):
+        for index, raw in enumerate(itinerary_options):
+            if not isinstance(raw, dict):
+                continue
+            label = str(raw.get("label") or f"itinerary option {index + 1}")
+            classes = [
+                "route_briefing",
+                "itinerary",
+                "建議幾天",
+                "幾天幾夜",
+                "行程版本",
+                "briefing",
+            ]
+            items.append(
+                _route_briefing_item(
+                    evidence_type="route_briefing_itinerary_option",
+                    context_kind="route_context",
+                    candidate_id=f"route_briefing_itinerary:{index + 1}",
+                    label=label,
+                    classes=classes,
+                    guidance=_join_text(
+                        raw.get("schedule"),
+                        raw.get("best_for"),
+                        raw.get("tradeoff"),
+                    ),
+                    stop_guidance="這是行前行程版本建議，不是出發許可或安全結論。",
+                    source_path=source_path,
+                    source_refs=source_refs,
+                    search_parts=[
+                        label,
+                        raw.get("schedule"),
+                        raw.get("best_for"),
+                        raw.get("tradeoff"),
+                        "奇萊南華建議幾天 行程版本 2天1夜 3天2夜",
+                    ],
+                    experience_score=20.0,
+                )
+            )
+    return items
+
+
+def _route_briefing_item(
+    *,
+    evidence_type: str,
+    context_kind: str,
+    candidate_id: str,
+    label: str,
+    classes: list[str],
+    guidance: str,
+    stop_guidance: str,
+    source_path: str,
+    source_refs: list[dict[str, Any]],
+    search_parts: list[Any],
+    experience_score: float,
+) -> dict[str, Any]:
+    return {
+        "evidence_type": evidence_type,
+        "context_kind": context_kind,
+        "candidate_id": candidate_id,
+        "label": label,
+        "distance_m": None,
+        "lat": None,
+        "lon": None,
+        "nearest_cp_candidate_id": None,
+        "point_classes": classes,
+        "review_state": "operator_reviewed_candidate",
+        "confidence": "source_manifest_bounded",
+        "experience_score": experience_score,
+        "guidance": guidance,
+        "stop_guidance": stop_guidance,
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+        "source_path": source_path,
+        "source_gaps": [],
+        "source_refs": source_refs,
+        "class_terms": classes,
+        "search_text": _search_text(*search_parts, classes),
     }
 
 
@@ -578,6 +903,8 @@ def _context_hints(query: str) -> set[str]:
         hints.add("resource_context")
     if _has_any(text, ("岔路", "方向", "轉彎", "導航")):
         hints.add("navigation_context")
+    if _has_any(text, ("建議幾天", "幾天幾夜", "活動簡報", "briefing")):
+        hints.add("route_context")
     return hints
 
 
@@ -594,9 +921,81 @@ def _looks_like_generic_route_context_query(query: str) -> bool:
             "下一個觀察",
             "地名故事",
             "路線脈絡",
+            "建議幾天",
+            "幾天幾夜",
+            "活動簡報",
+            "沿途有哪些",
+            "停3分鐘",
+            "停三分鐘",
+            "值得停",
             "routecontext",
             "experienceguide",
+            "routebriefing",
+            "briefing",
         ),
+    )
+
+
+def _route_briefing_field_answer(
+    route_briefing: dict[str, Any],
+    *,
+    query: str,
+) -> str | None:
+    if not route_briefing.get("available"):
+        return None
+    text = _normalize(query)
+    boundary = (
+        "這是 operator-reviewed pretrip candidate briefing，不是即時安全結論"
+        "或 runtime safety truth；出發前仍需重查官方公告、天氣、道路、"
+        "入園/山屋與現場風險。"
+    )
+    if _has_any(text, ("建議幾天", "幾天", "幾天幾夜", "行程版本", "itinerary")):
+        recommended = route_briefing.get("recommended_days") or "未提供建議天數"
+        options = _itinerary_option_lines(route_briefing.get("itinerary_options"))
+        return (
+            f"奇萊南華行程建議：{recommended}。"
+            + (f" 可選版本：{'；'.join(options)}。" if options else "")
+            + f" {boundary}"
+        )
+    if _has_any(
+        text,
+        (
+            "沿途有哪些",
+            "歷史",
+            "文化",
+            "自然",
+            "地形",
+            "季節",
+            "觀察",
+            "routecontext",
+        ),
+    ):
+        layers = _context_layer_lines(route_briefing.get("context_layers"))
+        summary = route_briefing.get("summary")
+        return (
+            "沿途 route-context 候選觀察："
+            + (f"{summary} " if summary else "")
+            + "；".join(layers)
+            + f"。{boundary}"
+        )
+    if _has_any(
+        text,
+        ("停3分鐘", "停三分鐘", "3分鐘", "三分鐘", "值得停", "觀察點"),
+    ):
+        stops = _observation_stop_lines(route_briefing.get("observation_stops"))
+        return (
+            "候選 3 分鐘觀察點："
+            + ("；".join(stops) if stops else "目前簡報沒有列出觀察點")
+            + "。這些不是現場停留授權；若真的要停留，仍需 contextual permission "
+            "重新計算時間、天氣、日照、隊伍與風險預算。 "
+            + boundary
+        )
+    title = route_briefing.get("title") or "route briefing"
+    recommended = route_briefing.get("recommended_days")
+    return (
+        f"{title} 已載入；"
+        + (f"建議天數：{recommended}。" if recommended else "")
+        + f" {boundary}"
     )
 
 
@@ -825,6 +1224,120 @@ def _source_refs(raw: dict[str, Any]) -> list[dict[str, Any]]:
     if not isinstance(refs, list):
         return []
     return [ref for ref in refs if isinstance(ref, dict)][:5]
+
+
+def _bounded_source_refs(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    refs = []
+    for raw in value[:8]:
+        if not isinstance(raw, dict):
+            continue
+        refs.append(
+            {
+                key: raw.get(key)
+                for key in ("title", "url", "usage", "source_tier", "source_family")
+                if raw.get(key) is not None
+            }
+        )
+    return refs
+
+
+def _bounded_context_layers(value: Any) -> dict[str, list[str]]:
+    if not isinstance(value, dict):
+        return {}
+    layers: dict[str, list[str]] = {}
+    for key, raw_lines in list(value.items())[:8]:
+        lines = _str_list(raw_lines)
+        layers[str(key)] = lines[:5]
+    return layers
+
+
+def _bounded_observation_stops(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    stops = []
+    for raw in value[:8]:
+        if not isinstance(raw, dict):
+            continue
+        stops.append(
+            {
+                key: raw.get(key)
+                for key in ("name", "minutes", "observe", "do_not_stop_if")
+                if raw.get(key) is not None
+            }
+        )
+    return stops
+
+
+def _bounded_itinerary_options(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    options = []
+    for raw in value[:6]:
+        if not isinstance(raw, dict):
+            continue
+        options.append(
+            {
+                key: raw.get(key)
+                for key in ("label", "schedule", "best_for", "tradeoff")
+                if raw.get(key) is not None
+            }
+        )
+    return options
+
+
+def _itinerary_option_lines(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    lines = []
+    for option in value[:4]:
+        if not isinstance(option, dict):
+            continue
+        label = str(option.get("label") or "")
+        best_for = str(option.get("best_for") or "")
+        tradeoff = str(option.get("tradeoff") or "")
+        line = _join_text(label, best_for, tradeoff)
+        if line:
+            lines.append(line)
+    return lines
+
+
+def _context_layer_lines(value: Any) -> list[str]:
+    if not isinstance(value, dict):
+        return []
+    lines = []
+    for layer_name, raw_lines in value.items():
+        text = "、".join(_str_list(raw_lines)[:2])
+        if text:
+            lines.append(f"{layer_name}: {text}")
+    return lines
+
+
+def _observation_stop_lines(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    lines = []
+    for stop in value[:6]:
+        if not isinstance(stop, dict):
+            continue
+        name = str(stop.get("name") or "")
+        minutes = stop.get("minutes")
+        observe = str(stop.get("observe") or "")
+        blocked = str(stop.get("do_not_stop_if") or "")
+        minute_text = f"{minutes} 分鐘" if minutes is not None else "短暫"
+        line = f"{name}（{minute_text}，看 {observe}"
+        if blocked:
+            line += f"；不要停留條件：{blocked}"
+        line += "）"
+        if name:
+            lines.append(line)
+    return lines
+
+
+def _join_text(*parts: Any) -> str:
+    values = [str(part).strip() for part in parts if part is not None and str(part).strip()]
+    return "；".join(values)
 
 
 def _item_references_cp(item: dict[str, Any], cp: str) -> bool:

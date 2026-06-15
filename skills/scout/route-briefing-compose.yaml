@@ -1,0 +1,77 @@
+id: route-briefing-compose
+version: 0.1.0
+status: experimental
+type: analysis
+priority: 48
+triggers:
+  - event: pretrip.route_briefing_requested
+    description: Compose a candidate-only HTML route briefing from operator-reviewed route research.
+    required_refs:
+      - pretrip.workspace.route_research_pack
+      - pretrip.workspace.route_summary
+activation_gate:
+  mode: operator_approved
+  requires_human_approval: true
+  conditions:
+    - user or operator requests a route activity briefing
+    - source URLs and route facts have been reviewed outside runtime
+    - output is kept candidate-only and does not mutate runtime safety truth
+noise_control:
+  cooldown_seconds: 3600
+  dedupe_window_seconds: 7200
+  max_runs_per_mission: 4
+  suppression_keys:
+    - project_id
+    - route_id
+preflight:
+  required_skill_ids: []
+  required_capabilities:
+    - pretrip.workspace.read
+    - pretrip.workspace.write
+  required_artifacts:
+    - operator_reviewed_route_research_pack
+allowed_reads:
+  - pretrip.workspace.project
+  - pretrip.workspace.route_summary
+  - pretrip.workspace.route_research_pack
+  - pretrip.workspace.normalized.context.route_context
+  - pretrip.workspace.candidates.route_context
+allowed_writes:
+  - pretrip.workspace.outputs.briefings
+  - pretrip.workspace.candidates.route_briefings
+forbidden_writes:
+  - phase1.runtime
+  - phase1.safety
+  - phase2.brain.observed_facts
+  - live.safety_api
+  - hardware.controls
+output_schema:
+  format: artifact
+  node_types:
+    - RouteBriefingCandidate
+    - SkillRunRecord
+  artifact_kinds:
+    - pretrip_route_briefing_compose
+    - html_briefing
+  required_fields:
+    - route_id
+    - source_refs
+    - context_layers
+    - observation_stops
+    - itinerary_options
+failure_policy:
+  on_error: record_failure
+  retry:
+    max_attempts: 0
+    backoff_seconds: 0
+  degrade_to: manual_route_context_review
+control_surface:
+  operator_visible: true
+  manual_run_allowed: true
+  disable_allowed: true
+  status_label: Route briefing compose
+audit:
+  log_inputs: true
+  log_outputs: true
+  log_decision: true
+  retention: mission_lifetime

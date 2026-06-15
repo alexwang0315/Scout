@@ -1057,6 +1057,8 @@ def _looks_like_contextual_permission_question(text: str) -> bool:
 
 
 def _looks_like_route_context_question(text: str) -> bool:
+    if _looks_like_route_briefing_question(text):
+        return True
     if _looks_like_contextual_permission_question(text):
         return False
     if _looks_like_media_literacy_question(text):
@@ -1076,6 +1078,16 @@ def _looks_like_route_context_question(text: str) -> bool:
             "大景",
             "地名故事",
             "路線脈絡",
+            "行程簡報",
+            "活動簡報",
+            "建議幾天",
+            "幾天幾夜",
+            "沿途有哪些",
+            "季節觀察",
+            "地形觀察",
+            "停3分鐘",
+            "停三分鐘",
+            "值得停",
             "文化",
             "歷史",
             "自然觀察",
@@ -1083,8 +1095,37 @@ def _looks_like_route_context_question(text: str) -> bool:
             "駐在所",
             "experienceguide",
             "routecontext",
+            "routebriefing",
+            "briefing",
             "whattosee",
             "viewpoint",
+        ),
+    )
+
+
+def _looks_like_route_briefing_question(text: str) -> bool:
+    return _has_any(
+        text,
+        (
+            "routebriefing",
+            "briefing",
+            "行程簡報",
+            "活動簡報",
+            "奇萊南華建議幾天",
+            "建議幾天",
+            "幾天幾夜",
+            "行程版本",
+            "標準2天1夜",
+            "3天2夜",
+            "沿途有哪些",
+            "季節觀察",
+            "地形觀察",
+            "自然觀察",
+            "停3分鐘",
+            "停三分鐘",
+            "3分鐘觀察",
+            "三分鐘觀察",
+            "值得停",
         ),
     )
 
