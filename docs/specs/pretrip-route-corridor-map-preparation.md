@@ -386,9 +386,11 @@ bash tools/rebuild_pretrip_workspace_on_scout.sh
 
 The rebuild script reads the fixed material structure under
 `/data/scout/materials/pretrip/{project_id}`, regenerates GPX importer outputs,
-restores durable admin evidence refs from the moved backup workspace, then runs
+restores durable admin evidence refs from the moved backup workspace, runs
 route-corridor map preparation with Overpass, imagery, terrain, risk, route,
-reference-track, CP/POI/hazard, corridor, retreat, and route-note layers.
+reference-track, CP/POI/hazard, corridor, retreat, and route-note layers, then
+collects Sec. 6 route-context evidence into the local route context pack before
+the final workspace verifier runs.
 
 No-network fixture/replay planning remains available for deterministic tests:
 

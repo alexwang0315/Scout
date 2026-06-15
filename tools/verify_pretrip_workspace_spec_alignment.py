@@ -52,6 +52,13 @@ REQUIRED_READY_LAYERS = {
     "route-notes",
 }
 
+OPTIONAL_ROUTE_CONTEXT_REFS = {
+    "route_context_evidence_ref": "normalized/context/route_context/route_context_evidence.json",
+    "route_context_source_manifest_ref": "normalized/context/route_context/source_manifest.json",
+    "route_context_pack_ref": "normalized/context/route_context/route_context_pack.json",
+    "route_context_points_ref": "candidates/route_context_points.json",
+}
+
 WORKSPACE_LAYOUT_SCHEMA_VERSION = "scout.workspace.v1"
 
 REQUIRED_PRETRIP_DIRS = {
@@ -136,6 +143,7 @@ def main(argv: list[str] | None = None) -> int:
     semantic_judgements: dict[str, Any] | None = None
     map_preparation_artifacts: dict[str, dict[str, Any] | None] = {}
     layer_candidate_artifacts: dict[str, dict[str, Any] | None] = {}
+    route_context_summary = {"checked": False, "available": False}
     api_summary = {"checked": False}
     tile_summary = {"checked": False}
 
@@ -242,6 +250,11 @@ def main(argv: list[str] | None = None) -> int:
             )
             _check_layer_candidate_artifacts(layer_candidate_artifacts, errors)
             _check_risk_refs(project_root, project, errors)
+            route_context_summary = _check_route_context_refs(
+                project_root,
+                project,
+                errors,
+            )
             admin_headers = _admin_headers(args.admin_bearer_token_file, errors)
             api_summary = _check_admin_api(
                 args.admin_base_url,
@@ -294,6 +307,7 @@ def main(argv: list[str] | None = None) -> int:
             map_preparation_artifacts
         ),
         "semantic_judgements": _semantic_judgement_summary(semantic_judgements),
+        "route_context": route_context_summary,
         "layer_candidates": {
             key: _candidate_artifact_summary(value)
             for key, value in layer_candidate_artifacts.items()
@@ -402,6 +416,173 @@ def _check_pretrip_workspace_layout(
         "schema_version": schema_version,
         "workspace_kind": workspace_kind,
     }
+
+
+def _check_route_context_refs(
+    project_root: Path,
+    project: dict[str, Any],
+    errors: list[str],
+) -> dict[str, Any]:
+    present_refs = {
+        key: project.get(key)
+        for key in OPTIONAL_ROUTE_CONTEXT_REFS
+        if project.get(key)
+    }
+    if not present_refs:
+        return {"checked": True, "available": False}
+
+    missing_ref_keys = [
+        key for key in OPTIONAL_ROUTE_CONTEXT_REFS if not project.get(key)
+    ]
+    if missing_ref_keys:
+        errors.append(
+            "route context refs are partial; missing: "
+            + ", ".join(sorted(missing_ref_keys))
+        )
+
+    unexpected_refs = {
+        key: project.get(key)
+        for key, expected in OPTIONAL_ROUTE_CONTEXT_REFS.items()
+        if project.get(key) and project.get(key) != expected
+    }
+    for key, ref in sorted(unexpected_refs.items()):
+        errors.append(
+            f"unexpected route context ref for {key}: {ref} != {OPTIONAL_ROUTE_CONTEXT_REFS[key]}"
+        )
+
+    payloads = {
+        key: _load_json_ref(project_root, project, key, errors)
+        for key in OPTIONAL_ROUTE_CONTEXT_REFS
+        if project.get(key)
+    }
+    evidence = payloads.get("route_context_evidence_ref") or {}
+    source_manifest = payloads.get("route_context_source_manifest_ref") or {}
+    pack = payloads.get("route_context_pack_ref") or {}
+    points = payloads.get("route_context_points_ref") or {}
+
+    _check_route_context_artifact_kind(
+        evidence,
+        "pretrip_route_context_evidence",
+        "route_context_evidence_ref",
+        errors,
+    )
+    _check_route_context_artifact_kind(
+        source_manifest,
+        "pretrip_route_context_source_manifest",
+        "route_context_source_manifest_ref",
+        errors,
+    )
+    _check_route_context_artifact_kind(
+        pack,
+        "pretrip_route_context_pack",
+        "route_context_pack_ref",
+        errors,
+    )
+    _check_route_context_artifact_kind(
+        points,
+        "pretrip_route_context_points",
+        "route_context_points_ref",
+        errors,
+    )
+    for key, payload in payloads.items():
+        _check_route_context_boundary(payload, key, errors)
+
+    project_count = project.get("route_context_point_count")
+    points_count = points.get("point_count") if isinstance(points, dict) else None
+    pack_count = pack.get("point_count") if isinstance(pack, dict) else None
+    if project_count is not None and points_count is not None and project_count != points_count:
+        errors.append(
+            f"route_context_point_count mismatch: project={project_count} points={points_count}"
+        )
+    if pack_count is not None and points_count is not None and pack_count != points_count:
+        errors.append(
+            f"route context pack point_count mismatch: pack={pack_count} points={points_count}"
+        )
+    cache_policy = (
+        source_manifest.get("cache_policy", {})
+        if isinstance(source_manifest, dict)
+        else {}
+    )
+    if cache_policy.get("live_fetch_performed") is True:
+        errors.append("route context source manifest claims live_fetch_performed=true")
+
+    return {
+        "checked": True,
+        "available": True,
+        "point_count": points_count,
+        "project_point_count": project_count,
+        "pack_point_count": pack_count,
+        "source_report_count": len(source_manifest.get("source_report", []))
+        if isinstance(source_manifest, dict)
+        else None,
+        "required_missing_source_count": len(
+            source_manifest.get("required_missing_source_kinds", [])
+        )
+        if isinstance(source_manifest, dict)
+        else None,
+        "optional_missing_source_count": len(
+            source_manifest.get("optional_missing_source_kinds", [])
+        )
+        if isinstance(source_manifest, dict)
+        else None,
+        "sensitivity_counts": (
+            points.get("counts", {}).get("by_sensitivity_level")
+            if isinstance(points, dict)
+            else None
+        ),
+        "live_fetch_performed": cache_policy.get("live_fetch_performed"),
+        "candidate_only": _route_context_candidate_only(points),
+        "runtime_safety_truth": _route_context_runtime_truth(points),
+    }
+
+
+def _check_route_context_artifact_kind(
+    payload: Any,
+    expected: str,
+    ref_key: str,
+    errors: list[str],
+) -> None:
+    if not isinstance(payload, dict):
+        errors.append(f"route context artifact payload missing for {ref_key}")
+        return
+    if payload.get("artifact_kind") != expected:
+        errors.append(
+            f"route context artifact kind mismatch for {ref_key}: {payload.get('artifact_kind')} != {expected}"
+        )
+
+
+def _check_route_context_boundary(
+    payload: Any,
+    ref_key: str,
+    errors: list[str],
+) -> None:
+    if not isinstance(payload, dict):
+        return
+    boundary = payload.get("boundary") if isinstance(payload.get("boundary"), dict) else {}
+    if payload.get("runtime_safety_truth") is True or boundary.get("runtime_safety_truth") is True:
+        errors.append(f"{ref_key} claims runtime_safety_truth=true")
+    if boundary.get("phase1_runtime_mutation_allowed") is True:
+        errors.append(f"{ref_key} allows phase1 runtime mutation")
+    if boundary.get("phase2_brain_writeback_allowed") is True:
+        errors.append(f"{ref_key} allows phase2 brain writeback")
+    if boundary.get("live_safety_api_calls_allowed") is True:
+        errors.append(f"{ref_key} allows live safety API calls")
+
+
+def _route_context_candidate_only(payload: Any) -> bool | None:
+    if not isinstance(payload, dict):
+        return None
+    boundary = payload.get("boundary") if isinstance(payload.get("boundary"), dict) else {}
+    return boundary.get("candidate_only")
+
+
+def _route_context_runtime_truth(payload: Any) -> bool | None:
+    if not isinstance(payload, dict):
+        return None
+    boundary = payload.get("boundary") if isinstance(payload.get("boundary"), dict) else {}
+    if "runtime_safety_truth" in boundary:
+        return boundary.get("runtime_safety_truth")
+    return payload.get("runtime_safety_truth")
 
 
 def _check_optional_false_boundary(

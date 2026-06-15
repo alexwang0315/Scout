@@ -39,6 +39,8 @@ ADMIN_BEARER_TOKEN_FILE="${SCOUT_ADMIN_BEARER_TOKEN_FILE:-}"
 CHECKPOINT_SPACING_M="${SCOUT_CHECKPOINT_SPACING_M:-500}"
 MAX_REFERENCE_DISPLAY_POINTS="${SCOUT_MAX_REFERENCE_DISPLAY_POINTS:-2500}"
 MAX_REASONABLE_GPX_SPEED_KMH="${SCOUT_MAX_REASONABLE_GPX_SPEED_KMH:-120}"
+ROUTE_CONTEXT_LIMIT_ROUTE_NOTES="${SCOUT_ROUTE_CONTEXT_LIMIT_ROUTE_NOTES:-80}"
+ROUTE_CONTEXT_INCLUDE_ROUTE_NOTES="${SCOUT_ROUTE_CONTEXT_INCLUDE_ROUTE_NOTES:-1}"
 ROUTE_CORRIDOR_M="${SCOUT_ROUTE_CORRIDOR_M:-500}"
 REFERENCE_TRACK_CORRIDOR_M="${SCOUT_REFERENCE_TRACK_CORRIDOR_M:-300}"
 LAYER_PROFILE="${SCOUT_PRETRIP_LAYER_PROFILE:-pi-online-explicit}"
@@ -80,6 +82,8 @@ mkdir -p "${WORKSPACE_ROOT}" "${BACKUP_ROOT}" "${LOG_ROOT}"
   echo "layer_profile=${LAYER_PROFILE}"
   echo "network_mode=${NETWORK_MODE}"
   echo "allow_network_fetch=${ALLOW_NETWORK_FETCH}"
+  echo "route_context_include_route_notes=${ROUTE_CONTEXT_INCLUDE_ROUTE_NOTES}"
+  echo "route_context_limit_route_notes=${ROUTE_CONTEXT_LIMIT_ROUTE_NOTES}"
   echo "log_path=${LOG_PATH}"
 
   if [[ -d "${PROJECT_ROOT}" ]]; then
@@ -145,6 +149,17 @@ PY
     LAYER_ARGS+=(--allow-network-fetch)
   fi
   PYTHONDONTWRITEBYTECODE=1 "${PYTHON_BIN}" "${LAYER_ARGS[@]}"
+
+  echo "Collecting Sec. 6 route context evidence..."
+  ROUTE_CONTEXT_ARGS=(
+    -m pretrip_route_context_collection
+    --project-root "${PROJECT_ROOT}"
+    --limit-route-notes "${ROUTE_CONTEXT_LIMIT_ROUTE_NOTES}"
+  )
+  if [[ "${ROUTE_CONTEXT_INCLUDE_ROUTE_NOTES}" == "0" || "${ROUTE_CONTEXT_INCLUDE_ROUTE_NOTES}" == "false" || "${ROUTE_CONTEXT_INCLUDE_ROUTE_NOTES}" == "FALSE" ]]; then
+    ROUTE_CONTEXT_ARGS+=(--no-route-notes)
+  fi
+  PYTHONDONTWRITEBYTECODE=1 "${PYTHON_BIN}" "${ROUTE_CONTEXT_ARGS[@]}"
 
   echo "Running spec alignment verifier..."
   VERIFY_ARGS=(

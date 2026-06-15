@@ -213,6 +213,17 @@ def _add_pretrip_group(subparsers: argparse._SubParsersAction) -> None:
     import_gpx.add_argument("--authorized-by", default=None)
     import_gpx.add_argument("--output", type=Path, default=None)
     import_gpx.add_argument("--json", action="store_true")
+    route_context = pretrip_sub.add_parser("route-context-collect")
+    route_context.add_argument("--project-root", type=Path, default=None)
+    route_context.add_argument("--project-id", default=None)
+    route_context.add_argument("--workspace-root", type=Path, default=None)
+    route_context.add_argument("--limit-route-notes", type=int, default=80)
+    route_context.add_argument("--no-route-notes", action="store_true")
+    route_context.add_argument("--collected-at", default=None)
+    route_context.add_argument("--dry-run", action="store_true")
+    route_context.add_argument("--authorized-by", default=None)
+    route_context.add_argument("--output", type=Path, default=None)
+    route_context.add_argument("--json", action="store_true")
     layers = pretrip_sub.add_parser("prepare-layers")
     layers.add_argument("--project-root", type=Path, default=None)
     layers.add_argument("--project-id", default=None)
@@ -555,6 +566,18 @@ def _tool_request_for_args(args: argparse.Namespace) -> tuple[str, dict[str, Any
             "workspace_root": str(args.workspace_root),
             **({"reference_dir": str(args.reference_dir)} if args.reference_dir else {}),
         }
+    if group == "pretrip" and args.pretrip_command == "route-context-collect":
+        request = {
+            "include_route_notes": not args.no_route_notes,
+            "limit_route_notes": args.limit_route_notes,
+        }
+        _set_path(request, "project_root", args.project_root)
+        _set_path(request, "workspace_root", args.workspace_root)
+        if args.project_id:
+            request["project_id"] = args.project_id
+        if args.collected_at:
+            request["collected_at"] = args.collected_at
+        return "scout.pretrip.route_context_collect", request
     if group == "pretrip" and args.pretrip_command == "prepare-layers":
         request = {"profile": args.profile}
         _set_path(request, "project_root", args.project_root)

@@ -12,7 +12,11 @@ from typing import Any
 ROUTE_CONTEXT_COLLECTION_ARTIFACT_KIND = "pretrip_route_context_collection"
 ROUTE_CONTEXT_EVIDENCE_ARTIFACT_KIND = "pretrip_route_context_evidence"
 ROUTE_CONTEXT_POINTS_ARTIFACT_KIND = "pretrip_route_context_points"
+ROUTE_CONTEXT_SOURCE_MANIFEST_ARTIFACT_KIND = "pretrip_route_context_source_manifest"
+ROUTE_CONTEXT_PACK_ARTIFACT_KIND = "pretrip_route_context_pack"
 ROUTE_CONTEXT_EVIDENCE_REF = "normalized/context/route_context/route_context_evidence.json"
+ROUTE_CONTEXT_SOURCE_MANIFEST_REF = "normalized/context/route_context/source_manifest.json"
+ROUTE_CONTEXT_PACK_REF = "normalized/context/route_context/route_context_pack.json"
 ROUTE_CONTEXT_POINTS_REF = "candidates/route_context_points.json"
 ROUTE_CONTEXT_SCHEMA_VERSION = "route_context_collection.v1"
 DEFAULT_ROUTE_NOTE_LIMIT = 80
@@ -24,6 +28,8 @@ SEC6_ALIGNMENT = {
     "workspace_layout_section": "Outdoor AI Agent Data Placement",
     "canonical_refs": [
         "normalized/context/route_context/*.json",
+        ROUTE_CONTEXT_PACK_REF,
+        ROUTE_CONTEXT_SOURCE_MANIFEST_REF,
         ROUTE_CONTEXT_POINTS_REF,
         "outputs/mcp/named_point_evidence.json",
         "outputs/layers/normalized/web_case_evidence.json",
@@ -137,13 +143,25 @@ def collect_pretrip_route_context(
         "import_manifest",
         source_report,
     )
-    _load_source(root, project, "route_summary", source_report)
+    route_summary_payload, route_summary_ref, _ = _load_source(
+        root,
+        project,
+        "route_summary",
+        source_report,
+    )
 
     points = _dedupe_points(points)
     counts = _counts(points)
     evidence_ref = str(project.get("route_context_evidence_ref") or ROUTE_CONTEXT_EVIDENCE_REF)
+    source_manifest_ref = str(
+        project.get("route_context_source_manifest_ref")
+        or ROUTE_CONTEXT_SOURCE_MANIFEST_REF
+    )
+    context_pack_ref = str(
+        project.get("route_context_pack_ref") or ROUTE_CONTEXT_PACK_REF
+    )
     points_ref = str(project.get("route_context_points_ref") or ROUTE_CONTEXT_POINTS_REF)
-    planned_writes = [evidence_ref, points_ref]
+    planned_writes = [evidence_ref, source_manifest_ref, context_pack_ref, points_ref]
 
     boundary = _closed_boundary(
         candidate_only=True,
@@ -162,6 +180,61 @@ def collect_pretrip_route_context(
         "points": points,
         "boundary": boundary,
     }
+    source_manifest_payload = {
+        "artifact_kind": ROUTE_CONTEXT_SOURCE_MANIFEST_ARTIFACT_KIND,
+        "schema_version": ROUTE_CONTEXT_SCHEMA_VERSION,
+        "project_id": project_id,
+        "generated_at": collected_at,
+        "source_report": source_report,
+        "required_missing_source_kinds": [
+            source["source_kind"]
+            for source in source_report
+            if source["required_by_standard_sec6"] and source["status"] != "loaded"
+        ],
+        "optional_missing_source_kinds": [
+            source["source_kind"]
+            for source in source_report
+            if not source["required_by_standard_sec6"] and source["status"] == "missing"
+        ],
+        "cache_policy": {
+            "mode": "offline_first_cache_first",
+            "live_fetch_performed": False,
+            "refresh_required_before_runtime_truth": True,
+            "answer_order": [
+                "local_cache",
+                "route_context_pack",
+                "local_spatial_index",
+                "remote_source_connector_if_explicitly_allowed",
+                "fallback_with_uncertainty",
+            ],
+        },
+        "boundary": boundary,
+    }
+    context_pack_payload = {
+        "artifact_kind": ROUTE_CONTEXT_PACK_ARTIFACT_KIND,
+        "schema_version": ROUTE_CONTEXT_SCHEMA_VERSION,
+        "project_id": project_id,
+        "generated_at": collected_at,
+        "route_summary_ref": route_summary_ref,
+        "route_summary": _route_summary_for_pack(route_summary_payload),
+        "route_context_evidence_ref": evidence_ref,
+        "source_manifest_ref": source_manifest_ref,
+        "route_context_points_ref": points_ref,
+        "point_count": len(points),
+        "counts": counts,
+        "query_policy": {
+            "mode": "cache_first_tool_second",
+            "local_answer_sources": [
+                "route_context_points",
+                "source_manifest",
+                "route_summary",
+            ],
+            "stop_or_delay_advice_requires_contextual_permission": True,
+        },
+        "sensitivity_policy": _sensitivity_policy(),
+        "observation_scoring_policy": _observation_scoring_policy(),
+        "boundary": boundary,
+    }
     evidence_payload = {
         "artifact_kind": ROUTE_CONTEXT_EVIDENCE_ARTIFACT_KIND,
         "schema_version": ROUTE_CONTEXT_SCHEMA_VERSION,
@@ -172,10 +245,14 @@ def collect_pretrip_route_context(
         "source_report": source_report,
         "counts": counts,
         "route_context_points_ref": points_ref,
+        "source_manifest_ref": source_manifest_ref,
+        "route_context_pack_ref": context_pack_ref,
         "import_manifest_ref": import_manifest_ref,
         "import_manifest_summary": _import_manifest_summary(import_manifest_payload),
         "project_update_suggestions": {
             "route_context_evidence_ref": evidence_ref,
+            "route_context_source_manifest_ref": source_manifest_ref,
+            "route_context_pack_ref": context_pack_ref,
             "route_context_points_ref": points_ref,
             "route_context_point_count": len(points),
         },
@@ -193,6 +270,8 @@ def collect_pretrip_route_context(
         "source_report": source_report,
         "outputs": {
             "route_context_evidence_ref": evidence_ref,
+            "route_context_source_manifest_ref": source_manifest_ref,
+            "route_context_pack_ref": context_pack_ref,
             "route_context_points_ref": points_ref,
         },
         "standard_alignment": SEC6_ALIGNMENT,
@@ -201,7 +280,22 @@ def collect_pretrip_route_context(
 
     if not dry_run:
         _write_json(root / evidence_ref, evidence_payload)
+        _write_json(root / source_manifest_ref, source_manifest_payload)
+        _write_json(root / context_pack_ref, context_pack_payload)
         _write_json(root / points_ref, points_payload)
+        _update_project_refs(
+            root / "project.json",
+            project,
+            {
+                "route_context_evidence_ref": evidence_ref,
+                "route_context_source_manifest_ref": source_manifest_ref,
+                "route_context_pack_ref": context_pack_ref,
+                "route_context_points_ref": points_ref,
+                "route_context_point_count": len(points),
+                "route_context_collection_updated_at": collected_at,
+                "route_context_collection_schema_version": ROUTE_CONTEXT_SCHEMA_VERSION,
+            },
+        )
         collection_payload["writes_performed"] = True
         collection_payload["written_refs"] = planned_writes
 
@@ -287,6 +381,10 @@ def _points_from_named_point_evidence(payload: dict[str, Any], source_ref: str) 
                 "aliases": aliases,
                 "point_classes": classes,
                 "confidence": position.get("coordinate_confidence"),
+                "source_freshness": _source_freshness_from_raw_stale_risk(
+                    raw.get("stale_risk"),
+                    fallback=point["source_freshness"],
+                ),
                 "mention_ratio": _float_or_none(raw.get("mention_ratio")),
                 "mention_page_count": raw.get("mention_page_count"),
                 "source_families": _str_list(raw.get("source_families")),
@@ -459,6 +557,7 @@ def _points_from_route_notes(
                 "route_note_category": category,
                 "confidence": raw.get("confidence"),
                 "review_state": raw.get("review_state") or "needs_review",
+                "source_freshness": _source_freshness_from_route_note(raw),
                 "route_note_freshness": raw.get("route_note_freshness"),
                 "potential_ln_signal": bool(raw.get("potential_ln_signal", False)),
                 "source_refs": _source_refs_for(source_ref, "route_note_candidates", raw),
@@ -483,6 +582,13 @@ def _base_point(
     sec6_layers = _sec6_layers(text_fields)
     evidence_families = sorted({source_kind, *(extra_evidence_families or [])})
     context_kind = _context_kind(sec6_layers, text_fields)
+    sensitivity = _sensitivity_level(sec6_layers, text_fields)
+    observation_score = _observation_score(
+        context_kind,
+        sec6_layers=sec6_layers,
+        evidence_families=evidence_families,
+        text_fields=text_fields,
+    )
     return {
         "candidate_id": _candidate_id("route_context", source_kind, source_candidate_id),
         "source_candidate_id": source_candidate_id,
@@ -491,6 +597,11 @@ def _base_point(
         "context_kind": context_kind,
         "sec6_layers": sec6_layers,
         "evidence_families": evidence_families,
+        "sensitivity_level": sensitivity,
+        "display_policy": _display_policy(sensitivity),
+        "source_freshness": _source_freshness(source_kind, text_fields),
+        "observation_score": observation_score,
+        "stop_advisory_candidate": _stop_advisory_candidate(context_kind, observation_score),
         "lat": lat,
         "lon": lon,
         "distance_m": distance_m,
@@ -594,6 +705,177 @@ def _context_kind(sec6_layers: list[str], values: list[Any]) -> str:
     if "historical" in sec6_layers or "cultural" in sec6_layers:
         return "route_context"
     return "route_context"
+
+
+def _sensitivity_level(sec6_layers: list[str], values: list[Any]) -> str:
+    text = _normalize(" ".join(str(value or "") for value in values))
+    if _has_any(
+        text,
+        (
+            "祖靈",
+            "墓",
+            "墓地",
+            "禁忌",
+            "祭場",
+            "傳統領域",
+            "private",
+            "restricted",
+            "burial",
+            "sacred",
+        ),
+    ):
+        return "restricted"
+    if _has_any(text, ("舊社", "獵徑", "部落", "原住民", "indigenous", "tribe")):
+        return "sensitive"
+    if "cultural" in sec6_layers:
+        return "cultural_review"
+    return "public"
+
+
+def _display_policy(sensitivity_level: str) -> dict[str, Any]:
+    if sensitivity_level == "restricted":
+        return {
+            "show_label": True,
+            "show_exact_coordinate": False,
+            "coordinate_precision": "hidden_or_area_only",
+            "requires_human_review_before_display": True,
+            "reason": "restricted cultural or private-location context",
+        }
+    if sensitivity_level in {"sensitive", "cultural_review"}:
+        return {
+            "show_label": True,
+            "show_exact_coordinate": False,
+            "coordinate_precision": "fuzzy_250m",
+            "requires_human_review_before_display": True,
+            "reason": "cultural context requires review before precise display",
+        }
+    return {
+        "show_label": True,
+        "show_exact_coordinate": True,
+        "coordinate_precision": "exact_candidate_coordinate",
+        "requires_human_review_before_display": False,
+        "reason": "public candidate context",
+    }
+
+
+def _source_freshness(source_kind: str, values: list[Any]) -> dict[str, Any]:
+    text = _normalize(" ".join(str(value or "") for value in values))
+    if _has_any(text, ("stale", "過舊", "route_note_age_days")):
+        status = "stale"
+    elif source_kind in {"web_case_evidence", "raster_label_evidence"}:
+        status = "unknown"
+    elif source_kind == "route_note_candidates":
+        status = "stale_or_unknown"
+    else:
+        status = "unknown"
+    ttl_policy = {
+        "mcp_candidates": "refresh_when_source_pack_changes",
+        "named_point_evidence": "refresh_when_search_pack_changes",
+        "ocr_label_evidence": "refresh_when_raster_tile_changes",
+        "web_case_evidence": "refresh_before_public_answer_if_network_allowed",
+        "raster_label_evidence": "refresh_when_map_layer_changes",
+        "route_note_candidates": "review_age_before_promotion",
+    }.get(source_kind, "unknown")
+    return {
+        "status": status,
+        "ttl_policy": ttl_policy,
+        "requires_refresh_before_runtime_truth": True,
+    }
+
+
+def _source_freshness_from_raw_stale_risk(
+    stale_risk: Any,
+    *,
+    fallback: dict[str, Any],
+) -> dict[str, Any]:
+    if not stale_risk:
+        return fallback
+    status = {
+        "low": "recent_enough_for_pretrip",
+        "medium": "review_recommended",
+        "high": "stale",
+    }.get(str(stale_risk), "unknown")
+    return {
+        **fallback,
+        "status": status,
+        "stale_risk": str(stale_risk),
+        "requires_refresh_before_runtime_truth": True,
+    }
+
+
+def _source_freshness_from_route_note(raw: dict[str, Any]) -> dict[str, Any]:
+    freshness = str(raw.get("route_note_freshness") or "unknown")
+    age_days = raw.get("route_note_age_days")
+    status = "stale" if freshness == "stale" else freshness
+    return {
+        "status": status,
+        "route_note_age_days": age_days,
+        "ttl_policy": "review_age_before_promotion",
+        "requires_refresh_before_runtime_truth": True,
+    }
+
+
+def _observation_score(
+    context_kind: str,
+    *,
+    sec6_layers: list[str],
+    evidence_families: list[str],
+    text_fields: list[Any],
+) -> dict[str, Any]:
+    observation_value = 25.0
+    reason_codes = ["candidate_context"]
+    if context_kind == "viewpoint" or "observation_point" in sec6_layers:
+        observation_value += 30.0
+        reason_codes.append("observation_point")
+    if "historical" in sec6_layers:
+        observation_value += 14.0
+        reason_codes.append("historical_context")
+    if "cultural" in sec6_layers:
+        observation_value += 12.0
+        reason_codes.append("cultural_context")
+    if "natural" in sec6_layers:
+        observation_value += 10.0
+        reason_codes.append("natural_context")
+    if context_kind == "resource_context":
+        observation_value += 10.0
+        reason_codes.append("resource_context")
+    if len(evidence_families) >= 3:
+        observation_value += 8.0
+        reason_codes.append("multi_source_support")
+
+    text = _normalize(" ".join(str(value or "") for value in text_fields))
+    risk_penalty = 0.0
+    if context_kind == "risk_context" or _has_any(text, ("崩", "危險", "裸露", "斷崖", "hazard", "risk")):
+        risk_penalty += 35.0
+        reason_codes.append("risk_context_penalty")
+    if _has_any(text, ("風口", "窄稜", "cliff", "exposure")):
+        risk_penalty += 20.0
+        reason_codes.append("exposure_penalty")
+
+    value = max(0.0, min(100.0, observation_value - risk_penalty))
+    return {
+        "value": round(value, 1),
+        "observation_value": round(min(100.0, observation_value), 1),
+        "risk_penalty": round(risk_penalty, 1),
+        "reason_codes": reason_codes,
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+    }
+
+
+def _stop_advisory_candidate(
+    context_kind: str,
+    observation_score: dict[str, Any],
+) -> str:
+    value = _float_or_none(observation_score.get("value")) or 0.0
+    risk_penalty = _float_or_none(observation_score.get("risk_penalty")) or 0.0
+    if context_kind == "risk_context" or risk_penalty >= 35.0:
+        return "pass_through_or_minimize_exposure"
+    if value >= 60.0:
+        return "short_stop_requires_contextual_permission"
+    if value >= 35.0:
+        return "context_reference_only"
+    return "low_priority_context_reference"
 
 
 def _load_source(
@@ -805,6 +1087,8 @@ def _counts(points: list[dict[str, Any]]) -> dict[str, Any]:
     by_kind: dict[str, int] = {}
     by_source: dict[str, int] = {}
     by_family: dict[str, int] = {}
+    by_sensitivity: dict[str, int] = {}
+    by_stop_advisory: dict[str, int] = {}
     for point in points:
         for layer in point.get("sec6_layers", []):
             by_layer[str(layer)] = by_layer.get(str(layer), 0) + 1
@@ -818,14 +1102,75 @@ def _counts(points: list[dict[str, Any]]) -> dict[str, Any]:
             str(point.get("evidence_type") or "unknown"),
             0,
         ) + 1
+        by_sensitivity[str(point.get("sensitivity_level") or "unknown")] = (
+            by_sensitivity.get(str(point.get("sensitivity_level") or "unknown"), 0)
+            + 1
+        )
+        by_stop_advisory[str(point.get("stop_advisory_candidate") or "unknown")] = (
+            by_stop_advisory.get(
+                str(point.get("stop_advisory_candidate") or "unknown"),
+                0,
+            )
+            + 1
+        )
     return {
         "route_context_point_count": len(points),
         "by_sec6_layer": dict(sorted(by_layer.items())),
         "by_context_kind": dict(sorted(by_kind.items())),
         "by_evidence_type": dict(sorted(by_source.items())),
         "by_evidence_family": dict(sorted(by_family.items())),
+        "by_sensitivity_level": dict(sorted(by_sensitivity.items())),
+        "by_stop_advisory_candidate": dict(sorted(by_stop_advisory.items())),
         "candidate_only": True,
         "runtime_safety_truth": False,
+    }
+
+
+def _route_summary_for_pack(payload: dict[str, Any]) -> dict[str, Any]:
+    bbox = payload.get("bbox_wgs84") if isinstance(payload.get("bbox_wgs84"), dict) else {}
+    return {
+        "route_name": payload.get("route_name"),
+        "distance_m": _float_or_none(payload.get("distance_m")),
+        "point_count": payload.get("point_count"),
+        "started_at": payload.get("started_at"),
+        "ended_at": payload.get("ended_at"),
+        "elevation_min_m": _float_or_none(payload.get("elevation_min_m")),
+        "elevation_max_m": _float_or_none(payload.get("elevation_max_m")),
+        "bbox_wgs84": bbox,
+        "raw_route_points_embedded": False,
+    }
+
+
+def _sensitivity_policy() -> dict[str, Any]:
+    return {
+        "public": {
+            "show_exact_coordinate": True,
+            "requires_human_review_before_display": False,
+        },
+        "cultural_review": {
+            "show_exact_coordinate": False,
+            "coordinate_precision": "fuzzy_250m",
+            "requires_human_review_before_display": True,
+        },
+        "sensitive": {
+            "show_exact_coordinate": False,
+            "coordinate_precision": "fuzzy_250m",
+            "requires_human_review_before_display": True,
+        },
+        "restricted": {
+            "show_exact_coordinate": False,
+            "coordinate_precision": "hidden_or_area_only",
+            "requires_human_review_before_display": True,
+        },
+    }
+
+
+def _observation_scoring_policy() -> dict[str, Any]:
+    return {
+        "formula": "observation_value_minus_risk_penalty",
+        "short_stop_requires": "scout.ai.contextual_permission.assess.v0",
+        "runtime_safety_truth": False,
+        "candidate_only": True,
     }
 
 
@@ -983,6 +1328,17 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
         encoding="utf-8",
     )
     temp_path.replace(path)
+
+
+def _update_project_refs(
+    project_path: Path,
+    project: dict[str, Any],
+    updates: dict[str, Any],
+) -> None:
+    if not project_path.exists():
+        return
+    updated = {**project, **updates}
+    _write_json(project_path, updated)
 
 
 def _sha256(path: Path) -> str:
