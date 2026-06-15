@@ -165,6 +165,7 @@ scout-risk-engine/scout_codex_package/tests/__pycache__/**
 !scout_agent_models.py
 !scout_agent_tools.py
 !scout_agent_trace.py
+!scout_ai_context_registry.py
 !scout_companion_match_models.py
 !scout_energy_baseline.py
 !scout_energy_field_cue.py
@@ -188,6 +189,7 @@ scout-risk-engine/scout_codex_package/tests/__pycache__/**
 !scout_route_architecture_tool.py
 !scout_route_readiness_tool.py
 !scout_safety_boundary_tool.py
+!scout_sensor_vitals_record.py
 !scout_survival_incident_playbook_tool.py
 !scout_team_status_tool.py
 !scout_terrain_score_tool.py
