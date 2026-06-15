@@ -20,6 +20,7 @@ from scout_weather_window_tool import WEATHER_WINDOW_TOOL_ID
 from scout_contextual_permission_tool import CONTEXTUAL_PERMISSION_TOOL_ID
 from scout_route_context_tool import ROUTE_CONTEXT_TOOL_ID
 from scout_pace_guardian_tool import PACE_GUARDIAN_TOOL_ID
+from scout_route_architecture_tool import ROUTE_ARCHITECTURE_TOOL_ID
 
 
 EXECUTABLE_TOOL_IDS = set(EXECUTABLE_TOOL_ALIASES)
@@ -432,6 +433,31 @@ def _execute_ready_current_tool(tool_id: str, arguments: dict[str, Any]) -> dict
             planned_eta_path=_str_or_none(arguments.get("planned_eta_path")),
             energy_vitals_path=_str_or_none(arguments.get("energy_vitals_path")),
             readiness_report_path=_str_or_none(arguments.get("readiness_report_path")),
+        )
+
+    if tool_id == ROUTE_ARCHITECTURE_TOOL_ID:
+        from scout_route_architecture_tool import assess_scout_route_architecture
+
+        return assess_scout_route_architecture(
+            project_root,
+            query=query,
+            current_cp_id=_str_or_none(arguments.get("current_cp_id")),
+            current_time=_str_or_none(arguments.get("current_time")),
+            target_cp_id=_str_or_none(arguments.get("target_cp_id")),
+            route_summary_path=_str_or_none(arguments.get("route_summary_path")),
+            checkpoint_candidates_path=_str_or_none(
+                arguments.get("checkpoint_candidates_path")
+            ),
+            segment_candidates_path=_str_or_none(arguments.get("segment_candidates_path")),
+            segment_policy_candidates_path=_str_or_none(
+                arguments.get("segment_policy_candidates_path")
+            ),
+            retreat_routes_path=_str_or_none(arguments.get("retreat_routes_path")),
+            planned_eta_path=_str_or_none(arguments.get("planned_eta_path")),
+            risk_ribbon_metadata_path=_str_or_none(
+                arguments.get("risk_ribbon_metadata_path")
+            ),
+            limit=limit,
         )
 
     raise ValueError(f"tool is not executable: {tool_id}")

@@ -13,6 +13,7 @@ from scout_ai_evidence_collection import (
 from scout_ai_tool_contracts import ScoutAiToolBaseModel, ScoutAiToolBoundary
 from scout_contextual_permission_tool import CONTEXTUAL_PERMISSION_TOOL_ID
 from scout_route_context_tool import ROUTE_CONTEXT_TOOL_ID
+from scout_route_architecture_tool import ROUTE_ARCHITECTURE_TOOL_ID
 from scout_pace_guardian_tool import PACE_GUARDIAN_TOOL_ID
 from scout_weather_window_tool import WEATHER_WINDOW_TOOL_ID
 
@@ -164,6 +165,9 @@ def _source_from_record(record: dict[str, Any]) -> ScoutAiAnswerSource:
     for key in (
         "field_answer",
         "route_context",
+        "route_architecture",
+        "cp_graph",
+        "route_decision",
         "pace_guardian",
         "team_pace_fit",
         "weather_to_decision",
@@ -232,6 +236,9 @@ def _answer_text(
     route_context_answer = _route_context_answer(completed_sources)
     if route_context_answer:
         parts.append(route_context_answer)
+    route_architecture_answer = _route_architecture_answer(completed_sources)
+    if route_architecture_answer:
+        parts.append(route_architecture_answer)
     pace_guardian_answer = _pace_guardian_answer(completed_sources)
     if pace_guardian_answer:
         parts.append(pace_guardian_answer)
@@ -314,6 +321,16 @@ def _route_context_answer(sources: list[ScoutAiAnswerSource]) -> str | None:
     return None
 
 
+def _route_architecture_answer(sources: list[ScoutAiAnswerSource]) -> str | None:
+    for source in sources:
+        if source.tool_id != ROUTE_ARCHITECTURE_TOOL_ID:
+            continue
+        field_answer = source.top_result_summary.get("field_answer")
+        if isinstance(field_answer, str) and field_answer.strip():
+            return field_answer.strip()
+    return None
+
+
 def _pace_guardian_answer(sources: list[ScoutAiAnswerSource]) -> str | None:
     for source in sources:
         if source.tool_id != PACE_GUARDIAN_TOOL_ID:
@@ -365,7 +382,14 @@ def _top_result_summary(value: Any) -> dict[str, Any]:
         "risk_budget",
         "risk_budget_source",
         "route_context",
+        "route_architecture",
+        "cp_graph",
+        "route_decision",
         "pace_guardian",
+        "route_type",
+        "turn_back",
+        "retreat_option_count",
+        "hard_point_count",
         "team_pace_fit",
         "schedule_pressure",
         "team_context",

@@ -10,6 +10,7 @@ from scout_ai_evidence_collection import (
 )
 from scout_ai_tool_planner import WEATHER_WINDOW_TOOL_ID
 from scout_pace_guardian_tool import PACE_GUARDIAN_TOOL_ID
+from scout_route_architecture_tool import ROUTE_ARCHITECTURE_TOOL_ID
 from scout_route_context_tool import ROUTE_CONTEXT_TOOL_ID
 from scout_risk_score_tool import RISK_SCORE_TOOL_ID
 from scout_terrain_score_tool import TERRAIN_SCORE_TOOL_ID
@@ -179,6 +180,35 @@ def test_evidence_collection_executes_pace_guardian_tool_without_model_synthesis
     assert payload["team_pace_fit"]["slowest_member"]["label"] == "New teammate"
     assert payload["team_pace_fit"]["pace_gap_ratio"] == 1.92
     assert pace.boundary.runtime_safety_truth is False
+
+
+def test_evidence_collection_keeps_route_architecture_cp_graph_payload() -> None:
+    result = collect_scout_ai_evidence(
+        "下一個撤退點在哪？這條路線難點在哪？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=4,
+    )
+
+    assert result.selected_tool_count == 1
+    assert result.executed_tool_count == 1
+    assert result.completed_tool_count == 1
+    assert result.contract_gap_count == 0
+    assert result.execution_policy.ready_tools_executed is True
+    assert result.execution_policy.model_synthesis_performed is False
+
+    route_architecture = _record(result, ROUTE_ARCHITECTURE_TOOL_ID)
+    assert route_architecture.collection_status == "completed"
+    assert route_architecture.result is not None
+    payload = route_architecture.result["payload"]
+    assert payload["answerability"] == "route_architecture_available"
+    assert payload["source_status"] == "candidate_only"
+    assert payload["decision"] == "CONDITIONAL_GO"
+    assert payload["route_architecture"]["role"] == "Route Architecture Intelligence"
+    assert payload["route_decision"]["runtime_safety_truth"] is False
+    assert payload["cp_graph"]["node_count"] == 124
+    assert payload["cp_graph"]["edge_count"] == 123
+    assert route_architecture.boundary.runtime_safety_truth is False
 
 
 def test_evidence_collection_reports_empty_collection_when_no_tool_matches() -> None:

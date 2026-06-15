@@ -48,6 +48,11 @@ from scout_pace_guardian_tool import (
     PACE_GUARDIAN_OUTPUT_KIND,
     PACE_GUARDIAN_TOOL_ID,
 )
+from scout_route_architecture_tool import (
+    ROUTE_ARCHITECTURE_OPTIONAL_FIELDS,
+    ROUTE_ARCHITECTURE_OUTPUT_KIND,
+    ROUTE_ARCHITECTURE_TOOL_ID,
+)
 
 ARTIFACT_KIND_REGISTRY = "scout_ai_tool_registry"
 ARTIFACT_VERSION_REGISTRY = "scout_ai_tool_registry.v0"
@@ -213,6 +218,11 @@ EXECUTABLE_TOOL_ALIASES: dict[str, list[str]] = {
         "scout.ai.team_pace_fit.assess",
         "scout.ai.readiness_pace_fit.assess",
     ],
+    ROUTE_ARCHITECTURE_TOOL_ID: [
+        "scout.ai.route_architecture.assess",
+        "scout.ai.cp_graph.assess",
+        "scout.ai.turn_back.assess",
+    ],
 }
 
 
@@ -232,6 +242,7 @@ EXECUTABLE_OUTPUT_KINDS: dict[str, str] = {
     CONTEXTUAL_PERMISSION_TOOL_ID: CONTEXTUAL_PERMISSION_OUTPUT_KIND,
     ROUTE_CONTEXT_TOOL_ID: ROUTE_CONTEXT_OUTPUT_KIND,
     PACE_GUARDIAN_TOOL_ID: PACE_GUARDIAN_OUTPUT_KIND,
+    ROUTE_ARCHITECTURE_TOOL_ID: ROUTE_ARCHITECTURE_OUTPUT_KIND,
 }
 
 
@@ -559,6 +570,8 @@ def _optional_fields_for(tool_id: str) -> list[str]:
         return list(ROUTE_CONTEXT_OPTIONAL_FIELDS)
     if tool_id == PACE_GUARDIAN_TOOL_ID:
         return list(PACE_GUARDIAN_OPTIONAL_FIELDS)
+    if tool_id == ROUTE_ARCHITECTURE_TOOL_ID:
+        return list(ROUTE_ARCHITECTURE_OPTIONAL_FIELDS)
     return []
 
 
