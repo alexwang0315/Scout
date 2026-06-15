@@ -1094,30 +1094,37 @@ def test_full_workflow_runs_route_context_experience_guide_question() -> None:
 
 
 def test_full_workflow_routes_standard_natural_context_layer() -> None:
-    result = run_scout_ai_full_workflow(
+    questions = [
         "這段林相變化有什麼可以觀察？",
-        project_root=PROJECT_ROOT,
-        project_id="chilai_nanhua_day1",
-        limit=4,
-    )
+        "這條路線有哪些自然、人文或地形脈絡？",
+        "哪裡適合停下來看風景，不要只衝山頂？",
+    ]
 
-    assert result.answerability == "evidence_available"
-    assert result.selected_tool_count == 1
-    assert result.executed_tool_count == 1
-    assert result.completed_tool_count == 1
-    assert result.contract_gap_count == 0
-    assert result.failed_tool_count == 0
-    assert result.missing_evidence_count == 0
-    assert result.sources[0]["tool_id"] == ROUTE_CONTEXT_TOOL_ID
-    assert result.sources[0]["top_result_summary"]["decision"] == "CONDITIONAL_GO"
-    assert result.sources[0]["top_result_summary"]["route_context"]["role"] == (
-        "Experience Guide"
-    )
-    assert result.decision_output["answerSourceToolId"] == ROUTE_CONTEXT_TOOL_ID
-    assert result.decision_output["decision"] == "CONDITIONAL_GO"
-    assert "候選路線脈絡" in result.answer
-    assert "Experience Guide 候選" in result.answer
-    assert result.boundary.runtime_safety_truth is False
+    for question in questions:
+        result = run_scout_ai_full_workflow(
+            question,
+            project_root=PROJECT_ROOT,
+            project_id="chilai_nanhua_day1",
+            limit=4,
+        )
+
+        assert result.answerability == "evidence_available"
+        assert result.selected_tool_count == 1
+        assert result.executed_tool_count == 1
+        assert result.completed_tool_count == 1
+        assert result.contract_gap_count == 0
+        assert result.failed_tool_count == 0
+        assert result.missing_evidence_count == 0
+        assert result.sources[0]["tool_id"] == ROUTE_CONTEXT_TOOL_ID
+        assert result.sources[0]["top_result_summary"]["decision"] == "CONDITIONAL_GO"
+        assert result.sources[0]["top_result_summary"]["route_context"]["role"] == (
+            "Experience Guide"
+        )
+        assert result.decision_output["answerSourceToolId"] == ROUTE_CONTEXT_TOOL_ID
+        assert result.decision_output["decision"] == "CONDITIONAL_GO"
+        assert "候選路線脈絡" in result.answer
+        assert "Experience Guide 候選" in result.answer
+        assert result.boundary.runtime_safety_truth is False
 
 
 def test_full_workflow_runs_pace_guardian_team_pace_question(tmp_path: Path) -> None:
