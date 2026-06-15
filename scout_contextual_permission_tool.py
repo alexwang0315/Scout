@@ -1346,6 +1346,8 @@ def _resolve_action(action: str | None, query: str) -> OutdoorAction:
     text = query.lower()
     if _has_any(text, ("拍影片", "拍片", "影片", "video", "film", "架腳架")):
         return OutdoorAction.FILM
+    if _has_any(text, ("等霧", "等隊友", "等待", "wait")):
+        return OutdoorAction.WAIT
     if _has_any(
         text,
         ("改線", "繞去", "支線", "岔路", "切過去", "捷徑", "reroute", "shortcut"),
@@ -1362,8 +1364,6 @@ def _resolve_action(action: str | None, query: str) -> OutdoorAction:
         return OutdoorAction.SPLIT_TEAM
     if _has_any(text, ("攻頂", "山頂", "summit")):
         return OutdoorAction.SUMMIT
-    if _has_any(text, ("等霧", "等隊友", "等待", "wait")):
-        return OutdoorAction.WAIT
     if _has_any(text, ("撤退", "折返", "下撤", "retreat")):
         return OutdoorAction.RETREAT
     if _has_any(text, ("穿雨衣", "雨衣", "rain gear")):
@@ -1471,7 +1471,7 @@ def _allowed_next_action(action: OutdoorAction, next_cp_id: str | None) -> str:
     if action == OutdoorAction.LUNCH:
         return f"只做短版午餐，完成後收整裝備並前往 {destination}。"
     if action == OutdoorAction.WAIT:
-        return f"到時限仍未改善就放棄等待，直接前往 {destination}。"
+        return f"若時限內能見度沒有改善，放棄拍攝與等待，直接前往 {destination}。"
     if action == OutdoorAction.SUMMIT:
         return "設定硬性折返時間，逾時立即放棄攻頂。"
     if action == OutdoorAction.REROUTE:
@@ -1501,7 +1501,12 @@ def _safe_next_action(action: OutdoorAction, next_cp_id: str | None) -> str:
 
 def _alternative_actions(action: OutdoorAction, next_cp_id: str | None) -> list[str]:
     destination = next_cp_id or "下一個安全 CP"
-    if action in {OutdoorAction.FILM, OutdoorAction.PHOTO, OutdoorAction.STOP, OutdoorAction.WAIT}:
+    if action in {
+        OutdoorAction.FILM,
+        OutdoorAction.PHOTO,
+        OutdoorAction.STOP,
+        OutdoorAction.WAIT,
+    }:
         return [f"前往 {destination} 後再停留", "取消拍攝或等待", "只在路線內側快速通過"]
     if action == OutdoorAction.REST:
         return [f"前往 {destination} 再休息", "縮短為站立補水", "改成撤退或短線"]
@@ -1653,8 +1658,10 @@ def _required_conditions(
 ) -> list[str]:
     conditions = [f"最多 {max_duration} 分鐘"]
     conditions.append(f"{leave_by} 前離開" if leave_by else "以現在時間起算，到時立即離開")
-    if action in {OutdoorAction.FILM, OutdoorAction.PHOTO, OutdoorAction.STOP}:
+    if action in {OutdoorAction.FILM, OutdoorAction.PHOTO, OutdoorAction.STOP, OutdoorAction.WAIT}:
         conditions.append("不要離開步道內側或既有路線走廊")
+    if action == OutdoorAction.WAIT:
+        conditions.append("若時限內能見度沒有改善，放棄拍攝並前往下一個 CP")
     conditions.append("若天氣、能見度、隊伍狀態或地形風險惡化，立即取消")
     return conditions
 
@@ -1691,6 +1698,8 @@ def _residual_risk(action: OutdoorAction, terrain_risk_level: str | None) -> lis
     risks = ["即使遵守時限，仍可能受天氣、地面濕滑、能見度與隊伍狀態變化影響。"]
     if action in {OutdoorAction.FILM, OutdoorAction.PHOTO}:
         risks.append("拍攝衝動可能導致追加停留或離開安全路線。")
+    if action == OutdoorAction.WAIT:
+        risks.append("等待霧散可能轉成追加拍攝時間，必須用硬性離開時間切斷。")
     if terrain_risk_level:
         risks.append(f"現場地形風險標記為 {terrain_risk_level}，需保守處理。")
     return risks

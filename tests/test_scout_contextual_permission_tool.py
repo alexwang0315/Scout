@@ -86,6 +86,51 @@ def test_contextual_permission_allows_film_with_bounded_deadline_and_cost() -> N
     assert result["boundary"]["safety_api_called"] is False
 
 
+def test_contextual_permission_allows_fog_wait_with_bounded_photo_cutoff() -> None:
+    result = assess_scout_contextual_permission(
+        PROJECT_ROOT,
+        query="可以等霧散再拍照嗎？",
+        current_time="2026-06-07T14:00:00+08:00",
+        current_cp_id="CP4",
+        next_cp_id="CP5",
+        remaining_safety_buffer_minutes=18,
+        next_segment_uncertainty_minutes=4,
+        weather_reserve_minutes=3,
+        weather_window_impact="14:30 後降雨風險升高，不再等待。",
+        communication_status="ok",
+        equipment_status="ok",
+    )
+
+    assert result["answerability"] == "contextual_permission_decision_available"
+    assert result["action"] == "wait"
+    assert result["decision"] == "CONDITIONAL_GO"
+    assert result["allowed"] is True
+    assert result["max_duration_minutes"] == 5
+    assert result["leave_by"] == "2026-06-07T14:05:00+08:00"
+    assert result["decision_output"]["firstLayer"]["decision"] == "可以，最多 5 分鐘。"
+    assert "14:05" in result["field_answer"]
+    assert "能見度沒有改善" in result["decision_output"]["firstLayer"]["nextStep"]
+    assert "放棄拍攝" in result["decision_output"]["firstLayer"]["nextStep"]
+    assert any(
+        "不要離開步道內側" in condition
+        for condition in result["decision_output"]["secondLayer"][
+            "requiredConditions"
+        ]
+    )
+    assert any(
+        "放棄拍攝" in condition
+        for condition in result["decision_output"]["secondLayer"][
+            "requiredConditions"
+        ]
+    )
+    assert result["contextual_permission"]["cost"]["timeBufferChangeMinutes"] == -5
+    assert result["contextual_permission"]["cost"]["weatherWindowImpact"] == (
+        "14:30 後降雨風險升高，不再等待。"
+    )
+    assert result["risk_budget"]["bufferAfterActionMinutes"] == 13
+    assert result["boundary"]["runtime_safety_truth"] is False
+
+
 def test_contextual_permission_missing_buffer_is_conservative_no_go() -> None:
     result = assess_scout_contextual_permission(
         PROJECT_ROOT,

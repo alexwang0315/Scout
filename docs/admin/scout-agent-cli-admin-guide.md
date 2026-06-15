@@ -228,6 +228,11 @@ equipment, season/weather, and image-scale bias into a concrete decision about
 whether the user may treat the media target as an action objective. It remains a
 read-only bias sentinel; actual stopping, filming, waiting, or rerouting still
 requires contextual permission.
+Sec. 25.4 fog-wait photo questions such as "可以等霧散再拍照嗎？" are treated
+as `wait`, not generic `photo`. They route through Weather Window and contextual
+permission: Weather supplies the weather-window uncertainty, while contextual
+permission can grant at most the bounded wait duration and must cut off the
+photo if visibility does not improve before the deadline.
 Sec. 25.5 social-photo detours such as "大家都說旁邊那個點很好拍，可以繞去嗎？"
 route through both media literacy and contextual permission. The media decision
 is primary for the first layer: it marks the action as `reroute`, returns

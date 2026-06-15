@@ -1061,6 +1061,46 @@ def test_execute_contextual_permission_assessor_allows_rain_gear_micro_decision(
     assert result.boundary.runtime_safety_truth is False
 
 
+def test_execute_contextual_permission_assessor_allows_fog_wait_photo_cutoff() -> None:
+    result = execute_scout_ai_tool(
+        {
+            "tool_id": "scout.ai.contextual_permission.assess",
+            "project_root": str(PROJECT_ROOT),
+            "query": "可以等霧散再拍照嗎？",
+            "arguments": {
+                "current_time": "2026-06-07T14:00:00+08:00",
+                "current_cp_id": "CP4",
+                "next_cp_id": "CP5",
+                "remaining_safety_buffer_minutes": 18,
+                "next_segment_uncertainty_minutes": 4,
+                "weather_reserve_minutes": 3,
+                "weather_window_impact": "14:30 後降雨風險升高，不再等待。",
+                "communication_status": "ok",
+                "equipment_status": "ok",
+            },
+        }
+    )
+
+    assert result.status == "completed"
+    assert result.tool_id == CONTEXTUAL_PERMISSION_TOOL_ID
+    assert result.payload["answerability"] == "contextual_permission_decision_available"
+    assert result.payload["action"] == "wait"
+    assert result.payload["decision"] == "CONDITIONAL_GO"
+    assert result.payload["allowed"] is True
+    assert result.payload["max_duration_minutes"] == 5
+    assert result.payload["leave_by"] == "2026-06-07T14:05:00+08:00"
+    assert result.payload["decision_output"]["action"] == "wait"
+    assert result.payload["decision_output"]["firstLayer"]["decision"] == (
+        "可以，最多 5 分鐘。"
+    )
+    assert "能見度沒有改善" in result.payload["decision_output"]["firstLayer"][
+        "nextStep"
+    ]
+    assert "放棄拍攝" in result.payload["field_answer"]
+    assert result.payload["decision_output"]["runtimeSafetyTruth"] is False
+    assert result.boundary.runtime_safety_truth is False
+
+
 def test_execute_contextual_permission_assessor_blocks_shortcut_reroute() -> None:
     result = execute_scout_ai_tool(
         {
