@@ -255,6 +255,40 @@ def test_weather_window_tool_changes_plan_for_heat_exposure_water_margin(
     assert result["decision_output"]["runtimeSafetyTruth"] is False
 
 
+def test_weather_window_tool_delays_forecast_source_disagreement(
+    tmp_path: Path,
+) -> None:
+    project_root = _write_source_disagreement_project(tmp_path)
+
+    result = assess_scout_weather_window(
+        project_root,
+        query="預報來源不一致，這個天氣窗可以照原計畫走嗎？",
+        limit=3,
+    )
+
+    assert result["answerability"] == "route_weather_risk_available"
+    assert result["decision"] == "DELAY"
+    weather_decision = result["weather_to_decision"]
+    assert weather_decision["decision"] == "DELAY"
+    assert weather_decision["route_sensitive_weather_rule"]["rule"] == (
+        "forecast_source_disagreement_conservative_review"
+    )
+    assert weather_decision["route_sensitive_weather_rule"]["segment_ids"] == [
+        "forecast.conflict.1"
+    ]
+    assert weather_decision["route_sensitive_weather_rule"]["conflicting_sources"] == [
+        "CWA",
+        "mountain_forecast_partner",
+    ]
+    assert "forecast source disagreement / uncertainty" in weather_decision[
+        "route_specific_conditions"
+    ]
+    assert "favorable forecast" in weather_decision["action_limit"]
+    assert "來源仍不一致" in weather_decision["next_action"]
+    assert result["decision_output"]["decision"] == "DELAY"
+    assert result["decision_output"]["runtimeSafetyTruth"] is False
+
+
 def test_weather_window_output_kind_is_registered_constant() -> None:
     assert WEATHER_WINDOW_OUTPUT_KIND == "scout_ai_weather_window_tool_output"
 
@@ -438,6 +472,71 @@ def _write_heat_exposure_project(tmp_path: Path) -> Path:
                         "riskLevel": "MODERATE",
                         "factors": ["高溫曝曬", "水量偏低", "無遮蔽", "午後炎熱時段"],
                         "message": "午後高溫與曝曬會放大中暑、補水與遮蔽需求。",
+                    }
+                ],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    return project_root
+
+
+def _write_source_disagreement_project(tmp_path: Path) -> Path:
+    project_root = tmp_path / "source-disagreement-project"
+    (project_root / "outputs").mkdir(parents=True)
+    (project_root / "project.json").write_text(
+        json.dumps(
+            {
+                "project_id": "source_disagreement_project",
+                "route_weather_package_ref": "outputs/route_weather_package.json",
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    (project_root / "outputs" / "route_weather_package.json").write_text(
+        json.dumps(
+            {
+                "artifact_kind": "route_weather_package",
+                "status": "candidate_only",
+                "routeId": "fixture-route",
+                "generatedAt": "2099-06-07T08:00:00Z",
+                "issued_at": "2099-06-07T08:00:00Z",
+                "valid_from": "2099-06-07T08:00:00Z",
+                "valid_to": "2099-06-10T08:00:00Z",
+                "validUntil": "2099-06-10T08:00:00Z",
+                "ttl_s": 259200,
+                "provider": "fixture_multi_source_weather",
+                "authoritative_weather_computed": True,
+                "external_api_calls_made": True,
+                "human_review_required": False,
+                "weather_window": {
+                    "summary": "預報來源不一致：官方預報較保守，第三方模式較樂觀",
+                    "valid_from": "2099-06-07T08:00:00Z",
+                    "valid_to": "2099-06-10T08:00:00Z",
+                    "source_status": "server_side_fixture",
+                    "source_consistency": "forecast_source_disagreement",
+                    "forecast_sources": [
+                        {"provider": "CWA", "risk": "rain_after_noon"},
+                        {"provider": "mountain_forecast_partner", "risk": "dry"},
+                    ],
+                },
+                "segments": [
+                    {
+                        "segmentId": "forecast.conflict.1",
+                        "etaFrom": "2099-06-08T04:30:00Z",
+                        "etaTo": "2099-06-08T05:20:00Z",
+                        "terrainRisk": 0.3,
+                        "weatherRisk": 0.3,
+                        "finalRisk": 0.36,
+                        "riskLevel": "LOW",
+                        "factors": ["預報來源不一致", "稜線通過時段", "人工審核前保守"],
+                        "message": "同一時段來源不一致，不能採用較樂觀預報直接通過。",
+                        "source": {
+                            "provider": "CWA",
+                            "source_consistency": "forecast_source_disagreement",
+                        },
                     }
                 ],
             },
