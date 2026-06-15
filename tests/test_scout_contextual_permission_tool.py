@@ -291,6 +291,22 @@ def test_contextual_permission_missing_buffer_is_conservative_no_go() -> None:
     assert result["decision_output"]["secondLayer"]["alternativeActions"]
 
 
+def test_contextual_permission_generic_leave_by_question_defaults_to_stop() -> None:
+    result = assess_scout_contextual_permission(
+        PROJECT_ROOT,
+        query="現在可以做嗎？什麼時間前必須離開？",
+    )
+
+    assert result["answerability"] == "contextual_permission_missing_required_fields"
+    assert result["action"] == "stop"
+    assert result["decision"] == "NO_GO"
+    assert result["allowed"] is False
+    assert result["missing_fields"] == ["remaining_safety_buffer_minutes"]
+    assert result["decision_output"]["action"] == "stop"
+    assert result["decision_output"]["firstLayer"]["decision"] == "不建議停留。"
+    assert result["boundary"]["runtime_safety_truth"] is False
+
+
 def test_contextual_permission_blocks_exposed_photo_even_with_buffer() -> None:
     result = assess_scout_contextual_permission(
         PROJECT_ROOT,

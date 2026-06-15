@@ -1520,6 +1520,13 @@ def _resolve_action(action: str | None, query: str) -> OutdoorAction:
             "停留",
             "可以停",
             "能不能停",
+            "什麼時間前必須離開",
+            "何時前必須離開",
+            "幾點前必須離開",
+            "什麼時間前離開",
+            "何時前離開",
+            "幾點前離開",
+            "必須離開",
             "stop",
         ),
     ) or re.search(r"停\s*\d+(?:\.\d+)?\s*(?:分鐘|分|min|minutes?)", text):
