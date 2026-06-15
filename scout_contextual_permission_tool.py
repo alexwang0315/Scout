@@ -575,6 +575,27 @@ def _permission(
             alternative_actions=_alternative_actions(action, next_cp_id),
         )
 
+    if _is_high_risk_action(action, terrain_risk_level, query):
+        decision = (
+            ScoutDecision.ESCALATE
+            if terrain_risk_level in _CRITICAL_RISK_LEVELS
+            or action == OutdoorAction.CROSS_STREAM
+            else ScoutDecision.NO_GO
+        )
+        return _no_go_permission(
+            action=action,
+            decision=decision,
+            reason=_high_risk_reason(action, terrain_risk_level),
+            next_action=_high_risk_next_action(action, next_cp_id),
+            confidence=_confidence(confidence, default=ConfidenceLevel.MEDIUM),
+            uncertainty_notes=_high_risk_uncertainty_notes(
+                missing_fields=missing_fields,
+                communication_status=communication_status,
+                equipment_status=equipment_status,
+            ),
+            alternative_actions=_alternative_actions(action, next_cp_id),
+        )
+
     if missing_fields and action in _BUDGET_ACTIONS:
         return _no_go_permission(
             action=action,
@@ -611,26 +632,6 @@ def _permission(
             next_action="就地穿上雨具，完成後立即回到原定節奏。",
             confidence=_confidence(confidence, default=ConfidenceLevel.MEDIUM),
             residual_risk=["若風雨持續增強，仍需重新評估撤退或改線。"],
-        )
-
-    if _is_high_risk_action(action, terrain_risk_level, query):
-        decision = (
-            ScoutDecision.ESCALATE
-            if terrain_risk_level in _CRITICAL_RISK_LEVELS
-            or action == OutdoorAction.CROSS_STREAM
-            else ScoutDecision.NO_GO
-        )
-        return _no_go_permission(
-            action=action,
-            decision=decision,
-            reason=_high_risk_reason(action, terrain_risk_level),
-            next_action=_high_risk_next_action(action, next_cp_id),
-            confidence=_confidence(confidence, default=ConfidenceLevel.MEDIUM),
-            uncertainty_notes=_status_uncertainty_notes(
-                communication_status=communication_status,
-                equipment_status=equipment_status,
-            ),
-            alternative_actions=_alternative_actions(action, next_cp_id),
         )
 
     if action in _BUDGET_ACTIONS:
@@ -1442,6 +1443,25 @@ def _high_risk_next_action(action: OutdoorAction, next_cp_id: str | None) -> str
     if action == OutdoorAction.CROSS_STREAM:
         return "停止進入溪谷，退回穩定安全點，必要時等待領隊、嚮導或官方資訊。"
     return _safe_next_action(action, next_cp_id)
+
+
+def _high_risk_uncertainty_notes(
+    *,
+    missing_fields: list[str],
+    communication_status: str | None,
+    equipment_status: str | None,
+) -> list[str]:
+    notes = _status_uncertainty_notes(
+        communication_status=communication_status,
+        equipment_status=equipment_status,
+    )
+    if missing_fields:
+        notes.append(
+            "高後果地形先採保守禁止；缺少 "
+            + "、".join(missing_fields)
+            + " 仍需補齊後才能重評估。"
+        )
+    return notes
 
 
 def _looks_like_exposed_lunch_context(
