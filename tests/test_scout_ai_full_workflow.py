@@ -539,6 +539,38 @@ def test_full_workflow_runs_pace_guardian_team_pace_question(tmp_path: Path) -> 
     assert result.boundary.runtime_safety_truth is False
 
 
+def test_full_workflow_routes_average_pace_bias_to_pace_guardian() -> None:
+    result = run_scout_ai_full_workflow(
+        "我們平均腳程還可以，可以用平均速度估嗎？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=4,
+    )
+
+    assert result.answerability == "partial_evidence_with_missing_context"
+    assert result.selected_tool_count == 1
+    assert result.executed_tool_count == 1
+    assert result.completed_tool_count == 1
+    assert result.missing_evidence_count == 1
+    assert result.sources[0]["tool_id"] == PACE_GUARDIAN_TOOL_ID
+    assert result.sources[0]["top_result_summary"]["decision"] == "NO_GO"
+    assert result.sources[0]["top_result_summary"]["pace_guardian"][
+        "average_pace_used"
+    ] is False
+    assert result.decision_output["answerSourceToolId"] == PACE_GUARDIAN_TOOL_ID
+    assert result.decision_output["decision"] == "NO_GO"
+    assert result.decision_output["allowed"] is False
+    assert result.decision_output["firstLayer"]["decision"] == (
+        "不建議用目前腳程資料繼續判斷。"
+    )
+    assert "不要用平均腳程" in result.decision_output["firstLayer"]["limit"]
+    assert "member_pace_profile" in result.sources[0]["missing_fields"]
+    answer_step = result.workflow_steps[-1]
+    assert answer_step.summary["decision_output_source_tool"] == PACE_GUARDIAN_TOOL_ID
+    assert "腳程守門員" in result.answer
+    assert result.boundary.runtime_safety_truth is False
+
+
 def test_full_workflow_prioritizes_pace_guardian_for_delayed_summit() -> None:
     result = run_scout_ai_full_workflow(
         "我們晚了 30 分鐘，還可以繼續攻頂嗎？",

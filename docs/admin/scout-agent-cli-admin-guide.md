@@ -260,6 +260,9 @@ route through both Pace Guardian and contextual permission. When the question
 contains an explicit delay, Pace Guardian becomes the first-layer decision source
 so schedule slip and slowest-member evidence are not hidden behind generic buffer
 authorization.
+Average-pace bias questions such as "可以用平均速度估嗎？" and slowest-member
+questions such as "最慢的人比預估慢，可以繼續原計畫嗎？" also route here; asking
+to use an average pace is treated as not accepting the slowest-member basis.
 
 `scout.ai.equipment_resource.assess.v0` returns a native `decision_output` for
 Sec. 18.1 equipment/resource inputs and Sec. 24.1 MVP readiness checks. The first
