@@ -966,6 +966,43 @@ def test_full_workflow_changes_plan_for_latest_return_limit() -> None:
     assert result.boundary.runtime_safety_truth is False
 
 
+def test_full_workflow_surfaces_pretrip_stop_policy() -> None:
+    result = run_scout_ai_full_workflow(
+        "哪裡是不建議停留點？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=3,
+    )
+
+    assert result.answerability == "partial_evidence_with_missing_context"
+    assert result.selected_tool_count == 1
+    assert result.executed_tool_count == 1
+    assert result.completed_tool_count == 1
+    assert result.failed_tool_count == 0
+    source = result.sources[0]
+    assert source["tool_id"] == ROUTE_READINESS_TOOL_ID
+    assert source["top_result_summary"]["decision"] == "DELAY"
+    package = source["top_result_summary"]["pretrip_decision_package"]
+    required = package["required_outputs"]
+    assert required["suggested_stop_points"][0]["label"] == "雲海保線所"
+    assert required["suggested_stop_points"][0]["policy"] == (
+        "turnaround_or_reassess"
+    )
+    assert "Unplanned photo" in required["not_recommended_stop_points"][0]["label"]
+    assert required["not_recommended_stop_points"][0]["policy"] == (
+        "not_recommended_until_reviewed"
+    )
+    assert result.decision_output["answerSourceToolId"] == ROUTE_READINESS_TOOL_ID
+    assert result.decision_output["decision"] == "DELAY"
+    assert result.decision_output["runtimeSafetyTruth"] is False
+    answer_step = result.workflow_steps[-1]
+    assert answer_step.summary["decision_output_source_tool"] == ROUTE_READINESS_TOOL_ID
+    assert "標準出發前決策包" in result.answer
+    assert "停留限制" in result.answer
+    assert "runtime safety truth" in result.answer
+    assert result.boundary.runtime_safety_truth is False
+
+
 def test_full_workflow_runs_guided_only_route_readiness_question() -> None:
     result = run_scout_ai_full_workflow(
         "beginner transportconfirmed slowestbasisconfirmed "

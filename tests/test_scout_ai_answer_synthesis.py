@@ -972,6 +972,37 @@ def test_answer_synthesis_changes_plan_for_latest_return_limit() -> None:
     assert result.decision_output["runtimeSafetyTruth"] is False
 
 
+def test_answer_synthesis_surfaces_pretrip_stop_policy() -> None:
+    result = collect_and_synthesize_scout_ai_answer(
+        "哪裡是不建議停留點？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=3,
+    )
+
+    assert result.answerability == "partial_evidence_with_missing_context"
+    assert result.completed_source_count == 1
+    source = result.sources[0]
+    assert source.tool_id == ROUTE_READINESS_TOOL_ID
+    assert source.top_result_summary["decision"] == "DELAY"
+    package = source.top_result_summary["pretrip_decision_package"]
+    required = package["required_outputs"]
+    assert required["suggested_stop_points"][0]["label"] == "雲海保線所"
+    assert required["suggested_stop_points"][0]["policy"] == (
+        "turnaround_or_reassess"
+    )
+    assert "Unplanned photo" in required["not_recommended_stop_points"][0]["label"]
+    assert required["not_recommended_stop_points"][0]["policy"] == (
+        "not_recommended_until_reviewed"
+    )
+    assert result.decision_output["answerSourceToolId"] == ROUTE_READINESS_TOOL_ID
+    assert result.decision_output["decision"] == "DELAY"
+    assert result.decision_output["runtimeSafetyTruth"] is False
+    assert "標準出發前決策包" in result.answer
+    assert "停留限制" in result.answer
+    assert "runtime safety truth" in result.answer
+
+
 def test_answer_synthesis_preserves_guided_only_route_readiness_decision() -> None:
     result = collect_and_synthesize_scout_ai_answer(
         "beginner transportconfirmed slowestbasisconfirmed "

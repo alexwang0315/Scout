@@ -166,6 +166,24 @@ def test_planner_routes_latest_return_limit_to_route_readiness() -> None:
     assert item.boundary.runtime_safety_truth is False
 
 
+def test_planner_routes_stop_policy_question_to_route_readiness() -> None:
+    for question in (
+        "哪裡是不建議停留點？",
+        "有哪些建議停留點和不建議停留點？",
+    ):
+        plan = plan_scout_ai_tools(
+            _query(question),
+            project_root=PROJECT_ROOT,
+        )
+
+        item = _single_tool(plan, ROUTE_READINESS_TOOL_ID)
+        assert item.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+        assert item.implementation_status == "ready_current_tool"
+        assert item.request is not None
+        assert item.request["tool_id"] == ROUTE_READINESS_TOOL_ID
+        assert item.boundary.runtime_safety_truth is False
+
+
 def test_planner_routes_missing_offline_map_departure_to_readiness_and_equipment() -> None:
     plan = plan_scout_ai_tools(
         _query("我沒下載離線地圖，可以自主出發嗎？"),
