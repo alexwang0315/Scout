@@ -285,6 +285,30 @@ def test_full_workflow_blocks_split_team_summit_question() -> None:
     assert result.boundary.runtime_safety_truth is False
 
 
+def test_full_workflow_uses_rain_gear_micro_decision() -> None:
+    result = run_scout_ai_full_workflow(
+        "前面下雨了，要不要穿雨衣？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=4,
+    )
+
+    assert result.answerability == "partial_evidence_with_missing_context"
+    assert result.selected_tool_count == 3
+    assert result.executed_tool_count == 3
+    assert result.completed_tool_count == 3
+    assert result.missing_evidence_count == 2
+    contextual = _workflow_source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
+    summary = contextual["top_result_summary"]
+    assert summary["action"] == "wear_rain_gear"
+    assert summary["decision"] == "GO"
+    assert summary["allowed"] is True
+    assert result.decision_output["answerSourceToolId"] == CONTEXTUAL_PERMISSION_TOOL_ID
+    assert result.decision_output["firstLayer"]["decision"] == "可以穿雨具。"
+    assert "就地穿上雨具" in result.answer
+    assert result.boundary.runtime_safety_truth is False
+
+
 def test_full_workflow_runs_route_context_experience_guide_question() -> None:
     result = run_scout_ai_full_workflow(
         "下一個觀察點在哪？哪裡適合拍攝大景？",
@@ -930,6 +954,12 @@ def _write_team_pace_project(tmp_path: Path) -> Path:
         encoding="utf-8",
     )
     return project_root
+
+
+def _workflow_source(result, tool_id: str):
+    matches = [source for source in result.sources if source["tool_id"] == tool_id]
+    assert len(matches) == 1, result.sources
+    return matches[0]
 
 
 def _write_route_weather_project(tmp_path: Path) -> Path:

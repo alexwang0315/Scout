@@ -211,6 +211,21 @@ def test_planner_selects_contextual_permission_for_split_team_summit_question() 
     assert item.boundary.runtime_safety_truth is False
 
 
+def test_planner_selects_contextual_permission_for_rain_gear_question() -> None:
+    plan = plan_scout_ai_tools(
+        _query("前面下雨了，要不要穿雨衣？"),
+        project_root=PROJECT_ROOT,
+    )
+
+    item = _single_tool(plan, CONTEXTUAL_PERMISSION_TOOL_ID)
+    assert item.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+    assert item.implementation_status == "ready_current_tool"
+    assert item.request is not None
+    assert item.request["tool_id"] == CONTEXTUAL_PERMISSION_TOOL_ID
+    assert item.missing_fields == []
+    assert item.boundary.runtime_safety_truth is False
+
+
 def test_planner_selects_route_context_for_experience_guide_question() -> None:
     plan = plan_scout_ai_tools(
         _query("下一個觀察點在哪？哪裡適合拍攝大景？"),
