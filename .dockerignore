@@ -170,6 +170,7 @@ scout-risk-engine/scout_codex_package/tests/__pycache__/**
 !scout_energy_models.py
 !scout_energy_reserve.py
 !scout_energy_reserve_monitor.py
+!scout_route_context_tool.py
 !scout_hardware_readiness_live_probe.py
 !scout_map_perception_tool.py
 !scout_mobile_handoff.py
