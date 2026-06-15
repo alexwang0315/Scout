@@ -1524,6 +1524,63 @@ def test_full_workflow_delays_retreat_window_status_without_current_context() ->
     assert result.boundary.runtime_safety_truth is False
 
 
+def test_full_workflow_delays_cp_schedule_delta_without_current_context() -> None:
+    result = run_scout_ai_full_workflow(
+        "我們現在比計畫晚多少？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=4,
+    )
+
+    assert result.answerability == "partial_evidence_with_missing_context"
+    assert result.selected_tool_count == 1
+    assert result.executed_tool_count == 1
+    assert result.completed_tool_count == 1
+    assert result.contract_gap_count == 0
+    assert result.failed_tool_count == 0
+    assert result.missing_evidence_count == 1
+    route = _workflow_source(result, ROUTE_ARCHITECTURE_TOOL_ID)
+    assert route["missing_fields"] == ["current_cp_id", "current_time"]
+    assert route["top_result_summary"]["decision"] == "DELAY"
+    assert route["top_result_summary"]["route_decision"]["first_layer_decision"] == (
+        "無法確認與計畫 CP 通過時間的差距。"
+    )
+    assert result.decision_output["answerSourceToolId"] == ROUTE_ARCHITECTURE_TOOL_ID
+    assert result.decision_output["decision"] == "DELAY"
+    assert result.decision_output["allowed"] is False
+    assert result.decision_output["firstLayer"]["decision"] == (
+        "無法確認與計畫 CP 通過時間的差距。"
+    )
+    assert "current_cp_id、current_time" in result.answer
+    assert "不能確認與計畫 CP 通過時間差距" in result.answer
+    assert "No registry-backed Scout AI tool" not in result.answer
+    assert result.boundary.runtime_safety_truth is False
+
+
+def test_full_workflow_prioritizes_route_architecture_for_position_schedule_delta() -> (
+    None
+):
+    result = run_scout_ai_full_workflow(
+        "目前位置和計畫 CP 通過時間差多少？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=6,
+    )
+
+    assert result.answerability == "partial_evidence_with_missing_context"
+    source_by_tool = {source["tool_id"]: source for source in result.sources}
+    assert ROUTE_ARCHITECTURE_TOOL_ID in source_by_tool
+    route = source_by_tool[ROUTE_ARCHITECTURE_TOOL_ID]
+    assert route["missing_fields"] == ["current_cp_id", "current_time"]
+    assert result.decision_output["answerSourceToolId"] == ROUTE_ARCHITECTURE_TOOL_ID
+    assert result.decision_output["decision"] == "DELAY"
+    assert result.decision_output["firstLayer"]["decision"] == (
+        "無法確認與計畫 CP 通過時間的差距。"
+    )
+    assert "不能確認與計畫 CP 通過時間差距" in result.answer
+    assert result.boundary.runtime_safety_truth is False
+
+
 def test_full_workflow_detects_natural_turnback_current_context() -> None:
     result = run_scout_ai_full_workflow(
         "現在 2013-10-08T15:10:00+08:00 在雲海保線所，現在是不是折返點？",
