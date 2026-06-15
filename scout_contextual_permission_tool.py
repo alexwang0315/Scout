@@ -655,12 +655,25 @@ def _permission(
         )
 
     if missing_fields and action in _BUDGET_ACTIONS:
+        requested_cost = _requested_duration_cost(requested_duration_minutes)
+        reason = "缺少剩餘安全 buffer，Scout 不能授權會消耗風險預算的行為。"
+        if requested_cost is not None:
+            reason = (
+                f"使用者要求約 {requested_cost} 分鐘；"
+                f"這會消耗約 {requested_cost} 分鐘時間 buffer，"
+                "但缺少剩餘安全 buffer，Scout 不能計算代價或授權。"
+            )
         return _no_go_permission(
             action=action,
             decision=ScoutDecision.NO_GO,
-            reason="缺少剩餘安全 buffer，Scout 不能授權會消耗風險預算的行為。",
+            reason=reason,
             next_action=_safe_next_action(action, next_cp_id),
             confidence=ConfidenceLevel.LOW,
+            cost=(
+                ContextualPermissionCost(time_buffer_change_minutes=-requested_cost)
+                if requested_cost is not None
+                else None
+            ),
             uncertainty_notes=[
                 "remaining_safety_buffer_minutes is required for bounded permission.",
                 "資料不足時 Scout 依標準採保守判斷。",
@@ -831,6 +844,7 @@ def _no_go_permission(
     reason: str,
     next_action: str,
     confidence: ConfidenceLevel,
+    cost: ContextualPermissionCost | None = None,
     uncertainty_notes: list[str] | None = None,
     alternative_actions: list[str] | None = None,
 ) -> ContextualPermission:
@@ -839,6 +853,7 @@ def _no_go_permission(
         decision=decision,
         allowed=False,
         main_reasons=[reason],
+        cost=cost,
         next_action=next_action,
         confidence=confidence,
         uncertainty_notes=uncertainty_notes or [],
@@ -1548,6 +1563,15 @@ def _requested_duration_from_query(query: str) -> float | None:
     return None
 
 
+def _requested_duration_cost(
+    requested_duration_minutes: float | int | str | None,
+) -> int | None:
+    value = _float_or_none(requested_duration_minutes)
+    if value is None or value <= 0:
+        return None
+    return max(1, floor(value))
+
+
 def _minutes_to_next_cp_from_query(query: str) -> float | None:
     text = str(query or "").strip().lower().replace(" ", "")
     patterns = (
@@ -1886,34 +1910,34 @@ def _allowed_reasons(
 
 
 def _allowed_next_action(action: OutdoorAction, next_cp_id: str | None) -> str:
-    destination = next_cp_id or "下一個安全 CP"
+    destination = _destination_phrase(next_cp_id)
     if action in {OutdoorAction.FILM, OutdoorAction.PHOTO}:
-        return f"完成拍攝後直接前往 {destination}，不要追加取景或離開路線走廊。"
+        return f"完成拍攝後直接{destination}，不要追加取景或離開路線走廊。"
     if action == OutdoorAction.TRIPOD:
         return (
-            f"收起腳架後直接前往 {destination}，不要把腳架架在風口、"
+            f"收起腳架後直接{destination}，不要把腳架架在風口、"
             "窄路、曝露邊坡或路線走廊外。"
         )
     if action == OutdoorAction.REST:
-        return f"短休結束後重新集合，確認最慢成員狀態，再前往 {destination}。"
+        return f"短休結束後重新集合，確認最慢成員狀態，再{destination}。"
     if action == OutdoorAction.LUNCH:
-        return f"只做短版午餐，完成後收整裝備並前往 {destination}。"
+        return f"只做短版午餐，完成後收整裝備並{destination}。"
     if action == OutdoorAction.WAIT:
-        return f"若時限內能見度沒有改善，放棄拍攝與等待，直接前往 {destination}。"
+        return f"若時限內能見度沒有改善，放棄拍攝與等待，直接{destination}。"
     if action == OutdoorAction.WAIT_TEAMMATE:
         return (
             f"最多等到時限；若仍未會合或取得明確位置，不要延長等待，"
-            f"保持隊伍完整並前往 {destination} 或啟動隊伍狀態檢查。"
+            f"保持隊伍完整並{destination}或啟動隊伍狀態檢查。"
         )
     if action == OutdoorAction.SUMMIT:
         return "設定硬性折返時間，逾時立即放棄攻頂。"
     if action == OutdoorAction.REROUTE:
         return "只採用已知安全替代線，並在下一 CP 重新評估。"
-    return f"到時限後立即離開，前往 {destination}。"
+    return f"到時限後立即離開，{destination}。"
 
 
 def _safe_next_action(action: OutdoorAction, next_cp_id: str | None) -> str:
-    destination = next_cp_id or "下一個安全 CP"
+    destination = _destination_phrase(next_cp_id)
     if action in {
         OutdoorAction.FILM,
         OutdoorAction.TRIPOD,
@@ -1924,21 +1948,21 @@ def _safe_next_action(action: OutdoorAction, next_cp_id: str | None) -> str:
         OutdoorAction.WAIT,
         OutdoorAction.WAIT_TEAMMATE,
     }:
-        return f"不要在此停留，請先前往 {destination} 再重新評估。"
+        return f"不要在此停留，請先{destination}，再重新評估。"
     if action == OutdoorAction.SUMMIT:
         return "不要繼續攻頂，請執行折返或改短線方案。"
     if action == OutdoorAction.REROUTE:
         return "不要臨時改線，請回到原路線或前往已知安全 CP。"
     if action == OutdoorAction.SPLIT_TEAM:
         return "不要分隊，請保持隊伍完整並前往共同安全點。"
-    return f"請前往 {destination} 並重新評估。"
+    return f"請{destination}並重新評估。"
 
 
 def _alternative_actions(action: OutdoorAction, next_cp_id: str | None) -> list[str]:
-    destination = next_cp_id or "下一個安全 CP"
+    destination = _destination_phrase(next_cp_id)
     if action == OutdoorAction.WAIT_TEAMMATE:
         return [
-            f"前往 {destination} 後再會合",
+            f"{destination} 後再會合",
             "改用既定集合點或隊伍狀態檢查",
             "必要時撤退到共同安全點",
         ]
@@ -1949,11 +1973,11 @@ def _alternative_actions(action: OutdoorAction, next_cp_id: str | None) -> list[
         OutdoorAction.STOP,
         OutdoorAction.WAIT,
     }:
-        return [f"前往 {destination} 後再停留", "取消拍攝或等待", "只在路線內側快速通過"]
+        return [f"{destination} 後再停留", "取消拍攝或等待", "只在路線內側快速通過"]
     if action == OutdoorAction.REST:
-        return [f"前往 {destination} 再休息", "縮短為站立補水", "改成撤退或短線"]
+        return [f"{destination} 再休息", "縮短為站立補水", "改成撤退或短線"]
     if action == OutdoorAction.LUNCH:
-        return [f"前往 {destination} 吃午餐", "改成行進補給", "取消長時間停留"]
+        return [f"{destination} 吃午餐", "改成行進補給", "取消長時間停留"]
     if action == OutdoorAction.SUMMIT:
         return ["立即折返", "改短線或放棄山頂停留", "在安全 CP 重新評估"]
     if action == OutdoorAction.REROUTE:
@@ -1962,7 +1986,13 @@ def _alternative_actions(action: OutdoorAction, next_cp_id: str | None) -> list[
         return ["保持隊伍完整", "由最慢成員決定節奏", "前往共同集合點"]
     if action == OutdoorAction.CROSS_STREAM:
         return ["不要渡溪", "退回安全高點", "等待官方或領隊判斷"]
-    return [f"前往 {destination}", "重新評估", "撤退或改線"]
+    return [destination, "重新評估", "撤退或改線"]
+
+
+def _destination_phrase(next_cp_id: str | None) -> str:
+    if next_cp_id and str(next_cp_id).strip():
+        return f"前往 {str(next_cp_id).strip()}"
+    return "前往下一個安全 CP"
 
 
 def _decision_output(

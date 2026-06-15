@@ -453,6 +453,35 @@ def test_answer_synthesis_routes_generic_leave_by_to_contextual_stop() -> None:
     assert "runtime safety truth" in result.answer
 
 
+def test_answer_synthesis_reports_requested_stop_cost_when_buffer_missing() -> None:
+    result = collect_and_synthesize_scout_ai_answer(
+        "如果多停 10 分鐘，代價是什麼？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=4,
+    )
+
+    assert result.answerability == "partial_evidence_with_missing_context"
+    source = _source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
+    assert source.top_result_summary["action"] == "stop"
+    assert source.top_result_summary["decision"] == "NO_GO"
+    assert source.missing_fields == ["remaining_safety_buffer_minutes"]
+    assert result.decision_output["answerSourceToolId"] == CONTEXTUAL_PERMISSION_TOOL_ID
+    assert result.decision_output["action"] == "stop"
+    assert result.decision_output["decision"] == "NO_GO"
+    assert result.decision_output["allowed"] is False
+    assert result.decision_output["cost"]["timeBufferChangeMinutes"] == -10
+    assert result.decision_output["firstLayer"]["decision"] == "不建議停留。"
+    assert "使用者要求約 10 分鐘" in result.decision_output["firstLayer"]["reason"]
+    assert "不能計算代價或授權" in result.decision_output["firstLayer"]["reason"]
+    assert any(
+        "使用者要求時間約 10 分鐘" in detail
+        for detail in result.decision_output["secondLayer"]["details"]
+    )
+    assert "消耗約 10 分鐘時間 buffer" in result.answer
+    assert result.decision_output["runtimeSafetyTruth"] is False
+
+
 def test_answer_synthesis_prices_photo_stop_budget_phrase() -> None:
     result = collect_and_synthesize_scout_ai_answer(
         "我們現在還有 21 分鐘安全 buffer，可以多停 10 分鐘拍照嗎？",

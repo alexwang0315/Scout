@@ -492,6 +492,39 @@ def test_full_workflow_routes_generic_leave_by_to_contextual_stop() -> None:
     assert result.boundary.runtime_safety_truth is False
 
 
+def test_full_workflow_reports_requested_stop_cost_when_buffer_missing() -> None:
+    result = run_scout_ai_full_workflow(
+        "如果多停 10 分鐘，代價是什麼？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=4,
+    )
+
+    assert result.answerability == "partial_evidence_with_missing_context"
+    assert result.selected_tool_count == 1
+    assert result.failed_tool_count == 0
+    source = result.sources[0]
+    assert source["tool_id"] == CONTEXTUAL_PERMISSION_TOOL_ID
+    assert source["top_result_summary"]["action"] == "stop"
+    assert source["top_result_summary"]["decision"] == "NO_GO"
+    assert source["missing_fields"] == ["remaining_safety_buffer_minutes"]
+    assert result.decision_output["answerSourceToolId"] == CONTEXTUAL_PERMISSION_TOOL_ID
+    assert result.decision_output["action"] == "stop"
+    assert result.decision_output["decision"] == "NO_GO"
+    assert result.decision_output["allowed"] is False
+    assert result.decision_output["cost"]["timeBufferChangeMinutes"] == -10
+    assert result.decision_output["firstLayer"]["decision"] == "不建議停留。"
+    assert "使用者要求約 10 分鐘" in result.decision_output["firstLayer"]["reason"]
+    assert "不能計算代價或授權" in result.decision_output["firstLayer"]["reason"]
+    assert any(
+        "使用者要求時間約 10 分鐘" in detail
+        for detail in result.decision_output["secondLayer"]["details"]
+    )
+    assert "消耗約 10 分鐘時間 buffer" in result.answer
+    assert result.decision_output["runtimeSafetyTruth"] is False
+    assert result.boundary.runtime_safety_truth is False
+
+
 def test_full_workflow_prices_film_stop_budget_phrase_with_next_cp() -> None:
     result = run_scout_ai_full_workflow(
         "前方 CP4 約 42 分鐘，安全 buffer 剩 21 分鐘，可以停 6 分鐘拍影片嗎？",
