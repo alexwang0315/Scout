@@ -21,6 +21,7 @@ from scout_survival_incident_playbook_tool import SURVIVAL_INCIDENT_PLAYBOOK_TOO
 from scout_safety_boundary_tool import SAFETY_BOUNDARY_TOOL_ID
 from scout_map_perception_tool import MAP_PERCEPTION_TOOL_ID
 from scout_ins_dr_trace_tool import INS_DR_TRACE_TOOL_ID
+from scout_live_navigation_state_tool import NMEA_ROUTE_RISK_PROBE_TOOL_ID
 from scout_navigation_terrain_tool import NAVIGATION_TERRAIN_TOOL_ID
 from scout_ai_tool_contracts import tool_registry_output
 from scout_ai_tool_executor import execute_scout_ai_tool
@@ -66,6 +67,7 @@ def test_tool_registry_lists_current_and_future_contracts() -> None:
     assert "scout.ai.ins_dr_trace.analyze.v0" in by_id
     assert "scout.ai.weather_window.assess.v0" in by_id
     assert "scout.ai.live_navigation_state.assess.v0" in by_id
+    assert NMEA_ROUTE_RISK_PROBE_TOOL_ID in by_id
     assert NAVIGATION_TERRAIN_TOOL_ID in by_id
     assert "scout.ai.safety_boundary.explain.v0" in by_id
     assert ROUTE_READINESS_TOOL_ID in by_id
@@ -92,6 +94,10 @@ def test_tool_registry_lists_current_and_future_contracts() -> None:
     assert by_id["scout.ai.live_navigation_state.assess.v0"].implementation_status == (
         "ready_current_tool"
     )
+    assert by_id[NMEA_ROUTE_RISK_PROBE_TOOL_ID].implementation_status == (
+        "ready_current_tool"
+    )
+    assert by_id[NMEA_ROUTE_RISK_PROBE_TOOL_ID].implementation_gap is None
     assert by_id[NAVIGATION_TERRAIN_TOOL_ID].implementation_status == (
         "ready_current_tool"
     )
@@ -148,6 +154,10 @@ def test_tool_registry_lists_current_and_future_contracts() -> None:
     assert "scout.ai.map_readiness.assess" in by_id[
         NAVIGATION_TERRAIN_TOOL_ID
     ].aliases
+    assert "scout.ai.nmea_live_navigation_probe.assess" in by_id[
+        NMEA_ROUTE_RISK_PROBE_TOOL_ID
+    ].aliases
+    assert "lat" in by_id[NMEA_ROUTE_RISK_PROBE_TOOL_ID].optional_fields
     assert "junction_points_known" in by_id[
         NAVIGATION_TERRAIN_TOOL_ID
     ].optional_fields
@@ -165,8 +175,9 @@ def test_tool_registry_lists_current_and_future_contracts() -> None:
     ].aliases
     assert registry.ready_current_tool_count >= 16
     assert registry.executable_tool_count >= registry.ready_current_tool_count
-    assert registry.contract_only_tool_count >= 1
+    assert registry.contract_only_tool_count == 0
     assert registry.implementation_status_counts["ready_current_tool"] >= 15
+    assert registry.implementation_status_counts["boundary_explain_only"] == 1
     assert "ready_current_tool" in registry.tool_ids_by_status
     assert "scout.ai.weather_window.assess.v0" not in registry.missing_evidence_fields_by_tool
     assert registry.boundary.runtime_safety_truth is False
@@ -845,6 +856,56 @@ def test_execute_live_navigation_state_assessor_returns_navigation_decision() ->
         "on_route_corridor"
     )
     assert result.missing_fields == []
+    assert result.boundary.runtime_safety_truth is False
+
+
+def test_execute_legacy_nmea_route_risk_probe_delegates_to_live_navigation_state() -> None:
+    result = execute_scout_ai_tool(
+        {
+            "tool_id": NMEA_ROUTE_RISK_PROBE_TOOL_ID,
+            "project_root": str(PROJECT_ROOT),
+            "query": "我現在是不是離主路太近但站在危險邊緣？",
+            "arguments": {
+                "observed_at": "2026-06-15T08:00:00+08:00",
+                "lat": 24.0509,
+                "lon": 121.216,
+                "elevation_m": 2220,
+                "source": "legacy_nmea_probe_fixture",
+                "hdop": 0.9,
+                "horizontal_accuracy_m": 5,
+                "fix_quality": "3d",
+                "satellite_count": 12,
+                "max_cno_dbhz": 38,
+                "heading_deg": 94,
+                "course_deg": 96,
+                "speed_mps": 0.82,
+                "nearest_route_distance_m": 45,
+                "route_progress_m": 1200,
+                "nearest_cp_id": "cp.004",
+                "ins_dr_source": "nmea_probe_fixture",
+                "confidence": 0.82,
+                "uncertainty_m": 8,
+                "last_anchor_at": "2026-06-15T07:58:00+08:00",
+            },
+        }
+    )
+
+    assert result.status == "completed"
+    assert result.tool_id == NMEA_ROUTE_RISK_PROBE_TOOL_ID
+    assert result.implementation_status == "ready_current_tool"
+    assert result.output_artifact_kind == "scout_ai_live_navigation_state_tool_output"
+    assert result.payload["tool_id"] == NMEA_ROUTE_RISK_PROBE_TOOL_ID
+    assert result.payload["compatibility_delegate_tool_id"] == (
+        "scout.ai.live_navigation_state.assess.v0"
+    )
+    assert result.payload["assessment_kind"] == "read_only_nmea_route_risk_probe_compat"
+    assert result.payload["answerability"] == "snapshot_evidence_available"
+    assert result.payload["decision"] == "CONDITIONAL_GO"
+    assert result.payload["navigation_decision"]["route_fit_status"] == (
+        "near_corridor_edge"
+    )
+    assert result.payload["navigation_decision"]["candidate_only"] is True
+    assert result.payload["boundary"]["phase1_l0_l4_state_mutated"] is False
     assert result.boundary.runtime_safety_truth is False
 
 
@@ -1686,7 +1747,8 @@ def test_agent_manifest_runs_tool_registry_and_tool_run(tmp_path: Path) -> None:
     assert registry_output["artifact_kind"] == "scout_ai_tool_registry"
     assert registry_output["tool_count"] >= 10
     assert registry_output["ready_current_tool_count"] >= 8
-    assert registry_output["contract_only_tool_count"] >= 1
+    assert registry_output["contract_only_tool_count"] == 0
+    assert registry_output["implementation_status_counts"]["boundary_explain_only"] == 1
     assert "scout.ai.weather_window.assess.v0" not in registry_output[
         "missing_evidence_fields_by_tool"
     ]
