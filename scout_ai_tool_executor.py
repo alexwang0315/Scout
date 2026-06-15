@@ -19,6 +19,7 @@ from scout_energy_vitals_tool import ENERGY_VITALS_TOOL_ID
 from scout_weather_window_tool import WEATHER_WINDOW_TOOL_ID
 from scout_route_readiness_tool import ROUTE_READINESS_TOOL_ID
 from scout_contextual_permission_tool import CONTEXTUAL_PERMISSION_TOOL_ID
+from scout_map_perception_tool import MAP_PERCEPTION_TOOL_ID
 from scout_route_context_tool import ROUTE_CONTEXT_TOOL_ID
 from scout_pace_guardian_tool import PACE_GUARDIAN_TOOL_ID
 from scout_equipment_resource_tool import EQUIPMENT_RESOURCE_TOOL_ID
@@ -724,6 +725,7 @@ def _completed_missing_fields(tool_id: str, payload: dict[str, Any]) -> list[str
         SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID,
         TERRAIN_SCORE_TOOL_ID,
         SAFETY_BOUNDARY_TOOL_ID,
+        MAP_PERCEPTION_TOOL_ID,
     }:
         return []
     value = payload.get("missing_fields")

@@ -26,6 +26,7 @@ from scout_survival_incident_playbook_tool import SURVIVAL_INCIDENT_PLAYBOOK_TOO
 from scout_risk_score_tool import RISK_SCORE_TOOL_ID
 from scout_terrain_score_tool import TERRAIN_SCORE_TOOL_ID
 from scout_safety_boundary_tool import SAFETY_BOUNDARY_TOOL_ID
+from scout_map_perception_tool import MAP_PERCEPTION_TOOL_ID
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -124,6 +125,34 @@ def test_evidence_collection_executes_weather_tool_without_model_synthesis() -> 
     assert "route_weather_package" in weather.missing_fields
     assert weather.implementation_gap is None
     assert weather.boundary.runtime_safety_truth is False
+
+
+def test_evidence_collection_keeps_map_perception_decision_output() -> None:
+    result = collect_scout_ai_evidence(
+        "CP001 附近有沒有標註?",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=3,
+    )
+
+    assert result.selected_tool_count == 1
+    assert result.executed_tool_count == 1
+    assert result.completed_tool_count == 1
+    map_perception = _record(result, MAP_PERCEPTION_TOOL_ID)
+    payload = map_perception.result["payload"]
+    assert payload["answerability"] == "map_perception_evidence_available"
+    assert payload["decision"] == "CONDITIONAL_GO"
+    assert payload["decision_output"]["decisionObjectSchema"] == "ContextualPermission"
+    assert payload["decision_output"]["decision"] == "CONDITIONAL_GO"
+    assert payload["decision_output"]["firstLayer"]["decision"] == (
+        "可作為候選地圖參考。"
+    )
+    assert payload["map_perception"]["role"] == (
+        "Navigation & Terrain Intelligence / Map Perception"
+    )
+    assert payload["map_perception"]["top_material"]["evidence_type"] == "ocr_label"
+    assert map_perception.missing_fields == []
+    assert map_perception.boundary.runtime_safety_truth is False
 
 
 def test_evidence_collection_keeps_energy_vitals_decision_output() -> None:

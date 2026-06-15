@@ -270,6 +270,7 @@ def _compact_payload(
         "risk_decision",
         "terrain_decision",
         "safety_boundary",
+        "map_perception",
         "risk_budget",
         "risk_budget_source",
         "route_context",

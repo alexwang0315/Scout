@@ -28,6 +28,7 @@ from scout_survival_incident_playbook_tool import SURVIVAL_INCIDENT_PLAYBOOK_TOO
 from scout_risk_score_tool import RISK_SCORE_TOOL_ID
 from scout_terrain_score_tool import TERRAIN_SCORE_TOOL_ID
 from scout_safety_boundary_tool import SAFETY_BOUNDARY_TOOL_ID
+from scout_map_perception_tool import MAP_PERCEPTION_TOOL_ID
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -177,6 +178,35 @@ def test_answer_synthesis_uses_weather_to_decision_field_answer(tmp_path: Path) 
     assert "天氣決策" in result.answer
     assert "CHANGE_PLAN" in result.answer
     assert "runtime safety truth" in result.answer
+
+
+def test_answer_synthesis_uses_map_perception_decision_output() -> None:
+    result = collect_and_synthesize_scout_ai_answer(
+        "CP001 附近有沒有標註?",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=3,
+    )
+
+    assert result.answerability == "evidence_available"
+    assert result.completed_source_count == 1
+    assert result.missing_evidence_count == 0
+    source = _source(result, MAP_PERCEPTION_TOOL_ID)
+    assert source.top_result_summary["decision"] == "CONDITIONAL_GO"
+    assert source.top_result_summary["decision_output"]["decisionObjectSchema"] == (
+        "ContextualPermission"
+    )
+    assert source.top_result_summary["map_perception"]["role"] == (
+        "Navigation & Terrain Intelligence / Map Perception"
+    )
+    assert result.decision_output["answerSourceToolId"] == MAP_PERCEPTION_TOOL_ID
+    assert result.decision_output["decision"] == "CONDITIONAL_GO"
+    assert result.decision_output["allowed"] is True
+    assert result.decision_output["firstLayer"]["decision"] == (
+        "可作為候選地圖參考。"
+    )
+    assert "地圖判讀決策：CONDITIONAL_GO" in result.answer
+    assert "不是 runtime safety truth" in result.answer
 
 
 def test_answer_synthesis_uses_contextual_permission_field_answer_without_guessing() -> None:
