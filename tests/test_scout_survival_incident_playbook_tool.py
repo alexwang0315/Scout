@@ -23,6 +23,13 @@ def test_survival_playbook_explains_lost_position_without_sending_sos() -> None:
     assert result["status"] == "completed"
     assert result["answerability"] == "survival_playbook_missing_personalized_context"
     assert result["decision"] == "NO_GO"
+    assert result["decision_output"]["decisionObjectSchema"] == "ContextualPermission"
+    assert result["decision_output"]["decision"] == "NO_GO"
+    assert result["decision_output"]["firstLayer"]["decision"] == (
+        "不建議繼續移動或下切找路。"
+    )
+    assert "不得下切" in result["decision_output"]["firstLayer"]["limit"]
+    assert result["decision_output"]["runtimeSafetyTruth"] is False
     assert result["incident_triage"]["scenario"] == "lost_or_position_uncertain"
     assert "current_location_status" in result["missing_fields"]
     assert "team_status" in result["missing_fields"]
@@ -54,6 +61,11 @@ def test_survival_playbook_personalizes_injury_context_without_medical_diagnosis
         "survival_playbook_personalized_context_available"
     )
     assert result["decision"] == "ESCALATE"
+    assert result["decision_output"]["decision"] == "ESCALATE"
+    assert result["decision_output"]["firstLayer"]["decision"] == (
+        "停止推進並交由人工救援/領隊判斷。"
+    )
+    assert "不得自動發送 SOS" in result["decision_output"]["firstLayer"]["limit"]
     assert result["missing_fields"] == []
     assert result["incident_triage"]["scenario"] == "injury_or_medical_uncertainty"
     assert result["incident_triage"]["escalation_required"] is True

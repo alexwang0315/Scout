@@ -318,8 +318,16 @@ def test_answer_synthesis_uses_equipment_resource_field_answer_without_guessing(
     assert result.missing_evidence_count == 1
     assert result.sources[0].tool_id == EQUIPMENT_RESOURCE_TOOL_ID
     assert result.sources[0].top_result_summary["decision"] == "DELAY"
+    assert result.sources[0].top_result_summary["decision_output"][
+        "decisionObjectSchema"
+    ] == "ContextualPermission"
     assert result.sources[0].top_result_summary["equipment_resource"]["role"] == (
         "Equipment / Resource Intelligence"
+    )
+    assert result.decision_output["answerSourceToolId"] == EQUIPMENT_RESOURCE_TOOL_ID
+    assert result.decision_output["decision"] == "DELAY"
+    assert result.decision_output["firstLayer"]["decision"] == (
+        "建議延後裝備資源判斷。"
     )
     assert "water_liters" in result.sources[0].missing_fields
     assert "裝備資源判斷" in result.answer
@@ -409,6 +417,9 @@ def test_answer_synthesis_uses_survival_playbook_field_answer_without_guessing()
     assert result.missing_evidence_count >= 1
     source = _source(result, SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID)
     assert source.top_result_summary["decision"] == "NO_GO"
+    assert source.top_result_summary["decision_output"]["decisionObjectSchema"] == (
+        "ContextualPermission"
+    )
     assert source.top_result_summary["survival_incident_playbook"]["role"] == (
         "Risk Sentinel / Survival Incident Playbook"
     )
@@ -416,6 +427,13 @@ def test_answer_synthesis_uses_survival_playbook_field_answer_without_guessing()
         "lost_or_position_uncertain"
     )
     assert "current_location_status" in source.missing_fields
+    assert result.decision_output["answerSourceToolId"] == (
+        SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID
+    )
+    assert result.decision_output["decision"] == "NO_GO"
+    assert result.decision_output["firstLayer"]["decision"] == (
+        "不建議繼續移動或下切找路。"
+    )
     assert "求生事件 playbook" in result.answer
     assert "發送 SOS" in result.answer
     assert "runtime safety truth" in result.answer
@@ -434,8 +452,16 @@ def test_answer_synthesis_uses_team_status_field_answer_without_guessing() -> No
     assert result.missing_evidence_count == 1
     assert result.sources[0].tool_id == TEAM_STATUS_TOOL_ID
     assert result.sources[0].top_result_summary["decision"] == "DELAY"
+    assert result.sources[0].top_result_summary["decision_output"][
+        "decisionObjectSchema"
+    ] == "ContextualPermission"
     assert result.sources[0].top_result_summary["team_status_guardian"]["role"] == (
         "Team Status / Remote Contact Governance"
+    )
+    assert result.decision_output["answerSourceToolId"] == TEAM_STATUS_TOOL_ID
+    assert result.decision_output["decision"] == "DELAY"
+    assert result.decision_output["firstLayer"]["decision"] == (
+        "建議延後隊伍狀態判斷。"
     )
     assert "member_positions_or_last_heard" in result.sources[0].missing_fields
     assert "隊伍守門員" in result.answer

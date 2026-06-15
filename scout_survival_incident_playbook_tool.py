@@ -121,6 +121,14 @@ def explain_scout_survival_incident_playbook(
         do_not_actions=do_not_actions,
     )
     boundary = _closed_boundary()
+    decision_output = _decision_output(
+        triage=triage,
+        field_answer=field_answer,
+        steps=steps,
+        do_not_actions=do_not_actions,
+        evidence_pack=evidence_pack,
+        share_policy=share_policy,
+    )
 
     return {
         "tool_id": SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID,
@@ -131,10 +139,12 @@ def explain_scout_survival_incident_playbook(
         "answerability": answerability,
         "source_status": "deterministic_playbook_explainer",
         "decision": triage.decision,
+        "decision_output": decision_output,
         "field_answer": field_answer,
         "survival_incident_playbook": {
             "role": triage.role,
             "scenario": scenario,
+            "decision_output": decision_output,
             "steps": steps,
             "do_not_actions": do_not_actions,
             "evidence_to_preserve": evidence_pack,
@@ -156,6 +166,7 @@ def explain_scout_survival_incident_playbook(
             {
                 "label": f"survival incident playbook: {scenario}",
                 "decision": triage.decision,
+                "decision_output": decision_output,
                 "field_answer": field_answer,
                 "answerability": answerability,
                 "main_risks": list(triage.main_risks),
@@ -323,6 +334,134 @@ def _field_answer(
         f"禁止事項：{do_not_actions[0]} "
         "這是只讀候選指引，不是 runtime safety truth，也不會發送 SOS。"
     )
+
+
+def _decision_output(
+    *,
+    triage: SurvivalIncidentTriage,
+    field_answer: str,
+    steps: list[str],
+    do_not_actions: list[str],
+    evidence_pack: list[dict[str, Any]],
+    share_policy: dict[str, Any],
+) -> dict[str, Any]:
+    decision = triage.decision
+    reasons = list(triage.main_risks) or ["事件資訊不足，必須採保守 playbook。"]
+    uncertainty_notes = [f"Missing field: {field}" for field in triage.missing_fields]
+    required_conditions = [
+        f"Provide {field}." for field in triage.missing_fields
+    ] or [
+        "Keep the team stopped or gathered while a human operator reviews the situation."
+    ]
+    first_layer = {
+        "decision": _decision_phrase(decision=decision, scenario=triage.scenario),
+        "limit": _decision_limit_phrase(decision=decision),
+        "reason": " / ".join(reasons[:2]),
+        "nextStep": steps[0] if steps else "停止前進並重新評估。",
+    }
+    second_layer = {
+        "details": _decision_details(
+            field_answer=field_answer,
+            steps=steps,
+            evidence_pack=evidence_pack,
+            share_policy=share_policy,
+        ),
+        "uncertaintyNotes": uncertainty_notes,
+        "residualRisk": [
+            "This playbook is candidate-only and not runtime safety truth.",
+            "Medical diagnosis, rescue dispatch, outbound send, SOS, /safety, and hardware control were not triggered.",
+        ],
+        "requiredConditions": required_conditions,
+        "alternativeActions": do_not_actions,
+    }
+    return {
+        "role": "Micro-Decision Agent",
+        "format": "SCOUT_OUTDOOR_AI_AGENT_STANDARD.section16",
+        "decisionObjectSchema": "ContextualPermission",
+        "text": "\n".join(
+            (
+                f"[決策] {first_layer['decision']}",
+                f"[限制] {first_layer['limit']}",
+                f"[原因] {first_layer['reason']}",
+                f"[下一步] {first_layer['nextStep']}",
+            )
+        ),
+        "firstLayer": first_layer,
+        "secondLayer": second_layer,
+        "action": "survival_incident_playbook",
+        "decision": decision,
+        "allowed": False,
+        "locationConstraint": first_layer["limit"],
+        "mainReasons": reasons[:3],
+        "cost": {
+            "scenario": triage.scenario,
+            "escalationRequired": triage.escalation_required,
+            "personalizedContextAvailable": triage.personalized_context_available,
+            "outboundSendAllowed": False,
+            "canPrepareManualSharePack": share_policy.get("can_prepare_manual_share_pack"),
+        },
+        "nextAction": first_layer["nextStep"],
+        "confidence": "low" if uncertainty_notes else "medium",
+        "uncertaintyNotes": uncertainty_notes,
+        "residualRisk": second_layer["residualRisk"],
+        "requiredConditions": required_conditions,
+        "alternativeActions": do_not_actions,
+        "standardAlignment": [
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 2 safety philosophy",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 15.2 Risk Sentinel",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 16 required decision output format",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 17 ContextualPermission schema",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 19 on-route workflow",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 28 guardrail principle",
+        ],
+        "runtimeSafetyTruth": False,
+    }
+
+
+def _decision_phrase(*, decision: str, scenario: str) -> str:
+    if decision == "ESCALATE":
+        return "停止推進並交由人工救援/領隊判斷。"
+    if scenario == "lost_or_position_uncertain":
+        return "不建議繼續移動或下切找路。"
+    if decision == "NO_GO":
+        return "不建議採取高風險行動。"
+    return "暫緩判斷。"
+
+
+def _decision_limit_phrase(*, decision: str) -> str:
+    if decision == "ESCALATE":
+        return "不得自動發送 SOS、通知留守人或報案；只能準備人工可轉報資料。"
+    return "不得下切、追捷徑、分散找路、自動 SOS、outbound send、/safety 或硬體警報。"
+
+
+def _decision_details(
+    *,
+    field_answer: str,
+    steps: list[str],
+    evidence_pack: list[dict[str, Any]],
+    share_policy: dict[str, Any],
+) -> list[str]:
+    provided_fields = [
+        str(item.get("field"))
+        for item in evidence_pack
+        if isinstance(item, dict) and item.get("provided")
+    ]
+    missing_fields = [
+        str(item.get("field"))
+        for item in evidence_pack
+        if isinstance(item, dict) and not item.get("provided")
+    ]
+    details = [field_answer]
+    details.extend(f"step_{index + 1}={step}" for index, step in enumerate(steps[:3]))
+    details.append("provided_evidence_fields=" + ",".join(provided_fields))
+    details.append("missing_evidence_fields=" + ",".join(missing_fields))
+    details.append(
+        "share_policy="
+        f"can_send_or_notify={share_policy.get('can_send_or_notify')}, "
+        "requires_explicit_authorization_before_outbound="
+        f"{share_policy.get('requires_explicit_authorization_before_outbound')}"
+    )
+    return details
 
 
 def _missing_fields(*, scenario: str, provided: dict[str, Any]) -> list[str]:

@@ -331,8 +331,16 @@ def test_full_workflow_runs_equipment_resource_question() -> None:
     assert result.missing_evidence_count == 1
     assert result.sources[0]["tool_id"] == EQUIPMENT_RESOURCE_TOOL_ID
     assert result.sources[0]["top_result_summary"]["decision"] == "DELAY"
+    assert result.sources[0]["top_result_summary"]["decision_output"][
+        "decisionObjectSchema"
+    ] == "ContextualPermission"
     assert result.sources[0]["top_result_summary"]["equipment_resource"]["role"] == (
         "Equipment / Resource Intelligence"
+    )
+    assert result.decision_output["answerSourceToolId"] == EQUIPMENT_RESOURCE_TOOL_ID
+    assert result.decision_output["decision"] == "DELAY"
+    assert result.decision_output["firstLayer"]["decision"] == (
+        "建議延後裝備資源判斷。"
     )
     assert "裝備資源判斷" in result.answer
     assert result.boundary.runtime_safety_truth is False
@@ -439,10 +447,18 @@ def test_full_workflow_runs_survival_playbook_question() -> None:
     assert len(source) == 1
     summary = source[0]["top_result_summary"]
     assert summary["decision"] == "NO_GO"
+    assert summary["decision_output"]["decisionObjectSchema"] == "ContextualPermission"
     assert summary["incident_triage"]["scenario"] == "lost_or_position_uncertain"
     assert summary["survival_incident_playbook"]["share_policy"][
         "can_send_or_notify"
     ] is False
+    assert result.decision_output["answerSourceToolId"] == (
+        SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID
+    )
+    assert result.decision_output["decision"] == "NO_GO"
+    assert result.decision_output["firstLayer"]["decision"] == (
+        "不建議繼續移動或下切找路。"
+    )
     assert "求生事件 playbook" in result.answer
     assert "發送 SOS" in result.answer
     assert result.boundary.runtime_safety_truth is False
@@ -463,8 +479,16 @@ def test_full_workflow_runs_team_status_question() -> None:
     assert result.missing_evidence_count == 1
     assert result.sources[0]["tool_id"] == TEAM_STATUS_TOOL_ID
     assert result.sources[0]["top_result_summary"]["decision"] == "DELAY"
+    assert result.sources[0]["top_result_summary"]["decision_output"][
+        "decisionObjectSchema"
+    ] == "ContextualPermission"
     assert result.sources[0]["top_result_summary"]["team_status_guardian"]["role"] == (
         "Team Status / Remote Contact Governance"
+    )
+    assert result.decision_output["answerSourceToolId"] == TEAM_STATUS_TOOL_ID
+    assert result.decision_output["decision"] == "DELAY"
+    assert result.decision_output["firstLayer"]["decision"] == (
+        "建議延後隊伍狀態判斷。"
     )
     assert "隊伍守門員" in result.answer
     assert result.boundary.runtime_safety_truth is False
