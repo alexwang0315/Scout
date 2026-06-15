@@ -755,6 +755,33 @@ def test_planner_selects_pace_guardian_for_slowest_member_original_plan_question
     assert item.boundary.runtime_safety_truth is False
 
 
+def test_planner_selects_pace_guardian_for_too_fast_question() -> None:
+    plan = plan_scout_ai_tools(
+        _query("我們是不是走太快？要不要慢一點？"),
+        project_root=PROJECT_ROOT,
+    )
+
+    item = _single_tool(plan, PACE_GUARDIAN_TOOL_ID)
+    assert item.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+    assert item.implementation_status == "ready_current_tool"
+    assert item.request is not None
+    assert item.request["tool_id"] == PACE_GUARDIAN_TOOL_ID
+    assert item.boundary.runtime_safety_truth is False
+
+
+def test_planner_passes_ahead_of_plan_delta_to_pace_guardian() -> None:
+    plan = plan_scout_ai_tools(
+        _query("目前比計畫快 20 分鐘，可以繼續照原節奏嗎？"),
+        project_root=PROJECT_ROOT,
+    )
+
+    item = _single_tool(plan, PACE_GUARDIAN_TOOL_ID)
+    assert item.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+    assert item.request is not None
+    assert item.request["arguments"] == {"current_delay_minutes": -20.0}
+    assert item.boundary.runtime_safety_truth is False
+
+
 def test_planner_selects_pace_and_contextual_for_delayed_summit_question() -> None:
     plan = plan_scout_ai_tools(
         _query("我們晚了 30 分鐘，還可以繼續攻頂嗎？"),

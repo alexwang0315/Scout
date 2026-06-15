@@ -309,7 +309,15 @@ def _pace_fit(
             )
 
     if current_delay_minutes is not None:
-        if current_delay_minutes >= DELAY_CHANGE_PLAN_MINUTES:
+        if current_delay_minutes <= -DELAY_WARNING_MINUTES:
+            ahead_minutes = abs(current_delay_minutes)
+            main_reasons.append(
+                f"目前比計畫快約 {ahead_minutes:.0f} 分鐘；快於計畫不是免費 buffer，需確認最慢者恢復節奏。"
+            )
+            required_conditions.append(
+                "降回最慢者可恢復節奏，下一個 CP 前重新檢查疲勞與休息需求。"
+            )
+        elif current_delay_minutes >= DELAY_CHANGE_PLAN_MINUTES:
             main_reasons.append(f"目前已落後約 {current_delay_minutes:.0f} 分鐘。")
         elif current_delay_minutes >= DELAY_WARNING_MINUTES:
             warnings.append(f"目前落後約 {current_delay_minutes:.0f} 分鐘。")
@@ -462,6 +470,9 @@ def _decision_output(
         "mainReasons": reasons[:3],
         "cost": {
             "scheduleDelayMinutes": schedule_pressure.get("current_delay_minutes"),
+            "scheduleAheadMinutes": _schedule_ahead_minutes(
+                schedule_pressure.get("current_delay_minutes")
+            ),
             "minutesToNextCp": schedule_pressure.get("minutes_to_next_cp"),
             "teamPaceImpact": "Slowest-member basis; team average pace was not used.",
             "paceCoefficientImpact": _pace_coefficient_impact_text(pace_fit),
@@ -598,6 +609,13 @@ def _pace_coefficient_impact_text(pace_fit: dict[str, Any]) -> str:
     if isinstance(coefficients, list) and coefficients:
         return "Scout Pace Coefficient considered terrain, fatigue, load, weather, and credibility drag."
     return "Scout Pace Coefficient unavailable; decision falls back to member pace and reserve evidence."
+
+
+def _schedule_ahead_minutes(current_delay_minutes: Any) -> float | None:
+    delay = _float_or_none(current_delay_minutes)
+    if delay is None or delay >= 0:
+        return None
+    return abs(delay)
 
 
 def _member_profiles(
@@ -948,6 +966,8 @@ def _fatigue_reasons(
 
 
 def _change_plan_next_action(*, query_reasons: list[str]) -> str:
+    if any("比計畫快" in reason for reason in query_reasons):
+        return "立刻降回最慢者可恢復節奏；下一個 CP 前確認疲勞、補水與休息需求。"
     if any("下一個 CP" in reason for reason in query_reasons):
         return "不要推進到原定下一個 CP；前移休息/午餐點，評估短版或撤退路線。"
     if any("剩餘儲備" in reason for reason in query_reasons):
@@ -1154,6 +1174,17 @@ def _first_present(*values: Any) -> Any:
 
 def _delay_minutes_from_query(query: str) -> float | None:
     text = str(query or "")
+    ahead_patterns = (
+        r"(?:比(?:原)?計畫快|比預定快|提前|提早|ahead(?:\s+by)?|early(?:\s+by)?)\s*([0-9]+(?:\.[0-9]+)?)\s*(?:分鐘|分|mins?|minutes?)",
+        r"([0-9]+(?:\.[0-9]+)?)\s*(?:分鐘|分|mins?|minutes?)\s*(?:ahead|early)",
+    )
+    for pattern in ahead_patterns:
+        match = re.search(pattern, text, flags=re.IGNORECASE)
+        if not match:
+            continue
+        value = _float_or_none(match.group(1))
+        if value is not None:
+            return -abs(value)
     patterns = (
         r"(?:晚了|落後|delay(?:ed)?(?:\s+by)?)\s*([0-9]+(?:\.[0-9]+)?)\s*(?:分鐘|分|mins?|minutes?)",
         r"([0-9]+(?:\.[0-9]+)?)\s*(?:分鐘|分|mins?|minutes?)\s*(?:delay|late|behind)",
