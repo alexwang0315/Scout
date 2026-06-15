@@ -71,5 +71,25 @@ def test_route_architecture_changes_plan_after_turn_back_eta() -> None:
     assert result["boundary"]["runtime_safety_truth"] is False
 
 
+def test_route_architecture_changes_plan_after_missed_checkpoint_deadline() -> None:
+    result = assess_scout_route_architecture(
+        PROJECT_ROOT,
+        query="11:30 未抵達 CP4 是否要折返？",
+        current_time="11:30",
+        target_cp_id="CP4",
+        limit=2,
+    )
+
+    assert result["answerability"] == "route_architecture_available"
+    assert result["decision"] == "CHANGE_PLAN"
+    assert result["decision_output"]["firstLayer"]["decision"] == (
+        "不建議錯過 checkpoint deadline 後繼續原計畫。"
+    )
+    assert result["route_decision"]["target_checkpoint"] == "CP4"
+    assert result["route_decision"]["checkpoint_deadline"] == "11:30"
+    assert "target checkpoint CP4" in result["route_decision"]["main_reasons"][0]
+    assert result["boundary"]["runtime_safety_truth"] is False
+
+
 def test_route_architecture_output_kind_constant() -> None:
     assert ROUTE_ARCHITECTURE_OUTPUT_KIND == "scout_ai_route_architecture_tool_output"

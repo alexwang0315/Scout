@@ -461,6 +461,9 @@ def _route_architecture_request_overrides(question: str) -> dict[str, Any]:
     current_cp = _extract_current_cp_label(question)
     if current_cp:
         overrides["current_cp_id"] = current_cp
+    target_cp = _extract_target_cp_label(question)
+    if target_cp:
+        overrides["target_cp_id"] = target_cp
     return overrides
 
 
@@ -763,7 +766,7 @@ def _extract_current_cp_label(question: str) -> str | None:
     text = str(question or "")
     patterns = (
         r"(?<!現)(?:在|位於)\s*([^，,。?？]+)",
-        r"(?:現在|目前)?\s*CP\s*([^，,。?？]+)",
+        r"(?:現在|目前)\s*CP\s*([^，,。?？]+)",
     )
     for pattern in patterns:
         match = re.search(pattern, text, flags=re.IGNORECASE)
@@ -783,6 +786,23 @@ def _extract_current_cp_label(question: str) -> str | None:
         if candidate.startswith(("哪", "是不是")):
             continue
         return candidate
+    return None
+
+
+def _extract_target_cp_label(question: str) -> str | None:
+    text = str(question or "")
+    patterns = (
+        r"(?:未抵達|未到|沒抵達|沒有抵達|沒到|未達|未通過|沒通過)\s*(CP\s*[A-Za-z0-9_-]+|checkpoint\s*[A-Za-z0-9_-]+|[^，,。?？\\s]+)",
+        r"(?:抵達|到達|通過)\s*(CP\s*[A-Za-z0-9_-]+|checkpoint\s*[A-Za-z0-9_-]+)",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, text, flags=re.IGNORECASE)
+        if not match:
+            continue
+        candidate = match.group(1).strip()
+        candidate = re.sub(r"\s+", "", candidate)
+        if candidate:
+            return candidate.upper() if candidate.lower().startswith(("cp", "checkpoint")) else candidate
     return None
 
 
@@ -1368,6 +1388,14 @@ def _looks_like_route_architecture_question(text: str) -> bool:
             "折返點",
             "最晚折返",
             "現在是不是折返點",
+            "未抵達",
+            "未到",
+            "沒抵達",
+            "沒到",
+            "是否要折返",
+            "要不要折返",
+            "即折返",
+            "逾時折返",
             "難點位置",
             "難點在哪",
             "難點位於",

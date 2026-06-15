@@ -1254,6 +1254,27 @@ def test_planner_passes_local_turnback_time_to_route_architecture() -> None:
     }
 
 
+def test_planner_routes_missed_checkpoint_deadline_to_route_architecture() -> None:
+    plan = plan_scout_ai_tools(
+        _query("11:30 未抵達 CP4 是否要折返？"),
+        project_root=PROJECT_ROOT,
+    )
+
+    tool_ids = _tool_ids(plan)
+    assert ROUTE_ARCHITECTURE_TOOL_ID in tool_ids
+    assert CONTEXTUAL_PERMISSION_TOOL_ID not in tool_ids
+
+    item = _single_tool(plan, ROUTE_ARCHITECTURE_TOOL_ID)
+    assert item.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+    assert item.request is not None
+    assert item.request["tool_id"] == ROUTE_ARCHITECTURE_TOOL_ID
+    assert item.request["arguments"] == {
+        "current_time": "11:30",
+        "target_cp_id": "CP4",
+    }
+    assert item.boundary.runtime_safety_truth is False
+
+
 def test_planner_selects_energy_vitals_contract_only_for_health_question() -> None:
     plan = plan_scout_ai_tools(
         _query("我現在心率偏高又很累，需要休息嗎?"),
