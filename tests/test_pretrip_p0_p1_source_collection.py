@@ -5,6 +5,7 @@ import shutil
 from pathlib import Path
 
 from pretrip_p0_p1_source_collection import (
+    DEFAULT_P0_P1_SOURCE_CATALOG,
     DEFAULT_WEB_CASE_EVIDENCE_REF,
     DEFAULT_WEB_CASE_QUERY_PLAN_REF,
     collect_pretrip_p0_p1_sources,
@@ -17,6 +18,51 @@ from pretrip_route_context_collection import (
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 FIXTURE_PROJECT = REPO_ROOT / "tests" / "fixtures" / "pretrip" / "projects" / "chilai_nanhua_day1"
+
+
+def test_p0_p1_source_collection_defaults_to_generic_catalog_without_route_urls(
+    tmp_path: Path,
+) -> None:
+    project_root = tmp_path / "chilai_nanhua_day1"
+    shutil.copytree(FIXTURE_PROJECT, project_root)
+
+    result = collect_pretrip_p0_p1_sources(
+        project_root,
+        dry_run=True,
+        generated_at="2026-06-15T00:00:00Z",
+    )
+
+    query_plan = result["planned_artifacts"]["query_plan"]
+    evidence = result["planned_artifacts"]["evidence"]
+    catalog = query_plan["source_catalog"]
+    assert result["source_count"] == 0
+    assert result["evidence_item_count"] == 0
+    assert query_plan["status"] == "planned_requires_source_discovery"
+    assert evidence["status"] == "planned_requires_source_discovery"
+    assert query_plan["sources"] == []
+    assert query_plan["source_policy"]["default_route_specific_sources"] is False
+    assert query_plan["source_policy"]["catalog_role"] == "search_scope_only"
+    assert query_plan["source_catalog_count"] == len(DEFAULT_P0_P1_SOURCE_CATALOG) == 20
+    assert {source["source_tier"] for source in catalog} == {"P0", "P1"}
+    assert {source["source_family"] for source in catalog} >= {
+        "official_baseline",
+        "official_status",
+        "terrain_baseline",
+        "weather_baseline",
+        "hazard_baseline",
+        "incident_baseline",
+        "natural_baseline",
+        "historical_map_baseline",
+        "cultural_expansion",
+        "historical_expansion",
+        "cultural_spatial_expansion",
+        "geology_expansion",
+        "map_expansion",
+        "community_route_seed",
+        "community_article_evidence",
+        "community_route_evidence",
+    }
+    assert all("url" not in source for source in catalog)
 
 
 def test_p0_p1_source_collection_writes_web_case_evidence_without_live_network(
@@ -177,4 +223,6 @@ def test_p0_p1_source_collection_can_read_allowlisted_links_from_briefing_html(
     assert result["writes_performed"] is False
     assert result["source_count"] == 2
     assert query_plan["sources"][0]["source_tier"] == "P0"
+    assert query_plan["sources"][0]["source_family"] == "official_baseline"
     assert query_plan["sources"][1]["source_tier"] == "P1"
+    assert query_plan["sources"][1]["source_family"] == "community_article_evidence"
