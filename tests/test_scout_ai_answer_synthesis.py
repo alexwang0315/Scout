@@ -766,7 +766,10 @@ def test_answer_synthesis_blocks_shortcut_reroute_micro_decision() -> None:
     assert result.decision_output["decision"] == "NO_GO"
     assert result.decision_output["allowed"] is False
     assert result.decision_output["firstLayer"]["decision"] == "不建議改線。"
+    assert "臨時切岔路或改線" in result.decision_output["firstLayer"]["reason"]
+    assert "已審核替代路線" in result.decision_output["firstLayer"]["reason"]
     assert "不要臨時改線" in result.answer
+    assert "只走已審核替代路線" in result.answer
     assert "Missing evidence" in result.answer
     assert "runtime safety truth" in result.answer
 
