@@ -152,6 +152,7 @@ def assess_scout_route_architecture(
     field_answer = _field_answer(
         answerability=answerability,
         decision=route_decision,
+        route_architecture=route_architecture,
         missing_fields=missing_fields,
     )
     decision_output = _decision_output(
@@ -505,6 +506,19 @@ def _route_decision(
     elif route_architecture["hard_points"]:
         decision = "CONDITIONAL_GO"
         reasons.append("Route has hard points that require CP-based monitoring.")
+        graph_completeness = route_architecture.get("graph_completeness")
+        graph_completeness = (
+            graph_completeness if isinstance(graph_completeness, dict) else {}
+        )
+        top_hard_point = _hard_point_summary(
+            route_architecture["hard_points"][0],
+            total_segments=_int_or_none(graph_completeness.get("segment_count")),
+        )
+        if top_hard_point:
+            reasons.append("top hard point: " + top_hard_point)
+        turn_back_text = _turn_back_brief(turn_back)
+        if turn_back_text:
+            reasons.append("turn-back candidate: " + turn_back_text)
         next_action = "用 CP Graph 監控難點前後的時間、天氣與隊伍速度；保留折返窗口。"
         action_limit = "Do not spend buffer before the hard-point cluster."
     else:
@@ -528,13 +542,16 @@ def _field_answer(
     *,
     answerability: str,
     decision: dict[str, Any],
+    route_architecture: dict[str, Any],
     missing_fields: list[str],
 ) -> str:
+    route_context = _route_architecture_brief(route_architecture)
     if missing_fields and answerability == "route_architecture_missing_current_context":
         return (
             "路線結構判斷：建議 DELAY。缺少 "
             + "、".join(missing_fields)
             + "，Scout 不能確認現在是否已到折返點。"
+            + (f" {route_context}" if route_context else "")
             + f" 下一步：{decision['next_action']} "
             + "此為 Route Architecture / CP Graph 候選判斷，不是 runtime safety truth；不得觸發 /safety、SOS、outbound send 或硬體控制。"
         )
@@ -550,8 +567,9 @@ def _field_answer(
         reason_text = f"answerability={answerability}"
     return (
         f"路線結構判斷：建議 {decision['decision']}。{reason_text} "
-        f"下一步：{decision['next_action']} "
-        "此為 Route Architecture / CP Graph 候選判斷，不是 runtime safety truth；不得觸發 /safety、SOS、outbound send 或硬體控制。"
+        + (f"{route_context} " if route_context else "")
+        + f"下一步：{decision['next_action']} "
+        + "此為 Route Architecture / CP Graph 候選判斷，不是 runtime safety truth；不得觸發 /safety、SOS、outbound send 或硬體控制。"
     )
 
 
@@ -706,6 +724,120 @@ def _decision_limit_phrase(
             or "只有在撤退/短版替代方案可見時，才可視為候選通過。"
         )
     return "這不是 runtime 出發或通行授權；仍需天氣、腳程與安全 runtime gate。"
+
+
+def _route_architecture_brief(route_architecture: dict[str, Any]) -> str:
+    highlights: list[str] = []
+    graph_completeness = route_architecture.get("graph_completeness")
+    graph_completeness = (
+        graph_completeness if isinstance(graph_completeness, dict) else {}
+    )
+    segment_count = _int_or_none(graph_completeness.get("segment_count"))
+
+    turn_back = route_architecture.get("turn_back")
+    if isinstance(turn_back, dict):
+        turn_back_text = _turn_back_brief(turn_back)
+        if turn_back_text:
+            highlights.append("折返/撤退 checkpoint: " + turn_back_text)
+
+    retreat_options = route_architecture.get("retreat_options")
+    if isinstance(retreat_options, list) and retreat_options:
+        retreat_text = _retreat_option_brief(retreat_options[0])
+        if retreat_text:
+            highlights.append("候選撤退路線: " + retreat_text)
+
+    hard_points = route_architecture.get("hard_points")
+    if isinstance(hard_points, list) and hard_points:
+        hard_text = "；".join(
+            text
+            for text in (
+                _hard_point_summary(item, total_segments=segment_count)
+                for item in hard_points[:3]
+                if isinstance(item, dict)
+            )
+            if text
+        )
+        if hard_text:
+            highlights.append("主要難點: " + hard_text)
+
+    alternatives = _string_list(route_architecture.get("alternative_plan_options"))
+    if alternatives:
+        highlights.append("替代方案: " + alternatives[0])
+
+    return "結構重點：" + "；".join(highlights) + "。" if highlights else ""
+
+
+def _turn_back_brief(turn_back: dict[str, Any]) -> str:
+    name = turn_back.get("turn_back_checkpoint_name")
+    if not name:
+        return ""
+    eta = turn_back.get("turn_back_eta")
+    return str(name) + (f" at {eta}" if eta else "")
+
+
+def _retreat_option_brief(route: dict[str, Any]) -> str:
+    label = str(route.get("label") or route.get("candidate_id") or "").strip()
+    if not label:
+        return ""
+    details = []
+    retreat_type = route.get("retreat_type")
+    if retreat_type:
+        details.append(str(retreat_type))
+    distance_km = _float_or_none(route.get("distance_km"))
+    if distance_km is not None:
+        details.append(f"{distance_km:g} km")
+    trigger = route.get("trigger_checkpoint_candidate_id")
+    if trigger:
+        details.append(f"trigger {trigger}")
+    return label + (f" ({', '.join(details)})" if details else "")
+
+
+def _hard_point_summary(
+    edge: dict[str, Any],
+    *,
+    total_segments: int | None = None,
+) -> str:
+    segment_id = str(edge.get("segment_id") or "").strip()
+    if not segment_id:
+        return ""
+    from_name = str(edge.get("from_name") or edge.get("from_cp_id") or "").strip()
+    to_name = str(edge.get("to_name") or edge.get("to_cp_id") or "").strip()
+    phase = _hard_point_phase(edge, total_segments=total_segments)
+    details = []
+    duration = _float_or_none(edge.get("expected_duration_minutes"))
+    if duration is not None:
+        details.append(f"{duration:g} min")
+    gain = _float_or_none(edge.get("elevation_gain_m"))
+    if gain is not None and gain > 0:
+        details.append(f"+{gain:g} m")
+    reasons = _string_list(edge.get("architecture_risk_reasons"))
+    if reasons:
+        details.append("/".join(reasons[:3]))
+    cp_span = f"{from_name} to {to_name}" if from_name or to_name else ""
+    parts = [segment_id]
+    if cp_span:
+        parts.append(cp_span)
+    if phase:
+        parts.append(phase)
+    if details:
+        parts.append(", ".join(details))
+    return " ".join(parts)
+
+
+def _hard_point_phase(edge: dict[str, Any], *, total_segments: int | None) -> str:
+    if not total_segments:
+        return ""
+    segment_id = str(edge.get("segment_id") or "")
+    match = re.search(r"(\d+)", segment_id)
+    if not match:
+        return ""
+    segment_index = int(match.group(1))
+    ratio = segment_index / max(total_segments, 1)
+    if ratio < 0.33:
+        return "前段難點"
+    if ratio < 0.66:
+        return "中段難點"
+    return "後段/回程難點"
 
 
 def _decision_details(

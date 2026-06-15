@@ -1295,6 +1295,25 @@ def test_planner_selects_route_architecture_for_cp_graph_question() -> None:
     assert item.boundary.runtime_safety_truth is False
 
 
+def test_planner_routes_route_phase_and_forgiveness_questions_to_route_architecture() -> None:
+    questions = (
+        "這條路線難點在前段、中段還是回程？",
+        "走錯或變天時還有退路嗎？",
+    )
+
+    for question in questions:
+        plan = plan_scout_ai_tools(
+            _query(question),
+            project_root=PROJECT_ROOT,
+        )
+
+        item = _single_tool(plan, ROUTE_ARCHITECTURE_TOOL_ID)
+        assert item.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+        assert item.request is not None
+        assert item.request["tool_id"] == ROUTE_ARCHITECTURE_TOOL_ID
+        assert item.boundary.runtime_safety_truth is False
+
+
 def test_planner_uses_route_architecture_not_contextual_for_turnback_status() -> None:
     plan = plan_scout_ai_tools(
         _query("現在是不是折返點？"),
