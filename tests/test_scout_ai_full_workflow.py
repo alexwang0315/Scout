@@ -307,6 +307,29 @@ def test_full_workflow_prices_extra_stop_time_against_buffer() -> None:
     assert result.boundary.runtime_safety_truth is False
 
 
+def test_full_workflow_uses_local_clock_for_stop_deadline() -> None:
+    result = run_scout_ai_full_workflow(
+        "現在 13:36，安全 buffer 還有 21 分鐘，如果多停 10 分鐘，代價是什麼？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=3,
+    )
+
+    assert result.answerability == "evidence_available"
+    assert result.decision_output["answerSourceToolId"] == CONTEXTUAL_PERMISSION_TOOL_ID
+    assert result.decision_output["action"] == "stop"
+    assert result.decision_output["decision"] == "CONDITIONAL_GO"
+    assert result.decision_output["maxDurationMinutes"] == 10
+    assert result.decision_output["leaveBy"] == "13:46"
+    assert result.decision_output["cost"]["timeBufferChangeMinutes"] == -10
+    assert result.decision_output["firstLayer"]["limit"] == (
+        "最多 10 分鐘，13:46 前離開。"
+    )
+    assert "13:46 前離開" in result.answer
+    assert result.decision_output["runtimeSafetyTruth"] is False
+    assert result.boundary.runtime_safety_truth is False
+
+
 def test_full_workflow_treats_fog_photo_as_wait_permission() -> None:
     result = run_scout_ai_full_workflow(
         "可以等霧散再拍照嗎？",
