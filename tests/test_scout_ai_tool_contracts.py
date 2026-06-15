@@ -645,6 +645,14 @@ def test_execute_contextual_permission_assessor_returns_bounded_decision() -> No
     assert result.payload["contextual_permission"]["cost"][
         "timeBufferChangeMinutes"
     ] == -6
+    assert result.payload["decision_object"] == result.payload["contextual_permission"]
+    assert result.payload["decision_output"]["decisionObjectSchema"] == (
+        "ContextualPermission"
+    )
+    assert result.payload["decision_output"]["firstLayer"]["decision"] == (
+        "可以，最多 6 分鐘。"
+    )
+    assert result.payload["field_answer"].startswith("[決策] 可以，最多 6 分鐘。")
     assert result.payload["risk_budget"]["authorizedDurationMinutes"] == 16
     assert result.missing_fields == []
     assert result.payload["boundary"]["runtime_safety_truth"] is False

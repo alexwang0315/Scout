@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from enum import StrEnum
 from math import floor
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -127,6 +127,52 @@ class ContextualPermission(ScoutContextualBaseModel):
     alternative_actions: list[str] = Field(
         default_factory=list,
         alias="alternativeActions",
+    )
+
+
+class DecisionOutputFirstLayer(ScoutContextualBaseModel):
+    decision: str = Field(min_length=1)
+    limit: str = Field(min_length=1)
+    reason: str = Field(min_length=1)
+    next_step: str = Field(min_length=1, alias="nextStep")
+
+
+class DecisionOutputSecondLayer(ScoutContextualBaseModel):
+    details: list[str] = Field(default_factory=list)
+    uncertainty_notes: list[str] = Field(
+        default_factory=list,
+        alias="uncertaintyNotes",
+    )
+    residual_risk: list[str] = Field(default_factory=list, alias="residualRisk")
+    required_conditions: list[str] = Field(
+        default_factory=list,
+        alias="requiredConditions",
+    )
+    alternative_actions: list[str] = Field(
+        default_factory=list,
+        alias="alternativeActions",
+    )
+
+
+class ScoutDecisionOutput(ScoutContextualBaseModel):
+    role: Literal["Micro-Decision Agent"] = "Micro-Decision Agent"
+    format: Literal["SCOUT_OUTDOOR_AI_AGENT_STANDARD.section16"] = (
+        "SCOUT_OUTDOOR_AI_AGENT_STANDARD.section16"
+    )
+    decision_object_schema: Literal["ContextualPermission"] = Field(
+        default="ContextualPermission",
+        alias="decisionObjectSchema",
+    )
+    text: str = Field(min_length=1)
+    first_layer: DecisionOutputFirstLayer = Field(alias="firstLayer")
+    second_layer: DecisionOutputSecondLayer = Field(alias="secondLayer")
+    standard_alignment: list[str] = Field(
+        default_factory=list,
+        alias="standardAlignment",
+    )
+    runtime_safety_truth: Literal[False] = Field(
+        default=False,
+        alias="runtimeSafetyTruth",
     )
 
 
@@ -336,7 +382,13 @@ def assess_scout_contextual_permission(
         exclude_none=True,
     )
     budget_payload = budget.model_dump(mode="json", by_alias=True, exclude_none=True)
-    field_answer = _field_answer(permission, budget=budget)
+    decision_output = _decision_output(permission, budget=budget)
+    decision_output_payload = decision_output.model_dump(
+        mode="json",
+        by_alias=True,
+        exclude_none=True,
+    )
+    field_answer = decision_output.text
     answerability = (
         "contextual_permission_missing_required_fields"
         if missing_fields
@@ -369,6 +421,8 @@ def assess_scout_contextual_permission(
         "leave_by": permission.leave_by,
         "field_answer": field_answer,
         "contextual_permission": permission_payload,
+        "decision_object": permission_payload,
+        "decision_output": decision_output_payload,
         "risk_budget": budget_payload,
         "risk_budget_source": risk_budget_source,
         "missing_fields": missing_fields,
@@ -378,6 +432,7 @@ def assess_scout_contextual_permission(
             "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 7.3 Team Pace Fit",
             "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 13 risk budget",
             "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 13.1 conceptual formula",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 16 required decision output format",
             "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 16 field answer format",
             "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 17 ContextualPermission schema",
             "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 23 acceptance criteria",
@@ -392,6 +447,8 @@ def assess_scout_contextual_permission(
                 "max_duration_minutes": permission.max_duration_minutes,
                 "leave_by": permission.leave_by,
                 "field_answer": field_answer,
+                "decision_object": permission_payload,
+                "decision_output": decision_output_payload,
                 "answerability": answerability,
                 "confidence": permission.confidence,
                 "main_reasons": list(permission.main_reasons),
@@ -1425,32 +1482,124 @@ def _alternative_actions(action: OutdoorAction, next_cp_id: str | None) -> list[
     return [f"前往 {destination}", "重新評估", "撤退或改線"]
 
 
-def _field_answer(permission: ContextualPermission, *, budget: RiskBudget) -> str:
+def _decision_output(
+    permission: ContextualPermission,
+    *,
+    budget: RiskBudget,
+) -> ScoutDecisionOutput:
+    first_layer = _decision_first_layer(permission, budget=budget)
+    second_layer = _decision_second_layer(permission, budget=budget)
+    text = "\n".join(
+        (
+            f"[決策] {first_layer.decision}",
+            f"[限制] {first_layer.limit}",
+            f"[原因] {first_layer.reason}",
+            f"[下一步] {first_layer.next_step}",
+        )
+    )
+    return ScoutDecisionOutput(
+        text=text,
+        first_layer=first_layer,
+        second_layer=second_layer,
+        standard_alignment=[
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 16 first-layer field decision",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 16 second-layer reason expansion",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 17 ContextualPermission schema",
+        ],
+    )
+
+
+def _decision_first_layer(
+    permission: ContextualPermission,
+    *,
+    budget: RiskBudget,
+) -> DecisionOutputFirstLayer:
+    return DecisionOutputFirstLayer(
+        decision=_decision_phrase(permission),
+        limit=_limit_phrase(permission),
+        reason=_reason_phrase(permission, budget=budget),
+        next_step=permission.next_action,
+    )
+
+
+def _decision_second_layer(
+    permission: ContextualPermission,
+    *,
+    budget: RiskBudget,
+) -> DecisionOutputSecondLayer:
+    details: list[str] = []
+    if budget.remaining_safety_buffer_minutes is not None:
+        details.append(
+            f"目前剩餘安全 buffer 約 {budget.remaining_safety_buffer_minutes:g} 分鐘。"
+        )
+    details.append(
+        f"可授權時間約 {budget.authorized_duration_minutes} 分鐘。"
+    )
+    if budget.requested_duration_minutes is not None:
+        details.append(
+            f"使用者要求時間約 {budget.requested_duration_minutes:g} 分鐘。"
+        )
+    if budget.next_segment_uncertainty_minutes:
+        details.append(
+            f"下一段不確定性 reserve {budget.next_segment_uncertainty_minutes:g} 分鐘。"
+        )
+    if budget.weather_reserve_minutes:
+        details.append(f"天氣 reserve {budget.weather_reserve_minutes:g} 分鐘。")
+    if budget.daylight_reserve_minutes:
+        details.append(f"日照 reserve {budget.daylight_reserve_minutes:g} 分鐘。")
+    if budget.retreat_reserve_minutes:
+        details.append(f"撤退 reserve {budget.retreat_reserve_minutes:g} 分鐘。")
+    if budget.slowest_member_reserve_minutes:
+        details.append(
+            f"最慢成員 reserve {budget.slowest_member_reserve_minutes:g} 分鐘。"
+        )
+    if permission.cost and permission.cost.time_buffer_change_minutes is not None:
+        details.append(
+            f"此決策的時間 buffer 變化為 {permission.cost.time_buffer_change_minutes:g} 分鐘。"
+        )
+    return DecisionOutputSecondLayer(
+        details=details,
+        uncertainty_notes=list(permission.uncertainty_notes),
+        residual_risk=list(permission.residual_risk),
+        required_conditions=list(permission.required_conditions),
+        alternative_actions=list(permission.alternative_actions),
+    )
+
+
+def _decision_phrase(permission: ContextualPermission) -> str:
     action_label = _action_label(permission.action)
     if permission.allowed and permission.max_duration_minutes is not None:
-        leave_phrase = (
-            f"{permission.leave_by} 前離開"
-            if permission.leave_by
-            else f"從現在起 {permission.max_duration_minutes} 分鐘內離開"
-        )
-        reason = permission.main_reasons[0] if permission.main_reasons else ""
-        return (
-            f"可以，最多 {permission.max_duration_minutes} 分鐘。"
-            f"{leave_phrase}。{reason} {permission.next_action}"
-        )
+        return f"可以，最多 {permission.max_duration_minutes} 分鐘。"
     if permission.allowed:
-        reason = permission.main_reasons[0] if permission.main_reasons else ""
-        return f"可以{action_label}。{reason} {permission.next_action}"
+        return f"可以{action_label}。"
     if permission.decision == ScoutDecision.ESCALATE:
-        reason = permission.main_reasons[0] if permission.main_reasons else ""
-        return f"需要升級處理，不建議{action_label}。{reason} {permission.next_action}"
-    reason = permission.main_reasons[0] if permission.main_reasons else ""
+        return f"需要升級處理，不建議{action_label}。"
+    if permission.decision == ScoutDecision.CHANGE_PLAN:
+        return f"改變計畫，不建議{action_label}。"
+    if permission.decision == ScoutDecision.DELAY:
+        return f"延後{action_label}。"
+    return f"不建議{action_label}。"
+
+
+def _limit_phrase(permission: ContextualPermission) -> str:
+    if permission.allowed and permission.max_duration_minutes is not None:
+        if permission.leave_by:
+            return f"最多 {permission.max_duration_minutes} 分鐘，{permission.leave_by} 前離開。"
+        return f"最多 {permission.max_duration_minutes} 分鐘，從現在起到時立即離開。"
+    if permission.allowed:
+        return "不額外消耗停留 buffer；執行後立即回到原定節奏。"
+    return "不授權此行動；不要消耗停留或改線 buffer。"
+
+
+def _reason_phrase(permission: ContextualPermission, *, budget: RiskBudget) -> str:
+    reasons = [reason for reason in permission.main_reasons[:2] if reason]
     if budget.remaining_safety_buffer_minutes is not None:
-        return (
-            f"不建議{action_label}。{permission.next_action} "
-            f"{reason} 目前剩餘安全 buffer 約 {budget.remaining_safety_buffer_minutes:g} 分鐘。"
+        reasons.append(
+            f"目前剩餘安全 buffer 約 {budget.remaining_safety_buffer_minutes:g} 分鐘。"
         )
-    return f"不建議{action_label}。{permission.next_action} {reason}"
+    if reasons:
+        return " ".join(reasons)
+    return "目前證據不足，Scout 依標準採保守判斷。"
 
 
 def _required_conditions(

@@ -256,6 +256,8 @@ def _compact_payload(
         "media_literacy",
         "media_bias_analysis",
         "decision",
+        "decision_object",
+        "decision_output",
         "allowed",
         "action",
         "max_duration_minutes",

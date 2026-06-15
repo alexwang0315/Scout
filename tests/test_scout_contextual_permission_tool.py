@@ -37,8 +37,11 @@ def test_contextual_permission_allows_film_with_bounded_deadline_and_cost() -> N
     assert result["action"] == "film"
     assert result["max_duration_minutes"] == 6
     assert result["leave_by"] == "2026-06-07T13:42:00+08:00"
+    assert result["field_answer"].startswith("[決策] 可以，最多 6 分鐘。")
     assert "最多 6 分鐘" in result["field_answer"]
     assert "13:42" in result["field_answer"]
+    assert "[限制]" in result["field_answer"]
+    assert "[下一步]" in result["field_answer"]
 
     permission = result["contextual_permission"]
     assert permission["decision"] == "CONDITIONAL_GO"
@@ -48,6 +51,19 @@ def test_contextual_permission_allows_film_with_bounded_deadline_and_cost() -> N
     assert permission["cost"]["timeBufferChangeMinutes"] == -6
     assert permission["nextAction"]
     assert permission["requiredConditions"]
+    assert result["decision_object"] == permission
+
+    decision_output = result["decision_output"]
+    assert decision_output["decisionObjectSchema"] == "ContextualPermission"
+    assert decision_output["runtimeSafetyTruth"] is False
+    assert decision_output["firstLayer"]["decision"] == "可以，最多 6 分鐘。"
+    assert "2026-06-07T13:42:00+08:00" in decision_output["firstLayer"]["limit"]
+    assert decision_output["firstLayer"]["nextStep"] == permission["nextAction"]
+    assert any(
+        "可授權時間約 16 分鐘" in detail
+        for detail in decision_output["secondLayer"]["details"]
+    )
+    assert "最多 6 分鐘" in decision_output["secondLayer"]["requiredConditions"][0]
 
     budget = result["risk_budget"]
     assert budget["remainingSafetyBufferMinutes"] == 21.0
@@ -73,9 +89,14 @@ def test_contextual_permission_missing_buffer_is_conservative_no_go() -> None:
     assert result["decision"] == "NO_GO"
     assert result["allowed"] is False
     assert result["missing_fields"] == ["remaining_safety_buffer_minutes"]
+    assert result["field_answer"].startswith("[決策] 不建議拍影片。")
     assert "不建議拍影片" in result["field_answer"]
     assert "資料不足" in result["contextual_permission"]["uncertaintyNotes"][1]
     assert result["contextual_permission"]["alternativeActions"]
+    assert result["decision_output"]["firstLayer"]["limit"] == (
+        "不授權此行動；不要消耗停留或改線 buffer。"
+    )
+    assert result["decision_output"]["secondLayer"]["alternativeActions"]
 
 
 def test_contextual_permission_derives_candidate_buffer_from_planned_eta() -> None:

@@ -16,6 +16,7 @@ from scout_team_status_tool import TEAM_STATUS_TOOL_ID
 from scout_post_trip_review_tool import POST_TRIP_REVIEW_TOOL_ID
 from scout_route_architecture_tool import ROUTE_ARCHITECTURE_TOOL_ID
 from scout_route_context_tool import ROUTE_CONTEXT_TOOL_ID
+from scout_contextual_permission_tool import CONTEXTUAL_PERMISSION_TOOL_ID
 from scout_media_literacy_tool import MEDIA_LITERACY_TOOL_ID
 from scout_risk_score_tool import RISK_SCORE_TOOL_ID
 from scout_terrain_score_tool import TERRAIN_SCORE_TOOL_ID
@@ -155,6 +156,33 @@ def test_evidence_collection_executes_route_context_tool_without_model_synthesis
     assert payload["matched_context_count"] >= 1
     assert any(item["label"] == "稜線啞口觀景點" for item in payload["results"])
     assert route_context.boundary.runtime_safety_truth is False
+
+
+def test_evidence_collection_keeps_contextual_permission_decision_object() -> None:
+    result = collect_scout_ai_evidence(
+        "我可以在這裡停下來拍一段影片嗎?",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=3,
+    )
+
+    assert result.selected_tool_count == 1
+    assert result.executed_tool_count == 1
+    assert result.completed_tool_count == 1
+    assert result.missing_input_count == 0
+
+    contextual = _record(result, CONTEXTUAL_PERMISSION_TOOL_ID)
+    assert contextual.collection_status == "completed"
+    assert contextual.result is not None
+    payload = contextual.result["payload"]
+    assert payload["decision"] == "NO_GO"
+    assert payload["decision_object"] == payload["contextual_permission"]
+    assert payload["decision_output"]["decisionObjectSchema"] == (
+        "ContextualPermission"
+    )
+    assert payload["decision_output"]["firstLayer"]["decision"] == "不建議拍影片。"
+    assert payload["field_answer"].startswith("[決策] 不建議拍影片。")
+    assert contextual.boundary.runtime_safety_truth is False
 
 
 def test_evidence_collection_executes_pace_guardian_tool_without_model_synthesis(
