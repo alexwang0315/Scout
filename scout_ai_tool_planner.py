@@ -86,11 +86,16 @@ def plan_scout_ai_tools(
     contracts = default_tool_contracts()
     normalized_question = _normalize(query.question)
     selected: list[tuple[str, str]] = []
+    six_power_overview_question = _looks_like_standard_six_power_overview_question(
+        normalized_question,
+    )
     route_context_question = _looks_like_route_context_question(normalized_question)
     pretrip_go_no_go = _looks_like_pretrip_go_no_go_question(
         normalized_question,
     ) and not _has_complete_route_readiness_confirmation_bundle(normalized_question)
 
+    if six_power_overview_question:
+        _append_standard_six_power_tools(selected)
     if _looks_like_workspace_catalog_question(normalized_question):
         selected.append(
             (
@@ -308,6 +313,38 @@ def _append_pretrip_go_no_go_support_tools(selected: list[tuple[str, str]]) -> N
         ),
     )
     for tool_id, reason in support_tools:
+        if not _has_tool(selected, tool_id):
+            selected.append((tool_id, reason))
+
+
+def _append_standard_six_power_tools(selected: list[tuple[str, str]]) -> None:
+    six_power_tools = (
+        (
+            ROUTE_CONTEXT_TOOL_ID,
+            "Six-power overview needs Route Context Intelligence for exploration, route culture, nature, and stop-point context.",
+        ),
+        (
+            PACE_GUARDIAN_TOOL_ID,
+            "Six-power overview needs Readiness & Pace Fit for slowest-member and team pace evidence.",
+        ),
+        (
+            CONTEXTUAL_PERMISSION_TOOL_ID,
+            "Six-power overview needs Contextual Permissioning for bounded micro-decisions and buffer cost.",
+        ),
+        (
+            ROUTE_ARCHITECTURE_TOOL_ID,
+            "Six-power overview needs Route Architecture Intelligence for CP Graph, hard points, retreat, and time pressure.",
+        ),
+        (
+            WEATHER_WINDOW_TOOL_ID,
+            "Six-power overview needs Weather-to-Decision Intelligence for route-specific weather and daylight decisions.",
+        ),
+        (
+            NAVIGATION_TERRAIN_TOOL_ID,
+            "Six-power overview needs Navigation & Terrain Intelligence for offline map, GPX, contour, junction, and retreat-direction readiness.",
+        ),
+    )
+    for tool_id, reason in six_power_tools:
         if not _has_tool(selected, tool_id):
             selected.append((tool_id, reason))
 
@@ -1428,6 +1465,49 @@ def _is_executable_contract(contract: ScoutAiToolContract) -> bool:
     }
 
 
+def _looks_like_standard_six_power_overview_question(text: str) -> bool:
+    six_power_terms = (
+        "探索力",
+        "自信力",
+        "勇氣力",
+        "路線力",
+        "天氣力",
+        "地圖力",
+    )
+    mentioned_power_count = sum(1 for term in six_power_terms if term in text)
+    if mentioned_power_count >= 3:
+        return True
+    if _has_any(text, ("scoutai力", "scoutai能力", "ai元能力")) and _has_any(
+        text,
+        (
+            "六力",
+            "動態決策",
+            "靜態分數",
+            "不是第七",
+            "元能力",
+            "轉成",
+            "轉化",
+        ),
+    ):
+        return True
+    return _has_any(text, ("六力", "拼圖六力")) and _has_any(
+        text,
+        (
+            "檢視",
+            "實作",
+            "覆蓋",
+            "狀態",
+            "總覽",
+            "各自",
+            "有沒有",
+            "是否都有",
+            "都有實作",
+            "動態決策",
+            "靜態分數",
+        ),
+    )
+
+
 def _looks_like_workspace_catalog_question(text: str) -> bool:
     return _has_any(
         text,
@@ -1461,6 +1541,7 @@ def _looks_like_route_architecture_question(text: str) -> bool:
             "routearchitecture",
             "cpgraph",
             "checkpointgraph",
+            "路線力",
             "路線結構",
             "行程結構",
             "cpgraph",
@@ -2173,6 +2254,8 @@ def _looks_like_pace_guardian_question(text: str) -> bool:
             "readinesspacefit",
             "scoutpacecoefficient",
             "pacecoefficient",
+            "自信力",
+            "腳程匹配力",
             "腳程係數",
             "最慢者",
             "最慢成員",
@@ -2647,6 +2730,9 @@ def _looks_like_contextual_permission_question(text: str) -> bool:
         text,
         (
             "我可以在這裡",
+            "勇氣力",
+            "情境授權",
+            "contextualpermissioning",
             "可以在這裡",
             "能不能在這裡",
             "可不可以在這裡",
@@ -2812,6 +2898,9 @@ def _looks_like_route_context_question(text: str) -> bool:
         text,
         (
             "值得看",
+            "探索力",
+            "路線脈絡力",
+            "routecontextintelligence",
             "看什麼",
             "看風景",
             "有什麼好看",

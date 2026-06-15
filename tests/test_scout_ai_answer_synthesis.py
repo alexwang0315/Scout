@@ -3281,6 +3281,60 @@ def test_answer_synthesis_builtin_rejects_blank_question_without_evidence_collec
     assert payload["boundary"]["runtime_safety_truth"] is False
 
 
+def test_answer_synthesis_surfaces_standard_six_power_coverage_overview() -> None:
+    result = collect_and_synthesize_scout_ai_answer(
+        "請檢視 Scout 對六力的實作狀態：探索力、自信力、勇氣力、路線力、天氣力、地圖力。",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=8,
+    )
+
+    source_ids = {source.tool_id for source in result.sources}
+    assert {
+        ROUTE_CONTEXT_TOOL_ID,
+        PACE_GUARDIAN_TOOL_ID,
+        CONTEXTUAL_PERMISSION_TOOL_ID,
+        ROUTE_ARCHITECTURE_TOOL_ID,
+        WEATHER_WINDOW_TOOL_ID,
+        NAVIGATION_TERRAIN_TOOL_ID,
+    }.issubset(source_ids)
+    assert result.decision_output["answerSourceToolId"] == (
+        "scout.ai.standard_six_power_overview.v0"
+    )
+    assert result.decision_output["decision"] == "GUIDED_ONLY"
+    assert "六力已接成 Scout AI 動態決策入口" in result.decision_output["firstLayer"][
+        "decision"
+    ]
+    assert "不得平均成單一分數" in result.decision_output["firstLayer"]["limit"]
+    assert result.decision_output["runtimeSafetyTruth"] is False
+    assert result.answer.startswith("六力覆蓋檢視：")
+    for label in ("探索力", "自信力", "勇氣力", "路線力", "天氣力", "地圖力"):
+        assert label in result.answer
+    assert "不輸出單一靜態分數" in result.answer
+    assert "No registry-backed Scout AI tool" not in result.answer
+    assert "可以繼續前進" not in result.answer
+    assert "地圖力判斷：建議" not in result.answer
+
+
+def test_answer_synthesis_routes_scout_ai_meta_power_to_dynamic_decision_overview() -> None:
+    result = collect_and_synthesize_scout_ai_answer(
+        "Scout AI 力如何把六力轉成動態決策，而不是靜態分數表？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=8,
+    )
+
+    assert result.completed_source_count == 6
+    assert result.decision_output["answerSourceToolId"] == (
+        "scout.ai.standard_six_power_overview.v0"
+    )
+    assert result.decision_output["decision"] == "GUIDED_ONLY"
+    assert "tool planning -> evidence collection" in result.answer
+    assert "deterministic answer synthesis" in result.answer
+    assert "不輸出單一靜態分數" in result.answer
+    assert "可以繼續前進" not in result.answer
+
+
 def _write_route_briefing_project(tmp_path: Path) -> Path:
     project_root = tmp_path / "route_briefing_project"
     project_root.mkdir()

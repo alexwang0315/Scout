@@ -1453,7 +1453,7 @@ def test_execute_contextual_permission_assessor_allows_direct_retreat() -> None:
     assert result.payload["decision_output"]["decision"] == "GO"
     assert result.payload["decision_output"]["allowed"] is True
     assert result.payload["decision_output"]["firstLayer"]["decision"] == (
-        "可以撤退。"
+        "建議撤退。"
     )
     assert result.payload["decision_output"]["runtimeSafetyTruth"] is False
     assert "開始撤退" in result.payload["field_answer"]

@@ -34,6 +34,39 @@ from scout_workspace_search_tools import MAJOR_POINT_TOOL_ID
 ARTIFACT_KIND = "scout_ai_answer_synthesis"
 ARTIFACT_VERSION = "scout_ai_answer_synthesis.v0"
 
+STANDARD_SIX_POWER_COVERAGE = (
+    (
+        "探索力",
+        "Route Context Intelligence / 路線脈絡力",
+        ROUTE_CONTEXT_TOOL_ID,
+    ),
+    (
+        "自信力",
+        "Readiness & Pace Fit / 腳程匹配力",
+        PACE_GUARDIAN_TOOL_ID,
+    ),
+    (
+        "勇氣力",
+        "Contextual Permissioning / 情境授權力",
+        CONTEXTUAL_PERMISSION_TOOL_ID,
+    ),
+    (
+        "路線力",
+        "Route Architecture Intelligence / 行程結構力",
+        ROUTE_ARCHITECTURE_TOOL_ID,
+    ),
+    (
+        "天氣力",
+        "Weather-to-Decision Intelligence / 天候決策力",
+        WEATHER_WINDOW_TOOL_ID,
+    ),
+    (
+        "地圖力",
+        "Navigation & Terrain Intelligence / 地形導航力",
+        NAVIGATION_TERRAIN_TOOL_ID,
+    ),
+)
+
 
 class ScoutAiAnswerSynthesisPolicy(ScoutAiToolBaseModel):
     evidence_collection_required: Literal[True] = True
@@ -303,6 +336,13 @@ def _answer_text(
         source for source in sources if source.collection_status == "completed"
     ]
     frontline_answer = _decision_output_text(decision_output)
+    six_power_overview = _six_power_overview_answer(
+        question,
+        sources=completed_sources,
+        missing_evidence=missing_evidence,
+    )
+    if six_power_overview:
+        parts.append(six_power_overview)
     if frontline_answer:
         parts.append(frontline_answer)
     primary_answer = _field_answer_for_tool(
@@ -311,68 +351,77 @@ def _answer_text(
     )
     if primary_answer and not _answer_part_already_covered(primary_answer, parts):
         parts.append(primary_answer)
-    contextual_answer = (
-        None
-        if _should_skip_secondary_contextual_answer(
-            decision_output=decision_output,
-            sources=completed_sources,
+    if not six_power_overview:
+        contextual_answer = (
+            None
+            if _should_skip_secondary_contextual_answer(
+                decision_output=decision_output,
+                sources=completed_sources,
+            )
+            else _contextual_permission_answer(completed_sources)
         )
-        else _contextual_permission_answer(completed_sources)
-    )
-    if contextual_answer and not _answer_part_already_covered(contextual_answer, parts):
-        parts.append(contextual_answer)
-    safety_boundary_answer = _safety_boundary_answer(completed_sources)
-    if safety_boundary_answer:
-        parts.append(safety_boundary_answer)
-    navigation_answer = _live_navigation_answer(completed_sources)
-    if navigation_answer:
-        parts.append(navigation_answer)
-    navigation_terrain_answer = _navigation_terrain_answer(completed_sources)
-    if navigation_terrain_answer:
-        parts.append(navigation_terrain_answer)
-    map_perception_answer = _map_perception_answer(completed_sources)
-    if map_perception_answer:
-        parts.append(map_perception_answer)
-    ins_dr_trace_answer = _ins_dr_trace_answer(completed_sources)
-    if ins_dr_trace_answer:
-        parts.append(ins_dr_trace_answer)
-    route_readiness_answer = _route_readiness_answer(completed_sources)
-    if route_readiness_answer:
-        parts.append(route_readiness_answer)
-    route_context_answer = _route_context_answer(completed_sources)
-    if route_context_answer:
-        parts.append(route_context_answer)
-    major_point_answer = _major_point_answer(completed_sources)
-    if major_point_answer:
-        parts.append(major_point_answer)
-    media_literacy_answer = _media_literacy_answer(completed_sources)
-    if media_literacy_answer:
-        parts.append(media_literacy_answer)
-    survival_incident_answer = _survival_incident_playbook_answer(completed_sources)
-    if survival_incident_answer:
-        parts.append(survival_incident_answer)
-    route_architecture_answer = _route_architecture_answer(completed_sources)
-    if route_architecture_answer:
-        parts.append(route_architecture_answer)
-    equipment_resource_answer = _equipment_resource_answer(completed_sources)
-    if equipment_resource_answer:
-        parts.append(equipment_resource_answer)
-    team_status_answer = _team_status_answer(completed_sources)
-    if team_status_answer:
-        parts.append(team_status_answer)
-    post_trip_review_answer = _post_trip_review_answer(completed_sources)
-    if post_trip_review_answer:
-        parts.append(post_trip_review_answer)
-    pace_guardian_answer = _pace_guardian_answer(completed_sources)
-    if pace_guardian_answer:
-        parts.append(pace_guardian_answer)
-    weather_decision_answer = _weather_decision_answer(completed_sources)
-    if weather_decision_answer:
-        parts.append(weather_decision_answer)
+        if contextual_answer and not _answer_part_already_covered(
+            contextual_answer,
+            parts,
+        ):
+            parts.append(contextual_answer)
+        safety_boundary_answer = _safety_boundary_answer(completed_sources)
+        if safety_boundary_answer:
+            parts.append(safety_boundary_answer)
+        navigation_answer = _live_navigation_answer(completed_sources)
+        if navigation_answer:
+            parts.append(navigation_answer)
+        navigation_terrain_answer = _navigation_terrain_answer(completed_sources)
+        if navigation_terrain_answer:
+            parts.append(navigation_terrain_answer)
+        map_perception_answer = _map_perception_answer(completed_sources)
+        if map_perception_answer:
+            parts.append(map_perception_answer)
+        ins_dr_trace_answer = _ins_dr_trace_answer(completed_sources)
+        if ins_dr_trace_answer:
+            parts.append(ins_dr_trace_answer)
+        route_readiness_answer = _route_readiness_answer(completed_sources)
+        if route_readiness_answer:
+            parts.append(route_readiness_answer)
+        route_context_answer = _route_context_answer(completed_sources)
+        if route_context_answer:
+            parts.append(route_context_answer)
+        major_point_answer = _major_point_answer(completed_sources)
+        if major_point_answer:
+            parts.append(major_point_answer)
+        media_literacy_answer = _media_literacy_answer(completed_sources)
+        if media_literacy_answer:
+            parts.append(media_literacy_answer)
+        survival_incident_answer = _survival_incident_playbook_answer(completed_sources)
+        if survival_incident_answer:
+            parts.append(survival_incident_answer)
+        route_architecture_answer = _route_architecture_answer(completed_sources)
+        if route_architecture_answer:
+            parts.append(route_architecture_answer)
+        equipment_resource_answer = _equipment_resource_answer(completed_sources)
+        if equipment_resource_answer:
+            parts.append(equipment_resource_answer)
+        team_status_answer = _team_status_answer(completed_sources)
+        if team_status_answer:
+            parts.append(team_status_answer)
+        post_trip_review_answer = _post_trip_review_answer(completed_sources)
+        if post_trip_review_answer:
+            parts.append(post_trip_review_answer)
+        pace_guardian_answer = _pace_guardian_answer(completed_sources)
+        if pace_guardian_answer:
+            parts.append(pace_guardian_answer)
+        weather_decision_answer = _weather_decision_answer(completed_sources)
+        if weather_decision_answer:
+            parts.append(weather_decision_answer)
     if completed_sources:
+        source_text = (
+            _completed_source_brief_text
+            if six_power_overview
+            else _completed_source_text
+        )
         parts.append(
             "Collected evidence: "
-            + "; ".join(_completed_source_text(source) for source in completed_sources)
+            + "; ".join(source_text(source) for source in completed_sources)
             + "."
         )
     if missing_evidence:
@@ -524,6 +573,18 @@ def _completed_source_text(source: ScoutAiAnswerSource) -> str:
     )
 
 
+def _completed_source_brief_text(source: ScoutAiAnswerSource) -> str:
+    missing_count = len(source.missing_fields)
+    missing_suffix = (
+        f" missing_field_count={missing_count}" if missing_count else " missing_field_count=0"
+    )
+    return (
+        f"{source.tool_id} completed"
+        f" result_count={source.result_count if source.result_count is not None else 'unknown'}"
+        f"{missing_suffix}"
+    )
+
+
 def _summary_value_text(key: str, value: Any) -> str:
     if key == "pretrip_decision_package" and isinstance(value, dict):
         outputs = (
@@ -606,6 +667,12 @@ def _answer_decision_output(
     completed_sources = [
         source for source in sources if source.collection_status == "completed"
     ]
+    if _looks_like_standard_six_power_overview_question(question) and completed_sources:
+        return _six_power_overview_decision_output(
+            sources=completed_sources,
+            missing_evidence=missing_evidence,
+            answerability=answerability,
+        )
     decision_sources = sorted(
         completed_sources,
         key=lambda source: _decision_source_priority(source, question=question),
@@ -940,6 +1007,176 @@ def _generic_decision_output_from_source(
         "runtimeSafetyTruth": False,
         "standardAlignment": _decision_output_standard_alignment(),
     }
+
+
+def _six_power_overview_decision_output(
+    *,
+    sources: list[ScoutAiAnswerSource],
+    missing_evidence: list[dict[str, Any]],
+    answerability: str,
+) -> dict[str, Any]:
+    status_lines = [
+        _six_power_status_line(label, system_name, tool_id, sources=sources)
+        for label, system_name, tool_id in STANDARD_SIX_POWER_COVERAGE
+    ]
+    missing_tool_ids = {
+        str(item.get("tool_id"))
+        for item in missing_evidence
+        if str(item.get("tool_id") or "").strip()
+    }
+    missing_summary = (
+        f"仍有 {len(missing_tool_ids)} 個能力來源缺 evidence。"
+        if missing_tool_ids
+        else "六個能力都有 deterministic evidence path 可檢視。"
+    )
+    return {
+        "decisionObjectSchema": "ContextualPermission",
+        "answerSourceToolId": "scout.ai.standard_six_power_overview.v0",
+        "answerability": answerability,
+        "action": "review_capability_coverage",
+        "decision": "GUIDED_ONLY",
+        "allowed": False,
+        "mainReasons": [
+            "六力總覽是 Scout AI 能力覆蓋檢視，不是出發或現場行動授權。",
+            missing_summary,
+            "Scout 不得把六力平均成單一靜態分數。",
+        ],
+        "nextAction": "針對缺 evidence 的能力補資料；現場或出發決策回到對應工具的限制與下一步。",
+        "confidence": "medium" if not missing_tool_ids else "low",
+        "uncertaintyNotes": [
+            _missing_evidence_text(item) for item in missing_evidence
+        ],
+        "firstLayer": {
+            "decision": "六力已接成 Scout AI 動態決策入口。",
+            "limit": "不得平均成單一分數，也不得把總覽當成出發批准或 runtime safety truth。",
+            "reason": missing_summary,
+            "nextStep": "查看六個能力的缺 evidence，補齊後再問具體出發或現場微決策。",
+        },
+        "secondLayer": {
+            "details": status_lines,
+            "uncertaintyNotes": [
+                _missing_evidence_text(item) for item in missing_evidence
+            ],
+            "residualRisk": [
+                "六力覆蓋檢視只能證明工具路徑存在，不能取代 route/date/team/weather/daylight/equipment 的出發門檢。",
+            ],
+            "requiredConditions": [
+                "每一力都必須保留 deterministic evidence、缺口與工具邊界。",
+                "出發和現場 permission 必須回到具體 Scout tool decision output。",
+            ],
+            "alternativeActions": [
+                "改問單一能力，例如地圖力、天氣力或勇氣力的具體行動。",
+                "改問出發前 Go/No-Go，讓 Route Readiness 整合六力證據。",
+            ],
+        },
+        "runtimeSafetyTruth": False,
+        "standardAlignment": [
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 5 Scout 六力 system transformation",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 5.1 Scout AI 力 meta-capability",
+            *_decision_output_standard_alignment(),
+        ],
+    }
+
+
+def _six_power_overview_answer(
+    question: str,
+    *,
+    sources: list[ScoutAiAnswerSource],
+    missing_evidence: list[dict[str, Any]],
+) -> str | None:
+    if not _looks_like_standard_six_power_overview_question(question):
+        return None
+    status_lines = [
+        _six_power_status_line(label, system_name, tool_id, sources=sources)
+        for label, system_name, tool_id in STANDARD_SIX_POWER_COVERAGE
+    ]
+    missing_tool_ids = {
+        str(item.get("tool_id"))
+        for item in missing_evidence
+        if str(item.get("tool_id") or "").strip()
+    }
+    missing_summary = (
+        f"仍有 {len(missing_tool_ids)} 個能力來源缺 evidence。"
+        if missing_tool_ids
+        else "六個能力都有 deterministic evidence path 可檢視。"
+    )
+    return (
+        "六力覆蓋檢視："
+        + "；".join(status_lines)
+        + "。Scout AI 力：目前以 tool planning -> evidence collection -> "
+        "deterministic answer synthesis 把六力轉成動態決策，不輸出單一靜態分數。"
+        + missing_summary
+        + " 這是能力/證據總覽，不是出發批准或 runtime safety truth。"
+    )
+
+
+def _six_power_status_line(
+    label: str,
+    system_name: str,
+    tool_id: str,
+    *,
+    sources: list[ScoutAiAnswerSource],
+) -> str:
+    source = next((item for item in sources if item.tool_id == tool_id), None)
+    if source is None:
+        return f"{label}={system_name} 未完成本次 deterministic evidence collection ({tool_id})"
+    if source.missing_fields:
+        fields = ", ".join(source.missing_fields[:3])
+        suffix = "..." if len(source.missing_fields) > 3 else ""
+        return f"{label}={system_name} 已實作可查詢，但仍缺 {fields}{suffix}"
+    return f"{label}={system_name} 已實作並可查詢"
+
+
+def _looks_like_standard_six_power_overview_question(question: str) -> bool:
+    text = _normalize_question_text(question)
+    six_power_terms = (
+        "探索力",
+        "自信力",
+        "勇氣力",
+        "路線力",
+        "天氣力",
+        "地圖力",
+    )
+    mentioned_power_count = sum(1 for term in six_power_terms if term in text)
+    if mentioned_power_count >= 3:
+        return True
+    if _text_has_any(text, ("scoutai力", "scoutai能力", "ai元能力")) and _text_has_any(
+        text,
+        (
+            "六力",
+            "動態決策",
+            "靜態分數",
+            "不是第七",
+            "元能力",
+            "轉成",
+            "轉化",
+        ),
+    ):
+        return True
+    return _text_has_any(text, ("六力", "拼圖六力")) and _text_has_any(
+        text,
+        (
+            "檢視",
+            "實作",
+            "覆蓋",
+            "狀態",
+            "總覽",
+            "各自",
+            "有沒有",
+            "是否都有",
+            "都有實作",
+            "動態決策",
+            "靜態分數",
+        ),
+    )
+
+
+def _normalize_question_text(text: str) -> str:
+    return str(text or "").strip().lower().replace(" ", "")
+
+
+def _text_has_any(text: str, fragments: tuple[str, ...]) -> bool:
+    return any(fragment.lower().replace(" ", "") in text for fragment in fragments)
 
 
 def _decision_output_standard_alignment() -> list[str]:
