@@ -452,7 +452,8 @@ def test_contextual_permission_allows_direct_retreat_for_tired_teammate() -> Non
     assert result["decision_output"]["decision"] == "GO"
     assert result["decision_output"]["allowed"] is True
     assert result["decision_output"]["cost"]["timeBufferChangeMinutes"] == 0
-    assert result["decision_output"]["firstLayer"]["decision"] == "可以撤退。"
+    assert result["decision_output"]["firstLayer"]["decision"] == "建議撤退。"
+    assert "保持隊伍完整" in result["decision_output"]["firstLayer"]["limit"]
     assert "保持隊伍完整" in result["decision_output"]["firstLayer"]["nextStep"]
     assert result["decision_output"]["runtimeSafetyTruth"] is False
     assert result["boundary"]["runtime_safety_truth"] is False

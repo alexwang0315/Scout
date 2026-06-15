@@ -2155,6 +2155,8 @@ def _decision_phrase(permission: ContextualPermission) -> str:
     action_label = _action_label(permission.action)
     if permission.allowed and permission.max_duration_minutes is not None:
         return f"可以，最多 {permission.max_duration_minutes} 分鐘。"
+    if permission.allowed and permission.action == OutdoorAction.RETREAT:
+        return "建議撤退。"
     if permission.allowed:
         return f"可以{action_label}。"
     if permission.decision == ScoutDecision.ESCALATE:
@@ -2171,6 +2173,8 @@ def _limit_phrase(permission: ContextualPermission) -> str:
         if permission.leave_by:
             return f"最多 {permission.max_duration_minutes} 分鐘，{permission.leave_by} 前離開。"
         return f"最多 {permission.max_duration_minutes} 分鐘，從現在起到時立即離開。"
+    if permission.allowed and permission.action == OutdoorAction.RETREAT:
+        return "保持隊伍完整，前往最近安全點；途中仍要重看地形、天氣與隊伍狀態。"
     if permission.allowed:
         return "不額外消耗停留 buffer；執行後立即回到原定節奏。"
     return "不授權此行動；不要消耗停留或改線 buffer。"
