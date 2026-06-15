@@ -413,6 +413,21 @@ def test_planner_routes_low_map_literacy_to_navigation_terrain() -> None:
     }
 
 
+def test_planner_routes_natural_terrain_feature_literacy_to_navigation_terrain() -> None:
+    plan = plan_scout_ai_tools(
+        _query("我不會看稜線谷線鞍部，可以自主前往嗎？"),
+        project_root=PROJECT_ROOT,
+    )
+
+    navigation = _single_tool(plan, NAVIGATION_TERRAIN_TOOL_ID)
+    assert navigation.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+    assert navigation.request is not None
+    assert navigation.request["arguments"] == {
+        "terrain_feature_skill_confirmed": False,
+    }
+    assert navigation.boundary.runtime_safety_truth is False
+
+
 def test_planner_passes_junction_and_risk_layer_literacy_to_navigation_terrain() -> None:
     plan = plan_scout_ai_tools(
         _query("不知道岔路點，也看不懂地形風險圖層，可以自主前往嗎？"),
@@ -424,6 +439,21 @@ def test_planner_passes_junction_and_risk_layer_literacy_to_navigation_terrain()
     assert navigation.request is not None
     assert navigation.request["arguments"] == {
         "junction_points_known": False,
+        "terrain_risk_layers_understood": False,
+    }
+    assert navigation.boundary.runtime_safety_truth is False
+
+
+def test_planner_routes_natural_risk_layer_literacy_to_navigation_terrain() -> None:
+    plan = plan_scout_ai_tools(
+        _query("看不懂崩壁溪谷陡坡曝露地形風險圖層，可以自主前往嗎？"),
+        project_root=PROJECT_ROOT,
+    )
+
+    navigation = _single_tool(plan, NAVIGATION_TERRAIN_TOOL_ID)
+    assert navigation.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+    assert navigation.request is not None
+    assert navigation.request["arguments"] == {
         "terrain_risk_layers_understood": False,
     }
     assert navigation.boundary.runtime_safety_truth is False

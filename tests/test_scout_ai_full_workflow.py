@@ -1787,6 +1787,26 @@ def test_full_workflow_blocks_autonomous_navigation_without_backup_positioning()
     assert result.boundary.runtime_safety_truth is False
 
 
+def test_full_workflow_blocks_autonomous_navigation_without_terrain_feature_literacy() -> None:
+    result = run_scout_ai_full_workflow(
+        "我不會看稜線谷線鞍部，可以自主前往嗎？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=6,
+    )
+
+    navigation = _workflow_source(result, NAVIGATION_TERRAIN_TOOL_ID)
+    assert navigation["top_result_summary"]["decision"] == "GUIDED_ONLY"
+    assert navigation["top_result_summary"]["map_skill_readiness"][
+        "terrain_feature_skill_confirmed"
+    ] is False
+    assert result.decision_output["answerSourceToolId"] == NAVIGATION_TERRAIN_TOOL_ID
+    assert result.decision_output["decision"] == "GUIDED_ONLY"
+    assert result.decision_output["firstLayer"]["decision"] == "不建議自主前往。"
+    assert "地形判讀" in result.answer
+    assert result.boundary.runtime_safety_truth is False
+
+
 def test_full_workflow_blocks_unknown_junctions_and_risk_layers() -> None:
     result = run_scout_ai_full_workflow(
         "不知道岔路點，也看不懂地形風險圖層，可以自主前往嗎？",
@@ -1809,6 +1829,26 @@ def test_full_workflow_blocks_unknown_junctions_and_risk_layers() -> None:
     assert result.decision_output["allowed"] is False
     assert result.decision_output["firstLayer"]["decision"] == "不建議自主前往。"
     assert "岔路" in result.answer
+    assert "地形風險圖層" in result.answer
+    assert result.boundary.runtime_safety_truth is False
+
+
+def test_full_workflow_blocks_natural_risk_layer_literacy_gap() -> None:
+    result = run_scout_ai_full_workflow(
+        "看不懂崩壁溪谷陡坡曝露地形風險圖層，可以自主前往嗎？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=6,
+    )
+
+    navigation = _workflow_source(result, NAVIGATION_TERRAIN_TOOL_ID)
+    assert navigation["top_result_summary"]["decision"] == "GUIDED_ONLY"
+    assert navigation["top_result_summary"]["map_readiness"][
+        "terrain_risk_layers_understood"
+    ] is False
+    assert result.decision_output["answerSourceToolId"] == NAVIGATION_TERRAIN_TOOL_ID
+    assert result.decision_output["decision"] == "GUIDED_ONLY"
+    assert result.decision_output["firstLayer"]["decision"] == "不建議自主前往。"
     assert "地形風險圖層" in result.answer
     assert result.boundary.runtime_safety_truth is False
 
