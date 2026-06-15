@@ -313,6 +313,8 @@ review requirements, writeback policy, and traceability. It can seed the next
 pretrip baseline after review, but it never writes user pace, team pace, route
 timing, route risk, Route Context, MissionGraph, incident package, `/safety/*`,
 or Phase 2 Brain state by itself.
+Natural-language debrief questions such as "旅行結束後要怎麼檢討？" route here
+so Scout gives a review/writeback decision instead of a generic no-tool answer.
 
 ## Route Context Collection
 
