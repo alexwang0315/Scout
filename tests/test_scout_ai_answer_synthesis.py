@@ -1146,7 +1146,11 @@ def test_answer_synthesis_prioritizes_pace_guardian_for_delayed_summit() -> None
     assert result.decision_output["cost"]["scheduleDelayMinutes"] == 30.0
     assert result.decision_output["firstLayer"]["decision"] == "不建議繼續攻頂。"
     assert "目前已落後約 30 分鐘" in result.decision_output["firstLayer"]["reason"]
+    first_answer_block = result.answer.split(" Collected evidence: ")[0]
+    assert first_answer_block.count("[決策]") == 1
+    assert "[決策] 不建議攻頂。" not in first_answer_block
     assert "腳程守門員" in result.answer
+    assert "contextual permission" in result.answer
     assert "runtime safety truth" in result.answer
 
 

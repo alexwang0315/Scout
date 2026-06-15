@@ -466,6 +466,8 @@ def _should_skip_secondary_contextual_answer(
     for source in sources:
         if source.tool_id != CONTEXTUAL_PERMISSION_TOOL_ID:
             continue
+        if source.top_result_summary.get("field_answer"):
+            return True
         contextual_decision = str(source.top_result_summary.get("decision") or "").upper()
         contextual_action = str(source.top_result_summary.get("action") or "")
         if contextual_decision == "GO" and contextual_action == "continue":
