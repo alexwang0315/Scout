@@ -61,6 +61,8 @@ OPTIONAL_PROJECT_ARTIFACTS: tuple[tuple[str, str], ...] = (
     ("route_weather_package", "route_weather_package_ref"),
     ("weather_source_manifest", "weather_source_manifest_ref"),
     ("weather_decision_candidates", "weather_decision_candidates_ref"),
+    ("contextual_permission_model", "contextual_permission_model_ref"),
+    ("contextual_permission_rules", "contextual_permission_rules_ref"),
 )
 
 
@@ -382,6 +384,38 @@ def _project_artifact_summary(artifact_kind: str, payload: Any) -> dict[str, Any
             "first_decision": first.get("decision"),
             "first_answerability": first.get("answerability"),
             "human_review_required": first.get("human_review_required"),
+            "candidate_only": boundary.get("candidate_only"),
+            "runtime_safety_truth": boundary.get("runtime_safety_truth"),
+        }
+
+    if artifact_kind == "contextual_permission_model":
+        boundary = payload.get("boundary", {})
+        return {
+            "project_id": payload.get("project_id"),
+            "schema_version": payload.get("schema_version"),
+            "supported_action_count": len(payload.get("supported_actions", [])),
+            "input_signal_count": payload.get("input_signal_count"),
+            "source_report_count": len(payload.get("source_report", [])),
+            "rules_ref": payload.get("rules_ref"),
+            "decision_object_schema": payload.get("decision_object_schema"),
+            "candidate_only": boundary.get("candidate_only"),
+            "runtime_safety_truth": boundary.get("runtime_safety_truth"),
+        }
+
+    if artifact_kind == "contextual_permission_rules":
+        counts = payload.get("counts", {})
+        boundary = payload.get("boundary", {})
+        return {
+            "project_id": payload.get("project_id"),
+            "schema_version": payload.get("schema_version"),
+            "rule_count": counts.get("rule_count"),
+            "allowed_count": counts.get("allowed_count"),
+            "bounded_permission_count": counts.get("bounded_permission_count"),
+            "no_go_count": counts.get("no_go_count"),
+            "change_plan_count": counts.get("change_plan_count"),
+            "escalate_count": counts.get("escalate_count"),
+            "missing_field_count": counts.get("missing_field_count"),
+            "human_review_required": payload.get("human_review_required"),
             "candidate_only": boundary.get("candidate_only"),
             "runtime_safety_truth": boundary.get("runtime_safety_truth"),
         }
