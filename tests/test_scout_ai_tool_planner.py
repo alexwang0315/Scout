@@ -335,6 +335,28 @@ def test_planner_selects_contextual_permission_for_micro_decision() -> None:
     assert WEATHER_WINDOW_TOOL_ID not in _tool_ids(plan)
 
 
+def test_planner_passes_stop_duration_and_buffer_to_contextual_permission() -> None:
+    plan = plan_scout_ai_tools(
+        _query(
+            "現在 2026-06-07T13:36:00+08:00，安全 buffer 還有 21 分鐘，"
+            "如果多停 10 分鐘，代價是什麼？"
+        ),
+        project_root=PROJECT_ROOT,
+    )
+
+    item = _single_tool(plan, CONTEXTUAL_PERMISSION_TOOL_ID)
+    assert item.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+    assert item.request is not None
+    assert item.request["tool_id"] == CONTEXTUAL_PERMISSION_TOOL_ID
+    assert item.request["arguments"] == {
+        "action": "stop",
+        "requested_duration_minutes": 10.0,
+        "remaining_safety_buffer_minutes": 21.0,
+        "current_time": "2026-06-07T13:36:00+08:00",
+    }
+    assert item.boundary.runtime_safety_truth is False
+
+
 def test_planner_selects_weather_and_contextual_for_fog_wait_photo() -> None:
     plan = plan_scout_ai_tools(
         _query("可以等霧散再拍照嗎？"),

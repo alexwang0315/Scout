@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime, timedelta
 from enum import StrEnum
 from math import floor
@@ -320,6 +321,8 @@ def assess_scout_contextual_permission(
     project = _load_project(root)
     project_id = str(project.get("project_id") or project.get("id") or root.name)
     resolved_action = _resolve_action(action, query)
+    if requested_duration_minutes is None:
+        requested_duration_minutes = _requested_duration_from_query(query)
     derived_budget_source = _derive_risk_budget_source(
         root,
         project=project,
@@ -1447,9 +1450,35 @@ def _resolve_action(action: str | None, query: str) -> OutdoorAction:
         return OutdoorAction.ENTER_EXPOSED_SECTION
     if _has_any(text, ("休息", "rest")):
         return OutdoorAction.REST
-    if _has_any(text, ("停多久", "停下", "停留", "可以停", "能不能停", "stop")):
+    if _has_any(
+        text,
+        (
+            "多停",
+            "多停留",
+            "停多久",
+            "停下",
+            "停留",
+            "可以停",
+            "能不能停",
+            "stop",
+        ),
+    ) or re.search(r"停\s*\d+(?:\.\d+)?\s*(?:分鐘|分|min|minutes?)", text):
         return OutdoorAction.STOP
     return OutdoorAction.CONTINUE
+
+
+def _requested_duration_from_query(query: str) -> float | None:
+    text = str(query or "").strip().lower().replace(" ", "")
+    action_prefix = (
+        "多停|多停留|停留|停|拍照|拍攝|拍影片|拍片|多拍|等待|等|休息|午餐|吃午餐"
+    )
+    match = re.search(
+        rf"(?:{action_prefix})(\d+(?:\.\d+)?)(?:分鐘|分|min|minutes?)",
+        text,
+    )
+    if match:
+        return float(match.group(1))
+    return None
 
 
 def _normalized_risk_level(level: str | None, query: str) -> str | None:

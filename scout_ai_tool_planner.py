@@ -305,6 +305,10 @@ def _plan_item(
         overrides = _route_readiness_request_overrides(query.question)
         if overrides:
             request["arguments"] = overrides
+    if request is not None and contract.tool_id == CONTEXTUAL_PERMISSION_TOOL_ID:
+        overrides = _contextual_permission_request_overrides(query.question)
+        if overrides:
+            request["arguments"] = overrides
     if request is not None and contract.tool_id == NAVIGATION_TERRAIN_TOOL_ID:
         overrides = _navigation_terrain_request_overrides(query.question)
         if overrides:
@@ -457,6 +461,112 @@ def _team_status_request_overrides(question: str) -> dict[str, Any]:
         overrides["checkin_overdue_minutes"] = minutes
         overrides["last_heard_minutes"] = minutes
     return overrides
+
+
+def _contextual_permission_request_overrides(question: str) -> dict[str, Any]:
+    normalized = _normalize(question)
+    overrides: dict[str, Any] = {}
+    action = _contextual_permission_action_override(normalized)
+    if action:
+        overrides["action"] = action
+    duration = _extract_requested_action_minutes(normalized)
+    if duration is not None:
+        overrides["requested_duration_minutes"] = duration
+    buffer_minutes = _extract_safety_buffer_minutes(normalized)
+    if buffer_minutes is not None:
+        overrides["remaining_safety_buffer_minutes"] = buffer_minutes
+    current_time = _extract_iso_datetime(question)
+    if current_time:
+        overrides["current_time"] = current_time
+    return overrides
+
+
+def _contextual_permission_action_override(normalized_question: str) -> str | None:
+    if _has_any(normalized_question, ("拍影片", "拍片", "影片", "video", "film", "架腳架")):
+        return "film"
+    if _has_any(normalized_question, ("等霧", "等隊友", "等待", "wait")):
+        return "wait"
+    if _has_any(
+        normalized_question,
+        ("改線", "繞去", "支線", "岔路", "切過去", "捷徑", "reroute", "shortcut"),
+    ):
+        return "reroute"
+    if _has_any(
+        normalized_question,
+        ("拍照", "照片", "photo", "攝影", "拍攝", "很好拍", "去拍", "想去拍", "多拍"),
+    ):
+        return "photo"
+    if _has_any(normalized_question, ("午餐", "吃午餐", "吃飯", "lunch")):
+        return "lunch"
+    if _has_any(
+        normalized_question,
+        ("分隊", "分開", "split", "走得快的人先去", "快的人先去", "先去山頂"),
+    ):
+        return "split_team"
+    if _has_any(normalized_question, ("攻頂", "山頂", "summit")):
+        return "summit"
+    if _has_any(normalized_question, ("撤退", "折返", "下撤", "retreat")):
+        return "retreat"
+    if _has_any(normalized_question, ("穿雨衣", "雨衣", "raingear")):
+        return "wear_rain_gear"
+    if _has_any(normalized_question, ("渡溪", "過溪", "溪水", "crossstream")):
+        return "cross_stream"
+    if _has_any(normalized_question, ("曝露", "暴露", "邊坡", "exposed")):
+        return "enter_exposed_section"
+    if _has_any(normalized_question, ("休息", "rest")):
+        return "rest"
+    if _has_any(
+        normalized_question,
+        (
+            "多停",
+            "多停留",
+            "停多久",
+            "停下",
+            "停留",
+            "可以停",
+            "能不能停",
+            "stop",
+        ),
+    ) or re.search(r"停\d+(?:\.\d+)?(?:分鐘|分|min|minutes?)", normalized_question):
+        return "stop"
+    return None
+
+
+def _extract_requested_action_minutes(normalized_question: str) -> float | None:
+    action_prefix = (
+        "多停|多停留|停留|停|拍照|拍攝|拍影片|拍片|多拍|等待|等|休息|午餐|吃午餐"
+    )
+    match = re.search(
+        rf"(?:{action_prefix})(\d+(?:\.\d+)?)(?:分鐘|分|min|minutes?)",
+        normalized_question,
+    )
+    if match:
+        return float(match.group(1))
+    return None
+
+
+def _extract_safety_buffer_minutes(normalized_question: str) -> float | None:
+    patterns = (
+        r"(?:安全)?buffer(?:剩|剩下|還有|約|是|=|只剩)?(\d+(?:\.\d+)?)(?:分鐘|分|min|minutes?)",
+        r"(\d+(?:\.\d+)?)(?:分鐘|分|min|minutes?)(?:安全)?buffer",
+        r"剩餘安全(?:buffer|餘裕)(?:約|是|=)?(\d+(?:\.\d+)?)(?:分鐘|分|min|minutes?)",
+        r"安全(?:buffer|餘裕)(?:剩|剩下|還有|約|是|=|只剩)?(\d+(?:\.\d+)?)(?:分鐘|分|min|minutes?)",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, normalized_question)
+        if match:
+            return float(match.group(1))
+    return None
+
+
+def _extract_iso_datetime(question: str) -> str | None:
+    match = re.search(
+        r"(\d{4}-\d{2}-\d{2}[tT]\d{2}:\d{2}(?::\d{2})?(?:[zZ]|[+-]\d{2}:\d{2})?)",
+        question,
+    )
+    if not match:
+        return None
+    return match.group(1)
 
 
 def _extract_minutes(normalized_question: str) -> float | None:
