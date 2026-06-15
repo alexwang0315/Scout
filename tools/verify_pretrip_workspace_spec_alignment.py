@@ -65,6 +65,11 @@ OPTIONAL_WEATHER_DECISION_REFS = {
     "route_weather_package_ref": "outputs/route_weather_package.json",
 }
 
+OPTIONAL_CONTEXTUAL_PERMISSION_REFS = {
+    "contextual_permission_model_ref": "normalized/permissions/contextual_permission_model.json",
+    "contextual_permission_rules_ref": "candidates/contextual_permission_rules.json",
+}
+
 WORKSPACE_LAYOUT_SCHEMA_VERSION = "scout.workspace.v1"
 
 REQUIRED_PRETRIP_DIRS = {
@@ -151,6 +156,7 @@ def main(argv: list[str] | None = None) -> int:
     layer_candidate_artifacts: dict[str, dict[str, Any] | None] = {}
     route_context_summary = {"checked": False, "available": False}
     weather_decision_summary = {"checked": False, "available": False}
+    contextual_permission_summary = {"checked": False, "available": False}
     api_summary = {"checked": False}
     tile_summary = {"checked": False}
 
@@ -267,6 +273,11 @@ def main(argv: list[str] | None = None) -> int:
                 project,
                 errors,
             )
+            contextual_permission_summary = _check_contextual_permission_refs(
+                project_root,
+                project,
+                errors,
+            )
             admin_headers = _admin_headers(args.admin_bearer_token_file, errors)
             api_summary = _check_admin_api(
                 args.admin_base_url,
@@ -321,6 +332,7 @@ def main(argv: list[str] | None = None) -> int:
         "semantic_judgements": _semantic_judgement_summary(semantic_judgements),
         "route_context": route_context_summary,
         "weather_decision": weather_decision_summary,
+        "contextual_permission": contextual_permission_summary,
         "layer_candidates": {
             key: _candidate_artifact_summary(value)
             for key, value in layer_candidate_artifacts.items()
@@ -764,6 +776,183 @@ def _weather_candidate_only(payload: Any) -> bool | None:
 
 
 def _weather_runtime_truth(payload: Any) -> bool | None:
+    if not isinstance(payload, dict):
+        return None
+    boundary = payload.get("boundary") if isinstance(payload.get("boundary"), dict) else {}
+    if "runtime_safety_truth" in boundary:
+        return boundary.get("runtime_safety_truth")
+    return payload.get("runtime_safety_truth")
+
+
+def _check_contextual_permission_refs(
+    project_root: Path,
+    project: dict[str, Any],
+    errors: list[str],
+) -> dict[str, Any]:
+    present_refs = {
+        key: project.get(key)
+        for key in OPTIONAL_CONTEXTUAL_PERMISSION_REFS
+        if project.get(key)
+    }
+    if not present_refs:
+        return {"checked": True, "available": False}
+
+    missing_ref_keys = [
+        key for key in OPTIONAL_CONTEXTUAL_PERMISSION_REFS if not project.get(key)
+    ]
+    if missing_ref_keys:
+        errors.append(
+            "contextual permission refs are partial; missing: "
+            + ", ".join(sorted(missing_ref_keys))
+        )
+
+    for key, expected in sorted(OPTIONAL_CONTEXTUAL_PERMISSION_REFS.items()):
+        ref = project.get(key)
+        if ref and ref != expected:
+            errors.append(
+                f"unexpected contextual permission ref for {key}: {ref} != {expected}"
+            )
+
+    payloads = {
+        key: _load_json_ref(project_root, project, key, errors)
+        for key in OPTIONAL_CONTEXTUAL_PERMISSION_REFS
+        if project.get(key)
+    }
+    model = payloads.get("contextual_permission_model_ref") or {}
+    rules = payloads.get("contextual_permission_rules_ref") or {}
+
+    _check_contextual_permission_artifact_kind(
+        model,
+        "pretrip_contextual_permission_model",
+        "contextual_permission_model_ref",
+        errors,
+    )
+    _check_contextual_permission_artifact_kind(
+        rules,
+        "pretrip_contextual_permission_rules",
+        "contextual_permission_rules_ref",
+        errors,
+    )
+    for key, payload in payloads.items():
+        _check_contextual_permission_boundary(payload, key, errors)
+
+    if isinstance(model, dict):
+        expected_rules_ref = OPTIONAL_CONTEXTUAL_PERMISSION_REFS[
+            "contextual_permission_rules_ref"
+        ]
+        if model.get("rules_ref") not in {None, expected_rules_ref}:
+            errors.append(
+                f"contextual permission model rules_ref mismatch: {model.get('rules_ref')} != {expected_rules_ref}"
+            )
+
+    rule_items = rules.get("rules", []) if isinstance(rules, dict) else []
+    rule_items = [item for item in rule_items if isinstance(item, dict)]
+    counts = rules.get("counts", {}) if isinstance(rules, dict) else {}
+    rule_count = counts.get("rule_count")
+    project_count = project.get("contextual_permission_rule_count")
+    if rule_count is not None and rule_count != len(rule_items):
+        errors.append(
+            f"contextual permission rule_count mismatch: counts={rule_count} rules={len(rule_items)}"
+        )
+    if (
+        project_count is not None
+        and rule_count is not None
+        and project_count != rule_count
+    ):
+        errors.append(
+            f"contextual_permission_rule_count mismatch: project={project_count} rules={rule_count}"
+        )
+    if isinstance(rules, dict) and rules.get("human_review_required") is not True:
+        errors.append("contextual permission rules must require human review")
+
+    for rule in rule_items:
+        rule_id = rule.get("rule_id") or rule.get("action") or "unknown"
+        if rule.get("candidate_only") is not True:
+            errors.append(f"contextual permission rule {rule_id} must be candidate_only")
+        if rule.get("runtime_safety_truth") is not False:
+            errors.append(
+                f"contextual permission rule {rule_id} must set runtime_safety_truth=false"
+            )
+        for key in (
+            "phase1_runtime_mutation_allowed",
+            "phase2_brain_writeback_allowed",
+            "live_safety_api_calls_allowed",
+            "external_api_calls_made",
+            "outbound_send_allowed",
+            "hardware_control_allowed",
+        ):
+            if rule.get(key) is True:
+                errors.append(f"contextual permission rule {rule_id} sets {key}=true")
+
+    first_rule = rule_items[0] if rule_items else {}
+    return {
+        "checked": True,
+        "available": True,
+        "rule_count": rule_count,
+        "project_rule_count": project_count,
+        "allowed_count": counts.get("allowed_count"),
+        "bounded_permission_count": counts.get("bounded_permission_count"),
+        "no_go_count": counts.get("no_go_count"),
+        "change_plan_count": counts.get("change_plan_count"),
+        "escalate_count": counts.get("escalate_count"),
+        "first_decision": first_rule.get("decision"),
+        "first_answerability": first_rule.get("answerability"),
+        "supported_action_count": len(model.get("supported_actions", []))
+        if isinstance(model, dict)
+        else None,
+        "input_signal_count": model.get("input_signal_count")
+        if isinstance(model, dict)
+        else None,
+        "candidate_only": _contextual_permission_candidate_only(rules),
+        "runtime_safety_truth": _contextual_permission_runtime_truth(rules),
+    }
+
+
+def _check_contextual_permission_artifact_kind(
+    payload: Any,
+    expected: str,
+    ref_key: str,
+    errors: list[str],
+) -> None:
+    if not isinstance(payload, dict):
+        errors.append(f"contextual permission artifact payload missing for {ref_key}")
+        return
+    if payload.get("artifact_kind") != expected:
+        errors.append(
+            f"contextual permission artifact kind mismatch for {ref_key}: {payload.get('artifact_kind')} != {expected}"
+        )
+
+
+def _check_contextual_permission_boundary(
+    payload: Any,
+    ref_key: str,
+    errors: list[str],
+) -> None:
+    if not isinstance(payload, dict):
+        return
+    boundary = payload.get("boundary") if isinstance(payload.get("boundary"), dict) else {}
+    if payload.get("runtime_safety_truth") is True or boundary.get("runtime_safety_truth") is True:
+        errors.append(f"{ref_key} claims runtime_safety_truth=true")
+    for key in (
+        "phase1_runtime_mutation_allowed",
+        "phase2_brain_writeback_allowed",
+        "live_safety_api_calls_allowed",
+        "external_api_calls_made",
+        "outbound_send_allowed",
+        "hardware_control_allowed",
+    ):
+        if boundary.get(key) is True:
+            errors.append(f"{ref_key} sets {key}=true")
+
+
+def _contextual_permission_candidate_only(payload: Any) -> bool | None:
+    if not isinstance(payload, dict):
+        return None
+    boundary = payload.get("boundary") if isinstance(payload.get("boundary"), dict) else {}
+    return boundary.get("candidate_only")
+
+
+def _contextual_permission_runtime_truth(payload: Any) -> bool | None:
     if not isinstance(payload, dict):
         return None
     boundary = payload.get("boundary") if isinstance(payload.get("boundary"), dict) else {}

@@ -55,6 +55,7 @@ def test_builtin_manifest_directory_lists_read_and_proposal_tools() -> None:
     assert "scout.pretrip.import_gpx" in tool_ids
     assert "scout.pretrip.route_context_collect" in tool_ids
     assert "scout.pretrip.weather_decision_collect" in tool_ids
+    assert "scout.pretrip.contextual_permission_collect" in tool_ids
     assert "scout.pretrip.prepare_layers" in tool_ids
     assert "scout.pretrip.artifact_manifest" in tool_ids
     assert "scout.pretrip.readiness" in tool_ids

@@ -160,6 +160,8 @@ def run_builtin_tool(argv: Sequence[str] | None = None) -> tuple[int, dict[str, 
         return _pretrip_route_context_collect(args)
     if args.command == "pretrip-weather-decision-collect":
         return _pretrip_weather_decision_collect(args)
+    if args.command == "pretrip-contextual-permission-collect":
+        return _pretrip_contextual_permission_collect(args)
     if args.command == "pretrip-prepare-layers":
         return _pretrip_prepare_layers(args)
     if args.command == "pretrip-artifact-manifest":
@@ -418,6 +420,13 @@ def _build_parser() -> argparse.ArgumentParser:
     weather_decision_parser.add_argument("--input", type=Path, required=True)
     weather_decision_parser.add_argument("--dry-run", action="store_true")
     weather_decision_parser.add_argument("--json", action="store_true")
+
+    contextual_permission_parser = subparsers.add_parser(
+        "pretrip-contextual-permission-collect"
+    )
+    contextual_permission_parser.add_argument("--input", type=Path, required=True)
+    contextual_permission_parser.add_argument("--dry-run", action="store_true")
+    contextual_permission_parser.add_argument("--json", action="store_true")
 
     prepare_layers_parser = subparsers.add_parser("pretrip-prepare-layers")
     prepare_layers_parser.add_argument("--input", type=Path, required=True)
@@ -2520,6 +2529,64 @@ def _pretrip_weather_decision_collect(args: argparse.Namespace) -> tuple[int, di
                 "raw_payloads_embedded": False,
                 "network_calls_made": False,
                 "client_cwa_api_key_allowed": False,
+            },
+        },
+    )
+
+
+def _pretrip_contextual_permission_collect(
+    args: argparse.Namespace,
+) -> tuple[int, dict[str, Any]]:
+    from pretrip_contextual_permission_collection import (
+        collect_pretrip_contextual_permission,
+    )
+
+    request = _load_json(args.input)
+    project_root = _optional_path(request.get("project_root"))
+    if project_root is None:
+        project_id = request.get("project_id")
+        workspace_root = _optional_path(request.get("workspace_root"))
+        if project_id and workspace_root:
+            project_root = workspace_root / str(project_id)
+    if project_root is None:
+        return 2, _error_payload(
+            "contextual permission collection requires project_root or workspace_root plus project_id"
+        )
+
+    result = collect_pretrip_contextual_permission(
+        project_root,
+        dry_run=bool(args.dry_run),
+        current_time=request.get("current_time"),
+        current_cp_id=request.get("current_cp_id"),
+        next_cp_id=request.get("next_cp_id"),
+        communication_status=request.get("communication_status"),
+        equipment_status=request.get("equipment_status"),
+        remaining_safety_buffer_minutes=request.get("remaining_safety_buffer_minutes"),
+        requested_duration_minutes=request.get("requested_duration_minutes"),
+        current_delay_minutes=request.get("current_delay_minutes"),
+        next_segment_uncertainty_minutes=request.get(
+            "next_segment_uncertainty_minutes"
+        ),
+        weather_reserve_minutes=request.get("weather_reserve_minutes"),
+        daylight_reserve_minutes=request.get("daylight_reserve_minutes"),
+        retreat_reserve_minutes=request.get("retreat_reserve_minutes"),
+        slowest_member_reserve_minutes=request.get("slowest_member_reserve_minutes"),
+        generated_at=request.get("generated_at"),
+    )
+    return (
+        0,
+        {
+            "artifact_kind": "scout_pretrip_contextual_permission_collect_tool_output",
+            "status": "completed",
+            "dry_run": bool(args.dry_run),
+            "result": result,
+            "boundary": {
+                **_closed_boundary(),
+                "workspace_file_mutation_allowed": not bool(args.dry_run),
+                "candidate_only": True,
+                "raw_payloads_embedded": False,
+                "network_calls_made": False,
+                "live_safety_api_calls_allowed": False,
             },
         },
     )

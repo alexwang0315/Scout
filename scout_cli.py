@@ -239,6 +239,28 @@ def _add_pretrip_group(subparsers: argparse._SubParsersAction) -> None:
     weather_decision.add_argument("--authorized-by", default=None)
     weather_decision.add_argument("--output", type=Path, default=None)
     weather_decision.add_argument("--json", action="store_true")
+    contextual_permission = pretrip_sub.add_parser("contextual-permission-collect")
+    contextual_permission.add_argument("--project-root", type=Path, default=None)
+    contextual_permission.add_argument("--project-id", default=None)
+    contextual_permission.add_argument("--workspace-root", type=Path, default=None)
+    contextual_permission.add_argument("--current-time", default=None)
+    contextual_permission.add_argument("--current-cp-id", default=None)
+    contextual_permission.add_argument("--next-cp-id", default=None)
+    contextual_permission.add_argument("--communication-status", default=None)
+    contextual_permission.add_argument("--equipment-status", default=None)
+    contextual_permission.add_argument("--remaining-safety-buffer-minutes", default=None)
+    contextual_permission.add_argument("--requested-duration-minutes", default=None)
+    contextual_permission.add_argument("--current-delay-minutes", default=None)
+    contextual_permission.add_argument("--next-segment-uncertainty-minutes", default=None)
+    contextual_permission.add_argument("--weather-reserve-minutes", default=None)
+    contextual_permission.add_argument("--daylight-reserve-minutes", default=None)
+    contextual_permission.add_argument("--retreat-reserve-minutes", default=None)
+    contextual_permission.add_argument("--slowest-member-reserve-minutes", default=None)
+    contextual_permission.add_argument("--generated-at", default=None)
+    contextual_permission.add_argument("--dry-run", action="store_true")
+    contextual_permission.add_argument("--authorized-by", default=None)
+    contextual_permission.add_argument("--output", type=Path, default=None)
+    contextual_permission.add_argument("--json", action="store_true")
     layers = pretrip_sub.add_parser("prepare-layers")
     layers.add_argument("--project-root", type=Path, default=None)
     layers.add_argument("--project-id", default=None)
@@ -612,6 +634,32 @@ def _tool_request_for_args(args: argparse.Namespace) -> tuple[str, dict[str, Any
         if args.valid_until:
             request["valid_until"] = args.valid_until
         return "scout.pretrip.weather_decision_collect", request
+    if group == "pretrip" and args.pretrip_command == "contextual-permission-collect":
+        request = {}
+        _set_path(request, "project_root", args.project_root)
+        _set_path(request, "workspace_root", args.workspace_root)
+        if args.project_id:
+            request["project_id"] = args.project_id
+        for key in (
+            "current_time",
+            "current_cp_id",
+            "next_cp_id",
+            "communication_status",
+            "equipment_status",
+            "remaining_safety_buffer_minutes",
+            "requested_duration_minutes",
+            "current_delay_minutes",
+            "next_segment_uncertainty_minutes",
+            "weather_reserve_minutes",
+            "daylight_reserve_minutes",
+            "retreat_reserve_minutes",
+            "slowest_member_reserve_minutes",
+            "generated_at",
+        ):
+            value = getattr(args, key)
+            if value is not None:
+                request[key] = value
+        return "scout.pretrip.contextual_permission_collect", request
     if group == "pretrip" and args.pretrip_command == "prepare-layers":
         request = {"profile": args.profile}
         _set_path(request, "project_root", args.project_root)

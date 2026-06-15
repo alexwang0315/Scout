@@ -6,6 +6,7 @@ from pathlib import Path
 
 from scout_agent_trace import load_agent_trace
 from scout_cli import run_scout_cli
+from pretrip_contextual_permission_collection import CONTEXTUAL_PERMISSION_RULES_REF
 from pretrip_route_context_collection import (
     ROUTE_CONTEXT_PACK_REF,
     ROUTE_CONTEXT_POINTS_REF,
@@ -524,6 +525,59 @@ def test_scout_pretrip_weather_decision_collect_facade(tmp_path: Path) -> None:
     assert output["result"]["writes_performed"] is True
     assert (project_root / ROUTE_WEATHER_PACKAGE_REF).is_file()
     assert (project_root / WEATHER_DECISION_CANDIDATES_REF).is_file()
+
+
+def test_scout_pretrip_contextual_permission_collect_facade(tmp_path: Path) -> None:
+    project_root = tmp_path / "chilai_nanhua_day1"
+    shutil.copytree(CHILAI_PROJECT, project_root)
+
+    dry_exit, dry_payload = run_scout_cli(
+        [
+            "pretrip",
+            "contextual-permission-collect",
+            "--project-root",
+            str(project_root),
+            "--remaining-safety-buffer-minutes",
+            "90",
+            "--current-time",
+            "2026-06-07T13:36:00+08:00",
+            "--next-cp-id",
+            "CP4",
+            "--dry-run",
+            "--json",
+        ]
+    )
+    assert dry_exit == 0
+    dry_output = json.loads(dry_payload["outputs"]["stdout"])
+    assert dry_output["result"]["writes_performed"] is False
+    assert not (project_root / CONTEXTUAL_PERMISSION_RULES_REF).exists()
+
+    exit_code, payload = run_scout_cli(
+        [
+            "pretrip",
+            "contextual-permission-collect",
+            "--project-root",
+            str(project_root),
+            "--remaining-safety-buffer-minutes",
+            "90",
+            "--current-time",
+            "2026-06-07T13:36:00+08:00",
+            "--next-cp-id",
+            "CP4",
+            "--authorized-by",
+            "operator.alex",
+            "--json",
+        ]
+    )
+
+    assert exit_code == 0
+    output = json.loads(payload["outputs"]["stdout"])
+    assert output["artifact_kind"] == (
+        "scout_pretrip_contextual_permission_collect_tool_output"
+    )
+    assert output["result"]["writes_performed"] is True
+    assert output["result"]["bounded_permission_count"] >= 4
+    assert (project_root / CONTEXTUAL_PERMISSION_RULES_REF).is_file()
 
 
 def test_scout_cp_apply_reviewed_delta_facade(tmp_path: Path) -> None:
