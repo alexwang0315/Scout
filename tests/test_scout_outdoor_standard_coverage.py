@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from scout_ai_full_workflow import run_scout_ai_full_workflow
 from scout_ai_tool_contracts import tool_registry_output
 from scout_ai_tool_executor import execute_scout_ai_tool
 from scout_contextual_permission_tool import CONTEXTUAL_PERMISSION_TOOL_ID
@@ -152,6 +153,59 @@ SIX_FORCE_SCENARIOS = [
         },
         "section 11 Navigation & Terrain Intelligence",
         id="navigation-terrain-map",
+    ),
+]
+
+SECTION_25_EXAMPLE_SCENARIOS = [
+    pytest.param(
+        "25.1 拍影片",
+        "現在 13:36，前方 CP4 約 42 分鐘，安全 buffer 剩 21 分鐘，可以停 6 分鐘拍影片嗎？",
+        CONTEXTUAL_PERMISSION_TOOL_ID,
+        "film",
+        "CONDITIONAL_GO",
+        True,
+        ("最多 6 分鐘", "13:42", "前往 CP4", "消耗 6 分鐘 buffer"),
+        id="section-25-film",
+    ),
+    pytest.param(
+        "25.2 午餐",
+        "這裡是風口，前方 CP3 約 18 分鐘且較避風，安全 buffer 還有 45 分鐘，我們可以在這裡吃午餐嗎？",
+        CONTEXTUAL_PERMISSION_TOOL_ID,
+        "lunch",
+        "NO_GO",
+        False,
+        ("不建議吃午餐", "約 18 分鐘到 CP3", "較避風", "不要消耗停留或改線 buffer"),
+        id="section-25-lunch",
+    ),
+    pytest.param(
+        "25.3 攻頂",
+        "我們晚了 30 分鐘，還可以繼續攻頂嗎？",
+        PACE_GUARDIAN_TOOL_ID,
+        "pace_adjustment",
+        "NO_GO",
+        False,
+        ("不建議繼續攻頂", "落後約 30 分鐘", "最慢者", "縮短行程或撤退"),
+        id="section-25-summit",
+    ),
+    pytest.param(
+        "25.4 等霧散拍照",
+        "現在 14:00，安全 buffer 剩 18 分鐘，可以等霧散 5 分鐘再拍照嗎？",
+        CONTEXTUAL_PERMISSION_TOOL_ID,
+        "wait",
+        "CONDITIONAL_GO",
+        True,
+        ("最多 5 分鐘", "14:05", "放棄拍攝", "消耗 5 分鐘 buffer"),
+        id="section-25-fog-wait",
+    ),
+    pytest.param(
+        "25.5 社群拍攝點",
+        "大家都說旁邊那個點很好拍，可以繞去嗎？",
+        MEDIA_LITERACY_TOOL_ID,
+        "reroute",
+        "NO_GO",
+        False,
+        ("不建議為媒體點位停留或改線", "beauty_photo_bias", "媒體內容", "不當作現場授權"),
+        id="section-25-social-photo",
     ),
 ]
 
@@ -339,6 +393,49 @@ def test_mvp_on_route_micro_decision_is_bounded_and_conservative_when_missing() 
     assert film_result.payload["decision_output"]["nextAction"]
     assert film_result.payload["decision_output"]["runtimeSafetyTruth"] is False
     _assert_no_forbidden_safety_language(film_result.payload)
+
+
+@pytest.mark.parametrize(
+    (
+        "scenario",
+        "query",
+        "answer_source_tool_id",
+        "action",
+        "decision",
+        "allowed",
+        "required_phrases",
+    ),
+    SECTION_25_EXAMPLE_SCENARIOS,
+)
+def test_section_25_example_scenarios_are_full_workflow_decisions(
+    scenario: str,
+    query: str,
+    answer_source_tool_id: str,
+    action: str,
+    decision: str,
+    allowed: bool,
+    required_phrases: tuple[str, ...],
+) -> None:
+    result = run_scout_ai_full_workflow(
+        query,
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=8,
+    )
+
+    decision_output = result.decision_output
+    assert result.completed_tool_count >= 1, scenario
+    assert result.failed_tool_count == 0, scenario
+    assert decision_output["answerSourceToolId"] == answer_source_tool_id
+    assert decision_output["action"] == action
+    assert decision_output["decision"] == decision
+    assert decision_output["allowed"] is allowed
+    assert decision_output["runtimeSafetyTruth"] is False
+    assert result.boundary.runtime_safety_truth is False
+    _assert_standard_output(decision_output)
+    _assert_no_forbidden_safety_language(decision_output)
+    for phrase in required_phrases:
+        assert phrase in result.answer, scenario
 
 
 def test_post_trip_learning_package_covers_reviewable_model_updates_without_writeback() -> None:
