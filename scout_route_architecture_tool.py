@@ -136,7 +136,7 @@ def assess_scout_route_architecture(
         route_architecture=route_architecture,
         planned_eta=planned_eta,
         cp_nodes=cp_nodes,
-        requires_turn_back_status=_looks_like_turn_back_status_question(query),
+        turn_back_status_label=_turn_back_status_label(query),
         requires_checkpoint_deadline_status=_looks_like_checkpoint_deadline_question(query),
         external_deadline_pressure_kind=_external_deadline_pressure_kind(query),
     )
@@ -378,7 +378,7 @@ def _route_decision(
     route_architecture: dict[str, Any],
     planned_eta: dict[str, Any],
     cp_nodes: list[dict[str, Any]],
-    requires_turn_back_status: bool,
+    turn_back_status_label: str | None,
     requires_checkpoint_deadline_status: bool,
     external_deadline_pressure_kind: str | None,
 ) -> dict[str, Any]:
@@ -405,9 +405,11 @@ def _route_decision(
             "candidate_only": True,
             "runtime_safety_truth": False,
         }
-    if requires_turn_back_status and not current_cp_id and not current_time:
+    if turn_back_status_label and not current_cp_id and not current_time:
         reasons = [
-            "current_cp_id and current_time are required to determine whether this is the turn-back point.",
+            "判斷現在是否為"
+            + turn_back_status_label
+            + "需要 current_cp_id and current_time.",
         ]
         if turn_back.get("turn_back_checkpoint_name"):
             reasons.append(
@@ -418,9 +420,9 @@ def _route_decision(
         return {
             "decision": "DELAY",
             "main_reasons": reasons,
-            "next_action": "先確認目前 CP、可靠定位與當前時間；確認前不要往折返點後方推進。",
-            "action_limit": "不得把此回答當成已通過折返點或可繼續推進的授權。",
-            "first_layer_decision": "無法確認現在是否為折返點。",
+            "next_action": "先確認目前 CP、可靠定位與當前時間；確認前不要往折返/撤退點後方推進。",
+            "action_limit": "不得把此回答當成已通過折返/撤退點或可繼續推進的授權。",
+            "first_layer_decision": "無法確認現在是否為" + turn_back_status_label + "。",
             "missing_fields": ["current_cp_id", "current_time"],
             "turn_back_checkpoint": turn_back,
             "candidate_only": True,
@@ -1063,9 +1065,23 @@ def _missing_fields(
     return missing
 
 
-def _looks_like_turn_back_status_question(query: str) -> bool:
+def _turn_back_status_label(query: str) -> str | None:
     normalized = "".join(str(query).lower().split())
-    return any(
+    if any(
+        phrase in normalized
+        for phrase in (
+            "現在是不是撤退點",
+            "目前是不是撤退點",
+            "這裡是不是撤退點",
+            "此處是不是撤退點",
+            "是不是撤退點",
+            "到撤退點了嗎",
+            "已經到撤退點",
+            "retreatpoint",
+        )
+    ):
+        return "撤退點"
+    if any(
         phrase in normalized
         for phrase in (
             "現在是不是折返點",
@@ -1075,7 +1091,9 @@ def _looks_like_turn_back_status_question(query: str) -> bool:
             "turn-backpoint",
             "turnbackpoint",
         )
-    )
+    ):
+        return "折返點"
+    return None
 
 
 def _looks_like_checkpoint_deadline_question(query: str) -> bool:

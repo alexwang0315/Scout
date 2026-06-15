@@ -1357,6 +1357,37 @@ def test_full_workflow_uses_route_architecture_for_turnback_status() -> None:
     assert result.boundary.runtime_safety_truth is False
 
 
+def test_full_workflow_delays_retreat_point_status_without_current_context() -> None:
+    result = run_scout_ai_full_workflow(
+        "現在是不是撤退點？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=4,
+    )
+
+    assert result.answerability == "partial_evidence_with_missing_context"
+    assert result.selected_tool_count == 1
+    assert result.executed_tool_count == 1
+    assert result.completed_tool_count == 1
+    assert result.contract_gap_count == 0
+    assert result.failed_tool_count == 0
+    assert result.missing_evidence_count == 1
+    assert result.sources[0]["tool_id"] == ROUTE_ARCHITECTURE_TOOL_ID
+    assert result.sources[0]["missing_fields"] == ["current_cp_id", "current_time"]
+    assert result.sources[0]["top_result_summary"]["answerability"] == (
+        "route_architecture_missing_current_context"
+    )
+    assert result.sources[0]["top_result_summary"]["decision"] == "DELAY"
+    assert result.decision_output["answerSourceToolId"] == ROUTE_ARCHITECTURE_TOOL_ID
+    assert result.decision_output["decision"] == "DELAY"
+    assert result.decision_output["firstLayer"]["decision"] == (
+        "無法確認現在是否為撤退點。"
+    )
+    assert "current_cp_id、current_time" in result.answer
+    assert "雲海保線所" in result.decision_output["firstLayer"]["reason"]
+    assert result.boundary.runtime_safety_truth is False
+
+
 def test_full_workflow_detects_natural_turnback_current_context() -> None:
     result = run_scout_ai_full_workflow(
         "現在 2013-10-08T15:10:00+08:00 在雲海保線所，現在是不是折返點？",

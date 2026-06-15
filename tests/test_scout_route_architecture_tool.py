@@ -76,6 +76,25 @@ def test_route_architecture_changes_plan_after_turn_back_eta() -> None:
     assert result["boundary"]["runtime_safety_truth"] is False
 
 
+def test_route_architecture_delays_retreat_point_status_without_current_context() -> None:
+    result = assess_scout_route_architecture(
+        PROJECT_ROOT,
+        query="現在是不是撤退點？",
+        limit=2,
+    )
+
+    assert result["answerability"] == "route_architecture_missing_current_context"
+    assert result["decision"] == "DELAY"
+    assert result["missing_fields"] == ["current_cp_id", "current_time"]
+    assert result["decision_output"]["firstLayer"]["decision"] == (
+        "無法確認現在是否為撤退點。"
+    )
+    assert "current_cp_id" in result["decision_output"]["firstLayer"]["reason"]
+    assert result["decision_output"]["allowed"] is False
+    assert result["decision_output"]["runtimeSafetyTruth"] is False
+    assert result["boundary"]["runtime_safety_truth"] is False
+
+
 def test_route_architecture_changes_plan_after_missed_checkpoint_deadline() -> None:
     result = assess_scout_route_architecture(
         PROJECT_ROOT,
