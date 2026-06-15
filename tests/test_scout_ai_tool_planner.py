@@ -597,6 +597,26 @@ def test_planner_selects_team_status_for_rear_group_and_checkin_question() -> No
     assert item.boundary.runtime_safety_truth is False
 
 
+def test_planner_routes_unanswered_message_to_team_status_with_overdue_minutes() -> None:
+    plan = plan_scout_ai_tools(
+        _query("隊友已經 20 分鐘沒回訊息，要怎麼辦？"),
+        project_root=PROJECT_ROOT,
+    )
+
+    item = _single_tool(plan, TEAM_STATUS_TOOL_ID)
+    assert item.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+    assert item.implementation_status == "ready_current_tool"
+    assert item.request is not None
+    assert item.request["tool_id"] == TEAM_STATUS_TOOL_ID
+    assert item.request["arguments"] == {
+        "communication_status": "unknown",
+        "checkin_overdue_minutes": 20.0,
+        "last_heard_minutes": 20.0,
+    }
+    assert item.missing_fields == []
+    assert item.boundary.runtime_safety_truth is False
+
+
 def test_planner_selects_post_trip_review_for_after_action_question() -> None:
     plan = plan_scout_ai_tools(
         _query("行後回顧要更新哪些下一次規劃？實際耗時哪裡比預期慢？"),

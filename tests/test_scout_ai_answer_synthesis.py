@@ -1131,6 +1131,33 @@ def test_answer_synthesis_uses_team_status_field_answer_without_guessing() -> No
     assert "runtime safety truth" in result.answer
 
 
+def test_answer_synthesis_escalates_unanswered_teammate_message_without_outbound() -> None:
+    result = collect_and_synthesize_scout_ai_answer(
+        "隊友已經 55 分鐘沒回訊息，要怎麼辦？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=3,
+    )
+
+    assert result.answerability == "partial_evidence_with_missing_context"
+    assert result.completed_source_count == 1
+    assert result.sources[0].tool_id == TEAM_STATUS_TOOL_ID
+    assert result.sources[0].top_result_summary["decision"] == "ESCALATE"
+    assert result.sources[0].top_result_summary["decision_output"]["cost"][
+        "checkinOverdueMinutes"
+    ] == 55.0
+    assert result.sources[0].top_result_summary["team_status_guardian"][
+        "outbound_send_performed"
+    ] is False
+    assert result.decision_output["answerSourceToolId"] == TEAM_STATUS_TOOL_ID
+    assert result.decision_output["decision"] == "ESCALATE"
+    assert result.decision_output["firstLayer"]["decision"] == (
+        "停止推進並升級人工確認。"
+    )
+    assert "不得自動通知留守人" in result.decision_output["firstLayer"]["limit"]
+    assert "runtime safety truth" in result.answer
+
+
 def test_answer_synthesis_uses_post_trip_review_field_answer_without_guessing() -> None:
     result = collect_and_synthesize_scout_ai_answer(
         "行後回顧要更新哪些下一次規劃？實際耗時哪裡比預期慢？",
