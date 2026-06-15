@@ -569,6 +569,15 @@ def test_answer_synthesis_prices_photo_stop_budget_phrase() -> None:
     assert result.decision_output["allowed"] is True
     assert result.decision_output["maxDurationMinutes"] == 10
     assert result.decision_output["cost"]["timeBufferChangeMinutes"] == -10
+    assert "attentionBudgetImpact" in result.decision_output["cost"]
+    assert "mediaExperienceBudgetImpact" in result.decision_output["cost"]
+    assert result.decision_output["cost"]["riskBudgetImpact"].startswith(
+        "spends 10 minutes"
+    )
+    assert any(
+        detail.startswith("拍攝/體驗預算：")
+        for detail in result.decision_output["secondLayer"]["details"]
+    )
     assert result.decision_output["firstLayer"]["decision"] == "可以，最多 10 分鐘。"
     assert "消耗 10 分鐘 buffer" in result.answer
     assert result.decision_output["runtimeSafetyTruth"] is False

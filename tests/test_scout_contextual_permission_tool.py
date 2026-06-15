@@ -51,6 +51,14 @@ def test_contextual_permission_allows_film_with_bounded_deadline_and_cost() -> N
     assert permission["leaveBy"] == "2026-06-07T13:42:00+08:00"
     assert permission["locationConstraint"] == "留在步道內側或既有路線走廊內"
     assert permission["cost"]["timeBufferChangeMinutes"] == -6
+    assert "attentionBudgetImpact" in permission["cost"]
+    assert "mediaExperienceBudgetImpact" in permission["cost"]
+    assert "riskBudgetImpact" in permission["cost"]
+    assert "media" in permission["cost"]["attentionBudgetImpact"]
+    assert "photo/video experience budget" in permission["cost"][
+        "mediaExperienceBudgetImpact"
+    ]
+    assert "spends 6 minutes" in permission["cost"]["riskBudgetImpact"]
     assert permission["nextAction"]
     assert permission["requiredConditions"]
     assert result["decision_object"] == permission
@@ -71,6 +79,18 @@ def test_contextual_permission_allows_film_with_bounded_deadline_and_cost() -> N
     assert decision_output["firstLayer"]["nextStep"] == permission["nextAction"]
     assert any(
         "可授權時間約 16 分鐘" in detail
+        for detail in decision_output["secondLayer"]["details"]
+    )
+    assert any(
+        detail.startswith("注意力預算：")
+        for detail in decision_output["secondLayer"]["details"]
+    )
+    assert any(
+        detail.startswith("拍攝/體驗預算：")
+        for detail in decision_output["secondLayer"]["details"]
+    )
+    assert any(
+        detail.startswith("風險預算：")
         for detail in decision_output["secondLayer"]["details"]
     )
     assert "最多 6 分鐘" in decision_output["secondLayer"]["requiredConditions"][0]
@@ -306,7 +326,13 @@ def test_contextual_permission_missing_buffer_still_reports_requested_stop_cost(
     assert result["allowed"] is False
     assert result["missing_fields"] == ["remaining_safety_buffer_minutes"]
     assert result["contextual_permission"]["cost"]["timeBufferChangeMinutes"] == -10
+    assert result["contextual_permission"]["cost"]["riskBudgetImpact"].startswith(
+        "spends 10 minutes"
+    )
     assert result["decision_output"]["cost"]["timeBufferChangeMinutes"] == -10
+    assert "attentionBudgetImpact" in result["decision_output"]["cost"]
+    assert "mediaExperienceBudgetImpact" in result["decision_output"]["cost"]
+    assert "riskBudgetImpact" in result["decision_output"]["cost"]
     assert result["decision_output"]["firstLayer"]["decision"] == "不建議停留。"
     assert "使用者要求約 10 分鐘" in result["decision_output"]["firstLayer"]["reason"]
     assert "不能計算代價或授權" in result["decision_output"]["firstLayer"]["reason"]

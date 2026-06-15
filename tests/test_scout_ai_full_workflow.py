@@ -680,6 +680,15 @@ def test_full_workflow_prices_film_stop_budget_phrase_with_next_cp() -> None:
     assert result.decision_output["allowed"] is True
     assert result.decision_output["maxDurationMinutes"] == 6
     assert result.decision_output["cost"]["timeBufferChangeMinutes"] == -6
+    assert "attentionBudgetImpact" in result.decision_output["cost"]
+    assert "mediaExperienceBudgetImpact" in result.decision_output["cost"]
+    assert result.decision_output["cost"]["riskBudgetImpact"].startswith(
+        "spends 6 minutes"
+    )
+    assert any(
+        detail.startswith("風險預算：")
+        for detail in result.decision_output["secondLayer"]["details"]
+    )
     assert result.decision_output["firstLayer"]["decision"] == "可以，最多 6 分鐘。"
     assert "消耗 6 分鐘 buffer" in result.answer
     assert "前往 CP4" in result.answer

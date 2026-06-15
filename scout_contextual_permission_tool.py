@@ -102,6 +102,15 @@ class ContextualPermissionCost(ScoutContextualBaseModel):
     retreat_impact: str | None = Field(default=None, alias="retreatImpact")
     fatigue_impact: str | None = Field(default=None, alias="fatigueImpact")
     team_pace_impact: str | None = Field(default=None, alias="teamPaceImpact")
+    attention_budget_impact: str | None = Field(
+        default=None,
+        alias="attentionBudgetImpact",
+    )
+    media_experience_budget_impact: str | None = Field(
+        default=None,
+        alias="mediaExperienceBudgetImpact",
+    )
+    risk_budget_impact: str | None = Field(default=None, alias="riskBudgetImpact")
 
 
 class ContextualPermission(ScoutContextualBaseModel):
@@ -713,7 +722,10 @@ def _permission(
             next_action=_safe_next_action(action, next_cp_id),
             confidence=ConfidenceLevel.LOW,
             cost=(
-                ContextualPermissionCost(time_buffer_change_minutes=-requested_cost)
+                _contextual_permission_cost(
+                    action=action,
+                    time_buffer_change_minutes=-requested_cost,
+                )
                 if requested_cost is not None
                 else None
             ),
@@ -736,7 +748,10 @@ def _permission(
             leave_by=leave_by,
             location_constraint=retreat_location,
             main_reasons=["撤退通常降低暴露時間與後續不確定性。"],
-            cost=ContextualPermissionCost(time_buffer_change_minutes=0),
+            cost=_contextual_permission_cost(
+                action=action,
+                time_buffer_change_minutes=0,
+            ),
             next_action="開始撤退，前往最近安全點並保持隊伍完整。",
             confidence=_confidence(confidence, default=ConfidenceLevel.MEDIUM),
             residual_risk=["撤退途中仍需注意地形、天氣與隊伍狀態。"],
@@ -760,7 +775,10 @@ def _permission(
             leave_by=leave_by,
             location_constraint=rain_gear_location,
             main_reasons=["穿雨具不應消耗主要路線 buffer，且可降低風寒與濕衣風險。"],
-            cost=ContextualPermissionCost(time_buffer_change_minutes=0),
+            cost=_contextual_permission_cost(
+                action=action,
+                time_buffer_change_minutes=0,
+            ),
             next_action="就地穿上雨具，完成後立即回到原定節奏。",
             confidence=_confidence(confidence, default=ConfidenceLevel.MEDIUM),
             residual_risk=["若風雨持續增強，仍需重新評估撤退或改線。"],
@@ -839,7 +857,8 @@ def _permission(
                 current_cp_id=current_cp_id,
                 next_cp_id=next_cp_id,
             ),
-            cost=ContextualPermissionCost(
+            cost=_contextual_permission_cost(
+                action=action,
                 time_buffer_change_minutes=-max_duration,
                 weather_window_impact=weather_window_impact
                 or _default_weather_impact(budget),
@@ -873,7 +892,10 @@ def _permission(
         decision=ScoutDecision.GO,
         allowed=True,
         main_reasons=["此行動未被判定為會直接消耗停留型風險預算。"],
-        cost=ContextualPermissionCost(time_buffer_change_minutes=0),
+        cost=_contextual_permission_cost(
+            action=action,
+            time_buffer_change_minutes=0,
+        ),
         next_action=_allowed_next_action(action, next_cp_id),
         confidence=_confidence(confidence, default=ConfidenceLevel.LOW),
         uncertainty_notes=[
@@ -894,6 +916,11 @@ def _no_go_permission(
     uncertainty_notes: list[str] | None = None,
     alternative_actions: list[str] | None = None,
 ) -> ContextualPermission:
+    if cost is None and action in _BUDGET_ACTIONS:
+        cost = _contextual_permission_cost(
+            action=action,
+            time_buffer_change_minutes=0,
+        )
     return ContextualPermission(
         action=action,
         decision=decision,
@@ -1640,6 +1667,116 @@ def _requested_duration_cost(
     return max(1, floor(value))
 
 
+def _contextual_permission_cost(
+    *,
+    action: OutdoorAction,
+    time_buffer_change_minutes: int,
+    weather_window_impact: str | None = None,
+    daylight_impact: str | None = None,
+    retreat_impact: str | None = None,
+    fatigue_impact: str | None = None,
+    team_pace_impact: str | None = None,
+) -> ContextualPermissionCost:
+    return ContextualPermissionCost(
+        time_buffer_change_minutes=time_buffer_change_minutes,
+        weather_window_impact=weather_window_impact,
+        daylight_impact=daylight_impact,
+        retreat_impact=retreat_impact,
+        fatigue_impact=fatigue_impact,
+        team_pace_impact=team_pace_impact,
+        attention_budget_impact=_attention_budget_impact(
+            action,
+            time_buffer_change_minutes=time_buffer_change_minutes,
+        ),
+        media_experience_budget_impact=_media_experience_budget_impact(
+            action,
+            time_buffer_change_minutes=time_buffer_change_minutes,
+        ),
+        risk_budget_impact=_risk_budget_impact(
+            action,
+            time_buffer_change_minutes=time_buffer_change_minutes,
+        ),
+    )
+
+
+def _attention_budget_impact(
+    action: OutdoorAction,
+    *,
+    time_buffer_change_minutes: int,
+) -> str:
+    if action in {OutdoorAction.RETREAT, OutdoorAction.WEAR_RAIN_GEAR}:
+        return "attention shifts to the protective action; no optional stop budget is authorized."
+    if action in {
+        OutdoorAction.PHOTO,
+        OutdoorAction.FILM,
+        OutdoorAction.TRIPOD,
+        OutdoorAction.WAIT,
+    }:
+        return (
+            "optional media or waiting attention must stay secondary to route, "
+            "weather, terrain, and team monitoring."
+        )
+    if action in {OutdoorAction.REROUTE, OutdoorAction.SUMMIT}:
+        return (
+            "objective pressure must not reduce navigation, terrain, weather, "
+            "and team-state attention."
+        )
+    if time_buffer_change_minutes < 0:
+        return "optional stop attention must remain bounded and end at the cutoff."
+    return "no additional optional attention budget spend is authorized."
+
+
+def _media_experience_budget_impact(
+    action: OutdoorAction,
+    *,
+    time_buffer_change_minutes: int,
+) -> str:
+    if action in {OutdoorAction.PHOTO, OutdoorAction.FILM, OutdoorAction.TRIPOD}:
+        return (
+            "spends optional photo/video experience budget only inside the "
+            "approved route corridor."
+        )
+    if action == OutdoorAction.WAIT:
+        return (
+            "spends optional waiting-for-view experience budget and must be "
+            "abandoned at the cutoff."
+        )
+    if action == OutdoorAction.SUMMIT:
+        return (
+            "spends summit/objective experience budget and competes with retreat "
+            "and daylight margin."
+        )
+    if action == OutdoorAction.REROUTE:
+        return "spends detour/alternate-experience budget and requires reviewed route evidence."
+    if action in {
+        OutdoorAction.STOP,
+        OutdoorAction.REST,
+        OutdoorAction.LUNCH,
+        OutdoorAction.WAIT_TEAMMATE,
+    }:
+        return "spends optional rest or experience budget, not core safety margin."
+    if time_buffer_change_minutes < 0:
+        return "spends optional experience budget and must not become open-ended."
+    return "no optional media or experience budget is authorized."
+
+
+def _risk_budget_impact(
+    action: OutdoorAction,
+    *,
+    time_buffer_change_minutes: int,
+) -> str:
+    if time_buffer_change_minutes < 0:
+        return (
+            f"spends {abs(time_buffer_change_minutes)} minutes of bounded risk "
+            "budget after reserves."
+        )
+    if action == OutdoorAction.RETREAT:
+        return "does not authorize optional risk spend; retreat is treated as exposure reduction."
+    if action == OutdoorAction.WEAR_RAIN_GEAR:
+        return "does not authorize optional risk spend; protective gear reduces weather exposure."
+    return "no optional risk budget spend is authorized."
+
+
 def _minutes_to_next_cp_from_query(query: str) -> float | None:
     text = str(query or "").strip().lower().replace(" ", "")
     patterns = (
@@ -2117,6 +2254,8 @@ def _decision_output(
         first_layer=first_layer,
         second_layer=second_layer,
         standard_alignment=[
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 13 risk budget",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 13.1 conceptual formula",
             "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 16 first-layer field decision",
             "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 16 second-layer reason expansion",
             "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 17 ContextualPermission schema",
@@ -2172,6 +2311,14 @@ def _decision_second_layer(
         details.append(
             f"此決策的時間 buffer 變化為 {permission.cost.time_buffer_change_minutes:g} 分鐘。"
         )
+    if permission.cost and permission.cost.attention_budget_impact:
+        details.append("注意力預算：" + permission.cost.attention_budget_impact)
+    if permission.cost and permission.cost.media_experience_budget_impact:
+        details.append(
+            "拍攝/體驗預算：" + permission.cost.media_experience_budget_impact
+        )
+    if permission.cost and permission.cost.risk_budget_impact:
+        details.append("風險預算：" + permission.cost.risk_budget_impact)
     return DecisionOutputSecondLayer(
         details=details,
         uncertainty_notes=list(permission.uncertainty_notes),
