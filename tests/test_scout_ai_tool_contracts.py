@@ -98,9 +98,7 @@ def test_tool_registry_lists_current_and_future_contracts() -> None:
     assert by_id["scout.ai.safety_boundary.explain.v0"].implementation_status == (
         "boundary_explain_only"
     )
-    assert by_id[ENERGY_VITALS_TOOL_ID].implementation_status == (
-        "partial_existing_surface"
-    )
+    assert by_id[ENERGY_VITALS_TOOL_ID].implementation_status == "ready_current_tool"
     assert by_id[CONTEXTUAL_PERMISSION_TOOL_ID].implementation_status == (
         "ready_current_tool"
     )
@@ -981,7 +979,7 @@ def test_execute_energy_vitals_assessor_returns_read_only_missing_fields() -> No
 
     assert result.status == "completed"
     assert result.tool_id == ENERGY_VITALS_TOOL_ID
-    assert result.implementation_status == "partial_existing_surface"
+    assert result.implementation_status == "ready_current_tool"
     assert result.output_artifact_kind == "scout_ai_energy_vitals_tool_output"
     assert result.payload["artifact_kind"] == "scout_ai_energy_vitals_tool_output"
     assert result.payload["tool_id"] == ENERGY_VITALS_TOOL_ID
