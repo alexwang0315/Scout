@@ -18,6 +18,7 @@ from scout_post_trip_review_tool import POST_TRIP_REVIEW_TOOL_ID
 from scout_media_literacy_tool import MEDIA_LITERACY_TOOL_ID
 from scout_survival_incident_playbook_tool import SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID
 from scout_safety_boundary_tool import SAFETY_BOUNDARY_TOOL_ID
+from scout_map_perception_tool import MAP_PERCEPTION_TOOL_ID
 from scout_ai_tool_contracts import tool_registry_output
 from scout_ai_tool_executor import execute_scout_ai_tool
 
@@ -512,6 +513,40 @@ def test_execute_live_navigation_state_assessor_returns_navigation_decision() ->
     assert result.payload["navigation_decision"]["route_fit_status"] == (
         "on_route_corridor"
     )
+    assert result.missing_fields == []
+    assert result.boundary.runtime_safety_truth is False
+
+
+def test_execute_map_perception_search_returns_candidate_decision_output() -> None:
+    result = execute_scout_ai_tool(
+        {
+            "tool_id": "scout.ai.map_perception.search",
+            "project_root": str(PROJECT_ROOT),
+            "query": "CP001 附近有沒有標註?",
+        }
+    )
+
+    assert result.status == "completed"
+    assert result.tool_id == MAP_PERCEPTION_TOOL_ID
+    assert result.output_artifact_kind == "scout_ai_map_perception_tool_output"
+    assert result.payload["tool_id"] == MAP_PERCEPTION_TOOL_ID
+    assert result.payload["assessment_kind"] == "read_only_map_perception"
+    assert result.payload["answerability"] == "map_perception_evidence_available"
+    assert result.payload["decision"] == "CONDITIONAL_GO"
+    assert result.payload["decision_output"]["decisionObjectSchema"] == (
+        "ContextualPermission"
+    )
+    assert result.payload["decision_output"]["decision"] == "CONDITIONAL_GO"
+    assert result.payload["decision_output"]["allowed"] is True
+    assert result.payload["decision_output"]["runtimeSafetyTruth"] is False
+    assert result.payload["decision_output"]["firstLayer"]["decision"] == (
+        "可作為候選地圖參考。"
+    )
+    assert result.payload["map_perception"]["role"] == (
+        "Navigation & Terrain Intelligence / Map Perception"
+    )
+    assert result.payload["map_perception"]["review_required"] is True
+    assert result.payload["results"][0]["evidence_type"] == "ocr_label"
     assert result.missing_fields == []
     assert result.boundary.runtime_safety_truth is False
 

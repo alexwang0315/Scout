@@ -26,6 +26,7 @@ from scout_survival_incident_playbook_tool import SURVIVAL_INCIDENT_PLAYBOOK_TOO
 from scout_risk_score_tool import RISK_SCORE_TOOL_ID
 from scout_terrain_score_tool import TERRAIN_SCORE_TOOL_ID
 from scout_safety_boundary_tool import SAFETY_BOUNDARY_TOOL_ID
+from scout_map_perception_tool import MAP_PERCEPTION_TOOL_ID
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -193,6 +194,37 @@ def test_full_workflow_runs_weather_to_decision_question(tmp_path: Path) -> None
     assert "天氣決策" in result.answer
     assert "CHANGE_PLAN" in result.answer
     assert "runtime safety truth" in result.answer
+    assert result.boundary.runtime_safety_truth is False
+
+
+def test_full_workflow_runs_map_perception_question() -> None:
+    result = run_scout_ai_full_workflow(
+        "CP001 附近有沒有標註?",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=3,
+    )
+
+    assert result.answerability == "evidence_available"
+    assert result.selected_tool_count == 1
+    assert result.executed_tool_count == 1
+    assert result.completed_tool_count == 1
+    assert result.missing_evidence_count == 0
+    assert result.sources[0]["tool_id"] == MAP_PERCEPTION_TOOL_ID
+    summary = result.sources[0]["top_result_summary"]
+    assert summary["decision"] == "CONDITIONAL_GO"
+    assert summary["decision_output"]["decisionObjectSchema"] == "ContextualPermission"
+    assert summary["map_perception"]["role"] == (
+        "Navigation & Terrain Intelligence / Map Perception"
+    )
+    assert result.decision_output["answerSourceToolId"] == MAP_PERCEPTION_TOOL_ID
+    assert result.decision_output["decision"] == "CONDITIONAL_GO"
+    assert result.decision_output["firstLayer"]["decision"] == "可作為候選地圖參考。"
+    answer_step = result.workflow_steps[-1]
+    assert answer_step.summary["decision_output_schema"] == "ContextualPermission"
+    assert answer_step.summary["decision_output_source_tool"] == MAP_PERCEPTION_TOOL_ID
+    assert "地圖判讀決策：CONDITIONAL_GO" in result.answer
+    assert "不是 runtime safety truth" in result.answer
     assert result.boundary.runtime_safety_truth is False
 
 

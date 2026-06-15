@@ -162,6 +162,15 @@ only caller-provided snapshots, but its output includes an explicit decision,
 action/location limit, 1-2 main reasons, next step, uncertainty notes, required
 conditions, and alternatives without mutating runtime safety truth.
 
+`scout.ai.map_perception.search` /
+`pydantic_ai.tool.search_scout_map_perception.v0` now returns a native
+`decision_output` for map OCR labels, contour interpretation, and map-layer
+materials. Matching reviewed/candidate material maps to a bounded map-reference
+decision such as `CONDITIONAL_GO`; missing or unmatched material maps to `DELAY`;
+runtime-truth claims in map perception material map to `ESCALATE`. This is
+candidate map context only and never authorizes stopping, rerouting, shortcutting,
+Ln, `/safety/*`, SOS, outbound send, or hardware control.
+
 `scout.ai.safety_boundary.explain.v0` now returns a native `decision_output` for
 candidate-vs-runtime safety boundary questions. Missing admission/operator
 evidence maps to `DELAY`; reviewed candidate evidence that is not admitted maps

@@ -124,13 +124,47 @@ def search_project_map_perception(
 
     filtered.sort(key=_sort_key(resolved_sort))
     results = filtered[:resolved_limit]
+    compact_results = [_compact_result(item) for item in results]
     summaries = _summaries(items)
+    missing_fields = _missing_fields(
+        searched_material_count=len(items),
+        matched_material_count=len(filtered),
+        result_count=len(compact_results),
+    )
+    answerability = _answerability(
+        searched_material_count=len(items),
+        matched_material_count=len(filtered),
+        result_count=len(compact_results),
+    )
+    decision = _map_perception_decision(
+        results=compact_results,
+        summaries=summaries,
+        missing_fields=missing_fields,
+    )
+    field_answer = _field_answer(
+        decision=decision,
+        results=compact_results,
+        missing_fields=missing_fields,
+    )
+    decision_output = _decision_output(
+        decision=decision,
+        results=compact_results,
+        missing_fields=missing_fields,
+        field_answer=field_answer,
+    )
 
     return {
         "tool_id": MAP_PERCEPTION_TOOL_ID,
         "status": "completed",
         "project_id": project_id,
         "query": query,
+        "assessment_kind": "read_only_map_perception",
+        "answerability": answerability,
+        "source_status": "candidate_only",
+        "decision": decision["decision"],
+        "decision_output": decision_output,
+        "field_answer": field_answer,
+        "missing_fields": missing_fields,
         "filters": {
             "evidence_types": sorted(resolved_evidence_types) if resolved_evidence_types else None,
             "cp": resolved_cp,
@@ -146,7 +180,32 @@ def search_project_map_perception(
         "searched_material_count": len(items),
         "matched_material_count": len(filtered),
         "result_count": len(results),
-        "results": [_compact_result(item) for item in results],
+        "map_perception": {
+            "role": "Navigation & Terrain Intelligence / Map Perception",
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+            "decision": decision["decision"],
+            "decision_output": decision_output,
+            "evidence_types": sorted(
+                {
+                    str(item.get("evidence_type"))
+                    for item in compact_results
+                    if item.get("evidence_type")
+                }
+            ),
+            "review_required": any(item.get("review_required") for item in compact_results),
+            "top_material": compact_results[0] if compact_results else None,
+            "next_action": decision["next_action"],
+        },
+        "results": compact_results,
+        "standard_alignment": [
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 11 Navigation & Terrain Intelligence",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 16 required decision output format",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 17 ContextualPermission schema",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 19.2 required on-route output",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 22 required development standards",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 23 acceptance criteria",
+        ],
         "boundary": _closed_boundary(),
     }
 
@@ -549,6 +608,402 @@ def _summaries(items: list[dict[str, Any]]) -> dict[str, Any]:
         "review_required_count": review_required,
         "runtime_safety_truth_count": runtime_truth,
     }
+
+
+def _answerability(
+    *,
+    searched_material_count: int,
+    matched_material_count: int,
+    result_count: int,
+) -> str:
+    if searched_material_count <= 0:
+        return "map_perception_materials_missing"
+    if matched_material_count <= 0 or result_count <= 0:
+        return "map_perception_no_matching_material"
+    return "map_perception_evidence_available"
+
+
+def _missing_fields(
+    *,
+    searched_material_count: int,
+    matched_material_count: int,
+    result_count: int,
+) -> list[str]:
+    if searched_material_count <= 0:
+        return ["map_perception_materials"]
+    if matched_material_count <= 0 or result_count <= 0:
+        return ["matching_map_perception_results"]
+    return []
+
+
+def _map_perception_decision(
+    *,
+    results: list[dict[str, Any]],
+    summaries: dict[str, Any],
+    missing_fields: list[str],
+) -> dict[str, Any]:
+    if missing_fields:
+        return {
+            "decision": "DELAY",
+            "main_reasons": [
+                "map perception evidence is missing or has no matching material",
+                "Scout cannot infer map annotations, contours, or layers without reviewed material",
+            ],
+            "next_action": (
+                "load OCR labels, contour interpretation, or map layer materials, "
+                "then rerun the map perception query"
+            ),
+            "action_limit": (
+                "do not use missing map perception evidence to confirm a route, "
+                "turn, stop, shortcut, or safety state"
+            ),
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+        }
+
+    if any(item.get("runtime_safety_truth") for item in results):
+        return {
+            "decision": "ESCALATE",
+            "main_reasons": [
+                "a map perception material claims runtime_safety_truth",
+                "map/OCR/contour materials must remain candidate evidence",
+            ],
+            "next_action": (
+                "escalate the material for operator review and remove runtime truth "
+                "claims from the Scout AI answer path"
+            ),
+            "action_limit": (
+                "do not promote map perception material to /safety/*, Ln, SOS, "
+                "outbound send, or hardware control"
+            ),
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+        }
+
+    review_required = any(item.get("review_required") for item in results)
+    candidate_only = any(item.get("candidate_only") for item in results)
+    top = results[0] if results else {}
+    if review_required or candidate_only:
+        return {
+            "decision": "CONDITIONAL_GO",
+            "main_reasons": _map_reasons(
+                top=top,
+                summaries=summaries,
+                review_required=review_required,
+            ),
+            "next_action": (
+                "use the top map perception result only as candidate reference; "
+                "cross-check with GPX, route corridor, terrain, and human review"
+            ),
+            "action_limit": (
+                "candidate map perception can inform context, but cannot authorize "
+                "stopping, rerouting, shortcutting, or runtime safety changes"
+            ),
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+        }
+
+    return {
+        "decision": "GO",
+        "main_reasons": _map_reasons(
+            top=results[0],
+            summaries=summaries,
+            review_required=False,
+        ),
+        "next_action": (
+            "use the reviewed map perception material as map context and continue "
+            "to verify with live position, route, weather, and terrain evidence"
+        ),
+        "action_limit": (
+            "map perception remains a bounded reference and does not create "
+            "runtime safety truth"
+        ),
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+    }
+
+
+def _field_answer(
+    *,
+    decision: dict[str, Any],
+    results: list[dict[str, Any]],
+    missing_fields: list[str],
+) -> str:
+    top = results[0] if results else {}
+    label = _result_label(top)
+    reasons = [str(item) for item in decision.get("main_reasons") or [] if str(item)]
+    if missing_fields:
+        reasons.append("missing=" + ",".join(missing_fields))
+    return (
+        f"地圖判讀決策：{decision['decision']}。"
+        f"主要材料：{label or 'none'}。"
+        f"{'；'.join(reasons[:3])}。"
+        f"下一步：{decision['next_action']}。"
+        "此為候選地圖感知，不是 runtime safety truth；不得觸發 Ln、"
+        "/safety/*、SOS、outbound send 或硬體控制。"
+    )
+
+
+def _decision_output(
+    *,
+    decision: dict[str, Any],
+    results: list[dict[str, Any]],
+    missing_fields: list[str],
+    field_answer: str,
+) -> dict[str, Any]:
+    decision_label = str(decision["decision"])
+    allowed = decision_label in {"GO", "CONDITIONAL_GO"}
+    reasons = [str(item) for item in decision.get("main_reasons") or [] if str(item)]
+    if not reasons:
+        reasons = ["map perception evidence did not expose a reason"]
+    first_layer = {
+        "decision": _decision_phrase(decision_label, allowed=allowed),
+        "limit": _limit_phrase(decision),
+        "reason": " / ".join(reasons[:2]),
+        "nextStep": str(decision["next_action"]),
+    }
+    uncertainty_notes = _uncertainty_notes(
+        results=results,
+        missing_fields=missing_fields,
+    )
+    required_conditions = _required_conditions(
+        decision=decision_label,
+        results=results,
+        missing_fields=missing_fields,
+    )
+    alternative_actions = _alternative_actions(decision_label)
+    residual_risk = [
+        "OCR, contour, and map layer materials are candidate evidence only.",
+        (
+            "Live position, route corridor, weather, terrain, and operator "
+            "review remain separate."
+        ),
+        (
+            "No runtime safety truth, /safety/*, Ln, SOS, outbound send, or "
+            "hardware control was triggered."
+        ),
+    ]
+    return {
+        "role": "Navigation & Terrain Intelligence / Map Perception",
+        "format": "SCOUT_OUTDOOR_AI_AGENT_STANDARD.section16",
+        "decisionObjectSchema": "ContextualPermission",
+        "text": "\n".join(
+            (
+                f"[決策] {first_layer['decision']}",
+                f"[限制] {first_layer['limit']}",
+                f"[原因] {first_layer['reason']}",
+                f"[下一步] {first_layer['nextStep']}",
+            )
+        ),
+        "firstLayer": first_layer,
+        "secondLayer": {
+            "details": _decision_details(
+                results=results,
+                field_answer=field_answer,
+            ),
+            "uncertaintyNotes": uncertainty_notes,
+            "residualRisk": residual_risk,
+            "requiredConditions": required_conditions,
+            "alternativeActions": alternative_actions,
+        },
+        "action": "map_perception_reference",
+        "decision": decision_label,
+        "allowed": allowed,
+        "locationConstraint": _location_constraint(results),
+        "mainReasons": reasons[:3],
+        "cost": {
+            "timeBufferChangeMinutes": 0,
+            "attentionImpact": (
+                "Map perception review consumes attention; do not use it to "
+                "justify delay or off-route movement without contextual permission."
+            ),
+            "retreatImpact": (
+                "No retreat or reroute action may be authorized by map perception "
+                "alone."
+            ),
+        },
+        "nextAction": first_layer["nextStep"],
+        "confidence": _confidence(
+            decision=decision_label,
+            uncertainty_notes=uncertainty_notes,
+        ),
+        "uncertaintyNotes": uncertainty_notes,
+        "residualRisk": residual_risk,
+        "requiredConditions": required_conditions,
+        "alternativeActions": alternative_actions,
+        "standardAlignment": [
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 11 Navigation & Terrain Intelligence",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 16 required decision output format",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 17 ContextualPermission schema",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 19.2 required on-route output",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 22 MUST/MUST NOT",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 23 acceptance criteria",
+        ],
+        "runtimeSafetyTruth": False,
+    }
+
+
+def _map_reasons(
+    *,
+    top: dict[str, Any],
+    summaries: dict[str, Any],
+    review_required: bool,
+) -> list[str]:
+    reasons = []
+    evidence_type = top.get("evidence_type")
+    if evidence_type:
+        reasons.append(f"top_material_type={evidence_type}")
+    label = _result_label(top)
+    if label:
+        reasons.append(f"top_material={label}")
+    confidence = top.get("confidence")
+    if confidence is not None:
+        reasons.append(f"confidence={confidence}")
+    if review_required:
+        reasons.append("human_review_required")
+    counts = summaries.get("counts_by_evidence_type")
+    if isinstance(counts, dict) and counts:
+        reasons.append(
+            "available_material_types="
+            + ",".join(sorted(str(key) for key in counts.keys())[:4])
+        )
+    return reasons or ["map perception material matched the query"]
+
+
+def _decision_phrase(decision: str, *, allowed: bool) -> str:
+    if decision == "GO":
+        return "可作為已審核地圖參考。"
+    if decision == "CONDITIONAL_GO":
+        return "可作為候選地圖參考。"
+    if decision == "DELAY":
+        return "暫緩地圖判讀。"
+    if decision == "ESCALATE":
+        return "升級處理地圖真實性邊界。"
+    return "可使用。" if allowed else "不建議使用。"
+
+
+def _limit_phrase(decision: dict[str, Any]) -> str:
+    return str(
+        decision.get("action_limit")
+        or "地圖判讀不得單獨授權停留、改線或安全狀態變更"
+    )
+
+
+def _uncertainty_notes(
+    *,
+    results: list[dict[str, Any]],
+    missing_fields: list[str],
+) -> list[str]:
+    notes = []
+    if missing_fields:
+        notes.append("Missing fields: " + ", ".join(missing_fields))
+    if any(item.get("review_required") for item in results):
+        notes.append("At least one matched OCR/contour material requires human review.")
+    if any(item.get("candidate_only") for item in results):
+        notes.append("Matched map materials are candidate evidence only.")
+    if any(item.get("full_source_image_embedded") for item in results):
+        notes.append("Full source image should not be embedded in Scout AI answer payloads.")
+    return notes
+
+
+def _required_conditions(
+    *,
+    decision: str,
+    results: list[dict[str, Any]],
+    missing_fields: list[str],
+) -> list[str]:
+    if missing_fields:
+        return [
+            "Provide " + ", ".join(missing_fields),
+            "Load reviewed OCR labels, contour interpretation, or map layer materials.",
+            "Re-run the map perception query before using the result.",
+        ]
+    conditions = [
+        "Cross-check with GPX/route corridor and current or planned CP context.",
+        "Treat OCR/contour/layer evidence as candidate context unless reviewed.",
+        "Do not call /safety/*, trigger Ln, send outbound, or control hardware.",
+    ]
+    if any(item.get("review_required") for item in results):
+        conditions.insert(0, "Complete human review of the matched map material.")
+    if decision == "ESCALATE":
+        conditions.insert(0, "Remove runtime safety truth claims from map perception material.")
+    return conditions
+
+
+def _alternative_actions(decision: str) -> list[str]:
+    if decision == "DELAY":
+        return [
+            "load map perception artifacts",
+            "ask a route context or major point question instead",
+            "use reviewed GPX/CP evidence rather than OCR inference",
+        ]
+    if decision == "ESCALATE":
+        return [
+            "operator review of the map artifact",
+            "remove runtime truth claims",
+            "fall back to deterministic safety admission for real state changes",
+        ]
+    return [
+        "use as candidate map context only",
+        "verify against route architecture and live navigation evidence",
+        "ask contextual permission before stopping, rerouting, or leaving the path",
+    ]
+
+
+def _decision_details(
+    *,
+    results: list[dict[str, Any]],
+    field_answer: str,
+) -> list[str]:
+    details = [field_answer]
+    for item in results[:3]:
+        label = _result_label(item) or str(item.get("candidate_id") or "map material")
+        detail = (
+            f"{label}: type={item.get('evidence_type')}; "
+            f"review_required={item.get('review_required', False)}; "
+            f"candidate_only={item.get('candidate_only', True)}"
+        )
+        distance = item.get("anchor_distance_m")
+        if distance is not None:
+            detail += f"; anchor_distance_m={distance}"
+        details.append(detail)
+    return details
+
+
+def _location_constraint(results: list[dict[str, Any]]) -> str:
+    if not results:
+        return "no map perception location verified"
+    top = results[0]
+    if top.get("anchor_distance_m") is not None:
+        return f"within anchor radius; anchor_distance_m={top['anchor_distance_m']}"
+    if top.get("distance_km") is not None:
+        return f"route distance km={top['distance_km']}"
+    if top.get("lat") is not None and top.get("lon") is not None:
+        return f"lat={top['lat']}, lon={top['lon']}"
+    return "candidate map material only"
+
+
+def _confidence(*, decision: str, uncertainty_notes: list[str]) -> str:
+    if decision in {"DELAY", "ESCALATE"}:
+        return "low"
+    if uncertainty_notes:
+        return "medium"
+    return "high"
+
+
+def _result_label(item: dict[str, Any]) -> str:
+    for key in (
+        "label_text",
+        "named_point_name",
+        "label_zh",
+        "label",
+        "candidate_id",
+        "layer_id",
+    ):
+        value = item.get(key)
+        if value is not None and str(value).strip():
+            return str(value).strip()
+    return ""
 
 
 def _compact_result(item: dict[str, Any]) -> dict[str, Any]:
