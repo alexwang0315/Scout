@@ -27,6 +27,7 @@ from scout_safety_boundary_tool import SAFETY_BOUNDARY_TOOL_ID
 from scout_map_perception_tool import MAP_PERCEPTION_TOOL_ID
 from scout_navigation_terrain_tool import NAVIGATION_TERRAIN_TOOL_ID
 from scout_ins_dr_trace_tool import INS_DR_TRACE_TOOL_ID
+from scout_risk_score_tool import RISK_SCORE_TOOL_ID
 from scout_workspace_search_tools import MAJOR_POINT_TOOL_ID
 
 
@@ -605,7 +606,10 @@ def _answer_decision_output(
     completed_sources = [
         source for source in sources if source.collection_status == "completed"
     ]
-    decision_sources = sorted(completed_sources, key=_decision_source_priority)
+    decision_sources = sorted(
+        completed_sources,
+        key=lambda source: _decision_source_priority(source, question=question),
+    )
     for source in decision_sources:
         native = source.top_result_summary.get("decision_output")
         if isinstance(native, dict) and native:
@@ -666,7 +670,15 @@ def _answer_decision_output(
     }
 
 
-def _decision_source_priority(source: ScoutAiAnswerSource) -> tuple[int, str]:
+def _decision_source_priority(
+    source: ScoutAiAnswerSource,
+    *,
+    question: str = "",
+) -> tuple[int, str]:
+    if source.tool_id == RISK_SCORE_TOOL_ID and _looks_like_forward_risk_segment_question(
+        question
+    ):
+        return (3, source.tool_id)
     if source.tool_id.startswith("pydantic_ai.tool.search_"):
         if source.tool_id == MAP_PERCEPTION_TOOL_ID:
             return (15, source.tool_id)
@@ -721,6 +733,15 @@ def _decision_source_priority(source: ScoutAiAnswerSource) -> tuple[int, str]:
     }:
         return (10, source.tool_id)
     return (20, source.tool_id)
+
+
+def _looks_like_forward_risk_segment_question(question: str) -> bool:
+    text = str(question or "").lower().replace(" ", "")
+    return (
+        any(term in text for term in ("前方", "下一段", "這段"))
+        and any(term in text for term in ("高風險路段", "危險路段", "風險路段"))
+        and not any(term in text for term in ("能不能", "要不要", "可以", "還能"))
+    )
 
 
 def _decision_output_from_pretrip_package(

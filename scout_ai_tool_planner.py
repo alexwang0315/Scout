@@ -655,7 +655,6 @@ def _contextual_permission_action_override(normalized_question: str) -> str | No
             "暴露",
             "曝露稜線",
             "暴露稜線",
-            "高風險路段",
             "高風險",
         ),
     ):
@@ -2664,7 +2663,6 @@ def _looks_like_contextual_permission_question(text: str) -> bool:
             "這段要不要快速通過",
             "落石",
             "落石區",
-            "高風險路段",
             "撤退窗口",
             "能不能繼續",
             "現在能不能繼續",
