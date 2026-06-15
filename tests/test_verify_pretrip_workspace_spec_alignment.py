@@ -1,0 +1,342 @@
+from __future__ import annotations
+
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1]
+VERIFIER = ROOT / "tools" / "verify_pretrip_workspace_spec_alignment.py"
+
+
+def test_runtime_session_layout_contract_accepts_black_box_recorder(tmp_path: Path) -> None:
+    session_root = tmp_path / "runtime" / "sessions"
+    _write_runtime_session(session_root, "session.alpha")
+
+    result = _run_verifier(
+        "--skip-pretrip",
+        "--runtime-session-root",
+        str(session_root),
+        "--runtime-session-id",
+        "session.alpha",
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["ok"] is True
+    assert payload["summary"]["runtime_session"]["checked"] is True
+    assert payload["summary"]["runtime_session"]["scout_svr_checked"] is True
+
+
+def test_runtime_session_layout_contract_rejects_credential_exposure(
+    tmp_path: Path,
+) -> None:
+    session_root = tmp_path / "runtime" / "sessions"
+    _write_runtime_session(session_root, "session.alpha", credential_exposed=True)
+
+    result = _run_verifier(
+        "--skip-pretrip",
+        "--runtime-session-root",
+        str(session_root),
+        "--runtime-session-id",
+        "session.alpha",
+    )
+
+    assert result.returncode == 1
+    payload = json.loads(result.stdout)
+    assert any(
+        "credential_value_exposed=false" in error
+        for error in payload["errors"]
+    )
+
+
+def test_completed_trip_layout_contract_accepts_multi_gpx_and_runtime_import(
+    tmp_path: Path,
+) -> None:
+    completed_root = tmp_path / "completed_trips"
+    _write_completed_trip(completed_root, "trip.alpha")
+
+    result = _run_verifier(
+        "--skip-pretrip",
+        "--completed-trip-root",
+        str(completed_root),
+        "--trip-id",
+        "trip.alpha",
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["summary"]["completed_trip"]["recorded_gpx_count"] == 2
+    assert payload["summary"]["completed_trip"]["runtime_import_checked"] is True
+
+
+def test_black_box_export_layout_contract_accepts_sealed_export(
+    tmp_path: Path,
+) -> None:
+    export_root = tmp_path / "black-box" / "session_exports"
+    _write_black_box_export(export_root, "session.alpha")
+
+    result = _run_verifier(
+        "--skip-pretrip",
+        "--black-box-export-root",
+        str(export_root),
+        "--black-box-session-id",
+        "session.alpha",
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["summary"]["black_box_export"]["checked"] is True
+
+
+def _run_verifier(*args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, str(VERIFIER), *args],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+
+def _write_runtime_session(
+    runtime_session_root: Path,
+    session_id: str,
+    *,
+    credential_exposed: bool = False,
+) -> None:
+    root = runtime_session_root / session_id
+    for relative in (
+        "events",
+        "team",
+        "recorder",
+        "transports",
+        "sensor_logs/journey.scout-svr",
+        "hardware",
+        "communications",
+        "navigation",
+        "black_box",
+    ):
+        (root / relative).mkdir(parents=True, exist_ok=True)
+
+    _write_json(
+        root / "session_manifest.json",
+        {
+            "workspace_kind": "runtime_session",
+            "session_id": session_id,
+            "pretrip_candidate_mutation_allowed": False,
+        },
+    )
+    _write_json(
+        root / "recorder" / "recorder_manifest.json",
+        {"session_id": session_id, "append_only": True},
+    )
+    _write_json(
+        root / "black_box" / "black_box_manifest.json",
+        {"session_id": session_id, "source_of_safety_decisions": False},
+    )
+    _write_jsonl(
+        root / "events" / "event_index.jsonl",
+        [{"sequence": 1, "event_id": "evt.1", "recorded_at": "2026-06-15T00:00:00Z"}],
+    )
+    _write_jsonl(
+        root / "team" / "team_status_events.jsonl",
+        [
+            {
+                "sequence": 1,
+                "member_ref": "member.self",
+                "status": "ok",
+                "recorded_at": "2026-06-15T00:00:01Z",
+            }
+        ],
+    )
+    _write_jsonl(
+        root / "recorder" / "append_only_integrity_chain.jsonl",
+        [{"sequence": 1, "recorded_at": "2026-06-15T00:00:02Z"}],
+    )
+    _write_jsonl(
+        root / "transports" / "ingress_evidence_index.jsonl",
+        [
+            {
+                "sequence": 1,
+                "received_at": "2026-06-15T00:00:03Z",
+                "ingress_transport": "wan_mqtt",
+                "source_adapter": "sensorlogger",
+                "payload_sha256": "a" * 64,
+                "parse_status": "accepted",
+                "credential_value_exposed": credential_exposed,
+            }
+        ],
+    )
+    _write_jsonl(
+        root / "transports" / "egress_evidence_index.jsonl",
+        [
+            {
+                "sequence": 1,
+                "queued_at": "2026-06-15T00:00:04Z",
+                "egress_transport": "lora_gateway",
+                "payload_sha256": "b" * 64,
+                "delivery_status": "queued",
+                "credential_value_exposed": False,
+            }
+        ],
+    )
+    _write_jsonl(
+        root / "hardware" / "hardware_resource_access_events.jsonl",
+        [
+            {
+                "sequence": 1,
+                "recorded_at": "2026-06-15T00:00:05Z",
+                "hardware_interface": "gpio",
+                "access_status": "read",
+            }
+        ],
+    )
+    _write_jsonl(
+        root / "black_box" / "black_box_event_index.jsonl",
+        [
+            {
+                "sequence": 1,
+                "event_ref": "events/event_index.jsonl#1",
+                "recorded_at": "2026-06-15T00:00:06Z",
+            }
+        ],
+    )
+    _write_scout_svr(root / "sensor_logs" / "journey.scout-svr")
+
+
+def _write_scout_svr(root: Path) -> None:
+    _write_json(
+        root / "manifest.json",
+        {
+            "artifact_kind": "scout_sensor_vitals_record",
+            "artifact_version": "scout_sensor_vitals_record.v0",
+        },
+    )
+    _write_jsonl(
+        root / "observations.jsonl",
+        [{"sequence": 1, "timestamp": "2026-06-15T00:00:00Z"}],
+    )
+    for filename in (
+        "application_routes.jsonl",
+        "filter_outputs.jsonl",
+        "navigation_estimates.jsonl",
+        "vitals.jsonl",
+        "transport_ingress_index.jsonl",
+        "transport_egress_index.jsonl",
+    ):
+        _write_jsonl(root / filename, [])
+
+
+def _write_completed_trip(completed_root: Path, trip_id: str) -> None:
+    root = completed_root / trip_id
+    for relative in (
+        "recorded/primary_user",
+        "recorded/participants/member.a",
+        "runtime/events",
+        "runtime/team",
+        "runtime/recorder",
+        "runtime/transports",
+        "runtime/sensor_logs",
+        "runtime/hardware",
+        "runtime/communications",
+        "runtime/navigation",
+        "runtime/black_box",
+        "outputs",
+        "reviews",
+    ):
+        (root / relative).mkdir(parents=True, exist_ok=True)
+    _write_json(
+        root / "trip_manifest.json",
+        {
+            "workspace_kind": "completed_trip",
+            "trip_id": trip_id,
+            "pretrip_candidate_mutation_allowed": False,
+        },
+    )
+    _write_json(
+        root / "recorded" / "recording_set_manifest.json",
+        {
+            "trip_id": trip_id,
+            "recording_set_storage_allows_multiple_gpx": True,
+            "active_view_single_subject": True,
+        },
+    )
+    _write_text(root / "recorded" / "primary_user" / "watch.gpx", _tiny_gpx())
+    _write_text(
+        root / "recorded" / "participants" / "member.a" / "phone.gpx",
+        _tiny_gpx(),
+    )
+    _write_json(root / "runtime" / "imported_session_manifest.json", {})
+    _write_json(root / "outputs" / "capability_timeline.json", {})
+    _write_json(root / "outputs" / "capability_capsule.json", {})
+
+
+def _write_black_box_export(export_root: Path, session_id: str) -> None:
+    root = export_root / session_id
+    for relative in (
+        "bundle/recorder",
+        "bundle/events",
+        "bundle/team",
+        "bundle/transports",
+        "bundle/sensor_logs",
+        "bundle/hardware",
+        "bundle/communications",
+        "bundle/navigation",
+        "bundle/black_box",
+    ):
+        (root / relative).mkdir(parents=True, exist_ok=True)
+    _write_json(
+        root / "black_box_export_manifest.json",
+        {
+            "session_id": session_id,
+            "source_runtime_session_ref": f"runtime/sessions/{session_id}",
+            "pretrip_template_package": False,
+        },
+    )
+    _write_json(
+        root / "redaction_policy.json",
+        {"audience": "support", "purpose": "incident_reconstruction"},
+    )
+    _write_text(root / "checksums.sha256", "a  bundle/session_manifest.json\n")
+    _write_jsonl(
+        root / "timeline_index.jsonl",
+        [
+            {
+                "sequence": 1,
+                "source_ref": "bundle/events/event_index.jsonl#1",
+                "recorded_at": "2026-06-15T00:00:00Z",
+            }
+        ],
+    )
+    _write_json(root / "bundle" / "session_manifest.json", {"session_id": session_id})
+
+
+def _write_json(path: Path, payload: object) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _write_jsonl(path: Path, records: list[dict[str, object]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        "".join(json.dumps(record, ensure_ascii=False) + "\n" for record in records),
+        encoding="utf-8",
+    )
+
+
+def _write_text(path: Path, body: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(body, encoding="utf-8")
+
+
+def _tiny_gpx() -> str:
+    return """<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="scout-test">
+  <trk><name>test</name><trkseg>
+    <trkpt lat="24.0" lon="121.0"><time>2026-06-15T00:00:00Z</time></trkpt>
+    <trkpt lat="24.0001" lon="121.0001"><time>2026-06-15T00:01:00Z</time></trkpt>
+  </trkseg></trk>
+</gpx>
+"""
