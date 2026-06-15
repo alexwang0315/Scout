@@ -235,6 +235,9 @@ def test_answer_synthesis_uses_contextual_permission_field_answer_without_guessi
     ] == "不建議拍影片。"
     assert result.decision_output["decisionObjectSchema"] == "ContextualPermission"
     assert result.decision_output["answerSourceToolId"] == CONTEXTUAL_PERMISSION_TOOL_ID
+    assert result.decision_output["action"] == "film"
+    assert result.decision_output["decision"] == "NO_GO"
+    assert result.decision_output["allowed"] is False
     assert result.decision_output["firstLayer"]["decision"] == "不建議拍影片。"
     assert result.decision_output["runtimeSafetyTruth"] is False
     assert "remaining_safety_buffer_minutes" in result.sources[0].missing_fields
@@ -261,6 +264,9 @@ def test_answer_synthesis_blocks_split_team_micro_decision() -> None:
     assert summary["decision"] == "NO_GO"
     assert summary["allowed"] is False
     assert result.decision_output["answerSourceToolId"] == CONTEXTUAL_PERMISSION_TOOL_ID
+    assert result.decision_output["action"] == "split_team"
+    assert result.decision_output["decision"] == "NO_GO"
+    assert result.decision_output["allowed"] is False
     assert result.decision_output["firstLayer"]["decision"] == "不建議分隊。"
     assert "保持隊伍完整" in result.answer
     assert "runtime safety truth" in result.answer
@@ -284,6 +290,9 @@ def test_answer_synthesis_uses_rain_gear_micro_decision_before_missing_context()
     assert summary["allowed"] is True
     assert source.missing_fields == []
     assert result.decision_output["answerSourceToolId"] == CONTEXTUAL_PERMISSION_TOOL_ID
+    assert result.decision_output["action"] == "wear_rain_gear"
+    assert result.decision_output["decision"] == "GO"
+    assert result.decision_output["allowed"] is True
     assert result.decision_output["firstLayer"]["decision"] == "可以穿雨具。"
     assert "不額外消耗停留 buffer" in result.answer
     assert "Missing evidence" in result.answer
@@ -310,6 +319,9 @@ def test_answer_synthesis_blocks_shortcut_reroute_micro_decision() -> None:
     nav_source = _source(result, LIVE_NAVIGATION_STATE_TOOL_ID)
     assert "lat" in nav_source.missing_fields
     assert result.decision_output["answerSourceToolId"] == CONTEXTUAL_PERMISSION_TOOL_ID
+    assert result.decision_output["action"] == "reroute"
+    assert result.decision_output["decision"] == "NO_GO"
+    assert result.decision_output["allowed"] is False
     assert result.decision_output["firstLayer"]["decision"] == "不建議改線。"
     assert "不要臨時改線" in result.answer
     assert "Missing evidence" in result.answer
@@ -336,6 +348,9 @@ def test_answer_synthesis_uses_direct_retreat_micro_decision() -> None:
     pace_source = _source(result, PACE_GUARDIAN_TOOL_ID)
     assert pace_source.missing_fields == ["member_pace_profile"]
     assert result.decision_output["answerSourceToolId"] == CONTEXTUAL_PERMISSION_TOOL_ID
+    assert result.decision_output["action"] == "retreat"
+    assert result.decision_output["decision"] == "GO"
+    assert result.decision_output["allowed"] is True
     assert result.decision_output["firstLayer"]["decision"] == "可以撤退。"
     assert "開始撤退" in result.answer
     assert "Missing evidence" in result.answer

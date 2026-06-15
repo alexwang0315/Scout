@@ -163,6 +163,17 @@ class ScoutDecisionOutput(ScoutContextualBaseModel):
         default="ContextualPermission",
         alias="decisionObjectSchema",
     )
+    action: OutdoorAction
+    decision: ScoutDecision
+    allowed: bool
+    max_duration_minutes: int | None = Field(
+        default=None,
+        ge=0,
+        alias="maxDurationMinutes",
+    )
+    leave_by: str | None = Field(default=None, alias="leaveBy")
+    cost: ContextualPermissionCost | None = None
+    confidence: ConfidenceLevel
     text: str = Field(min_length=1)
     first_layer: DecisionOutputFirstLayer = Field(alias="firstLayer")
     second_layer: DecisionOutputSecondLayer = Field(alias="secondLayer")
@@ -1523,6 +1534,13 @@ def _decision_output(
         )
     )
     return ScoutDecisionOutput(
+        action=permission.action,
+        decision=permission.decision,
+        allowed=permission.allowed,
+        max_duration_minutes=permission.max_duration_minutes,
+        leave_by=permission.leave_by,
+        cost=permission.cost,
+        confidence=permission.confidence,
         text=text,
         first_layer=first_layer,
         second_layer=second_layer,

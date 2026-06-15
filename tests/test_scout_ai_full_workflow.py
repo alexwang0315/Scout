@@ -250,6 +250,9 @@ def test_full_workflow_preserves_contextual_permission_decision_object() -> None
     assert summary["decision_output"]["firstLayer"]["decision"] == "不建議拍影片。"
     assert result.decision_output["decisionObjectSchema"] == "ContextualPermission"
     assert result.decision_output["answerSourceToolId"] == CONTEXTUAL_PERMISSION_TOOL_ID
+    assert result.decision_output["action"] == "film"
+    assert result.decision_output["decision"] == "NO_GO"
+    assert result.decision_output["allowed"] is False
     assert result.decision_output["firstLayer"]["decision"] == "不建議拍影片。"
     answer_step = result.workflow_steps[-1]
     assert answer_step.summary["decision_output_schema"] == "ContextualPermission"
@@ -280,6 +283,9 @@ def test_full_workflow_blocks_split_team_summit_question() -> None:
     assert summary["decision"] == "NO_GO"
     assert summary["allowed"] is False
     assert result.decision_output["answerSourceToolId"] == CONTEXTUAL_PERMISSION_TOOL_ID
+    assert result.decision_output["action"] == "split_team"
+    assert result.decision_output["decision"] == "NO_GO"
+    assert result.decision_output["allowed"] is False
     assert result.decision_output["firstLayer"]["decision"] == "不建議分隊。"
     assert "保持隊伍完整" in result.answer
     assert result.boundary.runtime_safety_truth is False
@@ -304,6 +310,9 @@ def test_full_workflow_uses_rain_gear_micro_decision() -> None:
     assert summary["decision"] == "GO"
     assert summary["allowed"] is True
     assert result.decision_output["answerSourceToolId"] == CONTEXTUAL_PERMISSION_TOOL_ID
+    assert result.decision_output["action"] == "wear_rain_gear"
+    assert result.decision_output["decision"] == "GO"
+    assert result.decision_output["allowed"] is True
     assert result.decision_output["firstLayer"]["decision"] == "可以穿雨具。"
     assert "就地穿上雨具" in result.answer
     assert result.boundary.runtime_safety_truth is False
@@ -330,6 +339,9 @@ def test_full_workflow_blocks_shortcut_reroute_question() -> None:
     nav_source = _workflow_source(result, LIVE_NAVIGATION_STATE_TOOL_ID)
     assert "lat" in nav_source["missing_fields"]
     assert result.decision_output["answerSourceToolId"] == CONTEXTUAL_PERMISSION_TOOL_ID
+    assert result.decision_output["action"] == "reroute"
+    assert result.decision_output["decision"] == "NO_GO"
+    assert result.decision_output["allowed"] is False
     assert result.decision_output["firstLayer"]["decision"] == "不建議改線。"
     assert "不要臨時改線" in result.answer
     assert result.boundary.runtime_safety_truth is False
@@ -356,6 +368,9 @@ def test_full_workflow_uses_direct_retreat_micro_decision() -> None:
     pace_source = _workflow_source(result, PACE_GUARDIAN_TOOL_ID)
     assert pace_source["missing_fields"] == ["member_pace_profile"]
     assert result.decision_output["answerSourceToolId"] == CONTEXTUAL_PERMISSION_TOOL_ID
+    assert result.decision_output["action"] == "retreat"
+    assert result.decision_output["decision"] == "GO"
+    assert result.decision_output["allowed"] is True
     assert result.decision_output["firstLayer"]["decision"] == "可以撤退。"
     assert "保持隊伍完整" in result.answer
     assert result.boundary.runtime_safety_truth is False

@@ -921,6 +921,11 @@ def test_execute_contextual_permission_assessor_returns_bounded_decision() -> No
     assert result.payload["decision_output"]["decisionObjectSchema"] == (
         "ContextualPermission"
     )
+    assert result.payload["decision_output"]["action"] == "film"
+    assert result.payload["decision_output"]["decision"] == "CONDITIONAL_GO"
+    assert result.payload["decision_output"]["allowed"] is True
+    assert result.payload["decision_output"]["maxDurationMinutes"] == 6
+    assert result.payload["decision_output"]["cost"]["timeBufferChangeMinutes"] == -6
     assert result.payload["decision_output"]["firstLayer"]["decision"] == (
         "可以，最多 6 分鐘。"
     )
@@ -951,6 +956,9 @@ def test_execute_contextual_permission_assessor_blocks_split_team_summit() -> No
     assert result.payload["decision_output"]["decisionObjectSchema"] == (
         "ContextualPermission"
     )
+    assert result.payload["decision_output"]["action"] == "split_team"
+    assert result.payload["decision_output"]["decision"] == "NO_GO"
+    assert result.payload["decision_output"]["allowed"] is False
     assert result.payload["decision_output"]["firstLayer"]["decision"] == (
         "不建議分隊。"
     )
@@ -982,6 +990,9 @@ def test_execute_contextual_permission_assessor_allows_rain_gear_micro_decision(
     assert result.payload["decision_output"]["decisionObjectSchema"] == (
         "ContextualPermission"
     )
+    assert result.payload["decision_output"]["action"] == "wear_rain_gear"
+    assert result.payload["decision_output"]["decision"] == "GO"
+    assert result.payload["decision_output"]["allowed"] is True
     assert result.payload["decision_output"]["firstLayer"]["decision"] == (
         "可以穿雨具。"
     )
@@ -1012,6 +1023,9 @@ def test_execute_contextual_permission_assessor_blocks_shortcut_reroute() -> Non
     assert result.payload["decision_output"]["decisionObjectSchema"] == (
         "ContextualPermission"
     )
+    assert result.payload["decision_output"]["action"] == "reroute"
+    assert result.payload["decision_output"]["decision"] == "NO_GO"
+    assert result.payload["decision_output"]["allowed"] is False
     assert result.payload["decision_output"]["firstLayer"]["decision"] == (
         "不建議改線。"
     )
@@ -1040,6 +1054,9 @@ def test_execute_contextual_permission_assessor_allows_direct_retreat() -> None:
     assert result.payload["decision_output"]["decisionObjectSchema"] == (
         "ContextualPermission"
     )
+    assert result.payload["decision_output"]["action"] == "retreat"
+    assert result.payload["decision_output"]["decision"] == "GO"
+    assert result.payload["decision_output"]["allowed"] is True
     assert result.payload["decision_output"]["firstLayer"]["decision"] == (
         "可以撤退。"
     )
