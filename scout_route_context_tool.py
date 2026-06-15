@@ -222,8 +222,17 @@ def _route_briefing_payload(
         payload, source_path = _load_project_json(root, ref)
         loaded_count = 1 if payload else 0
         if loaded_count:
+            payload = _normalize_route_briefing_payload(
+                root,
+                payload,
+                source_path=source_path,
+            )
             source_report.append(
-                _source_report("route_briefing_compose", source_path, loaded_count)
+                _source_report(
+                    _route_briefing_source_kind(payload),
+                    source_path,
+                    loaded_count,
+                )
             )
             return payload, source_path
     source_path = refs[0] if refs else "route_briefing_research_ref"
@@ -244,7 +253,11 @@ def _route_briefing_refs(
         project.get("route_briefing_candidate_ref"),
         project.get("pretrip_route_briefing_ref"),
         project.get("route_briefing_ref"),
+        project.get("route_context_pack_ref"),
+        project.get("route_context_evidence_ref"),
         "normalized/context/route_context/route_briefing_research.json",
+        "normalized/context/route_context/route_context_pack.json",
+        "normalized/context/route_context/route_context_evidence.json",
         "outputs/briefings/route_briefing_research.json",
     ):
         if not isinstance(value, str) or not value.strip():
@@ -253,6 +266,244 @@ def _route_briefing_refs(
             continue
         if value not in refs:
             refs.append(value)
+    return refs
+
+
+def _normalize_route_briefing_payload(
+    root: Path,
+    payload: dict[str, Any],
+    *,
+    source_path: str,
+) -> dict[str, Any]:
+    artifact_kind = str(payload.get("artifact_kind") or "")
+    if artifact_kind == "pretrip_route_context_pack":
+        return _route_context_pack_as_briefing_payload(
+            root,
+            payload,
+            source_path=source_path,
+        )
+    if artifact_kind == "pretrip_route_context_evidence":
+        pack_ref = payload.get("route_context_pack_ref")
+        if isinstance(pack_ref, str) and pack_ref.strip():
+            pack_payload, pack_source_path = _load_project_json(root, pack_ref)
+            if pack_payload:
+                return _route_context_pack_as_briefing_payload(
+                    root,
+                    pack_payload,
+                    source_path=pack_source_path,
+                )
+    return payload
+
+
+def _route_briefing_source_kind(payload: dict[str, Any]) -> str:
+    artifact_kind = str(payload.get("artifact_kind") or "")
+    if artifact_kind == "scout_route_context_pack_briefing_view":
+        return "route_context_pack"
+    return "route_briefing_compose"
+
+
+def _route_context_pack_as_briefing_payload(
+    root: Path,
+    payload: dict[str, Any],
+    *,
+    source_path: str,
+) -> dict[str, Any]:
+    route_summary = payload.get("route_summary")
+    route_summary = route_summary if isinstance(route_summary, dict) else {}
+    points_ref = str(payload.get("route_context_points_ref") or "candidates/route_context_points.json")
+    points_payload, _ = _load_project_json(root, points_ref)
+    points = points_payload.get("points") if isinstance(points_payload, dict) else []
+    points = [point for point in points if isinstance(point, dict)]
+    distance_m = _float_or_none(route_summary.get("distance_m"))
+    distance_km = distance_m / 1000 if distance_m is not None else None
+    route_name = str(
+        route_summary.get("display_name")
+        or route_summary.get("route_name")
+        or payload.get("project_id")
+        or "workspace route"
+    )
+    briefing_summary = _route_context_pack_summary(route_summary)
+    return {
+        "artifact_kind": "scout_route_context_pack_briefing_view",
+        "project_id": payload.get("project_id"),
+        "route_id": route_summary.get("route_id"),
+        "title": f"{route_name} route context briefing",
+        "generated_at": payload.get("generated_at"),
+        "route_summary": {
+            "recommended_days": _route_context_recommended_days(distance_km),
+            "summary": briefing_summary,
+            "current_status": "candidate-only pretrip route context pack",
+            "season_note": "季節、天候與山屋狀態必須另以最新來源人工審查。",
+            "risk_note": "這是行前 route-context 候選證據，不是 runtime safety truth。",
+        },
+        "context_layers": _route_context_layers_from_points(points),
+        "route_points": _route_points_from_context_points(points),
+        "observation_stops": _observation_stops_from_context_points(points),
+        "itinerary_options": _itinerary_options_from_route_summary(distance_km),
+        "source_refs": _source_refs_from_route_context_pack(root, payload),
+        "source_path": source_path,
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+    }
+
+
+def _route_context_pack_summary(route_summary: dict[str, Any]) -> str:
+    distance_m = _float_or_none(route_summary.get("distance_m"))
+    elevation_min = _float_or_none(route_summary.get("elevation_min_m"))
+    elevation_max = _float_or_none(route_summary.get("elevation_max_m"))
+    point_count = route_summary.get("point_count")
+    parts = []
+    if distance_m is not None:
+        parts.append(f"workspace route distance is about {distance_m / 1000:.1f} km")
+    if elevation_min is not None and elevation_max is not None:
+        parts.append(f"elevation spans about {elevation_min:.0f}-{elevation_max:.0f} m")
+    if point_count is not None:
+        parts.append(f"{point_count} route samples are represented without embedding raw points")
+    return "; ".join(parts) or "workspace route context pack is available"
+
+
+def _route_context_recommended_days(distance_km: float | None) -> str:
+    if distance_km is None:
+        return "缺少路線距離，需由領隊審查天數"
+    if distance_km >= 45:
+        return "2 天 1 夜或 3 天 2 夜；較保守版本優先留給天候、隊伍與拍照停留 buffer"
+    if distance_km >= 25:
+        return "1 天長程或 2 天 1 夜；需視隊伍腳程與天候審查"
+    return "1 天或短程版本；仍需檢查天候、日照與撤退點"
+
+
+def _itinerary_options_from_route_summary(distance_km: float | None) -> list[dict[str, Any]]:
+    if distance_km is None:
+        return [
+            {
+                "label": "待審查版本",
+                "schedule": "缺少 route distance，不能自動給天數。",
+                "best_for": "補齊路線距離、山屋、天候與隊伍腳程後再決定。",
+                "tradeoff": "目前只能作行前討論，不是出發建議。",
+            }
+        ]
+    if distance_km >= 45:
+        return [
+            {
+                "label": "2 天 1 夜",
+                "schedule": "常見壓縮版本；需確認天氣、山屋、日照與隊伍腳程都足夠。",
+                "best_for": "腳程穩定、裝備完整且不打算長時間停留觀察的隊伍。",
+                "tradeoff": "buffer 較少，遇到午後天氣或延誤時要提早啟動撤退條件。",
+            },
+            {
+                "label": "3 天 2 夜",
+                "schedule": "較保守版本；把拍照、文化自然觀察與天候 buffer 留在行程內。",
+                "best_for": "想做行前簡報式觀察、隊伍腳程差異較大或希望降低摸黑壓力。",
+                "tradeoff": "需要更多糧食、住宿與天氣窗口確認。",
+            },
+            {
+                "label": "壓縮版本",
+                "schedule": "只應作為人工審查比較項，不應自動採用。",
+                "best_for": "已確認所有高風險段、撤退點、天氣與體能條件後才討論。",
+                "tradeoff": "對延誤、迷霧、雨後地形與體能下降容錯最低。",
+            },
+        ]
+    return [
+        {
+            "label": "標準版本",
+            "schedule": f"約 {distance_km:.1f} km route，按隊伍腳程安排。",
+            "best_for": "一般行前規劃。",
+            "tradeoff": "仍需把天候、日照、撤退點與隊伍狀態納入審查。",
+        }
+    ]
+
+
+def _route_context_layers_from_points(points: list[dict[str, Any]]) -> dict[str, list[str]]:
+    layer_names = {
+        "historical": "歷史層",
+        "cultural": "文化層",
+        "natural": "自然層",
+        "terrain": "地形層",
+        "seasonal": "季節層",
+        "observation_point": "觀察點",
+        "route_context": "路線脈絡",
+    }
+    layers: dict[str, list[str]] = {}
+    for point in points:
+        label = str(point.get("display_label") or point.get("label") or "").strip()
+        if not label:
+            continue
+        context_kind = str(point.get("context_kind") or "route_context")
+        for raw_layer in _str_list(point.get("sec6_layers")):
+            layer = layer_names.get(raw_layer, raw_layer)
+            lines = layers.setdefault(layer, [])
+            if len(lines) >= 5:
+                continue
+            line = f"{label} ({context_kind})"
+            if line not in lines:
+                lines.append(line)
+    return layers
+
+
+def _route_points_from_context_points(points: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    route_points = []
+    for point in points[:12]:
+        label = str(point.get("display_label") or point.get("label") or "").strip()
+        if not label:
+            continue
+        context_kind = str(point.get("context_kind") or "route_context")
+        route_points.append(
+            {
+                "name": label,
+                "why_it_matters": _guidance_for(context_kind, label),
+                "observation_prompt": "行前簡報候選點；現場停留需重新檢查時間、天候、地形與隊伍狀態。",
+                "safety_note": _stop_guidance_for(context_kind),
+            }
+        )
+    return route_points
+
+
+def _observation_stops_from_context_points(points: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    stops = []
+    for point in points:
+        context_kind = str(point.get("context_kind") or "route_context")
+        sec6_layers = _str_list(point.get("sec6_layers"))
+        if context_kind not in {"viewpoint", "natural_context", "route_context"} and "observation_point" not in sec6_layers:
+            continue
+        label = str(point.get("display_label") or point.get("label") or "").strip()
+        if not label:
+            continue
+        stops.append(
+            {
+                "name": label,
+                "minutes": 3,
+                "observe": _guidance_for(context_kind, label),
+                "do_not_stop_if": _stop_guidance_for("risk_context")
+                if context_kind == "risk_context"
+                else "天氣轉壞、能見度差、隊伍拉開、疲勞或撤退時間不足時不要停留。",
+            }
+        )
+        if len(stops) >= 8:
+            break
+    return stops
+
+
+def _source_refs_from_route_context_pack(
+    root: Path,
+    payload: dict[str, Any],
+) -> list[dict[str, Any]]:
+    manifest_ref = str(payload.get("source_manifest_ref") or "")
+    manifest, _ = _load_project_json(root, manifest_ref) if manifest_ref else ({}, "")
+    source_report = manifest.get("source_report") if isinstance(manifest, dict) else []
+    if not isinstance(source_report, list):
+        return []
+    refs = []
+    for source in source_report[:8]:
+        if not isinstance(source, dict):
+            continue
+        refs.append(
+            {
+                "title": source.get("source_kind"),
+                "usage": source.get("conclusion_role") or source.get("status"),
+                "source_tier": source.get("source_tier"),
+                "source_family": source.get("source_kind"),
+            }
+        )
     return refs
 
 
@@ -305,6 +556,8 @@ def _route_briefing_items(
     source_path: str,
 ) -> list[dict[str, Any]]:
     if not payload:
+        return []
+    if payload.get("artifact_kind") == "scout_route_context_pack_briefing_view":
         return []
     items: list[dict[str, Any]] = []
     source_refs = _bounded_source_refs(payload.get("source_refs"))
@@ -1015,12 +1268,16 @@ def _route_briefing_field_answer(
         text,
         (
             "沿途有哪些",
-            "歷史",
-            "文化",
-            "自然",
-            "地形",
-            "季節",
-            "觀察",
+            "沿途有什麼",
+            "沿途有那些",
+            "有哪些歷史",
+            "有哪些文化",
+            "有哪些自然",
+            "有哪些地形",
+            "有哪些季節",
+            "歷史文化自然地形季節",
+            "活動簡報",
+            "行前簡報",
             "routecontext",
         ),
     ):
@@ -1044,13 +1301,7 @@ def _route_briefing_field_answer(
             "重新計算時間、天氣、日照、隊伍與風險預算。 "
             + boundary
         )
-    title = route_briefing.get("title") or "route briefing"
-    recommended = route_briefing.get("recommended_days")
-    return (
-        f"{title} 已載入；"
-        + (f"建議天數：{recommended}。" if recommended else "")
-        + f" {boundary}"
-    )
+    return None
 
 
 def _field_answer(results: list[dict[str, Any]], *, answerability: str) -> str:
