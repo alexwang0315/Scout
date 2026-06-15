@@ -546,6 +546,8 @@ def _looks_like_weather_question(text: str) -> bool:
             "風速",
             "風雨",
             "風寒",
+            "風口",
+            "失溫",
             "霧",
             "紮營",
             "扎營",

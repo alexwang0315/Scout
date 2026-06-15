@@ -1101,6 +1101,43 @@ def test_execute_contextual_permission_assessor_allows_fog_wait_photo_cutoff() -
     assert result.boundary.runtime_safety_truth is False
 
 
+def test_execute_contextual_permission_assessor_blocks_wind_exposed_lunch() -> None:
+    result = execute_scout_ai_tool(
+        {
+            "tool_id": "scout.ai.contextual_permission.assess",
+            "project_root": str(PROJECT_ROOT),
+            "query": "這裡是風口，我們可以在這裡吃午餐嗎？",
+            "arguments": {
+                "current_time": "2026-06-07T12:00:00+08:00",
+                "current_cp_id": "CP2",
+                "next_cp_id": "CP3",
+                "remaining_safety_buffer_minutes": 45,
+                "next_segment_uncertainty_minutes": 5,
+                "weather_reserve_minutes": 5,
+                "communication_status": "ok",
+                "equipment_status": "ok",
+            },
+        }
+    )
+
+    assert result.status == "completed"
+    assert result.tool_id == CONTEXTUAL_PERMISSION_TOOL_ID
+    assert result.payload["answerability"] == "contextual_permission_decision_available"
+    assert result.payload["action"] == "lunch"
+    assert result.payload["decision"] == "NO_GO"
+    assert result.payload["allowed"] is False
+    assert result.payload["max_duration_minutes"] is None
+    assert result.payload["decision_output"]["firstLayer"]["decision"] == (
+        "不建議吃午餐。"
+    )
+    assert "風口" in result.payload["decision_output"]["firstLayer"]["reason"]
+    assert result.payload["decision_output"]["firstLayer"]["nextStep"] == (
+        "不在此午餐，請再前往 CP3，到較避風處再重新評估。"
+    )
+    assert result.payload["decision_output"]["runtimeSafetyTruth"] is False
+    assert result.boundary.runtime_safety_truth is False
+
+
 def test_execute_contextual_permission_assessor_blocks_shortcut_reroute() -> None:
     result = execute_scout_ai_tool(
         {

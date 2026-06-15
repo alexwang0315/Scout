@@ -545,6 +545,36 @@ def _permission(
             alternative_actions=_alternative_actions(action, next_cp_id),
         )
 
+    if action == OutdoorAction.LUNCH and _looks_like_exposed_lunch_context(
+        query=query,
+        terrain_risk_level=terrain_risk_level,
+        location_constraint=location_constraint,
+        weather_window_impact=weather_window_impact,
+    ):
+        uncertainty_notes = _status_uncertainty_notes(
+            communication_status=communication_status,
+            equipment_status=equipment_status,
+        )
+        if missing_fields:
+            uncertainty_notes.extend(
+                [
+                    "remaining_safety_buffer_minutes is still required for any bounded lunch permission.",
+                    "風口午餐即使時間看似足夠，也不能只用 buffer 授權。",
+                ]
+            )
+        return _no_go_permission(
+            action=action,
+            decision=ScoutDecision.NO_GO,
+            reason=(
+                "此處為風口或曝露停留點，午餐停留會增加失溫與體力流失；"
+                "不能只因時間 buffer 足夠就授權。"
+            ),
+            next_action=_exposed_lunch_next_action(next_cp_id),
+            confidence=_confidence(confidence, default=ConfidenceLevel.MEDIUM),
+            uncertainty_notes=uncertainty_notes,
+            alternative_actions=_alternative_actions(action, next_cp_id),
+        )
+
     if missing_fields and action in _BUDGET_ACTIONS:
         return _no_go_permission(
             action=action,
@@ -1412,6 +1442,46 @@ def _high_risk_next_action(action: OutdoorAction, next_cp_id: str | None) -> str
     if action == OutdoorAction.CROSS_STREAM:
         return "停止進入溪谷，退回穩定安全點，必要時等待領隊、嚮導或官方資訊。"
     return _safe_next_action(action, next_cp_id)
+
+
+def _looks_like_exposed_lunch_context(
+    *,
+    query: str,
+    terrain_risk_level: str | None,
+    location_constraint: str | None,
+    weather_window_impact: str | None,
+) -> bool:
+    if terrain_risk_level in _HIGH_RISK_LEVELS:
+        return True
+    text = " ".join(
+        str(part or "")
+        for part in (query, location_constraint, weather_window_impact)
+    ).lower()
+    return _has_any(
+        text,
+        (
+            "風口",
+            "強風",
+            "陣風",
+            "風寒",
+            "失溫",
+            "曝露",
+            "暴露",
+            "稜線",
+            "ridge",
+            "wind",
+            "windy",
+            "windchill",
+            "exposed",
+            "cold exposure",
+        ),
+    )
+
+
+def _exposed_lunch_next_action(next_cp_id: str | None) -> str:
+    if next_cp_id:
+        return f"不在此午餐，請再前往 {next_cp_id}，到較避風處再重新評估。"
+    return "不在此午餐，請再前往下一個較避風 CP，到較避風處再重新評估。"
 
 
 def _budget_failure_decision(action: OutdoorAction) -> ScoutDecision:

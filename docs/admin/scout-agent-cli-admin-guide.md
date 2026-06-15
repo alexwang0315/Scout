@@ -233,6 +233,10 @@ as `wait`, not generic `photo`. They route through Weather Window and contextual
 permission: Weather supplies the weather-window uncertainty, while contextual
 permission can grant at most the bounded wait duration and must cut off the
 photo if visibility does not improve before the deadline.
+Sec. 25.2 lunch questions at exposed or windy locations such as "這裡是風口，我們
+可以在這裡吃午餐嗎？" remain `NO_GO` even when the time buffer looks sufficient.
+Contextual permission must prefer moving to the next sheltered CP because lunch
+stops can increase cold exposure and fatigue loss in wind-exposed terrain.
 Sec. 25.5 social-photo detours such as "大家都說旁邊那個點很好拍，可以繞去嗎？"
 route through both media literacy and contextual permission. The media decision
 is primary for the first layer: it marks the action as `reroute`, returns
