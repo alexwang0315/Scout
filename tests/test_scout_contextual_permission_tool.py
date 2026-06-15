@@ -291,6 +291,33 @@ def test_contextual_permission_missing_buffer_is_conservative_no_go() -> None:
     assert result["decision_output"]["secondLayer"]["alternativeActions"]
 
 
+def test_contextual_permission_missing_buffer_still_reports_requested_stop_cost() -> None:
+    result = assess_scout_contextual_permission(
+        PROJECT_ROOT,
+        query="如果多停 10 分鐘，代價是什麼？",
+    )
+
+    assert result["answerability"] == "contextual_permission_missing_required_fields"
+    assert result["action"] == "stop"
+    assert result["decision"] == "NO_GO"
+    assert result["allowed"] is False
+    assert result["missing_fields"] == ["remaining_safety_buffer_minutes"]
+    assert result["contextual_permission"]["cost"]["timeBufferChangeMinutes"] == -10
+    assert result["decision_output"]["cost"]["timeBufferChangeMinutes"] == -10
+    assert result["decision_output"]["firstLayer"]["decision"] == "不建議停留。"
+    assert "使用者要求約 10 分鐘" in result["decision_output"]["firstLayer"]["reason"]
+    assert "不能計算代價或授權" in result["decision_output"]["firstLayer"]["reason"]
+    assert result["decision_output"]["firstLayer"]["nextStep"] == (
+        "不要在此停留，請先前往下一個安全 CP，再重新評估。"
+    )
+    assert any(
+        "使用者要求時間約 10 分鐘" in detail
+        for detail in result["decision_output"]["secondLayer"]["details"]
+    )
+    assert result["decision_output"]["runtimeSafetyTruth"] is False
+    assert result["boundary"]["runtime_safety_truth"] is False
+
+
 def test_contextual_permission_generic_leave_by_question_defaults_to_stop() -> None:
     result = assess_scout_contextual_permission(
         PROJECT_ROOT,
