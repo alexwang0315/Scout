@@ -57,6 +57,7 @@ OPTIONAL_ROUTE_CONTEXT_REFS = {
     "route_context_source_manifest_ref": "normalized/context/route_context/source_manifest.json",
     "route_context_pack_ref": "normalized/context/route_context/route_context_pack.json",
     "route_context_crawl_seed_plan_ref": "normalized/context/route_context/crawl_seed_plan.json",
+    "route_context_media_manifest_ref": "normalized/context/route_context/media_manifest.json",
     "route_context_briefing_ref": "outputs/briefings/route_context_briefing.html",
     "route_context_points_ref": "candidates/route_context_points.json",
 }
@@ -521,6 +522,7 @@ def _check_route_context_refs(
     source_manifest = payloads.get("route_context_source_manifest_ref") or {}
     pack = payloads.get("route_context_pack_ref") or {}
     crawl_seed_plan = payloads.get("route_context_crawl_seed_plan_ref") or {}
+    media_manifest = payloads.get("route_context_media_manifest_ref") or {}
     points = payloads.get("route_context_points_ref") or {}
     briefing_summary = _check_route_context_briefing(
         project_root,
@@ -550,6 +552,12 @@ def _check_route_context_refs(
         crawl_seed_plan,
         "pretrip_route_context_crawl_seed_plan",
         "route_context_crawl_seed_plan_ref",
+        errors,
+    )
+    _check_route_context_artifact_kind(
+        media_manifest,
+        "pretrip_route_context_media_manifest",
+        "route_context_media_manifest_ref",
         errors,
     )
     _check_route_context_artifact_kind(
@@ -609,6 +617,18 @@ def _check_route_context_refs(
         else None,
         "route_note_seed_count": crawl_seed_plan.get("route_note_seed_count")
         if isinstance(crawl_seed_plan, dict)
+        else None,
+        "media_count": media_manifest.get("media_count")
+        if isinstance(media_manifest, dict)
+        else None,
+        "anchored_media_count": media_manifest.get("anchored_media_count")
+        if isinstance(media_manifest, dict)
+        else None,
+        "route_point_media_count": media_manifest.get("route_point_media_count")
+        if isinstance(media_manifest, dict)
+        else None,
+        "has_hero_image": bool(media_manifest.get("hero_image"))
+        if isinstance(media_manifest, dict)
         else None,
         "briefing_available": briefing_summary["available"],
         "briefing_size_bytes": briefing_summary.get("size_bytes"),

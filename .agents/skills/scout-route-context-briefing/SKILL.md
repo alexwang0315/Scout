@@ -102,6 +102,20 @@ Structure generated route context briefings around:
 - observation points: places worth a short planned observation stop, never automatic stop permission.
 - P2 Scout-owned layer: completed-trip GPX, deviations, dwell/stay points, photos, voice notes, IMU/PDR events, barometric altitude, team spacing, user stop-worthiness feedback, and Scout action logs that explain how the route actually unfolded for this user/team.
 
+## Visual / Map Briefing Template
+
+Future route briefing HTML should reuse the same high-energy briefing structure,
+not fall back to a source table or engineering report:
+
+- visual agenda: first-screen navigation for itinerary, imagery, map, context, observation stops, schedule, and sources.
+- photo essay: use real P0/P1/P2-backed images when available. Never fake missing photos with decorative placeholders.
+- visual kit: fixed slots for cover image, route map, lodging/intermediate nodes, terrain passage, 3-minute stop, and weather/season image. Missing slots must become an explicit shot list or evidence gap.
+- map atlas: include a real route overview/map image when available, plus route scale, elevation range, bbox span, and P0/P1/P2 map evidence cards so the route feels broad and spatially grounded.
+- source tier spine: show P0 official baseline, P1 expansion evidence, and P2 Scout-owned review data as separate visible cards before the detailed source table.
+- six context layers: historical, cultural, natural, terrain, seasonal, and observation points must each have a briefing card or an explicit missing-evidence state.
+- color direction: use a bold expedition palette with dark ground, ember/red action accents, signal yellow, and high-contrast map/source panels. Keep Scout safety boundary text clear and do not hide candidate-only status.
+- public/share variants must redact private P2 details, but Scout-local/admin briefings should still show that P2 exists and what category/review state it has.
+
 For each point, distinguish:
 - why it matters for route understanding;
 - source tier/family and URL;

@@ -1,0 +1,2719 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Scout Route Context Briefing - 奇萊-南華</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #17202a;
+      --muted: #64717f;
+      --line: #d9e0e7;
+      --panel: #ffffff;
+      --page: #f4f6f5;
+      --paper: #fffefa;
+      --forest: #234f45;
+      --forest-dark: #163d34;
+      --moss: #6c7f42;
+      --clay: #a35f3d;
+      --sky: #4a7194;
+      --gold: #b78a35;
+      --shadow: 0 18px 46px rgba(31, 42, 35, .12);
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        linear-gradient(90deg, rgba(35, 79, 69, .055) 1px, transparent 1px),
+        linear-gradient(0deg, rgba(35, 79, 69, .045) 1px, transparent 1px),
+        var(--page);
+      background-size: 28px 28px;
+      font-family: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.62;
+    }
+    p { margin: 0; }
+    a { color: var(--sky); text-underline-offset: 3px; text-decoration-thickness: 2px; }
+    .wrap { width: min(1160px, calc(100% - 40px)); margin: 0 auto; }
+    .hero {
+      position: relative;
+      min-height: min(620px, 72vh);
+      display: flex;
+      align-items: end;
+      padding: 78px 0 64px;
+      color: #fff;
+      background:
+        linear-gradient(110deg, rgba(26, 58, 50, .95), rgba(30, 55, 70, .76)),
+        linear-gradient(180deg, #496b61, #263f3a);
+      overflow: hidden;
+    }
+    .hero::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(90deg, rgba(17, 43, 38, .92), rgba(17, 43, 38, .62), rgba(17, 43, 38, .2));
+      pointer-events: none;
+    }
+    .hero-photo {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      filter: saturate(1.05) contrast(1.02);
+    }
+    .hero .wrap { position: relative; z-index: 1; }
+    .eyebrow, .kicker {
+      margin: 0 0 10px;
+      color: var(--gold);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0;
+      text-transform: uppercase;
+    }
+    .hero .eyebrow { color: #cbdcc5; }
+    h1 {
+      max-width: 920px;
+      margin: 0 0 18px;
+      font-family: "Noto Serif TC", "Songti TC", "PMingLiU", serif;
+      font-size: 64px;
+      line-height: 1.02;
+      letter-spacing: 0;
+    }
+    h2 {
+      margin: 0;
+      font-family: "Noto Serif TC", "Songti TC", "PMingLiU", serif;
+      font-size: 38px;
+      line-height: 1.12;
+      letter-spacing: 0;
+    }
+    h3 { margin: 0 0 8px; font-size: 20px; line-height: 1.25; }
+    .hero-copy { max-width: 760px; margin: 0 0 24px; color: #f6ead8; font-size: 20px; }
+    .meta-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 32px;
+      padding: 6px 12px;
+      border: 1px solid rgba(255, 255, 255, .28);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, .12);
+      font-size: 13px;
+      font-weight: 700;
+    }
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 255, 255, .96);
+      backdrop-filter: blur(12px);
+    }
+    nav .wrap { display: flex; gap: 8px; overflow-x: auto; padding-top: 10px; padding-bottom: 10px; }
+    nav a {
+      flex: 0 0 auto;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 8px 10px;
+      color: var(--forest);
+      background: var(--paper);
+      font-size: 13px;
+      font-weight: 800;
+      text-decoration: none;
+      white-space: nowrap;
+    }
+    .mode-switch {
+      flex: 0 0 auto;
+      display: inline-flex;
+      gap: 4px;
+      margin-left: auto;
+      padding: 3px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #f7f5ee;
+    }
+    .mode-button {
+      min-height: 34px;
+      border: 0;
+      border-radius: 6px;
+      padding: 6px 10px;
+      color: var(--forest);
+      background: transparent;
+      font: inherit;
+      font-size: 13px;
+      font-weight: 900;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .mode-button[aria-pressed="true"] {
+      color: #fff;
+      background: var(--forest);
+    }
+    main { padding: 28px 0 56px; }
+    .slide {
+      display: grid;
+      align-content: center;
+      min-width: 0;
+      min-height: min(680px, calc(100vh - 120px));
+      scroll-margin-top: 72px;
+      margin: 0 0 30px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(255, 254, 250, .97);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+    .chapter-break {
+      position: relative;
+      min-height: min(560px, calc(100vh - 120px));
+      color: #fff;
+      background: var(--forest-dark);
+    }
+    .chapter-break::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(90deg, rgba(16, 40, 35, .94), rgba(16, 40, 35, .64), rgba(16, 40, 35, .22)),
+        linear-gradient(180deg, rgba(16, 40, 35, .2), rgba(16, 40, 35, .72));
+      pointer-events: none;
+    }
+    .chapter-photo {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      filter: saturate(1.05) contrast(1.04);
+    }
+    .chapter-inner {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      grid-template-columns: minmax(0, .75fr) minmax(320px, .55fr);
+      gap: 28px;
+      align-items: end;
+      width: 100%;
+      padding: 52px;
+    }
+    .chapter-number {
+      display: inline-flex;
+      width: fit-content;
+      margin-bottom: 18px;
+      padding: 7px 11px;
+      border: 1px solid rgba(255, 255, 255, .32);
+      border-radius: 999px;
+      color: #f5e6b2;
+      background: rgba(255, 255, 255, .12);
+      font-size: 13px;
+      font-weight: 900;
+    }
+    .chapter-break h2 {
+      max-width: 720px;
+      color: #fff;
+      font-size: 52px;
+    }
+    .chapter-break .kicker { color: #f5e6b2; }
+    .chapter-copy {
+      max-width: 760px;
+      margin-top: 18px;
+      color: #fff4dc;
+      font-size: 20px;
+    }
+    .chapter-rhythm {
+      display: grid;
+      gap: 10px;
+      padding: 18px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, .12);
+      border: 1px solid rgba(255, 255, 255, .24);
+      backdrop-filter: blur(10px);
+    }
+    .chapter-rhythm b {
+      color: #f5e6b2;
+      font-size: 15px;
+    }
+    .chapter-rhythm span {
+      display: block;
+      color: #fff;
+      font-weight: 800;
+    }
+    .slide-inner { min-width: 0; padding: 42px; }
+    .slide-head {
+      display: flex;
+      align-items: start;
+      justify-content: space-between;
+      gap: 18px;
+      margin-bottom: 24px;
+    }
+    .stamp {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 88px;
+      padding: 10px;
+      border-radius: 8px;
+      color: #fff;
+      background: var(--forest);
+      font-weight: 900;
+      text-align: center;
+    }
+    .lead { max-width: 860px; margin: 0 0 22px; color: #31433e; font-size: 18px; }
+    .grid, .decision-grid, .layers, .source-grid, .route-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+      gap: 14px;
+    }
+    .briefing-deck {
+      display: flex;
+      gap: 16px;
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      overflow-x: auto;
+      overscroll-behavior-inline: contain;
+      scroll-snap-type: x mandatory;
+      padding: 6px 2px 16px;
+      scrollbar-color: rgba(35, 79, 69, .55) transparent;
+    }
+    .briefing-deck > article {
+      flex: 0 0 min(390px, calc(100vw - 80px));
+      scroll-snap-align: start;
+    }
+    .briefing-deck.layers {
+      display: flex;
+      grid-template-columns: none;
+    }
+    .deck-hint {
+      margin: -8px 0 14px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 800;
+    }
+    .itinerary-board {
+      display: grid;
+      grid-template-columns: minmax(320px, .9fr) minmax(0, 1.1fr);
+      gap: 18px;
+      margin: 20px 0;
+      padding: 18px;
+      align-items: start;
+      border-radius: 8px;
+      background: linear-gradient(135deg, #f7faef, #ffffff);
+      border: 1px solid #dbe7c7;
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .6);
+    }
+    .itinerary-lead {
+      display: grid;
+      gap: 0;
+      overflow: hidden;
+      min-height: 100%;
+      border-radius: 8px;
+      color: #fff;
+      background: linear-gradient(150deg, #204b41, #5f7142);
+    }
+    .itinerary-visual {
+      position: relative;
+      margin: 0;
+      overflow: hidden;
+      aspect-ratio: 16 / 9;
+      background: #183a32;
+    }
+    .itinerary-visual img {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .itinerary-visual figcaption {
+      position: absolute;
+      left: 10px;
+      right: 10px;
+      bottom: 10px;
+      padding: 7px 9px;
+      border-radius: 8px;
+      color: #fff;
+      background: rgba(18, 39, 34, .84);
+      font-size: 12px;
+      font-weight: 850;
+      line-height: 1.35;
+    }
+    .itinerary-lead-body {
+      display: grid;
+      gap: 16px;
+      padding: 18px;
+    }
+    .itinerary-lead strong { display: block; font-size: 46px; line-height: .95; }
+    .itinerary-lead span { color: #f5e6b2; font-weight: 900; }
+    .itinerary-lens {
+      display: grid;
+      gap: 8px;
+    }
+    .itinerary-lens span {
+      display: block;
+      padding: 10px 12px;
+      border-radius: 8px;
+      color: #fff;
+      background: rgba(255, 255, 255, .12);
+      border: 1px solid rgba(255, 255, 255, .18);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+    .itinerary-options {
+      display: grid;
+      gap: 12px;
+    }
+    .itinerary-option-card {
+      display: grid;
+      grid-template-columns: 86px 1fr;
+      gap: 12px;
+      align-items: start;
+      padding: 14px;
+      border-radius: 8px;
+      border: 1px solid #dfe7d8;
+      background: rgba(255, 255, 255, .78);
+    }
+    .itinerary-option-card.primary {
+      border-color: #b7c99a;
+      background: #f6faef;
+      box-shadow: inset 4px 0 0 #5f7142;
+    }
+    .itinerary-option-card.compressed {
+      border-color: #ecd2ae;
+      background: #fff8ea;
+    }
+    .itinerary-option-card b { display: block; color: var(--forest); font-size: 21px; }
+    .itinerary-option-card p { margin: 5px 0 0; color: #344842; }
+    .itinerary-decision-cue {
+      color: var(--clay);
+      font-size: 13px;
+      font-weight: 900;
+    }
+    .day-pill {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 44px;
+      border-radius: 999px;
+      background: #e8efdc;
+      color: var(--forest);
+      font-weight: 900;
+      text-align: center;
+    }
+    .card, .point, .decision, .layer, .day-card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      padding: 16px;
+    }
+    .layer-brief {
+      display: grid;
+      gap: 12px;
+      align-content: start;
+    }
+    .layer-brief h3 {
+      margin-bottom: 0;
+      font-size: 24px;
+      line-height: 1.18;
+    }
+    .layer-definition {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.55;
+    }
+    .field-media {
+      margin: -2px -2px 2px;
+      min-height: 150px;
+      border-radius: 8px;
+      overflow: hidden;
+      background: #e7efe8;
+      border: 1px solid #e4ebe7;
+    }
+    .field-media img {
+      display: block;
+      width: 100%;
+      height: 180px;
+      object-fit: cover;
+    }
+    .field-media figcaption {
+      padding: 8px 10px;
+      color: var(--muted);
+      background: #fff;
+      font-size: 12px;
+      line-height: 1.35;
+    }
+    .source-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      margin-top: 8px;
+    }
+    .source-badge {
+      display: inline-flex;
+      align-items: center;
+      min-height: 22px;
+      padding: 3px 7px;
+      border-radius: 999px;
+      color: #344842;
+      background: #eef3ef;
+      border: 1px solid #dae5dc;
+      font-size: 11px;
+      font-weight: 900;
+      line-height: 1;
+      white-space: nowrap;
+    }
+    .source-badge.tier-p0 { color: #fff; background: var(--forest); border-color: var(--forest); }
+    .source-badge.tier-p1 { color: #fff; background: var(--sky); border-color: var(--sky); }
+    .source-badge.tier-p2 { color: #fff; background: var(--gold); border-color: var(--gold); }
+    .source-badge.boundary { color: #5f4321; background: #fff4df; border-color: #ead4aa; }
+    .source-badge.review { color: #633c2a; background: #fff0e7; border-color: #e8c9b7; }
+    .mode-briefing .source-badge.boundary,
+    .mode-briefing .source-badge.review {
+      display: none;
+    }
+    .layer-count {
+      display: inline-flex;
+      width: fit-content;
+      padding: 4px 8px;
+      border-radius: 999px;
+      color: var(--forest-dark);
+      background: #e8efdc;
+      font-size: 12px;
+      font-weight: 900;
+    }
+    .decision.primary { border-color: #90a86a; background: #f6faef; }
+    .muted, small, .footnote, .boundary { color: var(--muted); }
+    .boundary-note {
+      margin-top: 16px;
+      padding: 14px 16px;
+      border-radius: 8px;
+      background: #eef5ef;
+      border: 1px solid #d5e3d7;
+      color: #31433e;
+      font-weight: 700;
+    }
+    .audit-details {
+      margin-top: 10px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .audit-details code { display: block; margin-top: 8px; white-space: normal; overflow-wrap: anywhere; }
+    body.mode-briefing .source-debug-slide,
+    body.mode-briefing .audit-details,
+    body.mode-briefing .source-details {
+      display: none;
+    }
+    body.mode-data .source-debug-slide {
+      display: grid;
+    }
+    .mode-note {
+      margin-top: 14px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 700;
+    }
+    .alert {
+      margin-top: 16px;
+      padding: 12px 14px;
+      border-left: 4px solid var(--gold);
+      background: #fff9eb;
+      font-weight: 700;
+    }
+    .stat-strip {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 10px;
+      margin: 16px 0;
+    }
+    .stat { border: 1px solid var(--line); border-radius: 8px; padding: 12px; }
+    .stat b { display: block; color: var(--forest); font-size: 24px; }
+    .source-health-board {
+      display: grid;
+      grid-template-columns: minmax(300px, .85fr) minmax(0, 1.15fr);
+      gap: 16px;
+      margin-top: 18px;
+    }
+    .source-health-summary {
+      display: grid;
+      gap: 14px;
+      align-content: start;
+      padding: 18px;
+      border-radius: 8px;
+      color: #fff;
+      background: linear-gradient(145deg, #214d43, #4a7194);
+    }
+    .source-health-summary h3 {
+      margin: 0;
+      color: #fff;
+      font-size: 30px;
+      line-height: 1.12;
+    }
+    .source-health-summary p {
+      margin: 0;
+      color: rgba(255, 255, 255, .88);
+      line-height: 1.5;
+    }
+    .source-health-score {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .source-health-score span {
+      min-height: 74px;
+      padding: 10px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, .12);
+      border: 1px solid rgba(255, 255, 255, .2);
+      font-size: 12px;
+      font-weight: 850;
+      line-height: 1.35;
+    }
+    .source-health-score b {
+      display: block;
+      margin-bottom: 4px;
+      color: #f5e6b2;
+      font-size: 25px;
+      line-height: 1;
+    }
+    .source-health-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .source-health-card {
+      display: grid;
+      gap: 8px;
+      align-content: start;
+      padding: 14px;
+      border-radius: 8px;
+      background: #fff;
+      border: 1px solid #dfe7df;
+    }
+    .source-health-card.warning {
+      border-color: #e6cfa7;
+      background: #fff8ea;
+    }
+    .source-health-card.locked {
+      border-color: #d5e3d7;
+      background: #f3f8f3;
+    }
+    .source-health-card h3 {
+      margin: 0;
+      color: var(--forest-dark);
+      font-size: 19px;
+      line-height: 1.2;
+    }
+    .source-health-card p {
+      margin: 0;
+      color: #344842;
+      line-height: 1.48;
+    }
+    .source-health-card small {
+      color: var(--muted);
+      font-weight: 800;
+      line-height: 1.35;
+    }
+    .health-pill-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .health-pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      color: var(--forest-dark);
+      background: #eef5ef;
+      border: 1px solid #d8e5da;
+      font-size: 12px;
+      font-weight: 900;
+      line-height: 1;
+    }
+    .health-pill.warning {
+      color: #664823;
+      background: #fff3dd;
+      border-color: #e2c28d;
+    }
+    .source-health-details {
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 700;
+    }
+    .source-health-details code {
+      display: block;
+      margin-top: 8px;
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
+    .image-band {
+      display: grid;
+      grid-template-columns: minmax(340px, .92fr) minmax(0, 1.08fr);
+      gap: 18px;
+      align-items: stretch;
+    }
+    .status-photo-feature {
+      display: grid;
+      align-self: start;
+      grid-template-rows: auto auto;
+      min-height: 0;
+    }
+    .status-photo-feature img {
+      height: clamp(300px, 36vw, 520px);
+      min-height: 0;
+      max-height: none;
+    }
+    .status-photo-strip {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 14px;
+    }
+    .status-photo-strip .photo {
+      min-height: 158px;
+    }
+    .status-photo-strip .photo img {
+      min-height: 158px;
+      max-height: 172px;
+    }
+    .status-cues {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 14px;
+    }
+    .status-cue {
+      padding: 12px;
+      border-radius: 8px;
+      color: #344842;
+      background: #fff;
+      border: 1px solid #e2e9e4;
+      font-size: 13px;
+      font-weight: 800;
+      line-height: 1.45;
+    }
+    .status-cue b {
+      display: block;
+      margin-bottom: 5px;
+      color: var(--forest-dark);
+      font-size: 14px;
+    }
+    .photo-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 10px;
+    }
+    .highlight-wall {
+      display: grid;
+      grid-template-columns: 1.2fr .8fr;
+      gap: 16px;
+      align-items: stretch;
+    }
+    .highlight-card {
+      display: grid;
+      grid-template-columns: minmax(160px, .85fr) minmax(0, 1fr);
+      min-height: 190px;
+      overflow: hidden;
+      border-radius: 8px;
+      background: #fff;
+      border: 1px solid var(--line);
+    }
+    .highlight-card:first-child { grid-row: span 2; grid-template-columns: 1fr; }
+    .highlight-card img {
+      width: 100%;
+      height: 100%;
+      min-height: 190px;
+      object-fit: cover;
+      background: #e7efe8;
+    }
+    .highlight-body { padding: 16px; }
+    .highlight-body p { margin: 6px 0; }
+    .highlight-meta { color: var(--muted); font-size: 13px; }
+    .highlight-guide-cue {
+      color: #31433e;
+      font-weight: 800;
+      line-height: 1.48;
+    }
+    .highlight-question {
+      margin-top: 10px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      color: var(--forest-dark);
+      background: #eef5ef;
+      border: 1px solid #d8e5da;
+      font-size: 13px;
+      font-weight: 900;
+      line-height: 1.42;
+    }
+    .highlight-data-details {
+      margin-top: 10px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 700;
+    }
+    .highlight-data-details code {
+      display: block;
+      margin-top: 8px;
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
+    .mode-briefing .highlight-data-details {
+      display: none;
+    }
+    .photo {
+      margin: 0;
+      min-height: 180px;
+      border-radius: 8px;
+      overflow: hidden;
+      background: #e9efeb;
+      border: 1px solid var(--line);
+    }
+    .photo img {
+      display: block;
+      width: 100%;
+      height: 100%;
+      min-height: 180px;
+      object-fit: cover;
+    }
+    .photo figcaption {
+      padding: 8px 10px;
+      color: var(--muted);
+      background: #fff;
+      font-size: 12px;
+    }
+    .photo.status-photo-feature img {
+      height: clamp(300px, 36vw, 520px);
+      min-height: 0;
+      max-height: none;
+    }
+    .media-panel {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 18px;
+      border-radius: 8px;
+      background: #f7f5ee;
+      border: 1px solid #e6dcc7;
+    }
+    .media-gap {
+      padding: 16px;
+      border: 1px dashed #c9b98d;
+      border-radius: 8px;
+      background: #fff9eb;
+    }
+    .photo-essay {
+      display: grid;
+      grid-template-columns: minmax(360px, .98fr) minmax(0, 1.02fr);
+      gap: 18px;
+      align-items: stretch;
+    }
+    .photo-essay-feature {
+      position: relative;
+      height: 100%;
+      min-height: 500px;
+      margin: 0;
+      overflow: hidden;
+      border-radius: 8px;
+      color: #fff;
+      background: #173b35;
+      border: 1px solid #cfd9d3;
+    }
+    .photo-essay-feature img {
+      display: block;
+      width: 100%;
+      height: 100%;
+      min-height: 500px;
+      object-fit: cover;
+    }
+    .photo-essay-feature::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, rgba(14, 33, 29, .08), rgba(14, 33, 29, .82));
+    }
+    .photo-essay-feature figcaption {
+      position: absolute;
+      z-index: 1;
+      left: 18px;
+      right: 18px;
+      bottom: 18px;
+      display: grid;
+      gap: 8px;
+    }
+    .photo-essay-feature b {
+      max-width: 660px;
+      color: #fff;
+      font-family: "Noto Serif TC", "Songti TC", "PMingLiU", serif;
+      font-size: clamp(30px, 4vw, 54px);
+      line-height: 1.02;
+    }
+    .photo-essay-feature span {
+      max-width: 560px;
+      color: #fff4dc;
+      font-size: 16px;
+      font-weight: 850;
+      line-height: 1.45;
+    }
+    .photo-essay-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      align-content: stretch;
+    }
+    .photo-essay-card {
+      position: relative;
+      height: 210px;
+      min-height: 210px;
+      overflow: hidden;
+      border-radius: 8px;
+      background: #eef3ef;
+      border: 1px solid #dce6df;
+    }
+    .photo-essay-card img {
+      display: block;
+      width: 100%;
+      height: 100%;
+      min-height: 210px;
+      object-fit: cover;
+    }
+    .photo-essay-card::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, rgba(17, 43, 38, .02), rgba(17, 43, 38, .76));
+    }
+    .photo-essay-card.map-card {
+      grid-column: 1 / -1;
+      height: 170px;
+      min-height: 170px;
+    }
+    .photo-essay-card.map-card img {
+      min-height: 170px;
+    }
+    .photo-essay-caption {
+      position: absolute;
+      z-index: 1;
+      left: 12px;
+      right: 12px;
+      bottom: 12px;
+      display: grid;
+      gap: 5px;
+      color: #fff;
+    }
+    .photo-essay-caption b {
+      color: #fff;
+      font-size: 18px;
+      line-height: 1.16;
+    }
+    .photo-essay-caption span {
+      color: #f6ead8;
+      font-size: 12px;
+      font-weight: 850;
+      line-height: 1.38;
+    }
+    .visual-anchor-board {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 14px;
+    }
+    .visual-anchor {
+      display: grid;
+      grid-template-rows: 180px auto;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+    }
+    .visual-anchor img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      background: #e7efe8;
+    }
+    .visual-anchor-body { padding: 16px; }
+    .visual-anchor-body p { margin: 6px 0; }
+    .anchor-kind {
+      display: inline-flex;
+      margin-bottom: 10px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      color: #fff;
+      background: var(--sky);
+      font-size: 12px;
+      font-weight: 900;
+    }
+    .p2-review-board {
+      display: grid;
+      grid-template-columns: minmax(320px, .92fr) minmax(0, 1.08fr);
+      gap: 18px;
+      align-items: stretch;
+      margin-top: 18px;
+    }
+    .p2-visual {
+      position: relative;
+      min-height: 430px;
+      overflow: hidden;
+      border-radius: 8px;
+      background: #203f37;
+      border: 1px solid #cfd9d3;
+    }
+    .p2-visual img {
+      display: block;
+      width: 100%;
+      height: 100%;
+      min-height: 430px;
+      object-fit: cover;
+    }
+    .p2-visual figcaption {
+      position: absolute;
+      left: 12px;
+      right: 12px;
+      bottom: 12px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      color: #fff;
+      background: rgba(22, 43, 38, .86);
+      font-size: 12px;
+      font-weight: 850;
+      line-height: 1.35;
+    }
+    .p2-panel {
+      display: grid;
+      gap: 14px;
+      align-content: start;
+      padding: 18px;
+      border-radius: 8px;
+      background: #f7f5ee;
+      border: 1px solid #e6dcc7;
+    }
+    .p2-lens {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .p2-lens span {
+      display: block;
+      min-height: 84px;
+      padding: 12px;
+      border-radius: 8px;
+      background: #fff;
+      border: 1px solid #e2e6df;
+      color: #344842;
+      font-size: 13px;
+      font-weight: 800;
+      line-height: 1.45;
+    }
+    .p2-lens b {
+      display: block;
+      margin-bottom: 5px;
+      color: var(--forest-dark);
+      font-size: 14px;
+    }
+    .p2-source-stack {
+      display: grid;
+      gap: 10px;
+    }
+    .p2-source-card {
+      display: grid;
+      grid-template-columns: 76px 1fr;
+      gap: 12px;
+      align-items: start;
+      padding: 14px;
+      border-radius: 8px;
+      background: #fff;
+      border: 1px solid #e0e7df;
+    }
+    .p2-source-card h3 {
+      margin: 0 0 4px;
+      font-size: 18px;
+      line-height: 1.2;
+    }
+    .p2-source-card p {
+      margin: 5px 0 0;
+      color: #344842;
+      line-height: 1.45;
+    }
+    .p2-source-count {
+      display: grid;
+      place-items: center;
+      min-height: 64px;
+      border-radius: 8px;
+      color: #fff;
+      background: var(--gold);
+      font-weight: 900;
+      text-align: center;
+    }
+    .p2-source-count b {
+      display: block;
+      font-size: 26px;
+      line-height: 1;
+    }
+    .p2-source-count span {
+      display: block;
+      margin-top: 3px;
+      font-size: 11px;
+    }
+    .p2-empty {
+      padding: 16px;
+      border-radius: 8px;
+      background: #fff9eb;
+      border: 1px dashed #d8bf82;
+      color: #5d4726;
+      font-weight: 800;
+    }
+    .story-wall {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 16px;
+      align-items: start;
+    }
+    .story-feature,
+    .story-tile {
+      position: relative;
+      overflow: hidden;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      background: #fff;
+      box-shadow: 0 14px 28px rgba(27, 45, 40, .08);
+    }
+    .story-feature {
+      min-height: 470px;
+      color: #fff;
+      background: #173b35;
+    }
+    .story-feature img {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .story-feature::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, rgba(15, 35, 31, .1), rgba(15, 35, 31, .82));
+    }
+    .story-feature-body {
+      position: absolute;
+      z-index: 1;
+      inset: auto 0 0;
+      padding: 28px;
+    }
+    .story-feature-body .source-chips { margin-top: 14px; }
+    .story-feature h3 {
+      max-width: 680px;
+      margin: 12px 0;
+      color: #fff;
+      font-size: clamp(34px, 4vw, 58px);
+      line-height: .98;
+    }
+    .story-feature .story-cue {
+      max-width: 620px;
+      margin: 0 0 14px;
+      color: rgba(255, 255, 255, .9);
+      font-size: clamp(19px, 2vw, 26px);
+      font-weight: 850;
+      line-height: 1.35;
+    }
+    .story-feature .story-point,
+    .story-feature .story-question {
+      max-width: 620px;
+      color: rgba(255, 255, 255, .92);
+    }
+    .story-mosaic {
+      display: flex;
+      gap: 14px;
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      overflow-x: auto;
+      overscroll-behavior-inline: contain;
+      scroll-snap-type: x mandatory;
+      padding: 2px 2px 14px;
+      scrollbar-color: rgba(35, 79, 69, .55) transparent;
+    }
+    .story-tile {
+      display: grid;
+      grid-template-rows: 150px auto;
+      flex: 0 0 min(330px, calc(100vw - 80px));
+      min-height: 300px;
+      scroll-snap-align: start;
+    }
+    .story-tile img {
+      width: 100%;
+      height: 150px;
+      object-fit: cover;
+      background: #e7efe8;
+    }
+    .story-tile-body {
+      display: grid;
+      gap: 8px;
+      padding: 15px;
+    }
+    .story-tile h3 {
+      margin: 0;
+      font-size: 19px;
+      line-height: 1.2;
+    }
+    .story-cue {
+      margin: 0;
+      color: #3f504b;
+      font-size: 15px;
+      font-weight: 850;
+      line-height: 1.55;
+    }
+    .story-point {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .story-point b,
+    .story-question b {
+      display: inline-block;
+      margin-right: 6px;
+      color: var(--forest-dark);
+      font-size: 12px;
+      letter-spacing: .03em;
+      text-transform: uppercase;
+    }
+    .story-question {
+      margin-top: 4px;
+      padding-top: 10px;
+      border-top: 1px solid #edf1ed;
+      color: var(--forest-dark);
+      font-size: 13px;
+      font-weight: 900;
+    }
+    .story-speaker-note {
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .story-speaker-note summary {
+      cursor: pointer;
+      color: var(--forest-dark);
+      font-weight: 900;
+    }
+    .story-speaker-note p {
+      margin: 8px 0 0;
+      line-height: 1.5;
+    }
+    .mode-briefing .story-speaker-note {
+      display: none;
+    }
+    .route-rail {
+      display: flex;
+      gap: 10px;
+      overflow-x: auto;
+      margin: 18px 0;
+      padding-bottom: 8px;
+    }
+    .route-node {
+      flex: 0 0 132px;
+      min-height: 92px;
+      padding: 12px;
+      border-radius: 8px;
+      color: #fff;
+      background: linear-gradient(160deg, #245347, #4d6b52);
+    }
+    .route-node b { display: block; margin-bottom: 6px; color: #f5e6b2; }
+    .route-overview {
+      display: grid;
+      grid-template-columns: minmax(0, 1.1fr) minmax(260px, .9fr);
+      gap: 16px;
+      align-items: stretch;
+      margin: 18px 0;
+    }
+    .route-profile-card {
+      min-height: 270px;
+      padding: 18px;
+      border-radius: 8px;
+      border: 1px solid #d7e1d9;
+      background: linear-gradient(180deg, #f8fbf5, #fffefa);
+    }
+    .route-profile-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 14px;
+      align-items: start;
+      margin-bottom: 18px;
+    }
+    .route-profile-head b { color: var(--forest-dark); font-size: 20px; }
+    .profile-stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-bottom: 22px;
+    }
+    .profile-stat {
+      padding: 10px;
+      border-radius: 8px;
+      background: #eef5ef;
+      color: #31433e;
+      font-weight: 800;
+    }
+    .profile-stat span { display: block; color: var(--muted); font-size: 12px; font-weight: 700; }
+    .profile-track {
+      position: relative;
+      min-height: 110px;
+      margin: 18px 4px 4px;
+      border-bottom: 2px solid #c9d6cc;
+    }
+    .profile-track::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 22px;
+      height: 56px;
+      border-radius: 999px 999px 18px 18px;
+      background: linear-gradient(90deg, rgba(108,127,66,.28), rgba(183,138,53,.34), rgba(74,113,148,.26));
+      clip-path: polygon(0 82%, 16% 70%, 28% 42%, 42% 54%, 58% 22%, 76% 36%, 100% 18%, 100% 100%, 0 100%);
+    }
+    .profile-marker {
+      position: absolute;
+      bottom: 14px;
+      width: 2px;
+      height: 72px;
+      background: rgba(35, 79, 69, .56);
+    }
+    .profile-marker::after {
+      content: "";
+      position: absolute;
+      left: -5px;
+      top: -4px;
+      width: 12px;
+      height: 12px;
+      border-radius: 999px;
+      background: var(--forest-dark);
+      box-shadow: 0 0 0 4px rgba(35, 79, 69, .14);
+    }
+    .profile-legend {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .profile-legend-item {
+      padding: 8px 10px;
+      border-radius: 8px;
+      background: #f1f6f2;
+      color: #31433e;
+      font-size: 13px;
+      font-weight: 800;
+    }
+    .profile-legend-item b {
+      color: var(--clay);
+      margin-right: 6px;
+    }
+    .route-media-note {
+      display: grid;
+      gap: 12px;
+      align-content: start;
+      padding: 16px;
+      border-radius: 8px;
+      border: 1px solid #ead9b5;
+      background: #fff8ea;
+    }
+    .route-reader-cues {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .route-reader-cues span {
+      display: block;
+      padding: 11px 12px;
+      border-radius: 8px;
+      color: #344842;
+      background: #fff;
+      border: 1px solid #eadfca;
+      font-size: 13px;
+      font-weight: 800;
+      line-height: 1.42;
+    }
+    .route-reader-cues b {
+      display: block;
+      margin-bottom: 5px;
+      color: var(--forest-dark);
+      font-size: 14px;
+    }
+    .route-photo-strip {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .route-photo-strip .photo {
+      min-height: 118px;
+    }
+    .route-photo-strip .photo img {
+      min-height: 118px;
+      max-height: 132px;
+    }
+    .route-photo-strip .photo figcaption {
+      font-size: 11px;
+      line-height: 1.3;
+    }
+    .route-data-details {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 700;
+    }
+    .mode-briefing .route-data-details {
+      display: none;
+    }
+    .risk-review-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 14px;
+    }
+    .risk-review-card {
+      display: grid;
+      gap: 12px;
+      align-content: start;
+      min-height: 260px;
+      padding: 18px;
+      border-radius: 8px;
+      border: 1px solid #ead0bd;
+      background: linear-gradient(180deg, #fff8f2, #ffffff);
+      box-shadow: 0 12px 24px rgba(95, 61, 40, .06);
+    }
+    .risk-review-card h3 {
+      margin: 0;
+      font-size: 24px;
+      line-height: 1.16;
+    }
+    .risk-visual {
+      position: relative;
+      margin: 0;
+      overflow: hidden;
+      aspect-ratio: 16 / 9;
+      border-radius: 8px;
+      background: #f1ebe3;
+    }
+    .risk-visual img {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .risk-visual figcaption {
+      position: absolute;
+      left: 8px;
+      right: 8px;
+      bottom: 8px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+      padding: 7px 8px;
+      border-radius: 8px;
+      color: #fff;
+      background: rgba(49, 42, 35, .84);
+      font-size: 12px;
+      font-weight: 850;
+      line-height: 1.35;
+    }
+    .risk-scene-label {
+      display: inline-flex;
+      align-items: center;
+      width: fit-content;
+      min-height: 28px;
+      padding: 4px 9px;
+      border-radius: 999px;
+      color: var(--clay);
+      background: #fff2df;
+      border: 1px solid #ecd2ae;
+      font-size: 12px;
+      font-weight: 900;
+      line-height: 1;
+    }
+    .risk-cue {
+      margin: 0;
+      color: #3f504b;
+      font-size: 16px;
+      font-weight: 850;
+      line-height: 1.45;
+    }
+    .risk-action {
+      margin: 0;
+      padding: 12px;
+      border-radius: 8px;
+      color: var(--forest-dark);
+      background: #fff2df;
+      border: 1px solid #ecd2ae;
+      font-weight: 900;
+      line-height: 1.45;
+    }
+    .risk-operator-note {
+      margin: 0;
+      color: #4f625c;
+      font-size: 14px;
+      font-weight: 800;
+      line-height: 1.45;
+    }
+    .risk-action b {
+      display: block;
+      margin-bottom: 4px;
+      color: var(--clay);
+      font-size: 12px;
+      letter-spacing: .03em;
+      text-transform: uppercase;
+    }
+    .risk-data-details {
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .risk-data-details summary {
+      cursor: pointer;
+      color: var(--forest-dark);
+      font-weight: 900;
+    }
+    .risk-data-details p {
+      margin: 8px 0 0;
+      line-height: 1.5;
+    }
+    .mode-briefing .risk-data-details {
+      display: none;
+    }
+    .storyline-rail {
+      position: relative;
+      display: flex;
+      gap: 16px;
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      overflow-x: auto;
+      overscroll-behavior-inline: contain;
+      scroll-snap-type: x mandatory;
+      padding: 10px 2px 18px;
+      scrollbar-color: rgba(35, 79, 69, .55) transparent;
+    }
+    .storyline-rail::before {
+      content: "";
+      position: absolute;
+      left: 24px;
+      right: 24px;
+      top: 38px;
+      height: 2px;
+      background: #d8e2db;
+    }
+    .storyline-card {
+      position: relative;
+      display: grid;
+      gap: 12px;
+      align-content: start;
+      flex: 0 0 min(360px, calc(100vw - 86px));
+      scroll-snap-align: start;
+      min-height: 430px;
+      padding: 14px;
+      border-radius: 8px;
+      border: 1px solid #dfe8e2;
+      background: linear-gradient(180deg, #ffffff, #f7fbf8);
+      box-shadow: 0 14px 28px rgba(32, 64, 55, .08);
+    }
+    .storyline-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      min-width: 0;
+    }
+    .storyline-index,
+    .storyline-distance {
+      display: inline-flex;
+      align-items: center;
+      min-height: 28px;
+      padding: 4px 9px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 900;
+      line-height: 1;
+    }
+    .storyline-index {
+      color: #fff;
+      background: var(--forest);
+    }
+    .storyline-distance {
+      color: var(--forest-dark);
+      background: #eef5ef;
+      border: 1px solid #d7e5dc;
+    }
+    .storyline-thumb {
+      position: relative;
+      margin: 0;
+      overflow: hidden;
+      aspect-ratio: 16 / 9;
+      border-radius: 8px;
+      background: #edf3ef;
+    }
+    .storyline-thumb img {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .storyline-thumb figcaption {
+      position: absolute;
+      left: 8px;
+      right: 8px;
+      bottom: 8px;
+      padding: 6px 8px;
+      border-radius: 8px;
+      color: #fff;
+      background: rgba(23, 43, 38, .84);
+      font-size: 12px;
+      font-weight: 850;
+      line-height: 1.35;
+    }
+    .storyline-card h3 {
+      margin: 0;
+      color: var(--forest-dark);
+      font-size: 23px;
+      line-height: 1.18;
+    }
+    .storyline-cue {
+      margin: 0;
+      color: #3a4e47;
+      font-size: 15px;
+      font-weight: 850;
+      line-height: 1.45;
+    }
+    .storyline-action {
+      margin: 0;
+      padding: 12px;
+      border-radius: 8px;
+      color: var(--forest-dark);
+      background: #fff8ea;
+      border: 1px solid #ead9b5;
+      font-weight: 850;
+      line-height: 1.45;
+    }
+    .storyline-action b {
+      display: block;
+      margin-bottom: 4px;
+      color: var(--clay);
+      font-size: 12px;
+      letter-spacing: .03em;
+      text-transform: uppercase;
+    }
+    .storyline-data-details {
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .storyline-data-details summary {
+      cursor: pointer;
+      color: var(--forest-dark);
+      font-weight: 900;
+    }
+    .storyline-data-details p {
+      margin: 8px 0 0;
+      line-height: 1.5;
+    }
+    .mode-briefing .storyline-data-details {
+      display: none;
+    }
+    .steps { display: grid; gap: 10px; }
+    .step { display: grid; grid-template-columns: 88px 1fr; gap: 10px; }
+    .step strong { display: block; color: var(--forest-dark); }
+    .time { color: var(--clay); font-weight: 900; }
+    .briefing-script {
+      display: grid;
+      gap: 10px;
+      margin-top: 12px;
+    }
+    .script-row {
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: #f6f8f7;
+      border: 1px solid #e3e9e5;
+    }
+    .script-row.talk-row {
+      background: #f5faf4;
+      border-color: #d9e8d5;
+    }
+    .script-row.ask-row {
+      background: #fffaf0;
+      border-color: #ead9b5;
+    }
+    .script-row.boundary-row {
+      background: #fff6ee;
+      border-color: #edcfbd;
+    }
+    .script-row b {
+      display: block;
+      margin-bottom: 4px;
+      color: var(--forest-dark);
+    }
+    .script-row span {
+      display: block;
+      color: #344842;
+      line-height: 1.5;
+    }
+    .layer-data-details {
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .layer-data-details summary {
+      cursor: pointer;
+      color: var(--forest-dark);
+      font-weight: 900;
+    }
+    .layer-data-details p {
+      margin: 8px 0 0;
+      line-height: 1.5;
+    }
+    .mode-briefing .layer-definition,
+    .mode-briefing .script-row.boundary-row,
+    .mode-briefing .layer-data-details {
+      display: none;
+    }
+    .schedule-board {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 16px;
+    }
+    .schedule-decision-board {
+      display: grid;
+      grid-template-columns: minmax(320px, .85fr) minmax(0, 1.15fr);
+      gap: 18px;
+      align-items: stretch;
+      margin-bottom: 18px;
+    }
+    .schedule-gate-panel {
+      display: grid;
+      gap: 14px;
+      align-content: start;
+      padding: 18px;
+      border-radius: 8px;
+      background: #f7f5ee;
+      border: 1px solid #e6dcc7;
+    }
+    .schedule-gate-panel h3 {
+      margin: 0;
+      color: var(--forest-dark);
+      font-size: 28px;
+      line-height: 1.16;
+    }
+    .schedule-gate-panel p {
+      margin: 0;
+      color: #344842;
+      line-height: 1.52;
+    }
+    .schedule-gates {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .schedule-gates span {
+      display: block;
+      min-height: 92px;
+      padding: 12px;
+      border-radius: 8px;
+      color: #344842;
+      background: #fff;
+      border: 1px solid #e1e6dd;
+      font-size: 13px;
+      font-weight: 800;
+      line-height: 1.45;
+    }
+    .schedule-gates b {
+      display: block;
+      margin-bottom: 5px;
+      color: var(--forest-dark);
+      font-size: 14px;
+    }
+    .schedule-decision-tag {
+      display: inline-flex;
+      width: fit-content;
+      align-items: center;
+      min-height: 26px;
+      padding: 4px 9px;
+      border-radius: 999px;
+      color: #fff;
+      background: var(--forest);
+      font-size: 12px;
+      font-weight: 900;
+    }
+    .schedule-photo-strip {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      width: 100%;
+      min-width: 0;
+      margin: 0;
+      overflow: hidden;
+    }
+    .schedule-photo-strip > * {
+      min-width: 0;
+    }
+    .schedule-photo-strip .field-media {
+      margin: 0;
+    }
+    .schedule-version {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      overflow: hidden;
+    }
+    .schedule-version.primary {
+      border-color: #bccd9d;
+      box-shadow: inset 0 0 0 2px rgba(95, 113, 66, .16);
+    }
+    .schedule-version.slow {
+      border-color: #cbd9df;
+    }
+    .schedule-version-head {
+      padding: 18px;
+      color: #fff;
+      background: linear-gradient(145deg, #214d43, #697943);
+    }
+    .schedule-version.slow .schedule-version-head {
+      background: linear-gradient(145deg, #214d43, #4a7194);
+    }
+    .schedule-version-head strong {
+      display: block;
+      margin-top: 4px;
+      font-size: 30px;
+      line-height: 1.1;
+    }
+    .schedule-version-head p {
+      margin-bottom: 0;
+      line-height: 1.5;
+    }
+    .schedule-version-gate {
+      margin: 14px 18px 0;
+      padding: 12px;
+      border-radius: 8px;
+      color: var(--forest-dark);
+      background: #f3f7ef;
+      border: 1px solid #dbe7cf;
+      font-weight: 850;
+      line-height: 1.45;
+    }
+    .schedule-version-gate b {
+      display: block;
+      margin-bottom: 4px;
+      color: var(--clay);
+      font-size: 12px;
+      letter-spacing: .03em;
+      text-transform: uppercase;
+    }
+    .day-plan {
+      display: grid;
+      grid-template-columns: 64px 1fr;
+      gap: 12px;
+      padding: 16px 18px;
+      border-top: 1px solid #e5ece8;
+    }
+    .day-plan b {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 48px;
+      height: 48px;
+      border-radius: 999px;
+      color: var(--forest-dark);
+      background: #e8efdc;
+    }
+    .day-plan h3 { font-size: 18px; }
+    .schedule-caution {
+      margin-top: 16px;
+      padding: 16px;
+      border-radius: 8px;
+      background: #fff7ea;
+      border: 1px solid #ead9b5;
+    }
+    .trust-board {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 14px;
+      margin-bottom: 18px;
+    }
+    .trust-card {
+      min-height: 150px;
+      padding: 16px;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      background: #fff;
+    }
+    .source-brief-grid {
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    }
+    .source-brief-card {
+      display: grid;
+      gap: 10px;
+      min-height: 210px;
+      box-shadow: 0 12px 24px rgba(27, 45, 40, .06);
+    }
+    .trust-card.good { background: #f2f8ef; border-color: #ccdfbd; }
+    .trust-card.warn { background: #fff8ea; border-color: #ead7ae; }
+    .trust-card.boundary { background: #eef5f7; border-color: #cfe1e7; }
+    .trust-card b {
+      display: block;
+      margin-bottom: 6px;
+      color: var(--forest-dark);
+      font-size: 26px;
+      line-height: 1.05;
+    }
+    .source-trust-layout {
+      display: grid;
+      grid-template-columns: minmax(300px, .82fr) minmax(0, 1.18fr);
+      gap: 16px;
+      align-items: stretch;
+      margin-bottom: 18px;
+    }
+    .source-trust-visual {
+      display: grid;
+      grid-template-rows: minmax(260px, 1fr) auto;
+      overflow: hidden;
+      min-height: 100%;
+      border-radius: 8px;
+      border: 1px solid #d7e2dc;
+      background: #f3f7f4;
+    }
+    .source-trust-visual img {
+      display: block;
+      width: 100%;
+      height: 100%;
+      min-height: 260px;
+      object-fit: cover;
+    }
+    .source-trust-caption {
+      display: grid;
+      gap: 8px;
+      padding: 14px;
+      color: #344842;
+      font-size: 13px;
+      font-weight: 800;
+      line-height: 1.45;
+    }
+    .source-path {
+      counter-reset: source-step;
+    }
+    .source-path .source-brief-card {
+      position: relative;
+      grid-template-columns: 42px 1fr;
+      gap: 12px;
+      min-height: auto;
+    }
+    .source-step-index {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 38px;
+      height: 38px;
+      border-radius: 999px;
+      color: #fff;
+      background: var(--forest);
+      font-size: 13px;
+      font-weight: 900;
+    }
+    .source-card-body {
+      min-width: 0;
+    }
+    .source-cue {
+      margin: 0;
+      color: #31433e;
+      font-size: 16px;
+      font-weight: 850;
+      line-height: 1.45;
+    }
+    .source-action {
+      margin: 0;
+      padding: 11px 12px;
+      border-radius: 8px;
+      color: var(--forest-dark);
+      background: rgba(255, 255, 255, .68);
+      border: 1px solid rgba(35, 79, 69, .12);
+      font-weight: 850;
+      line-height: 1.45;
+    }
+    .source-action b {
+      display: block;
+      margin-bottom: 4px;
+      color: var(--clay);
+      font-size: 12px;
+      letter-spacing: .03em;
+      text-transform: uppercase;
+    }
+    .source-details {
+      margin-top: 18px;
+      padding: 16px;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      background: #fff;
+    }
+    .source-details summary {
+      cursor: pointer;
+      color: var(--forest-dark);
+      font-weight: 900;
+    }
+    .tag {
+      display: inline-flex;
+      margin-bottom: 10px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      color: #fff;
+      background: var(--forest);
+      font-size: 12px;
+      font-weight: 900;
+    }
+    .tag.gold { background: var(--gold); }
+    .tag.sky { background: var(--sky); }
+    .tag.rust { background: var(--clay); }
+    table { width: 100%; border-collapse: collapse; background: #fff; }
+    th, td { padding: 10px; border-bottom: 1px solid #e7ecef; text-align: left; vertical-align: top; font-size: 14px; }
+    th { color: #42524d; background: #f6f8f7; }
+    ul, ol { margin: 0; padding-left: 20px; }
+    li { margin: 7px 0; }
+    @media (max-width: 720px) {
+      .wrap { width: min(100% - 28px, 1160px); }
+      .hero { min-height: auto; padding: 52px 0 34px; }
+      h1 { font-size: 36px; }
+      h2 { font-size: 30px; }
+      .slide-inner { padding: 20px; }
+      .slide-head { display: block; }
+      .stamp { margin-top: 14px; }
+      .chapter-inner { grid-template-columns: 1fr; padding: 30px 20px; }
+      .chapter-break h2 { font-size: 34px; }
+      .chapter-copy { font-size: 17px; }
+      .mode-switch { margin-left: 0; }
+      .briefing-deck > article { flex-basis: calc(100vw - 54px); }
+      .source-health-board { grid-template-columns: 1fr; }
+      .source-health-score { grid-template-columns: 1fr; }
+      .source-health-grid { grid-template-columns: 1fr; }
+      .storyline-card { flex-basis: calc(100vw - 54px); }
+      .storyline-rail::before { display: none; }
+      .step { grid-template-columns: 1fr; }
+      .image-band { grid-template-columns: 1fr; }
+      .photo-essay { grid-template-columns: 1fr; }
+      .photo-essay-feature, .photo-essay-feature img { min-height: 420px; }
+      .photo-essay-grid { grid-template-columns: 1fr; }
+      .photo-essay-card { height: 280px; }
+      .photo-essay-card.map-card { grid-column: auto; height: 260px; }
+      .route-reader-cues { grid-template-columns: 1fr; }
+      .route-photo-strip { grid-template-columns: 1fr; }
+      .status-photo-strip { grid-template-columns: 1fr; }
+      .status-cues { grid-template-columns: 1fr; }
+      .photo-grid { grid-template-columns: 1fr; }
+      .visual-anchor-board { grid-template-columns: 1fr; }
+      .p2-review-board { grid-template-columns: 1fr; }
+      .p2-lens { grid-template-columns: 1fr; }
+      .p2-source-card { grid-template-columns: 1fr; }
+      .story-wall { grid-template-columns: 1fr; }
+      .story-feature { min-height: 430px; }
+      .story-feature-body { padding: 22px; }
+      .story-mosaic { padding-bottom: 12px; }
+      .route-overview { grid-template-columns: 1fr; }
+      .profile-stats { grid-template-columns: 1fr; }
+      .schedule-decision-board { grid-template-columns: 1fr; }
+      .schedule-gates { grid-template-columns: 1fr; }
+      .schedule-board { grid-template-columns: 1fr; }
+      .schedule-photo-strip { grid-template-columns: 1fr; }
+      .day-plan { grid-template-columns: 1fr; }
+      .source-trust-layout { grid-template-columns: 1fr; }
+      .source-path .source-brief-card { grid-template-columns: 1fr; }
+      .trust-board { grid-template-columns: 1fr; }
+      .itinerary-board { grid-template-columns: 1fr; padding: 14px; }
+      .itinerary-lead strong { font-size: 34px; }
+      .itinerary-option-card { grid-template-columns: 1fr; }
+      .highlight-wall { grid-template-columns: 1fr; }
+      .highlight-card, .highlight-card:first-child { grid-template-columns: 1fr; }
+    }
+    @page {
+      size: A4 landscape;
+      margin: 10mm;
+    }
+    @media print {
+      * {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+      html, body {
+        background: #fff;
+        background-size: auto;
+      }
+      body { font-size: 11pt; }
+      nav, .mode-switch { display: none !important; }
+      main { padding: 0; }
+      .wrap { width: 100%; }
+      .hero {
+        min-height: 170mm;
+        padding: 18mm 0;
+        break-after: page;
+        page-break-after: always;
+      }
+      h1 { font-size: 42pt; }
+      h2 { font-size: 26pt; }
+      .hero-copy, .lead, .chapter-copy { font-size: 14pt; }
+      .slide {
+        min-height: auto;
+        margin: 0 0 8mm;
+        border: 1px solid #cfd8d3;
+        box-shadow: none;
+        overflow: visible;
+        break-after: page;
+        page-break-after: always;
+      }
+      .slide-inner { padding: 10mm; }
+      .chapter-break {
+        min-height: 160mm;
+        break-before: page;
+        page-break-before: always;
+      }
+      .chapter-inner {
+        grid-template-columns: minmax(0, .9fr) minmax(260px, .55fr);
+        padding: 16mm;
+      }
+      .chapter-break h2 { font-size: 38pt; }
+      .card, .point, .decision, .layer, .day-card, .trust-card,
+      .visual-anchor, .story-feature, .story-tile, .highlight-card, .schedule-version,
+      .storyline-card, .field-media, .photo, .script-row {
+        break-inside: avoid;
+        page-break-inside: avoid;
+      }
+      .briefing-deck,
+      .briefing-deck.layers,
+      .briefing-deck.stop-deck,
+      .storyline-rail {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 6mm;
+        overflow: visible;
+        padding: 0;
+        scroll-snap-type: none;
+      }
+      .storyline-rail::before { display: none; }
+      .storyline-card { min-height: auto; flex: initial; }
+      .briefing-deck > article { flex: initial; }
+      .field-media img, .photo img, .visual-anchor img, .story-tile img,
+      .highlight-card img, .storyline-thumb img {
+        max-height: 48mm;
+      }
+      .story-wall { grid-template-columns: 1fr; }
+      .story-mosaic {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        overflow: visible;
+        padding: 0;
+        scroll-snap-type: none;
+      }
+      .story-tile { flex: initial; }
+      .story-feature { min-height: 105mm; }
+      .source-details[open] { display: block; }
+      .source-details table { font-size: 9pt; }
+    }
+  </style>
+</head>
+<body class="mode-briefing">
+  <header class="hero" id="top">
+    <img class="hero-photo" src="https://recreation.forest.gov.tw/Files/RT/Photo/064/05/064.jpg" alt="能高越嶺道高山景觀">
+    <div class="wrap">
+      <p class="eyebrow">Scout 行前路線簡報</p>
+      <h1>奇萊-南華登山活動簡報</h1>
+      <p class="hero-copy">先看山、再看路，最後才看資料來源。這份簡報把路線節奏、沿途亮點與 3 分鐘觀察點放在前面，讓隊伍先建立共同畫面。</p>
+      <div class="meta-row" aria-label="route summary">
+        <span class="pill">路線距離候選 55.2 km</span>
+        <span class="pill">脈絡點 11</span>
+        <span class="pill">照片 6 張</span>
+        <span class="pill">資料更新 2026-06-15</span>
+        <span class="pill">可追溯版本</span>
+      </div>
+    </div>
+  </header>
+
+  <nav aria-label="簡報導覽">
+    <div class="wrap">
+      <a href="#days">天數結論</a>
+      <a href="#status">現況</a>
+      <a href="#photo-essay">圖像導覽</a>
+      <a href="#visual-anchors">照片點</a>
+      <a href="#story-wall">故事牆</a>
+      <a href="#route">路線</a>
+      <a href="#sights">景點</a>
+      <a href="#layers">脈絡層</a>
+      <a href="#p2">P2 Scout資料</a>
+      <a href="#storyline">路線敘事</a>
+      <a href="#stops">觀察點</a>
+      <a href="#risk">風險</a>
+      <a href="#schedule">行程</a>
+      <a href="#sources">來源</a>
+      <span class="mode-switch" aria-label="顯示模式">
+        <button class="mode-button" type="button" data-briefing-mode="briefing" aria-pressed="true">簡報</button>
+        <button class="mode-button" type="button" data-briefing-mode="data" aria-pressed="false">資料</button>
+      </span>
+    </div>
+  </nav>
+
+  <main class="wrap">
+    <section class="slide" id="days">
+      <div class="slide-inner">
+        <div class="slide-head">
+          <div>
+            <p class="kicker">行程天數</p>
+            <h2>預計幾天可以完成？</h2>
+          </div>
+          <div class="stamp">候選<br>方案</div>
+        </div>
+        <p class="lead">先用兩個常見版本討論隊伍節奏：標準完成版，以及保留觀察、拍照與教學時間的慢走版。真正出發前仍要重查山屋、入園、天氣、路況與隊伍狀態。</p>
+
+        <div class="itinerary-board">
+          <div class="itinerary-lead">
+            <figure class="itinerary-visual"><img loading="lazy" src="https://recreation.forest.gov.tw/Files/RT/Photo/064/05/064.jpg" alt="能高越嶺道高山景觀"><figcaption>天數判斷畫面 · 能高越嶺道高山景觀</figcaption></figure>
+            <div class="itinerary-lead-body">
+            <div>
+              <span>建議討論版本</span>
+              <strong>2 天 1 夜</strong>
+            </div>
+            <p>路線摘要距離 55.2 km。若活動重點包含觀察、攝影或教學，優先討論 3 天 2 夜。</p>
+            <div class="itinerary-lens" aria-label="天數判斷">
+              <span><b>時間窗</b> 出發前重查山屋、入園、天氣、路況與隊伍腳程。</span>
+              <span><b>觀察密度</b> 想講歷史、地形與拍照，就不要把行程排成純趕路。</span>
+              <span><b>排除條件</b> 天氣、電力、撤退或隊伍狀態不足時，壓縮版先排除。</span>
+            </div>
+            </div>
+          </div>
+          <div class="itinerary-options"><article class="itinerary-option-card primary"><span class="day-pill">2天</span><div><b>2 天 1 夜</b><p class="highlight-meta">標準完成版</p><p>把主要路線與雙峰放在同一個活動節奏裡；適合已確認山屋、天氣與隊伍腳程的行程。</p><p class="itinerary-decision-cue">建議先拿來討論</p></div></article>
+<article class="itinerary-option-card slow"><span class="day-pill">3天</span><div><b>3 天 2 夜</b><p class="highlight-meta">慢走觀察版</p><p>把歷史、地形、照片與教學時間拆開，讓雲海保線所、天池、光被八表不只是打卡點。</p><p class="itinerary-decision-cue">觀察與教學優先</p></div></article>
+<article class="itinerary-option-card compressed"><span class="day-pill">壓縮</span><div><b>1 日或壓縮</b><p class="highlight-meta">高門檻版本</p><p>只適合條件很完整的人工核准情境；若天氣、電力、隊伍或撤退條件不足，應排除。</p><p class="itinerary-decision-cue">缺任一條件就排除</p></div></article></div>
+        </div>
+
+        <div class="alert">這裡是行前討論版本，不是自動出發建議；正式採用前仍需人工 go/no-go review。</div>
+      </div>
+    </section>
+
+    <section class="slide" id="status">
+      <div class="slide-inner">
+
+        <div class="image-band">
+          <figure class="photo status-photo-feature">
+            <img loading="eager" decoding="async" src="https://recreation.forest.gov.tw/Files/RT/Photo/064/05/064.jpg" alt="能高越嶺道高山景觀">
+            <figcaption>能高越嶺道高山景觀<span class="source-chips" aria-label="media provenance"><span class="source-badge tier-p0">官方來源</span><span class="source-badge source-family">官方照片</span><span class="source-badge boundary">候選證據</span><span class="source-badge review">需人工審查</span><span class="source-badge boundary">非安全真值</span></span></figcaption>
+          </figure>
+          <div class="media-panel">
+            <div>
+              <p class="kicker">照片導覽</p>
+              <h2>先用照片建立路線感</h2>
+              <p>第一眼先讓隊伍知道這不是抽象路線：有稜線、山屋、展望、導覽圖與需要人工審查的現地條件。</p>
+            </div>
+            <div class="status-cues" aria-label="照片導讀重點">
+              <div class="status-cue"><b>路線畫面</b>先看稜線與遠景，建立隊伍共同方向感。</div>
+              <div class="status-cue"><b>節點畫面</b>再看山屋、保線所與展望點，連回天數與停留策略。</div>
+              <div class="status-cue"><b>安全邊界</b>照片只輔助 briefing；不能取代現地天氣、導航與 go/no-go review。</div>
+            </div>
+            <div class="status-photo-strip"><figure class="photo"><img loading="lazy" src="https://recreation.forest.gov.tw/Files/RT/Photo/064/05/%E9%9B%B2%E6%B5%B7%E4%BF%9D%E7%B7%9A%E6%89%80.JPG" alt="雲海保線所"><figcaption>雲海保線所：中繼休息點與雲霧展望<span class="source-chips" aria-label="media provenance"><span class="source-badge tier-p0">官方來源</span><span class="source-badge source-family">官方照片</span><span class="source-badge boundary">候選證據</span><span class="source-badge review">需人工審查</span><span class="source-badge boundary">非安全真值</span></span></figcaption></figure>
+<figure class="photo"><img loading="lazy" src="https://recreation.forest.gov.tw/Files/RT/Photo/064/05/%E5%A4%A9%E6%B1%A0%E5%B1%B1%E8%8E%8A.JPG" alt="天池山莊"><figcaption>天池山莊：能高越嶺道 13.1K 山屋<span class="source-chips" aria-label="media provenance"><span class="source-badge tier-p0">官方來源</span><span class="source-badge source-family">官方照片</span><span class="source-badge boundary">候選證據</span><span class="source-badge review">需人工審查</span><span class="source-badge boundary">非安全真值</span></span></figcaption></figure>
+<figure class="photo"><img loading="lazy" src="https://recreation.forest.gov.tw/Files/RT/Photo/064/05/%E8%83%BD%E9%AB%98%E8%B6%8A%E5%B6%BA%E9%81%93%E5%85%89%E6%89%B9%E5%85%AB%E8%A1%A8%E9%9B%B2%E6%B5%B7%E6%97%A5%E5%87%BA.JPG" alt="光被八表雲海日出"><figcaption>光被八表雲海日出<span class="source-chips" aria-label="media provenance"><span class="source-badge tier-p0">官方來源</span><span class="source-badge source-family">官方照片</span><span class="source-badge boundary">候選證據</span><span class="source-badge review">需人工審查</span><span class="source-badge boundary">非安全真值</span></span></figcaption></figure>
+<figure class="photo"><img loading="lazy" src="https://recreation.forest.gov.tw/Files/RT/Photo/064/05/%E5%85%89%E6%89%B9%E5%85%AB%E8%A1%A8%E6%97%A5%E5%87%BA.JPG" alt="光被八表日出"><figcaption>光被八表日出<span class="source-chips" aria-label="media provenance"><span class="source-badge tier-p0">官方來源</span><span class="source-badge source-family">官方照片</span><span class="source-badge boundary">候選證據</span><span class="source-badge review">需人工審查</span><span class="source-badge boundary">非安全真值</span></span></figcaption></figure></div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <section class="slide" id="photo-essay">
+      <div class="slide-inner">
+        <div class="slide-head">
+          <div>
+            <p class="kicker">圖像導覽</p>
+            <h2>先用六張畫面講完這趟路</h2>
+          </div>
+          <div class="stamp">Photo<br>Essay</div>
+        </div>
+        <p class="lead">把照片從附件改成簡報主軸：先看路線氣質，再看山屋、展望、日出與導覽圖。這些畫面只協助行前理解，正式安全判斷仍回到天氣、路況、隊伍與 Scout evidence。</p>
+
+        <div class="photo-essay">
+          <figure class="photo-essay-feature">
+            <img loading="eager" decoding="async" src="https://recreation.forest.gov.tw/Files/RT/Photo/064/05/064.jpg" alt="能高越嶺道高山景觀">
+            <figcaption>
+              <span>畫面 01 · 路線總覽</span>
+              <b>能高越嶺道高山景觀</b>
+              <span>先建立路線氣質，再回頭確認每個 CP/MCP 的通過策略。</span>
+              <span class="source-chips" aria-label="media provenance"><span class="source-badge tier-p0">官方來源</span><span class="source-badge source-family">官方照片</span><span class="source-badge boundary">候選證據</span><span class="source-badge review">需人工審查</span><span class="source-badge boundary">非安全真值</span></span>
+            </figcaption>
+          </figure>
+          <div class="photo-essay-grid" aria-label="路線照片導覽">
+            <figure class="photo-essay-card"><img loading="lazy" src="https://recreation.forest.gov.tw/Files/RT/Photo/064/05/%E9%9B%B2%E6%B5%B7%E4%BF%9D%E7%B7%9A%E6%89%80.JPG" alt="雲海保線所"><figcaption class="photo-essay-caption"><span>畫面 02 · 資源節點</span><b>雲海保線所：中繼休息點與雲霧展望</b><span>把住宿、休息與撤退節點先放進隊伍共同記憶。</span><span class="source-chips" aria-label="media provenance"><span class="source-badge tier-p0">官方來源</span><span class="source-badge source-family">官方照片</span><span class="source-badge boundary">候選證據</span><span class="source-badge review">需人工審查</span><span class="source-badge boundary">非安全真值</span></span></figcaption></figure>
+<figure class="photo-essay-card"><img loading="lazy" src="https://recreation.forest.gov.tw/Files/RT/Photo/064/05/%E5%A4%A9%E6%B1%A0%E5%B1%B1%E8%8E%8A.JPG" alt="天池山莊"><figcaption class="photo-essay-caption"><span>畫面 03 · 資源節點</span><b>天池山莊：能高越嶺道 13.1K 山屋</b><span>把住宿、休息與撤退節點先放進隊伍共同記憶。</span><span class="source-chips" aria-label="media provenance"><span class="source-badge tier-p0">官方來源</span><span class="source-badge source-family">官方照片</span><span class="source-badge boundary">候選證據</span><span class="source-badge review">需人工審查</span><span class="source-badge boundary">非安全真值</span></span></figcaption></figure>
+<figure class="photo-essay-card"><img loading="lazy" src="https://recreation.forest.gov.tw/Files/RT/Photo/064/05/%E8%83%BD%E9%AB%98%E8%B6%8A%E5%B6%BA%E9%81%93%E5%85%89%E6%89%B9%E5%85%AB%E8%A1%A8%E9%9B%B2%E6%B5%B7%E6%97%A5%E5%87%BA.JPG" alt="光被八表雲海日出"><figcaption class="photo-essay-caption"><span>畫面 04 · 展望脈絡</span><b>光被八表雲海日出</b><span>展望畫面要連到風、時間、停留條件與隊伍節奏。</span><span class="source-chips" aria-label="media provenance"><span class="source-badge tier-p0">官方來源</span><span class="source-badge source-family">官方照片</span><span class="source-badge boundary">候選證據</span><span class="source-badge review">需人工審查</span><span class="source-badge boundary">非安全真值</span></span></figcaption></figure>
+<figure class="photo-essay-card"><img loading="lazy" src="https://recreation.forest.gov.tw/Files/RT/Photo/064/05/%E5%85%89%E6%89%B9%E5%85%AB%E8%A1%A8%E6%97%A5%E5%87%BA.JPG" alt="光被八表日出"><figcaption class="photo-essay-caption"><span>畫面 05 · 展望脈絡</span><b>光被八表日出</b><span>展望畫面要連到風、時間、停留條件與隊伍節奏。</span><span class="source-chips" aria-label="media provenance"><span class="source-badge tier-p0">官方來源</span><span class="source-badge source-family">官方照片</span><span class="source-badge boundary">候選證據</span><span class="source-badge review">需人工審查</span><span class="source-badge boundary">非安全真值</span></span></figcaption></figure>
+<figure class="photo-essay-card map-card"><img loading="lazy" src="https://recreation.forest.gov.tw/Files/RT/Photo/064/01/%E8%83%BD%E9%AB%98%E8%B6%8A%E5%B6%BA%E5%B0%8E%E8%A6%BD%E5%9C%B0%E5%9C%96202510-ok-0310%E4%BF%AE.jpg" alt="能高越嶺道西段導覽圖"><figcaption class="photo-essay-caption"><span>畫面 06 · 路線總覽</span><b>能高越嶺道西段導覽圖</b><span>用總覽圖確認路線方向，但不要取代離線地圖與導航。</span><span class="source-chips" aria-label="media provenance"><span class="source-badge tier-p0">官方來源</span><span class="source-badge source-family">官方照片</span><span class="source-badge boundary">候選證據</span><span class="source-badge review">需人工審查</span><span class="source-badge boundary">非安全真值</span></span></figcaption></figure>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <section class="slide" id="visual-anchors">
+      <div class="slide-inner">
+        <div class="slide-head">
+          <div>
+            <p class="kicker">照片路標</p>
+            <h2>把照片綁到路線點與簡報段落</h2>
+          </div>
+        </div>
+        <p class="lead">同一張照片如果沒有位置脈絡，只是裝飾；這裡把圖片 metadata 對到已知 CP/MCP、住宿節點、稜線展望或路線總覽，讓隊伍知道每張圖該支撐哪一段討論。</p>
+        <div class="visual-anchor-board"><article class="visual-anchor"><img loading="lazy" src="https://recreation.forest.gov.tw/Files/RT/Photo/064/05/064.jpg" alt="能高越嶺道高山景觀"><div class="visual-anchor-body"><span class="anchor-kind">路線段照片</span><h3>能高越嶺道 / 路線總覽</h3><p>路線段 · 路線總覽</p><p class="muted">能高越嶺道高山景觀</p><span class="source-chips" aria-label="media provenance"><span class="source-badge tier-p0">官方來源</span><span class="source-badge source-family">官方照片</span><span class="source-badge boundary">候選證據</span><span class="source-badge review">需人工審查</span><span class="source-badge boundary">非安全真值</span></span><details class="audit-details"><summary>錨定依據</summary><code>caption_or_alt_indicates_route_level_context</code></details></div></article>
+<article class="visual-anchor"><img loading="lazy" src="https://recreation.forest.gov.tw/Files/RT/Photo/064/05/%E9%9B%B2%E6%B5%B7%E4%BF%9D%E7%B7%9A%E6%89%80.JPG" alt="雲海保線所"><div class="visual-anchor-body"><span class="anchor-kind">路線點照片</span><h3>雲海保線所</h3><p>1.5K · 資源節點</p><p class="muted">雲海保線所：中繼休息點與雲霧展望</p><span class="source-chips" aria-label="media provenance"><span class="source-badge tier-p0">官方來源</span><span class="source-badge source-family">官方照片</span><span class="source-badge boundary">候選證據</span><span class="source-badge review">需人工審查</span><span class="source-badge boundary">非安全真值</span></span><details class="audit-details"><summary>錨定依據</summary><code>caption_or_alt_contains_route_point_label</code></details></div></article>
+<article class="visual-anchor"><img loading="lazy" src="https://recreation.forest.gov.tw/Files/RT/Photo/064/05/%E5%A4%A9%E6%B1%A0%E5%B1%B1%E8%8E%8A.JPG" alt="天池山莊"><div class="visual-anchor-body"><span class="anchor-kind">路線段照片</span><h3>天池山莊 / 住宿與行程節點</h3><p>路線段 · 資源節點</p><p class="muted">天池山莊：能高越嶺道 13.1K 山屋</p><span class="source-chips" aria-label="media provenance"><span class="source-badge tier-p0">官方來源</span><span class="source-badge source-family">官方照片</span><span class="source-badge boundary">候選證據</span><span class="source-badge review">需人工審查</span><span class="source-badge boundary">非安全真值</span></span><details class="audit-details"><summary>錨定依據</summary><code>caption_or_alt_indicates_lodge_or_camp</code></details></div></article>
+<article class="visual-anchor"><img loading="lazy" src="https://recreation.forest.gov.tw/Files/RT/Photo/064/05/%E8%83%BD%E9%AB%98%E8%B6%8A%E5%B6%BA%E9%81%93%E5%85%89%E6%89%B9%E5%85%AB%E8%A1%A8%E9%9B%B2%E6%B5%B7%E6%97%A5%E5%87%BA.JPG" alt="光被八表雲海日出"><div class="visual-anchor-body"><span class="anchor-kind">路線段照片</span><h3>光被八表 / 稜線展望</h3><p>路線段 · 展望脈絡</p><p class="muted">光被八表雲海日出</p><span class="source-chips" aria-label="media provenance"><span class="source-badge tier-p0">官方來源</span><span class="source-badge source-family">官方照片</span><span class="source-badge boundary">候選證據</span><span class="source-badge review">需人工審查</span><span class="source-badge boundary">非安全真值</span></span><details class="audit-details"><summary>錨定依據</summary><code>caption_or_alt_indicates_ridge_viewpoint</code></details></div></article>
+<article class="visual-anchor"><img loading="lazy" src="https://recreation.forest.gov.tw/Files/RT/Photo/064/05/%E5%85%89%E6%89%B9%E5%85%AB%E8%A1%A8%E6%97%A5%E5%87%BA.JPG" alt="光被八表日出"><div class="visual-anchor-body"><span class="anchor-kind">路線段照片</span><h3>光被八表 / 稜線展望</h3><p>路線段 · 展望脈絡</p><p class="muted">光被八表日出</p><span class="source-chips" aria-label="media provenance"><span class="source-badge tier-p0">官方來源</span><span class="source-badge source-family">官方照片</span><span class="source-badge boundary">候選證據</span><span class="source-badge review">需人工審查</span><span class="source-badge boundary">非安全真值</span></span><details class="audit-details"><summary>錨定依據</summary><code>caption_or_alt_indicates_ridge_viewpoint</code></details></div></article>
+<article class="visual-anchor"><img loading="lazy" src="https://recreation.forest.gov.tw/Files/RT/Photo/064/01/%E8%83%BD%E9%AB%98%E8%B6%8A%E5%B6%BA%E5%B0%8E%E8%A6%BD%E5%9C%B0%E5%9C%96202510-ok-0310%E4%BF%AE.jpg" alt="能高越嶺道西段導覽圖"><div class="visual-anchor-body"><span class="anchor-kind">路線段照片</span><h3>路線總覽 / 導覽圖</h3><p>路線段 · 路線總覽</p><p class="muted">能高越嶺道西段導覽圖</p><span class="source-chips" aria-label="media provenance"><span class="source-badge tier-p0">官方來源</span><span class="source-badge source-family">官方照片</span><span class="source-badge boundary">候選證據</span><span class="source-badge review">需人工審查</span><span class="source-badge boundary">非安全真值</span></span><details class="audit-details"><summary>錨定依據</summary><code>caption_or_alt_indicates_route_map</code></details></div></article></div>
+      </div>
+    </section>
+
+    <section class="slide" id="story-wall">
+      <div class="slide-inner">
+        <div class="slide-head">
+          <div>
+            <p class="kicker">路線故事牆</p>
+            <h2>先讓隊伍記住畫面，再講資料</h2>
+          </div>
+          <div class="stamp">Brief<br>Story</div>
+        </div>
+        <p class="lead">把同一批 route context evidence 翻成活動簡報語言：每一層只留一張主畫面、一句提醒，以及現地可以問隊伍的問題。</p>
+
+        <div class="story-wall">
+          <article class="story-feature"><img loading="eager" decoding="async" src="https://recreation.forest.gov.tw/Files/RT/Photo/064/05/064.jpg" alt="能高越嶺道高山景觀"><div class="story-feature-body"><span class="tag gold">歷史層</span><h3>從能高越嶺道開始讀路</h3><p class="story-cue">把舊路、保線所與山屋串成一條時間線。</p><p class="story-point"><b>可帶到</b>舊林道叉路、雲海保線所、稜線啞口觀景點</p><p class="story-question"><b>現場問</b>這裡是舊路痕跡、補給節點，還是單純經過點？</p><details class="story-speaker-note"><summary>講者備註</summary><p>把古道、保線所、山屋與人為設施串成時間線，隊伍比較容易記住這條路為什麼存在。</p></details><span class="source-chips" aria-label="media provenance"><span class="source-badge tier-p0">官方來源</span><span class="source-badge source-family">官方照片</span><span class="source-badge boundary">候選證據</span><span class="source-badge review">需人工審查</span><span class="source-badge boundary">非安全真值</span></span></div></article>
+          <div class="story-mosaic"><article class="story-tile"><img loading="eager" decoding="async" src="https://recreation.forest.gov.tw/Files/RT/Photo/064/05/%E9%9B%B2%E6%B5%B7%E4%BF%9D%E7%B7%9A%E6%89%80.JPG" alt="雲海保線所"><div class="story-tile-body"><span class="tag">文化層</span><h3>地名與路徑先保持尊重</h3><p class="story-cue">有脈絡就說脈絡，沒有來源就保留。</p><p class="story-point"><b>可帶到</b>舊林道叉路、雲海保線所、黑水塘</p><p class="story-question"><b>現場問</b>這個名稱或路徑脈絡，我們有沒有可靠來源？</p><details class="story-speaker-note"><summary>講者備註</summary><p>原住民族地名、舊社與獵徑脈絡只作候選理解，不把未審核內容講成正式史實。</p></details><span class="source-chips" aria-label="media provenance"><span class="source-badge tier-p0">官方來源</span><span class="source-badge source-family">官方照片</span><span class="source-badge boundary">候選證據</span><span class="source-badge review">需人工審查</span><span class="source-badge boundary">非安全真值</span></span></div></article>
+<article class="story-tile"><img loading="eager" decoding="async" src="https://recreation.forest.gov.tw/Files/RT/Photo/064/05/%E5%A4%A9%E6%B1%A0%E5%B1%B1%E8%8E%8A.JPG" alt="天池山莊"><div class="story-tile-body"><span class="tag">自然層</span><h3>讓林相、雲海與高山植被帶路</h3><p class="story-cue">自然變化是隊伍正在換環境的訊號。</p><p class="story-point"><b>可帶到</b>舊林道叉路、隱蔽樹林區、能高越嶺道官方照片</p><p class="story-question"><b>現場問</b>這裡的植物、風、雲和溪流，跟剛才那段有什麼不同？</p><details class="story-speaker-note"><summary>講者備註</summary><p>自然觀察不是背景介紹；它能提醒隊伍海拔、濕度、風向與季節感正在改變。</p></details><span class="source-chips" aria-label="media provenance"><span class="source-badge tier-p0">官方來源</span><span class="source-badge source-family">官方照片</span><span class="source-badge boundary">候選證據</span><span class="source-badge review">需人工審查</span><span class="source-badge boundary">非安全真值</span></span></div></article>
+<article class="story-tile"><img loading="eager" decoding="async" src="https://recreation.forest.gov.tw/Files/RT/Photo/064/05/%E8%83%BD%E9%AB%98%E8%B6%8A%E5%B6%BA%E9%81%93%E5%85%89%E6%89%B9%E5%85%AB%E8%A1%A8%E9%9B%B2%E6%B5%B7%E6%97%A5%E5%87%BA.JPG" alt="光被八表雲海日出"><div class="story-tile-body"><span class="tag">地形層</span><h3>把展望點說成通過策略</h3><p class="story-cue">展望點不是只看風景，也要決定怎麼通過。</p><p class="story-point"><b>可帶到</b>舊林道叉路、大崩壁、固定繩橋段</p><p class="story-question"><b>現場問</b>這裡適合停留，還是應該快速通過？</p><details class="story-speaker-note"><summary>講者備註</summary><p>稜線、鞍部、崩壁、風口與谷線要連到停留、通過、撤退和隊形，不只當景點。</p></details><span class="source-chips" aria-label="media provenance"><span class="source-badge tier-p0">官方來源</span><span class="source-badge source-family">官方照片</span><span class="source-badge boundary">候選證據</span><span class="source-badge review">需人工審查</span><span class="source-badge boundary">非安全真值</span></span></div></article>
+<article class="story-tile"><img loading="eager" decoding="async" src="https://recreation.forest.gov.tw/Files/RT/Photo/064/05/%E5%85%89%E6%89%B9%E5%85%AB%E8%A1%A8%E6%97%A5%E5%87%BA.JPG" alt="光被八表日出"><div class="story-tile-body"><span class="tag">季節層</span><h3>季節不是美照，而是時間壓力</h3><p class="story-cue">季節條件會決定今天能不能慢慢走。</p><p class="story-point"><b>可帶到</b>雲海保線所、大崩壁、隱蔽樹林區</p><p class="story-question"><b>現場問</b>如果天氣提早變差，下一個安全點是哪裡？</p><details class="story-speaker-note"><summary>講者備註</summary><p>花期、雨季、雲海、低溫、芒草與午後天氣，會改變拍照時間、摸黑風險與體能消耗。</p></details><span class="source-chips" aria-label="media provenance"><span class="source-badge tier-p0">官方來源</span><span class="source-badge source-family">官方照片</span><span class="source-badge boundary">候選證據</span><span class="source-badge review">需人工審查</span><span class="source-badge boundary">非安全真值</span></span></div></article>
+<article class="story-tile"><img loading="eager" decoding="async" src="https://recreation.forest.gov.tw/Files/RT/Photo/064/01/%E8%83%BD%E9%AB%98%E8%B6%8A%E5%B6%BA%E5%B0%8E%E8%A6%BD%E5%9C%B0%E5%9C%96202510-ok-0310%E4%BF%AE.jpg" alt="能高越嶺道西段導覽圖"><div class="story-tile-body"><span class="tag">觀察點</span><h3>3 分鐘短停要有目的</h3><p class="story-cue">每一次停留都要換回一個判斷。</p><p class="story-point"><b>可帶到</b>稜線啞口觀景點</p><p class="story-question"><b>現場問</b>停 3 分鐘後，我們要帶走哪個判斷？</p><details class="story-speaker-note"><summary>講者備註</summary><p>值得停不是因為漂亮，而是因為這裡能幫隊伍建立路線記憶、風險判斷或撤退共識。</p></details><span class="source-chips" aria-label="media provenance"><span class="source-badge tier-p0">官方來源</span><span class="source-badge source-family">官方照片</span><span class="source-badge boundary">候選證據</span><span class="source-badge review">需人工審查</span><span class="source-badge boundary">非安全真值</span></span></div></article></div>
+        </div>
+
+      </div>
+    </section>
+
+    <section class="slide chapter-break" id="chapter-01"><img class="chapter-photo" loading="lazy" src="https://recreation.forest.gov.tw/Files/RT/Photo/064/05/064.jpg" alt="能高越嶺道高山景觀"><div class="chapter-inner"><div><span class="chapter-number">章節 01</span><p class="kicker">共同畫面</p><h2>先看見這條路</h2><p class="chapter-copy">用照片、距離與高度剖面先建立隊伍共同畫面；接著才討論路線細節與停留點。</p></div><div class="chapter-rhythm"><b>這章要帶隊伍抓住</b><span>照片不是裝飾，要能指向路線段落</span>
+<span>剖面圖只幫忙理解節奏，不取代導航</span>
+<span>先講整體，再拆 CP/MCP</span></div></div></section>
+
+    <section class="slide source-debug-slide" id="status-data">
+      <div class="slide-inner">
+        <div class="slide-head">
+          <div>
+            <p class="kicker">資料現況</p>
+            <h2>先看來源現況，再排行程</h2>
+          </div>
+        </div>
+        <p class="lead">這份簡報由 workspace cache 與 operator-approved source collection 組成。Scout AI 回答時應優先揭露來源可用性、缺口與 stale risk，而不是把缺資料解讀成安全。</p>
+        <p class="mode-note">這個區塊預設只在資料模式顯示。</p>
+
+        <div class="source-health-board">
+          <div class="source-health-summary">
+            <span class="schedule-decision-tag">operator data mode</span>
+            <h3>來源健康先讀，再給 Scout AI 回答</h3>
+            <p>這個區塊用來快速判斷：哪些資料可以支撐簡報，哪些只是 seed，哪些缺口需要在回答時明講。</p>
+            <div class="source-health-score" aria-label="來源摘要">
+              <span><b>7</b>已載入來源</span>
+              <span><b>1</b>P0 官方訊號</span>
+              <span><b>3</b>P2 自有 seed</span>
+            </div>
+          </div>
+          <div class="source-health-grid">
+            <article class="source-health-card">
+              <div class="health-pill-row">
+                <span class="health-pill">P0 1</span>
+                <span class="health-pill">P1 4</span>
+                <span class="health-pill">P2 3</span>
+              </div>
+              <h3>可回答範圍</h3>
+              <p>已載入來源可支撐行前脈絡、照片導覽、路線故事與候選停留點；仍不得當作 runtime safety truth。</p>
+              <details class="source-health-details"><summary>來源狀態列表</summary><code>CP/MCP 主要點:已載入、命名點與地圖標註:已載入、地圖 OCR 標籤:已載入、官方/公開網頁案例:已載入、Raster 標籤:尚缺、路線筆記候選:已載入、匯入清單:已載入、路線摘要:已載入</code></details>
+            </article>
+            <article class="source-health-card warning">
+              <div class="health-pill-row">
+                <span class="health-pill warning">無必要缺口</span>
+                <span class="health-pill warning">可補強：raster_label_evidence</span>
+              </div>
+              <h3>缺口處理</h3>
+              <p>缺資料時回答要更保守；缺口不能被解讀成低風險或安全。</p>
+              <small>出發前仍要重新整理官方狀態、天氣、路況、山屋與入園資訊。</small>
+            </article>
+            <article class="source-health-card">
+              <div class="health-pill-row">
+                <span class="health-pill">offline_first_cache_first</span>
+                <span class="health-pill ">live fetch off</span>
+              </div>
+              <h3>快取策略</h3>
+              <p>這份簡報來自 workspace cache 與 operator-approved collection；不在 runtime 自動 live search。</p>
+              <small>runtime truth 前需 refresh</small>
+            </article>
+            <article class="source-health-card locked">
+              <div class="health-pill-row">
+                <span class="health-pill">candidate-only</span>
+                <span class="health-pill">非安全真值</span>
+              </div>
+              <h3>安全邊界</h3>
+              <p>這份簡報只供行前討論與人工審查；不寫入 /safety/*，也不取代現地判斷。</p>
+              <details class="source-health-details"><summary>機器可讀邊界</summary><code>candidate_only=true; runtime_safety_truth=false; live_safety_api_called=false; source_fulltext_embedded=false</code></details>
+            </article>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <section class="slide" id="route">
+      <div class="slide-inner">
+        <div class="slide-head">
+          <div>
+            <p class="kicker">路線閱讀</p>
+            <h2>先把路線讀成一張行走地圖</h2>
+          </div>
+        </div>
+        <p class="lead">這一頁先讓隊伍抓住三件事：整趟路的節奏、哪些點會改變行程判斷、哪些地方只適合提問而不是直接下結論。</p>
+
+        <div class="route-overview">
+          <div class="route-profile-card">
+            <div class="route-profile-head">
+              <div>
+                <p class="kicker">路線閱讀圖</p>
+                <b>先看節奏，再看節點</b>
+              </div>
+              <small>行前閱讀</small>
+            </div>
+            <div class="profile-stats">
+              <div class="profile-stat"><span>距離候選</span>55.2 km</div>
+              <div class="profile-stat"><span>最低高度</span>1217 m</div>
+              <div class="profile-stat"><span>最高高度</span>3351 m</div>
+            </div>
+            <div class="profile-track" aria-label="route profile markers">
+              <i class="profile-marker" style="left: 1.1%" title="0.6K 舊林道叉路"></i>
+<i class="profile-marker" style="left: 2.7%" title="1.5K 雲海保線所"></i>
+<i class="profile-marker" style="left: 4.3%" title="2.4K 黑水塘"></i>
+<i class="profile-marker" style="left: 7.4%" title="4.1K 大崩壁"></i>
+<i class="profile-marker" style="left: 8.5%" title="4.7K 固定繩橋段"></i>
+<i class="profile-marker" style="left: 12.5%" title="6.9K 隱蔽樹林區"></i>
+            </div>
+            <div class="profile-legend"><span class="profile-legend-item"><b>0.6K</b>舊林道叉路</span>
+<span class="profile-legend-item"><b>1.5K</b>雲海保線所</span>
+<span class="profile-legend-item"><b>2.4K</b>黑水塘</span>
+<span class="profile-legend-item"><b>4.1K</b>大崩壁</span>
+<span class="profile-legend-item"><b>4.7K</b>固定繩橋段</span>
+<span class="profile-legend-item"><b>6.9K</b>隱蔽樹林區</span></div>
+            <p class="footnote">這張圖幫隊伍看見節奏與檢核點；現地導航、天氣與安全判斷仍要另行確認。</p>
+          </div>
+          <div class="route-media-note">
+            <figure class="field-media"><img loading="lazy" src="https://recreation.forest.gov.tw/Files/RT/Photo/064/05/064.jpg" alt="能高越嶺道高山景觀"><figcaption>路線圖像: 能高越嶺道高山景觀<span class="source-chips" aria-label="media provenance"><span class="source-badge tier-p0">官方來源</span><span class="source-badge source-family">官方照片</span><span class="source-badge boundary">候選證據</span><span class="source-badge review">需人工審查</span><span class="source-badge boundary">非安全真值</span></span></figcaption></figure>
+            <div class="route-reader-cues" aria-label="路線閱讀提問">
+              <span><b>先看節奏</b>哪一段只是推進，哪一段會開始消耗時間與體力。</span>
+              <span><b>再看節點</b>補水、轉折、風口、展望與山屋要分開討論。</span>
+              <span><b>最後看條件</b>缺少現地 GNSS、天氣或隊伍狀態時，不能把圖當安全結論。</span>
+            </div>
+            <div class="route-photo-strip" aria-label="路線畫面補充"><figure class="photo"><img loading="lazy" src="https://recreation.forest.gov.tw/Files/RT/Photo/064/05/%E9%9B%B2%E6%B5%B7%E4%BF%9D%E7%B7%9A%E6%89%80.JPG" alt="雲海保線所"><figcaption>雲海保線所：中繼休息點與雲霧展望<span class="source-chips" aria-label="media provenance"><span class="source-badge tier-p0">官方來源</span><span class="source-badge source-family">官方照片</span><span class="source-badge boundary">候選證據</span><span class="source-badge review">需人工審查</span><span class="source-badge boundary">非安全真值</span></span></figcaption></figure>
+<figure class="photo"><img loading="lazy" src="https://recreation.forest.gov.tw/Files/RT/Photo/064/05/%E5%A4%A9%E6%B1%A0%E5%B1%B1%E8%8E%8A.JPG" alt="天池山莊"><figcaption>天池山莊：能高越嶺道 13.1K 山屋<span class="source-chips" aria-label="media provenance"><span class="source-badge tier-p0">官方來源</span><span class="source-badge source-family">官方照片</span><span class="source-badge boundary">候選證據</span><span class="source-badge review">需人工審查</span><span class="source-badge boundary">非安全真值</span></span></figcaption></figure>
+<figure class="photo"><img loading="lazy" src="https://recreation.forest.gov.tw/Files/RT/Photo/064/05/%E8%83%BD%E9%AB%98%E8%B6%8A%E5%B6%BA%E9%81%93%E5%85%89%E6%89%B9%E5%85%AB%E8%A1%A8%E9%9B%B2%E6%B5%B7%E6%97%A5%E5%87%BA.JPG" alt="光被八表雲海日出"><figcaption>光被八表雲海日出<span class="source-chips" aria-label="media provenance"><span class="source-badge tier-p0">官方來源</span><span class="source-badge source-family">官方照片</span><span class="source-badge boundary">候選證據</span><span class="source-badge review">需人工審查</span><span class="source-badge boundary">非安全真值</span></span></figcaption></figure></div>
+            <details class="route-data-details">
+              <summary>資料邊界</summary>
+              <p>路線總覽來自 bounded point metadata，距離候選 55.2 km；HTML 不嵌入 raw GPX。</p>
+            </details>
+          </div>
+        </div>
+        <div class="route-rail" aria-label="route overview"><div class="route-node"><b>0.6K</b><span>舊林道叉路</span></div>
+<div class="route-node"><b>1.5K</b><span>雲海保線所</span></div>
+<div class="route-node"><b>2.4K</b><span>黑水塘</span></div>
+<div class="route-node"><b>4.1K</b><span>大崩壁</span></div>
+<div class="route-node"><b>4.7K</b><span>固定繩橋段</span></div>
+<div class="route-node"><b>6.9K</b><span>隱蔽樹林區</span></div>
+<div class="route-node"><b>6.9K</b><span>隱蔽樹林區</span></div>
+<div class="route-node"><b>8.2K</b><span>稜線啞口觀景點</span></div></div>
+
+        <div class="route-grid"><article class="day-card"><h3>前段：進入路線與初始判斷</h3><div class="steps"><div class="step"><span class="time">0.6K</span><span><strong>舊林道叉路</strong><small>先把這裡講成通過策略，不把它講成停留點。</small><details class="route-data-details"><summary>來源</summary><code>P1 · major_critical_point · ptt_hiking</code></details></span></div>
+<div class="step"><span class="time">1.5K</span><span><strong>雲海保線所</strong><small>把它當成補水、衣物、腳程與時間壓力的共同檢查點。</small><details class="route-data-details"><summary>來源</summary><code>P1 · named_point · hiking_biji/sunriver_culture/offline_map_ocr</code></details></span></div>
+<div class="step"><span class="time">2.4K</span><span><strong>黑水塘</strong><small>把它當成補水、衣物、腳程與時間壓力的共同檢查點。</small><details class="route-data-details"><summary>來源</summary><code>P1 · major_critical_point · ptt_hiking/hiking_biji/sunriver_culture</code></details></span></div>
+<div class="step"><span class="time">4.1K</span><span><strong>大崩壁</strong><small>先把這裡講成通過策略，不把它講成停留點。</small><details class="route-data-details"><summary>來源</summary><code>P1 · major_critical_point · ptt_hiking/hiking_biji/sunriver_culture</code></details></span></div>
+<div class="step"><span class="time">4.7K</span><span><strong>固定繩橋段</strong><small>先把這裡講成通過策略，不把它講成停留點。</small><details class="route-data-details"><summary>來源</summary><code>P1 · named_point · hiking_biji/public_web</code></details></span></div></div></article>
+<article class="day-card"><h3>後段：高山段、回程與複合風險</h3><div class="steps"><div class="step"><span class="time">6.9K</span><span><strong>隱蔽樹林區</strong><small>用這個節點把上一段與下一段路線說清楚。</small><details class="route-data-details"><summary>來源</summary><code>P1 · named_point · ptt_hiking/hiking_biji</code></details></span></div>
+<div class="step"><span class="time">6.9K</span><span><strong>隱蔽樹林區</strong><small>先把這裡講成通過策略，不把它講成停留點。</small><details class="route-data-details"><summary>來源</summary><code>P1 · major_critical_point</code></details></span></div>
+<div class="step"><span class="time">8.2K</span><span><strong>稜線啞口觀景點</strong><small>先把這裡講成通過策略，不把它講成停留點。</small><details class="route-data-details"><summary>來源</summary><code>P1 · major_critical_point · sunriver_culture/public_web</code></details></span></div>
+<div class="step"><span class="time">9.5K</span><span><strong>稜線通訊點</strong><small>先把這裡講成通過策略，不把它講成停留點。</small><details class="route-data-details"><summary>來源</summary><code>P1 · major_critical_point · ptt_hiking/hiking_biji</code></details></span></div>
+<div class="step"><span class="time">距離 unknown</span><span><strong>雲海保線所</strong><small>把它當成補水、衣物、腳程與時間壓力的共同檢查點。</small><details class="route-data-details"><summary>來源</summary><code>P1 · ocr_map_label</code></details></span></div></div></article></div>
+      </div>
+    </section>
+
+    <section class="slide" id="sights">
+      <div class="slide-inner">
+        <div class="slide-head">
+          <div>
+            <p class="kicker">沿途導覽</p>
+            <h2>沿途停看聽導覽卡</h2>
+          </div>
+        </div>
+        <p class="lead">這一頁不是景點清單，而是行前講解順序：每個點都要回答看什麼、問什麼，以及什麼條件下不能停留。</p>
+        <section class="highlight-wall"><article class="highlight-card"><img loading="lazy" src="https://recreation.forest.gov.tw/Files/RT/Photo/064/05/064.jpg" alt="能高越嶺道高山景觀"><div class="highlight-body"><span class="tag gold">短停條件</span><h3>雲海保線所</h3><p class="highlight-meta">1.5K · 資源節點</p><p class="highlight-guide-cue"><b>看什麼</b>：補水、休息、衣物調整、腳程落差與下一段時間壓力。</p><p class="highlight-question"><b>隊伍提問</b>：現在要補水、加衣、重分配裝備，還是直接往下一段？</p><p>可列為 3 分鐘觀察候選；現地仍需通過天氣、地形、隊伍與撤退時間檢查。</p><details class="highlight-data-details"><summary>現地審查資訊</summary><code>脈絡層：historical, cultural, seasonal; 來源：P1 · named_point · hiking_biji/sunriver_culture/offline_map_ocr; 觀察分數：69.0</code></details></div></article>
+<article class="highlight-card"><img loading="lazy" src="https://recreation.forest.gov.tw/Files/RT/Photo/064/05/%E9%9B%B2%E6%B5%B7%E4%BF%9D%E7%B7%9A%E6%89%80.JPG" alt="雲海保線所"><div class="highlight-body"><span class="tag sky">短停條件</span><h3>稜線啞口觀景點</h3><p class="highlight-meta">8.2K · 展望點</p><p class="highlight-guide-cue"><b>看什麼</b>：坡面、崩壁、碎石、風口與隊伍隊形，先決定通過方式。</p><p class="highlight-question"><b>隊伍提問</b>：這裡要快速通過、拉開距離，還是允許短暫觀察？</p><p>可列為 3 分鐘觀察候選；現地仍需通過天氣、地形、隊伍與撤退時間檢查。</p><details class="highlight-data-details"><summary>現地審查資訊</summary><code>脈絡層：cultural, historical, observation_point, terrain; 來源：P1 · major_critical_point · sunriver_culture/public_web; 觀察分數：69.0</code></details></div></article>
+<article class="highlight-card"><img loading="lazy" src="https://recreation.forest.gov.tw/Files/RT/Photo/064/05/%E5%A4%A9%E6%B1%A0%E5%B1%B1%E8%8E%8A.JPG" alt="天池山莊"><div class="highlight-body"><span class="tag sky">短停條件</span><h3>舊林道叉路</h3><p class="highlight-meta">0.6K · 導航脈絡</p><p class="highlight-guide-cue"><b>看什麼</b>：路標、轉折、舊路痕、方向感與下一個共同確認點。</p><p class="highlight-question"><b>隊伍提問</b>：所有人都知道下一個 CP/MCP 與回頭點在哪裡嗎？</p><p>可列為 3 分鐘觀察候選；現地仍需通過天氣、地形、隊伍與撤退時間檢查。</p><details class="highlight-data-details"><summary>現地審查資訊</summary><code>脈絡層：cultural, historical, natural, terrain; 來源：P1 · major_critical_point · ptt_hiking; 觀察分數：61.0</code></details></div></article>
+<article class="highlight-card"><img loading="lazy" src="https://recreation.forest.gov.tw/Files/RT/Photo/064/05/%E8%83%BD%E9%AB%98%E8%B6%8A%E5%B6%BA%E9%81%93%E5%85%89%E6%89%B9%E5%85%AB%E8%A1%A8%E9%9B%B2%E6%B5%B7%E6%97%A5%E5%87%BA.JPG" alt="光被八表雲海日出"><div class="highlight-body"><span class="tag gold">講解節點</span><h3>雲海保線所</h3><p class="highlight-meta">距離 unknown · 資源節點</p><p class="highlight-guide-cue"><b>看什麼</b>：補水、休息、衣物調整、腳程落差與下一段時間壓力。</p><p class="highlight-question"><b>隊伍提問</b>：現在要補水、加衣、重分配裝備，還是直接往下一段？</p><p>作為路線理解或補給脈絡，不自動代表停留建議。</p><details class="highlight-data-details"><summary>現地審查資訊</summary><code>脈絡層：historical, seasonal; 來源：P1 · ocr_map_label; 觀察分數：57.0</code></details></div></article>
+<article class="highlight-card"><img loading="lazy" src="https://recreation.forest.gov.tw/Files/RT/Photo/064/05/%E5%85%89%E6%89%B9%E5%85%AB%E8%A1%A8%E6%97%A5%E5%87%BA.JPG" alt="光被八表日出"><div class="highlight-body"><span class="tag sky">講解節點</span><h3>能高越嶺道官方照片</h3><p class="highlight-meta">距離 unknown · 自然脈絡</p><p class="highlight-guide-cue"><b>看什麼</b>：保線、古道、地名與設施脈絡；敏感內容先保留。</p><p class="highlight-question"><b>隊伍提問</b>：這個故事是否有可靠來源，還是只當候選脈絡？</p><p>作為路線理解或補給脈絡，不自動代表停留建議。</p><details class="highlight-data-details"><summary>現地審查資訊</summary><code>脈絡層：historical, natural; 來源：P0 · web_case_evidence · official_baseline; 觀察分數：49.0</code></details></div></article>
+<article class="highlight-card"><img loading="lazy" src="https://recreation.forest.gov.tw/Files/RT/Photo/064/01/%E8%83%BD%E9%AB%98%E8%B6%8A%E5%B6%BA%E5%B0%8E%E8%A6%BD%E5%9C%B0%E5%9C%96202510-ok-0310%E4%BF%AE.jpg" alt="能高越嶺道西段導覽圖"><div class="highlight-body"><span class="tag sky">講解節點</span><h3>隱蔽樹林區</h3><p class="highlight-meta">6.9K · 自然脈絡</p><p class="highlight-guide-cue"><b>看什麼</b>：林相、草坡、溪溝、濕度與季節變化。</p><p class="highlight-question"><b>隊伍提問</b>：這個點會改變節奏、停留、撤退或隊伍溝通嗎？</p><p>作為路線理解或補給脈絡，不自動代表停留建議。</p><details class="highlight-data-details"><summary>現地審查資訊</summary><code>脈絡層：natural; 來源：P1 · named_point · ptt_hiking/hiking_biji; 觀察分數：43.0</code></details></div></article></section>
+      </div>
+    </section>
+
+    <section class="slide chapter-break" id="chapter-02"><img class="chapter-photo" loading="lazy" src="https://recreation.forest.gov.tw/Files/RT/Photo/064/05/064.jpg" alt="能高越嶺道高山景觀"><div class="chapter-inner"><div><span class="chapter-number">章節 02</span><p class="kicker">路線脈絡</p><h2>再把路線讀成故事</h2><p class="chapter-copy">歷史、文化、自然、地形、季節與 Scout P2 回顧，應該幫隊伍理解這條路，而不是堆成資料表。</p></div><div class="chapter-rhythm"><b>這章要帶隊伍抓住</b><span>每層脈絡都要能講給隊伍聽</span>
+<span>文化敏感點只作 review candidate</span>
+<span>P2 回顧先當 seed，不直接變成結論</span></div></div></section>
+
+    <section class="slide" id="layers">
+      <div class="slide-inner">
+        <div class="slide-head">
+          <div>
+            <p class="kicker">脈絡層</p>
+            <h2>把路線拆成六個脈絡層</h2>
+          </div>
+        </div>
+        <p class="lead">這個章節對應你的提示詞：歷史層、文化層、自然層、地形層、季節層與觀察點。每張卡只引用已進入 workspace 的候選證據。</p>
+        <p class="deck-hint">簡報節奏：每次只講一層脈絡，避免把六層資料一次塞滿畫面。</p>
+        <div class="briefing-deck layers" aria-label="六個路線脈絡層"><article class="layer layer-brief"><figure class="field-media"><img loading="lazy" src="https://recreation.forest.gov.tw/Files/RT/Photo/064/05/064.jpg" alt="能高越嶺道高山景觀"><figcaption>歷史層: 能高越嶺道高山景觀<span class="source-chips" aria-label="media provenance"><span class="source-badge tier-p0">官方來源</span><span class="source-badge source-family">官方照片</span><span class="source-badge boundary">候選證據</span><span class="source-badge review">需人工審查</span><span class="source-badge boundary">非安全真值</span></span></figcaption></figure><span class="tag">歷史層</span><span class="layer-count">5 個候選點</span><h3>把古道與設施說成時間線</h3><p class="layer-definition">古道、警備道、駐在所、隘勇線、伐木路、產業道路、舊聚落、日治時期設施。</p><div class="briefing-script"><div class="script-row talk-row"><b>講給隊伍聽</b><span>用 舊林道叉路、雲海保線所、稜線啞口觀景點、能高越嶺道官方照片 串起保線、舊路、山屋與人為設施如何改變這條路。</span></div><div class="script-row ask-row"><b>現場提問</b><span>哪一段是歷史設施，哪一段只是現代路徑或補給點？</span></div><div class="script-row boundary-row"><b>邊界</b><span>不要把未審核的地名、遺構或私人筆記當成正式史實。</span></div></div><details class="layer-data-details"><summary>候選點與邊界</summary><p><b>候選點</b>：舊林道叉路、雲海保線所、稜線啞口觀景點、能高越嶺道官方照片</p><p><b>邊界</b>：不要把未審核的地名、遺構或私人筆記當成正式史實。</p></details></article>
+<article class="layer layer-brief"><figure class="field-media"><img loading="lazy" src="https://recreation.forest.gov.tw/Files/RT/Photo/064/05/%E9%9B%B2%E6%B5%B7%E4%BF%9D%E7%B7%9A%E6%89%80.JPG" alt="雲海保線所"><figcaption>文化層: 雲海保線所：中繼休息點與雲霧展望<span class="source-chips" aria-label="media provenance"><span class="source-badge tier-p0">官方來源</span><span class="source-badge source-family">官方照片</span><span class="source-badge boundary">候選證據</span><span class="source-badge review">需人工審查</span><span class="source-badge boundary">非安全真值</span></span></figcaption></figure><span class="tag gold">文化層</span><span class="layer-count">7 個候選點</span><h3>讓地名與使用方式保持尊重</h3><p class="layer-definition">原住民族地名、舊社、獵徑、地方傳說、土地使用變遷。</p><div class="briefing-script"><div class="script-row talk-row"><b>講給隊伍聽</b><span>用 舊林道叉路、雲海保線所、黑水塘、大崩壁、隱蔽樹林區 說明地名、舊路徑與土地使用變遷，但不放大敏感位置。</span></div><div class="script-row ask-row"><b>現場提問</b><span>這個點需要公開精確位置嗎？還是只需要理解脈絡？</span></div><div class="script-row boundary-row"><b>邊界</b><span>文化敏感點只作 review candidate；未核准前不公開精確座標。</span></div></div><details class="layer-data-details"><summary>候選點與邊界</summary><p><b>候選點</b>：舊林道叉路、雲海保線所、黑水塘、大崩壁、隱蔽樹林區</p><p><b>邊界</b>：文化敏感點只作 review candidate；未核准前不公開精確座標。</p></details></article>
+<article class="layer layer-brief"><figure class="field-media"><img loading="lazy" src="https://recreation.forest.gov.tw/Files/RT/Photo/064/05/%E5%A4%A9%E6%B1%A0%E5%B1%B1%E8%8E%8A.JPG" alt="天池山莊"><figcaption>自然層: 天池山莊：能高越嶺道 13.1K 山屋<span class="source-chips" aria-label="media provenance"><span class="source-badge tier-p0">官方來源</span><span class="source-badge source-family">官方照片</span><span class="source-badge boundary">候選證據</span><span class="source-badge review">需人工審查</span><span class="source-badge boundary">非安全真值</span></span></figcaption></figure><span class="tag sky">自然層</span><span class="layer-count">4 個候選點</span><h3>把林相與季節變成觀察線索</h3><p class="layer-definition">林相變化、植被帶、特殊植物、鳥類、溪流、地質、岩層。</p><div class="briefing-script"><div class="script-row talk-row"><b>講給隊伍聽</b><span>用 舊林道叉路、隱蔽樹林區、能高越嶺道官方照片 讓隊伍看見林相、草坡、雲霧與自然環境的轉換。</span></div><div class="script-row ask-row"><b>現場提問</b><span>現在看到的植被、濕度、雲霧是否和行前預期一致？</span></div><div class="script-row boundary-row"><b>邊界</b><span>自然觀察不是安全判定；天氣與地形條件仍要另行檢查。</span></div></div><details class="layer-data-details"><summary>候選點與邊界</summary><p><b>候選點</b>：舊林道叉路、隱蔽樹林區、能高越嶺道官方照片</p><p><b>邊界</b>：自然觀察不是安全判定；天氣與地形條件仍要另行檢查。</p></details></article>
+<article class="layer layer-brief"><figure class="field-media"><img loading="lazy" src="https://recreation.forest.gov.tw/Files/RT/Photo/064/05/%E8%83%BD%E9%AB%98%E8%B6%8A%E5%B6%BA%E9%81%93%E5%85%89%E6%89%B9%E5%85%AB%E8%A1%A8%E9%9B%B2%E6%B5%B7%E6%97%A5%E5%87%BA.JPG" alt="光被八表雲海日出"><figcaption>地形層: 光被八表雲海日出<span class="source-chips" aria-label="media provenance"><span class="source-badge tier-p0">官方來源</span><span class="source-badge source-family">官方照片</span><span class="source-badge boundary">候選證據</span><span class="source-badge review">需人工審查</span><span class="source-badge boundary">非安全真值</span></span></figcaption></figure><span class="tag rust">地形層</span><span class="layer-count">5 個候選點</span><h3>把地形說成通過策略</h3><p class="layer-definition">稜線、鞍部、谷線、崩壁、溪谷、展望點、風口。</p><div class="briefing-script"><div class="script-row talk-row"><b>講給隊伍聽</b><span>用 舊林道叉路、大崩壁、固定繩橋段、稜線啞口觀景點、稜線通訊點 指出稜線、崩壁、風口、溪谷或固定繩段的通過重點。</span></div><div class="script-row ask-row"><b>現場提問</b><span>這一段要拉開距離、快速通過，還是可以短停觀察？</span></div><div class="script-row boundary-row"><b>邊界</b><span>地形層只能提示 review priority，不可直接宣稱可通行或不可通行。</span></div></div><details class="layer-data-details"><summary>候選點與邊界</summary><p><b>候選點</b>：舊林道叉路、大崩壁、固定繩橋段、稜線啞口觀景點、稜線通訊點</p><p><b>邊界</b>：地形層只能提示 review priority，不可直接宣稱可通行或不可通行。</p></details></article>
+<article class="layer layer-brief"><figure class="field-media"><img loading="lazy" src="https://recreation.forest.gov.tw/Files/RT/Photo/064/05/%E5%85%89%E6%89%B9%E5%85%AB%E8%A1%A8%E6%97%A5%E5%87%BA.JPG" alt="光被八表日出"><figcaption>季節層: 光被八表日出<span class="source-chips" aria-label="media provenance"><span class="source-badge tier-p0">官方來源</span><span class="source-badge source-family">官方照片</span><span class="source-badge boundary">候選證據</span><span class="source-badge review">需人工審查</span><span class="source-badge boundary">非安全真值</span></span></figcaption></figure><span class="tag">季節層</span><span class="layer-count">4 個候選點</span><h3>把季節變成時間與裝備檢查</h3><p class="layer-definition">花期、楓紅、雲海、溪水期、雨季、蚊蟲、芒草、低溫。</p><div class="briefing-script"><div class="script-row talk-row"><b>講給隊伍聽</b><span>用 雲海保線所、大崩壁、隱蔽樹林區 討論雲海、低溫、雨季、濕滑與日照時間如何改變節奏。</span></div><div class="script-row ask-row"><b>現場提問</b><span>現在季節條件是否要求提早出發、加衣、補水或縮短停留？</span></div><div class="script-row boundary-row"><b>邊界</b><span>季節線索需要搭配 CWA/weather evidence；缺資料時不能假設低風險。</span></div></div><details class="layer-data-details"><summary>候選點與邊界</summary><p><b>候選點</b>：雲海保線所、大崩壁、隱蔽樹林區</p><p><b>邊界</b>：季節線索需要搭配 CWA/weather evidence；缺資料時不能假設低風險。</p></details></article>
+<article class="layer layer-brief"><figure class="field-media"><img loading="lazy" src="https://recreation.forest.gov.tw/Files/RT/Photo/064/01/%E8%83%BD%E9%AB%98%E8%B6%8A%E5%B6%BA%E5%B0%8E%E8%A6%BD%E5%9C%B0%E5%9C%96202510-ok-0310%E4%BF%AE.jpg" alt="能高越嶺道西段導覽圖"><figcaption>觀察點: 能高越嶺道西段導覽圖<span class="source-chips" aria-label="media provenance"><span class="source-badge tier-p0">官方來源</span><span class="source-badge source-family">官方照片</span><span class="source-badge boundary">候選證據</span><span class="source-badge review">需人工審查</span><span class="source-badge boundary">非安全真值</span></span></figcaption></figure><span class="tag gold">觀察點</span><span class="layer-count">1 個候選點</span><h3>把值得停變成有條件的短停</h3><p class="layer-definition">哪些地方值得停 3 分鐘，而不是只趕路通過。</p><div class="briefing-script"><div class="script-row talk-row"><b>講給隊伍聽</b><span>用 稜線啞口觀景點 做 3 分鐘觀察，但每次短停都要有目的與離開條件。</span></div><div class="script-row ask-row"><b>現場提問</b><span>這一停要看什麼？誰負責看隊伍距離與時間？</span></div><div class="script-row boundary-row"><b>邊界</b><span>觀察點不是停留授權；現地條件不好時改為快速通過。</span></div></div><details class="layer-data-details"><summary>候選點與邊界</summary><p><b>候選點</b>：稜線啞口觀景點</p><p><b>邊界</b>：觀察點不是停留授權；現地條件不好時改為快速通過。</p></details></article></div>
+      </div>
+    </section>
+
+    <section class="slide" id="p2">
+      <div class="slide-inner">
+        <div class="slide-head">
+          <div>
+            <p class="kicker">Scout 自有脈絡</p>
+            <h2>把完成旅程變成下一次的路線脈絡</h2>
+          </div>
+        </div>
+        <p class="lead">P0/P1 回答公開世界如何描述這條路線；P2 回答 Scout 實際走過後，這條路對這個隊伍代表什麼。未審核 P2 只能當 seed、caveat 或私有 admin evidence。</p>
+
+        <div class="p2-review-board">
+          <figure class="p2-visual"><img loading="lazy" src="https://recreation.forest.gov.tw/Files/RT/Photo/064/05/064.jpg" alt="能高越嶺道高山景觀"><figcaption>能高越嶺道高山景觀<span class="source-chips" aria-label="media provenance"><span class="source-badge tier-p0">官方來源</span><span class="source-badge source-family">官方照片</span><span class="source-badge boundary">候選證據</span><span class="source-badge review">需人工審查</span><span class="source-badge boundary">非安全真值</span></span></figcaption></figure>
+          <div class="p2-panel">
+            <div class="p2-lens" aria-label="P2 回顧判讀方式">
+              <span><b>先當回顧</b>把隊伍走過、延誤、停留與疑問整理成下一次 briefing 的線索。</span>
+              <span><b>再找佐證</b>需要 P0/P1、地形、天氣或現地觀察交叉確認後，才進入結論層。</span>
+              <span><b>保留邊界</b>P2 是 Scout-owned seed；candidate-only、需人工審查、非 runtime safety truth。</span>
+            </div>
+            <div class="p2-source-stack" aria-label="P2 Scout-owned evidence sources">
+              <article class="p2-source-card"><div class="p2-source-count"><b>4406</b><span>P2 筆數</span></div><div><span class="tag gold">P2 seed</span><h3>路線筆記候選</h3><p><b>目前狀態</b>：已載入。</p><p><b>簡報用法</b>：僅作 seed；先用來提醒下一次行前討論，不當作公開結論。</p><details class="audit-details"><summary>來源路徑</summary><code>candidates/route_note_candidates.json</code></details></div></article>
+<article class="p2-source-card"><div class="p2-source-count"><b>1</b><span>P2 筆數</span></div><div><span class="tag gold">P2 seed</span><h3>匯入清單</h3><p><b>目前狀態</b>：已載入。</p><p><b>簡報用法</b>：僅作 provenance；先用來提醒下一次行前討論，不當作公開結論。</p><details class="audit-details"><summary>來源路徑</summary><code>outputs/import_manifest.json</code></details></div></article>
+<article class="p2-source-card"><div class="p2-source-count"><b>1</b><span>P2 筆數</span></div><div><span class="tag gold">P2 seed</span><h3>路線摘要</h3><p><b>目前狀態</b>：已載入。</p><p><b>簡報用法</b>：路線範圍；先用來提醒下一次行前討論，不當作公開結論。</p><details class="audit-details"><summary>來源路徑</summary><code>normalized/routes/route_summary.json</code></details></div></article>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <section class="slide" id="storyline">
+      <div class="slide-inner">
+        <div class="slide-head">
+          <div>
+            <p class="kicker">敘事線</p>
+            <h2>把主要點串成行前敘事線</h2>
+          </div>
+        </div>
+        <p class="lead">若路線距離可用，點位會依距離排序；否則依 observation score 與標籤排序。Scout 不能用這條敘事線取代導航或安全判斷。</p>
+        <p class="deck-hint">路線敘事節奏：一次看一個節點，先抓距離與共同畫面，再講現地提醒。</p>
+        <div class="storyline-rail" aria-label="路線敘事節點"><article class="storyline-card"><figure class="storyline-thumb"><img loading="lazy" src="https://recreation.forest.gov.tw/Files/RT/Photo/064/05/064.jpg" alt="能高越嶺道高山景觀"><figcaption>能高越嶺道高山景觀</figcaption></figure><div class="storyline-meta"><span class="storyline-index">節點 01</span><span class="storyline-distance">0.6K</span><span class="tag sky">導航脈絡</span></div><h3>舊林道叉路</h3><p class="storyline-cue">先把這裡講成通過策略，不把它講成停留點。</p><p class="storyline-action"><b>短停條件</b>可列為 3 分鐘觀察候選；現地仍需通過天氣、地形、隊伍與撤退時間檢查。</p><details class="storyline-data-details"><summary>資料與邊界</summary><p>來源：P1 · major_critical_point · ptt_hiking</p><p>脈絡層：cultural, historical, natural, terrain</p><p>candidate-only; runtime_safety_truth=false; human_review_required=true</p></details></article>
+<article class="storyline-card"><figure class="storyline-thumb"><img loading="lazy" src="https://recreation.forest.gov.tw/Files/RT/Photo/064/05/%E9%9B%B2%E6%B5%B7%E4%BF%9D%E7%B7%9A%E6%89%80.JPG" alt="雲海保線所"><figcaption>雲海保線所：中繼休息點與雲霧展望</figcaption></figure><div class="storyline-meta"><span class="storyline-index">節點 02</span><span class="storyline-distance">1.5K</span><span class="tag gold">資源節點</span></div><h3>雲海保線所</h3><p class="storyline-cue">把它當成補水、衣物、腳程與時間壓力的共同檢查點。</p><p class="storyline-action"><b>短停條件</b>可列為 3 分鐘觀察候選；現地仍需通過天氣、地形、隊伍與撤退時間檢查。</p><details class="storyline-data-details"><summary>資料與邊界</summary><p>來源：P1 · named_point · hiking_biji/sunriver_culture/offline_map_ocr</p><p>脈絡層：historical, cultural, seasonal</p><p>candidate-only; runtime_safety_truth=false; human_review_required=true</p></details></article>
+<article class="storyline-card"><figure class="storyline-thumb"><img loading="lazy" src="https://recreation.forest.gov.tw/Files/RT/Photo/064/05/%E5%A4%A9%E6%B1%A0%E5%B1%B1%E8%8E%8A.JPG" alt="天池山莊"><figcaption>天池山莊：能高越嶺道 13.1K 山屋</figcaption></figure><div class="storyline-meta"><span class="storyline-index">節點 03</span><span class="storyline-distance">2.4K</span><span class="tag gold">資源節點</span></div><h3>黑水塘</h3><p class="storyline-cue">把它當成補水、衣物、腳程與時間壓力的共同檢查點。</p><p class="storyline-action"><b>講解節點</b>作為路線理解或補給脈絡，不自動代表停留建議。</p><details class="storyline-data-details"><summary>資料與邊界</summary><p>來源：P1 · major_critical_point · ptt_hiking/hiking_biji/sunriver_culture</p><p>脈絡層：cultural, route_context</p><p>candidate-only; runtime_safety_truth=false; human_review_required=true</p></details></article>
+<article class="storyline-card"><figure class="storyline-thumb"><img loading="lazy" src="https://recreation.forest.gov.tw/Files/RT/Photo/064/05/%E8%83%BD%E9%AB%98%E8%B6%8A%E5%B6%BA%E9%81%93%E5%85%89%E6%89%B9%E5%85%AB%E8%A1%A8%E9%9B%B2%E6%B5%B7%E6%97%A5%E5%87%BA.JPG" alt="光被八表雲海日出"><figcaption>光被八表雲海日出</figcaption></figure><div class="storyline-meta"><span class="storyline-index">節點 04</span><span class="storyline-distance">4.1K</span><span class="tag rust">風險脈絡</span></div><h3>大崩壁</h3><p class="storyline-cue">先把這裡講成通過策略，不把它講成停留點。</p><p class="storyline-action"><b>通過策略</b>只作為風險理解點；現地應快速通過，不建議停留拍照。</p><details class="storyline-data-details"><summary>資料與邊界</summary><p>來源：P1 · major_critical_point · ptt_hiking/hiking_biji/sunriver_culture</p><p>脈絡層：cultural, seasonal, terrain</p><p>candidate-only; runtime_safety_truth=false; human_review_required=true</p></details></article>
+<article class="storyline-card"><figure class="storyline-thumb"><img loading="lazy" src="https://recreation.forest.gov.tw/Files/RT/Photo/064/05/%E5%85%89%E6%89%B9%E5%85%AB%E8%A1%A8%E6%97%A5%E5%87%BA.JPG" alt="光被八表日出"><figcaption>光被八表日出</figcaption></figure><div class="storyline-meta"><span class="storyline-index">節點 05</span><span class="storyline-distance">4.7K</span><span class="tag sky">路線脈絡</span></div><h3>固定繩橋段</h3><p class="storyline-cue">先把這裡講成通過策略，不把它講成停留點。</p><p class="storyline-action"><b>人工審查</b>此點是 route-context candidate，需人工審查後才能放入正式行前包。</p><details class="storyline-data-details"><summary>資料與邊界</summary><p>來源：P1 · named_point · hiking_biji/public_web</p><p>脈絡層：terrain</p><p>candidate-only; runtime_safety_truth=false; human_review_required=true</p></details></article>
+<article class="storyline-card"><figure class="storyline-thumb"><img loading="lazy" src="https://recreation.forest.gov.tw/Files/RT/Photo/064/01/%E8%83%BD%E9%AB%98%E8%B6%8A%E5%B6%BA%E5%B0%8E%E8%A6%BD%E5%9C%B0%E5%9C%96202510-ok-0310%E4%BF%AE.jpg" alt="能高越嶺道西段導覽圖"><figcaption>能高越嶺道西段導覽圖</figcaption></figure><div class="storyline-meta"><span class="storyline-index">節點 06</span><span class="storyline-distance">6.9K</span><span class="tag sky">自然脈絡</span></div><h3>隱蔽樹林區</h3><p class="storyline-cue">用這個節點把上一段與下一段路線說清楚。</p><p class="storyline-action"><b>講解節點</b>作為路線理解或補給脈絡，不自動代表停留建議。</p><details class="storyline-data-details"><summary>資料與邊界</summary><p>來源：P1 · named_point · ptt_hiking/hiking_biji</p><p>脈絡層：natural</p><p>candidate-only; runtime_safety_truth=false; human_review_required=true</p></details></article>
+<article class="storyline-card"><figure class="storyline-thumb"><img loading="lazy" src="https://recreation.forest.gov.tw/Files/RT/Photo/064/05/064.jpg" alt="能高越嶺道高山景觀"><figcaption>能高越嶺道高山景觀</figcaption></figure><div class="storyline-meta"><span class="storyline-index">節點 07</span><span class="storyline-distance">6.9K</span><span class="tag rust">風險脈絡</span></div><h3>隱蔽樹林區</h3><p class="storyline-cue">先把這裡講成通過策略，不把它講成停留點。</p><p class="storyline-action"><b>通過策略</b>只作為風險理解點；現地應快速通過，不建議停留拍照。</p><details class="storyline-data-details"><summary>資料與邊界</summary><p>來源：P1 · major_critical_point</p><p>脈絡層：cultural, natural, seasonal</p><p>candidate-only; runtime_safety_truth=false; human_review_required=true</p></details></article>
+<article class="storyline-card"><figure class="storyline-thumb"><img loading="lazy" src="https://recreation.forest.gov.tw/Files/RT/Photo/064/05/%E9%9B%B2%E6%B5%B7%E4%BF%9D%E7%B7%9A%E6%89%80.JPG" alt="雲海保線所"><figcaption>雲海保線所：中繼休息點與雲霧展望</figcaption></figure><div class="storyline-meta"><span class="storyline-index">節點 08</span><span class="storyline-distance">8.2K</span><span class="tag sky">展望點</span></div><h3>稜線啞口觀景點</h3><p class="storyline-cue">先把這裡講成通過策略，不把它講成停留點。</p><p class="storyline-action"><b>短停條件</b>可列為 3 分鐘觀察候選；現地仍需通過天氣、地形、隊伍與撤退時間檢查。</p><details class="storyline-data-details"><summary>資料與邊界</summary><p>來源：P1 · major_critical_point · sunriver_culture/public_web</p><p>脈絡層：cultural, historical, observation_point, terrain</p><p>candidate-only; runtime_safety_truth=false; human_review_required=true</p></details></article>
+<article class="storyline-card"><figure class="storyline-thumb"><img loading="lazy" src="https://recreation.forest.gov.tw/Files/RT/Photo/064/05/%E5%A4%A9%E6%B1%A0%E5%B1%B1%E8%8E%8A.JPG" alt="天池山莊"><figcaption>天池山莊：能高越嶺道 13.1K 山屋</figcaption></figure><div class="storyline-meta"><span class="storyline-index">節點 09</span><span class="storyline-distance">9.5K</span><span class="tag sky">路線脈絡</span></div><h3>稜線通訊點</h3><p class="storyline-cue">先把這裡講成通過策略，不把它講成停留點。</p><p class="storyline-action"><b>講解節點</b>作為路線理解或補給脈絡，不自動代表停留建議。</p><details class="storyline-data-details"><summary>資料與邊界</summary><p>來源：P1 · major_critical_point · ptt_hiking/hiking_biji</p><p>脈絡層：cultural, terrain</p><p>candidate-only; runtime_safety_truth=false; human_review_required=true</p></details></article>
+<article class="storyline-card"><figure class="storyline-thumb"><img loading="lazy" src="https://recreation.forest.gov.tw/Files/RT/Photo/064/05/%E9%9B%B2%E6%B5%B7%E4%BF%9D%E7%B7%9A%E6%89%80.JPG" alt="雲海保線所"><figcaption>雲海保線所：中繼休息點與雲霧展望</figcaption></figure><div class="storyline-meta"><span class="storyline-index">節點 10</span><span class="storyline-distance">距離 unknown</span><span class="tag gold">資源節點</span></div><h3>雲海保線所</h3><p class="storyline-cue">把它當成補水、衣物、腳程與時間壓力的共同檢查點。</p><p class="storyline-action"><b>講解節點</b>作為路線理解或補給脈絡，不自動代表停留建議。</p><details class="storyline-data-details"><summary>資料與邊界</summary><p>來源：P1 · ocr_map_label</p><p>脈絡層：historical, seasonal</p><p>candidate-only; runtime_safety_truth=false; human_review_required=true</p></details></article>
+<article class="storyline-card"><figure class="storyline-thumb"><img loading="lazy" src="https://recreation.forest.gov.tw/Files/RT/Photo/064/05/%E5%85%89%E6%89%B9%E5%85%AB%E8%A1%A8%E6%97%A5%E5%87%BA.JPG" alt="光被八表日出"><figcaption>光被八表日出</figcaption></figure><div class="storyline-meta"><span class="storyline-index">節點 11</span><span class="storyline-distance">距離 unknown</span><span class="tag sky">自然脈絡</span></div><h3>能高越嶺道官方照片</h3><p class="storyline-cue">用故事建立路線記憶，但不要公開或放大敏感位置。</p><p class="storyline-action"><b>講解節點</b>作為路線理解或補給脈絡，不自動代表停留建議。</p><details class="storyline-data-details"><summary>資料與邊界</summary><p>來源：P0 · web_case_evidence · official_baseline</p><p>脈絡層：historical, natural</p><p>candidate-only; runtime_safety_truth=false; human_review_required=true</p></details></article></div>
+      </div>
+    </section>
+
+    <section class="slide chapter-break" id="chapter-03"><img class="chapter-photo" loading="lazy" src="https://recreation.forest.gov.tw/Files/RT/Photo/064/05/%E9%9B%B2%E6%B5%B7%E4%BF%9D%E7%B7%9A%E6%89%80.JPG" alt="雲海保線所"><div class="chapter-inner"><div><span class="chapter-number">章節 03</span><p class="kicker">現地節奏</p><h2>把停留變成有條件的決策</h2><p class="chapter-copy">3 分鐘觀察點、風險提醒與行程版本要一起讀：能不能停，不是看景色，而是看當下條件。</p></div><div class="chapter-rhythm"><b>這章要帶隊伍抓住</b><span>每個短停都要有目的與離開條件</span>
+<span>風險點優先討論通過策略</span>
+<span>行程版本只交給人工 go/no-go review</span></div></div></section>
+
+    <section class="slide" id="stops">
+      <div class="slide-inner">
+        <div class="slide-head">
+          <div>
+            <p class="kicker">短停觀察</p>
+            <h2>哪些點值得停 3 分鐘？</h2>
+          </div>
+          <div class="stamp">非停留<br>授權</div>
+        </div>
+        <p class="lead">3 分鐘觀察點必須再交給 contextual permission 檢查：當下天氣、能見度、地形暴露、隊伍間距、疲勞與撤退時間不通過時，Scout 應回答快速通過或不要停留。</p>
+        <p class="deck-hint">短停節奏：一次只討論一個點，先看畫面，再看觀察重點、隊伍提問與離開條件。</p>
+        <div class="briefing-deck stop-deck" aria-label="三分鐘觀察點"><article class="point"><figure class="field-media"><img loading="lazy" src="https://recreation.forest.gov.tw/Files/RT/Photo/064/05/064.jpg" alt="能高越嶺道高山景觀"><figcaption>短停畫面: 能高越嶺道高山景觀<span class="source-chips" aria-label="media provenance"><span class="source-badge tier-p0">官方來源</span><span class="source-badge source-family">官方照片</span><span class="source-badge boundary">候選證據</span><span class="source-badge review">需人工審查</span><span class="source-badge boundary">非安全真值</span></span></figcaption></figure><span class="tag sky">0.6K</span><h3>舊林道叉路</h3><p>這是 3 分鐘觀察候選，不是停留授權；現地仍需先看天氣、地形暴露、隊伍間距與撤退時間。</p><div class="briefing-script"><div class="script-row"><b>觀察重點</b><span>用 舊林道叉路 確認岔路、舊路跡、轉向與 GPX 趨勢，避免隊伍在相似路徑間分散。</span></div><div class="script-row"><b>隊伍提問</b><span>前後隊是否都知道接下來往哪裡走？最後一位是否已到齊並看見轉折？</span></div><div class="script-row"><b>離開條件</b><span>確認全隊到齊、方向一致、下一個檢核點明確後再離開；不確定時不要邊走邊猜。</span></div></div><details class="audit-details"><summary>現地審查資訊</summary><code>review_state=needs_human_review; sensitivity=cultural_review; advisory=short_stop_requires_contextual_permission</code></details></article>
+<article class="point"><figure class="field-media"><img loading="lazy" src="https://recreation.forest.gov.tw/Files/RT/Photo/064/05/%E9%9B%B2%E6%B5%B7%E4%BF%9D%E7%B7%9A%E6%89%80.JPG" alt="雲海保線所"><figcaption>短停畫面: 雲海保線所：中繼休息點與雲霧展望<span class="source-chips" aria-label="media provenance"><span class="source-badge tier-p0">官方來源</span><span class="source-badge source-family">官方照片</span><span class="source-badge boundary">候選證據</span><span class="source-badge review">需人工審查</span><span class="source-badge boundary">非安全真值</span></span></figcaption></figure><span class="tag sky">8.2K</span><h3>稜線啞口觀景點</h3><p>這是 3 分鐘觀察候選，不是停留授權；現地仍需先看天氣、地形暴露、隊伍間距與撤退時間。</p><div class="briefing-script"><div class="script-row"><b>觀察重點</b><span>在 稜線啞口觀景點 只取必要畫面：稜線、鞍部、風口、雲霧移動與下一段暴露程度。</span></div><div class="script-row"><b>隊伍提問</b><span>現在風、霧、光線與隊伍保暖是否允許短停？有人拍照時是否太靠近邊緣？</span></div><div class="script-row"><b>離開條件</b><span>風變強、雲霧壓低、有人離邊緣太近或隊伍拉開時立即離開。</span></div></div><details class="audit-details"><summary>現地審查資訊</summary><code>review_state=needs_human_review; sensitivity=public; advisory=short_stop_requires_contextual_permission</code></details></article>
+<article class="point"><figure class="field-media"><img loading="lazy" src="https://recreation.forest.gov.tw/Files/RT/Photo/064/05/%E9%9B%B2%E6%B5%B7%E4%BF%9D%E7%B7%9A%E6%89%80.JPG" alt="雲海保線所"><figcaption>短停畫面: 雲海保線所：中繼休息點與雲霧展望<span class="source-chips" aria-label="media provenance"><span class="source-badge tier-p0">官方來源</span><span class="source-badge source-family">官方照片</span><span class="source-badge boundary">候選證據</span><span class="source-badge review">需人工審查</span><span class="source-badge boundary">非安全真值</span></span></figcaption></figure><span class="tag sky">1.5K</span><h3>雲海保線所</h3><p>這是 3 分鐘觀察候選，不是停留授權；現地仍需先看天氣、地形暴露、隊伍間距與撤退時間。</p><div class="briefing-script"><div class="script-row"><b>觀察重點</b><span>把 雲海保線所 當成隊伍狀態檢查點：補水、衣物、時間、腳程與下一段爬升。</span></div><div class="script-row"><b>隊伍提問</b><span>有人需要吃東西、調整衣物或回報不舒服嗎？下一段是否仍符合原本節奏？</span></div><div class="script-row"><b>離開條件</b><span>完成補給與點名後離開；若時間落後或天氣轉差，改走撤退/保守版本。</span></div></div><details class="audit-details"><summary>現地審查資訊</summary><code>review_state=; sensitivity=cultural_review; advisory=short_stop_requires_contextual_permission</code></details></article></div>
+      </div>
+    </section>
+
+    <section class="slide" id="risk">
+      <div class="slide-inner">
+        <div class="slide-head">
+          <div>
+            <p class="kicker">風險審查</p>
+            <h2>風險、缺口與人工審查</h2>
+          </div>
+        </div>
+        <p class="lead">這個區塊只做 pretrip review candidate。簡報模式先講行動策略；資料模式才展開候選點、邊界與 evidence gap。</p>
+        <div class="risk-review-grid"><article class="risk-review-card"><figure class="risk-visual"><img loading="lazy" src="https://recreation.forest.gov.tw/Files/RT/Photo/064/05/064.jpg" alt="能高越嶺道高山景觀"><figcaption>先看路線場景 · 能高越嶺道高山景觀</figcaption></figure><div class="storyline-meta"><span class="tag rust">非安全真值</span><span class="risk-scene-label">先看路線場景</span></div><h3>先守住安全邊界</h3><p class="risk-cue">這份簡報只能提示人工審查，不會自動判定可通行或不可通行。</p><p class="risk-action"><b>通過前</b>把任何模型文字都當成 review prompt；Phase 1 runtime safety 仍以 deterministic safety service 為準。</p><p class="risk-operator-note">簡報只建立共同語言，真正的 go/no-go 要回到人工與 deterministic safety。</p><details class="risk-data-details"><summary>資料與邊界</summary><p>不得寫入 /safety/*，不得改 Phase 1 runtime safety，也不得把模型文字升級成 safety truth。</p></details></article>
+<article class="risk-review-card"><figure class="risk-visual"><img loading="lazy" src="https://recreation.forest.gov.tw/Files/RT/Photo/064/05/%E8%83%BD%E9%AB%98%E8%B6%8A%E5%B6%BA%E9%81%93%E5%85%89%E6%89%B9%E5%85%AB%E8%A1%A8%E9%9B%B2%E6%B5%B7%E6%97%A5%E5%87%BA.JPG" alt="光被八表雲海日出"><figcaption>高暴露段 · 光被八表雲海日出</figcaption></figure><div class="storyline-meta"><span class="tag rust">通過策略</span><span class="risk-scene-label">高暴露段</span></div><h3>高風險段少停、分批過</h3><p class="risk-cue">遇到崩壁、稜線、風口、固定繩或濕滑坡面，先討論隊形與通過節奏。</p><p class="risk-action"><b>現場做</b>拉開距離、逐一通過、收斂拍照；條件不清楚時不要把它當觀察點。</p><p class="risk-operator-note">把畫面翻成隊形、距離與通過順序，不把風景翻成停留理由。</p><details class="risk-data-details"><summary>資料與邊界</summary><p>風險脈絡候選：稜線啞口觀景點、舊林道叉路、稜線通訊點、固定繩橋段、隱蔽樹林區</p></details></article>
+<article class="risk-review-card"><figure class="risk-visual"><img loading="lazy" src="https://recreation.forest.gov.tw/Files/RT/Photo/064/05/%E9%9B%B2%E6%B5%B7%E4%BF%9D%E7%B7%9A%E6%89%80.JPG" alt="雲海保線所"><figcaption>漂亮但不一定能停 · 雲海保線所：中繼休息點與雲霧展望</figcaption></figure><div class="storyline-meta"><span class="tag rust">停留條件</span><span class="risk-scene-label">漂亮但不一定能停</span></div><h3>能不能停，取決於當下條件</h3><p class="risk-cue">景色漂亮不等於可以停。短停前要同時看天氣、能見度、隊伍距離與撤退時間。</p><p class="risk-action"><b>停留前</b>只允許有目的的短停；任何一項條件不通過，就改成快速通過。</p><p class="risk-operator-note">先問現地條件，再決定是否停；不要先決定要拍照再找理由。</p><details class="risk-data-details"><summary>資料與邊界</summary><p>這些停留條件只作 pretrip briefing；現地仍需 contextual permission 檢查。</p></details></article>
+<article class="risk-review-card"><figure class="risk-visual"><img loading="lazy" src="https://recreation.forest.gov.tw/Files/RT/Photo/064/05/064.jpg" alt="能高越嶺道高山景觀"><figcaption>缺資料就保守 · 能高越嶺道高山景觀</figcaption></figure><div class="storyline-meta"><span class="tag rust">撤退提醒</span><span class="risk-scene-label">缺資料就保守</span></div><h3>缺資料時，回答要更保守</h3><p class="risk-cue">官方狀態、天氣、山屋、道路或地形資料缺失時，不要把缺資料解讀成安全。</p><p class="risk-action"><b>回答方式</b>明確說 evidence gap，請 operator 或領隊補查；必要時把 go/no-go 提升到人工 review。</p><p class="risk-operator-note">這張卡提醒 Scout AI：不知道不是安全，而是需要補證據。</p><details class="risk-data-details"><summary>資料與邊界</summary><p>Scout AI 應回報 evidence gap，而不是假裝安全。</p></details></article>
+<article class="risk-review-card"><figure class="risk-visual"><img loading="lazy" src="https://recreation.forest.gov.tw/Files/RT/Photo/064/05/%E5%A4%A9%E6%B1%A0%E5%B1%B1%E8%8E%8A.JPG" alt="天池山莊"><figcaption>轉折前停一下腦袋 · 天池山莊：能高越嶺道 13.1K 山屋</figcaption></figure><div class="storyline-meta"><span class="tag rust">導航檢查</span><span class="risk-scene-label">轉折前停一下腦袋</span></div><h3>轉折和偏離要先查清楚</h3><p class="risk-cue">導航脈絡候選代表隊伍可能需要提前確認轉折、方向和回頭點。</p><p class="risk-action"><b>通過前</b>在轉折前確認 GPX 趨勢、下一個 CP/MCP、隊伍共同點與最近安全回頭點。</p><p class="risk-operator-note">轉折點要形成共同認知；不確定時不要讓前後隊各自猜。</p><details class="risk-data-details"><summary>資料與邊界</summary><p>導航脈絡候選：舊林道叉路、黑水塘、大崩壁、隱蔽樹林區、稜線啞口觀景點</p></details></article></div>
+      </div>
+    </section>
+
+    <section class="slide" id="schedule">
+      <div class="slide-inner">
+        <div class="slide-head">
+          <div>
+            <p class="kicker">行程決策</p>
+            <h2>出發前 go/no-go 行程板</h2>
+          </div>
+        </div>
+        <p class="lead">這裡不是替領隊自動決定，而是把 2 天、3 天與壓縮行程放到同一張人工審查板：先看 gate 是否通過，再選版本。</p>
+
+        <div class="schedule-decision-board">
+          <div><div class="schedule-photo-strip"><figure class="field-media"><img loading="lazy" src="https://recreation.forest.gov.tw/Files/RT/Photo/064/05/064.jpg" alt="能高越嶺道高山景觀"><figcaption>行程節奏: 能高越嶺道高山景觀<span class="source-chips" aria-label="media provenance"><span class="source-badge tier-p0">官方來源</span><span class="source-badge source-family">官方照片</span><span class="source-badge boundary">候選證據</span><span class="source-badge review">需人工審查</span><span class="source-badge boundary">非安全真值</span></span></figcaption></figure>
+<figure class="field-media"><img loading="lazy" src="https://recreation.forest.gov.tw/Files/RT/Photo/064/05/%E9%9B%B2%E6%B5%B7%E4%BF%9D%E7%B7%9A%E6%89%80.JPG" alt="雲海保線所"><figcaption>行程節奏: 雲海保線所：中繼休息點與雲霧展望<span class="source-chips" aria-label="media provenance"><span class="source-badge tier-p0">官方來源</span><span class="source-badge source-family">官方照片</span><span class="source-badge boundary">候選證據</span><span class="source-badge review">需人工審查</span><span class="source-badge boundary">非安全真值</span></span></figcaption></figure>
+<figure class="field-media"><img loading="lazy" src="https://recreation.forest.gov.tw/Files/RT/Photo/064/05/%E5%A4%A9%E6%B1%A0%E5%B1%B1%E8%8E%8A.JPG" alt="天池山莊"><figcaption>行程節奏: 天池山莊：能高越嶺道 13.1K 山屋<span class="source-chips" aria-label="media provenance"><span class="source-badge tier-p0">官方來源</span><span class="source-badge source-family">官方照片</span><span class="source-badge boundary">候選證據</span><span class="source-badge review">需人工審查</span><span class="source-badge boundary">非安全真值</span></span></figcaption></figure>
+<figure class="field-media"><img loading="lazy" src="https://recreation.forest.gov.tw/Files/RT/Photo/064/05/%E8%83%BD%E9%AB%98%E8%B6%8A%E5%B6%BA%E9%81%93%E5%85%89%E6%89%B9%E5%85%AB%E8%A1%A8%E9%9B%B2%E6%B5%B7%E6%97%A5%E5%87%BA.JPG" alt="光被八表雲海日出"><figcaption>行程節奏: 光被八表雲海日出<span class="source-chips" aria-label="media provenance"><span class="source-badge tier-p0">官方來源</span><span class="source-badge source-family">官方照片</span><span class="source-badge boundary">候選證據</span><span class="source-badge review">需人工審查</span><span class="source-badge boundary">非安全真值</span></span></figcaption></figure></div></div>
+          <div class="schedule-gate-panel">
+            <span class="schedule-decision-tag">人工 go/no-go review</span>
+            <h3>先確認能不能照原計畫走</h3>
+            <p>行程版本只能進入人工討論；任何 gate 不完整，都要先補資料或改採保守版本。</p>
+            <div class="schedule-gates" aria-label="行程版本 gate">
+              <span><b>官方與天氣</b>入園、山屋、道路、CWA 天氣與警特報都要重查。</span>
+              <span><b>隊伍狀態</b>腳程、疲勞、傷勢、隊距與撤退條件必須明確。</span>
+              <span><b>裝置與導航</b>離線地圖、GPS/IMU、電力與通訊都要有備援。</span>
+              <span><b>保守原則</b>缺資料不是安全；缺任一關鍵條件就升級人工審查。</span>
+            </div>
+          </div>
+        </div>
+    <div class="schedule-board"><article class="schedule-version primary"><div class="schedule-version-head"><span class="schedule-decision-tag">建議主案</span><span>標準完成版</span><strong>2 天 1 夜</strong><p>以 55.2 km 路線摘要討論主線完成；適合已確認山屋、天氣、隊伍腳程與撤退時間的行程。</p></div><div class="schedule-version-gate"><b>採用條件</b>山屋/入園、天氣窗口、隊伍腳程、撤退時間與離線地圖都已確認。</div><div class="day-plan"><b>D1</b><div><h3>進入路線，抵達住宿節點</h3><p>用雲海保線所、黑水塘等節點檢查腳程與補水；傍晚前確認住宿與隔日天氣。</p></div></div>
+<div class="day-plan"><b>D2</b><div><h3>清晨出發，完成雙峰與回程</h3><p>把稜線啞口、光被八表與高山段當作時間壓力檢查點；延誤時優先保守撤退。</p></div></div></article>
+<article class="schedule-version slow"><div class="schedule-version-head"><span class="schedule-decision-tag">觀察主案</span><span>慢走觀察版</span><strong>3 天 2 夜</strong><p>把歷史、文化、自然、地形、季節與 P2 Scout-owned 回顧拆開，不把所有觀察壓在第二天。</p></div><div class="schedule-version-gate"><b>採用條件</b>活動目標包含教學、攝影、隊伍節奏保守，或需要更多緩衝時間。</div><div class="day-plan"><b>D1</b><div><h3>進入山區並建立路線共同畫面</h3><p>第一天只做節奏校準、補給檢查與雲海保線所短講，不急著消耗隊伍餘裕。</p></div></div>
+<div class="day-plan"><b>D2</b><div><h3>雙峰、稜線與展望觀察日</h3><p>把光被八表、稜線啞口、風口與天氣變化作為教學主題；每次停留都要有離開條件。</p></div></div>
+<div class="day-plan"><b>D3</b><div><h3>回程整理與 P2 回顧</h3><p>下山途中補足未看的歷史/自然點，並收集照片點、停留點、語音註記給下一次簡報。</p></div></div></article></div><div class="schedule-caution"><strong>壓縮行程只保留為人工核准候選，不進入預設建議。</strong><p>只有官方狀態、天氣窗口、隊伍體能、電力、導航可信度與撤退條件都充分時，才應列入討論。</p></div>
+      </div>
+    </section>
+
+    <section class="slide chapter-break" id="chapter-04"><img class="chapter-photo" loading="lazy" src="https://recreation.forest.gov.tw/Files/RT/Photo/064/05/064.jpg" alt="能高越嶺道高山景觀"><div class="chapter-inner"><div><span class="chapter-number">章節 04</span><p class="kicker">查證邊界</p><h2>最後才看資料能信到哪裡</h2><p class="chapter-copy">來源追溯、缺口與 stale risk 放在最後，但不可省略；Scout AI 必須揭露缺資料，不能把缺資料當安全。</p></div><div class="chapter-rhythm"><b>這章要帶隊伍抓住</b><span>簡報模式給隊伍看，資料模式給 operator 查</span>
+<span>candidate-only 不等於現地安全真值</span>
+<span>完整來源與 crawl seed 保留可追溯</span></div></div></section>
+
+    <section class="slide" id="sources">
+      <div class="slide-inner">
+        <div class="slide-head">
+          <div>
+            <p class="kicker">來源追溯</p>
+            <h2>這份簡報可以信任到什麼程度？</h2>
+          </div>
+        </div>
+        <p class="lead">先看資料能支撐哪些結論，再看完整來源追溯。Scout AI 應揭露缺口與邊界，不把缺資料解讀成安全。</p>
+        <div class="source-trust-layout"><figure class="source-trust-visual"><img loading="lazy" src="https://recreation.forest.gov.tw/Files/RT/Photo/064/05/064.jpg" alt="能高越嶺道高山景觀"><figcaption class="source-trust-caption"><span>來源代表圖 · 能高越嶺道高山景觀</span><span class="source-chips" aria-label="media provenance"><span class="source-badge tier-p0">官方來源</span><span class="source-badge source-family">官方照片</span><span class="source-badge boundary">候選證據</span><span class="source-badge review">需人工審查</span><span class="source-badge boundary">非安全真值</span></span></figcaption></figure><div class="trust-board source-brief-grid source-path" aria-label="來源信任路徑"><article class="trust-card good source-brief-card"><span class="source-step-index">01</span><div class="source-card-body"><span class="tag">信任摘要</span><b>4</b><p class="source-cue">CP/MCP 主要點、命名點與地圖標註、地圖 OCR 標籤 等 4 類 可支撐這份行前簡報。</p><p class="source-action"><b>簡報時</b>可以先引用這些來源建立共同畫面，但仍要在出發前 refresh 官方狀態。</p></div></article>
+<article class="trust-card warn source-brief-card"><span class="source-step-index">02</span><div class="source-card-body"><span class="tag">缺口</span><b>1</b><p class="source-cue">沒有必要來源缺口；出發前仍需重新整理官方狀態、天氣與路況。 可補強：Raster 標籤</p><p class="source-action"><b>缺資料時</b>明確說 evidence gap，不把缺資料解讀成安全，也不直接給 go/no-go。</p></div></article>
+<article class="trust-card warn source-brief-card"><span class="source-step-index">03</span><div class="source-card-body"><span class="tag">可追溯資料</span><b>4406</b><p class="source-cue">路線筆記與 Scout 自有回顧可提出線索，但不能單獨形成結論。</p><p class="source-action"><b>要查證</b>切到資料模式可看完整來源表、crawl seed 與 source tier catalog。</p></div></article>
+<article class="trust-card boundary source-brief-card"><span class="source-step-index">04</span><div class="source-card-body"><span class="tag">安全邊界</span><b>行前</b><p class="source-cue">沒有 live fetch；出發前仍需 refresh。</p><p class="source-action"><b>不可做</b>不得把這份簡報、模型文字或 P2 筆記升級為現地安全真值。</p></div></article></div></div>
+        <p class="mode-note">完整來源表、crawl seed 與機器可讀邊界保留在資料模式。</p>
+        <details class="source-details">
+          <summary>展開完整來源表與 crawl seed</summary>
+          <table>
+            <thead><tr><th>來源</th><th>層級</th><th>狀態</th><th>數量</th><th>用途</th></tr></thead>
+            <tbody><tr><td>CP/MCP 主要點</td><td>P1</td><td>已載入</td><td>6</td><td>代表性候選</td></tr>
+<tr><td>命名點與地圖標註</td><td>P1</td><td>已載入</td><td>8</td><td>代表性候選</td></tr>
+<tr><td>地圖 OCR 標籤</td><td>P1</td><td>已載入</td><td>1</td><td>審查後代表性候選</td></tr>
+<tr><td>官方/公開網頁案例</td><td>P0</td><td>已載入</td><td>1</td><td>主要簡報證據</td></tr>
+<tr><td>Raster 標籤</td><td>P1</td><td>尚缺</td><td>0</td><td>審查後代表性候選</td></tr>
+<tr><td>路線筆記候選</td><td>P2</td><td>已載入</td><td>4406</td><td>僅作 seed</td></tr>
+<tr><td>匯入清單</td><td>P2</td><td>已載入</td><td>1</td><td>僅作 provenance</td></tr>
+<tr><td>路線摘要</td><td>P2</td><td>已載入</td><td>1</td><td>路線範圍</td></tr></tbody>
+          </table>
+          <h3>路線筆記 seed policy</h3>
+          <p>路線筆記只作為 seed material；簡報結論應來自 P0/P1 收集結果，或已審核的 Scout-owned P2 evidence。</p>
+          <ol><li>chilai_nanhua_day1 <span>route_keyword</span></li>
+<li>奇萊-南華 <span>route_keyword</span></li>
+<li>奇萊南華 <span>route_keyword</span></li>
+<li>奇萊南峰 南華山 <span>route_keyword</span></li>
+<li>奇萊南峰南華山 <span>route_keyword</span></li>
+<li>chilai_nanhua_day1 崩壁 <span>route_note</span></li>
+<li>chilai_nanhua_day1 大崩塌 <span>route_note</span></li>
+<li>chilai_nanhua_day1 大崩壁 <span>route_note</span></li>
+<li>chilai_nanhua_day1 小崩壁 <span>route_note</span></li>
+<li>chilai_nanhua_day1 崩塌1 <span>route_note</span></li>
+<li>chilai_nanhua_day1 崩塌2 <span>route_note</span></li>
+<li>chilai_nanhua_day1 崩塌3 <span>route_note</span></li>
+<li>chilai_nanhua_day1 崩塌4 <span>route_note</span></li>
+<li>chilai_nanhua_day1 斷崖. <span>route_note</span></li>
+<li>chilai_nanhua_day1 橫切崩壁 <span>route_note</span></li>
+<li>chilai_nanhua_day1 橫切崩壁 <span>route_note</span></li>
+<li>chilai_nanhua_day1 14下崩壁 <span>route_note</span></li>
+<li>chilai_nanhua_day1 拉繩下斷崖 <span>route_note</span></li>
+<li>chilai_nanhua_day1 拉繩下斷崖 <span>route_note</span></li>
+<li>chilai_nanhua_day1 第一段崩壁 <span>route_note</span></li>
+<li>chilai_nanhua_day1 第三段崩壁 <span>route_note</span></li>
+<li>chilai_nanhua_day1 第二段崩壁 <span>route_note</span></li>
+<li>chilai_nanhua_day1 08瘦稜崩壁 <span>route_note</span></li>
+<li>chilai_nanhua_day1 101崩塌區 <span>route_note</span></li></ol>
+          <h3>Source tier catalog</h3>
+          <ul><li><strong>P0</strong> 林業及自然保育署自然步道資料 <span>official_baseline</span></li>
+<li><strong>P0</strong> 台灣山林悠遊網開放資料 <span>official_baseline</span></li>
+<li><strong>P0</strong> 臺灣登山申請一站式服務網 <span>official_baseline</span></li>
+<li><strong>P0</strong> 國家公園路線開放狀態 <span>official_status</span></li>
+<li><strong>P0</strong> 內政部國土測繪中心 DEM / DTM / 地形圖 <span>terrain_baseline</span></li>
+<li><strong>P0</strong> 中央氣象署 CODiS / 開放資料 <span>weather_baseline</span></li>
+<li><strong>P0</strong> NCDR 災害潛勢資料 <span>hazard_baseline</span></li>
+<li><strong>P0</strong> 消防署山域事故救援案件 <span>incident_baseline</span></li>
+<li><strong>P0</strong> TBN 台灣生物多樣性網絡 <span>natural_baseline</span></li>
+<li><strong>P0</strong> 中研院臺灣百年歷史地圖 <span>historical_map_baseline</span></li>
+<li><strong>P1</strong> 國家文化記憶庫 <span>cultural_expansion</span></li>
+<li><strong>P1</strong> 臺灣記憶 <span>historical_expansion</span></li>
+<li><strong>P1</strong> 原住民族古道空間資訊網 <span>cultural_spatial_expansion</span></li>
+<li><strong>P1</strong> 地質雲 <span>geology_expansion</span></li>
+<li><strong>P1</strong> OpenStreetMap / Overpass / OSM full-history <span>map_expansion</span></li>
+<li><strong>P1</strong> 魯地圖 <span>map_expansion</span></li>
+<li><strong>P1</strong> 地圖產生器 / 山友 GPX <span>community_route_seed</span></li>
+<li><strong>P1</strong> 健行筆記 <span>community_article_evidence</span></li>
+<li><strong>P1</strong> Hikingbook <span>community_route_evidence</span></li>
+<li><strong>P1</strong> 登山補給站 <span>community_article_evidence</span></li>
+<li><strong>P2</strong> 使用者實際 GPX <span>scout_owned_observation</span></li>
+<li><strong>P2</strong> 偏航紀錄 <span>scout_owned_observation</span></li>
+<li><strong>P2</strong> 停留點 <span>scout_owned_observation</span></li>
+<li><strong>P2</strong> 拍照點 <span>scout_owned_observation</span></li>
+<li><strong>P2</strong> 語音註記 <span>scout_owned_observation</span></li>
+<li><strong>P2</strong> IMU 異常 <span>scout_owned_observation</span></li>
+<li><strong>P2</strong> 氣壓高度變化 <span>scout_owned_observation</span></li>
+<li><strong>P2</strong> 前鋒/後衛距離 <span>scout_owned_team_context</span></li>
+<li><strong>P2</strong> 隊伍拉長紀錄 <span>scout_owned_team_context</span></li>
+<li><strong>P2</strong> 使用者回報「值得停」或「不值得停」 <span>scout_owned_review_feedback</span></li></ul>
+        </details>
+      </div>
+    </section>
+  </main>
+  <script>
+    (() => {
+      const buttons = Array.from(document.querySelectorAll('[data-briefing-mode]'));
+      const applyMode = (mode) => {
+        const normalized = mode === 'data' ? 'data' : 'briefing';
+        document.body.classList.toggle('mode-data', normalized === 'data');
+        document.body.classList.toggle('mode-briefing', normalized !== 'data');
+        buttons.forEach((button) => {
+          button.setAttribute('aria-pressed', String(button.dataset.briefingMode === normalized));
+        });
+      };
+      buttons.forEach((button) => {
+        button.addEventListener('click', () => applyMode(button.dataset.briefingMode));
+      });
+      applyMode('briefing');
+    })();
+  </script>
+</body>
+</html>

@@ -59,6 +59,36 @@ output_schema:
     - context_layers
     - observation_stops
     - itinerary_options
+    - visual_kit
+    - map_atlas
+    - source_tier_spine
+  layout_contract:
+    required_sections:
+      - visual_agenda
+      - photo_essay
+      - visual_kit
+      - map_atlas
+      - source_tier_spine
+      - historical_layer
+      - cultural_layer
+      - natural_layer
+      - terrain_layer
+      - seasonal_layer
+      - observation_points
+    source_tiers_required:
+      - P0
+      - P1
+      - P2
+    visual_direction:
+      palette: bold_expedition
+      accents:
+        - ember_red
+        - signal_yellow
+        - dark_ground
+      rule: Use real route images/maps where available; render missing visual slots as evidence gaps.
+    safety_boundary:
+      candidate_only: true
+      runtime_safety_truth: false
 failure_policy:
   on_error: record_failure
   retry:

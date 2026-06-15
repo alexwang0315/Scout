@@ -1,0 +1,1298 @@
+{
+  "artifact_kind": "pretrip_route_context_crawl_seed_plan",
+  "boundary": {
+    "candidate_only": true,
+    "compile_allowed": false,
+    "live_safety_api_calls_allowed": false,
+    "phase1_runtime_mutation_allowed": false,
+    "phase2_brain_writeback_allowed": false,
+    "raw_payloads_embedded": false,
+    "runtime_safety_truth": false,
+    "safety_api_called": false,
+    "source_fulltext_embedded": false,
+    "workspace_file_mutation_allowed": true
+  },
+  "generated_at": "2026-06-15T00:00:00Z",
+  "project_id": "chilai_nanhua_day1",
+  "route_keywords": [
+    "chilai_nanhua_day1",
+    "奇萊-南華",
+    "奇萊南華",
+    "奇萊南峰 南華山",
+    "奇萊南峰南華山"
+  ],
+  "route_note_seed_count": 60,
+  "route_note_seed_policy": {
+    "default_policy": "seed_only",
+    "required_before_briefing_conclusion": "P0/P1/P2 corroborating source evidence or human review",
+    "route_note_point_policy": "seed_only",
+    "route_notes_are_conclusion": false,
+    "route_notes_are_seed_material": true
+  },
+  "schema_version": "route_context_collection.v1",
+  "seed_count": 65,
+  "seeds": [
+    {
+      "candidate_only": true,
+      "expected_output": "web_case_evidence_or_official_source_record",
+      "query": "chilai_nanhua_day1",
+      "runtime_safety_truth": false,
+      "seed_id": "route_keyword.001",
+      "seed_kind": "route_keyword",
+      "target_tiers": [
+        "P0",
+        "P1"
+      ]
+    },
+    {
+      "candidate_only": true,
+      "expected_output": "web_case_evidence_or_official_source_record",
+      "query": "奇萊-南華",
+      "runtime_safety_truth": false,
+      "seed_id": "route_keyword.002",
+      "seed_kind": "route_keyword",
+      "target_tiers": [
+        "P0",
+        "P1"
+      ]
+    },
+    {
+      "candidate_only": true,
+      "expected_output": "web_case_evidence_or_official_source_record",
+      "query": "奇萊南華",
+      "runtime_safety_truth": false,
+      "seed_id": "route_keyword.003",
+      "seed_kind": "route_keyword",
+      "target_tiers": [
+        "P0",
+        "P1"
+      ]
+    },
+    {
+      "candidate_only": true,
+      "expected_output": "web_case_evidence_or_official_source_record",
+      "query": "奇萊南峰 南華山",
+      "runtime_safety_truth": false,
+      "seed_id": "route_keyword.004",
+      "seed_kind": "route_keyword",
+      "target_tiers": [
+        "P0",
+        "P1"
+      ]
+    },
+    {
+      "candidate_only": true,
+      "expected_output": "web_case_evidence_or_official_source_record",
+      "query": "奇萊南峰南華山",
+      "runtime_safety_truth": false,
+      "seed_id": "route_keyword.005",
+      "seed_kind": "route_keyword",
+      "target_tiers": [
+        "P0",
+        "P1"
+      ]
+    },
+    {
+      "candidate_only": true,
+      "expected_output": "corroborating_article_or_official_record",
+      "label": "崩壁",
+      "promote_to_route_context_point": false,
+      "query": "chilai_nanhua_day1 崩壁",
+      "route_note_category": "hazard_hint",
+      "runtime_safety_truth": false,
+      "seed_id": "route_note_seed.001",
+      "seed_kind": "route_note",
+      "source_candidate_id": "route_note.reference_021_reference_021_speed_filtered.wpt_104",
+      "source_ref": "candidates/route_note_candidates.json",
+      "target_tiers": [
+        "P0",
+        "P1"
+      ]
+    },
+    {
+      "candidate_only": true,
+      "expected_output": "corroborating_article_or_official_record",
+      "label": "大崩塌",
+      "promote_to_route_context_point": false,
+      "query": "chilai_nanhua_day1 大崩塌",
+      "route_note_category": "hazard_hint",
+      "runtime_safety_truth": false,
+      "seed_id": "route_note_seed.002",
+      "seed_kind": "route_note",
+      "source_candidate_id": "route_note.golden_route.wpt_051",
+      "source_ref": "candidates/route_note_candidates.json",
+      "target_tiers": [
+        "P0",
+        "P1"
+      ]
+    },
+    {
+      "candidate_only": true,
+      "expected_output": "corroborating_article_or_official_record",
+      "label": "大崩壁",
+      "promote_to_route_context_point": false,
+      "query": "chilai_nanhua_day1 大崩壁",
+      "route_note_category": "hazard_hint",
+      "runtime_safety_truth": false,
+      "seed_id": "route_note_seed.003",
+      "seed_kind": "route_note",
+      "source_candidate_id": "route_note.golden_route.wpt_052",
+      "source_ref": "candidates/route_note_candidates.json",
+      "target_tiers": [
+        "P0",
+        "P1"
+      ]
+    },
+    {
+      "candidate_only": true,
+      "expected_output": "corroborating_article_or_official_record",
+      "label": "小崩壁",
+      "promote_to_route_context_point": false,
+      "query": "chilai_nanhua_day1 小崩壁",
+      "route_note_category": "hazard_hint",
+      "runtime_safety_truth": false,
+      "seed_id": "route_note_seed.004",
+      "seed_kind": "route_note",
+      "source_candidate_id": "route_note.reference_021_reference_021_speed_filtered.wpt_070",
+      "source_ref": "candidates/route_note_candidates.json",
+      "target_tiers": [
+        "P0",
+        "P1"
+      ]
+    },
+    {
+      "candidate_only": true,
+      "expected_output": "corroborating_article_or_official_record",
+      "label": "崩塌1",
+      "promote_to_route_context_point": false,
+      "query": "chilai_nanhua_day1 崩塌1",
+      "route_note_category": "hazard_hint",
+      "runtime_safety_truth": false,
+      "seed_id": "route_note_seed.005",
+      "seed_kind": "route_note",
+      "source_candidate_id": "route_note.golden_route.wpt_069",
+      "source_ref": "candidates/route_note_candidates.json",
+      "target_tiers": [
+        "P0",
+        "P1"
+      ]
+    },
+    {
+      "candidate_only": true,
+      "expected_output": "corroborating_article_or_official_record",
+      "label": "崩塌2",
+      "promote_to_route_context_point": false,
+      "query": "chilai_nanhua_day1 崩塌2",
+      "route_note_category": "hazard_hint",
+      "runtime_safety_truth": false,
+      "seed_id": "route_note_seed.006",
+      "seed_kind": "route_note",
+      "source_candidate_id": "route_note.golden_route.wpt_070",
+      "source_ref": "candidates/route_note_candidates.json",
+      "target_tiers": [
+        "P0",
+        "P1"
+      ]
+    },
+    {
+      "candidate_only": true,
+      "expected_output": "corroborating_article_or_official_record",
+      "label": "崩塌3",
+      "promote_to_route_context_point": false,
+      "query": "chilai_nanhua_day1 崩塌3",
+      "route_note_category": "hazard_hint",
+      "runtime_safety_truth": false,
+      "seed_id": "route_note_seed.007",
+      "seed_kind": "route_note",
+      "source_candidate_id": "route_note.golden_route.wpt_071",
+      "source_ref": "candidates/route_note_candidates.json",
+      "target_tiers": [
+        "P0",
+        "P1"
+      ]
+    },
+    {
+      "candidate_only": true,
+      "expected_output": "corroborating_article_or_official_record",
+      "label": "崩塌4",
+      "promote_to_route_context_point": false,
+      "query": "chilai_nanhua_day1 崩塌4",
+      "route_note_category": "hazard_hint",
+      "runtime_safety_truth": false,
+      "seed_id": "route_note_seed.008",
+      "seed_kind": "route_note",
+      "source_candidate_id": "route_note.golden_route.wpt_072",
+      "source_ref": "candidates/route_note_candidates.json",
+      "target_tiers": [
+        "P0",
+        "P1"
+      ]
+    },
+    {
+      "candidate_only": true,
+      "expected_output": "corroborating_article_or_official_record",
+      "label": "斷崖.",
+      "promote_to_route_context_point": false,
+      "query": "chilai_nanhua_day1 斷崖.",
+      "route_note_category": "hazard_hint",
+      "runtime_safety_truth": false,
+      "seed_id": "route_note_seed.009",
+      "seed_kind": "route_note",
+      "source_candidate_id": "route_note.reference_002_reference_002_2024_09_14_________p_speed_filtered.wpt_399",
+      "source_ref": "candidates/route_note_candidates.json",
+      "target_tiers": [
+        "P0",
+        "P1"
+      ]
+    },
+    {
+      "candidate_only": true,
+      "expected_output": "corroborating_article_or_official_record",
+      "label": "橫切崩壁",
+      "promote_to_route_context_point": false,
+      "query": "chilai_nanhua_day1 橫切崩壁",
+      "route_note_category": "hazard_hint",
+      "runtime_safety_truth": false,
+      "seed_id": "route_note_seed.010",
+      "seed_kind": "route_note",
+      "source_candidate_id": "route_note.reference_018_reference_018_speed_filtered.wpt_152",
+      "source_ref": "candidates/route_note_candidates.json",
+      "target_tiers": [
+        "P0",
+        "P1"
+      ]
+    },
+    {
+      "candidate_only": true,
+      "expected_output": "corroborating_article_or_official_record",
+      "label": "橫切崩壁",
+      "promote_to_route_context_point": false,
+      "query": "chilai_nanhua_day1 橫切崩壁",
+      "route_note_category": "hazard_hint",
+      "runtime_safety_truth": false,
+      "seed_id": "route_note_seed.011",
+      "seed_kind": "route_note",
+      "source_candidate_id": "route_note.reference_020_reference_020__gpx_speed_filtered.wpt_123",
+      "source_ref": "candidates/route_note_candidates.json",
+      "target_tiers": [
+        "P0",
+        "P1"
+      ]
+    },
+    {
+      "candidate_only": true,
+      "expected_output": "corroborating_article_or_official_record",
+      "label": "14下崩壁",
+      "promote_to_route_context_point": false,
+      "query": "chilai_nanhua_day1 14下崩壁",
+      "route_note_category": "hazard_hint",
+      "runtime_safety_truth": false,
+      "seed_id": "route_note_seed.012",
+      "seed_kind": "route_note",
+      "source_candidate_id": "route_note.reference_009_reference_009_3_____gdb_speed_filtered.wpt_013",
+      "source_ref": "candidates/route_note_candidates.json",
+      "target_tiers": [
+        "P0",
+        "P1"
+      ]
+    },
+    {
+      "candidate_only": true,
+      "expected_output": "corroborating_article_or_official_record",
+      "label": "拉繩下斷崖",
+      "promote_to_route_context_point": false,
+      "query": "chilai_nanhua_day1 拉繩下斷崖",
+      "route_note_category": "hazard_hint",
+      "runtime_safety_truth": false,
+      "seed_id": "route_note_seed.013",
+      "seed_kind": "route_note",
+      "source_candidate_id": "route_note.reference_001_reference_001_20161119_20_speed_filtered.wpt_013",
+      "source_ref": "candidates/route_note_candidates.json",
+      "target_tiers": [
+        "P0",
+        "P1"
+      ]
+    },
+    {
+      "candidate_only": true,
+      "expected_output": "corroborating_article_or_official_record",
+      "label": "拉繩下斷崖",
+      "promote_to_route_context_point": false,
+      "query": "chilai_nanhua_day1 拉繩下斷崖",
+      "route_note_category": "hazard_hint",
+      "runtime_safety_truth": false,
+      "seed_id": "route_note_seed.014",
+      "seed_kind": "route_note",
+      "source_candidate_id": "route_note.reference_004_reference_004_c_documents_and_settings_administrator___20111127_29_gdb_gpx_speed_filtered.wpt_023",
+      "source_ref": "candidates/route_note_candidates.json",
+      "target_tiers": [
+        "P0",
+        "P1"
+      ]
+    },
+    {
+      "candidate_only": true,
+      "expected_output": "corroborating_article_or_official_record",
+      "label": "第一段崩壁",
+      "promote_to_route_context_point": false,
+      "query": "chilai_nanhua_day1 第一段崩壁",
+      "route_note_category": "hazard_hint",
+      "runtime_safety_truth": false,
+      "seed_id": "route_note_seed.015",
+      "seed_kind": "route_note",
+      "source_candidate_id": "route_note.reference_008_reference_008_chen661_5_gpx_speed_filtered.wpt_074",
+      "source_ref": "candidates/route_note_candidates.json",
+      "target_tiers": [
+        "P0",
+        "P1"
+      ]
+    },
+    {
+      "candidate_only": true,
+      "expected_output": "corroborating_article_or_official_record",
+      "label": "第三段崩壁",
+      "promote_to_route_context_point": false,
+      "query": "chilai_nanhua_day1 第三段崩壁",
+      "route_note_category": "hazard_hint",
+      "runtime_safety_truth": false,
+      "seed_id": "route_note_seed.016",
+      "seed_kind": "route_note",
+      "source_candidate_id": "route_note.reference_008_reference_008_chen661_5_gpx_speed_filtered.wpt_076",
+      "source_ref": "candidates/route_note_candidates.json",
+      "target_tiers": [
+        "P0",
+        "P1"
+      ]
+    },
+    {
+      "candidate_only": true,
+      "expected_output": "corroborating_article_or_official_record",
+      "label": "第二段崩壁",
+      "promote_to_route_context_point": false,
+      "query": "chilai_nanhua_day1 第二段崩壁",
+      "route_note_category": "hazard_hint",
+      "runtime_safety_truth": false,
+      "seed_id": "route_note_seed.017",
+      "seed_kind": "route_note",
+      "source_candidate_id": "route_note.reference_008_reference_008_chen661_5_gpx_speed_filtered.wpt_075",
+      "source_ref": "candidates/route_note_candidates.json",
+      "target_tiers": [
+        "P0",
+        "P1"
+      ]
+    },
+    {
+      "candidate_only": true,
+      "expected_output": "corroborating_article_or_official_record",
+      "label": "08瘦稜崩壁",
+      "promote_to_route_context_point": false,
+      "query": "chilai_nanhua_day1 08瘦稜崩壁",
+      "route_note_category": "hazard_hint",
+      "runtime_safety_truth": false,
+      "seed_id": "route_note_seed.018",
+      "seed_kind": "route_note",
+      "source_candidate_id": "route_note.reference_009_reference_009_3_____gdb_speed_filtered.wpt_007",
+      "source_ref": "candidates/route_note_candidates.json",
+      "target_tiers": [
+        "P0",
+        "P1"
+      ]
+    },
+    {
+      "candidate_only": true,
+      "expected_output": "corroborating_article_or_official_record",
+      "label": "101崩塌區",
+      "promote_to_route_context_point": false,
+      "query": "chilai_nanhua_day1 101崩塌區",
+      "route_note_category": "hazard_hint",
+      "runtime_safety_truth": false,
+      "seed_id": "route_note_seed.019",
+      "seed_kind": "route_note",
+      "source_candidate_id": "route_note.reference_002_reference_002_2024_09_14_________p_speed_filtered.wpt_245",
+      "source_ref": "candidates/route_note_candidates.json",
+      "target_tiers": [
+        "P0",
+        "P1"
+      ]
+    },
+    {
+      "candidate_only": true,
+      "expected_output": "corroborating_article_or_official_record",
+      "label": "8.5K崩壁",
+      "promote_to_route_context_point": false,
+      "query": "chilai_nanhua_day1 8.5K崩壁",
+      "route_note_category": "hazard_hint",
+      "runtime_safety_truth": false,
+      "seed_id": "route_note_seed.020",
+      "seed_kind": "route_note",
+      "source_candidate_id": "route_note.reference_021_reference_021_speed_filtered.wpt_065",
+      "source_ref": "candidates/route_note_candidates.json",
+      "target_tiers": [
+        "P0",
+        "P1"
+      ]
+    },
+    {
+      "candidate_only": true,
+      "expected_output": "corroborating_article_or_official_record",
+      "label": "014 崩塌區",
+      "promote_to_route_context_point": false,
+      "query": "chilai_nanhua_day1 014 崩塌區",
+      "route_note_category": "hazard_hint",
+      "runtime_safety_truth": false,
+      "seed_id": "route_note_seed.021",
+      "seed_kind": "route_note",
+      "source_candidate_id": "route_note.reference_002_reference_002_2024_09_14_________p_speed_filtered.wpt_029",
+      "source_ref": "candidates/route_note_candidates.json",
+      "target_tiers": [
+        "P0",
+        "P1"
+      ]
+    },
+    {
+      "candidate_only": true,
+      "expected_output": "corroborating_article_or_official_record",
+      "label": "083 崩塌區",
+      "promote_to_route_context_point": false,
+      "query": "chilai_nanhua_day1 083 崩塌區",
+      "route_note_category": "hazard_hint",
+      "runtime_safety_truth": false,
+      "seed_id": "route_note_seed.022",
+      "seed_kind": "route_note",
+      "source_candidate_id": "route_note.reference_002_reference_002_2024_09_14_________p_speed_filtered.wpt_211",
+      "source_ref": "candidates/route_note_candidates.json",
+      "target_tiers": [
+        "P0",
+        "P1"
+      ]
+    },
+    {
+      "candidate_only": true,
+      "expected_output": "corroborating_article_or_official_record",
+      "label": "090崩塌橫渡",
+      "promote_to_route_context_point": false,
+      "query": "chilai_nanhua_day1 090崩塌橫渡",
+      "route_note_category": "hazard_hint",
+      "runtime_safety_truth": false,
+      "seed_id": "route_note_seed.023",
+      "seed_kind": "route_note",
+      "source_candidate_id": "route_note.reference_002_reference_002_2024_09_14_________p_speed_filtered.wpt_222",
+      "source_ref": "candidates/route_note_candidates.json",
+      "target_tiers": [
+        "P0",
+        "P1"
+      ]
+    },
+    {
+      "candidate_only": true,
+      "expected_output": "corroborating_article_or_official_record",
+      "label": "10.1K崩壁",
+      "promote_to_route_context_point": false,
+      "query": "chilai_nanhua_day1 10.1K崩壁",
+      "route_note_category": "hazard_hint",
+      "runtime_safety_truth": false,
+      "seed_id": "route_note_seed.024",
+      "seed_kind": "route_note",
+      "source_candidate_id": "route_note.reference_021_reference_021_speed_filtered.wpt_057",
+      "source_ref": "candidates/route_note_candidates.json",
+      "target_tiers": [
+        "P0",
+        "P1"
+      ]
+    },
+    {
+      "candidate_only": true,
+      "expected_output": "corroborating_article_or_official_record",
+      "label": "高密箭竹林勿入",
+      "promote_to_route_context_point": false,
+      "query": "chilai_nanhua_day1 高密箭竹林勿入",
+      "route_note_category": "hazard_hint",
+      "runtime_safety_truth": false,
+      "seed_id": "route_note_seed.025",
+      "seed_kind": "route_note",
+      "source_candidate_id": "route_note.reference_021_reference_021_speed_filtered.wpt_102",
+      "source_ref": "candidates/route_note_candidates.json",
+      "target_tiers": [
+        "P0",
+        "P1"
+      ]
+    },
+    {
+      "candidate_only": true,
+      "expected_output": "corroborating_article_or_official_record",
+      "label": "054崩塌區結束",
+      "promote_to_route_context_point": false,
+      "query": "chilai_nanhua_day1 054崩塌區結束",
+      "route_note_category": "hazard_hint",
+      "runtime_safety_truth": false,
+      "seed_id": "route_note_seed.026",
+      "seed_kind": "route_note",
+      "source_candidate_id": "route_note.reference_002_reference_002_2024_09_14_________p_speed_filtered.wpt_156",
+      "source_ref": "candidates/route_note_candidates.json",
+      "target_tiers": [
+        "P0",
+        "P1"
+      ]
+    },
+    {
+      "candidate_only": true,
+      "expected_output": "corroborating_article_or_official_record",
+      "label": "102第二段崩壁",
+      "promote_to_route_context_point": false,
+      "query": "chilai_nanhua_day1 102第二段崩壁",
+      "route_note_category": "hazard_hint",
+      "runtime_safety_truth": false,
+      "seed_id": "route_note_seed.027",
+      "seed_kind": "route_note",
+      "source_candidate_id": "route_note.reference_002_reference_002_2024_09_14_________p_speed_filtered.wpt_246",
+      "source_ref": "candidates/route_note_candidates.json",
+      "target_tiers": [
+        "P0",
+        "P1"
+      ]
+    },
+    {
+      "candidate_only": true,
+      "expected_output": "corroborating_article_or_official_record",
+      "label": "103第三段崩壁",
+      "promote_to_route_context_point": false,
+      "query": "chilai_nanhua_day1 103第三段崩壁",
+      "route_note_category": "hazard_hint",
+      "runtime_safety_truth": false,
+      "seed_id": "route_note_seed.028",
+      "seed_kind": "route_note",
+      "source_candidate_id": "route_note.reference_002_reference_002_2024_09_14_________p_speed_filtered.wpt_248",
+      "source_ref": "candidates/route_note_candidates.json",
+      "target_tiers": [
+        "P0",
+        "P1"
+      ]
+    },
+    {
+      "candidate_only": true,
+      "expected_output": "corroborating_article_or_official_record",
+      "label": "259第二段崩壁",
+      "promote_to_route_context_point": false,
+      "query": "chilai_nanhua_day1 259第二段崩壁",
+      "route_note_category": "hazard_hint",
+      "runtime_safety_truth": false,
+      "seed_id": "route_note_seed.029",
+      "seed_kind": "route_note",
+      "source_candidate_id": "route_note.reference_018_reference_018_speed_filtered.wpt_020",
+      "source_ref": "candidates/route_note_candidates.json",
+      "target_tiers": [
+        "P0",
+        "P1"
+      ]
+    },
+    {
+      "candidate_only": true,
+      "expected_output": "corroborating_article_or_official_record",
+      "label": "260第三段崩壁",
+      "promote_to_route_context_point": false,
+      "query": "chilai_nanhua_day1 260第三段崩壁",
+      "route_note_category": "hazard_hint",
+      "runtime_safety_truth": false,
+      "seed_id": "route_note_seed.030",
+      "seed_kind": "route_note",
+      "source_candidate_id": "route_note.reference_018_reference_018_speed_filtered.wpt_021",
+      "source_ref": "candidates/route_note_candidates.json",
+      "target_tiers": [
+        "P0",
+        "P1"
+      ]
+    },
+    {
+      "candidate_only": true,
+      "expected_output": "corroborating_article_or_official_record",
+      "label": "028-拉繩下斷崖",
+      "promote_to_route_context_point": false,
+      "query": "chilai_nanhua_day1 028-拉繩下斷崖",
+      "route_note_category": "hazard_hint",
+      "runtime_safety_truth": false,
+      "seed_id": "route_note_seed.031",
+      "seed_kind": "route_note",
+      "source_candidate_id": "route_note.reference_011_reference_011_gpx_speed_filtered.wpt_571",
+      "source_ref": "candidates/route_note_candidates.json",
+      "target_tiers": [
+        "P0",
+        "P1"
+      ]
+    },
+    {
+      "candidate_only": true,
+      "expected_output": "corroborating_article_or_official_record",
+      "label": "028-拉繩下斷崖",
+      "promote_to_route_context_point": false,
+      "query": "chilai_nanhua_day1 028-拉繩下斷崖",
+      "route_note_category": "hazard_hint",
+      "runtime_safety_truth": false,
+      "seed_id": "route_note_seed.032",
+      "seed_kind": "route_note",
+      "source_candidate_id": "route_note.reference_016_reference_016_speed_filtered.wpt_571",
+      "source_ref": "candidates/route_note_candidates.json",
+      "target_tiers": [
+        "P0",
+        "P1"
+      ]
+    },
+    {
+      "candidate_only": true,
+      "expected_output": "corroborating_article_or_official_record",
+      "label": "039_崩壁展望點",
+      "promote_to_route_context_point": false,
+      "query": "chilai_nanhua_day1 039_崩壁展望點",
+      "route_note_category": "hazard_hint",
+      "runtime_safety_truth": false,
+      "seed_id": "route_note_seed.033",
+      "seed_kind": "route_note",
+      "source_candidate_id": "route_note.reference_002_reference_002_2024_09_14_________p_speed_filtered.wpt_098",
+      "source_ref": "candidates/route_note_candidates.json",
+      "target_tiers": [
+        "P0",
+        "P1"
+      ]
+    },
+    {
+      "candidate_only": true,
+      "expected_output": "corroborating_article_or_official_record",
+      "label": "059-第一段崩壁",
+      "promote_to_route_context_point": false,
+      "query": "chilai_nanhua_day1 059-第一段崩壁",
+      "route_note_category": "hazard_hint",
+      "runtime_safety_truth": false,
+      "seed_id": "route_note_seed.034",
+      "seed_kind": "route_note",
+      "source_candidate_id": "route_note.reference_017_reference_017_speed_filtered.wpt_112",
+      "source_ref": "candidates/route_note_candidates.json",
+      "target_tiers": [
+        "P0",
+        "P1"
+      ]
+    },
+    {
+      "candidate_only": true,
+      "expected_output": "corroborating_article_or_official_record",
+      "label": "059-第一段崩壁",
+      "promote_to_route_context_point": false,
+      "query": "chilai_nanhua_day1 059-第一段崩壁",
+      "route_note_category": "hazard_hint",
+      "runtime_safety_truth": false,
+      "seed_id": "route_note_seed.035",
+      "seed_kind": "route_note",
+      "source_candidate_id": "route_note.reference_019_reference_019_gpx_speed_filtered.wpt_070",
+      "source_ref": "candidates/route_note_candidates.json",
+      "target_tiers": [
+        "P0",
+        "P1"
+      ]
+    },
+    {
+      "candidate_only": true,
+      "expected_output": "corroborating_article_or_official_record",
+      "label": "060-第二段崩壁",
+      "promote_to_route_context_point": false,
+      "query": "chilai_nanhua_day1 060-第二段崩壁",
+      "route_note_category": "hazard_hint",
+      "runtime_safety_truth": false,
+      "seed_id": "route_note_seed.036",
+      "seed_kind": "route_note",
+      "source_candidate_id": "route_note.reference_017_reference_017_speed_filtered.wpt_113",
+      "source_ref": "candidates/route_note_candidates.json",
+      "target_tiers": [
+        "P0",
+        "P1"
+      ]
+    },
+    {
+      "candidate_only": true,
+      "expected_output": "corroborating_article_or_official_record",
+      "label": "060-第二段崩壁",
+      "promote_to_route_context_point": false,
+      "query": "chilai_nanhua_day1 060-第二段崩壁",
+      "route_note_category": "hazard_hint",
+      "runtime_safety_truth": false,
+      "seed_id": "route_note_seed.037",
+      "seed_kind": "route_note",
+      "source_candidate_id": "route_note.reference_019_reference_019_gpx_speed_filtered.wpt_071",
+      "source_ref": "candidates/route_note_candidates.json",
+      "target_tiers": [
+        "P0",
+        "P1"
+      ]
+    },
+    {
+      "candidate_only": true,
+      "expected_output": "corroborating_article_or_official_record",
+      "label": "061-第三段崩壁",
+      "promote_to_route_context_point": false,
+      "query": "chilai_nanhua_day1 061-第三段崩壁",
+      "route_note_category": "hazard_hint",
+      "runtime_safety_truth": false,
+      "seed_id": "route_note_seed.038",
+      "seed_kind": "route_note",
+      "source_candidate_id": "route_note.reference_017_reference_017_speed_filtered.wpt_114",
+      "source_ref": "candidates/route_note_candidates.json",
+      "target_tiers": [
+        "P0",
+        "P1"
+      ]
+    },
+    {
+      "candidate_only": true,
+      "expected_output": "corroborating_article_or_official_record",
+      "label": "061-第三段崩壁",
+      "promote_to_route_context_point": false,
+      "query": "chilai_nanhua_day1 061-第三段崩壁",
+      "route_note_category": "hazard_hint",
+      "runtime_safety_truth": false,
+      "seed_id": "route_note_seed.039",
+      "seed_kind": "route_note",
+      "source_candidate_id": "route_note.reference_019_reference_019_gpx_speed_filtered.wpt_072",
+      "source_ref": "candidates/route_note_candidates.json",
+      "target_tiers": [
+        "P0",
+        "P1"
+      ]
+    },
+    {
+      "candidate_only": true,
+      "expected_output": "corroborating_article_or_official_record",
+      "label": "拉繩下斷崖(頗長)",
+      "promote_to_route_context_point": false,
+      "query": "chilai_nanhua_day1 拉繩下斷崖(頗長)",
+      "route_note_category": "hazard_hint",
+      "runtime_safety_truth": false,
+      "seed_id": "route_note_seed.040",
+      "seed_kind": "route_note",
+      "source_candidate_id": "route_note.reference_012_reference_012_speed_filtered.wpt_044",
+      "source_ref": "candidates/route_note_candidates.json",
+      "target_tiers": [
+        "P0",
+        "P1"
+      ]
+    },
+    {
+      "candidate_only": true,
+      "expected_output": "corroborating_article_or_official_record",
+      "label": "023-崩塌地展望點",
+      "promote_to_route_context_point": false,
+      "query": "chilai_nanhua_day1 023-崩塌地展望點",
+      "route_note_category": "hazard_hint",
+      "runtime_safety_truth": false,
+      "seed_id": "route_note_seed.041",
+      "seed_kind": "route_note",
+      "source_candidate_id": "route_note.reference_002_reference_002_2024_09_14_________p_speed_filtered.wpt_062",
+      "source_ref": "candidates/route_note_candidates.json",
+      "target_tiers": [
+        "P0",
+        "P1"
+      ]
+    },
+    {
+      "candidate_only": true,
+      "expected_output": "corroborating_article_or_official_record",
+      "label": "030--拉繩下斷崖",
+      "promote_to_route_context_point": false,
+      "query": "chilai_nanhua_day1 030--拉繩下斷崖",
+      "route_note_category": "hazard_hint",
+      "runtime_safety_truth": false,
+      "seed_id": "route_note_seed.042",
+      "seed_kind": "route_note",
+      "source_candidate_id": "route_note.reference_013_reference_013_____speed_filtered.wpt_031",
+      "source_ref": "candidates/route_note_candidates.json",
+      "target_tiers": [
+        "P0",
+        "P1"
+      ]
+    },
+    {
+      "candidate_only": true,
+      "expected_output": "corroborating_article_or_official_record",
+      "label": "006 5.8K崩塌地",
+      "promote_to_route_context_point": false,
+      "query": "chilai_nanhua_day1 006 5.8K崩塌地",
+      "route_note_category": "hazard_hint",
+      "runtime_safety_truth": false,
+      "seed_id": "route_note_seed.043",
+      "seed_kind": "route_note",
+      "source_candidate_id": "route_note.reference_014_reference_014_____gdb_gpx_speed_filtered.wpt_005",
+      "source_ref": "candidates/route_note_candidates.json",
+      "target_tiers": [
+        "P0",
+        "P1"
+      ]
+    },
+    {
+      "candidate_only": true,
+      "expected_output": "corroborating_article_or_official_record",
+      "label": "044-5.5K崩塌地",
+      "promote_to_route_context_point": false,
+      "query": "chilai_nanhua_day1 044-5.5K崩塌地",
+      "route_note_category": "hazard_hint",
+      "runtime_safety_truth": false,
+      "seed_id": "route_note_seed.044",
+      "seed_kind": "route_note",
+      "source_candidate_id": "route_note.reference_013_reference_013_____speed_filtered.wpt_047",
+      "source_ref": "candidates/route_note_candidates.json",
+      "target_tiers": [
+        "P0",
+        "P1"
+      ]
+    },
+    {
+      "candidate_only": true,
+      "expected_output": "corroborating_article_or_official_record",
+      "label": "044-5.5K崩塌地",
+      "promote_to_route_context_point": false,
+      "query": "chilai_nanhua_day1 044-5.5K崩塌地",
+      "route_note_category": "hazard_hint",
+      "runtime_safety_truth": false,
+      "seed_id": "route_note_seed.045",
+      "seed_kind": "route_note",
+      "source_candidate_id": "route_note.reference_015_reference_015__gpx_speed_filtered.wpt_008",
+      "source_ref": "candidates/route_note_candidates.json",
+      "target_tiers": [
+        "P0",
+        "P1"
+      ]
+    },
+    {
+      "candidate_only": true,
+      "expected_output": "corroborating_article_or_official_record",
+      "label": "5.5K雲海保線所崩塌地",
+      "promote_to_route_context_point": false,
+      "query": "chilai_nanhua_day1 5.5K雲海保線所崩塌地",
+      "route_note_category": "hazard_hint",
+      "runtime_safety_truth": false,
+      "seed_id": "route_note_seed.046",
+      "seed_kind": "route_note",
+      "source_candidate_id": "route_note.reference_004_reference_004_c_documents_and_settings_administrator___20111127_29_gdb_gpx_speed_filtered.wpt_003",
+      "source_ref": "candidates/route_note_candidates.json",
+      "target_tiers": [
+        "P0",
+        "P1"
+      ]
+    },
+    {
+      "candidate_only": true,
+      "expected_output": "corroborating_article_or_official_record",
+      "label": "大崩壁 | 1640 m",
+      "promote_to_route_context_point": false,
+      "query": "chilai_nanhua_day1 大崩壁 | 1640 m",
+      "route_note_category": "hazard_hint",
+      "runtime_safety_truth": false,
+      "seed_id": "route_note_seed.047",
+      "seed_kind": "route_note",
+      "source_candidate_id": "route_note.reference_018_reference_018_speed_filtered.wpt_050",
+      "source_ref": "candidates/route_note_candidates.json",
+      "target_tiers": [
+        "P0",
+        "P1"
+      ]
+    },
+    {
+      "candidate_only": true,
+      "expected_output": "corroborating_article_or_official_record",
+      "label": "崩塌區 | 2010-11-20 7:30:42",
+      "promote_to_route_context_point": false,
+      "query": "chilai_nanhua_day1 崩塌區 | 2010-11-20 7:30:42",
+      "route_note_category": "hazard_hint",
+      "runtime_safety_truth": false,
+      "seed_id": "route_note_seed.048",
+      "seed_kind": "route_note",
+      "source_candidate_id": "route_note.reference_018_reference_018_speed_filtered.wpt_122",
+      "source_ref": "candidates/route_note_candidates.json",
+      "target_tiers": [
+        "P0",
+        "P1"
+      ]
+    },
+    {
+      "candidate_only": true,
+      "expected_output": "corroborating_article_or_official_record",
+      "label": "崩壁2 | 2013-09-10 7:49:08",
+      "promote_to_route_context_point": false,
+      "query": "chilai_nanhua_day1 崩壁2 | 2013-09-10 7:49:08",
+      "route_note_category": "hazard_hint",
+      "runtime_safety_truth": false,
+      "seed_id": "route_note_seed.049",
+      "seed_kind": "route_note",
+      "source_candidate_id": "route_note.reference_021_reference_021_speed_filtered.wpt_105",
+      "source_ref": "candidates/route_note_candidates.json",
+      "target_tiers": [
+        "P0",
+        "P1"
+      ]
+    },
+    {
+      "candidate_only": true,
+      "expected_output": "corroborating_article_or_official_record",
+      "label": "崩壁B | 2013-10-13 6:59:25",
+      "promote_to_route_context_point": false,
+      "query": "chilai_nanhua_day1 崩壁B | 2013-10-13 6:59:25",
+      "route_note_category": "hazard_hint",
+      "runtime_safety_truth": false,
+      "seed_id": "route_note_seed.050",
+      "seed_kind": "route_note",
+      "source_candidate_id": "route_note.golden_route.wpt_073",
+      "source_ref": "candidates/route_note_candidates.json",
+      "target_tiers": [
+        "P0",
+        "P1"
+      ]
+    },
+    {
+      "candidate_only": true,
+      "expected_output": "corroborating_article_or_official_record",
+      "label": "大崩壁拉繩 | 2013-10-11 8:54:17",
+      "promote_to_route_context_point": false,
+      "query": "chilai_nanhua_day1 大崩壁拉繩 | 2013-10-11 8:54:17",
+      "route_note_category": "hazard_hint",
+      "runtime_safety_truth": false,
+      "seed_id": "route_note_seed.051",
+      "seed_kind": "route_note",
+      "source_candidate_id": "route_note.golden_route.wpt_053",
+      "source_ref": "candidates/route_note_candidates.json",
+      "target_tiers": [
+        "P0",
+        "P1"
+      ]
+    },
+    {
+      "candidate_only": true,
+      "expected_output": "corroborating_article_or_official_record",
+      "label": "流水崩塌 | 2007-06-19 3:07:17PM",
+      "promote_to_route_context_point": false,
+      "query": "chilai_nanhua_day1 流水崩塌 | 2007-06-19 3:07:17PM",
+      "route_note_category": "hazard_hint",
+      "runtime_safety_truth": false,
+      "seed_id": "route_note_seed.052",
+      "seed_kind": "route_note",
+      "source_candidate_id": "route_note.reference_012_reference_012_speed_filtered.wpt_050",
+      "source_ref": "candidates/route_note_candidates.json",
+      "target_tiers": [
+        "P0",
+        "P1"
+      ]
+    },
+    {
+      "candidate_only": true,
+      "expected_output": "corroborating_article_or_official_record",
+      "label": "雲海保線所崩塌地 | 2007-06-19 1:04:12PM",
+      "promote_to_route_context_point": false,
+      "query": "chilai_nanhua_day1 雲海保線所崩塌地 | 2007-06-19 1:04:12PM",
+      "route_note_category": "hazard_hint",
+      "runtime_safety_truth": false,
+      "seed_id": "route_note_seed.053",
+      "seed_kind": "route_note",
+      "source_candidate_id": "route_note.reference_012_reference_012_speed_filtered.wpt_069",
+      "source_ref": "candidates/route_note_candidates.json",
+      "target_tiers": [
+        "P0",
+        "P1"
+      ]
+    },
+    {
+      "candidate_only": true,
+      "expected_output": "corroborating_article_or_official_record",
+      "label": "水源",
+      "promote_to_route_context_point": false,
+      "query": "chilai_nanhua_day1 水源",
+      "route_note_category": "camp_or_water_hint",
+      "runtime_safety_truth": false,
+      "seed_id": "route_note_seed.054",
+      "seed_kind": "route_note",
+      "source_candidate_id": "route_note.reference_018_reference_018_speed_filtered.wpt_068",
+      "source_ref": "candidates/route_note_candidates.json",
+      "target_tiers": [
+        "P0",
+        "P1"
+      ]
+    },
+    {
+      "candidate_only": true,
+      "expected_output": "corroborating_article_or_official_record",
+      "label": "水源",
+      "promote_to_route_context_point": false,
+      "query": "chilai_nanhua_day1 水源",
+      "route_note_category": "camp_or_water_hint",
+      "runtime_safety_truth": false,
+      "seed_id": "route_note_seed.055",
+      "seed_kind": "route_note",
+      "source_candidate_id": "route_note.reference_020_reference_020__gpx_speed_filtered.wpt_042",
+      "source_ref": "candidates/route_note_candidates.json",
+      "target_tiers": [
+        "P0",
+        "P1"
+      ]
+    },
+    {
+      "candidate_only": true,
+      "expected_output": "corroborating_article_or_official_record",
+      "label": "營地",
+      "promote_to_route_context_point": false,
+      "query": "chilai_nanhua_day1 營地",
+      "route_note_category": "camp_or_water_hint",
+      "runtime_safety_truth": false,
+      "seed_id": "route_note_seed.056",
+      "seed_kind": "route_note",
+      "source_candidate_id": "route_note.reference_018_reference_018_speed_filtered.wpt_153",
+      "source_ref": "candidates/route_note_candidates.json",
+      "target_tiers": [
+        "P0",
+        "P1"
+      ]
+    },
+    {
+      "candidate_only": true,
+      "expected_output": "corroborating_article_or_official_record",
+      "label": "營地",
+      "promote_to_route_context_point": false,
+      "query": "chilai_nanhua_day1 營地",
+      "route_note_category": "camp_or_water_hint",
+      "runtime_safety_truth": false,
+      "seed_id": "route_note_seed.057",
+      "seed_kind": "route_note",
+      "source_candidate_id": "route_note.reference_020_reference_020__gpx_speed_filtered.wpt_124",
+      "source_ref": "candidates/route_note_candidates.json",
+      "target_tiers": [
+        "P0",
+        "P1"
+      ]
+    },
+    {
+      "candidate_only": true,
+      "expected_output": "corroborating_article_or_official_record",
+      "label": "水源地",
+      "promote_to_route_context_point": false,
+      "query": "chilai_nanhua_day1 水源地",
+      "route_note_category": "camp_or_water_hint",
+      "runtime_safety_truth": false,
+      "seed_id": "route_note_seed.058",
+      "seed_kind": "route_note",
+      "source_candidate_id": "route_note.reference_002_reference_002_2024_09_14_________p_speed_filtered.wpt_357",
+      "source_ref": "candidates/route_note_candidates.json",
+      "target_tiers": [
+        "P0",
+        "P1"
+      ]
+    },
+    {
+      "candidate_only": true,
+      "expected_output": "corroborating_article_or_official_record",
+      "label": "活水源",
+      "promote_to_route_context_point": false,
+      "query": "chilai_nanhua_day1 活水源",
+      "route_note_category": "camp_or_water_hint",
+      "runtime_safety_truth": false,
+      "seed_id": "route_note_seed.059",
+      "seed_kind": "route_note",
+      "source_candidate_id": "route_note.golden_route.wpt_079",
+      "source_ref": "candidates/route_note_candidates.json",
+      "target_tiers": [
+        "P0",
+        "P1"
+      ]
+    },
+    {
+      "candidate_only": true,
+      "expected_output": "corroborating_article_or_official_record",
+      "label": "27營地",
+      "promote_to_route_context_point": false,
+      "query": "chilai_nanhua_day1 27營地",
+      "route_note_category": "camp_or_water_hint",
+      "runtime_safety_truth": false,
+      "seed_id": "route_note_seed.060",
+      "seed_kind": "route_note",
+      "source_candidate_id": "route_note.reference_003_reference_003_990418_gdb_speed_filtered.wpt_026",
+      "source_ref": "candidates/route_note_candidates.json",
+      "target_tiers": [
+        "P0",
+        "P1"
+      ]
+    }
+  ],
+  "source_tiers": [
+    {
+      "label": "林業及自然保育署自然步道資料",
+      "role": "official_baseline",
+      "source_id": "forest_trail_data",
+      "tier": "P0"
+    },
+    {
+      "label": "台灣山林悠遊網開放資料",
+      "role": "official_baseline",
+      "source_id": "taiwan_mountain_forest_open_data",
+      "tier": "P0"
+    },
+    {
+      "label": "臺灣登山申請一站式服務網",
+      "role": "official_baseline",
+      "source_id": "mountain_permit_service",
+      "tier": "P0"
+    },
+    {
+      "label": "國家公園路線開放狀態",
+      "role": "official_status",
+      "source_id": "national_park_route_status",
+      "tier": "P0"
+    },
+    {
+      "label": "內政部國土測繪中心 DEM / DTM / 地形圖",
+      "role": "terrain_baseline",
+      "source_id": "nlsc_dem_dtm_topomap",
+      "tier": "P0"
+    },
+    {
+      "label": "中央氣象署 CODiS / 開放資料",
+      "role": "weather_baseline",
+      "source_id": "cwa_codis_open_data",
+      "tier": "P0"
+    },
+    {
+      "label": "NCDR 災害潛勢資料",
+      "role": "hazard_baseline",
+      "source_id": "ncdr_disaster_potential",
+      "tier": "P0"
+    },
+    {
+      "label": "消防署山域事故救援案件",
+      "role": "incident_baseline",
+      "source_id": "nfa_mountain_rescue_cases",
+      "tier": "P0"
+    },
+    {
+      "label": "TBN 台灣生物多樣性網絡",
+      "role": "natural_baseline",
+      "source_id": "tbn_biodiversity",
+      "tier": "P0"
+    },
+    {
+      "label": "中研院臺灣百年歷史地圖",
+      "role": "historical_map_baseline",
+      "source_id": "as_taiwan_century_maps",
+      "tier": "P0"
+    },
+    {
+      "label": "國家文化記憶庫",
+      "role": "cultural_expansion",
+      "source_id": "national_culture_memory_bank",
+      "tier": "P1"
+    },
+    {
+      "label": "臺灣記憶",
+      "role": "historical_expansion",
+      "source_id": "taiwan_memory",
+      "tier": "P1"
+    },
+    {
+      "label": "原住民族古道空間資訊網",
+      "role": "cultural_spatial_expansion",
+      "source_id": "indigenous_trail_spatial_info",
+      "tier": "P1"
+    },
+    {
+      "label": "地質雲",
+      "role": "geology_expansion",
+      "source_id": "geology_cloud",
+      "tier": "P1"
+    },
+    {
+      "label": "OpenStreetMap / Overpass / OSM full-history",
+      "role": "map_expansion",
+      "source_id": "osm_overpass_history",
+      "tier": "P1"
+    },
+    {
+      "label": "魯地圖",
+      "role": "map_expansion",
+      "source_id": "rudymap",
+      "tier": "P1"
+    },
+    {
+      "label": "地圖產生器 / 山友 GPX",
+      "role": "community_route_seed",
+      "source_id": "map_generator_hiker_gpx",
+      "tier": "P1"
+    },
+    {
+      "label": "健行筆記",
+      "role": "community_article_evidence",
+      "source_id": "hiking_biji",
+      "tier": "P1"
+    },
+    {
+      "label": "Hikingbook",
+      "role": "community_route_evidence",
+      "source_id": "hikingbook",
+      "tier": "P1"
+    },
+    {
+      "label": "登山補給站",
+      "role": "community_article_evidence",
+      "source_id": "mountain_news_bbs",
+      "tier": "P1"
+    },
+    {
+      "label": "使用者實際 GPX",
+      "role": "scout_owned_observation",
+      "source_id": "user_completed_gpx",
+      "tier": "P2"
+    },
+    {
+      "label": "偏航紀錄",
+      "role": "scout_owned_observation",
+      "source_id": "off_route_records",
+      "tier": "P2"
+    },
+    {
+      "label": "停留點",
+      "role": "scout_owned_observation",
+      "source_id": "stay_points",
+      "tier": "P2"
+    },
+    {
+      "label": "拍照點",
+      "role": "scout_owned_observation",
+      "source_id": "photo_points",
+      "tier": "P2"
+    },
+    {
+      "label": "語音註記",
+      "role": "scout_owned_observation",
+      "source_id": "voice_notes",
+      "tier": "P2"
+    },
+    {
+      "label": "IMU 異常",
+      "role": "scout_owned_observation",
+      "source_id": "imu_anomalies",
+      "tier": "P2"
+    },
+    {
+      "label": "氣壓高度變化",
+      "role": "scout_owned_observation",
+      "source_id": "barometric_altitude_changes",
+      "tier": "P2"
+    },
+    {
+      "label": "前鋒/後衛距離",
+      "role": "scout_owned_team_context",
+      "source_id": "front_rear_distance",
+      "tier": "P2"
+    },
+    {
+      "label": "隊伍拉長紀錄",
+      "role": "scout_owned_team_context",
+      "source_id": "team_stretch_records",
+      "tier": "P2"
+    },
+    {
+      "label": "使用者回報「值得停」或「不值得停」",
+      "role": "scout_owned_review_feedback",
+      "source_id": "user_worth_stop_feedback",
+      "tier": "P2"
+    }
+  ]
+}

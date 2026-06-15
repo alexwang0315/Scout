@@ -1,0 +1,1046 @@
+{
+  "artifact_kind": "pretrip_route_context_points",
+  "boundary": {
+    "candidate_only": true,
+    "compile_allowed": false,
+    "live_safety_api_calls_allowed": false,
+    "phase1_runtime_mutation_allowed": false,
+    "phase2_brain_writeback_allowed": false,
+    "raw_payloads_embedded": false,
+    "runtime_safety_truth": false,
+    "safety_api_called": false,
+    "source_fulltext_embedded": false,
+    "workspace_file_mutation_allowed": true
+  },
+  "counts": {
+    "by_context_kind": {
+      "natural_context": 2,
+      "navigation_context": 1,
+      "resource_context": 3,
+      "risk_context": 2,
+      "route_context": 2,
+      "viewpoint": 1
+    },
+    "by_evidence_family": {
+      "article": 9,
+      "map_label": 1,
+      "mcp_candidates": 6,
+      "named_point": 8,
+      "named_point_evidence": 8,
+      "ocr": 1,
+      "ocr_label_evidence": 1,
+      "web_case_evidence": 1
+    },
+    "by_evidence_type": {
+      "major_critical_point": 6,
+      "named_point": 3,
+      "ocr_map_label": 1,
+      "web_case_evidence": 1
+    },
+    "by_sec6_layer": {
+      "cultural": 7,
+      "historical": 5,
+      "natural": 4,
+      "observation_point": 1,
+      "route_context": 1,
+      "seasonal": 4,
+      "terrain": 5
+    },
+    "by_sensitivity_level": {
+      "cultural_review": 4,
+      "public": 7
+    },
+    "by_source_tier": {
+      "P0": 1,
+      "P1": 10
+    },
+    "by_stop_advisory_candidate": {
+      "context_reference_only": 5,
+      "low_priority_context_reference": 1,
+      "pass_through_or_minimize_exposure": 2,
+      "short_stop_requires_contextual_permission": 3
+    },
+    "candidate_only": true,
+    "route_context_point_count": 11,
+    "runtime_safety_truth": false
+  },
+  "generated_at": "2026-06-15T00:00:00Z",
+  "point_count": 11,
+  "points": [
+    {
+      "accepted_evidence_page_count": 12,
+      "aliases": [
+        "林道叉路"
+      ],
+      "candidate_id": "route_context.mcp_candidates.mcp.old_forest_fork.001",
+      "candidate_only": true,
+      "confidence": "medium",
+      "context_kind": "navigation_context",
+      "display_label": "舊林道叉路",
+      "display_policy": {
+        "coordinate_precision": "fuzzy_250m",
+        "reason": "cultural context requires review before precise display",
+        "requires_human_review_before_display": true,
+        "show_exact_coordinate": false,
+        "show_label": true
+      },
+      "distance_m": 600.0,
+      "evidence_families": [
+        "article",
+        "mcp_candidates",
+        "named_point",
+        "named_point_evidence"
+      ],
+      "evidence_type": "major_critical_point",
+      "label": "舊林道叉路",
+      "lat": 24.05065393075347,
+      "linked_cp_candidates": [
+        "cp.start"
+      ],
+      "linked_named_points": [
+        "np.old_forest_fork"
+      ],
+      "lon": 121.21523100882769,
+      "mcp_classes": [
+        "fork_junction"
+      ],
+      "mention_page_count": 1,
+      "mention_ratio": 0.083,
+      "merged_evidence_types": [
+        "major_critical_point",
+        "named_point"
+      ],
+      "nearest_cp_candidate_id": "cp.start",
+      "observation_score": {
+        "candidate_only": true,
+        "observation_value": 61.0,
+        "reason_codes": [
+          "candidate_context",
+          "historical_context",
+          "cultural_context",
+          "natural_context"
+        ],
+        "risk_penalty": 0.0,
+        "runtime_safety_truth": false,
+        "value": 61.0
+      },
+      "phase1_runtime_mutation_allowed": false,
+      "phase2_brain_writeback_allowed": false,
+      "promotion_basis": "representative_candidate",
+      "reference_gaps": [
+        "hiking_biji",
+        "missing mandatory source family: hiking_biji",
+        "missing mandatory source family: sunriver_culture",
+        "sunriver_culture"
+      ],
+      "requires_human_review": true,
+      "review_state": "needs_human_review",
+      "runtime_safety_truth": false,
+      "safety_api_called": false,
+      "sec6_layers": [
+        "cultural",
+        "historical",
+        "natural",
+        "terrain"
+      ],
+      "sensitivity_level": "cultural_review",
+      "source_candidate_id": "mcp.old_forest_fork.001",
+      "source_families": [
+        "ptt_hiking"
+      ],
+      "source_freshness": {
+        "requires_refresh_before_runtime_truth": true,
+        "status": "unknown",
+        "ttl_policy": "refresh_when_source_pack_changes"
+      },
+      "source_path": "outputs/mcp/mcp_candidates.json",
+      "source_refs": [
+        {
+          "candidate_only": true,
+          "runtime_safety_truth": false,
+          "source_kind": "mcp_candidates",
+          "source_path": "outputs/mcp/mcp_candidates.json"
+        },
+        {
+          "candidate_only": true,
+          "runtime_safety_truth": false,
+          "source_kind": "named_point_evidence",
+          "source_path": "outputs/mcp/named_point_evidence.json"
+        }
+      ],
+      "source_tier": "P1",
+      "stop_advisory_candidate": "short_stop_requires_contextual_permission"
+    },
+    {
+      "accepted_evidence_page_count": 12,
+      "aliases": [
+        "黑水池",
+        "黑水塘營地"
+      ],
+      "candidate_id": "route_context.mcp_candidates.mcp.heishuitang.002",
+      "candidate_only": true,
+      "confidence": "high",
+      "context_kind": "resource_context",
+      "display_label": "黑水塘",
+      "display_policy": {
+        "coordinate_precision": "exact_candidate_coordinate",
+        "reason": "public candidate context",
+        "requires_human_review_before_display": false,
+        "show_exact_coordinate": true,
+        "show_label": true
+      },
+      "distance_m": 2350.0,
+      "evidence_families": [
+        "article",
+        "mcp_candidates",
+        "named_point",
+        "named_point_evidence"
+      ],
+      "evidence_type": "major_critical_point",
+      "label": "黑水塘",
+      "lat": 24.052010625600815,
+      "linked_cp_candidates": [
+        "cp.002"
+      ],
+      "linked_named_points": [
+        "np.heishuitang",
+        "np.yunhai_station"
+      ],
+      "lon": 121.22796119190753,
+      "mcp_classes": [
+        "water_source",
+        "camp_hut_structure"
+      ],
+      "mention_page_count": 4,
+      "mention_ratio": 0.333,
+      "merged_evidence_types": [
+        "major_critical_point",
+        "named_point"
+      ],
+      "nearest_cp_candidate_id": "cp.002",
+      "observation_score": {
+        "candidate_only": true,
+        "observation_value": 35.0,
+        "reason_codes": [
+          "candidate_context",
+          "resource_context"
+        ],
+        "risk_penalty": 0.0,
+        "runtime_safety_truth": false,
+        "value": 35.0
+      },
+      "phase1_runtime_mutation_allowed": false,
+      "phase2_brain_writeback_allowed": false,
+      "promotion_basis": "representative_candidate",
+      "reference_gaps": [],
+      "requires_human_review": true,
+      "review_state": "needs_human_review",
+      "runtime_safety_truth": false,
+      "safety_api_called": false,
+      "sec6_layers": [
+        "cultural",
+        "route_context"
+      ],
+      "sensitivity_level": "public",
+      "source_candidate_id": "mcp.heishuitang.002",
+      "source_families": [
+        "ptt_hiking",
+        "hiking_biji",
+        "sunriver_culture",
+        "public_web"
+      ],
+      "source_freshness": {
+        "requires_refresh_before_runtime_truth": true,
+        "status": "unknown",
+        "ttl_policy": "refresh_when_source_pack_changes"
+      },
+      "source_path": "outputs/mcp/mcp_candidates.json",
+      "source_refs": [
+        {
+          "candidate_only": true,
+          "runtime_safety_truth": false,
+          "source_kind": "mcp_candidates",
+          "source_path": "outputs/mcp/mcp_candidates.json"
+        },
+        {
+          "candidate_only": true,
+          "runtime_safety_truth": false,
+          "source_kind": "named_point_evidence",
+          "source_path": "outputs/mcp/named_point_evidence.json"
+        }
+      ],
+      "source_tier": "P1",
+      "stop_advisory_candidate": "context_reference_only"
+    },
+    {
+      "accepted_evidence_page_count": 12,
+      "aliases": [
+        "崩壁高繞入口"
+      ],
+      "candidate_id": "route_context.mcp_candidates.mcp.major_collapse_wall.003",
+      "candidate_only": true,
+      "confidence": "high",
+      "context_kind": "risk_context",
+      "display_label": "大崩壁",
+      "display_policy": {
+        "coordinate_precision": "exact_candidate_coordinate",
+        "reason": "public candidate context",
+        "requires_human_review_before_display": false,
+        "show_exact_coordinate": true,
+        "show_label": true
+      },
+      "distance_m": 4100.0,
+      "evidence_families": [
+        "article",
+        "mcp_candidates",
+        "named_point",
+        "named_point_evidence"
+      ],
+      "evidence_type": "major_critical_point",
+      "label": "大崩壁",
+      "lat": 24.046623408794403,
+      "linked_cp_candidates": [
+        "cp.003"
+      ],
+      "linked_named_points": [
+        "np.major_collapse_wall",
+        "np.rope_bridge"
+      ],
+      "lon": 121.23617763631046,
+      "mcp_classes": [
+        "extreme_terrain_hazard"
+      ],
+      "mention_page_count": 3,
+      "mention_ratio": 0.25,
+      "merged_evidence_types": [
+        "major_critical_point",
+        "named_point"
+      ],
+      "nearest_cp_candidate_id": "cp.003",
+      "observation_score": {
+        "candidate_only": true,
+        "observation_value": 25.0,
+        "reason_codes": [
+          "candidate_context",
+          "risk_context_penalty"
+        ],
+        "risk_penalty": 35.0,
+        "runtime_safety_truth": false,
+        "value": 0.0
+      },
+      "phase1_runtime_mutation_allowed": false,
+      "phase2_brain_writeback_allowed": false,
+      "promotion_basis": "representative_candidate",
+      "reference_gaps": [],
+      "requires_human_review": true,
+      "review_state": "needs_human_review",
+      "runtime_safety_truth": false,
+      "safety_api_called": false,
+      "sec6_layers": [
+        "cultural",
+        "seasonal",
+        "terrain"
+      ],
+      "sensitivity_level": "public",
+      "source_candidate_id": "mcp.major_collapse_wall.003",
+      "source_families": [
+        "ptt_hiking",
+        "hiking_biji",
+        "sunriver_culture"
+      ],
+      "source_freshness": {
+        "requires_refresh_before_runtime_truth": true,
+        "status": "unknown",
+        "ttl_policy": "refresh_when_source_pack_changes"
+      },
+      "source_path": "outputs/mcp/mcp_candidates.json",
+      "source_refs": [
+        {
+          "candidate_only": true,
+          "runtime_safety_truth": false,
+          "source_kind": "mcp_candidates",
+          "source_path": "outputs/mcp/mcp_candidates.json"
+        },
+        {
+          "candidate_only": true,
+          "runtime_safety_truth": false,
+          "source_kind": "named_point_evidence",
+          "source_path": "outputs/mcp/named_point_evidence.json"
+        }
+      ],
+      "source_tier": "P1",
+      "stop_advisory_candidate": "pass_through_or_minimize_exposure"
+    },
+    {
+      "accepted_evidence_page_count": 12,
+      "candidate_id": "route_context.mcp_candidates.mcp.hidden_forest.004",
+      "candidate_only": true,
+      "confidence": "medium",
+      "context_kind": "risk_context",
+      "display_label": "隱蔽樹林區",
+      "display_policy": {
+        "coordinate_precision": "fuzzy_250m",
+        "reason": "cultural context requires review before precise display",
+        "requires_human_review_before_display": true,
+        "show_exact_coordinate": false,
+        "show_label": true
+      },
+      "distance_m": 6900.0,
+      "evidence_families": [
+        "mcp_candidates"
+      ],
+      "evidence_type": "major_critical_point",
+      "label": "隱蔽樹林區",
+      "lat": 24.04476505704224,
+      "linked_cp_candidates": [
+        "cp.005"
+      ],
+      "linked_named_points": [
+        "np.hidden_forest"
+      ],
+      "lon": 121.25119037926197,
+      "mcp_classes": [
+        "hidden_forest_route_loss"
+      ],
+      "mention_ratio": 0.167,
+      "nearest_cp_candidate_id": "cp.005",
+      "observation_score": {
+        "candidate_only": true,
+        "observation_value": 47.0,
+        "reason_codes": [
+          "candidate_context",
+          "cultural_context",
+          "natural_context",
+          "risk_context_penalty"
+        ],
+        "risk_penalty": 35.0,
+        "runtime_safety_truth": false,
+        "value": 12.0
+      },
+      "phase1_runtime_mutation_allowed": false,
+      "phase2_brain_writeback_allowed": false,
+      "promotion_basis": "representative_candidate",
+      "reference_gaps": [
+        "missing mandatory source family: sunriver_culture"
+      ],
+      "requires_human_review": true,
+      "review_state": "needs_human_review",
+      "runtime_safety_truth": false,
+      "safety_api_called": false,
+      "sec6_layers": [
+        "cultural",
+        "natural",
+        "seasonal"
+      ],
+      "sensitivity_level": "cultural_review",
+      "source_candidate_id": "mcp.hidden_forest.004",
+      "source_freshness": {
+        "requires_refresh_before_runtime_truth": true,
+        "status": "unknown",
+        "ttl_policy": "refresh_when_source_pack_changes"
+      },
+      "source_path": "outputs/mcp/mcp_candidates.json",
+      "source_refs": [
+        {
+          "candidate_only": true,
+          "runtime_safety_truth": false,
+          "source_kind": "mcp_candidates",
+          "source_path": "outputs/mcp/mcp_candidates.json"
+        }
+      ],
+      "source_tier": "P1",
+      "stop_advisory_candidate": "pass_through_or_minimize_exposure"
+    },
+    {
+      "accepted_evidence_page_count": 12,
+      "aliases": [
+        "大景",
+        "啞口"
+      ],
+      "candidate_id": "route_context.mcp_candidates.mcp.ridge_pass_view.005",
+      "candidate_only": true,
+      "confidence": "medium",
+      "context_kind": "viewpoint",
+      "display_label": "稜線啞口觀景點",
+      "display_policy": {
+        "coordinate_precision": "exact_candidate_coordinate",
+        "reason": "public candidate context",
+        "requires_human_review_before_display": false,
+        "show_exact_coordinate": true,
+        "show_label": true
+      },
+      "distance_m": 8200.0,
+      "evidence_families": [
+        "article",
+        "mcp_candidates",
+        "named_point",
+        "named_point_evidence"
+      ],
+      "evidence_type": "major_critical_point",
+      "label": "稜線啞口觀景點",
+      "lat": 24.048184286803007,
+      "linked_cp_candidates": [
+        "cp.006"
+      ],
+      "linked_named_points": [
+        "np.ridge_pass_view"
+      ],
+      "lon": 121.25656644813716,
+      "mcp_classes": [
+        "viewpoint_trailhead_pass"
+      ],
+      "mention_page_count": 2,
+      "mention_ratio": 0.167,
+      "merged_evidence_types": [
+        "major_critical_point",
+        "named_point"
+      ],
+      "nearest_cp_candidate_id": "cp.006",
+      "observation_score": {
+        "candidate_only": true,
+        "observation_value": 69.0,
+        "reason_codes": [
+          "candidate_context",
+          "observation_point",
+          "historical_context"
+        ],
+        "risk_penalty": 0.0,
+        "runtime_safety_truth": false,
+        "value": 69.0
+      },
+      "phase1_runtime_mutation_allowed": false,
+      "phase2_brain_writeback_allowed": false,
+      "promotion_basis": "representative_candidate",
+      "reference_gaps": [
+        "hiking_biji",
+        "missing mandatory source family: hiking_biji",
+        "missing mandatory source family: ptt_hiking",
+        "ptt_hiking"
+      ],
+      "requires_human_review": true,
+      "review_state": "needs_human_review",
+      "runtime_safety_truth": false,
+      "safety_api_called": false,
+      "sec6_layers": [
+        "cultural",
+        "historical",
+        "observation_point",
+        "terrain"
+      ],
+      "sensitivity_level": "public",
+      "source_candidate_id": "mcp.ridge_pass_view.005",
+      "source_families": [
+        "sunriver_culture",
+        "public_web"
+      ],
+      "source_freshness": {
+        "requires_refresh_before_runtime_truth": true,
+        "status": "unknown",
+        "ttl_policy": "refresh_when_source_pack_changes"
+      },
+      "source_path": "outputs/mcp/mcp_candidates.json",
+      "source_refs": [
+        {
+          "candidate_only": true,
+          "runtime_safety_truth": false,
+          "source_kind": "mcp_candidates",
+          "source_path": "outputs/mcp/mcp_candidates.json"
+        },
+        {
+          "candidate_only": true,
+          "runtime_safety_truth": false,
+          "source_kind": "named_point_evidence",
+          "source_path": "outputs/mcp/named_point_evidence.json"
+        }
+      ],
+      "source_tier": "P1",
+      "stop_advisory_candidate": "short_stop_requires_contextual_permission"
+    },
+    {
+      "accepted_evidence_page_count": 12,
+      "aliases": [
+        "收訊點",
+        "手機訊號點"
+      ],
+      "candidate_id": "route_context.mcp_candidates.mcp.mobile_reception_ridge.006",
+      "candidate_only": true,
+      "confidence": "low",
+      "context_kind": "route_context",
+      "display_label": "稜線通訊點",
+      "display_policy": {
+        "coordinate_precision": "fuzzy_250m",
+        "reason": "cultural context requires review before precise display",
+        "requires_human_review_before_display": true,
+        "show_exact_coordinate": false,
+        "show_label": true
+      },
+      "distance_m": 9500.0,
+      "evidence_families": [
+        "article",
+        "mcp_candidates",
+        "named_point",
+        "named_point_evidence"
+      ],
+      "evidence_type": "major_critical_point",
+      "label": "稜線通訊點",
+      "lat": 24.0,
+      "linked_cp_candidates": [
+        "cp.039"
+      ],
+      "linked_named_points": [
+        "np.mobile_reception_ridge"
+      ],
+      "lon": 121.0,
+      "mcp_classes": [
+        "mobile_reception"
+      ],
+      "mention_page_count": 2,
+      "mention_ratio": 0.167,
+      "merged_evidence_types": [
+        "major_critical_point",
+        "named_point"
+      ],
+      "nearest_cp_candidate_id": "cp.039",
+      "observation_score": {
+        "candidate_only": true,
+        "observation_value": 37.0,
+        "reason_codes": [
+          "candidate_context",
+          "cultural_context"
+        ],
+        "risk_penalty": 0.0,
+        "runtime_safety_truth": false,
+        "value": 37.0
+      },
+      "phase1_runtime_mutation_allowed": false,
+      "phase2_brain_writeback_allowed": false,
+      "promotion_basis": "representative_candidate",
+      "reference_gaps": [
+        "missing mandatory source family: sunriver_culture",
+        "sunriver_culture"
+      ],
+      "requires_human_review": true,
+      "review_state": "suggested_insertion_review_required",
+      "runtime_safety_truth": false,
+      "safety_api_called": false,
+      "sec6_layers": [
+        "cultural",
+        "terrain"
+      ],
+      "sensitivity_level": "cultural_review",
+      "source_candidate_id": "mcp.mobile_reception_ridge.006",
+      "source_families": [
+        "ptt_hiking",
+        "hiking_biji"
+      ],
+      "source_freshness": {
+        "requires_refresh_before_runtime_truth": true,
+        "status": "unknown",
+        "ttl_policy": "refresh_when_source_pack_changes"
+      },
+      "source_path": "outputs/mcp/mcp_candidates.json",
+      "source_refs": [
+        {
+          "candidate_only": true,
+          "runtime_safety_truth": false,
+          "source_kind": "mcp_candidates",
+          "source_path": "outputs/mcp/mcp_candidates.json"
+        },
+        {
+          "candidate_only": true,
+          "runtime_safety_truth": false,
+          "source_kind": "named_point_evidence",
+          "source_path": "outputs/mcp/named_point_evidence.json"
+        }
+      ],
+      "source_tier": "P1",
+      "stop_advisory_candidate": "context_reference_only"
+    },
+    {
+      "aliases": [
+        "雲海保線所",
+        "保線所"
+      ],
+      "candidate_id": "route_context.named_point_evidence.np.yunhai_station",
+      "candidate_only": true,
+      "confidence": "medium",
+      "context_kind": "resource_context",
+      "display_label": "雲海保線所",
+      "display_policy": {
+        "coordinate_precision": "fuzzy_250m",
+        "reason": "cultural context requires review before precise display",
+        "requires_human_review_before_display": true,
+        "show_exact_coordinate": false,
+        "show_label": true
+      },
+      "distance_m": 1500.0,
+      "evidence_families": [
+        "article",
+        "named_point",
+        "named_point_evidence"
+      ],
+      "evidence_type": "named_point",
+      "label": "雲海保線所",
+      "lat": 24.04682851396501,
+      "lon": 121.22322332113981,
+      "mention_page_count": 2,
+      "mention_ratio": 0.167,
+      "observation_score": {
+        "candidate_only": true,
+        "observation_value": 69.0,
+        "reason_codes": [
+          "candidate_context",
+          "historical_context",
+          "cultural_context",
+          "resource_context",
+          "multi_source_support"
+        ],
+        "risk_penalty": 0.0,
+        "runtime_safety_truth": false,
+        "value": 69.0
+      },
+      "phase1_runtime_mutation_allowed": false,
+      "phase2_brain_writeback_allowed": false,
+      "point_classes": [
+        "camp_hut_structure"
+      ],
+      "promotion_basis": "representative_candidate",
+      "reference_gaps": [
+        "ptt_hiking"
+      ],
+      "requires_human_review": true,
+      "runtime_safety_truth": false,
+      "safety_api_called": false,
+      "sec6_layers": [
+        "historical",
+        "cultural",
+        "seasonal"
+      ],
+      "sensitivity_level": "cultural_review",
+      "source_candidate_id": "np.yunhai_station",
+      "source_families": [
+        "hiking_biji",
+        "sunriver_culture",
+        "offline_map_ocr"
+      ],
+      "source_freshness": {
+        "requires_refresh_before_runtime_truth": true,
+        "stale_risk": "low",
+        "status": "recent_enough_for_pretrip",
+        "ttl_policy": "refresh_when_search_pack_changes"
+      },
+      "source_path": "outputs/mcp/named_point_evidence.json",
+      "source_refs": [
+        {
+          "candidate_only": true,
+          "runtime_safety_truth": false,
+          "source_kind": "named_point_evidence",
+          "source_path": "outputs/mcp/named_point_evidence.json"
+        }
+      ],
+      "source_tier": "P1",
+      "stop_advisory_candidate": "short_stop_requires_contextual_permission"
+    },
+    {
+      "aliases": [
+        "固定繩",
+        "繩索橋"
+      ],
+      "candidate_id": "route_context.named_point_evidence.np.rope_bridge",
+      "candidate_only": true,
+      "confidence": "medium",
+      "context_kind": "route_context",
+      "display_label": "固定繩橋段",
+      "display_policy": {
+        "coordinate_precision": "exact_candidate_coordinate",
+        "reason": "public candidate context",
+        "requires_human_review_before_display": false,
+        "show_exact_coordinate": true,
+        "show_label": true
+      },
+      "distance_m": 4700.0,
+      "evidence_families": [
+        "article",
+        "named_point",
+        "named_point_evidence"
+      ],
+      "evidence_type": "named_point",
+      "label": "固定繩橋段",
+      "lat": 24.046623408794403,
+      "lon": 121.23617763631046,
+      "mention_page_count": 2,
+      "mention_ratio": 0.167,
+      "observation_score": {
+        "candidate_only": true,
+        "observation_value": 33.0,
+        "reason_codes": [
+          "candidate_context",
+          "multi_source_support"
+        ],
+        "risk_penalty": 0.0,
+        "runtime_safety_truth": false,
+        "value": 33.0
+      },
+      "phase1_runtime_mutation_allowed": false,
+      "phase2_brain_writeback_allowed": false,
+      "point_classes": [
+        "technical_infrastructure"
+      ],
+      "promotion_basis": "representative_candidate",
+      "reference_gaps": [
+        "ptt_hiking",
+        "sunriver_culture"
+      ],
+      "requires_human_review": true,
+      "runtime_safety_truth": false,
+      "safety_api_called": false,
+      "sec6_layers": [
+        "terrain"
+      ],
+      "sensitivity_level": "public",
+      "source_candidate_id": "np.rope_bridge",
+      "source_families": [
+        "hiking_biji",
+        "public_web"
+      ],
+      "source_freshness": {
+        "requires_refresh_before_runtime_truth": true,
+        "stale_risk": "medium",
+        "status": "review_recommended",
+        "ttl_policy": "refresh_when_search_pack_changes"
+      },
+      "source_path": "outputs/mcp/named_point_evidence.json",
+      "source_refs": [
+        {
+          "candidate_only": true,
+          "runtime_safety_truth": false,
+          "source_kind": "named_point_evidence",
+          "source_path": "outputs/mcp/named_point_evidence.json"
+        }
+      ],
+      "source_tier": "P1",
+      "stop_advisory_candidate": "low_priority_context_reference"
+    },
+    {
+      "aliases": [
+        "易迷樹林"
+      ],
+      "candidate_id": "route_context.named_point_evidence.np.hidden_forest",
+      "candidate_only": true,
+      "confidence": "medium",
+      "context_kind": "natural_context",
+      "display_label": "隱蔽樹林區",
+      "display_policy": {
+        "coordinate_precision": "exact_candidate_coordinate",
+        "reason": "public candidate context",
+        "requires_human_review_before_display": false,
+        "show_exact_coordinate": true,
+        "show_label": true
+      },
+      "distance_m": 6900.0,
+      "evidence_families": [
+        "article",
+        "named_point",
+        "named_point_evidence"
+      ],
+      "evidence_type": "named_point",
+      "label": "隱蔽樹林區",
+      "lat": 24.04476505704224,
+      "lon": 121.25119037926197,
+      "mention_page_count": 2,
+      "mention_ratio": 0.167,
+      "observation_score": {
+        "candidate_only": true,
+        "observation_value": 43.0,
+        "reason_codes": [
+          "candidate_context",
+          "natural_context",
+          "multi_source_support"
+        ],
+        "risk_penalty": 0.0,
+        "runtime_safety_truth": false,
+        "value": 43.0
+      },
+      "phase1_runtime_mutation_allowed": false,
+      "phase2_brain_writeback_allowed": false,
+      "point_classes": [
+        "hidden_forest_route_loss"
+      ],
+      "promotion_basis": "representative_candidate",
+      "reference_gaps": [
+        "sunriver_culture"
+      ],
+      "requires_human_review": true,
+      "runtime_safety_truth": false,
+      "safety_api_called": false,
+      "sec6_layers": [
+        "natural"
+      ],
+      "sensitivity_level": "public",
+      "source_candidate_id": "np.hidden_forest",
+      "source_families": [
+        "ptt_hiking",
+        "hiking_biji"
+      ],
+      "source_freshness": {
+        "requires_refresh_before_runtime_truth": true,
+        "stale_risk": "low",
+        "status": "recent_enough_for_pretrip",
+        "ttl_policy": "refresh_when_search_pack_changes"
+      },
+      "source_path": "outputs/mcp/named_point_evidence.json",
+      "source_refs": [
+        {
+          "candidate_only": true,
+          "runtime_safety_truth": false,
+          "source_kind": "named_point_evidence",
+          "source_path": "outputs/mcp/named_point_evidence.json"
+        }
+      ],
+      "source_tier": "P1",
+      "stop_advisory_candidate": "context_reference_only"
+    },
+    {
+      "candidate_id": "route_context.ocr_label_evidence.ocr.yunhai_station.001",
+      "candidate_only": true,
+      "confidence": 0.87,
+      "context_kind": "resource_context",
+      "display_label": "雲海保線所",
+      "display_policy": {
+        "coordinate_precision": "exact_candidate_coordinate",
+        "reason": "public candidate context",
+        "requires_human_review_before_display": false,
+        "show_exact_coordinate": true,
+        "show_label": true
+      },
+      "distance_m": null,
+      "evidence_families": [
+        "map_label",
+        "ocr",
+        "ocr_label_evidence"
+      ],
+      "evidence_type": "ocr_map_label",
+      "label": "雲海保線所",
+      "lat": null,
+      "lon": null,
+      "named_point_id": "np.yunhai_station",
+      "observation_score": {
+        "candidate_only": true,
+        "observation_value": 57.0,
+        "reason_codes": [
+          "candidate_context",
+          "historical_context",
+          "resource_context",
+          "multi_source_support"
+        ],
+        "risk_penalty": 0.0,
+        "runtime_safety_truth": false,
+        "value": 57.0
+      },
+      "phase1_runtime_mutation_allowed": false,
+      "phase2_brain_writeback_allowed": false,
+      "promotion_basis": "representative_candidate_after_review",
+      "requires_human_review": true,
+      "review_state": "needs_human_review",
+      "runtime_safety_truth": false,
+      "safety_api_called": false,
+      "sec6_layers": [
+        "historical",
+        "seasonal"
+      ],
+      "sensitivity_level": "public",
+      "source_candidate_id": "ocr.yunhai_station.001",
+      "source_freshness": {
+        "requires_refresh_before_runtime_truth": true,
+        "status": "unknown",
+        "ttl_policy": "refresh_when_raster_tile_changes"
+      },
+      "source_path": "outputs/mcp/mcp_ocr_labels.json",
+      "source_refs": [
+        {
+          "candidate_only": true,
+          "runtime_safety_truth": false,
+          "source_kind": "ocr_label_evidence",
+          "source_path": "outputs/mcp/mcp_ocr_labels.json"
+        },
+        {
+          "candidate_only": true,
+          "runtime_safety_truth": false,
+          "source_kind": "source_ref",
+          "source_ref": "local_map_tile.z15.x26142.y13991"
+        }
+      ],
+      "source_tier": "P1",
+      "stop_advisory_candidate": "context_reference_only"
+    },
+    {
+      "candidate_id": "route_context.web_case_evidence.web_case.chilai_nanhua_day1.official_forest_trail_064",
+      "candidate_only": true,
+      "context_kind": "natural_context",
+      "display_label": "能高越嶺道官方照片",
+      "display_policy": {
+        "coordinate_precision": "exact_candidate_coordinate",
+        "reason": "public candidate context",
+        "requires_human_review_before_display": false,
+        "show_exact_coordinate": true,
+        "show_label": true
+      },
+      "distance_m": null,
+      "evidence_families": [
+        "article",
+        "web_case_evidence"
+      ],
+      "evidence_type": "web_case_evidence",
+      "label": "能高越嶺道官方照片",
+      "lat": null,
+      "lon": null,
+      "observation_score": {
+        "candidate_only": true,
+        "observation_value": 49.0,
+        "reason_codes": [
+          "candidate_context",
+          "historical_context",
+          "natural_context"
+        ],
+        "risk_penalty": 0.0,
+        "runtime_safety_truth": false,
+        "value": 49.0
+      },
+      "phase1_runtime_mutation_allowed": false,
+      "phase2_brain_writeback_allowed": false,
+      "promotion_basis": "primary_briefing_evidence",
+      "requires_human_review": true,
+      "runtime_safety_truth": false,
+      "safety_api_called": false,
+      "sec6_layers": [
+        "historical",
+        "natural"
+      ],
+      "sensitivity_level": "public",
+      "source_candidate_id": "web_case.chilai_nanhua_day1.official_forest_trail_064",
+      "source_families": [
+        "official_baseline"
+      ],
+      "source_family": "official_baseline",
+      "source_freshness": {
+        "requires_refresh_before_runtime_truth": true,
+        "status": "unknown",
+        "ttl_policy": "refresh_before_public_answer_if_network_allowed"
+      },
+      "source_path": "outputs/layers/normalized/web_case_evidence.json",
+      "source_refs": [
+        {
+          "candidate_only": true,
+          "runtime_safety_truth": false,
+          "source_kind": "web_case_evidence",
+          "source_path": "outputs/layers/normalized/web_case_evidence.json"
+        }
+      ],
+      "source_tier": "P0",
+      "stop_advisory_candidate": "context_reference_only"
+    }
+  ],
+  "project_id": "chilai_nanhua_day1",
+  "schema_version": "route_context_collection.v1",
+  "source_evidence_ref": "normalized/context/route_context/route_context_evidence.json"
+}

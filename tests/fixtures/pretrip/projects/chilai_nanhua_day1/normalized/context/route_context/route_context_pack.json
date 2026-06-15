@@ -1,0 +1,138 @@
+{
+  "artifact_kind": "pretrip_route_context_pack",
+  "boundary": {
+    "candidate_only": true,
+    "compile_allowed": false,
+    "live_safety_api_calls_allowed": false,
+    "phase1_runtime_mutation_allowed": false,
+    "phase2_brain_writeback_allowed": false,
+    "raw_payloads_embedded": false,
+    "runtime_safety_truth": false,
+    "safety_api_called": false,
+    "source_fulltext_embedded": false,
+    "workspace_file_mutation_allowed": true
+  },
+  "counts": {
+    "by_context_kind": {
+      "natural_context": 2,
+      "navigation_context": 1,
+      "resource_context": 3,
+      "risk_context": 2,
+      "route_context": 2,
+      "viewpoint": 1
+    },
+    "by_evidence_family": {
+      "article": 9,
+      "map_label": 1,
+      "mcp_candidates": 6,
+      "named_point": 8,
+      "named_point_evidence": 8,
+      "ocr": 1,
+      "ocr_label_evidence": 1,
+      "web_case_evidence": 1
+    },
+    "by_evidence_type": {
+      "major_critical_point": 6,
+      "named_point": 3,
+      "ocr_map_label": 1,
+      "web_case_evidence": 1
+    },
+    "by_sec6_layer": {
+      "cultural": 7,
+      "historical": 5,
+      "natural": 4,
+      "observation_point": 1,
+      "route_context": 1,
+      "seasonal": 4,
+      "terrain": 5
+    },
+    "by_sensitivity_level": {
+      "cultural_review": 4,
+      "public": 7
+    },
+    "by_source_tier": {
+      "P0": 1,
+      "P1": 10
+    },
+    "by_stop_advisory_candidate": {
+      "context_reference_only": 5,
+      "low_priority_context_reference": 1,
+      "pass_through_or_minimize_exposure": 2,
+      "short_stop_requires_contextual_permission": 3
+    },
+    "candidate_only": true,
+    "route_context_point_count": 11,
+    "runtime_safety_truth": false
+  },
+  "crawl_seed_plan_ref": "normalized/context/route_context/crawl_seed_plan.json",
+  "generated_at": "2026-06-15T00:00:00Z",
+  "observation_scoring_policy": {
+    "candidate_only": true,
+    "formula": "observation_value_minus_risk_penalty",
+    "runtime_safety_truth": false,
+    "short_stop_requires": "scout.ai.contextual_permission.assess.v0"
+  },
+  "point_count": 11,
+  "project_id": "chilai_nanhua_day1",
+  "query_policy": {
+    "local_answer_sources": [
+      "route_context_points",
+      "source_manifest",
+      "route_summary"
+    ],
+    "mode": "cache_first_tool_second",
+    "stop_or_delay_advice_requires_contextual_permission": true
+  },
+  "route_context_briefing_ref": "outputs/briefings/route_context_briefing.html",
+  "route_context_evidence_ref": "normalized/context/route_context/route_context_evidence.json",
+  "route_context_media_manifest_ref": "normalized/context/route_context/media_manifest.json",
+  "route_context_points_ref": "candidates/route_context_points.json",
+  "route_note_point_policy": "seed_only",
+  "route_summary": {
+    "bbox_wgs84": {
+      "max_lat": 24.053969560191035,
+      "max_lon": 121.28102609887719,
+      "min_lat": 23.872665725648403,
+      "min_lon": 121.17726685479283
+    },
+    "distance_m": 55174.67,
+    "elevation_max_m": 3350.81,
+    "elevation_min_m": 1216.69,
+    "ended_at": "2013-10-13T06:23:04Z",
+    "point_count": 2612,
+    "raw_route_points_embedded": false,
+    "route_name": "2013-10-08 10:58:50 每日記錄",
+    "started_at": "2013-10-08T02:58:50Z"
+  },
+  "route_summary_ref": "normalized/routes/route_summary.json",
+  "schema_version": "route_context_collection.v1",
+  "sensitivity_policy": {
+    "cultural_review": {
+      "coordinate_precision": "fuzzy_250m",
+      "requires_human_review_before_display": true,
+      "show_exact_coordinate": false
+    },
+    "public": {
+      "requires_human_review_before_display": false,
+      "show_exact_coordinate": true
+    },
+    "restricted": {
+      "coordinate_precision": "hidden_or_area_only",
+      "requires_human_review_before_display": true,
+      "show_exact_coordinate": false
+    },
+    "sensitive": {
+      "coordinate_precision": "fuzzy_250m",
+      "requires_human_review_before_display": true,
+      "show_exact_coordinate": false
+    }
+  },
+  "source_manifest_ref": "normalized/context/route_context/source_manifest.json",
+  "source_strategy": {
+    "P0": "Scout baseline sources. Use for official route, terrain, weather, hazard, rescue, biodiversity, and historical-map grounding.",
+    "P1": "Expansion sources. Use for public named points, route stories, OSM/Overpass, community articles, and map labels.",
+    "P2": "Scout-owned observations. Use as seeds and review feedback; do not promote to broad route context without corroboration.",
+    "briefing_conclusion_policy": "prefer P0/P1 crawler or official evidence; cite P2 only as Scout-owned observation or seed",
+    "route_note_policy": "route notes are crawler seeds by default, not briefing conclusions"
+  }
+}
