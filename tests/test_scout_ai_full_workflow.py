@@ -754,6 +754,39 @@ def test_full_workflow_uses_direct_retreat_micro_decision() -> None:
     assert result.boundary.runtime_safety_truth is False
 
 
+def test_full_workflow_uses_micro_decision_for_weather_fatigue_retreat() -> None:
+    result = run_scout_ai_full_workflow(
+        "天氣變差且隊友疲勞，是否需要撤退？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=5,
+    )
+
+    assert result.answerability == "partial_evidence_with_missing_context"
+    assert result.selected_tool_count == 4
+    assert result.executed_tool_count == 4
+    assert result.completed_tool_count == 4
+    assert result.missing_evidence_count == 3
+    contextual = _workflow_source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
+    summary = contextual["top_result_summary"]
+    assert summary["action"] == "retreat"
+    assert summary["decision"] == "GO"
+    assert summary["allowed"] is True
+    assert _workflow_source(result, WEATHER_WINDOW_TOOL_ID)["missing_fields"]
+    assert _workflow_source(result, ENERGY_VITALS_TOOL_ID)["missing_fields"]
+    assert _workflow_source(result, PACE_GUARDIAN_TOOL_ID)["missing_fields"] == [
+        "member_pace_profile"
+    ]
+    assert result.decision_output["answerSourceToolId"] == CONTEXTUAL_PERMISSION_TOOL_ID
+    assert result.decision_output["action"] == "retreat"
+    assert result.decision_output["decision"] == "GO"
+    assert result.decision_output["allowed"] is True
+    assert result.decision_output["firstLayer"]["decision"] == "可以撤退。"
+    assert "開始撤退" in result.answer
+    assert "天氣決策" in result.answer
+    assert result.boundary.runtime_safety_truth is False
+
+
 def test_full_workflow_runs_route_context_experience_guide_question() -> None:
     result = run_scout_ai_full_workflow(
         "下一個觀察點在哪？哪裡適合拍攝大景？",

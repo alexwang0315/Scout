@@ -688,6 +688,28 @@ def test_planner_selects_contextual_permission_for_direct_retreat_question() -> 
     assert item.boundary.runtime_safety_truth is False
 
 
+def test_planner_selects_micro_decision_for_weather_fatigue_retreat_question() -> None:
+    plan = plan_scout_ai_tools(
+        _query("天氣變差且隊友疲勞，是否需要撤退？"),
+        project_root=PROJECT_ROOT,
+    )
+
+    tool_ids = _tool_ids(plan)
+    assert WEATHER_WINDOW_TOOL_ID in tool_ids
+    assert ENERGY_VITALS_TOOL_ID in tool_ids
+    assert PACE_GUARDIAN_TOOL_ID in tool_ids
+    assert CONTEXTUAL_PERMISSION_TOOL_ID in tool_ids
+
+    item = _single_tool(plan, CONTEXTUAL_PERMISSION_TOOL_ID)
+    assert item.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+    assert item.implementation_status == "ready_current_tool"
+    assert item.request is not None
+    assert item.request["tool_id"] == CONTEXTUAL_PERMISSION_TOOL_ID
+    assert item.request["arguments"] == {"action": "retreat"}
+    assert item.missing_fields == []
+    assert item.boundary.runtime_safety_truth is False
+
+
 def test_planner_selects_route_context_for_experience_guide_question() -> None:
     plan = plan_scout_ai_tools(
         _query("下一個觀察點在哪？哪裡適合拍攝大景？"),
