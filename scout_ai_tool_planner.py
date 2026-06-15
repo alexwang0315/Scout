@@ -20,6 +20,7 @@ from scout_map_perception_tool import MAP_PERCEPTION_TOOL_ID
 from scout_risk_score_tool import RISK_SCORE_TOOL_ID
 from scout_terrain_score_tool import TERRAIN_SCORE_TOOL_ID
 from scout_weather_window_tool import WEATHER_WINDOW_TOOL_ID
+from scout_route_readiness_tool import ROUTE_READINESS_TOOL_ID
 from scout_contextual_permission_tool import CONTEXTUAL_PERMISSION_TOOL_ID
 from scout_route_context_tool import ROUTE_CONTEXT_TOOL_ID
 from scout_pace_guardian_tool import PACE_GUARDIAN_TOOL_ID
@@ -147,6 +148,13 @@ def plan_scout_ai_tools(
             (
                 WEATHER_WINDOW_TOOL_ID,
                 "Question asks about weather window, rain, thunderstorm, fog, wind, or whether to camp/shelter.",
+            )
+        )
+    if _looks_like_route_readiness_question(normalized_question):
+        selected.append(
+            (
+                ROUTE_READINESS_TOOL_ID,
+                "Question asks for pre-trip Route Readiness / departure Go-No-Go: route/date/team/experience/equipment/transport/weather/daylight and CP Graph readiness.",
             )
         )
     if _looks_like_energy_vitals_question(normalized_question):
@@ -463,6 +471,44 @@ def _looks_like_weather_question(text: str) -> bool:
             "紮營",
             "扎營",
             "避雨",
+        ),
+    )
+
+
+def _looks_like_route_readiness_question(text: str) -> bool:
+    if _looks_like_contextual_permission_question(text) and not _has_any(
+        text,
+        (
+            "出發",
+            "行前",
+            "pretrip",
+            "departure",
+            "go/no-go",
+            "gono",
+        ),
+    ):
+        return False
+    return _has_any(
+        text,
+        (
+            "routereadiness",
+            "departuregate",
+            "pretripgonogo",
+            "go/no-go",
+            "gono",
+            "出發前",
+            "行前",
+            "可以出發",
+            "能出發",
+            "要不要出發",
+            "是否出發",
+            "出發決策",
+            "departure gate",
+            "departure readiness",
+            "route readiness",
+            "pretrip readiness",
+            "go no go",
+            "gonogo",
         ),
     )
 

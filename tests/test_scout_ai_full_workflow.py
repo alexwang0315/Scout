@@ -13,6 +13,7 @@ from scout_pace_guardian_tool import PACE_GUARDIAN_TOOL_ID
 from scout_equipment_resource_tool import EQUIPMENT_RESOURCE_TOOL_ID
 from scout_team_status_tool import TEAM_STATUS_TOOL_ID
 from scout_post_trip_review_tool import POST_TRIP_REVIEW_TOOL_ID
+from scout_route_readiness_tool import ROUTE_READINESS_TOOL_ID
 from scout_route_architecture_tool import ROUTE_ARCHITECTURE_TOOL_ID
 from scout_route_context_tool import ROUTE_CONTEXT_TOOL_ID
 from scout_risk_score_tool import RISK_SCORE_TOOL_ID
@@ -255,6 +256,32 @@ def test_full_workflow_runs_equipment_resource_question() -> None:
         "Equipment / Resource Intelligence"
     )
     assert "裝備資源判斷" in result.answer
+    assert result.boundary.runtime_safety_truth is False
+
+
+def test_full_workflow_runs_route_readiness_question() -> None:
+    result = run_scout_ai_full_workflow(
+        "出發前 Go/No-Go 可以出發嗎？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=3,
+    )
+
+    assert result.answerability == "partial_evidence_with_missing_context"
+    assert result.selected_tool_count == 1
+    assert result.executed_tool_count == 1
+    assert result.completed_tool_count == 1
+    assert result.contract_gap_count == 0
+    assert result.failed_tool_count == 0
+    assert result.missing_evidence_count == 1
+    assert result.sources[0]["tool_id"] == ROUTE_READINESS_TOOL_ID
+    assert result.sources[0]["top_result_summary"]["decision"] == "DELAY"
+    assert result.sources[0]["top_result_summary"]["route_readiness"]["role"] == (
+        "Pre-Trip Route Readiness / Departure Gate"
+    )
+    assert "user_experience_level" in result.sources[0]["missing_fields"]
+    assert "出發前判斷" in result.answer
+    assert "runtime safety truth" in result.answer
     assert result.boundary.runtime_safety_truth is False
 
 

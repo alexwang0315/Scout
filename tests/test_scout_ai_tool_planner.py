@@ -8,6 +8,7 @@ from scout_ai_tool_planner import (
     ENERGY_VITALS_TOOL_ID,
     INS_DR_TRACE_TOOL_ID,
     LIVE_NAVIGATION_STATE_TOOL_ID,
+    ROUTE_READINESS_TOOL_ID,
     ROUTE_CONTEXT_TOOL_ID,
     ROUTE_ARCHITECTURE_TOOL_ID,
     PACE_GUARDIAN_TOOL_ID,
@@ -101,6 +102,21 @@ def test_planner_selects_weather_ready_tool_for_weather_questions() -> None:
     assert item.required_fields == ["project_root"]
     assert item.missing_fields == []
     assert item.boundary.live_safety_api_calls_allowed is False
+
+
+def test_planner_selects_route_readiness_for_pretrip_go_no_go_question() -> None:
+    plan = plan_scout_ai_tools(
+        _query("出發前 Go/No-Go 可以出發嗎？"),
+        project_root=PROJECT_ROOT,
+    )
+
+    item = _single_tool(plan, ROUTE_READINESS_TOOL_ID)
+    assert item.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+    assert item.implementation_status == "ready_current_tool"
+    assert item.request is not None
+    assert item.request["tool_id"] == ROUTE_READINESS_TOOL_ID
+    assert item.missing_fields == []
+    assert item.boundary.runtime_safety_truth is False
 
 
 def test_planner_selects_contextual_permission_for_micro_decision() -> None:

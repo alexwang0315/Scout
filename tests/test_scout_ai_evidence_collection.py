@@ -9,6 +9,7 @@ from scout_ai_evidence_collection import (
     collect_scout_ai_evidence,
 )
 from scout_ai_tool_planner import LIVE_NAVIGATION_STATE_TOOL_ID, WEATHER_WINDOW_TOOL_ID
+from scout_route_readiness_tool import ROUTE_READINESS_TOOL_ID
 from scout_pace_guardian_tool import PACE_GUARDIAN_TOOL_ID
 from scout_equipment_resource_tool import EQUIPMENT_RESOURCE_TOOL_ID
 from scout_team_status_tool import TEAM_STATUS_TOOL_ID
@@ -266,6 +267,33 @@ def test_evidence_collection_keeps_equipment_resource_payload() -> None:
     assert payload["resource_state"]["offline_map_ready"] is True
     assert "water_liters" in equipment.missing_fields
     assert equipment.boundary.runtime_safety_truth is False
+
+
+def test_evidence_collection_keeps_route_readiness_payload() -> None:
+    result = collect_scout_ai_evidence(
+        "出發前 Go/No-Go 可以出發嗎？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=3,
+    )
+
+    assert result.selected_tool_count == 1
+    assert result.executed_tool_count == 1
+    assert result.completed_tool_count == 1
+    assert result.missing_input_count == 0
+
+    readiness = _record(result, ROUTE_READINESS_TOOL_ID)
+    assert readiness.collection_status == "completed"
+    assert readiness.result is not None
+    payload = readiness.result["payload"]
+    assert payload["answerability"] == "route_readiness_missing_required_fields"
+    assert payload["decision"] == "DELAY"
+    assert payload["route_readiness"]["role"] == (
+        "Pre-Trip Route Readiness / Departure Gate"
+    )
+    assert payload["departure_gate"]["approval_granted"] is False
+    assert "user_experience_level" in readiness.missing_fields
+    assert readiness.boundary.runtime_safety_truth is False
 
 
 def test_evidence_collection_keeps_team_status_payload() -> None:

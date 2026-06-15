@@ -12,6 +12,7 @@ from scout_ai_answer_synthesis import (
 from scout_ai_evidence_collection import collect_scout_ai_evidence
 from scout_ai_tool_planner import LIVE_NAVIGATION_STATE_TOOL_ID, WEATHER_WINDOW_TOOL_ID
 from scout_contextual_permission_tool import CONTEXTUAL_PERMISSION_TOOL_ID
+from scout_route_readiness_tool import ROUTE_READINESS_TOOL_ID
 from scout_pace_guardian_tool import PACE_GUARDIAN_TOOL_ID
 from scout_equipment_resource_tool import EQUIPMENT_RESOURCE_TOOL_ID
 from scout_team_status_tool import TEAM_STATUS_TOOL_ID
@@ -259,6 +260,27 @@ def test_answer_synthesis_uses_equipment_resource_field_answer_without_guessing(
     )
     assert "water_liters" in result.sources[0].missing_fields
     assert "裝備資源判斷" in result.answer
+    assert "runtime safety truth" in result.answer
+
+
+def test_answer_synthesis_uses_route_readiness_field_answer_without_guessing() -> None:
+    result = collect_and_synthesize_scout_ai_answer(
+        "出發前 Go/No-Go 可以出發嗎？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=3,
+    )
+
+    assert result.answerability == "partial_evidence_with_missing_context"
+    assert result.completed_source_count == 1
+    assert result.missing_evidence_count == 1
+    assert result.sources[0].tool_id == ROUTE_READINESS_TOOL_ID
+    assert result.sources[0].top_result_summary["decision"] == "DELAY"
+    assert result.sources[0].top_result_summary["route_readiness"]["role"] == (
+        "Pre-Trip Route Readiness / Departure Gate"
+    )
+    assert "user_experience_level" in result.sources[0].missing_fields
+    assert "出發前判斷" in result.answer
     assert "runtime safety truth" in result.answer
 
 
