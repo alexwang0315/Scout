@@ -12,6 +12,7 @@ from scout_ai_answer_synthesis import (
 from scout_ai_evidence_collection import collect_scout_ai_evidence
 from scout_ai_tool_planner import WEATHER_WINDOW_TOOL_ID
 from scout_contextual_permission_tool import CONTEXTUAL_PERMISSION_TOOL_ID
+from scout_route_context_tool import ROUTE_CONTEXT_TOOL_ID
 from scout_risk_score_tool import RISK_SCORE_TOOL_ID
 from scout_terrain_score_tool import TERRAIN_SCORE_TOOL_ID
 
@@ -106,6 +107,30 @@ def test_answer_synthesis_uses_contextual_permission_field_answer_without_guessi
     assert "remaining_safety_buffer_minutes" in result.sources[0].missing_fields
     assert "不建議拍影片" in result.answer
     assert "remaining_safety_buffer_minutes" in result.answer
+    assert "runtime safety truth" in result.answer
+
+
+def test_answer_synthesis_uses_route_context_field_answer_without_guessing() -> None:
+    result = collect_and_synthesize_scout_ai_answer(
+        "下一個觀察點在哪？哪裡適合拍攝大景？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=4,
+    )
+
+    assert result.answerability == "evidence_available"
+    assert result.completed_source_count == 1
+    assert result.missing_evidence_count == 0
+    assert result.sources[0].tool_id == ROUTE_CONTEXT_TOOL_ID
+    assert result.sources[0].top_result_summary["answerability"] == (
+        "route_context_available"
+    )
+    assert result.sources[0].top_result_summary["route_context"]["role"] == (
+        "Experience Guide"
+    )
+    assert "候選路線脈絡" in result.answer
+    assert "Experience Guide 候選" in result.answer
+    assert "contextual permission" in result.answer
     assert "runtime safety truth" in result.answer
 
 

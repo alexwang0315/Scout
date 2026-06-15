@@ -18,6 +18,7 @@ from scout_ins_dr_trace_tool import INS_DR_TRACE_TOOL_ID
 from scout_energy_vitals_tool import ENERGY_VITALS_TOOL_ID
 from scout_weather_window_tool import WEATHER_WINDOW_TOOL_ID
 from scout_contextual_permission_tool import CONTEXTUAL_PERMISSION_TOOL_ID
+from scout_route_context_tool import ROUTE_CONTEXT_TOOL_ID
 
 
 EXECUTABLE_TOOL_IDS = set(EXECUTABLE_TOOL_ALIASES)
@@ -382,6 +383,30 @@ def _execute_ready_current_tool(tool_id: str, arguments: dict[str, Any]) -> dict
             plan_validation_path=_str_or_none(arguments.get("plan_validation_path")),
             energy_vitals_path=_str_or_none(arguments.get("energy_vitals_path")),
             team_status_path=_str_or_none(arguments.get("team_status_path")),
+        )
+
+    if tool_id == ROUTE_CONTEXT_TOOL_ID:
+        from scout_route_context_tool import assess_scout_route_context
+
+        return assess_scout_route_context(
+            project_root,
+            query=query,
+            context_types=_list_arg(arguments, "context_types"),
+            cp=_str_or_none(arguments.get("cp")),
+            distance_m_min=_float_or_none(arguments.get("distance_m_min")),
+            distance_m_max=_float_or_none(arguments.get("distance_m_max")),
+            route_context_path=_str_or_none(arguments.get("route_context_path")),
+            spatial_imprints_path=_str_or_none(
+                arguments.get("spatial_imprints_path")
+            ),
+            rest_area_candidates_path=_str_or_none(
+                arguments.get("rest_area_candidates_path")
+            ),
+            mcp_candidates_path=_str_or_none(arguments.get("mcp_candidates_path")),
+            named_point_evidence_path=_str_or_none(
+                arguments.get("named_point_evidence_path")
+            ),
+            limit=limit,
         )
 
     raise ValueError(f"tool is not executable: {tool_id}")

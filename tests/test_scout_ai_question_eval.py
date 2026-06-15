@@ -59,6 +59,14 @@ def test_question_eval_classifies_current_tools_and_missing_live_evidence() -> N
             "question": "是否要通知留守人？",
         }
     )
+    route_context_eval = evaluate_question(
+        {
+            "id": "q-route-context",
+            "source_set": "test",
+            "category": "route_context",
+            "question": "下一個觀察點在哪？哪裡適合拍攝大景？",
+        }
+    )
 
     assert route_eval.answerability == "answerable_by_current_read_only_tools"
     assert "pydantic_ai.tool.search_scout_route_structure.v0" in route_eval.current_tool_ids
@@ -66,6 +74,8 @@ def test_question_eval_classifies_current_tools_and_missing_live_evidence() -> N
     assert live_eval.answerability == "requires_missing_evidence"
     assert "scout.ai.live_navigation_state.assess.v0" in live_eval.recommended_tool_ids
     assert "current_position" in live_eval.missing_evidence
+    assert route_context_eval.answerability == "answerable_by_current_read_only_tools"
+    assert "scout.ai.route_context.assess.v0" in route_context_eval.current_tool_ids
     assert rescue_eval.answerability == "blocked_for_direct_action_can_only_explain"
     assert rescue_eval.safety_boundary["outbound_send_performed"] is False
 

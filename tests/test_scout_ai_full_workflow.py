@@ -9,6 +9,7 @@ from scout_ai_full_workflow import (
     run_scout_ai_full_workflow,
 )
 from scout_ai_tool_planner import WEATHER_WINDOW_TOOL_ID
+from scout_route_context_tool import ROUTE_CONTEXT_TOOL_ID
 from scout_risk_score_tool import RISK_SCORE_TOOL_ID
 from scout_terrain_score_tool import TERRAIN_SCORE_TOOL_ID
 
@@ -98,6 +99,30 @@ def test_full_workflow_runs_weather_tool_and_reports_missing_fresh_evidence() ->
     assert "ttl_s" in result.missing_evidence[0]["missing_fields"]
     assert "weather_placeholder_only" in result.answer
     assert "runtime safety truth" in result.answer
+
+
+def test_full_workflow_runs_route_context_experience_guide_question() -> None:
+    result = run_scout_ai_full_workflow(
+        "下一個觀察點在哪？哪裡適合拍攝大景？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=4,
+    )
+
+    assert result.answerability == "evidence_available"
+    assert result.selected_tool_count == 1
+    assert result.executed_tool_count == 1
+    assert result.completed_tool_count == 1
+    assert result.contract_gap_count == 0
+    assert result.failed_tool_count == 0
+    assert result.missing_evidence_count == 0
+    assert result.sources[0]["tool_id"] == ROUTE_CONTEXT_TOOL_ID
+    assert result.sources[0]["top_result_summary"]["route_context"]["role"] == (
+        "Experience Guide"
+    )
+    assert "候選路線脈絡" in result.answer
+    assert "contextual permission" in result.answer
+    assert result.boundary.runtime_safety_truth is False
 
 
 def test_full_workflow_reports_no_registry_tool_selected_without_guessing() -> None:

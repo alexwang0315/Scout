@@ -21,6 +21,7 @@ from scout_risk_score_tool import RISK_SCORE_TOOL_ID
 from scout_terrain_score_tool import TERRAIN_SCORE_TOOL_ID
 from scout_weather_window_tool import WEATHER_WINDOW_TOOL_ID
 from scout_contextual_permission_tool import CONTEXTUAL_PERMISSION_TOOL_ID
+from scout_route_context_tool import ROUTE_CONTEXT_TOOL_ID
 from scout_workspace_search_tools import (
     MAJOR_POINT_TOOL_ID,
     ROUTE_STRUCTURE_TOOL_ID,
@@ -162,6 +163,14 @@ def plan_scout_ai_tools(
                 CONTEXTUAL_PERMISSION_TOOL_ID,
                 "Question asks for a bounded outdoor micro-decision: "
                 "whether an action is allowed, for how long, what it costs, and the next step.",
+            )
+        )
+    if _looks_like_route_context_question(normalized_question):
+        selected.append(
+            (
+                ROUTE_CONTEXT_TOOL_ID,
+                "Question asks for Experience Guide / Route Context Intelligence: "
+                "what is worth seeing, where to observe or photograph, and which candidate context points matter.",
             )
         )
 
@@ -566,6 +575,37 @@ def _looks_like_contextual_permission_question(text: str) -> bool:
             "howlongcanistop",
             "canifilm",
             "canitakephoto",
+        ),
+    )
+
+
+def _looks_like_route_context_question(text: str) -> bool:
+    if _looks_like_contextual_permission_question(text):
+        return False
+    return _has_any(
+        text,
+        (
+            "值得看",
+            "看什麼",
+            "有什麼好看",
+            "觀察點",
+            "下一個觀察",
+            "哪裡適合拍",
+            "適合拍攝",
+            "哪裡可以拍",
+            "景觀點",
+            "大景",
+            "地名故事",
+            "路線脈絡",
+            "文化",
+            "歷史",
+            "自然觀察",
+            "遺構",
+            "駐在所",
+            "experienceguide",
+            "routecontext",
+            "whattosee",
+            "viewpoint",
         ),
     )
 
