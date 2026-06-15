@@ -8,6 +8,7 @@ from scout_energy_models import load_wearable_activity_summaries
 from scout_energy_reserve import write_energy_reserve_artifacts
 from scout_energy_vitals_tool import ENERGY_VITALS_TOOL_ID
 from scout_contextual_permission_tool import CONTEXTUAL_PERMISSION_TOOL_ID
+from scout_route_context_tool import ROUTE_CONTEXT_TOOL_ID
 from scout_ai_tool_contracts import tool_registry_output
 from scout_ai_tool_executor import execute_scout_ai_tool
 
@@ -43,6 +44,7 @@ def test_tool_registry_lists_current_and_future_contracts() -> None:
     assert "scout.ai.live_navigation_state.assess.v0" in by_id
     assert "scout.ai.safety_boundary.explain.v0" in by_id
     assert CONTEXTUAL_PERMISSION_TOOL_ID in by_id
+    assert ROUTE_CONTEXT_TOOL_ID in by_id
     assert ENERGY_VITALS_TOOL_ID in by_id
     assert by_id["pydantic_ai.tool.search_scout_risk_scores.v0"].implementation_status == (
         "ready_current_tool"
@@ -65,10 +67,14 @@ def test_tool_registry_lists_current_and_future_contracts() -> None:
     assert by_id[CONTEXTUAL_PERMISSION_TOOL_ID].implementation_status == (
         "ready_current_tool"
     )
+    assert by_id[ROUTE_CONTEXT_TOOL_ID].implementation_status == (
+        "ready_current_tool"
+    )
     assert "scout.ai.energy_vitals.assess" in by_id[ENERGY_VITALS_TOOL_ID].aliases
     assert "scout.ai.micro_decision.assess" in by_id[
         CONTEXTUAL_PERMISSION_TOOL_ID
     ].aliases
+    assert "scout.ai.experience_guide.assess" in by_id[ROUTE_CONTEXT_TOOL_ID].aliases
     assert registry.ready_current_tool_count >= 8
     assert registry.executable_tool_count >= registry.ready_current_tool_count
     assert registry.contract_only_tool_count >= 1
@@ -432,6 +438,31 @@ def test_execute_contextual_permission_passes_energy_vitals_reserve_path(
     assert slowest[0]["source_path"] == "outputs/energy_vitals.json"
     assert slowest[0]["raw_health_payload_embedded"] is False
     assert result.payload["boundary"]["runtime_safety_truth"] is False
+    assert result.missing_fields == []
+
+
+def test_execute_route_context_assessor_returns_experience_guide_candidates() -> None:
+    result = execute_scout_ai_tool(
+        {
+            "tool_id": "scout.ai.experience_guide.assess",
+            "project_root": str(PROJECT_ROOT),
+            "query": "哪裡適合拍攝或觀察大景?",
+            "limit": 4,
+        }
+    )
+
+    assert result.status == "completed"
+    assert result.tool_id == ROUTE_CONTEXT_TOOL_ID
+    assert result.implementation_status == "ready_current_tool"
+    assert result.output_artifact_kind == "scout_ai_route_context_tool_output"
+    assert result.payload["artifact_kind"] == "scout_ai_route_context_tool_output"
+    assert result.payload["answerability"] == "route_context_available"
+    assert result.payload["route_context"]["role"] == "Experience Guide"
+    assert result.payload["route_context"]["stop_permission_required"] is True
+    assert result.payload["result_count"] >= 1
+    assert any(item["label"] == "稜線啞口觀景點" for item in result.payload["results"])
+    assert result.payload["boundary"]["runtime_safety_truth"] is False
+    assert result.boundary.live_safety_api_calls_allowed is False
     assert result.missing_fields == []
 
 

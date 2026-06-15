@@ -8,6 +8,7 @@ from scout_ai_tool_planner import (
     ENERGY_VITALS_TOOL_ID,
     INS_DR_TRACE_TOOL_ID,
     LIVE_NAVIGATION_STATE_TOOL_ID,
+    ROUTE_CONTEXT_TOOL_ID,
     SAFETY_BOUNDARY_TOOL_ID,
     WEATHER_WINDOW_TOOL_ID,
     ScoutAiToolPlanItemStatus,
@@ -112,6 +113,22 @@ def test_planner_selects_contextual_permission_for_micro_decision() -> None:
     assert item.missing_fields == []
     assert item.boundary.runtime_safety_truth is False
     assert WEATHER_WINDOW_TOOL_ID not in _tool_ids(plan)
+
+
+def test_planner_selects_route_context_for_experience_guide_question() -> None:
+    plan = plan_scout_ai_tools(
+        _query("下一個觀察點在哪？哪裡適合拍攝大景？"),
+        project_root=PROJECT_ROOT,
+    )
+
+    item = _single_tool(plan, ROUTE_CONTEXT_TOOL_ID)
+    assert item.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+    assert item.implementation_status == "ready_current_tool"
+    assert item.request is not None
+    assert item.request["tool_id"] == ROUTE_CONTEXT_TOOL_ID
+    assert item.missing_fields == []
+    assert CONTEXTUAL_PERMISSION_TOOL_ID not in _tool_ids(plan)
+    assert item.boundary.runtime_safety_truth is False
 
 
 def test_planner_selects_energy_vitals_contract_only_for_health_question() -> None:

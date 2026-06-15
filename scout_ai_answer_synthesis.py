@@ -12,6 +12,7 @@ from scout_ai_evidence_collection import (
 )
 from scout_ai_tool_contracts import ScoutAiToolBaseModel, ScoutAiToolBoundary
 from scout_contextual_permission_tool import CONTEXTUAL_PERMISSION_TOOL_ID
+from scout_route_context_tool import ROUTE_CONTEXT_TOOL_ID
 
 
 ARTIFACT_KIND = "scout_ai_answer_synthesis"
@@ -157,13 +158,17 @@ def _source_from_record(record: dict[str, Any]) -> ScoutAiAnswerSource:
     result = record.get("result") if isinstance(record.get("result"), dict) else {}
     payload = result.get("payload") if isinstance(result.get("payload"), dict) else {}
     results = payload.get("results") if isinstance(payload.get("results"), list) else []
+    top_summary = _top_result_summary(results[0] if results else payload)
+    for key in ("field_answer", "route_context", "answerability", "source_status"):
+        if key in payload and key not in top_summary:
+            top_summary[key] = payload[key]
     return ScoutAiAnswerSource(
         source_id=str(record.get("tool_id") or ""),
         tool_id=str(record.get("tool_id") or ""),
         collection_status=str(record.get("collection_status") or ""),
         output_artifact_kind=record.get("output_artifact_kind"),
         result_count=_int_or_none(payload.get("result_count")),
-        top_result_summary=_top_result_summary(results[0] if results else payload),
+        top_result_summary=top_summary,
         missing_fields=[str(field) for field in record.get("missing_fields", [])],
         implementation_gap=record.get("implementation_gap"),
     )
@@ -213,6 +218,9 @@ def _answer_text(
     contextual_answer = _contextual_permission_answer(completed_sources)
     if contextual_answer:
         parts.append(contextual_answer)
+    route_context_answer = _route_context_answer(completed_sources)
+    if route_context_answer:
+        parts.append(route_context_answer)
     if completed_sources:
         parts.append(
             "Collected evidence: "
@@ -279,6 +287,16 @@ def _contextual_permission_answer(sources: list[ScoutAiAnswerSource]) -> str | N
     return None
 
 
+def _route_context_answer(sources: list[ScoutAiAnswerSource]) -> str | None:
+    for source in sources:
+        if source.tool_id != ROUTE_CONTEXT_TOOL_ID:
+            continue
+        field_answer = source.top_result_summary.get("field_answer")
+        if isinstance(field_answer, str) and field_answer.strip():
+            return field_answer.strip()
+    return None
+
+
 def _top_result_summary(value: Any) -> dict[str, Any]:
     if not isinstance(value, dict):
         return {}
@@ -308,6 +326,11 @@ def _top_result_summary(value: Any) -> dict[str, Any]:
         "contextual_permission",
         "risk_budget",
         "risk_budget_source",
+        "route_context",
+        "context_kind",
+        "guidance",
+        "stop_guidance",
+        "candidate_only",
         "confidence",
         "main_reasons",
         "next_action",

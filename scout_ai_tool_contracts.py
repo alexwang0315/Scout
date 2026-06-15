@@ -38,6 +38,11 @@ from scout_contextual_permission_tool import (
     CONTEXTUAL_PERMISSION_OUTPUT_KIND,
     CONTEXTUAL_PERMISSION_TOOL_ID,
 )
+from scout_route_context_tool import (
+    ROUTE_CONTEXT_OPTIONAL_FIELDS,
+    ROUTE_CONTEXT_OUTPUT_KIND,
+    ROUTE_CONTEXT_TOOL_ID,
+)
 
 ARTIFACT_KIND_REGISTRY = "scout_ai_tool_registry"
 ARTIFACT_VERSION_REGISTRY = "scout_ai_tool_registry.v0"
@@ -194,6 +199,10 @@ EXECUTABLE_TOOL_ALIASES: dict[str, list[str]] = {
         "scout.ai.micro_decision.assess",
         "scout.ai.risk_budget.permission",
     ],
+    ROUTE_CONTEXT_TOOL_ID: [
+        "scout.ai.route_context.assess",
+        "scout.ai.experience_guide.assess",
+    ],
 }
 
 
@@ -211,6 +220,7 @@ EXECUTABLE_OUTPUT_KINDS: dict[str, str] = {
     ENERGY_VITALS_TOOL_ID: ENERGY_VITALS_OUTPUT_KIND,
     WEATHER_WINDOW_TOOL_ID: WEATHER_WINDOW_OUTPUT_KIND,
     CONTEXTUAL_PERMISSION_TOOL_ID: CONTEXTUAL_PERMISSION_OUTPUT_KIND,
+    ROUTE_CONTEXT_TOOL_ID: ROUTE_CONTEXT_OUTPUT_KIND,
 }
 
 
@@ -534,6 +544,8 @@ def _optional_fields_for(tool_id: str) -> list[str]:
         return list(WEATHER_WINDOW_OPTIONAL_FIELDS)
     if tool_id == CONTEXTUAL_PERMISSION_TOOL_ID:
         return list(CONTEXTUAL_PERMISSION_OPTIONAL_FIELDS)
+    if tool_id == ROUTE_CONTEXT_TOOL_ID:
+        return list(ROUTE_CONTEXT_OPTIONAL_FIELDS)
     return []
 
 

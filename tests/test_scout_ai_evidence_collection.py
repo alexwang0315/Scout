@@ -9,6 +9,7 @@ from scout_ai_evidence_collection import (
     collect_scout_ai_evidence,
 )
 from scout_ai_tool_planner import WEATHER_WINDOW_TOOL_ID
+from scout_route_context_tool import ROUTE_CONTEXT_TOOL_ID
 from scout_risk_score_tool import RISK_SCORE_TOOL_ID
 from scout_terrain_score_tool import TERRAIN_SCORE_TOOL_ID
 
@@ -87,6 +88,35 @@ def test_evidence_collection_executes_weather_tool_without_model_synthesis() -> 
     assert "route_weather_package" in weather.missing_fields
     assert weather.implementation_gap is None
     assert weather.boundary.runtime_safety_truth is False
+
+
+def test_evidence_collection_executes_route_context_tool_without_model_synthesis() -> None:
+    result = collect_scout_ai_evidence(
+        "下一個觀察點在哪？哪裡適合拍攝大景？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=4,
+    )
+
+    assert result.selected_tool_count == 1
+    assert result.executed_tool_count == 1
+    assert result.completed_tool_count == 1
+    assert result.contract_gap_count == 0
+    assert result.execution_policy.ready_tools_executed is True
+    assert result.execution_policy.model_synthesis_performed is False
+
+    route_context = _record(result, ROUTE_CONTEXT_TOOL_ID)
+    assert route_context.collection_status == "completed"
+    assert route_context.result is not None
+    payload = route_context.result["payload"]
+    assert payload["answerability"] == "route_context_available"
+    assert payload["source_status"] == "candidate_only"
+    assert payload["route_context"]["role"] == "Experience Guide"
+    assert payload["route_context"]["stop_permission_required"] is True
+    assert payload["result_count"] >= 1
+    assert payload["matched_context_count"] >= 1
+    assert any(item["label"] == "稜線啞口觀景點" for item in payload["results"])
+    assert route_context.boundary.runtime_safety_truth is False
 
 
 def test_evidence_collection_reports_empty_collection_when_no_tool_matches() -> None:

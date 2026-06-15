@@ -47,6 +47,10 @@ CURRENT_TOOLS = {
         "label": "contextual permission",
         "evidence_scope": "bounded outdoor micro-decision, Scout decision vocabulary, risk budget, deadline, next action",
     },
+    "scout.ai.route_context.assess.v0": {
+        "label": "route context / experience guide",
+        "evidence_scope": "candidate route context, named points, spatial imprints, rest-area candidates, and observation/photo context",
+    },
 }
 
 
@@ -437,6 +441,7 @@ _CURRENT_TOOL_TERMS = (
     ("pydantic_ai.tool.search_scout_risk_scores.v0", ("risk score", "risk", "風險", "危險", "低容錯", "出事", "滑墜", "落石", "崩塌", "墜崖")),
     ("pydantic_ai.tool.search_scout_terrain_scores.v0", ("坡度", "地形", "稜線", "崩壁", "碎石", "乾溝", "溪谷", "下切", "等高線", "slope", "terrain")),
     ("pydantic_ai.tool.search_scout_map_perception.v0", ("ocr", "annotation", "標註", "圖磚", "影像", "景觀點", "拍照", "contour", "被看見")),
+    ("scout.ai.route_context.assess.v0", ("值得看", "觀察點", "適合拍攝", "大景", "地名故事", "路線脈絡", "自然觀察", "experience guide", "route context", "viewpoint")),
 )
 
 
