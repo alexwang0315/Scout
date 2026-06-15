@@ -9,14 +9,19 @@ from scout_ai_tool_executor import execute_scout_ai_tool
 from scout_contextual_permission_tool import CONTEXTUAL_PERMISSION_TOOL_ID
 from scout_navigation_terrain_tool import NAVIGATION_TERRAIN_TOOL_ID
 from scout_pace_guardian_tool import PACE_GUARDIAN_TOOL_ID
+from scout_post_trip_review_tool import POST_TRIP_REVIEW_TOOL_ID
 from scout_route_architecture_tool import ROUTE_ARCHITECTURE_TOOL_ID
 from scout_route_context_tool import ROUTE_CONTEXT_TOOL_ID
+from scout_route_readiness_tool import ROUTE_READINESS_TOOL_ID
 from scout_weather_window_tool import WEATHER_WINDOW_TOOL_ID
 
 
 ROOT = Path(__file__).resolve().parents[1]
 PROJECT_ROOT = (
     ROOT / "tests" / "fixtures" / "pretrip" / "projects" / "chilai_nanhua_day1"
+)
+POST_ANALYSIS_ROOT = (
+    ROOT / "tests" / "fixtures" / "post_analysis" / "chilai_nanhua_day1_post_analysis"
 )
 
 STANDARD_DECISIONS = {
@@ -45,6 +50,8 @@ DECISION_OUTPUT_REQUIRED_KEYS = {
     "requiredConditions",
     "alternativeActions",
 }
+
+FORBIDDEN_SAFETY_PHRASES = ("請自行評估", "一定安全", "保證沒問題", "安全無虞")
 
 SIX_FORCE_SCENARIOS = [
     pytest.param(
@@ -218,3 +225,209 @@ def test_six_force_tools_emit_standard_contextual_permission_decisions(
     assert any(standard_section in item for item in payload["standard_alignment"]), (
         system_language
     )
+
+
+def test_mvp_pretrip_go_no_go_outputs_required_package_and_conservative_gates() -> None:
+    missing_result = execute_scout_ai_tool(
+        {
+            "tool_id": "scout.ai.pretrip_go_no_go.assess",
+            "project_root": str(PROJECT_ROOT),
+            "query": "出發前 Go/No-Go 可以出發嗎？",
+        }
+    )
+    high_risk_result = execute_scout_ai_tool(
+        {
+            "tool_id": "scout.ai.pretrip_go_no_go.assess",
+            "project_root": str(PROJECT_ROOT),
+            "query": "雪地技術攀登，出發前 Go/No-Go 可以自主出發嗎？",
+            "arguments": {
+                "user_experience_level": "advanced",
+                "user_goal": "雪地技術攀登",
+                "transport_access_plan": "confirmed shuttle",
+                "team_slowest_basis_confirmed": True,
+                "departure_time_confirmed": True,
+                "weather_reviewed": True,
+                "daylight_reviewed": True,
+                "equipment_confirmed": True,
+                "remote_contact_confirmed": True,
+            },
+        }
+    )
+
+    assert missing_result.tool_id == ROUTE_READINESS_TOOL_ID
+    assert missing_result.payload["decision"] == "DELAY"
+    assert "user_experience_level" in missing_result.missing_fields
+    assert "slowest_team_basis" in missing_result.missing_fields
+    _assert_standard_output(missing_result.payload["decision_output"])
+    missing_package = missing_result.payload["pretrip_decision_package"]
+    required_outputs = missing_package["required_outputs"]
+    assert required_outputs["pretrip_decision"] == "DELAY"
+    assert required_outputs["cp_graph"]["checkpoint_count"] == 124
+    assert required_outputs["cp_graph"]["segment_count"] == 123
+    assert required_outputs["latest_turnaround"]["checkpoint_name"] == "雲海保線所"
+    assert required_outputs["top_risk_sources"]
+    assert required_outputs["required_conditions"]
+    assert required_outputs["alternatives_or_short_routes"]
+    assert required_outputs["pretrip_checklist"]
+    assert required_outputs["residual_risk"]
+    assert missing_package["decision_limits"]["allowed"] is False
+    assert missing_package["acceptance_coverage"]["explicit_decision"] is True
+    assert missing_result.boundary.runtime_safety_truth is False
+
+    assert high_risk_result.tool_id == ROUTE_READINESS_TOOL_ID
+    assert high_risk_result.payload["decision"] == "GUIDED_ONLY"
+    assert high_risk_result.payload["guided_only_gate"]["required"] is True
+    assert high_risk_result.payload["guided_only_gate"]["reason"] == (
+        "high_risk_non_goal_domain"
+    )
+    assert high_risk_result.payload["decision_output"]["allowed"] is False
+    assert high_risk_result.payload["decision_output"]["runtimeSafetyTruth"] is False
+    assert "不得自主出發" in high_risk_result.payload["decision_output"]["firstLayer"][
+        "limit"
+    ]
+    _assert_no_forbidden_safety_language(high_risk_result.payload)
+
+
+def test_mvp_on_route_micro_decision_is_bounded_and_conservative_when_missing() -> None:
+    missing_result = execute_scout_ai_tool(
+        {
+            "tool_id": "scout.ai.micro_decision.assess",
+            "project_root": str(PROJECT_ROOT),
+            "query": "我可以在這裡停留 10 分鐘嗎？",
+        }
+    )
+    film_result = execute_scout_ai_tool(
+        {
+            "tool_id": "scout.ai.micro_decision.assess",
+            "project_root": str(PROJECT_ROOT),
+            "query": "我可以在這裡停下來拍一段影片嗎？",
+            "arguments": {
+                "action": "film",
+                "current_time": "2026-06-07T13:36:00+08:00",
+                "current_cp_id": "CP3",
+                "next_cp_id": "CP4",
+                "remaining_safety_buffer_minutes": 21,
+                "current_delay_minutes": 9,
+                "next_segment_uncertainty_minutes": 3,
+                "weather_reserve_minutes": 2,
+                "communication_status": "ok",
+                "equipment_status": "ok",
+            },
+        }
+    )
+
+    assert missing_result.tool_id == CONTEXTUAL_PERMISSION_TOOL_ID
+    assert missing_result.payload["decision"] == "NO_GO"
+    assert "remaining_safety_buffer_minutes" in missing_result.missing_fields
+    assert missing_result.payload["decision_output"]["allowed"] is False
+    assert missing_result.payload["decision_output"]["cost"][
+        "timeBufferChangeMinutes"
+    ] == -10
+    _assert_standard_output(missing_result.payload["decision_output"])
+
+    assert film_result.tool_id == CONTEXTUAL_PERMISSION_TOOL_ID
+    assert film_result.payload["decision"] == "CONDITIONAL_GO"
+    assert film_result.payload["allowed"] is True
+    assert film_result.payload["max_duration_minutes"] == 6
+    assert film_result.payload["leave_by"] == "2026-06-07T13:42:00+08:00"
+    assert film_result.payload["contextual_permission"]["cost"][
+        "timeBufferChangeMinutes"
+    ] == -6
+    assert "最多 6 分鐘" in film_result.payload["field_answer"]
+    assert "13:42" in film_result.payload["field_answer"]
+    assert film_result.payload["decision_output"]["nextAction"]
+    assert film_result.payload["decision_output"]["runtimeSafetyTruth"] is False
+    _assert_no_forbidden_safety_language(film_result.payload)
+
+
+def test_post_trip_learning_package_covers_reviewable_model_updates_without_writeback() -> None:
+    missing_result = execute_scout_ai_tool(
+        {
+            "tool_id": "scout.ai.after_action.assess",
+            "project_root": str(POST_ANALYSIS_ROOT),
+            "query": "行後回顧要更新哪些下一次規劃？",
+        }
+    )
+    incident_result = execute_scout_ai_tool(
+        {
+            "tool_id": "scout.ai.after_action.assess",
+            "project_root": str(POST_ANALYSIS_ROOT),
+            "query": "行後有 near miss 和滑倒事件，下一次要怎麼改？",
+            "arguments": {
+                "subjective_difficulty": "比預期難",
+                "equipment_gaps": ["手套不足"],
+                "near_miss_events": ["摸黑前差點錯過岔路"],
+                "incident_events": ["隊員滑倒擦傷"],
+                "weather_matched_expectation": False,
+                "route_condition_notes": ["午後霧氣比預報早"],
+                "route_context_updates": ["雲海保線所有可靠集合空間"],
+                "user_feedback_items": ["午餐點應前移"],
+            },
+        }
+    )
+
+    assert missing_result.tool_id == POST_TRIP_REVIEW_TOOL_ID
+    assert missing_result.payload["decision"] == "DELAY"
+    assert "subjective_difficulty" in missing_result.missing_fields
+    learning_package = missing_result.payload["post_trip_learning_package"]
+    assert learning_package["data_to_collect"]["actual_cp_pass_times"][
+        "observed_edge_count"
+    ] == 73
+    assert learning_package["data_to_collect"]["actual_stop_duration"][
+        "rest_interval_count"
+    ] == 62
+    assert learning_package["model_update_target_coverage"][
+        "user_scout_pace_coefficient"
+    ] is True
+    assert learning_package["model_update_target_coverage"][
+        "route_cp_elapsed_time"
+    ] is True
+    assert learning_package["writeback_policy"][
+        "automatic_user_model_update_allowed"
+    ] is False
+    assert learning_package["writeback_policy"][
+        "automatic_route_model_update_allowed"
+    ] is False
+    assert learning_package["acceptance_coverage"]["section_20_1_data_to_collect"] is True
+    assert learning_package["acceptance_coverage"]["section_20_2_model_update_targets"] is True
+    assert missing_result.payload["boundary"]["learning_write_performed"] is False
+
+    assert incident_result.payload["decision"] == "ESCALATE"
+    assert incident_result.payload["post_trip_feedback"]["event_taxonomy"][
+        "review_required"
+    ] is True
+    assert {
+        "lost_or_navigation_uncertainty",
+        "slip_or_fall",
+        "darkness_or_daylight_overrun",
+        "equipment_failure",
+    } <= set(
+        incident_result.payload["post_trip_feedback"]["event_taxonomy"][
+            "matched_event_types"
+        ]
+    )
+    assert incident_result.payload["post_trip_review"]["learning_write_performed"] is False
+    assert incident_result.payload["decision_output"]["runtimeSafetyTruth"] is False
+    _assert_no_forbidden_safety_language(incident_result.payload)
+
+
+def _assert_standard_output(decision_output: dict[str, object]) -> None:
+    missing_keys = DECISION_OUTPUT_REQUIRED_KEYS - set(decision_output)
+    assert not missing_keys
+    assert decision_output["decision"] in STANDARD_DECISIONS
+    assert decision_output["decisionObjectSchema"] == "ContextualPermission"
+    assert isinstance(decision_output["allowed"], bool)
+    assert decision_output["runtimeSafetyTruth"] is False
+    assert decision_output["firstLayer"]["decision"]
+    assert decision_output["firstLayer"]["limit"]
+    assert decision_output["firstLayer"]["reason"]
+    assert decision_output["firstLayer"]["nextStep"]
+    assert decision_output["mainReasons"]
+    assert decision_output["nextAction"]
+    assert isinstance(decision_output["cost"], dict)
+
+
+def _assert_no_forbidden_safety_language(payload: dict[str, object]) -> None:
+    text = str(payload)
+    for phrase in FORBIDDEN_SAFETY_PHRASES:
+        assert phrase not in text
