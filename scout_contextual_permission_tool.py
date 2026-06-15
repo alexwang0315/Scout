@@ -1356,7 +1356,10 @@ def _resolve_action(action: str | None, query: str) -> OutdoorAction:
         return OutdoorAction.CROSS_STREAM
     if _has_any(text, ("曝露", "暴露", "邊坡", "exposed")):
         return OutdoorAction.ENTER_EXPOSED_SECTION
-    if _has_any(text, ("改線", "繞去", "支線", "reroute")):
+    if _has_any(
+        text,
+        ("改線", "繞去", "支線", "岔路", "切過去", "捷徑", "reroute", "shortcut"),
+    ):
         return OutdoorAction.REROUTE
     if _has_any(text, ("休息", "rest")):
         return OutdoorAction.REST

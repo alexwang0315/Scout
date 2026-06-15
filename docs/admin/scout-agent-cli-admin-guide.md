@@ -437,6 +437,12 @@ the planned rhythm immediately. Weather and equipment tools may still contribute
 missing-context evidence, but the first-layer micro-decision remains the
 rain-gear action.
 
+For branch or shortcut questions such as whether a hiker can cut onto a side
+trail, Scout resolves the request as `reroute`, not generic `continue`. Without
+remaining safety buffer and reliable live navigation evidence, the first-layer
+decision is `NO_GO`: do not improvise a shortcut; return to the known route or a
+known safe CP.
+
 ```bash
 python -m scout_cli pretrip contextual-permission-collect \
   --project-root /data/scout/admin/pretrip-workspaces/chilai_nanhua_day1 \
