@@ -189,6 +189,35 @@ def test_weather_window_tool_no_go_for_critical_weather_route_interaction(
     assert "NO_GO" in result["field_answer"]
 
 
+def test_weather_window_tool_delays_recent_rain_creek_crossing_without_experience(
+    tmp_path: Path,
+) -> None:
+    project_root = _write_recent_rain_creek_project(tmp_path)
+
+    result = assess_scout_weather_window(
+        project_root,
+        query="前 24 小時有降雨，這條路有兩處渡溪點且隊伍沒有渡溪經驗，可以照原計畫出發嗎？",
+        limit=3,
+    )
+
+    assert result["answerability"] == "route_weather_risk_available"
+    assert result["decision"] == "DELAY"
+    assert result["weather_to_decision"]["decision"] == "DELAY"
+    assert result["weather_to_decision"]["route_sensitive_weather_rule"] == {
+        "rule": "previous_24h_rain_creek_crossing_no_experience",
+        "creek_crossing_count": 2,
+        "segment_ids": ["creek.crossing.1", "creek.crossing.2"],
+    }
+    assert "creek-crossing" in result["weather_to_decision"]["main_reasons"][0]
+    assert "no creek-crossing experience" in result["weather_to_decision"][
+        "main_reasons"
+    ][1]
+    assert "延期 48 小時" in result["weather_to_decision"]["next_action"]
+    assert "低風險替代路線" in result["field_answer"]
+    assert result["decision_output"]["decision"] == "DELAY"
+    assert result["decision_output"]["runtimeSafetyTruth"] is False
+
+
 def test_weather_window_output_kind_is_registered_constant() -> None:
     assert WEATHER_WINDOW_OUTPUT_KIND == "scout_ai_weather_window_tool_output"
 
@@ -246,6 +275,73 @@ def _write_route_weather_project(
                         "factors": ["午後雷雨", "稜線暴露", "強風", "低能見度可能"],
                         "message": "此路段有雷雨、強風與稜線暴露疊加。",
                     }
+                ],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    return project_root
+
+
+def _write_recent_rain_creek_project(tmp_path: Path) -> Path:
+    project_root = tmp_path / "recent-rain-creek-project"
+    (project_root / "outputs").mkdir(parents=True)
+    (project_root / "project.json").write_text(
+        json.dumps(
+            {
+                "project_id": "recent_rain_creek_project",
+                "route_weather_package_ref": "outputs/route_weather_package.json",
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    (project_root / "outputs" / "route_weather_package.json").write_text(
+        json.dumps(
+            {
+                "artifact_kind": "route_weather_package",
+                "status": "candidate_only",
+                "routeId": "fixture-route",
+                "generatedAt": "2099-06-07T08:00:00Z",
+                "issued_at": "2099-06-07T08:00:00Z",
+                "valid_from": "2099-06-07T08:00:00Z",
+                "valid_to": "2099-06-10T08:00:00Z",
+                "validUntil": "2099-06-10T08:00:00Z",
+                "ttl_s": 259200,
+                "provider": "fixture_cwa_server_side_ingestor",
+                "authoritative_weather_computed": True,
+                "external_api_calls_made": True,
+                "human_review_required": False,
+                "weather_window": {
+                    "summary": "前 24 小時明顯降雨，溪流水位需重新確認",
+                    "valid_from": "2099-06-07T08:00:00Z",
+                    "valid_to": "2099-06-10T08:00:00Z",
+                    "source_status": "server_side_fixture",
+                },
+                "segments": [
+                    {
+                        "segmentId": "creek.crossing.1",
+                        "etaFrom": "2099-06-08T03:30:00Z",
+                        "etaTo": "2099-06-08T03:50:00Z",
+                        "terrainRisk": 0.48,
+                        "weatherRisk": 0.44,
+                        "finalRisk": 0.56,
+                        "riskLevel": "MODERATE",
+                        "factors": ["前 24 小時明顯降雨", "渡溪點", "隊伍沒有渡溪經驗"],
+                        "message": "前 24 小時降雨後需重新確認溪流水位。",
+                    },
+                    {
+                        "segmentId": "creek.crossing.2",
+                        "etaFrom": "2099-06-08T05:20:00Z",
+                        "etaTo": "2099-06-08T05:40:00Z",
+                        "terrainRisk": 0.5,
+                        "weatherRisk": 0.42,
+                        "finalRisk": 0.55,
+                        "riskLevel": "MODERATE",
+                        "factors": ["前 24 小時明顯降雨", "渡溪點", "無渡溪經驗"],
+                        "message": "第二處渡溪點受前 24 小時降雨影響。",
+                    },
                 ],
             },
             ensure_ascii=False,
