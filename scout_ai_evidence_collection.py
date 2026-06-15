@@ -269,6 +269,7 @@ def _compact_payload(
         "contextual_permission",
         "risk_decision",
         "terrain_decision",
+        "safety_boundary",
         "risk_budget",
         "risk_budget_source",
         "route_context",

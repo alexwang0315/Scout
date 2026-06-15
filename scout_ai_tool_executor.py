@@ -723,6 +723,7 @@ def _completed_missing_fields(tool_id: str, payload: dict[str, Any]) -> list[str
         MEDIA_LITERACY_TOOL_ID,
         SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID,
         TERRAIN_SCORE_TOOL_ID,
+        SAFETY_BOUNDARY_TOOL_ID,
     }:
         return []
     value = payload.get("missing_fields")

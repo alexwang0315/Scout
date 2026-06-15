@@ -25,6 +25,7 @@ from scout_media_literacy_tool import MEDIA_LITERACY_TOOL_ID
 from scout_survival_incident_playbook_tool import SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID
 from scout_risk_score_tool import RISK_SCORE_TOOL_ID
 from scout_terrain_score_tool import TERRAIN_SCORE_TOOL_ID
+from scout_safety_boundary_tool import SAFETY_BOUNDARY_TOOL_ID
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -583,6 +584,48 @@ def test_full_workflow_runs_post_trip_review_question() -> None:
     assert result.decision_output["decision"] == "DELAY"
     assert result.decision_output["firstLayer"]["decision"] == "暫緩學習寫回。"
     assert "行後回顧" in result.answer
+    assert result.boundary.runtime_safety_truth is False
+
+
+def test_full_workflow_runs_safety_boundary_question() -> None:
+    result = run_scout_ai_full_workflow(
+        "哪些風險目前只是候選，不能觸發 Ln？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=3,
+    )
+
+    assert result.answerability == "partial_evidence_with_missing_context"
+    assert result.selected_tool_count == 3
+    assert result.executed_tool_count == 3
+    assert result.completed_tool_count == 3
+    assert result.missing_evidence_count == 2
+    source_ids = {source["tool_id"] for source in result.sources}
+    assert SAFETY_BOUNDARY_TOOL_ID in source_ids
+    safety = next(
+        source
+        for source in result.sources
+        if source["tool_id"] == SAFETY_BOUNDARY_TOOL_ID
+    )
+    assert safety["top_result_summary"]["decision"] == "DELAY"
+    assert safety["top_result_summary"]["decision_output"][
+        "decisionObjectSchema"
+    ] == "ContextualPermission"
+    assert safety["top_result_summary"]["safety_boundary"]["role"] == (
+        "Safety Boundary / Runtime Admission Guard"
+    )
+    assert result.decision_output["answerSourceToolId"] == SAFETY_BOUNDARY_TOOL_ID
+    assert result.decision_output["decision"] == "DELAY"
+    assert result.decision_output["allowed"] is False
+    assert result.decision_output["firstLayer"]["decision"] == (
+        "Hold safety-state changes until admission evidence is complete."
+    )
+    answer_step = result.workflow_steps[-1]
+    assert answer_step.summary["decision_output_schema"] == "ContextualPermission"
+    assert answer_step.summary["decision_output_source_tool"] == SAFETY_BOUNDARY_TOOL_ID
+    assert "admission_state" in safety["missing_fields"]
+    assert "Safety boundary decision: DELAY" in result.answer
+    assert "cannot trigger Ln" in result.answer
     assert result.boundary.runtime_safety_truth is False
 
 

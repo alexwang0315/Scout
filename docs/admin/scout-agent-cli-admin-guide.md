@@ -162,6 +162,13 @@ only caller-provided snapshots, but its output includes an explicit decision,
 action/location limit, 1-2 main reasons, next step, uncertainty notes, required
 conditions, and alternatives without mutating runtime safety truth.
 
+`scout.ai.safety_boundary.explain.v0` now returns a native `decision_output` for
+candidate-vs-runtime safety boundary questions. Missing admission/operator
+evidence maps to `DELAY`; reviewed candidate evidence that is not admitted maps
+to `NO_GO`; high-risk or mutation/outbound intent maps to `ESCALATE`. The tool is
+still an explainer only: it never calls `/safety/*`, mutates Phase 1 L0-L4 state,
+triggers Ln, sends outbound messages, emits SOS, or controls hardware.
+
 `scout.ai.weather_window.assess.v0` returns a native `decision_output` for Sec.
 10 Weather-to-Decision and Sec. 15.2 Risk Sentinel questions. The output converts
 route-weather risk into Go / Delay / Change Plan / No-Go style field decisions,

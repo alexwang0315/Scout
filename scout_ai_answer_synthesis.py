@@ -23,6 +23,7 @@ from scout_route_readiness_tool import ROUTE_READINESS_TOOL_ID
 from scout_weather_window_tool import WEATHER_WINDOW_TOOL_ID
 from scout_media_literacy_tool import MEDIA_LITERACY_TOOL_ID
 from scout_survival_incident_playbook_tool import SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID
+from scout_safety_boundary_tool import SAFETY_BOUNDARY_TOOL_ID
 
 
 ARTIFACT_KIND = "scout_ai_answer_synthesis"
@@ -181,6 +182,7 @@ def _source_from_record(record: dict[str, Any]) -> ScoutAiAnswerSource:
         "field_answer",
         "navigation_terrain",
         "navigation_decision",
+        "safety_boundary",
         "provided_fields",
         "quality_flags",
         "route_readiness",
@@ -279,6 +281,9 @@ def _answer_text(
     contextual_answer = _contextual_permission_answer(completed_sources)
     if contextual_answer:
         parts.append(contextual_answer)
+    safety_boundary_answer = _safety_boundary_answer(completed_sources)
+    if safety_boundary_answer:
+        parts.append(safety_boundary_answer)
     navigation_answer = _live_navigation_answer(completed_sources)
     if navigation_answer:
         parts.append(navigation_answer)
@@ -503,6 +508,7 @@ def _decision_source_priority(source: ScoutAiAnswerSource) -> tuple[int, str]:
         CONTEXTUAL_PERMISSION_TOOL_ID,
         MEDIA_LITERACY_TOOL_ID,
         SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID,
+        SAFETY_BOUNDARY_TOOL_ID,
     }:
         return (0, source.tool_id)
     if source.tool_id in {
@@ -796,6 +802,16 @@ def _decision_phrase(*, decision: str, allowed: bool) -> str:
 def _contextual_permission_answer(sources: list[ScoutAiAnswerSource]) -> str | None:
     for source in sources:
         if source.tool_id != CONTEXTUAL_PERMISSION_TOOL_ID:
+            continue
+        field_answer = source.top_result_summary.get("field_answer")
+        if isinstance(field_answer, str) and field_answer.strip():
+            return field_answer.strip()
+    return None
+
+
+def _safety_boundary_answer(sources: list[ScoutAiAnswerSource]) -> str | None:
+    for source in sources:
+        if source.tool_id != SAFETY_BOUNDARY_TOOL_ID:
             continue
         field_answer = source.top_result_summary.get("field_answer")
         if isinstance(field_answer, str) and field_answer.strip():

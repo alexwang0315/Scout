@@ -17,6 +17,7 @@ from scout_team_status_tool import TEAM_STATUS_TOOL_ID
 from scout_post_trip_review_tool import POST_TRIP_REVIEW_TOOL_ID
 from scout_media_literacy_tool import MEDIA_LITERACY_TOOL_ID
 from scout_survival_incident_playbook_tool import SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID
+from scout_safety_boundary_tool import SAFETY_BOUNDARY_TOOL_ID
 from scout_ai_tool_contracts import tool_registry_output
 from scout_ai_tool_executor import execute_scout_ai_tool
 
@@ -558,9 +559,26 @@ def test_execute_safety_boundary_explainer_returns_read_only_missing_fields() ->
     assert result.implementation_status == "boundary_explain_only"
     assert result.output_artifact_kind == "scout_ai_safety_boundary_explainer_tool_output"
     assert result.payload["artifact_kind"] == "scout_ai_safety_boundary_explainer_tool_output"
-    assert result.payload["tool_id"] == "scout.ai.safety_boundary.explain.v0"
+    assert result.payload["tool_id"] == SAFETY_BOUNDARY_TOOL_ID
+    assert result.payload["answerability"] == "safety_boundary_missing_required_fields"
+    assert result.payload["decision"] == "DELAY"
+    assert result.payload["decision_output"]["decisionObjectSchema"] == (
+        "ContextualPermission"
+    )
+    assert result.payload["decision_output"]["decision"] == "DELAY"
+    assert result.payload["decision_output"]["allowed"] is False
+    assert result.payload["decision_output"]["runtimeSafetyTruth"] is False
+    assert result.payload["decision_output"]["firstLayer"]["decision"] == (
+        "Hold safety-state changes until admission evidence is complete."
+    )
+    assert result.payload["safety_boundary"]["role"] == (
+        "Safety Boundary / Runtime Admission Guard"
+    )
+    assert result.payload["safety_boundary"]["runtime_safety_truth"] is False
     assert "admission_state" in result.payload["missing_fields"]
     assert "operator_review_status" in result.payload["missing_fields"]
+    assert "admission_state" in result.missing_fields
+    assert "operator_review_status" in result.missing_fields
     assert result.payload["boundary"]["safety_api_called"] is False
     assert result.payload["boundary"]["phase1_l0_l4_state_mutated"] is False
     assert result.payload["boundary"]["outbound_send_performed"] is False
