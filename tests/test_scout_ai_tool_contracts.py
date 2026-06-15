@@ -102,7 +102,7 @@ def test_tool_registry_lists_current_and_future_contracts() -> None:
         "ready_current_tool"
     )
     assert by_id["scout.ai.safety_boundary.explain.v0"].implementation_status == (
-        "boundary_explain_only"
+        "ready_current_tool"
     )
     assert by_id[ENERGY_VITALS_TOOL_ID].implementation_status == "ready_current_tool"
     assert by_id[CONTEXTUAL_PERMISSION_TOOL_ID].implementation_status == (
@@ -158,6 +158,10 @@ def test_tool_registry_lists_current_and_future_contracts() -> None:
         NMEA_ROUTE_RISK_PROBE_TOOL_ID
     ].aliases
     assert "lat" in by_id[NMEA_ROUTE_RISK_PROBE_TOOL_ID].optional_fields
+    assert "scout.ai.runtime_admission.assess" in by_id[
+        SAFETY_BOUNDARY_TOOL_ID
+    ].aliases
+    assert "admission_state" in by_id[SAFETY_BOUNDARY_TOOL_ID].optional_fields
     assert "junction_points_known" in by_id[
         NAVIGATION_TERRAIN_TOOL_ID
     ].optional_fields
@@ -176,8 +180,8 @@ def test_tool_registry_lists_current_and_future_contracts() -> None:
     assert registry.ready_current_tool_count >= 16
     assert registry.executable_tool_count >= registry.ready_current_tool_count
     assert registry.contract_only_tool_count == 0
-    assert registry.implementation_status_counts["ready_current_tool"] >= 15
-    assert registry.implementation_status_counts["boundary_explain_only"] == 1
+    assert registry.implementation_status_counts["ready_current_tool"] >= 26
+    assert "boundary_explain_only" not in registry.implementation_status_counts
     assert "ready_current_tool" in registry.tool_ids_by_status
     assert "scout.ai.weather_window.assess.v0" not in registry.missing_evidence_fields_by_tool
     assert registry.boundary.runtime_safety_truth is False
@@ -999,7 +1003,7 @@ def test_execute_safety_boundary_explainer_returns_read_only_missing_fields() ->
 
     assert result.status == "completed"
     assert result.tool_id == "scout.ai.safety_boundary.explain.v0"
-    assert result.implementation_status == "boundary_explain_only"
+    assert result.implementation_status == "ready_current_tool"
     assert result.output_artifact_kind == "scout_ai_safety_boundary_explainer_tool_output"
     assert result.payload["artifact_kind"] == "scout_ai_safety_boundary_explainer_tool_output"
     assert result.payload["tool_id"] == SAFETY_BOUNDARY_TOOL_ID
@@ -1025,6 +1029,48 @@ def test_execute_safety_boundary_explainer_returns_read_only_missing_fields() ->
     assert result.payload["boundary"]["safety_api_called"] is False
     assert result.payload["boundary"]["phase1_l0_l4_state_mutated"] is False
     assert result.payload["boundary"]["outbound_send_performed"] is False
+    assert result.boundary.live_safety_api_calls_allowed is False
+    assert result.boundary.phase1_safety_mutation_allowed is False
+
+
+def test_execute_safety_boundary_assessor_escalates_unreviewed_high_risk_state() -> None:
+    result = execute_scout_ai_tool(
+        {
+            "tool_id": "scout.ai.runtime_admission.assess",
+            "project_root": str(PROJECT_ROOT),
+            "query": "這個高風險候選能不能進入 Ln 或觸發 safety 狀態？",
+            "arguments": {
+                "candidate_id": "risk.candidate.stream_surge.cp4",
+                "risk_source": "field_hydrology_candidate",
+                "risk_score": 96,
+                "admission_state": "candidate",
+                "persistence_window": "observed_10m",
+                "evidence_refs": [
+                    "runtime_ingress.sensorlogger.last_payload",
+                    "weather_window.gpm_antecedent_rain",
+                ],
+                "operator_review_status": "pending",
+                "phase1_safety_decision_change_allowed": False,
+                "remote_outbound_allowed": False,
+                "last_decision_at": "2026-06-15T08:20:00+08:00",
+            },
+        }
+    )
+
+    assert result.status == "completed"
+    assert result.tool_id == SAFETY_BOUNDARY_TOOL_ID
+    assert result.implementation_status == "ready_current_tool"
+    assert result.payload["answerability"] == "safety_boundary_decision_available"
+    assert result.payload["decision"] == "ESCALATE"
+    assert result.payload["decision_output"]["decision"] == "ESCALATE"
+    assert result.payload["decision_output"]["allowed"] is False
+    assert result.payload["decision_output"]["runtimeSafetyTruth"] is False
+    assert result.payload["safety_boundary"]["admission_state"] == "candidate"
+    assert result.payload["safety_boundary"]["operator_review_status"] == "pending"
+    assert result.payload["boundary"]["safety_api_called"] is False
+    assert result.payload["boundary"]["phase1_l0_l4_state_mutated"] is False
+    assert result.payload["boundary"]["outbound_send_performed"] is False
+    assert result.missing_fields == []
     assert result.boundary.live_safety_api_calls_allowed is False
     assert result.boundary.phase1_safety_mutation_allowed is False
 
@@ -1748,7 +1794,7 @@ def test_agent_manifest_runs_tool_registry_and_tool_run(tmp_path: Path) -> None:
     assert registry_output["tool_count"] >= 10
     assert registry_output["ready_current_tool_count"] >= 8
     assert registry_output["contract_only_tool_count"] == 0
-    assert registry_output["implementation_status_counts"]["boundary_explain_only"] == 1
+    assert "boundary_explain_only" not in registry_output["implementation_status_counts"]
     assert "scout.ai.weather_window.assess.v0" not in registry_output[
         "missing_evidence_fields_by_tool"
     ]

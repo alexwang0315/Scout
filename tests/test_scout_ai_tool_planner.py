@@ -1725,7 +1725,7 @@ def test_planner_selects_safety_boundary_and_live_state_for_candidate_ln_questio
     assert live_item.request is not None
     assert live_item.request["tool_id"] == LIVE_NAVIGATION_STATE_TOOL_ID
     assert safety_item.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
-    assert safety_item.implementation_status == "boundary_explain_only"
+    assert safety_item.implementation_status == "ready_current_tool"
     assert safety_item.request is not None
     assert safety_item.request["tool_id"] == SAFETY_BOUNDARY_TOOL_ID
     assert live_item.missing_fields == []
