@@ -7,6 +7,7 @@ from scout_agent_cli import run_scout_agent_cli
 from scout_energy_models import load_wearable_activity_summaries
 from scout_energy_reserve import write_energy_reserve_artifacts
 from scout_energy_vitals_tool import ENERGY_VITALS_TOOL_ID
+from scout_contextual_permission_tool import CONTEXTUAL_PERMISSION_TOOL_ID
 from scout_ai_tool_contracts import tool_registry_output
 from scout_ai_tool_executor import execute_scout_ai_tool
 
@@ -41,6 +42,7 @@ def test_tool_registry_lists_current_and_future_contracts() -> None:
     assert "scout.ai.weather_window.assess.v0" in by_id
     assert "scout.ai.live_navigation_state.assess.v0" in by_id
     assert "scout.ai.safety_boundary.explain.v0" in by_id
+    assert CONTEXTUAL_PERMISSION_TOOL_ID in by_id
     assert ENERGY_VITALS_TOOL_ID in by_id
     assert by_id["pydantic_ai.tool.search_scout_risk_scores.v0"].implementation_status == (
         "ready_current_tool"
@@ -60,7 +62,13 @@ def test_tool_registry_lists_current_and_future_contracts() -> None:
     assert by_id[ENERGY_VITALS_TOOL_ID].implementation_status == (
         "partial_existing_surface"
     )
+    assert by_id[CONTEXTUAL_PERMISSION_TOOL_ID].implementation_status == (
+        "ready_current_tool"
+    )
     assert "scout.ai.energy_vitals.assess" in by_id[ENERGY_VITALS_TOOL_ID].aliases
+    assert "scout.ai.micro_decision.assess" in by_id[
+        CONTEXTUAL_PERMISSION_TOOL_ID
+    ].aliases
     assert registry.ready_current_tool_count >= 8
     assert registry.executable_tool_count >= registry.ready_current_tool_count
     assert registry.contract_only_tool_count >= 1
@@ -313,6 +321,80 @@ def test_execute_energy_vitals_assessor_loads_workspace_energy_artifacts(tmp_pat
     assert result.payload["boundary"]["medical_diagnosis"] is False
     assert result.payload["boundary"]["safety_api_called"] is False
     assert result.payload["boundary"]["provider_values_are_scout_truth"] is False
+
+
+def test_execute_contextual_permission_assessor_returns_bounded_decision() -> None:
+    result = execute_scout_ai_tool(
+        {
+            "tool_id": "scout.ai.contextual_permission.assess",
+            "project_root": str(PROJECT_ROOT),
+            "query": "我可以在這裡停下來拍一段影片嗎?",
+            "arguments": {
+                "current_time": "2026-06-07T13:36:00+08:00",
+                "current_cp_id": "CP3",
+                "next_cp_id": "CP4",
+                "remaining_safety_buffer_minutes": 21,
+                "current_delay_minutes": 9,
+                "next_segment_uncertainty_minutes": 3,
+                "weather_reserve_minutes": 2,
+                "communication_status": "ok",
+                "equipment_status": "ok",
+            },
+        }
+    )
+
+    assert result.status == "completed"
+    assert result.tool_id == CONTEXTUAL_PERMISSION_TOOL_ID
+    assert result.implementation_status == "ready_current_tool"
+    assert result.output_artifact_kind == "scout_ai_contextual_permission_tool_output"
+    assert result.payload["artifact_kind"] == "scout_ai_contextual_permission_tool_output"
+    assert result.payload["decision"] == "CONDITIONAL_GO"
+    assert result.payload["allowed"] is True
+    assert result.payload["contextual_permission"]["maxDurationMinutes"] == 6
+    assert result.payload["contextual_permission"]["leaveBy"] == (
+        "2026-06-07T13:42:00+08:00"
+    )
+    assert result.payload["contextual_permission"]["cost"][
+        "timeBufferChangeMinutes"
+    ] == -6
+    assert result.payload["risk_budget"]["authorizedDurationMinutes"] == 16
+    assert result.missing_fields == []
+    assert result.payload["boundary"]["runtime_safety_truth"] is False
+    assert result.payload["boundary"]["safety_api_called"] is False
+
+
+def test_execute_contextual_permission_assessor_derives_planned_eta_buffer() -> None:
+    result = execute_scout_ai_tool(
+        {
+            "tool_id": CONTEXTUAL_PERMISSION_TOOL_ID,
+            "project_root": str(PROJECT_ROOT),
+            "query": "我可以在這裡停下來拍一段影片嗎?",
+            "arguments": {
+                "current_time": "2013-10-08T14:52:50+08:00",
+                "next_cp_id": "雲海保線所",
+                "communication_status": "ok",
+                "equipment_status": "ok",
+            },
+        }
+    )
+
+    assert result.status == "completed"
+    assert result.payload["decision"] == "NO_GO"
+    assert result.payload["allowed"] is False
+    assert result.payload["max_duration_minutes"] is None
+    assert result.payload["risk_budget"]["remainingSafetyBufferMinutes"] == 6.0
+    assert result.payload["risk_budget"]["authorizedDurationMinutes"] == 0
+    assert result.payload["risk_budget"]["daylightReserveMinutes"] == 60.0
+    assert result.payload["risk_budget"]["weatherReserveMinutes"] == 15.0
+    assert result.payload["risk_budget"]["nextSegmentUncertaintyMinutes"] == 10.0
+    assert result.payload["risk_budget_source"]["source_status"] == (
+        "derived_from_planned_eta_candidate"
+    )
+    assert result.payload["risk_budget_source"]["reserve_sources"]
+    assert result.payload["risk_budget_source"]["runtime_safety_truth"] is False
+    assert result.missing_fields == []
+    assert any("candidate planned ETA" in warning for warning in result.warnings)
+    assert any("reserve was deducted" in warning for warning in result.warnings)
 
 
 def test_agent_manifest_runs_tool_registry_and_tool_run(tmp_path: Path) -> None:

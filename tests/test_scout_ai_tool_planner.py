@@ -4,6 +4,7 @@ from pathlib import Path
 
 from assistant_models import AssistantSurface, ScoutAssistantQuery
 from scout_ai_tool_planner import (
+    CONTEXTUAL_PERMISSION_TOOL_ID,
     ENERGY_VITALS_TOOL_ID,
     INS_DR_TRACE_TOOL_ID,
     LIVE_NAVIGATION_STATE_TOOL_ID,
@@ -94,6 +95,23 @@ def test_planner_selects_weather_ready_tool_for_weather_questions() -> None:
     assert item.required_fields == ["project_root"]
     assert item.missing_fields == []
     assert item.boundary.live_safety_api_calls_allowed is False
+
+
+def test_planner_selects_contextual_permission_for_micro_decision() -> None:
+    plan = plan_scout_ai_tools(
+        _query("我可以在這裡停下來拍一段影片嗎?"),
+        project_root=PROJECT_ROOT,
+    )
+
+    item = _single_tool(plan, CONTEXTUAL_PERMISSION_TOOL_ID)
+    assert item.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+    assert item.implementation_status == "ready_current_tool"
+    assert item.request is not None
+    assert item.request["tool_id"] == CONTEXTUAL_PERMISSION_TOOL_ID
+    assert item.required_fields == ["project_root"]
+    assert item.missing_fields == []
+    assert item.boundary.runtime_safety_truth is False
+    assert WEATHER_WINDOW_TOOL_ID not in _tool_ids(plan)
 
 
 def test_planner_selects_energy_vitals_contract_only_for_health_question() -> None:
