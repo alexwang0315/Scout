@@ -130,6 +130,23 @@ def test_planner_keeps_active_hypothermia_in_survival_playbook() -> None:
     assert SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID in tool_ids
 
 
+def test_planner_routes_active_altitude_sickness_to_survival_playbook() -> None:
+    plan = plan_scout_ai_tools(
+        _query("隊友頭痛想吐疑似高山症，還能繼續前進嗎？"),
+        project_root=PROJECT_ROOT,
+    )
+
+    tool_ids = _tool_ids(plan)
+    assert SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID in tool_ids
+    assert CONTEXTUAL_PERMISSION_TOOL_ID not in tool_ids
+
+    item = _single_tool(plan, SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID)
+    assert item.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+    assert item.request is not None
+    assert item.request["tool_id"] == SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID
+    assert item.boundary.runtime_safety_truth is False
+
+
 def test_planner_selects_route_readiness_for_pretrip_go_no_go_question() -> None:
     plan = plan_scout_ai_tools(
         _query("出發前 Go/No-Go 可以出發嗎？"),

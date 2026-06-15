@@ -2321,6 +2321,8 @@ def _looks_like_survival_incident_playbook_question(text: str) -> bool:
         text,
     ) and not _looks_like_active_survival_incident_question(text):
         return False
+    if _looks_like_active_survival_incident_question(text):
+        return True
     return _has_any(
         text,
         (
@@ -2393,6 +2395,20 @@ def _looks_like_active_survival_incident_question(text: str) -> bool:
             "撐過夜",
             "傷者",
             "受傷",
+            "高山症",
+            "疑似高山症",
+            "頭痛想吐",
+            "頭痛噁心",
+            "氣喘發作",
+            "哮喘發作",
+            "呼吸困難",
+            "喘不過氣",
+            "胸痛",
+            "altitude sickness",
+            "acute mountain sickness",
+            "ams",
+            "asthma attack",
+            "shortness of breath",
             "迷路",
             "不確定自己在哪",
             "求救",
@@ -2404,6 +2420,8 @@ def _looks_like_active_survival_incident_question(text: str) -> bool:
 
 
 def _looks_like_contextual_permission_question(text: str) -> bool:
+    if _looks_like_active_survival_incident_question(text):
+        return False
     return _has_any(
         text,
         (

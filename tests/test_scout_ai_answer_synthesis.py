@@ -1964,6 +1964,33 @@ def test_answer_synthesis_uses_survival_playbook_field_answer_without_guessing()
     assert "runtime safety truth" in result.answer
 
 
+def test_answer_synthesis_escalates_active_altitude_sickness() -> None:
+    result = collect_and_synthesize_scout_ai_answer(
+        "隊友頭痛想吐疑似高山症，還能繼續前進嗎？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=5,
+    )
+
+    assert result.answerability == "partial_evidence_with_missing_context"
+    source = _source(result, SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID)
+    assert source.top_result_summary["decision"] == "ESCALATE"
+    assert source.top_result_summary["incident_triage"]["scenario"] == (
+        "injury_or_medical_uncertainty"
+    )
+    assert result.decision_output["answerSourceToolId"] == (
+        SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID
+    )
+    assert result.decision_output["decision"] == "ESCALATE"
+    assert result.decision_output["allowed"] is False
+    assert result.decision_output["firstLayer"]["decision"] == (
+        "停止推進並交由人工救援/領隊判斷。"
+    )
+    assert "疑似高山症" in result.decision_output["firstLayer"]["reason"]
+    assert "求生事件 playbook" in result.answer
+    assert "runtime safety truth" in result.answer
+
+
 def test_answer_synthesis_uses_team_status_field_answer_without_guessing() -> None:
     result = collect_and_synthesize_scout_ai_answer(
         "後隊在哪？最後一次有效位置多久前？留守回報準備好了嗎？",

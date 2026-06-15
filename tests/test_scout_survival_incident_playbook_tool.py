@@ -76,6 +76,25 @@ def test_survival_playbook_personalizes_injury_context_without_medical_diagnosis
     assert result["boundary"]["remote_outbound_send_allowed"] is False
 
 
+def test_survival_playbook_escalates_active_altitude_sickness() -> None:
+    result = explain_scout_survival_incident_playbook(
+        PROJECT_ROOT,
+        query="隊友頭痛想吐疑似高山症，還能繼續前進嗎？",
+    )
+
+    assert result["answerability"] == "survival_playbook_missing_personalized_context"
+    assert result["decision"] == "ESCALATE"
+    assert result["decision_output"]["decision"] == "ESCALATE"
+    assert result["decision_output"]["allowed"] is False
+    assert result["decision_output"]["firstLayer"]["decision"] == (
+        "停止推進並交由人工救援/領隊判斷。"
+    )
+    assert "疑似高山症" in result["decision_output"]["firstLayer"]["reason"]
+    assert result["incident_triage"]["scenario"] == "injury_or_medical_uncertainty"
+    assert result["boundary"]["medical_diagnosis"] is False
+    assert result["boundary"]["runtime_safety_truth"] is False
+
+
 def test_survival_playbook_output_kind_constant() -> None:
     assert SURVIVAL_INCIDENT_PLAYBOOK_OUTPUT_KIND == (
         "scout_ai_survival_incident_playbook_tool_output"

@@ -189,7 +189,31 @@ def explain_scout_survival_incident_playbook(
 
 def _scenario(incident_type: str | None, query: str) -> str:
     text = f"{incident_type or ''} {query}".lower()
-    if _has_any(text, ("受傷", "傷者", "injury", "bleeding", "fracture", "移動傷者")):
+    if _has_any(
+        text,
+        (
+            "受傷",
+            "傷者",
+            "injury",
+            "bleeding",
+            "fracture",
+            "移動傷者",
+            "高山症",
+            "疑似高山症",
+            "頭痛想吐",
+            "頭痛噁心",
+            "氣喘發作",
+            "哮喘發作",
+            "呼吸困難",
+            "喘不過氣",
+            "胸痛",
+            "altitude sickness",
+            "acute mountain sickness",
+            "ams",
+            "asthma attack",
+            "shortness of breath",
+        ),
+    ):
         return "injury_or_medical_uncertainty"
     if _has_any(text, ("失溫", "低溫", "hypothermia", "風寒", "濕衣", "撐過夜")):
         return "cold_exposure_or_overnight"
@@ -482,7 +506,33 @@ def _main_risks(
     if scenario == "lost_or_position_uncertain":
         risks = ["位置不確定時繼續移動會放大迷途與失聯風險。"]
     elif scenario == "injury_or_medical_uncertainty":
-        risks = ["傷勢不明時移動傷者可能造成二次傷害。"]
+        if _has_any(
+            query.lower(),
+            (
+                "高山症",
+                "頭痛想吐",
+                "頭痛噁心",
+                "altitude sickness",
+                "acute mountain sickness",
+                "ams",
+            ),
+        ):
+            risks = ["疑似高山症屬高後果健康情境，繼續上升或推進可能讓狀況惡化。"]
+        elif _has_any(
+            query.lower(),
+            (
+                "氣喘發作",
+                "哮喘發作",
+                "呼吸困難",
+                "喘不過氣",
+                "胸痛",
+                "asthma attack",
+                "shortness of breath",
+            ),
+        ):
+            risks = ["呼吸困難或氣喘發作屬高後果健康情境，繼續推進可能延誤人工醫療判斷。"]
+        else:
+            risks = ["傷勢不明時移動傷者可能造成二次傷害。"]
     elif scenario == "cold_exposure_or_overnight":
         risks = ["低溫、濕衣、風與夜間暴露會提高失溫風險。"]
     elif scenario == "rescue_or_sos_preparation":

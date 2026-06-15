@@ -2091,6 +2091,34 @@ def test_full_workflow_runs_survival_playbook_question() -> None:
     assert result.boundary.runtime_safety_truth is False
 
 
+def test_full_workflow_escalates_active_altitude_sickness() -> None:
+    result = run_scout_ai_full_workflow(
+        "隊友頭痛想吐疑似高山症，還能繼續前進嗎？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=5,
+    )
+
+    assert result.answerability == "partial_evidence_with_missing_context"
+    assert result.failed_tool_count == 0
+    source = _workflow_source(result, SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID)
+    assert source["top_result_summary"]["decision"] == "ESCALATE"
+    assert source["top_result_summary"]["incident_triage"]["scenario"] == (
+        "injury_or_medical_uncertainty"
+    )
+    assert result.decision_output["answerSourceToolId"] == (
+        SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID
+    )
+    assert result.decision_output["decision"] == "ESCALATE"
+    assert result.decision_output["allowed"] is False
+    assert result.decision_output["firstLayer"]["decision"] == (
+        "停止推進並交由人工救援/領隊判斷。"
+    )
+    assert "疑似高山症" in result.decision_output["firstLayer"]["reason"]
+    assert "求生事件 playbook" in result.answer
+    assert result.boundary.runtime_safety_truth is False
+
+
 def test_full_workflow_runs_team_status_question() -> None:
     result = run_scout_ai_full_workflow(
         "後隊在哪？最後一次有效位置多久前？留守回報準備好了嗎？",
