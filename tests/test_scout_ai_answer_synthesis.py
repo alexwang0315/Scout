@@ -335,6 +335,25 @@ def test_answer_synthesis_blocks_wind_exposed_lunch() -> None:
     assert "runtime safety truth" in result.answer
 
 
+def test_answer_synthesis_surfaces_lunch_alternate_cp_and_minutes() -> None:
+    result = collect_and_synthesize_scout_ai_answer(
+        "這裡是風口，前方 CP3 約 18 分鐘且較避風，安全 buffer 還有 45 分鐘，"
+        "我們可以在這裡吃午餐嗎？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=6,
+    )
+
+    contextual = _source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
+    assert contextual.top_result_summary["action"] == "lunch"
+    assert contextual.top_result_summary["decision"] == "NO_GO"
+    assert contextual.top_result_summary["allowed"] is False
+    assert contextual.top_result_summary["minutes_to_next_cp"] == 18.0
+    assert contextual.missing_fields == []
+    assert "約 18 分鐘到 CP3" in result.decision_output["firstLayer"]["nextStep"]
+    assert "約 18 分鐘到 CP3" in result.answer
+
+
 def test_answer_synthesis_escalates_stream_surge_crossing() -> None:
     result = collect_and_synthesize_scout_ai_answer(
         "前方溪水暴漲，還能過溪嗎？",

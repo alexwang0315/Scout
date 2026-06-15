@@ -271,6 +271,7 @@ def _compact_payload(
         "decision_output",
         "allowed",
         "action",
+        "minutes_to_next_cp",
         "max_duration_minutes",
         "leave_by",
         "field_answer",

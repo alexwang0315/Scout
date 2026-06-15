@@ -422,6 +422,7 @@ def _execute_ready_current_tool(tool_id: str, arguments: dict[str, Any]) -> dict
             current_time=_str_or_none(arguments.get("current_time")),
             current_cp_id=_str_or_none(arguments.get("current_cp_id")),
             next_cp_id=_str_or_none(arguments.get("next_cp_id")),
+            minutes_to_next_cp=_float_or_none(arguments.get("minutes_to_next_cp")),
             remaining_safety_buffer_minutes=_float_or_none(
                 arguments.get("remaining_safety_buffer_minutes")
             ),
