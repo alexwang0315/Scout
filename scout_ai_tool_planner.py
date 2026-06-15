@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from enum import StrEnum
 from pathlib import Path
 from typing import Any, Literal
@@ -316,6 +317,10 @@ def _plan_item(
         overrides = _pace_guardian_request_overrides(query.question)
         if overrides:
             request["arguments"] = overrides
+    if request is not None and contract.tool_id == TEAM_STATUS_TOOL_ID:
+        overrides = _team_status_request_overrides(query.question)
+        if overrides:
+            request["arguments"] = overrides
     return ScoutAiToolPlanItem(
         tool_id=contract.tool_id,
         label=contract.label,
@@ -396,6 +401,55 @@ def _pace_guardian_request_overrides(question: str) -> dict[str, Any]:
     ):
         overrides["leader_accepts_slowest_basis"] = True
     return overrides
+
+
+def _team_status_request_overrides(question: str) -> dict[str, Any]:
+    normalized = _normalize(question)
+    overrides: dict[str, Any] = {}
+    if _has_any(
+        normalized,
+        (
+            "沒回訊息",
+            "未回訊息",
+            "沒有回訊息",
+            "沒回覆",
+            "未回覆",
+            "聯絡不上",
+            "失聯",
+            "最後聯絡",
+            "最後一次聯絡",
+        ),
+    ):
+        overrides["communication_status"] = "unknown"
+    minutes = _extract_minutes(normalized)
+    if minutes is not None and _has_any(
+        normalized,
+        (
+            "沒回訊息",
+            "未回訊息",
+            "沒有回訊息",
+            "沒回覆",
+            "未回覆",
+            "聯絡不上",
+            "失聯",
+            "最後聯絡",
+            "最後一次聯絡",
+            "多久前",
+        ),
+    ):
+        overrides["checkin_overdue_minutes"] = minutes
+        overrides["last_heard_minutes"] = minutes
+    return overrides
+
+
+def _extract_minutes(normalized_question: str) -> float | None:
+    match = re.search(
+        r"(\d+(?:\.\d+)?)(?:分鐘|分|min|minutes?)",
+        normalized_question,
+    )
+    if not match:
+        return None
+    return float(match.group(1))
 
 
 def _asks_to_use_average_pace(normalized_question: str) -> bool:
@@ -1229,6 +1283,14 @@ def _looks_like_team_status_question(text: str) -> bool:
             "集合點",
             "約定山屋",
             "checkin",
+            "沒回訊息",
+            "未回訊息",
+            "沒有回訊息",
+            "沒回覆",
+            "未回覆",
+            "聯絡不上",
+            "失聯",
+            "多久沒回",
             "rendezvous",
         ),
     )

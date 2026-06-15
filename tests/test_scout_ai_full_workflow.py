@@ -1152,6 +1152,37 @@ def test_full_workflow_runs_team_status_question() -> None:
     assert result.boundary.runtime_safety_truth is False
 
 
+def test_full_workflow_escalates_unanswered_teammate_message_without_outbound() -> None:
+    result = run_scout_ai_full_workflow(
+        "隊友已經 55 分鐘沒回訊息，要怎麼辦？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=3,
+    )
+
+    assert result.answerability == "partial_evidence_with_missing_context"
+    assert result.selected_tool_count == 1
+    assert result.executed_tool_count == 1
+    assert result.completed_tool_count == 1
+    assert result.failed_tool_count == 0
+    source = result.sources[0]
+    assert source["tool_id"] == TEAM_STATUS_TOOL_ID
+    assert source["top_result_summary"]["decision"] == "ESCALATE"
+    assert source["top_result_summary"]["decision_output"]["cost"][
+        "checkinOverdueMinutes"
+    ] == 55.0
+    assert source["top_result_summary"]["team_status_guardian"][
+        "outbound_send_performed"
+    ] is False
+    assert result.decision_output["answerSourceToolId"] == TEAM_STATUS_TOOL_ID
+    assert result.decision_output["decision"] == "ESCALATE"
+    assert result.decision_output["firstLayer"]["decision"] == (
+        "停止推進並升級人工確認。"
+    )
+    assert "不得自動通知留守人" in result.decision_output["firstLayer"]["limit"]
+    assert result.boundary.runtime_safety_truth is False
+
+
 def test_full_workflow_runs_post_trip_review_question() -> None:
     result = run_scout_ai_full_workflow(
         "行後回顧要更新哪些下一次規劃？實際耗時哪裡比預期慢？",
