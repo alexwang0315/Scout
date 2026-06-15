@@ -31,6 +31,11 @@ PACE_GAP_RATIO_WARNING = 1.45
 PACE_GAP_RATIO_CHANGE_PLAN = 1.8
 DELAY_WARNING_MINUTES = 15.0
 DELAY_CHANGE_PLAN_MINUTES = 25.0
+TECHNICAL_SLOWDOWN_WARNING_RATIO = 0.25
+LATE_TRIP_DECAY_WARNING_RATIO = 0.2
+LOAD_SLOWDOWN_WARNING_RATIO = 0.15
+WEATHER_SLOWDOWN_WARNING_RATIO = 0.15
+DOWNHILL_DRAG_RATIO = 0.75
 
 
 def assess_scout_pace_guardian(
@@ -187,6 +192,7 @@ def assess_scout_pace_guardian(
             "decision": decision,
             "decision_output": decision_output,
             "next_action": pace_fit["next_action"],
+            "scout_pace_coefficients": pace_fit["scout_pace_coefficients"],
             "guardrails": [
                 "Do not use team average pace to hide the slowest member.",
                 "Use contextual permission for bounded stop/rest/lunch duration.",
@@ -207,6 +213,7 @@ def assess_scout_pace_guardian(
                 "slowest_member": pace_fit.get("slowest_member"),
                 "fastest_member": pace_fit.get("fastest_member"),
                 "pace_gap_ratio": pace_fit.get("pace_gap_ratio"),
+                "scout_pace_coefficients": pace_fit.get("scout_pace_coefficients"),
                 "main_reasons": pace_fit["main_reasons"],
                 "next_action": pace_fit["next_action"],
                 "field_answer": field_answer,
@@ -216,6 +223,7 @@ def assess_scout_pace_guardian(
         ],
         "standard_alignment": [
             "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 7 Readiness & Pace Fit",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 7.2 Scout Pace Coefficient",
             "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 7.3 Team Pace Fit",
             "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 15.1 Pace Guardian",
             "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 18.1 member experience and pace inputs",
@@ -265,6 +273,11 @@ def _pace_fit(
         for member in members
         if member.get("vulnerable_link") is True
     ]
+    pace_coefficients = [
+        coefficient
+        for coefficient in (_member_pace_coefficient(member) for member in members)
+        if coefficient.get("available")
+    ]
     main_reasons: list[str] = []
     required_conditions: list[str] = []
     warnings: list[str] = []
@@ -303,6 +316,11 @@ def _pace_fit(
 
     fatigue_reasons = _fatigue_reasons(members, energy_vitals=energy_vitals)
     main_reasons.extend(fatigue_reasons)
+    coefficient_reasons, coefficient_warnings = _pace_coefficient_reasons(
+        pace_coefficients
+    )
+    main_reasons.extend(coefficient_reasons)
+    warnings.extend(coefficient_warnings)
 
     if vulnerable_members:
         warnings.append("隊伍存在較脆弱環節，節奏必須以該成員可恢復性為準。")
@@ -331,6 +349,7 @@ def _pace_fit(
         "fastest_member": _member_public_summary(fastest) if fastest else None,
         "pace_gap_ratio": pace_gap_ratio,
         "vulnerable_members": vulnerable_members,
+        "scout_pace_coefficients": pace_coefficients,
         "main_reasons": main_reasons,
         "warnings": warnings,
         "required_conditions": required_conditions,
@@ -445,6 +464,7 @@ def _decision_output(
             "scheduleDelayMinutes": schedule_pressure.get("current_delay_minutes"),
             "minutesToNextCp": schedule_pressure.get("minutes_to_next_cp"),
             "teamPaceImpact": "Slowest-member basis; team average pace was not used.",
+            "paceCoefficientImpact": _pace_coefficient_impact_text(pace_fit),
             "retreatImpact": "If pace pressure persists, shorten route or turn around before buffer collapse.",
         },
         "nextAction": pace_fit["next_action"],
@@ -554,6 +574,14 @@ def _decision_details(
         )
     if pace_fit.get("pace_gap_ratio") is not None:
         details.append(f"pace_gap_ratio={pace_fit.get('pace_gap_ratio')}")
+    coefficients = pace_fit.get("scout_pace_coefficients")
+    if isinstance(coefficients, list) and coefficients:
+        labels = [
+            str(item.get("label") or item.get("member_id"))
+            for item in coefficients[:4]
+            if isinstance(item, dict)
+        ]
+        details.append("scout_pace_coefficients=" + ", ".join(labels))
     if schedule_pressure.get("current_delay_minutes") is not None:
         details.append(
             f"current_delay_minutes={schedule_pressure.get('current_delay_minutes')}"
@@ -563,6 +591,13 @@ def _decision_details(
             f"minutes_to_next_cp={schedule_pressure.get('minutes_to_next_cp')}"
         )
     return details
+
+
+def _pace_coefficient_impact_text(pace_fit: dict[str, Any]) -> str:
+    coefficients = pace_fit.get("scout_pace_coefficients")
+    if isinstance(coefficients, list) and coefficients:
+        return "Scout Pace Coefficient considered terrain, fatigue, load, weather, and credibility drag."
+    return "Scout Pace Coefficient unavailable; decision falls back to member pace and reserve evidence."
 
 
 def _member_profiles(
@@ -632,6 +667,7 @@ def _member_profiles(
             ),
             "conditions": conditions,
             "review_state": _nested(raw, "review", "review_state") or raw.get("review_state"),
+            "scout_pace_coefficient": _raw_scout_pace_coefficient(raw),
         }
         member["vulnerable_link"] = _is_vulnerable_member(member)
         members.append(member)
@@ -658,10 +694,192 @@ def _members_from_energy_vitals(energy_vitals: dict[str, Any]) -> list[dict[str,
             "first_time_similar_route": None,
             "conditions": [],
             "review_state": None,
+            "scout_pace_coefficient": {},
             "vulnerable_link": str(advisory.get("cue_band") or "").lower()
             in {"rest_suggested", "manual_check", "slow_down"},
         }
     ]
+
+
+def _raw_scout_pace_coefficient(raw: dict[str, Any]) -> dict[str, Any]:
+    coefficient = raw.get("scout_pace_coefficient")
+    if not isinstance(coefficient, dict):
+        coefficient = {}
+    return {
+        "flat_speed_mps": _float_or_none(
+            _first_present(
+                coefficient.get("flat_speed_mps"),
+                coefficient.get("flat_pace_mps"),
+                raw.get("flat_speed_mps"),
+                raw.get("flat_pace_mps"),
+            )
+        ),
+        "uphill_speed_mps": _float_or_none(
+            _first_present(
+                coefficient.get("uphill_speed_mps"),
+                coefficient.get("uphill_pace_mps"),
+                raw.get("uphill_speed_mps"),
+                raw.get("uphill_pace_mps"),
+            )
+        ),
+        "downhill_speed_mps": _float_or_none(
+            _first_present(
+                coefficient.get("downhill_speed_mps"),
+                coefficient.get("downhill_pace_mps"),
+                raw.get("downhill_speed_mps"),
+                raw.get("downhill_pace_mps"),
+            )
+        ),
+        "technical_terrain_slowdown_ratio": _float_or_none(
+            _first_present(
+                coefficient.get("technical_terrain_slowdown_ratio"),
+                coefficient.get("technical_slowdown_ratio"),
+                raw.get("technical_terrain_slowdown_ratio"),
+                raw.get("technical_slowdown_ratio"),
+            )
+        ),
+        "rest_frequency_minutes": _float_or_none(
+            _first_present(
+                coefficient.get("rest_frequency_minutes"),
+                coefficient.get("rest_interval_minutes"),
+                raw.get("rest_frequency_minutes"),
+                raw.get("rest_interval_minutes"),
+            )
+        ),
+        "late_trip_speed_decay_ratio": _float_or_none(
+            _first_present(
+                coefficient.get("late_trip_speed_decay_ratio"),
+                coefficient.get("fatigue_decay_ratio"),
+                raw.get("late_trip_speed_decay_ratio"),
+                raw.get("fatigue_decay_ratio"),
+            )
+        ),
+        "pack_weight_kg": _float_or_none(
+            _first_present(
+                coefficient.get("pack_weight_kg"),
+                coefficient.get("load_kg"),
+                raw.get("pack_weight_kg"),
+                raw.get("load_kg"),
+            )
+        ),
+        "load_slowdown_ratio": _float_or_none(
+            _first_present(
+                coefficient.get("load_slowdown_ratio"),
+                coefficient.get("pack_slowdown_ratio"),
+                raw.get("load_slowdown_ratio"),
+                raw.get("pack_slowdown_ratio"),
+            )
+        ),
+        "weather_slowdown_ratio": _float_or_none(
+            _first_present(
+                coefficient.get("weather_slowdown_ratio"),
+                coefficient.get("rain_slowdown_ratio"),
+                raw.get("weather_slowdown_ratio"),
+                raw.get("rain_slowdown_ratio"),
+            )
+        ),
+        "experience_credibility": _first_present(
+            coefficient.get("experience_credibility"),
+            coefficient.get("self_report_credibility"),
+            raw.get("experience_credibility"),
+            raw.get("self_report_credibility"),
+        ),
+        "self_report_gap_ratio": _float_or_none(
+            _first_present(
+                coefficient.get("self_report_gap_ratio"),
+                coefficient.get("actual_vs_self_report_gap_ratio"),
+                raw.get("self_report_gap_ratio"),
+                raw.get("actual_vs_self_report_gap_ratio"),
+            )
+        ),
+    }
+
+
+def _member_pace_coefficient(member: dict[str, Any]) -> dict[str, Any]:
+    coefficient = member.get("scout_pace_coefficient")
+    coefficient = coefficient if isinstance(coefficient, dict) else {}
+    public = {
+        key: value
+        for key, value in coefficient.items()
+        if value not in (None, "", [])
+    }
+    public.update(
+        {
+            "member_id": member.get("member_id"),
+            "label": member.get("label"),
+            "available": bool(public),
+        }
+    )
+    return public
+
+
+def _pace_coefficient_reasons(
+    coefficients: list[dict[str, Any]],
+) -> tuple[list[str], list[str]]:
+    reasons: list[str] = []
+    warnings: list[str] = []
+    for coefficient in coefficients:
+        label = str(coefficient.get("label") or coefficient.get("member_id"))
+        flat = _float_or_none(coefficient.get("flat_speed_mps"))
+        downhill = _float_or_none(coefficient.get("downhill_speed_mps"))
+        technical = _float_or_none(
+            coefficient.get("technical_terrain_slowdown_ratio")
+        )
+        late_decay = _float_or_none(coefficient.get("late_trip_speed_decay_ratio"))
+        load_slowdown = _float_or_none(coefficient.get("load_slowdown_ratio"))
+        weather_slowdown = _float_or_none(coefficient.get("weather_slowdown_ratio"))
+        experience_gap = _float_or_none(coefficient.get("self_report_gap_ratio"))
+        credibility = str(coefficient.get("experience_credibility") or "").lower()
+        coefficient_factors: list[str] = []
+
+        if flat is not None and downhill is not None and downhill < flat * DOWNHILL_DRAG_RATIO:
+            coefficient_factors.append("下坡速度")
+        if technical is not None and technical >= TECHNICAL_SLOWDOWN_WARNING_RATIO:
+            coefficient_factors.append("技術地形降速率")
+        if late_decay is not None and late_decay >= LATE_TRIP_DECAY_WARNING_RATIO:
+            coefficient_factors.append("行程後段速度衰退")
+        if load_slowdown is not None and load_slowdown >= LOAD_SLOWDOWN_WARNING_RATIO:
+            coefficient_factors.append("負重影響")
+        if weather_slowdown is not None and weather_slowdown >= WEATHER_SLOWDOWN_WARNING_RATIO:
+            coefficient_factors.append("天候影響")
+        if credibility in {"low", "poor", "unreviewed", "低", "不足"} or (
+            experience_gap is not None and experience_gap >= 0.2
+        ):
+            coefficient_factors.append("經驗可信度")
+        if coefficient_factors:
+            reasons.append(
+                f"{label} 的 Scout Pace Coefficient 顯示"
+                + "、".join(coefficient_factors[:6])
+                + "會拖慢原計畫腳程。"
+            )
+
+        if flat is not None and downhill is not None and downhill < flat * DOWNHILL_DRAG_RATIO:
+            reasons.append(
+                f"{label} 的 Scout Pace Coefficient 顯示下坡速度明顯低於平地速度，需保留膝蓋與技術地形餘裕。"
+            )
+        if technical is not None and technical >= TECHNICAL_SLOWDOWN_WARNING_RATIO:
+            reasons.append(
+                f"{label} 技術地形降速率約 {technical:.0%}，拉繩、碎石、泥濘或攀爬段不能用平地腳程估算。"
+            )
+        if late_decay is not None and late_decay >= LATE_TRIP_DECAY_WARNING_RATIO:
+            reasons.append(
+                f"{label} 行程後段速度衰退約 {late_decay:.0%}，回程與撤退 buffer 需加厚。"
+            )
+        if load_slowdown is not None and load_slowdown >= LOAD_SLOWDOWN_WARNING_RATIO:
+            reasons.append(
+                f"{label} 負重造成約 {load_slowdown:.0%} 速度折損，不能只看未負重紀錄。"
+            )
+        if weather_slowdown is not None and weather_slowdown >= WEATHER_SLOWDOWN_WARNING_RATIO:
+            warnings.append(
+                f"{label} 雨天/低溫等天候下速度可能再下降約 {weather_slowdown:.0%}。"
+            )
+        if credibility in {"low", "poor", "unreviewed", "低", "不足"} or (
+            experience_gap is not None and experience_gap >= 0.2
+        ):
+            reasons.append(
+                f"{label} 經驗可信度不足或自述與實際紀錄落差偏高，需用已驗證紀錄校正。"
+            )
+    return _dedupe(reasons), _dedupe(warnings)
 
 
 def _team_context(

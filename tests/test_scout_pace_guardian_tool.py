@@ -68,6 +68,60 @@ def test_pace_guardian_changes_plan_for_slowest_member_pressure() -> None:
     assert result["boundary"]["medical_diagnosis"] is False
 
 
+def test_pace_guardian_surfaces_scout_pace_coefficient_drag() -> None:
+    result = assess_scout_pace_guardian(
+        PROJECT_ROOT,
+        query="這段有碎石下坡又下雨，最慢者的 Scout Pace Coefficient 還能照原計畫嗎？",
+        team_members=[
+            {
+                "member_id": "leader",
+                "display_label": "Leader",
+                "pace_mps": 1.05,
+                "reserve_minutes": 70,
+            },
+            {
+                "member_id": "slowest",
+                "display_label": "Slowest member",
+                "pace_mps": 0.72,
+                "reserve_minutes": 45,
+                "flat_speed_mps": 1.0,
+                "uphill_speed_mps": 0.55,
+                "downhill_speed_mps": 0.48,
+                "technical_terrain_slowdown_ratio": 0.35,
+                "rest_frequency_minutes": 50,
+                "late_trip_speed_decay_ratio": 0.28,
+                "pack_weight_kg": 11,
+                "load_slowdown_ratio": 0.2,
+                "weather_slowdown_ratio": 0.18,
+                "experience_credibility": "low",
+                "self_report_gap_ratio": 0.24,
+            },
+        ],
+        leader_accepts_slowest_basis=True,
+        team_rest_sync="synced",
+    )
+
+    assert result["answerability"] == "pace_fit_decision_available"
+    assert result["decision"] == "CONDITIONAL_GO"
+    coefficient = result["team_pace_fit"]["scout_pace_coefficients"][0]
+    assert coefficient["label"] == "Slowest member"
+    assert coefficient["technical_terrain_slowdown_ratio"] == 0.35
+    assert coefficient["late_trip_speed_decay_ratio"] == 0.28
+    assert coefficient["load_slowdown_ratio"] == 0.2
+    assert coefficient["weather_slowdown_ratio"] == 0.18
+    reasons = " ".join(result["team_pace_fit"]["main_reasons"])
+    assert "Scout Pace Coefficient" in reasons
+    assert "技術地形降速率" in reasons
+    assert "行程後段速度衰退" in reasons
+    assert "負重" in reasons
+    assert "經驗可信度" in reasons
+    assert "Scout Pace Coefficient" in result["field_answer"]
+    assert result["decision_output"]["cost"]["paceCoefficientImpact"].startswith(
+        "Scout Pace Coefficient considered"
+    )
+    assert result["boundary"]["runtime_safety_truth"] is False
+
+
 def test_pace_guardian_reports_missing_member_pace_from_resource_plan() -> None:
     result = assess_scout_pace_guardian(
         PROJECT_ROOT,
