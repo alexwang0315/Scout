@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -123,6 +124,8 @@ def assess_scout_pace_guardian(
     )
     current_delay = _float_or_none(current_delay_minutes)
     if current_delay is None:
+        current_delay = _delay_minutes_from_query(query)
+    if current_delay is None:
         current_delay = _nested_float(team_status, "schedule", "current_delay_minutes")
     if current_delay is None:
         current_delay = _nested_float(team_status, "progress", "current_delay_minutes")
@@ -155,6 +158,7 @@ def assess_scout_pace_guardian(
         "eta_source": eta_source,
     }
     decision_output = _decision_output(
+        query=query,
         decision=decision,
         pace_fit=pace_fit,
         schedule_pressure=schedule_pressure,
@@ -382,6 +386,7 @@ def _field_answer(
 
 def _decision_output(
     *,
+    query: str,
     decision: str,
     pace_fit: dict[str, Any],
     schedule_pressure: dict[str, Any],
@@ -397,7 +402,7 @@ def _decision_output(
     )
     alternatives = _pace_alternative_actions(decision=decision, pace_fit=pace_fit)
     first_layer = {
-        "decision": _decision_phrase(decision=decision, allowed=allowed),
+        "decision": _decision_phrase(decision=decision, allowed=allowed, query=query),
         "limit": _decision_limit_phrase(decision=decision, pace_fit=pace_fit),
         "reason": " / ".join(reasons[:2]),
         "nextStep": pace_fit["next_action"],
@@ -463,8 +468,9 @@ def _decision_reasons(
     *, pace_fit: dict[str, Any], missing_fields: list[str]
 ) -> list[str]:
     reasons = _str_list(pace_fit.get("main_reasons"))
-    if not reasons:
-        reasons = _str_list(pace_fit.get("warnings"))
+    warnings = _str_list(pace_fit.get("warnings"))
+    if warnings:
+        reasons.extend(warnings)
     if missing_fields:
         reasons.append("缺少 " + "、".join(missing_fields[:5]))
     if not reasons:
@@ -501,7 +507,9 @@ def _pace_alternative_actions(*, decision: str, pace_fit: dict[str, Any]) -> lis
     return _dedupe(alternatives)
 
 
-def _decision_phrase(*, decision: str, allowed: bool) -> str:
+def _decision_phrase(*, decision: str, allowed: bool, query: str) -> str:
+    if decision == "NO_GO" and _looks_like_summit_question(query):
+        return "不建議繼續攻頂。"
     if decision == "NO_GO":
         return "不建議用目前腳程資料繼續判斷。"
     if decision == "CHANGE_PLAN":
@@ -924,6 +932,27 @@ def _first_present(*values: Any) -> Any:
             continue
         return value
     return None
+
+
+def _delay_minutes_from_query(query: str) -> float | None:
+    text = str(query or "")
+    patterns = (
+        r"(?:晚了|落後|delay(?:ed)?(?:\s+by)?)\s*([0-9]+(?:\.[0-9]+)?)\s*(?:分鐘|分|mins?|minutes?)",
+        r"([0-9]+(?:\.[0-9]+)?)\s*(?:分鐘|分|mins?|minutes?)\s*(?:delay|late|behind)",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, text, flags=re.IGNORECASE)
+        if not match:
+            continue
+        value = _float_or_none(match.group(1))
+        if value is not None:
+            return max(0.0, value)
+    return None
+
+
+def _looks_like_summit_question(query: str) -> bool:
+    normalized = str(query or "").lower().replace(" ", "")
+    return any(term in normalized for term in ("攻頂", "山頂", "summit"))
 
 
 def _float_or_none(value: Any) -> float | None:

@@ -256,6 +256,30 @@ def test_execute_pace_guardian_alias_returns_team_pace_fit_decision() -> None:
     assert result.boundary.live_safety_api_calls_allowed is False
 
 
+def test_execute_pace_guardian_extracts_delay_from_summit_question() -> None:
+    result = execute_scout_ai_tool(
+        {
+            "tool_id": "scout.ai.team_pace_fit.assess",
+            "project_root": str(PROJECT_ROOT),
+            "query": "我們晚了 30 分鐘，還可以繼續攻頂嗎？",
+        }
+    )
+
+    assert result.status == "completed"
+    assert result.tool_id == PACE_GUARDIAN_TOOL_ID
+    assert result.payload["answerability"] == "pace_fit_missing_required_fields"
+    assert result.payload["decision"] == "NO_GO"
+    assert result.payload["schedule_pressure"]["current_delay_minutes"] == 30.0
+    assert result.payload["decision_output"]["cost"]["scheduleDelayMinutes"] == 30.0
+    assert result.payload["decision_output"]["decision"] == "NO_GO"
+    assert result.payload["decision_output"]["allowed"] is False
+    assert result.payload["decision_output"]["firstLayer"]["decision"] == "不建議繼續攻頂。"
+    assert "目前已落後約 30 分鐘" in result.payload["decision_output"]["firstLayer"]["reason"]
+    assert "member_pace_profile" in result.missing_fields
+    assert result.payload["pace_guardian"]["average_pace_used"] is False
+    assert result.boundary.runtime_safety_truth is False
+
+
 def test_execute_route_architecture_alias_returns_cp_graph_decision() -> None:
     result = execute_scout_ai_tool(
         {

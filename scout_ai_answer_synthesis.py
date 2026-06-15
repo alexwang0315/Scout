@@ -226,6 +226,7 @@ def _source_from_record(record: dict[str, Any]) -> ScoutAiAnswerSource:
         "privacy_share_policy",
         "pace_guardian",
         "team_pace_fit",
+        "schedule_pressure",
         "weather_to_decision",
         "decision",
         "decision_object",
@@ -532,6 +533,10 @@ def _decision_source_priority(source: ScoutAiAnswerSource) -> tuple[int, str]:
         return (0, source.tool_id)
     if source.tool_id == MEDIA_LITERACY_TOOL_ID:
         return (1, source.tool_id)
+    if source.tool_id == PACE_GUARDIAN_TOOL_ID:
+        schedule = source.top_result_summary.get("schedule_pressure")
+        if isinstance(schedule, dict) and schedule.get("current_delay_minutes") is not None:
+            return (1, source.tool_id)
     if source.tool_id == CONTEXTUAL_PERMISSION_TOOL_ID:
         return (2, source.tool_id)
     if source.tool_id == ROUTE_READINESS_TOOL_ID:

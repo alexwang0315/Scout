@@ -645,6 +645,7 @@ def _looks_like_pace_guardian_question(text: str) -> bool:
             "最慢",
             "腳程",
             "落後",
+            "晚了",
             "午餐點",
             "前移",
             "縮短行程",
