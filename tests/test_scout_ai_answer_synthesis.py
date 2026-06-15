@@ -13,6 +13,7 @@ from scout_ai_evidence_collection import collect_scout_ai_evidence
 from scout_ai_tool_planner import (
     ENERGY_VITALS_TOOL_ID,
     LIVE_NAVIGATION_STATE_TOOL_ID,
+    NAVIGATION_TERRAIN_TOOL_ID,
     WEATHER_WINDOW_TOOL_ID,
 )
 from scout_contextual_permission_tool import CONTEXTUAL_PERMISSION_TOOL_ID
@@ -796,6 +797,51 @@ def test_answer_synthesis_blocks_autonomous_departure_without_offline_map() -> N
     assert "不得照原計畫出發" in result.decision_output["firstLayer"]["limit"]
     assert "離線地圖未就緒" in result.answer
     assert "runtime safety truth" in result.answer
+
+
+def test_answer_synthesis_blocks_autonomous_navigation_without_backup_positioning() -> None:
+    result = collect_and_synthesize_scout_ai_answer(
+        "這條路地圖力需求很高，但我們沒有第二套定位備援，可以自己去嗎？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=4,
+    )
+
+    source_ids = {source.tool_id for source in result.sources}
+    assert NAVIGATION_TERRAIN_TOOL_ID in source_ids
+    assert ROUTE_READINESS_TOOL_ID in source_ids
+    assert MAP_PERCEPTION_TOOL_ID not in source_ids
+
+    navigation = _source(result, NAVIGATION_TERRAIN_TOOL_ID)
+    assert navigation.top_result_summary["decision"] == "GUIDED_ONLY"
+    assert navigation.top_result_summary["positioning_readiness"][
+        "backup_positioning_available"
+    ] is False
+
+    assert result.decision_output["answerSourceToolId"] == NAVIGATION_TERRAIN_TOOL_ID
+    assert result.decision_output["decision"] == "GUIDED_ONLY"
+    assert result.decision_output["allowed"] is False
+    assert result.decision_output["firstLayer"]["decision"] == "不建議自主前往。"
+    assert "不得自主出發" in result.decision_output["firstLayer"]["limit"]
+    assert "地圖力判斷" in result.answer
+    assert "定位備援" in result.answer
+    assert "runtime safety truth" in result.answer
+
+
+def test_answer_synthesis_blocks_autonomous_navigation_with_low_map_literacy() -> None:
+    result = collect_and_synthesize_scout_ai_answer(
+        "我不會看等高線，也不知道撤退方向，可以自主前往嗎？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=4,
+    )
+
+    navigation = _source(result, NAVIGATION_TERRAIN_TOOL_ID)
+    assert navigation.top_result_summary["decision"] == "GUIDED_ONLY"
+    assert result.decision_output["answerSourceToolId"] == NAVIGATION_TERRAIN_TOOL_ID
+    assert result.decision_output["firstLayer"]["decision"] == "不建議自主前往。"
+    assert "等高線" in result.answer
+    assert "撤退方向" in result.answer
 
 
 def test_answer_synthesis_uses_route_readiness_field_answer_without_guessing() -> None:

@@ -20,6 +20,7 @@ from scout_survival_incident_playbook_tool import SURVIVAL_INCIDENT_PLAYBOOK_TOO
 from scout_safety_boundary_tool import SAFETY_BOUNDARY_TOOL_ID
 from scout_map_perception_tool import MAP_PERCEPTION_TOOL_ID
 from scout_ins_dr_trace_tool import INS_DR_TRACE_TOOL_ID
+from scout_navigation_terrain_tool import NAVIGATION_TERRAIN_TOOL_ID
 from scout_ai_tool_contracts import tool_registry_output
 from scout_ai_tool_executor import execute_scout_ai_tool
 
@@ -64,6 +65,7 @@ def test_tool_registry_lists_current_and_future_contracts() -> None:
     assert "scout.ai.ins_dr_trace.analyze.v0" in by_id
     assert "scout.ai.weather_window.assess.v0" in by_id
     assert "scout.ai.live_navigation_state.assess.v0" in by_id
+    assert NAVIGATION_TERRAIN_TOOL_ID in by_id
     assert "scout.ai.safety_boundary.explain.v0" in by_id
     assert ROUTE_READINESS_TOOL_ID in by_id
     assert CONTEXTUAL_PERMISSION_TOOL_ID in by_id
@@ -86,6 +88,9 @@ def test_tool_registry_lists_current_and_future_contracts() -> None:
         "ready_current_tool"
     )
     assert by_id["scout.ai.live_navigation_state.assess.v0"].implementation_status == (
+        "ready_current_tool"
+    )
+    assert by_id[NAVIGATION_TERRAIN_TOOL_ID].implementation_status == (
         "ready_current_tool"
     )
     assert by_id["scout.ai.safety_boundary.explain.v0"].implementation_status == (
@@ -135,6 +140,9 @@ def test_tool_registry_lists_current_and_future_contracts() -> None:
     assert "route_briefing_path" in by_id[ROUTE_CONTEXT_TOOL_ID].optional_fields
     assert "scout.ai.cp_graph.assess" in by_id[ROUTE_ARCHITECTURE_TOOL_ID].aliases
     assert "scout.ai.device_resource.assess" in by_id[EQUIPMENT_RESOURCE_TOOL_ID].aliases
+    assert "scout.ai.map_readiness.assess" in by_id[
+        NAVIGATION_TERRAIN_TOOL_ID
+    ].aliases
     assert "scout.ai.team_pace_fit.assess" in by_id[PACE_GUARDIAN_TOOL_ID].aliases
     assert "scout.ai.team_guardian.assess" in by_id[TEAM_STATUS_TOOL_ID].aliases
     assert "scout.ai.after_action.assess" in by_id[POST_TRIP_REVIEW_TOOL_ID].aliases
@@ -521,6 +529,34 @@ def test_execute_route_readiness_returns_guided_only_for_beginner_high_demand_ro
     assert package["decision_limits"]["autonomous_departure_allowed"] is False
     assert result.payload["departure_gate"]["approval_granted"] is False
     assert result.payload["boundary"]["runtime_handoff_performed"] is False
+    assert result.boundary.runtime_safety_truth is False
+
+
+def test_execute_navigation_terrain_alias_returns_map_readiness_decision() -> None:
+    result = execute_scout_ai_tool(
+        {
+            "tool_id": "scout.ai.navigation_terrain.assess",
+            "project_root": str(PROJECT_ROOT),
+            "query": "這條路地圖力需求很高，但我們沒有第二套定位備援，可以自己去嗎？",
+            "arguments": {"backup_positioning_available": False},
+        }
+    )
+
+    assert result.status == "completed"
+    assert result.tool_id == NAVIGATION_TERRAIN_TOOL_ID
+    assert result.output_artifact_kind == "scout_ai_navigation_terrain_tool_output"
+    assert result.payload["decision"] == "GUIDED_ONLY"
+    assert result.payload["decision_output"]["decision"] == "GUIDED_ONLY"
+    assert result.payload["decision_output"]["firstLayer"]["decision"] == (
+        "不建議自主前往。"
+    )
+    assert result.payload["navigation_terrain"]["role"] == (
+        "Navigation & Terrain Intelligence / Map Readiness"
+    )
+    assert result.payload["positioning_readiness"][
+        "backup_positioning_available"
+    ] is False
+    assert result.payload["debug_collection"]["writes_performed"] is False
     assert result.boundary.runtime_safety_truth is False
 
 

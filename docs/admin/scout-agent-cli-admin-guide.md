@@ -274,6 +274,16 @@ Questions that state a missing offline map or unloaded GPX, such as
 "我沒下載離線地圖，可以自主出發嗎？", route through route readiness plus this
 equipment gate and must not be answered by candidate map OCR/perception alone.
 
+`scout.ai.navigation_terrain.assess.v0` is the read-only Scout AI Sec. 11
+navigation-terrain assessor. It dry-runs the existing navigation terrain
+collector and returns a native `decision_output` without writing
+`normalized/navigation/*`. Questions about high map-demand routes, contour
+literacy, retreat direction, backup positioning, or only one teammate knowing
+offline maps route here. If route map demand is high and readiness is low, it
+returns `GUIDED_ONLY` with the first-layer decision "不建議自主前往。"; it is
+candidate planning evidence only and never grants departure approval or runtime
+safety truth.
+
 `scout.ai.team_status.assess.v0` returns a native `decision_output` for Sec. 18.1
 team/remote-contact inputs and Sec. 19 team-status recalculation. It converts
 missing member position, overdue check-in, split team, unreliable communication,

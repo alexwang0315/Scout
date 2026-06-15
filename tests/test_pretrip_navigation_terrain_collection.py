@@ -33,8 +33,35 @@ def test_collect_navigation_terrain_dry_run_reports_missing_readiness() -> None:
     assert result["decision"] == "CONDITIONAL_GO"
     assert result["answerability"] == "navigation_terrain_missing_user_readiness"
     assert result["navigation_demand_level"] == "high"
+    assert result["navigation_demand"]["demand_level"] == "high"
+    assert result["map_readiness"]["map_context_available"] is True
+    assert result["positioning_readiness"]["live_sensor_probe_performed"] is False
     assert "offline_map_downloaded" in result["missing_fields"]
+    assert result["required_actions"]
     assert result["required_action_count"] >= 6
+    assert result["boundary"]["runtime_safety_truth"] is False
+
+
+def test_collect_navigation_terrain_guided_only_when_only_one_map_user() -> None:
+    result = collect_pretrip_navigation_terrain(
+        PROJECT_ROOT,
+        dry_run=True,
+        offline_map_downloaded=True,
+        gpx_loaded_on_device=True,
+        contour_skill_confirmed=True,
+        terrain_feature_skill_confirmed=True,
+        retreat_direction_understood=True,
+        backup_positioning_available=True,
+        team_map_user_count=1,
+        generated_at="2099-06-07T08:00:00Z",
+    )
+
+    assert result["writes_performed"] is False
+    assert result["decision"] == "GUIDED_ONLY"
+    assert result["missing_fields"] == []
+    assert "Confirm at least two team members can use offline maps and GPX." in result[
+        "required_actions"
+    ]
     assert result["boundary"]["runtime_safety_truth"] is False
 
 

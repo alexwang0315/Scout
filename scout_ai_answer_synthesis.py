@@ -25,6 +25,7 @@ from scout_media_literacy_tool import MEDIA_LITERACY_TOOL_ID
 from scout_survival_incident_playbook_tool import SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID
 from scout_safety_boundary_tool import SAFETY_BOUNDARY_TOOL_ID
 from scout_map_perception_tool import MAP_PERCEPTION_TOOL_ID
+from scout_navigation_terrain_tool import NAVIGATION_TERRAIN_TOOL_ID
 from scout_ins_dr_trace_tool import INS_DR_TRACE_TOOL_ID
 
 
@@ -183,6 +184,12 @@ def _source_from_record(record: dict[str, Any]) -> ScoutAiAnswerSource:
     for key in (
         "field_answer",
         "navigation_terrain",
+        "navigation_demand",
+        "map_readiness",
+        "terrain_readiness",
+        "positioning_readiness",
+        "map_skill_readiness",
+        "required_actions",
         "navigation_decision",
         "safety_boundary",
         "map_perception",
@@ -300,6 +307,9 @@ def _answer_text(
     navigation_answer = _live_navigation_answer(completed_sources)
     if navigation_answer:
         parts.append(navigation_answer)
+    navigation_terrain_answer = _navigation_terrain_answer(completed_sources)
+    if navigation_terrain_answer:
+        parts.append(navigation_terrain_answer)
     map_perception_answer = _map_perception_answer(completed_sources)
     if map_perception_answer:
         parts.append(map_perception_answer)
@@ -542,6 +552,11 @@ def _decision_source_priority(source: ScoutAiAnswerSource) -> tuple[int, str]:
         return (2, source.tool_id)
     if source.tool_id == ROUTE_READINESS_TOOL_ID:
         return (5, source.tool_id)
+    if source.tool_id == NAVIGATION_TERRAIN_TOOL_ID:
+        decision = str(source.top_result_summary.get("decision") or "").upper()
+        if decision in {"GUIDED_ONLY", "CHANGE_PLAN", "NO_GO"}:
+            return (4, source.tool_id)
+        return (10, source.tool_id)
     if source.tool_id == EQUIPMENT_RESOURCE_TOOL_ID:
         decision = str(source.top_result_summary.get("decision") or "").upper()
         if decision in {"ESCALATE", "NO_GO"}:
@@ -877,6 +892,16 @@ def _map_perception_answer(sources: list[ScoutAiAnswerSource]) -> str | None:
     return None
 
 
+def _navigation_terrain_answer(sources: list[ScoutAiAnswerSource]) -> str | None:
+    for source in sources:
+        if source.tool_id != NAVIGATION_TERRAIN_TOOL_ID:
+            continue
+        field_answer = source.top_result_summary.get("field_answer")
+        if isinstance(field_answer, str) and field_answer.strip():
+            return field_answer.strip()
+    return None
+
+
 def _ins_dr_trace_answer(sources: list[ScoutAiAnswerSource]) -> str | None:
     for source in sources:
         if source.tool_id != INS_DR_TRACE_TOOL_ID:
@@ -1112,6 +1137,12 @@ def _top_result_summary(value: Any) -> dict[str, Any]:
         "risk_budget",
         "risk_budget_source",
         "navigation_terrain",
+        "navigation_demand",
+        "map_readiness",
+        "terrain_readiness",
+        "positioning_readiness",
+        "map_skill_readiness",
+        "required_actions",
         "navigation_decision",
         "provided_fields",
         "quality_flags",

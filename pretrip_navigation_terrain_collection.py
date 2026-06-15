@@ -175,7 +175,13 @@ def collect_pretrip_navigation_terrain(
         "decision": decision,
         "answerability": answerability,
         "navigation_demand_level": demand["demand_level"],
+        "navigation_demand": demand,
+        "map_readiness": offline_payload["map_readiness"],
+        "terrain_readiness": offline_payload["terrain_readiness"],
+        "positioning_readiness": ins_dr_payload["positioning_readiness"],
+        "map_skill_readiness": ins_dr_payload["map_skill_readiness"],
         "missing_fields": missing_fields,
+        "required_actions": required_actions,
         "required_action_count": len(required_actions),
         "source_report": source_report,
         "standard_alignment": SEC11_ALIGNMENT,
@@ -328,6 +334,11 @@ def _required_actions(
         actions.append("Review retreat direction and nearest retreat candidates.")
     if capability["backup_positioning_available"] is not True:
         actions.append("Prepare backup positioning before relying on GNSS/phone navigation.")
+    if (
+        capability["team_map_user_count"] is not None
+        and capability["team_map_user_count"] < 2
+    ):
+        actions.append("Confirm at least two team members can use offline maps and GPX.")
     if not workspace["risk_layers_available"]:
         actions.append("Generate or review risk heat/ribbon layers before departure.")
     if not workspace["terrain_layers_available"]:
@@ -354,6 +365,12 @@ def _decision(
             "retreat_direction_understood",
             "backup_positioning_available",
         )
+    ):
+        return "GUIDED_ONLY"
+    if (
+        demand["demand_level"] == "high"
+        and capability["team_map_user_count"] is not None
+        and capability["team_map_user_count"] < 2
     ):
         return "GUIDED_ONLY"
     if missing_fields:
