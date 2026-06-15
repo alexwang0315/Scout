@@ -2640,8 +2640,12 @@ def _pretrip_navigation_terrain_collect(
         gpx_loaded_on_device=request.get("gpx_loaded_on_device"),
         contour_skill_confirmed=request.get("contour_skill_confirmed"),
         terrain_feature_skill_confirmed=request.get("terrain_feature_skill_confirmed"),
+        junction_points_known=request.get("junction_points_known"),
         retreat_direction_understood=request.get("retreat_direction_understood"),
         backup_positioning_available=request.get("backup_positioning_available"),
+        terrain_risk_layers_understood=request.get(
+            "terrain_risk_layers_understood"
+        ),
         team_map_user_count=request.get("team_map_user_count"),
         generated_at=request.get("generated_at"),
     )

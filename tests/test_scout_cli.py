@@ -606,9 +606,13 @@ def test_scout_pretrip_navigation_terrain_collect_facade(tmp_path: Path) -> None
             "false",
             "--terrain-feature-skill-confirmed",
             "false",
+            "--junction-points-known",
+            "false",
             "--retreat-direction-understood",
             "false",
             "--backup-positioning-available",
+            "false",
+            "--terrain-risk-layers-understood",
             "false",
             "--team-map-user-count",
             "1",
@@ -635,9 +639,13 @@ def test_scout_pretrip_navigation_terrain_collect_facade(tmp_path: Path) -> None
             "false",
             "--terrain-feature-skill-confirmed",
             "false",
+            "--junction-points-known",
+            "false",
             "--retreat-direction-understood",
             "false",
             "--backup-positioning-available",
+            "false",
+            "--terrain-risk-layers-understood",
             "false",
             "--team-map-user-count",
             "1",
@@ -654,6 +662,10 @@ def test_scout_pretrip_navigation_terrain_collect_facade(tmp_path: Path) -> None
     )
     assert output["result"]["decision"] == "GUIDED_ONLY"
     assert output["result"]["writes_performed"] is True
+    assert output["result"]["map_readiness"]["junction_points_known"] is False
+    assert (
+        output["result"]["map_readiness"]["terrain_risk_layers_understood"] is False
+    )
     assert output["result"]["boundary"]["live_sensor_read_allowed"] is False
     assert (project_root / OFFLINE_MAP_MANIFEST_REF).is_file()
 

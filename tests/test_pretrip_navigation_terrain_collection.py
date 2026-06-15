@@ -37,8 +37,10 @@ def test_collect_navigation_terrain_dry_run_reports_missing_readiness() -> None:
     assert result["map_readiness"]["map_context_available"] is True
     assert result["positioning_readiness"]["live_sensor_probe_performed"] is False
     assert "offline_map_downloaded" in result["missing_fields"]
+    assert "junction_points_known" in result["missing_fields"]
+    assert "terrain_risk_layers_understood" in result["missing_fields"]
     assert result["required_actions"]
-    assert result["required_action_count"] >= 6
+    assert result["required_action_count"] >= 8
     assert result["boundary"]["runtime_safety_truth"] is False
 
 
@@ -50,8 +52,10 @@ def test_collect_navigation_terrain_guided_only_when_only_one_map_user() -> None
         gpx_loaded_on_device=True,
         contour_skill_confirmed=True,
         terrain_feature_skill_confirmed=True,
+        junction_points_known=True,
         retreat_direction_understood=True,
         backup_positioning_available=True,
+        terrain_risk_layers_understood=True,
         team_map_user_count=1,
         generated_at="2099-06-07T08:00:00Z",
     )
@@ -75,8 +79,10 @@ def test_collect_navigation_terrain_writes_guided_only_artifacts(tmp_path: Path)
         gpx_loaded_on_device=False,
         contour_skill_confirmed=False,
         terrain_feature_skill_confirmed=False,
+        junction_points_known=False,
         retreat_direction_understood=False,
         backup_positioning_available=False,
+        terrain_risk_layers_understood=False,
         team_map_user_count=1,
         generated_at="2099-06-07T08:00:00Z",
     )
@@ -92,7 +98,9 @@ def test_collect_navigation_terrain_writes_guided_only_artifacts(tmp_path: Path)
     assert offline["navigation_demand"]["demand_level"] == "high"
     assert offline["map_readiness"]["offline_map_downloaded"] is False
     assert offline["map_readiness"]["gpx_loaded_on_device"] is False
+    assert offline["map_readiness"]["junction_points_known"] is False
     assert offline["map_readiness"]["risk_layers_available"] is True
+    assert offline["map_readiness"]["terrain_risk_layers_understood"] is False
     assert offline["map_readiness"]["terrain_layers_available"] is True
     assert offline["terrain_readiness"]["risk_ribbon_segment_count"] > 0
     assert offline["boundary"]["runtime_safety_truth"] is False
@@ -101,6 +109,8 @@ def test_collect_navigation_terrain_writes_guided_only_artifacts(tmp_path: Path)
     assert ins_dr["positioning_readiness"]["live_sensor_probe_performed"] is False
     assert ins_dr["positioning_readiness"]["hardware_control_performed"] is False
     assert ins_dr["map_skill_readiness"]["contour_skill_confirmed"] is False
+    assert ins_dr["map_skill_readiness"]["junction_points_known"] is False
+    assert ins_dr["map_skill_readiness"]["terrain_risk_layers_understood"] is False
     assert project["offline_map_manifest_ref"] == OFFLINE_MAP_MANIFEST_REF
     assert project["ins_dr_readiness_ref"] == INS_DR_READINESS_REF
     assert project["navigation_terrain_decision"] == "GUIDED_ONLY"

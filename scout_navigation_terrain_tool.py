@@ -14,8 +14,10 @@ NAVIGATION_TERRAIN_OPTIONAL_FIELDS = (
     "gpx_loaded_on_device",
     "contour_skill_confirmed",
     "terrain_feature_skill_confirmed",
+    "junction_points_known",
     "retreat_direction_understood",
     "backup_positioning_available",
+    "terrain_risk_layers_understood",
     "team_map_user_count",
 )
 
@@ -28,8 +30,10 @@ def assess_scout_navigation_terrain(
     gpx_loaded_on_device: bool | str | None = None,
     contour_skill_confirmed: bool | str | None = None,
     terrain_feature_skill_confirmed: bool | str | None = None,
+    junction_points_known: bool | str | None = None,
     retreat_direction_understood: bool | str | None = None,
     backup_positioning_available: bool | str | None = None,
+    terrain_risk_layers_understood: bool | str | None = None,
     team_map_user_count: int | str | None = None,
 ) -> dict[str, Any]:
     """Assess Sec. 11 navigation terrain readiness without writing workspace files."""
@@ -41,8 +45,10 @@ def assess_scout_navigation_terrain(
         gpx_loaded_on_device=gpx_loaded_on_device,
         contour_skill_confirmed=contour_skill_confirmed,
         terrain_feature_skill_confirmed=terrain_feature_skill_confirmed,
+        junction_points_known=junction_points_known,
         retreat_direction_understood=retreat_direction_understood,
         backup_positioning_available=backup_positioning_available,
+        terrain_risk_layers_understood=terrain_risk_layers_understood,
         team_map_user_count=team_map_user_count,
     )
     decision = str(collection.get("decision") or "DELAY")
