@@ -630,6 +630,8 @@ def _contextual_permission_request_overrides(question: str) -> dict[str, Any]:
 
 
 def _contextual_permission_action_override(normalized_question: str) -> str | None:
+    if _looks_like_buffer_cost_question(normalized_question):
+        return "stop"
     if _has_any(normalized_question, ("架腳架", "腳架", "tripod")):
         return "tripod"
     if _has_any(normalized_question, ("拍影片", "拍片", "影片", "video", "film")):
@@ -1477,6 +1479,15 @@ def _looks_like_route_architecture_question(text: str) -> bool:
             "scheduledelta",
             "走錯或變天",
             "走錯時",
+            "走錯要往哪",
+            "走錯往哪",
+            "走錯要退",
+            "走錯要下撤",
+            "往哪裡退",
+            "往哪退",
+            "退到哪",
+            "退回哪",
+            "下撤方向",
             "變天時",
             "是否要折返",
             "要不要折返",
@@ -2586,6 +2597,8 @@ def _looks_like_active_survival_incident_question(text: str) -> bool:
 def _looks_like_contextual_permission_question(text: str) -> bool:
     if _looks_like_active_survival_incident_question(text):
         return False
+    if _looks_like_buffer_cost_question(text):
+        return True
     return _has_any(
         text,
         (
@@ -2713,6 +2726,31 @@ def _looks_like_contextual_permission_question(text: str) -> bool:
             "howlongcanistop",
             "canifilm",
             "canitakephoto",
+        ),
+    )
+
+
+def _looks_like_buffer_cost_question(text: str) -> bool:
+    return _has_any(
+        text,
+        (
+            "會消耗什麼buffer",
+            "會消耗什麼 buffer",
+            "消耗什麼buffer",
+            "消耗什麼 buffer",
+            "消耗哪些buffer",
+            "消耗哪些 buffer",
+            "耗掉什麼buffer",
+            "耗掉什麼 buffer",
+            "吃掉什麼buffer",
+            "吃掉什麼 buffer",
+            "消耗什麼餘裕",
+            "消耗哪些餘裕",
+            "消耗什麼預算",
+            "消耗哪些預算",
+            "風險預算",
+            "代價是什麼",
+            "成本是什麼",
         ),
     )
 

@@ -673,6 +673,20 @@ def test_planner_passes_stop_duration_and_buffer_to_contextual_permission() -> N
     assert item.boundary.runtime_safety_truth is False
 
 
+def test_planner_routes_abstract_buffer_cost_to_contextual_permission() -> None:
+    plan = plan_scout_ai_tools(
+        _query("這個選擇會消耗什麼 buffer？"),
+        project_root=PROJECT_ROOT,
+    )
+
+    item = _single_tool(plan, CONTEXTUAL_PERMISSION_TOOL_ID)
+    assert item.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+    assert item.request is not None
+    assert item.request["tool_id"] == CONTEXTUAL_PERMISSION_TOOL_ID
+    assert item.request["arguments"] == {"action": "stop"}
+    assert item.boundary.runtime_safety_truth is False
+
+
 def test_planner_routes_generic_leave_by_question_to_contextual_stop() -> None:
     plan = plan_scout_ai_tools(
         _query("現在可以做嗎？什麼時間前必須離開？"),
@@ -1387,6 +1401,7 @@ def test_planner_routes_route_phase_and_forgiveness_questions_to_route_architect
     questions = (
         "這條路線難點在前段、中段還是回程？",
         "走錯或變天時還有退路嗎？",
+        "如果走錯要往哪裡退？",
     )
 
     for question in questions:

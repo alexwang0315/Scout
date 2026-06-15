@@ -318,6 +318,27 @@ def test_contextual_permission_missing_buffer_still_reports_requested_stop_cost(
     assert result["boundary"]["runtime_safety_truth"] is False
 
 
+def test_contextual_permission_abstract_buffer_cost_defaults_to_stop_budget() -> None:
+    result = assess_scout_contextual_permission(
+        PROJECT_ROOT,
+        query="這個選擇會消耗什麼 buffer？",
+    )
+
+    assert result["answerability"] == "contextual_permission_missing_required_fields"
+    assert result["action"] == "stop"
+    assert result["decision"] == "NO_GO"
+    assert result["allowed"] is False
+    assert result["missing_fields"] == ["remaining_safety_buffer_minutes"]
+    assert result["decision_output"]["firstLayer"]["decision"] == "不建議停留。"
+    assert result["decision_output"]["firstLayer"]["limit"] == (
+        "不授權此行動；不要消耗停留或改線 buffer。"
+    )
+    assert result["risk_budget_source"]["source_status"] == (
+        "missing_required_buffer_evidence"
+    )
+    assert result["boundary"]["runtime_safety_truth"] is False
+
+
 def test_contextual_permission_generic_leave_by_question_defaults_to_stop() -> None:
     result = assess_scout_contextual_permission(
         PROJECT_ROOT,
