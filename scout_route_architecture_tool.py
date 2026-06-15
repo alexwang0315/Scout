@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import math
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from statistics import mean
 from typing import Any
@@ -120,6 +120,12 @@ def assess_scout_route_architecture(
 
     cp_nodes = _cp_nodes(checkpoints, planned_eta=planned_eta)
     graph_edges = _graph_edges(segments, checkpoints=cp_nodes, policies=segment_policies)
+    cp_nodes = _standard_cp_nodes(
+        cp_nodes,
+        graph_edges=graph_edges,
+        retreat_routes=retreat_routes,
+        planned_eta=planned_eta,
+    )
     route_architecture = _route_architecture(
         route_summary=route_summary,
         cp_nodes=cp_nodes,
@@ -217,6 +223,7 @@ def assess_scout_route_architecture(
         "standard_alignment": [
             "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 9 Route Architecture Intelligence",
             "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 12 Checkpoint Graph",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 12.1 CP Node Fields",
             "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 18.2 CP Graph and alternatives",
             "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 19 on-route recalculation",
             "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 22 required development standards",
@@ -246,8 +253,22 @@ def _cp_nodes(
                     "lat": _float_or_none(raw.get("lat")),
                     "lon": _float_or_none(raw.get("lon")),
                 },
+                "elevation": _first_float(
+                    raw,
+                    (
+                        "elevation",
+                        "elevation_m",
+                        "elevationMeters",
+                        "elevation_meter",
+                        "ele",
+                    ),
+                ),
                 "route_point_index": _int_or_none(raw.get("route_point_index")),
                 "planned_arrival_time": eta.get("eta") if eta else None,
+                "latest_safe_arrival_time": raw.get("latest_safe_arrival_time")
+                or raw.get("latestSafeArrivalTime"),
+                "latest_safe_departure_time": raw.get("latest_safe_departure_time")
+                or raw.get("latestSafeDepartureTime"),
                 "next_segment_estimated_minutes": eta.get("segment_duration_minutes")
                 if eta
                 else None,
@@ -258,6 +279,310 @@ def _cp_nodes(
             }
         )
     return nodes
+
+
+def _standard_cp_nodes(
+    cp_nodes: list[dict[str, Any]],
+    *,
+    graph_edges: list[dict[str, Any]],
+    retreat_routes: list[dict[str, Any]],
+    planned_eta: dict[str, Any],
+) -> list[dict[str, Any]]:
+    outgoing_by_cp_id = {
+        str(edge.get("from_cp_id")): edge
+        for edge in graph_edges
+        if isinstance(edge, dict) and edge.get("from_cp_id")
+    }
+    turn_back = _turn_back_summary(planned_eta)
+    return [
+        _standard_cp_node(
+            node,
+            outgoing_edge=outgoing_by_cp_id.get(str(node.get("cp_id"))),
+            retreat_routes=retreat_routes,
+            turn_back=turn_back,
+        )
+        for node in cp_nodes
+    ]
+
+
+def _standard_cp_node(
+    node: dict[str, Any],
+    *,
+    outgoing_edge: dict[str, Any] | None,
+    retreat_routes: list[dict[str, Any]],
+    turn_back: dict[str, Any],
+) -> dict[str, Any]:
+    cp_id = str(node.get("cp_id") or node.get("cpId") or "")
+    planned_arrival_time = node.get("planned_arrival_time")
+    recommended_stop_minutes = _recommended_stop_minutes(
+        node,
+        outgoing_edge=outgoing_edge,
+    )
+    planned_departure_time = _time_plus_minutes(
+        planned_arrival_time,
+        recommended_stop_minutes,
+    )
+    latest_safe_arrival_time = _latest_safe_arrival_time(
+        node,
+        turn_back=turn_back,
+    )
+    latest_safe_departure_time = _latest_safe_departure_time(
+        node,
+        outgoing_edge=outgoing_edge,
+        latest_safe_arrival_time=latest_safe_arrival_time,
+    )
+    retreat_options = _node_retreat_options(
+        cp_id,
+        retreat_routes=retreat_routes,
+        turn_back=turn_back,
+        node=node,
+    )
+    safe_to_stop = _safe_to_stop_candidate(node, outgoing_edge=outgoing_edge)
+    enriched = dict(node)
+    enriched.update(
+        {
+            "cpId": cp_id,
+            "plannedArrivalTime": planned_arrival_time,
+            "latestSafeArrivalTime": latest_safe_arrival_time,
+            "plannedDepartureTime": planned_departure_time,
+            "latestSafeDepartureTime": latest_safe_departure_time,
+            "recommendedStopMinutes": recommended_stop_minutes,
+            "maxStopMinutes": _max_stop_minutes(safe_to_stop),
+            "nextSegmentEstimatedMinutes": _next_segment_estimated_minutes(
+                node,
+                outgoing_edge=outgoing_edge,
+            ),
+            "nextSegmentDifficulty": _next_segment_difficulty(outgoing_edge),
+            "retreatOptions": retreat_options,
+            "weatherSensitivity": _weather_sensitivity(outgoing_edge),
+            "terrainRisks": _terrain_risks(outgoing_edge),
+            "communicationStatus": _communication_status(outgoing_edge),
+            "safeToStop": safe_to_stop,
+            "photoVideoSuitability": _photo_video_suitability(safe_to_stop),
+            "decisionTriggers": _cp_decision_triggers(
+                node,
+                outgoing_edge=outgoing_edge,
+                retreat_options=retreat_options,
+                latest_safe_arrival_time=latest_safe_arrival_time,
+                latest_safe_departure_time=latest_safe_departure_time,
+                turn_back=turn_back,
+            ),
+        }
+    )
+    return enriched
+
+
+def _recommended_stop_minutes(
+    node: dict[str, Any],
+    *,
+    outgoing_edge: dict[str, Any] | None,
+) -> int:
+    explicit = _int_or_none(
+        node.get("recommended_stop_minutes") or node.get("recommendedStopMinutes")
+    )
+    if explicit is not None:
+        return max(explicit, 0)
+    if not _safe_to_stop_candidate(node, outgoing_edge=outgoing_edge):
+        return 0
+    return 3
+
+
+def _max_stop_minutes(safe_to_stop: bool) -> int:
+    return 5 if safe_to_stop else 0
+
+
+def _safe_to_stop_candidate(
+    node: dict[str, Any],
+    *,
+    outgoing_edge: dict[str, Any] | None,
+) -> bool:
+    explicit = node.get("safe_to_stop")
+    if explicit is None:
+        explicit = node.get("safeToStop")
+    if isinstance(explicit, bool):
+        return explicit
+    cp_type = str(node.get("checkpoint_type") or "").strip().lower()
+    low_risk_outgoing = (
+        outgoing_edge is None
+        or int(outgoing_edge.get("architecture_score") or 0) == 0
+    )
+    known_stop_type = cp_type in {"start", "finish", "trailhead", "hut", "camp", "shelter"}
+    return bool(known_stop_type and low_risk_outgoing)
+
+
+def _time_plus_minutes(value: Any, minutes: int) -> str | None:
+    if not value:
+        return None
+    if minutes <= 0:
+        return str(value)
+    parsed = _parse_datetime(value)
+    if parsed is None:
+        return str(value)
+    return (parsed + timedelta(minutes=minutes)).isoformat()
+
+
+def _latest_safe_arrival_time(
+    node: dict[str, Any],
+    *,
+    turn_back: dict[str, Any],
+) -> Any:
+    explicit = node.get("latest_safe_arrival_time") or node.get("latestSafeArrivalTime")
+    if explicit:
+        return explicit
+    if _node_matches_turn_back(node, turn_back=turn_back):
+        return turn_back.get("turn_back_eta")
+    return None
+
+
+def _latest_safe_departure_time(
+    node: dict[str, Any],
+    *,
+    outgoing_edge: dict[str, Any] | None,
+    latest_safe_arrival_time: Any,
+) -> Any:
+    explicit = node.get("latest_safe_departure_time") or node.get(
+        "latestSafeDepartureTime"
+    )
+    if explicit:
+        return explicit
+    if outgoing_edge and outgoing_edge.get("latest_safe_departure_time"):
+        return outgoing_edge.get("latest_safe_departure_time")
+    return latest_safe_arrival_time
+
+
+def _next_segment_estimated_minutes(
+    node: dict[str, Any],
+    *,
+    outgoing_edge: dict[str, Any] | None,
+) -> float | int | None:
+    if outgoing_edge:
+        estimated = _float_or_none(outgoing_edge.get("expected_duration_minutes"))
+        if estimated is not None:
+            return estimated
+    return _float_or_none(node.get("next_segment_estimated_minutes"))
+
+
+def _next_segment_difficulty(outgoing_edge: dict[str, Any] | None) -> str:
+    if outgoing_edge is None:
+        return "terminal_or_unknown"
+    score = int(outgoing_edge.get("architecture_score") or 0)
+    if score >= 5:
+        return "high"
+    if score >= 2:
+        return "moderate"
+    return "low"
+
+
+def _node_retreat_options(
+    cp_id: str,
+    *,
+    retreat_routes: list[dict[str, Any]],
+    turn_back: dict[str, Any],
+    node: dict[str, Any],
+) -> list[dict[str, Any]]:
+    options = []
+    for route in retreat_routes:
+        trigger = str(route.get("trigger_checkpoint_candidate_id") or "")
+        is_triggered_here = bool(trigger and trigger == cp_id)
+        is_turn_back_return_route = (
+            _node_matches_turn_back(node, turn_back=turn_back)
+            and (
+                route.get("reversed_from_primary_route")
+                or str(route.get("retreat_type") or "").lower() == "return_to_entry"
+            )
+        )
+        if not is_triggered_here and not is_turn_back_return_route:
+            continue
+        option = _compact_retreat_route(route)
+        option["applicability"] = (
+            "turn_back_checkpoint_candidate"
+            if is_turn_back_return_route and not is_triggered_here
+            else "trigger_checkpoint_candidate"
+        )
+        options.append(option)
+    return options
+
+
+def _weather_sensitivity(outgoing_edge: dict[str, Any] | None) -> list[str]:
+    if outgoing_edge is None:
+        return ["next_segment_unknown"]
+    sensitivity = []
+    if outgoing_edge.get("requires_daylight"):
+        sensitivity.append("daylight_required")
+    if not sensitivity:
+        sensitivity.append("no_weather_sensitivity_flagged")
+    return sensitivity
+
+
+def _terrain_risks(outgoing_edge: dict[str, Any] | None) -> list[str]:
+    if outgoing_edge is None:
+        return []
+    return [
+        reason
+        for reason in _string_list(outgoing_edge.get("architecture_risk_reasons"))
+        if reason != "requires_daylight"
+    ]
+
+
+def _communication_status(outgoing_edge: dict[str, Any] | None) -> str:
+    if outgoing_edge is None:
+        return "unknown"
+    if outgoing_edge.get("signal_expected"):
+        return "signal_expected"
+    return "signal_not_expected"
+
+
+def _photo_video_suitability(safe_to_stop: bool) -> str:
+    if safe_to_stop:
+        return "candidate_only_short_stop_requires_contextual_permission"
+    return "not_recommended_requires_contextual_permission"
+
+
+def _cp_decision_triggers(
+    node: dict[str, Any],
+    *,
+    outgoing_edge: dict[str, Any] | None,
+    retreat_options: list[dict[str, Any]],
+    latest_safe_arrival_time: Any,
+    latest_safe_departure_time: Any,
+    turn_back: dict[str, Any],
+) -> list[str]:
+    triggers = [
+        "recompute_on_arrival",
+        "recompute_if_late",
+        "no_stop_without_contextual_permission",
+    ]
+    if not latest_safe_arrival_time:
+        triggers.append("latest_safe_arrival_time_missing")
+    if not latest_safe_departure_time:
+        triggers.append("latest_safe_departure_time_missing")
+    if outgoing_edge and outgoing_edge.get("requires_daylight"):
+        triggers.append("recompute_if_daylight_window_changes")
+    if outgoing_edge and not outgoing_edge.get("signal_expected"):
+        triggers.append("do_not_extend_stop_without_signal_review")
+    if outgoing_edge and int(outgoing_edge.get("architecture_score") or 0) >= 5:
+        triggers.append("preserve_buffer_before_high_difficulty_segment")
+    if retreat_options:
+        triggers.append("retreat_option_available_requires_review")
+    if _node_matches_turn_back(node, turn_back=turn_back):
+        triggers.append("turn_back_checkpoint")
+    return _dedupe(triggers)
+
+
+def _node_matches_turn_back(
+    node: dict[str, Any],
+    *,
+    turn_back: dict[str, Any],
+) -> bool:
+    turn_back_name = str(turn_back.get("turn_back_checkpoint_name") or "").strip()
+    if not turn_back_name:
+        return False
+    identifiers = {
+        str(node.get("name") or "").strip(),
+        str(node.get("cp_id") or "").strip(),
+        str(node.get("cpId") or "").strip(),
+    }
+    return turn_back_name in identifiers
 
 
 def _graph_edges(
@@ -302,6 +627,8 @@ def _graph_edges(
             "retreat_available": bool(requirement.get("retreat_available", False)),
             "water_available": bool(requirement.get("water_available", False)),
             "signal_expected": bool(requirement.get("signal_expected", False)),
+            "latest_safe_departure_time": requirement.get("latest_safe_departure_time")
+            or requirement.get("latestSafeDepartureTime"),
             "review_state": raw.get("review_state"),
             "candidate_only": True,
             "runtime_safety_truth": False,
@@ -1571,6 +1898,14 @@ def _float_or_none(value: Any) -> float | None:
     if math.isnan(parsed):
         return None
     return parsed
+
+
+def _first_float(raw: dict[str, Any], keys: tuple[str, ...]) -> float | None:
+    for key in keys:
+        parsed = _float_or_none(raw.get(key))
+        if parsed is not None:
+            return parsed
+    return None
 
 
 def _int_or_none(value: Any) -> int | None:
