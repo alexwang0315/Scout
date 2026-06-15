@@ -423,6 +423,26 @@ def test_planner_selects_weather_and_contextual_for_fog_wait_photo() -> None:
     assert contextual.boundary.runtime_safety_truth is False
 
 
+def test_planner_routes_teammate_wait_to_contextual_action() -> None:
+    plan = plan_scout_ai_tools(
+        _query(
+            "現在 2026-06-07T13:50:00+08:00，安全 buffer 還有 18 分鐘，可以等隊友 5 分鐘嗎？"
+        ),
+        project_root=PROJECT_ROOT,
+    )
+
+    contextual = _single_tool(plan, CONTEXTUAL_PERMISSION_TOOL_ID)
+    assert contextual.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+    assert contextual.request is not None
+    assert contextual.request["arguments"] == {
+        "action": "wait_teammate",
+        "requested_duration_minutes": 5.0,
+        "remaining_safety_buffer_minutes": 18.0,
+        "current_time": "2026-06-07T13:50:00+08:00",
+    }
+    assert contextual.boundary.runtime_safety_truth is False
+
+
 def test_planner_routes_tripod_permission_to_contextual_action() -> None:
     plan = plan_scout_ai_tools(
         _query("現在 2026-06-07T13:36:00+08:00，安全 buffer 還有 21 分鐘，可以架腳架 4 分鐘嗎？"),

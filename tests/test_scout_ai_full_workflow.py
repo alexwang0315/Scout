@@ -409,6 +409,33 @@ def test_full_workflow_treats_fog_photo_as_wait_permission() -> None:
     assert result.boundary.runtime_safety_truth is False
 
 
+def test_full_workflow_allows_bounded_teammate_wait() -> None:
+    result = run_scout_ai_full_workflow(
+        "現在 2026-06-07T13:50:00+08:00，安全 buffer 還有 18 分鐘，可以等隊友 5 分鐘嗎？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=3,
+    )
+
+    assert result.answerability == "evidence_available"
+    assert result.selected_tool_count == 1
+    assert result.executed_tool_count == 1
+    assert result.completed_tool_count == 1
+    assert result.missing_evidence_count == 0
+    contextual = _workflow_source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
+    summary = contextual["top_result_summary"]
+    assert summary["action"] == "wait_teammate"
+    assert summary["decision"] == "CONDITIONAL_GO"
+    assert summary["allowed"] is True
+    assert summary["max_duration_minutes"] == 5
+    assert result.decision_output["answerSourceToolId"] == CONTEXTUAL_PERMISSION_TOOL_ID
+    assert result.decision_output["action"] == "wait_teammate"
+    assert result.decision_output["firstLayer"]["decision"] == "可以，最多 5 分鐘。"
+    assert "未會合" in result.answer
+    assert "隊伍狀態檢查" in result.answer
+    assert result.boundary.runtime_safety_truth is False
+
+
 def test_full_workflow_blocks_wind_exposed_lunch() -> None:
     result = run_scout_ai_full_workflow(
         "這裡是風口，我們可以在這裡吃午餐嗎？",

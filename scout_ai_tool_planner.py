@@ -539,7 +539,12 @@ def _contextual_permission_action_override(normalized_question: str) -> str | No
         return "tripod"
     if _has_any(normalized_question, ("拍影片", "拍片", "影片", "video", "film")):
         return "film"
-    if _has_any(normalized_question, ("等霧", "等隊友", "等待", "wait")):
+    if _has_any(
+        normalized_question,
+        ("等隊友", "等後隊", "等待隊友", "等待後隊", "waitteammate"),
+    ):
+        return "wait_teammate"
+    if _has_any(normalized_question, ("等霧", "等待", "wait")):
         return "wait"
     if _has_any(
         normalized_question,
@@ -589,7 +594,7 @@ def _contextual_permission_action_override(normalized_question: str) -> str | No
 
 def _extract_requested_action_minutes(normalized_question: str) -> float | None:
     action_prefix = (
-        "多停|多停留|停留|停|拍照|拍攝|拍影片|拍片|多拍|架腳架|腳架|等待|等|休息|午餐|吃午餐"
+        "多停|多停留|停留|停|拍照|拍攝|拍影片|拍片|多拍|架腳架|腳架|等待隊友|等隊友|等待|等|休息|午餐|吃午餐"
     )
     match = re.search(
         rf"(?:{action_prefix})(\d+(?:\.\d+)?)(?:分鐘|分|min|minutes?)",

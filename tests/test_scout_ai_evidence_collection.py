@@ -301,6 +301,32 @@ def test_evidence_collection_keeps_tripod_micro_decision() -> None:
     assert contextual.boundary.runtime_safety_truth is False
 
 
+def test_evidence_collection_keeps_teammate_wait_micro_decision() -> None:
+    result = collect_scout_ai_evidence(
+        "現在 2026-06-07T13:50:00+08:00，安全 buffer 還有 18 分鐘，可以等隊友 5 分鐘嗎？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=3,
+    )
+
+    assert result.selected_tool_count == 1
+    assert result.executed_tool_count == 1
+    assert result.completed_tool_count == 1
+    assert result.missing_input_count == 0
+
+    contextual = _record(result, CONTEXTUAL_PERMISSION_TOOL_ID)
+    assert contextual.collection_status == "completed"
+    assert contextual.result is not None
+    payload = contextual.result["payload"]
+    assert payload["action"] == "wait_teammate"
+    assert payload["decision"] == "CONDITIONAL_GO"
+    assert payload["allowed"] is True
+    assert payload["max_duration_minutes"] == 5
+    assert payload["decision_output"]["firstLayer"]["decision"] == "可以，最多 5 分鐘。"
+    assert "未會合" in payload["decision_output"]["firstLayer"]["nextStep"]
+    assert contextual.boundary.runtime_safety_truth is False
+
+
 def test_evidence_collection_keeps_split_team_micro_decision() -> None:
     result = collect_scout_ai_evidence(
         "可以讓走得快的人先去山頂嗎？",

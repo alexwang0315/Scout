@@ -131,6 +131,48 @@ def test_contextual_permission_allows_fog_wait_with_bounded_photo_cutoff() -> No
     assert result["boundary"]["runtime_safety_truth"] is False
 
 
+def test_contextual_permission_allows_teammate_wait_with_hard_cutoff() -> None:
+    result = assess_scout_contextual_permission(
+        PROJECT_ROOT,
+        query="可以等隊友 5 分鐘嗎？",
+        current_time="2026-06-07T13:50:00+08:00",
+        current_cp_id="CP4",
+        next_cp_id="CP5",
+        remaining_safety_buffer_minutes=18,
+        requested_duration_minutes=5,
+        next_segment_uncertainty_minutes=4,
+        retreat_reserve_minutes=3,
+        communication_status="ok",
+        equipment_status="ok",
+    )
+
+    assert result["answerability"] == "contextual_permission_decision_available"
+    assert result["action"] == "wait_teammate"
+    assert result["decision"] == "CONDITIONAL_GO"
+    assert result["allowed"] is True
+    assert result["max_duration_minutes"] == 5
+    assert result["leave_by"] == "2026-06-07T13:55:00+08:00"
+    assert result["decision_output"]["firstLayer"]["decision"] == "可以，最多 5 分鐘。"
+    assert "未會合" in result["decision_output"]["firstLayer"]["nextStep"]
+    assert "隊伍狀態檢查" in result["decision_output"]["firstLayer"]["nextStep"]
+    assert any(
+        "保持隊伍完整" in condition
+        for condition in result["decision_output"]["secondLayer"][
+            "requiredConditions"
+        ]
+    )
+    assert any(
+        "不能無限延長" in risk
+        for risk in result["decision_output"]["secondLayer"]["residualRisk"]
+    )
+    assert "改用既定集合點" in result["decision_output"]["secondLayer"][
+        "alternativeActions"
+    ][1]
+    assert result["contextual_permission"]["cost"]["timeBufferChangeMinutes"] == -5
+    assert result["risk_budget"]["bufferAfterActionMinutes"] == 13
+    assert result["boundary"]["runtime_safety_truth"] is False
+
+
 def test_contextual_permission_allows_tripod_only_with_bounded_cutoff() -> None:
     result = assess_scout_contextual_permission(
         PROJECT_ROOT,
