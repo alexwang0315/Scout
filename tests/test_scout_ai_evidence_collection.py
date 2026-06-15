@@ -12,6 +12,7 @@ from scout_ai_tool_planner import LIVE_NAVIGATION_STATE_TOOL_ID, WEATHER_WINDOW_
 from scout_pace_guardian_tool import PACE_GUARDIAN_TOOL_ID
 from scout_equipment_resource_tool import EQUIPMENT_RESOURCE_TOOL_ID
 from scout_team_status_tool import TEAM_STATUS_TOOL_ID
+from scout_post_trip_review_tool import POST_TRIP_REVIEW_TOOL_ID
 from scout_route_architecture_tool import ROUTE_ARCHITECTURE_TOOL_ID
 from scout_route_context_tool import ROUTE_CONTEXT_TOOL_ID
 from scout_risk_score_tool import RISK_SCORE_TOOL_ID
@@ -20,6 +21,9 @@ from scout_terrain_score_tool import TERRAIN_SCORE_TOOL_ID
 
 ROOT = Path(__file__).resolve().parents[1]
 PROJECT_ROOT = ROOT / "tests" / "fixtures" / "pretrip" / "projects" / "chilai_nanhua_day1"
+POST_ANALYSIS_ROOT = (
+    ROOT / "tests" / "fixtures" / "post_analysis" / "chilai_nanhua_day1_post_analysis"
+)
 MANIFEST_PATH = (
     ROOT
     / "tools"
@@ -289,6 +293,33 @@ def test_evidence_collection_keeps_team_status_payload() -> None:
     assert payload["team_status"]["remote_contact"]["available"] is True
     assert "member_positions_or_last_heard" in team_status.missing_fields
     assert team_status.boundary.runtime_safety_truth is False
+
+
+def test_evidence_collection_keeps_post_trip_review_payload() -> None:
+    result = collect_scout_ai_evidence(
+        "行後回顧要更新哪些下一次規劃？實際耗時哪裡比預期慢？",
+        project_root=POST_ANALYSIS_ROOT,
+        project_id="chilai_nanhua_day1_post_analysis",
+        limit=3,
+    )
+
+    assert result.selected_tool_count == 1
+    assert result.executed_tool_count == 1
+    assert result.completed_tool_count == 1
+    assert result.missing_input_count == 0
+
+    post_trip = _record(result, POST_TRIP_REVIEW_TOOL_ID)
+    assert post_trip.collection_status == "completed"
+    assert post_trip.result is not None
+    payload = post_trip.result["payload"]
+    assert payload["answerability"] == "post_trip_review_missing_required_fields"
+    assert payload["decision"] == "DELAY"
+    assert payload["post_trip_review"]["role"] == (
+        "Post-Trip Review / Learning Governance"
+    )
+    assert payload["completed_trip_summary"]["edge_count"] == 73
+    assert "subjective_difficulty" in post_trip.missing_fields
+    assert post_trip.boundary.runtime_safety_truth is False
 
 
 def test_evidence_collection_reports_empty_collection_when_no_tool_matches() -> None:

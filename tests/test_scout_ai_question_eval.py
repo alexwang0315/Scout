@@ -99,6 +99,14 @@ def test_question_eval_classifies_current_tools_and_missing_live_evidence() -> N
             "question": "後隊在哪？最後一次有效位置多久前？",
         }
     )
+    post_trip_eval = evaluate_question(
+        {
+            "id": "q-post-trip",
+            "source_set": "test",
+            "category": "post_trip_review",
+            "question": "行後回顧要更新哪些下一次規劃？實際耗時哪裡比預期慢？",
+        }
+    )
 
     assert route_eval.answerability == "answerable_by_current_read_only_tools"
     assert "pydantic_ai.tool.search_scout_route_structure.v0" in route_eval.current_tool_ids
@@ -123,6 +131,9 @@ def test_question_eval_classifies_current_tools_and_missing_live_evidence() -> N
     assert team_status_eval.answerability == "requires_missing_evidence"
     assert "scout.ai.team_status.assess.v0" in team_status_eval.current_tool_ids
     assert "team_member_positions_and_last_heard" in team_status_eval.missing_evidence
+    assert post_trip_eval.answerability == "requires_missing_evidence"
+    assert "scout.ai.post_trip_review.assess.v0" in post_trip_eval.current_tool_ids
+    assert "completed_journey_or_incident_record" in post_trip_eval.missing_evidence
     assert rescue_eval.answerability == "blocked_for_direct_action_can_only_explain"
     assert rescue_eval.safety_boundary["outbound_send_performed"] is False
 

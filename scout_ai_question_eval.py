@@ -67,6 +67,10 @@ CURRENT_TOOLS = {
         "label": "team status / remote-contact governance",
         "evidence_scope": "team member positions, last-heard timestamps, check-in schedule, planned rendezvous, communication state, and 留守 escalation boundaries",
     },
+    "scout.ai.post_trip_review.assess.v0": {
+        "label": "post-trip review / learning governance",
+        "evidence_scope": "completed journey timeline, actual CP timing, rest time, slow segments, subjective difficulty, equipment gaps, weather/route-condition feedback, near misses, incident candidates, and next-plan model update candidates",
+    },
     "scout.ai.route_architecture.assess.v0": {
         "label": "route architecture / CP Graph",
         "evidence_scope": "candidate CP Graph, hard points, retreat options, turn-back checkpoint, route forgiveness, and alternative/short-route structure",
@@ -468,6 +472,7 @@ _CURRENT_TOOL_TERMS = (
     ("scout.ai.pace_guardian.assess.v0", ("pace guardian", "team pace fit", "readiness pace fit", "最慢者", "最慢成員", "腳程差", "隊伍腳程", "隊伍速度", "隊伍節奏", "休息節奏", "午餐點", "午餐前移", "需要加快", "落後", "晚了", "縮短行程", "改短版", "直接撤退", "能準時抵達", "下一個 cp", "隊友很累", "後隊", "快慢組")),
     ("scout.ai.equipment_resource.assess.v0", ("手機電量", "手機只剩", "電量", "手錶電量", "頭燈", "備用燈", "行動電源", "離線地圖", "gpx", "第二套導航", "裝備", "水剩", "水還剩", "水量", "食物", "行動糧", "瓦斯", "雨衣", "保暖層", "急救包")),
     ("scout.ai.team_status.assess.v0", ("隊友在哪", "後隊在哪", "隊友不見", "隊友走散", "隊伍走散", "脫隊", "留守", "回報", "最後一次有效位置", "最後聯絡", "集合", "集合點", "約定山屋", "checkin", "rendezvous")),
+    ("scout.ai.post_trip_review.assess.v0", ("行後", "回顧", "覆盤", "事後", "完成行程", "實際cp", "實際通過", "實際耗時", "停留時間", "比預期慢", "路段比預期", "體感難度", "near miss", "nearmiss", "裝備缺口", "天氣與路況", "下次行前", "下一次規劃", "模型更新", "能力摘要", "capability timeline", "capability capsule", "incident package", "field case")),
     ("scout.ai.route_architecture.assess.v0", ("route architecture", "cp graph", "checkpoint graph", "路線結構", "行程結構", "cp圖", "撤退點", "撤退路線", "折返點", "最晚折返", "難點位置", "難點在哪", "容錯率", "低容錯", "替代路線", "短版路線", "岔路可以切", "回頭成本")),
 )
 
@@ -500,7 +505,22 @@ _VITALS_TERMS = ("心率", "高山症", "補水", "補給", "太累", "速度下
 _TEAM_TERMS = ("隊友", "後隊", "隊伍", "留守", "回報", "約定山屋", "集合")
 _EQUIPMENT_TERMS = ("手機電量", "手機只剩", "5%", "手錶", "頭燈", "行動電源", "離線地圖", "第二套導航", "裝備", "水剩", "瓦斯", "食物")
 _INCIDENT_CONTEXT_TERMS = ("受傷", "救援", "搜救", "直升機", "傷者", "求救", "報案", "留守人轉報")
-_POST_TRIP_TERMS = ("事後", "這次", "下次", "field case", "incident package", "spec 需要", "warning 應該")
+_POST_TRIP_TERMS = (
+    "行後",
+    "回顧",
+    "覆盤",
+    "事後",
+    "這次",
+    "下次",
+    "完成行程",
+    "實際耗時",
+    "實際通過",
+    "比預期慢",
+    "field case",
+    "incident package",
+    "spec 需要",
+    "warning 應該",
+)
 _DIRECT_ACTION_TERMS = ("通知留守", "通知", "報案", "啟動", "分享給誰", "回報一次", "建立現場指揮")
 _MEDICAL_DIAGNOSIS_TERMS = ("心率", "高山症", "失溫", "醫療", "受傷", "移動傷者")
 
