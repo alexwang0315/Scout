@@ -510,6 +510,14 @@ def _contract_from_raw(tool_id: str, raw: dict[str, Any]) -> ScoutAiToolContract
             *_as_str_list(raw.get("existing_support")),
             "scout_weather_window_tool.py read-only route weather package assessor",
         ]
+    elif tool_id == ENERGY_VITALS_TOOL_ID:
+        status = ScoutAiToolImplementationStatus.READY_CURRENT_TOOL
+        required_fields = list(ENERGY_VITALS_REQUIRED_FIELDS)
+        implementation_gap = None
+        existing_support = [
+            *_as_str_list(raw.get("existing_support")),
+            "scout_energy_vitals_tool.py read-only energy/vitals assessor",
+        ]
     elif tool_id == REVIEW_GAP_TOOL_ID:
         status = ScoutAiToolImplementationStatus.READY_CURRENT_TOOL
         required_fields = list(REVIEW_GAP_REQUIRED_FIELDS)

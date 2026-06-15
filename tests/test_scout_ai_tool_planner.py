@@ -1689,7 +1689,7 @@ def test_planner_routes_transport_deadline_pressure_to_route_architecture() -> N
     assert MAJOR_POINT_TOOL_ID not in tool_ids
 
 
-def test_planner_selects_energy_vitals_contract_only_for_health_question() -> None:
+def test_planner_selects_ready_energy_vitals_for_health_question() -> None:
     plan = plan_scout_ai_tools(
         _query("我現在心率偏高又很累，需要休息嗎?"),
         project_root=PROJECT_ROOT,
@@ -1697,7 +1697,7 @@ def test_planner_selects_energy_vitals_contract_only_for_health_question() -> No
 
     item = _single_tool(plan, ENERGY_VITALS_TOOL_ID)
     assert item.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
-    assert item.implementation_status == "partial_existing_surface"
+    assert item.implementation_status == "ready_current_tool"
     assert item.request is not None
     assert item.request["tool_id"] == ENERGY_VITALS_TOOL_ID
     assert "heart_rate_bpm" in item.required_fields
