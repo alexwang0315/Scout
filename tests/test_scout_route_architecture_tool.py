@@ -91,5 +91,37 @@ def test_route_architecture_changes_plan_after_missed_checkpoint_deadline() -> N
     assert result["boundary"]["runtime_safety_truth"] is False
 
 
+def test_route_architecture_changes_plan_for_hut_checkin_pressure() -> None:
+    result = assess_scout_route_architecture(
+        PROJECT_ROOT,
+        query="山屋報到時間快到了，是否需要改計畫？",
+        limit=2,
+    )
+
+    assert result["answerability"] == "route_architecture_available"
+    assert result["decision"] == "CHANGE_PLAN"
+    assert result["decision_output"]["firstLayer"]["decision"] == (
+        "建議改變計畫，先處理外部 deadline 壓力。"
+    )
+    assert result["route_decision"]["deadline_pressure"] == "hut_checkin"
+    assert "hut check-in" in result["route_decision"]["main_reasons"][0]
+    assert "external deadline pressure" in result["field_answer"]
+    assert result["boundary"]["runtime_safety_truth"] is False
+
+
+def test_route_architecture_changes_plan_for_transport_deadline_pressure() -> None:
+    result = assess_scout_route_architecture(
+        PROJECT_ROOT,
+        query="交通末班車快趕不上了，還能照原計畫嗎？",
+        limit=2,
+    )
+
+    assert result["answerability"] == "route_architecture_available"
+    assert result["decision"] == "CHANGE_PLAN"
+    assert result["route_decision"]["deadline_pressure"] == "transport_last_service"
+    assert "transport last service" in result["route_decision"]["main_reasons"][0]
+    assert result["boundary"]["runtime_safety_truth"] is False
+
+
 def test_route_architecture_output_kind_constant() -> None:
     assert ROUTE_ARCHITECTURE_OUTPUT_KIND == "scout_ai_route_architecture_tool_output"

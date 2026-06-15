@@ -1424,11 +1424,13 @@ def _looks_like_route_architecture_question(text: str) -> bool:
             "補給點",
             "水源是否合理",
         ),
-    )
+    ) or _looks_like_external_deadline_pressure_question(text)
 
 
 def _looks_like_major_point_question(text: str) -> bool:
     if _looks_like_map_perception_question(text):
+        return False
+    if _looks_like_external_deadline_pressure_question(text):
         return False
     return _has_any(
         text,
@@ -1447,6 +1449,47 @@ def _looks_like_major_point_question(text: str) -> bool:
             "附近",
         ),
     ) and not _looks_like_weather_question(text)
+
+
+def _looks_like_external_deadline_pressure_question(text: str) -> bool:
+    has_external_deadline = _has_any(
+        text,
+        (
+            "山屋報到",
+            "報到時間",
+            "山屋入住",
+            "入住時間",
+            "check-in",
+            "checkin",
+            "hutcheckin",
+            "hutdeadline",
+            "交通末班",
+            "末班車",
+            "末班",
+            "接駁末班",
+            "lastbus",
+            "lasttransport",
+            "transportdeadline",
+        ),
+    )
+    has_pressure_or_route_decision = _has_any(
+        text,
+        (
+            "快到了",
+            "快到",
+            "趕不上",
+            "來不及",
+            "逼近",
+            "是否需要改計畫",
+            "需要改計畫",
+            "改計畫",
+            "照原計畫",
+            "原計畫",
+            "deadline",
+            "timepressure",
+        ),
+    )
+    return has_external_deadline and has_pressure_or_route_decision
 
 
 def _looks_like_risk_question(text: str) -> bool:

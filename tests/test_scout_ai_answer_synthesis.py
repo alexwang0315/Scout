@@ -1224,6 +1224,33 @@ def test_answer_synthesis_uses_route_architecture_for_missed_checkpoint_deadline
     assert "runtime safety truth" in result.answer
 
 
+def test_answer_synthesis_uses_route_architecture_for_hut_checkin_pressure() -> None:
+    result = collect_and_synthesize_scout_ai_answer(
+        "山屋報到時間快到了，是否需要改計畫？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=4,
+    )
+
+    assert result.answerability == "evidence_available"
+    assert result.completed_source_count == 1
+    assert result.missing_evidence_count == 0
+    route = _source(result, ROUTE_ARCHITECTURE_TOOL_ID)
+    assert route.missing_fields == []
+    assert route.top_result_summary["answerability"] == "route_architecture_available"
+    assert route.top_result_summary["decision"] == "CHANGE_PLAN"
+    assert route.top_result_summary["route_decision"]["deadline_pressure"] == (
+        "hut_checkin"
+    )
+    assert result.decision_output["answerSourceToolId"] == ROUTE_ARCHITECTURE_TOOL_ID
+    assert result.decision_output["decision"] == "CHANGE_PLAN"
+    assert result.decision_output["firstLayer"]["decision"] == (
+        "建議改變計畫，先處理外部 deadline 壓力。"
+    )
+    assert "hut check-in" in result.decision_output["firstLayer"]["reason"]
+    assert "runtime safety truth" in result.answer
+
+
 def test_answer_synthesis_uses_live_navigation_field_answer_without_guessing() -> None:
     result = collect_and_synthesize_scout_ai_answer(
         "我現在是不是偏離路線？",

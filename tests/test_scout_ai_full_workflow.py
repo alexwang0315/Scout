@@ -1298,6 +1298,41 @@ def test_full_workflow_uses_route_architecture_for_missed_checkpoint_deadline() 
     assert result.boundary.runtime_safety_truth is False
 
 
+def test_full_workflow_uses_route_architecture_for_hut_checkin_pressure() -> None:
+    result = run_scout_ai_full_workflow(
+        "山屋報到時間快到了，是否需要改計畫？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=4,
+    )
+
+    assert result.answerability == "evidence_available"
+    assert result.selected_tool_count == 1
+    assert result.executed_tool_count == 1
+    assert result.completed_tool_count == 1
+    assert result.contract_gap_count == 0
+    assert result.failed_tool_count == 0
+    assert result.missing_evidence_count == 0
+    source_by_tool = {source["tool_id"]: source for source in result.sources}
+    route = source_by_tool[ROUTE_ARCHITECTURE_TOOL_ID]
+    assert route["missing_fields"] == []
+    assert route["top_result_summary"]["answerability"] == (
+        "route_architecture_available"
+    )
+    assert route["top_result_summary"]["decision"] == "CHANGE_PLAN"
+    assert route["top_result_summary"]["route_decision"]["deadline_pressure"] == (
+        "hut_checkin"
+    )
+    assert result.decision_output["answerSourceToolId"] == ROUTE_ARCHITECTURE_TOOL_ID
+    assert result.decision_output["decision"] == "CHANGE_PLAN"
+    assert result.decision_output["firstLayer"]["decision"] == (
+        "建議改變計畫，先處理外部 deadline 壓力。"
+    )
+    assert "hut check-in" in result.decision_output["firstLayer"]["reason"]
+    assert result.decision_output["runtimeSafetyTruth"] is False
+    assert result.boundary.runtime_safety_truth is False
+
+
 def test_full_workflow_runs_live_navigation_uncertainty_question() -> None:
     result = run_scout_ai_full_workflow(
         "我現在是不是偏離路線？",
