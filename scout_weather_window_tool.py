@@ -112,6 +112,20 @@ def assess_scout_weather_window(
         if weather_evidence
         else "weather_evidence_missing"
     )
+    weather_to_decision = _weather_to_decision(
+        answerability=answerability,
+        weather_window=weather_window,
+        risk_summary=risk_summary,
+        wx_alerts=wx_alerts,
+        segments=filtered_segments,
+        missing_fields=missing_fields,
+        warnings=warnings,
+    )
+    field_answer = _field_answer(
+        decision=weather_to_decision,
+        answerability=answerability,
+        missing_fields=missing_fields,
+    )
 
     return {
         "tool_id": WEATHER_WINDOW_TOOL_ID,
@@ -126,6 +140,9 @@ def assess_scout_weather_window(
             route_package,
             weather_evidence,
         ),
+        "decision": weather_to_decision["decision"],
+        "field_answer": field_answer,
+        "weather_to_decision": weather_to_decision,
         "external_api_calls_made": _bool_from_sources(
             "external_api_calls_made",
             route_package,
@@ -155,6 +172,13 @@ def assess_scout_weather_window(
         "result_count": len(top_segments),
         "results": [_compact_segment(segment_item) for segment_item in top_segments],
         "route_weather_package_schema": _route_weather_package_schema(),
+        "standard_alignment": [
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 10 Weather-to-Decision Intelligence",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 15.2 Risk Sentinel",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 19 on-route weather recalculation",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 22 required development standards",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 23 acceptance criteria",
+        ],
         "boundary": _closed_boundary(),
     }
 
@@ -444,6 +468,230 @@ def _wx_alerts(segments: list[dict[str, Any]], *, limit: int) -> list[dict[str, 
             }
         )
     return alerts[: max(0, limit)]
+
+
+def _weather_to_decision(
+    *,
+    answerability: str,
+    weather_window: dict[str, Any],
+    risk_summary: dict[str, Any],
+    wx_alerts: list[dict[str, Any]],
+    segments: list[dict[str, Any]],
+    missing_fields: list[str],
+    warnings: list[str],
+) -> dict[str, Any]:
+    highest = _highest_risk_segment(segments)
+    alert_codes = sorted({code for alert in wx_alerts for code in _string_list(alert.get("code"))})
+    if missing_fields:
+        decision = "DELAY"
+        main_reasons = [
+            "fresh weather / route-specific weather evidence is incomplete",
+            "missing_fields=" + ",".join(missing_fields),
+        ]
+        action_limit = "Do not authorize departure, camping, summit, exposed ridge, or creek decisions from placeholder weather."
+        next_action = "補齊 fresh provider、TTL、valid-time 與 route_weather_package；完成前採保守延後。"
+        alternatives = ["delay until fresh route weather package is reviewed", "choose lower-exposure fallback route"]
+    else:
+        decision = _weather_decision_from_risk(highest=highest, risk_summary=risk_summary)
+        main_reasons = _weather_decision_reasons(
+            weather_window=weather_window,
+            highest=highest,
+            alert_codes=alert_codes,
+        )
+        action_limit = _weather_action_limit(decision, alert_codes=alert_codes, highest=highest)
+        next_action = _weather_next_action(decision, alert_codes=alert_codes, highest=highest)
+        alternatives = _weather_alternatives(decision, alert_codes=alert_codes)
+
+    if not main_reasons:
+        main_reasons = ["route weather package is present and no elevated route-weather segment was selected"]
+    return {
+        "role": "Risk Sentinel / Weather-to-Decision",
+        "decision": decision,
+        "answerability": answerability,
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+        "main_reasons": main_reasons[:3],
+        "action_limit": action_limit,
+        "next_action": next_action,
+        "alternatives": alternatives,
+        "route_specific_conditions": _route_specific_conditions(alert_codes, highest=highest),
+        "highest_risk_segment": _compact_segment(highest) if highest else None,
+        "wx_alert_count": len(wx_alerts),
+        "warnings": warnings[:3],
+        "weather_buffer_impact": _weather_buffer_impact(decision),
+    }
+
+
+def _field_answer(
+    *,
+    decision: dict[str, Any],
+    answerability: str,
+    missing_fields: list[str],
+) -> str:
+    decision_label = str(decision.get("decision") or "DELAY")
+    reasons = decision.get("main_reasons")
+    reason_text = "；".join(str(reason) for reason in reasons[:2]) if isinstance(reasons, list) else ""
+    if missing_fields:
+        reason_text = f"缺少 {', '.join(missing_fields)}，不能只看降雨機率或 placeholder。"
+    if not reason_text:
+        reason_text = f"answerability={answerability}"
+    next_action = str(decision.get("next_action") or "補齊天氣與路線交互證據後再判斷。")
+    return (
+        f"天氣決策：建議 {decision_label}。{reason_text} 下一步：{next_action} "
+        "此為 Weather-to-Decision 候選判斷，不是 runtime safety truth；不得觸發 /safety、SOS、outbound send 或硬體控制。"
+    )
+
+
+def _weather_decision_from_risk(
+    *,
+    highest: dict[str, Any] | None,
+    risk_summary: dict[str, Any],
+) -> str:
+    if not highest:
+        return "GO"
+    final_risk = _float_or_none(highest.get("final_risk")) or 0.0
+    weather_risk = _float_or_none(highest.get("weather_risk")) or 0.0
+    level = str(highest.get("risk_level") or "").lower()
+    if level in {"critical", "severe", "extreme"} or final_risk >= 0.85:
+        return "NO_GO"
+    if level in {"high", "very_high"} or final_risk >= 0.7 or weather_risk >= 0.65:
+        return "CHANGE_PLAN"
+    if final_risk >= 0.5 or weather_risk >= 0.35:
+        return "CONDITIONAL_GO"
+    counts = risk_summary.get("risk_level_counts")
+    if isinstance(counts, dict) and any(str(key).upper() in {"HIGH", "VERY_HIGH"} for key in counts):
+        return "CHANGE_PLAN"
+    return "GO"
+
+
+def _weather_decision_reasons(
+    *,
+    weather_window: dict[str, Any],
+    highest: dict[str, Any] | None,
+    alert_codes: list[str],
+) -> list[str]:
+    reasons = []
+    summary = weather_window.get("summary")
+    if summary:
+        reasons.append(str(summary))
+    if highest:
+        segment_id = highest.get("segment_id")
+        level = highest.get("risk_level")
+        final_risk = _float_or_none(highest.get("final_risk"))
+        weather_risk = _float_or_none(highest.get("weather_risk"))
+        values = []
+        if final_risk is not None:
+            values.append(f"final_risk={final_risk:.2f}")
+        if weather_risk is not None:
+            values.append(f"weather_risk={weather_risk:.2f}")
+        reasons.append(
+            f"route segment {segment_id} is {level}"
+            + (f" ({', '.join(values)})" if values else "")
+        )
+        factors = _string_list(highest.get("factors"))
+        if factors:
+            reasons.append("route-specific factors: " + ", ".join(factors[:3]))
+    if alert_codes:
+        reasons.append("WX alert codes: " + ", ".join(alert_codes))
+    return reasons
+
+
+def _weather_action_limit(
+    decision: str,
+    *,
+    alert_codes: list[str],
+    highest: dict[str, Any] | None,
+) -> str:
+    if decision == "NO_GO":
+        return "Do not enter the flagged segment under this weather window."
+    if decision == "CHANGE_PLAN":
+        if {"THUNDER", "WIND"} & set(alert_codes):
+            return "Avoid exposed ridge, summit, and open terrain during the flagged window."
+        if "RAIN" in alert_codes:
+            return "Avoid creek crossings, landslide-prone cuts, and slippery exposed terrain during the flagged window."
+        return "Do not follow the original timing through the highest-risk segment."
+    if decision == "CONDITIONAL_GO":
+        segment = highest.get("segment_id") if highest else "flagged segment"
+        return f"Proceed only if the team can pass {segment} before conditions worsen and reassess at the next CP."
+    return "Normal plan can proceed only while fresh route weather package remains valid."
+
+
+def _weather_next_action(
+    decision: str,
+    *,
+    alert_codes: list[str],
+    highest: dict[str, Any] | None,
+) -> str:
+    if decision == "NO_GO":
+        return "延期或改低暴露替代路線，並重新產生 route weather package。"
+    if decision == "CHANGE_PLAN":
+        if "THUNDER" in alert_codes:
+            return "調整時程避開午後雷雨，優先移出稜線、山頂、裸露地與溪谷活動。"
+        if "LOW_VIS" in alert_codes:
+            return "改為更保守導航節奏，增加 CP 檢查，必要時延後或改短版。"
+        return "改短版、提前撤退窗口，或延後到下一個較低風險天氣窗。"
+    if decision == "CONDITIONAL_GO":
+        return "設定下一個 CP 重新檢查點，若 weather risk 升高立即改線或撤退。"
+    return "維持計畫並保留天氣重新檢查；不要把此候選判斷升級成安全保證。"
+
+
+def _weather_alternatives(decision: str, *, alert_codes: list[str]) -> list[str]:
+    if decision in {"NO_GO", "CHANGE_PLAN"}:
+        alternatives = ["delay 24-48 hours", "choose lower-exposure fallback route"]
+        if "THUNDER" in alert_codes:
+            alternatives.append("move ridge/summit exposure outside thunderstorm window")
+        if "RAIN" in alert_codes:
+            alternatives.append("avoid creek and landslide-prone segments")
+        return alternatives
+    if decision == "CONDITIONAL_GO":
+        return ["shorten route", "set earlier turn-back checkpoint", "increase CP weather checks"]
+    return ["continue with scheduled CP weather re-checks"]
+
+
+def _route_specific_conditions(
+    alert_codes: list[str],
+    *,
+    highest: dict[str, Any] | None,
+) -> list[str]:
+    conditions = []
+    for code, label in {
+        "RAIN": "rain / wet terrain",
+        "THUNDER": "thunderstorm exposure",
+        "LOW_VIS": "low visibility / navigation demand",
+        "WIND": "strong wind exposure",
+        "COLD": "cold stress / hypothermia context",
+        "TERRAIN": "terrain interaction",
+    }.items():
+        if code in alert_codes:
+            conditions.append(label)
+    if highest:
+        for factor in _string_list(highest.get("factors")):
+            if factor not in conditions:
+                conditions.append(factor)
+    return conditions[:6]
+
+
+def _weather_buffer_impact(decision: str) -> str:
+    if decision in {"NO_GO", "CHANGE_PLAN"}:
+        return "weather buffer is not available for discretionary delay or exposure"
+    if decision == "CONDITIONAL_GO":
+        return "weather buffer must be reserved for CP re-check and retreat option"
+    if decision == "DELAY":
+        return "weather buffer cannot be computed from incomplete evidence"
+    return "weather buffer currently not consumed by a decision restriction"
+
+
+def _highest_risk_segment(segments: list[dict[str, Any]]) -> dict[str, Any] | None:
+    if not segments:
+        return None
+    return max(
+        segments,
+        key=lambda item: (
+            _float_or_none(item.get("final_risk")) or -1.0,
+            _float_or_none(item.get("weather_risk")) or -1.0,
+            str(item.get("segment_id") or ""),
+        ),
+    )
 
 
 def _missing_weather_fields(

@@ -176,6 +176,11 @@ def test_execute_weather_tool_returns_read_only_weather_evidence_gap() -> None:
     assert result.payload["artifact_kind"] == "scout_ai_weather_window_tool_output"
     assert result.payload["tool_id"] == "scout.ai.weather_window.assess.v0"
     assert result.payload["answerability"] == "weather_placeholder_only"
+    assert result.payload["decision"] == "DELAY"
+    assert result.payload["weather_to_decision"]["role"] == (
+        "Risk Sentinel / Weather-to-Decision"
+    )
+    assert "天氣決策" in result.payload["field_answer"]
     assert "provider" in result.missing_fields
     assert "ttl_s" in result.missing_fields
     assert "route_weather_package" in result.missing_fields

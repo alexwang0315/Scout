@@ -102,6 +102,32 @@ def test_full_workflow_runs_weather_tool_and_reports_missing_fresh_evidence() ->
     assert "runtime safety truth" in result.answer
 
 
+def test_full_workflow_runs_weather_to_decision_question(tmp_path: Path) -> None:
+    project_root = _write_route_weather_project(tmp_path)
+
+    result = run_scout_ai_full_workflow(
+        "午後雷雨是否要改變計畫?",
+        project_root=project_root,
+        project_id="weather_decision_project",
+        limit=3,
+    )
+
+    assert result.answerability == "evidence_available"
+    assert result.selected_tool_count == 1
+    assert result.executed_tool_count == 1
+    assert result.completed_tool_count == 1
+    assert result.missing_evidence_count == 0
+    assert result.sources[0]["tool_id"] == WEATHER_WINDOW_TOOL_ID
+    assert result.sources[0]["top_result_summary"]["decision"] == "CHANGE_PLAN"
+    assert result.sources[0]["top_result_summary"]["weather_to_decision"]["role"] == (
+        "Risk Sentinel / Weather-to-Decision"
+    )
+    assert "天氣決策" in result.answer
+    assert "CHANGE_PLAN" in result.answer
+    assert "runtime safety truth" in result.answer
+    assert result.boundary.runtime_safety_truth is False
+
+
 def test_full_workflow_runs_route_context_experience_guide_question() -> None:
     result = run_scout_ai_full_workflow(
         "下一個觀察點在哪？哪裡適合拍攝大景？",
@@ -315,6 +341,63 @@ def _write_team_pace_project(tmp_path: Path) -> Path:
                         "rest_need_minutes": 12,
                         "first_time_similar_route": True,
                     },
+                ],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    return project_root
+
+
+def _write_route_weather_project(tmp_path: Path) -> Path:
+    project_root = tmp_path / "weather_decision_project"
+    outputs = project_root / "outputs"
+    outputs.mkdir(parents=True)
+    (project_root / "project.json").write_text(
+        json.dumps(
+            {
+                "project_id": "weather_decision_project",
+                "route_weather_package_ref": "outputs/route_weather_package.json",
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    (outputs / "route_weather_package.json").write_text(
+        json.dumps(
+            {
+                "artifact_kind": "route_weather_package",
+                "status": "candidate_only",
+                "routeId": "fixture-route",
+                "generatedAt": "2099-06-07T08:00:00Z",
+                "issued_at": "2099-06-07T08:00:00Z",
+                "valid_from": "2099-06-07T08:00:00Z",
+                "valid_to": "2099-06-10T08:00:00Z",
+                "validUntil": "2099-06-10T08:00:00Z",
+                "ttl_s": 259200,
+                "provider": "fixture_cwa_server_side_ingestor",
+                "authoritative_weather_computed": True,
+                "external_api_calls_made": True,
+                "human_review_required": False,
+                "weather_window": {
+                    "summary": "午後雷雨風險偏高",
+                    "valid_from": "2099-06-07T08:00:00Z",
+                    "valid_to": "2099-06-10T08:00:00Z",
+                    "source_status": "server_side_fixture",
+                },
+                "segments": [
+                    {
+                        "segmentId": "ridge.exposure",
+                        "etaFrom": "2099-06-08T04:30:00Z",
+                        "etaTo": "2099-06-08T05:10:00Z",
+                        "terrainRisk": 0.74,
+                        "weatherRisk": 0.68,
+                        "finalRisk": 0.79,
+                        "riskLevel": "HIGH",
+                        "factors": ["午後雷雨", "稜線暴露", "低能見度可能"],
+                        "message": "此路段有雷雨、低能見度與稜線暴露疊加。",
+                    }
                 ],
             },
             ensure_ascii=False,
