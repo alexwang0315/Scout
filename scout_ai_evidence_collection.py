@@ -253,6 +253,8 @@ def _compact_payload(
         "readiness_governance",
         "weather_daylight_state",
         "weather_to_decision",
+        "media_literacy",
+        "media_bias_analysis",
         "decision",
         "allowed",
         "action",

@@ -21,6 +21,7 @@ from scout_team_status_tool import TEAM_STATUS_TOOL_ID
 from scout_post_trip_review_tool import POST_TRIP_REVIEW_TOOL_ID
 from scout_route_readiness_tool import ROUTE_READINESS_TOOL_ID
 from scout_weather_window_tool import WEATHER_WINDOW_TOOL_ID
+from scout_media_literacy_tool import MEDIA_LITERACY_TOOL_ID
 
 
 ARTIFACT_KIND = "scout_ai_answer_synthesis"
@@ -179,6 +180,8 @@ def _source_from_record(record: dict[str, Any]) -> ScoutAiAnswerSource:
         "readiness_governance",
         "weather_daylight_state",
         "route_context",
+        "media_literacy",
+        "media_bias_analysis",
         "route_architecture",
         "cp_graph",
         "route_decision",
@@ -269,6 +272,9 @@ def _answer_text(
     route_context_answer = _route_context_answer(completed_sources)
     if route_context_answer:
         parts.append(route_context_answer)
+    media_literacy_answer = _media_literacy_answer(completed_sources)
+    if media_literacy_answer:
+        parts.append(media_literacy_answer)
     route_architecture_answer = _route_architecture_answer(completed_sources)
     if route_architecture_answer:
         parts.append(route_architecture_answer)
@@ -383,6 +389,16 @@ def _route_context_answer(sources: list[ScoutAiAnswerSource]) -> str | None:
     return None
 
 
+def _media_literacy_answer(sources: list[ScoutAiAnswerSource]) -> str | None:
+    for source in sources:
+        if source.tool_id != MEDIA_LITERACY_TOOL_ID:
+            continue
+        field_answer = source.top_result_summary.get("field_answer")
+        if isinstance(field_answer, str) and field_answer.strip():
+            return field_answer.strip()
+    return None
+
+
 def _route_architecture_answer(sources: list[ScoutAiAnswerSource]) -> str | None:
     for source in sources:
         if source.tool_id != ROUTE_ARCHITECTURE_TOOL_ID:
@@ -485,6 +501,8 @@ def _top_result_summary(value: Any) -> dict[str, Any]:
         "readiness_governance",
         "weather_daylight_state",
         "route_context",
+        "media_literacy",
+        "media_bias_analysis",
         "route_architecture",
         "cp_graph",
         "route_decision",

@@ -73,6 +73,11 @@ from scout_route_architecture_tool import (
     ROUTE_ARCHITECTURE_OUTPUT_KIND,
     ROUTE_ARCHITECTURE_TOOL_ID,
 )
+from scout_media_literacy_tool import (
+    MEDIA_LITERACY_OPTIONAL_FIELDS,
+    MEDIA_LITERACY_OUTPUT_KIND,
+    MEDIA_LITERACY_TOOL_ID,
+)
 
 ARTIFACT_KIND_REGISTRY = "scout_ai_tool_registry"
 ARTIFACT_VERSION_REGISTRY = "scout_ai_tool_registry.v0"
@@ -263,6 +268,11 @@ EXECUTABLE_TOOL_ALIASES: dict[str, list[str]] = {
         "scout.ai.cp_graph.assess",
         "scout.ai.turn_back.assess",
     ],
+    MEDIA_LITERACY_TOOL_ID: [
+        "scout.ai.media_literacy.assess",
+        "scout.ai.media_bias.assess",
+        "scout.ai.bias_sentinel.assess",
+    ],
 }
 
 
@@ -287,6 +297,7 @@ EXECUTABLE_OUTPUT_KINDS: dict[str, str] = {
     TEAM_STATUS_TOOL_ID: TEAM_STATUS_OUTPUT_KIND,
     POST_TRIP_REVIEW_TOOL_ID: POST_TRIP_REVIEW_OUTPUT_KIND,
     ROUTE_ARCHITECTURE_TOOL_ID: ROUTE_ARCHITECTURE_OUTPUT_KIND,
+    MEDIA_LITERACY_TOOL_ID: MEDIA_LITERACY_OUTPUT_KIND,
 }
 
 
@@ -624,6 +635,8 @@ def _optional_fields_for(tool_id: str) -> list[str]:
         return list(POST_TRIP_REVIEW_OPTIONAL_FIELDS)
     if tool_id == ROUTE_ARCHITECTURE_TOOL_ID:
         return list(ROUTE_ARCHITECTURE_OPTIONAL_FIELDS)
+    if tool_id == MEDIA_LITERACY_TOOL_ID:
+        return list(MEDIA_LITERACY_OPTIONAL_FIELDS)
     return []
 
 

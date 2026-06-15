@@ -19,6 +19,7 @@ from scout_team_status_tool import TEAM_STATUS_TOOL_ID
 from scout_post_trip_review_tool import POST_TRIP_REVIEW_TOOL_ID
 from scout_route_architecture_tool import ROUTE_ARCHITECTURE_TOOL_ID
 from scout_route_context_tool import ROUTE_CONTEXT_TOOL_ID
+from scout_media_literacy_tool import MEDIA_LITERACY_TOOL_ID
 from scout_risk_score_tool import RISK_SCORE_TOOL_ID
 from scout_terrain_score_tool import TERRAIN_SCORE_TOOL_ID
 
@@ -281,6 +282,27 @@ def test_answer_synthesis_uses_route_readiness_field_answer_without_guessing() -
     )
     assert "user_experience_level" in result.sources[0].missing_fields
     assert "出發前判斷" in result.answer
+    assert "runtime safety truth" in result.answer
+
+
+def test_answer_synthesis_uses_media_literacy_field_answer_without_guessing() -> None:
+    result = collect_and_synthesize_scout_ai_answer(
+        "IG 大崩壁美照會不會誤導？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=3,
+    )
+
+    assert result.answerability == "partial_evidence_with_missing_context"
+    assert result.completed_source_count >= 1
+    assert result.missing_evidence_count == 1
+    source = _source(result, MEDIA_LITERACY_TOOL_ID)
+    assert source.top_result_summary["decision"] == "NO_GO"
+    assert source.top_result_summary["media_literacy"]["role"] == (
+        "Media Literacy / Bias Sentinel"
+    )
+    assert "fresh_weather_or_route_condition_review" in source.missing_fields
+    assert "媒體識讀判斷" in result.answer
     assert "runtime safety truth" in result.answer
 
 
@@ -552,3 +574,9 @@ def test_answer_synthesis_builtin_rejects_blank_question_without_evidence_collec
     assert payload["status"] == "failed"
     assert "non-empty question" in payload["error"]
     assert payload["boundary"]["runtime_safety_truth"] is False
+
+
+def _source(result, tool_id: str):
+    matches = [source for source in result.sources if source.tool_id == tool_id]
+    assert len(matches) == 1, result.model_dump(mode="json")
+    return matches[0]
