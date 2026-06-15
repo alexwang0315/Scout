@@ -362,7 +362,7 @@ def _decision_output(
         "cost": {
             "timeBufferChangeMinutes": 0 if not allowed else None,
             "daylightImpact": "Departure remains gated by daylight and review evidence.",
-            "retreatImpact": "Turnaround and alternatives must remain visible before runtime handoff.",
+            "retreatImpact": "runtime handoff 前必須保留折返與替代方案可見性。",
             "teamPaceImpact": "Slowest or most vulnerable member basis is required.",
             "latestTurnaroundCheckpoint": route_state.get("turn_back_checkpoint_node_name"),
             "latestReturnDeadline": governance.get("transport_deadline", {}).get(
@@ -436,7 +436,7 @@ def _decision_limit_phrase(
     if decision == "NO_GO":
         return "不得照原計畫出發；先改線、延期或解除 hard blockers。"
     if decision == "DELAY":
-        return "缺口補齊與人工 departure gate 通過前，不得出發或進入 runtime handoff。"
+        return "缺口補齊與人工出發門檢通過前，不得出發或進入 runtime handoff。"
     if decision == "CHANGE_PLAN":
         return "必須改線、改日期或降低目標 CP；不得照原計畫出發。"
     if decision == "ESCALATE":
@@ -446,11 +446,11 @@ def _decision_limit_phrase(
     if decision == "CONDITIONAL_GO":
         deadline = limits.get("must_leave_by") or route_state.get("turn_back_checkpoint_eta")
         if deadline:
-            return f"必須滿足 required conditions，並在 {deadline} 前離開/折返指定 checkpoint。"
-        return "必須滿足 required conditions，且出發前仍需人工 departure gate。"
+            return f"必須滿足必補條件，並在 {deadline} 前離開/折返指定 checkpoint。"
+        return "必須滿足必補條件，且出發前仍需人工出發門檢。"
     if allowed:
-        return "仍需人工 departure gate；每個 CP 依 CP Graph 與天氣/日照重新確認。"
-    return "不得把此候選判斷當作 departure approval 或 runtime safety truth。"
+        return "仍需人工出發門檢；每個 CP 依 CP Graph 與天氣/日照重新確認。"
+    return "不得把此候選判斷當作出發核准或 runtime safety truth。"
 
 
 def _decision_phrase(*, decision: str, allowed: bool) -> str:
@@ -863,38 +863,38 @@ def _governance(
     )
 
     if readiness_state["status"] == "blocked" or readiness_state["blocker_count"]:
-        critical_gaps.append("Hard readiness report contains blocker findings.")
-        required_conditions.append("Resolve hard readiness blockers before departure.")
+        critical_gaps.append("硬體/行前 readiness report 仍有 blocker。")
+        required_conditions.append("出發前先解除 hard readiness blocker。")
     if not route_state.get("mission_graph_available"):
-        critical_gaps.append("MissionGraph / CP Graph is not available.")
+        critical_gaps.append("缺少 MissionGraph / CP Graph。")
     if resource_state.get("remote_contact_secret_details_included") or resource_state.get(
         "emergency_secret_details_included"
     ):
-        critical_gaps.append("Resource plan contains secret contact details in Scout AI payload.")
+        critical_gaps.append("Resource plan 在 Scout AI payload 中含有秘密聯絡資訊。")
     if resource_state.get("blocker_candidates"):
         critical_gaps.extend(resource_state["blocker_candidates"][:3])
 
     if transport_deadline_conflict:
         warning_gaps.append(
-            "Planned target ETA is later than the latest return transport limit."
+            "計畫目標 ETA 晚於最晚回程交通限制。"
         )
         required_conditions.append(
-            "Change the route, target CP, date, departure time, or transport plan before departure."
+            "出發前必須調整路線、目標 CP、日期、出發時間或交通方案。"
         )
         alternative_actions.append(
-            "Shorten the route or set an earlier turn-back checkpoint that preserves the return transport deadline."
+            "縮短路線，或設定能保住回程交通限制的更早折返 CP。"
         )
     if readiness_state["status"] == "warning" or readiness_state["warning_count"]:
-        warning_gaps.append("Hard readiness report contains warning findings.")
+        warning_gaps.append("硬體/行前 readiness report 仍有 warning。")
     if guided_only_required:
         warning_gaps.append(
-            "Route demand is high for a beginner or low-experience user; autonomous departure is not recommended."
+            "路線需求對初學者或低經驗使用者偏高，不建議自主出發。"
         )
         required_conditions.append(
-            "Use a qualified guide, experienced leader, or equivalent reviewed controls before considering this route."
+            "改由合格嚮導、經驗領隊或等效審核控制後，才可重新考慮此路線。"
         )
         alternative_actions.append(
-            "Switch to a guided trip, lower-demand route, shorter route, or training route."
+            "改成嚮導行程、低需求路線、短版路線或訓練路線。"
         )
     if high_risk_domain_required:
         domain_text = "、".join(_goal_label(domain) for domain in high_risk_domains)
@@ -934,42 +934,42 @@ def _governance(
         required_conditions.append("補上攻頂前硬性折返點與山頂停留時間上限。")
         alternative_actions.append("改成不攻頂或只到已審核折返 CP 的短版路線。")
     if route_state.get("departure_gate_required_before_runtime"):
-        warning_gaps.append("Reviewed planning package is not departure approval.")
-        required_conditions.append("Run an explicit departure gate before runtime handoff.")
+        warning_gaps.append("已審核 planning package 不等於出發核准。")
+        required_conditions.append("runtime handoff 前必須明確執行人工出發門檢。")
     if (
         route_state.get("team_multiplier_status") == "not_derived_no_human_stats"
         and not input_coverage.get("slowest_team_basis")
     ):
-        warning_gaps.append("Team multiplier / slowest-member basis is not derived.")
-        required_conditions.append("Confirm slowest team member basis before Go/No-Go.")
+        warning_gaps.append("尚未推導 team multiplier / 最慢成員基準。")
+        required_conditions.append("Go/No-Go 前必須確認以最慢成員為基準。")
     if route_state.get("daylight_policy_status") == "not_evaluated_requires_sun_window":
-        warning_gaps.append("Daylight policy has not been evaluated against a sun window.")
+        warning_gaps.append("日照政策尚未用 sunrise/sunset window 評估。")
     if weather_state.get("human_review_required"):
-        warning_gaps.append("Weather/daylight evidence still requires human review.")
+        warning_gaps.append("天氣/日照證據仍需人工審核。")
     if resource_state.get("warning_candidates"):
         warning_gaps.extend(resource_state["warning_candidates"][:3])
     if resource_state.get("devices_need_review"):
-        warning_gaps.append("Some device readiness entries still need review.")
+        warning_gaps.append("部分裝置 readiness 項目仍需審核。")
     if resource_state.get("equipment_need_review"):
-        warning_gaps.append("Some required equipment/resource entries still need review.")
+        warning_gaps.append("部分必要裝備/資源項目仍需審核。")
     if resource_state.get("team_members_need_review"):
-        warning_gaps.append("Some team member inputs still need review.")
+        warning_gaps.append("部分隊員資料仍需審核。")
     if resource_state.get("remote_contact_needs_review"):
-        warning_gaps.append("Remote contact plan still needs review.")
+        warning_gaps.append("留守/遠端聯絡方案仍需審核。")
     if resource_state.get("emergency_plan_needs_review"):
-        warning_gaps.append("Emergency plan still needs review.")
+        warning_gaps.append("緊急應變方案仍需審核。")
     if missing_fields:
-        required_conditions.extend(f"Provide {field}." for field in missing_fields)
+        required_conditions.extend(f"補齊 {field}。" for field in missing_fields)
     if not input_coverage.get("transport_access"):
-        alternative_actions.append("Delay departure until traffic/access plan is confirmed.")
+        alternative_actions.append("延後出發，直到交通/入山接駁方案確認。")
     if not input_coverage.get("weather_reviewed"):
-        alternative_actions.append("Delay or change date until weather evidence is reviewed.")
+        alternative_actions.append("天氣證據完成審核前，延後或改日期。")
     if not input_coverage.get("slowest_team_basis"):
-        alternative_actions.append("Recompute ETA using the slowest/most vulnerable member.")
+        alternative_actions.append("用最慢或最脆弱成員重新計算 ETA。")
     alternative_actions.extend(
         [
-            "Use shorter route or lower target CP if review gaps remain.",
-            "Keep reviewed package as planning evidence only until departure gate passes.",
+            "若審核缺口仍存在，改短版路線或降低目標 CP。",
+            "出發門檢通過前，只能把已審核 package 當作行前規劃證據。",
         ]
     )
 
@@ -1098,7 +1098,7 @@ def _pretrip_decision_package(
     )
     required_conditions = _dedupe(
         list(governance["required_conditions"])
-        or ["Pass explicit human departure gate before runtime handoff."]
+        or ["runtime handoff 前必須通過明確人工出發門檢。"]
     )
     residual_risk = _residual_risk(
         governance=governance,
@@ -1226,8 +1226,8 @@ def _top_risk_sources(
                 "severity": "guided_only",
                 "source": "mvp_non_goal_high_risk_domain",
                 "reason": (
-                    "User goal enters Scout MVP high-risk/non-goal domain"
-                    + (f": {label_text}." if label_text else ".")
+                    "使用者目標進入 Scout MVP 高風險/non-goal 領域"
+                    + (f"：{label_text}。" if label_text else "。")
                 ),
             }
         )
@@ -1238,11 +1238,11 @@ def _top_risk_sources(
                 "severity": "plan_change_required",
                 "source": "transport_deadline",
                 "reason": (
-                    "Target ETA "
+                    "目標 ETA "
                     + str(transport_deadline.get("target_eta"))
-                    + " is later than latest return deadline "
+                    + " 晚於最晚回程限制 "
                     + str(transport_deadline.get("resolved_deadline"))
-                    + "."
+                    + "。"
                 ),
             }
         )
@@ -1251,7 +1251,7 @@ def _top_risk_sources(
             {
                 "severity": "blocking_gap",
                 "source": "required_pretrip_input",
-                "reason": f"Missing required pre-trip input: {field}.",
+                "reason": f"缺少必要行前輸入：{field}。",
             }
         )
     for reason in governance["warning_gaps"]:
@@ -1283,7 +1283,7 @@ def _top_risk_sources(
             {
                 "severity": "residual",
                 "source": "departure_gate",
-                "reason": "Outdoor conditions can change after pre-trip review; final human departure gate is still required.",
+                "reason": "行前審核後戶外條件仍可能變化；最終仍需人工出發門檢。",
             }
         )
     ranked = []
@@ -1302,11 +1302,11 @@ def _residual_risk(
     if governance["warning_gaps"]:
         risks.extend(governance["warning_gaps"][:4])
     if weather_state.get("human_review_required"):
-        risks.append("Weather/daylight evidence remains human-review-required.")
+        risks.append("天氣/日照證據仍需人工審核。")
     if readiness_state.get("warning_count"):
-        risks.append("Hard readiness warnings remain present.")
+        risks.append("硬體/行前 readiness warning 仍存在。")
     risks.append(
-        "Reviewed pre-trip evidence is not departure approval or runtime safety truth."
+        "已審核行前證據不等於出發核准或 runtime safety truth。"
     )
     return _dedupe(risks)
 
@@ -1389,25 +1389,25 @@ def _stop_policy(
     if missing_fields or governance["warning_gaps"] or decision not in {"GO"}:
         not_recommended.append(
             {
-                "label": "Unplanned photo, lunch, summit, or waiting stops",
+                "label": "未審核拍攝、午餐、攻頂或等待停留",
                 "policy": "not_recommended_until_reviewed",
-                "rationale": "Required inputs, review state, or buffer limits are not fully proven.",
+                "rationale": "必要輸入、審核狀態或 buffer 限制尚未完全證明。",
             }
         )
     if decision == "GUIDED_ONLY":
         not_recommended.append(
             {
-                "label": "Autonomous departure without qualified guide or reviewed controls",
+                "label": "缺少合格嚮導或已審核控制的自主出發",
                 "policy": "not_recommended_guided_only",
-                "rationale": "Current pre-trip decision requires guided or equivalent support.",
+                "rationale": "目前行前決策要求嚮導或等效支援。",
             }
         )
     if decision in {"NO_GO", "DELAY", "CHANGE_PLAN", "ESCALATE", "GUIDED_ONLY"}:
         not_recommended.append(
             {
-                "label": "Leaving the trailhead under the original plan",
+                "label": "照原計畫離開登山口",
                 "policy": "not_recommended",
-                "rationale": f"Current pre-trip decision is {decision}.",
+                "rationale": f"目前行前決策為 {decision}。",
             }
         )
     return {
@@ -1423,21 +1423,21 @@ def _pretrip_checklist(
     weather_state: dict[str, Any],
 ) -> list[dict[str, str]]:
     checks = [
-        ("route", "Route loaded"),
-        ("date", "Trip date / departure date known"),
-        ("team", "Team roster present"),
-        ("user_experience", "Member experience reviewed"),
-        ("user_goal", "User trip goal reviewed"),
-        ("equipment", "Equipment inventory present"),
-        ("transport_access", "Transport and latest return limit confirmed"),
-        ("planned_departure_time", "Planned departure time confirmed"),
-        ("weather_reviewed", "Weather reviewed"),
-        ("daylight_reviewed", "Daylight window reviewed"),
-        ("cp_graph", "CP Graph compiled"),
-        ("turn_back_checkpoint", "Latest turnaround checkpoint available"),
-        ("slowest_team_basis", "Slowest or most vulnerable member basis confirmed"),
-        ("equipment_confirmed", "Equipment review complete"),
-        ("remote_contact_confirmed", "Remote contact / emergency plan reviewed"),
+        ("route", "路線已載入"),
+        ("date", "行程日期/出發日期已確認"),
+        ("team", "隊伍名單已建立"),
+        ("user_experience", "成員經驗已審核"),
+        ("user_goal", "使用者行程目標已審核"),
+        ("equipment", "裝備清單已建立"),
+        ("transport_access", "交通與最晚回程限制已確認"),
+        ("planned_departure_time", "預計出發時間已確認"),
+        ("weather_reviewed", "天氣已審核"),
+        ("daylight_reviewed", "日照窗口已審核"),
+        ("cp_graph", "CP Graph 已編譯"),
+        ("turn_back_checkpoint", "最晚折返 checkpoint 已建立"),
+        ("slowest_team_basis", "最慢或最脆弱成員基準已確認"),
+        ("equipment_confirmed", "裝備審核已完成"),
+        ("remote_contact_confirmed", "留守/緊急方案已審核"),
     ]
     checklist = [
         {
@@ -1471,13 +1471,11 @@ def _buffer_cost_statement(
 ) -> str:
     if decision in {"NO_GO", "DELAY", "CHANGE_PLAN", "ESCALATE"}:
         return (
-            "No discretionary stop, photo, lunch, summit, or waiting buffer is granted "
-            "until required gaps are resolved and the departure gate is rerun."
+            "必要缺口解除並重新執行出發門檢前，不授權停留、拍照、午餐、攻頂或等待 buffer。"
         )
     if decision == "GUIDED_ONLY":
         return (
-            "No autonomous route, stop, summit, photo, lunch, or waiting buffer is granted "
-            "until guide support or equivalent reviewed controls are confirmed."
+            "嚮導支援或等效審核控制確認前，不授權自主路線、停留、攻頂、拍照、午餐或等待 buffer。"
         )
     if missing_fields or governance["warning_gaps"]:
         return (
@@ -1536,14 +1534,14 @@ def _field_answer(
             f"{reason_text} "
             "以目前使用者經驗，不建議自主出發；只能改成合格嚮導、經驗領隊或等效審核控制下的方案。 "
             f"下一步：{governance['next_action']} "
-            "此為 pre-trip route readiness 候選判斷，不是 departure approval 或 runtime safety truth；不會啟動 runtime handoff、/safety、SOS、outbound send 或硬體控制。"
+            "此為 pre-trip route readiness 候選判斷，不是出發核准或 runtime safety truth；不會啟動 runtime handoff、/safety、SOS、outbound send 或硬體控制。"
         )
     reasons = governance["critical_gaps"] or governance["warning_gaps"] or ["出發前資料未顯示主要阻礙。"]
     return (
         f"出發前判斷：建議 {decision}。"
         f"{'；'.join(reasons[:2])} "
         f"下一步：{governance['next_action']} "
-        "此為 pre-trip route readiness 候選判斷，不是 departure approval 或 runtime safety truth；不會啟動 runtime handoff、/safety、SOS、outbound send 或硬體控制。"
+        "此為 pre-trip route readiness 候選判斷，不是出發核准或 runtime safety truth；不會啟動 runtime handoff、/safety、SOS、outbound send 或硬體控制。"
     )
 
 
@@ -1564,8 +1562,8 @@ def _next_action(
     if missing_fields:
         return "補齊出發前必要輸入與人工 review，再重新評估。"
     if warning_gaps:
-        return "通過人工 departure gate 並保留替代路線/撤退策略後才可條件式出發。"
-    return "完成人工 departure gate 後，才允許進入 runtime handoff。"
+        return "通過人工出發門檢並保留替代路線/撤退策略後才可條件式出發。"
+    return "完成人工出發門檢後，才允許進入 runtime handoff。"
 
 
 def _load_optional_json(

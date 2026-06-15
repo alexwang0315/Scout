@@ -2022,7 +2022,7 @@ def test_answer_synthesis_routes_top_risk_sources_to_route_readiness() -> None:
     assert result.decision_output["decision"] == "DELAY"
     assert "標準出發前決策包" in result.answer
     assert "前三風險" in result.answer
-    assert "Missing required pre-trip input" in result.answer
+    assert "缺少必要行前輸入" in result.answer
     assert result.decision_output["runtimeSafetyTruth"] is False
 
 
@@ -2075,7 +2075,7 @@ def test_answer_synthesis_changes_plan_for_latest_return_limit() -> None:
     assert result.decision_output["answerSourceToolId"] == ROUTE_READINESS_TOOL_ID
     assert result.decision_output["decision"] == "CHANGE_PLAN"
     assert result.decision_output["firstLayer"]["decision"] == "建議改變計畫。"
-    assert "Target ETA 2013-10-08T18:28:50+08:00" in result.decision_output[
+    assert "目標 ETA 2013-10-08T18:28:50+08:00" in result.decision_output[
         "firstLayer"
     ]["reason"]
     assert result.decision_output["cost"]["latestReturnDeadline"] == (
@@ -2103,7 +2103,7 @@ def test_answer_synthesis_surfaces_pretrip_stop_policy() -> None:
     assert required["suggested_stop_points"][0]["policy"] == (
         "turnaround_or_reassess"
     )
-    assert "Unplanned photo" in required["not_recommended_stop_points"][0]["label"]
+    assert "未審核拍攝" in required["not_recommended_stop_points"][0]["label"]
     assert required["not_recommended_stop_points"][0]["policy"] == (
         "not_recommended_until_reviewed"
     )
@@ -2132,7 +2132,7 @@ def test_answer_synthesis_surfaces_pretrip_checklist_gaps() -> None:
     assert any(item["status"] != "complete" for item in checklist)
     assert result.decision_output["answerSourceToolId"] == ROUTE_READINESS_TOOL_ID
     assert "行前 checklist 缺口" in result.answer
-    assert "Member experience reviewed=missing_or_needs_review" in result.answer
+    assert "成員經驗已審核=missing_or_needs_review" in result.answer
     assert result.decision_output["runtimeSafetyTruth"] is False
 
 
@@ -2151,7 +2151,7 @@ def test_answer_synthesis_routes_residual_risk_to_route_readiness_package() -> N
     assert residual_risk
     assert result.decision_output["answerSourceToolId"] == ROUTE_READINESS_TOOL_ID
     assert "殘餘風險" in result.answer
-    assert "Reviewed planning package is not departure approval" in result.answer
+    assert any("已審核行前證據不等於出發核准" in item for item in residual_risk)
     assert result.decision_output["runtimeSafetyTruth"] is False
 
 

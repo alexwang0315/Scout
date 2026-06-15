@@ -52,6 +52,10 @@ def test_route_readiness_fixture_delays_without_required_pretrip_reviews() -> No
     assert outputs["latest_turnaround"]["checkpoint_name"] == "雲海保線所"
     assert outputs["not_recommended_stop_points"]
     assert outputs["alternatives_or_short_routes"]
+    assert any("延後出發" in item for item in outputs["alternatives_or_short_routes"])
+    assert not any(
+        "Delay departure" in item for item in outputs["alternatives_or_short_routes"]
+    )
     assert outputs["pretrip_checklist"]
     assert outputs["residual_risk"]
     assert package["decision_limits"]["allowed"] is False
@@ -109,9 +113,10 @@ def test_route_readiness_no_go_for_hard_readiness_blocker(tmp_path: Path) -> Non
 
     assert result["answerability"] == "route_readiness_decision_available"
     assert result["decision"] == "NO_GO"
-    assert "Hard readiness report contains blocker findings." in result[
-        "readiness_governance"
-    ]["critical_gaps"]
+    assert any(
+        "readiness report 仍有 blocker" in item
+        for item in result["readiness_governance"]["critical_gaps"]
+    )
     assert result["departure_gate"]["approval_granted"] is False
     assert "runtime safety truth" in result["field_answer"]
     package = result["pretrip_decision_package"]
