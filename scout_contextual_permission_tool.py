@@ -65,6 +65,7 @@ class ConfidenceLevel(StrEnum):
 class OutdoorAction(StrEnum):
     STOP = "stop"
     FILM = "film"
+    TRIPOD = "tripod"
     PHOTO = "photo"
     REST = "rest"
     LUNCH = "lunch"
@@ -232,6 +233,7 @@ class RiskBudget(ScoutContextualBaseModel):
 _BUDGET_ACTIONS = {
     OutdoorAction.STOP,
     OutdoorAction.FILM,
+    OutdoorAction.TRIPOD,
     OutdoorAction.PHOTO,
     OutdoorAction.REST,
     OutdoorAction.LUNCH,
@@ -245,6 +247,7 @@ _BUDGET_ACTIONS = {
 _EXPOSED_MEDIA_PRESSURE_ACTIONS = {
     OutdoorAction.STOP,
     OutdoorAction.FILM,
+    OutdoorAction.TRIPOD,
     OutdoorAction.PHOTO,
     OutdoorAction.REROUTE,
     OutdoorAction.WAIT,
@@ -253,6 +256,7 @@ _EXPOSED_MEDIA_PRESSURE_ACTIONS = {
 _DEFAULT_DURATION_BY_ACTION = {
     OutdoorAction.STOP: 6,
     OutdoorAction.FILM: 6,
+    OutdoorAction.TRIPOD: 4,
     OutdoorAction.PHOTO: 5,
     OutdoorAction.REST: 8,
     OutdoorAction.LUNCH: 20,
@@ -267,6 +271,7 @@ _DEFAULT_DURATION_BY_ACTION = {
 _MINIMUM_USEFUL_DURATION_BY_ACTION = {
     OutdoorAction.STOP: 1,
     OutdoorAction.FILM: 2,
+    OutdoorAction.TRIPOD: 2,
     OutdoorAction.PHOTO: 2,
     OutdoorAction.REST: 3,
     OutdoorAction.LUNCH: 12,
@@ -457,6 +462,7 @@ def assess_scout_contextual_permission(
         "warnings": warnings,
         "standard_alignment": [
             "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 4 decision vocabulary",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 8 Contextual Permissioning",
             "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 7.3 Team Pace Fit",
             "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 13 risk budget",
             "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 13.1 conceptual formula",
@@ -616,14 +622,8 @@ def _permission(
         return _no_go_permission(
             action=action,
             decision=ScoutDecision.NO_GO,
-            reason=(
-                "該拍攝或停留目標位於曝露或高後果地形；"
-                "不能為照片、影片或打卡期待增加停留、靠近或繞行。"
-            ),
-            next_action=(
-                "不要前往或停留拍攝；回到主線或穩定安全點，"
-                "改在已審核且不壓縮撤退 buffer 的觀察點再評估。"
-            ),
+            reason=_exposed_media_reason(action),
+            next_action=_exposed_media_next_action(action),
             confidence=_confidence(confidence, default=ConfidenceLevel.MEDIUM),
             uncertainty_notes=uncertainty_notes,
             alternative_actions=_alternative_actions(action, next_cp_id),
@@ -1429,7 +1429,9 @@ def _resolve_action(action: str | None, query: str) -> OutdoorAction:
             if normalized == candidate.value:
                 return candidate
     text = query.lower()
-    if _has_any(text, ("拍影片", "拍片", "影片", "video", "film", "架腳架")):
+    if _has_any(text, ("架腳架", "腳架", "tripod")):
+        return OutdoorAction.TRIPOD
+    if _has_any(text, ("拍影片", "拍片", "影片", "video", "film")):
         return OutdoorAction.FILM
     if _has_any(text, ("等霧", "等隊友", "等待", "wait")):
         return OutdoorAction.WAIT
@@ -1633,6 +1635,8 @@ def _looks_like_exposed_media_pressure(
             "拍攝",
             "拍片",
             "影片",
+            "腳架",
+            "架腳架",
             "去拍",
             "想去拍",
             "很好拍",
@@ -1642,6 +1646,7 @@ def _looks_like_exposed_media_pressure(
             "photo",
             "video",
             "film",
+            "tripod",
             "checkin",
         ),
     )
@@ -1687,9 +1692,15 @@ def _looks_like_exposed_media_pressure(
             "滑墜",
             "濕滑",
             "泥濘",
+            "風口",
+            "強風",
+            "陣風",
+            "稜線",
             "exposed",
             "cliff",
             "steep",
+            "wind",
+            "windy",
         ),
     )
 
@@ -1708,6 +1719,30 @@ def _exposed_lunch_next_action(
     if next_cp_id:
         return f"不在此午餐，請再前往 {next_cp_id}，到較避風處再重新評估。"
     return "不在此午餐，請再前往下一個較避風 CP，到較避風處再重新評估。"
+
+
+def _exposed_media_reason(action: OutdoorAction) -> str:
+    if action == OutdoorAction.TRIPOD:
+        return (
+            "腳架會增加停留時間、佔用路徑寬度並放大強風或曝露邊坡風險；"
+            "不能為取景穩定度增加停留、靠近或離開路線走廊。"
+        )
+    return (
+        "該拍攝或停留目標位於曝露或高後果地形；"
+        "不能為照片、影片或打卡期待增加停留、靠近或繞行。"
+    )
+
+
+def _exposed_media_next_action(action: OutdoorAction) -> str:
+    if action == OutdoorAction.TRIPOD:
+        return (
+            "不要架腳架；收起設備並回到主線或穩定安全點，"
+            "改在已審核且不壓縮撤退 buffer 的觀察點再評估。"
+        )
+    return (
+        "不要前往或停留拍攝；回到主線或穩定安全點，"
+        "改在已審核且不壓縮撤退 buffer 的觀察點再評估。"
+    )
 
 
 def _budget_failure_decision(action: OutdoorAction) -> ScoutDecision:
@@ -1762,6 +1797,11 @@ def _allowed_next_action(action: OutdoorAction, next_cp_id: str | None) -> str:
     destination = next_cp_id or "下一個安全 CP"
     if action in {OutdoorAction.FILM, OutdoorAction.PHOTO}:
         return f"完成拍攝後直接前往 {destination}，不要追加取景或離開路線走廊。"
+    if action == OutdoorAction.TRIPOD:
+        return (
+            f"收起腳架後直接前往 {destination}，不要把腳架架在風口、"
+            "窄路、曝露邊坡或路線走廊外。"
+        )
     if action == OutdoorAction.REST:
         return f"短休結束後重新集合，確認最慢成員狀態，再前往 {destination}。"
     if action == OutdoorAction.LUNCH:
@@ -1779,6 +1819,7 @@ def _safe_next_action(action: OutdoorAction, next_cp_id: str | None) -> str:
     destination = next_cp_id or "下一個安全 CP"
     if action in {
         OutdoorAction.FILM,
+        OutdoorAction.TRIPOD,
         OutdoorAction.PHOTO,
         OutdoorAction.STOP,
         OutdoorAction.REST,
@@ -1799,6 +1840,7 @@ def _alternative_actions(action: OutdoorAction, next_cp_id: str | None) -> list[
     destination = next_cp_id or "下一個安全 CP"
     if action in {
         OutdoorAction.FILM,
+        OutdoorAction.TRIPOD,
         OutdoorAction.PHOTO,
         OutdoorAction.STOP,
         OutdoorAction.WAIT,
@@ -1954,8 +1996,16 @@ def _required_conditions(
 ) -> list[str]:
     conditions = [f"最多 {max_duration} 分鐘"]
     conditions.append(f"{leave_by} 前離開" if leave_by else "以現在時間起算，到時立即離開")
-    if action in {OutdoorAction.FILM, OutdoorAction.PHOTO, OutdoorAction.STOP, OutdoorAction.WAIT}:
+    if action in {
+        OutdoorAction.FILM,
+        OutdoorAction.TRIPOD,
+        OutdoorAction.PHOTO,
+        OutdoorAction.STOP,
+        OutdoorAction.WAIT,
+    }:
         conditions.append("不要離開步道內側或既有路線走廊")
+    if action == OutdoorAction.TRIPOD:
+        conditions.append("不得在風口、窄路、曝露邊坡或會阻礙通行處架腳架")
     if action == OutdoorAction.WAIT:
         conditions.append("若時限內能見度沒有改善，放棄拍攝並前往下一個 CP")
     conditions.append("若天氣、能見度、隊伍狀態或地形風險惡化，立即取消")
@@ -1992,8 +2042,10 @@ def _status_uncertainty_notes(
 
 def _residual_risk(action: OutdoorAction, terrain_risk_level: str | None) -> list[str]:
     risks = ["即使遵守時限，仍可能受天氣、地面濕滑、能見度與隊伍狀態變化影響。"]
-    if action in {OutdoorAction.FILM, OutdoorAction.PHOTO}:
+    if action in {OutdoorAction.FILM, OutdoorAction.PHOTO, OutdoorAction.TRIPOD}:
         risks.append("拍攝衝動可能導致追加停留或離開安全路線。")
+    if action == OutdoorAction.TRIPOD:
+        risks.append("腳架會增加停留時間、佔用路徑寬度，強風時也可能造成失衡。")
     if action == OutdoorAction.WAIT:
         risks.append("等待霧散可能轉成追加拍攝時間，必須用硬性離開時間切斷。")
     if terrain_risk_level:
@@ -2002,7 +2054,14 @@ def _residual_risk(action: OutdoorAction, terrain_risk_level: str | None) -> lis
 
 
 def _default_location_constraint(action: OutdoorAction) -> str | None:
-    if action in {OutdoorAction.FILM, OutdoorAction.PHOTO, OutdoorAction.STOP, OutdoorAction.REST, OutdoorAction.WAIT}:
+    if action in {
+        OutdoorAction.FILM,
+        OutdoorAction.TRIPOD,
+        OutdoorAction.PHOTO,
+        OutdoorAction.STOP,
+        OutdoorAction.REST,
+        OutdoorAction.WAIT,
+    }:
         return "stay on the inner side of the trail or inside the known route corridor"
     if action == OutdoorAction.LUNCH:
         return "use only the nearest stable, low-exposure spot inside the route corridor"
@@ -2084,6 +2143,7 @@ def _action_label(action: OutdoorAction | str) -> str:
     labels = {
         OutdoorAction.STOP: "停留",
         OutdoorAction.FILM: "拍影片",
+        OutdoorAction.TRIPOD: "架腳架",
         OutdoorAction.PHOTO: "拍照",
         OutdoorAction.REST: "休息",
         OutdoorAction.LUNCH: "吃午餐",
