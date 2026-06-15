@@ -9,6 +9,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 VERIFIER = ROOT / "tools" / "verify_pretrip_workspace_spec_alignment.py"
 
+from tools.verify_pretrip_workspace_spec_alignment import (
+    _check_layer_preparation,
+    _check_layer_projection,
+    _check_required_project_refs,
+)
+
 
 def test_runtime_session_layout_contract_accepts_black_box_recorder(tmp_path: Path) -> None:
     session_root = tmp_path / "runtime" / "sessions"
@@ -88,6 +94,116 @@ def test_black_box_export_layout_contract_accepts_sealed_export(
     assert result.returncode == 0, result.stdout + result.stderr
     payload = json.loads(result.stdout)
     assert payload["summary"]["black_box_export"]["checked"] is True
+
+
+def test_pretrip_verifier_accepts_wmts_runtime_imagery_contract(
+    tmp_path: Path,
+) -> None:
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    project = {
+        "imagery_source_id": "nlsc_photo2",
+        "imagery_source_registry_id": "scout.imagery_sources.default.v1",
+    }
+    for ref_key, ref in {
+        "source_inbox_manifest_ref": "inbox/source_manifest.json",
+        "historical_gpx_source_index_ref": "sources/historical_gpx_source_index.json",
+        "route_evidence_bundle_ref": "normalized/routes/route_evidence_bundle.json",
+        "normalized_route_note_candidates_ref": "normalized/notes/gpx_route_note_candidates.json",
+        "route_note_candidates_ref": "candidates/route_note_candidates.json",
+        "gpx_speed_filter_report_ref": "outputs/gpx_speed_filter_report.json",
+        "layer_preparation_manifest_ref": "outputs/layers/layer_preparation_manifest.json",
+        "layer_preparation_summary_ref": "outputs/layers/layer_preparation_summary.json",
+        "map_preparation_summary_ref": "outputs/layers/map_preparation_summary.json",
+        "layer_map_projection_ref": "outputs/layers/projections/pretrip_map_layers.json",
+        "web_case_query_plan_ref": "outputs/layers/plans/web_case_query_plan.json",
+        "raster_label_plan_ref": "outputs/layers/plans/raster_label_plan.json",
+        "overpass_vector_evidence_ref": "outputs/layers/normalized/overpass_vector_evidence.geojson",
+        "terrain_route_samples_ref": "outputs/layers/normalized/terrain_route_samples.geojson",
+        "web_case_evidence_ref": "outputs/layers/normalized/web_case_evidence.json",
+        "raster_label_evidence_ref": "outputs/layers/normalized/raster_label_evidence.geojson",
+        "gis_semantic_input_bundle_ref": "outputs/layers/semantic/gis_semantic_input_bundle.json",
+        "gis_perception_ai_judgements_ref": "outputs/layers/semantic/gis_perception_ai_judgements.json",
+        "gis_checkpoint_candidates_ref": "outputs/layers/candidates/gis_checkpoint_candidates.json",
+        "ln_proposals_ref": "outputs/layers/candidates/ln_proposals.json",
+        "poi_candidates_ref": "outputs/layers/candidates/poi_candidates.json",
+        "terrain_risk_candidates_ref": "outputs/layers/candidates/terrain_risk_candidates.json",
+        "detour_route_candidates_ref": "outputs/layers/candidates/detour_route_candidates.json",
+        "risk_score_points_ref": "outputs/risk/risk_score_points.geojson",
+        "risk_ribbon_ref": "outputs/risk/risk_ribbon.geojson",
+        "calibrated_risk_heatmap_ref": "outputs/risk/calibrated_risk_heatmap.geojson",
+    }.items():
+        project[ref_key] = ref
+        (project_root / ref).parent.mkdir(parents=True, exist_ok=True)
+        (project_root / ref).write_text("{}", encoding="utf-8")
+
+    errors: list[str] = []
+    _check_required_project_refs(project_root, project, errors)
+    assert not errors
+
+    imagery_layer = {
+        "layer_id": "imagery",
+        "status": "wmts_runtime_only",
+        "raster_tile_delivery": "direct_wmts_runtime",
+        "imagery_source_kind": "wmts_tile",
+        "source_refs": [{"source_kind": "wmts_tile"}],
+        "counts": {"remote_imagery_source_registered": True},
+        "lifecycle": {
+            "import": {"source_ref_count": 1},
+            "summarize": {"counts": {"remote_imagery_source_registered": True}},
+        },
+    }
+    ready_layers = [
+        {
+            "layer_id": layer_id,
+            "status": "ready",
+            "source_refs": [],
+            "counts": {},
+            "lifecycle": {"summarize": {"counts": {}}},
+        }
+        for layer_id in (
+            "risk-score",
+            "risk-ribbon",
+            "risk-heatmap",
+            "risk-delta",
+            "route",
+            "segments",
+            "checkpoints",
+            "reference-tracks",
+        )
+    ]
+    ready_layers.append(
+        {
+            "layer_id": "route-notes",
+            "status": "ready",
+            "source_refs": [
+                {"project_ref_key": "normalized_route_note_candidates_ref"},
+                {"project_ref_key": "route_note_candidates_ref"},
+            ],
+            "counts": {},
+            "lifecycle": {"summarize": {"counts": {}}},
+        }
+    )
+    errors = []
+    warnings: list[str] = []
+    _check_layer_preparation(
+        {
+            "boundary": {
+                "runtime_safety_truth": False,
+                "phase1_runtime_mutation_allowed": False,
+            },
+            "network_policy": {"network_calls_made": False},
+            "layers": [imagery_layer, *ready_layers],
+        },
+        {"layers": []},
+        errors,
+        warnings,
+    )
+    assert not errors
+
+    errors = []
+    _check_layer_projection({"layers": [imagery_layer]}, errors)
+    assert not errors
 
 
 def _run_verifier(*args: str) -> subprocess.CompletedProcess[str]:
