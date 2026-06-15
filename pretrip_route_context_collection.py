@@ -583,6 +583,8 @@ def _points_from_web_case_evidence(payload: dict[str, Any], source_ref: str) -> 
         point.update(
             {
                 "evidence_type": "web_case_evidence",
+                "source_tier": str(raw.get("source_tier") or point["source_tier"]),
+                "source_family": raw.get("source_family"),
                 "source_families": _str_list(raw.get("source_families") or raw.get("source_family")),
                 "source_refs": _source_refs_for(source_ref, "web_case_evidence", raw),
             }
@@ -1036,21 +1038,44 @@ def _load_source(
     status = "loaded" if count > 0 else "empty"
     if not path.exists():
         status = "missing"
-    source_report.append(
-        {
-            "source_kind": source_kind,
-            "status": status,
-            "source_path": ref,
-            "loaded_count": count,
-            "required_by_standard_sec6": bool(spec["required_by_standard_sec6"]),
-            "source_tier": spec.get("source_tier"),
-            "conclusion_role": spec.get("conclusion_role"),
-            "sha256": _sha256(path) if path.exists() and path.is_file() else None,
-            "candidate_only": True,
-            "runtime_safety_truth": False,
-        }
-    )
+    source_tier, source_tier_counts = _source_tier_summary(source_kind, payload, spec)
+    report = {
+        "source_kind": source_kind,
+        "status": status,
+        "source_path": ref,
+        "loaded_count": count,
+        "required_by_standard_sec6": bool(spec["required_by_standard_sec6"]),
+        "source_tier": source_tier,
+        "conclusion_role": spec.get("conclusion_role"),
+        "sha256": _sha256(path) if path.exists() and path.is_file() else None,
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+    }
+    if source_tier_counts:
+        report["source_tier_counts"] = source_tier_counts
+    source_report.append(report)
     return payload, ref, path
+
+
+def _source_tier_summary(
+    source_kind: str,
+    payload: dict[str, Any],
+    spec: dict[str, Any],
+) -> tuple[str, dict[str, int]]:
+    default_tier = str(spec.get("source_tier") or "unknown")
+    if source_kind != "web_case_evidence" or not payload:
+        return default_tier, {}
+    counts: dict[str, int] = {}
+    for raw in _list_from_any(payload, ("points", "candidates", "evidence", "cases")):
+        if not isinstance(raw, dict):
+            continue
+        tier = str(raw.get("source_tier") or default_tier)
+        counts[tier] = counts.get(tier, 0) + 1
+    if not counts:
+        return default_tier, {}
+    if len(counts) == 1:
+        return next(iter(counts)), dict(sorted(counts.items()))
+    return "mixed:" + "/".join(sorted(counts)), dict(sorted(counts.items()))
 
 
 def _source_count(source_kind: str, payload: dict[str, Any]) -> int:
