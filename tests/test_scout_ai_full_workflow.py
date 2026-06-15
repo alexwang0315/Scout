@@ -8,7 +8,7 @@ from scout_ai_full_workflow import (
     ARTIFACT_VERSION,
     run_scout_ai_full_workflow,
 )
-from scout_ai_tool_planner import WEATHER_WINDOW_TOOL_ID
+from scout_ai_tool_planner import LIVE_NAVIGATION_STATE_TOOL_ID, WEATHER_WINDOW_TOOL_ID
 from scout_pace_guardian_tool import PACE_GUARDIAN_TOOL_ID
 from scout_route_architecture_tool import ROUTE_ARCHITECTURE_TOOL_ID
 from scout_route_context_tool import ROUTE_CONTEXT_TOOL_ID
@@ -205,6 +205,28 @@ def test_full_workflow_runs_route_architecture_cp_graph_question() -> None:
     assert result.sources[0]["top_result_summary"]["cp_graph"]["node_count"] == 124
     assert "路線結構判斷" in result.answer
     assert "CP Graph" in result.answer
+    assert result.boundary.runtime_safety_truth is False
+
+
+def test_full_workflow_runs_live_navigation_uncertainty_question() -> None:
+    result = run_scout_ai_full_workflow(
+        "我現在是不是偏離路線？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=3,
+    )
+
+    assert result.answerability == "partial_evidence_with_missing_context"
+    assert result.selected_tool_count == 1
+    assert result.executed_tool_count == 1
+    assert result.completed_tool_count == 1
+    assert result.missing_evidence_count == 1
+    assert result.sources[0]["tool_id"] == LIVE_NAVIGATION_STATE_TOOL_ID
+    assert result.sources[0]["top_result_summary"]["decision"] == "DELAY"
+    assert result.sources[0]["top_result_summary"]["navigation_terrain"]["role"] == (
+        "Navigation & Terrain Intelligence"
+    )
+    assert "地形導航判斷" in result.answer
     assert result.boundary.runtime_safety_truth is False
 
 

@@ -196,7 +196,7 @@ def test_planner_selects_safety_boundary_and_live_state_for_candidate_ln_questio
     live_item = _single_tool(plan, LIVE_NAVIGATION_STATE_TOOL_ID)
     safety_item = _single_tool(plan, SAFETY_BOUNDARY_TOOL_ID)
     assert live_item.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
-    assert live_item.implementation_status == "partial_existing_surface"
+    assert live_item.implementation_status == "ready_current_tool"
     assert live_item.request is not None
     assert live_item.request["tool_id"] == LIVE_NAVIGATION_STATE_TOOL_ID
     assert safety_item.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
@@ -206,6 +206,20 @@ def test_planner_selects_safety_boundary_and_live_state_for_candidate_ln_questio
     assert live_item.missing_fields == []
     assert safety_item.missing_fields == []
     assert safety_item.boundary.live_safety_api_calls_allowed is False
+
+
+def test_planner_selects_live_navigation_for_branch_uncertainty_question() -> None:
+    plan = plan_scout_ai_tools(
+        _query("剛剛岔路我有走對嗎？現在要不要回主線？"),
+        project_root=PROJECT_ROOT,
+    )
+
+    item = _single_tool(plan, LIVE_NAVIGATION_STATE_TOOL_ID)
+    assert item.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+    assert item.implementation_status == "ready_current_tool"
+    assert item.request is not None
+    assert item.request["tool_id"] == LIVE_NAVIGATION_STATE_TOOL_ID
+    assert item.boundary.runtime_safety_truth is False
 
 
 def test_planner_selects_ins_dr_trace_for_gps_dr_trajectory_question() -> None:

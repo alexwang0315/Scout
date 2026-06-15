@@ -88,6 +88,7 @@ def test_question_eval_classifies_current_tools_and_missing_live_evidence() -> N
     assert "pydantic_ai.tool.search_scout_route_structure.v0" in route_eval.current_tool_ids
     assert "pydantic_ai.tool.search_scout_major_points.v0" in route_eval.current_tool_ids
     assert live_eval.answerability == "requires_missing_evidence"
+    assert "scout.ai.live_navigation_state.assess.v0" in live_eval.current_tool_ids
     assert "scout.ai.live_navigation_state.assess.v0" in live_eval.recommended_tool_ids
     assert "current_position" in live_eval.missing_evidence
     assert route_context_eval.answerability == "answerable_by_current_read_only_tools"
