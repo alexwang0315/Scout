@@ -74,6 +74,16 @@ def test_evidence_collection_executes_ready_risk_and_terrain_tools() -> None:
         assert record.result["boundary"]["runtime_safety_truth"] is False
     assert risk.result["payload"]["result_count"] >= 1
     assert risk.result["payload"]["results"]
+    assert risk.result["payload"]["decision"] == "CHANGE_PLAN"
+    assert risk.result["payload"]["decision_output"]["decisionObjectSchema"] == (
+        "ContextualPermission"
+    )
+    assert risk.result["payload"]["decision_output"]["firstLayer"]["decision"] == (
+        "建議改變路線或通過策略。"
+    )
+    assert risk.result["payload"]["risk_decision"]["highest_risk_result"][
+        "risk_bucket"
+    ] == "high"
     assert terrain.result["payload"]["summaries"]
 
 

@@ -435,7 +435,8 @@ def _answer_decision_output(
     completed_sources = [
         source for source in sources if source.collection_status == "completed"
     ]
-    for source in completed_sources:
+    decision_sources = sorted(completed_sources, key=_decision_source_priority)
+    for source in decision_sources:
         native = source.top_result_summary.get("decision_output")
         if isinstance(native, dict) and native:
             return {
@@ -445,7 +446,7 @@ def _answer_decision_output(
                 "runtimeSafetyTruth": False,
                 "standardAlignment": _decision_output_standard_alignment(),
             }
-    for source in completed_sources:
+    for source in decision_sources:
         package = source.top_result_summary.get("pretrip_decision_package")
         if isinstance(package, dict) and package:
             return _decision_output_from_pretrip_package(
@@ -453,7 +454,7 @@ def _answer_decision_output(
                 package=package,
                 answerability=answerability,
             )
-    for source in completed_sources:
+    for source in decision_sources:
         output = _generic_decision_output_from_source(
             source=source,
             question=question,
@@ -493,6 +494,30 @@ def _answer_decision_output(
         "runtimeSafetyTruth": False,
         "standardAlignment": _decision_output_standard_alignment(),
     }
+
+
+def _decision_source_priority(source: ScoutAiAnswerSource) -> tuple[int, str]:
+    if source.tool_id.startswith("pydantic_ai.tool.search_"):
+        return (50, source.tool_id)
+    if source.tool_id in {
+        CONTEXTUAL_PERMISSION_TOOL_ID,
+        MEDIA_LITERACY_TOOL_ID,
+        SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID,
+    }:
+        return (0, source.tool_id)
+    if source.tool_id in {
+        ROUTE_READINESS_TOOL_ID,
+        WEATHER_WINDOW_TOOL_ID,
+        LIVE_NAVIGATION_STATE_TOOL_ID,
+        PACE_GUARDIAN_TOOL_ID,
+        EQUIPMENT_RESOURCE_TOOL_ID,
+        TEAM_STATUS_TOOL_ID,
+        ROUTE_ARCHITECTURE_TOOL_ID,
+        ROUTE_CONTEXT_TOOL_ID,
+        POST_TRIP_REVIEW_TOOL_ID,
+    }:
+        return (10, source.tool_id)
+    return (20, source.tool_id)
 
 
 def _decision_output_from_pretrip_package(

@@ -267,6 +267,7 @@ def _compact_payload(
         "leave_by",
         "field_answer",
         "contextual_permission",
+        "risk_decision",
         "risk_budget",
         "risk_budget_source",
         "route_context",

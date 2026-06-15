@@ -169,6 +169,15 @@ preserves the weather action limit, and carries route-specific conditions,
 required conditions, and alternatives without calling live providers or mutating
 runtime safety truth.
 
+`scout.ai.risk_scores.search` / `pydantic_ai.tool.search_scout_risk_scores.v0`
+returns a native `decision_output` for route risk-score queries. It still
+returns compact baseline/calibrated risk evidence, but the highest matched risk
+is also mapped into a candidate Risk Sentinel decision such as `CHANGE_PLAN` or
+`NO_GO`, with a first-layer location limit, next action, buffer cost statement,
+and uncertainty notes. The score is never promoted to runtime safety truth and
+does not grant stop, summit, photo, `/safety/*`, SOS, outbound, or hardware
+permission.
+
 `scout.ai.media_literacy.assess.v0` also returns a native `decision_output` for
 Sec. 21 media-bias moments. It turns social-photo, check-in, speed, guided-party,
 equipment, season/weather, and image-scale bias into a concrete decision about

@@ -170,6 +170,20 @@ def test_execute_ready_current_tool_returns_uniform_result() -> None:
     assert result.payload["artifact_kind"] == "scout_ai_risk_scores_tool_output"
     assert result.payload["tool_id"] == "pydantic_ai.tool.search_scout_risk_scores.v0"
     assert result.payload["summaries"]["baseline"]["available"] is True
+    assert result.payload["answerability"] == "risk_score_decision_available"
+    assert result.payload["decision"] == "CHANGE_PLAN"
+    assert result.payload["decision_output"]["decisionObjectSchema"] == (
+        "ContextualPermission"
+    )
+    assert result.payload["decision_output"]["decision"] == "CHANGE_PLAN"
+    assert result.payload["decision_output"]["allowed"] is False
+    assert result.payload["decision_output"]["firstLayer"]["decision"] == (
+        "建議改變路線或通過策略。"
+    )
+    assert result.payload["decision_output"]["runtimeSafetyTruth"] is False
+    assert result.payload["risk_decision"]["highest_risk_result"]["risk_bucket"] == (
+        "high"
+    )
     assert result.boundary.runtime_safety_truth is False
     assert result.boundary.phase1_safety_mutation_allowed is False
 

@@ -78,6 +78,18 @@ def test_full_workflow_runs_risk_and_terrain_question_end_to_end() -> None:
     source_ids = {source["tool_id"] for source in result.sources}
     assert RISK_SCORE_TOOL_ID in source_ids
     assert TERRAIN_SCORE_TOOL_ID in source_ids
+    risk_source = next(
+        source for source in result.sources if source["tool_id"] == RISK_SCORE_TOOL_ID
+    )
+    assert risk_source["top_result_summary"]["decision"] == "CHANGE_PLAN"
+    assert risk_source["top_result_summary"]["decision_output"][
+        "decisionObjectSchema"
+    ] == "ContextualPermission"
+    assert result.decision_output["answerSourceToolId"] == RISK_SCORE_TOOL_ID
+    assert result.decision_output["decision"] == "CHANGE_PLAN"
+    assert result.decision_output["firstLayer"]["decision"] == (
+        "建議改變路線或通過策略。"
+    )
     assert "deterministic evidence was collected before synthesis" in result.answer
     assert "runtime safety truth" in result.answer
     assert any("no model provider was called" in item for item in result.limitations)
