@@ -88,6 +88,9 @@ def plan_scout_ai_tools(
     contracts = default_tool_contracts()
     normalized_question = _normalize(query.question)
     selected: list[tuple[str, str]] = []
+    product_identity_question = _looks_like_product_identity_question(
+        normalized_question,
+    )
     standard_gap_overview_question = _looks_like_standard_gap_overview_question(
         normalized_question,
     )
@@ -98,6 +101,21 @@ def plan_scout_ai_tools(
     pretrip_go_no_go = _looks_like_pretrip_go_no_go_question(
         normalized_question,
     ) and not _has_complete_route_readiness_confirmation_bundle(normalized_question)
+
+    if (
+        product_identity_question
+        and not standard_gap_overview_question
+        and not six_power_overview_question
+    ):
+        return ScoutAiToolPlan(
+            surface=query.surface.value,
+            question=query.question,
+            project_root=str(project_root) if project_root is not None else None,
+            selected_tools=[],
+            planner_notes=[
+                "Product identity questions are answered from the deterministic Scout outdoor standard formatter, not route/weather/catalog tools."
+            ],
+        )
 
     if standard_gap_overview_question:
         _append_standard_gap_overview_tools(selected)
@@ -1705,6 +1723,29 @@ def _looks_like_standard_gap_overview_question(text: str) -> bool:
         "實作狀態",
     )
     return _has_any(text, standard_terms) and _has_any(text, gap_terms)
+
+
+def _looks_like_product_identity_question(text: str) -> bool:
+    product_terms = (
+        "scout是什麼",
+        "scout到底是什麼",
+        "scout的定位",
+        "產品定位",
+        "產品主張",
+        "一句話產品主張",
+        "不應該變成什麼",
+        "不應變成什麼",
+        "不能變成什麼",
+        "不是路線資料庫",
+        "不是天氣工具",
+        "不是風險dashboard",
+        "不是資訊平台",
+        "路線資料庫或天氣工具",
+        "產品northstar",
+        "productnorthstar",
+        "productclaim",
+    )
+    return _has_any(text, product_terms)
 
 
 def _looks_like_workspace_catalog_question(text: str) -> bool:

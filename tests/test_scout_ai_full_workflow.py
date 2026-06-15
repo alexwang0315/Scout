@@ -247,6 +247,40 @@ def test_full_workflow_surfaces_standard_gap_overview_before_six_power() -> None
     assert result.boundary.runtime_safety_truth is False
 
 
+def test_full_workflow_answers_product_identity_without_weather_or_catalog_detour() -> None:
+    result = run_scout_ai_full_workflow(
+        "Scout 是什麼？它是不是路線資料庫或天氣工具？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=8,
+    )
+
+    assert result.answerability == "standard_product_identity"
+    assert result.selected_tool_count == 0
+    assert result.completed_tool_count == 0
+    assert result.decision_output["answerSourceToolId"] == (
+        "scout.ai.product_identity_standard.v0"
+    )
+    assert result.decision_output["decision"] == "GUIDED_ONLY"
+    assert result.decision_output["runtimeSafetyTruth"] is False
+    assert "Scout 是戶外活動的 AI 決策層" in result.decision_output["firstLayer"][
+        "decision"
+    ]
+    assert result.answer.startswith("產品身份：")
+    assert "不是路線資料庫" in result.answer
+    assert "不是天氣工具" in result.answer
+    assert "應該沒關係吧" in result.answer
+    assert "不是出發批准或 runtime safety truth" in result.answer
+    assert "No registry-backed Scout AI tool" not in result.answer
+    assert "沒有完成的 deterministic Scout evidence source" not in result.answer
+    assert "未檢查路線、天氣、隊伍或 runtime evidence" in result.answer
+    assert "deterministic Scout outdoor standard formatter was used" in result.answer
+    assert "evidence was collected before synthesis by Scout AI tools" not in result.answer
+    assert "建議延後天氣判斷" not in result.answer
+    assert result.workflow_policy.model_provider_used is False
+    assert result.boundary.runtime_safety_truth is False
+
+
 def test_full_workflow_routes_scout_ai_meta_power_to_six_capability_tools() -> None:
     result = run_scout_ai_full_workflow(
         "Scout AI 力如何把六力轉成動態決策，而不是靜態分數表？",

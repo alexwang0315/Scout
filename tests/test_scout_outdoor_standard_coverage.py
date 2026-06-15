@@ -395,6 +395,37 @@ def test_mvp_on_route_micro_decision_is_bounded_and_conservative_when_missing() 
     _assert_no_forbidden_safety_language(film_result.payload)
 
 
+def test_product_identity_answers_standard_north_star_and_must_not_become() -> None:
+    result = run_scout_ai_full_workflow(
+        "Scout 是什麼？它是不是路線資料庫或天氣工具？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=8,
+    )
+
+    decision_output = result.decision_output
+    assert result.selected_tool_count == 0
+    assert result.answerability == "standard_product_identity"
+    assert decision_output["answerSourceToolId"] == (
+        "scout.ai.product_identity_standard.v0"
+    )
+    assert decision_output["decision"] == "GUIDED_ONLY"
+    assert decision_output["allowed"] is False
+    assert decision_output["runtimeSafetyTruth"] is False
+    _assert_standard_output(decision_output)
+    assert "Scout 是戶外活動的 AI 決策層" in result.answer
+    assert "不是路線資料庫" in result.answer
+    assert "不是天氣工具" in result.answer
+    assert "風險 dashboard" in result.answer
+    assert "應該沒關係吧" in result.answer
+    assert "不是出發批准或 runtime safety truth" in result.answer
+    assert any(
+        "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 26" in item
+        for item in decision_output["standardAlignment"]
+    )
+    assert result.boundary.runtime_safety_truth is False
+
+
 @pytest.mark.parametrize(
     (
         "scenario",
