@@ -255,6 +255,8 @@ def _compact_payload(
         "weather_to_decision",
         "media_literacy",
         "media_bias_analysis",
+        "survival_incident_playbook",
+        "incident_triage",
         "decision",
         "decision_object",
         "decision_output",

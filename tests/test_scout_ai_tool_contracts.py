@@ -16,6 +16,7 @@ from scout_pace_guardian_tool import PACE_GUARDIAN_TOOL_ID
 from scout_team_status_tool import TEAM_STATUS_TOOL_ID
 from scout_post_trip_review_tool import POST_TRIP_REVIEW_TOOL_ID
 from scout_media_literacy_tool import MEDIA_LITERACY_TOOL_ID
+from scout_survival_incident_playbook_tool import SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID
 from scout_ai_tool_contracts import tool_registry_output
 from scout_ai_tool_executor import execute_scout_ai_tool
 
@@ -62,6 +63,7 @@ def test_tool_registry_lists_current_and_future_contracts() -> None:
     assert TEAM_STATUS_TOOL_ID in by_id
     assert POST_TRIP_REVIEW_TOOL_ID in by_id
     assert MEDIA_LITERACY_TOOL_ID in by_id
+    assert SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID in by_id
     assert ENERGY_VITALS_TOOL_ID in by_id
     assert by_id["pydantic_ai.tool.search_scout_risk_scores.v0"].implementation_status == (
         "ready_current_tool"
@@ -108,6 +110,9 @@ def test_tool_registry_lists_current_and_future_contracts() -> None:
     assert by_id[MEDIA_LITERACY_TOOL_ID].implementation_status == (
         "ready_current_tool"
     )
+    assert by_id[SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID].implementation_status == (
+        "ready_current_tool"
+    )
     assert "scout.ai.energy_vitals.assess" in by_id[ENERGY_VITALS_TOOL_ID].aliases
     assert "scout.ai.micro_decision.assess" in by_id[
         CONTEXTUAL_PERMISSION_TOOL_ID
@@ -122,7 +127,10 @@ def test_tool_registry_lists_current_and_future_contracts() -> None:
     assert "scout.ai.team_guardian.assess" in by_id[TEAM_STATUS_TOOL_ID].aliases
     assert "scout.ai.after_action.assess" in by_id[POST_TRIP_REVIEW_TOOL_ID].aliases
     assert "scout.ai.media_bias.assess" in by_id[MEDIA_LITERACY_TOOL_ID].aliases
-    assert registry.ready_current_tool_count >= 15
+    assert "scout.ai.sos_playbook.explain" in by_id[
+        SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID
+    ].aliases
+    assert registry.ready_current_tool_count >= 16
     assert registry.executable_tool_count >= registry.ready_current_tool_count
     assert registry.contract_only_tool_count >= 1
     assert registry.implementation_status_counts["ready_current_tool"] >= 15
@@ -657,6 +665,33 @@ def test_execute_contextual_permission_assessor_returns_bounded_decision() -> No
     assert result.missing_fields == []
     assert result.payload["boundary"]["runtime_safety_truth"] is False
     assert result.payload["boundary"]["safety_api_called"] is False
+
+
+def test_execute_survival_playbook_alias_returns_boundary_safe_guidance() -> None:
+    result = execute_scout_ai_tool(
+        {
+            "tool_id": "scout.ai.sos_playbook.explain",
+            "project_root": str(PROJECT_ROOT),
+            "query": "不確定自己在哪，可以下切溪谷找路嗎？",
+        }
+    )
+
+    assert result.status == "completed"
+    assert result.tool_id == SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID
+    assert result.implementation_status == "ready_current_tool"
+    assert result.output_artifact_kind == (
+        "scout_ai_survival_incident_playbook_tool_output"
+    )
+    assert result.payload["artifact_kind"] == (
+        "scout_ai_survival_incident_playbook_tool_output"
+    )
+    assert result.payload["decision"] == "NO_GO"
+    assert result.payload["survival_incident_playbook"]["share_policy"][
+        "can_send_or_notify"
+    ] is False
+    assert result.payload["boundary"]["real_sos_sent"] is False
+    assert result.payload["boundary"]["outbound_send_performed"] is False
+    assert "current_location_status" in result.missing_fields
 
 
 def test_execute_contextual_permission_assessor_derives_planned_eta_buffer() -> None:

@@ -12,6 +12,7 @@ from scout_ai_tool_planner import (
     ROUTE_CONTEXT_TOOL_ID,
     ROUTE_ARCHITECTURE_TOOL_ID,
     MEDIA_LITERACY_TOOL_ID,
+    SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID,
     PACE_GUARDIAN_TOOL_ID,
     EQUIPMENT_RESOURCE_TOOL_ID,
     TEAM_STATUS_TOOL_ID,
@@ -134,6 +135,21 @@ def test_planner_selects_media_literacy_for_social_photo_bias_question() -> None
     assert item.missing_fields == []
     assert item.boundary.runtime_safety_truth is False
     assert ROUTE_CONTEXT_TOOL_ID not in _tool_ids(plan)
+
+
+def test_planner_selects_survival_playbook_for_lost_position_question() -> None:
+    plan = plan_scout_ai_tools(
+        _query("不確定自己在哪，可以下切溪谷找路嗎？"),
+        project_root=PROJECT_ROOT,
+    )
+
+    item = _single_tool(plan, SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID)
+    assert item.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+    assert item.implementation_status == "ready_current_tool"
+    assert item.request is not None
+    assert item.request["tool_id"] == SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID
+    assert item.missing_fields == []
+    assert item.boundary.runtime_safety_truth is False
 
 
 def test_planner_selects_contextual_permission_for_micro_decision() -> None:

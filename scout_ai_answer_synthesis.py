@@ -22,6 +22,7 @@ from scout_post_trip_review_tool import POST_TRIP_REVIEW_TOOL_ID
 from scout_route_readiness_tool import ROUTE_READINESS_TOOL_ID
 from scout_weather_window_tool import WEATHER_WINDOW_TOOL_ID
 from scout_media_literacy_tool import MEDIA_LITERACY_TOOL_ID
+from scout_survival_incident_playbook_tool import SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID
 
 
 ARTIFACT_KIND = "scout_ai_answer_synthesis"
@@ -182,6 +183,8 @@ def _source_from_record(record: dict[str, Any]) -> ScoutAiAnswerSource:
         "route_context",
         "media_literacy",
         "media_bias_analysis",
+        "survival_incident_playbook",
+        "incident_triage",
         "route_architecture",
         "cp_graph",
         "route_decision",
@@ -278,6 +281,9 @@ def _answer_text(
     media_literacy_answer = _media_literacy_answer(completed_sources)
     if media_literacy_answer:
         parts.append(media_literacy_answer)
+    survival_incident_answer = _survival_incident_playbook_answer(completed_sources)
+    if survival_incident_answer:
+        parts.append(survival_incident_answer)
     route_architecture_answer = _route_architecture_answer(completed_sources)
     if route_architecture_answer:
         parts.append(route_architecture_answer)
@@ -402,6 +408,18 @@ def _media_literacy_answer(sources: list[ScoutAiAnswerSource]) -> str | None:
     return None
 
 
+def _survival_incident_playbook_answer(
+    sources: list[ScoutAiAnswerSource],
+) -> str | None:
+    for source in sources:
+        if source.tool_id != SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID:
+            continue
+        field_answer = source.top_result_summary.get("field_answer")
+        if isinstance(field_answer, str) and field_answer.strip():
+            return field_answer.strip()
+    return None
+
+
 def _route_architecture_answer(sources: list[ScoutAiAnswerSource]) -> str | None:
     for source in sources:
         if source.tool_id != ROUTE_ARCHITECTURE_TOOL_ID:
@@ -508,6 +526,8 @@ def _top_result_summary(value: Any) -> dict[str, Any]:
         "route_context",
         "media_literacy",
         "media_bias_analysis",
+        "survival_incident_playbook",
+        "incident_triage",
         "route_architecture",
         "cp_graph",
         "route_decision",
