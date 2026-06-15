@@ -137,6 +137,7 @@ def assess_scout_route_architecture(
         planned_eta=planned_eta,
         cp_nodes=cp_nodes,
         turn_back_status_label=_turn_back_status_label(query),
+        requires_schedule_delta_status=_looks_like_schedule_delta_question(query),
         requires_checkpoint_deadline_status=_looks_like_checkpoint_deadline_question(query),
         external_deadline_pressure_kind=_external_deadline_pressure_kind(query),
     )
@@ -379,6 +380,7 @@ def _route_decision(
     planned_eta: dict[str, Any],
     cp_nodes: list[dict[str, Any]],
     turn_back_status_label: str | None,
+    requires_schedule_delta_status: bool,
     requires_checkpoint_deadline_status: bool,
     external_deadline_pressure_kind: str | None,
 ) -> dict[str, Any]:
@@ -445,6 +447,108 @@ def _route_decision(
             "action_limit": "不得把此回答當成已通過折返/撤退點或可繼續推進的授權。",
             "first_layer_decision": "無法確認現在是否為" + turn_back_status_label + "。",
             "missing_fields": ["current_cp_id", "current_time"],
+            "turn_back_checkpoint": turn_back,
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+        }
+    if requires_schedule_delta_status:
+        missing = []
+        if not current_cp_id:
+            missing.append("current_cp_id")
+        if not current_time:
+            missing.append("current_time")
+        planned_cp_eta = _planned_eta_for_cp(
+            current_cp_id,
+            cp_nodes=cp_nodes,
+            planned_eta=planned_eta,
+        )
+        if current_cp_id and not planned_cp_eta:
+            missing.append("planned_eta_for_current_cp")
+        if missing:
+            return {
+                "decision": "DELAY",
+                "main_reasons": [
+                    "判斷與計畫 CP 通過時間差距需要 current_cp_id, current_time, and planned ETA for that CP.",
+                ],
+                "next_action": "先確認目前 CP、可靠定位與當前時間；再與 CP Graph planned ETA 比對落後或提前分鐘。",
+                "action_limit": "不得把此回答當成仍有完整時間、日照、撤退或天氣 buffer 的授權。",
+                "first_layer_decision": "無法確認與計畫 CP 通過時間的差距。",
+                "missing_fields": missing,
+                "schedule_delta_status": {
+                    "status": "missing_current_context",
+                    "missing_fields": missing,
+                    "candidate_only": True,
+                    "runtime_safety_truth": False,
+                },
+                "turn_back_checkpoint": turn_back,
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+            }
+        schedule_delta = _schedule_delta_status(
+            current_cp_id=current_cp_id,
+            current_time=current_time,
+            planned_eta=planned_cp_eta,
+        )
+        if schedule_delta.get("missing_fields"):
+            return {
+                "decision": "DELAY",
+                "main_reasons": [
+                    "current_time and planned ETA must be parseable to compute CP schedule delta.",
+                ],
+                "next_action": "先用可解析的當前時間與 CP planned ETA 重新計算時程差。",
+                "action_limit": "不得用不可解析的時間推論仍可照原計畫推進。",
+                "first_layer_decision": "無法確認與計畫 CP 通過時間的差距。",
+                "missing_fields": _string_list(schedule_delta.get("missing_fields")),
+                "schedule_delta_status": schedule_delta,
+                "turn_back_checkpoint": turn_back,
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+            }
+        delta_minutes = _float_or_none(schedule_delta.get("delta_minutes"))
+        if delta_minutes is None:
+            decision = "DELAY"
+            first_layer = "無法確認與計畫 CP 通過時間的差距。"
+            next_action = "先補齊可追溯的 CP 通過時間，再重新估算 buffer。"
+            action_limit = "不得把未確認進度當成可繼續推進授權。"
+        elif delta_minutes >= 25:
+            decision = "CHANGE_PLAN"
+            first_layer = f"目前比計畫晚約 {delta_minutes:.0f} 分鐘。"
+            next_action = "不要照原計畫硬推；重算腳程、日照、天氣與撤退 buffer，必要時改短版或折返。"
+            action_limit = "落後已明顯壓縮時間、日照、撤退與天氣 buffer；未覆核前不建議照原計畫推進。"
+        elif delta_minutes >= 15:
+            decision = "CONDITIONAL_GO"
+            first_layer = f"目前比計畫晚約 {delta_minutes:.0f} 分鐘。"
+            next_action = "以最慢者控速前往下一 CP，下一 CP 前重新計算是否改短版或折返。"
+            action_limit = "不得再消耗停留 buffer；下一 CP 前必須重算天氣、日照、撤退與隊伍速度。"
+        elif delta_minutes <= -15:
+            decision = "CONDITIONAL_GO"
+            first_layer = f"目前比計畫快約 {abs(delta_minutes):.0f} 分鐘。"
+            next_action = "放回最慢者可恢復節奏；不要把提前時間視為免費停留 buffer。"
+            action_limit = "提前不是無限制 permission；仍需檢查最慢者、天氣、日照與撤退窗口。"
+        else:
+            decision = "GO" if abs(delta_minutes) < 0.05 else "CONDITIONAL_GO"
+            if delta_minutes >= 0:
+                first_layer = f"目前比計畫晚約 {delta_minutes:.0f} 分鐘。"
+            else:
+                first_layer = f"目前比計畫快約 {abs(delta_minutes):.0f} 分鐘。"
+            next_action = "照 CP Graph 監控下一個 CP，並持續保留天氣、日照、撤退與腳程 buffer。"
+            action_limit = "這只是 CP 時程差候選判斷；不得把小幅提前或落後轉成額外停留授權。"
+        return {
+            "decision": decision,
+            "main_reasons": [
+                "current CP "
+                + str(schedule_delta.get("current_cp_id"))
+                + " planned ETA "
+                + str(schedule_delta.get("planned_eta"))
+                + " vs current time "
+                + str(schedule_delta.get("current_time"))
+                + f" => schedule delta {delta_minutes:.1f} minutes.",
+                "CP schedule delta consumes or preserves pace, daylight, weather, and retreat buffer.",
+            ],
+            "next_action": next_action,
+            "action_limit": action_limit,
+            "first_layer_decision": first_layer,
+            "schedule_delta_status": schedule_delta,
             "turn_back_checkpoint": turn_back,
             "candidate_only": True,
             "runtime_safety_truth": False,
@@ -571,7 +675,9 @@ def _field_answer(
     route_context = _route_architecture_brief(route_architecture)
     if missing_fields and answerability == "route_architecture_missing_current_context":
         first_layer_decision = str(decision.get("first_layer_decision") or "")
-        if "撤退點是否即將失去" in first_layer_decision:
+        if "CP 通過時間" in first_layer_decision:
+            missing_context_phrase = "Scout 不能確認與計畫 CP 通過時間差距。"
+        elif "撤退點是否即將失去" in first_layer_decision:
             missing_context_phrase = "Scout 不能確認撤退點是否即將失去。"
         elif "撤退點" in first_layer_decision:
             missing_context_phrase = "Scout 不能確認現在是否已到撤退點。"
@@ -676,6 +782,7 @@ def _decision_output(
             "segmentCount": len(graph_edges),
             "hardPointCount": len(route_architecture.get("hard_points") or []),
             "retreatOptionCount": route_architecture.get("retreat_option_count"),
+            "scheduleDeltaMinutes": _schedule_delta_minutes_from_decision(decision),
         },
         "nextAction": first_layer["nextStep"],
         "confidence": "low" if uncertainty_notes else "medium",
@@ -704,6 +811,13 @@ def _decision_reasons(
     if not reasons:
         reasons.append("CP Graph and route architecture evidence are available.")
     return _dedupe(reasons)
+
+
+def _schedule_delta_minutes_from_decision(decision: dict[str, Any]) -> float | None:
+    status = decision.get("schedule_delta_status")
+    if not isinstance(status, dict):
+        return None
+    return _float_or_none(status.get("delta_minutes"))
 
 
 def _required_conditions(
@@ -746,6 +860,11 @@ def _decision_limit_phrase(
         return str(
             route_decision.get("action_limit")
             or "不得只依路線名稱、距離或爬升做撤退、折返或替代路線判斷。"
+        )
+    if route_decision.get("schedule_delta_status"):
+        return str(
+            route_decision.get("action_limit")
+            or "CP 時程差只是候選判斷，不得當成現場安全授權。"
         )
     if decision == "CONDITIONAL_GO" and route_architecture.get("hard_points"):
         return "不得在難點群前消耗 buffer；通過前後都要重新檢查時間、天氣與隊伍速度。"
@@ -966,10 +1085,9 @@ def _eta_by_name(planned_eta: dict[str, Any]) -> dict[str, dict[str, Any]]:
     for item in estimates:
         if not isinstance(item, dict):
             continue
-        for key in ("to_node_name", "from_node_name"):
-            name = item.get(key)
-            if isinstance(name, str) and name.strip():
-                result[name.strip().lower()] = item
+        name = item.get("to_node_name")
+        if isinstance(name, str) and name.strip():
+            result[name.strip().lower()] = item
     return result
 
 
@@ -986,6 +1104,89 @@ def _turn_back_summary(planned_eta: dict[str, Any]) -> dict[str, Any]:
         "daylight_policy_status": assumption.get("daylight_policy_status"),
         "team_multiplier_status": assumption.get("team_multiplier_status"),
     }
+
+
+def _planned_eta_for_cp(
+    current_cp_id: str | None,
+    *,
+    cp_nodes: list[dict[str, Any]],
+    planned_eta: dict[str, Any],
+) -> dict[str, Any] | None:
+    if not current_cp_id:
+        return None
+    current = str(current_cp_id).strip().lower()
+    for node in cp_nodes:
+        if not isinstance(node, dict):
+            continue
+        identifiers = (
+            str(node.get("cp_id") or "").strip().lower(),
+            str(node.get("name") or "").strip().lower(),
+        )
+        if current not in identifiers:
+            continue
+        eta = node.get("planned_arrival_time")
+        if eta:
+            return {
+                "current_cp_id": node.get("cp_id"),
+                "current_cp_name": node.get("name"),
+                "planned_eta": eta,
+            }
+    eta_by_name = _eta_by_name(planned_eta)
+    eta = eta_by_name.get(current)
+    if eta and eta.get("eta"):
+        return {
+            "current_cp_id": current_cp_id,
+            "current_cp_name": eta.get("to_node_name") or current_cp_id,
+            "planned_eta": eta.get("eta"),
+        }
+    return None
+
+
+def _schedule_delta_status(
+    *,
+    current_cp_id: str | None,
+    current_time: str | None,
+    planned_eta: dict[str, Any],
+) -> dict[str, Any]:
+    planned_time = planned_eta.get("planned_eta")
+    delta = _minutes_delta(current_time, planned_time)
+    missing = []
+    if delta is None:
+        if _local_clock_minutes(current_time) is None:
+            missing.append("current_time")
+        if _local_clock_minutes(planned_time) is None:
+            missing.append("planned_eta_for_current_cp")
+    status = "unknown"
+    if delta is not None:
+        if delta > 0:
+            status = "behind_plan"
+        elif delta < 0:
+            status = "ahead_of_plan"
+        else:
+            status = "on_plan"
+    return {
+        "current_cp_id": planned_eta.get("current_cp_id") or current_cp_id,
+        "current_cp_name": planned_eta.get("current_cp_name"),
+        "current_time": current_time,
+        "planned_eta": planned_time,
+        "delta_minutes": delta,
+        "status": status,
+        "missing_fields": missing,
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+    }
+
+
+def _minutes_delta(current_time: Any, planned_time: Any) -> float | None:
+    current_dt = _parse_datetime(current_time)
+    planned_dt = _parse_datetime(planned_time)
+    if current_dt is not None and planned_dt is not None:
+        return round((current_dt - planned_dt).total_seconds() / 60.0, 1)
+    current_clock = _local_clock_minutes(current_time)
+    planned_clock = _local_clock_minutes(planned_time)
+    if current_clock is None or planned_clock is None:
+        return None
+    return round(current_clock - planned_clock, 1)
 
 
 def _route_type(
@@ -1165,6 +1366,31 @@ def _looks_like_checkpoint_deadline_question(query: str) -> bool:
         )
     )
     return has_missed_checkpoint and has_turnback_intent
+
+
+def _looks_like_schedule_delta_question(query: str) -> bool:
+    normalized = "".join(str(query).lower().split())
+    return any(
+        phrase in normalized
+        for phrase in (
+            "cp通過時間",
+            "checkpoint通過時間",
+            "計畫cp通過時間",
+            "通過時間差",
+            "時程差",
+            "進度差",
+            "比計畫晚",
+            "比原計畫晚",
+            "比預定晚",
+            "比計畫落後",
+            "比原計畫落後",
+            "比計畫快多少",
+            "落後多少",
+            "晚多少",
+            "plannedeta",
+            "scheduledelta",
+        )
+    )
 
 
 def _external_deadline_pressure_kind(query: str) -> str | None:

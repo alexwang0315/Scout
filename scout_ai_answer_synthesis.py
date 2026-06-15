@@ -706,6 +706,10 @@ def _decision_source_priority(
         route_decision = source.top_result_summary.get("route_decision")
         if isinstance(route_decision, dict) and route_decision.get("deadline_pressure"):
             return (3, source.tool_id)
+        if isinstance(route_decision, dict) and route_decision.get(
+            "schedule_delta_status"
+        ):
+            return (2, source.tool_id)
     if source.tool_id == ROUTE_READINESS_TOOL_ID:
         return (4, source.tool_id)
     if source.tool_id == WEATHER_WINDOW_TOOL_ID:

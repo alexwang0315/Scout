@@ -116,6 +116,58 @@ def test_route_architecture_delays_retreat_window_status_without_current_context
     assert result["boundary"]["runtime_safety_truth"] is False
 
 
+def test_route_architecture_delays_cp_schedule_delta_without_current_context() -> None:
+    result = assess_scout_route_architecture(
+        PROJECT_ROOT,
+        query="我們現在比計畫晚多少？",
+        limit=2,
+    )
+
+    assert result["answerability"] == "route_architecture_missing_current_context"
+    assert result["decision"] == "DELAY"
+    assert result["missing_fields"] == ["current_cp_id", "current_time"]
+    assert result["decision_output"]["firstLayer"]["decision"] == (
+        "無法確認與計畫 CP 通過時間的差距。"
+    )
+    assert "current_cp_id" in result["decision_output"]["firstLayer"]["reason"]
+    assert "完整時間、日照、撤退或天氣 buffer" in result["decision_output"][
+        "firstLayer"
+    ]["limit"]
+    assert "不能確認與計畫 CP 通過時間差距" in result["field_answer"]
+    assert result["decision_output"]["allowed"] is False
+    assert result["decision_output"]["runtimeSafetyTruth"] is False
+    assert result["boundary"]["runtime_safety_truth"] is False
+
+
+def test_route_architecture_computes_cp_schedule_delta_from_planned_eta() -> None:
+    result = assess_scout_route_architecture(
+        PROJECT_ROOT,
+        query="現在比計畫晚多少？",
+        current_time="2013-10-08T15:10:00+08:00",
+        current_cp_id="雲海保線所",
+        limit=2,
+    )
+
+    assert result["answerability"] == "route_architecture_available"
+    assert result["decision"] == "CONDITIONAL_GO"
+    status = result["route_decision"]["schedule_delta_status"]
+    assert status["current_cp_name"] == "雲海保線所"
+    assert status["planned_eta"] == "2013-10-08T14:58:50+08:00"
+    assert status["delta_minutes"] == 11.2
+    assert status["status"] == "behind_plan"
+    assert result["decision_output"]["firstLayer"]["decision"] == (
+        "目前比計畫晚約 11 分鐘。"
+    )
+    assert "不得把小幅提前或落後轉成額外停留授權" in result[
+        "decision_output"
+    ]["firstLayer"]["limit"]
+    assert result["decision_output"]["cost"]["scheduleDeltaMinutes"] == 11.2
+    assert "schedule delta 11.2 minutes" in result["decision_output"][
+        "firstLayer"
+    ]["reason"]
+    assert result["decision_output"]["runtimeSafetyTruth"] is False
+
+
 def test_route_architecture_changes_plan_after_missed_checkpoint_deadline() -> None:
     result = assess_scout_route_architecture(
         PROJECT_ROOT,

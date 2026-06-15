@@ -1045,6 +1045,21 @@ def test_planner_selects_pace_guardian_for_team_pace_fit_question() -> None:
     assert item.boundary.runtime_safety_truth is False
 
 
+def test_planner_selects_route_architecture_for_cp_schedule_delta_question() -> None:
+    plan = plan_scout_ai_tools(
+        _query("我們現在比計畫晚多少？"),
+        project_root=PROJECT_ROOT,
+    )
+
+    item = _single_tool(plan, ROUTE_ARCHITECTURE_TOOL_ID)
+    assert item.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+    assert item.implementation_status == "ready_current_tool"
+    assert item.request is not None
+    assert item.request["tool_id"] == ROUTE_ARCHITECTURE_TOOL_ID
+    assert item.missing_fields == []
+    assert item.boundary.runtime_safety_truth is False
+
+
 def test_planner_selects_pace_guardian_for_scout_pace_coefficient_question() -> None:
     plan = plan_scout_ai_tools(
         _query("最慢者的 Scout Pace Coefficient 在碎石下坡和負重下還能照原計畫嗎？"),
