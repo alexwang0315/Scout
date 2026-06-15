@@ -11,6 +11,7 @@ from scout_ai_answer_synthesis import (
 )
 from scout_ai_evidence_collection import collect_scout_ai_evidence
 from scout_ai_tool_planner import WEATHER_WINDOW_TOOL_ID
+from scout_contextual_permission_tool import CONTEXTUAL_PERMISSION_TOOL_ID
 from scout_risk_score_tool import RISK_SCORE_TOOL_ID
 from scout_terrain_score_tool import TERRAIN_SCORE_TOOL_ID
 
@@ -85,6 +86,26 @@ def test_answer_synthesis_reports_weather_tool_missing_fresh_evidence_without_gu
     assert "weather_placeholder_only" in result.answer
     assert "provider" in result.answer
     assert "ttl_s" in result.answer
+    assert "runtime safety truth" in result.answer
+
+
+def test_answer_synthesis_uses_contextual_permission_field_answer_without_guessing() -> None:
+    result = collect_and_synthesize_scout_ai_answer(
+        "我可以在這裡停下來拍一段影片嗎?",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=3,
+    )
+
+    assert result.answerability == "partial_evidence_with_missing_context"
+    assert result.completed_source_count == 1
+    assert result.missing_evidence_count == 1
+    assert result.sources[0].tool_id == CONTEXTUAL_PERMISSION_TOOL_ID
+    assert result.sources[0].top_result_summary["decision"] == "NO_GO"
+    assert result.sources[0].top_result_summary["allowed"] is False
+    assert "remaining_safety_buffer_minutes" in result.sources[0].missing_fields
+    assert "不建議拍影片" in result.answer
+    assert "remaining_safety_buffer_minutes" in result.answer
     assert "runtime safety truth" in result.answer
 
 

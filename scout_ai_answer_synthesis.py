@@ -11,6 +11,7 @@ from scout_ai_evidence_collection import (
     collect_scout_ai_evidence,
 )
 from scout_ai_tool_contracts import ScoutAiToolBaseModel, ScoutAiToolBoundary
+from scout_contextual_permission_tool import CONTEXTUAL_PERMISSION_TOOL_ID
 
 
 ARTIFACT_KIND = "scout_ai_answer_synthesis"
@@ -209,6 +210,9 @@ def _answer_text(
         f"Question: {question}",
     ]
     completed_sources = [source for source in sources if source.collection_status == "completed"]
+    contextual_answer = _contextual_permission_answer(completed_sources)
+    if contextual_answer:
+        parts.append(contextual_answer)
     if completed_sources:
         parts.append(
             "Collected evidence: "
@@ -265,6 +269,16 @@ def _limitations(answerability: str) -> list[str]:
     ]
 
 
+def _contextual_permission_answer(sources: list[ScoutAiAnswerSource]) -> str | None:
+    for source in sources:
+        if source.tool_id != CONTEXTUAL_PERMISSION_TOOL_ID:
+            continue
+        field_answer = source.top_result_summary.get("field_answer")
+        if isinstance(field_answer, str) and field_answer.strip():
+            return field_answer.strip()
+    return None
+
+
 def _top_result_summary(value: Any) -> dict[str, Any]:
     if not isinstance(value, dict):
         return {}
@@ -285,6 +299,18 @@ def _top_result_summary(value: Any) -> dict[str, Any]:
         "source_status",
         "risk_summary",
         "weather_window",
+        "decision",
+        "allowed",
+        "action",
+        "max_duration_minutes",
+        "leave_by",
+        "field_answer",
+        "contextual_permission",
+        "risk_budget",
+        "risk_budget_source",
+        "confidence",
+        "main_reasons",
+        "next_action",
         "missing_fields",
     )
     return {key: value[key] for key in keys if key in value and value[key] is not None}

@@ -43,6 +43,10 @@ CURRENT_TOOLS = {
         "label": "map perception",
         "evidence_scope": "OCR labels, map annotations, contour/map material candidates",
     },
+    "scout.ai.contextual_permission.assess.v0": {
+        "label": "contextual permission",
+        "evidence_scope": "bounded outdoor micro-decision, Scout decision vocabulary, risk budget, deadline, next action",
+    },
 }
 
 

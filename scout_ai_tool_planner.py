@@ -20,6 +20,7 @@ from scout_map_perception_tool import MAP_PERCEPTION_TOOL_ID
 from scout_risk_score_tool import RISK_SCORE_TOOL_ID
 from scout_terrain_score_tool import TERRAIN_SCORE_TOOL_ID
 from scout_weather_window_tool import WEATHER_WINDOW_TOOL_ID
+from scout_contextual_permission_tool import CONTEXTUAL_PERMISSION_TOOL_ID
 from scout_workspace_search_tools import (
     MAJOR_POINT_TOOL_ID,
     ROUTE_STRUCTURE_TOOL_ID,
@@ -153,6 +154,14 @@ def plan_scout_ai_tools(
             (
                 SAFETY_BOUNDARY_TOOL_ID,
                 "Question asks whether candidate risk can affect Ln/safety admission or must remain advisory.",
+            )
+        )
+    if _looks_like_contextual_permission_question(normalized_question):
+        selected.append(
+            (
+                CONTEXTUAL_PERMISSION_TOOL_ID,
+                "Question asks for a bounded outdoor micro-decision: "
+                "whether an action is allowed, for how long, what it costs, and the next step.",
             )
         )
 
@@ -519,6 +528,44 @@ def _looks_like_safety_boundary_question(text: str) -> bool:
             "候選",
             "admission",
             "persistence",
+        ),
+    )
+
+
+def _looks_like_contextual_permission_question(text: str) -> bool:
+    return _has_any(
+        text,
+        (
+            "我可以在這裡",
+            "可以在這裡",
+            "能不能在這裡",
+            "可不可以在這裡",
+            "可以停多久",
+            "能停多久",
+            "可以停下來",
+            "能不能停",
+            "可以拍照",
+            "可以拍影片",
+            "可以拍片",
+            "可以架腳架",
+            "可以休息多久",
+            "要不要現在吃午餐",
+            "可以吃午餐",
+            "可以等霧",
+            "可以等隊友",
+            "還能攻頂",
+            "可以繼續攻頂",
+            "可以改走支線",
+            "這個岔路可以切",
+            "現在是不是折返點",
+            "可以繞去",
+            "旁邊那個點很好拍",
+            "如果多停",
+            "多拍",
+            "canistop",
+            "howlongcanistop",
+            "canifilm",
+            "canitakephoto",
         ),
     )
 

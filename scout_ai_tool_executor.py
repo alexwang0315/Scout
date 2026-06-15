@@ -17,6 +17,7 @@ from scout_live_navigation_state_tool import LIVE_NAVIGATION_STATE_TOOL_ID
 from scout_ins_dr_trace_tool import INS_DR_TRACE_TOOL_ID
 from scout_energy_vitals_tool import ENERGY_VITALS_TOOL_ID
 from scout_weather_window_tool import WEATHER_WINDOW_TOOL_ID
+from scout_contextual_permission_tool import CONTEXTUAL_PERMISSION_TOOL_ID
 
 
 EXECUTABLE_TOOL_IDS = set(EXECUTABLE_TOOL_ALIASES)
@@ -332,6 +333,55 @@ def _execute_ready_current_tool(tool_id: str, arguments: dict[str, Any]) -> dict
             observation_path=_str_or_none(arguments.get("observation_path")),
         )
 
+    if tool_id == CONTEXTUAL_PERMISSION_TOOL_ID:
+        from scout_contextual_permission_tool import assess_scout_contextual_permission
+
+        return assess_scout_contextual_permission(
+            project_root,
+            query=query,
+            action=_str_or_none(arguments.get("action")),
+            current_time=_str_or_none(arguments.get("current_time")),
+            current_cp_id=_str_or_none(arguments.get("current_cp_id")),
+            next_cp_id=_str_or_none(arguments.get("next_cp_id")),
+            remaining_safety_buffer_minutes=_float_or_none(
+                arguments.get("remaining_safety_buffer_minutes")
+            ),
+            requested_duration_minutes=_float_or_none(
+                arguments.get("requested_duration_minutes")
+            ),
+            current_delay_minutes=_float_or_none(arguments.get("current_delay_minutes")),
+            next_segment_uncertainty_minutes=_float_or_none(
+                arguments.get("next_segment_uncertainty_minutes")
+            ),
+            weather_reserve_minutes=_float_or_none(
+                arguments.get("weather_reserve_minutes")
+            ),
+            daylight_reserve_minutes=_float_or_none(
+                arguments.get("daylight_reserve_minutes")
+            ),
+            retreat_reserve_minutes=_float_or_none(
+                arguments.get("retreat_reserve_minutes")
+            ),
+            slowest_member_reserve_minutes=_float_or_none(
+                arguments.get("slowest_member_reserve_minutes")
+            ),
+            weather_window_impact=_str_or_none(arguments.get("weather_window_impact")),
+            daylight_impact=_str_or_none(arguments.get("daylight_impact")),
+            retreat_impact=_str_or_none(arguments.get("retreat_impact")),
+            fatigue_impact=_str_or_none(arguments.get("fatigue_impact")),
+            team_pace_impact=_str_or_none(arguments.get("team_pace_impact")),
+            location_constraint=_str_or_none(arguments.get("location_constraint")),
+            terrain_risk_level=_str_or_none(arguments.get("terrain_risk_level")),
+            communication_status=_str_or_none(arguments.get("communication_status")),
+            equipment_status=_str_or_none(arguments.get("equipment_status")),
+            confidence=_str_or_none(arguments.get("confidence")),
+            planned_eta_path=_str_or_none(arguments.get("planned_eta_path")),
+            weather_daylight_evidence_path=_str_or_none(
+                arguments.get("weather_daylight_evidence_path")
+            ),
+            plan_validation_path=_str_or_none(arguments.get("plan_validation_path")),
+        )
+
     raise ValueError(f"tool is not executable: {tool_id}")
 
 
@@ -388,7 +438,7 @@ def _source_report_refs(payload: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _completed_missing_fields(tool_id: str, payload: dict[str, Any]) -> list[str]:
-    if tool_id != WEATHER_WINDOW_TOOL_ID:
+    if tool_id not in {WEATHER_WINDOW_TOOL_ID, CONTEXTUAL_PERMISSION_TOOL_ID}:
         return []
     value = payload.get("missing_fields")
     if isinstance(value, list):
@@ -397,7 +447,7 @@ def _completed_missing_fields(tool_id: str, payload: dict[str, Any]) -> list[str
 
 
 def _completed_warnings(tool_id: str, payload: dict[str, Any]) -> list[str]:
-    if tool_id != WEATHER_WINDOW_TOOL_ID:
+    if tool_id not in {WEATHER_WINDOW_TOOL_ID, CONTEXTUAL_PERMISSION_TOOL_ID}:
         return []
     value = payload.get("warnings")
     if isinstance(value, list):
