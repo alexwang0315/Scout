@@ -251,6 +251,8 @@ def _execute_ready_current_tool(tool_id: str, arguments: dict[str, Any]) -> dict
             route_weather_package_path=_str_or_none(
                 arguments.get("route_weather_package_path")
             ),
+            planned_eta_path=_str_or_none(arguments.get("planned_eta_path")),
+            current_time=_str_or_none(arguments.get("current_time")),
             valid_from=_str_or_none(arguments.get("valid_from")),
             valid_to=_str_or_none(arguments.get("valid_to")),
             segment=_str_or_none(arguments.get("segment")),

@@ -14,6 +14,8 @@ WEATHER_WINDOW_REQUIRED_FIELDS = ("project_root",)
 WEATHER_WINDOW_OPTIONAL_FIELDS = (
     "weather_evidence_path",
     "route_weather_package_path",
+    "planned_eta_path",
+    "current_time",
     "valid_from",
     "valid_to",
     "segment",
@@ -42,6 +44,8 @@ def assess_scout_weather_window(
     query: str = "",
     weather_evidence_path: str | None = None,
     route_weather_package_path: str | None = None,
+    planned_eta_path: str | None = None,
+    current_time: str | None = None,
     valid_from: str | None = None,
     valid_to: str | None = None,
     segment: str | None = None,
@@ -76,8 +80,13 @@ def assess_scout_weather_window(
         project,
         explicit_path=weather_evidence_path,
     )
+    planned_eta, planned_eta_report = _load_planned_eta(
+        root,
+        project,
+        explicit_path=planned_eta_path,
+    )
 
-    source_report = [*route_report, *weather_report]
+    source_report = [*route_report, *weather_report, *planned_eta_report]
     route_segments = _route_weather_segments(route_package)
     filtered_segments = _filter_segments(
         route_segments,
@@ -98,6 +107,19 @@ def assess_scout_weather_window(
         route_package=route_package,
         weather_evidence=weather_evidence,
     )
+    daylight_buffer_status = _daylight_buffer_status(
+        query=query,
+        current_time=current_time,
+        weather_evidence=weather_evidence,
+        planned_eta=planned_eta,
+    )
+    if daylight_buffer_status:
+        missing_fields = _dedupe(
+            [
+                *missing_fields,
+                *_string_list(daylight_buffer_status.get("missing_fields")),
+            ]
+        )
     warnings = _warnings(
         route_package=route_package,
         weather_evidence=weather_evidence,
@@ -122,6 +144,7 @@ def assess_scout_weather_window(
         segments=filtered_segments,
         missing_fields=missing_fields,
         warnings=warnings,
+        daylight_buffer_status=daylight_buffer_status,
     )
     field_answer = _field_answer(
         decision=weather_to_decision,
@@ -169,6 +192,7 @@ def assess_scout_weather_window(
             "stale_after_hours": stale_hours,
         },
         "weather_window": weather_window,
+        "daylight_buffer_status": daylight_buffer_status,
         "threshold_policy": _threshold_policy(weather_evidence),
         "risk_summary": risk_summary,
         "wx_alerts": wx_alerts,
@@ -225,6 +249,22 @@ def _load_weather_daylight_evidence(
         fallbacks=("outputs/weather_daylight_evidence.json",),
     )
     return _load_first_json_object(candidates, source_kind="weather_daylight_evidence")
+
+
+def _load_planned_eta(
+    root: Path,
+    project: dict[str, Any],
+    *,
+    explicit_path: str | None,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    candidates = _candidate_paths(
+        root,
+        project,
+        explicit_path=explicit_path,
+        ref_keys=("planned_eta_ref",),
+        fallbacks=("outputs/planned_eta.json",),
+    )
+    return _load_first_json_object(candidates, source_kind="planned_eta")
 
 
 def _candidate_paths(
@@ -503,6 +543,127 @@ def _wx_alerts(segments: list[dict[str, Any]], *, limit: int) -> list[dict[str, 
     return alerts[: max(0, limit)]
 
 
+def _daylight_buffer_status(
+    *,
+    query: str,
+    current_time: str | None,
+    weather_evidence: dict[str, Any],
+    planned_eta: dict[str, Any],
+) -> dict[str, Any]:
+    if not _looks_like_daylight_buffer_question(query):
+        return {}
+    daylight = weather_evidence.get("daylight")
+    daylight = daylight if isinstance(daylight, dict) else {}
+    sunset = _first_present(
+        daylight,
+        "sunset",
+        "sunset_at",
+        "sunsetAt",
+        "civil_twilight_end",
+    )
+    target_eta = _planned_target_eta(planned_eta)
+    daylight_reviewed = _daylight_window_reviewed(
+        weather_evidence=weather_evidence,
+        daylight=daylight,
+        sunset=sunset,
+    )
+    missing_fields: list[str] = []
+    if not daylight_reviewed:
+        missing_fields.append("reviewed_daylight_window")
+    if not current_time:
+        missing_fields.append("current_time")
+    if not target_eta:
+        missing_fields.append("planned_target_eta")
+    minutes_until_sunset = (
+        _minutes_between(later=sunset, earlier=current_time)
+        if current_time and sunset
+        else None
+    )
+    route_daylight_buffer_minutes = (
+        _minutes_between(later=sunset, earlier=target_eta)
+        if target_eta and sunset
+        else None
+    )
+    if current_time and sunset and minutes_until_sunset is None:
+        missing_fields.append("current_time")
+    if target_eta and sunset and route_daylight_buffer_minutes is None:
+        missing_fields.append("planned_target_eta")
+    missing_fields = _dedupe(missing_fields)
+    if missing_fields:
+        return {
+            "status": "daylight_buffer_missing_context",
+            "decision": "DELAY",
+            "first_layer_decision": "無法確認日照 buffer 是否下降。",
+            "main_reasons": [
+                "reviewed daylight window, current_time, and planned target ETA are required to evaluate daylight buffer.",
+                "missing_fields=" + ",".join(missing_fields),
+            ],
+            "action_limit": "不得把此回答當成仍有日照 buffer、可停留或可繼續推進的授權。",
+            "next_action": "先補齊 reviewed sunrise/sunset、目前時間與 planned ETA；完成前不要消耗停留或攻頂 buffer。",
+            "alternatives": [
+                "re-check at the next CP after reviewed daylight evidence is loaded",
+                "shorten route or turn back before daylight buffer collapses",
+            ],
+            "missing_fields": missing_fields,
+            "daylight_buffer_impact": "daylight buffer cannot be computed from incomplete evidence",
+            "current_time": current_time,
+            "sunset": sunset,
+            "planned_target_eta": target_eta,
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+        }
+    assert minutes_until_sunset is not None
+    assert route_daylight_buffer_minutes is not None
+    if route_daylight_buffer_minutes < 0:
+        decision = "NO_GO"
+        first_layer = "不建議照原計畫進入摸黑風險。"
+        action_limit = "planned target ETA is after reviewed sunset; do not continue the original plan without reviewed retreat override."
+        next_action = "改短版或折返，並重新計算撤退、天氣與最慢者腳程。"
+        impact = "daylight buffer is already negative against planned target ETA"
+    elif route_daylight_buffer_minutes < 30:
+        decision = "CHANGE_PLAN"
+        first_layer = f"日照 buffer 只剩約 {route_daylight_buffer_minutes:.0f} 分鐘。"
+        action_limit = "日照 buffer 已低於 30 分鐘，不得再增加停留、拍攝、等待或攻頂壓力。"
+        next_action = "改短版、前往最近安全 CP 或折返；下一 CP 前重新計算天氣與撤退窗口。"
+        impact = "daylight buffer is near collapse and unavailable for discretionary actions"
+    elif route_daylight_buffer_minutes < 60:
+        decision = "CONDITIONAL_GO"
+        first_layer = f"日照 buffer 約 {route_daylight_buffer_minutes:.0f} 分鐘，偏低。"
+        action_limit = "只能照 CP Graph 監控推進；不得消耗停留或拍攝 buffer。"
+        next_action = "下一 CP 前重算日照、天氣、撤退與最慢者速度；若再下降就改短版或折返。"
+        impact = "daylight buffer is low and must be reserved for CP re-check"
+    else:
+        decision = "GO"
+        first_layer = f"日照 buffer 約 {route_daylight_buffer_minutes:.0f} 分鐘。"
+        action_limit = "這不是停留授權；任何拍攝、等待、午餐或攻頂仍需 contextual permission。"
+        next_action = "照 CP Graph 推進，並在下一 CP 重新檢查日照 buffer 是否下降。"
+        impact = "daylight buffer currently remains available but not spendable without permission"
+    return {
+        "status": "daylight_buffer_available",
+        "decision": decision,
+        "first_layer_decision": first_layer,
+        "main_reasons": [
+            f"reviewed sunset={sunset}; current_time={current_time}; minutes_until_sunset={minutes_until_sunset:.1f}.",
+            f"planned_target_eta={target_eta}; daylight_buffer_to_target={route_daylight_buffer_minutes:.1f} minutes.",
+        ],
+        "action_limit": action_limit,
+        "next_action": next_action,
+        "alternatives": [
+            "reserve daylight buffer for CP re-check",
+            "shorten route if daylight buffer drops below the next threshold",
+        ],
+        "missing_fields": [],
+        "minutes_until_sunset": round(minutes_until_sunset, 1),
+        "route_daylight_buffer_minutes": round(route_daylight_buffer_minutes, 1),
+        "daylight_buffer_impact": impact,
+        "current_time": current_time,
+        "sunset": sunset,
+        "planned_target_eta": target_eta,
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+    }
+
+
 def _weather_to_decision(
     *,
     query: str,
@@ -513,6 +674,7 @@ def _weather_to_decision(
     segments: list[dict[str, Any]],
     missing_fields: list[str],
     warnings: list[str],
+    daylight_buffer_status: dict[str, Any],
 ) -> dict[str, Any]:
     highest = _highest_risk_segment(segments)
     alert_codes = sorted({code for alert in wx_alerts for code in _string_list(alert.get("code"))})
@@ -525,7 +687,19 @@ def _weather_to_decision(
     query_stated_rule = _query_stated_weather_rule(query) if missing_fields else None
     if source_disagreement and "SOURCE_CONFLICT" not in alert_codes:
         alert_codes.append("SOURCE_CONFLICT")
-    if query_stated_rule:
+    if daylight_buffer_status:
+        decision = str(daylight_buffer_status.get("decision") or "DELAY")
+        main_reasons = _string_list(daylight_buffer_status.get("main_reasons"))
+        action_limit = str(
+            daylight_buffer_status.get("action_limit")
+            or "Do not treat daylight as available until reviewed."
+        )
+        next_action = str(
+            daylight_buffer_status.get("next_action")
+            or "補齊日照窗口、目前時間與 planned ETA 後重新計算。"
+        )
+        alternatives = _string_list(daylight_buffer_status.get("alternatives"))
+    elif query_stated_rule:
         decision = str(query_stated_rule["decision"])
         main_reasons = _string_list(query_stated_rule.get("main_reasons"))
         action_limit = str(query_stated_rule["action_limit"])
@@ -641,6 +815,13 @@ def _weather_to_decision(
             decision,
             missing_fields=bool(missing_fields),
         ),
+        "daylight_buffer_status": daylight_buffer_status,
+        "daylight_buffer_impact": daylight_buffer_status.get("daylight_buffer_impact")
+        if daylight_buffer_status
+        else None,
+        "first_layer_decision": daylight_buffer_status.get("first_layer_decision")
+        if daylight_buffer_status
+        else None,
     }
 
 
@@ -655,6 +836,17 @@ def _field_answer(
     reason_text = "；".join(str(reason) for reason in reasons[:2]) if isinstance(reasons, list) else ""
     rule = decision.get("route_sensitive_weather_rule")
     query_reported = isinstance(rule, dict) and rule.get("query_reported") is True
+    if decision.get("daylight_buffer_status"):
+        if not reason_text:
+            reason_text = f"answerability={answerability}"
+        next_action = str(
+            decision.get("next_action") or "補齊日照與 planned ETA 後再判斷。"
+        )
+        return (
+            f"日照 buffer 判斷：建議 {decision_label}。{reason_text} "
+            f"下一步：{next_action} "
+            "此為 Weather-to-Decision / daylight buffer 候選判斷，不是 runtime safety truth；不得觸發 /safety、SOS、outbound send 或硬體控制。"
+        )
     if missing_fields and not query_reported:
         reason_text = f"缺少 {', '.join(missing_fields)}，不能只看降雨機率或 placeholder。"
     elif missing_fields and query_reported:
@@ -690,7 +882,10 @@ def _decision_output(
     )
     alternatives = _string_list(decision.get("alternatives"))
     first_layer = {
-        "decision": _decision_phrase(decision_label, allowed=allowed),
+        "decision": str(
+            decision.get("first_layer_decision")
+            or _decision_phrase(decision_label, allowed=allowed)
+        ),
         "limit": str(
             decision.get("action_limit")
             or "不得把 weather placeholder 當成現場授權。"
@@ -730,6 +925,8 @@ def _decision_output(
         "mainReasons": reasons[:3],
         "cost": {
             "weatherBufferImpact": decision.get("weather_buffer_impact"),
+            "daylightBufferImpact": decision.get("daylight_buffer_impact"),
+            "daylightBufferStatus": decision.get("daylight_buffer_status") or {},
             "routeSpecificConditions": decision.get("route_specific_conditions") or [],
             "wxAlertCount": decision.get("wx_alert_count"),
         },
@@ -741,9 +938,11 @@ def _decision_output(
         "alternativeActions": alternatives,
         "standardAlignment": [
             "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 10 Weather-to-Decision Intelligence",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 13 risk budget",
             "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 15.2 Risk Sentinel",
             "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 16 required decision output format",
             "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 17 ContextualPermission schema",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 19 on-route recalculation",
             "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 23 acceptance criteria",
         ],
         "runtimeSafetyTruth": False,
@@ -1425,6 +1624,112 @@ def _weather_buffer_impact(
             return "weather buffer cannot be computed from incomplete evidence"
         return "weather buffer must be preserved until route-specific weather risk is re-reviewed"
     return "weather buffer currently not consumed by a decision restriction"
+
+
+def _looks_like_daylight_buffer_question(query: str) -> bool:
+    normalized = str(query or "").replace(" ", "").lower()
+    has_daylight = any(
+        term in normalized
+        for term in (
+            "日照",
+            "日落",
+            "天黑",
+            "摸黑",
+            "sunset",
+            "daylight",
+            "darkarrival",
+            "nightfall",
+        )
+    )
+    has_buffer_or_decision = any(
+        term in normalized
+        for term in (
+            "buffer",
+            "餘裕",
+            "下降",
+            "剩",
+            "還有",
+            "多久",
+            "繼續",
+            "能不能",
+            "可以",
+            "是否",
+        )
+    )
+    return has_daylight and has_buffer_or_decision
+
+
+def _planned_target_eta(planned_eta: dict[str, Any]) -> str | None:
+    assumption = planned_eta.get("assumption")
+    assumption = assumption if isinstance(assumption, dict) else {}
+    target_eta = _first_present(
+        assumption,
+        "target_eta",
+        "planned_target_eta",
+        "arrival_eta",
+    )
+    if target_eta:
+        return str(target_eta)
+    estimates = planned_eta.get("estimates")
+    if not isinstance(estimates, list):
+        return None
+    eta_values = [
+        str(item.get("eta"))
+        for item in estimates
+        if isinstance(item, dict) and item.get("eta")
+    ]
+    return eta_values[-1] if eta_values else None
+
+
+def _daylight_window_reviewed(
+    *,
+    weather_evidence: dict[str, Any],
+    daylight: dict[str, Any],
+    sunset: Any,
+) -> bool:
+    if not sunset:
+        return False
+    if weather_evidence.get("human_review_required") is True:
+        return False
+    validation = weather_evidence.get("validation")
+    validation = validation if isinstance(validation, dict) else {}
+    if validation.get("validation_status") == "human_review_required":
+        return False
+    return str(daylight.get("source_status") or "").lower() in {
+        "reviewed",
+        "accepted",
+        "computed",
+        "server_side_fixture",
+    }
+
+
+def _minutes_between(*, later: Any, earlier: Any) -> float | None:
+    later_dt = _parse_datetime(later)
+    earlier_dt = _parse_datetime(earlier)
+    if later_dt is not None and earlier_dt is not None:
+        return round((later_dt - earlier_dt).total_seconds() / 60.0, 1)
+    later_clock = _local_clock_minutes(later)
+    earlier_clock = _local_clock_minutes(earlier)
+    if later_clock is None or earlier_clock is None:
+        return None
+    return round(later_clock - earlier_clock, 1)
+
+
+def _local_clock_minutes(value: Any) -> float | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    parsed = _parse_datetime(value)
+    if parsed is not None:
+        return parsed.hour * 60 + parsed.minute + parsed.second / 60
+    match = re.search(r"(?<!\d)(\d{1,2})[:：](\d{2})(?::(\d{2}))?", value)
+    if not match:
+        return None
+    hour = int(match.group(1))
+    minute = int(match.group(2))
+    second = int(match.group(3) or 0)
+    if hour > 23 or minute > 59 or second > 59:
+        return None
+    return hour * 60 + minute + second / 60
 
 
 def _highest_risk_segment(segments: list[dict[str, Any]]) -> dict[str, Any] | None:

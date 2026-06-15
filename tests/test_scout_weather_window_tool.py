@@ -49,6 +49,64 @@ def test_weather_window_tool_reports_placeholder_missing_fresh_weather() -> None
     assert result["boundary"]["live_provider_fetch_performed"] is False
 
 
+def test_weather_window_tool_delays_daylight_buffer_without_reviewed_sun_window() -> None:
+    result = assess_scout_weather_window(
+        PROJECT_ROOT,
+        query="日照 buffer 是否下降？",
+        limit=3,
+    )
+
+    assert result["answerability"] == "weather_placeholder_only"
+    assert result["decision"] == "DELAY"
+    status = result["daylight_buffer_status"]
+    assert status["status"] == "daylight_buffer_missing_context"
+    assert status["decision"] == "DELAY"
+    assert status["missing_fields"] == ["reviewed_daylight_window", "current_time"]
+    assert result["decision_output"]["firstLayer"]["decision"] == (
+        "無法確認日照 buffer 是否下降。"
+    )
+    assert "仍有日照 buffer" in result["decision_output"]["firstLayer"]["limit"]
+    assert "reviewed_daylight_window" in result["missing_fields"]
+    assert "current_time" in result["missing_fields"]
+    assert "日照 buffer 判斷" in result["field_answer"]
+    assert result["decision_output"]["cost"]["daylightBufferStatus"]["status"] == (
+        "daylight_buffer_missing_context"
+    )
+    assert result["decision_output"]["runtimeSafetyTruth"] is False
+
+
+def test_weather_window_tool_computes_reviewed_daylight_buffer(
+    tmp_path: Path,
+) -> None:
+    project_root = _write_daylight_buffer_project(tmp_path)
+
+    result = assess_scout_weather_window(
+        project_root,
+        query="日照 buffer 是否下降？",
+        current_time="2099-06-07T15:10:00+08:00",
+        limit=3,
+    )
+
+    assert result["answerability"] == "route_weather_risk_available"
+    assert result["decision"] == "CONDITIONAL_GO"
+    status = result["daylight_buffer_status"]
+    assert status["status"] == "daylight_buffer_available"
+    assert status["minutes_until_sunset"] == 200.0
+    assert status["route_daylight_buffer_minutes"] == 30.0
+    assert result["decision_output"]["firstLayer"]["decision"] == (
+        "日照 buffer 約 30 分鐘，偏低。"
+    )
+    assert "不得消耗停留或拍攝 buffer" in result["decision_output"][
+        "firstLayer"
+    ]["limit"]
+    assert result["decision_output"]["cost"]["daylightBufferImpact"] == (
+        "daylight buffer is low and must be reserved for CP re-check"
+    )
+    assert result["missing_fields"] == []
+    assert "日照 buffer 判斷" in result["field_answer"]
+    assert result["boundary"]["runtime_safety_truth"] is False
+
+
 def test_weather_window_tool_uses_query_reported_recent_rain_conservatively() -> None:
     result = assess_scout_weather_window(
         PROJECT_ROOT,
@@ -563,6 +621,94 @@ def _write_source_disagreement_project(tmp_path: Path) -> Path:
                             "provider": "CWA",
                             "source_consistency": "forecast_source_disagreement",
                         },
+                    }
+                ],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    return project_root
+
+
+def _write_daylight_buffer_project(tmp_path: Path) -> Path:
+    project_root = tmp_path / "daylight-buffer-project"
+    (project_root / "outputs").mkdir(parents=True)
+    (project_root / "project.json").write_text(
+        json.dumps(
+            {
+                "project_id": "daylight_buffer_project",
+                "weather_daylight_evidence_ref": "outputs/weather_daylight_evidence.json",
+                "planned_eta_ref": "outputs/planned_eta.json",
+                "route_weather_package_ref": "outputs/route_weather_package.json",
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    (project_root / "outputs" / "weather_daylight_evidence.json").write_text(
+        json.dumps(
+            {
+                "status": "candidate_only",
+                "human_review_required": False,
+                "daylight": {
+                    "source_status": "reviewed",
+                    "sunrise": "05:20",
+                    "sunset": "18:30",
+                    "timezone": "Asia/Taipei",
+                },
+                "validation": {"validation_status": "reviewed"},
+                "weather_window": {
+                    "summary": "reviewed daylight fixture",
+                    "source_status": "server_side_fixture",
+                },
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    (project_root / "outputs" / "planned_eta.json").write_text(
+        json.dumps(
+            {
+                "assumption": {
+                    "target_eta": "2099-06-07T18:00:00+08:00",
+                },
+                "estimates": [
+                    {
+                        "eta": "2099-06-07T18:00:00+08:00",
+                        "to_node_name": "target",
+                    }
+                ],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    (project_root / "outputs" / "route_weather_package.json").write_text(
+        json.dumps(
+            {
+                "artifact_kind": "route_weather_package",
+                "status": "candidate_only",
+                "provider": "fixture_cwa_server_side_ingestor",
+                "issued_at": "2099-06-07T08:00:00Z",
+                "valid_from": "2099-06-07T08:00:00Z",
+                "valid_to": "2099-06-08T08:00:00Z",
+                "ttl_s": 86400,
+                "human_review_required": False,
+                "weather_window": {
+                    "summary": "stable weather fixture",
+                    "source_status": "server_side_fixture",
+                },
+                "segments": [
+                    {
+                        "segmentId": "low.weather.1",
+                        "etaFrom": "2099-06-07T14:30:00+08:00",
+                        "etaTo": "2099-06-07T15:00:00+08:00",
+                        "terrainRisk": 0.1,
+                        "weatherRisk": 0.1,
+                        "finalRisk": 0.1,
+                        "riskLevel": "LOW",
+                        "factors": ["stable weather"],
                     }
                 ],
             },

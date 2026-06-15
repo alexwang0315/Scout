@@ -1307,6 +1307,7 @@ def _top_result_summary(value: Any) -> dict[str, Any]:
         "source_status",
         "risk_summary",
         "weather_window",
+        "daylight_buffer_status",
         "weather_to_decision",
         "decision",
         "decision_object",

@@ -147,6 +147,19 @@ def test_planner_selects_weather_ready_tool_for_weather_questions() -> None:
     assert item.boundary.live_safety_api_calls_allowed is False
 
 
+def test_planner_passes_current_time_to_weather_for_daylight_buffer() -> None:
+    plan = plan_scout_ai_tools(
+        _query("現在 15:10 日照 buffer 是否下降？"),
+        project_root=PROJECT_ROOT,
+    )
+
+    item = _single_tool(plan, WEATHER_WINDOW_TOOL_ID)
+    assert item.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+    assert item.request is not None
+    assert item.request["arguments"] == {"current_time": "15:10"}
+    assert item.boundary.runtime_safety_truth is False
+
+
 def test_planner_keeps_cold_exposure_risk_in_weather_not_survival() -> None:
     plan = plan_scout_ai_tools(
         _query("強風低溫會不會讓稜線失溫風險升高？"),

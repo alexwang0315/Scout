@@ -168,6 +168,33 @@ def test_full_workflow_runs_weather_tool_and_reports_missing_fresh_evidence() ->
     assert "runtime safety truth" in result.answer
 
 
+def test_full_workflow_uses_daylight_buffer_weather_decision() -> None:
+    result = run_scout_ai_full_workflow(
+        "日照 buffer 是否下降？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=3,
+    )
+
+    assert result.answerability == "partial_evidence_with_missing_context"
+    assert result.selected_tool_count == 1
+    assert result.completed_tool_count == 1
+    weather = _workflow_source(result, WEATHER_WINDOW_TOOL_ID)
+    assert weather["top_result_summary"]["decision"] == "DELAY"
+    status = weather["top_result_summary"]["daylight_buffer_status"]
+    assert status["status"] == "daylight_buffer_missing_context"
+    assert status["missing_fields"] == ["reviewed_daylight_window", "current_time"]
+    assert result.decision_output["answerSourceToolId"] == WEATHER_WINDOW_TOOL_ID
+    assert result.decision_output["firstLayer"]["decision"] == (
+        "無法確認日照 buffer 是否下降。"
+    )
+    assert "reviewed_daylight_window" in weather["missing_fields"]
+    assert "current_time" in weather["missing_fields"]
+    assert "日照 buffer 判斷" in result.answer
+    assert result.decision_output["runtimeSafetyTruth"] is False
+    assert result.boundary.runtime_safety_truth is False
+
+
 def test_full_workflow_uses_query_reported_recent_rain_weather_decision() -> None:
     result = run_scout_ai_full_workflow(
         "前 24 小時明顯降雨，溪水和崩塌風險是否升高？今天還能走嗎？",
@@ -658,9 +685,9 @@ def test_full_workflow_prioritizes_weather_delay_over_generic_continue() -> None
     assert result.decision_output["answerSourceToolId"] == WEATHER_WINDOW_TOOL_ID
     assert result.decision_output["decision"] == "DELAY"
     assert result.decision_output["firstLayer"]["decision"] == (
-        "建議延後天氣判斷。"
+        "無法確認日照 buffer 是否下降。"
     )
-    assert "fresh weather" in result.decision_output["firstLayer"]["reason"]
+    assert "reviewed daylight window" in result.decision_output["firstLayer"]["reason"]
     assert result.decision_output["runtimeSafetyTruth"] is False
     assert result.boundary.runtime_safety_truth is False
 
@@ -1005,7 +1032,6 @@ def test_full_workflow_uses_micro_decision_for_weather_fatigue_retreat() -> None
     assert result.decision_output["allowed"] is True
     assert result.decision_output["firstLayer"]["decision"] == "可以撤退。"
     assert "開始撤退" in result.answer
-    assert "天氣決策" in result.answer
     assert result.boundary.runtime_safety_truth is False
 
 
@@ -1369,7 +1395,7 @@ def test_full_workflow_blocks_daylight_summit_pressure() -> None:
         "不建議因為已經投入時間而繼續前進或攻頂。"
     )
     assert "已投入時間" in result.decision_output["firstLayer"]["limit"]
-    assert "天氣決策" in result.answer
+    assert "日照 buffer 判斷" in result.answer
     assert "sunk_cost_bias" in result.answer
     assert result.boundary.runtime_safety_truth is False
 

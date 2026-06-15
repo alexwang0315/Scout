@@ -253,6 +253,7 @@ def _compact_payload(
         "provided_fields",
         "quality_flags",
         "weather_window",
+        "daylight_buffer_status",
         "route_readiness",
         "route_demand_profile",
         "guided_only_gate",
