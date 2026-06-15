@@ -861,6 +861,30 @@ def test_planner_selects_post_trip_review_for_trip_end_debrief_question() -> Non
     assert item.boundary.runtime_safety_truth is False
 
 
+def test_planner_passes_post_trip_event_taxonomy_feedback() -> None:
+    plan = plan_scout_ai_tools(
+        _query(
+            "行後比預期難，摸黑前差點錯過岔路，隊友滑倒、脫隊，"
+            "頭燈電量不足，午後低溫濕冷比預報早，下次要怎麼更新？"
+        ),
+        project_root=PROJECT_ROOT,
+    )
+
+    item = _single_tool(plan, POST_TRIP_REVIEW_TOOL_ID)
+    assert item.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+    assert item.request is not None
+    args = item.request["arguments"]
+    assert args["subjective_difficulty"] == "harder_than_expected"
+    assert "摸黑" in args["near_miss_events"]
+    assert "錯過岔路" in args["near_miss_events"]
+    assert "滑倒" in args["incident_events"]
+    assert "脫隊" in args["near_miss_events"]
+    assert "頭燈電量不足" in args["equipment_gaps"]
+    assert args["weather_matched_expectation"] is False
+    assert args["user_feedback_items"] == ["review_for_next_pretrip"]
+    assert item.boundary.runtime_safety_truth is False
+
+
 def test_planner_selects_route_architecture_for_cp_graph_question() -> None:
     plan = plan_scout_ai_tools(
         _query("下一個撤退點在哪？這條路線的難點在哪裡？"),

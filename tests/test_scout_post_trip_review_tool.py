@@ -79,6 +79,59 @@ def test_post_trip_review_escalates_incident_feedback_without_mutation() -> None
     assert "不會寫回使用者模型" in result["field_answer"]
 
 
+def test_post_trip_review_classifies_standard_event_taxonomy() -> None:
+    result = assess_scout_post_trip_review(
+        POST_ANALYSIS_ROOT,
+        query="行後有摸黑、差點迷路、滑倒、脫隊、失溫和裝備失效，下一次要怎麼改？",
+        subjective_difficulty="比預期難",
+        equipment_gaps=["頭燈電量不足"],
+        near_miss_events=["摸黑前差點錯過岔路", "後隊脫隊十分鐘"],
+        incident_events=["隊員滑倒擦傷", "濕冷後疑似失溫", "頭燈失效"],
+        weather_matched_expectation=False,
+        route_condition_notes=["午後低溫濕冷"],
+        route_context_updates=["危險岔路需要標記"],
+        user_feedback_items=["下次應提早折返"],
+    )
+
+    assert result["answerability"] == "post_trip_review_available"
+    assert result["decision"] == "ESCALATE"
+    taxonomy = result["post_trip_feedback"]["event_taxonomy"]
+    assert taxonomy["candidate_only"] is True
+    assert taxonomy["runtime_safety_truth"] is False
+    assert set(taxonomy["matched_event_types"]) >= {
+        "lost_or_navigation_uncertainty",
+        "slip_or_fall",
+        "cold_or_hypothermia",
+        "team_separation",
+        "darkness_or_daylight_overrun",
+        "equipment_failure",
+    }
+    data = result["post_trip_learning_package"]["data_to_collect"]
+    assert data["event_taxonomy"]["event_count"] >= 5
+    coverage = result["post_trip_learning_package"]["model_update_target_coverage"]
+    assert coverage["navigation_terrain_readiness_model"] is True
+    assert coverage["terrain_risk_layer"] is True
+    assert coverage["weather_cold_exposure_policy"] is True
+    assert coverage["team_status_governance"] is True
+    assert coverage["daylight_turnaround_policy"] is True
+    assert coverage["equipment_resource_readiness"] is True
+    update_kinds = {item["update_kind"] for item in result["model_update_candidates"]}
+    assert {
+        "navigation_terrain_readiness_model",
+        "terrain_risk_layer",
+        "weather_cold_exposure_policy",
+        "team_status_governance",
+        "daylight_turnaround_policy",
+        "equipment_resource_readiness",
+    } <= update_kinds
+    assert any(
+        "摸黑" in gap or "日照" in gap
+        for gap in result["review_governance"]["warning_gaps"]
+    )
+    assert result["post_trip_review"]["learning_write_performed"] is False
+    assert result["boundary"]["runtime_safety_truth"] is False
+
+
 def test_post_trip_review_go_when_required_feedback_is_complete(tmp_path: Path) -> None:
     project_root = tmp_path / "post_trip_ready"
     outputs = project_root / "outputs"

@@ -336,6 +336,12 @@ def _after_action_summary(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def _feedback_summary(direct: dict[str, Any]) -> dict[str, Any]:
+    event_taxonomy = _post_trip_event_taxonomy(
+        near_miss_events=direct["near_miss_events"],
+        incident_events=direct["incident_events"],
+        equipment_gaps=direct["equipment_gaps"],
+        route_condition_notes=direct["route_condition_notes"],
+    )
     return {
         "candidate_only": True,
         "runtime_safety_truth": False,
@@ -347,6 +353,7 @@ def _feedback_summary(direct: dict[str, Any]) -> dict[str, Any]:
         "route_condition_notes": direct["route_condition_notes"],
         "route_context_updates": direct["route_context_updates"],
         "user_feedback_items": direct["user_feedback_items"],
+        "event_taxonomy": event_taxonomy,
     }
 
 
@@ -434,7 +441,66 @@ def _model_update_candidates(
                 "blocked_until_human_review",
             )
         )
-    return candidates
+    event_types = set(
+        feedback_summary.get("event_taxonomy", {}).get("matched_event_types", [])
+    )
+    if "lost_or_navigation_uncertainty" in event_types:
+        candidates.append(
+            _update_candidate(
+                "navigation_terrain_readiness_model",
+                "Review missed junction, lost-position, or off-route event before changing navigation readiness assumptions.",
+                "blocked_until_human_review",
+            )
+        )
+    if "slip_or_fall" in event_types:
+        candidates.append(
+            _update_candidate(
+                "terrain_risk_layer",
+                "Review slip/fall evidence against terrain, wet-surface, and exposure layers before changing risk scoring.",
+                "blocked_until_human_review",
+            )
+        )
+    if "cold_or_hypothermia" in event_types:
+        candidates.append(
+            _update_candidate(
+                "weather_cold_exposure_policy",
+                "Review cold exposure or hypothermia signals before changing weather and insulation gates.",
+                "blocked_until_human_review",
+            )
+        )
+    if "team_separation" in event_types:
+        candidates.append(
+            _update_candidate(
+                "team_status_governance",
+                "Review team separation or lost-contact event before changing check-in and no-split policies.",
+                "blocked_until_human_review",
+            )
+        )
+    if "darkness_or_daylight_overrun" in event_types:
+        candidates.append(
+            _update_candidate(
+                "daylight_turnaround_policy",
+                "Review darkness or late-arrival event before tightening turnaround and daylight-buffer policy.",
+                "blocked_until_human_review",
+            )
+        )
+    if "equipment_failure" in event_types:
+        candidates.append(
+            _update_candidate(
+                "equipment_resource_readiness",
+                "Review gear failure before changing equipment checklist and departure gate requirements.",
+                "blocked_until_human_review",
+            )
+        )
+    if "medical_or_altitude_symptom" in event_types:
+        candidates.append(
+            _update_candidate(
+                "energy_vitals_and_medical_escalation_policy",
+                "Review altitude, medical, or serious-injury signals with a human reviewer before changing vitals or escalation policy.",
+                "blocked_until_human_review",
+            )
+        )
+    return _dedupe_update_candidates(candidates)
 
 
 def _update_candidate(kind: str, summary: str, review_state: str) -> dict[str, Any]:
@@ -505,6 +571,7 @@ def _post_trip_learning_package(
             "route_condition_notes": feedback_summary.get("route_condition_notes") or [],
             "near_miss_events": feedback_summary.get("near_miss_events") or [],
             "incident_events": feedback_summary.get("incident_events") or [],
+            "event_taxonomy": feedback_summary.get("event_taxonomy") or {},
             "route_context_updates": feedback_summary.get("route_context_updates") or [],
             "user_feedback_items": feedback_summary.get("user_feedback_items") or [],
         },
@@ -527,6 +594,28 @@ def _post_trip_learning_package(
             ),
             "route_context_intelligence": _has_update_kind(
                 model_update_candidates, "route_context_intelligence"
+            ),
+            "navigation_terrain_readiness_model": _has_update_kind(
+                model_update_candidates, "navigation_terrain_readiness_model"
+            ),
+            "terrain_risk_layer": _has_update_kind(
+                model_update_candidates, "terrain_risk_layer"
+            ),
+            "weather_cold_exposure_policy": _has_update_kind(
+                model_update_candidates, "weather_cold_exposure_policy"
+            ),
+            "team_status_governance": _has_update_kind(
+                model_update_candidates, "team_status_governance"
+            ),
+            "daylight_turnaround_policy": _has_update_kind(
+                model_update_candidates, "daylight_turnaround_policy"
+            ),
+            "equipment_resource_readiness": _has_update_kind(
+                model_update_candidates, "equipment_resource_readiness"
+            ),
+            "energy_vitals_and_medical_escalation_policy": _has_update_kind(
+                model_update_candidates,
+                "energy_vitals_and_medical_escalation_policy",
             ),
         },
         "review_required": {
@@ -556,6 +645,7 @@ def _post_trip_learning_package(
         },
         "acceptance_coverage": {
             "section_20_1_data_to_collect": True,
+            "section_20_1_incident_event_taxonomy": True,
             "section_20_2_model_update_targets": True,
             "section_22_reviewable_reasoning": True,
             "section_23_no_runtime_safety_truth": True,
@@ -567,8 +657,159 @@ def _feedback_value_or_missing(value: Any) -> Any:
     return value if value is not None else "missing"
 
 
+def _post_trip_event_taxonomy(
+    *,
+    near_miss_events: list[str],
+    incident_events: list[str],
+    equipment_gaps: list[str],
+    route_condition_notes: list[str],
+) -> dict[str, Any]:
+    classified_events: list[dict[str, Any]] = []
+    for source, values in (
+        ("near_miss", near_miss_events),
+        ("incident", incident_events),
+        ("equipment_gap", equipment_gaps),
+        ("route_condition", route_condition_notes),
+    ):
+        for value in _actionable_items(values):
+            event_types = _post_trip_event_types(value, source=source)
+            if not event_types:
+                continue
+            classified_events.append(
+                {
+                    "source": source,
+                    "text": value,
+                    "event_types": event_types,
+                    "review_state": "requires_human_review",
+                    "candidate_only": True,
+                    "runtime_safety_truth": False,
+                }
+            )
+    matched_event_types = _dedupe(
+        [
+            event_type
+            for event in classified_events
+            for event_type in event["event_types"]
+        ]
+    )
+    by_type = {
+        event_type: sum(
+            1 for event in classified_events if event_type in event["event_types"]
+        )
+        for event_type in matched_event_types
+    }
+    return {
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+        "classification_schema": "scout_post_trip_event_taxonomy.v0",
+        "event_count": len(classified_events),
+        "matched_event_types": matched_event_types,
+        "by_type": by_type,
+        "events": classified_events[:12],
+        "review_required": bool(classified_events),
+    }
+
+
+def _post_trip_event_types(value: str, *, source: str) -> list[str]:
+    text = value.lower().replace(" ", "")
+    event_types: list[str] = []
+
+    def add(event_type: str) -> None:
+        if event_type not in event_types:
+            event_types.append(event_type)
+
+    if _has_any_text(
+        text,
+        (
+            "迷路",
+            "走錯",
+            "錯過岔路",
+            "岔路",
+            "不確定自己在哪",
+            "偏離路線",
+            "offroute",
+            "lost",
+            "wrongturn",
+        ),
+    ):
+        add("lost_or_navigation_uncertainty")
+    if _has_any_text(
+        text,
+        ("滑倒", "跌倒", "摔倒", "滑墜", "墜落", "slip", "fall"),
+    ):
+        add("slip_or_fall")
+    if _has_any_text(
+        text,
+        (
+            "失溫",
+            "低溫",
+            "濕冷",
+            "冷到",
+            "濕衣",
+            "hypothermia",
+            "coldexposure",
+        ),
+    ):
+        add("cold_or_hypothermia")
+    if _has_any_text(
+        text,
+        (
+            "脫隊",
+            "走散",
+            "分隊",
+            "快慢組",
+            "失聯",
+            "後隊",
+            "teamseparation",
+            "splitteam",
+            "lostcontact",
+        ),
+    ):
+        add("team_separation")
+    if _has_any_text(
+        text,
+        ("摸黑", "天黑", "日落", "夜間", "頭燈前", "dark", "nightfall"),
+    ):
+        add("darkness_or_daylight_overrun")
+    if source == "equipment_gap" or _has_any_text(
+        text,
+        (
+            "裝備失效",
+            "失效",
+            "故障",
+            "壞掉",
+            "沒電",
+            "電量不足",
+            "不足",
+            "缺",
+            "頭燈",
+            "雨衣",
+            "手套",
+            "gearfailure",
+            "equipmentfailure",
+            "batterydead",
+        ),
+    ):
+        add("equipment_failure")
+    if _has_any_text(text, ("高山症", "氣喘", "低血糖", "重大傷病", "ams")):
+        add("medical_or_altitude_symptom")
+    return event_types
+
+
 def _has_update_kind(candidates: list[dict[str, Any]], update_kind: str) -> bool:
     return any(candidate.get("update_kind") == update_kind for candidate in candidates)
+
+
+def _dedupe_update_candidates(candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    seen = set()
+    result = []
+    for candidate in candidates:
+        key = candidate.get("update_kind")
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(candidate)
+    return result
 
 
 def _decision_output(
@@ -755,6 +996,12 @@ def _review_governance(
     incident_events = _actionable_items(feedback_summary["incident_events"])
     near_miss_events = _actionable_items(feedback_summary["near_miss_events"])
     equipment_gaps = _actionable_items(feedback_summary["equipment_gaps"])
+    event_taxonomy = feedback_summary.get("event_taxonomy", {})
+    event_types = (
+        set(event_taxonomy.get("matched_event_types", []))
+        if isinstance(event_taxonomy, dict)
+        else set()
+    )
 
     if incident_events:
         critical_gaps.append("行後回顧包含 incident events，必須人工事故回顧。")
@@ -762,6 +1009,27 @@ def _review_governance(
     if near_miss_events:
         warning_gaps.append("有 near miss 回報，下一次規劃需降低風險預算。")
         required_conditions.append("將 near miss 對應到 CP/segment 後再更新路線模型。")
+    if "lost_or_navigation_uncertainty" in event_types:
+        warning_gaps.append("事件分類包含迷路、錯過岔路或導航不確定。")
+        required_conditions.append("回顧離線地圖、GPX、岔路點與撤退方向後再更新地圖力模型。")
+    if "slip_or_fall" in event_types:
+        warning_gaps.append("事件分類包含滑倒、跌倒或滑墜風險。")
+        required_conditions.append("將事件對到地形/天候/路面條件後再更新風險圖層。")
+    if "cold_or_hypothermia" in event_types:
+        warning_gaps.append("事件分類包含失溫、低溫或濕冷暴露。")
+        required_conditions.append("回顧保暖裝備、天氣窗口與營地/停留政策後再更新模型。")
+    if "team_separation" in event_types:
+        warning_gaps.append("事件分類包含脫隊、快慢組分裂或失聯。")
+        required_conditions.append("回顧隊伍 check-in、no-split 與留守策略後再更新隊伍模型。")
+    if "darkness_or_daylight_overrun" in event_types:
+        warning_gaps.append("事件分類包含摸黑或日照 buffer 失守。")
+        required_conditions.append("回顧折返時間、最晚通過 CP 與頭燈電量後再更新 daylight policy。")
+    if "equipment_failure" in event_types:
+        warning_gaps.append("事件分類包含裝備失效、缺件或電量不足。")
+        required_conditions.append("回顧裝備清單與 departure gate 後再更新資源模型。")
+    if "medical_or_altitude_symptom" in event_types:
+        warning_gaps.append("事件分類包含高山症、醫療或重大傷病訊號。")
+        required_conditions.append("人工醫療/領隊回顧完成前，不更新 vitals 或 escalation policy。")
     if completed_trip.get("completion_status") == "partial":
         warning_gaps.append("完成軌跡顯示行程未完整完成或有折返。")
         required_conditions.append("標記 turnaround edge，下一次行前先調整路線或時間。")
@@ -943,6 +1211,11 @@ def _normalized_text_list(value: Any) -> list[str]:
 def _actionable_items(values: list[str]) -> list[str]:
     empty_markers = {"none", "no", "n/a", "na", "無", "沒有", "無事件", "無缺口"}
     return [value for value in values if value.strip().lower() not in empty_markers]
+
+
+def _has_any_text(value: str, fragments: tuple[str, ...]) -> bool:
+    normalized = value.lower().replace(" ", "")
+    return any(fragment.lower().replace(" ", "") in normalized for fragment in fragments)
 
 
 def _first_text(*values: Any) -> str | None:

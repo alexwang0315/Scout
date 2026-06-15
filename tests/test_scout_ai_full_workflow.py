@@ -1748,6 +1748,53 @@ def test_full_workflow_routes_trip_end_debrief_to_post_trip_review() -> None:
     assert result.boundary.runtime_safety_truth is False
 
 
+def test_full_workflow_surfaces_post_trip_event_taxonomy() -> None:
+    result = run_scout_ai_full_workflow(
+        (
+            "行後比預期難，摸黑前差點錯過岔路，隊友滑倒、脫隊，"
+            "頭燈電量不足，午後低溫濕冷比預報早，下次要怎麼更新？"
+        ),
+        project_root=POST_ANALYSIS_ROOT,
+        project_id="chilai_nanhua_day1_post_analysis",
+        limit=6,
+    )
+
+    assert result.answerability == "evidence_available"
+    assert result.selected_tool_count == 1
+    assert result.executed_tool_count == 1
+    assert result.completed_tool_count == 1
+    assert result.missing_evidence_count == 0
+    source = result.sources[0]
+    assert source["tool_id"] == POST_TRIP_REVIEW_TOOL_ID
+    assert source["collection_status"] == "completed"
+    assert source["top_result_summary"]["decision"] == "ESCALATE"
+    taxonomy = source["top_result_summary"]["post_trip_feedback"]["event_taxonomy"]
+    assert taxonomy["candidate_only"] is True
+    assert taxonomy["runtime_safety_truth"] is False
+    assert set(taxonomy["matched_event_types"]) >= {
+        "lost_or_navigation_uncertainty",
+        "slip_or_fall",
+        "cold_or_hypothermia",
+        "team_separation",
+        "darkness_or_daylight_overrun",
+        "equipment_failure",
+    }
+    coverage = source["top_result_summary"]["post_trip_learning_package"][
+        "model_update_target_coverage"
+    ]
+    assert coverage["navigation_terrain_readiness_model"] is True
+    assert coverage["terrain_risk_layer"] is True
+    assert coverage["weather_cold_exposure_policy"] is True
+    assert coverage["team_status_governance"] is True
+    assert coverage["daylight_turnaround_policy"] is True
+    assert coverage["equipment_resource_readiness"] is True
+    assert result.decision_output["answerSourceToolId"] == POST_TRIP_REVIEW_TOOL_ID
+    assert result.decision_output["decision"] == "ESCALATE"
+    assert result.decision_output["runtimeSafetyTruth"] is False
+    assert "行後回顧" in result.answer
+    assert result.boundary.runtime_safety_truth is False
+
+
 def test_full_workflow_runs_safety_boundary_question() -> None:
     result = run_scout_ai_full_workflow(
         "哪些風險目前只是候選，不能觸發 Ln？",
