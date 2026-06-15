@@ -601,8 +601,8 @@ def _daylight_buffer_status(
             "action_limit": "不得把此回答當成仍有日照 buffer、可停留或可繼續推進的授權。",
             "next_action": "先補齊 reviewed sunrise/sunset、目前時間與 planned ETA；完成前不要消耗停留或攻頂 buffer。",
             "alternatives": [
-                "re-check at the next CP after reviewed daylight evidence is loaded",
-                "shorten route or turn back before daylight buffer collapses",
+                "載入已審核日照證據後在下一 CP 重查",
+                "日照 buffer 崩潰前改短版或折返",
             ],
             "missing_fields": missing_fields,
             "daylight_buffer_impact": "daylight buffer cannot be computed from incomplete evidence",
@@ -617,7 +617,7 @@ def _daylight_buffer_status(
     if route_daylight_buffer_minutes < 0:
         decision = "NO_GO"
         first_layer = "不建議照原計畫進入摸黑風險。"
-        action_limit = "planned target ETA is after reviewed sunset; do not continue the original plan without reviewed retreat override."
+        action_limit = "計畫目標 ETA 晚於已審核日落；沒有已審核撤退覆寫前不得照原計畫推進。"
         next_action = "改短版或折返，並重新計算撤退、天氣與最慢者腳程。"
         impact = "daylight buffer is already negative against planned target ETA"
     elif route_daylight_buffer_minutes < 30:
@@ -649,8 +649,8 @@ def _daylight_buffer_status(
         "action_limit": action_limit,
         "next_action": next_action,
         "alternatives": [
-            "reserve daylight buffer for CP re-check",
-            "shorten route if daylight buffer drops below the next threshold",
+            "保留日照 buffer 給 CP 複查",
+            "日照 buffer 低於下一門檻時改短版",
         ],
         "missing_fields": [],
         "minutes_until_sunset": round(minutes_until_sunset, 1),
@@ -692,7 +692,7 @@ def _weather_to_decision(
         main_reasons = _string_list(daylight_buffer_status.get("main_reasons"))
         action_limit = str(
             daylight_buffer_status.get("action_limit")
-            or "Do not treat daylight as available until reviewed."
+            or "日照窗口完成審核前，不得把日照視為仍可用。"
         )
         next_action = str(
             daylight_buffer_status.get("next_action")
@@ -711,72 +711,66 @@ def _weather_to_decision(
     elif missing_fields:
         decision = "DELAY"
         main_reasons = [
-            "fresh weather / route-specific weather evidence is incomplete",
+            "缺少新鮮且路線化的天氣證據。",
             "missing_fields=" + ",".join(missing_fields),
         ]
-        action_limit = "Do not authorize departure, camping, summit, exposed ridge, or creek decisions from placeholder weather."
+        action_limit = "不得用 placeholder 天氣授權出發、紮營、攻頂、曝露稜線或渡溪決策。"
         next_action = "補齊 fresh provider、TTL、valid-time 與 route_weather_package；完成前採保守延後。"
-        alternatives = ["delay until fresh route weather package is reviewed", "choose lower-exposure fallback route"]
+        alternatives = ["延後到新鮮路線天氣包完成審核", "改低曝露備援路線"]
     elif route_sensitive_delay:
         decision = "DELAY"
         crossing_count = route_sensitive_delay["creek_crossing_count"]
         main_reasons = [
             (
-                "route contains "
-                f"{crossing_count:g} creek-crossing point"
-                + ("s" if crossing_count != 1 else "")
-                + " after previous-24h rainfall"
+                f"前 24 小時降雨後，路線仍包含 {crossing_count:g} 處渡溪點。"
             ),
-            "team has no creek-crossing experience",
-            "rainfall can raise creek, wet-terrain, rockfall, collapse, and loose-soil risk",
+            "隊伍缺少渡溪經驗。",
+            "降雨可能放大水位、濕滑、落石、崩塌與土石鬆動風險。",
         ]
         action_limit = (
-            "Do not depart on the original creek-crossing plan until water level, "
-            "recent route reports, and team crossing capability are reviewed."
+            "溪流水位、近期路況與隊伍渡溪能力完成審核前，不得照原渡溪計畫出發。"
         )
         next_action = "建議延期 48 小時或改走低風險替代路線，並重新確認溪流水位與近期路況。"
         alternatives = [
-            "delay 48 hours",
-            "choose a lower-risk route without creek crossings",
-            "use a guided-only creek-crossing plan after route review",
+            "延期 48 小時",
+            "改走沒有渡溪點的低風險路線",
+            "路況審核後改成嚮導/專家陪同渡溪方案",
         ]
     elif source_disagreement:
         decision = "DELAY"
         main_reasons = [
-            "forecast sources disagree enough to reduce weather confidence",
-            "route-sensitive weather decision needs source reconciliation",
-            "do not treat the favorable forecast as authoritative",
+            "預報來源分歧，天氣可信度不足。",
+            "路線化天氣決策需要先完成來源比對。",
+            "不得只採用較樂觀的預報作為授權依據。",
         ]
         action_limit = (
-            "Do not authorize departure, summit, exposed ridge, creek, or camp "
-            "decisions from a favorable forecast until sources are reconciled."
+            "來源比對完成前，不得用單一樂觀預報授權出發、攻頂、曝露稜線、渡溪或紮營。"
         )
         next_action = (
             "先比對官方預報、路線天氣包與人工審核；若來源仍不一致，延後或改低曝露替代路線。"
         )
         alternatives = [
-            "delay until forecast sources converge",
-            "choose a conservative lower-exposure route",
-            "run human weather review before route-sensitive decisions",
+            "延後到預報來源收斂",
+            "改保守低曝露路線",
+            "路線敏感決策前先做人工作業天氣審核",
         ]
     elif heat_change_plan:
         decision = "CHANGE_PLAN"
         main_reasons = [
-            "route contains high heat / exposure with hydration or shade constraints",
-            "heat exposure raises heat-illness, water, shade, and timing risk",
-            "original exposed timing should be moved or shortened",
+            "路線有高溫曝曬，且水量或遮蔽條件不足。",
+            "高溫曝曬會放大熱傷害、補水、遮蔽與時段風險。",
+            "原本曝曬時段需要移動或縮短。",
         ]
         action_limit = (
-            "Do not follow the original high-heat exposed timing until water "
-            "margin, shade/rest points, and a cooler travel window are reviewed."
+            "水量餘裕、遮蔽休息點與較涼行走時段完成審核前，不得照原高溫曝曬時段推進。"
         )
         next_action = (
             "改到清晨或較涼時段、補足水量並指定遮蔽休息點；若無法滿足就改短低曝曬路線。"
         )
         alternatives = [
-            "move exposed travel to a cooler window",
-            "increase water margin and reviewed shade/rest points",
-            "choose a shorter or lower-exposure route",
+            "把曝露路段移到較涼時段",
+            "增加水量餘裕並指定已審核遮蔽休息點",
+            "改短版或低曝曬路線",
         ]
     else:
         decision = _weather_decision_from_risk(highest=highest, risk_summary=risk_summary)
@@ -954,14 +948,14 @@ def _weather_required_conditions(
     decision: dict[str, Any],
     missing_fields: list[str],
 ) -> list[str]:
-    required = [f"Provide {field}." for field in missing_fields]
+    required = [f"補齊 {field}。" for field in missing_fields]
     decision_label = str(decision.get("decision") or "")
     if decision_label in {"NO_GO", "CHANGE_PLAN"}:
-        required.append("Choose a lower-risk weather window or route alternative.")
+        required.append("改選較低風險天氣窗口或替代路線。")
     if decision_label == "CONDITIONAL_GO":
-        required.append("Re-check weather and route risk at the next CP.")
+        required.append("下一 CP 重新檢查天氣與路線風險。")
     if not required:
-        required.append("Keep route weather package fresh and reviewed.")
+        required.append("保持 route weather package 新鮮且已審核。")
     return _dedupe(required)
 
 
@@ -1058,22 +1052,21 @@ def _weather_action_limit(
     highest: dict[str, Any] | None,
 ) -> str:
     if decision == "NO_GO":
-        return "Do not enter the flagged segment under this weather window."
+        return "此天氣窗口下不得進入已標記路段。"
     if decision == "CHANGE_PLAN":
         if {"THUNDER", "WIND"} & set(alert_codes):
-            return "Avoid exposed ridge, summit, and open terrain during the flagged window."
+            return "標記天氣窗口內避開曝露稜線、山頂與開闊地。"
         if "HEAT" in alert_codes:
             return (
-                "Avoid high-heat exposed timing until water margin, "
-                "shade/rest points, and cooler travel window are reviewed."
+                "水量餘裕、遮蔽休息點與較涼行走時段完成審核前，避開高溫曝曬時段。"
             )
         if "RAIN" in alert_codes:
-            return "Avoid creek crossings, landslide-prone cuts, and slippery exposed terrain during the flagged window."
-        return "Do not follow the original timing through the highest-risk segment."
+            return "標記天氣窗口內避開渡溪、崩塌敏感切坡與濕滑曝露地形。"
+        return "不得依原時程通過最高風險路段。"
     if decision == "CONDITIONAL_GO":
         segment = highest.get("segment_id") if highest else "flagged segment"
-        return f"Proceed only if the team can pass {segment} before conditions worsen and reassess at the next CP."
-    return "Normal plan can proceed only while fresh route weather package remains valid."
+        return f"只有在天氣惡化前能通過 {segment}，且下一 CP 會重新評估時，才可繼續。"
+    return "只有新鮮 route_weather_package 仍有效時，才可維持原計畫。"
 
 
 def _weather_next_action(
@@ -1099,17 +1092,17 @@ def _weather_next_action(
 
 def _weather_alternatives(decision: str, *, alert_codes: list[str]) -> list[str]:
     if decision in {"NO_GO", "CHANGE_PLAN"}:
-        alternatives = ["delay 24-48 hours", "choose lower-exposure fallback route"]
+        alternatives = ["延後 24-48 小時", "改低曝露備援路線"]
         if "THUNDER" in alert_codes:
-            alternatives.append("move ridge/summit exposure outside thunderstorm window")
+            alternatives.append("把稜線/山頂曝露移出雷雨窗口")
         if "RAIN" in alert_codes:
-            alternatives.append("avoid creek and landslide-prone segments")
+            alternatives.append("避開溪谷與崩塌敏感路段")
         if "HEAT" in alert_codes:
-            alternatives.append("move exposed hiking to cooler hours and confirm water margin")
+            alternatives.append("把曝露行走移到較涼時段並確認水量餘裕")
         return alternatives
     if decision == "CONDITIONAL_GO":
-        return ["shorten route", "set earlier turn-back checkpoint", "increase CP weather checks"]
-    return ["continue with scheduled CP weather re-checks"]
+        return ["縮短路線", "設定更早折返 CP", "提高 CP 天氣複查頻率"]
+    return ["維持排定 CP 天氣複查"]
 
 
 def _route_specific_conditions(
@@ -1305,19 +1298,18 @@ def _query_stated_weather_rule(query: str) -> dict[str, Any] | None:
             "query_reported": True,
             "alert_codes": ["RAIN", "TERRAIN"],
             "main_reasons": [
-                "user reported previous-24h rainfall with creek, wet-terrain, rockfall, or collapse concern",
-                "recent rainfall can raise water level, wet-terrain, rockfall, collapse, and loose-soil risk",
-                "fresh route_weather_package is still required before restoring the original plan",
+                "使用者回報前 24 小時降雨，且涉及溪水、濕滑、落石或崩塌疑慮。",
+                "近期降雨可能抬升水位，並放大濕滑、落石、崩塌與土石鬆動風險。",
+                "恢復原計畫前仍需補齊新鮮 route_weather_package。",
             ],
             "action_limit": (
-                "Do not treat the original route as approved after reported recent rainfall; "
-                "avoid creek, collapse, rockfall, and wet-terrain segments until route-specific review is complete."
+                "路線化審核完成前，不得把原路線視為已核准；先避開渡溪、崩塌、落石與濕滑路段。"
             ),
             "next_action": "改低風險替代路線或延後，並補齊近期路況、溪流水位與 route_weather_package 後再判斷。",
             "alternatives": [
-                "delay until recent rainfall impact is reviewed",
-                "choose a route without creek crossings or collapse-prone terrain",
-                "run human review of water level and recent route reports",
+                "延後到近期降雨影響完成審核",
+                "改走沒有渡溪或崩塌敏感地形的路線",
+                "人工審核水位與近期路況後再判斷",
             ],
         }
     if any(term in normalized for term in ("午後雷雨", "雷雨", "thunderstorm")):
@@ -1327,16 +1319,16 @@ def _query_stated_weather_rule(query: str) -> dict[str, Any] | None:
             "query_reported": True,
             "alert_codes": ["THUNDER"],
             "main_reasons": [
-                "user reported thunderstorm pressure near route decision time",
-                "thunderstorm exposure changes ridge, summit, open terrain, and creek decisions",
-                "fresh route_weather_package is still required before restoring the original plan",
+                "使用者回報路線決策時段有雷雨壓力。",
+                "雷雨會改變稜線、山頂、開闊地與溪谷通行決策。",
+                "恢復原計畫前仍需補齊新鮮 route_weather_package。",
             ],
-            "action_limit": "Do not continue into ridge, summit, open terrain, or creek exposure under reported thunderstorm pressure.",
+            "action_limit": "雷雨壓力解除前，不得進入稜線、山頂、開闊地或溪谷曝露情境。",
             "next_action": "移出曝露路段、改短版或延後到較穩定天氣窗，並在下一 CP 重新檢查天氣。",
             "alternatives": [
-                "avoid ridge and summit exposure",
-                "choose a sheltered lower route",
-                "delay until thunderstorm window passes",
+                "避開稜線與山頂曝露",
+                "改走較避風避雷的低海拔路線",
+                "延後到雷雨窗口通過後",
             ],
         }
     if any(term in normalized for term in ("強風低溫", "強風", "低溫", "失溫", "cold", "wind")):
@@ -1346,16 +1338,16 @@ def _query_stated_weather_rule(query: str) -> dict[str, Any] | None:
             "query_reported": True,
             "alert_codes": ["WIND", "COLD"],
             "main_reasons": [
-                "user reported wind or cold exposure that can raise hypothermia risk",
-                "ridge and camp decisions need wind, temperature, gear, and retreat review",
-                "fresh route_weather_package is still required before restoring the original plan",
+                "使用者回報強風或低溫曝露，失溫風險可能升高。",
+                "稜線與紮營決策需要同時審核風、溫度、裝備與撤退 buffer。",
+                "恢復原計畫前仍需補齊新鮮 route_weather_package。",
             ],
-            "action_limit": "Do not commit to exposed ridge or camp plans until wind-cold exposure, gear, and retreat buffer are reviewed.",
+            "action_limit": "強風低溫、裝備與撤退 buffer 完成審核前，不得承諾曝露稜線或紮營計畫。",
             "next_action": "改低曝露路線、縮短停留或下撤到避風點；補齊天氣包與保暖裝備檢查。",
             "alternatives": [
-                "move to sheltered checkpoints",
-                "shorten exposed ridge travel",
-                "delay camping decision until wind-cold review is complete",
+                "移動到避風 CP",
+                "縮短曝露稜線行走",
+                "強風低溫審核完成前延後紮營決策",
             ],
         }
     if _has_heat_signal(normalized, temperature_c=None, heat_index_c=None):
@@ -1365,16 +1357,16 @@ def _query_stated_weather_rule(query: str) -> dict[str, Any] | None:
             "query_reported": True,
             "alert_codes": ["HEAT"],
             "main_reasons": [
-                "user reported heat exposure or hydration timing pressure",
-                "heat raises water, shade, heat-illness, and travel-window requirements",
-                "fresh route_weather_package is still required before restoring the original plan",
+                "使用者回報高溫曝曬或補水時段壓力。",
+                "高溫會提高水量、遮蔽、熱傷害與行走時段要求。",
+                "恢復原計畫前仍需補齊新鮮 route_weather_package。",
             ],
-            "action_limit": "Do not follow the original exposed hot-window timing until water margin, shade points, and cooler travel window are reviewed.",
+            "action_limit": "水量餘裕、遮蔽點與較涼行走時段完成審核前，不得照原曝曬時段推進。",
             "next_action": "改到清晨或較涼時段、補水並指定遮蔽休息點；不滿足時改短低曝曬路線。",
             "alternatives": [
-                "move exposed travel to cooler hours",
-                "increase water margin and shade rest points",
-                "choose a shorter low-exposure route",
+                "把曝露路段移到較涼時段",
+                "增加水量餘裕與遮蔽休息點",
+                "改短版低曝曬路線",
             ],
         }
     if _mentions_source_disagreement(normalized):
@@ -1384,16 +1376,16 @@ def _query_stated_weather_rule(query: str) -> dict[str, Any] | None:
             "query_reported": True,
             "alert_codes": ["SOURCE_CONFLICT"],
             "main_reasons": [
-                "user reported forecast source disagreement",
-                "route-sensitive weather decisions should not rely on the favorable source",
-                "fresh route_weather_package and source reconciliation are required",
+                "使用者回報預報來源不一致。",
+                "路線敏感天氣決策不得只採用較樂觀來源。",
+                "需要新鮮 route_weather_package 與來源比對。",
             ],
-            "action_limit": "Do not authorize departure, exposed ridge, creek, summit, or camp decisions from a favorable forecast while sources disagree.",
+            "action_limit": "來源仍不一致時，不得用較樂觀預報授權出發、曝露稜線、渡溪、攻頂或紮營。",
             "next_action": "先比對官方預報、路線天氣包與人工審核；若來源仍不一致，延後或改低曝露替代路線。",
             "alternatives": [
-                "delay until forecast sources converge",
-                "choose a conservative lower-exposure route",
-                "run human weather review before route-sensitive decisions",
+                "延後到預報來源收斂",
+                "改保守低曝露路線",
+                "路線敏感決策前先做人工作業天氣審核",
             ],
         }
     return None

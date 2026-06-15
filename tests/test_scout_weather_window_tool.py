@@ -124,7 +124,8 @@ def test_weather_window_tool_uses_query_reported_recent_rain_conservatively() ->
     assert weather_decision["route_sensitive_weather_rule"]["query_reported"] is True
     assert "rain / wet terrain" in weather_decision["route_specific_conditions"]
     assert "terrain interaction" in weather_decision["route_specific_conditions"]
-    assert "previous-24h rainfall" in weather_decision["main_reasons"][0]
+    assert "前 24 小時降雨" in weather_decision["main_reasons"][0]
+    assert "不得把原路線視為已核准" in weather_decision["action_limit"]
     assert result["decision_output"]["firstLayer"]["decision"] == (
         "不建議照原計畫通過。"
     )
@@ -268,7 +269,7 @@ def test_weather_window_tool_no_go_for_critical_weather_route_interaction(
         "weather buffer is not available for discretionary delay or exposure"
     )
     assert result["weather_to_decision"]["action_limit"] == (
-        "Do not enter the flagged segment under this weather window."
+        "此天氣窗口下不得進入已標記路段。"
     )
     assert "NO_GO" in result["field_answer"]
 
@@ -292,10 +293,11 @@ def test_weather_window_tool_delays_recent_rain_creek_crossing_without_experienc
         "creek_crossing_count": 2,
         "segment_ids": ["creek.crossing.1", "creek.crossing.2"],
     }
-    assert "creek-crossing" in result["weather_to_decision"]["main_reasons"][0]
-    assert "no creek-crossing experience" in result["weather_to_decision"][
+    assert "渡溪點" in result["weather_to_decision"]["main_reasons"][0]
+    assert "缺少渡溪經驗" in result["weather_to_decision"][
         "main_reasons"
     ][1]
+    assert "不得照原渡溪計畫出發" in result["weather_to_decision"]["action_limit"]
     assert "延期 48 小時" in result["weather_to_decision"]["next_action"]
     assert "低風險替代路線" in result["field_answer"]
     assert result["decision_output"]["decision"] == "DELAY"
@@ -332,7 +334,7 @@ def test_weather_window_tool_changes_plan_for_heat_exposure_water_margin(
     assert "heat exposure / hydration demand" in weather_decision[
         "route_specific_conditions"
     ]
-    assert "water margin" in weather_decision["action_limit"]
+    assert "水量餘裕" in weather_decision["action_limit"]
     assert "較涼時段" in weather_decision["next_action"]
     assert "補足水量" in result["field_answer"]
     assert result["decision_output"]["decision"] == "CHANGE_PLAN"
@@ -367,7 +369,7 @@ def test_weather_window_tool_delays_forecast_source_disagreement(
     assert "forecast source disagreement / uncertainty" in weather_decision[
         "route_specific_conditions"
     ]
-    assert "favorable forecast" in weather_decision["action_limit"]
+    assert "單一樂觀預報" in weather_decision["action_limit"]
     assert "來源仍不一致" in weather_decision["next_action"]
     assert result["decision_output"]["decision"] == "DELAY"
     assert result["decision_output"]["runtimeSafetyTruth"] is False

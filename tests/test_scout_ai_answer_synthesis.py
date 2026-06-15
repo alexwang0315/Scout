@@ -172,7 +172,8 @@ def test_answer_synthesis_uses_query_reported_recent_rain_weather_decision() -> 
     assert result.decision_output["firstLayer"]["decision"] == (
         "不建議照原計畫通過。"
     )
-    assert "previous-24h rainfall" in result.decision_output["firstLayer"]["reason"]
+    assert "前 24 小時降雨" in result.decision_output["firstLayer"]["reason"]
+    assert "不得把原路線視為已核准" in result.decision_output["firstLayer"]["limit"]
     assert "runtime safety truth" in result.answer
 
 
@@ -280,7 +281,7 @@ def test_answer_synthesis_surfaces_heat_exposure_weather_decision(
     assert rule["segment_ids"] == ["heat.exposed.1"]
     assert result.decision_output["answerSourceToolId"] == WEATHER_WINDOW_TOOL_ID
     assert result.decision_output["decision"] == "CHANGE_PLAN"
-    assert "water margin" in result.decision_output["firstLayer"]["limit"]
+    assert "水量餘裕" in result.decision_output["firstLayer"]["limit"]
     assert "補足水量" in result.answer
     assert "runtime safety truth" in result.answer
 
@@ -309,7 +310,7 @@ def test_answer_synthesis_surfaces_forecast_source_disagreement_decision(
     assert rule["segment_ids"] == ["forecast.conflict.1"]
     assert result.decision_output["answerSourceToolId"] == WEATHER_WINDOW_TOOL_ID
     assert result.decision_output["decision"] == "DELAY"
-    assert "favorable forecast" in result.decision_output["firstLayer"]["limit"]
+    assert "單一樂觀預報" in result.decision_output["firstLayer"]["limit"]
     assert "來源仍不一致" in result.answer
     assert "runtime safety truth" in result.answer
 
