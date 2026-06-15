@@ -644,6 +644,37 @@ def test_execute_media_literacy_blocks_social_photo_detour() -> None:
     assert result.payload["boundary"]["runtime_safety_truth"] is False
 
 
+def test_execute_media_literacy_records_social_detour_buffer_context() -> None:
+    result = execute_scout_ai_tool(
+        {
+            "tool_id": "scout.ai.media_bias.assess",
+            "project_root": str(PROJECT_ROOT),
+            "query": "看到乾季晴天美照，但今天濕滑又只剩 18 分鐘 buffer，可以繞去拍嗎？",
+            "arguments": {
+                "remaining_safety_buffer_minutes": 18,
+                "route_condition_reviewed": True,
+            },
+        }
+    )
+
+    assert result.status == "completed"
+    assert result.tool_id == MEDIA_LITERACY_TOOL_ID
+    assert result.payload["decision"] == "NO_GO"
+    assert result.payload["media_bias_analysis"]["input_state"][
+        "remaining_safety_buffer_minutes"
+    ] == 18
+    assert result.payload["media_bias_analysis"]["input_state"][
+        "route_condition_reviewed"
+    ] is True
+    assert "fresh_weather_or_route_condition_review" not in result.missing_fields
+    bias_ids = {
+        item["bias_id"]
+        for item in result.payload["media_bias_analysis"]["detected_biases"]
+    }
+    assert {"beauty_photo_bias", "season_weather_bias"} <= bias_ids
+    assert result.payload["boundary"]["runtime_safety_truth"] is False
+
+
 def test_execute_weather_tool_returns_read_only_weather_evidence_gap() -> None:
     result = execute_scout_ai_tool(
         {
@@ -1325,6 +1356,31 @@ def test_execute_contextual_permission_assessor_blocks_shortcut_reroute() -> Non
     assert result.payload["decision_output"]["runtimeSafetyTruth"] is False
     assert "不要臨時改線" in result.payload["field_answer"]
     assert result.boundary.runtime_safety_truth is False
+
+
+def test_execute_contextual_permission_blocks_media_bias_detour_even_with_buffer() -> None:
+    result = execute_scout_ai_tool(
+        {
+            "tool_id": "scout.ai.contextual_permission.assess",
+            "project_root": str(PROJECT_ROOT),
+            "query": "看到乾季晴天美照，但今天濕滑又只剩 18 分鐘 buffer，可以繞去拍嗎？",
+            "arguments": {
+                "remaining_safety_buffer_minutes": 18,
+            },
+        }
+    )
+
+    assert result.status == "completed"
+    assert result.tool_id == CONTEXTUAL_PERMISSION_TOOL_ID
+    assert result.payload["answerability"] == "contextual_permission_decision_available"
+    assert result.payload["action"] == "reroute"
+    assert result.payload["decision"] == "NO_GO"
+    assert result.payload["allowed"] is False
+    assert result.payload["missing_fields"] == []
+    assert result.payload["decision_output"]["decision"] == "NO_GO"
+    assert "不能為照片" in result.payload["decision_output"]["firstLayer"]["reason"]
+    assert "18 分鐘" in result.payload["field_answer"]
+    assert result.payload["boundary"]["runtime_safety_truth"] is False
 
 
 def test_execute_contextual_permission_assessor_allows_direct_retreat() -> None:
