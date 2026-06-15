@@ -7,6 +7,7 @@ import pytest
 from scout_ai_tool_contracts import tool_registry_output
 from scout_ai_tool_executor import execute_scout_ai_tool
 from scout_contextual_permission_tool import CONTEXTUAL_PERMISSION_TOOL_ID
+from scout_media_literacy_tool import MEDIA_LITERACY_TOOL_ID
 from scout_navigation_terrain_tool import NAVIGATION_TERRAIN_TOOL_ID
 from scout_pace_guardian_tool import PACE_GUARDIAN_TOOL_ID
 from scout_post_trip_review_tool import POST_TRIP_REVIEW_TOOL_ID
@@ -409,6 +410,62 @@ def test_post_trip_learning_package_covers_reviewable_model_updates_without_writ
     assert incident_result.payload["post_trip_review"]["learning_write_performed"] is False
     assert incident_result.payload["decision_output"]["runtimeSafetyTruth"] is False
     _assert_no_forbidden_safety_language(incident_result.payload)
+
+
+def test_media_literacy_product_function_counters_bias_without_permission_leak() -> None:
+    social_photo_result = execute_scout_ai_tool(
+        {
+            "tool_id": "scout.ai.media_bias.assess",
+            "project_root": str(PROJECT_ROOT),
+            "query": "IG 大崩壁美照會不會誤導？想去打卡。",
+        }
+    )
+    summit_pressure_result = execute_scout_ai_tool(
+        {
+            "tool_id": "scout.ai.media_bias.assess",
+            "project_root": str(PROJECT_ROOT),
+            "query": "已經快到山頂了，不攻頂會不會很可惜？",
+        }
+    )
+
+    assert social_photo_result.tool_id == MEDIA_LITERACY_TOOL_ID
+    assert social_photo_result.payload["decision"] == "NO_GO"
+    assert social_photo_result.payload["allowed"] is False
+    assert {
+        bias["bias_id"]
+        for bias in social_photo_result.payload["media_literacy"]["detected_biases"]
+    } >= {"beauty_photo_bias", "check_in_pressure"}
+    assert social_photo_result.payload["media_bias_analysis"][
+        "target_context_points"
+    ][0]["risk_context"] is True
+    assert "fresh_weather_or_route_condition_review" in social_photo_result.missing_fields
+    assert social_photo_result.payload["decision_output"]["action"] in {
+        "photo",
+        "stop",
+    }
+    assert social_photo_result.payload["decision_output"]["allowed"] is False
+    assert social_photo_result.payload["decision_output"]["runtimeSafetyTruth"] is False
+    assert any(
+        "section 21 Media Literacy" in item
+        for item in social_photo_result.payload["standard_alignment"]
+    )
+    _assert_standard_output(social_photo_result.payload["decision_output"])
+    _assert_no_forbidden_safety_language(social_photo_result.payload)
+
+    assert summit_pressure_result.payload["decision"] == "NO_GO"
+    assert summit_pressure_result.payload["decision_output"]["action"] == "summit"
+    assert any(
+        bias["bias_id"] == "sunk_cost_bias"
+        for bias in summit_pressure_result.payload["media_literacy"]["detected_biases"]
+    )
+    assert any(
+        "最近安全 CP" in action
+        for action in summit_pressure_result.payload["decision_output"][
+            "alternativeActions"
+        ]
+    )
+    assert summit_pressure_result.payload["decision_output"]["runtimeSafetyTruth"] is False
+    assert summit_pressure_result.boundary.live_safety_api_calls_allowed is False
 
 
 def _assert_standard_output(decision_output: dict[str, object]) -> None:
