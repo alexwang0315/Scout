@@ -292,6 +292,37 @@ def test_full_workflow_treats_fog_photo_as_wait_permission() -> None:
     assert result.boundary.runtime_safety_truth is False
 
 
+def test_full_workflow_blocks_wind_exposed_lunch() -> None:
+    result = run_scout_ai_full_workflow(
+        "這裡是風口，我們可以在這裡吃午餐嗎？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=6,
+    )
+
+    assert result.answerability == "partial_evidence_with_missing_context"
+    assert result.selected_tool_count == 2
+    assert result.executed_tool_count == 2
+    assert result.completed_tool_count == 2
+    assert result.missing_evidence_count == 2
+    weather = _workflow_source(result, WEATHER_WINDOW_TOOL_ID)
+    contextual = _workflow_source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
+    assert weather["top_result_summary"]["decision"] == "DELAY"
+    assert contextual["top_result_summary"]["action"] == "lunch"
+    assert contextual["top_result_summary"]["decision"] == "NO_GO"
+    assert contextual["top_result_summary"]["allowed"] is False
+    assert contextual["missing_fields"] == ["remaining_safety_buffer_minutes"]
+    assert result.decision_output["answerSourceToolId"] == CONTEXTUAL_PERMISSION_TOOL_ID
+    assert result.decision_output["action"] == "lunch"
+    assert result.decision_output["decision"] == "NO_GO"
+    assert result.decision_output["allowed"] is False
+    assert result.decision_output["firstLayer"]["decision"] == "不建議吃午餐。"
+    assert "風口" in result.decision_output["firstLayer"]["reason"]
+    assert "較避風 CP" in result.decision_output["firstLayer"]["nextStep"]
+    assert "不建議吃午餐" in result.answer
+    assert result.boundary.runtime_safety_truth is False
+
+
 def test_full_workflow_blocks_split_team_summit_question() -> None:
     result = run_scout_ai_full_workflow(
         "可以讓走得快的人先去山頂嗎？",

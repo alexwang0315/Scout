@@ -131,6 +131,41 @@ def test_contextual_permission_allows_fog_wait_with_bounded_photo_cutoff() -> No
     assert result["boundary"]["runtime_safety_truth"] is False
 
 
+def test_contextual_permission_blocks_wind_exposed_lunch_even_with_buffer() -> None:
+    result = assess_scout_contextual_permission(
+        PROJECT_ROOT,
+        query="這裡是風口，我們可以在這裡吃午餐嗎？",
+        current_time="2026-06-07T12:00:00+08:00",
+        current_cp_id="CP2",
+        next_cp_id="CP3",
+        remaining_safety_buffer_minutes=45,
+        next_segment_uncertainty_minutes=5,
+        weather_reserve_minutes=5,
+        communication_status="ok",
+        equipment_status="ok",
+    )
+
+    assert result["answerability"] == "contextual_permission_decision_available"
+    assert result["action"] == "lunch"
+    assert result["decision"] == "NO_GO"
+    assert result["allowed"] is False
+    assert result["max_duration_minutes"] is None
+    assert result["leave_by"] is None
+    assert result["decision_output"]["firstLayer"]["decision"] == "不建議吃午餐。"
+    assert "風口" in result["decision_output"]["firstLayer"]["reason"]
+    assert "失溫" in result["decision_output"]["firstLayer"]["reason"]
+    assert "不能只因時間 buffer 足夠就授權" in result["field_answer"]
+    assert result["decision_output"]["firstLayer"]["nextStep"] == (
+        "不在此午餐，請再前往 CP3，到較避風處再重新評估。"
+    )
+    assert "前往 CP3 吃午餐" in result["decision_output"]["secondLayer"][
+        "alternativeActions"
+    ]
+    assert result["risk_budget"]["authorizedDurationMinutes"] == 35
+    assert "bufferAfterActionMinutes" not in result["risk_budget"]
+    assert result["boundary"]["runtime_safety_truth"] is False
+
+
 def test_contextual_permission_missing_buffer_is_conservative_no_go() -> None:
     result = assess_scout_contextual_permission(
         PROJECT_ROOT,
