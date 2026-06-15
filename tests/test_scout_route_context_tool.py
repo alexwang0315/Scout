@@ -46,6 +46,37 @@ def test_route_context_finds_candidate_viewpoint_and_experience_guidance() -> No
     assert "停留風險預算" in viewpoint["stop_guidance"]
 
 
+def test_route_context_covers_standard_natural_and_cultural_layers() -> None:
+    natural = assess_scout_route_context(
+        PROJECT_ROOT,
+        query="這段林相變化有什麼可以觀察？",
+        limit=4,
+    )
+    natural_hints = set(natural["filters"]["context_hints"])
+
+    assert natural["answerability"] == "route_context_available"
+    assert natural["decision"] == "CONDITIONAL_GO"
+    assert natural["route_context"]["role"] == "Experience Guide"
+    assert natural["boundary"]["runtime_safety_truth"] is False
+    assert "route_context" in natural_hints
+    assert "viewpoint" in natural_hints
+    assert "Experience Guide 候選" in natural["field_answer"]
+
+    cultural = assess_scout_route_context(
+        PROJECT_ROOT,
+        query="有哪些原住民族地名或舊社脈絡？",
+        limit=4,
+    )
+    cultural_hints = set(cultural["filters"]["context_hints"])
+
+    assert cultural["answerability"] == "route_context_available"
+    assert cultural["decision"] == "CONDITIONAL_GO"
+    assert cultural["route_context"]["role"] == "Experience Guide"
+    assert cultural["boundary"]["runtime_safety_truth"] is False
+    assert {"resource_context", "route_context"}.issubset(cultural_hints)
+    assert "Experience Guide 候選" in cultural["field_answer"]
+
+
 def test_route_context_keeps_risk_context_from_becoming_stop_permission() -> None:
     result = assess_scout_route_context(
         PROJECT_ROOT,

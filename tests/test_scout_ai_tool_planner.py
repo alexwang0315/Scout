@@ -722,6 +722,23 @@ def test_planner_selects_route_context_for_route_briefing_questions() -> None:
         assert item.boundary.runtime_safety_truth is False
 
 
+def test_planner_selects_route_context_for_standard_context_layers() -> None:
+    questions = [
+        "這段林相變化有什麼可以觀察？",
+        "有哪些原住民族地名或舊社脈絡？",
+    ]
+
+    for question in questions:
+        plan = plan_scout_ai_tools(_query(question), project_root=PROJECT_ROOT)
+        item = _single_tool(plan, ROUTE_CONTEXT_TOOL_ID)
+        assert item.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+        assert item.implementation_status == "ready_current_tool"
+        assert item.request is not None
+        assert item.request["tool_id"] == ROUTE_CONTEXT_TOOL_ID
+        assert item.missing_fields == []
+        assert item.boundary.runtime_safety_truth is False
+
+
 def test_planner_selects_pace_guardian_for_team_pace_fit_question() -> None:
     plan = plan_scout_ai_tools(
         _query("隊伍腳程是否能準時抵達下一個 CP？最慢者需要前移午餐點嗎？"),

@@ -898,9 +898,45 @@ def _context_hints(query: str) -> set[str]:
         hints.add("rest_area")
     if _has_any(text, ("水", "山屋", "營地", "保線所", "resource", "hut", "camp")):
         hints.add("resource_context")
-    if _has_any(text, ("文化", "歷史", "故事", "地名", "遺構", "context")):
+    if _has_any(
+        text,
+        (
+            "文化",
+            "歷史",
+            "故事",
+            "地名",
+            "遺構",
+            "原住民族",
+            "原住民",
+            "舊社",
+            "獵徑",
+            "警備道",
+            "隘勇線",
+            "地方傳說",
+            "土地使用",
+            "context",
+        ),
+    ):
         hints.add("route_context")
         hints.add("resource_context")
+    if _has_any(
+        text,
+        (
+            "自然",
+            "林相",
+            "林相變化",
+            "植被",
+            "植群",
+            "植物",
+            "鳥類",
+            "溪流觀察",
+            "地質",
+            "岩層",
+            "季節",
+            "地形",
+        ),
+    ):
+        hints.add("route_context")
     if _has_any(text, ("岔路", "方向", "轉彎", "導航")):
         hints.add("navigation_context")
     if _has_any(text, ("建議幾天", "幾天幾夜", "活動簡報", "briefing")):
@@ -925,6 +961,24 @@ def _looks_like_generic_route_context_query(query: str) -> bool:
             "幾天幾夜",
             "活動簡報",
             "沿途有哪些",
+            "自然觀察",
+            "林相",
+            "林相變化",
+            "植被",
+            "植群",
+            "植物",
+            "鳥類",
+            "溪流觀察",
+            "地質",
+            "岩層",
+            "原住民族",
+            "原住民",
+            "舊社",
+            "獵徑",
+            "警備道",
+            "隘勇線",
+            "地方傳說",
+            "土地使用",
             "停3分鐘",
             "停三分鐘",
             "值得停",
