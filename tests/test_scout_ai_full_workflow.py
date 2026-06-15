@@ -441,6 +441,30 @@ def test_full_workflow_prices_extra_stop_time_against_buffer() -> None:
     assert result.boundary.runtime_safety_truth is False
 
 
+def test_full_workflow_routes_generic_leave_by_to_contextual_stop() -> None:
+    result = run_scout_ai_full_workflow(
+        "現在可以做嗎？什麼時間前必須離開？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=4,
+    )
+
+    assert result.answerability == "partial_evidence_with_missing_context"
+    assert result.selected_tool_count == 1
+    assert result.failed_tool_count == 0
+    source = result.sources[0]
+    assert source["tool_id"] == CONTEXTUAL_PERMISSION_TOOL_ID
+    assert source["top_result_summary"]["action"] == "stop"
+    assert source["top_result_summary"]["decision"] == "NO_GO"
+    assert source["missing_fields"] == ["remaining_safety_buffer_minutes"]
+    assert result.decision_output["answerSourceToolId"] == CONTEXTUAL_PERMISSION_TOOL_ID
+    assert result.decision_output["action"] == "stop"
+    assert result.decision_output["decision"] == "NO_GO"
+    assert result.decision_output["firstLayer"]["decision"] == "不建議停留。"
+    assert result.decision_output["runtimeSafetyTruth"] is False
+    assert result.boundary.runtime_safety_truth is False
+
+
 def test_full_workflow_prices_film_stop_budget_phrase_with_next_cp() -> None:
     result = run_scout_ai_full_workflow(
         "前方 CP4 約 42 分鐘，安全 buffer 剩 21 分鐘，可以停 6 分鐘拍影片嗎？",
