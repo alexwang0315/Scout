@@ -1263,6 +1263,22 @@ def _query_reported_vulnerabilities(query: str) -> list[str]:
     add("low_blood_sugar", ("低血糖", "血糖低", "lowbloodsugar", "hypoglycemia"))
     add("anxiety", ("焦慮", "恐慌", "anxiety", "panic"))
     add("injury", ("受傷", "扭傷", "拉傷", "injury", "sprain"))
+    add(
+        "first_time_similar_route",
+        ("第一次走類似路線", "第一次走", "首次走", "firsttimeroute", "firstsimilarroute"),
+    )
+    add(
+        "rest_rhythm_mismatch",
+        (
+            "休息節奏不一致",
+            "休息節奏不同",
+            "休息不同步",
+            "休息過多",
+            "快慢組",
+            "restmismatch",
+            "restrhythmmismatch",
+        ),
+    )
     return vulnerabilities
 
 
@@ -1275,6 +1291,8 @@ def _vulnerability_label(code: str) -> str:
         "low_blood_sugar": "低血糖",
         "anxiety": "焦慮",
         "injury": "受傷",
+        "first_time_similar_route": "第一次走類似路線",
+        "rest_rhythm_mismatch": "休息節奏不一致",
     }
     return labels.get(str(code), str(code))
 
