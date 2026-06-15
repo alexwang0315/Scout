@@ -16,6 +16,7 @@ from scout_contextual_permission_tool import CONTEXTUAL_PERMISSION_TOOL_ID
 from scout_route_context_tool import ROUTE_CONTEXT_TOOL_ID
 from scout_route_architecture_tool import ROUTE_ARCHITECTURE_TOOL_ID
 from scout_pace_guardian_tool import PACE_GUARDIAN_TOOL_ID
+from scout_energy_vitals_tool import ENERGY_VITALS_TOOL_ID
 from scout_equipment_resource_tool import EQUIPMENT_RESOURCE_TOOL_ID
 from scout_team_status_tool import TEAM_STATUS_TOOL_ID
 from scout_post_trip_review_tool import POST_TRIP_REVIEW_TOOL_ID
@@ -35,6 +36,7 @@ from scout_workspace_search_tools import MAJOR_POINT_TOOL_ID
 
 ARTIFACT_KIND = "scout_ai_answer_synthesis"
 ARTIFACT_VERSION = "scout_ai_answer_synthesis.v0"
+STANDARD_GAP_OVERVIEW_SOURCE_ID = "scout.ai.standard_gap_overview.v0"
 
 STANDARD_SIX_POWER_COVERAGE = (
     (
@@ -67,6 +69,103 @@ STANDARD_SIX_POWER_COVERAGE = (
         "Navigation & Terrain Intelligence / 地形導航力",
         (NAVIGATION_TERRAIN_TOOL_ID,),
     ),
+)
+
+STANDARD_IMPLEMENTATION_COVERAGE = (
+    {
+        "label": "六力動態決策",
+        "sections": "5-11",
+        "tool_ids": (
+            ROUTE_CONTEXT_TOOL_ID,
+            PACE_GUARDIAN_TOOL_ID,
+            ROUTE_READINESS_TOOL_ID,
+            CONTEXTUAL_PERMISSION_TOOL_ID,
+            ROUTE_ARCHITECTURE_TOOL_ID,
+            WEATHER_WINDOW_TOOL_ID,
+            NAVIGATION_TERRAIN_TOOL_ID,
+        ),
+        "gap": "六力工具路徑已接上；仍需在每次具體出發/現場問題回到對應 decision output，不可平均成總分。",
+    },
+    {
+        "label": "CP Graph / Risk Budget / 微決策",
+        "sections": "12-14",
+        "tool_ids": (
+            ROUTE_ARCHITECTURE_TOOL_ID,
+            CONTEXTUAL_PERMISSION_TOOL_ID,
+            RISK_SCORE_TOOL_ID,
+            LIVE_NAVIGATION_STATE_TOOL_ID,
+        ),
+        "gap": "已具備 CP Graph、risk budget、on-route candidate evidence；仍需以 live route/date/team evidence 重算，不可離線假設現場安全。",
+    },
+    {
+        "label": "三個 agent roles",
+        "sections": "15",
+        "tool_ids": (
+            PACE_GUARDIAN_TOOL_ID,
+            WEATHER_WINDOW_TOOL_ID,
+            RISK_SCORE_TOOL_ID,
+            ROUTE_CONTEXT_TOOL_ID,
+        ),
+        "gap": "Pace Guardian、Risk Sentinel、Experience Guide 均有工具承擔；Experience 類輸出仍必須被 safety/risk gate 約束。",
+    },
+    {
+        "label": "決策輸出與 ContextualPermission schema",
+        "sections": "16-17",
+        "tool_ids": (
+            CONTEXTUAL_PERMISSION_TOOL_ID,
+            ROUTE_READINESS_TOOL_ID,
+            WEATHER_WINDOW_TOOL_ID,
+            NAVIGATION_TERRAIN_TOOL_ID,
+            SAFETY_BOUNDARY_TOOL_ID,
+        ),
+        "gap": "核心 agent decision 已回到 ContextualPermission；仍需持續防止 raw search/catalog 類工具被當成最終 agent response。",
+    },
+    {
+        "label": "行前 / 行中 / 行後 workflow",
+        "sections": "18-20",
+        "tool_ids": (
+            ROUTE_READINESS_TOOL_ID,
+            CONTEXTUAL_PERMISSION_TOOL_ID,
+            LIVE_NAVIGATION_STATE_TOOL_ID,
+            ENERGY_VITALS_TOOL_ID,
+            POST_TRIP_REVIEW_TOOL_ID,
+        ),
+        "gap": "三段 workflow 均有 read-only decision package；行後模型更新仍維持 reviewable package，尚未自動寫回 user/route model。",
+    },
+    {
+        "label": "媒體識讀與標準情境",
+        "sections": "21,25",
+        "tool_ids": (
+            MEDIA_LITERACY_TOOL_ID,
+            CONTEXTUAL_PERMISSION_TOOL_ID,
+            PACE_GUARDIAN_TOOL_ID,
+        ),
+        "gap": "拍影片、午餐、攻頂、等霧、社群拍攝等情境已由微決策/媒體識讀路徑承擔；仍需把新情境加入同一組標準 regression。",
+    },
+    {
+        "label": "安全哲學 / 開發標準 / traceability",
+        "sections": "2,22-23,28",
+        "tool_ids": (
+            SAFETY_BOUNDARY_TOOL_ID,
+            SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID,
+            REVIEW_GAP_TOOL_ID,
+            RUNTIME_INGRESS_STATUS_TOOL_ID,
+        ),
+        "gap": "runtime safety truth、review gap、data confidence 邊界已顯式輸出；仍需保持 model output 不可改寫 safety truth。",
+    },
+    {
+        "label": "MVP 必備能力",
+        "sections": "24",
+        "tool_ids": (
+            ROUTE_READINESS_TOOL_ID,
+            ROUTE_ARCHITECTURE_TOOL_ID,
+            WEATHER_WINDOW_TOOL_ID,
+            PACE_GUARDIAN_TOOL_ID,
+            EQUIPMENT_RESOURCE_TOOL_ID,
+            TEAM_STATUS_TOOL_ID,
+        ),
+        "gap": "新手/中級山 Go/No-Go 與行中微決策已可檢視；仍需在真實專案資料中補齊裝備、隊伍與天候 evidence。",
+    },
 )
 
 
@@ -344,12 +443,19 @@ def _answer_text(
         source for source in sources if source.collection_status == "completed"
     ]
     frontline_answer = _decision_output_text(decision_output)
+    standard_gap_overview = _standard_gap_overview_answer(
+        question,
+        sources=completed_sources,
+        missing_evidence=missing_evidence,
+    )
     six_power_overview = _six_power_overview_answer(
         question,
         sources=completed_sources,
         missing_evidence=missing_evidence,
     )
-    if six_power_overview:
+    if standard_gap_overview:
+        parts.append(standard_gap_overview)
+    elif six_power_overview:
         parts.append(six_power_overview)
     if frontline_answer:
         parts.append(frontline_answer)
@@ -362,7 +468,7 @@ def _answer_text(
     )
     if primary_answer and not _answer_part_already_covered(primary_answer, parts):
         parts.append(primary_answer)
-    if not six_power_overview:
+    if not six_power_overview and not standard_gap_overview:
         contextual_answer = (
             None
             if _should_skip_secondary_contextual_answer(
@@ -433,7 +539,7 @@ def _answer_text(
     if completed_sources:
         source_text = (
             _completed_source_brief_text
-            if six_power_overview
+            if six_power_overview or standard_gap_overview
             else _completed_source_text
         )
         parts.append(
@@ -818,6 +924,17 @@ def _answer_decision_output(
     completed_sources = [
         source for source in sources if source.collection_status == "completed"
     ]
+    if _looks_like_standard_gap_overview_question(question) and completed_sources:
+        return _with_data_confidence(
+            _standard_gap_overview_decision_output(
+                sources=completed_sources,
+                missing_evidence=missing_evidence,
+                answerability=answerability,
+            ),
+            sources=sources,
+            missing_evidence=missing_evidence,
+            answerability=answerability,
+        )
     if _looks_like_standard_six_power_overview_question(question) and completed_sources:
         return _with_data_confidence(
             _six_power_overview_decision_output(
@@ -1278,6 +1395,210 @@ def _generic_decision_output_from_source(
         "runtimeSafetyTruth": False,
         "standardAlignment": _decision_output_standard_alignment(),
     }
+
+
+def _standard_gap_overview_decision_output(
+    *,
+    sources: list[ScoutAiAnswerSource],
+    missing_evidence: list[dict[str, Any]],
+    answerability: str,
+) -> dict[str, Any]:
+    coverage_lines = [
+        _standard_gap_coverage_line(group, sources=sources)
+        for group in STANDARD_IMPLEMENTATION_COVERAGE
+    ]
+    complete_group_count = sum(
+        1
+        for group in STANDARD_IMPLEMENTATION_COVERAGE
+        if _standard_gap_group_has_source(group, sources=sources)
+    )
+    missing_tool_ids = {
+        str(item.get("tool_id"))
+        for item in missing_evidence
+        if str(item.get("tool_id") or "").strip()
+    }
+    six_power_lines = [
+        _six_power_status_line(label, system_name, tool_ids, sources=sources)
+        for label, system_name, tool_ids in STANDARD_SIX_POWER_COVERAGE
+    ]
+    missing_summary = (
+        f"本次仍有 {len(missing_tool_ids)} 個工具 evidence 缺口。"
+        if missing_tool_ids
+        else "本次標準覆蓋工具都有 deterministic evidence path 可檢視。"
+    )
+    standard_gap_summary = (
+        f"{complete_group_count}/{len(STANDARD_IMPLEMENTATION_COVERAGE)} 個標準能力群"
+        "已有本次完成的 deterministic source。"
+    )
+    return {
+        "decisionObjectSchema": "ContextualPermission",
+        "answerSourceToolId": STANDARD_GAP_OVERVIEW_SOURCE_ID,
+        "answerability": answerability,
+        "action": "review_standard_implementation_gap",
+        "decision": "GUIDED_ONLY",
+        "allowed": False,
+        "mainReasons": [
+            standard_gap_summary,
+            missing_summary,
+            "此輸出是標準落差檢視，不是出發批准、現場授權或 runtime safety truth。",
+        ],
+        "cost": {
+            "coveredStandardGroupCount": complete_group_count,
+            "standardGroupCount": len(STANDARD_IMPLEMENTATION_COVERAGE),
+            "missingEvidenceToolCount": len(missing_tool_ids),
+            "runtimeSafetyTruthImpact": "No runtime safety truth was created or changed.",
+        },
+        "nextAction": (
+            "先補本次缺 evidence 或仍薄弱的標準群；真正出發/現場問題必須回到"
+            " Route Readiness 或 Contextual Permission decision output。"
+        ),
+        "confidence": "medium" if not missing_tool_ids else "low",
+        "uncertaintyNotes": [
+            _missing_evidence_text(item) for item in missing_evidence
+        ],
+        "firstLayer": {
+            "decision": "Scout 主要六力與核心 workflow 已接成 deterministic decision path。",
+            "limit": (
+                "標準差異檢視不得視為產品完成證明、出發批准或 runtime safety truth；"
+                "產品文案/UX 原則仍需另以介面驗收。"
+            ),
+            "reason": standard_gap_summary + " " + missing_summary,
+            "nextStep": "逐項查看仍薄弱的標準群，選下一個可驗證 slice 補實作與測試。",
+        },
+        "secondLayer": {
+            "details": [
+                "六力狀態：" + "；".join(six_power_lines),
+                *coverage_lines,
+            ],
+            "uncertaintyNotes": [
+                _missing_evidence_text(item) for item in missing_evidence
+            ],
+            "residualRisk": [
+                "0/1/3/26/27/30 等產品北極星與文案原則不能只靠工具矩陣證明，需要 UI/UX 與端到端產品驗收。",
+                "Raw search/catalog evidence 仍不能取代 ContextualPermission decision output。",
+                "Fixture evidence 通過不等於真實路線、真實天候、真實隊伍資料已完整。",
+            ],
+            "requiredConditions": [
+                "每個標準能力群都必須保留 source report、decision output、missing fields 與 safety boundary。",
+                "六力只能作為動態決策入口，不得平均成單一靜態分數。",
+                "出發與現場授權必須回到具體工具，而不是標準總覽。",
+            ],
+            "alternativeActions": [
+                "改問六力實作狀態，查看六力 coverage。",
+                "改問出發前 Go/No-Go，驗證 Route Readiness 是否整合 route/date/team/weather/equipment。",
+                "改問特定情境，例如午餐、等霧、攻頂、社群拍攝點，驗證 Section 25 微決策。",
+            ],
+        },
+        "runtimeSafetyTruth": False,
+        "standardAlignment": [
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 0 Product North Star",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 5 Scout 六力 system transformation",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 16 required decision output format",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 17 ContextualPermission schema",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 23 acceptance criteria",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 24 MVP Scope",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 30 Final Standard",
+        ],
+    }
+
+
+def _standard_gap_overview_answer(
+    question: str,
+    *,
+    sources: list[ScoutAiAnswerSource],
+    missing_evidence: list[dict[str, Any]],
+) -> str | None:
+    if not _looks_like_standard_gap_overview_question(question):
+        return None
+    coverage_lines = [
+        _standard_gap_coverage_line(group, sources=sources)
+        for group in STANDARD_IMPLEMENTATION_COVERAGE
+    ]
+    six_power_lines = [
+        _six_power_status_line(label, system_name, tool_ids, sources=sources)
+        for label, system_name, tool_ids in STANDARD_SIX_POWER_COVERAGE
+    ]
+    missing_tool_ids = {
+        str(item.get("tool_id"))
+        for item in missing_evidence
+        if str(item.get("tool_id") or "").strip()
+    }
+    missing_summary = (
+        f"本次仍有 {len(missing_tool_ids)} 個工具 evidence 缺口。"
+        if missing_tool_ids
+        else "本次標準覆蓋工具都有 deterministic evidence path 可檢視。"
+    )
+    return (
+        "標準差異檢視：六力都有實作在 Scout AI 工具/證據/答案路徑內："
+        + "；".join(six_power_lines)
+        + "。主要標準群："
+        + "；".join(coverage_lines)
+        + "。主要仍需補強：產品北極星、文案與 UI/UX 原則不能只靠工具矩陣證明；"
+        "raw search/catalog evidence 不能取代 ContextualPermission；fixture 通過不等於真實路線資料已完整。"
+        + missing_summary
+        + " 這是差異檢視，不是出發批准或 runtime safety truth。"
+    )
+
+
+def _standard_gap_coverage_line(
+    group: dict[str, Any],
+    *,
+    sources: list[ScoutAiAnswerSource],
+) -> str:
+    tool_ids = tuple(str(tool_id) for tool_id in group.get("tool_ids", ()))
+    matched_sources = [source for source in sources if source.tool_id in tool_ids]
+    label = str(group.get("label") or "標準群")
+    sections = str(group.get("sections") or "unknown")
+    if not matched_sources:
+        joined_tools = ", ".join(tool_ids)
+        return f"{label}(sections {sections}) 未完成本次 evidence collection ({joined_tools})"
+    missing_fields = [
+        f"{source.tool_id}:{field}"
+        for source in matched_sources
+        for field in source.missing_fields
+    ]
+    if missing_fields:
+        fields = ", ".join(missing_fields[:3])
+        suffix = "..." if len(missing_fields) > 3 else ""
+        return f"{label}(sections {sections}) 已實作但本次仍缺 {fields}{suffix}"
+    joined_tools = " + ".join(source.tool_id for source in matched_sources)
+    gap = str(group.get("gap") or "")
+    return f"{label}(sections {sections}) 已實作並可查詢 ({joined_tools})；{gap}"
+
+
+def _standard_gap_group_has_source(
+    group: dict[str, Any],
+    *,
+    sources: list[ScoutAiAnswerSource],
+) -> bool:
+    tool_ids = {str(tool_id) for tool_id in group.get("tool_ids", ())}
+    return any(source.tool_id in tool_ids for source in sources)
+
+
+def _looks_like_standard_gap_overview_question(question: str) -> bool:
+    text = _normalize_question_text(question)
+    standard_terms = (
+        "scout_outdoor_ai_agent_standard",
+        "outdooraiagentstandard",
+        "標準文件",
+        "scout標準",
+        "這份文件",
+        "產品標準",
+        "agentstandard",
+    )
+    gap_terms = (
+        "缺口",
+        "還缺",
+        "差異",
+        "落差",
+        "補齊",
+        "補起來",
+        "檢視",
+        "對照",
+        "覆蓋",
+        "實作狀態",
+    )
+    return _text_has_any(text, standard_terms) and _text_has_any(text, gap_terms)
 
 
 def _six_power_overview_decision_output(

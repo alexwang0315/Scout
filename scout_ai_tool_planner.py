@@ -88,6 +88,9 @@ def plan_scout_ai_tools(
     contracts = default_tool_contracts()
     normalized_question = _normalize(query.question)
     selected: list[tuple[str, str]] = []
+    standard_gap_overview_question = _looks_like_standard_gap_overview_question(
+        normalized_question,
+    )
     six_power_overview_question = _looks_like_standard_six_power_overview_question(
         normalized_question,
     )
@@ -96,6 +99,8 @@ def plan_scout_ai_tools(
         normalized_question,
     ) and not _has_complete_route_readiness_confirmation_bundle(normalized_question)
 
+    if standard_gap_overview_question:
+        _append_standard_gap_overview_tools(selected)
     if six_power_overview_question:
         _append_standard_six_power_tools(selected)
     if _looks_like_workspace_catalog_question(normalized_question):
@@ -370,6 +375,86 @@ def _append_standard_six_power_tools(selected: list[tuple[str, str]]) -> None:
         ),
     )
     for tool_id, reason in six_power_tools:
+        if not _has_tool(selected, tool_id):
+            selected.append((tool_id, reason))
+
+
+def _append_standard_gap_overview_tools(selected: list[tuple[str, str]]) -> None:
+    standard_tools = (
+        (
+            ROUTE_CONTEXT_TOOL_ID,
+            "Standard gap review needs Route Context Intelligence for exploration/product context coverage.",
+        ),
+        (
+            PACE_GUARDIAN_TOOL_ID,
+            "Standard gap review needs Pace Guardian for Readiness & Pace Fit and slowest-member basis.",
+        ),
+        (
+            ROUTE_READINESS_TOOL_ID,
+            "Standard gap review needs pre-trip Go/No-Go package, MVP required outputs, and conservative missing-evidence gates.",
+        ),
+        (
+            CONTEXTUAL_PERMISSION_TOOL_ID,
+            "Standard gap review needs Contextual Permissioning for bounded micro-decisions and risk budget cost.",
+        ),
+        (
+            ROUTE_ARCHITECTURE_TOOL_ID,
+            "Standard gap review needs Route Architecture / CP Graph coverage.",
+        ),
+        (
+            WEATHER_WINDOW_TOOL_ID,
+            "Standard gap review needs Weather-to-Decision coverage.",
+        ),
+        (
+            NAVIGATION_TERRAIN_TOOL_ID,
+            "Standard gap review needs Navigation & Terrain / map-readiness coverage.",
+        ),
+        (
+            LIVE_NAVIGATION_STATE_TOOL_ID,
+            "Standard gap review needs on-route navigation state and live candidate evidence boundaries.",
+        ),
+        (
+            RISK_SCORE_TOOL_ID,
+            "Standard gap review needs Risk Sentinel evidence for risk budget and forward hazard review.",
+        ),
+        (
+            ENERGY_VITALS_TOOL_ID,
+            "Standard gap review needs energy, fatigue, hydration, nutrition, and vitals evidence.",
+        ),
+        (
+            EQUIPMENT_RESOURCE_TOOL_ID,
+            "Standard gap review needs equipment/resource readiness and offline-map/GPX checks.",
+        ),
+        (
+            TEAM_STATUS_TOOL_ID,
+            "Standard gap review needs team status, remote contact, and weakest-link governance.",
+        ),
+        (
+            POST_TRIP_REVIEW_TOOL_ID,
+            "Standard gap review needs post-trip learning package and no-writeback governance.",
+        ),
+        (
+            MEDIA_LITERACY_TOOL_ID,
+            "Standard gap review needs media literacy product-function coverage.",
+        ),
+        (
+            SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID,
+            "Standard gap review needs high-risk escalation and incident playbook boundaries.",
+        ),
+        (
+            SAFETY_BOUNDARY_TOOL_ID,
+            "Standard gap review needs safety truth/admission boundary coverage.",
+        ),
+        (
+            REVIEW_GAP_TOOL_ID,
+            "Standard gap review needs provenance/review gap and traceability coverage.",
+        ),
+        (
+            RUNTIME_INGRESS_STATUS_TOOL_ID,
+            "Standard gap review needs runtime ingress/data-confidence boundary coverage.",
+        ),
+    )
+    for tool_id, reason in standard_tools:
         if not _has_tool(selected, tool_id):
             selected.append((tool_id, reason))
 
@@ -1595,6 +1680,31 @@ def _looks_like_standard_six_power_overview_question(text: str) -> bool:
             "靜態分數",
         ),
     )
+
+
+def _looks_like_standard_gap_overview_question(text: str) -> bool:
+    standard_terms = (
+        "scout_outdoor_ai_agent_standard",
+        "outdooraiagentstandard",
+        "標準文件",
+        "scout標準",
+        "這份文件",
+        "產品標準",
+        "agentstandard",
+    )
+    gap_terms = (
+        "缺口",
+        "還缺",
+        "差異",
+        "落差",
+        "補齊",
+        "補起來",
+        "檢視",
+        "對照",
+        "覆蓋",
+        "實作狀態",
+    )
+    return _has_any(text, standard_terms) and _has_any(text, gap_terms)
 
 
 def _looks_like_workspace_catalog_question(text: str) -> bool:

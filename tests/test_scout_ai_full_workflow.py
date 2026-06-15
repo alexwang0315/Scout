@@ -211,6 +211,42 @@ def test_full_workflow_surfaces_standard_six_power_coverage_overview() -> None:
     assert result.boundary.runtime_safety_truth is False
 
 
+def test_full_workflow_surfaces_standard_gap_overview_before_six_power() -> None:
+    result = run_scout_ai_full_workflow(
+        "請以 SCOUT_OUTDOOR_AI_AGENT_STANDARD 為基準，檢視目前 Scout 體系還缺哪些東西，六力是否都有實作？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=8,
+    )
+
+    source_ids = {source["tool_id"] for source in result.sources}
+    assert {
+        ROUTE_CONTEXT_TOOL_ID,
+        PACE_GUARDIAN_TOOL_ID,
+        ROUTE_READINESS_TOOL_ID,
+        CONTEXTUAL_PERMISSION_TOOL_ID,
+        ROUTE_ARCHITECTURE_TOOL_ID,
+        WEATHER_WINDOW_TOOL_ID,
+        NAVIGATION_TERRAIN_TOOL_ID,
+        MEDIA_LITERACY_TOOL_ID,
+        SAFETY_BOUNDARY_TOOL_ID,
+        REVIEW_GAP_TOOL_ID,
+    }.issubset(source_ids)
+    assert result.decision_output["answerSourceToolId"] == (
+        "scout.ai.standard_gap_overview.v0"
+    )
+    assert result.decision_output["decision"] == "GUIDED_ONLY"
+    assert result.decision_output["runtimeSafetyTruth"] is False
+    assert result.decision_output["cost"]["standardGroupCount"] == 8
+    assert result.answer.startswith("標準差異檢視：")
+    assert "六力都有實作在 Scout AI 工具/證據/答案路徑內" in result.answer
+    assert "產品北極星" in result.answer
+    assert "不是出發批准或 runtime safety truth" in result.answer
+    assert "六力覆蓋檢視：" not in result.answer
+    assert result.workflow_policy.model_provider_used is False
+    assert result.boundary.runtime_safety_truth is False
+
+
 def test_full_workflow_routes_scout_ai_meta_power_to_six_capability_tools() -> None:
     result = run_scout_ai_full_workflow(
         "Scout AI 力如何把六力轉成動態決策，而不是靜態分數表？",
