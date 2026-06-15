@@ -2200,6 +2200,27 @@ def test_full_workflow_runs_route_readiness_question() -> None:
     assert result.boundary.runtime_safety_truth is False
 
 
+def test_full_workflow_routes_top_risk_sources_to_route_readiness() -> None:
+    result = run_scout_ai_full_workflow(
+        "主要風險來源前三項是什麼？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=4,
+    )
+
+    source = _workflow_source(result, ROUTE_READINESS_TOOL_ID)
+    package = source["top_result_summary"]["pretrip_decision_package"]
+    top_risks = package["required_outputs"]["top_risk_sources"]
+    assert top_risks
+    assert len(top_risks) >= 3
+    assert result.decision_output["answerSourceToolId"] == ROUTE_READINESS_TOOL_ID
+    assert result.decision_output["decision"] == "DELAY"
+    assert "標準出發前決策包" in result.answer
+    assert "前三風險" in result.answer
+    assert "Missing required pre-trip input" in result.answer
+    assert result.boundary.runtime_safety_truth is False
+
+
 def test_full_workflow_expands_generic_pretrip_departure_to_mvp_evidence() -> None:
     result = run_scout_ai_full_workflow(
         "這個隊伍明天可以出發嗎？",
