@@ -21,6 +21,7 @@ from scout_contextual_permission_tool import CONTEXTUAL_PERMISSION_TOOL_ID
 from scout_route_context_tool import ROUTE_CONTEXT_TOOL_ID
 from scout_pace_guardian_tool import PACE_GUARDIAN_TOOL_ID
 from scout_equipment_resource_tool import EQUIPMENT_RESOURCE_TOOL_ID
+from scout_team_status_tool import TEAM_STATUS_TOOL_ID
 from scout_route_architecture_tool import ROUTE_ARCHITECTURE_TOOL_ID
 
 
@@ -497,6 +498,31 @@ def _execute_ready_current_tool(tool_id: str, arguments: dict[str, Any]) -> dict
             ),
         )
 
+    if tool_id == TEAM_STATUS_TOOL_ID:
+        from scout_team_status_tool import assess_scout_team_status
+
+        return assess_scout_team_status(
+            project_root,
+            query=query,
+            team_status_path=_str_or_none(arguments.get("team_status_path")),
+            resource_plan_path=_str_or_none(arguments.get("resource_plan_path")),
+            remote_contact_summary_path=_str_or_none(
+                arguments.get("remote_contact_summary_path")
+            ),
+            team_members=_raw_list_arg(arguments, "team_members"),
+            communication_status=_str_or_none(arguments.get("communication_status")),
+            checkin_overdue_minutes=_float_or_none(
+                arguments.get("checkin_overdue_minutes")
+            ),
+            planned_checkin_interval_minutes=_float_or_none(
+                arguments.get("planned_checkin_interval_minutes")
+            ),
+            rendezvous_point=_str_or_none(arguments.get("rendezvous_point")),
+            split_team=_bool_or_none(arguments.get("split_team")),
+            all_accounted_for=_bool_or_none(arguments.get("all_accounted_for")),
+            last_heard_minutes=_float_or_none(arguments.get("last_heard_minutes")),
+        )
+
     raise ValueError(f"tool is not executable: {tool_id}")
 
 
@@ -559,6 +585,7 @@ def _completed_missing_fields(tool_id: str, payload: dict[str, Any]) -> list[str
         CONTEXTUAL_PERMISSION_TOOL_ID,
         PACE_GUARDIAN_TOOL_ID,
         EQUIPMENT_RESOURCE_TOOL_ID,
+        TEAM_STATUS_TOOL_ID,
     }:
         return []
     value = payload.get("missing_fields")

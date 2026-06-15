@@ -12,6 +12,7 @@ from scout_ai_tool_planner import (
     ROUTE_ARCHITECTURE_TOOL_ID,
     PACE_GUARDIAN_TOOL_ID,
     EQUIPMENT_RESOURCE_TOOL_ID,
+    TEAM_STATUS_TOOL_ID,
     SAFETY_BOUNDARY_TOOL_ID,
     WEATHER_WINDOW_TOOL_ID,
     ScoutAiToolPlanItemStatus,
@@ -161,6 +162,21 @@ def test_planner_selects_equipment_resource_for_device_and_water_question() -> N
     assert item.implementation_status == "ready_current_tool"
     assert item.request is not None
     assert item.request["tool_id"] == EQUIPMENT_RESOURCE_TOOL_ID
+    assert item.missing_fields == []
+    assert item.boundary.runtime_safety_truth is False
+
+
+def test_planner_selects_team_status_for_rear_group_and_checkin_question() -> None:
+    plan = plan_scout_ai_tools(
+        _query("後隊在哪？最後一次有效位置多久前？留守回報準備好了嗎？"),
+        project_root=PROJECT_ROOT,
+    )
+
+    item = _single_tool(plan, TEAM_STATUS_TOOL_ID)
+    assert item.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+    assert item.implementation_status == "ready_current_tool"
+    assert item.request is not None
+    assert item.request["tool_id"] == TEAM_STATUS_TOOL_ID
     assert item.missing_fields == []
     assert item.boundary.runtime_safety_truth is False
 
