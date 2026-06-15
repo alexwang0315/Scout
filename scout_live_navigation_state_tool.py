@@ -120,6 +120,10 @@ def assess_scout_live_navigation_state(
         decision=navigation_decision,
         missing_fields=missing_fields,
     )
+    decision_output = _decision_output(
+        decision=navigation_decision,
+        missing_fields=missing_fields,
+    )
     return {
         "artifact_kind": LIVE_NAVIGATION_STATE_OUTPUT_KIND,
         "tool_id": LIVE_NAVIGATION_STATE_TOOL_ID,
@@ -135,6 +139,7 @@ def assess_scout_live_navigation_state(
         ),
         "decision": navigation_decision["decision"],
         "field_answer": field_answer,
+        "decision_output": decision_output,
         "missing_fields": missing_fields,
         "provided_fields": provided_fields,
         "navigation_terrain": navigation_terrain,
@@ -158,6 +163,7 @@ def assess_scout_live_navigation_state(
                     "position_quality_status"
                 ],
                 "field_answer": field_answer,
+                "decision_output": decision_output,
                 "candidate_only": True,
                 "runtime_safety_truth": False,
             }
@@ -363,6 +369,182 @@ def _field_answer(
         f"下一步：{decision['next_action']} "
         "此為 Navigation & Terrain 候選判斷，不是 runtime safety truth；不得觸發 /safety、SOS、outbound send 或硬體控制。"
     )
+
+
+def _decision_output(
+    *,
+    decision: dict[str, Any],
+    missing_fields: list[str],
+) -> dict[str, Any]:
+    decision_label = str(decision["decision"])
+    allowed = decision_label in {"GO", "CONDITIONAL_GO"}
+    reasons = [str(item) for item in decision.get("main_reasons", []) if str(item)]
+    if not reasons and missing_fields:
+        reasons = ["缺少 " + "、".join(missing_fields[:5])]
+    if not reasons:
+        reasons = [f"route_fit_status={decision.get('route_fit_status')}"]
+    uncertainty_notes = _uncertainty_notes(
+        decision=decision,
+        missing_fields=missing_fields,
+    )
+    required_conditions = _required_conditions(
+        decision=decision,
+        missing_fields=missing_fields,
+    )
+    alternative_actions = _navigation_alternatives(decision=decision)
+    details = [
+        f"route_fit_status={decision.get('route_fit_status')}",
+        f"position_quality_status={decision.get('position_quality_status')}",
+        f"terrain_caution_flags={','.join(decision.get('terrain_caution_flags') or []) or 'none'}",
+        str(decision.get("action_limit") or ""),
+    ]
+    return {
+        "role": "Micro-Decision Agent",
+        "format": "SCOUT_OUTDOOR_AI_AGENT_STANDARD.section16",
+        "decisionObjectSchema": "ContextualPermission",
+        "text": "\n".join(
+            (
+                f"[決策] {_decision_phrase(decision_label, allowed=allowed)}",
+                f"[限制] {_limit_phrase(decision)}",
+                f"[原因] {' / '.join(reasons[:2])}",
+                f"[下一步] {decision['next_action']}",
+            )
+        ),
+        "firstLayer": {
+            "decision": _decision_phrase(decision_label, allowed=allowed),
+            "limit": _limit_phrase(decision),
+            "reason": " / ".join(reasons[:2]),
+            "nextStep": decision["next_action"],
+        },
+        "secondLayer": {
+            "details": [detail for detail in details if detail],
+            "uncertaintyNotes": uncertainty_notes,
+            "residualRisk": [
+                "Caller-provided navigation snapshot is candidate evidence only.",
+                "Runtime safety truth, /safety, SOS, outbound send, and hardware control were not triggered.",
+            ],
+            "requiredConditions": required_conditions,
+            "alternativeActions": alternative_actions,
+        },
+        "action": _navigation_action(decision_label),
+        "decision": decision_label,
+        "allowed": allowed,
+        "locationConstraint": _limit_phrase(decision),
+        "mainReasons": reasons[:3],
+        "cost": {
+            "retreatImpact": "Do not consume retreat buffer by expanding off-route uncertainty.",
+            "daylightImpact": "Recompute daylight and CP buffer before extending movement.",
+        },
+        "nextAction": decision["next_action"],
+        "confidence": "low" if uncertainty_notes else "medium",
+        "uncertaintyNotes": uncertainty_notes,
+        "residualRisk": [
+            "Candidate navigation guidance only.",
+            "Live runtime admission and map evidence remain separate.",
+        ],
+        "requiredConditions": required_conditions,
+        "alternativeActions": alternative_actions,
+        "standardAlignment": [
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 16 required decision output format",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 17 ContextualPermission schema",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 19.2 required on-route output",
+        ],
+        "runtimeSafetyTruth": False,
+    }
+
+
+def _decision_phrase(decision: str, *, allowed: bool) -> str:
+    if decision == "GO":
+        return "可以沿路線走廊前進。"
+    if decision == "CONDITIONAL_GO":
+        return "可以保守前進到下一個可信 CP。"
+    if decision == "GUIDED_ONLY":
+        return "只能做保守引導。"
+    if decision == "CHANGE_PLAN":
+        return "必須先停止推進並修正路線。"
+    if decision == "DELAY":
+        return "暫緩判斷，先取得可靠位置。"
+    if decision == "NO_GO":
+        return "不建議前進或下切。"
+    if decision == "ESCALATE":
+        return "需要升級處理。"
+    return "可以。" if allowed else "不建議。"
+
+
+def _limit_phrase(decision: dict[str, Any]) -> str:
+    decision_label = str(decision.get("decision") or "")
+    if decision_label == "DELAY":
+        return "不得判斷岔路、偏離或下切；先取得可靠位置與路線對照。"
+    if decision_label == "NO_GO":
+        return "不得下切、走捷徑或離開主線；回到可信 CP、開闊點或原路 anchor 重新定位。"
+    if decision_label == "GUIDED_ONLY":
+        return "不得確認岔路或下降決策；只做保守引導並改善定位品質。"
+    if decision_label == "CHANGE_PLAN":
+        return "不得繼續進入未知地形；先停止推進並回到可信 anchor。"
+    if decision_label == "CONDITIONAL_GO":
+        return "不得離開地圖走廊；到下一個 CP 或數分鐘內重新核對。"
+    if decision_label == "GO":
+        return "維持在路線走廊內；下一個 CP 重新計算位置與地形風險。"
+    return "不得離開已知路線走廊；到下一個可信 CP 前持續核對。"
+
+
+def _navigation_action(decision: str) -> str:
+    if decision in {"NO_GO", "CHANGE_PLAN", "DELAY"}:
+        return "retreat" if decision == "NO_GO" else "continue"
+    return "continue"
+
+
+def _uncertainty_notes(
+    *,
+    decision: dict[str, Any],
+    missing_fields: list[str],
+) -> list[str]:
+    notes = []
+    if missing_fields:
+        notes.append("Missing fields: " + ", ".join(missing_fields[:8]))
+    if decision.get("route_fit_status") == "route_fit_unknown":
+        notes.append("Route fit is unknown from this snapshot.")
+    if decision.get("position_quality_status") in {"poor_quality", "partial_quality"}:
+        notes.append(f"Position quality is {decision.get('position_quality_status')}.")
+    return notes
+
+
+def _required_conditions(
+    *,
+    decision: dict[str, Any],
+    missing_fields: list[str],
+) -> list[str]:
+    conditions = []
+    if missing_fields:
+        conditions.append("Provide complete position, quality, route-fit, and anchor fields.")
+    if decision.get("position_quality_status") in {"poor_quality", "partial_quality"}:
+        conditions.append("Improve GNSS/INS-DR quality before confirming branch or descent decisions.")
+    if decision.get("route_fit_status") in {"route_fit_unknown", "off_route_candidate"}:
+        conditions.append("Reconcile position with offline map, GPX, CP Graph, and last reliable anchor.")
+    return conditions
+
+
+def _navigation_alternatives(*, decision: dict[str, Any]) -> list[str]:
+    decision_label = decision.get("decision")
+    if decision_label == "NO_GO":
+        return [
+            "回到最近可信 CP 或原路 anchor。",
+            "留在主線或開闊點重新定位。",
+            "不要下切溪谷、乾溝或離開主線。",
+        ]
+    if decision_label in {"DELAY", "GUIDED_ONLY"}:
+        return [
+            "停止擴大偏差。",
+            "核對離線地圖與 GPX。",
+            "移動到開闊安全位置後重新取樣。",
+        ]
+    if decision_label == "CHANGE_PLAN":
+        return [
+            "停止往未知地形推進。",
+            "回到上一個可信 anchor。",
+            "重新比對路線走廊後再決策。",
+        ]
+    return ["在下一個 CP 重新計算位置、heading 與 terrain risk。"]
 
 
 def _route_fit_status(

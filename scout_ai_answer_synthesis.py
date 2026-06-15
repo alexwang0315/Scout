@@ -64,6 +64,7 @@ class ScoutAiAnswerSynthesisOutput(ScoutAiToolBaseModel):
     question: str
     answerability: str
     answer: str
+    decision_output: dict[str, Any] = Field(default_factory=dict)
     evidence_collection: dict[str, Any]
     evidence_collection_verified: Literal[True] = True
     completed_source_count: int = Field(ge=0)
@@ -131,6 +132,12 @@ def synthesize_scout_ai_answer_from_evidence(
         selected_tool_count=collection.selected_tool_count,
     )
     limitations = _limitations(answerability)
+    decision_output = _answer_decision_output(
+        collection.question,
+        sources=sources,
+        missing_evidence=missing_evidence,
+        answerability=answerability,
+    )
 
     return ScoutAiAnswerSynthesisOutput(
         project_id=collection.project_id,
@@ -144,6 +151,7 @@ def synthesize_scout_ai_answer_from_evidence(
             missing_evidence=missing_evidence,
             answerability=answerability,
         ),
+        decision_output=decision_output,
         evidence_collection=collection.model_dump(mode="json"),
         completed_source_count=completed_count,
         missing_evidence_count=len(missing_evidence),
@@ -179,6 +187,7 @@ def _source_from_record(record: dict[str, Any]) -> ScoutAiAnswerSource:
         "departure_gate",
         "readiness_state",
         "readiness_governance",
+        "pretrip_decision_package",
         "weather_daylight_state",
         "route_context",
         "media_literacy",
@@ -199,6 +208,7 @@ def _source_from_record(record: dict[str, Any]) -> ScoutAiAnswerSource:
         "post_trip_feedback",
         "after_action_next_plan",
         "model_update_candidates",
+        "post_trip_learning_package",
         "review_governance",
         "privacy_share_policy",
         "pace_guardian",
@@ -331,12 +341,69 @@ def _answer_text(
 
 def _completed_source_text(source: ScoutAiAnswerSource) -> str:
     top = source.top_result_summary
-    top_text = ", ".join(f"{key}={value}" for key, value in top.items()) if top else "no top result"
+    top_text = (
+        ", ".join(f"{key}={_summary_value_text(key, value)}" for key, value in top.items())
+        if top
+        else "no top result"
+    )
     return (
         f"{source.tool_id} completed"
         f" result_count={source.result_count if source.result_count is not None else 'unknown'}"
         f" top[{top_text}]"
     )
+
+
+def _summary_value_text(key: str, value: Any) -> str:
+    if key == "pretrip_decision_package" and isinstance(value, dict):
+        outputs = (
+            value.get("required_outputs")
+            if isinstance(value.get("required_outputs"), dict)
+            else {}
+        )
+        traceability = (
+            value.get("traceability")
+            if isinstance(value.get("traceability"), dict)
+            else {}
+        )
+        reasons = (
+            traceability.get("reason_records")
+            if isinstance(traceability.get("reason_records"), dict)
+            else {}
+        )
+        return (
+            "{decision="
+            + str(outputs.get("pretrip_decision"))
+            + f", top_risk_count={len(outputs.get('top_risk_sources') or [])}"
+            + f", missing_field_count={reasons.get('missing_field_count')}}}"
+        )
+    if isinstance(value, dict):
+        preferred_keys = (
+            "role",
+            "decision",
+            "answerability",
+            "status",
+            "available",
+            "checkpoint_count",
+            "segment_count",
+            "runtime_safety_truth",
+            "candidate_only",
+        )
+        parts = [
+            f"{item_key}={value[item_key]}"
+            for item_key in preferred_keys
+            if item_key in value and value[item_key] is not None
+        ]
+        if parts:
+            return "{" + ", ".join(parts[:4]) + "}"
+        return "{keys=" + ",".join(list(value)[:4]) + "}"
+    if isinstance(value, list):
+        if len(value) <= 3 and all(not isinstance(item, (dict, list)) for item in value):
+            return "[" + ", ".join(str(item) for item in value) + "]"
+        return f"list[{len(value)}]"
+    text = str(value)
+    if len(text) > 160:
+        return text[:157] + "..."
+    return text
 
 
 def _missing_evidence_text(item: dict[str, Any]) -> str:
@@ -356,6 +423,349 @@ def _limitations(answerability: str) -> list[str]:
         "Candidate/planning evidence was not promoted to runtime safety truth.",
         "No /safety/* call, Phase 1 mutation, Brain/ObservedFact/HumanReview write, outbound send, or hardware control was performed.",
     ]
+
+
+def _answer_decision_output(
+    question: str,
+    *,
+    sources: list[ScoutAiAnswerSource],
+    missing_evidence: list[dict[str, Any]],
+    answerability: str,
+) -> dict[str, Any]:
+    completed_sources = [
+        source for source in sources if source.collection_status == "completed"
+    ]
+    for source in completed_sources:
+        native = source.top_result_summary.get("decision_output")
+        if isinstance(native, dict) and native:
+            return {
+                **native,
+                "answerSourceToolId": source.tool_id,
+                "answerability": answerability,
+                "runtimeSafetyTruth": False,
+                "standardAlignment": _decision_output_standard_alignment(),
+            }
+    for source in completed_sources:
+        package = source.top_result_summary.get("pretrip_decision_package")
+        if isinstance(package, dict) and package:
+            return _decision_output_from_pretrip_package(
+                source=source,
+                package=package,
+                answerability=answerability,
+            )
+    for source in completed_sources:
+        output = _generic_decision_output_from_source(
+            source=source,
+            question=question,
+            answerability=answerability,
+        )
+        if output:
+            return output
+    return {
+        "decisionObjectSchema": "ContextualPermission",
+        "answerSourceToolId": None,
+        "action": "continue",
+        "decision": "DELAY" if missing_evidence else "ESCALATE",
+        "allowed": False,
+        "mainReasons": [
+            "No deterministic Scout decision source was available for this answer."
+        ],
+        "nextAction": "補齊 deterministic Scout evidence，再重新詢問。",
+        "confidence": "low",
+        "uncertaintyNotes": [
+            _missing_evidence_text(item) for item in missing_evidence
+        ],
+        "firstLayer": {
+            "decision": "暫緩判斷。",
+            "limit": "不得把此回答當成現場授權。",
+            "reason": "缺少可追溯的 Scout 決策證據。",
+            "nextStep": "補齊 deterministic Scout evidence，再重新詢問。",
+        },
+        "secondLayer": {
+            "details": [],
+            "uncertaintyNotes": [
+                _missing_evidence_text(item) for item in missing_evidence
+            ],
+            "residualRisk": ["No runtime safety truth was created."],
+            "requiredConditions": ["Provide deterministic Scout evidence."],
+            "alternativeActions": ["Ask a narrower question with available workspace evidence."],
+        },
+        "runtimeSafetyTruth": False,
+        "standardAlignment": _decision_output_standard_alignment(),
+    }
+
+
+def _decision_output_from_pretrip_package(
+    *,
+    source: ScoutAiAnswerSource,
+    package: dict[str, Any],
+    answerability: str,
+) -> dict[str, Any]:
+    outputs = (
+        package.get("required_outputs")
+        if isinstance(package.get("required_outputs"), dict)
+        else {}
+    )
+    limits = (
+        package.get("decision_limits")
+        if isinstance(package.get("decision_limits"), dict)
+        else {}
+    )
+    traceability = (
+        package.get("traceability")
+        if isinstance(package.get("traceability"), dict)
+        else {}
+    )
+    decision = str(outputs.get("pretrip_decision") or "DELAY")
+    allowed = bool(limits.get("allowed"))
+    main_reasons = _risk_reasons(outputs.get("top_risk_sources"))
+    required_conditions = _text_list(outputs.get("required_conditions"))
+    alternatives = _text_list(outputs.get("alternatives_or_short_routes"))
+    residual_risk = _text_list(outputs.get("residual_risk"))
+    latest_turnaround = (
+        outputs.get("latest_turnaround")
+        if isinstance(outputs.get("latest_turnaround"), dict)
+        else {}
+    )
+    stop_limits = _stop_limit_lines(outputs.get("not_recommended_stop_points"))
+    limit = _pretrip_first_layer_limit(
+        decision=decision,
+        allowed=allowed,
+        limits=limits,
+        latest_turnaround=latest_turnaround,
+    )
+    next_action = str(limits.get("next_action") or "補齊出發前必要條件後重新評估。")
+    uncertainty_notes = _missing_field_uncertainty(traceability)
+    details = [
+        detail
+        for detail in (
+            _cp_graph_detail(outputs.get("cp_graph")),
+            _turnaround_limit_text(latest_turnaround),
+            *stop_limits[:2],
+        )
+        if detail
+    ]
+    return {
+        "decisionObjectSchema": "ContextualPermission",
+        "answerSourceToolId": source.tool_id,
+        "answerability": answerability,
+        "action": "continue",
+        "decision": decision,
+        "allowed": allowed,
+        "mainReasons": main_reasons
+        or ["Pre-trip readiness decision package did not expose top risks."],
+        "cost": {
+            "timeBufferChangeMinutes": 0 if not allowed else None,
+            "daylightImpact": "Departure remains gated by daylight and review evidence.",
+            "retreatImpact": "Turnaround and alternatives must remain visible before runtime handoff.",
+            "teamPaceImpact": "Slowest or most vulnerable member basis is required.",
+        },
+        "nextAction": next_action,
+        "confidence": "low" if uncertainty_notes else "medium",
+        "uncertaintyNotes": uncertainty_notes,
+        "residualRisk": residual_risk,
+        "requiredConditions": required_conditions,
+        "alternativeActions": alternatives,
+        "firstLayer": {
+            "decision": _decision_phrase(decision=decision, allowed=allowed),
+            "limit": limit,
+            "reason": " / ".join((main_reasons or ["缺少前三風險摘要"])[:2]),
+            "nextStep": next_action,
+        },
+        "secondLayer": {
+            "details": details,
+            "uncertaintyNotes": uncertainty_notes,
+            "residualRisk": residual_risk,
+            "requiredConditions": required_conditions,
+            "alternativeActions": alternatives,
+        },
+        "runtimeSafetyTruth": False,
+        "standardAlignment": _decision_output_standard_alignment(),
+    }
+
+
+def _generic_decision_output_from_source(
+    *,
+    source: ScoutAiAnswerSource,
+    question: str,
+    answerability: str,
+) -> dict[str, Any] | None:
+    summary = source.top_result_summary
+    decision = summary.get("decision")
+    if not decision:
+        return None
+    next_action = _first_text(
+        summary.get("next_action"),
+        summary.get("nextAction"),
+        "依照 Scout 工具輸出的下一步重新評估。",
+    )
+    field_answer = _first_text(summary.get("field_answer"), question) or question
+    main_reasons = _text_list(summary.get("main_reasons")) or _text_list(
+        summary.get("mainReasons")
+    )
+    if not main_reasons:
+        main_reasons = [field_answer[:160]]
+    allowed = bool(summary.get("allowed")) if "allowed" in summary else str(decision) in {
+        "GO",
+        "CONDITIONAL_GO",
+    }
+    return {
+        "decisionObjectSchema": "ContextualPermission",
+        "answerSourceToolId": source.tool_id,
+        "answerability": answerability,
+        "action": "continue",
+        "decision": str(decision),
+        "allowed": allowed,
+        "mainReasons": main_reasons[:3],
+        "nextAction": next_action,
+        "confidence": "low" if source.missing_fields else "medium",
+        "uncertaintyNotes": [
+            f"Missing field: {field}" for field in source.missing_fields
+        ],
+        "firstLayer": {
+            "decision": _decision_phrase(decision=str(decision), allowed=allowed),
+            "limit": "依工具 field_answer 的限制執行；不可視為 runtime safety truth。",
+            "reason": " / ".join(main_reasons[:2]),
+            "nextStep": next_action,
+        },
+        "secondLayer": {
+            "details": [field_answer],
+            "uncertaintyNotes": [
+                f"Missing field: {field}" for field in source.missing_fields
+            ],
+            "residualRisk": ["Candidate/planning evidence only."],
+            "requiredConditions": [],
+            "alternativeActions": [],
+        },
+        "runtimeSafetyTruth": False,
+        "standardAlignment": _decision_output_standard_alignment(),
+    }
+
+
+def _decision_output_standard_alignment() -> list[str]:
+    return [
+        "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 16 required decision output format",
+        "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 17 ContextualPermission schema",
+        "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 23 acceptance criteria",
+    ]
+
+
+def _risk_reasons(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    reasons = []
+    for item in value:
+        if isinstance(item, dict) and item.get("reason"):
+            reasons.append(str(item["reason"]))
+    return reasons
+
+
+def _text_list(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item) for item in value if str(item).strip()]
+
+
+def _first_text(*values: Any) -> str | None:
+    for value in values:
+        if value is None:
+            continue
+        text = str(value).strip()
+        if text:
+            return text
+    return None
+
+
+def _stop_limit_lines(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    lines = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        label = item.get("label")
+        policy = item.get("policy")
+        rationale = item.get("rationale")
+        line = " ".join(str(part) for part in (label, policy, rationale) if part)
+        if line:
+            lines.append(line)
+    return lines
+
+
+def _missing_field_uncertainty(traceability: dict[str, Any]) -> list[str]:
+    reason_records = (
+        traceability.get("reason_records")
+        if isinstance(traceability.get("reason_records"), dict)
+        else {}
+    )
+    count = reason_records.get("missing_field_count")
+    if not count:
+        return []
+    return [f"{count} required pre-trip field(s) remain missing or unreviewed."]
+
+
+def _cp_graph_detail(value: Any) -> str:
+    if not isinstance(value, dict):
+        return ""
+    if not value.get("available"):
+        return "CP Graph is not available."
+    return (
+        "CP Graph available: "
+        f"{value.get('checkpoint_count')} checkpoint(s), "
+        f"{value.get('segment_count')} segment(s)."
+    )
+
+
+def _turnaround_limit_text(value: Any) -> str:
+    if not isinstance(value, dict):
+        return ""
+    checkpoint = value.get("checkpoint_name")
+    deadline = value.get("deadline")
+    if checkpoint and deadline:
+        return f"最晚折返點 {checkpoint}，deadline {deadline}。"
+    if checkpoint:
+        return f"最晚折返點 {checkpoint}。"
+    if deadline:
+        return f"最晚折返 deadline {deadline}。"
+    return ""
+
+
+def _pretrip_first_layer_limit(
+    *,
+    decision: str,
+    allowed: bool,
+    limits: dict[str, Any],
+    latest_turnaround: dict[str, Any],
+) -> str:
+    turnaround = _turnaround_limit_text(latest_turnaround)
+    if not allowed or decision in {"DELAY", "NO_GO", "CHANGE_PLAN", "ESCALATE"}:
+        if turnaround:
+            return f"不得出發或增加停留；補齊缺口並重跑 departure gate。{turnaround}"
+        return "不得出發或增加停留；補齊缺口並重跑 departure gate。"
+    buffer_cost = _first_text(limits.get("buffer_cost_statement"))
+    if turnaround and buffer_cost:
+        return f"{turnaround}任何停留都必須保留安全 buffer。"
+    if turnaround:
+        return turnaround
+    return "不得把此回答當成 departure approval；仍需人工出發關卡。"
+
+
+def _decision_phrase(*, decision: str, allowed: bool) -> str:
+    if decision == "GO":
+        return "可以出發，但仍需通過人工 departure gate。"
+    if decision == "CONDITIONAL_GO":
+        return "可以條件式出發。"
+    if decision == "GUIDED_ONLY":
+        return "不建議自主前往。"
+    if decision == "CHANGE_PLAN":
+        return "必須改計畫。"
+    if decision == "DELAY":
+        return "建議延後。"
+    if decision == "NO_GO":
+        return "不建議出發。"
+    if decision == "ESCALATE":
+        return "需要升級處理。"
+    return "可以。" if allowed else "不建議。"
 
 
 def _contextual_permission_answer(sources: list[ScoutAiAnswerSource]) -> str | None:
@@ -383,9 +793,99 @@ def _route_readiness_answer(sources: list[ScoutAiAnswerSource]) -> str | None:
         if source.tool_id != ROUTE_READINESS_TOOL_ID:
             continue
         field_answer = source.top_result_summary.get("field_answer")
+        package = source.top_result_summary.get("pretrip_decision_package")
+        package_answer = (
+            _pretrip_decision_package_answer(package)
+            if isinstance(package, dict)
+            else None
+        )
         if isinstance(field_answer, str) and field_answer.strip():
+            if package_answer:
+                return f"{field_answer.strip()} {package_answer}"
             return field_answer.strip()
+        if package_answer:
+            return package_answer
     return None
+
+
+def _pretrip_decision_package_answer(package: dict[str, Any]) -> str | None:
+    outputs = (
+        package.get("required_outputs")
+        if isinstance(package.get("required_outputs"), dict)
+        else {}
+    )
+    limits = (
+        package.get("decision_limits")
+        if isinstance(package.get("decision_limits"), dict)
+        else {}
+    )
+    decision = outputs.get("pretrip_decision")
+    top_risks = _summarize_risk_reasons(outputs.get("top_risk_sources"))
+    required_conditions = _summarize_text_items(outputs.get("required_conditions"), limit=2)
+    stop_limits = _summarize_stop_limits(
+        outputs.get("not_recommended_stop_points"),
+        limits=limits,
+    )
+    pieces = []
+    if decision:
+        pieces.append(f"標準出發前決策包：decision={decision}")
+    if top_risks:
+        pieces.append(f"前三風險={top_risks}")
+    if required_conditions:
+        pieces.append(f"必補條件={required_conditions}")
+    latest_turnaround = (
+        outputs.get("latest_turnaround")
+        if isinstance(outputs.get("latest_turnaround"), dict)
+        else {}
+    )
+    checkpoint = latest_turnaround.get("checkpoint_name")
+    deadline = latest_turnaround.get("deadline")
+    if checkpoint or deadline:
+        pieces.append(
+            "最晚折返="
+            + " ".join(str(value) for value in (checkpoint, deadline) if value)
+        )
+    if stop_limits:
+        pieces.append(f"停留限制={stop_limits}")
+    if not pieces:
+        return None
+    return "；".join(pieces) + "。"
+
+
+def _summarize_risk_reasons(value: Any) -> str:
+    if not isinstance(value, list):
+        return ""
+    reasons = []
+    for item in value[:3]:
+        if not isinstance(item, dict):
+            continue
+        reason = item.get("reason")
+        if reason:
+            reasons.append(str(reason))
+    return " / ".join(reasons)
+
+
+def _summarize_text_items(value: Any, *, limit: int) -> str:
+    if not isinstance(value, list):
+        return ""
+    return " / ".join(str(item) for item in value[:limit] if str(item).strip())
+
+
+def _summarize_stop_limits(value: Any, *, limits: dict[str, Any]) -> str:
+    parts = []
+    if isinstance(value, list):
+        for item in value[:2]:
+            if not isinstance(item, dict):
+                continue
+            label = item.get("label")
+            policy = item.get("policy")
+            text = " ".join(str(part) for part in (label, policy) if part)
+            if text:
+                parts.append(text)
+    buffer_cost = limits.get("buffer_cost_statement")
+    if buffer_cost:
+        parts.append(str(buffer_cost))
+    return " / ".join(parts)
 
 
 def _route_context_answer(sources: list[ScoutAiAnswerSource]) -> str | None:
@@ -522,6 +1022,7 @@ def _top_result_summary(value: Any) -> dict[str, Any]:
         "departure_gate",
         "readiness_state",
         "readiness_governance",
+        "pretrip_decision_package",
         "weather_daylight_state",
         "route_context",
         "media_literacy",
@@ -543,6 +1044,7 @@ def _top_result_summary(value: Any) -> dict[str, Any]:
         "post_trip_feedback",
         "after_action_next_plan",
         "model_update_candidates",
+        "post_trip_learning_package",
         "review_governance",
         "privacy_share_policy",
         "critical_gaps",

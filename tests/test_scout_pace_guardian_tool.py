@@ -46,6 +46,13 @@ def test_pace_guardian_changes_plan_for_slowest_member_pressure() -> None:
     assert result["status"] == "completed"
     assert result["answerability"] == "pace_fit_decision_available"
     assert result["decision"] == "CHANGE_PLAN"
+    assert result["decision_output"]["decisionObjectSchema"] == "ContextualPermission"
+    assert result["decision_output"]["decision"] == "CHANGE_PLAN"
+    assert result["decision_output"]["firstLayer"]["decision"] == (
+        "不建議照原計畫推進。"
+    )
+    assert "不要用平均腳程" in result["decision_output"]["firstLayer"]["limit"]
+    assert result["decision_output"]["runtimeSafetyTruth"] is False
     assert result["source_status"] == "candidate_only"
     assert result["pace_guardian"]["role"] == "Pace Guardian"
     assert result["pace_guardian"]["basis"] == "slowest_member_and_most_vulnerable_link"
@@ -69,6 +76,10 @@ def test_pace_guardian_reports_missing_member_pace_from_resource_plan() -> None:
 
     assert result["answerability"] == "pace_fit_missing_required_fields"
     assert result["decision"] == "NO_GO"
+    assert result["decision_output"]["decision"] == "NO_GO"
+    assert result["decision_output"]["firstLayer"]["decision"] == (
+        "不建議用目前腳程資料繼續判斷。"
+    )
     assert result["missing_fields"] == ["member_pace_profile"]
     assert result["team_pace_fit"]["member_count"] == 2
     assert result["team_pace_fit"]["members_with_pace_count"] == 0

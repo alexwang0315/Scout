@@ -32,6 +32,15 @@ def test_media_literacy_blocks_social_photo_pressure_on_risk_context() -> None:
     assert "fresh_weather_or_route_condition_review" in result["missing_fields"]
     assert "媒體識讀判斷" in result["field_answer"]
     assert "runtime safety truth" in result["field_answer"]
+    assert result["decision_output"]["decisionObjectSchema"] == "ContextualPermission"
+    assert result["decision_output"]["decision"] == "NO_GO"
+    assert result["decision_output"]["allowed"] is False
+    assert result["decision_output"]["firstLayer"]["decision"] == (
+        "不建議為媒體點位停留或改線。"
+    )
+    assert "不得為拍照" in result["decision_output"]["firstLayer"]["limit"]
+    assert result["decision_output"]["secondLayer"]["alternativeActions"]
+    assert result["decision_output"]["runtimeSafetyTruth"] is False
     assert result["boundary"]["runtime_safety_truth"] is False
     assert result["boundary"]["outbound_send_performed"] is False
 
@@ -52,6 +61,11 @@ def test_media_literacy_guided_content_requires_guided_or_equivalent_support() -
         for bias in result["media_literacy"]["detected_biases"]
     )
     assert result["media_literacy"]["next_action"].startswith("若沒有嚮導")
+    assert result["decision_output"]["decision"] == "GUIDED_ONLY"
+    assert result["decision_output"]["firstLayer"]["decision"] == (
+        "不建議自主複製媒體路線。"
+    )
+    assert "嚮導" in result["decision_output"]["firstLayer"]["limit"]
     assert result["boundary"]["live_safety_api_calls_allowed"] is False
 
 

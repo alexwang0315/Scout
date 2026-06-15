@@ -147,6 +147,14 @@ def assess_scout_route_architecture(
         decision=route_decision,
         missing_fields=missing_fields,
     )
+    decision_output = _decision_output(
+        decision=route_decision,
+        route_architecture=route_architecture,
+        cp_nodes=cp_nodes,
+        graph_edges=graph_edges,
+        missing_fields=missing_fields,
+        field_answer=field_answer,
+    )
 
     return {
         "artifact_kind": ROUTE_ARCHITECTURE_OUTPUT_KIND,
@@ -158,6 +166,7 @@ def assess_scout_route_architecture(
         "answerability": answerability,
         "source_status": "candidate_only",
         "decision": route_decision["decision"],
+        "decision_output": decision_output,
         "field_answer": field_answer,
         "missing_fields": missing_fields,
         "route_architecture": route_architecture,
@@ -185,6 +194,7 @@ def assess_scout_route_architecture(
             {
                 "label": "route architecture decision",
                 "decision": route_decision["decision"],
+                "decision_output": decision_output,
                 "answerability": answerability,
                 "route_type": route_architecture["route_type"],
                 "turn_back": route_architecture["turn_back"],
@@ -445,6 +455,207 @@ def _field_answer(
         f"下一步：{decision['next_action']} "
         "此為 Route Architecture / CP Graph 候選判斷，不是 runtime safety truth；不得觸發 /safety、SOS、outbound send 或硬體控制。"
     )
+
+
+def _decision_output(
+    *,
+    decision: dict[str, Any],
+    route_architecture: dict[str, Any],
+    cp_nodes: list[dict[str, Any]],
+    graph_edges: list[dict[str, Any]],
+    missing_fields: list[str],
+    field_answer: str,
+) -> dict[str, Any]:
+    decision_label = str(decision.get("decision") or "DELAY")
+    allowed = decision_label in {"GO", "CONDITIONAL_GO"}
+    reasons = _decision_reasons(decision=decision, missing_fields=missing_fields)
+    uncertainty_notes = [f"Missing field: {field}" for field in missing_fields]
+    required_conditions = _required_conditions(
+        decision=decision,
+        route_architecture=route_architecture,
+        missing_fields=missing_fields,
+    )
+    alternatives = _string_list(route_architecture.get("alternative_plan_options"))
+    first_layer = {
+        "decision": _decision_phrase(decision_label, allowed=allowed),
+        "limit": _decision_limit_phrase(
+            decision=decision_label,
+            route_decision=decision,
+            route_architecture=route_architecture,
+        ),
+        "reason": " / ".join(reasons[:2]),
+        "nextStep": str(decision.get("next_action") or "補齊 CP Graph 後重新評估。"),
+    }
+    second_layer = {
+        "details": _decision_details(
+            route_architecture=route_architecture,
+            cp_nodes=cp_nodes,
+            graph_edges=graph_edges,
+            field_answer=field_answer,
+        ),
+        "uncertaintyNotes": uncertainty_notes,
+        "residualRisk": [
+            "CP Graph and route architecture evidence are candidate-only.",
+            "Weather, pace, team status, and runtime admission remain separate gates.",
+            "No runtime safety truth was created.",
+        ],
+        "requiredConditions": required_conditions,
+        "alternativeActions": alternatives,
+    }
+    return {
+        "role": "Micro-Decision Agent",
+        "format": "SCOUT_OUTDOOR_AI_AGENT_STANDARD.section16",
+        "decisionObjectSchema": "ContextualPermission",
+        "text": "\n".join(
+            (
+                f"[決策] {first_layer['decision']}",
+                f"[限制] {first_layer['limit']}",
+                f"[原因] {first_layer['reason']}",
+                f"[下一步] {first_layer['nextStep']}",
+            )
+        ),
+        "firstLayer": first_layer,
+        "secondLayer": second_layer,
+        "action": "route_architecture_navigation",
+        "decision": decision_label,
+        "allowed": allowed,
+        "locationConstraint": first_layer["limit"],
+        "mainReasons": reasons[:3],
+        "cost": {
+            "checkpointCount": len(cp_nodes),
+            "segmentCount": len(graph_edges),
+            "hardPointCount": len(route_architecture.get("hard_points") or []),
+            "retreatOptionCount": route_architecture.get("retreat_option_count"),
+        },
+        "nextAction": first_layer["nextStep"],
+        "confidence": "low" if uncertainty_notes else "medium",
+        "uncertaintyNotes": uncertainty_notes,
+        "residualRisk": second_layer["residualRisk"],
+        "requiredConditions": required_conditions,
+        "alternativeActions": alternatives,
+        "standardAlignment": [
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 9 Route Architecture Intelligence",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 12 Checkpoint Graph",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 16 required decision output format",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 17 ContextualPermission schema",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 23 acceptance criteria",
+        ],
+        "runtimeSafetyTruth": False,
+    }
+
+
+def _decision_reasons(
+    *, decision: dict[str, Any], missing_fields: list[str]
+) -> list[str]:
+    reasons = _string_list(decision.get("main_reasons"))
+    if missing_fields:
+        reasons.append("缺少 " + "、".join(missing_fields[:5]))
+    if not reasons:
+        reasons.append("CP Graph and route architecture evidence are available.")
+    return _dedupe(reasons)
+
+
+def _required_conditions(
+    *,
+    decision: dict[str, Any],
+    route_architecture: dict[str, Any],
+    missing_fields: list[str],
+) -> list[str]:
+    required = [f"Provide {field}." for field in missing_fields]
+    if decision.get("decision") in {"CHANGE_PLAN", "CONDITIONAL_GO"}:
+        required.append("Re-check weather, pace, team status, and retreat buffer at the next CP.")
+    if not route_architecture.get("retreat_options"):
+        required.append("Review retreat or short-route alternatives before committing beyond hard points.")
+    if not required:
+        required.append("Keep CP Graph monitoring active through the next checkpoint.")
+    return _dedupe(required)
+
+
+def _decision_phrase(decision: str, *, allowed: bool) -> str:
+    if decision == "CHANGE_PLAN":
+        return "不建議照原路線往後段推進。"
+    if decision == "DELAY":
+        return "暫緩路線結構判斷。"
+    if decision == "CONDITIONAL_GO":
+        return "可依 CP Graph 推進，但必須保留折返窗口。"
+    if decision == "GO" and allowed:
+        return "可依 CP Graph 行進。"
+    return "暫緩判斷。"
+
+
+def _decision_limit_phrase(
+    *,
+    decision: str,
+    route_decision: dict[str, Any],
+    route_architecture: dict[str, Any],
+) -> str:
+    if decision == "CHANGE_PLAN":
+        return "未完成人工覆核前，不建議延續原路線到折返點後方或更高成本後段。"
+    if decision == "DELAY":
+        return "不得只依路線名稱、距離或爬升做撤退、折返或替代路線判斷。"
+    if decision == "CONDITIONAL_GO" and route_architecture.get("hard_points"):
+        return "不得在難點群前消耗 buffer；通過前後都要重新檢查時間、天氣與隊伍速度。"
+    if decision == "CONDITIONAL_GO":
+        return str(
+            route_decision.get("action_limit")
+            or "只有在撤退/短版替代方案可見時，才可視為候選通過。"
+        )
+    return "這不是 runtime 出發或通行授權；仍需天氣、腳程與安全 runtime gate。"
+
+
+def _decision_details(
+    *,
+    route_architecture: dict[str, Any],
+    cp_nodes: list[dict[str, Any]],
+    graph_edges: list[dict[str, Any]],
+    field_answer: str,
+) -> list[str]:
+    details = [
+        field_answer,
+        f"route_type={route_architecture.get('route_type')}",
+        f"cp_graph={len(cp_nodes)} node(s), {len(graph_edges)} edge(s)",
+    ]
+    turn_back = route_architecture.get("turn_back")
+    if isinstance(turn_back, dict) and turn_back.get("turn_back_checkpoint_name"):
+        details.append(
+            "turn_back="
+            + str(turn_back.get("turn_back_checkpoint_name"))
+            + f", eta={turn_back.get('turn_back_eta')}"
+        )
+    hard_points = route_architecture.get("hard_points")
+    if isinstance(hard_points, list) and hard_points:
+        first = hard_points[0]
+        if isinstance(first, dict):
+            details.append(
+                "top_hard_point="
+                + str(first.get("segment_id"))
+                + f", reasons={','.join(_string_list(first.get('architecture_risk_reasons')))}"
+            )
+    details.append(
+        f"retreat_option_count={route_architecture.get('retreat_option_count')}"
+    )
+    return details
+
+
+def _string_list(value: Any) -> list[str]:
+    if isinstance(value, list):
+        return [str(item) for item in value if str(item).strip()]
+    if isinstance(value, tuple):
+        return [str(item) for item in value if str(item).strip()]
+    if isinstance(value, str) and value.strip():
+        return [value]
+    return []
+
+
+def _dedupe(values: list[str]) -> list[str]:
+    seen = set()
+    result = []
+    for value in values:
+        if value in seen:
+            continue
+        seen.add(value)
+        result.append(value)
+    return result
 
 
 def _edge_risk_reasons(edge: dict[str, Any], *, mean_distance: float) -> list[str]:

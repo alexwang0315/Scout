@@ -134,6 +134,12 @@ def assess_scout_route_context(
     answerability = (
         "route_context_available" if results else "route_context_missing_evidence"
     )
+    field_answer = _field_answer(results, answerability=answerability)
+    decision_output = _decision_output(
+        results=results,
+        answerability=answerability,
+        field_answer=field_answer,
+    )
     return {
         "tool_id": ROUTE_CONTEXT_TOOL_ID,
         "status": "completed",
@@ -142,6 +148,8 @@ def assess_scout_route_context(
         "assessment_kind": "read_only_route_context",
         "answerability": answerability,
         "source_status": "candidate_only",
+        "decision": decision_output["decision"],
+        "decision_output": decision_output,
         "filters": {
             "context_types": sorted(resolved_context_types) if resolved_context_types else None,
             "cp": cp,
@@ -150,11 +158,12 @@ def assess_scout_route_context(
             "query_terms": sorted(query_terms),
             "context_hints": sorted(hints),
         },
-        "field_answer": _field_answer(results, answerability=answerability),
+        "field_answer": field_answer,
         "route_context": {
             "role": "Experience Guide",
             "candidate_only": True,
             "runtime_safety_truth": False,
+            "decision_output": decision_output,
             "top_context_points": results[:3],
             "stop_permission_required": True,
             "stop_permission_tool_id": "scout.ai.contextual_permission.assess.v0",
@@ -613,6 +622,153 @@ def _field_answer(results: list[dict[str, Any]], *, answerability: str) -> str:
     )
 
 
+def _decision_output(
+    *,
+    results: list[dict[str, Any]],
+    answerability: str,
+    field_answer: str,
+) -> dict[str, Any]:
+    decision = _route_context_decision(results)
+    allowed = decision in {"GO", "CONDITIONAL_GO"}
+    reasons = _decision_reasons(results=results, answerability=answerability)
+    first_layer = {
+        "decision": _decision_phrase(decision=decision, allowed=allowed),
+        "limit": _decision_limit_phrase(decision=decision),
+        "reason": " / ".join(reasons[:2]),
+        "nextStep": _decision_next_step(decision=decision),
+    }
+    second_layer = {
+        "details": _decision_details(results=results, field_answer=field_answer),
+        "uncertaintyNotes": []
+        if results
+        else ["Route Context evidence was not available."],
+        "residualRisk": [
+            "Route context evidence is candidate-only.",
+            "Stop, wait, filming, or detour duration still requires contextual permission.",
+            "No runtime safety truth was created.",
+        ],
+        "requiredConditions": [
+            "Use contextual permission before any stop, wait, filming, or detour.",
+            "Keep weather, daylight, pace, and risk budget checks separate.",
+        ],
+        "alternativeActions": _decision_alternatives(decision=decision),
+    }
+    return {
+        "role": "Micro-Decision Agent",
+        "format": "SCOUT_OUTDOOR_AI_AGENT_STANDARD.section16",
+        "decisionObjectSchema": "ContextualPermission",
+        "text": "\n".join(
+            (
+                f"[決策] {first_layer['decision']}",
+                f"[限制] {first_layer['limit']}",
+                f"[原因] {first_layer['reason']}",
+                f"[下一步] {first_layer['nextStep']}",
+            )
+        ),
+        "firstLayer": first_layer,
+        "secondLayer": second_layer,
+        "action": "route_context_observation",
+        "decision": decision,
+        "allowed": allowed,
+        "locationConstraint": first_layer["limit"],
+        "mainReasons": reasons[:3],
+        "cost": {
+            "stopPermissionRequired": True,
+            "contextPointCount": len(results),
+            "topContextKinds": [
+                str(item.get("context_kind") or "route_context") for item in results[:3]
+            ],
+        },
+        "nextAction": first_layer["nextStep"],
+        "confidence": "medium" if results else "low",
+        "uncertaintyNotes": second_layer["uncertaintyNotes"],
+        "residualRisk": second_layer["residualRisk"],
+        "requiredConditions": second_layer["requiredConditions"],
+        "alternativeActions": second_layer["alternativeActions"],
+        "standardAlignment": [
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 6 Route Context Intelligence",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 15.3 Experience Guide",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 16 required decision output format",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 17 ContextualPermission schema",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 23 acceptance criteria",
+        ],
+        "runtimeSafetyTruth": False,
+    }
+
+
+def _route_context_decision(results: list[dict[str, Any]]) -> str:
+    if not results:
+        return "DELAY"
+    top = results[0]
+    stop_guidance = str(top.get("stop_guidance") or "")
+    if top.get("context_kind") == "risk_context" or "不建議" in stop_guidance:
+        return "NO_GO"
+    return "CONDITIONAL_GO"
+
+
+def _decision_reasons(
+    *, results: list[dict[str, Any]], answerability: str
+) -> list[str]:
+    if not results:
+        return [f"answerability={answerability}", "缺少可用路線脈絡候選資料。"]
+    reasons = []
+    for item in results[:3]:
+        label = str(item.get("label") or item.get("candidate_id") or "context point")
+        kind = str(item.get("context_kind") or "route_context")
+        reasons.append(f"{label} 是 {kind} 候選點。")
+        guidance = str(item.get("stop_guidance") or "")
+        if guidance:
+            reasons.append(guidance)
+    return _dedupe(reasons)
+
+
+def _decision_phrase(*, decision: str, allowed: bool) -> str:
+    if decision == "NO_GO":
+        return "不建議為觀察或拍攝停留。"
+    if decision == "DELAY":
+        return "暫緩觀察點判斷。"
+    if decision == "CONDITIONAL_GO" and allowed:
+        return "可作為候選觀察點。"
+    return "暫緩判斷。"
+
+
+def _decision_limit_phrase(*, decision: str) -> str:
+    if decision == "NO_GO":
+        return "不得為觀察、拍攝或社群打卡停留或繞行；若必須通過，縮短暴露時間。"
+    if decision == "DELAY":
+        return "不得因缺少脈絡證據臨時改線或停留。"
+    return "這不是停留授權；停多久、是否等待或繞行必須另用 contextual permission。"
+
+
+def _decision_next_step(*, decision: str) -> str:
+    if decision == "NO_GO":
+        return "保持原安全路線通過，改找下一個低風險觀察點。"
+    if decision == "DELAY":
+        return "補齊 route context、CP、weather/daylight 與 risk budget 後再判斷。"
+    return "若要停留、拍攝或等待，先重跑 contextual permission。"
+
+
+def _decision_alternatives(*, decision: str) -> list[str]:
+    if decision == "NO_GO":
+        return ["不停留直接通過。", "改到下一個安全 CP 或低暴露觀察點。"]
+    if decision == "DELAY":
+        return ["不要臨時改線。", "先用行前候選點做下一次 pretrip 規劃。"]
+    return ["短暫觀察後直接前往下一個 CP。", "放棄拍攝，保留天氣與回程 buffer。"]
+
+
+def _decision_details(
+    *, results: list[dict[str, Any]], field_answer: str
+) -> list[str]:
+    details = [field_answer]
+    for item in results[:3]:
+        label = str(item.get("label") or item.get("candidate_id") or "context point")
+        details.append(
+            f"{label}: context_kind={item.get('context_kind')}, "
+            f"distance_m={item.get('distance_m')}, stop_guidance={item.get('stop_guidance')}"
+        )
+    return details
+
+
 def _summaries(items: list[dict[str, Any]], filtered: list[dict[str, Any]]) -> dict[str, Any]:
     by_kind: dict[str, int] = {}
     by_evidence_type: dict[str, int] = {}
@@ -711,6 +867,17 @@ def _str_list(value: Any) -> list[str]:
     if isinstance(value, str) and value.strip():
         return [value]
     return []
+
+
+def _dedupe(values: list[str]) -> list[str]:
+    seen = set()
+    result = []
+    for value in values:
+        if value in seen:
+            continue
+        seen.add(value)
+        result.append(value)
+    return result
 
 
 def _bounded_limit(value: int) -> int:

@@ -26,6 +26,13 @@ def test_route_architecture_builds_candidate_cp_graph_and_decision() -> None:
     assert result["answerability"] == "route_architecture_available"
     assert result["source_status"] == "candidate_only"
     assert result["decision"] == "CONDITIONAL_GO"
+    assert result["decision_output"]["decisionObjectSchema"] == "ContextualPermission"
+    assert result["decision_output"]["decision"] == "CONDITIONAL_GO"
+    assert result["decision_output"]["firstLayer"]["decision"] == (
+        "可依 CP Graph 推進，但必須保留折返窗口。"
+    )
+    assert "不得在難點群前消耗 buffer" in result["decision_output"]["firstLayer"]["limit"]
+    assert result["decision_output"]["runtimeSafetyTruth"] is False
     assert result["missing_fields"] == []
     assert result["cp_graph"]["node_count"] == 124
     assert result["cp_graph"]["edge_count"] == 123
@@ -53,6 +60,9 @@ def test_route_architecture_changes_plan_after_turn_back_eta() -> None:
 
     assert result["answerability"] == "route_architecture_available"
     assert result["decision"] == "CHANGE_PLAN"
+    assert result["decision_output"]["firstLayer"]["decision"] == (
+        "不建議照原路線往後段推進。"
+    )
     assert result["route_decision"]["turn_back_checkpoint"][
         "turn_back_checkpoint_name"
     ] == "雲海保線所"

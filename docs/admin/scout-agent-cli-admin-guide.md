@@ -135,6 +135,77 @@ Current manifest count is reported by `scout_cli tools list --json`.
 | sos | `scout.sos.playbook_run` | Mock-only SOS delegated playbook after explicit SOS activation |
 | evidence | `scout.evidence.sensorlog_to_gpx` | Convert local SensorLog export to GPX |
 
+## Scout AI Route Readiness Decision Package
+
+`scout.ai.route_readiness.assess.v0` is the read-only Scout AI route readiness
+assessor. It is planner/executor surfaced rather than a `scout_cli pretrip`
+workspace-write command.
+
+The assessor now returns `pretrip_decision_package`, aligned to
+`SCOUT_OUTDOOR_AI_AGENT_STANDARD` Sec. 18.2 and Sec. 23. The package exposes the
+pre-trip decision, top risk sources, required conditions, CP Graph summary,
+latest turnaround point, suggested and not-recommended stop points,
+alternatives/short-route actions, checklist, residual risk, decision limits,
+and traceability. It remains candidate-only decision support: it does not grant
+departure approval, runtime handoff, `/safety/*`, SOS, outbound send, or hardware
+control.
+
+Scout AI answer synthesis and full workflow artifacts also expose top-level
+`decision_output`, aligned to Sec. 16 and Sec. 17. When a tool already returns a
+native decision object, Scout AI preserves it. When route readiness is the source,
+Scout AI converts `pretrip_decision_package` into a
+`ContextualPermission`-equivalent first layer and second layer so callers can
+read `[決策]`, `[限制]`, `[原因]`, and `[下一步]` fields without parsing prose.
+
+`scout.ai.live_navigation_state.assess.v0` now returns a native
+`decision_output` for Sec. 19.2 on-route navigation answers. The tool still reads
+only caller-provided snapshots, but its output includes an explicit decision,
+action/location limit, 1-2 main reasons, next step, uncertainty notes, required
+conditions, and alternatives without mutating runtime safety truth.
+
+`scout.ai.weather_window.assess.v0` returns a native `decision_output` for Sec.
+10 Weather-to-Decision and Sec. 15.2 Risk Sentinel questions. The output converts
+route-weather risk into Go / Delay / Change Plan / No-Go style field decisions,
+preserves the weather action limit, and carries route-specific conditions,
+required conditions, and alternatives without calling live providers or mutating
+runtime safety truth.
+
+`scout.ai.media_literacy.assess.v0` also returns a native `decision_output` for
+Sec. 21 media-bias moments. It turns social-photo, check-in, speed, guided-party,
+equipment, season/weather, and image-scale bias into a concrete decision about
+whether the user may treat the media target as an action objective. It remains a
+read-only bias sentinel; actual stopping, filming, waiting, or rerouting still
+requires contextual permission.
+
+`scout.ai.pace_guardian.assess.v0` returns a native `decision_output` for Sec. 7
+and Sec. 15.1 Pace Guardian questions. The first layer states whether the party
+may continue as planned or must change plan, and the limit explicitly preserves
+slowest-member basis instead of average pace. It can recommend moving lunch/rest
+earlier, shortening, or turning around, but bounded stop duration still requires
+contextual permission.
+
+`scout.ai.route_context.assess.v0` returns a native `decision_output` for Sec. 6
+and Sec. 15.3 Experience Guide questions. Candidate observation, photo, cultural,
+natural, and historical points are exposed as route context, while the first
+layer explicitly says they are not stop authorization. Risk-context points return
+a no-go style stop decision, and all waiting, filming, detour, or dwell-time
+questions still require contextual permission.
+
+`scout.ai.route_architecture.assess.v0` returns a native `decision_output` for
+Sec. 9 Route Architecture and Sec. 12 Checkpoint Graph questions. The first
+layer names whether continuing through the route structure is conditional,
+delayed, or should change plan, while the second layer exposes CP Graph size,
+turn-back point, hard-point pressure, retreat-option count, required conditions,
+and alternatives. It remains CP-graph advisory evidence, not runtime admission.
+
+`scout.ai.post_trip_review.assess.v0` returns a native `decision_output` and a
+`post_trip_learning_package` for Sec. 20 post-trip review. The package groups the
+required post-trip data collection fields, candidate model update targets, human
+review requirements, writeback policy, and traceability. It can seed the next
+pretrip baseline after review, but it never writes user pace, team pace, route
+timing, route risk, Route Context, MissionGraph, incident package, `/safety/*`,
+or Phase 2 Brain state by itself.
+
 ## Route Context Collection
 
 Route context collection is a post-import enrichment tool for

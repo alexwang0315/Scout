@@ -170,6 +170,28 @@ def assess_scout_route_readiness(
         governance=governance,
         missing_fields=missing_fields,
     )
+    debug_sources = {
+        "readiness_source": readiness_source,
+        "planned_eta_source": planned_eta_source,
+        "resource_plan_source": resource_plan_source,
+        "weather_daylight_source": weather_source,
+        "pretrip_package_source": package_source,
+        "mission_graph_source": mission_graph_source,
+        "route_comparison_source": route_comparison_source,
+    }
+    pretrip_decision_package = _pretrip_decision_package(
+        decision=decision,
+        answerability=answerability,
+        route_state=route_state,
+        readiness_state=readiness_state,
+        resource_state=resource_state,
+        weather_state=weather_state,
+        input_coverage=input_coverage,
+        missing_fields=missing_fields,
+        governance=governance,
+        source_report=source_report,
+        debug_sources=debug_sources,
+    )
 
     return {
         "artifact_kind": ROUTE_READINESS_OUTPUT_KIND,
@@ -210,6 +232,7 @@ def assess_scout_route_readiness(
         "resource_state": resource_state,
         "weather_daylight_state": weather_state,
         "readiness_governance": governance,
+        "pretrip_decision_package": pretrip_decision_package,
         "source_report": source_report,
         "result_count": 1,
         "results": [
@@ -234,15 +257,7 @@ def assess_scout_route_readiness(
             "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 24.1 MVP pre-trip Go/No-Go",
         ],
         "boundary": _closed_boundary(),
-        "debug_sources": {
-            "readiness_source": readiness_source,
-            "planned_eta_source": planned_eta_source,
-            "resource_plan_source": resource_plan_source,
-            "weather_daylight_source": weather_source,
-            "pretrip_package_source": package_source,
-            "mission_graph_source": mission_graph_source,
-            "route_comparison_source": route_comparison_source,
-        },
+        "debug_sources": debug_sources,
     }
 
 
@@ -592,6 +607,342 @@ def _decision(*, governance: dict[str, Any], missing_fields: list[str]) -> str:
     if governance["warning_gaps"] or governance["required_conditions"]:
         return "CONDITIONAL_GO"
     return "GO"
+
+
+def _pretrip_decision_package(
+    *,
+    decision: str,
+    answerability: str,
+    route_state: dict[str, Any],
+    readiness_state: dict[str, Any],
+    resource_state: dict[str, Any],
+    weather_state: dict[str, Any],
+    input_coverage: dict[str, bool],
+    missing_fields: list[str],
+    governance: dict[str, Any],
+    source_report: list[dict[str, Any]],
+    debug_sources: dict[str, str | None],
+) -> dict[str, Any]:
+    """Materialize the Sec. 18.2 required pre-trip outputs."""
+
+    top_risks = _top_risk_sources(
+        governance=governance,
+        missing_fields=missing_fields,
+        weather_state=weather_state,
+        resource_state=resource_state,
+    )
+    required_conditions = _dedupe(
+        list(governance["required_conditions"])
+        or ["Pass explicit human departure gate before runtime handoff."]
+    )
+    residual_risk = _residual_risk(
+        governance=governance,
+        weather_state=weather_state,
+        readiness_state=readiness_state,
+    )
+    stop_policy = _stop_policy(
+        decision=decision,
+        route_state=route_state,
+        governance=governance,
+        missing_fields=missing_fields,
+        debug_sources=debug_sources,
+    )
+    return {
+        "schema_version": "scout_pretrip_decision_package.v1",
+        "standard_alignment": [
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 18.2 required outputs",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 23 acceptance criteria",
+        ],
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+        "departure_approval_granted": False,
+        "human_review_required": True,
+        "answerability": answerability,
+        "required_outputs": {
+            "pretrip_decision": decision,
+            "top_risk_sources": top_risks,
+            "required_conditions": required_conditions,
+            "cp_graph": {
+                "available": bool(route_state.get("mission_graph_available")),
+                "checkpoint_count": route_state.get("checkpoint_count"),
+                "segment_count": route_state.get("segment_count"),
+                "source_ref": debug_sources.get("mission_graph_source"),
+            },
+            "latest_turnaround": {
+                "available": bool(route_state.get("turn_back_checkpoint_node_name")),
+                "checkpoint_name": route_state.get("turn_back_checkpoint_node_name"),
+                "deadline": route_state.get("turn_back_checkpoint_eta"),
+                "source_ref": debug_sources.get("planned_eta_source"),
+            },
+            "suggested_stop_points": stop_policy["suggested_stop_points"],
+            "not_recommended_stop_points": stop_policy["not_recommended_stop_points"],
+            "alternatives_or_short_routes": list(governance["alternative_actions"]),
+            "pretrip_checklist": _pretrip_checklist(
+                input_coverage=input_coverage,
+                resource_state=resource_state,
+                weather_state=weather_state,
+            ),
+            "residual_risk": residual_risk,
+        },
+        "decision_limits": {
+            "allowed": decision in {"GO", "CONDITIONAL_GO"},
+            "must_leave_by": route_state.get("turn_back_checkpoint_eta"),
+            "turnaround_checkpoint": route_state.get("turn_back_checkpoint_node_name"),
+            "buffer_cost_statement": _buffer_cost_statement(
+                decision=decision,
+                missing_fields=missing_fields,
+                governance=governance,
+            ),
+            "next_action": governance["next_action"],
+        },
+        "traceability": {
+            "source_refs": {
+                key: value
+                for key, value in debug_sources.items()
+                if value is not None
+            },
+            "source_kinds_loaded": [
+                item["source_kind"]
+                for item in source_report
+                if item.get("status") == "loaded"
+            ],
+            "reason_records": {
+                "critical_gap_count": len(governance["critical_gaps"]),
+                "warning_gap_count": len(governance["warning_gaps"]),
+                "missing_field_count": len(missing_fields),
+                "readiness_finding_count": readiness_state.get("finding_count"),
+            },
+            "raw_payloads_embedded": False,
+        },
+        "acceptance_coverage": {
+            "explicit_decision": decision
+            in {"GO", "CONDITIONAL_GO", "GUIDED_ONLY", "CHANGE_PLAN", "DELAY", "NO_GO", "ESCALATE"},
+            "limits_or_action_restrictions_included": True,
+            "buffer_cost_included": True,
+            "uncertainty_handled_conservatively": answerability.endswith(
+                "missing_required_fields"
+            )
+            or decision in {"DELAY", "NO_GO", "CHANGE_PLAN", "ESCALATE"},
+            "slowest_member_basis_required": bool(
+                input_coverage.get("slowest_team_basis")
+            )
+            or "slowest_team_basis" in missing_fields,
+            "traceable_inputs_recorded": True,
+        },
+        "boundary": _closed_boundary(),
+    }
+
+
+def _top_risk_sources(
+    *,
+    governance: dict[str, Any],
+    missing_fields: list[str],
+    weather_state: dict[str, Any],
+    resource_state: dict[str, Any],
+) -> list[dict[str, str]]:
+    risks: list[dict[str, str]] = []
+    for reason in governance["critical_gaps"]:
+        risks.append(
+            {
+                "severity": "critical",
+                "source": "readiness_governance",
+                "reason": reason,
+            }
+        )
+    for field in missing_fields:
+        risks.append(
+            {
+                "severity": "blocking_gap",
+                "source": "required_pretrip_input",
+                "reason": f"Missing required pre-trip input: {field}.",
+            }
+        )
+    for reason in governance["warning_gaps"]:
+        risks.append(
+            {
+                "severity": "warning",
+                "source": "readiness_governance",
+                "reason": reason,
+            }
+        )
+    for note in weather_state.get("hazard_notes", []):
+        risks.append(
+            {
+                "severity": "weather_uncertainty",
+                "source": "weather_daylight_evidence",
+                "reason": str(note),
+            }
+        )
+    for reason in resource_state.get("warning_candidates", []):
+        risks.append(
+            {
+                "severity": "resource_review",
+                "source": "resource_plan",
+                "reason": str(reason),
+            }
+        )
+    if not risks:
+        risks.append(
+            {
+                "severity": "residual",
+                "source": "departure_gate",
+                "reason": "Outdoor conditions can change after pre-trip review; final human departure gate is still required.",
+            }
+        )
+    ranked = []
+    for index, item in enumerate(_dedupe_risk_dicts(risks)[:3], start=1):
+        ranked.append({"rank": str(index), **item})
+    return ranked
+
+
+def _residual_risk(
+    *,
+    governance: dict[str, Any],
+    weather_state: dict[str, Any],
+    readiness_state: dict[str, Any],
+) -> list[str]:
+    risks = []
+    if governance["warning_gaps"]:
+        risks.extend(governance["warning_gaps"][:4])
+    if weather_state.get("human_review_required"):
+        risks.append("Weather/daylight evidence remains human-review-required.")
+    if readiness_state.get("warning_count"):
+        risks.append("Hard readiness warnings remain present.")
+    risks.append(
+        "Reviewed pre-trip evidence is not departure approval or runtime safety truth."
+    )
+    return _dedupe(risks)
+
+
+def _stop_policy(
+    *,
+    decision: str,
+    route_state: dict[str, Any],
+    governance: dict[str, Any],
+    missing_fields: list[str],
+    debug_sources: dict[str, str | None],
+) -> dict[str, list[dict[str, Any]]]:
+    suggested = []
+    turnaround = route_state.get("turn_back_checkpoint_node_name")
+    if turnaround:
+        suggested.append(
+            {
+                "label": turnaround,
+                "policy": "turnaround_or_reassess",
+                "latest_leave_time": route_state.get("turn_back_checkpoint_eta"),
+                "rationale": "Use this checkpoint as the explicit turn-back or reassessment point.",
+                "source_ref": debug_sources.get("planned_eta_source"),
+            }
+        )
+    if decision in {"GO", "CONDITIONAL_GO"}:
+        suggested.append(
+            {
+                "label": "Reviewed CP rest stops only",
+                "policy": "short_stop_with_departure_gate_limits",
+                "latest_leave_time": route_state.get("turn_back_checkpoint_eta"),
+                "rationale": "Only reviewed CPs may be used for discretionary rest before runtime admission.",
+                "source_ref": debug_sources.get("mission_graph_source"),
+            }
+        )
+
+    not_recommended = []
+    if missing_fields or governance["warning_gaps"] or decision not in {"GO"}:
+        not_recommended.append(
+            {
+                "label": "Unplanned photo, lunch, summit, or waiting stops",
+                "policy": "not_recommended_until_reviewed",
+                "rationale": "Required inputs, review state, or buffer limits are not fully proven.",
+            }
+        )
+    if decision in {"NO_GO", "DELAY", "CHANGE_PLAN", "ESCALATE"}:
+        not_recommended.append(
+            {
+                "label": "Leaving the trailhead under the original plan",
+                "policy": "not_recommended",
+                "rationale": f"Current pre-trip decision is {decision}.",
+            }
+        )
+    return {
+        "suggested_stop_points": suggested,
+        "not_recommended_stop_points": not_recommended,
+    }
+
+
+def _pretrip_checklist(
+    *,
+    input_coverage: dict[str, bool],
+    resource_state: dict[str, Any],
+    weather_state: dict[str, Any],
+) -> list[dict[str, str]]:
+    checks = [
+        ("route", "Route loaded"),
+        ("date", "Trip date / departure date known"),
+        ("team", "Team roster present"),
+        ("user_experience", "Member experience reviewed"),
+        ("equipment", "Equipment inventory present"),
+        ("transport_access", "Transport and latest return limit confirmed"),
+        ("planned_departure_time", "Planned departure time confirmed"),
+        ("weather_reviewed", "Weather reviewed"),
+        ("daylight_reviewed", "Daylight window reviewed"),
+        ("cp_graph", "CP Graph compiled"),
+        ("turn_back_checkpoint", "Latest turnaround checkpoint available"),
+        ("slowest_team_basis", "Slowest or most vulnerable member basis confirmed"),
+        ("equipment_confirmed", "Equipment review complete"),
+        ("remote_contact_confirmed", "Remote contact / emergency plan reviewed"),
+    ]
+    checklist = [
+        {
+            "item": label,
+            "status": "complete" if input_coverage.get(key) else "missing_or_needs_review",
+        }
+        for key, label in checks
+    ]
+    if resource_state.get("devices_need_review"):
+        checklist.append(
+            {
+                "item": "Device readiness review",
+                "status": "needs_review",
+            }
+        )
+    if weather_state.get("human_review_required"):
+        checklist.append(
+            {
+                "item": "Human weather/daylight review",
+                "status": "required",
+            }
+        )
+    return checklist
+
+
+def _buffer_cost_statement(
+    *,
+    decision: str,
+    missing_fields: list[str],
+    governance: dict[str, Any],
+) -> str:
+    if decision in {"NO_GO", "DELAY", "CHANGE_PLAN", "ESCALATE"}:
+        return (
+            "No discretionary stop, photo, lunch, summit, or waiting buffer is granted "
+            "until required gaps are resolved and the departure gate is rerun."
+        )
+    if missing_fields or governance["warning_gaps"]:
+        return (
+            "Any discretionary stop consumes route/daylight buffer and must stay within "
+            "the reviewed departure-gate limit."
+        )
+    return "Discretionary stops still consume buffer; use CP Graph limits before extending any stop."
+
+
+def _dedupe_risk_dicts(values: list[dict[str, str]]) -> list[dict[str, str]]:
+    seen = set()
+    result = []
+    for value in values:
+        key = (value.get("severity"), value.get("source"), value.get("reason"))
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(value)
+    return result
 
 
 def _field_answer(

@@ -118,6 +118,11 @@ def test_evidence_collection_keeps_weather_to_decision_payload(tmp_path: Path) -
     payload = weather.result["payload"]
     assert payload["answerability"] == "route_weather_risk_available"
     assert payload["decision"] == "CHANGE_PLAN"
+    assert payload["decision_output"]["decisionObjectSchema"] == "ContextualPermission"
+    assert payload["decision_output"]["decision"] == "CHANGE_PLAN"
+    assert payload["decision_output"]["firstLayer"]["decision"] == (
+        "不建議照原計畫通過。"
+    )
     assert payload["field_answer"].startswith("天氣決策")
     assert payload["weather_to_decision"]["role"] == (
         "Risk Sentinel / Weather-to-Decision"
@@ -151,6 +156,10 @@ def test_evidence_collection_executes_route_context_tool_without_model_synthesis
     payload = route_context.result["payload"]
     assert payload["answerability"] == "route_context_available"
     assert payload["source_status"] == "candidate_only"
+    assert payload["decision"] == "CONDITIONAL_GO"
+    assert payload["decision_output"]["decisionObjectSchema"] == "ContextualPermission"
+    assert payload["decision_output"]["firstLayer"]["decision"] == "可作為候選觀察點。"
+    assert "不是停留授權" in payload["decision_output"]["firstLayer"]["limit"]
     assert payload["route_context"]["role"] == "Experience Guide"
     assert payload["route_context"]["stop_permission_required"] is True
     assert payload["result_count"] >= 1
@@ -212,6 +221,11 @@ def test_evidence_collection_executes_pace_guardian_tool_without_model_synthesis
     assert payload["answerability"] == "pace_fit_decision_available"
     assert payload["source_status"] == "candidate_only"
     assert payload["decision"] == "CHANGE_PLAN"
+    assert payload["decision_output"]["decisionObjectSchema"] == "ContextualPermission"
+    assert payload["decision_output"]["decision"] == "CHANGE_PLAN"
+    assert payload["decision_output"]["firstLayer"]["decision"] == (
+        "不建議照原計畫推進。"
+    )
     assert payload["pace_guardian"]["role"] == "Pace Guardian"
     assert payload["pace_guardian"]["average_pace_used"] is False
     assert payload["team_pace_fit"]["slowest_member"]["label"] == "New teammate"
@@ -241,6 +255,10 @@ def test_evidence_collection_keeps_route_architecture_cp_graph_payload() -> None
     assert payload["answerability"] == "route_architecture_available"
     assert payload["source_status"] == "candidate_only"
     assert payload["decision"] == "CONDITIONAL_GO"
+    assert payload["decision_output"]["decisionObjectSchema"] == "ContextualPermission"
+    assert payload["decision_output"]["firstLayer"]["decision"] == (
+        "可依 CP Graph 推進，但必須保留折返窗口。"
+    )
     assert payload["route_architecture"]["role"] == "Route Architecture Intelligence"
     assert payload["route_decision"]["runtime_safety_truth"] is False
     assert payload["cp_graph"]["node_count"] == 124
@@ -269,6 +287,12 @@ def test_evidence_collection_keeps_live_navigation_decision_payload() -> None:
     assert payload["decision"] == "DELAY"
     assert payload["navigation_terrain"]["role"] == "Navigation & Terrain Intelligence"
     assert payload["navigation_decision"]["route_fit_status"] == "route_fit_unknown"
+    assert payload["decision_output"]["decisionObjectSchema"] == "ContextualPermission"
+    assert payload["decision_output"]["decision"] == "DELAY"
+    assert payload["decision_output"]["firstLayer"]["decision"] == (
+        "暫緩判斷，先取得可靠位置。"
+    )
+    assert payload["decision_output"]["secondLayer"]["uncertaintyNotes"]
     assert "lat" in navigation.missing_fields
     assert "lon" in navigation.missing_fields
     assert navigation.boundary.runtime_safety_truth is False
@@ -321,6 +345,13 @@ def test_evidence_collection_keeps_route_readiness_payload() -> None:
     assert payload["route_readiness"]["role"] == (
         "Pre-Trip Route Readiness / Departure Gate"
     )
+    package = payload["pretrip_decision_package"]
+    assert package["required_outputs"]["pretrip_decision"] == "DELAY"
+    assert package["required_outputs"]["top_risk_sources"]
+    assert package["required_outputs"]["latest_turnaround"]["checkpoint_name"] == (
+        "雲海保線所"
+    )
+    assert package["traceability"]["raw_payloads_embedded"] is False
     assert payload["departure_gate"]["approval_granted"] is False
     assert "user_experience_level" in readiness.missing_fields
     assert readiness.boundary.runtime_safety_truth is False
@@ -349,6 +380,12 @@ def test_evidence_collection_keeps_media_literacy_payload() -> None:
     assert payload["media_bias_analysis"]["target_context_points"][0]["label"] == (
         "大崩壁"
     )
+    assert payload["decision_output"]["decisionObjectSchema"] == "ContextualPermission"
+    assert payload["decision_output"]["decision"] == "NO_GO"
+    assert payload["decision_output"]["firstLayer"]["decision"] == (
+        "不建議為媒體點位停留或改線。"
+    )
+    assert payload["decision_output"]["secondLayer"]["alternativeActions"]
     assert "fresh_weather_or_route_condition_review" in media.missing_fields
     assert media.boundary.runtime_safety_truth is False
 
@@ -429,9 +466,18 @@ def test_evidence_collection_keeps_post_trip_review_payload() -> None:
     payload = post_trip.result["payload"]
     assert payload["answerability"] == "post_trip_review_missing_required_fields"
     assert payload["decision"] == "DELAY"
+    assert payload["decision_output"]["decisionObjectSchema"] == "ContextualPermission"
+    assert payload["decision_output"]["decision"] == "DELAY"
+    assert payload["decision_output"]["runtimeSafetyTruth"] is False
     assert payload["post_trip_review"]["role"] == (
         "Post-Trip Review / Learning Governance"
     )
+    assert payload["post_trip_learning_package"]["role"] == (
+        "Post-Trip Learning Proposal"
+    )
+    assert payload["post_trip_learning_package"]["writeback_policy"][
+        "automatic_route_model_update_allowed"
+    ] is False
     assert payload["completed_trip_summary"]["edge_count"] == 73
     assert "subjective_difficulty" in post_trip.missing_fields
     assert post_trip.boundary.runtime_safety_truth is False
