@@ -325,9 +325,20 @@ def test_execute_route_readiness_alias_returns_departure_gate_decision() -> None
     assert result.payload["artifact_kind"] == "scout_ai_route_readiness_tool_output"
     assert result.payload["answerability"] == "route_readiness_missing_required_fields"
     assert result.payload["decision"] == "DELAY"
+    assert result.payload["decision_output"]["decisionObjectSchema"] == (
+        "ContextualPermission"
+    )
+    assert result.payload["decision_output"]["decision"] == "DELAY"
+    assert result.payload["decision_output"]["allowed"] is False
+    assert result.payload["decision_output"]["firstLayer"]["decision"] == "建議延後。"
+    assert "不得出發" in result.payload["decision_output"]["firstLayer"]["limit"]
+    assert result.payload["decision_output"]["departureApprovalGranted"] is False
+    assert result.payload["decision_output"]["runtimeSafetyTruth"] is False
     assert result.payload["route_readiness"]["role"] == (
         "Pre-Trip Route Readiness / Departure Gate"
     )
+    assert result.payload["route_readiness"]["decision_output"]["decision"] == "DELAY"
+    assert result.payload["results"][0]["decision_output"]["decision"] == "DELAY"
     assert "user_experience_level" in result.missing_fields
     assert result.payload["departure_gate"]["approval_granted"] is False
     assert result.payload["boundary"]["runtime_handoff_performed"] is False

@@ -397,6 +397,12 @@ def test_full_workflow_runs_route_readiness_question() -> None:
     assert result.sources[0]["top_result_summary"]["route_readiness"]["role"] == (
         "Pre-Trip Route Readiness / Departure Gate"
     )
+    assert result.sources[0]["top_result_summary"]["decision_output"][
+        "decisionObjectSchema"
+    ] == "ContextualPermission"
+    assert result.sources[0]["top_result_summary"]["decision_output"]["decision"] == (
+        "DELAY"
+    )
     package = result.sources[0]["top_result_summary"]["pretrip_decision_package"]
     assert package["required_outputs"]["pretrip_decision"] == "DELAY"
     assert package["required_outputs"]["top_risk_sources"]
