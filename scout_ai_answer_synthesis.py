@@ -37,6 +37,7 @@ from scout_workspace_search_tools import MAJOR_POINT_TOOL_ID
 ARTIFACT_KIND = "scout_ai_answer_synthesis"
 ARTIFACT_VERSION = "scout_ai_answer_synthesis.v0"
 STANDARD_GAP_OVERVIEW_SOURCE_ID = "scout.ai.standard_gap_overview.v0"
+PRODUCT_IDENTITY_STANDARD_SOURCE_ID = "scout.ai.product_identity_standard.v0"
 
 STANDARD_SIX_POWER_COVERAGE = (
     (
@@ -271,6 +272,8 @@ def synthesize_scout_ai_answer_from_evidence(
         failed_count=failed_count,
         selected_tool_count=collection.selected_tool_count,
     )
+    if _looks_like_product_identity_question(collection.question):
+        answerability = "standard_product_identity"
     limitations = _limitations(answerability)
     decision_output = _answer_decision_output(
         collection.question,
@@ -443,6 +446,7 @@ def _answer_text(
         source for source in sources if source.collection_status == "completed"
     ]
     frontline_answer = _decision_output_text(decision_output)
+    product_identity_answer = _product_identity_answer(question)
     standard_gap_overview = _standard_gap_overview_answer(
         question,
         sources=completed_sources,
@@ -453,7 +457,9 @@ def _answer_text(
         sources=completed_sources,
         missing_evidence=missing_evidence,
     )
-    if standard_gap_overview:
+    if product_identity_answer:
+        parts.append(product_identity_answer)
+    elif standard_gap_overview:
         parts.append(standard_gap_overview)
     elif six_power_overview:
         parts.append(six_power_overview)
@@ -468,7 +474,7 @@ def _answer_text(
     )
     if primary_answer and not _answer_part_already_covered(primary_answer, parts):
         parts.append(primary_answer)
-    if not six_power_overview and not standard_gap_overview:
+    if not product_identity_answer and not six_power_overview and not standard_gap_overview:
         contextual_answer = (
             None
             if _should_skip_secondary_contextual_answer(
@@ -562,10 +568,16 @@ def _answer_text(
         parts.append(
             "A field conclusion should not be inferred until the missing evidence is provided."
         )
-    parts.append(
-        "Traceability: deterministic evidence was collected before synthesis by Scout AI tools. "
-        f"Question: {question}"
-    )
+    if answerability == "standard_product_identity":
+        parts.append(
+            "Traceability: deterministic Scout outdoor standard formatter was used before synthesis. "
+            f"Question: {question}"
+        )
+    else:
+        parts.append(
+            "Traceability: deterministic evidence was collected before synthesis by Scout AI tools. "
+            f"Question: {question}"
+        )
     parts.append(
         "This is candidate/planning evidence only, not runtime safety truth; it cannot trigger Ln, /safety/*, SOS, beacon, outbound send, or hardware control."
     )
@@ -690,7 +702,9 @@ def _data_confidence_summary(
     )
     native_confidence = _first_text(output.get("confidence"))
     native_level = str(native_confidence or "").lower()
-    if failed_count or answerability in {
+    if answerability == "standard_product_identity":
+        level = "medium"
+    elif failed_count or answerability in {
         "evidence_collection_failed",
         "missing_evidence",
         "no_registry_tool_selected",
@@ -707,7 +721,12 @@ def _data_confidence_summary(
         level = "low"
 
     notes: list[str] = []
-    if missing_evidence:
+    if answerability == "standard_product_identity":
+        notes.append(
+            "產品身份依 SCOUT_OUTDOOR_AI_AGENT_STANDARD deterministic formatter 回答；"
+            "未檢查路線、天氣、隊伍或 runtime evidence。"
+        )
+    elif missing_evidence:
         notes.append(
             f"部分 Scout evidence 可用，但仍有 {len(missing_evidence)} 個資料缺口；Scout 採保守判斷。"
         )
@@ -905,6 +924,14 @@ def _missing_evidence_text(item: dict[str, Any]) -> str:
 
 
 def _limitations(answerability: str) -> list[str]:
+    if answerability == "standard_product_identity":
+        return [
+            f"answerability={answerability}",
+            "Deterministic Scout outdoor standard formatter was used before answer synthesis.",
+            "This identity answer does not inspect route, weather, team, or runtime evidence.",
+            "Product identity output was not promoted to runtime safety truth.",
+            "No /safety/* call, Phase 1 mutation, Brain/ObservedFact/HumanReview write, outbound send, or hardware control was performed.",
+        ]
     return [
         f"answerability={answerability}",
         "Deterministic Scout AI tools were used before answer synthesis.",
@@ -924,6 +951,13 @@ def _answer_decision_output(
     completed_sources = [
         source for source in sources if source.collection_status == "completed"
     ]
+    if _looks_like_product_identity_question(question):
+        return _with_data_confidence(
+            _product_identity_decision_output(answerability=answerability),
+            sources=sources,
+            missing_evidence=missing_evidence,
+            answerability=answerability,
+        )
     if _looks_like_standard_gap_overview_question(question) and completed_sources:
         return _with_data_confidence(
             _standard_gap_overview_decision_output(
@@ -1395,6 +1429,134 @@ def _generic_decision_output_from_source(
         "runtimeSafetyTruth": False,
         "standardAlignment": _decision_output_standard_alignment(),
     }
+
+
+def _product_identity_decision_output(*, answerability: str) -> dict[str, Any]:
+    first_layer = {
+        "decision": "Scout 是戶外活動的 AI 決策層。",
+        "limit": (
+            "此回答是產品身份與標準定位，不是出發批准、現場 permission "
+            "或 runtime safety truth。"
+        ),
+        "reason": (
+            "Scout 的核心價值是把高維、不完整、互相牽制的戶外資訊，"
+            "壓縮成保守、清楚、可解釋、可執行的下一步決策。"
+        ),
+        "nextStep": (
+            "遇到具體出發或現場問題時，回到 Route Readiness、"
+            "Contextual Permission 或對應 Scout decision tool。"
+        ),
+    }
+    residual_risk = [
+        "產品身份回答不能替代 route/date/team/weather/equipment evidence。",
+        "若 UI 或文案只展示資訊而不收斂決策，仍會退化成內容或 dashboard。",
+    ]
+    required_conditions = [
+        "所有具體戶外回答都必須收斂成明確 decision、限制、原因與下一步。",
+        "Scout 不得承諾安全無虞，也不得把產品主張當作現場授權。",
+        "六力必須透過 Scout AI 力轉成動態決策，不得平均成單一靜態分數。",
+    ]
+    alternative_actions = [
+        "改問出發前 Go/No-Go，取得 route/date/team/weather/equipment 決策。",
+        "改問現場微決策，例如能否停留、等霧、午餐、攻頂或改線。",
+        "改問標準缺口總覽，檢視目前 Scout 工具與標準章節的覆蓋。",
+    ]
+    return {
+        "decisionObjectSchema": "ContextualPermission",
+        "answerSourceToolId": PRODUCT_IDENTITY_STANDARD_SOURCE_ID,
+        "answerability": answerability,
+        "role": "Scout Product Identity Standard",
+        "format": "SCOUT_OUTDOOR_AI_AGENT_STANDARD.section16",
+        "action": "explain_product_identity",
+        "decision": "GUIDED_ONLY",
+        "allowed": False,
+        "text": "\n".join(
+            (
+                f"[決策] {first_layer['decision']}",
+                f"[限制] {first_layer['limit']}",
+                f"[原因] {first_layer['reason']}",
+                f"[下一步] {first_layer['nextStep']}",
+            )
+        ),
+        "firstLayer": first_layer,
+        "secondLayer": {
+            "details": [
+                "Product claim: Scout 把戶外活動中每一個「應該沒關係吧」，轉化成一個有時間、有位置、有條件、有後果的清楚決策。",
+                "Short version: Scout 不只是告訴你去哪裡，而是告訴你此刻能不能做、能做多久、什麼時候必須離開。",
+                "Scout must not become: 不是路線資料庫、不是地圖工具、不是天氣工具、不是課程目錄、不是風險 dashboard、不是單純六力分數表，也不是戶外內容平台。",
+            ],
+            "uncertaintyNotes": [
+                "This identity answer does not inspect live route/weather/team evidence."
+            ],
+            "residualRisk": residual_risk,
+            "requiredConditions": required_conditions,
+            "alternativeActions": alternative_actions,
+        },
+        "mainReasons": [first_layer["reason"]],
+        "cost": {
+            "timeBufferChangeMinutes": 0,
+            "runtimeSafetyTruthImpact": "No runtime safety truth was created or changed.",
+            "productRisk": "Identity answer must not replace concrete Scout decisions.",
+        },
+        "nextAction": first_layer["nextStep"],
+        "confidence": "medium",
+        "uncertaintyNotes": [
+            "Product identity was answered from the deterministic Scout outdoor standard formatter."
+        ],
+        "residualRisk": residual_risk,
+        "requiredConditions": required_conditions,
+        "alternativeActions": alternative_actions,
+        "runtimeSafetyTruth": False,
+        "standardAlignment": [
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 0 Product North Star",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 1 Core Product Thesis",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 3 Decision System, Not Information System",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 26 What Scout Must Not Become",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 27 Product Copy",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 30 Final Standard",
+        ],
+    }
+
+
+def _product_identity_answer(question: str) -> str | None:
+    if not _looks_like_product_identity_question(question):
+        return None
+    return (
+        "產品身份：Scout 是戶外活動的 AI 決策層，不是路線資料庫、不是地圖工具、"
+        "不是天氣工具、不是課程目錄、不是風險 dashboard、不是單純六力分數表，"
+        "也不是戶外內容平台。"
+        "Scout 的產品主張是：把戶外活動中每一個「應該沒關係吧」，"
+        "轉化成一個有時間、有位置、有條件、有後果的清楚決策。"
+        "短版：Scout 不只是告訴你去哪裡，而是告訴你此刻能不能做、"
+        "能做多久、什麼時候必須離開。"
+        "限制：這是產品身份與標準定位，不是出發批准或 runtime safety truth；"
+        "具體出發和現場行動仍必須回到 Route Readiness、Contextual Permission "
+        "或對應 Scout decision tool。"
+    )
+
+
+def _looks_like_product_identity_question(question: str) -> bool:
+    text = _normalize_question_text(question)
+    product_terms = (
+        "scout是什麼",
+        "scout到底是什麼",
+        "scout的定位",
+        "產品定位",
+        "產品主張",
+        "一句話產品主張",
+        "不應該變成什麼",
+        "不應變成什麼",
+        "不能變成什麼",
+        "不是路線資料庫",
+        "不是天氣工具",
+        "不是風險dashboard",
+        "不是資訊平台",
+        "路線資料庫或天氣工具",
+        "產品northstar",
+        "productnorthstar",
+        "productclaim",
+    )
+    return _text_has_any(text, product_terms)
 
 
 def _standard_gap_overview_decision_output(

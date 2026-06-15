@@ -3470,6 +3470,38 @@ def test_answer_synthesis_surfaces_standard_gap_overview_before_six_power() -> N
     assert "六力覆蓋檢視：" not in result.answer
 
 
+def test_answer_synthesis_answers_product_identity_from_standard_formatter() -> None:
+    result = collect_and_synthesize_scout_ai_answer(
+        "Scout 是什麼？它是不是路線資料庫或天氣工具？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=8,
+    )
+
+    assert result.answerability == "standard_product_identity"
+    assert result.evidence_collection["selected_tool_count"] == 0
+    assert result.completed_source_count == 0
+    assert result.decision_output["answerSourceToolId"] == (
+        "scout.ai.product_identity_standard.v0"
+    )
+    assert result.decision_output["decision"] == "GUIDED_ONLY"
+    assert result.decision_output["runtimeSafetyTruth"] is False
+    assert "Scout 是戶外活動的 AI 決策層" in result.decision_output["firstLayer"][
+        "decision"
+    ]
+    assert "不是路線資料庫" in result.answer
+    assert "不是天氣工具" in result.answer
+    assert "風險 dashboard" in result.answer
+    assert "應該沒關係吧" in result.answer
+    assert "不是出發批准或 runtime safety truth" in result.answer
+    assert "No registry-backed Scout AI tool" not in result.answer
+    assert "沒有完成的 deterministic Scout evidence source" not in result.answer
+    assert "未檢查路線、天氣、隊伍或 runtime evidence" in result.answer
+    assert "deterministic Scout outdoor standard formatter was used" in result.answer
+    assert "evidence was collected before synthesis by Scout AI tools" not in result.answer
+    assert "建議延後天氣判斷" not in result.answer
+
+
 def test_answer_synthesis_routes_scout_ai_meta_power_to_dynamic_decision_overview() -> None:
     result = collect_and_synthesize_scout_ai_answer(
         "Scout AI 力如何把六力轉成動態決策，而不是靜態分數表？",

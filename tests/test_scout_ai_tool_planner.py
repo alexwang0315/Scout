@@ -1821,6 +1821,20 @@ def test_planner_routes_standard_gap_overview_to_core_standard_tools() -> None:
         assert item.boundary.runtime_safety_truth is False
 
 
+def test_planner_keeps_product_identity_question_out_of_weather_or_catalog_tools() -> None:
+    plan = plan_scout_ai_tools(
+        _query("Scout 是什麼？它是不是路線資料庫或天氣工具？"),
+        project_root=PROJECT_ROOT,
+        limit=8,
+    )
+
+    assert _tool_ids(plan) == set()
+    assert plan.planner_notes == [
+        "Product identity questions are answered from the deterministic Scout outdoor standard formatter, not route/weather/catalog tools."
+    ]
+    assert plan.boundary.runtime_safety_truth is False
+
+
 def test_planner_routes_scout_ai_meta_power_to_six_capability_tools() -> None:
     plan = plan_scout_ai_tools(
         _query("Scout AI 力如何把六力轉成動態決策，而不是靜態分數表？"),
