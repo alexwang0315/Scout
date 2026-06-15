@@ -2661,6 +2661,31 @@ def test_answer_synthesis_routes_actual_cp_writeback_to_post_trip_review() -> No
     assert result.decision_output["runtimeSafetyTruth"] is False
 
 
+def test_answer_synthesis_routes_route_context_updates_to_post_trip_review() -> None:
+    question = "哪些歷史、自然、文化點值得補充到路線脈絡？"
+    result = collect_and_synthesize_scout_ai_answer(
+        question,
+        project_root=POST_ANALYSIS_ROOT,
+        project_id="chilai_nanhua_day1_post_analysis",
+        limit=4,
+    )
+
+    assert result.answerability == "partial_evidence_with_missing_context"
+    assert result.completed_source_count == 1
+    assert result.sources[0].tool_id == POST_TRIP_REVIEW_TOOL_ID
+    source = result.sources[0].top_result_summary
+    package = source["post_trip_learning_package"]
+    assert package["data_to_collect"]["route_context_updates"] == [question]
+    assert package["model_update_target_coverage"][
+        "route_context_intelligence"
+    ] is True
+    assert result.decision_output["answerSourceToolId"] == POST_TRIP_REVIEW_TOOL_ID
+    assert result.decision_output["firstLayer"]["decision"] == "暫緩學習寫回。"
+    assert "行後回顧" in result.answer
+    assert "候選路線脈絡" not in result.answer
+    assert result.decision_output["runtimeSafetyTruth"] is False
+
+
 def test_answer_synthesis_routes_post_trip_lost_near_miss_to_review() -> None:
     result = collect_and_synthesize_scout_ai_answer(
         "這次摸黑差點迷路，要怎麼檢討？",

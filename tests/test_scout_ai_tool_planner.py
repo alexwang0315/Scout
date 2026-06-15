@@ -1406,6 +1406,25 @@ def test_planner_routes_actual_cp_writeback_to_post_trip_not_route_architecture(
     assert item.boundary.runtime_safety_truth is False
 
 
+def test_planner_routes_route_context_updates_to_post_trip_review() -> None:
+    question = "哪些歷史、自然、文化點值得補充到路線脈絡？"
+    plan = plan_scout_ai_tools(
+        _query(question),
+        project_root=PROJECT_ROOT,
+    )
+
+    tool_ids = _tool_ids(plan)
+    assert POST_TRIP_REVIEW_TOOL_ID in tool_ids
+    assert ROUTE_CONTEXT_TOOL_ID not in tool_ids
+
+    item = _single_tool(plan, POST_TRIP_REVIEW_TOOL_ID)
+    assert item.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+    assert item.request is not None
+    assert item.request["tool_id"] == POST_TRIP_REVIEW_TOOL_ID
+    assert item.request["arguments"]["route_context_updates"] == [question]
+    assert item.boundary.runtime_safety_truth is False
+
+
 def test_planner_routes_post_trip_lost_near_miss_to_review_not_survival() -> None:
     plan = plan_scout_ai_tools(
         _query("這次摸黑差點迷路，要怎麼檢討？"),

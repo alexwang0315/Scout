@@ -1057,7 +1057,19 @@ def _post_trip_route_condition_notes(question: str, normalized: str) -> list[str
 
 
 def _post_trip_route_context_updates(question: str, normalized: str) -> list[str]:
-    if _has_any(normalized, ("路線脈絡", "補充展望", "集合空間", "危險岔路需要標記")):
+    if _has_any(
+        normalized,
+        (
+            "路線脈絡",
+            "補充展望",
+            "集合空間",
+            "危險岔路需要標記",
+            "歷史",
+            "自然",
+            "文化",
+            "人文",
+        ),
+    ) and _has_any(normalized, ("補充", "回寫", "更新", "標記")):
         return [question]
     return []
 
@@ -2346,7 +2358,7 @@ def _looks_like_team_status_question(text: str) -> bool:
 
 
 def _looks_like_post_trip_review_question(text: str) -> bool:
-    return _has_any(
+    return _looks_like_post_trip_route_context_update_question(text) or _has_any(
         text,
         (
             "posttripreview",
@@ -2385,6 +2397,14 @@ def _looks_like_post_trip_review_question(text: str) -> bool:
             "incident package",
             "field case",
         ),
+    )
+
+
+def _looks_like_post_trip_route_context_update_question(text: str) -> bool:
+    return (
+        _has_any(text, ("補充", "回寫", "更新", "標記"))
+        and _has_any(text, ("路線脈絡", "歷史", "自然", "文化", "人文"))
+        and _has_any(text, ("值得", "哪些", "哪個", "哪裡", "這次", "行後"))
     )
 
 
@@ -2782,6 +2802,8 @@ def _looks_like_buffer_cost_question(text: str) -> bool:
 def _looks_like_route_context_question(text: str) -> bool:
     if _looks_like_route_briefing_question(text):
         return True
+    if _looks_like_post_trip_route_context_update_question(text):
+        return False
     if _looks_like_contextual_permission_question(text):
         return False
     if _looks_like_media_literacy_question(text):
