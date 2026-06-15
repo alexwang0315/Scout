@@ -308,7 +308,7 @@ def _answer_text(
         completed_sources,
         str(decision_output.get("answerSourceToolId") or ""),
     )
-    if primary_answer and primary_answer != frontline_answer:
+    if primary_answer and not _answer_part_already_covered(primary_answer, parts):
         parts.append(primary_answer)
     contextual_answer = (
         None
@@ -318,7 +318,7 @@ def _answer_text(
         )
         else _contextual_permission_answer(completed_sources)
     )
-    if contextual_answer:
+    if contextual_answer and not _answer_part_already_covered(contextual_answer, parts):
         parts.append(contextual_answer)
     safety_boundary_answer = _safety_boundary_answer(completed_sources)
     if safety_boundary_answer:
@@ -402,7 +402,11 @@ def _answer_text(
 def _decision_output_text(decision_output: dict[str, Any]) -> str | None:
     text = decision_output.get("text")
     if isinstance(text, str) and text.strip():
-        return text.strip()
+        lines = [text.strip()]
+        alternative_line = _alternative_actions_line(decision_output)
+        if alternative_line and alternative_line not in lines[0]:
+            lines.append(alternative_line)
+        return "\n".join(lines)
     first_layer = decision_output.get("firstLayer")
     if not isinstance(first_layer, dict):
         return None
@@ -415,14 +419,34 @@ def _decision_output_text(decision_output: dict[str, Any]) -> str | None:
         for value in (decision, limit, reason, next_step)
     ):
         return None
-    return "\n".join(
-        (
-            f"[決策] {str(decision or '暫緩判斷。')}",
-            f"[限制] {str(limit or '不得把此回答當成現場授權。')}",
-            f"[原因] {str(reason or '缺少可追溯的 Scout 決策證據。')}",
-            f"[下一步] {str(next_step or '補齊 deterministic Scout evidence，再重新詢問。')}",
-        )
+    lines = [
+        f"[決策] {str(decision or '暫緩判斷。')}",
+        f"[限制] {str(limit or '不得把此回答當成現場授權。')}",
+        f"[原因] {str(reason or '缺少可追溯的 Scout 決策證據。')}",
+        f"[下一步] {str(next_step or '補齊 deterministic Scout evidence，再重新詢問。')}",
+    ]
+    alternative_line = _alternative_actions_line(decision_output)
+    if alternative_line:
+        lines.append(alternative_line)
+    return "\n".join(lines)
+
+
+def _alternative_actions_line(decision_output: dict[str, Any]) -> str | None:
+    second_layer = decision_output.get("secondLayer")
+    alternatives = (
+        second_layer.get("alternativeActions")
+        if isinstance(second_layer, dict)
+        else None
     )
+    if isinstance(alternatives, list):
+        safe_alternatives = [
+            str(alternative).strip()
+            for alternative in alternatives
+            if str(alternative).strip()
+        ]
+        if safe_alternatives:
+            return "[替代] " + "、".join(safe_alternatives)
+    return None
 
 
 def _field_answer_for_tool(
@@ -450,6 +474,16 @@ def _dedupe_answer_parts(parts: list[str]) -> list[str]:
         seen.add(normalized)
         result.append(normalized)
     return result
+
+
+def _answer_part_already_covered(candidate: str, parts: list[str]) -> bool:
+    normalized = candidate.strip()
+    if not normalized:
+        return True
+    return any(
+        normalized == existing.strip() or normalized in existing.strip()
+        for existing in parts
+    )
 
 
 def _should_skip_secondary_contextual_answer(

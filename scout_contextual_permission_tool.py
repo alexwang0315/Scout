@@ -654,6 +654,44 @@ def _permission(
             alternative_actions=_alternative_actions(action, next_cp_id),
         )
 
+    if action == OutdoorAction.CONTINUE and _looks_like_risk_sentinel_continue(query):
+        return _no_go_permission(
+            action=action,
+            decision=ScoutDecision.NO_GO,
+            reason=(
+                "缺少可追溯的前方路段風險、目前位置與撤退窗口證據，"
+                "Scout 不能授權快速通過或繼續推進。"
+            ),
+            next_action="先留在或退回最近安全 CP，補齊位置、路段風險與撤退窗口後再判斷。",
+            confidence=ConfidenceLevel.LOW,
+            uncertainty_notes=[
+                "Risk Sentinel requires route segment, location, retreat-window, and current-condition evidence.",
+                "資料不足時 Scout 依標準採保守判斷，不把快速通過當成安全授權。",
+            ],
+            alternative_actions=[
+                "退回最近安全 CP",
+                "等待領隊確認路段風險",
+                "改走已審核替代路線或撤退",
+            ],
+        )
+
+    if action == OutdoorAction.REROUTE and _looks_like_unreviewed_reroute(query):
+        return _no_go_permission(
+            action=action,
+            decision=ScoutDecision.NO_GO,
+            reason=(
+                "這是臨時切岔路或改線請求；缺少已審核替代路線、可靠目前位置與"
+                "CP Graph 對照時，Scout 不能授權離開原路線。"
+            ),
+            next_action=_safe_next_action(action, next_cp_id),
+            confidence=ConfidenceLevel.LOW,
+            uncertainty_notes=[
+                "reviewed_alternative_route, current_position, and CP Graph fit are required before reroute permission.",
+                "資料不足時 Scout 依標準採保守判斷，不把捷徑或支線當成可走路線。",
+            ],
+            alternative_actions=_alternative_actions(action, next_cp_id),
+        )
+
     if missing_fields and action in _BUDGET_ACTIONS:
         requested_cost = _requested_duration_cost(requested_duration_minutes)
         reason = "缺少剩餘安全 buffer，Scout 不能授權會消耗風險預算的行為。"
@@ -703,27 +741,6 @@ def _permission(
             next_action="就地穿上雨具，完成後立即回到原定節奏。",
             confidence=_confidence(confidence, default=ConfidenceLevel.MEDIUM),
             residual_risk=["若風雨持續增強，仍需重新評估撤退或改線。"],
-        )
-
-    if action == OutdoorAction.CONTINUE and _looks_like_risk_sentinel_continue(query):
-        return _no_go_permission(
-            action=action,
-            decision=ScoutDecision.NO_GO,
-            reason=(
-                "缺少可追溯的前方路段風險、目前位置與撤退窗口證據，"
-                "Scout 不能授權快速通過或繼續推進。"
-            ),
-            next_action="先留在或退回最近安全 CP，補齊位置、路段風險與撤退窗口後再判斷。",
-            confidence=ConfidenceLevel.LOW,
-            uncertainty_notes=[
-                "Risk Sentinel requires route segment, location, retreat-window, and current-condition evidence.",
-                "資料不足時 Scout 依標準採保守判斷，不把快速通過當成安全授權。",
-            ],
-            alternative_actions=[
-                "退回最近安全 CP",
-                "等待領隊確認路段風險",
-                "改走已審核替代路線或撤退",
-            ],
         )
 
     if action in _BUDGET_ACTIONS:
@@ -1660,6 +1677,29 @@ def _looks_like_risk_sentinel_continue(query: str) -> bool:
             "通訊死角",
             "能不能繼續",
             "現在能不能繼續",
+        ),
+    )
+
+
+def _looks_like_unreviewed_reroute(query: str) -> bool:
+    text = str(query or "").lower().replace(" ", "")
+    return _has_any(
+        text,
+        (
+            "這個岔路",
+            "這條岔路",
+            "那個岔路",
+            "岔路可以切",
+            "可以切",
+            "切過去",
+            "捷徑",
+            "支線",
+            "臨時改線",
+            "繞去",
+            "繞一下",
+            "旁邊那個點",
+            "shortcut",
+            "reroute",
         ),
     )
 
