@@ -601,6 +601,36 @@ def test_full_workflow_prioritizes_pace_guardian_for_delayed_summit() -> None:
     assert result.boundary.runtime_safety_truth is False
 
 
+def test_full_workflow_blocks_daylight_summit_pressure() -> None:
+    result = run_scout_ai_full_workflow(
+        "我們快摸黑了，但山頂只差一點，可以趕一下攻頂嗎？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=6,
+    )
+
+    assert result.answerability == "partial_evidence_with_missing_context"
+    assert result.selected_tool_count == 2
+    assert result.executed_tool_count == 2
+    assert result.completed_tool_count == 2
+    assert result.failed_tool_count == 0
+    weather = _workflow_source(result, WEATHER_WINDOW_TOOL_ID)
+    contextual = _workflow_source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
+    assert weather["top_result_summary"]["decision"] == "DELAY"
+    assert "route_weather_package" in weather["missing_fields"]
+    assert contextual["top_result_summary"]["action"] == "summit"
+    assert contextual["top_result_summary"]["decision"] == "NO_GO"
+    assert "remaining_safety_buffer_minutes" in contextual["missing_fields"]
+    assert result.decision_output["answerSourceToolId"] == CONTEXTUAL_PERMISSION_TOOL_ID
+    assert result.decision_output["action"] == "summit"
+    assert result.decision_output["decision"] == "NO_GO"
+    assert result.decision_output["allowed"] is False
+    assert result.decision_output["firstLayer"]["decision"] == "不建議攻頂。"
+    assert "不要繼續攻頂" in result.decision_output["firstLayer"]["nextStep"]
+    assert "天氣決策" in result.answer
+    assert result.boundary.runtime_safety_truth is False
+
+
 def test_full_workflow_runs_route_architecture_cp_graph_question() -> None:
     result = run_scout_ai_full_workflow(
         "下一個撤退點在哪？這條路線難點在哪？",

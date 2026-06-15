@@ -521,6 +521,35 @@ def test_planner_selects_pace_and_contextual_for_delayed_summit_question() -> No
     assert pace.boundary.runtime_safety_truth is False
 
 
+def test_planner_selects_weather_and_contextual_for_daylight_summit_pressure() -> None:
+    for question in (
+        "天快黑了但還差一點到山頂，可以衝一下嗎？",
+        "我們快摸黑了，但山頂只差一點，可以趕一下攻頂嗎？",
+        "現在日照 buffer 很低，還能繼續攻頂嗎？",
+    ):
+        plan = plan_scout_ai_tools(
+            _query(question),
+            project_root=PROJECT_ROOT,
+        )
+
+        tool_ids = _tool_ids(plan)
+        assert WEATHER_WINDOW_TOOL_ID in tool_ids
+        assert CONTEXTUAL_PERMISSION_TOOL_ID in tool_ids
+        assert PACE_GUARDIAN_TOOL_ID not in tool_ids
+
+        weather = _single_tool(plan, WEATHER_WINDOW_TOOL_ID)
+        assert weather.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+        assert weather.request is not None
+        assert weather.request["tool_id"] == WEATHER_WINDOW_TOOL_ID
+        assert weather.boundary.runtime_safety_truth is False
+
+        contextual = _single_tool(plan, CONTEXTUAL_PERMISSION_TOOL_ID)
+        assert contextual.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+        assert contextual.request is not None
+        assert contextual.request["tool_id"] == CONTEXTUAL_PERMISSION_TOOL_ID
+        assert contextual.boundary.runtime_safety_truth is False
+
+
 def test_planner_selects_equipment_resource_for_device_and_water_question() -> None:
     plan = plan_scout_ai_tools(
         _query("手機電量和頭燈水量夠嗎？"),

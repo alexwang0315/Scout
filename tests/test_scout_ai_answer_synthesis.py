@@ -620,6 +620,33 @@ def test_answer_synthesis_prioritizes_pace_guardian_for_delayed_summit() -> None
     assert "runtime safety truth" in result.answer
 
 
+def test_answer_synthesis_blocks_daylight_summit_pressure() -> None:
+    result = collect_and_synthesize_scout_ai_answer(
+        "我們快摸黑了，但山頂只差一點，可以趕一下攻頂嗎？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=6,
+    )
+
+    assert result.answerability == "partial_evidence_with_missing_context"
+    assert result.completed_source_count == 2
+    weather = _source(result, WEATHER_WINDOW_TOOL_ID)
+    contextual = _source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
+    assert weather.top_result_summary["decision"] == "DELAY"
+    assert "route_weather_package" in weather.missing_fields
+    assert contextual.top_result_summary["action"] == "summit"
+    assert contextual.top_result_summary["decision"] == "NO_GO"
+    assert "remaining_safety_buffer_minutes" in contextual.missing_fields
+    assert result.decision_output["answerSourceToolId"] == CONTEXTUAL_PERMISSION_TOOL_ID
+    assert result.decision_output["action"] == "summit"
+    assert result.decision_output["decision"] == "NO_GO"
+    assert result.decision_output["allowed"] is False
+    assert result.decision_output["firstLayer"]["decision"] == "不建議攻頂。"
+    assert "不要繼續攻頂" in result.decision_output["firstLayer"]["nextStep"]
+    assert "天氣決策" in result.answer
+    assert "runtime safety truth" in result.answer
+
+
 def test_answer_synthesis_uses_route_architecture_field_answer_without_guessing() -> None:
     result = collect_and_synthesize_scout_ai_answer(
         "下一個撤退點在哪？這條路線難點在哪？",
