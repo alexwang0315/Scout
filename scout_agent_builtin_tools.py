@@ -156,6 +156,8 @@ def run_builtin_tool(argv: Sequence[str] | None = None) -> tuple[int, dict[str, 
         return _pretrip_workspace_edit(args)
     if args.command == "pretrip-import-gpx":
         return _pretrip_import_gpx(args)
+    if args.command == "pretrip-route-context-collect":
+        return _pretrip_route_context_collect(args)
     if args.command == "pretrip-prepare-layers":
         return _pretrip_prepare_layers(args)
     if args.command == "pretrip-artifact-manifest":
@@ -404,6 +406,11 @@ def _build_parser() -> argparse.ArgumentParser:
     pretrip_import_parser.add_argument("--input", type=Path, required=True)
     pretrip_import_parser.add_argument("--dry-run", action="store_true")
     pretrip_import_parser.add_argument("--json", action="store_true")
+
+    route_context_parser = subparsers.add_parser("pretrip-route-context-collect")
+    route_context_parser.add_argument("--input", type=Path, required=True)
+    route_context_parser.add_argument("--dry-run", action="store_true")
+    route_context_parser.add_argument("--json", action="store_true")
 
     prepare_layers_parser = subparsers.add_parser("pretrip-prepare-layers")
     prepare_layers_parser.add_argument("--input", type=Path, required=True)
@@ -2423,6 +2430,44 @@ def _pretrip_import_gpx(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
                 "workspace_file_mutation_allowed": True,
                 "candidate_only": True,
                 "raw_gpx_embedded": False,
+            },
+        },
+    )
+
+
+def _pretrip_route_context_collect(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
+    from pretrip_route_context_collection import collect_pretrip_route_context
+
+    request = _load_json(args.input)
+    project_root = _optional_path(request.get("project_root"))
+    if project_root is None:
+        project_id = request.get("project_id")
+        workspace_root = _optional_path(request.get("workspace_root"))
+        if project_id and workspace_root:
+            project_root = workspace_root / str(project_id)
+    if project_root is None:
+        return 2, _error_payload("route context collection requires project_root or workspace_root plus project_id")
+
+    result = collect_pretrip_route_context(
+        project_root,
+        dry_run=bool(args.dry_run),
+        include_route_notes=bool(request.get("include_route_notes", True)),
+        limit_route_notes=int(request.get("limit_route_notes", 80)),
+        collected_at=request.get("collected_at"),
+    )
+    return (
+        0,
+        {
+            "artifact_kind": "scout_pretrip_route_context_collect_tool_output",
+            "status": "completed",
+            "dry_run": bool(args.dry_run),
+            "result": result,
+            "boundary": {
+                **_closed_boundary(),
+                "workspace_file_mutation_allowed": not bool(args.dry_run),
+                "candidate_only": True,
+                "raw_payloads_embedded": False,
+                "network_calls_made": False,
             },
         },
     )

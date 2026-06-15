@@ -53,22 +53,34 @@ def assess_scout_route_context(
 
     items: list[dict[str, Any]] = []
     source_report: list[dict[str, Any]] = []
-    items.extend(
-        _mcp_items(
-            root,
-            project,
-            explicit_path=mcp_candidates_path or route_context_path,
-            source_report=source_report,
-        )
+    route_context_items = _route_context_point_items(
+        root,
+        project,
+        explicit_path=route_context_path,
+        source_report=source_report,
     )
-    items.extend(
-        _named_point_items(
-            root,
-            project,
-            explicit_path=named_point_evidence_path,
-            source_report=source_report,
+    items.extend(route_context_items)
+    mcp_explicit_path = mcp_candidates_path
+    if mcp_explicit_path is None and route_context_path and not route_context_items:
+        mcp_explicit_path = route_context_path
+    if not route_context_items or mcp_candidates_path:
+        items.extend(
+            _mcp_items(
+                root,
+                project,
+                explicit_path=mcp_explicit_path,
+                source_report=source_report,
+            )
         )
-    )
+    if not route_context_items or named_point_evidence_path:
+        items.extend(
+            _named_point_items(
+                root,
+                project,
+                explicit_path=named_point_evidence_path,
+                source_report=source_report,
+            )
+        )
     items.extend(
         _spatial_imprint_items(
             root,
@@ -161,6 +173,66 @@ def assess_scout_route_context(
         ],
         "boundary": _closed_boundary(),
     }
+
+
+def _route_context_point_items(
+    root: Path,
+    project: dict[str, Any],
+    *,
+    explicit_path: str | None,
+    source_report: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    ref = explicit_path or str(project.get("route_context_points_ref") or "candidates/route_context_points.json")
+    payload, source_path = _load_project_json(root, ref)
+    points = payload.get("points") if isinstance(payload, dict) else []
+    if not isinstance(points, list):
+        points = []
+    source_report.append(
+        _source_report("route_context_points", source_path, len(points))
+    )
+    items = []
+    for raw in points:
+        if not isinstance(raw, dict):
+            continue
+        sec6_layers = _str_list(raw.get("sec6_layers"))
+        evidence_families = _str_list(raw.get("evidence_families"))
+        classes = sec6_layers + evidence_families
+        context_kind = str(raw.get("context_kind") or _context_kind(classes, label=raw.get("label")))
+        label = str(raw.get("display_label") or raw.get("label") or raw.get("candidate_id") or "")
+        items.append(
+            {
+                "evidence_type": raw.get("evidence_type") or "route_context_point",
+                "context_kind": context_kind,
+                "candidate_id": raw.get("candidate_id"),
+                "label": label,
+                "distance_m": _float_or_none(raw.get("distance_m")),
+                "lat": _float_or_none(raw.get("lat")),
+                "lon": _float_or_none(raw.get("lon")),
+                "nearest_cp_candidate_id": raw.get("nearest_cp_candidate_id"),
+                "point_classes": classes,
+                "review_state": raw.get("review_state"),
+                "confidence": raw.get("confidence"),
+                "experience_score": _experience_score(context_kind, classes, raw),
+                "guidance": _guidance_for(context_kind, label),
+                "stop_guidance": _stop_guidance_for(context_kind),
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+                "source_path": source_path,
+                "source_gaps": raw.get("reference_gaps", []),
+                "source_refs": _source_refs(raw),
+                "class_terms": classes,
+                "search_text": _search_text(
+                    label,
+                    raw.get("candidate_id"),
+                    raw.get("source_candidate_id"),
+                    raw.get("context_kind"),
+                    sec6_layers,
+                    evidence_families,
+                    raw.get("reference_gaps"),
+                ),
+            }
+        )
+    return items
 
 
 def _mcp_items(
