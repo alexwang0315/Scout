@@ -738,6 +738,33 @@ def test_answer_synthesis_uses_route_architecture_for_turnback_status() -> None:
     assert "runtime safety truth" in result.answer
 
 
+def test_answer_synthesis_detects_natural_turnback_current_context() -> None:
+    result = collect_and_synthesize_scout_ai_answer(
+        "現在 2013-10-08T15:10:00+08:00 在雲海保線所，現在是不是折返點？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=4,
+    )
+
+    assert result.answerability == "evidence_available"
+    route = _source(result, ROUTE_ARCHITECTURE_TOOL_ID)
+    assert route.missing_fields == []
+    assert route.top_result_summary["answerability"] == "route_architecture_available"
+    assert route.top_result_summary["decision"] == "CHANGE_PLAN"
+    assert result.decision_output["answerSourceToolId"] == ROUTE_ARCHITECTURE_TOOL_ID
+    assert result.decision_output["decision"] == "CHANGE_PLAN"
+    assert result.decision_output["allowed"] is False
+    assert result.decision_output["firstLayer"]["decision"] == (
+        "不建議照原路線往後段推進。"
+    )
+    assert "current_time is at or past" in result.decision_output["firstLayer"][
+        "reason"
+    ]
+    assert "current CP matches" in result.decision_output["firstLayer"]["reason"]
+    assert result.decision_output["runtimeSafetyTruth"] is False
+    assert "runtime safety truth" in result.answer
+
+
 def test_answer_synthesis_uses_live_navigation_field_answer_without_guessing() -> None:
     result = collect_and_synthesize_scout_ai_answer(
         "我現在是不是偏離路線？",
