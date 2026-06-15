@@ -13,6 +13,7 @@ from scout_ai_tool_planner import (
     PACE_GUARDIAN_TOOL_ID,
     EQUIPMENT_RESOURCE_TOOL_ID,
     TEAM_STATUS_TOOL_ID,
+    POST_TRIP_REVIEW_TOOL_ID,
     SAFETY_BOUNDARY_TOOL_ID,
     WEATHER_WINDOW_TOOL_ID,
     ScoutAiToolPlanItemStatus,
@@ -177,6 +178,21 @@ def test_planner_selects_team_status_for_rear_group_and_checkin_question() -> No
     assert item.implementation_status == "ready_current_tool"
     assert item.request is not None
     assert item.request["tool_id"] == TEAM_STATUS_TOOL_ID
+    assert item.missing_fields == []
+    assert item.boundary.runtime_safety_truth is False
+
+
+def test_planner_selects_post_trip_review_for_after_action_question() -> None:
+    plan = plan_scout_ai_tools(
+        _query("行後回顧要更新哪些下一次規劃？實際耗時哪裡比預期慢？"),
+        project_root=PROJECT_ROOT,
+    )
+
+    item = _single_tool(plan, POST_TRIP_REVIEW_TOOL_ID)
+    assert item.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+    assert item.implementation_status == "ready_current_tool"
+    assert item.request is not None
+    assert item.request["tool_id"] == POST_TRIP_REVIEW_TOOL_ID
     assert item.missing_fields == []
     assert item.boundary.runtime_safety_truth is False
 

@@ -18,6 +18,7 @@ from scout_route_architecture_tool import ROUTE_ARCHITECTURE_TOOL_ID
 from scout_pace_guardian_tool import PACE_GUARDIAN_TOOL_ID
 from scout_equipment_resource_tool import EQUIPMENT_RESOURCE_TOOL_ID
 from scout_team_status_tool import TEAM_STATUS_TOOL_ID
+from scout_post_trip_review_tool import POST_TRIP_REVIEW_TOOL_ID
 from scout_weather_window_tool import WEATHER_WINDOW_TOOL_ID
 
 
@@ -181,6 +182,13 @@ def _source_from_record(record: dict[str, Any]) -> ScoutAiAnswerSource:
         "team_status_guardian",
         "team_status",
         "team_governance",
+        "post_trip_review",
+        "completed_trip_summary",
+        "post_trip_feedback",
+        "after_action_next_plan",
+        "model_update_candidates",
+        "review_governance",
+        "privacy_share_policy",
         "pace_guardian",
         "team_pace_fit",
         "weather_to_decision",
@@ -261,6 +269,9 @@ def _answer_text(
     team_status_answer = _team_status_answer(completed_sources)
     if team_status_answer:
         parts.append(team_status_answer)
+    post_trip_review_answer = _post_trip_review_answer(completed_sources)
+    if post_trip_review_answer:
+        parts.append(post_trip_review_answer)
     pace_guardian_answer = _pace_guardian_answer(completed_sources)
     if pace_guardian_answer:
         parts.append(pace_guardian_answer)
@@ -383,6 +394,16 @@ def _team_status_answer(sources: list[ScoutAiAnswerSource]) -> str | None:
     return None
 
 
+def _post_trip_review_answer(sources: list[ScoutAiAnswerSource]) -> str | None:
+    for source in sources:
+        if source.tool_id != POST_TRIP_REVIEW_TOOL_ID:
+            continue
+        field_answer = source.top_result_summary.get("field_answer")
+        if isinstance(field_answer, str) and field_answer.strip():
+            return field_answer.strip()
+    return None
+
+
 def _pace_guardian_answer(sources: list[ScoutAiAnswerSource]) -> str | None:
     for source in sources:
         if source.tool_id != PACE_GUARDIAN_TOOL_ID:
@@ -450,6 +471,13 @@ def _top_result_summary(value: Any) -> dict[str, Any]:
         "team_status_guardian",
         "team_status",
         "team_governance",
+        "post_trip_review",
+        "completed_trip_summary",
+        "post_trip_feedback",
+        "after_action_next_plan",
+        "model_update_candidates",
+        "review_governance",
+        "privacy_share_policy",
         "critical_gaps",
         "warning_gaps",
         "route_type",

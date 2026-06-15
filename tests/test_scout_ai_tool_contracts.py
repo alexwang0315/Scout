@@ -13,12 +13,16 @@ from scout_route_architecture_tool import ROUTE_ARCHITECTURE_TOOL_ID
 from scout_equipment_resource_tool import EQUIPMENT_RESOURCE_TOOL_ID
 from scout_pace_guardian_tool import PACE_GUARDIAN_TOOL_ID
 from scout_team_status_tool import TEAM_STATUS_TOOL_ID
+from scout_post_trip_review_tool import POST_TRIP_REVIEW_TOOL_ID
 from scout_ai_tool_contracts import tool_registry_output
 from scout_ai_tool_executor import execute_scout_ai_tool
 
 
 ROOT = Path(__file__).resolve().parents[1]
 PROJECT_ROOT = ROOT / "tests" / "fixtures" / "pretrip" / "projects" / "chilai_nanhua_day1"
+POST_ANALYSIS_ROOT = (
+    ROOT / "tests" / "fixtures" / "post_analysis" / "chilai_nanhua_day1_post_analysis"
+)
 MANIFEST_DIR = ROOT / "tools" / "scout_agent_tool_manifests"
 WEARABLE_FIXTURES = [
     ROOT / "tests" / "fixtures" / "wearables" / "apple_health_clean_activity.json",
@@ -53,6 +57,7 @@ def test_tool_registry_lists_current_and_future_contracts() -> None:
     assert EQUIPMENT_RESOURCE_TOOL_ID in by_id
     assert PACE_GUARDIAN_TOOL_ID in by_id
     assert TEAM_STATUS_TOOL_ID in by_id
+    assert POST_TRIP_REVIEW_TOOL_ID in by_id
     assert ENERGY_VITALS_TOOL_ID in by_id
     assert by_id["pydantic_ai.tool.search_scout_risk_scores.v0"].implementation_status == (
         "ready_current_tool"
@@ -90,6 +95,9 @@ def test_tool_registry_lists_current_and_future_contracts() -> None:
     assert by_id[TEAM_STATUS_TOOL_ID].implementation_status == (
         "ready_current_tool"
     )
+    assert by_id[POST_TRIP_REVIEW_TOOL_ID].implementation_status == (
+        "ready_current_tool"
+    )
     assert "scout.ai.energy_vitals.assess" in by_id[ENERGY_VITALS_TOOL_ID].aliases
     assert "scout.ai.micro_decision.assess" in by_id[
         CONTEXTUAL_PERMISSION_TOOL_ID
@@ -99,10 +107,11 @@ def test_tool_registry_lists_current_and_future_contracts() -> None:
     assert "scout.ai.device_resource.assess" in by_id[EQUIPMENT_RESOURCE_TOOL_ID].aliases
     assert "scout.ai.team_pace_fit.assess" in by_id[PACE_GUARDIAN_TOOL_ID].aliases
     assert "scout.ai.team_guardian.assess" in by_id[TEAM_STATUS_TOOL_ID].aliases
-    assert registry.ready_current_tool_count >= 12
+    assert "scout.ai.after_action.assess" in by_id[POST_TRIP_REVIEW_TOOL_ID].aliases
+    assert registry.ready_current_tool_count >= 13
     assert registry.executable_tool_count >= registry.ready_current_tool_count
     assert registry.contract_only_tool_count >= 1
-    assert registry.implementation_status_counts["ready_current_tool"] >= 12
+    assert registry.implementation_status_counts["ready_current_tool"] >= 13
     assert "ready_current_tool" in registry.tool_ids_by_status
     assert "scout.ai.weather_window.assess.v0" not in registry.missing_evidence_fields_by_tool
     assert registry.boundary.runtime_safety_truth is False
@@ -250,6 +259,31 @@ def test_execute_team_status_alias_returns_remote_contact_decision() -> None:
     )
     assert "member_positions_or_last_heard" in result.missing_fields
     assert result.payload["boundary"]["runtime_safety_truth"] is False
+    assert result.boundary.live_safety_api_calls_allowed is False
+
+
+def test_execute_post_trip_review_alias_returns_learning_decision() -> None:
+    result = execute_scout_ai_tool(
+        {
+            "tool_id": "scout.ai.after_action.assess",
+            "project_root": str(POST_ANALYSIS_ROOT),
+            "query": "行後回顧要更新哪些下一次規劃？",
+        }
+    )
+
+    assert result.status == "completed"
+    assert result.tool_id == POST_TRIP_REVIEW_TOOL_ID
+    assert result.implementation_status == "ready_current_tool"
+    assert result.output_artifact_kind == "scout_ai_post_trip_review_tool_output"
+    assert result.payload["artifact_kind"] == "scout_ai_post_trip_review_tool_output"
+    assert result.payload["answerability"] == "post_trip_review_missing_required_fields"
+    assert result.payload["decision"] == "DELAY"
+    assert result.payload["post_trip_review"]["role"] == (
+        "Post-Trip Review / Learning Governance"
+    )
+    assert "subjective_difficulty" in result.missing_fields
+    assert result.payload["completed_trip_summary"]["edge_count"] == 73
+    assert result.payload["boundary"]["learning_write_performed"] is False
     assert result.boundary.live_safety_api_calls_allowed is False
 
 

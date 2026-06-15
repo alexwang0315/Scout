@@ -22,6 +22,7 @@ from scout_route_context_tool import ROUTE_CONTEXT_TOOL_ID
 from scout_pace_guardian_tool import PACE_GUARDIAN_TOOL_ID
 from scout_equipment_resource_tool import EQUIPMENT_RESOURCE_TOOL_ID
 from scout_team_status_tool import TEAM_STATUS_TOOL_ID
+from scout_post_trip_review_tool import POST_TRIP_REVIEW_TOOL_ID
 from scout_route_architecture_tool import ROUTE_ARCHITECTURE_TOOL_ID
 
 
@@ -523,6 +524,40 @@ def _execute_ready_current_tool(tool_id: str, arguments: dict[str, Any]) -> dict
             last_heard_minutes=_float_or_none(arguments.get("last_heard_minutes")),
         )
 
+    if tool_id == POST_TRIP_REVIEW_TOOL_ID:
+        from scout_post_trip_review_tool import assess_scout_post_trip_review
+
+        return assess_scout_post_trip_review(
+            project_root,
+            query=query,
+            capability_timeline_path=_str_or_none(
+                arguments.get("capability_timeline_path")
+            ),
+            capability_capsule_path=_str_or_none(
+                arguments.get("capability_capsule_path")
+            ),
+            route_time_comparison_path=_str_or_none(
+                arguments.get("route_time_comparison_path")
+            ),
+            share_preview_path=_str_or_none(arguments.get("share_preview_path")),
+            after_action_candidates_path=_str_or_none(
+                arguments.get("after_action_candidates_path")
+            ),
+            energy_feedback_path=_str_or_none(arguments.get("energy_feedback_path")),
+            subjective_difficulty=_str_or_none(
+                arguments.get("subjective_difficulty")
+            ),
+            equipment_gaps=_raw_list_arg(arguments, "equipment_gaps"),
+            near_miss_events=_raw_list_arg(arguments, "near_miss_events"),
+            incident_events=_raw_list_arg(arguments, "incident_events"),
+            weather_matched_expectation=_bool_or_none(
+                arguments.get("weather_matched_expectation")
+            ),
+            route_condition_notes=_raw_list_arg(arguments, "route_condition_notes"),
+            route_context_updates=_raw_list_arg(arguments, "route_context_updates"),
+            user_feedback_items=_raw_list_arg(arguments, "user_feedback_items"),
+        )
+
     raise ValueError(f"tool is not executable: {tool_id}")
 
 
@@ -586,6 +621,7 @@ def _completed_missing_fields(tool_id: str, payload: dict[str, Any]) -> list[str
         PACE_GUARDIAN_TOOL_ID,
         EQUIPMENT_RESOURCE_TOOL_ID,
         TEAM_STATUS_TOOL_ID,
+        POST_TRIP_REVIEW_TOOL_ID,
     }:
         return []
     value = payload.get("missing_fields")

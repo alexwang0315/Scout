@@ -25,6 +25,7 @@ from scout_route_context_tool import ROUTE_CONTEXT_TOOL_ID
 from scout_pace_guardian_tool import PACE_GUARDIAN_TOOL_ID
 from scout_equipment_resource_tool import EQUIPMENT_RESOURCE_TOOL_ID
 from scout_team_status_tool import TEAM_STATUS_TOOL_ID
+from scout_post_trip_review_tool import POST_TRIP_REVIEW_TOOL_ID
 from scout_route_architecture_tool import ROUTE_ARCHITECTURE_TOOL_ID
 from scout_workspace_search_tools import (
     MAJOR_POINT_TOOL_ID,
@@ -175,6 +176,13 @@ def plan_scout_ai_tools(
             (
                 TEAM_STATUS_TOOL_ID,
                 "Question asks for Team Status / remote-contact governance: teammates, rear group, last-heard state, rendezvous, check-ins, or 留守 escalation boundaries.",
+            )
+        )
+    if _looks_like_post_trip_review_question(normalized_question):
+        selected.append(
+            (
+                POST_TRIP_REVIEW_TOOL_ID,
+                "Question asks for Post-Trip Review / learning governance: completed-trip evidence, after-action candidates, actual CP timing, slow segments, near miss, equipment gaps, or next-plan model updates.",
             )
         )
     if _looks_like_live_navigation_state_question(normalized_question):
@@ -663,6 +671,41 @@ def _looks_like_team_status_question(text: str) -> bool:
             "約定山屋",
             "checkin",
             "rendezvous",
+        ),
+    )
+
+
+def _looks_like_post_trip_review_question(text: str) -> bool:
+    return _has_any(
+        text,
+        (
+            "posttripreview",
+            "afteraction",
+            "learningreview",
+            "行後",
+            "回顧",
+            "覆盤",
+            "事後",
+            "完成行程",
+            "實際cp",
+            "實際通過",
+            "實際耗時",
+            "停留時間",
+            "比預期慢",
+            "路段比預期",
+            "體感難度",
+            "near miss",
+            "nearmiss",
+            "裝備缺口",
+            "天氣與路況",
+            "下次行前",
+            "下一次規劃",
+            "模型更新",
+            "能力摘要",
+            "capability timeline",
+            "capability capsule",
+            "incident package",
+            "field case",
         ),
     )
 
