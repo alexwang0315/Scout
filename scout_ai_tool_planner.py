@@ -2134,6 +2134,10 @@ def _looks_like_safety_boundary_question(text: str) -> bool:
 
 
 def _looks_like_survival_incident_playbook_question(text: str) -> bool:
+    if _looks_like_weather_hazard_risk_question(
+        text,
+    ) and not _looks_like_active_survival_incident_question(text):
+        return False
     return _has_any(
         text,
         (
@@ -2158,6 +2162,58 @@ def _looks_like_survival_incident_playbook_question(text: str) -> bool:
             "撐過夜",
             "報案",
             "失溫",
+            "sos",
+            "rescue",
+        ),
+    )
+
+
+def _looks_like_weather_hazard_risk_question(text: str) -> bool:
+    return _has_any(
+        text,
+        (
+            "失溫風險",
+            "風險升高",
+            "會不會讓",
+            "是否升高",
+            "強風低溫",
+            "風寒風險",
+            "稜線失溫",
+            "營地失溫",
+        ),
+    ) and _has_any(
+        text,
+        (
+            "天氣",
+            "強風",
+            "低溫",
+            "風寒",
+            "失溫",
+            "稜線",
+            "營地",
+        ),
+    )
+
+
+def _looks_like_active_survival_incident_question(text: str) -> bool:
+    return _has_any(
+        text,
+        (
+            "隊友失溫",
+            "有人失溫",
+            "夥伴失溫",
+            "同伴失溫",
+            "失溫了",
+            "已經失溫",
+            "疑似失溫",
+            "濕衣",
+            "撐過夜",
+            "傷者",
+            "受傷",
+            "迷路",
+            "不確定自己在哪",
+            "求救",
+            "報案",
             "sos",
             "rescue",
         ),

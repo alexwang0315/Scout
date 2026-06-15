@@ -107,6 +107,29 @@ def test_planner_selects_weather_ready_tool_for_weather_questions() -> None:
     assert item.boundary.live_safety_api_calls_allowed is False
 
 
+def test_planner_keeps_cold_exposure_risk_in_weather_not_survival() -> None:
+    plan = plan_scout_ai_tools(
+        _query("強風低溫會不會讓稜線失溫風險升高？"),
+        project_root=PROJECT_ROOT,
+    )
+
+    tool_ids = _tool_ids(plan)
+    assert WEATHER_WINDOW_TOOL_ID in tool_ids
+    assert NAVIGATION_TERRAIN_TOOL_ID in tool_ids
+    assert SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID not in tool_ids
+
+
+def test_planner_keeps_active_hypothermia_in_survival_playbook() -> None:
+    plan = plan_scout_ai_tools(
+        _query("隊友失溫了現在怎麼做？"),
+        project_root=PROJECT_ROOT,
+    )
+
+    tool_ids = _tool_ids(plan)
+    assert WEATHER_WINDOW_TOOL_ID in tool_ids
+    assert SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID in tool_ids
+
+
 def test_planner_selects_route_readiness_for_pretrip_go_no_go_question() -> None:
     plan = plan_scout_ai_tools(
         _query("出發前 Go/No-Go 可以出發嗎？"),
