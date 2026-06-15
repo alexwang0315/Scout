@@ -49,6 +49,32 @@ def test_weather_window_tool_reports_placeholder_missing_fresh_weather() -> None
     assert result["boundary"]["live_provider_fetch_performed"] is False
 
 
+def test_weather_window_tool_uses_query_reported_recent_rain_conservatively() -> None:
+    result = assess_scout_weather_window(
+        PROJECT_ROOT,
+        query="前 24 小時明顯降雨，溪水和崩塌風險是否升高？今天還能走嗎？",
+        limit=3,
+    )
+
+    assert result["answerability"] == "weather_placeholder_only"
+    assert result["decision"] == "CHANGE_PLAN"
+    weather_decision = result["weather_to_decision"]
+    assert weather_decision["decision"] == "CHANGE_PLAN"
+    assert weather_decision["route_sensitive_weather_rule"]["rule"] == (
+        "query_reported_previous_24h_rain_route_reassessment"
+    )
+    assert weather_decision["route_sensitive_weather_rule"]["query_reported"] is True
+    assert "rain / wet terrain" in weather_decision["route_specific_conditions"]
+    assert "terrain interaction" in weather_decision["route_specific_conditions"]
+    assert "previous-24h rainfall" in weather_decision["main_reasons"][0]
+    assert result["decision_output"]["firstLayer"]["decision"] == (
+        "不建議照原計畫通過。"
+    )
+    assert "route_weather_package" in result["missing_fields"]
+    assert "使用者回報條件下的候選保守決策" in result["field_answer"]
+    assert result["boundary"]["runtime_safety_truth"] is False
+
+
 def test_weather_window_tool_reads_route_weather_package_and_emits_wx_alerts(
     tmp_path: Path,
 ) -> None:

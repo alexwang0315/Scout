@@ -114,6 +114,7 @@ def assess_scout_weather_window(
         else "weather_evidence_missing"
     )
     weather_to_decision = _weather_to_decision(
+        query=query,
         answerability=answerability,
         weather_window=weather_window,
         risk_summary=risk_summary,
@@ -504,6 +505,7 @@ def _wx_alerts(segments: list[dict[str, Any]], *, limit: int) -> list[dict[str, 
 
 def _weather_to_decision(
     *,
+    query: str,
     answerability: str,
     weather_window: dict[str, Any],
     risk_summary: dict[str, Any],
@@ -520,9 +522,19 @@ def _weather_to_decision(
         segments=segments,
     )
     heat_change_plan = _route_sensitive_heat_change_plan(segments)
+    query_stated_rule = _query_stated_weather_rule(query) if missing_fields else None
     if source_disagreement and "SOURCE_CONFLICT" not in alert_codes:
         alert_codes.append("SOURCE_CONFLICT")
-    if missing_fields:
+    if query_stated_rule:
+        decision = str(query_stated_rule["decision"])
+        main_reasons = _string_list(query_stated_rule.get("main_reasons"))
+        action_limit = str(query_stated_rule["action_limit"])
+        next_action = str(query_stated_rule["next_action"])
+        alternatives = _string_list(query_stated_rule.get("alternatives"))
+        for code in _string_list(query_stated_rule.get("alert_codes")):
+            if code not in alert_codes:
+                alert_codes.append(code)
+    elif missing_fields:
         decision = "DELAY"
         main_reasons = [
             "fresh weather / route-specific weather evidence is incomplete",
@@ -617,7 +629,10 @@ def _weather_to_decision(
         "alternatives": alternatives,
         "route_specific_conditions": _route_specific_conditions(alert_codes, highest=highest),
         "route_sensitive_weather_rule": (
-            route_sensitive_delay or source_disagreement or heat_change_plan
+            query_stated_rule
+            or route_sensitive_delay
+            or source_disagreement
+            or heat_change_plan
         ),
         "highest_risk_segment": _compact_segment(highest) if highest else None,
         "wx_alert_count": len(wx_alerts),
@@ -638,8 +653,14 @@ def _field_answer(
     decision_label = str(decision.get("decision") or "DELAY")
     reasons = decision.get("main_reasons")
     reason_text = "；".join(str(reason) for reason in reasons[:2]) if isinstance(reasons, list) else ""
-    if missing_fields:
+    rule = decision.get("route_sensitive_weather_rule")
+    query_reported = isinstance(rule, dict) and rule.get("query_reported") is True
+    if missing_fields and not query_reported:
         reason_text = f"缺少 {', '.join(missing_fields)}，不能只看降雨機率或 placeholder。"
+    elif missing_fields and query_reported:
+        reason_text = (
+            (reason_text + "；") if reason_text else ""
+        ) + f"仍缺少 {', '.join(missing_fields)}，此判斷只能作為使用者回報條件下的候選保守決策。"
     if not reason_text:
         reason_text = f"answerability={answerability}"
     next_action = str(decision.get("next_action") or "補齊天氣與路線交互證據後再判斷。")
@@ -1037,6 +1058,146 @@ def _route_sensitive_heat_change_plan(
             "cooler_travel_window",
         ],
     }
+
+
+def _query_stated_weather_rule(query: str) -> dict[str, Any] | None:
+    normalized = str(query or "").replace(" ", "").lower()
+    if not normalized:
+        return None
+    asks_route_decision = any(
+        term in normalized
+        for term in (
+            "今天還能走",
+            "還能走",
+            "能不能走",
+            "照原路線",
+            "原計畫",
+            "需要重規劃",
+            "是否需要保守決策",
+            "是否需要重新評估",
+            "是否升高",
+            "天氣決策",
+            "route",
+            "plan",
+        )
+    )
+    if _mentions_previous_24h_rain(normalized) and any(
+        term in normalized
+        for term in (
+            "溪水",
+            "渡溪",
+            "過溪",
+            "崩塌",
+            "落石",
+            "濕滑",
+            "土石",
+            "水位",
+            "倒木",
+            "通行性",
+            "creek",
+            "stream",
+            "landslide",
+            "rockfall",
+        )
+    ):
+        return {
+            "rule": "query_reported_previous_24h_rain_route_reassessment",
+            "decision": "CHANGE_PLAN" if asks_route_decision else "DELAY",
+            "query_reported": True,
+            "alert_codes": ["RAIN", "TERRAIN"],
+            "main_reasons": [
+                "user reported previous-24h rainfall with creek, wet-terrain, rockfall, or collapse concern",
+                "recent rainfall can raise water level, wet-terrain, rockfall, collapse, and loose-soil risk",
+                "fresh route_weather_package is still required before restoring the original plan",
+            ],
+            "action_limit": (
+                "Do not treat the original route as approved after reported recent rainfall; "
+                "avoid creek, collapse, rockfall, and wet-terrain segments until route-specific review is complete."
+            ),
+            "next_action": "改低風險替代路線或延後，並補齊近期路況、溪流水位與 route_weather_package 後再判斷。",
+            "alternatives": [
+                "delay until recent rainfall impact is reviewed",
+                "choose a route without creek crossings or collapse-prone terrain",
+                "run human review of water level and recent route reports",
+            ],
+        }
+    if any(term in normalized for term in ("午後雷雨", "雷雨", "thunderstorm")):
+        return {
+            "rule": "query_reported_thunderstorm_exposure_review",
+            "decision": "CHANGE_PLAN" if asks_route_decision else "DELAY",
+            "query_reported": True,
+            "alert_codes": ["THUNDER"],
+            "main_reasons": [
+                "user reported thunderstorm pressure near route decision time",
+                "thunderstorm exposure changes ridge, summit, open terrain, and creek decisions",
+                "fresh route_weather_package is still required before restoring the original plan",
+            ],
+            "action_limit": "Do not continue into ridge, summit, open terrain, or creek exposure under reported thunderstorm pressure.",
+            "next_action": "移出曝露路段、改短版或延後到較穩定天氣窗，並在下一 CP 重新檢查天氣。",
+            "alternatives": [
+                "avoid ridge and summit exposure",
+                "choose a sheltered lower route",
+                "delay until thunderstorm window passes",
+            ],
+        }
+    if any(term in normalized for term in ("強風低溫", "強風", "低溫", "失溫", "cold", "wind")):
+        return {
+            "rule": "query_reported_wind_cold_exposure_review",
+            "decision": "CHANGE_PLAN" if asks_route_decision else "DELAY",
+            "query_reported": True,
+            "alert_codes": ["WIND", "COLD"],
+            "main_reasons": [
+                "user reported wind or cold exposure that can raise hypothermia risk",
+                "ridge and camp decisions need wind, temperature, gear, and retreat review",
+                "fresh route_weather_package is still required before restoring the original plan",
+            ],
+            "action_limit": "Do not commit to exposed ridge or camp plans until wind-cold exposure, gear, and retreat buffer are reviewed.",
+            "next_action": "改低曝露路線、縮短停留或下撤到避風點；補齊天氣包與保暖裝備檢查。",
+            "alternatives": [
+                "move to sheltered checkpoints",
+                "shorten exposed ridge travel",
+                "delay camping decision until wind-cold review is complete",
+            ],
+        }
+    if _has_heat_signal(normalized, temperature_c=None, heat_index_c=None):
+        return {
+            "rule": "query_reported_heat_exposure_timing_review",
+            "decision": "CHANGE_PLAN" if asks_route_decision else "DELAY",
+            "query_reported": True,
+            "alert_codes": ["HEAT"],
+            "main_reasons": [
+                "user reported heat exposure or hydration timing pressure",
+                "heat raises water, shade, heat-illness, and travel-window requirements",
+                "fresh route_weather_package is still required before restoring the original plan",
+            ],
+            "action_limit": "Do not follow the original exposed hot-window timing until water margin, shade points, and cooler travel window are reviewed.",
+            "next_action": "改到清晨或較涼時段、補水並指定遮蔽休息點；不滿足時改短低曝曬路線。",
+            "alternatives": [
+                "move exposed travel to cooler hours",
+                "increase water margin and shade rest points",
+                "choose a shorter low-exposure route",
+            ],
+        }
+    if _mentions_source_disagreement(normalized):
+        return {
+            "rule": "query_reported_forecast_source_disagreement_review",
+            "decision": "DELAY",
+            "query_reported": True,
+            "alert_codes": ["SOURCE_CONFLICT"],
+            "main_reasons": [
+                "user reported forecast source disagreement",
+                "route-sensitive weather decisions should not rely on the favorable source",
+                "fresh route_weather_package and source reconciliation are required",
+            ],
+            "action_limit": "Do not authorize departure, exposed ridge, creek, summit, or camp decisions from a favorable forecast while sources disagree.",
+            "next_action": "先比對官方預報、路線天氣包與人工審核；若來源仍不一致，延後或改低曝露替代路線。",
+            "alternatives": [
+                "delay until forecast sources converge",
+                "choose a conservative lower-exposure route",
+                "run human weather review before route-sensitive decisions",
+            ],
+        }
+    return None
 
 
 def _segment_weather_text(item: dict[str, Any]) -> str:
