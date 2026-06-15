@@ -406,6 +406,27 @@ def _route_decision(
             "runtime_safety_truth": False,
         }
     if turn_back_status_label and not current_cp_id and not current_time:
+        if turn_back_status_label == "撤退窗口":
+            reasons = [
+                "判斷撤退點是否即將失去需要 current_cp_id and current_time.",
+            ]
+            if turn_back.get("turn_back_checkpoint_name"):
+                reasons.append(
+                    "planned turn-back checkpoint is "
+                    + str(turn_back.get("turn_back_checkpoint_name"))
+                    + f" at {turn_back.get('turn_back_eta')}"
+                )
+            return {
+                "decision": "DELAY",
+                "main_reasons": reasons,
+                "next_action": "先確認目前 CP、可靠定位與當前時間；確認前不要判定撤退窗口仍可用或繼續往後段推進。",
+                "action_limit": "不得把此回答當成撤退窗口仍可用或可繼續推進的授權。",
+                "first_layer_decision": "無法確認撤退點是否即將失去。",
+                "missing_fields": ["current_cp_id", "current_time"],
+                "turn_back_checkpoint": turn_back,
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+            }
         reasons = [
             "判斷現在是否為"
             + turn_back_status_label
@@ -549,10 +570,18 @@ def _field_answer(
 ) -> str:
     route_context = _route_architecture_brief(route_architecture)
     if missing_fields and answerability == "route_architecture_missing_current_context":
+        first_layer_decision = str(decision.get("first_layer_decision") or "")
+        if "撤退點是否即將失去" in first_layer_decision:
+            missing_context_phrase = "Scout 不能確認撤退點是否即將失去。"
+        elif "撤退點" in first_layer_decision:
+            missing_context_phrase = "Scout 不能確認現在是否已到撤退點。"
+        else:
+            missing_context_phrase = "Scout 不能確認現在是否已到折返點。"
         return (
             "路線結構判斷：建議 DELAY。缺少 "
             + "、".join(missing_fields)
-            + "，Scout 不能確認現在是否已到折返點。"
+            + "，"
+            + missing_context_phrase
             + (f" {route_context}" if route_context else "")
             + f" 下一步：{decision['next_action']} "
             + "此為 Route Architecture / CP Graph 候選判斷，不是 runtime safety truth；不得觸發 /safety、SOS、outbound send 或硬體控制。"
@@ -1067,6 +1096,20 @@ def _missing_fields(
 
 def _turn_back_status_label(query: str) -> str | None:
     normalized = "".join(str(query).lower().split())
+    if any(
+        phrase in normalized
+        for phrase in (
+            "撤退點是否即將失去",
+            "撤退點是不是快沒了",
+            "下一個撤退點是不是快沒了",
+            "撤退窗口是否即將失去",
+            "撤退窗口是不是快沒了",
+            "快失去撤退窗口",
+            "失去撤退窗口",
+            "retreatwindowclosing",
+        )
+    ):
+        return "撤退窗口"
     if any(
         phrase in normalized
         for phrase in (

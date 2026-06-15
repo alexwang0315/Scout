@@ -652,6 +652,35 @@ def test_evidence_collection_requires_current_context_for_turnback_status() -> N
     assert route_architecture.boundary.runtime_safety_truth is False
 
 
+def test_evidence_collection_requires_current_context_for_retreat_window_status() -> None:
+    result = collect_scout_ai_evidence(
+        "撤退點是否即將失去？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=4,
+    )
+
+    assert result.selected_tool_count == 1
+    assert result.executed_tool_count == 1
+    assert result.completed_tool_count == 1
+    assert result.contract_gap_count == 0
+
+    route_architecture = _record(result, ROUTE_ARCHITECTURE_TOOL_ID)
+    assert route_architecture.collection_status == "completed"
+    assert route_architecture.missing_fields == ["current_cp_id", "current_time"]
+    assert route_architecture.result is not None
+    payload = route_architecture.result["payload"]
+    assert payload["answerability"] == "route_architecture_missing_current_context"
+    assert payload["decision"] == "DELAY"
+    assert payload["missing_fields"] == ["current_cp_id", "current_time"]
+    assert payload["decision_output"]["firstLayer"]["decision"] == (
+        "無法確認撤退點是否即將失去。"
+    )
+    assert "撤退窗口仍可用" in payload["decision_output"]["firstLayer"]["limit"]
+    assert payload["route_decision"]["runtime_safety_truth"] is False
+    assert route_architecture.boundary.runtime_safety_truth is False
+
+
 def test_evidence_collection_keeps_live_navigation_decision_payload() -> None:
     result = collect_scout_ai_evidence(
         "我現在是不是偏離路線？",
