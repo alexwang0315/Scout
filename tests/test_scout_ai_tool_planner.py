@@ -730,6 +730,23 @@ def test_planner_selects_weather_and_contextual_for_stream_surge_crossing() -> N
     assert contextual.boundary.runtime_safety_truth is False
 
 
+def test_planner_routes_unknown_creek_level_to_cross_stream_permission() -> None:
+    plan = plan_scout_ai_tools(
+        _query("目前無法確認溪流水位，且我們沒有渡溪經驗，可以進入溪谷嗎？"),
+        project_root=PROJECT_ROOT,
+    )
+
+    tool_ids = _tool_ids(plan)
+    assert WEATHER_WINDOW_TOOL_ID in tool_ids
+    assert CONTEXTUAL_PERMISSION_TOOL_ID in tool_ids
+
+    contextual = _single_tool(plan, CONTEXTUAL_PERMISSION_TOOL_ID)
+    assert contextual.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+    assert contextual.request is not None
+    assert contextual.request["arguments"]["action"] == "cross_stream"
+    assert contextual.boundary.runtime_safety_truth is False
+
+
 def test_planner_selects_contextual_permission_for_split_team_summit_question() -> None:
     plan = plan_scout_ai_tools(
         _query("可以讓走得快的人先去山頂嗎？"),

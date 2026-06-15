@@ -564,6 +564,33 @@ def test_answer_synthesis_escalates_stream_surge_crossing() -> None:
     assert "runtime safety truth" in result.answer
 
 
+def test_answer_synthesis_escalates_unknown_creek_level_without_experience() -> None:
+    result = collect_and_synthesize_scout_ai_answer(
+        "目前無法確認溪流水位，且我們沒有渡溪經驗，可以進入溪谷嗎？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=6,
+    )
+
+    assert result.answerability == "partial_evidence_with_missing_context"
+    contextual = _source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
+    assert contextual.top_result_summary["action"] == "cross_stream"
+    assert contextual.top_result_summary["decision"] == "ESCALATE"
+    assert contextual.top_result_summary["allowed"] is False
+    assert contextual.missing_fields == ["remaining_safety_buffer_minutes"]
+    assert result.decision_output["answerSourceToolId"] == CONTEXTUAL_PERMISSION_TOOL_ID
+    assert result.decision_output["action"] == "cross_stream"
+    assert result.decision_output["decision"] == "ESCALATE"
+    assert result.decision_output["allowed"] is False
+    assert result.decision_output["firstLayer"]["decision"] == (
+        "需要升級處理，不建議渡溪。"
+    )
+    assert "高後果情境" in result.decision_output["firstLayer"]["reason"]
+    assert "停止進入溪谷" in result.decision_output["firstLayer"]["nextStep"]
+    assert "需要升級處理，不建議渡溪" in result.answer
+    assert "runtime safety truth" in result.answer
+
+
 def test_answer_synthesis_blocks_split_team_micro_decision() -> None:
     result = collect_and_synthesize_scout_ai_answer(
         "可以讓走得快的人先去山頂嗎？",

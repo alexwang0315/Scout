@@ -1490,7 +1490,21 @@ def _resolve_action(action: str | None, query: str) -> OutdoorAction:
         return OutdoorAction.RETREAT
     if _has_any(text, ("穿雨衣", "雨衣", "rain gear")):
         return OutdoorAction.WEAR_RAIN_GEAR
-    if _has_any(text, ("渡溪", "過溪", "溪水", "cross stream")):
+    if _has_any(
+        text,
+        (
+            "渡溪",
+            "過溪",
+            "溪水",
+            "溪流",
+            "溪谷",
+            "水位無法確認",
+            "無法確認溪流水位",
+            "沒有渡溪經驗",
+            "無渡溪經驗",
+            "cross stream",
+        ),
+    ):
         return OutdoorAction.CROSS_STREAM
     if _has_any(text, ("曝露", "暴露", "邊坡", "exposed")):
         return OutdoorAction.ENTER_EXPOSED_SECTION
@@ -1562,6 +1576,10 @@ def _normalized_risk_level(level: str | None, query: str) -> str | None:
             "斷崖",
             "崩壁",
             "溪水",
+            "溪流",
+            "溪谷",
+            "水位無法確認",
+            "無法確認溪流水位",
         ),
     ):
         return "high"
@@ -1577,7 +1595,21 @@ def _is_high_risk_action(
         return False
     if terrain_risk_level in _HIGH_RISK_LEVELS:
         return True
-    return _has_any(query.lower(), ("暴漲", "濕滑", "落石", "滑墜", "曝露", "暴露"))
+    return _has_any(
+        query.lower(),
+        (
+            "暴漲",
+            "濕滑",
+            "落石",
+            "滑墜",
+            "曝露",
+            "暴露",
+            "水位無法確認",
+            "無法確認溪流水位",
+            "沒有渡溪經驗",
+            "無渡溪經驗",
+        ),
+    )
 
 
 def _looks_like_risk_sentinel_continue(query: str) -> bool:
