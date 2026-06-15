@@ -1284,7 +1284,7 @@ def _route_briefing_field_answer(
         layers = _context_layer_lines(route_briefing.get("context_layers"))
         summary = route_briefing.get("summary")
         return (
-            "沿途 route-context 候選觀察："
+            "候選路線脈絡（Experience Guide 候選）："
             + (f"{summary} " if summary else "")
             + "；".join(layers)
             + f"。{boundary}"
@@ -1295,7 +1295,7 @@ def _route_briefing_field_answer(
     ):
         stops = _observation_stop_lines(route_briefing.get("observation_stops"))
         return (
-            "候選 3 分鐘觀察點："
+            "候選路線脈絡（Experience Guide 候選）：候選 3 分鐘觀察點："
             + ("；".join(stops) if stops else "目前簡報沒有列出觀察點")
             + "。這些不是現場停留授權；若真的要停留，仍需 contextual permission "
             "重新計算時間、天氣、日照、隊伍與風險預算。 "
