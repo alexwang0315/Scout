@@ -124,6 +124,30 @@ def test_answer_synthesis_reports_weather_tool_missing_fresh_evidence_without_gu
     assert "runtime safety truth" in result.answer
 
 
+def test_answer_synthesis_uses_query_reported_recent_rain_weather_decision() -> None:
+    result = collect_and_synthesize_scout_ai_answer(
+        "前 24 小時明顯降雨，溪水和崩塌風險是否升高？今天還能走嗎？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=5,
+    )
+
+    assert result.answerability == "partial_evidence_with_missing_context"
+    weather = _source(result, WEATHER_WINDOW_TOOL_ID)
+    assert weather.top_result_summary["decision"] == "CHANGE_PLAN"
+    assert weather.top_result_summary["weather_to_decision"][
+        "route_sensitive_weather_rule"
+    ]["rule"] == "query_reported_previous_24h_rain_route_reassessment"
+    assert "route_weather_package" in weather.missing_fields
+    assert result.decision_output["answerSourceToolId"] == WEATHER_WINDOW_TOOL_ID
+    assert result.decision_output["decision"] == "CHANGE_PLAN"
+    assert result.decision_output["firstLayer"]["decision"] == (
+        "不建議照原計畫通過。"
+    )
+    assert "previous-24h rainfall" in result.decision_output["firstLayer"]["reason"]
+    assert "runtime safety truth" in result.answer
+
+
 def test_answer_synthesis_uses_energy_vitals_decision_output() -> None:
     result = collect_and_synthesize_scout_ai_answer(
         "我現在心率偏高又很累，需要休息嗎?",
