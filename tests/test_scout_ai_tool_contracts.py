@@ -19,6 +19,7 @@ from scout_media_literacy_tool import MEDIA_LITERACY_TOOL_ID
 from scout_survival_incident_playbook_tool import SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID
 from scout_safety_boundary_tool import SAFETY_BOUNDARY_TOOL_ID
 from scout_map_perception_tool import MAP_PERCEPTION_TOOL_ID
+from scout_ins_dr_trace_tool import INS_DR_TRACE_TOOL_ID
 from scout_ai_tool_contracts import tool_registry_output
 from scout_ai_tool_executor import execute_scout_ai_tool
 
@@ -565,7 +566,7 @@ def test_execute_ins_dr_trace_analyzer_returns_read_only_missing_evidence() -> N
     assert result.implementation_status == "ready_current_tool"
     assert result.output_artifact_kind == "scout_ai_ins_dr_trace_tool_output"
     assert result.payload["artifact_kind"] == "scout_ai_ins_dr_trace_tool_output"
-    assert result.payload["tool_id"] == "scout.ai.ins_dr_trace.analyze.v0"
+    assert result.payload["tool_id"] == INS_DR_TRACE_TOOL_ID
     assert result.payload["analysis_kind"] == "read_only_ins_dr_trace"
     assert result.payload["answerability"] in {
         "missing_trace_evidence",
@@ -573,6 +574,22 @@ def test_execute_ins_dr_trace_analyzer_returns_read_only_missing_evidence() -> N
         "insufficient_aligned_samples",
         "trace_metrics_available",
     }
+    assert result.payload["decision"] == "DELAY"
+    assert result.payload["decision_output"]["decisionObjectSchema"] == (
+        "ContextualPermission"
+    )
+    assert result.payload["decision_output"]["decision"] == "DELAY"
+    assert result.payload["decision_output"]["allowed"] is False
+    assert result.payload["decision_output"]["runtimeSafetyTruth"] is False
+    assert result.payload["decision_output"]["firstLayer"]["decision"] == (
+        "暫緩 INS/DR trace 判斷。"
+    )
+    assert result.payload["ins_dr_trace"]["role"] == (
+        "Navigation Truth / INS-DR Trace Guard"
+    )
+    assert result.payload["ins_dr_trace"]["runtime_safety_truth"] is False
+    assert "ins_dr_estimates_jsonl" in result.missing_fields
+    assert "gps_only_trajectory" in result.missing_fields
     assert result.payload["boundary"]["safety_api_called"] is False
     assert result.payload["boundary"]["phase1_l0_l4_state_mutated"] is False
     assert result.payload["boundary"]["outbound_send_performed"] is False

@@ -27,6 +27,7 @@ from scout_risk_score_tool import RISK_SCORE_TOOL_ID
 from scout_terrain_score_tool import TERRAIN_SCORE_TOOL_ID
 from scout_safety_boundary_tool import SAFETY_BOUNDARY_TOOL_ID
 from scout_map_perception_tool import MAP_PERCEPTION_TOOL_ID
+from scout_ins_dr_trace_tool import INS_DR_TRACE_TOOL_ID
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -374,6 +375,33 @@ def test_evidence_collection_keeps_live_navigation_decision_payload() -> None:
     assert "lat" in navigation.missing_fields
     assert "lon" in navigation.missing_fields
     assert navigation.boundary.runtime_safety_truth is False
+
+
+def test_evidence_collection_keeps_ins_dr_trace_decision_output() -> None:
+    result = collect_scout_ai_evidence(
+        "GPS-only 軌跡和 INS/DR 軌跡差多少？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=3,
+    )
+
+    assert result.selected_tool_count == 1
+    assert result.executed_tool_count == 1
+    assert result.completed_tool_count == 1
+    trace = _record(result, INS_DR_TRACE_TOOL_ID)
+    payload = trace.result["payload"]
+    assert payload["answerability"] == "missing_trace_evidence"
+    assert payload["decision"] == "DELAY"
+    assert payload["decision_output"]["decisionObjectSchema"] == "ContextualPermission"
+    assert payload["decision_output"]["decision"] == "DELAY"
+    assert payload["decision_output"]["firstLayer"]["decision"] == (
+        "暫緩 INS/DR trace 判斷。"
+    )
+    assert payload["ins_dr_trace"]["role"] == "Navigation Truth / INS-DR Trace Guard"
+    assert payload["ins_dr_trace"]["runtime_safety_truth"] is False
+    assert "ins_dr_estimates_jsonl" in trace.missing_fields
+    assert "gps_only_trajectory" in trace.missing_fields
+    assert trace.boundary.runtime_safety_truth is False
 
 
 def test_evidence_collection_keeps_equipment_resource_payload() -> None:

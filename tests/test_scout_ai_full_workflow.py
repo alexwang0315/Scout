@@ -27,6 +27,7 @@ from scout_risk_score_tool import RISK_SCORE_TOOL_ID
 from scout_terrain_score_tool import TERRAIN_SCORE_TOOL_ID
 from scout_safety_boundary_tool import SAFETY_BOUNDARY_TOOL_ID
 from scout_map_perception_tool import MAP_PERCEPTION_TOOL_ID
+from scout_ins_dr_trace_tool import INS_DR_TRACE_TOOL_ID
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -394,6 +395,37 @@ def test_full_workflow_runs_live_navigation_uncertainty_question() -> None:
     )
     assert result.decision_output["secondLayer"]["uncertaintyNotes"]
     assert "地形導航判斷" in result.answer
+    assert result.boundary.runtime_safety_truth is False
+
+
+def test_full_workflow_runs_ins_dr_trace_question() -> None:
+    result = run_scout_ai_full_workflow(
+        "GPS-only 軌跡和 INS/DR 軌跡差多少？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=3,
+    )
+
+    assert result.answerability == "partial_evidence_with_missing_context"
+    assert result.selected_tool_count == 1
+    assert result.executed_tool_count == 1
+    assert result.completed_tool_count == 1
+    assert result.missing_evidence_count == 1
+    assert result.sources[0]["tool_id"] == INS_DR_TRACE_TOOL_ID
+    summary = result.sources[0]["top_result_summary"]
+    assert summary["decision"] == "DELAY"
+    assert summary["decision_output"]["decisionObjectSchema"] == "ContextualPermission"
+    assert summary["ins_dr_trace"]["role"] == "Navigation Truth / INS-DR Trace Guard"
+    assert result.decision_output["answerSourceToolId"] == INS_DR_TRACE_TOOL_ID
+    assert result.decision_output["decision"] == "DELAY"
+    assert result.decision_output["firstLayer"]["decision"] == (
+        "暫緩 INS/DR trace 判斷。"
+    )
+    answer_step = result.workflow_steps[-1]
+    assert answer_step.summary["decision_output_schema"] == "ContextualPermission"
+    assert answer_step.summary["decision_output_source_tool"] == INS_DR_TRACE_TOOL_ID
+    assert "ins_dr_estimates_jsonl" in result.sources[0]["missing_fields"]
+    assert "INS/DR trace decision: DELAY" in result.answer
     assert result.boundary.runtime_safety_truth is False
 
 
