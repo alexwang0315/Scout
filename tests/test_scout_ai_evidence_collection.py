@@ -462,6 +462,33 @@ def test_evidence_collection_blocks_shortcut_reroute_micro_decision() -> None:
     assert contextual.boundary.runtime_safety_truth is False
 
 
+def test_evidence_collection_blocks_continue_forward_micro_decision() -> None:
+    result = collect_scout_ai_evidence(
+        "我們現在可以繼續前進嗎？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=4,
+    )
+
+    assert result.selected_tool_count == 1
+    assert result.executed_tool_count == 1
+    assert result.completed_tool_count == 1
+    assert result.missing_input_count == 0
+
+    contextual = _record(result, CONTEXTUAL_PERMISSION_TOOL_ID)
+    assert contextual.collection_status == "completed"
+    assert contextual.missing_fields == []
+    assert contextual.result is not None
+    payload = contextual.result["payload"]
+    assert payload["answerability"] == "contextual_permission_decision_available"
+    assert payload["action"] == "continue"
+    assert payload["decision"] == "NO_GO"
+    assert payload["allowed"] is False
+    assert payload["decision_output"]["firstLayer"]["decision"] == "不建議繼續前進。"
+    assert "繼續推進" in payload["decision_output"]["firstLayer"]["reason"]
+    assert contextual.boundary.runtime_safety_truth is False
+
+
 def test_evidence_collection_keeps_direct_retreat_micro_decision() -> None:
     result = collect_scout_ai_evidence(
         "隊友很累，要不要直接撤退？",

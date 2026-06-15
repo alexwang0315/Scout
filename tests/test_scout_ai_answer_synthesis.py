@@ -798,6 +798,33 @@ def test_answer_synthesis_blocks_rockfall_fast_passage() -> None:
     assert "runtime safety truth" in result.answer
 
 
+def test_answer_synthesis_blocks_unreviewed_continue_forward() -> None:
+    result = collect_and_synthesize_scout_ai_answer(
+        "我們現在可以繼續前進嗎？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=4,
+    )
+
+    assert result.answerability == "evidence_available"
+    assert result.completed_source_count == 1
+    assert result.missing_evidence_count == 0
+    source = _source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
+    summary = source.top_result_summary
+    assert summary["action"] == "continue"
+    assert summary["decision"] == "NO_GO"
+    assert summary["allowed"] is False
+    assert result.decision_output["answerSourceToolId"] == CONTEXTUAL_PERMISSION_TOOL_ID
+    assert result.decision_output["action"] == "continue"
+    assert result.decision_output["decision"] == "NO_GO"
+    assert result.decision_output["allowed"] is False
+    assert result.decision_output["firstLayer"]["decision"] == "不建議繼續前進。"
+    assert "繼續推進" in result.decision_output["firstLayer"]["reason"]
+    assert "最近安全 CP" in result.decision_output["firstLayer"]["nextStep"]
+    assert "退回最近安全 CP" in result.answer
+    assert "runtime safety truth" in result.answer
+
+
 def test_answer_synthesis_uses_direct_retreat_micro_decision() -> None:
     result = collect_and_synthesize_scout_ai_answer(
         "隊友很累，要不要直接撤退？",

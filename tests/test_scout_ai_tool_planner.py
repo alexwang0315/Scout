@@ -893,6 +893,19 @@ def test_planner_routes_fast_passage_to_contextual_continue() -> None:
     assert item.boundary.runtime_safety_truth is False
 
 
+def test_planner_routes_continue_forward_to_contextual_continue() -> None:
+    plan = plan_scout_ai_tools(
+        _query("我們現在可以繼續前進嗎？"),
+        project_root=PROJECT_ROOT,
+    )
+
+    item = _single_tool(plan, CONTEXTUAL_PERMISSION_TOOL_ID)
+    assert item.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+    assert item.request is not None
+    assert item.request["arguments"] == {"action": "continue"}
+    assert item.boundary.runtime_safety_truth is False
+
+
 def test_planner_routes_rockfall_fast_passage_to_exposed_section() -> None:
     plan = plan_scout_ai_tools(
         _query("前方是落石區，這段要不要快速通過？"),
