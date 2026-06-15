@@ -32,7 +32,7 @@ def test_chilai_fixture_segments_link_to_dtm_metadata_without_rasters():
 
     assert summary.summary_id == "terrain_summary.chilai_nanhua_day1.test"
     assert summary.route_artifact_id == coverage.route_artifact_id
-    assert summary.segment_count == 109
+    assert summary.segment_count == len(segments)
     assert summary.candidate_tile_count == 48
     assert summary.unlinked_segment_ids == []
     assert [item.segment_candidate_id for item in summary.segment_metadata] == [

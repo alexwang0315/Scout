@@ -70,6 +70,11 @@ OPTIONAL_PACE_FIT_REFS = {
     "team_pace_fit_ref": "normalized/pace/team_pace_fit.json",
 }
 
+OPTIONAL_NAVIGATION_TERRAIN_REFS = {
+    "offline_map_manifest_ref": "normalized/navigation/offline_map_manifest.json",
+    "ins_dr_readiness_ref": "normalized/navigation/ins_dr_readiness.json",
+}
+
 OPTIONAL_WEATHER_DECISION_REFS = {
     "weather_source_manifest_ref": "normalized/weather/weather_source_manifest.json",
     "weather_decision_candidates_ref": "candidates/weather_decision_candidates.json",
@@ -168,6 +173,7 @@ def main(argv: list[str] | None = None) -> int:
     route_context_summary = {"checked": False, "available": False}
     route_architecture_summary = {"checked": False, "available": False}
     pace_fit_summary = {"checked": False, "available": False}
+    navigation_terrain_summary = {"checked": False, "available": False}
     weather_decision_summary = {"checked": False, "available": False}
     contextual_permission_summary = {"checked": False, "available": False}
     api_summary = {"checked": False}
@@ -291,6 +297,11 @@ def main(argv: list[str] | None = None) -> int:
                 project,
                 errors,
             )
+            navigation_terrain_summary = _check_navigation_terrain_refs(
+                project_root,
+                project,
+                errors,
+            )
             weather_decision_summary = _check_weather_decision_refs(
                 project_root,
                 project,
@@ -356,6 +367,7 @@ def main(argv: list[str] | None = None) -> int:
         "route_context": route_context_summary,
         "route_architecture": route_architecture_summary,
         "pace_fit": pace_fit_summary,
+        "navigation_terrain": navigation_terrain_summary,
         "weather_decision": weather_decision_summary,
         "contextual_permission": contextual_permission_summary,
         "layer_candidates": {
@@ -1028,6 +1040,173 @@ def _pace_fit_candidate_only(payload: Any) -> bool | None:
 
 
 def _pace_fit_runtime_truth(payload: Any) -> bool | None:
+    if not isinstance(payload, dict):
+        return None
+    boundary = payload.get("boundary") if isinstance(payload.get("boundary"), dict) else {}
+    if "runtime_safety_truth" in boundary:
+        return boundary.get("runtime_safety_truth")
+    return payload.get("runtime_safety_truth")
+
+
+def _check_navigation_terrain_refs(
+    project_root: Path,
+    project: dict[str, Any],
+    errors: list[str],
+) -> dict[str, Any]:
+    present_refs = {
+        key: project.get(key)
+        for key in OPTIONAL_NAVIGATION_TERRAIN_REFS
+        if project.get(key)
+    }
+    if not present_refs:
+        return {"checked": True, "available": False}
+
+    missing_ref_keys = [
+        key for key in OPTIONAL_NAVIGATION_TERRAIN_REFS if not project.get(key)
+    ]
+    if missing_ref_keys:
+        errors.append(
+            "navigation terrain refs are partial; missing: "
+            + ", ".join(sorted(missing_ref_keys))
+        )
+
+    for key, expected in sorted(OPTIONAL_NAVIGATION_TERRAIN_REFS.items()):
+        ref = project.get(key)
+        if ref and ref != expected:
+            errors.append(
+                f"unexpected navigation terrain ref for {key}: {ref} != {expected}"
+            )
+
+    payloads = {
+        key: _load_json_ref(project_root, project, key, errors)
+        for key in OPTIONAL_NAVIGATION_TERRAIN_REFS
+        if project.get(key)
+    }
+    offline = payloads.get("offline_map_manifest_ref")
+    offline = offline if isinstance(offline, dict) else {}
+    ins_dr = payloads.get("ins_dr_readiness_ref")
+    ins_dr = ins_dr if isinstance(ins_dr, dict) else {}
+
+    _check_navigation_terrain_artifact_kind(
+        offline,
+        "pretrip_offline_map_manifest",
+        "offline_map_manifest_ref",
+        errors,
+    )
+    _check_navigation_terrain_artifact_kind(
+        ins_dr,
+        "pretrip_ins_dr_readiness",
+        "ins_dr_readiness_ref",
+        errors,
+    )
+    for key, payload in payloads.items():
+        _check_navigation_terrain_boundary(payload, key, errors)
+
+    if offline.get("human_review_required") is not True:
+        errors.append("offline map manifest must require human review")
+    if ins_dr.get("human_review_required") is not True:
+        errors.append("INS/DR readiness must require human review")
+    if offline.get("decision") != ins_dr.get("decision"):
+        errors.append(
+            "navigation terrain decision mismatch: "
+            f"offline={offline.get('decision')} ins_dr={ins_dr.get('decision')}"
+        )
+    project_decision = project.get("navigation_terrain_decision")
+    if project_decision is not None and project_decision != offline.get("decision"):
+        errors.append(
+            "navigation_terrain_decision mismatch: "
+            f"project={project_decision} artifact={offline.get('decision')}"
+        )
+
+    map_readiness = (
+        offline.get("map_readiness")
+        if isinstance(offline.get("map_readiness"), dict)
+        else {}
+    )
+    terrain_readiness = (
+        offline.get("terrain_readiness")
+        if isinstance(offline.get("terrain_readiness"), dict)
+        else {}
+    )
+    positioning = (
+        ins_dr.get("positioning_readiness")
+        if isinstance(ins_dr.get("positioning_readiness"), dict)
+        else {}
+    )
+    if positioning.get("live_sensor_probe_performed") is not False:
+        errors.append("INS/DR readiness must set live_sensor_probe_performed=false")
+    if positioning.get("hardware_control_performed") is not False:
+        errors.append("INS/DR readiness must set hardware_control_performed=false")
+
+    return {
+        "checked": True,
+        "available": True,
+        "decision": offline.get("decision"),
+        "answerability": offline.get("answerability"),
+        "offline_map_downloaded": map_readiness.get("offline_map_downloaded"),
+        "gpx_loaded_on_device": map_readiness.get("gpx_loaded_on_device"),
+        "risk_layers_available": map_readiness.get("risk_layers_available"),
+        "terrain_layers_available": map_readiness.get("terrain_layers_available"),
+        "risk_ribbon_segment_count": terrain_readiness.get(
+            "risk_ribbon_segment_count"
+        ),
+        "backup_positioning_available": positioning.get(
+            "backup_positioning_available"
+        ),
+        "live_sensor_probe_performed": positioning.get("live_sensor_probe_performed"),
+        "candidate_only": _navigation_terrain_candidate_only(offline),
+        "runtime_safety_truth": _navigation_terrain_runtime_truth(offline),
+    }
+
+
+def _check_navigation_terrain_artifact_kind(
+    payload: Any,
+    expected: str,
+    ref_key: str,
+    errors: list[str],
+) -> None:
+    if not isinstance(payload, dict):
+        errors.append(f"navigation terrain artifact payload missing for {ref_key}")
+        return
+    if payload.get("artifact_kind") != expected:
+        errors.append(
+            f"navigation terrain artifact kind mismatch for {ref_key}: {payload.get('artifact_kind')} != {expected}"
+        )
+
+
+def _check_navigation_terrain_boundary(
+    payload: Any,
+    ref_key: str,
+    errors: list[str],
+) -> None:
+    if not isinstance(payload, dict):
+        return
+    boundary = payload.get("boundary") if isinstance(payload.get("boundary"), dict) else {}
+    if payload.get("runtime_safety_truth") is True or boundary.get("runtime_safety_truth") is True:
+        errors.append(f"{ref_key} claims runtime_safety_truth=true")
+    for key in (
+        "phase1_runtime_mutation_allowed",
+        "phase2_brain_writeback_allowed",
+        "live_safety_api_calls_allowed",
+        "external_api_calls_made",
+        "outbound_send_allowed",
+        "hardware_control_allowed",
+        "live_sensor_read_allowed",
+        "live_sensor_probe_performed",
+        "raw_payloads_embedded",
+    ):
+        if boundary.get(key) is True:
+            errors.append(f"{ref_key} sets {key}=true")
+
+
+def _navigation_terrain_candidate_only(payload: Any) -> bool | None:
+    if not isinstance(payload, dict):
+        return None
+    boundary = payload.get("boundary") if isinstance(payload.get("boundary"), dict) else {}
+    return boundary.get("candidate_only")
+
+
+def _navigation_terrain_runtime_truth(payload: Any) -> bool | None:
     if not isinstance(payload, dict):
         return None
     boundary = payload.get("boundary") if isinstance(payload.get("boundary"), dict) else {}

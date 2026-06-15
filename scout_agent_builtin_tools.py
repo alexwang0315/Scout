@@ -162,6 +162,8 @@ def run_builtin_tool(argv: Sequence[str] | None = None) -> tuple[int, dict[str, 
         return _pretrip_route_architecture_collect(args)
     if args.command == "pretrip-pace-fit-collect":
         return _pretrip_pace_fit_collect(args)
+    if args.command == "pretrip-navigation-terrain-collect":
+        return _pretrip_navigation_terrain_collect(args)
     if args.command == "pretrip-weather-decision-collect":
         return _pretrip_weather_decision_collect(args)
     if args.command == "pretrip-contextual-permission-collect":
@@ -429,6 +431,13 @@ def _build_parser() -> argparse.ArgumentParser:
     pace_fit_parser.add_argument("--input", type=Path, required=True)
     pace_fit_parser.add_argument("--dry-run", action="store_true")
     pace_fit_parser.add_argument("--json", action="store_true")
+
+    navigation_terrain_parser = subparsers.add_parser(
+        "pretrip-navigation-terrain-collect"
+    )
+    navigation_terrain_parser.add_argument("--input", type=Path, required=True)
+    navigation_terrain_parser.add_argument("--dry-run", action="store_true")
+    navigation_terrain_parser.add_argument("--json", action="store_true")
 
     weather_decision_parser = subparsers.add_parser("pretrip-weather-decision-collect")
     weather_decision_parser.add_argument("--input", type=Path, required=True)
@@ -2600,6 +2609,58 @@ def _pretrip_pace_fit_collect(args: argparse.Namespace) -> tuple[int, dict[str, 
                 "live_safety_api_calls_allowed": False,
                 "medical_diagnosis": False,
                 "average_pace_used": False,
+            },
+        },
+    )
+
+
+def _pretrip_navigation_terrain_collect(
+    args: argparse.Namespace,
+) -> tuple[int, dict[str, Any]]:
+    from pretrip_navigation_terrain_collection import (
+        collect_pretrip_navigation_terrain,
+    )
+
+    request = _load_json(args.input)
+    project_root = _optional_path(request.get("project_root"))
+    if project_root is None:
+        project_id = request.get("project_id")
+        workspace_root = _optional_path(request.get("workspace_root"))
+        if project_id and workspace_root:
+            project_root = workspace_root / str(project_id)
+    if project_root is None:
+        return 2, _error_payload(
+            "navigation terrain collection requires project_root or workspace_root plus project_id"
+        )
+
+    result = collect_pretrip_navigation_terrain(
+        project_root,
+        dry_run=bool(args.dry_run),
+        offline_map_downloaded=request.get("offline_map_downloaded"),
+        gpx_loaded_on_device=request.get("gpx_loaded_on_device"),
+        contour_skill_confirmed=request.get("contour_skill_confirmed"),
+        terrain_feature_skill_confirmed=request.get("terrain_feature_skill_confirmed"),
+        retreat_direction_understood=request.get("retreat_direction_understood"),
+        backup_positioning_available=request.get("backup_positioning_available"),
+        team_map_user_count=request.get("team_map_user_count"),
+        generated_at=request.get("generated_at"),
+    )
+    return (
+        0,
+        {
+            "artifact_kind": "scout_pretrip_navigation_terrain_collect_tool_output",
+            "status": "completed",
+            "dry_run": bool(args.dry_run),
+            "result": result,
+            "boundary": {
+                **_closed_boundary(),
+                "workspace_file_mutation_allowed": not bool(args.dry_run),
+                "candidate_only": True,
+                "raw_payloads_embedded": False,
+                "network_calls_made": False,
+                "live_safety_api_calls_allowed": False,
+                "hardware_control_allowed": False,
+                "live_sensor_read_allowed": False,
             },
         },
     )

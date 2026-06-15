@@ -28,7 +28,7 @@ Scout Agent/CLI is designed to let Scout use its own local resources:
 
 - Build and query an offline evidence index for the trip.
 - Import GPX and prepare pretrip layers.
-- Collect route context, route architecture, pace fit, weather decisions, and contextual permission rules.
+- Collect route context, route architecture, pace fit, navigation terrain readiness, weather decisions, and contextual permission rules.
 - Review, propose, and apply CP candidate changes through auditable workspace artifacts.
 - Build risk attribution and heatmap diagnostics.
 - Append notes to the flight recorder.
@@ -106,7 +106,7 @@ flowchart LR
 | `local_evidence_query` | Read local evidence only | release checks, KB query, debug trace tail |
 | `decision_support` | Compute advice without writing runtime truth | readiness, trigger dry-run, shelter direction |
 | `proposal_write` | Write candidate-only proposals | CP add/delete proposal preview |
-| `workspace_write` | Write local workspace or trace artifacts | import GPX, collect route context/route architecture/pace fit/weather/contextual permission candidates, prepare layers, append note, plant imprint |
+| `workspace_write` | Write local workspace or trace artifacts | import GPX, collect route context/route architecture/pace fit/navigation terrain/weather/contextual permission candidates, prepare layers, append note, plant imprint |
 | `package_write` | Write package/handoff artifacts without runtime activation | reviewed candidates, runtime export/handoff |
 | `outbound_preview` | Preview or mock outbound/voice only | voice preview, mock queue |
 | `ephemeral_safety_action` | Short-lived advisory action | shelter direction |
@@ -121,7 +121,7 @@ Current manifest count is reported by `scout_cli tools list --json`.
 | checks | `scout.checks.pretrip_release`, `scout.checks.runtime_readiness` | Read-only release/readiness reports |
 | kb | `scout.kb.build`, `scout.kb.query`, `scout.kb.pretrip_view_summary`, `scout.kb.hardware_readiness_summary` | Offline evidence index and summaries |
 | local evidence | `scout.local_evidence.status` | Local trip state summary |
-| pretrip | `scout.pretrip.import_gpx`, `scout.pretrip.route_context_collect`, `scout.pretrip.route_architecture_collect`, `scout.pretrip.pace_fit_collect`, `scout.pretrip.weather_decision_collect`, `scout.pretrip.contextual_permission_collect`, `scout.pretrip.prepare_layers`, `scout.pretrip.artifact_manifest`, `scout.pretrip.readiness`, `scout.pretrip.decision_register`, `scout.pretrip.workspace_edit`, `scout.pretrip.review_append_decisions`, `scout.pretrip.departure_reviewed_candidates`, `scout.pretrip.runtime_handoff`, `scout.pretrip.runtime_export` | Pretrip workspace, route context, route architecture, pace fit, weather decision, contextual permission, review, handoff/export |
+| pretrip | `scout.pretrip.import_gpx`, `scout.pretrip.route_context_collect`, `scout.pretrip.route_architecture_collect`, `scout.pretrip.pace_fit_collect`, `scout.pretrip.navigation_terrain_collect`, `scout.pretrip.weather_decision_collect`, `scout.pretrip.contextual_permission_collect`, `scout.pretrip.prepare_layers`, `scout.pretrip.artifact_manifest`, `scout.pretrip.readiness`, `scout.pretrip.decision_register`, `scout.pretrip.workspace_edit`, `scout.pretrip.review_append_decisions`, `scout.pretrip.departure_reviewed_candidates`, `scout.pretrip.runtime_handoff`, `scout.pretrip.runtime_export` | Pretrip workspace, route context, route architecture, pace fit, navigation terrain, weather decision, contextual permission, review, handoff/export |
 | cp | `scout.cp.proposal_preview`, `scout.cp.propose_add`, `scout.cp.propose_delete`, `scout.cp.apply_reviewed_delta` | CP proposal and reviewed deltas |
 | risk | `scout.risk.attribution`, `scout.risk.heatmap` | Candidate-only risk diagnostics |
 | map | `scout.map.raster_source`, `scout.map.raster_tiles`, `scout.map.tile_cache_plan` | Local raster/tile planning and cache prep |
@@ -206,6 +206,37 @@ The canonical outputs are:
 These artifacts are candidate-only planning evidence. They do not diagnose
 medical conditions, send messages, approve departure, call `/safety/*`, or
 become runtime safety truth.
+
+## Navigation Terrain Collection
+
+Navigation terrain collection is the Sec. 11 pretrip enrichment flow. It reads
+workspace-local map context, reference tracks, DTM coverage, segment terrain
+coverage, retreat routes, and risk layers, then combines them with operator
+answers about offline maps, GPX loading, contour literacy, terrain-feature
+recognition, retreat direction, and backup positioning.
+
+```bash
+python -m scout_cli pretrip navigation-terrain-collect \
+  --project-root /data/scout/admin/pretrip-workspaces/chilai_nanhua_day1 \
+  --offline-map-downloaded false \
+  --gpx-loaded-on-device false \
+  --contour-skill-confirmed false \
+  --terrain-feature-skill-confirmed false \
+  --retreat-direction-understood false \
+  --backup-positioning-available false \
+  --team-map-user-count 1 \
+  --json
+```
+
+The canonical outputs are:
+
+- `normalized/navigation/offline_map_manifest.json`
+- `normalized/navigation/ins_dr_readiness.json`
+
+If route map demand is high and the team lacks offline map, GPX, contour,
+terrain, retreat, or backup-positioning readiness, the flow returns
+`GUIDED_ONLY` rather than a vague warning. It does not read live sensors, control
+hardware, call `/safety/*`, or become runtime safety truth.
 
 ## Weather Decision Collection
 
