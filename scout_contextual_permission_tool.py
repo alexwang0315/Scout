@@ -1491,6 +1491,8 @@ def _resolve_action(action: str | None, query: str) -> OutdoorAction:
             if normalized == candidate.value:
                 return candidate
     text = query.lower()
+    if _looks_like_buffer_cost_question(text):
+        return OutdoorAction.STOP
     if _has_any(text, ("架腳架", "腳架", "tripod")):
         return OutdoorAction.TRIPOD
     if _has_any(text, ("拍影片", "拍片", "影片", "video", "film")):
@@ -1564,6 +1566,26 @@ def _resolve_action(action: str | None, query: str) -> OutdoorAction:
     ) or re.search(r"停\s*\d+(?:\.\d+)?\s*(?:分鐘|分|min|minutes?)", text):
         return OutdoorAction.STOP
     return OutdoorAction.CONTINUE
+
+
+def _looks_like_buffer_cost_question(text: str) -> bool:
+    return _has_any(
+        text.replace(" ", ""),
+        (
+            "會消耗什麼buffer",
+            "消耗什麼buffer",
+            "消耗哪些buffer",
+            "耗掉什麼buffer",
+            "吃掉什麼buffer",
+            "消耗什麼餘裕",
+            "消耗哪些餘裕",
+            "消耗什麼預算",
+            "消耗哪些預算",
+            "風險預算",
+            "代價是什麼",
+            "成本是什麼",
+        ),
+    )
 
 
 def _requested_duration_from_query(query: str) -> float | None:

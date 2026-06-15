@@ -638,6 +638,28 @@ def test_full_workflow_uses_local_clock_for_stop_deadline() -> None:
     assert result.boundary.runtime_safety_truth is False
 
 
+def test_full_workflow_routes_abstract_buffer_cost_to_contextual_permission() -> None:
+    result = run_scout_ai_full_workflow(
+        "這個選擇會消耗什麼 buffer？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=4,
+    )
+
+    assert result.answerability == "partial_evidence_with_missing_context"
+    assert result.selected_tool_count == 1
+    contextual = _workflow_source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
+    assert contextual["top_result_summary"]["action"] == "stop"
+    assert contextual["top_result_summary"]["decision"] == "NO_GO"
+    assert contextual["missing_fields"] == ["remaining_safety_buffer_minutes"]
+    assert result.decision_output["answerSourceToolId"] == CONTEXTUAL_PERMISSION_TOOL_ID
+    assert result.decision_output["action"] == "stop"
+    assert result.decision_output["decision"] == "NO_GO"
+    assert "remaining_safety_buffer_minutes" in result.answer
+    assert "不要消耗停留或改線 buffer" in result.answer
+    assert result.boundary.runtime_safety_truth is False
+
+
 def test_full_workflow_treats_fog_photo_as_wait_permission() -> None:
     result = run_scout_ai_full_workflow(
         "可以等霧散再拍照嗎？",
@@ -1451,6 +1473,24 @@ def test_full_workflow_explains_route_forgiveness_and_retreat_options() -> None:
     assert "候選撤退路線" in result.answer
     assert "雲海保線所" in result.answer
     assert "no_segment_retreat" in result.answer
+    assert result.boundary.runtime_safety_truth is False
+
+
+def test_full_workflow_explains_where_to_retreat_after_wrong_turn() -> None:
+    result = run_scout_ai_full_workflow(
+        "如果走錯要往哪裡退？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=4,
+    )
+
+    assert result.answerability == "evidence_available"
+    assert result.selected_tool_count == 1
+    assert result.sources[0]["tool_id"] == ROUTE_ARCHITECTURE_TOOL_ID
+    assert result.decision_output["answerSourceToolId"] == ROUTE_ARCHITECTURE_TOOL_ID
+    assert result.decision_output["decision"] == "CONDITIONAL_GO"
+    assert "候選撤退路線" in result.answer
+    assert "雲海保線所" in result.answer
     assert result.boundary.runtime_safety_truth is False
 
 
