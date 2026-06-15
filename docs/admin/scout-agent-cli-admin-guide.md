@@ -184,6 +184,26 @@ slowest-member basis instead of average pace. It can recommend moving lunch/rest
 earlier, shortening, or turning around, but bounded stop duration still requires
 contextual permission.
 
+`scout.ai.equipment_resource.assess.v0` returns a native `decision_output` for
+Sec. 18.1 equipment/resource inputs and Sec. 24.1 MVP readiness checks. The first
+layer turns battery, offline map, GPX, headlamp, water, food, and critical gear
+gaps into Go / Delay / Conditional / No-Go style field decisions. It remains a
+read-only resource gate and never grants departure approval or runtime safety
+truth by itself.
+
+`scout.ai.team_status.assess.v0` returns a native `decision_output` for Sec. 18.1
+team/remote-contact inputs and Sec. 19 team-status recalculation. It converts
+missing member position, overdue check-in, split team, unreliable communication,
+and remote-contact review gaps into first-layer team decisions while explicitly
+blocking automatic remote messages, SOS, `/safety/*`, or hardware control.
+
+`scout.ai.survival_incident_playbook.explain.v0` returns a native
+`decision_output` for Risk Sentinel incident playbook questions. Lost-position,
+injury, cold-exposure, and SOS-preparation scenarios produce a first-layer
+No-Go/Escalate decision plus the first safe action, evidence fields to collect,
+manual share-pack policy, and explicit prohibitions on automatic SOS, remote
+messages, `/safety/*`, medical diagnosis, or hardware control.
+
 `scout.ai.route_context.assess.v0` returns a native `decision_output` for Sec. 6
 and Sec. 15.3 Experience Guide questions. Candidate observation, photo, cultural,
 natural, and historical points are exposed as route context, while the first

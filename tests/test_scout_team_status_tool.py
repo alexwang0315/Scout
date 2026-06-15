@@ -23,6 +23,12 @@ def test_team_status_reports_fixture_missing_live_team_fields() -> None:
     assert result["tool_id"] == TEAM_STATUS_TOOL_ID
     assert result["answerability"] == "team_status_missing_required_fields"
     assert result["decision"] == "DELAY"
+    assert result["decision_output"]["decisionObjectSchema"] == "ContextualPermission"
+    assert result["decision_output"]["decision"] == "DELAY"
+    assert result["decision_output"]["firstLayer"]["decision"] == (
+        "建議延後隊伍狀態判斷。"
+    )
+    assert result["decision_output"]["runtimeSafetyTruth"] is False
     assert "member_positions_or_last_heard" in result["missing_fields"]
     assert "communication_status" in result["missing_fields"]
     assert result["team_status_guardian"]["role"] == (
@@ -62,6 +68,11 @@ def test_team_status_escalates_for_missing_teammate_and_overdue_checkin() -> Non
 
     assert result["answerability"] == "team_status_decision_available"
     assert result["decision"] == "ESCALATE"
+    assert result["decision_output"]["decision"] == "ESCALATE"
+    assert result["decision_output"]["firstLayer"]["decision"] == (
+        "停止推進並升級人工確認。"
+    )
+    assert "不得自動通知留守人" in result["decision_output"]["firstLayer"]["limit"]
     assert "有隊員未確認位置或狀態。" in result["team_governance"][
         "critical_gaps"
     ]
@@ -105,6 +116,9 @@ def test_team_status_go_when_direct_team_inputs_are_ready(tmp_path: Path) -> Non
 
     assert result["answerability"] == "team_status_decision_available"
     assert result["decision"] == "GO"
+    assert result["decision_output"]["firstLayer"]["decision"] == (
+        "隊伍狀態可進入下一步。"
+    )
     assert result["missing_fields"] == []
     assert result["team_governance"]["critical_gaps"] == []
     assert result["team_governance"]["warning_gaps"] == []

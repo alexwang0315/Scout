@@ -120,6 +120,13 @@ def assess_scout_equipment_resource(
         readiness=readiness,
         missing_fields=missing_fields,
     )
+    decision_output = _decision_output(
+        decision=decision,
+        readiness=readiness,
+        resource_state=resource_state,
+        missing_fields=missing_fields,
+        field_answer=field_answer,
+    )
 
     return {
         "artifact_kind": EQUIPMENT_RESOURCE_OUTPUT_KIND,
@@ -131,6 +138,7 @@ def assess_scout_equipment_resource(
         "answerability": answerability,
         "source_status": "candidate_only",
         "decision": decision,
+        "decision_output": decision_output,
         "field_answer": field_answer,
         "missing_fields": missing_fields,
         "equipment_resource": {
@@ -138,6 +146,7 @@ def assess_scout_equipment_resource(
             "candidate_only": True,
             "runtime_safety_truth": False,
             "decision": decision,
+            "decision_output": decision_output,
             "critical_gaps": readiness["critical_gaps"],
             "warning_gaps": readiness["warning_gaps"],
             "required_conditions": readiness["required_conditions"],
@@ -152,6 +161,7 @@ def assess_scout_equipment_resource(
             {
                 "label": "equipment resource decision",
                 "decision": decision,
+                "decision_output": decision_output,
                 "answerability": answerability,
                 "critical_gaps": readiness["critical_gaps"],
                 "warning_gaps": readiness["warning_gaps"],
@@ -376,6 +386,134 @@ def _field_answer(
         f"下一步：{readiness['next_action']} "
         "此為 Equipment / Resource 候選判斷，不是 runtime safety truth；不得觸發 /safety、SOS、outbound send 或硬體控制。"
     )
+
+
+def _decision_output(
+    *,
+    decision: str,
+    readiness: dict[str, Any],
+    resource_state: dict[str, Any],
+    missing_fields: list[str],
+    field_answer: str,
+) -> dict[str, Any]:
+    allowed = decision in {"GO", "CONDITIONAL_GO"}
+    reasons = _decision_reasons(readiness=readiness, missing_fields=missing_fields)
+    uncertainty_notes = [f"Missing field: {field}" for field in missing_fields]
+    first_layer = {
+        "decision": _decision_phrase(decision=decision, allowed=allowed),
+        "limit": _decision_limit_phrase(decision=decision),
+        "reason": " / ".join(reasons[:2]),
+        "nextStep": readiness["next_action"],
+    }
+    second_layer = {
+        "details": _decision_details(
+            resource_state=resource_state,
+            field_answer=field_answer,
+        ),
+        "uncertaintyNotes": uncertainty_notes,
+        "residualRisk": [
+            "Equipment and resource evidence is candidate-only.",
+            "Runtime safety truth, /safety, SOS, outbound send, and hardware control were not triggered.",
+        ],
+        "requiredConditions": readiness["required_conditions"],
+        "alternativeActions": readiness["alternative_actions"],
+    }
+    return {
+        "role": "Micro-Decision Agent",
+        "format": "SCOUT_OUTDOOR_AI_AGENT_STANDARD.section16",
+        "decisionObjectSchema": "ContextualPermission",
+        "text": "\n".join(
+            (
+                f"[決策] {first_layer['decision']}",
+                f"[限制] {first_layer['limit']}",
+                f"[原因] {first_layer['reason']}",
+                f"[下一步] {first_layer['nextStep']}",
+            )
+        ),
+        "firstLayer": first_layer,
+        "secondLayer": second_layer,
+        "action": "equipment_resource_readiness",
+        "decision": decision,
+        "allowed": allowed,
+        "locationConstraint": first_layer["limit"],
+        "mainReasons": reasons[:3],
+        "cost": {
+            "phoneBatteryPercent": resource_state.get("phone_battery_percent"),
+            "powerBankPercent": resource_state.get("power_bank_percent"),
+            "waterLiters": resource_state.get("water_liters"),
+            "foodHours": resource_state.get("food_hours"),
+            "offlineMapReady": resource_state.get("offline_map_ready"),
+            "gpxLoaded": resource_state.get("gpx_loaded"),
+        },
+        "nextAction": readiness["next_action"],
+        "confidence": "low" if uncertainty_notes else "medium",
+        "uncertaintyNotes": uncertainty_notes,
+        "residualRisk": second_layer["residualRisk"],
+        "requiredConditions": readiness["required_conditions"],
+        "alternativeActions": readiness["alternative_actions"],
+        "standardAlignment": [
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 18.1 equipment and offline map inputs",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 18.2 required outputs",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 16 required decision output format",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 17 ContextualPermission schema",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 24.1 MVP required inputs",
+        ],
+        "runtimeSafetyTruth": False,
+    }
+
+
+def _decision_reasons(
+    *, readiness: dict[str, Any], missing_fields: list[str]
+) -> list[str]:
+    reasons = []
+    reasons.extend(readiness["critical_gaps"])
+    reasons.extend(readiness["warning_gaps"])
+    if missing_fields:
+        reasons.append("缺少 " + "、".join(missing_fields[:5]))
+    if not reasons:
+        reasons.append("裝備資源資料未顯示主要缺口。")
+    return _dedupe(reasons)
+
+
+def _decision_phrase(*, decision: str, allowed: bool) -> str:
+    if decision == "NO_GO":
+        return "不建議照原計畫出發或推進。"
+    if decision == "DELAY":
+        return "建議延後裝備資源判斷。"
+    if decision == "CONDITIONAL_GO":
+        return "可有條件進入下一步規劃。"
+    if decision == "GO" and allowed:
+        return "裝備資源可進入下一步。"
+    return "暫緩判斷。"
+
+
+def _decision_limit_phrase(*, decision: str) -> str:
+    if decision == "NO_GO":
+        return "補齊關鍵裝備、離線地圖、GPX、電量、水或食物前，不得照原計畫出發或推進。"
+    if decision == "DELAY":
+        return "資料缺口補齊前，不得把此回答當成 departure approval 或現場 permission。"
+    if decision == "CONDITIONAL_GO":
+        return "必須先滿足 required conditions，且仍需天氣、腳程、隊伍與 runtime gate。"
+    return "這不是 runtime safety truth；下一個 CP 或出發前仍需重算資源狀態。"
+
+
+def _decision_details(
+    *, resource_state: dict[str, Any], field_answer: str
+) -> list[str]:
+    details = [
+        field_answer,
+        f"phone_battery_percent={resource_state.get('phone_battery_percent')}",
+        f"power_bank_percent={resource_state.get('power_bank_percent')}",
+        f"offline_map_ready={resource_state.get('offline_map_ready')}",
+        f"gpx_loaded={resource_state.get('gpx_loaded')}",
+        f"headlamp_ready={resource_state.get('headlamp_ready')}",
+        f"water_liters={resource_state.get('water_liters')}",
+        f"food_hours={resource_state.get('food_hours')}",
+    ]
+    warnings = resource_state.get("resource_plan_warnings")
+    if isinstance(warnings, list) and warnings:
+        details.append("resource_plan_warnings=" + " / ".join(str(item) for item in warnings[:3]))
+    return details
 
 
 def _missing_fields(resource_state: dict[str, Any]) -> list[str]:

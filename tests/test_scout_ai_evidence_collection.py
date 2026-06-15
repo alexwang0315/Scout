@@ -317,6 +317,10 @@ def test_evidence_collection_keeps_equipment_resource_payload() -> None:
     payload = equipment.result["payload"]
     assert payload["answerability"] == "equipment_resource_missing_required_fields"
     assert payload["decision"] == "DELAY"
+    assert payload["decision_output"]["decisionObjectSchema"] == "ContextualPermission"
+    assert payload["decision_output"]["firstLayer"]["decision"] == (
+        "建議延後裝備資源判斷。"
+    )
     assert payload["equipment_resource"]["role"] == "Equipment / Resource Intelligence"
     assert payload["resource_state"]["offline_map_ready"] is True
     assert "water_liters" in equipment.missing_fields
@@ -409,6 +413,10 @@ def test_evidence_collection_keeps_survival_playbook_payload() -> None:
     payload = survival.result["payload"]
     assert payload["answerability"] == "survival_playbook_missing_personalized_context"
     assert payload["decision"] == "NO_GO"
+    assert payload["decision_output"]["decisionObjectSchema"] == "ContextualPermission"
+    assert payload["decision_output"]["firstLayer"]["decision"] == (
+        "不建議繼續移動或下切找路。"
+    )
     assert payload["survival_incident_playbook"]["role"] == (
         "Risk Sentinel / Survival Incident Playbook"
     )
@@ -439,6 +447,10 @@ def test_evidence_collection_keeps_team_status_payload() -> None:
     payload = team_status.result["payload"]
     assert payload["answerability"] == "team_status_missing_required_fields"
     assert payload["decision"] == "DELAY"
+    assert payload["decision_output"]["decisionObjectSchema"] == "ContextualPermission"
+    assert payload["decision_output"]["firstLayer"]["decision"] == (
+        "建議延後隊伍狀態判斷。"
+    )
     assert payload["team_status_guardian"]["role"] == (
         "Team Status / Remote Contact Governance"
     )

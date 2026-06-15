@@ -110,6 +110,13 @@ def assess_scout_team_status(
         governance=governance,
         missing_fields=missing_fields,
     )
+    decision_output = _decision_output(
+        decision=decision,
+        governance=governance,
+        team_state=team_state,
+        missing_fields=missing_fields,
+        field_answer=field_answer,
+    )
 
     return {
         "artifact_kind": TEAM_STATUS_OUTPUT_KIND,
@@ -121,6 +128,7 @@ def assess_scout_team_status(
         "answerability": answerability,
         "source_status": "candidate_only",
         "decision": decision,
+        "decision_output": decision_output,
         "field_answer": field_answer,
         "missing_fields": missing_fields,
         "team_status_guardian": {
@@ -129,6 +137,7 @@ def assess_scout_team_status(
             "runtime_safety_truth": False,
             "outbound_send_performed": False,
             "decision": decision,
+            "decision_output": decision_output,
             "critical_gaps": governance["critical_gaps"],
             "warning_gaps": governance["warning_gaps"],
             "required_conditions": governance["required_conditions"],
@@ -143,6 +152,7 @@ def assess_scout_team_status(
             {
                 "label": "team status decision",
                 "decision": decision,
+                "decision_output": decision_output,
                 "answerability": answerability,
                 "critical_gaps": governance["critical_gaps"],
                 "warning_gaps": governance["warning_gaps"],
@@ -341,6 +351,140 @@ def _field_answer(
         f"下一步：{governance['next_action']} "
         "此為 Team Status / 留守治理候選判斷，不是 runtime safety truth；不得自動通知留守人、報案、觸發 /safety、SOS、outbound send 或硬體控制。"
     )
+
+
+def _decision_output(
+    *,
+    decision: str,
+    governance: dict[str, Any],
+    team_state: dict[str, Any],
+    missing_fields: list[str],
+    field_answer: str,
+) -> dict[str, Any]:
+    allowed = decision in {"GO", "CONDITIONAL_GO"}
+    reasons = _decision_reasons(governance=governance, missing_fields=missing_fields)
+    uncertainty_notes = [f"Missing field: {field}" for field in missing_fields]
+    first_layer = {
+        "decision": _decision_phrase(decision=decision, allowed=allowed),
+        "limit": _decision_limit_phrase(decision=decision),
+        "reason": " / ".join(reasons[:2]),
+        "nextStep": governance["next_action"],
+    }
+    second_layer = {
+        "details": _decision_details(team_state=team_state, field_answer=field_answer),
+        "uncertaintyNotes": uncertainty_notes,
+        "residualRisk": [
+            "Team status evidence is candidate-only.",
+            "Remote contact, outbound send, SOS, /safety, and hardware control were not triggered.",
+            "Runtime safety truth was not created.",
+        ],
+        "requiredConditions": governance["required_conditions"],
+        "alternativeActions": governance["alternative_actions"],
+    }
+    return {
+        "role": "Micro-Decision Agent",
+        "format": "SCOUT_OUTDOOR_AI_AGENT_STANDARD.section16",
+        "decisionObjectSchema": "ContextualPermission",
+        "text": "\n".join(
+            (
+                f"[決策] {first_layer['decision']}",
+                f"[限制] {first_layer['limit']}",
+                f"[原因] {first_layer['reason']}",
+                f"[下一步] {first_layer['nextStep']}",
+            )
+        ),
+        "firstLayer": first_layer,
+        "secondLayer": second_layer,
+        "action": "team_status_guardian",
+        "decision": decision,
+        "allowed": allowed,
+        "locationConstraint": first_layer["limit"],
+        "mainReasons": reasons[:3],
+        "cost": {
+            "memberCount": team_state.get("member_count"),
+            "membersNotAccountedFor": team_state.get("members_not_accounted_for"),
+            "checkinOverdueMinutes": team_state.get("checkin_overdue_minutes"),
+            "communicationStatus": team_state.get("communication_status"),
+            "splitTeam": team_state.get("split_team"),
+        },
+        "nextAction": governance["next_action"],
+        "confidence": "low" if uncertainty_notes else "medium",
+        "uncertaintyNotes": uncertainty_notes,
+        "residualRisk": second_layer["residualRisk"],
+        "requiredConditions": governance["required_conditions"],
+        "alternativeActions": governance["alternative_actions"],
+        "standardAlignment": [
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 7.3 Team Pace Fit",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 18.1 team and remote-contact inputs",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 19 on-route team status recalculation",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 16 required decision output format",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 17 ContextualPermission schema",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 24.1 MVP required inputs",
+        ],
+        "runtimeSafetyTruth": False,
+    }
+
+
+def _decision_reasons(
+    *, governance: dict[str, Any], missing_fields: list[str]
+) -> list[str]:
+    reasons = []
+    reasons.extend(governance["critical_gaps"])
+    reasons.extend(governance["warning_gaps"])
+    if missing_fields:
+        reasons.append("缺少 " + "、".join(missing_fields[:5]))
+    if not reasons:
+        reasons.append("隊伍狀態未顯示主要缺口。")
+    return _dedupe(reasons)
+
+
+def _decision_phrase(*, decision: str, allowed: bool) -> str:
+    if decision == "ESCALATE":
+        return "停止推進並升級人工確認。"
+    if decision == "CHANGE_PLAN":
+        return "不建議照原隊伍節奏推進。"
+    if decision == "DELAY":
+        return "建議延後隊伍狀態判斷。"
+    if decision == "CONDITIONAL_GO":
+        return "可有條件推進，但必須先完成隊伍/留守確認。"
+    if decision == "GO" and allowed:
+        return "隊伍狀態可進入下一步。"
+    return "暫緩判斷。"
+
+
+def _decision_limit_phrase(*, decision: str) -> str:
+    if decision == "ESCALATE":
+        return "不得自動通知留守人或報案；先集合隊伍，由領隊/留守依批准流程人工確認。"
+    if decision == "CHANGE_PLAN":
+        return "隊伍未重新集合或確認前，不得讓快慢組繼續擴大距離。"
+    if decision == "DELAY":
+        return "隊員位置、最後聯絡、通訊與集合/留守計畫補齊前，不得推進此判斷。"
+    if decision == "CONDITIONAL_GO":
+        return "必須在下一個安全 CP 前完成隊內集合與留守回報確認。"
+    return "這不是 runtime safety truth；下一個 CP 仍需重算全員位置與回報節點。"
+
+
+def _decision_details(
+    *, team_state: dict[str, Any], field_answer: str
+) -> list[str]:
+    details = [
+        field_answer,
+        f"member_count={team_state.get('member_count')}",
+        "members_not_accounted_for="
+        + ",".join(str(item) for item in team_state.get("members_not_accounted_for") or []),
+        "members_missing_last_heard="
+        + ",".join(str(item) for item in team_state.get("members_missing_last_heard") or []),
+        f"communication_status={team_state.get('communication_status')}",
+        f"checkin_overdue_minutes={team_state.get('checkin_overdue_minutes')}",
+        f"rendezvous_point={team_state.get('rendezvous_point')}",
+    ]
+    remote = team_state.get("remote_contact")
+    if isinstance(remote, dict):
+        details.append(
+            "remote_contact="
+            f"available={remote.get('available')}, review_state={remote.get('review_state')}"
+        )
+    return details
 
 
 def _missing_fields(team_state: dict[str, Any]) -> list[str]:

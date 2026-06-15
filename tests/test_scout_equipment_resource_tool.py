@@ -23,6 +23,12 @@ def test_equipment_resource_reports_fixture_missing_resource_fields() -> None:
     assert result["tool_id"] == EQUIPMENT_RESOURCE_TOOL_ID
     assert result["answerability"] == "equipment_resource_missing_required_fields"
     assert result["decision"] == "DELAY"
+    assert result["decision_output"]["decisionObjectSchema"] == "ContextualPermission"
+    assert result["decision_output"]["decision"] == "DELAY"
+    assert result["decision_output"]["firstLayer"]["decision"] == (
+        "建議延後裝備資源判斷。"
+    )
+    assert result["decision_output"]["runtimeSafetyTruth"] is False
     assert "gpx_loaded" in result["missing_fields"]
     assert "water_liters" in result["missing_fields"]
     assert result["equipment_resource"]["role"] == "Equipment / Resource Intelligence"
@@ -49,6 +55,11 @@ def test_equipment_resource_no_go_for_low_battery_and_missing_offline_map() -> N
 
     assert result["answerability"] == "equipment_resource_decision_available"
     assert result["decision"] == "NO_GO"
+    assert result["decision_output"]["decision"] == "NO_GO"
+    assert result["decision_output"]["firstLayer"]["decision"] == (
+        "不建議照原計畫出發或推進。"
+    )
+    assert "不得照原計畫" in result["decision_output"]["firstLayer"]["limit"]
     assert "手機電量過低且沒有可靠行動電源。" in result["resource_readiness"][
         "critical_gaps"
     ]
@@ -79,6 +90,9 @@ def test_equipment_resource_go_when_direct_required_resources_are_ready(tmp_path
 
     assert result["answerability"] == "equipment_resource_decision_available"
     assert result["decision"] == "GO"
+    assert result["decision_output"]["firstLayer"]["decision"] == (
+        "裝備資源可進入下一步。"
+    )
     assert result["missing_fields"] == []
     assert result["resource_readiness"]["critical_gaps"] == []
     assert result["resource_readiness"]["warning_gaps"] == []
