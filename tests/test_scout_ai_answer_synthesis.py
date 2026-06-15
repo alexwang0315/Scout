@@ -385,6 +385,33 @@ def test_answer_synthesis_prices_extra_stop_time_against_buffer() -> None:
     assert result.decision_output["runtimeSafetyTruth"] is False
 
 
+def test_answer_synthesis_prices_photo_stop_budget_phrase() -> None:
+    result = collect_and_synthesize_scout_ai_answer(
+        "我們現在還有 21 分鐘安全 buffer，可以多停 10 分鐘拍照嗎？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=3,
+    )
+
+    assert result.answerability == "evidence_available"
+    assert result.completed_source_count == 1
+    assert result.missing_evidence_count == 0
+    source = _source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
+    assert source.top_result_summary["action"] == "photo"
+    assert source.top_result_summary["decision"] == "CONDITIONAL_GO"
+    assert source.top_result_summary["allowed"] is True
+    assert source.top_result_summary["max_duration_minutes"] == 10
+    assert result.decision_output["answerSourceToolId"] == CONTEXTUAL_PERMISSION_TOOL_ID
+    assert result.decision_output["action"] == "photo"
+    assert result.decision_output["decision"] == "CONDITIONAL_GO"
+    assert result.decision_output["allowed"] is True
+    assert result.decision_output["maxDurationMinutes"] == 10
+    assert result.decision_output["cost"]["timeBufferChangeMinutes"] == -10
+    assert result.decision_output["firstLayer"]["decision"] == "可以，最多 10 分鐘。"
+    assert "消耗 10 分鐘 buffer" in result.answer
+    assert result.decision_output["runtimeSafetyTruth"] is False
+
+
 def test_answer_synthesis_treats_fog_photo_as_wait_permission() -> None:
     result = collect_and_synthesize_scout_ai_answer(
         "可以等霧散再拍照嗎？",

@@ -420,6 +420,38 @@ def test_full_workflow_prices_extra_stop_time_against_buffer() -> None:
     assert result.boundary.runtime_safety_truth is False
 
 
+def test_full_workflow_prices_film_stop_budget_phrase_with_next_cp() -> None:
+    result = run_scout_ai_full_workflow(
+        "前方 CP4 約 42 分鐘，安全 buffer 剩 21 分鐘，可以停 6 分鐘拍影片嗎？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=3,
+    )
+
+    assert result.answerability == "evidence_available"
+    assert result.selected_tool_count == 1
+    assert result.executed_tool_count == 1
+    assert result.completed_tool_count == 1
+    assert result.missing_evidence_count == 0
+    source = result.sources[0]
+    assert source["tool_id"] == CONTEXTUAL_PERMISSION_TOOL_ID
+    assert source["top_result_summary"]["action"] == "film"
+    assert source["top_result_summary"]["decision"] == "CONDITIONAL_GO"
+    assert source["top_result_summary"]["allowed"] is True
+    assert source["top_result_summary"]["max_duration_minutes"] == 6
+    assert result.decision_output["answerSourceToolId"] == CONTEXTUAL_PERMISSION_TOOL_ID
+    assert result.decision_output["action"] == "film"
+    assert result.decision_output["decision"] == "CONDITIONAL_GO"
+    assert result.decision_output["allowed"] is True
+    assert result.decision_output["maxDurationMinutes"] == 6
+    assert result.decision_output["cost"]["timeBufferChangeMinutes"] == -6
+    assert result.decision_output["firstLayer"]["decision"] == "可以，最多 6 分鐘。"
+    assert "消耗 6 分鐘 buffer" in result.answer
+    assert "前往 CP4" in result.answer
+    assert result.decision_output["runtimeSafetyTruth"] is False
+    assert result.boundary.runtime_safety_truth is False
+
+
 def test_full_workflow_uses_local_clock_for_stop_deadline() -> None:
     result = run_scout_ai_full_workflow(
         "現在 13:36，安全 buffer 還有 21 分鐘，如果多停 10 分鐘，代價是什麼？",
