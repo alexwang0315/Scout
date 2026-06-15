@@ -936,6 +936,36 @@ def test_execute_contextual_permission_assessor_allows_rain_gear_micro_decision(
     assert result.boundary.runtime_safety_truth is False
 
 
+def test_execute_contextual_permission_assessor_blocks_shortcut_reroute() -> None:
+    result = execute_scout_ai_tool(
+        {
+            "tool_id": "scout.ai.contextual_permission.assess",
+            "project_root": str(PROJECT_ROOT),
+            "query": "這個岔路可以切嗎？",
+        }
+    )
+
+    assert result.status == "completed"
+    assert result.tool_id == CONTEXTUAL_PERMISSION_TOOL_ID
+    assert result.payload["answerability"] == (
+        "contextual_permission_missing_required_fields"
+    )
+    assert result.payload["action"] == "reroute"
+    assert result.payload["decision"] == "NO_GO"
+    assert result.payload["allowed"] is False
+    assert result.payload["missing_fields"] == ["remaining_safety_buffer_minutes"]
+    assert result.payload["decision_object"] == result.payload["contextual_permission"]
+    assert result.payload["decision_output"]["decisionObjectSchema"] == (
+        "ContextualPermission"
+    )
+    assert result.payload["decision_output"]["firstLayer"]["decision"] == (
+        "不建議改線。"
+    )
+    assert result.payload["decision_output"]["runtimeSafetyTruth"] is False
+    assert "不要臨時改線" in result.payload["field_answer"]
+    assert result.boundary.runtime_safety_truth is False
+
+
 def test_execute_survival_playbook_alias_returns_boundary_safe_guidance() -> None:
     result = execute_scout_ai_tool(
         {

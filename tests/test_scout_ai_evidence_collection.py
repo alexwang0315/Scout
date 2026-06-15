@@ -326,6 +326,37 @@ def test_evidence_collection_keeps_rain_gear_micro_decision() -> None:
     assert contextual.boundary.runtime_safety_truth is False
 
 
+def test_evidence_collection_blocks_shortcut_reroute_micro_decision() -> None:
+    result = collect_scout_ai_evidence(
+        "這個岔路可以切嗎？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=5,
+    )
+
+    assert result.selected_tool_count == 3
+    assert result.executed_tool_count == 3
+    assert result.completed_tool_count == 3
+    assert result.missing_input_count == 0
+
+    route = _record(result, ROUTE_ARCHITECTURE_TOOL_ID)
+    nav = _record(result, LIVE_NAVIGATION_STATE_TOOL_ID)
+    contextual = _record(result, CONTEXTUAL_PERMISSION_TOOL_ID)
+    assert route.collection_status == "completed"
+    assert nav.collection_status == "completed"
+    assert "lat" in nav.missing_fields
+    assert contextual.collection_status == "completed"
+    assert contextual.missing_fields == ["remaining_safety_buffer_minutes"]
+    assert contextual.result is not None
+    payload = contextual.result["payload"]
+    assert payload["answerability"] == "contextual_permission_missing_required_fields"
+    assert payload["action"] == "reroute"
+    assert payload["decision"] == "NO_GO"
+    assert payload["allowed"] is False
+    assert payload["decision_output"]["firstLayer"]["decision"] == "不建議改線。"
+    assert contextual.boundary.runtime_safety_truth is False
+
+
 def test_evidence_collection_executes_pace_guardian_tool_without_model_synthesis(
     tmp_path: Path,
 ) -> None:
