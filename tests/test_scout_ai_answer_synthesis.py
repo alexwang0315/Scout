@@ -1362,6 +1362,11 @@ def test_answer_synthesis_uses_route_architecture_field_answer_without_guessing(
     )
     assert "路線結構判斷" in result.answer
     assert "CP Graph" in result.answer
+    assert "通過折返點前，先使用已審核或候選撤退路線返回入口" in result.answer
+    assert "Return to entry" not in result.answer
+    assert "return to entry using" not in result.answer
+    assert "turn back at" not in result.answer
+    assert "shorten route or split" not in result.answer
     assert "runtime safety truth" in result.answer
 
 
@@ -1504,10 +1509,12 @@ def test_answer_synthesis_detects_natural_turnback_current_context() -> None:
     assert result.decision_output["firstLayer"]["decision"] == (
         "不建議照原路線往後段推進。"
     )
-    assert "current_time is at or past" in result.decision_output["firstLayer"][
+    assert "目前時間已到或超過折返 ETA" in result.decision_output["firstLayer"][
         "reason"
     ]
-    assert "current CP matches" in result.decision_output["firstLayer"]["reason"]
+    assert "目前 CP 符合計畫折返 checkpoint" in result.decision_output["firstLayer"][
+        "reason"
+    ]
     assert result.decision_output["runtimeSafetyTruth"] is False
     assert "runtime safety truth" in result.answer
 
@@ -1526,10 +1533,12 @@ def test_answer_synthesis_detects_local_clock_turnback_context() -> None:
     assert route.top_result_summary["decision"] == "CHANGE_PLAN"
     assert result.decision_output["answerSourceToolId"] == ROUTE_ARCHITECTURE_TOOL_ID
     assert result.decision_output["decision"] == "CHANGE_PLAN"
-    assert "current_time is at or past" in result.decision_output["firstLayer"][
+    assert "目前時間已到或超過折返 ETA" in result.decision_output["firstLayer"][
         "reason"
     ]
-    assert "current CP matches" in result.decision_output["firstLayer"]["reason"]
+    assert "目前 CP 符合計畫折返 checkpoint" in result.decision_output["firstLayer"][
+        "reason"
+    ]
     assert result.decision_output["runtimeSafetyTruth"] is False
     assert "runtime safety truth" in result.answer
 
@@ -1554,7 +1563,7 @@ def test_answer_synthesis_uses_route_architecture_for_missed_checkpoint_deadline
     assert result.decision_output["firstLayer"]["decision"] == (
         "不建議錯過 checkpoint deadline 後繼續原計畫。"
     )
-    assert "target checkpoint CP4" in result.decision_output["firstLayer"]["reason"]
+    assert "目標 checkpoint CP4" in result.decision_output["firstLayer"]["reason"]
     assert "runtime safety truth" in result.answer
 
 
@@ -1581,7 +1590,7 @@ def test_answer_synthesis_uses_route_architecture_for_hut_checkin_pressure() -> 
     assert result.decision_output["firstLayer"]["decision"] == (
         "建議改變計畫，先處理外部 deadline 壓力。"
     )
-    assert "hut check-in" in result.decision_output["firstLayer"]["reason"]
+    assert "山屋報到" in result.decision_output["firstLayer"]["reason"]
     assert "runtime safety truth" in result.answer
 
 
@@ -1605,7 +1614,9 @@ def test_answer_synthesis_prioritizes_transport_deadline_pressure() -> None:
     assert result.decision_output["firstLayer"]["decision"] == (
         "建議改變計畫，先處理外部 deadline 壓力。"
     )
-    assert "transport last service" in result.decision_output["firstLayer"]["reason"]
+    assert "交通末班/接駁 deadline" in result.decision_output["firstLayer"][
+        "reason"
+    ]
 
 
 def test_answer_synthesis_uses_live_navigation_field_answer_without_guessing() -> None:

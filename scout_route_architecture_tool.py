@@ -401,22 +401,22 @@ def _route_decision(
     if missing_graph:
         return {
             "decision": "DELAY",
-            "main_reasons": ["CP Graph is missing or incomplete."],
+            "main_reasons": ["CP Graph 缺失或不完整。"],
             "next_action": "補齊 checkpoint/segment graph 後再回答撤退、折返或替代路線問題。",
-            "action_limit": "Do not infer route architecture decisions from route name or distance only.",
+            "action_limit": "不得只依路線名稱或距離推論路線結構決策。",
             "candidate_only": True,
             "runtime_safety_truth": False,
         }
     if turn_back_status_label and not current_cp_id and not current_time:
         if turn_back_status_label == "撤退窗口":
             reasons = [
-                "判斷撤退點是否即將失去需要 current_cp_id and current_time.",
+                "判斷撤退點是否即將失去需要 current_cp_id 與 current_time。",
             ]
             if turn_back.get("turn_back_checkpoint_name"):
                 reasons.append(
-                    "planned turn-back checkpoint is "
+                    "計畫折返 checkpoint 是 "
                     + str(turn_back.get("turn_back_checkpoint_name"))
-                    + f" at {turn_back.get('turn_back_eta')}"
+                    + f"，ETA={turn_back.get('turn_back_eta')}"
                 )
             return {
                 "decision": "DELAY",
@@ -432,13 +432,13 @@ def _route_decision(
         reasons = [
             "判斷現在是否為"
             + turn_back_status_label
-            + "需要 current_cp_id and current_time.",
+            + "需要 current_cp_id 與 current_time。",
         ]
         if turn_back.get("turn_back_checkpoint_name"):
             reasons.append(
-                "planned turn-back checkpoint is "
+                "計畫折返 checkpoint 是 "
                 + str(turn_back.get("turn_back_checkpoint_name"))
-                + f" at {turn_back.get('turn_back_eta')}"
+                + f"，ETA={turn_back.get('turn_back_eta')}"
             )
         return {
             "decision": "DELAY",
@@ -468,7 +468,7 @@ def _route_decision(
             return {
                 "decision": "DELAY",
                 "main_reasons": [
-                    "判斷與計畫 CP 通過時間差距需要 current_cp_id, current_time, and planned ETA for that CP.",
+                    "判斷與計畫 CP 通過時間差距需要 current_cp_id、current_time 與該 CP 的 planned ETA。",
                 ],
                 "next_action": "先確認目前 CP、可靠定位與當前時間；再與 CP Graph planned ETA 比對落後或提前分鐘。",
                 "action_limit": "不得把此回答當成仍有完整時間、日照、撤退或天氣 buffer 的授權。",
@@ -493,7 +493,7 @@ def _route_decision(
             return {
                 "decision": "DELAY",
                 "main_reasons": [
-                    "current_time and planned ETA must be parseable to compute CP schedule delta.",
+                    "current_time 與 planned ETA 必須可解析，才能計算 CP 時程差。",
                 ],
                 "next_action": "先用可解析的當前時間與 CP planned ETA 重新計算時程差。",
                 "action_limit": "不得用不可解析的時間推論仍可照原計畫推進。",
@@ -536,14 +536,14 @@ def _route_decision(
         return {
             "decision": decision,
             "main_reasons": [
-                "current CP "
+                "目前 CP "
                 + str(schedule_delta.get("current_cp_id"))
-                + " planned ETA "
+                + " 的 planned ETA 是 "
                 + str(schedule_delta.get("planned_eta"))
-                + " vs current time "
+                + "，目前時間是 "
                 + str(schedule_delta.get("current_time"))
-                + f" => schedule delta {delta_minutes:.1f} minutes.",
-                "CP schedule delta consumes or preserves pace, daylight, weather, and retreat buffer.",
+                + f"，時程差約 {delta_minutes:.1f} 分鐘。",
+                "CP 時程差會消耗或保留腳程、日照、天氣與撤退 buffer。",
             ],
             "next_action": next_action,
             "action_limit": action_limit,
@@ -563,7 +563,7 @@ def _route_decision(
             return {
                 "decision": "DELAY",
                 "main_reasons": [
-                    "current_time and target_cp_id are required to evaluate a missed checkpoint deadline.",
+                    "判斷是否錯過 checkpoint deadline 需要 current_time 與 target_cp_id。",
                 ],
                 "next_action": "先確認 deadline、目標 CP 與目前是否已抵達；確認前不要把原計畫視為仍可推進。",
                 "action_limit": "不得把未抵達 checkpoint 的狀態當成可繼續推進授權。",
@@ -576,11 +576,11 @@ def _route_decision(
         return {
             "decision": "CHANGE_PLAN",
             "main_reasons": [
-                f"target checkpoint {target_cp_id} was reported not reached by deadline {current_time}.",
-                "Missed checkpoint deadlines consume pace, daylight, weather, and retreat buffer.",
+                f"目標 checkpoint {target_cp_id} 回報在 deadline {current_time} 前未抵達。",
+                "錯過 checkpoint deadline 會消耗腳程、日照、天氣與撤退 buffer。",
             ],
             "next_action": "不要照原計畫繼續推進；在目前安全 CP 折返或改短版，並重新計算天氣、腳程與撤退路線。",
-            "action_limit": "Original route continuation is not recommended after a missed checkpoint deadline without reviewed override.",
+            "action_limit": "錯過 checkpoint deadline 後，沒有人工覆核 override 前不建議延續原路線。",
             "first_layer_decision": "不建議錯過 checkpoint deadline 後繼續原計畫。",
             "turn_back_checkpoint": turn_back,
             "target_checkpoint": target_cp_id,
@@ -592,18 +592,17 @@ def _route_decision(
         return {
             "decision": "CHANGE_PLAN",
             "main_reasons": [
-                "external deadline pressure was reported for "
+                "已回報外部 deadline 壓力："
                 + _external_deadline_pressure_label(external_deadline_pressure_kind)
-                + ".",
-                "External deadlines reduce daylight, retreat, pace, and route buffer.",
+                + "。",
+                "外部 deadline 會壓縮日照、撤退、腳程與路線 buffer。",
             ],
             "next_action": (
                 "不要照原計畫硬推；改短版、直接前往最近安全 CP/山屋，"
                 "並人工確認住宿、接駁或留守回報方案。"
             ),
             "action_limit": (
-                "Original route continuation is not recommended while external "
-                "deadline pressure is unresolved."
+                "外部 deadline 壓力未解除前，不建議延續原路線。"
             ),
             "first_layer_decision": "建議改變計畫，先處理外部 deadline 壓力。",
             "turn_back_checkpoint": turn_back,
@@ -615,24 +614,24 @@ def _route_decision(
         current_time,
         turn_back.get("turn_back_eta"),
     ):
-        reasons.append(f"current_time is at or past turn-back ETA {turn_back.get('turn_back_eta')}")
+        reasons.append(f"目前時間已到或超過折返 ETA {turn_back.get('turn_back_eta')}。")
     if at_turn_back_node:
-        reasons.append("current CP matches the planned turn-back checkpoint.")
+        reasons.append("目前 CP 符合計畫折返 checkpoint。")
     if target_is_after_turn_back:
-        reasons.append("target is beyond the planned turn-back checkpoint.")
+        reasons.append("目標點位於計畫折返 checkpoint 後方。")
 
     if reasons:
         decision = "CHANGE_PLAN"
         next_action = "不要照原計畫往更後段推進；在折返點重新確認隊伍、天氣與撤退路線。"
-        action_limit = "Original route continuation is not recommended without reviewed override."
+        action_limit = "沒有人工覆核 override 前，不建議延續原路線。"
     elif not route_architecture["retreat_options"]:
         decision = "CONDITIONAL_GO"
-        reasons.append("CP Graph exists but no reviewed retreat candidate is available.")
+        reasons.append("CP Graph 已存在，但尚無已審核撤退候選路線。")
         next_action = "先補撤退路線或短版替代方案，再把行程送出發前決策。"
-        action_limit = "Treat route as low-forgiveness until retreat evidence is reviewed."
+        action_limit = "撤退證據審核前，應視為低容錯路線。"
     elif route_architecture["hard_points"]:
         decision = "CONDITIONAL_GO"
-        reasons.append("Route has hard points that require CP-based monitoring.")
+        reasons.append("路線有需要以 CP 為單位監控的難點。")
         graph_completeness = route_architecture.get("graph_completeness")
         graph_completeness = (
             graph_completeness if isinstance(graph_completeness, dict) else {}
@@ -642,17 +641,17 @@ def _route_decision(
             total_segments=_int_or_none(graph_completeness.get("segment_count")),
         )
         if top_hard_point:
-            reasons.append("top hard point: " + top_hard_point)
+            reasons.append("主要難點：" + top_hard_point)
         turn_back_text = _turn_back_brief(turn_back)
         if turn_back_text:
-            reasons.append("turn-back candidate: " + turn_back_text)
+            reasons.append("折返候選：" + turn_back_text)
         next_action = "用 CP Graph 監控難點前後的時間、天氣與隊伍速度；保留折返窗口。"
-        action_limit = "Do not spend buffer before the hard-point cluster."
+        action_limit = "進入難點群前不要消耗 buffer。"
     else:
         decision = "GO"
-        reasons.append("CP Graph and retreat candidate evidence are available.")
+        reasons.append("CP Graph 與撤退候選證據已可檢視。")
         next_action = "照 CP Graph 行進，並在下一個 CP 重新計算 buffer。"
-        action_limit = "GO is candidate-only and remains bounded by weather, pace, and runtime evidence."
+        action_limit = "GO 仍只是候選判斷，必須受天氣、腳程與 runtime evidence 約束。"
 
     return {
         "decision": decision,
@@ -751,9 +750,9 @@ def _decision_output(
         ),
         "uncertaintyNotes": uncertainty_notes,
         "residualRisk": [
-            "CP Graph and route architecture evidence are candidate-only.",
-            "Weather, pace, team status, and runtime admission remain separate gates.",
-            "No runtime safety truth was created.",
+            "CP Graph 與路線結構證據仍是 candidate-only。",
+            "天氣、腳程、隊伍狀態與 runtime admission 仍是分開的 gate。",
+            "本工具沒有建立 runtime safety truth。",
         ],
         "requiredConditions": required_conditions,
         "alternativeActions": alternatives,
@@ -826,13 +825,13 @@ def _required_conditions(
     route_architecture: dict[str, Any],
     missing_fields: list[str],
 ) -> list[str]:
-    required = [f"Provide {field}." for field in missing_fields]
+    required = [f"補齊 {field}。" for field in missing_fields]
     if decision.get("decision") in {"CHANGE_PLAN", "CONDITIONAL_GO"}:
-        required.append("Re-check weather, pace, team status, and retreat buffer at the next CP.")
+        required.append("下一個 CP 前重新檢查天氣、腳程、隊伍狀態與撤退 buffer。")
     if not route_architecture.get("retreat_options"):
-        required.append("Review retreat or short-route alternatives before committing beyond hard points.")
+        required.append("進入難點後方前，先完成撤退或短版替代路線覆核。")
     if not required:
-        required.append("Keep CP Graph monitoring active through the next checkpoint.")
+        required.append("下一個 checkpoint 前持續使用 CP Graph 監控。")
     return _dedupe(required)
 
 
@@ -888,13 +887,13 @@ def _route_architecture_brief(route_architecture: dict[str, Any]) -> str:
     if isinstance(turn_back, dict):
         turn_back_text = _turn_back_brief(turn_back)
         if turn_back_text:
-            highlights.append("折返/撤退 checkpoint: " + turn_back_text)
+            highlights.append("折返/撤退 checkpoint：" + turn_back_text)
 
     retreat_options = route_architecture.get("retreat_options")
     if isinstance(retreat_options, list) and retreat_options:
         retreat_text = _retreat_option_brief(retreat_options[0])
         if retreat_text:
-            highlights.append("候選撤退路線: " + retreat_text)
+            highlights.append("候選撤退路線：" + retreat_text)
 
     hard_points = route_architecture.get("hard_points")
     if isinstance(hard_points, list) and hard_points:
@@ -908,11 +907,11 @@ def _route_architecture_brief(route_architecture: dict[str, Any]) -> str:
             if text
         )
         if hard_text:
-            highlights.append("主要難點: " + hard_text)
+            highlights.append("主要難點：" + hard_text)
 
     alternatives = _string_list(route_architecture.get("alternative_plan_options"))
     if alternatives:
-        highlights.append("替代方案: " + alternatives[0])
+        highlights.append("替代方案：" + alternatives[0])
 
     return "結構重點：" + "；".join(highlights) + "。" if highlights else ""
 
@@ -922,24 +921,41 @@ def _turn_back_brief(turn_back: dict[str, Any]) -> str:
     if not name:
         return ""
     eta = turn_back.get("turn_back_eta")
-    return str(name) + (f" at {eta}" if eta else "")
+    return str(name) + (f"，ETA={eta}" if eta else "")
 
 
 def _retreat_option_brief(route: dict[str, Any]) -> str:
-    label = str(route.get("label") or route.get("candidate_id") or "").strip()
+    label = _retreat_route_label(route)
     if not label:
         return ""
     details = []
     retreat_type = route.get("retreat_type")
     if retreat_type:
-        details.append(str(retreat_type))
+        details.append(_retreat_type_label(str(retreat_type)))
     distance_km = _float_or_none(route.get("distance_km"))
     if distance_km is not None:
-        details.append(f"{distance_km:g} km")
+        details.append(f"{distance_km:g} 公里")
     trigger = route.get("trigger_checkpoint_candidate_id")
     if trigger:
-        details.append(f"trigger {trigger}")
+        details.append(f"觸發點 {trigger}")
     return label + (f" ({', '.join(details)})" if details else "")
+
+
+def _retreat_route_label(route: dict[str, Any]) -> str:
+    label = str(route.get("label") or "").strip()
+    retreat_type = str(route.get("retreat_type") or "").strip().lower()
+    if route.get("reversed_from_primary_route") or retreat_type == "return_to_entry":
+        return "沿已審核或候選反向路線返回入口"
+    return label or str(route.get("candidate_id") or "").strip()
+
+
+def _retreat_type_label(value: str) -> str:
+    labels = {
+        "return_to_entry": "返回入口撤退線",
+        "short_route": "短版路線",
+        "alternate_exit": "替代出口",
+    }
+    return labels.get(value, value)
 
 
 def _hard_point_summary(
@@ -956,14 +972,14 @@ def _hard_point_summary(
     details = []
     duration = _float_or_none(edge.get("expected_duration_minutes"))
     if duration is not None:
-        details.append(f"{duration:g} min")
+        details.append(f"{duration:g} 分鐘")
     gain = _float_or_none(edge.get("elevation_gain_m"))
     if gain is not None and gain > 0:
         details.append(f"+{gain:g} m")
     reasons = _string_list(edge.get("architecture_risk_reasons"))
     if reasons:
-        details.append("/".join(reasons[:3]))
-    cp_span = f"{from_name} to {to_name}" if from_name or to_name else ""
+        details.append("/".join(_architecture_risk_reason_label(item) for item in reasons[:3]))
+    cp_span = f"{from_name} 到 {to_name}" if from_name or to_name else ""
     parts = [segment_id]
     if cp_span:
         parts.append(cp_span)
@@ -999,27 +1015,31 @@ def _decision_details(
 ) -> list[str]:
     details = [
         field_answer,
-        f"route_type={route_architecture.get('route_type')}",
-        f"cp_graph={len(cp_nodes)} node(s), {len(graph_edges)} edge(s)",
+        f"路線類型={route_architecture.get('route_type')}",
+        f"CP Graph={len(cp_nodes)} 個節點、{len(graph_edges)} 個路段",
     ]
     turn_back = route_architecture.get("turn_back")
     if isinstance(turn_back, dict) and turn_back.get("turn_back_checkpoint_name"):
         details.append(
-            "turn_back="
+            "折返點="
             + str(turn_back.get("turn_back_checkpoint_name"))
-            + f", eta={turn_back.get('turn_back_eta')}"
+            + f"，ETA={turn_back.get('turn_back_eta')}"
         )
     hard_points = route_architecture.get("hard_points")
     if isinstance(hard_points, list) and hard_points:
         first = hard_points[0]
         if isinstance(first, dict):
             details.append(
-                "top_hard_point="
+                "主要難點="
                 + str(first.get("segment_id"))
-                + f", reasons={','.join(_string_list(first.get('architecture_risk_reasons')))}"
+                + "，原因="
+                + "、".join(
+                    _architecture_risk_reason_label(item)
+                    for item in _string_list(first.get("architecture_risk_reasons"))
+                )
             )
     details.append(
-        f"retreat_option_count={route_architecture.get('retreat_option_count')}"
+        f"撤退候選數={route_architecture.get('retreat_option_count')}"
     )
     return details
 
@@ -1063,6 +1083,18 @@ def _edge_risk_reasons(edge: dict[str, Any], *, mean_distance: float) -> list[st
     if gain is not None and gain >= 120:
         reasons.append("sustained_ascent")
     return reasons
+
+
+def _architecture_risk_reason_label(reason: str) -> str:
+    labels = {
+        "requires_daylight": "需要日照",
+        "no_segment_retreat": "路段內無撤退點",
+        "no_segment_water": "路段內無補水點",
+        "long_segment_duration": "路段時間長",
+        "longer_than_typical_segment": "長於典型路段",
+        "sustained_ascent": "持續爬升",
+    }
+    return labels.get(str(reason), str(reason))
 
 
 def _edge_architecture_score(edge: dict[str, Any]) -> int:
@@ -1211,10 +1243,12 @@ def _alternative_plan_options(
 ) -> list[str]:
     options = []
     if retreat_routes:
-        options.append("return to entry using reviewed/candidate retreat route before committing beyond turn-back point")
+        options.append("通過折返點前，先使用已審核或候選撤退路線返回入口。")
     if turn_back.get("turn_back_checkpoint_name"):
-        options.append(f"turn back at {turn_back['turn_back_checkpoint_name']} if pace/weather buffer is weak")
-    options.append("shorten route or split into lower-risk segment plan before hard-point cluster")
+        options.append(
+            f"若腳程或天氣 buffer 偏弱，在 {turn_back['turn_back_checkpoint_name']} 折返。"
+        )
+    options.append("進入難點群前，改短版路線或拆成較低風險路段計畫。")
     return options
 
 
@@ -1443,10 +1477,10 @@ def _external_deadline_pressure_kind(query: str) -> str | None:
 
 def _external_deadline_pressure_label(kind: str) -> str:
     if kind == "hut_checkin":
-        return "hut check-in"
+        return "山屋報到"
     if kind == "transport_last_service":
-        return "transport last service"
-    return "external deadline"
+        return "交通末班/接駁 deadline"
+    return "外部 deadline"
 
 
 def _load_project_json(
