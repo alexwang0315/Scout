@@ -339,6 +339,28 @@ def _route_weather_segments(route_package: dict[str, Any]) -> list[dict[str, Any
             "eta_from": _first_present(raw, "eta_from", "etaFrom"),
             "eta_to": _first_present(raw, "eta_to", "etaTo"),
             "township": _first_present(raw, "township", "areaName", "area_name"),
+            "temperature_c": _float_or_none(
+                _first_present(
+                    raw,
+                    "temperature_c",
+                    "temperatureC",
+                    "max_temperature_c",
+                    "maxTemperatureC",
+                )
+            ),
+            "heat_index_c": _float_or_none(
+                _first_present(raw, "heat_index_c", "heatIndexC", "heatIndex")
+            ),
+            "shade_status": _first_present(raw, "shade_status", "shadeStatus", "shade"),
+            "water_margin_liters": _float_or_none(
+                _first_present(
+                    raw,
+                    "water_margin_liters",
+                    "waterMarginLiters",
+                    "water_margin_l",
+                    "waterMarginL",
+                )
+            ),
             "terrain_risk": terrain_risk,
             "weather_risk": weather_risk,
             "final_risk": final_risk,
@@ -490,6 +512,7 @@ def _weather_to_decision(
     highest = _highest_risk_segment(segments)
     alert_codes = sorted({code for alert in wx_alerts for code in _string_list(alert.get("code"))})
     route_sensitive_delay = _route_sensitive_weather_delay(segments)
+    heat_change_plan = _route_sensitive_heat_change_plan(segments)
     if missing_fields:
         decision = "DELAY"
         main_reasons = [
@@ -522,6 +545,25 @@ def _weather_to_decision(
             "choose a lower-risk route without creek crossings",
             "use a guided-only creek-crossing plan after route review",
         ]
+    elif heat_change_plan:
+        decision = "CHANGE_PLAN"
+        main_reasons = [
+            "route contains high heat / exposure with hydration or shade constraints",
+            "heat exposure raises heat-illness, water, shade, and timing risk",
+            "original exposed timing should be moved or shortened",
+        ]
+        action_limit = (
+            "Do not follow the original high-heat exposed timing until water "
+            "margin, shade/rest points, and a cooler travel window are reviewed."
+        )
+        next_action = (
+            "改到清晨或較涼時段、補足水量並指定遮蔽休息點；若無法滿足就改短低曝曬路線。"
+        )
+        alternatives = [
+            "move exposed travel to a cooler window",
+            "increase water margin and reviewed shade/rest points",
+            "choose a shorter or lower-exposure route",
+        ]
     else:
         decision = _weather_decision_from_risk(highest=highest, risk_summary=risk_summary)
         main_reasons = _weather_decision_reasons(
@@ -546,7 +588,7 @@ def _weather_to_decision(
         "next_action": next_action,
         "alternatives": alternatives,
         "route_specific_conditions": _route_specific_conditions(alert_codes, highest=highest),
-        "route_sensitive_weather_rule": route_sensitive_delay,
+        "route_sensitive_weather_rule": route_sensitive_delay or heat_change_plan,
         "highest_risk_segment": _compact_segment(highest) if highest else None,
         "wx_alert_count": len(wx_alerts),
         "warnings": warnings[:3],
@@ -770,6 +812,11 @@ def _weather_action_limit(
     if decision == "CHANGE_PLAN":
         if {"THUNDER", "WIND"} & set(alert_codes):
             return "Avoid exposed ridge, summit, and open terrain during the flagged window."
+        if "HEAT" in alert_codes:
+            return (
+                "Avoid high-heat exposed timing until water margin, "
+                "shade/rest points, and cooler travel window are reviewed."
+            )
         if "RAIN" in alert_codes:
             return "Avoid creek crossings, landslide-prone cuts, and slippery exposed terrain during the flagged window."
         return "Do not follow the original timing through the highest-risk segment."
@@ -792,6 +839,8 @@ def _weather_next_action(
             return "調整時程避開午後雷雨，優先移出稜線、山頂、裸露地與溪谷活動。"
         if "LOW_VIS" in alert_codes:
             return "改為更保守導航節奏，增加 CP 檢查，必要時延後或改短版。"
+        if "HEAT" in alert_codes:
+            return "改到較涼時段、補足水量、指定遮蔽休息點，或改短低曝曬路線。"
         return "改短版、提前撤退窗口，或延後到下一個較低風險天氣窗。"
     if decision == "CONDITIONAL_GO":
         return "設定下一個 CP 重新檢查點，若 weather risk 升高立即改線或撤退。"
@@ -805,6 +854,8 @@ def _weather_alternatives(decision: str, *, alert_codes: list[str]) -> list[str]
             alternatives.append("move ridge/summit exposure outside thunderstorm window")
         if "RAIN" in alert_codes:
             alternatives.append("avoid creek and landslide-prone segments")
+        if "HEAT" in alert_codes:
+            alternatives.append("move exposed hiking to cooler hours and confirm water margin")
         return alternatives
     if decision == "CONDITIONAL_GO":
         return ["shorten route", "set earlier turn-back checkpoint", "increase CP weather checks"]
@@ -823,6 +874,7 @@ def _route_specific_conditions(
         "LOW_VIS": "low visibility / navigation demand",
         "WIND": "strong wind exposure",
         "COLD": "cold stress / hypothermia context",
+        "HEAT": "heat exposure / hydration demand",
         "TERRAIN": "terrain interaction",
     }.items():
         if code in alert_codes:
@@ -864,13 +916,152 @@ def _route_sensitive_weather_delay(
     }
 
 
+def _route_sensitive_heat_change_plan(
+    segments: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    heat_segments = []
+    for item in segments:
+        text = _segment_weather_text(item)
+        temperature_c = _float_or_none(item.get("temperature_c"))
+        heat_index_c = _float_or_none(item.get("heat_index_c"))
+        water_margin = _float_or_none(item.get("water_margin_liters"))
+        if not _has_heat_signal(
+            text,
+            temperature_c=temperature_c,
+            heat_index_c=heat_index_c,
+        ):
+            continue
+        if not (
+            _mentions_heat_exposure(text, item.get("shade_status"))
+            or _mentions_limited_water(text, water_margin=water_margin)
+            or _mentions_hot_timing(text)
+        ):
+            continue
+        heat_segments.append(item)
+    if not heat_segments:
+        return None
+    temperatures = [
+        value
+        for item in heat_segments
+        for value in (
+            _float_or_none(item.get("temperature_c")),
+            _float_or_none(item.get("heat_index_c")),
+        )
+        if value is not None
+    ]
+    water_margins = [
+        value
+        for item in heat_segments
+        if (value := _float_or_none(item.get("water_margin_liters"))) is not None
+    ]
+    return {
+        "rule": "high_heat_exposure_water_timing_review",
+        "segment_ids": [
+            str(item.get("segment_id"))
+            for item in heat_segments[:6]
+            if item.get("segment_id") is not None
+        ],
+        "max_temperature_or_heat_index_c": max(temperatures) if temperatures else None,
+        "min_water_margin_liters": min(water_margins) if water_margins else None,
+        "required_reviews": [
+            "water_margin",
+            "shade_or_rest_points",
+            "cooler_travel_window",
+        ],
+    }
+
+
 def _segment_weather_text(item: dict[str, Any]) -> str:
     parts = [
         str(item.get("segment_id") or ""),
         str(item.get("message") or ""),
+        str(item.get("shade_status") or ""),
         *_string_list(item.get("factors")),
     ]
     return " ".join(part for part in parts if part)
+
+
+def _has_heat_signal(
+    text: str,
+    *,
+    temperature_c: float | None,
+    heat_index_c: float | None,
+) -> bool:
+    normalized = text.replace(" ", "").lower()
+    if temperature_c is not None and temperature_c >= 30:
+        return True
+    if heat_index_c is not None and heat_index_c >= 32:
+        return True
+    return any(
+        needle in normalized
+        for needle in (
+            "高溫",
+            "炎熱",
+            "酷熱",
+            "中暑",
+            "熱傷害",
+            "heatexposure",
+            "heatindex",
+            "hightemperature",
+            "hotweather",
+        )
+    )
+
+
+def _mentions_heat_exposure(text: str, shade_status: Any) -> bool:
+    normalized = text.replace(" ", "").lower()
+    shade = str(shade_status or "").strip().lower().replace(" ", "")
+    return shade in {"none", "limited", "unshaded", "無遮蔽", "少遮蔽"} or any(
+        needle in normalized
+        for needle in (
+            "曝曬",
+            "日曬",
+            "無遮蔽",
+            "少遮蔽",
+            "裸露",
+            "稜線",
+            "exposed",
+            "unshaded",
+            "limitedshade",
+            "opensun",
+        )
+    )
+
+
+def _mentions_limited_water(text: str, *, water_margin: float | None) -> bool:
+    normalized = text.replace(" ", "").lower()
+    if water_margin is not None and water_margin < 0.75:
+        return True
+    return any(
+        needle in normalized
+        for needle in (
+            "水量不足",
+            "水量偏低",
+            "補水",
+            "缺水",
+            "低水量",
+            "watermarginlow",
+            "lowwater",
+            "hydration",
+        )
+    )
+
+
+def _mentions_hot_timing(text: str) -> bool:
+    normalized = text.replace(" ", "").lower()
+    return any(
+        needle in normalized
+        for needle in (
+            "午後",
+            "正午",
+            "中午",
+            "炎熱時段",
+            "midday",
+            "noon",
+            "afternoonheat",
+            "hotwindow",
+        )
+    )
 
 
 def _mentions_previous_24h_rain(text: str) -> bool:
@@ -1091,6 +1282,10 @@ def _compact_segment(item: dict[str, Any]) -> dict[str, Any]:
             "eta_from",
             "eta_to",
             "township",
+            "temperature_c",
+            "heat_index_c",
+            "shade_status",
+            "water_margin_liters",
             "terrain_risk",
             "weather_risk",
             "final_risk",
@@ -1121,6 +1316,10 @@ def _route_weather_package_schema() -> dict[str, Any]:
             "weatherRisk/weather_risk",
             "finalRisk/final_risk",
             "riskLevel/risk_level",
+            "temperatureC/temperature_c",
+            "heatIndexC/heat_index_c",
+            "shadeStatus/shade_status",
+            "waterMarginLiters/water_margin_liters",
             "factors",
             "message",
         ],
@@ -1181,6 +1380,17 @@ def _alert_codes(item: dict[str, Any]) -> list[str]:
         "LOW_VIS": ("fog", "霧", "白牆", "visibility", "能見度"),
         "WIND": ("wind", "風"),
         "COLD": ("cold", "low temperature", "低溫", "失溫"),
+        "HEAT": (
+            "heat",
+            "hot",
+            "high temperature",
+            "heat index",
+            "高溫",
+            "炎熱",
+            "酷熱",
+            "中暑",
+            "曝曬",
+        ),
         "TERRAIN": ("cliff", "slope", "terrain", "稜線", "崩", "溪", "坡"),
     }.items():
         if any(needle in text for needle in needles):

@@ -218,6 +218,43 @@ def test_weather_window_tool_delays_recent_rain_creek_crossing_without_experienc
     assert result["decision_output"]["runtimeSafetyTruth"] is False
 
 
+def test_weather_window_tool_changes_plan_for_heat_exposure_water_margin(
+    tmp_path: Path,
+) -> None:
+    project_root = _write_heat_exposure_project(tmp_path)
+
+    result = assess_scout_weather_window(
+        project_root,
+        query="高溫曝曬，水量偏低，午後原路線還能走嗎？",
+        limit=3,
+    )
+
+    assert result["answerability"] == "route_weather_risk_available"
+    assert result["decision"] == "CHANGE_PLAN"
+    weather_decision = result["weather_to_decision"]
+    assert weather_decision["decision"] == "CHANGE_PLAN"
+    assert weather_decision["route_sensitive_weather_rule"]["rule"] == (
+        "high_heat_exposure_water_timing_review"
+    )
+    assert weather_decision["route_sensitive_weather_rule"]["segment_ids"] == [
+        "heat.exposed.1"
+    ]
+    assert weather_decision["route_sensitive_weather_rule"][
+        "max_temperature_or_heat_index_c"
+    ] == 36.0
+    assert weather_decision["route_sensitive_weather_rule"][
+        "min_water_margin_liters"
+    ] == 0.4
+    assert "heat exposure / hydration demand" in weather_decision[
+        "route_specific_conditions"
+    ]
+    assert "water margin" in weather_decision["action_limit"]
+    assert "較涼時段" in weather_decision["next_action"]
+    assert "補足水量" in result["field_answer"]
+    assert result["decision_output"]["decision"] == "CHANGE_PLAN"
+    assert result["decision_output"]["runtimeSafetyTruth"] is False
+
+
 def test_weather_window_output_kind_is_registered_constant() -> None:
     assert WEATHER_WINDOW_OUTPUT_KIND == "scout_ai_weather_window_tool_output"
 
@@ -342,6 +379,66 @@ def _write_recent_rain_creek_project(tmp_path: Path) -> Path:
                         "factors": ["前 24 小時明顯降雨", "渡溪點", "無渡溪經驗"],
                         "message": "第二處渡溪點受前 24 小時降雨影響。",
                     },
+                ],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    return project_root
+
+
+def _write_heat_exposure_project(tmp_path: Path) -> Path:
+    project_root = tmp_path / "heat-exposure-project"
+    (project_root / "outputs").mkdir(parents=True)
+    (project_root / "project.json").write_text(
+        json.dumps(
+            {
+                "project_id": "heat_exposure_project",
+                "route_weather_package_ref": "outputs/route_weather_package.json",
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    (project_root / "outputs" / "route_weather_package.json").write_text(
+        json.dumps(
+            {
+                "artifact_kind": "route_weather_package",
+                "status": "candidate_only",
+                "routeId": "fixture-route",
+                "generatedAt": "2099-06-07T08:00:00Z",
+                "issued_at": "2099-06-07T08:00:00Z",
+                "valid_from": "2099-06-07T08:00:00Z",
+                "valid_to": "2099-06-10T08:00:00Z",
+                "validUntil": "2099-06-10T08:00:00Z",
+                "ttl_s": 259200,
+                "provider": "fixture_cwa_server_side_ingestor",
+                "authoritative_weather_computed": True,
+                "external_api_calls_made": True,
+                "human_review_required": False,
+                "weather_window": {
+                    "summary": "午後高溫曝曬，水量與遮蔽需要重新規劃",
+                    "valid_from": "2099-06-07T08:00:00Z",
+                    "valid_to": "2099-06-10T08:00:00Z",
+                    "source_status": "server_side_fixture",
+                },
+                "segments": [
+                    {
+                        "segmentId": "heat.exposed.1",
+                        "etaFrom": "2099-06-08T04:30:00Z",
+                        "etaTo": "2099-06-08T05:20:00Z",
+                        "temperatureC": 33.5,
+                        "heatIndexC": 36.0,
+                        "shadeStatus": "limited",
+                        "waterMarginLiters": 0.4,
+                        "terrainRisk": 0.35,
+                        "weatherRisk": 0.62,
+                        "finalRisk": 0.62,
+                        "riskLevel": "MODERATE",
+                        "factors": ["高溫曝曬", "水量偏低", "無遮蔽", "午後炎熱時段"],
+                        "message": "午後高溫與曝曬會放大中暑、補水與遮蔽需求。",
+                    }
                 ],
             },
             ensure_ascii=False,
