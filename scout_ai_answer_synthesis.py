@@ -1646,6 +1646,7 @@ def _top_result_summary(value: Any) -> dict[str, Any]:
         "minutes_to_next_cp",
         "max_duration_minutes",
         "leave_by",
+        "location_constraint",
         "field_answer",
         "contextual_permission",
         "risk_budget",

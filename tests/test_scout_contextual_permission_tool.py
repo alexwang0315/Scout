@@ -37,6 +37,7 @@ def test_contextual_permission_allows_film_with_bounded_deadline_and_cost() -> N
     assert result["action"] == "film"
     assert result["max_duration_minutes"] == 6
     assert result["leave_by"] == "2026-06-07T13:42:00+08:00"
+    assert result["location_constraint"] == "留在步道內側或既有路線走廊內"
     assert result["field_answer"].startswith("[決策] 可以，最多 6 分鐘。")
     assert "最多 6 分鐘" in result["field_answer"]
     assert "13:42" in result["field_answer"]
@@ -48,6 +49,7 @@ def test_contextual_permission_allows_film_with_bounded_deadline_and_cost() -> N
     assert permission["allowed"] is True
     assert permission["maxDurationMinutes"] == 6
     assert permission["leaveBy"] == "2026-06-07T13:42:00+08:00"
+    assert permission["locationConstraint"] == "留在步道內側或既有路線走廊內"
     assert permission["cost"]["timeBufferChangeMinutes"] == -6
     assert permission["nextAction"]
     assert permission["requiredConditions"]
@@ -60,6 +62,7 @@ def test_contextual_permission_allows_film_with_bounded_deadline_and_cost() -> N
     assert decision_output["allowed"] is True
     assert decision_output["maxDurationMinutes"] == 6
     assert decision_output["leaveBy"] == "2026-06-07T13:42:00+08:00"
+    assert decision_output["locationConstraint"] == "留在步道內側或既有路線走廊內"
     assert decision_output["cost"]["timeBufferChangeMinutes"] == -6
     assert decision_output["confidence"] == "medium"
     assert decision_output["runtimeSafetyTruth"] is False
@@ -390,15 +393,32 @@ def test_contextual_permission_allows_rain_gear_without_buffer() -> None:
     assert result["decision"] == "GO"
     assert result["allowed"] is True
     assert result["missing_fields"] == []
-    assert result["contextual_permission"]["cost"]["timeBufferChangeMinutes"] == 0
+    permission = result["contextual_permission"]
+    assert result["max_duration_minutes"] == 2
+    assert result["location_constraint"] == (
+        "就地安全位置；不離開步道內側或既有路線走廊"
+    )
+    assert permission["maxDurationMinutes"] == 2
+    assert permission["locationConstraint"] == (
+        "就地安全位置；不離開步道內側或既有路線走廊"
+    )
+    assert permission["cost"]["timeBufferChangeMinutes"] == 0
     assert result["decision_output"]["decisionObjectSchema"] == "ContextualPermission"
     assert result["decision_output"]["action"] == "wear_rain_gear"
     assert result["decision_output"]["decision"] == "GO"
     assert result["decision_output"]["allowed"] is True
+    assert result["decision_output"]["maxDurationMinutes"] == 2
+    assert result["decision_output"]["locationConstraint"] == (
+        "就地安全位置；不離開步道內側或既有路線走廊"
+    )
     assert result["decision_output"]["cost"]["timeBufferChangeMinutes"] == 0
-    assert result["decision_output"]["firstLayer"]["decision"] == "可以穿雨具。"
-    assert result["decision_output"]["firstLayer"]["limit"] == (
-        "不額外消耗停留 buffer；執行後立即回到原定節奏。"
+    assert result["decision_output"]["firstLayer"]["decision"] == (
+        "可以穿雨具，最多 2 分鐘。"
+    )
+    assert "最多 2 分鐘" in result["decision_output"]["firstLayer"]["limit"]
+    assert "就地安全位置" in result["decision_output"]["firstLayer"]["limit"]
+    assert "完成後立即回到原定節奏" in (
+        result["decision_output"]["secondLayer"]["requiredConditions"]
     )
     assert result["decision_output"]["runtimeSafetyTruth"] is False
     assert "就地穿上雨具" in result["field_answer"]
@@ -446,15 +466,27 @@ def test_contextual_permission_allows_direct_retreat_for_tired_teammate() -> Non
     assert result["decision"] == "GO"
     assert result["allowed"] is True
     assert result["missing_fields"] == []
-    assert result["contextual_permission"]["cost"]["timeBufferChangeMinutes"] == 0
+    permission = result["contextual_permission"]
+    assert result["max_duration_minutes"] == 0
+    assert "最近安全點" in result["location_constraint"]
+    assert permission["maxDurationMinutes"] == 0
+    assert "最近安全點" in permission["locationConstraint"]
+    assert permission["cost"]["timeBufferChangeMinutes"] == 0
     assert result["decision_output"]["decisionObjectSchema"] == "ContextualPermission"
     assert result["decision_output"]["action"] == "retreat"
     assert result["decision_output"]["decision"] == "GO"
     assert result["decision_output"]["allowed"] is True
+    assert result["decision_output"]["maxDurationMinutes"] == 0
+    assert "最近安全點" in result["decision_output"]["locationConstraint"]
     assert result["decision_output"]["cost"]["timeBufferChangeMinutes"] == 0
     assert result["decision_output"]["firstLayer"]["decision"] == "建議撤退。"
+    assert "立即開始撤退" in result["decision_output"]["firstLayer"]["limit"]
+    assert "不授權停留" in result["decision_output"]["firstLayer"]["limit"]
     assert "保持隊伍完整" in result["decision_output"]["firstLayer"]["limit"]
     assert "保持隊伍完整" in result["decision_output"]["firstLayer"]["nextStep"]
+    assert "立即開始撤退，不授權原地停留" in (
+        result["decision_output"]["secondLayer"]["requiredConditions"]
+    )
     assert result["decision_output"]["runtimeSafetyTruth"] is False
     assert result["boundary"]["runtime_safety_truth"] is False
 
