@@ -549,8 +549,8 @@ def _with_data_confidence(
     result.setdefault("confidence", data_confidence["level"])
     uncertainty_notes = _dedupe_text_values(
         [
-            *_text_list(result.get("uncertaintyNotes")),
             *_text_list(data_confidence.get("uncertaintyNotes")),
+            *_text_list(result.get("uncertaintyNotes")),
         ]
     )
     result["uncertaintyNotes"] = uncertainty_notes
@@ -560,8 +560,8 @@ def _with_data_confidence(
             **second_layer,
             "uncertaintyNotes": _dedupe_text_values(
                 [
-                    *_text_list(second_layer.get("uncertaintyNotes")),
                     *_text_list(data_confidence.get("uncertaintyNotes")),
+                    *_text_list(second_layer.get("uncertaintyNotes")),
                 ]
             ),
         }
