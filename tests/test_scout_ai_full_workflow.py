@@ -524,6 +524,32 @@ def test_full_workflow_treats_fog_photo_as_wait_permission() -> None:
     assert result.boundary.runtime_safety_truth is False
 
 
+def test_full_workflow_prioritizes_weather_delay_over_generic_continue() -> None:
+    result = run_scout_ai_full_workflow(
+        "日落快到了，還能繼續推進嗎？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=4,
+    )
+
+    assert result.answerability == "partial_evidence_with_missing_context"
+    assert result.selected_tool_count == 2
+    assert result.failed_tool_count == 0
+    weather = _workflow_source(result, WEATHER_WINDOW_TOOL_ID)
+    contextual = _workflow_source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
+    assert weather["top_result_summary"]["decision"] == "DELAY"
+    assert contextual["top_result_summary"]["action"] == "continue"
+    assert contextual["top_result_summary"]["decision"] == "GO"
+    assert result.decision_output["answerSourceToolId"] == WEATHER_WINDOW_TOOL_ID
+    assert result.decision_output["decision"] == "DELAY"
+    assert result.decision_output["firstLayer"]["decision"] == (
+        "建議延後天氣判斷。"
+    )
+    assert "fresh weather" in result.decision_output["firstLayer"]["reason"]
+    assert result.decision_output["runtimeSafetyTruth"] is False
+    assert result.boundary.runtime_safety_truth is False
+
+
 def test_full_workflow_allows_bounded_teammate_wait() -> None:
     result = run_scout_ai_full_workflow(
         "現在 2026-06-07T13:50:00+08:00，安全 buffer 還有 18 分鐘，可以等隊友 5 分鐘嗎？",
