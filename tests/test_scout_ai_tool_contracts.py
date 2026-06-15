@@ -877,6 +877,37 @@ def test_execute_contextual_permission_assessor_returns_bounded_decision() -> No
     assert result.payload["boundary"]["safety_api_called"] is False
 
 
+def test_execute_contextual_permission_assessor_blocks_split_team_summit() -> None:
+    result = execute_scout_ai_tool(
+        {
+            "tool_id": "scout.ai.contextual_permission.assess",
+            "project_root": str(PROJECT_ROOT),
+            "query": "可以讓走得快的人先去山頂嗎？",
+        }
+    )
+
+    assert result.status == "completed"
+    assert result.tool_id == CONTEXTUAL_PERMISSION_TOOL_ID
+    assert result.payload["answerability"] == "contextual_permission_decision_available"
+    assert result.payload["action"] == "split_team"
+    assert result.payload["decision"] == "NO_GO"
+    assert result.payload["allowed"] is False
+    assert result.payload["missing_fields"] == []
+    assert result.payload["decision_object"] == result.payload["contextual_permission"]
+    assert result.payload["decision_output"]["decisionObjectSchema"] == (
+        "ContextualPermission"
+    )
+    assert result.payload["decision_output"]["firstLayer"]["decision"] == (
+        "不建議分隊。"
+    )
+    assert result.payload["decision_output"]["runtimeSafetyTruth"] is False
+    assert "走得快的人先去山頂" in result.payload["contextual_permission"][
+        "mainReasons"
+    ][0]
+    assert "保持隊伍完整" in result.payload["contextual_permission"]["nextAction"]
+    assert result.boundary.runtime_safety_truth is False
+
+
 def test_execute_survival_playbook_alias_returns_boundary_safe_guidance() -> None:
     result = execute_scout_ai_tool(
         {
