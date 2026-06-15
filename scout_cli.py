@@ -224,6 +224,19 @@ def _add_pretrip_group(subparsers: argparse._SubParsersAction) -> None:
     route_context.add_argument("--authorized-by", default=None)
     route_context.add_argument("--output", type=Path, default=None)
     route_context.add_argument("--json", action="store_true")
+    route_architecture = pretrip_sub.add_parser("route-architecture-collect")
+    route_architecture.add_argument("--project-root", type=Path, default=None)
+    route_architecture.add_argument("--project-id", default=None)
+    route_architecture.add_argument("--workspace-root", type=Path, default=None)
+    route_architecture.add_argument("--current-cp-id", default=None)
+    route_architecture.add_argument("--current-time", default=None)
+    route_architecture.add_argument("--target-cp-id", default=None)
+    route_architecture.add_argument("--limit", type=int, default=12)
+    route_architecture.add_argument("--generated-at", default=None)
+    route_architecture.add_argument("--dry-run", action="store_true")
+    route_architecture.add_argument("--authorized-by", default=None)
+    route_architecture.add_argument("--output", type=Path, default=None)
+    route_architecture.add_argument("--json", action="store_true")
     weather_decision = pretrip_sub.add_parser("weather-decision-collect")
     weather_decision.add_argument("--project-root", type=Path, default=None)
     weather_decision.add_argument("--project-id", default=None)
@@ -615,6 +628,21 @@ def _tool_request_for_args(args: argparse.Namespace) -> tuple[str, dict[str, Any
         if args.collected_at:
             request["collected_at"] = args.collected_at
         return "scout.pretrip.route_context_collect", request
+    if group == "pretrip" and args.pretrip_command == "route-architecture-collect":
+        request = {"limit": args.limit}
+        _set_path(request, "project_root", args.project_root)
+        _set_path(request, "workspace_root", args.workspace_root)
+        if args.project_id:
+            request["project_id"] = args.project_id
+        if args.current_cp_id:
+            request["current_cp_id"] = args.current_cp_id
+        if args.current_time:
+            request["current_time"] = args.current_time
+        if args.target_cp_id:
+            request["target_cp_id"] = args.target_cp_id
+        if args.generated_at:
+            request["generated_at"] = args.generated_at
+        return "scout.pretrip.route_architecture_collect", request
     if group == "pretrip" and args.pretrip_command == "weather-decision-collect":
         request = {"provider": args.provider}
         _set_path(request, "project_root", args.project_root)
