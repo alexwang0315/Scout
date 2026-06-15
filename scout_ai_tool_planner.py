@@ -673,7 +673,21 @@ def _contextual_permission_action_override(normalized_question: str) -> str | No
         return "retreat"
     if _has_any(normalized_question, ("穿雨衣", "雨衣", "raingear")):
         return "wear_rain_gear"
-    if _has_any(normalized_question, ("渡溪", "過溪", "溪水", "crossstream")):
+    if _has_any(
+        normalized_question,
+        (
+            "渡溪",
+            "過溪",
+            "溪水",
+            "溪流",
+            "溪谷",
+            "水位無法確認",
+            "無法確認溪流水位",
+            "沒有渡溪經驗",
+            "無渡溪經驗",
+            "crossstream",
+        ),
+    ):
         return "cross_stream"
     if _has_any(normalized_question, ("曝露", "暴露", "邊坡", "exposed")):
         return "enter_exposed_section"
@@ -2474,6 +2488,12 @@ def _looks_like_contextual_permission_question(text: str) -> bool:
             "還能過溪",
             "可以渡溪",
             "能不能渡溪",
+            "進入溪谷",
+            "可以進入溪谷",
+            "能不能進入溪谷",
+            "溪流水位",
+            "水位無法確認",
+            "無法確認溪流水位",
             "溪水暴漲",
             "水位暴漲",
             "快速通過",

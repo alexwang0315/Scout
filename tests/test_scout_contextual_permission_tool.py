@@ -554,6 +554,25 @@ def test_contextual_permission_escalates_stream_surge_without_buffer() -> None:
     assert result["boundary"]["runtime_safety_truth"] is False
 
 
+def test_contextual_permission_escalates_unknown_creek_level_without_experience() -> None:
+    result = assess_scout_contextual_permission(
+        PROJECT_ROOT,
+        query="目前無法確認溪流水位，且我們沒有渡溪經驗，可以進入溪谷嗎？",
+    )
+
+    assert result["answerability"] == "contextual_permission_missing_required_fields"
+    assert result["action"] == "cross_stream"
+    assert result["decision"] == "ESCALATE"
+    assert result["allowed"] is False
+    assert result["missing_fields"] == ["remaining_safety_buffer_minutes"]
+    assert result["decision_output"]["firstLayer"]["decision"] == (
+        "需要升級處理，不建議渡溪。"
+    )
+    assert "高後果情境" in result["decision_output"]["firstLayer"]["reason"]
+    assert "停止進入溪谷" in result["decision_output"]["firstLayer"]["nextStep"]
+    assert result["boundary"]["runtime_safety_truth"] is False
+
+
 def test_contextual_permission_blocks_unreviewed_fast_passage_request() -> None:
     result = assess_scout_contextual_permission(
         PROJECT_ROOT,
