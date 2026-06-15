@@ -91,6 +91,9 @@ def plan_scout_ai_tools(
     product_identity_question = _looks_like_product_identity_question(
         normalized_question,
     )
+    standard_glossary_question = _looks_like_standard_glossary_question(
+        normalized_question,
+    )
     standard_gap_overview_question = _looks_like_standard_gap_overview_question(
         normalized_question,
     )
@@ -114,6 +117,16 @@ def plan_scout_ai_tools(
             selected_tools=[],
             planner_notes=[
                 "Product identity questions are answered from the deterministic Scout outdoor standard formatter, not route/weather/catalog tools."
+            ],
+        )
+    if standard_glossary_question and not standard_gap_overview_question:
+        return ScoutAiToolPlan(
+            surface=query.surface.value,
+            question=query.question,
+            project_root=str(project_root) if project_root is not None else None,
+            selected_tools=[],
+            planner_notes=[
+                "Standard glossary questions are answered from the deterministic Scout outdoor standard formatter, not route/risk/pace tools."
             ],
         )
 
@@ -1746,6 +1759,40 @@ def _looks_like_product_identity_question(text: str) -> bool:
         "productclaim",
     )
     return _has_any(text, product_terms)
+
+
+def _looks_like_standard_glossary_question(text: str) -> bool:
+    glossary_terms = (
+        "cpgraph",
+        "checkpointgraph",
+        "riskbudget",
+        "風險預算",
+        "scoutpacecoefficient",
+        "pacecoefficient",
+        "腳程係數",
+        "residualrisk",
+        "剩餘風險",
+        "殘餘風險",
+        "vetopower",
+        "permissionpower",
+        "microdecisionagent",
+        "micro-decisionagent",
+        "微決策agent",
+        "微決策代理",
+    )
+    concept_terms = (
+        "是什麼",
+        "什麼是",
+        "定義",
+        "意思",
+        "差在哪",
+        "差異",
+        "glossary",
+        "術語",
+        "名詞",
+        "解釋",
+    )
+    return _has_any(text, glossary_terms) and _has_any(text, concept_terms)
 
 
 def _looks_like_workspace_catalog_question(text: str) -> bool:

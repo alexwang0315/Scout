@@ -3502,6 +3502,32 @@ def test_answer_synthesis_answers_product_identity_from_standard_formatter() -> 
     assert "建議延後天氣判斷" not in result.answer
 
 
+def test_answer_synthesis_answers_standard_glossary_without_operational_tool_detour() -> None:
+    result = collect_and_synthesize_scout_ai_answer(
+        "Veto Power 和 Permission Power 差在哪？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=8,
+    )
+
+    assert result.answerability == "standard_glossary"
+    assert result.evidence_collection["selected_tool_count"] == 0
+    assert result.completed_source_count == 0
+    assert result.decision_output["answerSourceToolId"] == (
+        "scout.ai.standard_glossary.v0"
+    )
+    assert result.decision_output["decision"] == "GUIDED_ONLY"
+    assert result.decision_output["runtimeSafetyTruth"] is False
+    assert "Veto Power" in result.answer
+    assert "Permission Power" in result.answer
+    assert "明確否決" in result.answer
+    assert "條件與限制約束" in result.answer
+    assert "不是出發批准" in result.answer
+    assert "standard glossary formatter was used" in result.answer
+    assert "No registry-backed Scout AI tool" not in result.answer
+    assert "沒有完成的 deterministic Scout evidence source" not in result.answer
+
+
 def test_answer_synthesis_routes_scout_ai_meta_power_to_dynamic_decision_overview() -> None:
     result = collect_and_synthesize_scout_ai_answer(
         "Scout AI 力如何把六力轉成動態決策，而不是靜態分數表？",
