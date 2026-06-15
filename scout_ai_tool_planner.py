@@ -2934,10 +2934,14 @@ def _looks_like_route_context_question(text: str) -> bool:
         return True
     if _looks_like_post_trip_route_context_update_question(text):
         return False
-    if _looks_like_contextual_permission_question(text):
-        return False
     if _looks_like_media_literacy_question(text):
         return False
+    if _looks_like_contextual_permission_question(text):
+        return _has_route_context_terms(text)
+    return _has_route_context_terms(text)
+
+
+def _has_route_context_terms(text: str) -> bool:
     return _has_any(
         text,
         (

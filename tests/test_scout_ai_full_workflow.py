@@ -1213,6 +1213,36 @@ def test_full_workflow_runs_route_context_experience_guide_question() -> None:
     assert result.boundary.runtime_safety_truth is False
 
 
+def test_full_workflow_combines_experience_guide_with_stop_permission() -> None:
+    result = run_scout_ai_full_workflow(
+        "哪裡適合拍攝？可以停多久？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=6,
+    )
+
+    assert result.answerability == "partial_evidence_with_missing_context"
+    assert result.selected_tool_count == 7
+    assert result.executed_tool_count == 7
+    assert result.completed_tool_count == 7
+    assert result.failed_tool_count == 0
+    assert result.missing_evidence_count == 4
+    _assert_on_route_micro_decision_support_sources(result)
+    contextual = _workflow_source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
+    route_context = _workflow_source(result, ROUTE_CONTEXT_TOOL_ID)
+    assert contextual["top_result_summary"]["action"] == "photo"
+    assert contextual["top_result_summary"]["decision"] == "NO_GO"
+    assert route_context["top_result_summary"]["route_context"]["role"] == (
+        "Experience Guide"
+    )
+    assert result.decision_output["answerSourceToolId"] == CONTEXTUAL_PERMISSION_TOOL_ID
+    assert result.decision_output["action"] == "photo"
+    assert result.decision_output["decision"] == "NO_GO"
+    assert "不建議拍照" in result.answer
+    assert "候選路線脈絡" in result.answer
+    assert result.boundary.runtime_safety_truth is False
+
+
 def test_full_workflow_routes_standard_natural_context_layer() -> None:
     questions = [
         "這段林相變化有什麼可以觀察？",
