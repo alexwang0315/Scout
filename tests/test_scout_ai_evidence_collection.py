@@ -375,9 +375,17 @@ def test_evidence_collection_keeps_route_readiness_payload() -> None:
     payload = readiness.result["payload"]
     assert payload["answerability"] == "route_readiness_missing_required_fields"
     assert payload["decision"] == "DELAY"
+    assert payload["decision_output"]["decisionObjectSchema"] == "ContextualPermission"
+    assert payload["decision_output"]["decision"] == "DELAY"
+    assert payload["decision_output"]["allowed"] is False
+    assert payload["decision_output"]["firstLayer"]["decision"] == "建議延後。"
+    assert "不得出發" in payload["decision_output"]["firstLayer"]["limit"]
+    assert payload["decision_output"]["departureApprovalGranted"] is False
+    assert payload["decision_output"]["runtimeSafetyTruth"] is False
     assert payload["route_readiness"]["role"] == (
         "Pre-Trip Route Readiness / Departure Gate"
     )
+    assert payload["route_readiness"]["decision_output"]["decision"] == "DELAY"
     package = payload["pretrip_decision_package"]
     assert package["required_outputs"]["pretrip_decision"] == "DELAY"
     assert package["required_outputs"]["top_risk_sources"]

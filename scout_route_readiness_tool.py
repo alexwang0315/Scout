@@ -192,6 +192,15 @@ def assess_scout_route_readiness(
         source_report=source_report,
         debug_sources=debug_sources,
     )
+    decision_output = _decision_output(
+        decision=decision,
+        answerability=answerability,
+        route_state=route_state,
+        governance=governance,
+        missing_fields=missing_fields,
+        pretrip_decision_package=pretrip_decision_package,
+        field_answer=field_answer,
+    )
 
     return {
         "artifact_kind": ROUTE_READINESS_OUTPUT_KIND,
@@ -204,6 +213,7 @@ def assess_scout_route_readiness(
         "source_status": "candidate_only",
         "decision": decision,
         "allowed": decision in {"GO", "CONDITIONAL_GO"},
+        "decision_output": decision_output,
         "field_answer": field_answer,
         "missing_fields": missing_fields,
         "route_readiness": {
@@ -212,6 +222,7 @@ def assess_scout_route_readiness(
             "runtime_safety_truth": False,
             "departure_approval_granted": False,
             "decision": decision,
+            "decision_output": decision_output,
             "critical_gaps": governance["critical_gaps"],
             "warning_gaps": governance["warning_gaps"],
             "required_conditions": governance["required_conditions"],
@@ -239,6 +250,7 @@ def assess_scout_route_readiness(
             {
                 "label": "pre-trip route readiness decision",
                 "decision": decision,
+                "decision_output": decision_output,
                 "answerability": answerability,
                 "critical_gaps": governance["critical_gaps"],
                 "warning_gaps": governance["warning_gaps"],
@@ -252,6 +264,8 @@ def assess_scout_route_readiness(
             "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 18 pre-trip workflow",
             "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 18.1 required inputs",
             "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 18.2 required outputs",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 16 required decision output format",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 17 ContextualPermission schema",
             "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 22 required development standards",
             "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 23 acceptance criteria",
             "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 24.1 MVP pre-trip Go/No-Go",
@@ -259,6 +273,211 @@ def assess_scout_route_readiness(
         "boundary": _closed_boundary(),
         "debug_sources": debug_sources,
     }
+
+
+def _decision_output(
+    *,
+    decision: str,
+    answerability: str,
+    route_state: dict[str, Any],
+    governance: dict[str, Any],
+    missing_fields: list[str],
+    pretrip_decision_package: dict[str, Any],
+    field_answer: str,
+) -> dict[str, Any]:
+    outputs = pretrip_decision_package.get("required_outputs")
+    outputs = outputs if isinstance(outputs, dict) else {}
+    limits = pretrip_decision_package.get("decision_limits")
+    limits = limits if isinstance(limits, dict) else {}
+    traceability = pretrip_decision_package.get("traceability")
+    traceability = traceability if isinstance(traceability, dict) else {}
+
+    allowed = bool(limits.get("allowed"))
+    main_reasons = _risk_reasons(outputs.get("top_risk_sources"))
+    required_conditions = _text_list(outputs.get("required_conditions"))
+    alternatives = _text_list(outputs.get("alternatives_or_short_routes"))
+    residual_risk = _text_list(outputs.get("residual_risk"))
+    uncertainty_notes = _uncertainty_notes(
+        missing_fields=missing_fields,
+        traceability=traceability,
+    )
+    limit = _decision_limit_phrase(
+        decision=decision,
+        allowed=allowed,
+        route_state=route_state,
+        limits=limits,
+    )
+    next_action = str(limits.get("next_action") or governance["next_action"])
+    details = _decision_details(
+        outputs=outputs,
+        route_state=route_state,
+        field_answer=field_answer,
+    )
+    first_layer = {
+        "decision": _decision_phrase(decision=decision, allowed=allowed),
+        "limit": limit,
+        "reason": " / ".join((main_reasons or ["缺少前三風險摘要"])[:2]),
+        "nextStep": next_action,
+    }
+    second_layer = {
+        "details": details,
+        "uncertaintyNotes": uncertainty_notes,
+        "residualRisk": residual_risk,
+        "requiredConditions": required_conditions,
+        "alternativeActions": alternatives,
+    }
+    return {
+        "role": "Pre-Trip Go/No-Go Agent",
+        "format": "SCOUT_OUTDOOR_AI_AGENT_STANDARD.section16",
+        "decisionObjectSchema": "ContextualPermission",
+        "text": "\n".join(
+            (
+                f"[決策] {first_layer['decision']}",
+                f"[限制] {first_layer['limit']}",
+                f"[原因] {first_layer['reason']}",
+                f"[下一步] {first_layer['nextStep']}",
+            )
+        ),
+        "firstLayer": first_layer,
+        "secondLayer": second_layer,
+        "action": "pretrip_route_readiness_departure_gate",
+        "decision": decision,
+        "allowed": allowed,
+        "locationConstraint": limit,
+        "mainReasons": main_reasons
+        or ["Pre-trip readiness decision package did not expose top risks."],
+        "cost": {
+            "timeBufferChangeMinutes": 0 if not allowed else None,
+            "daylightImpact": "Departure remains gated by daylight and review evidence.",
+            "retreatImpact": "Turnaround and alternatives must remain visible before runtime handoff.",
+            "teamPaceImpact": "Slowest or most vulnerable member basis is required.",
+            "latestTurnaroundCheckpoint": route_state.get("turn_back_checkpoint_node_name"),
+            "mustLeaveBy": limits.get("must_leave_by"),
+            "bufferCostStatement": limits.get("buffer_cost_statement"),
+        },
+        "nextAction": next_action,
+        "confidence": "low" if uncertainty_notes else "medium",
+        "uncertaintyNotes": uncertainty_notes,
+        "residualRisk": residual_risk,
+        "requiredConditions": required_conditions,
+        "alternativeActions": alternatives,
+        "answerability": answerability,
+        "runtimeSafetyTruth": False,
+        "departureApprovalGranted": False,
+        "standardAlignment": [
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 16 required decision output format",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 17 ContextualPermission schema",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 18.2 required pre-trip outputs",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 23 acceptance criteria",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 24.1 MVP Go/No-Go",
+        ],
+    }
+
+
+def _risk_reasons(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    reasons = []
+    for item in value:
+        if isinstance(item, dict):
+            reason = item.get("reason")
+            if isinstance(reason, str) and reason.strip():
+                reasons.append(reason.strip())
+    return _dedupe(reasons)
+
+
+def _text_list(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item).strip() for item in value if str(item).strip()]
+
+
+def _uncertainty_notes(
+    *,
+    missing_fields: list[str],
+    traceability: dict[str, Any],
+) -> list[str]:
+    notes = [f"Missing field: {field}" for field in missing_fields]
+    reason_records = traceability.get("reason_records")
+    if isinstance(reason_records, dict):
+        warning_count = _int_or_zero(reason_records.get("warning_gap_count"))
+        if warning_count:
+            notes.append(f"Warning gap count: {warning_count}")
+        finding_count = _int_or_zero(reason_records.get("readiness_finding_count"))
+        if finding_count:
+            notes.append(f"Readiness finding count: {finding_count}")
+    return _dedupe(notes)
+
+
+def _decision_limit_phrase(
+    *,
+    decision: str,
+    allowed: bool,
+    route_state: dict[str, Any],
+    limits: dict[str, Any],
+) -> str:
+    if decision == "NO_GO":
+        return "不得照原計畫出發；先改線、延期或解除 hard blockers。"
+    if decision == "DELAY":
+        return "缺口補齊與人工 departure gate 通過前，不得出發或進入 runtime handoff。"
+    if decision == "CHANGE_PLAN":
+        return "必須改線、改日期或降低目標 CP；不得照原計畫出發。"
+    if decision == "ESCALATE":
+        return "交由人工領隊/留守確認；Scout 不自動批准出發、通知或報案。"
+    if decision == "CONDITIONAL_GO":
+        deadline = limits.get("must_leave_by") or route_state.get("turn_back_checkpoint_eta")
+        if deadline:
+            return f"必須滿足 required conditions，並在 {deadline} 前離開/折返指定 checkpoint。"
+        return "必須滿足 required conditions，且出發前仍需人工 departure gate。"
+    if allowed:
+        return "仍需人工 departure gate；每個 CP 依 CP Graph 與天氣/日照重新確認。"
+    return "不得把此候選判斷當作 departure approval 或 runtime safety truth。"
+
+
+def _decision_phrase(*, decision: str, allowed: bool) -> str:
+    if decision == "GO" and allowed:
+        return "可進入人工出發門檢。"
+    if decision == "CONDITIONAL_GO":
+        return "可有條件進入人工出發門檢。"
+    if decision == "GUIDED_ONLY":
+        return "只建議在合格帶領下進入。"
+    if decision == "CHANGE_PLAN":
+        return "建議改變計畫。"
+    if decision == "DELAY":
+        return "建議延後。"
+    if decision == "NO_GO":
+        return "不建議出發。"
+    if decision == "ESCALATE":
+        return "升級人工確認。"
+    return "暫緩判斷。"
+
+
+def _decision_details(
+    *,
+    outputs: dict[str, Any],
+    route_state: dict[str, Any],
+    field_answer: str,
+) -> list[str]:
+    latest_turnaround = outputs.get("latest_turnaround")
+    latest_turnaround = latest_turnaround if isinstance(latest_turnaround, dict) else {}
+    details = [
+        field_answer,
+        f"cp_graph_available={bool(route_state.get('mission_graph_available'))}",
+        f"checkpoint_count={route_state.get('checkpoint_count')}",
+        f"segment_count={route_state.get('segment_count')}",
+        f"latest_turnaround={latest_turnaround.get('checkpoint_name')}",
+        f"latest_turnaround_deadline={latest_turnaround.get('deadline')}",
+    ]
+    stop_points = outputs.get("not_recommended_stop_points")
+    if isinstance(stop_points, list) and stop_points:
+        details.append(
+            "not_recommended_stop_points="
+            + " / ".join(
+                str(item.get("label") if isinstance(item, dict) else item)
+                for item in stop_points[:2]
+            )
+        )
+    return details
 
 
 def _route_state(
@@ -1099,6 +1318,13 @@ def _bool_or_none(value: Any) -> bool | None:
     if normalized in {"0", "false", "no", "n", "missing", "unknown", "needs_review"}:
         return False
     return None
+
+
+def _int_or_zero(value: Any) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
 
 
 def _dedupe(values: list[str]) -> list[str]:

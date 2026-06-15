@@ -141,21 +141,20 @@ Current manifest count is reported by `scout_cli tools list --json`.
 assessor. It is planner/executor surfaced rather than a `scout_cli pretrip`
 workspace-write command.
 
-The assessor now returns `pretrip_decision_package`, aligned to
-`SCOUT_OUTDOOR_AI_AGENT_STANDARD` Sec. 18.2 and Sec. 23. The package exposes the
-pre-trip decision, top risk sources, required conditions, CP Graph summary,
-latest turnaround point, suggested and not-recommended stop points,
-alternatives/short-route actions, checklist, residual risk, decision limits,
-and traceability. It remains candidate-only decision support: it does not grant
-departure approval, runtime handoff, `/safety/*`, SOS, outbound send, or hardware
-control.
+The assessor now returns both a native `decision_output` and a
+`pretrip_decision_package`, aligned to `SCOUT_OUTDOOR_AI_AGENT_STANDARD` Sec.
+16, Sec. 17, Sec. 18.2, and Sec. 23. The decision output gives callers the
+first-layer `[決策]`, `[限制]`, `[原因]`, and `[下一步]` fields directly. The
+package exposes the pre-trip decision, top risk sources, required conditions, CP
+Graph summary, latest turnaround point, suggested and not-recommended stop
+points, alternatives/short-route actions, checklist, residual risk, decision
+limits, and traceability. It remains candidate-only decision support: it does
+not grant departure approval, runtime handoff, `/safety/*`, SOS, outbound send,
+or hardware control.
 
 Scout AI answer synthesis and full workflow artifacts also expose top-level
 `decision_output`, aligned to Sec. 16 and Sec. 17. When a tool already returns a
-native decision object, Scout AI preserves it. When route readiness is the source,
-Scout AI converts `pretrip_decision_package` into a
-`ContextualPermission`-equivalent first layer and second layer so callers can
-read `[決策]`, `[限制]`, `[原因]`, and `[下一步]` fields without parsing prose.
+native decision object, including route readiness, Scout AI preserves it.
 
 `scout.ai.live_navigation_state.assess.v0` now returns a native
 `decision_output` for Sec. 19.2 on-route navigation answers. The tool still reads
