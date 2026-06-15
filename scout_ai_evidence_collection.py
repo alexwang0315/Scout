@@ -243,6 +243,7 @@ def _compact_payload(
         "searched_context_count",
         "source_status",
         "weather_window",
+        "weather_to_decision",
         "decision",
         "allowed",
         "action",

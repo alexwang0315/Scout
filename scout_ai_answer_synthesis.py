@@ -14,6 +14,7 @@ from scout_ai_tool_contracts import ScoutAiToolBaseModel, ScoutAiToolBoundary
 from scout_contextual_permission_tool import CONTEXTUAL_PERMISSION_TOOL_ID
 from scout_route_context_tool import ROUTE_CONTEXT_TOOL_ID
 from scout_pace_guardian_tool import PACE_GUARDIAN_TOOL_ID
+from scout_weather_window_tool import WEATHER_WINDOW_TOOL_ID
 
 
 ARTIFACT_KIND = "scout_ai_answer_synthesis"
@@ -165,6 +166,8 @@ def _source_from_record(record: dict[str, Any]) -> ScoutAiAnswerSource:
         "route_context",
         "pace_guardian",
         "team_pace_fit",
+        "weather_to_decision",
+        "decision",
         "answerability",
         "source_status",
     ):
@@ -232,6 +235,9 @@ def _answer_text(
     pace_guardian_answer = _pace_guardian_answer(completed_sources)
     if pace_guardian_answer:
         parts.append(pace_guardian_answer)
+    weather_decision_answer = _weather_decision_answer(completed_sources)
+    if weather_decision_answer:
+        parts.append(weather_decision_answer)
     if completed_sources:
         parts.append(
             "Collected evidence: "
@@ -318,6 +324,16 @@ def _pace_guardian_answer(sources: list[ScoutAiAnswerSource]) -> str | None:
     return None
 
 
+def _weather_decision_answer(sources: list[ScoutAiAnswerSource]) -> str | None:
+    for source in sources:
+        if source.tool_id != WEATHER_WINDOW_TOOL_ID:
+            continue
+        field_answer = source.top_result_summary.get("field_answer")
+        if isinstance(field_answer, str) and field_answer.strip():
+            return field_answer.strip()
+    return None
+
+
 def _top_result_summary(value: Any) -> dict[str, Any]:
     if not isinstance(value, dict):
         return {}
@@ -338,6 +354,7 @@ def _top_result_summary(value: Any) -> dict[str, Any]:
         "source_status",
         "risk_summary",
         "weather_window",
+        "weather_to_decision",
         "decision",
         "allowed",
         "action",
