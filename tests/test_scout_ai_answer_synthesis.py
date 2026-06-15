@@ -1251,6 +1251,29 @@ def test_answer_synthesis_uses_route_architecture_for_hut_checkin_pressure() -> 
     assert "runtime safety truth" in result.answer
 
 
+def test_answer_synthesis_prioritizes_transport_deadline_pressure() -> None:
+    result = collect_and_synthesize_scout_ai_answer(
+        "交通末班車快趕不上了，還能照原計畫嗎？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=4,
+    )
+
+    assert result.answerability == "partial_evidence_with_missing_context"
+    assert result.missing_evidence_count >= 1
+    route = _source(result, ROUTE_ARCHITECTURE_TOOL_ID)
+    assert route.top_result_summary["decision"] == "CHANGE_PLAN"
+    assert route.top_result_summary["route_decision"]["deadline_pressure"] == (
+        "transport_last_service"
+    )
+    assert result.decision_output["answerSourceToolId"] == ROUTE_ARCHITECTURE_TOOL_ID
+    assert result.decision_output["decision"] == "CHANGE_PLAN"
+    assert result.decision_output["firstLayer"]["decision"] == (
+        "建議改變計畫，先處理外部 deadline 壓力。"
+    )
+    assert "transport last service" in result.decision_output["firstLayer"]["reason"]
+
+
 def test_answer_synthesis_uses_live_navigation_field_answer_without_guessing() -> None:
     result = collect_and_synthesize_scout_ai_answer(
         "我現在是不是偏離路線？",
