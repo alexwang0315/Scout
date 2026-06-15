@@ -188,7 +188,18 @@ def _detect_biases(text: str) -> list[dict[str, Any]]:
     definitions = [
         (
             "beauty_photo_bias",
-            ("美照", "照片", "ig", "instagram", "網美", "漂亮", "大景", "熱門照片", "很好拍"),
+            (
+                "美照",
+                "照片",
+                "ig",
+                "instagram",
+                "網美",
+                "漂亮",
+                "大景",
+                "熱門照片",
+                "照片很好看",
+                "很好拍",
+            ),
             "只看到展望或照片效果，可能低估泥濘、曝曬、落差與通過成本。",
         ),
         (
@@ -725,6 +736,10 @@ def _has_detour_or_stop_pressure(text: str) -> bool:
             "打卡",
             "停留",
             "等",
+            "去拍",
+            "想去拍",
+            "可以去拍",
+            "照片很好看",
             "很好拍",
             "拍照",
             "拍攝",

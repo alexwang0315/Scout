@@ -243,6 +243,31 @@ def test_planner_selects_media_and_contextual_for_social_detour_question() -> No
     assert contextual.request["tool_id"] == CONTEXTUAL_PERMISSION_TOOL_ID
 
 
+def test_planner_selects_media_and_contextual_for_exposed_photo_pressure() -> None:
+    plan = plan_scout_ai_tools(
+        _query("前方是高曝露陡坡，但照片很好看，可以去拍嗎？"),
+        project_root=PROJECT_ROOT,
+    )
+
+    tool_ids = _tool_ids(plan)
+    assert TERRAIN_SCORE_TOOL_ID in tool_ids
+    assert MEDIA_LITERACY_TOOL_ID in tool_ids
+    assert CONTEXTUAL_PERMISSION_TOOL_ID in tool_ids
+    assert ROUTE_CONTEXT_TOOL_ID not in tool_ids
+
+    media = _single_tool(plan, MEDIA_LITERACY_TOOL_ID)
+    assert media.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+    assert media.request is not None
+    assert media.request["tool_id"] == MEDIA_LITERACY_TOOL_ID
+    assert media.boundary.runtime_safety_truth is False
+
+    contextual = _single_tool(plan, CONTEXTUAL_PERMISSION_TOOL_ID)
+    assert contextual.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+    assert contextual.request is not None
+    assert contextual.request["tool_id"] == CONTEXTUAL_PERMISSION_TOOL_ID
+    assert contextual.boundary.runtime_safety_truth is False
+
+
 def test_planner_selects_survival_playbook_for_lost_position_question() -> None:
     plan = plan_scout_ai_tools(
         _query("不確定自己在哪，可以下切溪谷找路嗎？"),

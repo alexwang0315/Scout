@@ -65,6 +65,28 @@ def test_media_literacy_blocks_beauty_photo_bias_even_when_review_is_incomplete(
     assert result["decision_output"]["runtimeSafetyTruth"] is False
 
 
+def test_media_literacy_blocks_exposed_photo_pressure_without_context_guessing() -> None:
+    result = assess_scout_media_literacy(
+        PROJECT_ROOT,
+        query="前方是高曝露陡坡，但照片很好看，可以去拍嗎？",
+    )
+
+    assert result["answerability"] == "media_literacy_missing_context"
+    assert result["decision"] == "NO_GO"
+    assert result["allowed"] is False
+    assert result["action"] == "photo"
+    bias_ids = {bias["bias_id"] for bias in result["media_literacy"]["detected_biases"]}
+    assert "beauty_photo_bias" in bias_ids
+    assert result["media_bias_analysis"]["input_state"]["detour_or_stop_pressure"] is True
+    assert "route_context_or_target_point" in result["missing_fields"]
+    assert result["decision_output"]["decisionObjectSchema"] == "ContextualPermission"
+    assert result["decision_output"]["decision"] == "NO_GO"
+    assert result["decision_output"]["action"] == "photo"
+    assert "不得為拍照" in result["decision_output"]["firstLayer"]["limit"]
+    assert result["decision_output"]["runtimeSafetyTruth"] is False
+    assert result["boundary"]["runtime_safety_truth"] is False
+
+
 def test_media_literacy_guided_content_requires_guided_or_equivalent_support() -> None:
     result = assess_scout_media_literacy(
         PROJECT_ROOT,
