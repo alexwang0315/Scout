@@ -265,6 +265,48 @@ def test_full_workflow_preserves_contextual_permission_decision_object() -> None
     assert result.boundary.runtime_safety_truth is False
 
 
+def test_full_workflow_prices_extra_stop_time_against_buffer() -> None:
+    result = run_scout_ai_full_workflow(
+        "現在 2026-06-07T13:36:00+08:00，安全 buffer 還有 21 分鐘，"
+        "如果多停 10 分鐘，代價是什麼？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=3,
+    )
+
+    assert result.answerability == "evidence_available"
+    assert result.selected_tool_count == 1
+    assert result.executed_tool_count == 1
+    assert result.completed_tool_count == 1
+    assert result.failed_tool_count == 0
+    source = result.sources[0]
+    assert source["tool_id"] == CONTEXTUAL_PERMISSION_TOOL_ID
+    assert source["top_result_summary"]["action"] == "stop"
+    assert source["top_result_summary"]["decision"] == "CONDITIONAL_GO"
+    assert source["top_result_summary"]["allowed"] is True
+    assert source["top_result_summary"]["max_duration_minutes"] == 10
+    assert source["top_result_summary"]["leave_by"] == (
+        "2026-06-07T13:46:00+08:00"
+    )
+    assert result.decision_output["answerSourceToolId"] == CONTEXTUAL_PERMISSION_TOOL_ID
+    assert result.decision_output["action"] == "stop"
+    assert result.decision_output["decision"] == "CONDITIONAL_GO"
+    assert result.decision_output["allowed"] is True
+    assert result.decision_output["maxDurationMinutes"] == 10
+    assert result.decision_output["leaveBy"] == "2026-06-07T13:46:00+08:00"
+    assert result.decision_output["cost"]["timeBufferChangeMinutes"] == -10
+    assert result.decision_output["firstLayer"]["decision"] == "可以，最多 10 分鐘。"
+    answer_step = result.workflow_steps[-1]
+    assert answer_step.summary["decision_output_schema"] == "ContextualPermission"
+    assert answer_step.summary["decision_output_source_tool"] == (
+        CONTEXTUAL_PERMISSION_TOOL_ID
+    )
+    assert "消耗 10 分鐘 buffer" in result.answer
+    assert "2026-06-07T13:46:00+08:00 前離開" in result.answer
+    assert result.decision_output["runtimeSafetyTruth"] is False
+    assert result.boundary.runtime_safety_truth is False
+
+
 def test_full_workflow_treats_fog_photo_as_wait_permission() -> None:
     result = run_scout_ai_full_workflow(
         "可以等霧散再拍照嗎？",
