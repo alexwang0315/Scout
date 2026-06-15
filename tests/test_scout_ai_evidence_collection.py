@@ -84,6 +84,15 @@ def test_evidence_collection_executes_ready_risk_and_terrain_tools() -> None:
     assert risk.result["payload"]["risk_decision"]["highest_risk_result"][
         "risk_bucket"
     ] == "high"
+    assert terrain.result["payload"]["answerability"] == "terrain_score_missing_evidence"
+    assert terrain.result["payload"]["decision"] == "DELAY"
+    assert terrain.result["payload"]["decision_output"]["decisionObjectSchema"] == (
+        "ContextualPermission"
+    )
+    assert terrain.result["payload"]["decision_output"]["firstLayer"]["decision"] == (
+        "暫緩地形分數判斷。"
+    )
+    assert "terrain_score_results" in terrain.missing_fields
     assert terrain.result["payload"]["summaries"]
 
 

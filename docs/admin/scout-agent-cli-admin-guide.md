@@ -178,6 +178,17 @@ and uncertainty notes. The score is never promoted to runtime safety truth and
 does not grant stop, summit, photo, `/safety/*`, SOS, outbound, or hardware
 permission.
 
+`scout.ai.terrain_scores.search` /
+`pydantic_ai.tool.search_scout_terrain_scores.v0` returns a native
+`decision_output` for terrain, slope, and terrain-proxy score queries. When
+terrain samples are missing, it now reports `DELAY` with explicit missing terrain
+evidence instead of silently returning an empty score list. When samples are
+available, the highest terrain/slope score is mapped into a candidate terrain
+hazard decision with a location limit, next action, buffer policy, and
+uncertainty notes. It remains read-only planning evidence, not runtime safety
+truth or permission to stop, push, reroute, call `/safety/*`, send outbound
+messages, or control hardware.
+
 `scout.ai.media_literacy.assess.v0` also returns a native `decision_output` for
 Sec. 21 media-bias moments. It turns social-photo, check-in, speed, guided-party,
 equipment, season/weather, and image-scale bias into a concrete decision about

@@ -27,6 +27,7 @@ from scout_post_trip_review_tool import POST_TRIP_REVIEW_TOOL_ID
 from scout_route_architecture_tool import ROUTE_ARCHITECTURE_TOOL_ID
 from scout_media_literacy_tool import MEDIA_LITERACY_TOOL_ID
 from scout_survival_incident_playbook_tool import SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID
+from scout_terrain_score_tool import TERRAIN_SCORE_TOOL_ID
 
 
 EXECUTABLE_TOOL_IDS = set(EXECUTABLE_TOOL_ALIASES)
@@ -721,6 +722,7 @@ def _completed_missing_fields(tool_id: str, payload: dict[str, Any]) -> list[str
         POST_TRIP_REVIEW_TOOL_ID,
         MEDIA_LITERACY_TOOL_ID,
         SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID,
+        TERRAIN_SCORE_TOOL_ID,
     }:
         return []
     value = payload.get("missing_fields")
