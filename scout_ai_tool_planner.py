@@ -353,6 +353,9 @@ def _route_readiness_request_overrides(question: str) -> dict[str, Any]:
     experience = _route_readiness_experience_level(normalized)
     if experience:
         overrides["user_experience_level"] = experience
+    user_goal = _route_readiness_user_goal(normalized)
+    if user_goal:
+        overrides["user_goal"] = user_goal
     if _has_any(normalized, ("交通已確認", "接駁已確認", "transportconfirmed")):
         overrides["transport_access_plan"] = "user_confirmed"
     latest_return_time = _extract_clock_time(normalized)
@@ -986,6 +989,37 @@ def _route_readiness_experience_level(normalized_question: str) -> str | None:
     if _has_any(normalized_question, ("高經驗", "資深", "advanced", "experienced")):
         return "advanced"
     return None
+
+
+def _route_readiness_user_goal(normalized_question: str) -> str | None:
+    goals: list[str] = []
+
+    def add(goal: str) -> None:
+        if goal not in goals:
+            goals.append(goal)
+
+    if _has_any(normalized_question, ("攻頂", "登頂", "山頂", "summit")):
+        add("summit")
+    if _has_any(
+        normalized_question,
+        ("拍攝", "拍照", "攝影", "photo", "photography", "film", "video"),
+    ):
+        add("photo")
+    if _has_any(
+        normalized_question,
+        ("慢行", "慢走", "慢遊", "slowtravel", "slowhike", "slowtrip", "slowgoal"),
+    ):
+        add("slow")
+    if _has_any(normalized_question, ("訓練", "練習", "training", "train")):
+        add("training")
+    if _has_any(
+        normalized_question,
+        ("親子", "家庭", "小孩", "孩子", "兒童", "family", "child", "kids"),
+    ):
+        add("family")
+    if _has_any(normalized_question, ("社交", "朋友", "團體", "social", "friends")):
+        add("social")
+    return ",".join(goals) if goals else None
 
 
 def _missing_fields(

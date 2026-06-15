@@ -691,12 +691,13 @@ def test_evidence_collection_keeps_route_readiness_payload() -> None:
     assert package["traceability"]["raw_payloads_embedded"] is False
     assert payload["departure_gate"]["approval_granted"] is False
     assert "user_experience_level" in readiness.missing_fields
+    assert "user_goal" in readiness.missing_fields
     assert readiness.boundary.runtime_safety_truth is False
 
 
 def test_evidence_collection_keeps_guided_only_route_readiness_payload() -> None:
     result = collect_scout_ai_evidence(
-        "beginner transportconfirmed slowestbasisconfirmed "
+        "beginner 訓練 transportconfirmed slowestbasisconfirmed "
         "departuretimeconfirmed wxconfirmed sunok gearconfirmed rcconfirmed "
         "pretrip Go/No-Go 可以自主出發嗎？",
         project_root=PROJECT_ROOT,
@@ -718,6 +719,7 @@ def test_evidence_collection_keeps_guided_only_route_readiness_payload() -> None
     assert payload["decision_output"]["decision"] == "GUIDED_ONLY"
     assert payload["decision_output"]["allowed"] is False
     assert payload["guided_only_gate"]["required"] is True
+    assert payload["user_goal_profile"]["goals"] == ["training"]
     assert payload["route_demand_profile"]["route_demand"] == "high"
     assert payload["pretrip_decision_package"]["required_outputs"][
         "pretrip_decision"

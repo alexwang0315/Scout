@@ -256,6 +256,7 @@ def _compact_payload(
         "route_readiness",
         "route_demand_profile",
         "guided_only_gate",
+        "user_goal_profile",
         "departure_gate",
         "readiness_state",
         "readiness_governance",

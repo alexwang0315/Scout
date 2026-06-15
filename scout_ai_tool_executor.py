@@ -281,6 +281,7 @@ def _execute_ready_current_tool(tool_id: str, arguments: dict[str, Any]) -> dict
             user_experience_level=_str_or_none(
                 arguments.get("user_experience_level")
             ),
+            user_goal=_str_or_none(arguments.get("user_goal")),
             transport_access_plan=_str_or_none(
                 arguments.get("transport_access_plan")
             ),
