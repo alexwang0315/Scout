@@ -25,6 +25,7 @@ from scout_media_literacy_tool import MEDIA_LITERACY_TOOL_ID
 from scout_survival_incident_playbook_tool import SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID
 from scout_safety_boundary_tool import SAFETY_BOUNDARY_TOOL_ID
 from scout_map_perception_tool import MAP_PERCEPTION_TOOL_ID
+from scout_ins_dr_trace_tool import INS_DR_TRACE_TOOL_ID
 
 
 ARTIFACT_KIND = "scout_ai_answer_synthesis"
@@ -185,6 +186,12 @@ def _source_from_record(record: dict[str, Any]) -> ScoutAiAnswerSource:
         "navigation_decision",
         "safety_boundary",
         "map_perception",
+        "ins_dr_trace",
+        "metrics",
+        "top_deviations",
+        "gps_dropout_segments",
+        "zigzag_summary",
+        "estimate_cadence_summary",
         "provided_fields",
         "quality_flags",
         "route_readiness",
@@ -292,6 +299,9 @@ def _answer_text(
     map_perception_answer = _map_perception_answer(completed_sources)
     if map_perception_answer:
         parts.append(map_perception_answer)
+    ins_dr_trace_answer = _ins_dr_trace_answer(completed_sources)
+    if ins_dr_trace_answer:
+        parts.append(ins_dr_trace_answer)
     route_readiness_answer = _route_readiness_answer(completed_sources)
     if route_readiness_answer:
         parts.append(route_readiness_answer)
@@ -509,6 +519,8 @@ def _answer_decision_output(
 def _decision_source_priority(source: ScoutAiAnswerSource) -> tuple[int, str]:
     if source.tool_id.startswith("pydantic_ai.tool.search_"):
         if source.tool_id == MAP_PERCEPTION_TOOL_ID:
+            return (10, source.tool_id)
+        if source.tool_id == INS_DR_TRACE_TOOL_ID:
             return (10, source.tool_id)
         return (50, source.tool_id)
     if source.tool_id in {
@@ -839,6 +851,16 @@ def _live_navigation_answer(sources: list[ScoutAiAnswerSource]) -> str | None:
 def _map_perception_answer(sources: list[ScoutAiAnswerSource]) -> str | None:
     for source in sources:
         if source.tool_id != MAP_PERCEPTION_TOOL_ID:
+            continue
+        field_answer = source.top_result_summary.get("field_answer")
+        if isinstance(field_answer, str) and field_answer.strip():
+            return field_answer.strip()
+    return None
+
+
+def _ins_dr_trace_answer(sources: list[ScoutAiAnswerSource]) -> str | None:
+    for source in sources:
+        if source.tool_id != INS_DR_TRACE_TOOL_ID:
             continue
         field_answer = source.top_result_summary.get("field_answer")
         if isinstance(field_answer, str) and field_answer.strip():

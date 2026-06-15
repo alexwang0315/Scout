@@ -171,6 +171,16 @@ runtime-truth claims in map perception material map to `ESCALATE`. This is
 candidate map context only and never authorizes stopping, rerouting, shortcutting,
 Ln, `/safety/*`, SOS, outbound send, or hardware control.
 
+`scout.ai.ins_dr_trace.analyze.v0` now returns a native `decision_output` for
+Sec. 11 navigation-truth and Sec. 19.2 trace-corroboration questions. Missing or
+unpaired GPS/INS-DR evidence maps to `DELAY`; drift, zigzag, and dropout evidence
+maps to `CHANGE_PLAN` or `NO_GO`; stable paired traces map only to bounded
+`CONDITIONAL_GO`. The output preserves first-layer decision, limits, reasons,
+next step, uncertainty notes, required conditions, and alternatives as candidate
+navigation support. It never promotes INS/DR, PDR, or vendor-fused traces to
+runtime safety truth and never triggers Ln, `/safety/*`, SOS, outbound send, or
+hardware control.
+
 `scout.ai.safety_boundary.explain.v0` now returns a native `decision_output` for
 candidate-vs-runtime safety boundary questions. Missing admission/operator
 evidence maps to `DELAY`; reviewed candidate evidence that is not admitted maps
