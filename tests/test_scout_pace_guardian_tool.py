@@ -205,6 +205,26 @@ def test_pace_guardian_uses_query_reported_vulnerable_member_conditions() -> Non
     assert result["boundary"]["runtime_safety_truth"] is False
 
 
+def test_pace_guardian_uses_query_reported_route_experience_and_rest_mismatch() -> None:
+    result = assess_scout_pace_guardian(
+        PROJECT_ROOT,
+        query="有人第一次走類似路線，隊伍休息節奏不一致，還能照原計畫嗎？",
+    )
+
+    assert result["answerability"] == "pace_fit_missing_required_fields"
+    assert result["decision"] == "NO_GO"
+    assert result["team_pace_fit"]["query_reported_vulnerabilities"] == [
+        "first_time_similar_route",
+        "rest_rhythm_mismatch",
+    ]
+    assert result["decision_output"]["firstLayer"]["decision"] == (
+        "不建議照原計畫推進。"
+    )
+    assert "第一次走類似路線" in result["decision_output"]["firstLayer"]["reason"]
+    assert "休息節奏不一致" in result["field_answer"]
+    assert result["boundary"]["runtime_safety_truth"] is False
+
+
 def test_pace_guardian_derives_minutes_to_next_cp_from_planned_eta() -> None:
     result = assess_scout_pace_guardian(
         PROJECT_ROOT,

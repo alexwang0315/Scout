@@ -1046,6 +1046,27 @@ def test_answer_synthesis_uses_query_reported_vulnerable_member_conditions() -> 
     assert "runtime safety truth" in result.answer
 
 
+def test_answer_synthesis_uses_query_reported_first_time_route_risk() -> None:
+    result = collect_and_synthesize_scout_ai_answer(
+        "有人第一次走類似路線，還能照原計畫嗎？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=4,
+    )
+
+    assert result.answerability == "partial_evidence_with_missing_context"
+    pace = _source(result, PACE_GUARDIAN_TOOL_ID)
+    assert pace.top_result_summary["team_pace_fit"][
+        "query_reported_vulnerabilities"
+    ] == ["first_time_similar_route"]
+    assert result.decision_output["answerSourceToolId"] == PACE_GUARDIAN_TOOL_ID
+    assert result.decision_output["decision"] == "NO_GO"
+    assert result.decision_output["firstLayer"]["decision"] == (
+        "不建議照原計畫推進。"
+    )
+    assert "第一次走類似路線" in result.decision_output["firstLayer"]["reason"]
+
+
 def test_answer_synthesis_routes_ahead_of_plan_pace_to_pace_guardian() -> None:
     result = collect_and_synthesize_scout_ai_answer(
         "目前比計畫快 20 分鐘，可以繼續照原節奏嗎？",
