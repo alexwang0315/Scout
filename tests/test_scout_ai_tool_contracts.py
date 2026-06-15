@@ -966,6 +966,34 @@ def test_execute_contextual_permission_assessor_blocks_shortcut_reroute() -> Non
     assert result.boundary.runtime_safety_truth is False
 
 
+def test_execute_contextual_permission_assessor_allows_direct_retreat() -> None:
+    result = execute_scout_ai_tool(
+        {
+            "tool_id": "scout.ai.contextual_permission.assess",
+            "project_root": str(PROJECT_ROOT),
+            "query": "隊友很累，要不要直接撤退？",
+        }
+    )
+
+    assert result.status == "completed"
+    assert result.tool_id == CONTEXTUAL_PERMISSION_TOOL_ID
+    assert result.payload["answerability"] == "contextual_permission_decision_available"
+    assert result.payload["action"] == "retreat"
+    assert result.payload["decision"] == "GO"
+    assert result.payload["allowed"] is True
+    assert result.payload["missing_fields"] == []
+    assert result.payload["decision_object"] == result.payload["contextual_permission"]
+    assert result.payload["decision_output"]["decisionObjectSchema"] == (
+        "ContextualPermission"
+    )
+    assert result.payload["decision_output"]["firstLayer"]["decision"] == (
+        "可以撤退。"
+    )
+    assert result.payload["decision_output"]["runtimeSafetyTruth"] is False
+    assert "開始撤退" in result.payload["field_answer"]
+    assert result.boundary.runtime_safety_truth is False
+
+
 def test_execute_survival_playbook_alias_returns_boundary_safe_guidance() -> None:
     result = execute_scout_ai_tool(
         {

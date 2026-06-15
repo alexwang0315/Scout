@@ -142,6 +142,25 @@ def test_contextual_permission_blocks_unreviewed_shortcut_reroute() -> None:
     assert result["boundary"]["runtime_safety_truth"] is False
 
 
+def test_contextual_permission_allows_direct_retreat_for_tired_teammate() -> None:
+    result = assess_scout_contextual_permission(
+        PROJECT_ROOT,
+        query="隊友很累，要不要直接撤退？",
+    )
+
+    assert result["answerability"] == "contextual_permission_decision_available"
+    assert result["action"] == "retreat"
+    assert result["decision"] == "GO"
+    assert result["allowed"] is True
+    assert result["missing_fields"] == []
+    assert result["contextual_permission"]["cost"]["timeBufferChangeMinutes"] == 0
+    assert result["decision_output"]["decisionObjectSchema"] == "ContextualPermission"
+    assert result["decision_output"]["firstLayer"]["decision"] == "可以撤退。"
+    assert "保持隊伍完整" in result["decision_output"]["firstLayer"]["nextStep"]
+    assert result["decision_output"]["runtimeSafetyTruth"] is False
+    assert result["boundary"]["runtime_safety_truth"] is False
+
+
 def test_contextual_permission_derives_candidate_buffer_from_planned_eta() -> None:
     result = assess_scout_contextual_permission(
         PROJECT_ROOT,

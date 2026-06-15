@@ -335,6 +335,32 @@ def test_full_workflow_blocks_shortcut_reroute_question() -> None:
     assert result.boundary.runtime_safety_truth is False
 
 
+def test_full_workflow_uses_direct_retreat_micro_decision() -> None:
+    result = run_scout_ai_full_workflow(
+        "隊友很累，要不要直接撤退？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=5,
+    )
+
+    assert result.answerability == "partial_evidence_with_missing_context"
+    assert result.selected_tool_count == 3
+    assert result.executed_tool_count == 3
+    assert result.completed_tool_count == 3
+    assert result.missing_evidence_count == 2
+    contextual = _workflow_source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
+    summary = contextual["top_result_summary"]
+    assert summary["action"] == "retreat"
+    assert summary["decision"] == "GO"
+    assert summary["allowed"] is True
+    pace_source = _workflow_source(result, PACE_GUARDIAN_TOOL_ID)
+    assert pace_source["missing_fields"] == ["member_pace_profile"]
+    assert result.decision_output["answerSourceToolId"] == CONTEXTUAL_PERMISSION_TOOL_ID
+    assert result.decision_output["firstLayer"]["decision"] == "可以撤退。"
+    assert "保持隊伍完整" in result.answer
+    assert result.boundary.runtime_safety_truth is False
+
+
 def test_full_workflow_runs_route_context_experience_guide_question() -> None:
     result = run_scout_ai_full_workflow(
         "下一個觀察點在哪？哪裡適合拍攝大景？",
