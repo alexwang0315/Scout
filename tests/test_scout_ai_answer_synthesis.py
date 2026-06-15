@@ -13,6 +13,7 @@ from scout_ai_evidence_collection import collect_scout_ai_evidence
 from scout_ai_tool_planner import WEATHER_WINDOW_TOOL_ID
 from scout_contextual_permission_tool import CONTEXTUAL_PERMISSION_TOOL_ID
 from scout_pace_guardian_tool import PACE_GUARDIAN_TOOL_ID
+from scout_route_architecture_tool import ROUTE_ARCHITECTURE_TOOL_ID
 from scout_route_context_tool import ROUTE_CONTEXT_TOOL_ID
 from scout_risk_score_tool import RISK_SCORE_TOOL_ID
 from scout_terrain_score_tool import TERRAIN_SCORE_TOOL_ID
@@ -186,6 +187,30 @@ def test_answer_synthesis_uses_pace_guardian_field_answer_without_guessing(
     assert "腳程守門員" in result.answer
     assert "不使用平均腳程" in result.answer
     assert "contextual permission" in result.answer
+    assert "runtime safety truth" in result.answer
+
+
+def test_answer_synthesis_uses_route_architecture_field_answer_without_guessing() -> None:
+    result = collect_and_synthesize_scout_ai_answer(
+        "下一個撤退點在哪？這條路線難點在哪？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=4,
+    )
+
+    assert result.answerability == "evidence_available"
+    assert result.completed_source_count == 1
+    assert result.missing_evidence_count == 0
+    assert result.sources[0].tool_id == ROUTE_ARCHITECTURE_TOOL_ID
+    assert result.sources[0].top_result_summary["answerability"] == (
+        "route_architecture_available"
+    )
+    assert result.sources[0].top_result_summary["route_architecture"]["role"] == (
+        "Route Architecture Intelligence"
+    )
+    assert result.sources[0].top_result_summary["cp_graph"]["node_count"] == 124
+    assert "路線結構判斷" in result.answer
+    assert "CP Graph" in result.answer
     assert "runtime safety truth" in result.answer
 
 

@@ -23,6 +23,7 @@ from scout_weather_window_tool import WEATHER_WINDOW_TOOL_ID
 from scout_contextual_permission_tool import CONTEXTUAL_PERMISSION_TOOL_ID
 from scout_route_context_tool import ROUTE_CONTEXT_TOOL_ID
 from scout_pace_guardian_tool import PACE_GUARDIAN_TOOL_ID
+from scout_route_architecture_tool import ROUTE_ARCHITECTURE_TOOL_ID
 from scout_workspace_search_tools import (
     MAJOR_POINT_TOOL_ID,
     ROUTE_STRUCTURE_TOOL_ID,
@@ -100,6 +101,14 @@ def plan_scout_ai_tools(
             (
                 ROUTE_STRUCTURE_TOOL_ID,
                 "Question asks about CP/checkpoint count, route structure, or route segments.",
+            )
+        )
+    if _looks_like_route_architecture_question(normalized_question):
+        selected.append(
+            (
+                ROUTE_ARCHITECTURE_TOOL_ID,
+                "Question asks for Route Architecture / CP Graph decision context: "
+                "hard points, retreat/turn-back, route forgiveness, or alternative/short route structure.",
             )
         )
     if _looks_like_risk_question(normalized_question):
@@ -292,6 +301,42 @@ def _looks_like_route_structure_question(text: str) -> bool:
         _has_any(text, ("cp", "checkpoint", "checkpoints", "檢查點", "路線", "segment"))
         and _has_any(text, ("多少", "幾個", "count", "數量", "總共", "列表", "有哪些"))
     ) or _has_any(text, ("有多少個cp", "有多少個CP".lower(), "cp數"))
+
+
+def _looks_like_route_architecture_question(text: str) -> bool:
+    return _has_any(
+        text,
+        (
+            "routearchitecture",
+            "cpgraph",
+            "checkpointgraph",
+            "路線結構",
+            "行程結構",
+            "cpgraph",
+            "cp圖",
+            "cp graph",
+            "撤退點",
+            "下一個撤退",
+            "撤退路線",
+            "撤退版",
+            "折返點",
+            "最晚折返",
+            "現在是不是折返點",
+            "難點位置",
+            "難點在哪",
+            "難點位於",
+            "容錯率",
+            "低容錯",
+            "替代路線",
+            "短版路線",
+            "改短版",
+            "這個岔路可以切",
+            "岔路可以切",
+            "回頭成本",
+            "補給點",
+            "水源是否合理",
+        ),
+    )
 
 
 def _looks_like_major_point_question(text: str) -> bool:

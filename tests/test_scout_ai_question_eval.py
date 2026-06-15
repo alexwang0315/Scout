@@ -75,6 +75,14 @@ def test_question_eval_classifies_current_tools_and_missing_live_evidence() -> N
             "question": "隊伍腳程是否能準時抵達下一個 CP？最慢者需要前移午餐點嗎？",
         }
     )
+    route_architecture_eval = evaluate_question(
+        {
+            "id": "q-route-architecture",
+            "source_set": "test",
+            "category": "route_architecture",
+            "question": "最晚折返點在哪？這條路線難點在哪裡？",
+        }
+    )
 
     assert route_eval.answerability == "answerable_by_current_read_only_tools"
     assert "pydantic_ai.tool.search_scout_route_structure.v0" in route_eval.current_tool_ids
@@ -87,6 +95,11 @@ def test_question_eval_classifies_current_tools_and_missing_live_evidence() -> N
     assert pace_guardian_eval.answerability == "requires_missing_evidence"
     assert "scout.ai.pace_guardian.assess.v0" in pace_guardian_eval.current_tool_ids
     assert "user_or_team_baseline_profile" in pace_guardian_eval.missing_evidence
+    assert route_architecture_eval.answerability == "answerable_by_current_read_only_tools"
+    assert (
+        "scout.ai.route_architecture.assess.v0"
+        in route_architecture_eval.current_tool_ids
+    )
     assert rescue_eval.answerability == "blocked_for_direct_action_can_only_explain"
     assert rescue_eval.safety_boundary["outbound_send_performed"] is False
 
