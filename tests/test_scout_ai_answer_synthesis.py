@@ -430,6 +430,33 @@ def test_answer_synthesis_uses_pace_guardian_field_answer_without_guessing(
     assert "runtime safety truth" in result.answer
 
 
+def test_answer_synthesis_prioritizes_pace_guardian_for_delayed_summit() -> None:
+    result = collect_and_synthesize_scout_ai_answer(
+        "我們晚了 30 分鐘，還可以繼續攻頂嗎？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=6,
+    )
+
+    assert result.answerability == "partial_evidence_with_missing_context"
+    assert result.completed_source_count == 2
+    assert result.missing_evidence_count == 2
+    pace = _source(result, PACE_GUARDIAN_TOOL_ID)
+    contextual = _source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
+    assert pace.top_result_summary["decision"] == "NO_GO"
+    assert pace.top_result_summary["schedule_pressure"]["current_delay_minutes"] == 30.0
+    assert contextual.top_result_summary["action"] == "summit"
+    assert result.decision_output["answerSourceToolId"] == PACE_GUARDIAN_TOOL_ID
+    assert result.decision_output["action"] == "pace_adjustment"
+    assert result.decision_output["decision"] == "NO_GO"
+    assert result.decision_output["allowed"] is False
+    assert result.decision_output["cost"]["scheduleDelayMinutes"] == 30.0
+    assert result.decision_output["firstLayer"]["decision"] == "不建議繼續攻頂。"
+    assert "目前已落後約 30 分鐘" in result.decision_output["firstLayer"]["reason"]
+    assert "腳程守門員" in result.answer
+    assert "runtime safety truth" in result.answer
+
+
 def test_answer_synthesis_uses_route_architecture_field_answer_without_guessing() -> None:
     result = collect_and_synthesize_scout_ai_answer(
         "下一個撤退點在哪？這條路線難點在哪？",

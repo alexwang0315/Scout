@@ -321,6 +321,24 @@ def test_planner_selects_pace_guardian_for_team_pace_fit_question() -> None:
     assert item.boundary.runtime_safety_truth is False
 
 
+def test_planner_selects_pace_and_contextual_for_delayed_summit_question() -> None:
+    plan = plan_scout_ai_tools(
+        _query("我們晚了 30 分鐘，還可以繼續攻頂嗎？"),
+        project_root=PROJECT_ROOT,
+    )
+
+    tool_ids = _tool_ids(plan)
+    assert PACE_GUARDIAN_TOOL_ID in tool_ids
+    assert CONTEXTUAL_PERMISSION_TOOL_ID in tool_ids
+
+    pace = _single_tool(plan, PACE_GUARDIAN_TOOL_ID)
+    assert pace.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+    assert pace.implementation_status == "ready_current_tool"
+    assert pace.request is not None
+    assert pace.request["tool_id"] == PACE_GUARDIAN_TOOL_ID
+    assert pace.boundary.runtime_safety_truth is False
+
+
 def test_planner_selects_equipment_resource_for_device_and_water_question() -> None:
     plan = plan_scout_ai_tools(
         _query("手機電量和頭燈水量夠嗎？"),

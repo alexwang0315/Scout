@@ -240,6 +240,11 @@ may continue as planned or must change plan, and the limit explicitly preserves
 slowest-member basis instead of average pace. It can recommend moving lunch/rest
 earlier, shortening, or turning around, but bounded stop duration still requires
 contextual permission.
+Sec. 25.3 delayed-summit questions such as "我們晚了 30 分鐘，還可以繼續攻頂嗎？"
+route through both Pace Guardian and contextual permission. When the question
+contains an explicit delay, Pace Guardian becomes the first-layer decision source
+so schedule slip and slowest-member evidence are not hidden behind generic buffer
+authorization.
 
 `scout.ai.equipment_resource.assess.v0` returns a native `decision_output` for
 Sec. 18.1 equipment/resource inputs and Sec. 24.1 MVP readiness checks. The first
