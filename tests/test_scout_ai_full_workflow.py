@@ -261,6 +261,30 @@ def test_full_workflow_preserves_contextual_permission_decision_object() -> None
     assert result.boundary.runtime_safety_truth is False
 
 
+def test_full_workflow_blocks_split_team_summit_question() -> None:
+    result = run_scout_ai_full_workflow(
+        "可以讓走得快的人先去山頂嗎？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=3,
+    )
+
+    assert result.answerability == "evidence_available"
+    assert result.selected_tool_count == 1
+    assert result.executed_tool_count == 1
+    assert result.completed_tool_count == 1
+    assert result.missing_evidence_count == 0
+    assert result.sources[0]["tool_id"] == CONTEXTUAL_PERMISSION_TOOL_ID
+    summary = result.sources[0]["top_result_summary"]
+    assert summary["action"] == "split_team"
+    assert summary["decision"] == "NO_GO"
+    assert summary["allowed"] is False
+    assert result.decision_output["answerSourceToolId"] == CONTEXTUAL_PERMISSION_TOOL_ID
+    assert result.decision_output["firstLayer"]["decision"] == "不建議分隊。"
+    assert "保持隊伍完整" in result.answer
+    assert result.boundary.runtime_safety_truth is False
+
+
 def test_full_workflow_runs_route_context_experience_guide_question() -> None:
     result = run_scout_ai_full_workflow(
         "下一個觀察點在哪？哪裡適合拍攝大景？",

@@ -423,6 +423,13 @@ evidence. The output is candidate-only permission rules such as whether the user
 can stop, film, eat lunch, wait, continue toward a summit, or must avoid a high
 risk crossing.
 
+For Sec. 19.1 split-team questions such as whether faster members can go ahead
+to summit, `scout.ai.contextual_permission.assess.v0` resolves the request as
+`split_team` and returns `NO_GO` by default. This is a high-impact team safety
+decision, not a discretionary time-budget permission: Scout does not need a
+remaining-buffer estimate to block splitting the team, and the next action keeps
+the party together under the slowest or most vulnerable member basis.
+
 ```bash
 python -m scout_cli pretrip contextual-permission-collect \
   --project-root /data/scout/admin/pretrip-workspaces/chilai_nanhua_day1 \

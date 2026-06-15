@@ -225,7 +225,6 @@ _BUDGET_ACTIONS = {
     OutdoorAction.SUMMIT,
     OutdoorAction.REROUTE,
     OutdoorAction.WAIT,
-    OutdoorAction.SPLIT_TEAM,
     OutdoorAction.CROSS_STREAM,
     OutdoorAction.ENTER_EXPOSED_SECTION,
 }
@@ -515,6 +514,26 @@ def _permission(
     team_pace_impact: str | None,
     location_constraint: str | None,
 ) -> ContextualPermission:
+    if action == OutdoorAction.SPLIT_TEAM:
+        return _no_go_permission(
+            action=action,
+            decision=ScoutDecision.NO_GO,
+            reason=(
+                "不建議讓走得快的人先去山頂；"
+                "分隊會放大最慢者、通訊、撤退與事故回應風險。"
+            ),
+            next_action=(
+                "保持隊伍完整，以最慢或最脆弱成員為基準；"
+                "若仍想攻頂，改成全隊共同折返時間或放棄山頂。"
+            ),
+            confidence=_confidence(confidence, default=ConfidenceLevel.MEDIUM),
+            uncertainty_notes=_status_uncertainty_notes(
+                communication_status=communication_status,
+                equipment_status=equipment_status,
+            ),
+            alternative_actions=_alternative_actions(action, next_cp_id),
+        )
+
     if missing_fields and action in _BUDGET_ACTIONS:
         return _no_go_permission(
             action=action,
@@ -1320,6 +1339,11 @@ def _resolve_action(action: str | None, query: str) -> OutdoorAction:
         return OutdoorAction.PHOTO
     if _has_any(text, ("午餐", "吃午餐", "吃飯", "lunch")):
         return OutdoorAction.LUNCH
+    if _has_any(
+        text,
+        ("分隊", "分開", "split", "走得快的人先去", "快的人先去", "先去山頂"),
+    ):
+        return OutdoorAction.SPLIT_TEAM
     if _has_any(text, ("攻頂", "山頂", "summit")):
         return OutdoorAction.SUMMIT
     if _has_any(text, ("等霧", "等隊友", "等待", "wait")):
@@ -1328,8 +1352,6 @@ def _resolve_action(action: str | None, query: str) -> OutdoorAction:
         return OutdoorAction.RETREAT
     if _has_any(text, ("穿雨衣", "雨衣", "rain gear")):
         return OutdoorAction.WEAR_RAIN_GEAR
-    if _has_any(text, ("分隊", "分開", "split")):
-        return OutdoorAction.SPLIT_TEAM
     if _has_any(text, ("渡溪", "過溪", "溪水", "cross stream")):
         return OutdoorAction.CROSS_STREAM
     if _has_any(text, ("曝露", "暴露", "邊坡", "exposed")):

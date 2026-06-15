@@ -274,6 +274,32 @@ def test_evidence_collection_keeps_contextual_permission_decision_object() -> No
     assert contextual.boundary.runtime_safety_truth is False
 
 
+def test_evidence_collection_keeps_split_team_micro_decision() -> None:
+    result = collect_scout_ai_evidence(
+        "可以讓走得快的人先去山頂嗎？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=3,
+    )
+
+    assert result.selected_tool_count == 1
+    assert result.executed_tool_count == 1
+    assert result.completed_tool_count == 1
+    assert result.missing_input_count == 0
+
+    contextual = _record(result, CONTEXTUAL_PERMISSION_TOOL_ID)
+    assert contextual.collection_status == "completed"
+    assert contextual.missing_fields == []
+    assert contextual.result is not None
+    payload = contextual.result["payload"]
+    assert payload["answerability"] == "contextual_permission_decision_available"
+    assert payload["action"] == "split_team"
+    assert payload["decision"] == "NO_GO"
+    assert payload["allowed"] is False
+    assert payload["decision_output"]["firstLayer"]["decision"] == "不建議分隊。"
+    assert contextual.boundary.runtime_safety_truth is False
+
+
 def test_evidence_collection_executes_pace_guardian_tool_without_model_synthesis(
     tmp_path: Path,
 ) -> None:

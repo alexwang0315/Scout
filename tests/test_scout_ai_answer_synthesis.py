@@ -244,6 +244,28 @@ def test_answer_synthesis_uses_contextual_permission_field_answer_without_guessi
     assert "runtime safety truth" in result.answer
 
 
+def test_answer_synthesis_blocks_split_team_micro_decision() -> None:
+    result = collect_and_synthesize_scout_ai_answer(
+        "可以讓走得快的人先去山頂嗎？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=3,
+    )
+
+    assert result.answerability == "evidence_available"
+    assert result.completed_source_count == 1
+    assert result.missing_evidence_count == 0
+    assert result.sources[0].tool_id == CONTEXTUAL_PERMISSION_TOOL_ID
+    summary = result.sources[0].top_result_summary
+    assert summary["action"] == "split_team"
+    assert summary["decision"] == "NO_GO"
+    assert summary["allowed"] is False
+    assert result.decision_output["answerSourceToolId"] == CONTEXTUAL_PERMISSION_TOOL_ID
+    assert result.decision_output["firstLayer"]["decision"] == "不建議分隊。"
+    assert "保持隊伍完整" in result.answer
+    assert "runtime safety truth" in result.answer
+
+
 def test_answer_synthesis_uses_route_context_field_answer_without_guessing() -> None:
     result = collect_and_synthesize_scout_ai_answer(
         "下一個觀察點在哪？哪裡適合拍攝大景？",
