@@ -11,6 +11,7 @@ from scout_ai_full_workflow import (
 from scout_ai_tool_planner import (
     ENERGY_VITALS_TOOL_ID,
     LIVE_NAVIGATION_STATE_TOOL_ID,
+    NAVIGATION_TERRAIN_TOOL_ID,
     WEATHER_WINDOW_TOOL_ID,
 )
 from scout_pace_guardian_tool import PACE_GUARDIAN_TOOL_ID
@@ -789,6 +790,41 @@ def test_full_workflow_blocks_autonomous_departure_without_offline_map() -> None
     answer_step = result.workflow_steps[-1]
     assert answer_step.summary["decision_output_source_tool"] == (
         EQUIPMENT_RESOURCE_TOOL_ID
+    )
+    assert result.boundary.runtime_safety_truth is False
+
+
+def test_full_workflow_blocks_autonomous_navigation_without_backup_positioning() -> None:
+    result = run_scout_ai_full_workflow(
+        "這條路地圖力需求很高，但我們沒有第二套定位備援，可以自己去嗎？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=4,
+    )
+
+    source_ids = {source["tool_id"] for source in result.sources}
+    assert NAVIGATION_TERRAIN_TOOL_ID in source_ids
+    assert ROUTE_READINESS_TOOL_ID in source_ids
+    assert MAP_PERCEPTION_TOOL_ID not in source_ids
+
+    navigation = next(
+        source
+        for source in result.sources
+        if source["tool_id"] == NAVIGATION_TERRAIN_TOOL_ID
+    )
+    assert navigation["top_result_summary"]["decision"] == "GUIDED_ONLY"
+    assert navigation["top_result_summary"]["positioning_readiness"][
+        "backup_positioning_available"
+    ] is False
+
+    assert result.decision_output["answerSourceToolId"] == NAVIGATION_TERRAIN_TOOL_ID
+    assert result.decision_output["decision"] == "GUIDED_ONLY"
+    assert result.decision_output["allowed"] is False
+    assert result.decision_output["firstLayer"]["decision"] == "不建議自主前往。"
+    assert "地圖力判斷" in result.answer
+    answer_step = result.workflow_steps[-1]
+    assert answer_step.summary["decision_output_source_tool"] == (
+        NAVIGATION_TERRAIN_TOOL_ID
     )
     assert result.boundary.runtime_safety_truth is False
 

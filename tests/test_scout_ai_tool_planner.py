@@ -8,6 +8,7 @@ from scout_ai_tool_planner import (
     ENERGY_VITALS_TOOL_ID,
     INS_DR_TRACE_TOOL_ID,
     LIVE_NAVIGATION_STATE_TOOL_ID,
+    NAVIGATION_TERRAIN_TOOL_ID,
     ROUTE_READINESS_TOOL_ID,
     ROUTE_CONTEXT_TOOL_ID,
     ROUTE_ARCHITECTURE_TOOL_ID,
@@ -169,6 +170,38 @@ def test_planner_routes_missing_offline_map_departure_to_readiness_and_equipment
     assert equipment.request is not None
     assert equipment.request["arguments"] == {"offline_map_ready": False}
     assert equipment.boundary.runtime_safety_truth is False
+
+
+def test_planner_routes_navigation_terrain_backup_positioning_question() -> None:
+    plan = plan_scout_ai_tools(
+        _query("這條路地圖力需求很高，但我們沒有第二套定位備援，可以自己去嗎？"),
+        project_root=PROJECT_ROOT,
+    )
+
+    tool_ids = _tool_ids(plan)
+    assert NAVIGATION_TERRAIN_TOOL_ID in tool_ids
+    assert ROUTE_READINESS_TOOL_ID in tool_ids
+    assert MAP_PERCEPTION_TOOL_ID not in tool_ids
+
+    navigation = _single_tool(plan, NAVIGATION_TERRAIN_TOOL_ID)
+    assert navigation.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+    assert navigation.request is not None
+    assert navigation.request["arguments"] == {"backup_positioning_available": False}
+    assert navigation.boundary.runtime_safety_truth is False
+
+
+def test_planner_routes_low_map_literacy_to_navigation_terrain() -> None:
+    plan = plan_scout_ai_tools(
+        _query("我不會看等高線，也不知道撤退方向，可以自主前往嗎？"),
+        project_root=PROJECT_ROOT,
+    )
+
+    navigation = _single_tool(plan, NAVIGATION_TERRAIN_TOOL_ID)
+    assert navigation.request is not None
+    assert navigation.request["arguments"] == {
+        "contour_skill_confirmed": False,
+        "retreat_direction_understood": False,
+    }
 
 
 def test_planner_selects_media_literacy_for_social_photo_bias_question() -> None:

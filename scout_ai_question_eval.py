@@ -47,6 +47,10 @@ CURRENT_TOOLS = {
         "label": "live navigation state / terrain guidance",
         "evidence_scope": "caller-provided position, GNSS/INS-DR quality, route-fit distance, heading/course, and conservative navigation guidance",
     },
+    "scout.ai.navigation_terrain.assess.v0": {
+        "label": "navigation terrain / map readiness",
+        "evidence_scope": "pre-trip offline map, GPX, contour literacy, terrain-feature recognition, retreat direction, backup positioning, and map-demand readiness",
+    },
     "scout.ai.route_readiness.assess.v0": {
         "label": "route readiness / departure gate",
         "evidence_scope": "pre-trip route, date, team, user experience, equipment, transport/access plan, planned departure time, weather/daylight review, CP Graph, ETA, turn-back point, and departure gate conditions",
@@ -110,6 +114,16 @@ RECOMMENDED_TOOLS = {
             "INS/DR estimate",
             "heading/course",
             "recent timestamped samples",
+        ],
+    },
+    "scout.ai.navigation_terrain.assess.v0": {
+        "label": "navigation terrain and map-readiness assessment",
+        "evidence_required": [
+            "offline map and GPX readiness",
+            "contour and terrain-feature literacy",
+            "retreat direction understanding",
+            "backup positioning availability",
+            "route map-demand profile",
         ],
     },
     "scout.ai.weather_window.assess.v0": {
@@ -484,6 +498,7 @@ _CURRENT_TOOL_TERMS = (
     ("pydantic_ai.tool.search_scout_terrain_scores.v0", ("坡度", "地形", "稜線", "崩壁", "碎石", "乾溝", "溪谷", "下切", "等高線", "slope", "terrain")),
     ("pydantic_ai.tool.search_scout_map_perception.v0", ("ocr", "annotation", "標註", "圖磚", "影像", "景觀點", "拍照", "contour", "被看見")),
     ("scout.ai.live_navigation_state.assess.v0", ("我現在", "現在是不是", "目前", "前方", "gps", "gnss", "imu", "pdr", "方向", "偏離", "轉彎點", "精確導航", "主線", "下切", "岔路", "走對", "回主線")),
+    ("scout.ai.navigation_terrain.assess.v0", ("地圖力", "地圖需求", "離線地圖熟悉", "熟悉離線地圖", "等高線", "地形判讀", "撤退方向", "定位備援", "第二套定位", "第二套導航", "自主前往", "backup positioning", "map readiness", "navigation readiness")),
     ("scout.ai.route_readiness.assess.v0", ("go/no-go", "gono", "出發前", "行前", "可以出發", "能出發", "要不要出發", "是否出發", "出發決策", "departure gate", "departure readiness", "route readiness", "pretrip readiness", "go no go", "gonogo")),
     ("scout.ai.route_context.assess.v0", ("值得看", "觀察點", "適合拍攝", "大景", "地名故事", "路線脈絡", "自然觀察", "experience guide", "route context", "viewpoint")),
     ("scout.ai.pace_guardian.assess.v0", ("pace guardian", "team pace fit", "readiness pace fit", "最慢者", "最慢成員", "腳程差", "隊伍腳程", "隊伍速度", "隊伍節奏", "休息節奏", "午餐點", "午餐前移", "需要加快", "落後", "晚了", "縮短行程", "改短版", "直接撤退", "能準時抵達", "下一個 cp", "隊友很累", "後隊", "快慢組")),
@@ -499,6 +514,7 @@ _CURRENT_TOOL_TERMS = (
 _RECOMMENDED_TOOL_TERMS = (
     ("scout.ai.route_readiness.assess.v0", ("體能", "配速", "buffer", "晚出發", "水", "補給", "checkpoint", "摸黑", "低容錯", "停留拍照", "延後出發")),
     ("scout.ai.live_navigation_state.assess.v0", ("我現在", "現在是不是", "目前", "前方", "gps", "imu", "pdr", "方向", "偏離", "轉彎點", "精確導航", "主線", "下切")),
+    ("scout.ai.navigation_terrain.assess.v0", ("地圖力", "地圖需求", "離線地圖熟悉", "等高線", "地形判讀", "撤退方向", "定位備援", "第二套定位", "第二套導航", "自主前往")),
     ("scout.ai.weather_window.assess.v0", ("天氣", "下雨", "白牆", "風雨", "日落", "起霧", "溪水", "風寒", "濕衣", "撤退", "暴漲", "落石區", "紮營", "延後出發", "有效期限", "變冷")),
     ("scout.ai.energy_vitals.assess.v0", ("心率", "太累", "速度下降", "補水", "高山症", "自評", "上升", "休息", "下撤", "決策品質", "體能", "vitals", "health evidence", "source value", "body battery", "privacy boundary")),
     ("scout.ai.team_status.assess.v0", ("隊友", "後隊", "隊伍", "留守", "回報", "最後一次有效位置", "集合", "約定山屋")),

@@ -11,6 +11,7 @@ from scout_ai_evidence_collection import (
 from scout_ai_tool_planner import (
     ENERGY_VITALS_TOOL_ID,
     LIVE_NAVIGATION_STATE_TOOL_ID,
+    NAVIGATION_TERRAIN_TOOL_ID,
     WEATHER_WINDOW_TOOL_ID,
 )
 from scout_route_readiness_tool import ROUTE_READINESS_TOOL_ID
@@ -516,6 +517,30 @@ def test_evidence_collection_keeps_live_navigation_decision_payload() -> None:
     assert payload["decision_output"]["secondLayer"]["uncertaintyNotes"]
     assert "lat" in navigation.missing_fields
     assert "lon" in navigation.missing_fields
+    assert navigation.boundary.runtime_safety_truth is False
+
+
+def test_evidence_collection_keeps_navigation_terrain_readiness_payload() -> None:
+    result = collect_scout_ai_evidence(
+        "這條路地圖力需求很高，但我們沒有第二套定位備援，可以自己去嗎？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=4,
+    )
+
+    navigation = _record(result, NAVIGATION_TERRAIN_TOOL_ID)
+    assert navigation.collection_status == "completed"
+    assert navigation.result is not None
+    payload = navigation.result["payload"]
+    assert payload["answerability"] == "navigation_terrain_missing_user_readiness"
+    assert payload["decision"] == "GUIDED_ONLY"
+    assert payload["navigation_terrain"]["role"] == (
+        "Navigation & Terrain Intelligence / Map Readiness"
+    )
+    assert payload["positioning_readiness"]["backup_positioning_available"] is False
+    assert payload["navigation_demand"]["demand_level"] == "high"
+    assert payload["decision_output"]["decision"] == "GUIDED_ONLY"
+    assert payload["decision_output"]["firstLayer"]["decision"] == "不建議自主前往。"
     assert navigation.boundary.runtime_safety_truth is False
 
 

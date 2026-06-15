@@ -17,6 +17,7 @@ from scout_ai_tool_contracts import (
 from scout_energy_vitals_tool import ENERGY_VITALS_TOOL_ID
 from scout_ins_dr_trace_tool import INS_DR_TRACE_TOOL_ID
 from scout_map_perception_tool import MAP_PERCEPTION_TOOL_ID
+from scout_navigation_terrain_tool import NAVIGATION_TERRAIN_TOOL_ID
 from scout_risk_score_tool import RISK_SCORE_TOOL_ID
 from scout_terrain_score_tool import TERRAIN_SCORE_TOOL_ID
 from scout_weather_window_tool import WEATHER_WINDOW_TOOL_ID
@@ -136,6 +137,13 @@ def plan_scout_ai_tools(
             (
                 MAP_PERCEPTION_TOOL_ID,
                 "Question asks about map annotations, OCR labels, contour text, or tile/layer perception material.",
+            )
+        )
+    if _looks_like_navigation_terrain_question(normalized_question):
+        selected.append(
+            (
+                NAVIGATION_TERRAIN_TOOL_ID,
+                "Question asks for Navigation & Terrain map-readiness: offline map use, contour literacy, retreat direction, or backup positioning before autonomous travel.",
             )
         )
     if _looks_like_ins_dr_trace_question(normalized_question):
@@ -296,6 +304,10 @@ def _plan_item(
         overrides = _route_readiness_request_overrides(query.question)
         if overrides:
             request["arguments"] = overrides
+    if request is not None and contract.tool_id == NAVIGATION_TERRAIN_TOOL_ID:
+        overrides = _navigation_terrain_request_overrides(query.question)
+        if overrides:
+            request["arguments"] = overrides
     if request is not None and contract.tool_id == EQUIPMENT_RESOURCE_TOOL_ID:
         overrides = _equipment_resource_request_overrides(query.question)
         if overrides:
@@ -427,6 +439,127 @@ def _equipment_resource_request_overrides(question: str) -> dict[str, Any]:
         ("gpx已載入", "路線檔已載入", "gpxloaded", "routefileloaded"),
     ):
         overrides["gpx_loaded"] = True
+    return overrides
+
+
+def _navigation_terrain_request_overrides(question: str) -> dict[str, Any]:
+    normalized = _normalize(question)
+    overrides: dict[str, Any] = {}
+    if _states_missing_offline_map(normalized):
+        overrides["offline_map_downloaded"] = False
+    if _has_any(
+        normalized,
+        (
+            "離線地圖已下載",
+            "下載好離線地圖",
+            "所有人下載離線地圖",
+            "offlinemapready",
+            "offlinemapdownloaded",
+        ),
+    ):
+        overrides["offline_map_downloaded"] = True
+    if _states_missing_gpx(normalized):
+        overrides["gpx_loaded_on_device"] = False
+    if _has_any(
+        normalized,
+        ("gpx已載入", "路線檔已載入", "gpxloaded", "routefileloaded"),
+    ):
+        overrides["gpx_loaded_on_device"] = True
+    if _has_any(
+        normalized,
+        (
+            "不會看等高線",
+            "看不懂等高線",
+            "不懂等高線",
+            "等高線不會",
+            "contourskillfalse",
+        ),
+    ):
+        overrides["contour_skill_confirmed"] = False
+    if _has_any(
+        normalized,
+        ("會看等高線", "等高線已確認", "contourskillconfirmed"),
+    ) and "contour_skill_confirmed" not in overrides:
+        overrides["contour_skill_confirmed"] = True
+    if _has_any(
+        normalized,
+        (
+            "不會判讀地形",
+            "不懂地形判讀",
+            "地形判讀不足",
+            "不會辨識稜線",
+            "不會辨識谷線",
+            "不會辨識鞍部",
+            "terrainfeatureskillfalse",
+        ),
+    ):
+        overrides["terrain_feature_skill_confirmed"] = False
+    if _has_any(
+        normalized,
+        (
+            "地形判讀已確認",
+            "會辨識稜線",
+            "會辨識谷線",
+            "會辨識鞍部",
+            "terrainfeatureskillconfirmed",
+        ),
+    ) and "terrain_feature_skill_confirmed" not in overrides:
+        overrides["terrain_feature_skill_confirmed"] = True
+    if _has_any(
+        normalized,
+        (
+            "不知道撤退方向",
+            "不清楚撤退方向",
+            "撤退方向不知道",
+            "retreatdirectionunknown",
+        ),
+    ):
+        overrides["retreat_direction_understood"] = False
+    if _has_any(
+        normalized,
+        ("知道撤退方向", "撤退方向已確認", "retreatdirectionconfirmed"),
+    ) and "retreat_direction_understood" not in overrides:
+        overrides["retreat_direction_understood"] = True
+    if _has_any(
+        normalized,
+        (
+            "沒有第二套定位備援",
+            "沒第二套定位備援",
+            "沒有定位備援",
+            "沒定位備援",
+            "沒有第二套定位",
+            "沒第二套定位",
+            "沒有第二套導航",
+            "沒第二套導航",
+            "沒有備援導航",
+            "沒備援導航",
+            "backuppositioningfalse",
+        ),
+    ):
+        overrides["backup_positioning_available"] = False
+    if _has_any(
+        normalized,
+        (
+            "有第二套定位備援",
+            "定位備援已確認",
+            "有第二套定位",
+            "有第二套導航",
+            "backuppositioningconfirmed",
+        ),
+    ) and "backup_positioning_available" not in overrides:
+        overrides["backup_positioning_available"] = True
+    if _has_any(
+        normalized,
+        (
+            "只有一個人熟悉離線地圖",
+            "只有1人熟悉離線地圖",
+            "只有一人熟悉離線地圖",
+            "只有1個人熟悉離線地圖",
+            "只有一個會用離線地圖",
+            "只有1個會用離線地圖",
+        ),
+    ):
+        overrides["team_map_user_count"] = 1
     return overrides
 
 
@@ -622,6 +755,19 @@ def _looks_like_terrain_question(text: str) -> bool:
 
 def _looks_like_map_perception_question(text: str) -> bool:
     map_readiness_terms = ("離線地圖", "下載地圖", "地圖下載", "offline map")
+    navigation_readiness_terms = (
+        "地圖力",
+        "地圖需求",
+        "地圖力需求",
+        "地形判讀",
+        "撤退方向",
+        "定位備援",
+        "第二套定位",
+        "第二套導航",
+        "熟悉離線地圖",
+        "自主前往",
+        "自己去",
+    )
     map_perception_terms = (
         "ocr",
         "annotation",
@@ -639,6 +785,10 @@ def _looks_like_map_perception_question(text: str) -> bool:
         text, map_perception_terms
     ):
         return False
+    if _has_any(text, navigation_readiness_terms) and not _has_any(
+        text, map_perception_terms
+    ):
+        return False
     return _has_any(
         text,
         (
@@ -652,6 +802,71 @@ def _looks_like_map_perception_question(text: str) -> bool:
             "標注",
             "文字",
             "圖層",
+        ),
+    )
+
+
+def _looks_like_navigation_terrain_question(text: str) -> bool:
+    live_terms = (
+        "我現在",
+        "現在是不是",
+        "目前",
+        "前方",
+        "偏離",
+        "走對",
+        "回主線",
+    )
+    readiness_terms = (
+        "出發",
+        "行前",
+        "自主",
+        "自己去",
+        "前往",
+        "可以去",
+        "能不能去",
+        "pretrip",
+    )
+    if _has_any(text, live_terms) and not _has_any(text, readiness_terms):
+        return False
+    if _looks_like_map_perception_question(text) and not _has_any(
+        text,
+        (
+            "地圖力",
+            "地圖需求",
+            "地形判讀",
+            "撤退方向",
+            "定位備援",
+            "第二套定位",
+            "第二套導航",
+            "熟悉離線地圖",
+            "自主前往",
+            "自己去",
+        ),
+    ):
+        return False
+    return _has_any(
+        text,
+        (
+            "navigationterrain",
+            "mapreadiness",
+            "navigationreadiness",
+            "地圖力",
+            "地圖需求",
+            "地圖力需求",
+            "熟悉離線地圖",
+            "只有一個人熟悉離線地圖",
+            "只有一人熟悉離線地圖",
+            "等高線",
+            "地形判讀",
+            "稜線",
+            "谷線",
+            "鞍部",
+            "撤退方向",
+            "定位備援",
+            "第二套定位",
+            "第二套導航",
+            "備援導航",
+            "backuppositioning",
         ),
     )
 
@@ -724,6 +939,9 @@ def _looks_like_route_readiness_question(text: str) -> bool:
             "能不能自主出發",
             "不建議自主前往",
             "自主前往",
+            "可以自己去",
+            "能不能自己去",
+            "自己去嗎",
             "要不要出發",
             "是否出發",
             "出發決策",

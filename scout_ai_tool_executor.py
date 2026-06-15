@@ -14,6 +14,7 @@ from scout_ai_tool_contracts import (
 )
 from scout_safety_boundary_tool import SAFETY_BOUNDARY_TOOL_ID
 from scout_live_navigation_state_tool import LIVE_NAVIGATION_STATE_TOOL_ID
+from scout_navigation_terrain_tool import NAVIGATION_TERRAIN_TOOL_ID
 from scout_ins_dr_trace_tool import INS_DR_TRACE_TOOL_ID
 from scout_energy_vitals_tool import ENERGY_VITALS_TOOL_ID
 from scout_weather_window_tool import WEATHER_WINDOW_TOOL_ID
@@ -327,6 +328,33 @@ def _execute_ready_current_tool(tool_id: str, arguments: dict[str, Any]) -> dict
             confidence=_float_or_none(arguments.get("confidence")),
             uncertainty_m=_float_or_none(arguments.get("uncertainty_m")),
             last_anchor_at=_str_or_none(arguments.get("last_anchor_at")),
+        )
+
+    if tool_id == NAVIGATION_TERRAIN_TOOL_ID:
+        from scout_navigation_terrain_tool import assess_scout_navigation_terrain
+
+        return assess_scout_navigation_terrain(
+            project_root,
+            query=query,
+            offline_map_downloaded=_bool_or_none(
+                arguments.get("offline_map_downloaded")
+            ),
+            gpx_loaded_on_device=_bool_or_none(
+                arguments.get("gpx_loaded_on_device")
+            ),
+            contour_skill_confirmed=_bool_or_none(
+                arguments.get("contour_skill_confirmed")
+            ),
+            terrain_feature_skill_confirmed=_bool_or_none(
+                arguments.get("terrain_feature_skill_confirmed")
+            ),
+            retreat_direction_understood=_bool_or_none(
+                arguments.get("retreat_direction_understood")
+            ),
+            backup_positioning_available=_bool_or_none(
+                arguments.get("backup_positioning_available")
+            ),
+            team_map_user_count=_int_or_none(arguments.get("team_map_user_count")),
         )
 
     if tool_id == SAFETY_BOUNDARY_TOOL_ID:

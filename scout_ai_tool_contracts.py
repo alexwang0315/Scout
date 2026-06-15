@@ -17,6 +17,11 @@ from scout_live_navigation_state_tool import (
     LIVE_NAVIGATION_STATE_OUTPUT_KIND,
     LIVE_NAVIGATION_STATE_TOOL_ID,
 )
+from scout_navigation_terrain_tool import (
+    NAVIGATION_TERRAIN_OPTIONAL_FIELDS,
+    NAVIGATION_TERRAIN_OUTPUT_KIND,
+    NAVIGATION_TERRAIN_TOOL_ID,
+)
 from scout_ins_dr_trace_tool import (
     INS_DR_TRACE_OUTPUT_KIND,
     INS_DR_TRACE_TOOL_ID,
@@ -225,6 +230,11 @@ EXECUTABLE_TOOL_ALIASES: dict[str, list[str]] = {
     LIVE_NAVIGATION_STATE_TOOL_ID: [
         "scout.ai.live_navigation_state.assess",
     ],
+    NAVIGATION_TERRAIN_TOOL_ID: [
+        "scout.ai.navigation_terrain.assess",
+        "scout.ai.map_readiness.assess",
+        "scout.ai.navigation_readiness.assess",
+    ],
     SAFETY_BOUNDARY_TOOL_ID: [
         "scout.ai.safety_boundary.explain",
     ],
@@ -296,6 +306,7 @@ EXECUTABLE_OUTPUT_KINDS: dict[str, str] = {
     "pydantic_ai.tool.search_scout_map_perception.v0": "scout_ai_map_perception_tool_output",
     INS_DR_TRACE_TOOL_ID: INS_DR_TRACE_OUTPUT_KIND,
     LIVE_NAVIGATION_STATE_TOOL_ID: LIVE_NAVIGATION_STATE_OUTPUT_KIND,
+    NAVIGATION_TERRAIN_TOOL_ID: NAVIGATION_TERRAIN_OUTPUT_KIND,
     SAFETY_BOUNDARY_TOOL_ID: SAFETY_BOUNDARY_OUTPUT_KIND,
     ENERGY_VITALS_TOOL_ID: ENERGY_VITALS_OUTPUT_KIND,
     WEATHER_WINDOW_TOOL_ID: WEATHER_WINDOW_OUTPUT_KIND,
@@ -621,6 +632,8 @@ def _optional_fields_for(tool_id: str) -> list[str]:
         ]
     if tool_id == LIVE_NAVIGATION_STATE_TOOL_ID:
         return list(LIVE_NAVIGATION_REQUIRED_FIELDS)
+    if tool_id == NAVIGATION_TERRAIN_TOOL_ID:
+        return list(NAVIGATION_TERRAIN_OPTIONAL_FIELDS)
     if tool_id == SAFETY_BOUNDARY_TOOL_ID:
         return list(SAFETY_ADMISSION_REQUIRED_FIELDS)
     if tool_id == ENERGY_VITALS_TOOL_ID:
