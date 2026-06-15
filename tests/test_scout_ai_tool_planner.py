@@ -18,6 +18,7 @@ from scout_ai_tool_planner import (
     EQUIPMENT_RESOURCE_TOOL_ID,
     TEAM_STATUS_TOOL_ID,
     POST_TRIP_REVIEW_TOOL_ID,
+    REVIEW_GAP_TOOL_ID,
     SAFETY_BOUNDARY_TOOL_ID,
     WEATHER_WINDOW_TOOL_ID,
     ScoutAiToolPlanItemStatus,
@@ -1473,6 +1474,21 @@ def test_planner_routes_post_trip_lost_near_miss_to_review_not_survival() -> Non
     assert "摸黑" in args["near_miss_events"]
     assert "迷路" in args["near_miss_events"]
     assert args["user_feedback_items"] == ["review_for_next_pretrip"]
+    assert item.boundary.runtime_safety_truth is False
+
+
+def test_planner_selects_review_gap_for_provenance_promotion_question() -> None:
+    plan = plan_scout_ai_tools(
+        _query("哪些天氣證據還沒有人工審核，不能升格為出發依據？"),
+        project_root=PROJECT_ROOT,
+    )
+
+    item = _single_tool(plan, REVIEW_GAP_TOOL_ID)
+    assert item.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+    assert item.implementation_status == "ready_current_tool"
+    assert item.request is not None
+    assert item.request["tool_id"] == REVIEW_GAP_TOOL_ID
+    assert item.request["arguments"] == {"category": "weather_daylight"}
     assert item.boundary.runtime_safety_truth is False
 
 

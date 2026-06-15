@@ -19,6 +19,7 @@ from scout_pace_guardian_tool import PACE_GUARDIAN_TOOL_ID
 from scout_equipment_resource_tool import EQUIPMENT_RESOURCE_TOOL_ID
 from scout_team_status_tool import TEAM_STATUS_TOOL_ID
 from scout_post_trip_review_tool import POST_TRIP_REVIEW_TOOL_ID
+from scout_review_gap_tool import REVIEW_GAP_TOOL_ID
 from scout_route_readiness_tool import ROUTE_READINESS_TOOL_ID
 from scout_weather_window_tool import WEATHER_WINDOW_TOOL_ID
 from scout_media_literacy_tool import MEDIA_LITERACY_TOOL_ID
@@ -267,7 +268,9 @@ def _source_from_record(record: dict[str, Any]) -> ScoutAiAnswerSource:
         "after_action_next_plan",
         "model_update_candidates",
         "post_trip_learning_package",
+        "review_gap",
         "review_governance",
+        "provenance_summary",
         "privacy_share_policy",
         "pace_guardian",
         "team_pace_fit",
@@ -410,6 +413,9 @@ def _answer_text(
         post_trip_review_answer = _post_trip_review_answer(completed_sources)
         if post_trip_review_answer:
             parts.append(post_trip_review_answer)
+        review_gap_answer = _review_gap_answer(completed_sources)
+        if review_gap_answer:
+            parts.append(review_gap_answer)
         pace_guardian_answer = _pace_guardian_answer(completed_sources)
         if pace_guardian_answer:
             parts.append(pace_guardian_answer)
@@ -907,6 +913,8 @@ def _decision_source_priority(
         question
     ):
         return (-1, source.tool_id)
+    if source.tool_id == REVIEW_GAP_TOOL_ID and _looks_like_review_gap_question(question):
+        return (-1, source.tool_id)
     if source.tool_id == RISK_SCORE_TOOL_ID and _looks_like_forward_risk_segment_question(
         question
     ):
@@ -1019,6 +1027,54 @@ def _looks_like_post_trip_review_question(question: str) -> bool:
             "capabilitycapsule",
             "incidentpackage",
             "fieldcase",
+        )
+    )
+
+
+def _looks_like_review_gap_question(question: str) -> bool:
+    text = str(question or "").lower().replace(" ", "")
+    if _looks_like_post_trip_review_question(question) and not any(
+        term in text
+        for term in (
+            "reviewqueue",
+            "provenance",
+            "來源追溯",
+            "證據追溯",
+            "可追溯",
+            "人工審核",
+            "humanreview",
+            "不能升格",
+            "尚未升格",
+            "升格",
+            "不能當依據",
+            "reviewgap",
+        )
+    ):
+        return False
+    return any(
+        term in text
+        for term in (
+            "reviewgap",
+            "reviewqueue",
+            "provenance",
+            "provenancegap",
+            "reviewprovenance",
+            "人工審核",
+            "humanreview",
+            "來源追溯",
+            "證據追溯",
+            "可追溯",
+            "哪些證據還不能",
+            "哪些證據不能",
+            "不能升格",
+            "尚未升格",
+            "升格為決策",
+            "不能當依據",
+            "不能作為依據",
+            "為什麼不能用",
+            "review缺口",
+            "審核缺口",
+            "證據缺口",
         )
     )
 
@@ -1774,6 +1830,37 @@ def _post_trip_review_answer(sources: list[ScoutAiAnswerSource]) -> str | None:
         field_answer = source.top_result_summary.get("field_answer")
         if isinstance(field_answer, str) and field_answer.strip():
             return field_answer.strip()
+    return None
+
+
+def _review_gap_answer(sources: list[ScoutAiAnswerSource]) -> str | None:
+    for source in sources:
+        if source.tool_id != REVIEW_GAP_TOOL_ID:
+            continue
+        review_gap = source.top_result_summary.get("review_gap")
+        if not isinstance(review_gap, dict):
+            continue
+        counts = review_gap.get("counts")
+        if not isinstance(counts, dict):
+            counts = {}
+        required_actions = _text_list(review_gap.get("required_actions"))
+        evidence = review_gap.get("unpromoted_evidence")
+        sample_items = []
+        if isinstance(evidence, list):
+            for item in evidence[:3]:
+                if isinstance(item, dict):
+                    label = _first_text(item.get("source_id"), item.get("candidate_ref"))
+                    if label:
+                        sample_items.append(label)
+        return (
+            "Review gap："
+            f"decision={review_gap.get('decision')}; "
+            f"unresolved={counts.get('unresolved_review_count', 0)}, "
+            f"blocker={counts.get('blocker_count', 0)}, "
+            f"warning={counts.get('warning_count', 0)}. "
+            f"樣本={'; '.join(sample_items) or '無'}。"
+            f"下一步={'; '.join(required_actions[:2]) or '保持 candidate-only，不升格為 runtime safety truth'}。"
+        )
     return None
 
 

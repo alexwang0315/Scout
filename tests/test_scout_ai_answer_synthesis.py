@@ -22,6 +22,7 @@ from scout_pace_guardian_tool import PACE_GUARDIAN_TOOL_ID
 from scout_equipment_resource_tool import EQUIPMENT_RESOURCE_TOOL_ID
 from scout_team_status_tool import TEAM_STATUS_TOOL_ID
 from scout_post_trip_review_tool import POST_TRIP_REVIEW_TOOL_ID
+from scout_review_gap_tool import REVIEW_GAP_TOOL_ID
 from scout_route_architecture_tool import ROUTE_ARCHITECTURE_TOOL_ID
 from scout_route_context_tool import ROUTE_CONTEXT_TOOL_ID
 from scout_media_literacy_tool import MEDIA_LITERACY_TOOL_ID
@@ -3451,6 +3452,29 @@ def test_answer_synthesis_routes_scout_ai_meta_power_to_dynamic_decision_overvie
     assert "deterministic answer synthesis" in result.answer
     assert "不輸出單一靜態分數" in result.answer
     assert "可以繼續前進" not in result.answer
+
+
+def test_answer_synthesis_uses_review_gap_for_provenance_promotion_question() -> None:
+    result = collect_and_synthesize_scout_ai_answer(
+        "哪些天氣證據還沒有人工審核，不能升格為出發依據？",
+        project_root=PROJECT_ROOT,
+        limit=6,
+    )
+
+    assert result.decision_output["answerSourceToolId"] == REVIEW_GAP_TOOL_ID
+    assert result.decision_output["decision"] == "DELAY"
+    assert result.decision_output["cost"]["unresolvedReviewCount"] == 1
+    assert "Review gap" in result.answer
+    assert "unresolved=1" in result.answer
+    assert "不得把 candidate/review queue 證據升格" in result.answer
+
+    source = _source(result, REVIEW_GAP_TOOL_ID)
+    assert source.top_result_summary["review_gap"]["counts"][
+        "unresolved_review_count"
+    ] == 1
+    assert source.top_result_summary["review_governance"][
+        "review_write_performed"
+    ] is False
 
 
 def _write_route_briefing_project(tmp_path: Path) -> Path:
