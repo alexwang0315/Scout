@@ -77,6 +77,35 @@ def test_route_context_covers_standard_natural_and_cultural_layers() -> None:
     assert "Experience Guide 候選" in cultural["field_answer"]
 
 
+def test_route_context_reads_canonical_route_context_pack_for_briefing_questions() -> None:
+    days = assess_scout_route_context(
+        PROJECT_ROOT,
+        query="奇萊南華建議幾天？",
+        limit=4,
+    )
+
+    assert days["answerability"] == "route_context_available"
+    assert days["route_briefing"]["available"] is True
+    assert days["route_briefing"]["candidate_only"] is True
+    assert days["route_briefing"]["runtime_safety_truth"] is False
+    assert days["route_briefing"]["source_path"].endswith("route_context_pack.json")
+    assert "2 天 1 夜" in days["field_answer"]
+    assert "3 天 2 夜" in days["field_answer"]
+    assert "route_context_pack" in {
+        source["source_kind"] for source in days["source_report"]
+    }
+
+    stops = assess_scout_route_context(
+        PROJECT_ROOT,
+        query="哪些點值得停 3 分鐘？",
+        limit=4,
+    )
+
+    assert stops["answerability"] == "route_context_available"
+    assert "候選 3 分鐘觀察點" in stops["field_answer"]
+    assert "不是現場停留授權" in stops["field_answer"]
+
+
 def test_route_context_keeps_risk_context_from_becoming_stop_permission() -> None:
     result = assess_scout_route_context(
         PROJECT_ROOT,
