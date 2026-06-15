@@ -23,6 +23,7 @@ from scout_weather_window_tool import WEATHER_WINDOW_TOOL_ID
 from scout_contextual_permission_tool import CONTEXTUAL_PERMISSION_TOOL_ID
 from scout_route_context_tool import ROUTE_CONTEXT_TOOL_ID
 from scout_pace_guardian_tool import PACE_GUARDIAN_TOOL_ID
+from scout_equipment_resource_tool import EQUIPMENT_RESOURCE_TOOL_ID
 from scout_route_architecture_tool import ROUTE_ARCHITECTURE_TOOL_ID
 from scout_workspace_search_tools import (
     MAJOR_POINT_TOOL_ID,
@@ -159,6 +160,13 @@ def plan_scout_ai_tools(
                 PACE_GUARDIAN_TOOL_ID,
                 "Question asks for Pace Guardian / Team Pace Fit: "
                 "slowest-member pacing, delay, rest rhythm, lunch-point movement, shortening the route, or whether the team can still reach the next CP.",
+            )
+        )
+    if _looks_like_equipment_resource_question(normalized_question):
+        selected.append(
+            (
+                EQUIPMENT_RESOURCE_TOOL_ID,
+                "Question asks for Equipment / Resource readiness: battery, offline maps, GPX, lighting, power bank, water, food, or critical gear gaps.",
             )
         )
     if _looks_like_live_navigation_state_question(normalized_question):
@@ -534,6 +542,38 @@ def _looks_like_pace_guardian_question(text: str) -> bool:
             "後隊",
             "快慢組",
             "分隊",
+        ),
+    )
+
+
+def _looks_like_equipment_resource_question(text: str) -> bool:
+    return _has_any(
+        text,
+        (
+            "equipmentresource",
+            "deviceresource",
+            "gearreadiness",
+            "手機電量",
+            "手機只剩",
+            "電量",
+            "手錶電量",
+            "頭燈",
+            "備用燈",
+            "行動電源",
+            "離線地圖",
+            "gpx載入",
+            "gpx有沒有",
+            "第二套導航",
+            "裝備",
+            "水剩",
+            "水還剩",
+            "水量",
+            "食物",
+            "行動糧",
+            "瓦斯",
+            "雨衣",
+            "保暖層",
+            "急救包",
         ),
     )
 

@@ -75,6 +75,14 @@ def test_question_eval_classifies_current_tools_and_missing_live_evidence() -> N
             "question": "隊伍腳程是否能準時抵達下一個 CP？最慢者需要前移午餐點嗎？",
         }
     )
+    equipment_eval = evaluate_question(
+        {
+            "id": "q-equipment-resource",
+            "source_set": "test",
+            "category": "equipment_resource",
+            "question": "手機電量和頭燈水量夠嗎？",
+        }
+    )
     route_architecture_eval = evaluate_question(
         {
             "id": "q-route-architecture",
@@ -96,6 +104,9 @@ def test_question_eval_classifies_current_tools_and_missing_live_evidence() -> N
     assert pace_guardian_eval.answerability == "requires_missing_evidence"
     assert "scout.ai.pace_guardian.assess.v0" in pace_guardian_eval.current_tool_ids
     assert "user_or_team_baseline_profile" in pace_guardian_eval.missing_evidence
+    assert equipment_eval.answerability == "requires_missing_evidence"
+    assert "scout.ai.equipment_resource.assess.v0" in equipment_eval.current_tool_ids
+    assert "equipment_inventory_or_battery_telemetry" in equipment_eval.missing_evidence
     assert route_architecture_eval.answerability == "answerable_by_current_read_only_tools"
     assert (
         "scout.ai.route_architecture.assess.v0"

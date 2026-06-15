@@ -20,6 +20,7 @@ from scout_weather_window_tool import WEATHER_WINDOW_TOOL_ID
 from scout_contextual_permission_tool import CONTEXTUAL_PERMISSION_TOOL_ID
 from scout_route_context_tool import ROUTE_CONTEXT_TOOL_ID
 from scout_pace_guardian_tool import PACE_GUARDIAN_TOOL_ID
+from scout_equipment_resource_tool import EQUIPMENT_RESOURCE_TOOL_ID
 from scout_route_architecture_tool import ROUTE_ARCHITECTURE_TOOL_ID
 
 
@@ -460,6 +461,42 @@ def _execute_ready_current_tool(tool_id: str, arguments: dict[str, Any]) -> dict
             limit=limit,
         )
 
+    if tool_id == EQUIPMENT_RESOURCE_TOOL_ID:
+        from scout_equipment_resource_tool import assess_scout_equipment_resource
+
+        return assess_scout_equipment_resource(
+            project_root,
+            query=query,
+            equipment_status_path=_str_or_none(arguments.get("equipment_status_path")),
+            resource_plan_path=_str_or_none(arguments.get("resource_plan_path")),
+            battery_percent=_float_or_none(arguments.get("battery_percent")),
+            phone_battery_percent=_float_or_none(
+                arguments.get("phone_battery_percent")
+            ),
+            watch_battery_percent=_float_or_none(
+                arguments.get("watch_battery_percent")
+            ),
+            offline_map_ready=_bool_or_none(arguments.get("offline_map_ready")),
+            gpx_loaded=_bool_or_none(arguments.get("gpx_loaded")),
+            headlamp_ready=_bool_or_none(arguments.get("headlamp_ready")),
+            backup_light_ready=_bool_or_none(arguments.get("backup_light_ready")),
+            power_bank_percent=_float_or_none(arguments.get("power_bank_percent")),
+            water_liters=_float_or_none(arguments.get("water_liters")),
+            food_hours=_float_or_none(arguments.get("food_hours")),
+            rain_shell_ready=_bool_or_none(arguments.get("rain_shell_ready")),
+            emergency_layer_ready=_bool_or_none(
+                arguments.get("emergency_layer_ready")
+            ),
+            first_aid_ready=_bool_or_none(arguments.get("first_aid_ready")),
+            comms_ready=_bool_or_none(arguments.get("comms_ready")),
+            expected_hours_remaining=_float_or_none(
+                arguments.get("expected_hours_remaining")
+            ),
+            daylight_hours_remaining=_float_or_none(
+                arguments.get("daylight_hours_remaining")
+            ),
+        )
+
     raise ValueError(f"tool is not executable: {tool_id}")
 
 
@@ -521,6 +558,7 @@ def _completed_missing_fields(tool_id: str, payload: dict[str, Any]) -> list[str
         WEATHER_WINDOW_TOOL_ID,
         CONTEXTUAL_PERMISSION_TOOL_ID,
         PACE_GUARDIAN_TOOL_ID,
+        EQUIPMENT_RESOURCE_TOOL_ID,
     }:
         return []
     value = payload.get("missing_fields")
