@@ -37,6 +37,17 @@ def test_runtime_ingress_status_tool_reads_status_and_router_traces(
     assert result["latency_status"]["sample_count"] == 1
     assert result["decision_output"]["decisionObjectSchema"] == "ContextualPermission"
     assert result["decision_output"]["runtimeSafetyTruth"] is False
+    for key in (
+        "cost",
+        "residualRisk",
+        "requiredConditions",
+        "alternativeActions",
+    ):
+        assert key in result["decision_output"]
+    assert (
+        result["decision_output"]["residualRisk"]
+        == result["decision_output"]["secondLayer"]["residualRisk"]
+    )
     assert result["boundary"]["runtime_safety_truth"] is False
     serialized = json.dumps(result, ensure_ascii=False)
     assert "raw_payload_text" not in serialized
