@@ -19,6 +19,7 @@ CONTEXTUAL_PERMISSION_OPTIONAL_FIELDS = (
     "current_time",
     "current_cp_id",
     "next_cp_id",
+    "minutes_to_next_cp",
     "remaining_safety_buffer_minutes",
     "requested_duration_minutes",
     "current_delay_minutes",
@@ -293,6 +294,7 @@ def assess_scout_contextual_permission(
     current_time: str | None = None,
     current_cp_id: str | None = None,
     next_cp_id: str | None = None,
+    minutes_to_next_cp: float | int | str | None = None,
     remaining_safety_buffer_minutes: float | int | str | None = None,
     requested_duration_minutes: float | int | str | None = None,
     current_delay_minutes: float | int | str | None = None,
@@ -323,6 +325,9 @@ def assess_scout_contextual_permission(
     resolved_action = _resolve_action(action, query)
     if requested_duration_minutes is None:
         requested_duration_minutes = _requested_duration_from_query(query)
+    if minutes_to_next_cp is None:
+        minutes_to_next_cp = _minutes_to_next_cp_from_query(query)
+    minutes_to_next_cp_value = _float_or_none(minutes_to_next_cp)
     derived_budget_source = _derive_risk_budget_source(
         root,
         project=project,
@@ -383,6 +388,7 @@ def assess_scout_contextual_permission(
         current_time=current_time,
         current_cp_id=current_cp_id,
         next_cp_id=next_cp_id,
+        minutes_to_next_cp=minutes_to_next_cp_value,
         budget=budget,
         missing_fields=missing_fields,
         requested_duration_minutes=_float_or_none(requested_duration_minutes),
@@ -438,6 +444,7 @@ def assess_scout_contextual_permission(
         "decision": permission.decision,
         "allowed": permission.allowed,
         "action": permission.action,
+        "minutes_to_next_cp": minutes_to_next_cp_value,
         "max_duration_minutes": permission.max_duration_minutes,
         "leave_by": permission.leave_by,
         "field_answer": field_answer,
@@ -465,6 +472,7 @@ def assess_scout_contextual_permission(
                 "action": permission.action,
                 "decision": permission.decision,
                 "allowed": permission.allowed,
+                "minutes_to_next_cp": minutes_to_next_cp_value,
                 "max_duration_minutes": permission.max_duration_minutes,
                 "leave_by": permission.leave_by,
                 "field_answer": field_answer,
@@ -522,6 +530,7 @@ def _permission(
     current_time: str | None,
     current_cp_id: str | None,
     next_cp_id: str | None,
+    minutes_to_next_cp: float | None,
     budget: RiskBudget,
     missing_fields: list[str],
     requested_duration_minutes: float | None,
@@ -580,7 +589,10 @@ def _permission(
                 "此處為風口或曝露停留點，午餐停留會增加失溫與體力流失；"
                 "不能只因時間 buffer 足夠就授權。"
             ),
-            next_action=_exposed_lunch_next_action(next_cp_id),
+            next_action=_exposed_lunch_next_action(
+                next_cp_id,
+                minutes_to_next_cp=minutes_to_next_cp,
+            ),
             confidence=_confidence(confidence, default=ConfidenceLevel.MEDIUM),
             uncertainty_notes=uncertainty_notes,
             alternative_actions=_alternative_actions(action, next_cp_id),
@@ -1481,6 +1493,23 @@ def _requested_duration_from_query(query: str) -> float | None:
     return None
 
 
+def _minutes_to_next_cp_from_query(query: str) -> float | None:
+    text = str(query or "").strip().lower().replace(" ", "")
+    patterns = (
+        r"(?:再前進|再走|前方|到|前往|下一個cp|下一cp|nextcp)"
+        r"(?:約|大約|還有|需時|需要)?(\d+(?:\.\d+)?)(?:分鐘|分|min|minutes?)",
+        r"(\d+(?:\.\d+)?)(?:分鐘|分|min|minutes?)"
+        r"(?:到|抵達|前往|可到|可以到)(?:cp|checkpoint)?[\w\u4e00-\u9fff-]*",
+        r"(?:cp|checkpoint)[\w-]*(?:約|大約|還有|距離|需時|需要)"
+        r"(\d+(?:\.\d+)?)(?:分鐘|分|min|minutes?)",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, text)
+        if match:
+            return float(match.group(1))
+    return None
+
+
 def _normalized_risk_level(level: str | None, query: str) -> str | None:
     if level and str(level).strip():
         return str(level).strip().lower()
@@ -1665,7 +1694,17 @@ def _looks_like_exposed_media_pressure(
     )
 
 
-def _exposed_lunch_next_action(next_cp_id: str | None) -> str:
+def _exposed_lunch_next_action(
+    next_cp_id: str | None,
+    *,
+    minutes_to_next_cp: float | None,
+) -> str:
+    if next_cp_id and minutes_to_next_cp is not None:
+        return (
+            "不在此午餐，請再前進約 "
+            f"{minutes_to_next_cp:g} 分鐘到 {next_cp_id}，"
+            "到較避風處再重新評估。"
+        )
     if next_cp_id:
         return f"不在此午餐，請再前往 {next_cp_id}，到較避風處再重新評估。"
     return "不在此午餐，請再前往下一個較避風 CP，到較避風處再重新評估。"

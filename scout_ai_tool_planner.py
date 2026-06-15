@@ -520,6 +520,12 @@ def _contextual_permission_request_overrides(question: str) -> dict[str, Any]:
     buffer_minutes = _extract_safety_buffer_minutes(normalized)
     if buffer_minutes is not None:
         overrides["remaining_safety_buffer_minutes"] = buffer_minutes
+    next_cp_id = _extract_next_cp_id(normalized)
+    if next_cp_id:
+        overrides["next_cp_id"] = next_cp_id
+    minutes_to_next_cp = _extract_minutes_to_next_cp(normalized)
+    if minutes_to_next_cp is not None:
+        overrides["minutes_to_next_cp"] = minutes_to_next_cp
     current_time = _extract_iso_datetime(question)
     if not current_time:
         current_time = _extract_clock_time(normalized)
@@ -601,6 +607,35 @@ def _extract_safety_buffer_minutes(normalized_question: str) -> float | None:
     )
     for pattern in patterns:
         match = re.search(pattern, normalized_question)
+        if match:
+            return float(match.group(1))
+    return None
+
+
+def _extract_next_cp_id(normalized_question: str) -> str | None:
+    patterns = (
+        r"(?:到|前往|再前進到|再走到)(cp[a-z0-9_-]*)",
+        r"(?:前方|下一個|下一)(cp[a-z0-9_-]*)",
+        r"(cp[a-z0-9_-]*)(?:約|大約|還有|距離|需時|需要)\d+(?:\.\d+)?(?:分鐘|分|min|minutes?)",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, normalized_question, flags=re.IGNORECASE)
+        if match:
+            return match.group(1).upper()
+    return None
+
+
+def _extract_minutes_to_next_cp(normalized_question: str) -> float | None:
+    patterns = (
+        r"(?:再前進|再走|前方|到|前往|下一個cp|下一cp|nextcp)"
+        r"(?:約|大約|還有|需時|需要)?(\d+(?:\.\d+)?)(?:分鐘|分|min|minutes?)",
+        r"(\d+(?:\.\d+)?)(?:分鐘|分|min|minutes?)"
+        r"(?:到|抵達|前往|可到|可以到)(?:cp|checkpoint)?[\w\u4e00-\u9fff-]*",
+        r"(?:cp|checkpoint)[\w-]*(?:約|大約|還有|距離|需時|需要)"
+        r"(\d+(?:\.\d+)?)(?:分鐘|分|min|minutes?)",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, normalized_question, flags=re.IGNORECASE)
         if match:
             return float(match.group(1))
     return None

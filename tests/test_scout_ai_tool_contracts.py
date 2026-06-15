@@ -133,6 +133,9 @@ def test_tool_registry_lists_current_and_future_contracts() -> None:
     assert "scout.ai.micro_decision.assess" in by_id[
         CONTEXTUAL_PERMISSION_TOOL_ID
     ].aliases
+    assert "minutes_to_next_cp" in by_id[
+        CONTEXTUAL_PERMISSION_TOOL_ID
+    ].optional_fields
     assert "scout.ai.departure_gate.assess" in by_id[
         ROUTE_READINESS_TOOL_ID
     ].aliases
@@ -1269,6 +1272,7 @@ def test_execute_contextual_permission_assessor_blocks_wind_exposed_lunch() -> N
                 "current_time": "2026-06-07T12:00:00+08:00",
                 "current_cp_id": "CP2",
                 "next_cp_id": "CP3",
+                "minutes_to_next_cp": 18,
                 "remaining_safety_buffer_minutes": 45,
                 "next_segment_uncertainty_minutes": 5,
                 "weather_reserve_minutes": 5,
@@ -1284,14 +1288,16 @@ def test_execute_contextual_permission_assessor_blocks_wind_exposed_lunch() -> N
     assert result.payload["action"] == "lunch"
     assert result.payload["decision"] == "NO_GO"
     assert result.payload["allowed"] is False
+    assert result.payload["minutes_to_next_cp"] == 18.0
     assert result.payload["max_duration_minutes"] is None
     assert result.payload["decision_output"]["firstLayer"]["decision"] == (
         "不建議吃午餐。"
     )
     assert "風口" in result.payload["decision_output"]["firstLayer"]["reason"]
     assert result.payload["decision_output"]["firstLayer"]["nextStep"] == (
-        "不在此午餐，請再前往 CP3，到較避風處再重新評估。"
+        "不在此午餐，請再前進約 18 分鐘到 CP3，到較避風處再重新評估。"
     )
+    assert "約 18 分鐘到 CP3" in result.payload["field_answer"]
     assert result.payload["decision_output"]["runtimeSafetyTruth"] is False
     assert result.boundary.runtime_safety_truth is False
 

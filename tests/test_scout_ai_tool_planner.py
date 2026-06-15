@@ -425,6 +425,20 @@ def test_planner_selects_weather_and_contextual_for_wind_lunch() -> None:
     assert contextual.boundary.runtime_safety_truth is False
 
 
+def test_planner_passes_lunch_alternate_cp_and_minutes_to_contextual() -> None:
+    plan = plan_scout_ai_tools(
+        _query("這裡是風口，前方 CP3 約 18 分鐘且較避風，我們可以在這裡吃午餐嗎？"),
+        project_root=PROJECT_ROOT,
+    )
+
+    contextual = _single_tool(plan, CONTEXTUAL_PERMISSION_TOOL_ID)
+    assert contextual.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+    assert contextual.request is not None
+    assert contextual.request["arguments"]["action"] == "lunch"
+    assert contextual.request["arguments"]["next_cp_id"] == "CP3"
+    assert contextual.request["arguments"]["minutes_to_next_cp"] == 18.0
+
+
 def test_planner_selects_weather_and_contextual_for_stream_surge_crossing() -> None:
     plan = plan_scout_ai_tools(
         _query("前方溪水暴漲，還能過溪嗎？"),

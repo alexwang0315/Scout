@@ -1130,6 +1130,7 @@ def _top_result_summary(value: Any) -> dict[str, Any]:
         "decision_output",
         "allowed",
         "action",
+        "minutes_to_next_cp",
         "max_duration_minutes",
         "leave_by",
         "field_answer",
