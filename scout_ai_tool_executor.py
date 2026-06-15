@@ -17,6 +17,7 @@ from scout_live_navigation_state_tool import LIVE_NAVIGATION_STATE_TOOL_ID
 from scout_ins_dr_trace_tool import INS_DR_TRACE_TOOL_ID
 from scout_energy_vitals_tool import ENERGY_VITALS_TOOL_ID
 from scout_weather_window_tool import WEATHER_WINDOW_TOOL_ID
+from scout_route_readiness_tool import ROUTE_READINESS_TOOL_ID
 from scout_contextual_permission_tool import CONTEXTUAL_PERMISSION_TOOL_ID
 from scout_route_context_tool import ROUTE_CONTEXT_TOOL_ID
 from scout_pace_guardian_tool import PACE_GUARDIAN_TOOL_ID
@@ -251,6 +252,45 @@ def _execute_ready_current_tool(tool_id: str, arguments: dict[str, Any]) -> dict
             include_segments=_bool_or_none(arguments.get("include_segments")),
             stale_after_hours=_float_or_none(arguments.get("stale_after_hours")),
             limit=limit,
+        )
+
+    if tool_id == ROUTE_READINESS_TOOL_ID:
+        from scout_route_readiness_tool import assess_scout_route_readiness
+
+        return assess_scout_route_readiness(
+            project_root,
+            query=query,
+            readiness_report_path=_str_or_none(
+                arguments.get("readiness_report_path")
+            ),
+            planned_eta_path=_str_or_none(arguments.get("planned_eta_path")),
+            resource_plan_path=_str_or_none(arguments.get("resource_plan_path")),
+            weather_daylight_path=_str_or_none(
+                arguments.get("weather_daylight_path")
+            ),
+            pretrip_package_path=_str_or_none(arguments.get("pretrip_package_path")),
+            mission_graph_path=_str_or_none(arguments.get("mission_graph_path")),
+            route_comparison_path=_str_or_none(
+                arguments.get("route_comparison_path")
+            ),
+            user_experience_level=_str_or_none(
+                arguments.get("user_experience_level")
+            ),
+            transport_access_plan=_str_or_none(
+                arguments.get("transport_access_plan")
+            ),
+            team_slowest_basis_confirmed=_bool_or_none(
+                arguments.get("team_slowest_basis_confirmed")
+            ),
+            departure_time_confirmed=_bool_or_none(
+                arguments.get("departure_time_confirmed")
+            ),
+            weather_reviewed=_bool_or_none(arguments.get("weather_reviewed")),
+            daylight_reviewed=_bool_or_none(arguments.get("daylight_reviewed")),
+            equipment_confirmed=_bool_or_none(arguments.get("equipment_confirmed")),
+            remote_contact_confirmed=_bool_or_none(
+                arguments.get("remote_contact_confirmed")
+            ),
         )
 
     if tool_id == LIVE_NAVIGATION_STATE_TOOL_ID:
@@ -617,6 +657,7 @@ def _completed_missing_fields(tool_id: str, payload: dict[str, Any]) -> list[str
     if tool_id not in {
         LIVE_NAVIGATION_STATE_TOOL_ID,
         WEATHER_WINDOW_TOOL_ID,
+        ROUTE_READINESS_TOOL_ID,
         CONTEXTUAL_PERMISSION_TOOL_ID,
         PACE_GUARDIAN_TOOL_ID,
         EQUIPMENT_RESOURCE_TOOL_ID,

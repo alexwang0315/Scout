@@ -19,6 +19,7 @@ from scout_pace_guardian_tool import PACE_GUARDIAN_TOOL_ID
 from scout_equipment_resource_tool import EQUIPMENT_RESOURCE_TOOL_ID
 from scout_team_status_tool import TEAM_STATUS_TOOL_ID
 from scout_post_trip_review_tool import POST_TRIP_REVIEW_TOOL_ID
+from scout_route_readiness_tool import ROUTE_READINESS_TOOL_ID
 from scout_weather_window_tool import WEATHER_WINDOW_TOOL_ID
 
 
@@ -172,6 +173,11 @@ def _source_from_record(record: dict[str, Any]) -> ScoutAiAnswerSource:
         "navigation_decision",
         "provided_fields",
         "quality_flags",
+        "route_readiness",
+        "departure_gate",
+        "readiness_state",
+        "readiness_governance",
+        "weather_daylight_state",
         "route_context",
         "route_architecture",
         "cp_graph",
@@ -257,6 +263,9 @@ def _answer_text(
     navigation_answer = _live_navigation_answer(completed_sources)
     if navigation_answer:
         parts.append(navigation_answer)
+    route_readiness_answer = _route_readiness_answer(completed_sources)
+    if route_readiness_answer:
+        parts.append(route_readiness_answer)
     route_context_answer = _route_context_answer(completed_sources)
     if route_context_answer:
         parts.append(route_context_answer)
@@ -347,6 +356,16 @@ def _contextual_permission_answer(sources: list[ScoutAiAnswerSource]) -> str | N
 def _live_navigation_answer(sources: list[ScoutAiAnswerSource]) -> str | None:
     for source in sources:
         if source.tool_id != LIVE_NAVIGATION_STATE_TOOL_ID:
+            continue
+        field_answer = source.top_result_summary.get("field_answer")
+        if isinstance(field_answer, str) and field_answer.strip():
+            return field_answer.strip()
+    return None
+
+
+def _route_readiness_answer(sources: list[ScoutAiAnswerSource]) -> str | None:
+    for source in sources:
+        if source.tool_id != ROUTE_READINESS_TOOL_ID:
             continue
         field_answer = source.top_result_summary.get("field_answer")
         if isinstance(field_answer, str) and field_answer.strip():
@@ -460,6 +479,11 @@ def _top_result_summary(value: Any) -> dict[str, Any]:
         "quality_flags",
         "route_fit_status",
         "position_quality_status",
+        "route_readiness",
+        "departure_gate",
+        "readiness_state",
+        "readiness_governance",
+        "weather_daylight_state",
         "route_context",
         "route_architecture",
         "cp_graph",

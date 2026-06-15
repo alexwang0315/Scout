@@ -83,6 +83,14 @@ def test_question_eval_classifies_current_tools_and_missing_live_evidence() -> N
             "question": "手機電量和頭燈水量夠嗎？",
         }
     )
+    route_readiness_eval = evaluate_question(
+        {
+            "id": "q-route-readiness",
+            "source_set": "test",
+            "category": "route_readiness",
+            "question": "出發前 Go/No-Go 可以出發嗎？",
+        }
+    )
     route_architecture_eval = evaluate_question(
         {
             "id": "q-route-architecture",
@@ -123,6 +131,12 @@ def test_question_eval_classifies_current_tools_and_missing_live_evidence() -> N
     assert equipment_eval.answerability == "requires_missing_evidence"
     assert "scout.ai.equipment_resource.assess.v0" in equipment_eval.current_tool_ids
     assert "equipment_inventory_or_battery_telemetry" in equipment_eval.missing_evidence
+    assert route_readiness_eval.answerability == "requires_missing_evidence"
+    assert "scout.ai.route_readiness.assess.v0" in route_readiness_eval.current_tool_ids
+    assert (
+        "route_date_team_equipment_weather_inputs"
+        in route_readiness_eval.missing_evidence
+    )
     assert route_architecture_eval.answerability == "answerable_by_current_read_only_tools"
     assert (
         "scout.ai.route_architecture.assess.v0"

@@ -47,6 +47,10 @@ CURRENT_TOOLS = {
         "label": "live navigation state / terrain guidance",
         "evidence_scope": "caller-provided position, GNSS/INS-DR quality, route-fit distance, heading/course, and conservative navigation guidance",
     },
+    "scout.ai.route_readiness.assess.v0": {
+        "label": "route readiness / departure gate",
+        "evidence_scope": "pre-trip route, date, team, user experience, equipment, transport/access plan, planned departure time, weather/daylight review, CP Graph, ETA, turn-back point, and departure gate conditions",
+    },
     "scout.ai.contextual_permission.assess.v0": {
         "label": "contextual permission",
         "evidence_scope": "bounded outdoor micro-decision, Scout decision vocabulary, risk budget, deadline, next action",
@@ -404,6 +408,8 @@ def _missing_evidence(question: str, recommended_tools: list[str]) -> list[str]:
         missing.append("review_queue_or_provenance_report")
     if _has_any(question, _WEATHER_TERMS):
         missing.append("fresh_weather_or_nowcast_with_ttl")
+    if _has_any(question, _ROUTE_READINESS_TERMS):
+        missing.append("route_date_team_equipment_weather_inputs")
     if _has_any(question, _PRIVATE_PROFILE_TERMS):
         missing.append("user_or_team_baseline_profile")
     if _has_any(question, _PACE_PROFILE_TERMS):
@@ -468,6 +474,7 @@ _CURRENT_TOOL_TERMS = (
     ("pydantic_ai.tool.search_scout_terrain_scores.v0", ("坡度", "地形", "稜線", "崩壁", "碎石", "乾溝", "溪谷", "下切", "等高線", "slope", "terrain")),
     ("pydantic_ai.tool.search_scout_map_perception.v0", ("ocr", "annotation", "標註", "圖磚", "影像", "景觀點", "拍照", "contour", "被看見")),
     ("scout.ai.live_navigation_state.assess.v0", ("我現在", "現在是不是", "目前", "前方", "gps", "gnss", "imu", "pdr", "方向", "偏離", "轉彎點", "精確導航", "主線", "下切", "岔路", "走對", "回主線")),
+    ("scout.ai.route_readiness.assess.v0", ("go/no-go", "gono", "出發前", "行前", "可以出發", "能出發", "要不要出發", "是否出發", "出發決策", "departure gate", "departure readiness", "route readiness", "pretrip readiness", "go no go", "gonogo")),
     ("scout.ai.route_context.assess.v0", ("值得看", "觀察點", "適合拍攝", "大景", "地名故事", "路線脈絡", "自然觀察", "experience guide", "route context", "viewpoint")),
     ("scout.ai.pace_guardian.assess.v0", ("pace guardian", "team pace fit", "readiness pace fit", "最慢者", "最慢成員", "腳程差", "隊伍腳程", "隊伍速度", "隊伍節奏", "休息節奏", "午餐點", "午餐前移", "需要加快", "落後", "晚了", "縮短行程", "改短版", "直接撤退", "能準時抵達", "下一個 cp", "隊友很累", "後隊", "快慢組")),
     ("scout.ai.equipment_resource.assess.v0", ("手機電量", "手機只剩", "電量", "手錶電量", "頭燈", "備用燈", "行動電源", "離線地圖", "gpx", "第二套導航", "裝備", "水剩", "水還剩", "水量", "食物", "行動糧", "瓦斯", "雨衣", "保暖層", "急救包")),
@@ -499,6 +506,7 @@ _RUNTIME_INGRESS_TERMS = ("mqtt", "sensor logger", "sensor/vitals", "apple watch
 _SAFETY_BOUNDARY_TERMS = ("ln", "safety", "/safety", "phase 1", "l0", "l1", "l2", "l3", "l4", "operator", "觸發警報", "告警", "誤判", "墜崖", "候選", "admission", "persistence")
 _REVIEW_GAP_TERMS = ("人工複核", "複核", "互相矛盾", "provenance", "缺少什麼", "缺少哪些", "context 缺失", "最相關", "不能回答", "可信度", "sources", "引用")
 _WEATHER_TERMS = ("天氣", "下雨", "白牆", "風雨", "日落", "起霧", "溪水", "風寒", "濕衣", "暴漲", "落石區", "紮營", "延後出發", "有效期限", "變冷")
+_ROUTE_READINESS_TERMS = ("go/no-go", "gono", "出發前", "行前", "可以出發", "能出發", "要不要出發", "是否出發", "出發決策", "departure gate", "departure readiness", "route readiness", "pretrip readiness", "go no go", "gonogo")
 _PRIVATE_PROFILE_TERMS = ("我的體能", "我的速度", "我今天", "我需要", "我晚出發", "我補", "我是不是", "我該")
 _PACE_PROFILE_TERMS = ("最慢者", "最慢成員", "腳程差", "隊伍腳程", "隊伍速度", "隊伍節奏", "休息節奏", "午餐點", "午餐前移", "縮短行程", "改短版", "能準時抵達", "下一個 cp")
 _VITALS_TERMS = ("心率", "高山症", "補水", "補給", "太累", "速度下降", "決策品質", "休息", "下撤", "體能", "vitals", "health evidence", "source value", "body battery", "privacy boundary")

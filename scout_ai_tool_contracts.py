@@ -33,6 +33,11 @@ from scout_weather_window_tool import (
     WEATHER_WINDOW_REQUIRED_FIELDS,
     WEATHER_WINDOW_TOOL_ID,
 )
+from scout_route_readiness_tool import (
+    ROUTE_READINESS_OPTIONAL_FIELDS,
+    ROUTE_READINESS_OUTPUT_KIND,
+    ROUTE_READINESS_TOOL_ID,
+)
 from scout_contextual_permission_tool import (
     CONTEXTUAL_PERMISSION_OPTIONAL_FIELDS,
     CONTEXTUAL_PERMISSION_OUTPUT_KIND,
@@ -219,6 +224,11 @@ EXECUTABLE_TOOL_ALIASES: dict[str, list[str]] = {
     WEATHER_WINDOW_TOOL_ID: [
         "scout.ai.weather_window.assess",
     ],
+    ROUTE_READINESS_TOOL_ID: [
+        "scout.ai.route_readiness.assess",
+        "scout.ai.departure_gate.assess",
+        "scout.ai.pretrip_go_no_go.assess",
+    ],
     CONTEXTUAL_PERMISSION_TOOL_ID: [
         "scout.ai.contextual_permission.assess",
         "scout.ai.micro_decision.assess",
@@ -269,6 +279,7 @@ EXECUTABLE_OUTPUT_KINDS: dict[str, str] = {
     SAFETY_BOUNDARY_TOOL_ID: SAFETY_BOUNDARY_OUTPUT_KIND,
     ENERGY_VITALS_TOOL_ID: ENERGY_VITALS_OUTPUT_KIND,
     WEATHER_WINDOW_TOOL_ID: WEATHER_WINDOW_OUTPUT_KIND,
+    ROUTE_READINESS_TOOL_ID: ROUTE_READINESS_OUTPUT_KIND,
     CONTEXTUAL_PERMISSION_TOOL_ID: CONTEXTUAL_PERMISSION_OUTPUT_KIND,
     ROUTE_CONTEXT_TOOL_ID: ROUTE_CONTEXT_OUTPUT_KIND,
     PACE_GUARDIAN_TOOL_ID: PACE_GUARDIAN_OUTPUT_KIND,
@@ -597,6 +608,8 @@ def _optional_fields_for(tool_id: str) -> list[str]:
         ]
     if tool_id == WEATHER_WINDOW_TOOL_ID:
         return list(WEATHER_WINDOW_OPTIONAL_FIELDS)
+    if tool_id == ROUTE_READINESS_TOOL_ID:
+        return list(ROUTE_READINESS_OPTIONAL_FIELDS)
     if tool_id == CONTEXTUAL_PERMISSION_TOOL_ID:
         return list(CONTEXTUAL_PERMISSION_OPTIONAL_FIELDS)
     if tool_id == ROUTE_CONTEXT_TOOL_ID:

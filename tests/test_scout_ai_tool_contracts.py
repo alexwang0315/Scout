@@ -7,6 +7,7 @@ from scout_agent_cli import run_scout_agent_cli
 from scout_energy_models import load_wearable_activity_summaries
 from scout_energy_reserve import write_energy_reserve_artifacts
 from scout_energy_vitals_tool import ENERGY_VITALS_TOOL_ID
+from scout_route_readiness_tool import ROUTE_READINESS_TOOL_ID
 from scout_contextual_permission_tool import CONTEXTUAL_PERMISSION_TOOL_ID
 from scout_route_context_tool import ROUTE_CONTEXT_TOOL_ID
 from scout_route_architecture_tool import ROUTE_ARCHITECTURE_TOOL_ID
@@ -51,6 +52,7 @@ def test_tool_registry_lists_current_and_future_contracts() -> None:
     assert "scout.ai.weather_window.assess.v0" in by_id
     assert "scout.ai.live_navigation_state.assess.v0" in by_id
     assert "scout.ai.safety_boundary.explain.v0" in by_id
+    assert ROUTE_READINESS_TOOL_ID in by_id
     assert CONTEXTUAL_PERMISSION_TOOL_ID in by_id
     assert ROUTE_CONTEXT_TOOL_ID in by_id
     assert ROUTE_ARCHITECTURE_TOOL_ID in by_id
@@ -80,6 +82,9 @@ def test_tool_registry_lists_current_and_future_contracts() -> None:
     assert by_id[CONTEXTUAL_PERMISSION_TOOL_ID].implementation_status == (
         "ready_current_tool"
     )
+    assert by_id[ROUTE_READINESS_TOOL_ID].implementation_status == (
+        "ready_current_tool"
+    )
     assert by_id[ROUTE_CONTEXT_TOOL_ID].implementation_status == (
         "ready_current_tool"
     )
@@ -102,16 +107,19 @@ def test_tool_registry_lists_current_and_future_contracts() -> None:
     assert "scout.ai.micro_decision.assess" in by_id[
         CONTEXTUAL_PERMISSION_TOOL_ID
     ].aliases
+    assert "scout.ai.departure_gate.assess" in by_id[
+        ROUTE_READINESS_TOOL_ID
+    ].aliases
     assert "scout.ai.experience_guide.assess" in by_id[ROUTE_CONTEXT_TOOL_ID].aliases
     assert "scout.ai.cp_graph.assess" in by_id[ROUTE_ARCHITECTURE_TOOL_ID].aliases
     assert "scout.ai.device_resource.assess" in by_id[EQUIPMENT_RESOURCE_TOOL_ID].aliases
     assert "scout.ai.team_pace_fit.assess" in by_id[PACE_GUARDIAN_TOOL_ID].aliases
     assert "scout.ai.team_guardian.assess" in by_id[TEAM_STATUS_TOOL_ID].aliases
     assert "scout.ai.after_action.assess" in by_id[POST_TRIP_REVIEW_TOOL_ID].aliases
-    assert registry.ready_current_tool_count >= 13
+    assert registry.ready_current_tool_count >= 14
     assert registry.executable_tool_count >= registry.ready_current_tool_count
     assert registry.contract_only_tool_count >= 1
-    assert registry.implementation_status_counts["ready_current_tool"] >= 13
+    assert registry.implementation_status_counts["ready_current_tool"] >= 14
     assert "ready_current_tool" in registry.tool_ids_by_status
     assert "scout.ai.weather_window.assess.v0" not in registry.missing_evidence_fields_by_tool
     assert registry.boundary.runtime_safety_truth is False
@@ -284,6 +292,31 @@ def test_execute_post_trip_review_alias_returns_learning_decision() -> None:
     assert "subjective_difficulty" in result.missing_fields
     assert result.payload["completed_trip_summary"]["edge_count"] == 73
     assert result.payload["boundary"]["learning_write_performed"] is False
+    assert result.boundary.live_safety_api_calls_allowed is False
+
+
+def test_execute_route_readiness_alias_returns_departure_gate_decision() -> None:
+    result = execute_scout_ai_tool(
+        {
+            "tool_id": "scout.ai.departure_gate.assess",
+            "project_root": str(PROJECT_ROOT),
+            "query": "出發前 Go/No-Go 可以出發嗎？",
+        }
+    )
+
+    assert result.status == "completed"
+    assert result.tool_id == ROUTE_READINESS_TOOL_ID
+    assert result.implementation_status == "ready_current_tool"
+    assert result.output_artifact_kind == "scout_ai_route_readiness_tool_output"
+    assert result.payload["artifact_kind"] == "scout_ai_route_readiness_tool_output"
+    assert result.payload["answerability"] == "route_readiness_missing_required_fields"
+    assert result.payload["decision"] == "DELAY"
+    assert result.payload["route_readiness"]["role"] == (
+        "Pre-Trip Route Readiness / Departure Gate"
+    )
+    assert "user_experience_level" in result.missing_fields
+    assert result.payload["departure_gate"]["approval_granted"] is False
+    assert result.payload["boundary"]["runtime_handoff_performed"] is False
     assert result.boundary.live_safety_api_calls_allowed is False
 
 
