@@ -1814,6 +1814,10 @@ def _standard_gap_overview_decision_output(
     missing_evidence: list[dict[str, Any]],
     answerability: str,
 ) -> dict[str, Any]:
+    standard_gap_audit = _standard_gap_audit(
+        sources=sources,
+        missing_evidence=missing_evidence,
+    )
     coverage_lines = [
         _standard_gap_coverage_line(group, sources=sources)
         for group in STANDARD_IMPLEMENTATION_COVERAGE
@@ -1864,6 +1868,15 @@ def _standard_gap_overview_decision_output(
             "coveredStandardGroupCount": complete_group_count,
             "standardGroupCount": standard_group_count,
             "missingEvidenceToolCount": len(missing_tool_ids),
+            "implementationGapToolCount": standard_gap_audit["summary"][
+                "implementationGapToolCount"
+            ],
+            "contextOrReviewEvidenceGapToolCount": standard_gap_audit["summary"][
+                "contextOrReviewEvidenceGapToolCount"
+            ],
+            "uiUxValidationNeeded": standard_gap_audit["summary"][
+                "uiUxValidationNeeded"
+            ],
             "runtimeSafetyTruthImpact": "No runtime safety truth was created or changed.",
         },
         "nextAction": (
@@ -1907,7 +1920,9 @@ def _standard_gap_overview_decision_output(
                 "改問出發前 Go/No-Go，驗證 Route Readiness 是否整合 route/date/team/weather/equipment。",
                 "改問特定情境，例如午餐、等霧、攻頂、社群拍攝點，驗證 Section 25 微決策。",
             ],
+            "standardGapAudit": standard_gap_audit,
         },
+        "standardGapAudit": standard_gap_audit,
         "runtimeSafetyTruth": False,
         "standardAlignment": [
             "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 0 Product North Star",
@@ -1929,6 +1944,10 @@ def _standard_gap_overview_answer(
 ) -> str | None:
     if not _looks_like_standard_gap_overview_question(question):
         return None
+    standard_gap_audit = _standard_gap_audit(
+        sources=sources,
+        missing_evidence=missing_evidence,
+    )
     coverage_lines = [
         _standard_gap_coverage_line(group, sources=sources)
         for group in STANDARD_IMPLEMENTATION_COVERAGE
@@ -1951,11 +1970,14 @@ def _standard_gap_overview_answer(
         if missing_tool_ids
         else "本次標準覆蓋工具都有 deterministic evidence path 可檢視。"
     )
+    classification_summary = _standard_gap_classification_summary(standard_gap_audit)
     return (
         "標準差異檢視：六力都有實作在 Scout AI 工具/證據/答案路徑內："
         + "；".join(six_power_lines)
         + "。主要標準群："
         + "；".join([*coverage_lines, *synthesis_lines])
+        + "。缺口分類："
+        + classification_summary
         + "。主要仍需補強：產品北極星、文案與 UI/UX 原則不能只靠工具矩陣證明；"
         "raw search/catalog evidence 不能取代 ContextualPermission；fixture 通過不等於真實路線資料已完整。"
         + missing_summary
@@ -2007,6 +2029,206 @@ def _standard_gap_group_has_source(
 ) -> bool:
     tool_ids = {str(tool_id) for tool_id in group.get("tool_ids", ())}
     return any(source.tool_id in tool_ids for source in sources)
+
+
+def _standard_gap_audit(
+    *,
+    sources: list[ScoutAiAnswerSource],
+    missing_evidence: list[dict[str, Any]],
+) -> dict[str, Any]:
+    implementation_groups = [
+        _standard_gap_audit_group(group, sources=sources)
+        for group in STANDARD_IMPLEMENTATION_COVERAGE
+    ]
+    synthesis_groups = [
+        {
+            "label": str(group.get("label") or "標準 formatter"),
+            "sections": str(group.get("sections") or "unknown"),
+            "status": "implemented_synthesis_formatter",
+            "classification": "synthesis_formatter",
+            "sourceIds": [str(group.get("source_id") or "unknown")],
+            "gapSummary": str(group.get("gap") or ""),
+            "nextSlice": "以 UI/UX 或產品文案驗收證明 formatter 內容進入實際介面。",
+        }
+        for group in STANDARD_SYNTHESIS_COVERAGE
+    ]
+    input_or_evidence_gaps = [
+        _standard_gap_missing_evidence_item(item) for item in missing_evidence
+    ]
+    implementation_gap_tools = [
+        item
+        for item in input_or_evidence_gaps
+        if item["classification"] == "implementation_gap"
+    ]
+    context_or_review_gap_tools = [
+        item
+        for item in input_or_evidence_gaps
+        if item["classification"] != "implementation_gap"
+    ]
+    groups = [*implementation_groups, *synthesis_groups]
+    status_counts: dict[str, int] = {}
+    for group in groups:
+        status = str(group["status"])
+        status_counts[status] = status_counts.get(status, 0) + 1
+    context_or_review_gap_count = len(context_or_review_gap_tools)
+    return {
+        "schema": "scout_standard_gap_audit.v0",
+        "runtimeSafetyTruth": False,
+        "summary": {
+            "standardGroupCount": len(groups),
+            "coveredStandardGroupCount": sum(
+                1 for group in groups if str(group["status"]).startswith("implemented")
+            ),
+            "implementationGapToolCount": len(implementation_gap_tools),
+            "contextOrReviewEvidenceGapToolCount": context_or_review_gap_count,
+            "uiUxValidationNeeded": True,
+            "statusCounts": dict(sorted(status_counts.items())),
+        },
+        "groups": groups,
+        "inputOrEvidenceGaps": context_or_review_gap_tools,
+        "implementationGaps": implementation_gap_tools,
+        "nextSlices": [
+            (
+                f"把 {context_or_review_gap_count} 個情境輸入/審核 evidence gap 依工具分流："
+                "route/team/weather/live nav/post-trip/media/runtime trace。"
+            ),
+            "針對 UI/UX 端到端驗收補畫面或截圖 smoke，證明產品北極星與 Product Copy 進入實際使用流程。",
+            "用真實專案資料重跑 Route Readiness 與 Contextual Permission，確認 fixture 通過沒有被誤當 runtime safety truth。",
+        ],
+        "nonGoals": [
+            "此 audit 不批准出發、不寫入 runtime safety truth、不觸發 /safety、SOS、outbound send 或硬體控制。",
+            "此 audit 不把缺使用者輸入或缺新鮮天氣等同於未實作工具。",
+        ],
+    }
+
+
+def _standard_gap_audit_group(
+    group: dict[str, Any],
+    *,
+    sources: list[ScoutAiAnswerSource],
+) -> dict[str, Any]:
+    tool_ids = tuple(str(tool_id) for tool_id in group.get("tool_ids", ()))
+    matched_sources = [source for source in sources if source.tool_id in tool_ids]
+    missing_fields = [
+        f"{source.tool_id}:{field}"
+        for source in matched_sources
+        for field in source.missing_fields
+    ]
+    implementation_gaps = [
+        f"{source.tool_id}:{source.implementation_gap}"
+        for source in matched_sources
+        if source.implementation_gap
+    ]
+    if implementation_gaps:
+        status = "implementation_gap"
+        classification = "implementation_gap"
+        next_slice = "先補工具 contract 或 executor，再納入標準回歸測試。"
+    elif matched_sources and missing_fields:
+        status = "implemented_requires_context_or_review_evidence"
+        classification = "context_or_review_evidence_required"
+        next_slice = "補具體路線、隊伍、天氣、現場或人工審核 evidence 後重跑此標準群。"
+    elif matched_sources:
+        status = "implemented_evidence_available"
+        classification = "deterministic_tool_path"
+        next_slice = "維持 regression；遇到新情境時加同一標準群案例。"
+    else:
+        status = "not_collected_in_this_query"
+        classification = "planner_or_query_scope_gap"
+        next_slice = "確認 planner trigger 是否應在此類標準問題中選取本工具。"
+    return {
+        "label": str(group.get("label") or "標準群"),
+        "sections": str(group.get("sections") or "unknown"),
+        "status": status,
+        "classification": classification,
+        "toolIds": list(tool_ids),
+        "matchedToolIds": [source.tool_id for source in matched_sources],
+        "missingFieldCount": len(missing_fields),
+        "missingFields": missing_fields[:12],
+        "implementationGaps": implementation_gaps,
+        "gapSummary": str(group.get("gap") or ""),
+        "nextSlice": next_slice,
+    }
+
+
+def _standard_gap_missing_evidence_item(item: dict[str, Any]) -> dict[str, Any]:
+    tool_id = str(item.get("tool_id") or "").strip()
+    missing_fields = _text_list(item.get("missing_fields"))
+    implementation_gap = item.get("implementation_gap")
+    classification = _standard_missing_evidence_classification(
+        tool_id=tool_id,
+        missing_fields=missing_fields,
+        implementation_gap=implementation_gap,
+    )
+    return {
+        "toolId": tool_id,
+        "classification": classification,
+        "collectionStatus": str(item.get("collection_status") or ""),
+        "missingFieldCount": len(missing_fields),
+        "missingFields": missing_fields[:12],
+        "implementationGap": implementation_gap,
+        "nextSlice": _standard_missing_evidence_next_slice(classification),
+    }
+
+
+def _standard_missing_evidence_classification(
+    *,
+    tool_id: str,
+    missing_fields: list[str],
+    implementation_gap: Any,
+) -> str:
+    if implementation_gap:
+        return "implementation_gap"
+    if tool_id == ROUTE_READINESS_TOOL_ID:
+        return "pretrip_user_team_inputs_required"
+    if tool_id == WEATHER_WINDOW_TOOL_ID:
+        return "fresh_or_reviewed_weather_required"
+    if tool_id == LIVE_NAVIGATION_STATE_TOOL_ID:
+        return "live_navigation_state_required"
+    if tool_id == ENERGY_VITALS_TOOL_ID:
+        return "wearable_or_energy_vitals_required"
+    if tool_id == POST_TRIP_REVIEW_TOOL_ID:
+        return "post_trip_feedback_required"
+    if tool_id == MEDIA_LITERACY_TOOL_ID:
+        return "media_claim_and_target_context_required"
+    if tool_id in {SAFETY_BOUNDARY_TOOL_ID, RUNTIME_INGRESS_STATUS_TOOL_ID}:
+        return "runtime_review_trace_required"
+    if tool_id in {PACE_GUARDIAN_TOOL_ID, EQUIPMENT_RESOURCE_TOOL_ID, TEAM_STATUS_TOOL_ID}:
+        return "team_or_resource_context_required"
+    if tool_id == SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID:
+        return "incident_context_required"
+    if missing_fields:
+        return "context_or_review_evidence_required"
+    return "unknown_evidence_gap"
+
+
+def _standard_missing_evidence_next_slice(classification: str) -> str:
+    return {
+        "implementation_gap": "補工具實作、executor 或 contract，完成後再納入標準總覽。",
+        "pretrip_user_team_inputs_required": "補 route/date/team/experience/goal/transport 的出發前輸入 bundle。",
+        "fresh_or_reviewed_weather_required": "接入新鮮且已審核的 route_weather_package，不用 placeholder 授權。",
+        "live_navigation_state_required": "接 live navigation snapshot，但保持 candidate-only 與 runtime safety truth 分離。",
+        "wearable_or_energy_vitals_required": "接使用者同意的體能/能量資料，缺資料時維持保守判斷。",
+        "post_trip_feedback_required": "接行後 timeline、難度、裝備、near miss 與回饋，產出 reviewable update package。",
+        "media_claim_and_target_context_required": "把社群內容、目標點與天氣/日照人工審核一起送入媒體識讀決策。",
+        "runtime_review_trace_required": "補 runtime ingress 或 safety boundary trace，只做審核證據，不改 safety truth。",
+        "team_or_resource_context_required": "補最慢者、隊伍位置、通訊、裝備、水食與集合點資料。",
+        "incident_context_required": "補位置、隊伍、通訊與事件情境，必要時升級 ESCALATE。",
+    }.get(classification, "補足該工具缺少的具體情境 evidence 後重跑標準檢視。")
+
+
+def _standard_gap_classification_summary(audit: dict[str, Any]) -> str:
+    summary = audit.get("summary")
+    summary = summary if isinstance(summary, dict) else {}
+    implementation_gap_count = int(summary.get("implementationGapToolCount") or 0)
+    context_gap_count = int(summary.get("contextOrReviewEvidenceGapToolCount") or 0)
+    ui_needed = bool(summary.get("uiUxValidationNeeded"))
+    parts = [
+        f"implementation gap={implementation_gap_count}",
+        f"情境輸入/審核 evidence gap={context_gap_count}",
+    ]
+    if ui_needed:
+        parts.append("UI/UX 端到端驗收仍需證明產品北極星與文案進入實際流程")
+    return "；".join(parts)
 
 
 def _looks_like_standard_gap_overview_question(question: str) -> bool:
