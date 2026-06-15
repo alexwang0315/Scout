@@ -10,6 +10,8 @@ from pretrip_contextual_permission_collection import CONTEXTUAL_PERMISSION_RULES
 from pretrip_pace_fit_collection import TEAM_PACE_FIT_REF
 from pretrip_route_architecture_collection import ROUTE_ARCHITECTURE_REF
 from pretrip_route_context_collection import (
+    ROUTE_CONTEXT_BRIEFING_REF,
+    ROUTE_CONTEXT_CRAWL_SEED_PLAN_REF,
     ROUTE_CONTEXT_PACK_REF,
     ROUTE_CONTEXT_POINTS_REF,
 )
@@ -419,6 +421,8 @@ def test_scout_pretrip_route_context_collect_facade(tmp_path: Path) -> None:
             str(project_root),
             "--limit-route-notes",
             "8",
+            "--route-keyword",
+            "奇萊-南華",
             "--dry-run",
             "--json",
         ]
@@ -436,6 +440,8 @@ def test_scout_pretrip_route_context_collect_facade(tmp_path: Path) -> None:
             str(project_root),
             "--limit-route-notes",
             "8",
+            "--route-keyword",
+            "奇萊-南華",
             "--authorized-by",
             "operator.alex",
             "--json",
@@ -446,7 +452,10 @@ def test_scout_pretrip_route_context_collect_facade(tmp_path: Path) -> None:
     output = json.loads(payload["outputs"]["stdout"])
     assert output["artifact_kind"] == "scout_pretrip_route_context_collect_tool_output"
     assert output["result"]["writes_performed"] is True
+    assert output["result"]["crawl_seed_count"] > output["result"]["route_context_point_count"]
     assert (project_root / ROUTE_CONTEXT_PACK_REF).is_file()
+    assert (project_root / ROUTE_CONTEXT_CRAWL_SEED_PLAN_REF).is_file()
+    assert (project_root / ROUTE_CONTEXT_BRIEFING_REF).is_file()
     assert (project_root / ROUTE_CONTEXT_POINTS_REF).is_file()
 
 

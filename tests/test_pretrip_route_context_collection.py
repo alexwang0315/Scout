@@ -6,6 +6,8 @@ from pathlib import Path
 
 from pretrip_artifact_manifest import build_pretrip_artifact_manifest
 from pretrip_route_context_collection import (
+    ROUTE_CONTEXT_BRIEFING_REF,
+    ROUTE_CONTEXT_CRAWL_SEED_PLAN_REF,
     ROUTE_CONTEXT_EVIDENCE_REF,
     ROUTE_CONTEXT_PACK_REF,
     ROUTE_CONTEXT_POINTS_REF,
@@ -33,13 +35,17 @@ def test_route_context_collection_dry_run_uses_sec6_sources_without_writes() -> 
     assert result["status"] == "completed"
     assert result["dry_run"] is True
     assert result["writes_performed"] is False
-    assert result["route_context_point_count"] >= 15
+    assert result["route_context_point_count"] >= 6
+    assert result["crawl_seed_count"] > result["route_context_point_count"]
+    assert "route_note_candidate" not in result["counts"]["by_evidence_type"]
     assert result["boundary"]["candidate_only"] is True
     assert result["boundary"]["runtime_safety_truth"] is False
     assert result["boundary"]["phase1_runtime_mutation_allowed"] is False
     assert result["outputs"]["route_context_evidence_ref"] == ROUTE_CONTEXT_EVIDENCE_REF
     assert result["outputs"]["route_context_source_manifest_ref"] == ROUTE_CONTEXT_SOURCE_MANIFEST_REF
     assert result["outputs"]["route_context_pack_ref"] == ROUTE_CONTEXT_PACK_REF
+    assert result["outputs"]["route_context_crawl_seed_plan_ref"] == ROUTE_CONTEXT_CRAWL_SEED_PLAN_REF
+    assert result["outputs"]["route_context_briefing_ref"] == ROUTE_CONTEXT_BRIEFING_REF
     assert result["outputs"]["route_context_points_ref"] == ROUTE_CONTEXT_POINTS_REF
 
     source_status = {
@@ -67,36 +73,56 @@ def test_route_context_collection_writes_workspace_layout_outputs(tmp_path: Path
     evidence_path = project_root / ROUTE_CONTEXT_EVIDENCE_REF
     source_manifest_path = project_root / ROUTE_CONTEXT_SOURCE_MANIFEST_REF
     pack_path = project_root / ROUTE_CONTEXT_PACK_REF
+    crawl_seed_plan_path = project_root / ROUTE_CONTEXT_CRAWL_SEED_PLAN_REF
+    briefing_path = project_root / ROUTE_CONTEXT_BRIEFING_REF
     points_path = project_root / ROUTE_CONTEXT_POINTS_REF
     assert evidence_path.is_file()
     assert source_manifest_path.is_file()
     assert pack_path.is_file()
+    assert crawl_seed_plan_path.is_file()
+    assert briefing_path.is_file()
     assert points_path.is_file()
 
     evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
     source_manifest = json.loads(source_manifest_path.read_text(encoding="utf-8"))
     pack = json.loads(pack_path.read_text(encoding="utf-8"))
+    crawl_seed_plan = json.loads(crawl_seed_plan_path.read_text(encoding="utf-8"))
+    briefing = briefing_path.read_text(encoding="utf-8")
     points = json.loads(points_path.read_text(encoding="utf-8"))
     project = json.loads((project_root / "project.json").read_text(encoding="utf-8"))
     labels = {point["display_label"] for point in points["points"]}
     assert evidence["artifact_kind"] == "pretrip_route_context_evidence"
     assert source_manifest["artifact_kind"] == "pretrip_route_context_source_manifest"
     assert pack["artifact_kind"] == "pretrip_route_context_pack"
+    assert crawl_seed_plan["artifact_kind"] == "pretrip_route_context_crawl_seed_plan"
     assert points["artifact_kind"] == "pretrip_route_context_points"
     assert evidence["route_context_points_ref"] == ROUTE_CONTEXT_POINTS_REF
     assert evidence["source_manifest_ref"] == ROUTE_CONTEXT_SOURCE_MANIFEST_REF
     assert evidence["route_context_pack_ref"] == ROUTE_CONTEXT_PACK_REF
+    assert evidence["crawl_seed_plan_ref"] == ROUTE_CONTEXT_CRAWL_SEED_PLAN_REF
     assert pack["source_manifest_ref"] == ROUTE_CONTEXT_SOURCE_MANIFEST_REF
     assert pack["route_context_points_ref"] == ROUTE_CONTEXT_POINTS_REF
+    assert pack["crawl_seed_plan_ref"] == ROUTE_CONTEXT_CRAWL_SEED_PLAN_REF
     assert pack["route_summary"]["raw_route_points_embedded"] is False
+    assert crawl_seed_plan["route_note_seed_policy"]["route_notes_are_conclusion"] is False
+    assert crawl_seed_plan["route_note_seed_policy"]["route_notes_are_seed_material"] is True
+    assert crawl_seed_plan["route_note_seed_count"] > 0
+    assert "奇萊-南華" in crawl_seed_plan["route_keywords"]
+    assert all("每日記錄" not in keyword for keyword in crawl_seed_plan["route_keywords"])
+    assert "Scout Route Context Briefing" in briefing
+    assert "Route notes are treated as seed material" in briefing
     assert source_manifest["cache_policy"]["live_fetch_performed"] is False
     assert project["route_context_evidence_ref"] == ROUTE_CONTEXT_EVIDENCE_REF
     assert project["route_context_source_manifest_ref"] == ROUTE_CONTEXT_SOURCE_MANIFEST_REF
     assert project["route_context_pack_ref"] == ROUTE_CONTEXT_PACK_REF
+    assert project["route_context_crawl_seed_plan_ref"] == ROUTE_CONTEXT_CRAWL_SEED_PLAN_REF
+    assert project["route_context_briefing_ref"] == ROUTE_CONTEXT_BRIEFING_REF
     assert project["route_context_points_ref"] == ROUTE_CONTEXT_POINTS_REF
     assert project["route_context_point_count"] == points["point_count"]
+    assert project["route_context_crawl_seed_count"] == crawl_seed_plan["seed_count"]
     assert project["route_context_collection_schema_version"] == "route_context_collection.v1"
     assert points["boundary"]["runtime_safety_truth"] is False
+    assert "route_note_candidate" not in points["counts"]["by_evidence_type"]
     assert "黑水塘" in labels
     assert "大崩壁" in labels
     assert "雲海保線所" in labels
@@ -123,6 +149,8 @@ def test_route_context_collection_writes_workspace_layout_outputs(tmp_path: Path
     assert by_kind["route_context_evidence"]["route_context_point_count"] == points["point_count"]
     assert by_kind["route_context_source_manifest"]["live_fetch_performed"] is False
     assert by_kind["route_context_pack"]["query_mode"] == "cache_first_tool_second"
+    assert by_kind["route_context_crawl_seed_plan"]["route_notes_are_conclusion"] is False
+    assert by_kind["route_context_briefing"]["content_type"] == "text/html"
     assert by_kind["route_context_points"]["point_count"] == points["point_count"]
 
     verifier_errors: list[str] = []
@@ -134,6 +162,9 @@ def test_route_context_collection_writes_workspace_layout_outputs(tmp_path: Path
     assert verifier_errors == []
     assert route_context_summary["available"] is True
     assert route_context_summary["point_count"] == points["point_count"]
+    assert route_context_summary["crawl_seed_count"] == crawl_seed_plan["seed_count"]
+    assert route_context_summary["route_note_seed_count"] == crawl_seed_plan["route_note_seed_count"]
+    assert route_context_summary["briefing_available"] is True
     assert route_context_summary["live_fetch_performed"] is False
     assert route_context_summary["runtime_safety_truth"] is False
 
@@ -147,6 +178,7 @@ def test_builtin_route_context_collect_tool_runs_with_authorization(tmp_path: Pa
             {
                 "project_root": str(project_root),
                 "limit_route_notes": 10,
+                "route_keyword": "奇萊-南華",
                 "collected_at": "2026-06-15T00:00:00Z",
             },
             ensure_ascii=False,
@@ -195,6 +227,8 @@ def test_builtin_route_context_collect_tool_runs_with_authorization(tmp_path: Pa
     assert (project_root / ROUTE_CONTEXT_EVIDENCE_REF).is_file()
     assert (project_root / ROUTE_CONTEXT_SOURCE_MANIFEST_REF).is_file()
     assert (project_root / ROUTE_CONTEXT_PACK_REF).is_file()
+    assert (project_root / ROUTE_CONTEXT_CRAWL_SEED_PLAN_REF).is_file()
+    assert (project_root / ROUTE_CONTEXT_BRIEFING_REF).is_file()
     assert (project_root / ROUTE_CONTEXT_POINTS_REF).is_file()
 
 
@@ -250,6 +284,7 @@ def test_route_context_collection_marks_sensitive_cultural_points(tmp_path: Path
         project_root,
         dry_run=False,
         limit_route_notes=120,
+        route_note_point_policy="promote_representative",
         collected_at="2026-06-15T00:00:00Z",
     )
 

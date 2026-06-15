@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import html
 import json
 import re
 from datetime import datetime, timezone
@@ -14,12 +15,18 @@ ROUTE_CONTEXT_EVIDENCE_ARTIFACT_KIND = "pretrip_route_context_evidence"
 ROUTE_CONTEXT_POINTS_ARTIFACT_KIND = "pretrip_route_context_points"
 ROUTE_CONTEXT_SOURCE_MANIFEST_ARTIFACT_KIND = "pretrip_route_context_source_manifest"
 ROUTE_CONTEXT_PACK_ARTIFACT_KIND = "pretrip_route_context_pack"
+ROUTE_CONTEXT_CRAWL_SEED_PLAN_ARTIFACT_KIND = "pretrip_route_context_crawl_seed_plan"
+ROUTE_CONTEXT_BRIEFING_ARTIFACT_KIND = "pretrip_route_context_briefing"
 ROUTE_CONTEXT_EVIDENCE_REF = "normalized/context/route_context/route_context_evidence.json"
 ROUTE_CONTEXT_SOURCE_MANIFEST_REF = "normalized/context/route_context/source_manifest.json"
 ROUTE_CONTEXT_PACK_REF = "normalized/context/route_context/route_context_pack.json"
+ROUTE_CONTEXT_CRAWL_SEED_PLAN_REF = "normalized/context/route_context/crawl_seed_plan.json"
+ROUTE_CONTEXT_BRIEFING_REF = "outputs/briefings/route_context_briefing.html"
 ROUTE_CONTEXT_POINTS_REF = "candidates/route_context_points.json"
 ROUTE_CONTEXT_SCHEMA_VERSION = "route_context_collection.v1"
 DEFAULT_ROUTE_NOTE_LIMIT = 80
+DEFAULT_ROUTE_NOTE_SEED_LIMIT = 60
+DEFAULT_ROUTE_NOTE_POINT_POLICY = "seed_only"
 
 
 SEC6_ALIGNMENT = {
@@ -30,6 +37,8 @@ SEC6_ALIGNMENT = {
         "normalized/context/route_context/*.json",
         ROUTE_CONTEXT_PACK_REF,
         ROUTE_CONTEXT_SOURCE_MANIFEST_REF,
+        ROUTE_CONTEXT_CRAWL_SEED_PLAN_REF,
+        ROUTE_CONTEXT_BRIEFING_REF,
         ROUTE_CONTEXT_POINTS_REF,
         "outputs/mcp/named_point_evidence.json",
         "outputs/layers/normalized/web_case_evidence.json",
@@ -38,46 +47,96 @@ SEC6_ALIGNMENT = {
 }
 
 
+SOURCE_TIER_CATALOG: tuple[dict[str, str], ...] = (
+    {"tier": "P0", "source_id": "forest_trail_data", "label": "林業及自然保育署自然步道資料", "role": "official_baseline"},
+    {"tier": "P0", "source_id": "taiwan_mountain_forest_open_data", "label": "台灣山林悠遊網開放資料", "role": "official_baseline"},
+    {"tier": "P0", "source_id": "mountain_permit_service", "label": "臺灣登山申請一站式服務網", "role": "official_baseline"},
+    {"tier": "P0", "source_id": "national_park_route_status", "label": "國家公園路線開放狀態", "role": "official_status"},
+    {"tier": "P0", "source_id": "nlsc_dem_dtm_topomap", "label": "內政部國土測繪中心 DEM / DTM / 地形圖", "role": "terrain_baseline"},
+    {"tier": "P0", "source_id": "cwa_codis_open_data", "label": "中央氣象署 CODiS / 開放資料", "role": "weather_baseline"},
+    {"tier": "P0", "source_id": "ncdr_disaster_potential", "label": "NCDR 災害潛勢資料", "role": "hazard_baseline"},
+    {"tier": "P0", "source_id": "nfa_mountain_rescue_cases", "label": "消防署山域事故救援案件", "role": "incident_baseline"},
+    {"tier": "P0", "source_id": "tbn_biodiversity", "label": "TBN 台灣生物多樣性網絡", "role": "natural_baseline"},
+    {"tier": "P0", "source_id": "as_taiwan_century_maps", "label": "中研院臺灣百年歷史地圖", "role": "historical_map_baseline"},
+    {"tier": "P1", "source_id": "national_culture_memory_bank", "label": "國家文化記憶庫", "role": "cultural_expansion"},
+    {"tier": "P1", "source_id": "taiwan_memory", "label": "臺灣記憶", "role": "historical_expansion"},
+    {"tier": "P1", "source_id": "indigenous_trail_spatial_info", "label": "原住民族古道空間資訊網", "role": "cultural_spatial_expansion"},
+    {"tier": "P1", "source_id": "geology_cloud", "label": "地質雲", "role": "geology_expansion"},
+    {"tier": "P1", "source_id": "osm_overpass_history", "label": "OpenStreetMap / Overpass / OSM full-history", "role": "map_expansion"},
+    {"tier": "P1", "source_id": "rudymap", "label": "魯地圖", "role": "map_expansion"},
+    {"tier": "P1", "source_id": "map_generator_hiker_gpx", "label": "地圖產生器 / 山友 GPX", "role": "community_route_seed"},
+    {"tier": "P1", "source_id": "hiking_biji", "label": "健行筆記", "role": "community_article_evidence"},
+    {"tier": "P1", "source_id": "hikingbook", "label": "Hikingbook", "role": "community_route_evidence"},
+    {"tier": "P1", "source_id": "mountain_news_bbs", "label": "登山補給站", "role": "community_article_evidence"},
+    {"tier": "P2", "source_id": "user_completed_gpx", "label": "使用者實際 GPX", "role": "scout_owned_observation"},
+    {"tier": "P2", "source_id": "off_route_records", "label": "偏航紀錄", "role": "scout_owned_observation"},
+    {"tier": "P2", "source_id": "stay_points", "label": "停留點", "role": "scout_owned_observation"},
+    {"tier": "P2", "source_id": "photo_points", "label": "拍照點", "role": "scout_owned_observation"},
+    {"tier": "P2", "source_id": "voice_notes", "label": "語音註記", "role": "scout_owned_observation"},
+    {"tier": "P2", "source_id": "imu_anomalies", "label": "IMU 異常", "role": "scout_owned_observation"},
+    {"tier": "P2", "source_id": "barometric_altitude_changes", "label": "氣壓高度變化", "role": "scout_owned_observation"},
+    {"tier": "P2", "source_id": "front_rear_distance", "label": "前鋒/後衛距離", "role": "scout_owned_team_context"},
+    {"tier": "P2", "source_id": "team_stretch_records", "label": "隊伍拉長紀錄", "role": "scout_owned_team_context"},
+    {"tier": "P2", "source_id": "user_worth_stop_feedback", "label": "使用者回報「值得停」或「不值得停」", "role": "scout_owned_review_feedback"},
+)
+
+
 SOURCE_DEFAULTS: dict[str, dict[str, Any]] = {
     "mcp_candidates": {
         "project_ref_key": "mcp_candidates_ref",
         "default_ref": "outputs/mcp/mcp_candidates.json",
         "required_by_standard_sec6": True,
+        "source_tier": "P1",
+        "conclusion_role": "representative_candidate",
     },
     "named_point_evidence": {
         "project_ref_key": "mcp_named_point_evidence_ref",
         "default_ref": "outputs/mcp/named_point_evidence.json",
         "required_by_standard_sec6": True,
+        "source_tier": "P1",
+        "conclusion_role": "representative_candidate",
     },
     "route_note_candidates": {
         "project_ref_key": "route_note_candidates_ref",
         "default_ref": "candidates/route_note_candidates.json",
         "required_by_standard_sec6": False,
+        "source_tier": "P2",
+        "conclusion_role": "seed_only",
     },
     "ocr_label_evidence": {
         "project_ref_key": "mcp_ocr_labels_ref",
         "default_ref": "outputs/mcp/mcp_ocr_labels.json",
         "required_by_standard_sec6": False,
+        "source_tier": "P1",
+        "conclusion_role": "representative_candidate_after_review",
     },
     "web_case_evidence": {
         "project_ref_key": "web_case_evidence_ref",
         "default_ref": "outputs/layers/normalized/web_case_evidence.json",
         "required_by_standard_sec6": False,
+        "source_tier": "P1",
+        "conclusion_role": "primary_briefing_evidence",
     },
     "raster_label_evidence": {
         "project_ref_key": "raster_label_evidence_ref",
         "default_ref": "outputs/layers/normalized/raster_label_evidence.geojson",
         "required_by_standard_sec6": False,
+        "source_tier": "P1",
+        "conclusion_role": "representative_candidate_after_review",
     },
     "import_manifest": {
         "project_ref_key": "import_manifest_ref",
         "default_ref": "outputs/import_manifest.json",
         "required_by_standard_sec6": False,
+        "source_tier": "P2",
+        "conclusion_role": "provenance_only",
     },
     "route_summary": {
         "project_ref_key": "route_summary_ref",
         "default_ref": "normalized/routes/route_summary.json",
         "required_by_standard_sec6": False,
+        "source_tier": "P2",
+        "conclusion_role": "route_scope",
     },
 }
 
@@ -88,6 +147,9 @@ def collect_pretrip_route_context(
     dry_run: bool = False,
     include_route_notes: bool = True,
     limit_route_notes: int = DEFAULT_ROUTE_NOTE_LIMIT,
+    route_note_point_policy: str = DEFAULT_ROUTE_NOTE_POINT_POLICY,
+    route_keyword: str | None = None,
+    write_briefing: bool = True,
     collected_at: str | None = None,
 ) -> dict[str, Any]:
     """Collect Sec. 6 route-context evidence after GPX import.
@@ -101,6 +163,11 @@ def collect_pretrip_route_context(
     project = _load_json_object(root / "project.json")
     project_id = str(project.get("project_id") or project.get("id") or root.name)
     collected_at = collected_at or _utc_now()
+    route_note_point_policy = str(
+        route_note_point_policy or DEFAULT_ROUTE_NOTE_POINT_POLICY
+    ).strip()
+    if route_note_point_policy not in {"seed_only", "promote_representative"}:
+        route_note_point_policy = DEFAULT_ROUTE_NOTE_POINT_POLICY
     route_bbox = _route_bbox(root, project)
 
     source_report: list[dict[str, Any]] = []
@@ -128,14 +195,15 @@ def collect_pretrip_route_context(
         source_report,
     )
     if include_route_notes:
-        points.extend(
-            _points_from_route_notes(
-                route_note_payload,
-                route_note_ref,
-                route_bbox=route_bbox,
-                limit=max(0, int(limit_route_notes)),
+        if route_note_point_policy != "seed_only":
+            points.extend(
+                _points_from_route_notes(
+                    route_note_payload,
+                    route_note_ref,
+                    route_bbox=route_bbox,
+                    limit=max(0, int(limit_route_notes)),
+                )
             )
-        )
 
     import_manifest_payload, import_manifest_ref, _ = _load_source(
         root,
@@ -160,8 +228,23 @@ def collect_pretrip_route_context(
     context_pack_ref = str(
         project.get("route_context_pack_ref") or ROUTE_CONTEXT_PACK_REF
     )
+    crawl_seed_plan_ref = str(
+        project.get("route_context_crawl_seed_plan_ref")
+        or ROUTE_CONTEXT_CRAWL_SEED_PLAN_REF
+    )
+    briefing_ref = str(
+        project.get("route_context_briefing_ref") or ROUTE_CONTEXT_BRIEFING_REF
+    )
     points_ref = str(project.get("route_context_points_ref") or ROUTE_CONTEXT_POINTS_REF)
-    planned_writes = [evidence_ref, source_manifest_ref, context_pack_ref, points_ref]
+    planned_writes = [
+        evidence_ref,
+        source_manifest_ref,
+        context_pack_ref,
+        crawl_seed_plan_ref,
+        points_ref,
+    ]
+    if write_briefing:
+        planned_writes.append(briefing_ref)
 
     boundary = _closed_boundary(
         candidate_only=True,
@@ -180,12 +263,33 @@ def collect_pretrip_route_context(
         "points": points,
         "boundary": boundary,
     }
+    route_keywords = _route_keywords(
+        project_id=project_id,
+        route_keyword=route_keyword,
+        route_summary=route_summary_payload,
+    )
+    crawl_seed_plan_payload = _build_crawl_seed_plan(
+        project_id=project_id,
+        generated_at=collected_at,
+        route_keywords=route_keywords,
+        route_note_payload=route_note_payload,
+        route_note_ref=route_note_ref,
+        route_bbox=route_bbox,
+        include_route_notes=include_route_notes,
+        route_note_point_policy=route_note_point_policy,
+        limit=DEFAULT_ROUTE_NOTE_SEED_LIMIT,
+        boundary=boundary,
+    )
     source_manifest_payload = {
         "artifact_kind": ROUTE_CONTEXT_SOURCE_MANIFEST_ARTIFACT_KIND,
         "schema_version": ROUTE_CONTEXT_SCHEMA_VERSION,
         "project_id": project_id,
         "generated_at": collected_at,
         "source_report": source_report,
+        "source_tiers": _source_tier_catalog(),
+        "source_strategy": _source_strategy(),
+        "crawl_seed_plan_ref": crawl_seed_plan_ref,
+        "route_context_briefing_ref": briefing_ref if write_briefing else None,
         "required_missing_source_kinds": [
             source["source_kind"]
             for source in source_report
@@ -220,6 +324,8 @@ def collect_pretrip_route_context(
         "route_context_evidence_ref": evidence_ref,
         "source_manifest_ref": source_manifest_ref,
         "route_context_points_ref": points_ref,
+        "crawl_seed_plan_ref": crawl_seed_plan_ref,
+        "route_context_briefing_ref": briefing_ref if write_briefing else None,
         "point_count": len(points),
         "counts": counts,
         "query_policy": {
@@ -233,6 +339,8 @@ def collect_pretrip_route_context(
         },
         "sensitivity_policy": _sensitivity_policy(),
         "observation_scoring_policy": _observation_scoring_policy(),
+        "source_strategy": _source_strategy(),
+        "route_note_point_policy": route_note_point_policy,
         "boundary": boundary,
     }
     evidence_payload = {
@@ -247,17 +355,32 @@ def collect_pretrip_route_context(
         "route_context_points_ref": points_ref,
         "source_manifest_ref": source_manifest_ref,
         "route_context_pack_ref": context_pack_ref,
+        "crawl_seed_plan_ref": crawl_seed_plan_ref,
+        "route_context_briefing_ref": briefing_ref if write_briefing else None,
         "import_manifest_ref": import_manifest_ref,
         "import_manifest_summary": _import_manifest_summary(import_manifest_payload),
         "project_update_suggestions": {
             "route_context_evidence_ref": evidence_ref,
             "route_context_source_manifest_ref": source_manifest_ref,
             "route_context_pack_ref": context_pack_ref,
+            "route_context_crawl_seed_plan_ref": crawl_seed_plan_ref,
+            "route_context_briefing_ref": briefing_ref if write_briefing else None,
             "route_context_points_ref": points_ref,
             "route_context_point_count": len(points),
         },
         "boundary": boundary,
     }
+    briefing_html = _build_briefing_html(
+        project_id=project_id,
+        generated_at=collected_at,
+        route_keywords=route_keywords,
+        route_summary=_route_summary_for_pack(route_summary_payload),
+        points=points,
+        counts=counts,
+        source_manifest=source_manifest_payload,
+        crawl_seed_plan=crawl_seed_plan_payload,
+        boundary=boundary,
+    )
     collection_payload = {
         "artifact_kind": ROUTE_CONTEXT_COLLECTION_ARTIFACT_KIND,
         "status": "completed",
@@ -266,12 +389,15 @@ def collect_pretrip_route_context(
         "writes_performed": False,
         "planned_refs": planned_writes,
         "route_context_point_count": len(points),
+        "crawl_seed_count": crawl_seed_plan_payload["seed_count"],
         "counts": counts,
         "source_report": source_report,
         "outputs": {
             "route_context_evidence_ref": evidence_ref,
             "route_context_source_manifest_ref": source_manifest_ref,
             "route_context_pack_ref": context_pack_ref,
+            "route_context_crawl_seed_plan_ref": crawl_seed_plan_ref,
+            "route_context_briefing_ref": briefing_ref if write_briefing else None,
             "route_context_points_ref": points_ref,
         },
         "standard_alignment": SEC6_ALIGNMENT,
@@ -282,7 +408,10 @@ def collect_pretrip_route_context(
         _write_json(root / evidence_ref, evidence_payload)
         _write_json(root / source_manifest_ref, source_manifest_payload)
         _write_json(root / context_pack_ref, context_pack_payload)
+        _write_json(root / crawl_seed_plan_ref, crawl_seed_plan_payload)
         _write_json(root / points_ref, points_payload)
+        if write_briefing:
+            _write_text(root / briefing_ref, briefing_html)
         _update_project_refs(
             root / "project.json",
             project,
@@ -290,8 +419,11 @@ def collect_pretrip_route_context(
                 "route_context_evidence_ref": evidence_ref,
                 "route_context_source_manifest_ref": source_manifest_ref,
                 "route_context_pack_ref": context_pack_ref,
+                "route_context_crawl_seed_plan_ref": crawl_seed_plan_ref,
+                "route_context_briefing_ref": briefing_ref if write_briefing else None,
                 "route_context_points_ref": points_ref,
                 "route_context_point_count": len(points),
+                "route_context_crawl_seed_count": crawl_seed_plan_payload["seed_count"],
                 "route_context_collection_updated_at": collected_at,
                 "route_context_collection_schema_version": ROUTE_CONTEXT_SCHEMA_VERSION,
             },
@@ -597,6 +729,8 @@ def _base_point(
         "context_kind": context_kind,
         "sec6_layers": sec6_layers,
         "evidence_families": evidence_families,
+        "source_tier": _source_tier_for(source_kind),
+        "promotion_basis": _promotion_basis_for(source_kind),
         "sensitivity_level": sensitivity,
         "display_policy": _display_policy(sensitivity),
         "source_freshness": _source_freshness(source_kind, text_fields),
@@ -783,6 +917,16 @@ def _source_freshness(source_kind: str, values: list[Any]) -> dict[str, Any]:
     }
 
 
+def _source_tier_for(source_kind: str) -> str:
+    spec = SOURCE_DEFAULTS.get(source_kind, {})
+    return str(spec.get("source_tier") or "unknown")
+
+
+def _promotion_basis_for(source_kind: str) -> str:
+    spec = SOURCE_DEFAULTS.get(source_kind, {})
+    return str(spec.get("conclusion_role") or "candidate_evidence")
+
+
 def _source_freshness_from_raw_stale_risk(
     stale_risk: Any,
     *,
@@ -899,6 +1043,8 @@ def _load_source(
             "source_path": ref,
             "loaded_count": count,
             "required_by_standard_sec6": bool(spec["required_by_standard_sec6"]),
+            "source_tier": spec.get("source_tier"),
+            "conclusion_role": spec.get("conclusion_role"),
             "sha256": _sha256(path) if path.exists() and path.is_file() else None,
             "candidate_only": True,
             "runtime_safety_truth": False,
@@ -1004,6 +1150,160 @@ def _route_note_rank(label: str, category: str) -> tuple[int, int, str]:
     return (priority, len(label), label)
 
 
+def _route_keywords(
+    *,
+    project_id: str,
+    route_keyword: str | None,
+    route_summary: dict[str, Any],
+) -> list[str]:
+    candidates = [
+        route_keyword,
+        "chilai_nanhua_day1" if project_id == "chilai_nanhua_day1" else project_id,
+        "奇萊-南華" if project_id == "chilai_nanhua_day1" else None,
+        "奇萊南華" if project_id == "chilai_nanhua_day1" else None,
+        "奇萊南峰 南華山" if project_id == "chilai_nanhua_day1" else None,
+        "奇萊南峰南華山" if project_id == "chilai_nanhua_day1" else None,
+        route_summary.get("route_name") if isinstance(route_summary, dict) else None,
+    ]
+    keywords: list[str] = []
+    seen: set[str] = set()
+    for value in candidates:
+        text = str(value or "").strip()
+        if not text or text in seen or not _is_thematic_route_keyword(text):
+            continue
+        seen.add(text)
+        keywords.append(text)
+    return keywords
+
+
+def _is_thematic_route_keyword(value: str) -> bool:
+    text = value.strip()
+    if not text:
+        return False
+    if re.fullmatch(r"\d{4}[-/]\d{1,2}[-/]\d{1,2}.*", text):
+        return False
+    if re.fullmatch(r"\d{1,2}:\d{2}(:\d{2})?", text):
+        return False
+    if text in {"每日記錄", "daily record", "track", "route"}:
+        return False
+    if "每日記錄" in text and re.search(r"\d{4}[-/]\d{1,2}[-/]\d{1,2}", text):
+        return False
+    return True
+
+
+def _build_crawl_seed_plan(
+    *,
+    project_id: str,
+    generated_at: str,
+    route_keywords: list[str],
+    route_note_payload: dict[str, Any],
+    route_note_ref: str,
+    route_bbox: dict[str, float] | None,
+    include_route_notes: bool,
+    route_note_point_policy: str,
+    limit: int,
+    boundary: dict[str, Any],
+) -> dict[str, Any]:
+    seeds: list[dict[str, Any]] = []
+    for index, keyword in enumerate(route_keywords, start=1):
+        seeds.append(
+            {
+                "seed_id": f"route_keyword.{index:03d}",
+                "seed_kind": "route_keyword",
+                "query": keyword,
+                "target_tiers": ["P0", "P1"],
+                "expected_output": "web_case_evidence_or_official_source_record",
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+            }
+        )
+
+    route_note_seeds = []
+    if include_route_notes:
+        route_note_seeds = _route_note_seed_records(
+            route_note_payload,
+            route_note_ref=route_note_ref,
+            route_keywords=route_keywords,
+            route_bbox=route_bbox,
+            limit=limit,
+        )
+        seeds.extend(route_note_seeds)
+
+    return {
+        "artifact_kind": ROUTE_CONTEXT_CRAWL_SEED_PLAN_ARTIFACT_KIND,
+        "schema_version": ROUTE_CONTEXT_SCHEMA_VERSION,
+        "project_id": project_id,
+        "generated_at": generated_at,
+        "route_keywords": route_keywords,
+        "source_tiers": _source_tier_catalog(),
+        "route_note_seed_policy": {
+            "route_notes_are_conclusion": False,
+            "route_notes_are_seed_material": True,
+            "route_note_point_policy": route_note_point_policy,
+            "default_policy": DEFAULT_ROUTE_NOTE_POINT_POLICY,
+            "required_before_briefing_conclusion": "P0/P1/P2 corroborating source evidence or human review",
+        },
+        "seed_count": len(seeds),
+        "route_note_seed_count": len(route_note_seeds),
+        "seeds": seeds,
+        "boundary": boundary,
+    }
+
+
+def _route_note_seed_records(
+    payload: dict[str, Any],
+    *,
+    route_note_ref: str,
+    route_keywords: list[str],
+    route_bbox: dict[str, float] | None,
+    limit: int,
+) -> list[dict[str, Any]]:
+    candidates = payload.get("candidates") if isinstance(payload, dict) else []
+    if not isinstance(candidates, list) or limit <= 0:
+        return []
+    primary_keyword = route_keywords[0] if route_keywords else ""
+    ranked: list[tuple[tuple[int, int, str], dict[str, Any]]] = []
+    for raw in candidates:
+        if not isinstance(raw, dict):
+            continue
+        label = _first_text(raw.get("normalized_note"), raw.get("name"), raw.get("candidate_id"))
+        category = str(raw.get("note_category") or "")
+        lat = _float_or_none(raw.get("lat"))
+        lon = _float_or_none(raw.get("lon"))
+        if not _is_meaningful_route_note(label, category):
+            continue
+        if route_bbox and lat is not None and lon is not None and not _within_bbox(
+            lat,
+            lon,
+            route_bbox,
+            padding_degrees=0.03,
+        ):
+            continue
+        ranked.append((_route_note_rank(label, category), raw))
+    ranked.sort(key=lambda item: item[0])
+
+    seeds: list[dict[str, Any]] = []
+    for index, (_, raw) in enumerate(ranked[:limit], start=1):
+        label = _first_text(raw.get("normalized_note"), raw.get("name"), raw.get("candidate_id"))
+        seeds.append(
+            {
+                "seed_id": f"route_note_seed.{index:03d}",
+                "seed_kind": "route_note",
+                "query": " ".join(part for part in (primary_keyword, label) if part),
+                "label": label,
+                "route_note_category": raw.get("note_category"),
+                "source_candidate_id": raw.get("candidate_id"),
+                "source_ref": route_note_ref,
+                "target_tiers": ["P0", "P1"],
+                "expected_output": "corroborating_article_or_official_record",
+                "promote_to_route_context_point": False,
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+            }
+        )
+    return seeds
+
+
 def _dedupe_points(points: list[dict[str, Any]]) -> list[dict[str, Any]]:
     seen: dict[tuple[str, str, float | None, float | None], int] = {}
     deduped = []
@@ -1087,6 +1387,7 @@ def _counts(points: list[dict[str, Any]]) -> dict[str, Any]:
     by_kind: dict[str, int] = {}
     by_source: dict[str, int] = {}
     by_family: dict[str, int] = {}
+    by_tier: dict[str, int] = {}
     by_sensitivity: dict[str, int] = {}
     by_stop_advisory: dict[str, int] = {}
     for point in points:
@@ -1100,6 +1401,10 @@ def _counts(points: list[dict[str, Any]]) -> dict[str, Any]:
         ) + 1
         by_source[str(point.get("evidence_type") or "unknown")] = by_source.get(
             str(point.get("evidence_type") or "unknown"),
+            0,
+        ) + 1
+        by_tier[str(point.get("source_tier") or "unknown")] = by_tier.get(
+            str(point.get("source_tier") or "unknown"),
             0,
         ) + 1
         by_sensitivity[str(point.get("sensitivity_level") or "unknown")] = (
@@ -1119,6 +1424,7 @@ def _counts(points: list[dict[str, Any]]) -> dict[str, Any]:
         "by_context_kind": dict(sorted(by_kind.items())),
         "by_evidence_type": dict(sorted(by_source.items())),
         "by_evidence_family": dict(sorted(by_family.items())),
+        "by_source_tier": dict(sorted(by_tier.items())),
         "by_sensitivity_level": dict(sorted(by_sensitivity.items())),
         "by_stop_advisory_candidate": dict(sorted(by_stop_advisory.items())),
         "candidate_only": True,
@@ -1139,6 +1445,125 @@ def _route_summary_for_pack(payload: dict[str, Any]) -> dict[str, Any]:
         "bbox_wgs84": bbox,
         "raw_route_points_embedded": False,
     }
+
+
+def _source_tier_catalog() -> list[dict[str, str]]:
+    return [dict(source) for source in SOURCE_TIER_CATALOG]
+
+
+def _source_strategy() -> dict[str, Any]:
+    return {
+        "P0": "Scout baseline sources. Use for official route, terrain, weather, hazard, rescue, biodiversity, and historical-map grounding.",
+        "P1": "Expansion sources. Use for public named points, route stories, OSM/Overpass, community articles, and map labels.",
+        "P2": "Scout-owned observations. Use as seeds and review feedback; do not promote to broad route context without corroboration.",
+        "route_note_policy": "route notes are crawler seeds by default, not briefing conclusions",
+        "briefing_conclusion_policy": "prefer P0/P1 crawler or official evidence; cite P2 only as Scout-owned observation or seed",
+    }
+
+
+def _build_briefing_html(
+    *,
+    project_id: str,
+    generated_at: str,
+    route_keywords: list[str],
+    route_summary: dict[str, Any],
+    points: list[dict[str, Any]],
+    counts: dict[str, Any],
+    source_manifest: dict[str, Any],
+    crawl_seed_plan: dict[str, Any],
+    boundary: dict[str, Any],
+) -> str:
+    title = f"Scout Route Context Briefing - {route_keywords[0] if route_keywords else project_id}"
+    representative_points = sorted(
+        points,
+        key=lambda point: (
+            -float((point.get("observation_score") or {}).get("value") or 0),
+            str(point.get("display_label") or ""),
+        ),
+    )
+    source_rows = "\n".join(
+        "<tr>"
+        f"<td>{_h(source.get('source_kind'))}</td>"
+        f"<td>{_h(source.get('source_tier'))}</td>"
+        f"<td>{_h(source.get('status'))}</td>"
+        f"<td>{_h(source.get('loaded_count'))}</td>"
+        f"<td>{_h(source.get('conclusion_role'))}</td>"
+        "</tr>"
+        for source in source_manifest.get("source_report", [])
+    )
+    point_cards = "\n".join(
+        "<article class=\"point\">"
+        f"<h3>{_h(point.get('display_label'))}</h3>"
+        f"<p>{_h(point.get('context_kind'))} · {_h(point.get('evidence_type'))} · {_h(point.get('source_tier'))}</p>"
+        f"<p>Layers: {_h(', '.join(_str_list(point.get('sec6_layers'))))}</p>"
+        f"<p>Observation score: {_h((point.get('observation_score') or {}).get('value'))}</p>"
+        "</article>"
+        for point in representative_points[:12]
+    )
+    seed_items = "\n".join(
+        f"<li>{_h(seed.get('query'))} <span>{_h(seed.get('seed_kind'))}</span></li>"
+        for seed in crawl_seed_plan.get("seeds", [])[:24]
+    )
+    tier_items = "\n".join(
+        f"<li><strong>{_h(source['tier'])}</strong> {_h(source['label'])} <span>{_h(source['role'])}</span></li>"
+        for source in SOURCE_TIER_CATALOG
+    )
+    route_distance = _float_or_none(route_summary.get("distance_m"))
+    route_distance_km = round(route_distance / 1000.0, 1) if route_distance else "unknown"
+    return f"""<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{_h(title)}</title>
+  <style>
+    body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 0; color: #17202a; background: #f7f8fa; }}
+    header, main {{ max-width: 1080px; margin: 0 auto; padding: 28px; }}
+    header {{ background: #ffffff; border-bottom: 1px solid #d8dee6; }}
+    h1 {{ margin: 0 0 8px; font-size: 28px; }}
+    h2 {{ margin-top: 28px; font-size: 20px; }}
+    .meta, .boundary {{ color: #526070; }}
+    .grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }}
+    .card, .point {{ background: #fff; border: 1px solid #d8dee6; border-radius: 8px; padding: 14px; }}
+    table {{ width: 100%; border-collapse: collapse; background: #fff; border: 1px solid #d8dee6; }}
+    th, td {{ text-align: left; padding: 9px; border-bottom: 1px solid #e6ebf0; font-size: 14px; }}
+    li {{ margin: 7px 0; }}
+    span {{ color: #687586; }}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>{_h(title)}</h1>
+    <p class="meta">Generated at {_h(generated_at)} · project {_h(project_id)} · route distance {_h(route_distance_km)} km</p>
+    <p class="boundary">Candidate-only pretrip evidence. Runtime safety truth: {_h(boundary.get('runtime_safety_truth'))}. Live safety API called: {_h(boundary.get('safety_api_called'))}.</p>
+  </header>
+  <main>
+    <section class="grid">
+      <div class="card"><strong>Route context points</strong><br>{_h(counts.get('route_context_point_count'))}</div>
+      <div class="card"><strong>Crawl seeds</strong><br>{_h(crawl_seed_plan.get('seed_count'))}</div>
+      <div class="card"><strong>Route-note seeds</strong><br>{_h(crawl_seed_plan.get('route_note_seed_count'))}</div>
+      <div class="card"><strong>Source tiers</strong><br>P0 / P1 / P2</div>
+    </section>
+    <h2>Representative Context Candidates</h2>
+    <section class="grid">{point_cards or '<p>No representative route context points yet.</p>'}</section>
+    <h2>Source Readiness</h2>
+    <table>
+      <thead><tr><th>Source</th><th>Tier</th><th>Status</th><th>Count</th><th>Role</th></tr></thead>
+      <tbody>{source_rows}</tbody>
+    </table>
+    <h2>Crawl Seed Plan</h2>
+    <p>Route notes are treated as seed material. Briefing conclusions should come from P0/P1 crawler outputs or reviewed Scout-owned P2 evidence.</p>
+    <ol>{seed_items}</ol>
+    <h2>Source Tier Catalog</h2>
+    <ul>{tier_items}</ul>
+  </main>
+</body>
+</html>
+"""
+
+
+def _h(value: Any) -> str:
+    return html.escape(str(value if value is not None else ""))
 
 
 def _sensitivity_policy() -> dict[str, Any]:
@@ -1330,6 +1755,13 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
     temp_path.replace(path)
 
 
+def _write_text(path: Path, payload: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = path.with_name(f".{path.name}.tmp")
+    temp_path.write_text(payload, encoding="utf-8")
+    temp_path.replace(path)
+
+
 def _update_project_refs(
     project_path: Path,
     project: dict[str, Any],
@@ -1370,6 +1802,13 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--include-route-notes", action="store_true", default=True)
     parser.add_argument("--no-route-notes", dest="include_route_notes", action="store_false")
     parser.add_argument("--limit-route-notes", type=int, default=DEFAULT_ROUTE_NOTE_LIMIT)
+    parser.add_argument(
+        "--route-note-point-policy",
+        choices=("seed_only", "promote_representative"),
+        default=DEFAULT_ROUTE_NOTE_POINT_POLICY,
+    )
+    parser.add_argument("--route-keyword", default=None)
+    parser.add_argument("--no-briefing", dest="write_briefing", action="store_false")
     parser.add_argument("--collected-at", default=None)
     parser.add_argument("--json", action="store_true")
     return parser
@@ -1382,6 +1821,9 @@ def main(argv: list[str] | None = None) -> int:
         dry_run=args.dry_run,
         include_route_notes=args.include_route_notes,
         limit_route_notes=args.limit_route_notes,
+        route_note_point_policy=args.route_note_point_policy,
+        route_keyword=args.route_keyword,
+        write_briefing=args.write_briefing,
         collected_at=args.collected_at,
     )
     print(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True))

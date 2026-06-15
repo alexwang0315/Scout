@@ -28,7 +28,8 @@
   ],
   "allowed_writes": [
     "pretrip.workspace.normalized.context.route_context",
-    "pretrip.workspace.candidates.route_context"
+    "pretrip.workspace.candidates.route_context",
+    "pretrip.workspace.outputs.briefings"
   ],
   "forbidden_writes": [
     "phase1.runtime",
@@ -46,6 +47,8 @@
     "standard_alignment": "SCOUT_OUTDOOR_AI_AGENT_STANDARD Sec. 6 Route Context Intelligence",
     "workspace_layout_section": "Outdoor AI Agent Data Placement",
     "network_policy": "no_live_network_fetch",
+    "route_note_policy": "seed_only_by_default",
+    "briefing_html": true,
     "candidate_only": true
   }
 }
