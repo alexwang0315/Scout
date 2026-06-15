@@ -23,57 +23,170 @@ DEFAULT_WEB_CASE_EVIDENCE_REF = "outputs/layers/normalized/web_case_evidence.jso
 DEFAULT_ROUTE_SCOPE_REF = "normalized/routes/route_evidence_bundle.json"
 
 
-DEFAULT_CHILAI_NANHUA_SOURCES: tuple[dict[str, str], ...] = (
+DEFAULT_P0_P1_SOURCE_CATALOG: tuple[dict[str, str], ...] = (
     {
-        "source_id": "forest_tianchi_open_20260613",
+        "catalog_id": "forest_nature_trail_data",
         "source_tier": "P0",
-        "source_family": "official_forest_notice",
-        "label": "天池山莊 2026-06-13 起開放公告",
-        "url": "https://tconline.forest.gov.tw/news/index.php?id=521&mode=data",
+        "source_family": "official_baseline",
+        "label": "林業及自然保育署自然步道資料",
+        "coverage_scope": "national",
+        "seed_role": "official trail baseline discovery",
     },
     {
-        "source_id": "forest_yuntiangong_difficulty_notice",
+        "catalog_id": "forest_recreation_open_data",
         "source_tier": "P0",
-        "source_family": "official_forest_notice",
-        "label": "雲天宮線難度提醒",
-        "url": "https://tconline.forest.gov.tw/news/index.php?id=505&mode=data",
+        "source_family": "official_baseline",
+        "label": "台灣山林悠遊網開放資料",
+        "coverage_scope": "national",
+        "seed_role": "official recreation open-data baseline discovery",
     },
     {
-        "source_id": "forest_recreation_nenggao_west_trail",
+        "catalog_id": "hike_taiwan_permit_portal",
         "source_tier": "P0",
-        "source_family": "official_trail_profile",
-        "label": "台灣山林悠遊網 能高越嶺道西段",
-        "url": "https://recreation.forest.gov.tw/Trail/RT?tr_id=064",
-    },
-    {
-        "source_id": "forest_tianchi_lodging_rules",
-        "source_tier": "P0",
-        "source_family": "official_lodging_rules",
-        "label": "天池山莊住宿申請須知",
-        "url": "https://tconline.forest.gov.tw/ifa/?parent_id=253",
-    },
-    {
-        "source_id": "hike_taiwan_permit_beds",
-        "source_tier": "P0",
-        "source_family": "official_permit_status",
+        "source_family": "official_baseline",
         "label": "臺灣登山申請一站式服務網",
-        "url": "https://hike.taiwan.gov.tw/bed_5.aspx",
+        "coverage_scope": "national",
+        "seed_role": "permit, bed quota and controlled-area baseline discovery",
     },
     {
-        "source_id": "hiking_biji_chilai_nanhua",
-        "source_tier": "P1",
-        "source_family": "community_route_profile",
-        "label": "健行筆記 奇萊南華",
-        "url": "https://hiking.biji.co/index.php?act=detail&id=430&q=trail",
+        "catalog_id": "national_park_route_status",
+        "source_tier": "P0",
+        "source_family": "official_status",
+        "label": "國家公園路線開放狀態",
+        "coverage_scope": "national_or_park_region",
+        "seed_role": "park trail access and route status discovery",
     },
     {
-        "source_id": "culture_memory_gb_babiao",
+        "catalog_id": "nlsc_dem_dtm_topographic_maps",
+        "source_tier": "P0",
+        "source_family": "terrain_baseline",
+        "label": "內政部國土測繪中心 DEM / DTM / 地形圖",
+        "coverage_scope": "national",
+        "seed_role": "terrain, DEM, DTM and topographic-map baseline discovery",
+    },
+    {
+        "catalog_id": "cwa_weather_open_data",
+        "source_tier": "P0",
+        "source_family": "weather_baseline",
+        "label": "中央氣象署 CODiS / 開放資料",
+        "coverage_scope": "national",
+        "seed_role": "weather station, rainfall, temperature and warning evidence discovery",
+    },
+    {
+        "catalog_id": "ncdr_disaster_potential",
+        "source_tier": "P0",
+        "source_family": "hazard_baseline",
+        "label": "NCDR 災害潛勢資料",
+        "coverage_scope": "national",
+        "seed_role": "hazard and disaster-potential evidence discovery",
+    },
+    {
+        "catalog_id": "nfa_mountain_rescue_cases",
+        "source_tier": "P0",
+        "source_family": "incident_baseline",
+        "label": "消防署山域事故救援案件",
+        "coverage_scope": "national",
+        "seed_role": "incident and rescue case evidence discovery",
+    },
+    {
+        "catalog_id": "tbn_biodiversity_network",
+        "source_tier": "P0",
+        "source_family": "natural_baseline",
+        "label": "TBN 台灣生物多樣性網絡",
+        "coverage_scope": "national",
+        "seed_role": "natural and ecological context baseline discovery",
+    },
+    {
+        "catalog_id": "as_taiwan_century_historical_maps",
+        "source_tier": "P0",
+        "source_family": "historical_map_baseline",
+        "label": "中研院臺灣百年歷史地圖",
+        "coverage_scope": "national",
+        "seed_role": "historical map and old-place context baseline discovery",
+    },
+    {
+        "catalog_id": "national_culture_memory",
         "source_tier": "P1",
-        "source_family": "culture_memory_place",
-        "label": "國家文化記憶庫 光被八表",
-        "url": "https://tcmb.culture.tw/zh-tw/detail?id=625957&indexCode=Culture_Place",
+        "source_family": "cultural_expansion",
+        "label": "國家文化記憶庫",
+        "coverage_scope": "national_or_regional",
+        "seed_role": "cultural route-context expansion",
+    },
+    {
+        "catalog_id": "taiwan_memory",
+        "source_tier": "P1",
+        "source_family": "historical_expansion",
+        "label": "臺灣記憶",
+        "coverage_scope": "national_or_regional",
+        "seed_role": "historical route-context expansion",
+    },
+    {
+        "catalog_id": "indigenous_historic_trail_spatial_info",
+        "source_tier": "P1",
+        "source_family": "cultural_spatial_expansion",
+        "label": "原住民族古道空間資訊網",
+        "coverage_scope": "national_or_regional",
+        "seed_role": "cultural spatial route-context expansion",
+    },
+    {
+        "catalog_id": "geology_cloud",
+        "source_tier": "P1",
+        "source_family": "geology_expansion",
+        "label": "地質雲",
+        "coverage_scope": "national",
+        "seed_role": "geology evidence expansion",
+    },
+    {
+        "catalog_id": "osm_overpass",
+        "source_tier": "P1",
+        "source_family": "map_expansion",
+        "label": "OpenStreetMap / Overpass / OSM full-history",
+        "coverage_scope": "global",
+        "seed_role": "named places, trail topology and human-made feature discovery",
+    },
+    {
+        "catalog_id": "rudymap",
+        "source_tier": "P1",
+        "source_family": "map_expansion",
+        "label": "魯地圖",
+        "coverage_scope": "taiwan_community",
+        "seed_role": "community map and named-place expansion",
+    },
+    {
+        "catalog_id": "map_generator_and_hiker_gpx",
+        "source_tier": "P1",
+        "source_family": "community_route_seed",
+        "label": "地圖產生器 / 山友 GPX",
+        "coverage_scope": "taiwan_community",
+        "seed_role": "community GPX and route-seed discovery",
+    },
+    {
+        "catalog_id": "hiking_biji",
+        "source_tier": "P1",
+        "source_family": "community_article_evidence",
+        "label": "健行筆記",
+        "coverage_scope": "taiwan_community",
+        "seed_role": "community article and named-point evidence discovery",
+    },
+    {
+        "catalog_id": "hikingbook",
+        "source_tier": "P1",
+        "source_family": "community_route_evidence",
+        "label": "Hikingbook",
+        "coverage_scope": "taiwan_community",
+        "seed_role": "community route evidence discovery",
+    },
+    {
+        "catalog_id": "mountain_notes",
+        "source_tier": "P1",
+        "source_family": "community_article_evidence",
+        "label": "登山補給站",
+        "coverage_scope": "taiwan_community",
+        "seed_role": "community article, trip report and caution-note evidence discovery",
     },
 )
+
+DEFAULT_CONCRETE_SOURCE_RECORDS: tuple[dict[str, str], ...] = ()
 
 
 FetchResult = dict[str, Any]
@@ -109,7 +222,7 @@ def collect_pretrip_p0_p1_sources(
     route_scope_ref = _route_scope_ref(project)
     keywords = route_keywords or _route_keywords_from_workspace(root, project, project_id)
     base_sources = (
-        [dict(source) for source in DEFAULT_CHILAI_NANHUA_SOURCES]
+        [dict(source) for source in DEFAULT_CONCRETE_SOURCE_RECORDS]
         if source_records is None
         else source_records
     )
@@ -184,11 +297,23 @@ def collect_pretrip_p0_p1_sources(
         "project_id": project_id,
         "source_id": f"{project_id}.p0_p1_source_query_plan",
         "source_path": query_plan_ref,
-        "status": "ready_for_explicit_fetch" if allow_network_fetch else "planned_no_network",
+        "status": _query_plan_status(allow_network_fetch, len(sources)),
         "route_scope_ref": route_scope_ref,
         "route_keywords": keywords,
+        "source_catalog": [dict(source) for source in DEFAULT_P0_P1_SOURCE_CATALOG],
+        "source_catalog_count": len(DEFAULT_P0_P1_SOURCE_CATALOG),
         "source_count": len(sources),
         "sources": sources,
+        "source_policy": {
+            "default_route_specific_sources": False,
+            "concrete_url_required_for_fetch": True,
+            "concrete_url_inputs": [
+                "source_list_html",
+                "source_url",
+                "future_search_adapter_output",
+            ],
+            "catalog_role": "search_scope_only",
+        },
         "network_policy": {
             "allow_network_fetch": allow_network_fetch,
             "explicit_fetch_required": True,
@@ -305,13 +430,43 @@ def _classify_url(url: str, *, label: str | None = None) -> dict[str, str]:
     family = "community_or_reference_source"
     if host.endswith("forest.gov.tw") or host.endswith("hike.taiwan.gov.tw"):
         tier = "P0"
-        family = "official_route_or_status_source"
+        family = "official_baseline"
+    elif "nps.gov.tw" in host:
+        tier = "P0"
+        family = "official_status"
+    elif "nlsc.gov.tw" in host:
+        tier = "P0"
+        family = "terrain_baseline"
+    elif "cwa.gov.tw" in host or "codis" in host:
+        tier = "P0"
+        family = "weather_baseline"
+    elif "ncdr" in host:
+        tier = "P0"
+        family = "hazard_baseline"
+    elif "nfa.gov.tw" in host:
+        tier = "P0"
+        family = "incident_baseline"
+    elif "tbn.org.tw" in host:
+        tier = "P0"
+        family = "natural_baseline"
+    elif "gis.rchss.sinica.edu.tw" in host:
+        tier = "P0"
+        family = "historical_map_baseline"
     elif host.endswith("culture.tw"):
         tier = "P1"
-        family = "culture_memory_source"
+        family = "cultural_expansion"
     elif host.endswith("hiking.biji.co"):
         tier = "P1"
-        family = "community_route_profile"
+        family = "community_article_evidence"
+    elif "hikingbook" in host:
+        tier = "P1"
+        family = "community_route_evidence"
+    elif "keepon" in host:
+        tier = "P1"
+        family = "community_article_evidence"
+    elif "openstreetmap" in host or "overpass" in host:
+        tier = "P1"
+        family = "map_expansion"
     return {
         "source_id": f"source.{slug}.{hashlib.sha1(url.encode('utf-8')).hexdigest()[:10]}",
         "source_tier": tier,
@@ -503,6 +658,8 @@ def _evidence_status(
     evidence_items: list[dict[str, Any]],
     source_statuses: list[dict[str, Any]],
 ) -> str:
+    if not source_statuses:
+        return "planned_requires_source_discovery"
     if not allow_network_fetch:
         return "planned_no_network"
     if evidence_items:
@@ -510,6 +667,12 @@ def _evidence_status(
     if any(item.get("status") == "fetch_failed" for item in source_statuses):
         return "empty_fetch_failed"
     return "empty_no_matching_sources"
+
+
+def _query_plan_status(allow_network_fetch: bool, source_count: int) -> str:
+    if source_count == 0:
+        return "planned_requires_source_discovery"
+    return "ready_for_explicit_fetch" if allow_network_fetch else "planned_no_network"
 
 
 def _boundary(*, allow_network_fetch: bool, network_calls_made: bool) -> dict[str, Any]:
@@ -654,9 +817,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
-    extra_sources = [{"url": url} for url in args.source_url]
-    source_records = [dict(source) for source in DEFAULT_CHILAI_NANHUA_SOURCES]
-    source_records.extend(extra_sources)
+    source_records = [{"url": url} for url in args.source_url]
     payload = collect_pretrip_p0_p1_sources(
         args.project_root,
         allow_network_fetch=args.allow_network_fetch,
