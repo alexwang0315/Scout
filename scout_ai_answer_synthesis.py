@@ -38,32 +38,32 @@ STANDARD_SIX_POWER_COVERAGE = (
     (
         "探索力",
         "Route Context Intelligence / 路線脈絡力",
-        ROUTE_CONTEXT_TOOL_ID,
+        (ROUTE_CONTEXT_TOOL_ID,),
     ),
     (
         "自信力",
-        "Readiness & Pace Fit / 腳程匹配力",
-        PACE_GUARDIAN_TOOL_ID,
+        "Readiness & Pace Fit / 腳程匹配力 + 出發門檢",
+        (PACE_GUARDIAN_TOOL_ID, ROUTE_READINESS_TOOL_ID),
     ),
     (
         "勇氣力",
         "Contextual Permissioning / 情境授權力",
-        CONTEXTUAL_PERMISSION_TOOL_ID,
+        (CONTEXTUAL_PERMISSION_TOOL_ID,),
     ),
     (
         "路線力",
         "Route Architecture Intelligence / 行程結構力",
-        ROUTE_ARCHITECTURE_TOOL_ID,
+        (ROUTE_ARCHITECTURE_TOOL_ID,),
     ),
     (
         "天氣力",
         "Weather-to-Decision Intelligence / 天候決策力",
-        WEATHER_WINDOW_TOOL_ID,
+        (WEATHER_WINDOW_TOOL_ID,),
     ),
     (
         "地圖力",
         "Navigation & Terrain Intelligence / 地形導航力",
-        NAVIGATION_TERRAIN_TOOL_ID,
+        (NAVIGATION_TERRAIN_TOOL_ID,),
     ),
 )
 
@@ -1016,8 +1016,8 @@ def _six_power_overview_decision_output(
     answerability: str,
 ) -> dict[str, Any]:
     status_lines = [
-        _six_power_status_line(label, system_name, tool_id, sources=sources)
-        for label, system_name, tool_id in STANDARD_SIX_POWER_COVERAGE
+        _six_power_status_line(label, system_name, tool_ids, sources=sources)
+        for label, system_name, tool_ids in STANDARD_SIX_POWER_COVERAGE
     ]
     missing_tool_ids = {
         str(item.get("tool_id"))
@@ -1087,8 +1087,8 @@ def _six_power_overview_answer(
     if not _looks_like_standard_six_power_overview_question(question):
         return None
     status_lines = [
-        _six_power_status_line(label, system_name, tool_id, sources=sources)
-        for label, system_name, tool_id in STANDARD_SIX_POWER_COVERAGE
+        _six_power_status_line(label, system_name, tool_ids, sources=sources)
+        for label, system_name, tool_ids in STANDARD_SIX_POWER_COVERAGE
     ]
     missing_tool_ids = {
         str(item.get("tool_id"))
@@ -1113,18 +1113,28 @@ def _six_power_overview_answer(
 def _six_power_status_line(
     label: str,
     system_name: str,
-    tool_id: str,
+    tool_ids: tuple[str, ...],
     *,
     sources: list[ScoutAiAnswerSource],
 ) -> str:
-    source = next((item for item in sources if item.tool_id == tool_id), None)
-    if source is None:
-        return f"{label}={system_name} 未完成本次 deterministic evidence collection ({tool_id})"
-    if source.missing_fields:
-        fields = ", ".join(source.missing_fields[:3])
-        suffix = "..." if len(source.missing_fields) > 3 else ""
+    matched_sources = [item for item in sources if item.tool_id in tool_ids]
+    if not matched_sources:
+        joined_tools = ", ".join(tool_ids)
+        return (
+            f"{label}={system_name} 未完成本次 deterministic evidence collection "
+            f"({joined_tools})"
+        )
+    missing_fields = [
+        f"{source.tool_id}:{field}"
+        for source in matched_sources
+        for field in source.missing_fields
+    ]
+    if missing_fields:
+        fields = ", ".join(missing_fields[:3])
+        suffix = "..." if len(missing_fields) > 3 else ""
         return f"{label}={system_name} 已實作可查詢，但仍缺 {fields}{suffix}"
-    return f"{label}={system_name} 已實作並可查詢"
+    joined_tools = " + ".join(source.tool_id for source in matched_sources)
+    return f"{label}={system_name} 已實作並可查詢 ({joined_tools})"
 
 
 def _looks_like_standard_six_power_overview_question(question: str) -> bool:

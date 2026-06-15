@@ -3326,6 +3326,7 @@ def test_answer_synthesis_surfaces_standard_six_power_coverage_overview() -> Non
     assert {
         ROUTE_CONTEXT_TOOL_ID,
         PACE_GUARDIAN_TOOL_ID,
+        ROUTE_READINESS_TOOL_ID,
         CONTEXTUAL_PERMISSION_TOOL_ID,
         ROUTE_ARCHITECTURE_TOOL_ID,
         WEATHER_WINDOW_TOOL_ID,
@@ -3343,6 +3344,8 @@ def test_answer_synthesis_surfaces_standard_six_power_coverage_overview() -> Non
     assert result.answer.startswith("六力覆蓋檢視：")
     for label in ("探索力", "自信力", "勇氣力", "路線力", "天氣力", "地圖力"):
         assert label in result.answer
+    assert PACE_GUARDIAN_TOOL_ID in result.answer
+    assert ROUTE_READINESS_TOOL_ID in result.answer
     assert "不輸出單一靜態分數" in result.answer
     assert "No registry-backed Scout AI tool" not in result.answer
     assert "可以繼續前進" not in result.answer
@@ -3357,7 +3360,7 @@ def test_answer_synthesis_routes_scout_ai_meta_power_to_dynamic_decision_overvie
         limit=8,
     )
 
-    assert result.completed_source_count == 6
+    assert result.completed_source_count == 7
     assert result.decision_output["answerSourceToolId"] == (
         "scout.ai.standard_six_power_overview.v0"
     )

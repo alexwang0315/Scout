@@ -1725,6 +1725,7 @@ def test_planner_routes_standard_six_power_overview_to_all_six_capabilities() ->
     assert _tool_ids(plan) == {
         ROUTE_CONTEXT_TOOL_ID,
         PACE_GUARDIAN_TOOL_ID,
+        ROUTE_READINESS_TOOL_ID,
         CONTEXTUAL_PERMISSION_TOOL_ID,
         ROUTE_ARCHITECTURE_TOOL_ID,
         WEATHER_WINDOW_TOOL_ID,
@@ -1746,11 +1747,12 @@ def test_planner_routes_scout_ai_meta_power_to_six_capability_tools() -> None:
     tool_ids = _tool_ids(plan)
     assert ROUTE_CONTEXT_TOOL_ID in tool_ids
     assert PACE_GUARDIAN_TOOL_ID in tool_ids
+    assert ROUTE_READINESS_TOOL_ID in tool_ids
     assert CONTEXTUAL_PERMISSION_TOOL_ID in tool_ids
     assert ROUTE_ARCHITECTURE_TOOL_ID in tool_ids
     assert WEATHER_WINDOW_TOOL_ID in tool_ids
     assert NAVIGATION_TERRAIN_TOOL_ID in tool_ids
-    assert len(tool_ids) == 6
+    assert len(tool_ids) == 7
 
 
 def _query(question: str) -> ScoutAssistantQuery:
