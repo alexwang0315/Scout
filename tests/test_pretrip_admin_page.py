@@ -419,6 +419,8 @@ def test_pretrip_admin_page_has_wearable_inventory_energy_controls():
     assert "/admin/pretrip/projects/${PROJECT_ID}/refresh-energy-projection" in html
     assert "/admin/pretrip/projects/${PROJECT_ID}/refresh-companion-match" in html
     assert "/admin/pretrip/projects/${PROJECT_ID}/refresh-energy-feedback" in html
+    assert 'id="routeContextBriefingLink"' in html
+    assert "/admin/pretrip/projects/chilai_nanhua_day1/briefings/route-context" in html
     assert "candidate_capsule_paths" in html
     assert "medical_diagnosis: false" in html
     assert "phase1_runtime_safety_truth: false" in html

@@ -152,6 +152,7 @@ from scout_wearable_validator import validate_wearable_activity_summary_contract
 DEFAULT_ADMIN_PAGE = ROOT / "docs" / "admin" / "phase1-after-action.html"
 DEFAULT_PRETRIP_ADMIN_PAGE = ROOT / "docs" / "admin" / "phase4-pretrip-planning.html"
 DEFAULT_ASSISTANT_UI_SCRIPT = ROOT / "docs" / "admin" / "scout-assistant-ui.js"
+DEFAULT_ROUTE_CONTEXT_BRIEFING_REF = "outputs/briefings/route_context_briefing.html"
 
 
 class PreTripReviewDecisionCorrectionRequest(BaseModel):
@@ -1865,6 +1866,44 @@ def create_admin_router(
             return _compact_pretrip_project_view(view) if compact else view
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="Pre-trip project not found") from exc
+
+    @router.get(
+        "/pretrip/projects/{project_id}/briefings/route-context",
+        response_class=HTMLResponse,
+    )
+    def pretrip_project_route_context_briefing(project_id: str) -> Response:
+        project_root = _pretrip_workspace_project_root(
+            pretrip_workspace_root,
+            project_id=project_id,
+        )
+        if project_root is None:
+            raise HTTPException(status_code=404, detail="Pre-trip project not found")
+        try:
+            project = json.loads(
+                (project_root / "project.json").read_text(encoding="utf-8")
+            )
+        except (json.JSONDecodeError, OSError) as exc:
+            raise HTTPException(status_code=422, detail="invalid pre-trip project") from exc
+        briefing_ref = (
+            project.get("route_context_briefing_ref")
+            or DEFAULT_ROUTE_CONTEXT_BRIEFING_REF
+        )
+        briefing_path = _safe_pretrip_project_ref_path(project_root, briefing_ref)
+        if briefing_path is None:
+            raise HTTPException(status_code=422, detail="unsafe route context briefing path")
+        if not briefing_path.exists():
+            raise HTTPException(status_code=404, detail="route context briefing not prepared")
+        return Response(
+            briefing_path.read_text(encoding="utf-8"),
+            media_type="text/html",
+            headers={
+                "Cache-Control": "no-store",
+                "X-Scout-Candidate-Only": "true",
+                "X-Scout-Runtime-Safety-Truth": "false",
+                "X-Scout-Route-Context-Briefing": "true",
+                "X-Scout-Source-Ref": str(briefing_ref),
+            },
+        )
 
     @router.get("/pretrip/projects/{project_id}/terrain-overlays/{mode}.png")
     def pretrip_project_terrain_overlay(project_id: str, mode: str) -> Response:
