@@ -248,6 +248,43 @@ def test_pretrip_project_api_compact_payload_removes_duplicate_tabs():
     assert len(compact_response.content) < len(full_response.content)
 
 
+def test_pretrip_project_route_context_briefing_api_serves_workspace_html(tmp_path: Path):
+    workspace_root = _copy_pretrip_workspace(tmp_path)
+    project_root = workspace_root / PROJECT_ID
+    briefing_ref = "outputs/briefings/route_context_briefing.html"
+    briefing_path = project_root / briefing_ref
+    briefing_path.parent.mkdir(parents=True, exist_ok=True)
+    briefing_path.write_text(
+        "<!doctype html><html><body><h1>Scout Route Context Briefing</h1></body></html>",
+        encoding="utf-8",
+    )
+    project_path = project_root / "project.json"
+    project = json.loads(project_path.read_text(encoding="utf-8"))
+    project["route_context_briefing_ref"] = briefing_ref
+    project_path.write_text(json.dumps(project, ensure_ascii=False), encoding="utf-8")
+
+    client = TestClient(create_admin_app(pretrip_workspace_root=workspace_root))
+    response = client.get(
+        f"/admin/pretrip/projects/{PROJECT_ID}/briefings/route-context"
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/html")
+    assert response.headers["cache-control"] == "no-store"
+    assert response.headers["x-scout-candidate-only"] == "true"
+    assert response.headers["x-scout-runtime-safety-truth"] == "false"
+    assert response.headers["x-scout-route-context-briefing"] == "true"
+    assert response.headers["x-scout-source-ref"] == briefing_ref
+    assert "Scout Route Context Briefing" in response.text
+
+    project["route_context_briefing_ref"] = "../outside.html"
+    project_path.write_text(json.dumps(project, ensure_ascii=False), encoding="utf-8")
+    unsafe_response = client.get(
+        f"/admin/pretrip/projects/{PROJECT_ID}/briefings/route-context"
+    )
+    assert unsafe_response.status_code == 422
+
+
 def test_pretrip_project_terrain_overlay_api_serves_workspace_png(tmp_path: Path):
     workspace_root = tmp_path / "pretrip_workspace"
     project_root = workspace_root / PROJECT_ID
