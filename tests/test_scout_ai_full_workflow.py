@@ -50,7 +50,7 @@ def test_full_workflow_runs_risk_and_terrain_question_end_to_end() -> None:
 
     assert result.artifact_kind == ARTIFACT_KIND
     assert result.artifact_version == ARTIFACT_VERSION
-    assert result.answerability == "evidence_available"
+    assert result.answerability == "partial_evidence_with_missing_context"
     assert result.discovery_plan["artifact_kind"] == "scout_ai_workflow_discovery_plan"
     assert result.evidence_collection["artifact_kind"] == "scout_ai_evidence_collection"
     assert result.answer_synthesis["artifact_kind"] == "scout_ai_answer_synthesis"
@@ -64,7 +64,7 @@ def test_full_workflow_runs_risk_and_terrain_question_end_to_end() -> None:
     assert result.completed_tool_count == 2
     assert result.contract_gap_count == 0
     assert result.failed_tool_count == 0
-    assert result.missing_evidence_count == 0
+    assert result.missing_evidence_count == 1
     assert result.workflow_policy.deterministic_tools_executed is True
     assert result.workflow_policy.context_registry_discovered is True
     assert result.workflow_policy.tool_plan_created is True
@@ -81,6 +81,9 @@ def test_full_workflow_runs_risk_and_terrain_question_end_to_end() -> None:
     risk_source = next(
         source for source in result.sources if source["tool_id"] == RISK_SCORE_TOOL_ID
     )
+    terrain_source = next(
+        source for source in result.sources if source["tool_id"] == TERRAIN_SCORE_TOOL_ID
+    )
     assert risk_source["top_result_summary"]["decision"] == "CHANGE_PLAN"
     assert risk_source["top_result_summary"]["decision_output"][
         "decisionObjectSchema"
@@ -90,6 +93,8 @@ def test_full_workflow_runs_risk_and_terrain_question_end_to_end() -> None:
     assert result.decision_output["firstLayer"]["decision"] == (
         "建議改變路線或通過策略。"
     )
+    assert terrain_source["top_result_summary"]["decision"] == "DELAY"
+    assert "terrain_score_results" in terrain_source["missing_fields"]
     assert "deterministic evidence was collected before synthesis" in result.answer
     assert "runtime safety truth" in result.answer
     assert any("no model provider was called" in item for item in result.limitations)
@@ -450,11 +455,18 @@ def test_full_workflow_runs_media_literacy_question() -> None:
     assert result.completed_tool_count >= 1
     assert result.contract_gap_count == 0
     assert result.failed_tool_count == 0
-    assert result.missing_evidence_count == 1
+    assert result.missing_evidence_count == 2
     sources = [source for source in result.sources if source["tool_id"] == MEDIA_LITERACY_TOOL_ID]
     assert len(sources) == 1
     source = sources[0]
+    terrain_sources = [
+        source for source in result.sources if source["tool_id"] == TERRAIN_SCORE_TOOL_ID
+    ]
+    assert len(terrain_sources) == 1
+    terrain_source = terrain_sources[0]
     assert source["top_result_summary"]["decision"] == "NO_GO"
+    assert terrain_source["top_result_summary"]["decision"] == "DELAY"
+    assert "terrain_score_results" in terrain_source["missing_fields"]
     assert source["top_result_summary"]["media_literacy"]["role"] == (
         "Media Literacy / Bias Sentinel"
     )
@@ -652,10 +664,18 @@ def test_full_workflow_builtin_manifest_and_payload_are_read_only(
     assert payload["artifact_kind"] == ARTIFACT_KIND
     assert payload["artifact_version"] == ARTIFACT_VERSION
     assert payload["status"] == "completed"
-    assert payload["answerability"] == "evidence_available"
+    assert payload["answerability"] == "partial_evidence_with_missing_context"
     assert payload["selected_tool_count"] == 2
     assert payload["executed_tool_count"] == 2
     assert payload["completed_tool_count"] == 2
+    assert payload["missing_evidence_count"] == 1
+    terrain_source = next(
+        source
+        for source in payload["sources"]
+        if source["tool_id"] == TERRAIN_SCORE_TOOL_ID
+    )
+    assert terrain_source["top_result_summary"]["decision"] == "DELAY"
+    assert "terrain_score_results" in terrain_source["missing_fields"]
     assert payload["workflow_policy"]["model_provider_used"] is False
     assert payload["workflow_policy"]["model_synthesis_performed"] is False
     assert payload["workflow_steps"][0]["step_id"] == "context_registry_and_tool_plan"

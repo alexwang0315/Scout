@@ -52,10 +52,10 @@ def test_answer_synthesis_uses_completed_risk_and_terrain_evidence() -> None:
 
     assert result.artifact_kind == ARTIFACT_KIND
     assert result.artifact_version == ARTIFACT_VERSION
-    assert result.answerability == "evidence_available"
+    assert result.answerability == "partial_evidence_with_missing_context"
     assert result.evidence_collection_verified is True
     assert result.completed_source_count == 2
-    assert result.missing_evidence_count == 0
+    assert result.missing_evidence_count == 1
     assert result.failed_source_count == 0
     assert result.synthesis_policy.evidence_collected_before_synthesis is True
     assert result.synthesis_policy.deterministic_fallback_formatter_used is True
@@ -68,6 +68,9 @@ def test_answer_synthesis_uses_completed_risk_and_terrain_evidence() -> None:
     assert RISK_SCORE_TOOL_ID in source_ids
     assert TERRAIN_SCORE_TOOL_ID in source_ids
     risk_source = next(source for source in result.sources if source.tool_id == RISK_SCORE_TOOL_ID)
+    terrain_source = next(
+        source for source in result.sources if source.tool_id == TERRAIN_SCORE_TOOL_ID
+    )
     assert risk_source.top_result_summary["decision"] == "CHANGE_PLAN"
     assert risk_source.top_result_summary["decision_output"][
         "decisionObjectSchema"
@@ -77,6 +80,8 @@ def test_answer_synthesis_uses_completed_risk_and_terrain_evidence() -> None:
     assert result.decision_output["firstLayer"]["decision"] == (
         "建議改變路線或通過策略。"
     )
+    assert terrain_source.top_result_summary["decision"] == "DELAY"
+    assert "terrain_score_results" in terrain_source.missing_fields
     assert "deterministic evidence was collected before synthesis" in result.answer
     assert RISK_SCORE_TOOL_ID in result.answer
     assert "result_count=3" in result.answer
@@ -427,9 +432,12 @@ def test_answer_synthesis_uses_media_literacy_field_answer_without_guessing() ->
 
     assert result.answerability == "partial_evidence_with_missing_context"
     assert result.completed_source_count >= 1
-    assert result.missing_evidence_count == 1
+    assert result.missing_evidence_count == 2
     source = _source(result, MEDIA_LITERACY_TOOL_ID)
+    terrain_source = _source(result, TERRAIN_SCORE_TOOL_ID)
     assert source.top_result_summary["decision"] == "NO_GO"
+    assert terrain_source.top_result_summary["decision"] == "DELAY"
+    assert "terrain_score_results" in terrain_source.missing_fields
     assert source.top_result_summary["media_literacy"]["role"] == (
         "Media Literacy / Bias Sentinel"
     )
@@ -582,10 +590,14 @@ def test_answer_synthesis_accepts_existing_evidence_collection_artifact() -> Non
 
     result = synthesize_scout_ai_answer_from_evidence(evidence_collection)
 
-    assert result.answerability == "evidence_available"
+    assert result.answerability == "partial_evidence_with_missing_context"
     assert result.evidence_collection["artifact_kind"] == "scout_ai_evidence_collection"
     assert result.evidence_collection["executed_tool_count"] == 2
     assert result.completed_source_count == 2
+    assert result.missing_evidence_count == 1
+    terrain_source = _source(result, TERRAIN_SCORE_TOOL_ID)
+    assert terrain_source.top_result_summary["decision"] == "DELAY"
+    assert "terrain_score_results" in terrain_source.missing_fields
 
 
 def test_answer_synthesis_builtin_manifest_and_payload_are_read_only(
@@ -628,9 +640,17 @@ def test_answer_synthesis_builtin_manifest_and_payload_are_read_only(
     assert payload["artifact_kind"] == ARTIFACT_KIND
     assert payload["artifact_version"] == ARTIFACT_VERSION
     assert payload["status"] == "completed"
-    assert payload["answerability"] == "evidence_available"
+    assert payload["answerability"] == "partial_evidence_with_missing_context"
     assert payload["evidence_collection_verified"] is True
     assert payload["completed_source_count"] == 2
+    assert payload["missing_evidence_count"] == 1
+    terrain_source = next(
+        source
+        for source in payload["sources"]
+        if source["tool_id"] == TERRAIN_SCORE_TOOL_ID
+    )
+    assert terrain_source["top_result_summary"]["decision"] == "DELAY"
+    assert "terrain_score_results" in terrain_source["missing_fields"]
     assert payload["synthesis_policy"]["model_provider_used"] is False
     assert payload["synthesis_policy"]["model_synthesis_performed"] is False
     assert payload["boundary"]["read_only"] is True

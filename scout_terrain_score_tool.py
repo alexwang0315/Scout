@@ -121,12 +121,61 @@ def search_project_terrain_scores(
     ]
     filtered.sort(key=_sort_key(resolved_sort))
     results = filtered[:resolved_limit]
+    compact_results = [_compact_result(item) for item in results]
+    missing_fields = [] if compact_results else ["terrain_score_results"]
+    answerability = (
+        "terrain_score_decision_available"
+        if compact_results
+        else "terrain_score_missing_evidence"
+    )
+    decision = _terrain_decision(compact_results)
+    field_answer = _field_answer(
+        decision=decision,
+        results=compact_results,
+        answerability=answerability,
+        metric=resolved_metric,
+    )
+    decision_output = _decision_output(
+        decision=decision,
+        results=compact_results,
+        summaries=summaries,
+        filters={
+            "min_score": resolved_min_score,
+            "min_slope_degrees": resolved_min_slope,
+            "distance_km_min": resolved_distance_min,
+            "distance_km_max": resolved_distance_max,
+            "cp": resolved_cp,
+            "lat": resolved_lat,
+            "lon": resolved_lon,
+            "radius_m": resolved_radius_m,
+            "sort": resolved_sort,
+        },
+        answerability=answerability,
+        field_answer=field_answer,
+        metric=resolved_metric,
+        missing_fields=missing_fields,
+    )
 
     return {
         "tool_id": TERRAIN_SCORE_TOOL_ID,
         "status": "completed",
         "project_id": project_id,
         "query": query,
+        "source_status": "candidate_only",
+        "answerability": answerability,
+        "decision": decision,
+        "decision_output": decision_output,
+        "field_answer": field_answer,
+        "missing_fields": missing_fields,
+        "terrain_decision": {
+            "role": "Terrain / Slope Hazard Decision",
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+            "decision": decision,
+            "decision_output": decision_output,
+            "highest_terrain_result": compact_results[0] if compact_results else None,
+            "next_action": decision_output["nextAction"],
+        },
         "metric": resolved_metric,
         "filters": {
             "min_score": resolved_min_score,
@@ -145,7 +194,14 @@ def search_project_terrain_scores(
         "searched_sample_count": len(loaded_items),
         "matched_sample_count": len(filtered),
         "result_count": len(results),
-        "results": [_compact_result(item) for item in results],
+        "results": compact_results,
+        "standard_alignment": [
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 15.2 Risk Sentinel",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 16 required decision output format",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 17 ContextualPermission schema",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 23 acceptance criteria",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 28.3 data confidence",
+        ],
         "boundary": _closed_boundary(),
     }
 
@@ -503,6 +559,307 @@ def _terrain_summaries(items: list[dict[str, Any]]) -> dict[str, Any]:
     return summaries
 
 
+def _terrain_decision(results: list[dict[str, Any]]) -> str:
+    if not results:
+        return "DELAY"
+    top = results[0]
+    score = _score_100(top.get("score"))
+    direct_slope = _optional_float(top.get("direct_slope_degrees"))
+    if direct_slope is not None and direct_slope >= 35.0:
+        return "NO_GO"
+    if score >= 90.0:
+        return "NO_GO"
+    if direct_slope is not None and direct_slope >= 25.0:
+        return "CHANGE_PLAN"
+    if score >= 70.0:
+        return "CHANGE_PLAN"
+    if direct_slope is not None and direct_slope >= 15.0:
+        return "CONDITIONAL_GO"
+    if score >= 40.0:
+        return "CONDITIONAL_GO"
+    return "GO"
+
+
+def _field_answer(
+    *,
+    decision: str,
+    results: list[dict[str, Any]],
+    answerability: str,
+    metric: str,
+) -> str:
+    if not results:
+        return (
+            f"地形分數判斷：建議 DELAY。metric={metric} 沒有匹配到可追溯的地形/坡度樣本；"
+            "Scout 不能用空資料推論地形可通過性。"
+        )
+    top = results[0]
+    return (
+        f"地形分數判斷：建議 {decision}。最高候選地形點位於 {_result_location(top)}，"
+        f"metric={metric}、score={top.get('score')}、"
+        f"slope={top.get('direct_slope_degrees') or 'not_available'}。"
+        f"下一步：{_next_action(decision=decision)} "
+        f"answerability={answerability}；此為候選地形證據，不是 runtime safety truth。"
+    )
+
+
+def _decision_output(
+    *,
+    decision: str,
+    results: list[dict[str, Any]],
+    summaries: dict[str, Any],
+    filters: dict[str, Any],
+    answerability: str,
+    field_answer: str,
+    metric: str,
+    missing_fields: list[str],
+) -> dict[str, Any]:
+    allowed = decision in {"GO", "CONDITIONAL_GO"}
+    top = results[0] if results else {}
+    reasons = _decision_reasons(decision=decision, results=results, metric=metric)
+    uncertainty_notes = _uncertainty_notes(
+        results=results,
+        summaries=summaries,
+        missing_fields=missing_fields,
+        metric=metric,
+    )
+    first_layer = {
+        "decision": _decision_phrase(decision=decision, allowed=allowed),
+        "limit": _decision_limit_phrase(decision=decision, top=top),
+        "reason": " / ".join(reasons[:2]),
+        "nextStep": _next_action(decision=decision),
+    }
+    residual_risk = [
+        "Terrain scores are candidate planning evidence only.",
+        (
+            "Slope and terrain proxy scores must be reconciled with weather, pace, "
+            "route readiness, and live observations."
+        ),
+        "No /safety, SOS, outbound send, runtime mutation, or hardware control was performed.",
+    ]
+    second_layer = {
+        "details": _decision_details(
+            top=top,
+            results=results,
+            filters=filters,
+            field_answer=field_answer,
+            metric=metric,
+        ),
+        "uncertaintyNotes": uncertainty_notes,
+        "residualRisk": residual_risk,
+        "requiredConditions": _required_conditions(decision=decision),
+        "alternativeActions": _alternative_actions(decision=decision),
+    }
+    return {
+        "role": "Terrain Hazard Sentinel",
+        "format": "SCOUT_OUTDOOR_AI_AGENT_STANDARD.section16",
+        "decisionObjectSchema": "ContextualPermission",
+        "text": "\n".join(
+            (
+                f"[決策] {first_layer['decision']}",
+                f"[限制] {first_layer['limit']}",
+                f"[原因] {first_layer['reason']}",
+                f"[下一步] {first_layer['nextStep']}",
+            )
+        ),
+        "firstLayer": first_layer,
+        "secondLayer": second_layer,
+        "action": "terrain_score_hazard_review",
+        "decision": decision,
+        "allowed": allowed,
+        "locationConstraint": first_layer["limit"],
+        "mainReasons": reasons[:3],
+        "cost": {
+            "highestScore": top.get("score"),
+            "highestScore100": _score_100(top.get("score")) if top else None,
+            "highestMetric": metric,
+            "highestDistanceKm": top.get("distance_km"),
+            "directSlopeDegrees": top.get("direct_slope_degrees"),
+            "matchedSampleCount": len(results),
+            "timeBufferChangeMinutes": 0 if not allowed else None,
+            "bufferPolicy": (
+                "Unplanned stops, photo goals, and summit pushes are not granted "
+                "by terrain scores."
+            ),
+        },
+        "nextAction": first_layer["nextStep"],
+        "confidence": "low" if uncertainty_notes else "medium",
+        "uncertaintyNotes": uncertainty_notes,
+        "residualRisk": residual_risk,
+        "requiredConditions": second_layer["requiredConditions"],
+        "alternativeActions": second_layer["alternativeActions"],
+        "answerability": answerability,
+        "runtimeSafetyTruth": False,
+        "standardAlignment": [
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 15.2 Risk Sentinel",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 16 required decision output format",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 17 ContextualPermission schema",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 23 acceptance criteria",
+        ],
+    }
+
+
+def _decision_reasons(
+    *,
+    decision: str,
+    results: list[dict[str, Any]],
+    metric: str,
+) -> list[str]:
+    if not results:
+        return [f"沒有匹配到 metric={metric} 的可追溯地形/坡度樣本。"]
+    top = results[0]
+    reasons = [
+        f"最高候選地形 score={top.get('score')} metric={metric}。",
+        f"位置：{_result_location(top)}。",
+    ]
+    direct_slope = top.get("direct_slope_degrees")
+    if direct_slope is not None:
+        reasons.append(f"direct_slope_degrees={direct_slope}。")
+    elif top.get("slope_measurement_status"):
+        reasons.append(f"slope_measurement_status={top.get('slope_measurement_status')}。")
+    if decision in {"NO_GO", "CHANGE_PLAN"}:
+        reasons.append("地形分數或坡度已達需要改變路線/通過策略的保守門檻。")
+    elif decision == "CONDITIONAL_GO":
+        reasons.append("地形分數或坡度顯示需要條件式通過與重查。")
+    else:
+        reasons.append("目前匹配結果未達高地形風險門檻。")
+    return _dedupe(reasons)
+
+
+def _uncertainty_notes(
+    *,
+    results: list[dict[str, Any]],
+    summaries: dict[str, Any],
+    missing_fields: list[str],
+    metric: str,
+) -> list[str]:
+    notes = [f"Missing field: {field}" for field in missing_fields]
+    if not results:
+        notes.append(f"No matching terrain score result was available for metric={metric}.")
+    if not summaries.get("direct_slope_degrees_available"):
+        notes.append("Direct slope degrees are not available; terrain scores may be proxies.")
+    if results and results[0].get("slope_measurement_status") == (
+        "proxy_from_teii_no_direct_slope_degrees"
+    ):
+        notes.append("Top slope result uses TEII proxy instead of direct slope degrees.")
+    return _dedupe(notes)
+
+
+def _decision_phrase(*, decision: str, allowed: bool) -> str:
+    if decision == "NO_GO":
+        return "不建議進入最高地形風險路段。"
+    if decision == "CHANGE_PLAN":
+        return "建議改變地形通過策略。"
+    if decision == "CONDITIONAL_GO":
+        return "可有條件通過，但必須快速通過並重查。"
+    if decision == "GO" and allowed:
+        return "可作為低地形風險候選路段通過。"
+    return "暫緩地形分數判斷。"
+
+
+def _decision_limit_phrase(*, decision: str, top: dict[str, Any]) -> str:
+    location = _result_location(top) if top else "目前查詢範圍"
+    if decision == "NO_GO":
+        return f"{location} 不得作為原計畫通過或停留目標；先改線、撤退或人工複核。"
+    if decision == "CHANGE_PLAN":
+        return f"{location} 不得直接照原節奏通過；先改線、縮短目標或設定人工確認點。"
+    if decision == "CONDITIONAL_GO":
+        return f"{location} 只能快速通過，不得為拍照、休息或攻頂增加停留；下一 CP 前重查。"
+    if decision == "GO":
+        return "仍需依風險分數、天氣、日照、隊伍與 CP Graph 重查；此回答不是停留授權。"
+    return "補齊可追溯地形/坡度樣本前，不得把此回答當成路線 permission。"
+
+
+def _next_action(*, decision: str) -> str:
+    if decision == "NO_GO":
+        return "改線、撤退到上一個安全 CP，或交由人工複核後重新規劃。"
+    if decision == "CHANGE_PLAN":
+        return "改短版/替代路線，並用 risk score、weather、pace 與 route readiness 重新評估。"
+    if decision == "CONDITIONAL_GO":
+        return "快速通過並在下一 CP 前重查地形、天氣與隊伍狀態。"
+    if decision == "GO":
+        return "維持保守節奏，下一 CP 或條件改變時重查。"
+    return "補齊 terrain route samples、坡度或候選地形證據後再判斷。"
+
+
+def _required_conditions(*, decision: str) -> list[str]:
+    conditions = [
+        "不得將地形分數升格為 runtime safety truth。",
+        "通過前仍需核對 risk score、weather/daylight、pace、team status 與 route readiness。",
+    ]
+    if decision in {"NO_GO", "CHANGE_PLAN"}:
+        conditions.append("必須提出改線、撤退或人工複核方案。")
+    if decision == "CONDITIONAL_GO":
+        conditions.append("不得增加非必要停留；下一 CP 前必須重查。")
+    return conditions
+
+
+def _alternative_actions(*, decision: str) -> list[str]:
+    if decision == "NO_GO":
+        return ["改線。", "撤回上一個安全 CP。", "延期或交由人工複核。"]
+    if decision == "CHANGE_PLAN":
+        return ["改短版。", "避開最高地形風險段。", "改由更保守 CP Graph 重新排程。"]
+    if decision == "CONDITIONAL_GO":
+        return ["快速通過。", "降低速度與隊伍間距。", "在下一 CP 重查後再決定。"]
+    if decision == "GO":
+        return ["維持原路線但保守通過。", "若天氣或隊伍狀態改變則重新評估。"]
+    return ["補齊 terrain route samples 或坡度證據。", "改問具體 CP 或里程範圍。"]
+
+
+def _decision_details(
+    *,
+    top: dict[str, Any],
+    results: list[dict[str, Any]],
+    filters: dict[str, Any],
+    field_answer: str,
+    metric: str,
+) -> list[str]:
+    details = [field_answer, f"metric={metric}", f"matched_result_count={len(results)}"]
+    if top:
+        details.extend(
+            [
+                f"top_score={top.get('score')}",
+                f"top_distance_km={top.get('distance_km')}",
+                f"top_slope={top.get('direct_slope_degrees')}",
+                f"top_source_kind={top.get('source_kind')}",
+            ]
+        )
+    details.append("filters=" + json.dumps(filters, ensure_ascii=False, sort_keys=True))
+    return details
+
+
+def _result_location(item: dict[str, Any]) -> str:
+    if item.get("distance_km") is not None:
+        return f"{item.get('distance_km')} km"
+    if item.get("candidate_id"):
+        return f"candidate {item.get('candidate_id')}"
+    if item.get("sample_id"):
+        return f"sample {item.get('sample_id')}"
+    if item.get("lat") is not None and item.get("lon") is not None:
+        return f"{item.get('lat')},{item.get('lon')}"
+    return "查詢範圍內"
+
+
+def _score_100(value: Any) -> float:
+    score = _optional_float(value)
+    if score is None:
+        return 0.0
+    if 0.0 <= score <= 1.0:
+        return score * 100.0
+    return score
+
+
+def _dedupe(values: list[str]) -> list[str]:
+    seen = set()
+    result = []
+    for value in values:
+        text = str(value).strip()
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        result.append(text)
+    return result
+
+
 def _parse_query_filters(query: str) -> dict[str, Any]:
     text = str(query or "").strip()
     lowered = text.lower()
@@ -551,7 +908,11 @@ def _parse_query_filters(query: str) -> dict[str, Any]:
     threshold_match = re.search(r"(?:score|分數)\s*(?:>=|大於|超過)\s*(\d+(?:\.\d+)?)", lowered)
     if threshold_match:
         parsed["min_score"] = float(threshold_match.group(1))
-    slope_threshold_match = re.search(r"(?:slope|坡度|陡坡|坡)\s*(?:>=|大於|超過)?\s*(\d+(?:\.\d+)?)\s*(?:deg|degree|度)", lowered)
+    slope_threshold_match = re.search(
+        r"(?:slope|坡度|陡坡|坡)\s*(?:>=|大於|超過)?\s*"
+        r"(\d+(?:\.\d+)?)\s*(?:deg|degree|度)",
+        lowered,
+    )
     if slope_threshold_match:
         parsed["min_slope_degrees"] = float(slope_threshold_match.group(1))
     if re.search(r"最高|最陡|top|highest|max|最大|危險", lowered):

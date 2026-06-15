@@ -188,6 +188,35 @@ def test_execute_ready_current_tool_returns_uniform_result() -> None:
     assert result.boundary.phase1_safety_mutation_allowed is False
 
 
+def test_execute_terrain_scores_returns_conservative_missing_decision() -> None:
+    result = execute_scout_ai_tool(
+        {
+            "tool_id": "scout.ai.terrain_scores.search",
+            "project_root": str(PROJECT_ROOT),
+            "query": "危險地形在哪些位置?",
+            "limit": 3,
+        }
+    )
+
+    assert result.status == "completed"
+    assert result.tool_id == "pydantic_ai.tool.search_scout_terrain_scores.v0"
+    assert result.payload["artifact_kind"] == "scout_ai_terrain_scores_tool_output"
+    assert result.payload["answerability"] == "terrain_score_missing_evidence"
+    assert result.payload["decision"] == "DELAY"
+    assert result.payload["decision_output"]["decisionObjectSchema"] == (
+        "ContextualPermission"
+    )
+    assert result.payload["decision_output"]["decision"] == "DELAY"
+    assert result.payload["decision_output"]["allowed"] is False
+    assert result.payload["decision_output"]["confidence"] == "low"
+    assert result.payload["decision_output"]["firstLayer"]["decision"] == (
+        "暫緩地形分數判斷。"
+    )
+    assert "terrain_score_results" in result.missing_fields
+    assert result.payload["terrain_decision"]["highest_terrain_result"] is None
+    assert result.boundary.runtime_safety_truth is False
+
+
 def test_execute_pace_guardian_alias_returns_team_pace_fit_decision() -> None:
     result = execute_scout_ai_tool(
         {
