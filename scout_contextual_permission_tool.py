@@ -39,6 +39,8 @@ CONTEXTUAL_PERMISSION_OPTIONAL_FIELDS = (
     "planned_eta_path",
     "weather_daylight_evidence_path",
     "plan_validation_path",
+    "energy_vitals_path",
+    "team_status_path",
 )
 
 
@@ -212,6 +214,10 @@ _CRITICAL_RISK_LEVELS = {"critical", "severe", "extreme"}
 DEFAULT_UNREVIEWED_WEATHER_RESERVE_MINUTES = 15
 DEFAULT_UNREVIEWED_SEGMENT_POLICY_RESERVE_MINUTES = 10
 DEFAULT_UNREVIEWED_DAYLIGHT_RESERVE_MINUTES = 60
+DEFAULT_ENERGY_MISSING_CORE_RESERVE_MINUTES = 10
+ENERGY_SLOW_DOWN_RESERVE_MINUTES = 5
+ENERGY_REST_SUGGESTED_RESERVE_MINUTES = 10
+ENERGY_MANUAL_CHECK_RESERVE_MINUTES = 20
 
 
 def assess_scout_contextual_permission(
@@ -243,6 +249,8 @@ def assess_scout_contextual_permission(
     planned_eta_path: str | None = None,
     weather_daylight_evidence_path: str | None = None,
     plan_validation_path: str | None = None,
+    energy_vitals_path: str | None = None,
+    team_status_path: str | None = None,
 ) -> dict[str, Any]:
     root = Path(project_root)
     project = _load_project(root)
@@ -269,6 +277,8 @@ def assess_scout_contextual_permission(
         enabled=derived_budget_source is not None,
         weather_daylight_evidence_path=weather_daylight_evidence_path,
         plan_validation_path=plan_validation_path,
+        energy_vitals_path=energy_vitals_path,
+        team_status_path=team_status_path,
     )
     if derived_budget_source is not None:
         reserves = workspace_reserve_source.get("reserves", {})
@@ -365,7 +375,9 @@ def assess_scout_contextual_permission(
         "warnings": warnings,
         "standard_alignment": [
             "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 4 decision vocabulary",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 7.3 Team Pace Fit",
             "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 13 risk budget",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 13.1 conceptual formula",
             "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 16 field answer format",
             "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 17 ContextualPermission schema",
             "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 23 acceptance criteria",
@@ -695,6 +707,8 @@ def _derive_workspace_reserve_source(
     enabled: bool,
     weather_daylight_evidence_path: str | None,
     plan_validation_path: str | None,
+    energy_vitals_path: str | None,
+    team_status_path: str | None,
 ) -> dict[str, Any]:
     if not enabled:
         return {
@@ -720,6 +734,28 @@ def _derive_workspace_reserve_source(
         explicit_path=plan_validation_path,
         ref_keys=("plan_validation_candidates_ref",),
         fallbacks=("outputs/plan_validation_candidates.json",),
+    )
+    energy_payload, energy_source_path = _load_first_project_json(
+        root,
+        project=project,
+        explicit_path=energy_vitals_path,
+        ref_keys=("energy_vitals_ref", "energy_vitals_snapshot_ref"),
+        fallbacks=(
+            "outputs/energy_vitals.json",
+            "outputs/energy_vitals_snapshot.json",
+            "outputs/energy/energy_vitals.json",
+        ),
+    )
+    team_payload, team_source_path = _load_first_project_json(
+        root,
+        project=project,
+        explicit_path=team_status_path,
+        ref_keys=("team_status_ref", "team_pace_ref", "team_guardian_ref"),
+        fallbacks=(
+            "outputs/team_status.json",
+            "outputs/team_pace_fit.json",
+            "outputs/team_guardian.json",
+        ),
     )
     reserves: dict[str, float] = {}
     reserve_sources: list[dict[str, Any]] = []
@@ -778,11 +814,46 @@ def _derive_workspace_reserve_source(
                 reason=str(finding.get("message") or rule_id),
             )
 
+    energy_reserve = _slowest_member_reserve_from_energy_vitals(energy_payload)
+    if energy_reserve:
+        _set_reserve(
+            reserves,
+            reserve_sources,
+            field="slowest_member_reserve_minutes",
+            minutes=float(energy_reserve["reserve_minutes"]),
+            source_path=energy_source_path,
+            reason=str(energy_reserve["reason"]),
+            detail={
+                "source_kind": "energy_vitals_advisory",
+                "candidate_basis": energy_reserve["candidate_basis"],
+                "subject_id": energy_reserve.get("subject_id"),
+                "raw_health_payload_embedded": False,
+                "provider_values_are_scout_truth": False,
+            },
+        )
+
+    team_reserve = _slowest_member_reserve_from_team_status(team_payload)
+    if team_reserve:
+        _set_reserve(
+            reserves,
+            reserve_sources,
+            field="slowest_member_reserve_minutes",
+            minutes=float(team_reserve["reserve_minutes"]),
+            source_path=team_source_path,
+            reason=str(team_reserve["reason"]),
+            detail={
+                "source_kind": "team_status",
+                "candidate_basis": team_reserve["candidate_basis"],
+                "member_ref": team_reserve.get("member_ref"),
+                "average_pace_used": False,
+            },
+        )
+
     source_status = (
         "workspace_reserves_applied"
         if reserve_sources
         else "workspace_reserves_not_needed_reviewed_evidence"
-        if weather_payload or plan_payload
+        if weather_payload or plan_payload or energy_payload or team_payload
         else "workspace_reserves_not_found"
     )
     return {
@@ -805,20 +876,193 @@ def _set_reserve(
     minutes: float,
     source_path: str | None,
     reason: str,
+    detail: dict[str, Any] | None = None,
 ) -> None:
     if minutes <= 0:
         return
     previous = reserves.get(field, 0.0)
     reserves[field] = max(previous, float(minutes))
-    reserve_sources.append(
-        {
-            "reserve_field": field,
-            "reserve_minutes": float(minutes),
-            "source_path": source_path,
-            "reason": reason,
-            "runtime_safety_truth": False,
-        }
+    source = {
+        "reserve_field": field,
+        "reserve_minutes": float(minutes),
+        "source_path": source_path,
+        "reason": reason,
+        "runtime_safety_truth": False,
+    }
+    if detail:
+        source.update({key: value for key, value in detail.items() if value is not None})
+    reserve_sources.append(source)
+
+
+def _slowest_member_reserve_from_energy_vitals(
+    payload: dict[str, Any],
+) -> dict[str, Any] | None:
+    if not payload:
+        return None
+    candidates = [_energy_reserve_candidate(payload)]
+    for key in ("members", "team_members", "participants"):
+        items = payload.get(key)
+        if isinstance(items, list):
+            candidates.extend(_energy_reserve_candidate(item) for item in items)
+    usable = [candidate for candidate in candidates if candidate is not None]
+    if not usable:
+        return None
+    usable.sort(key=lambda item: float(item["reserve_minutes"]), reverse=True)
+    return usable[0]
+
+
+def _slowest_member_reserve_from_team_status(
+    payload: dict[str, Any],
+) -> dict[str, Any] | None:
+    if not payload:
+        return None
+    candidates: list[dict[str, Any] | None] = []
+    for key in ("members", "team_members", "participants"):
+        items = payload.get(key)
+        if isinstance(items, list):
+            candidates.extend(_team_reserve_candidate(item) for item in items)
+    if not candidates:
+        candidates.append(_team_reserve_candidate(payload))
+    usable = [candidate for candidate in candidates if candidate is not None]
+    if not usable:
+        return None
+    usable.sort(key=lambda item: float(item["reserve_minutes"]), reverse=True)
+    return usable[0]
+
+
+def _energy_reserve_candidate(payload: Any) -> dict[str, Any] | None:
+    if not isinstance(payload, dict):
+        return None
+    provided = payload.get("provided_fields")
+    provided = provided if isinstance(provided, dict) else {}
+    advisory = payload.get("advisory")
+    advisory = advisory if isinstance(advisory, dict) else {}
+    cue_band = _first_text(
+        advisory.get("cue_band"),
+        provided.get("cue_band"),
+        payload.get("cue_band"),
     )
+    reserve_band = _first_text(
+        provided.get("reserve_band"),
+        advisory.get("reserve_band"),
+        payload.get("reserve_band"),
+    )
+    reserve_score = _first_number(
+        provided.get("reserve_score"),
+        advisory.get("reserve_score"),
+        payload.get("reserve_score"),
+    )
+    drift_ratio = _first_number(
+        provided.get("heart_rate_drift_ratio"),
+        advisory.get("heart_rate_drift_ratio"),
+        payload.get("heart_rate_drift_ratio"),
+    )
+    answerability = str(payload.get("answerability") or "")
+    member_ref = _first_text(
+        provided.get("subject_id"),
+        payload.get("subject_id"),
+        payload.get("member_id"),
+        payload.get("participant_id"),
+    )
+    minutes, basis = _reserve_minutes_from_energy_markers(
+        cue_band=cue_band,
+        reserve_band=reserve_band,
+        reserve_score=reserve_score,
+        drift_ratio=drift_ratio,
+    )
+    if minutes <= 0 and answerability == "energy_vitals_missing_required_fields":
+        minutes = DEFAULT_ENERGY_MISSING_CORE_RESERVE_MINUTES
+        basis.append("energy_vitals_missing_required_fields")
+    if minutes <= 0:
+        return None
+    return {
+        "reserve_minutes": float(minutes),
+        "reason": (
+            "energy/vitals advisory requires preserving time for the slowest or "
+            "most vulnerable member"
+        ),
+        "candidate_basis": basis,
+        "subject_id": member_ref,
+    }
+
+
+def _team_reserve_candidate(payload: Any) -> dict[str, Any] | None:
+    if not isinstance(payload, dict):
+        return None
+    cue_band = _first_text(payload.get("cue_band"), payload.get("status"))
+    reserve_band = _first_text(payload.get("reserve_band"), payload.get("pace_band"))
+    reserve_score = _first_number(payload.get("reserve_score"), payload.get("pace_score"))
+    drift_ratio = _first_number(payload.get("heart_rate_drift_ratio"))
+    minutes, basis = _reserve_minutes_from_energy_markers(
+        cue_band=cue_band,
+        reserve_band=reserve_band,
+        reserve_score=reserve_score,
+        drift_ratio=drift_ratio,
+    )
+    vulnerability_flags = payload.get("vulnerability_flags")
+    if isinstance(vulnerability_flags, list) and vulnerability_flags and minutes < 10:
+        minutes = 10
+        basis.append("vulnerability_flags_present")
+    if _truthy(payload.get("is_slowest")) and minutes < 5:
+        minutes = 5
+        basis.append("explicit_slowest_member")
+    if minutes <= 0:
+        return None
+    return {
+        "reserve_minutes": float(minutes),
+        "reason": (
+            "team status evidence requires using the slowest or most vulnerable "
+            "member instead of average team pace"
+        ),
+        "candidate_basis": basis,
+        "member_ref": _first_text(
+            payload.get("member_ref"),
+            payload.get("member_id"),
+            payload.get("participant_id"),
+            payload.get("subject_id"),
+        ),
+    }
+
+
+def _reserve_minutes_from_energy_markers(
+    *,
+    cue_band: str | None,
+    reserve_band: str | None,
+    reserve_score: float | None,
+    drift_ratio: float | None,
+) -> tuple[float, list[str]]:
+    minutes = 0.0
+    basis: list[str] = []
+    normalized_cue = str(cue_band or "").strip().lower()
+    normalized_reserve = str(reserve_band or "").strip().lower()
+    for band in (normalized_cue, normalized_reserve):
+        if band in {"manual_check", "stop_and_check", "critical", "depleted"}:
+            minutes = max(minutes, float(ENERGY_MANUAL_CHECK_RESERVE_MINUTES))
+            basis.append(f"{band}_band")
+        elif band in {"rest_suggested", "low", "very_low", "warning"}:
+            minutes = max(minutes, float(ENERGY_REST_SUGGESTED_RESERVE_MINUTES))
+            basis.append(f"{band}_band")
+        elif band in {"slow_down", "watch"}:
+            minutes = max(minutes, float(ENERGY_SLOW_DOWN_RESERVE_MINUTES))
+            basis.append(f"{band}_band")
+    if reserve_score is not None:
+        if reserve_score <= 25:
+            minutes = max(minutes, float(ENERGY_MANUAL_CHECK_RESERVE_MINUTES))
+            basis.append("reserve_score_very_low")
+        elif reserve_score <= 40:
+            minutes = max(minutes, float(ENERGY_REST_SUGGESTED_RESERVE_MINUTES))
+            basis.append("reserve_score_low")
+    if drift_ratio is not None:
+        if drift_ratio >= 0.18:
+            minutes = max(minutes, float(ENERGY_MANUAL_CHECK_RESERVE_MINUTES))
+            basis.append("heart_rate_drift_manual_check_band")
+        elif drift_ratio >= 0.12:
+            minutes = max(minutes, float(ENERGY_REST_SUGGESTED_RESERVE_MINUTES))
+            basis.append("heart_rate_drift_rest_band")
+        elif drift_ratio >= 0.08:
+            minutes = max(minutes, float(ENERGY_SLOW_DOWN_RESERVE_MINUTES))
+            basis.append("heart_rate_drift_watch_band")
+    return minutes, list(dict.fromkeys(basis))
 
 
 def _weather_daylight_needs_review(payload: dict[str, Any]) -> bool:
@@ -1361,7 +1605,7 @@ def _warnings(
         )
     if risk_budget_source.get("reserve_sources"):
         warnings.append(
-            "Workspace weather/daylight or segment-policy reserve was deducted from planned ETA slack."
+            "Workspace reserve was deducted from planned ETA slack."
         )
     if not communication_status:
         warnings.append("communication_status missing; no team/contact assumption was made.")
@@ -1388,6 +1632,33 @@ def _float_or_none(value: Any) -> float | None:
         return float(value)
     except (TypeError, ValueError):
         return None
+
+
+def _first_number(*values: Any) -> float | None:
+    for value in values:
+        parsed = _float_or_none(value)
+        if parsed is not None:
+            return parsed
+    return None
+
+
+def _first_text(*values: Any) -> str | None:
+    for value in values:
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+        if value is not None and not isinstance(value, (dict, list, tuple, set)):
+            text = str(value).strip()
+            if text:
+                return text
+    return None
+
+
+def _truthy(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "y"}
+    return bool(value)
 
 
 def _nonnegative_float(value: Any) -> float:

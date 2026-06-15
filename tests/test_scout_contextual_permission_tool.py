@@ -160,6 +160,46 @@ def test_contextual_permission_allows_eta_buffer_when_weather_and_validation_rev
     assert not any("reserve was deducted" in warning for warning in result["warnings"])
 
 
+def test_contextual_permission_deducts_slowest_member_reserve_from_energy_vitals(
+    tmp_path: Path,
+) -> None:
+    project_root = _write_reviewed_eta_project(tmp_path, include_energy_vitals=True)
+
+    result = assess_scout_contextual_permission(
+        project_root,
+        query="我可以在這裡停下來拍一段影片嗎?",
+        current_time="2026-06-07T13:36:00+08:00",
+        next_cp_id="CP4",
+        communication_status="ok",
+        equipment_status="ok",
+    )
+
+    assert result["decision"] == "NO_GO"
+    assert result["allowed"] is False
+    assert "不建議拍影片" in result["field_answer"]
+
+    budget = result["risk_budget"]
+    assert budget["remainingSafetyBufferMinutes"] == 6.0
+    assert budget["slowestMemberReserveMinutes"] == 10.0
+    assert budget["authorizedDurationMinutes"] == 0
+
+    source = result["risk_budget_source"]
+    reserve_sources = source["reserve_sources"]
+    slowest = [
+        item
+        for item in reserve_sources
+        if item["reserve_field"] == "slowest_member_reserve_minutes"
+    ]
+    assert len(slowest) == 1
+    assert slowest[0]["source_path"] == "outputs/energy_vitals.json"
+    assert slowest[0]["source_kind"] == "energy_vitals_advisory"
+    assert slowest[0]["raw_health_payload_embedded"] is False
+    assert slowest[0]["provider_values_are_scout_truth"] is False
+    assert "rest_suggested_band" in slowest[0]["candidate_basis"]
+    assert "heart_rate_drift_rest_band" in slowest[0]["candidate_basis"]
+    assert any("reserve was deducted" in warning for warning in result["warnings"])
+
+
 def test_contextual_permission_escalates_high_risk_stream_crossing() -> None:
     result = assess_scout_contextual_permission(
         PROJECT_ROOT,
@@ -184,18 +224,25 @@ def test_contextual_permission_output_kind_constant() -> None:
     )
 
 
-def _write_reviewed_eta_project(tmp_path: Path) -> Path:
+def _write_reviewed_eta_project(
+    tmp_path: Path,
+    *,
+    include_energy_vitals: bool = False,
+) -> Path:
     project_root = tmp_path / "reviewed_eta_project"
     outputs = project_root / "outputs"
     outputs.mkdir(parents=True)
+    project_payload = {
+        "project_id": "reviewed_eta_project",
+        "planned_eta_ref": "outputs/planned_eta.json",
+        "weather_daylight_evidence_ref": "outputs/weather_daylight_evidence.json",
+        "plan_validation_candidates_ref": "outputs/plan_validation_candidates.json",
+    }
+    if include_energy_vitals:
+        project_payload["energy_vitals_ref"] = "outputs/energy_vitals.json"
     (project_root / "project.json").write_text(
         json.dumps(
-            {
-                "project_id": "reviewed_eta_project",
-                "planned_eta_ref": "outputs/planned_eta.json",
-                "weather_daylight_evidence_ref": "outputs/weather_daylight_evidence.json",
-                "plan_validation_candidates_ref": "outputs/plan_validation_candidates.json",
-            },
+            project_payload,
             ensure_ascii=False,
         ),
         encoding="utf-8",
@@ -245,4 +292,36 @@ def _write_reviewed_eta_project(tmp_path: Path) -> Path:
         ),
         encoding="utf-8",
     )
+    if include_energy_vitals:
+        (outputs / "energy_vitals.json").write_text(
+            json.dumps(
+                {
+                    "artifact_kind": "scout_ai_energy_vitals_tool_output",
+                    "answerability": "energy_vitals_advisory_available",
+                    "provided_fields": {
+                        "subject_id": "local_user.private",
+                        "reserve_score": 38,
+                        "reserve_band": "rest_suggested",
+                        "heart_rate_drift_ratio": 0.174,
+                    },
+                    "advisory": {
+                        "cue_band": "rest_suggested",
+                        "reserve_band": "rest_suggested",
+                        "heart_rate_drift_ratio": 0.174,
+                        "message_zh": "體能儲備提示：建議短暫休息。",
+                    },
+                    "privacy": {
+                        "raw_health_payload_shared": False,
+                        "raw_samples_embedded": False,
+                    },
+                    "boundary": {
+                        "runtime_safety_truth": False,
+                        "medical_diagnosis": False,
+                        "provider_values_are_scout_truth": False,
+                    },
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
     return project_root

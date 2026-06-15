@@ -397,6 +397,44 @@ def test_execute_contextual_permission_assessor_derives_planned_eta_buffer() -> 
     assert any("reserve was deducted" in warning for warning in result.warnings)
 
 
+def test_execute_contextual_permission_passes_energy_vitals_reserve_path(
+    tmp_path: Path,
+) -> None:
+    project_root = _write_reviewed_contextual_permission_project(tmp_path)
+
+    result = execute_scout_ai_tool(
+        {
+            "tool_id": "scout.ai.micro_decision.assess",
+            "project_root": str(project_root),
+            "query": "我可以在這裡停下來拍一段影片嗎?",
+            "arguments": {
+                "current_time": "2026-06-07T13:36:00+08:00",
+                "next_cp_id": "CP4",
+                "communication_status": "ok",
+                "equipment_status": "ok",
+                "energy_vitals_path": "outputs/energy_vitals.json",
+            },
+        }
+    )
+
+    assert result.status == "completed"
+    assert result.tool_id == CONTEXTUAL_PERMISSION_TOOL_ID
+    assert result.payload["decision"] == "NO_GO"
+    assert result.payload["risk_budget"]["remainingSafetyBufferMinutes"] == 6.0
+    assert result.payload["risk_budget"]["slowestMemberReserveMinutes"] == 10.0
+    assert result.payload["risk_budget"]["authorizedDurationMinutes"] == 0
+    slowest = [
+        item
+        for item in result.payload["risk_budget_source"]["reserve_sources"]
+        if item["reserve_field"] == "slowest_member_reserve_minutes"
+    ]
+    assert len(slowest) == 1
+    assert slowest[0]["source_path"] == "outputs/energy_vitals.json"
+    assert slowest[0]["raw_health_payload_embedded"] is False
+    assert result.payload["boundary"]["runtime_safety_truth"] is False
+    assert result.missing_fields == []
+
+
 def test_agent_manifest_runs_tool_registry_and_tool_run(tmp_path: Path) -> None:
     registry_output = _run_manifest(
         "scout.ai.tool_registry.describe",
@@ -457,3 +495,81 @@ def _run_manifest(
     assert exit_code == 0
     assert payload["status"] == "completed"
     return json.loads(payload["outputs"]["stdout"])
+
+
+def _write_reviewed_contextual_permission_project(tmp_path: Path) -> Path:
+    project_root = tmp_path / "reviewed_contextual_permission_project"
+    outputs = project_root / "outputs"
+    outputs.mkdir(parents=True)
+    (project_root / "project.json").write_text(
+        json.dumps(
+            {
+                "project_id": "reviewed_contextual_permission_project",
+                "planned_eta_ref": "outputs/planned_eta.json",
+                "weather_daylight_evidence_ref": "outputs/weather_daylight_evidence.json",
+                "plan_validation_candidates_ref": "outputs/plan_validation_candidates.json",
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    (outputs / "planned_eta.json").write_text(
+        json.dumps(
+            {
+                "estimates": [
+                    {
+                        "estimate_id": "eta.cp4",
+                        "to_node_name": "CP4",
+                        "eta": "2026-06-07T13:42:00+08:00",
+                    }
+                ],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    (outputs / "weather_daylight_evidence.json").write_text(
+        json.dumps(
+            {
+                "status": "reviewed",
+                "human_review_required": False,
+                "authoritative_weather_computed": True,
+                "validation": {"validation_status": "reviewed"},
+                "daylight": {"source_status": "reviewed"},
+                "weather_window": {"source_status": "reviewed"},
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    (outputs / "plan_validation_candidates.json").write_text(
+        json.dumps({"status": "reviewed", "findings": []}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    (outputs / "energy_vitals.json").write_text(
+        json.dumps(
+            {
+                "artifact_kind": "scout_ai_energy_vitals_tool_output",
+                "answerability": "energy_vitals_advisory_available",
+                "provided_fields": {
+                    "subject_id": "local_user.private",
+                    "reserve_score": 38,
+                    "reserve_band": "rest_suggested",
+                    "heart_rate_drift_ratio": 0.174,
+                },
+                "advisory": {
+                    "cue_band": "rest_suggested",
+                    "reserve_band": "rest_suggested",
+                    "heart_rate_drift_ratio": 0.174,
+                },
+                "boundary": {
+                    "runtime_safety_truth": False,
+                    "medical_diagnosis": False,
+                    "provider_values_are_scout_truth": False,
+                },
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    return project_root
