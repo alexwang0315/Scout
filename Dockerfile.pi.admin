@@ -204,6 +204,7 @@ COPY \
     ./
 
 COPY scout_ai_*.py scout_*_tool.py ./
+COPY pretrip_*.py ./
 
 COPY tools/pydantic_ai_cloud_latency_benchmark.py ./tools/
 COPY tools/scout_agent_tool_manifests/ ./tools/scout_agent_tool_manifests/
