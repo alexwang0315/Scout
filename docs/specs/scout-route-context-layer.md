@@ -17,6 +17,9 @@ The layer aligns with `SCOUT_OUTDOOR_AI_AGENT_STANDARD` Sec. 6 Route Context
 Intelligence and the `scout-workspace-layout.md` Outdoor AI Agent Data
 Placement contract.
 
+See `scout-route-context-intelligence-implementation.md` for the current Scout
+AI, skill, workspace-cache, and offline briefing regeneration behavior.
+
 It covers these context families:
 
 - historical: old trails, guard roads, police stations, forestry roads, old
