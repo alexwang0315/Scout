@@ -137,6 +137,7 @@ def assess_scout_pace_guardian(
 
     pace_fit = _pace_fit(
         members,
+        query=query,
         current_delay_minutes=current_delay,
         minutes_to_next_cp=eta_minutes,
         leader_accepts_slowest_basis=team_context["leader_accepts_slowest_basis"],
@@ -247,6 +248,7 @@ def assess_scout_pace_guardian(
 def _pace_fit(
     members: list[dict[str, Any]],
     *,
+    query: str,
     current_delay_minutes: float | None,
     minutes_to_next_cp: float | None,
     leader_accepts_slowest_basis: bool | None,
@@ -273,6 +275,7 @@ def _pace_fit(
         for member in members
         if member.get("vulnerable_link") is True
     ]
+    query_vulnerabilities = _query_reported_vulnerabilities(query)
     pace_coefficients = [
         coefficient
         for coefficient in (_member_pace_coefficient(member) for member in members)
@@ -324,6 +327,16 @@ def _pace_fit(
 
     fatigue_reasons = _fatigue_reasons(members, energy_vitals=energy_vitals)
     main_reasons.extend(fatigue_reasons)
+    if query_vulnerabilities:
+        labels = [_vulnerability_label(item) for item in query_vulnerabilities]
+        main_reasons.append(
+            "使用者回報隊伍脆弱環節："
+            + "、".join(labels)
+            + "；不能用原計畫或平均腳程掩蓋風險。"
+        )
+        required_conditions.append(
+            "Review reported vulnerable member conditions and recompute route plan on the most vulnerable member basis."
+        )
     coefficient_reasons, coefficient_warnings = _pace_coefficient_reasons(
         pace_coefficients
     )
@@ -357,6 +370,7 @@ def _pace_fit(
         "fastest_member": _member_public_summary(fastest) if fastest else None,
         "pace_gap_ratio": pace_gap_ratio,
         "vulnerable_members": vulnerable_members,
+        "query_reported_vulnerabilities": query_vulnerabilities,
         "scout_pace_coefficients": pace_coefficients,
         "main_reasons": main_reasons,
         "warnings": warnings,
@@ -376,6 +390,8 @@ def _decision(pace_fit: dict[str, Any], *, missing_fields: list[str]) -> str:
         return "CHANGE_PLAN"
     if any("領隊/決策者尚未確認" in str(reason) for reason in reasons):
         return "CHANGE_PLAN"
+    if any("使用者回報隊伍脆弱環節" in str(reason) for reason in reasons):
+        return "CHANGE_PLAN"
     if any("不能用平均腳程" in str(reason) for reason in reasons):
         return "CONDITIONAL_GO"
     if reasons:
@@ -391,6 +407,16 @@ def _field_answer(
     missing_fields: list[str],
 ) -> str:
     if missing_fields:
+        query_vulnerabilities = _str_list(pace_fit.get("query_reported_vulnerabilities"))
+        if query_vulnerabilities:
+            labels = [_vulnerability_label(item) for item in query_vulnerabilities]
+            return (
+                "腳程守門員：不建議照原計畫推進。使用者回報隊伍脆弱環節："
+                + "、".join(labels)
+                + "；同時缺少 "
+                + "、".join(missing_fields)
+                + "。Scout 必須以最慢者與最脆弱成員重新估算，才能判斷是否縮短行程、前移休息或撤退。"
+            )
         return (
             "腳程守門員：目前不建議用平均腳程做決策。缺少 "
             + "、".join(missing_fields)
@@ -429,7 +455,12 @@ def _decision_output(
     )
     alternatives = _pace_alternative_actions(decision=decision, pace_fit=pace_fit)
     first_layer = {
-        "decision": _decision_phrase(decision=decision, allowed=allowed, query=query),
+        "decision": _decision_phrase(
+            decision=decision,
+            allowed=allowed,
+            query=query,
+            pace_fit=pace_fit,
+        ),
         "limit": _decision_limit_phrase(decision=decision, pace_fit=pace_fit),
         "reason": " / ".join(reasons[:2]),
         "nextStep": pace_fit["next_action"],
@@ -538,9 +569,17 @@ def _pace_alternative_actions(*, decision: str, pace_fit: dict[str, Any]) -> lis
     return _dedupe(alternatives)
 
 
-def _decision_phrase(*, decision: str, allowed: bool, query: str) -> str:
+def _decision_phrase(
+    *,
+    decision: str,
+    allowed: bool,
+    query: str,
+    pace_fit: dict[str, Any],
+) -> str:
     if decision == "NO_GO" and _looks_like_summit_question(query):
         return "不建議繼續攻頂。"
+    if decision == "NO_GO" and pace_fit.get("query_reported_vulnerabilities"):
+        return "不建議照原計畫推進。"
     if decision == "NO_GO":
         return "不建議用目前腳程資料繼續判斷。"
     if decision == "CHANGE_PLAN":
@@ -600,6 +639,12 @@ def _decision_details(
     if schedule_pressure.get("minutes_to_next_cp") is not None:
         details.append(
             f"minutes_to_next_cp={schedule_pressure.get('minutes_to_next_cp')}"
+        )
+    query_vulnerabilities = _str_list(pace_fit.get("query_reported_vulnerabilities"))
+    if query_vulnerabilities:
+        details.append(
+            "query_reported_vulnerabilities="
+            + ", ".join(query_vulnerabilities[:6])
         )
     return details
 
@@ -966,6 +1011,8 @@ def _fatigue_reasons(
 
 
 def _change_plan_next_action(*, query_reasons: list[str]) -> str:
+    if any("使用者回報隊伍脆弱環節" in reason for reason in query_reasons):
+        return "不要照原計畫推進；以前移休息、改短版或撤退重新規劃，並人工確認脆弱成員狀態。"
     if any("比計畫快" in reason for reason in query_reasons):
         return "立刻降回最慢者可恢復節奏；下一個 CP 前確認疲勞、補水與休息需求。"
     if any("下一個 CP" in reason for reason in query_reasons):
@@ -1197,6 +1244,39 @@ def _delay_minutes_from_query(query: str) -> float | None:
         if value is not None:
             return max(0.0, value)
     return None
+
+
+def _query_reported_vulnerabilities(query: str) -> list[str]:
+    normalized = str(query or "").replace(" ", "").lower()
+    vulnerabilities: list[str] = []
+
+    def add(code: str, terms: tuple[str, ...]) -> None:
+        if code in vulnerabilities:
+            return
+        if any(term in normalized for term in terms):
+            vulnerabilities.append(code)
+
+    add("knee_pain", ("膝蓋痛", "膝蓋不舒服", "膝蓋", "knee", "kneepain"))
+    add("altitude_sickness", ("高山症", "頭痛想吐", "疑似高山症", "altitudesickness", "ams"))
+    add("asthma", ("氣喘", "喘不過氣", "asthma"))
+    add("sleep_debt", ("睡眠不足", "沒睡好", "睡不好", "sleepdebt", "lackofsleep"))
+    add("low_blood_sugar", ("低血糖", "血糖低", "lowbloodsugar", "hypoglycemia"))
+    add("anxiety", ("焦慮", "恐慌", "anxiety", "panic"))
+    add("injury", ("受傷", "扭傷", "拉傷", "injury", "sprain"))
+    return vulnerabilities
+
+
+def _vulnerability_label(code: str) -> str:
+    labels = {
+        "knee_pain": "膝蓋痛",
+        "altitude_sickness": "高山症/疑似高山症",
+        "asthma": "氣喘",
+        "sleep_debt": "睡眠不足",
+        "low_blood_sugar": "低血糖",
+        "anxiety": "焦慮",
+        "injury": "受傷",
+    }
+    return labels.get(str(code), str(code))
 
 
 def _looks_like_summit_question(query: str) -> bool:

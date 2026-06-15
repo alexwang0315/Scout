@@ -1069,6 +1069,33 @@ def test_full_workflow_routes_average_pace_bias_to_pace_guardian() -> None:
     assert result.boundary.runtime_safety_truth is False
 
 
+def test_full_workflow_uses_query_reported_vulnerable_member_conditions() -> None:
+    result = run_scout_ai_full_workflow(
+        "有人膝蓋痛又睡眠不足，還能照原計畫嗎？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=4,
+    )
+
+    assert result.answerability == "partial_evidence_with_missing_context"
+    assert result.failed_tool_count == 0
+    pace = _workflow_source(result, PACE_GUARDIAN_TOOL_ID)
+    assert pace["top_result_summary"]["decision"] == "NO_GO"
+    assert pace["top_result_summary"]["team_pace_fit"][
+        "query_reported_vulnerabilities"
+    ] == ["knee_pain", "sleep_debt"]
+    assert pace["missing_fields"] == ["member_pace_profile"]
+    assert result.decision_output["answerSourceToolId"] == PACE_GUARDIAN_TOOL_ID
+    assert result.decision_output["decision"] == "NO_GO"
+    assert result.decision_output["firstLayer"]["decision"] == (
+        "不建議照原計畫推進。"
+    )
+    assert "膝蓋痛" in result.decision_output["firstLayer"]["reason"]
+    assert "睡眠不足" in result.answer
+    assert result.decision_output["runtimeSafetyTruth"] is False
+    assert result.boundary.runtime_safety_truth is False
+
+
 def test_full_workflow_routes_ahead_of_plan_pace_to_pace_guardian() -> None:
     result = run_scout_ai_full_workflow(
         "目前比計畫快 20 分鐘，可以繼續照原節奏嗎？",
