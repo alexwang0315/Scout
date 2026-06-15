@@ -1358,6 +1358,43 @@ def test_planner_selects_post_trip_review_for_trip_end_debrief_question() -> Non
     assert item.boundary.runtime_safety_truth is False
 
 
+def test_planner_routes_actual_cp_writeback_to_post_trip_not_route_architecture() -> None:
+    plan = plan_scout_ai_tools(
+        _query("實際 CP 通過時間要怎麼回寫？"),
+        project_root=PROJECT_ROOT,
+    )
+
+    tool_ids = _tool_ids(plan)
+    assert POST_TRIP_REVIEW_TOOL_ID in tool_ids
+    assert ROUTE_ARCHITECTURE_TOOL_ID not in tool_ids
+
+    item = _single_tool(plan, POST_TRIP_REVIEW_TOOL_ID)
+    assert item.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+    assert item.request is not None
+    assert item.request["tool_id"] == POST_TRIP_REVIEW_TOOL_ID
+    assert item.boundary.runtime_safety_truth is False
+
+
+def test_planner_routes_post_trip_lost_near_miss_to_review_not_survival() -> None:
+    plan = plan_scout_ai_tools(
+        _query("這次摸黑差點迷路，要怎麼檢討？"),
+        project_root=PROJECT_ROOT,
+    )
+
+    tool_ids = _tool_ids(plan)
+    assert POST_TRIP_REVIEW_TOOL_ID in tool_ids
+    assert SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID not in tool_ids
+
+    item = _single_tool(plan, POST_TRIP_REVIEW_TOOL_ID)
+    assert item.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+    assert item.request is not None
+    args = item.request["arguments"]
+    assert "摸黑" in args["near_miss_events"]
+    assert "迷路" in args["near_miss_events"]
+    assert args["user_feedback_items"] == ["review_for_next_pretrip"]
+    assert item.boundary.runtime_safety_truth is False
+
+
 def test_planner_passes_post_trip_event_taxonomy_feedback() -> None:
     plan = plan_scout_ai_tools(
         _query(

@@ -2570,6 +2570,52 @@ def test_answer_synthesis_routes_trip_end_debrief_to_post_trip_review() -> None:
     assert "runtime safety truth" in result.answer
 
 
+def test_answer_synthesis_routes_actual_cp_writeback_to_post_trip_review() -> None:
+    result = collect_and_synthesize_scout_ai_answer(
+        "實際 CP 通過時間要怎麼回寫？",
+        project_root=POST_ANALYSIS_ROOT,
+        project_id="chilai_nanhua_day1_post_analysis",
+        limit=4,
+    )
+
+    assert result.answerability == "partial_evidence_with_missing_context"
+    assert result.completed_source_count == 1
+    assert result.sources[0].tool_id == POST_TRIP_REVIEW_TOOL_ID
+    assert result.decision_output["answerSourceToolId"] == POST_TRIP_REVIEW_TOOL_ID
+    assert result.decision_output["firstLayer"]["decision"] == "暫緩學習寫回。"
+    assert "行後回顧" in result.answer
+    assert "current_cp_id" not in result.answer
+    assert result.decision_output["runtimeSafetyTruth"] is False
+
+
+def test_answer_synthesis_routes_post_trip_lost_near_miss_to_review() -> None:
+    result = collect_and_synthesize_scout_ai_answer(
+        "這次摸黑差點迷路，要怎麼檢討？",
+        project_root=POST_ANALYSIS_ROOT,
+        project_id="chilai_nanhua_day1_post_analysis",
+        limit=6,
+    )
+
+    assert result.answerability == "partial_evidence_with_missing_context"
+    assert result.completed_source_count == 1
+    assert result.missing_evidence_count == 1
+    source = result.sources[0]
+    assert source.tool_id == POST_TRIP_REVIEW_TOOL_ID
+    assert source.missing_fields == [
+        "subjective_difficulty",
+        "equipment_gap_review",
+        "weather_and_route_condition_feedback",
+    ]
+    assert result.decision_output["answerSourceToolId"] == POST_TRIP_REVIEW_TOOL_ID
+    assert result.decision_output["decision"] == "ESCALATE"
+    taxonomy = source.top_result_summary["post_trip_feedback"]["event_taxonomy"]
+    assert "lost_or_navigation_uncertainty" in taxonomy["matched_event_types"]
+    assert "darkness_or_daylight_overrun" in taxonomy["matched_event_types"]
+    assert "行後回顧" in result.answer
+    assert "求生事件 playbook" not in result.answer
+    assert result.decision_output["runtimeSafetyTruth"] is False
+
+
 def test_answer_synthesis_surfaces_post_trip_event_taxonomy() -> None:
     result = collect_and_synthesize_scout_ai_answer(
         (
