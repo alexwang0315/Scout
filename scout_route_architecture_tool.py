@@ -137,6 +137,7 @@ def assess_scout_route_architecture(
         planned_eta=planned_eta,
         cp_nodes=cp_nodes,
         requires_turn_back_status=_looks_like_turn_back_status_question(query),
+        requires_checkpoint_deadline_status=_looks_like_checkpoint_deadline_question(query),
     )
     graph_missing_fields = _missing_fields(cp_nodes=cp_nodes, graph_edges=graph_edges)
     decision_missing_fields = _string_list(route_decision.get("missing_fields"))
@@ -376,6 +377,7 @@ def _route_decision(
     planned_eta: dict[str, Any],
     cp_nodes: list[dict[str, Any]],
     requires_turn_back_status: bool,
+    requires_checkpoint_deadline_status: bool,
 ) -> dict[str, Any]:
     missing_graph = not route_architecture["graph_completeness"]["has_cp_graph"]
     turn_back = route_architecture.get("turn_back")
@@ -418,6 +420,41 @@ def _route_decision(
             "first_layer_decision": "無法確認現在是否為折返點。",
             "missing_fields": ["current_cp_id", "current_time"],
             "turn_back_checkpoint": turn_back,
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+        }
+    if requires_checkpoint_deadline_status:
+        missing = []
+        if not current_time:
+            missing.append("current_time")
+        if not target_cp_id:
+            missing.append("target_cp_id")
+        if missing:
+            return {
+                "decision": "DELAY",
+                "main_reasons": [
+                    "current_time and target_cp_id are required to evaluate a missed checkpoint deadline.",
+                ],
+                "next_action": "先確認 deadline、目標 CP 與目前是否已抵達；確認前不要把原計畫視為仍可推進。",
+                "action_limit": "不得把未抵達 checkpoint 的狀態當成可繼續推進授權。",
+                "first_layer_decision": "無法確認是否已錯過 checkpoint 折返門檻。",
+                "missing_fields": missing,
+                "turn_back_checkpoint": turn_back,
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+            }
+        return {
+            "decision": "CHANGE_PLAN",
+            "main_reasons": [
+                f"target checkpoint {target_cp_id} was reported not reached by deadline {current_time}.",
+                "Missed checkpoint deadlines consume pace, daylight, weather, and retreat buffer.",
+            ],
+            "next_action": "不要照原計畫繼續推進；在目前安全 CP 折返或改短版，並重新計算天氣、腳程與撤退路線。",
+            "action_limit": "Original route continuation is not recommended after a missed checkpoint deadline without reviewed override.",
+            "first_layer_decision": "不建議錯過 checkpoint deadline 後繼續原計畫。",
+            "turn_back_checkpoint": turn_back,
+            "target_checkpoint": target_cp_id,
+            "checkpoint_deadline": current_time,
             "candidate_only": True,
             "runtime_safety_truth": False,
         }
@@ -882,6 +919,34 @@ def _looks_like_turn_back_status_question(query: str) -> bool:
             "turnbackpoint",
         )
     )
+
+
+def _looks_like_checkpoint_deadline_question(query: str) -> bool:
+    normalized = "".join(str(query).lower().split())
+    has_missed_checkpoint = any(
+        phrase in normalized
+        for phrase in (
+            "未抵達",
+            "未到",
+            "沒抵達",
+            "沒有抵達",
+            "沒到",
+            "未達",
+            "未通過",
+            "沒通過",
+        )
+    )
+    has_turnback_intent = any(
+        phrase in normalized
+        for phrase in (
+            "折返",
+            "撤退",
+            "回頭",
+            "turnback",
+            "turn-back",
+        )
+    )
+    return has_missed_checkpoint and has_turnback_intent
 
 
 def _load_project_json(

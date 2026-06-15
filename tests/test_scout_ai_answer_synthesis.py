@@ -1173,6 +1173,30 @@ def test_answer_synthesis_detects_local_clock_turnback_context() -> None:
     assert "runtime safety truth" in result.answer
 
 
+def test_answer_synthesis_uses_route_architecture_for_missed_checkpoint_deadline() -> None:
+    result = collect_and_synthesize_scout_ai_answer(
+        "11:30 未抵達 CP4 是否要折返？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=4,
+    )
+
+    assert result.answerability == "evidence_available"
+    route = _source(result, ROUTE_ARCHITECTURE_TOOL_ID)
+    assert route.missing_fields == []
+    assert route.top_result_summary["answerability"] == "route_architecture_available"
+    assert route.top_result_summary["decision"] == "CHANGE_PLAN"
+    assert route.top_result_summary["route_decision"]["target_checkpoint"] == "CP4"
+    assert route.top_result_summary["route_decision"]["checkpoint_deadline"] == "11:30"
+    assert result.decision_output["answerSourceToolId"] == ROUTE_ARCHITECTURE_TOOL_ID
+    assert result.decision_output["decision"] == "CHANGE_PLAN"
+    assert result.decision_output["firstLayer"]["decision"] == (
+        "不建議錯過 checkpoint deadline 後繼續原計畫。"
+    )
+    assert "target checkpoint CP4" in result.decision_output["firstLayer"]["reason"]
+    assert "runtime safety truth" in result.answer
+
+
 def test_answer_synthesis_uses_live_navigation_field_answer_without_guessing() -> None:
     result = collect_and_synthesize_scout_ai_answer(
         "我現在是不是偏離路線？",
