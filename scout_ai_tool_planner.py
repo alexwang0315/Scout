@@ -328,6 +328,11 @@ def _append_standard_six_power_tools(selected: list[tuple[str, str]]) -> None:
             "Six-power overview needs Readiness & Pace Fit for slowest-member and team pace evidence.",
         ),
         (
+            ROUTE_READINESS_TOOL_ID,
+            "Six-power overview needs Route Readiness / Departure Gate "
+            "for route-date-team-equipment fit.",
+        ),
+        (
             CONTEXTUAL_PERMISSION_TOOL_ID,
             "Six-power overview needs Contextual Permissioning for bounded micro-decisions and buffer cost.",
         ),
