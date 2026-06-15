@@ -1677,6 +1677,9 @@ def _looks_like_risk_sentinel_continue(query: str) -> bool:
             "通訊死角",
             "能不能繼續",
             "現在能不能繼續",
+            "可以繼續前進",
+            "可以繼續推進",
+            "繼續前進嗎",
         ),
     )
 
