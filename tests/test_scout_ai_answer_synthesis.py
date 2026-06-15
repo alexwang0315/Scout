@@ -10,7 +10,11 @@ from scout_ai_answer_synthesis import (
     synthesize_scout_ai_answer_from_evidence,
 )
 from scout_ai_evidence_collection import collect_scout_ai_evidence
-from scout_ai_tool_planner import LIVE_NAVIGATION_STATE_TOOL_ID, WEATHER_WINDOW_TOOL_ID
+from scout_ai_tool_planner import (
+    ENERGY_VITALS_TOOL_ID,
+    LIVE_NAVIGATION_STATE_TOOL_ID,
+    WEATHER_WINDOW_TOOL_ID,
+)
 from scout_contextual_permission_tool import CONTEXTUAL_PERMISSION_TOOL_ID
 from scout_route_readiness_tool import ROUTE_READINESS_TOOL_ID
 from scout_pace_guardian_tool import PACE_GUARDIAN_TOOL_ID
@@ -99,6 +103,31 @@ def test_answer_synthesis_reports_weather_tool_missing_fresh_evidence_without_gu
     assert "provider" in result.answer
     assert "ttl_s" in result.answer
     assert "runtime safety truth" in result.answer
+
+
+def test_answer_synthesis_uses_energy_vitals_decision_output() -> None:
+    result = collect_and_synthesize_scout_ai_answer(
+        "我現在心率偏高又很累，需要休息嗎?",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=3,
+    )
+
+    assert result.answerability == "partial_evidence_with_missing_context"
+    assert result.sources[0].tool_id == ENERGY_VITALS_TOOL_ID
+    assert result.sources[0].collection_status == "completed"
+    assert result.sources[0].top_result_summary["decision"] == "DELAY"
+    assert result.sources[0].top_result_summary["decision_output"][
+        "decisionObjectSchema"
+    ] == "ContextualPermission"
+    assert result.decision_output["decisionObjectSchema"] == "ContextualPermission"
+    assert result.decision_output["answerSourceToolId"] == ENERGY_VITALS_TOOL_ID
+    assert result.decision_output["decision"] == "DELAY"
+    assert result.decision_output["allowed"] is False
+    assert result.decision_output["firstLayer"]["decision"] == (
+        "建議延後體能/穿戴判斷。"
+    )
+    assert result.decision_output["runtimeSafetyTruth"] is False
 
 
 def test_answer_synthesis_uses_weather_to_decision_field_answer(tmp_path: Path) -> None:

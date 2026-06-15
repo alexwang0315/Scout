@@ -8,7 +8,11 @@ from scout_ai_evidence_collection import (
     ARTIFACT_VERSION,
     collect_scout_ai_evidence,
 )
-from scout_ai_tool_planner import LIVE_NAVIGATION_STATE_TOOL_ID, WEATHER_WINDOW_TOOL_ID
+from scout_ai_tool_planner import (
+    ENERGY_VITALS_TOOL_ID,
+    LIVE_NAVIGATION_STATE_TOOL_ID,
+    WEATHER_WINDOW_TOOL_ID,
+)
 from scout_route_readiness_tool import ROUTE_READINESS_TOOL_ID
 from scout_pace_guardian_tool import PACE_GUARDIAN_TOOL_ID
 from scout_equipment_resource_tool import EQUIPMENT_RESOURCE_TOOL_ID
@@ -100,6 +104,31 @@ def test_evidence_collection_executes_weather_tool_without_model_synthesis() -> 
     assert "route_weather_package" in weather.missing_fields
     assert weather.implementation_gap is None
     assert weather.boundary.runtime_safety_truth is False
+
+
+def test_evidence_collection_keeps_energy_vitals_decision_output() -> None:
+    result = collect_scout_ai_evidence(
+        "我現在心率偏高又很累，需要休息嗎?",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=3,
+    )
+
+    energy = _record(result, ENERGY_VITALS_TOOL_ID)
+    assert energy.collection_status == "completed"
+    assert energy.result is not None
+    payload = energy.result["payload"]
+    assert payload["answerability"] == "energy_vitals_missing_required_fields"
+    assert payload["decision"] == "DELAY"
+    assert payload["decision_output"]["decisionObjectSchema"] == "ContextualPermission"
+    assert payload["decision_output"]["decision"] == "DELAY"
+    assert payload["decision_output"]["allowed"] is False
+    assert payload["decision_output"]["runtimeSafetyTruth"] is False
+    assert payload["decision_output"]["firstLayer"]["decision"] == (
+        "建議延後體能/穿戴判斷。"
+    )
+    assert "heart_rate_bpm" in energy.missing_fields
+    assert energy.boundary.runtime_safety_truth is False
 
 
 def test_evidence_collection_keeps_weather_to_decision_payload(tmp_path: Path) -> None:

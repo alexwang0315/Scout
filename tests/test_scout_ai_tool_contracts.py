@@ -531,6 +531,22 @@ def test_execute_energy_vitals_assessor_returns_read_only_missing_fields() -> No
     assert result.payload["tool_id"] == ENERGY_VITALS_TOOL_ID
     assert result.payload["assessment_kind"] == "read_only_energy_vitals"
     assert result.payload["answerability"] == "energy_vitals_missing_required_fields"
+    assert result.payload["decision"] == "DELAY"
+    assert result.payload["decision_output"]["decisionObjectSchema"] == (
+        "ContextualPermission"
+    )
+    assert result.payload["decision_output"]["decision"] == "DELAY"
+    assert result.payload["decision_output"]["allowed"] is False
+    assert result.payload["decision_output"]["confidence"] == "low"
+    assert result.payload["decision_output"]["runtimeSafetyTruth"] is False
+    assert result.payload["decision_output"]["firstLayer"]["decision"] == (
+        "建議延後體能/穿戴判斷。"
+    )
+    assert "不得把此回答當成現場 permission" in (
+        result.payload["decision_output"]["firstLayer"]["limit"]
+    )
+    assert result.payload["energy_vitals"]["runtime_safety_truth"] is False
+    assert result.payload["results"][0]["decision"] == "DELAY"
     assert "heart_rate_bpm" in result.payload["missing_fields"]
     assert "baseline_window_days" in result.payload["missing_fields"]
     assert "reserve_score" in result.payload["missing_fields"]
@@ -570,6 +586,21 @@ def test_execute_energy_vitals_assessor_uses_normalized_evidence_only() -> None:
     assert result.status == "completed"
     assert result.tool_id == ENERGY_VITALS_TOOL_ID
     assert result.payload["answerability"] == "energy_vitals_advisory_available"
+    assert result.payload["decision"] == "CONDITIONAL_GO"
+    assert result.payload["decision_output"]["decisionObjectSchema"] == (
+        "ContextualPermission"
+    )
+    assert result.payload["decision_output"]["decision"] == "CONDITIONAL_GO"
+    assert result.payload["decision_output"]["allowed"] is True
+    assert result.payload["decision_output"]["confidence"] == "medium"
+    assert result.payload["decision_output"]["runtimeSafetyTruth"] is False
+    assert result.payload["decision_output"]["cost"]["recommendedRestMinutes"] == 10
+    assert "短休最多 10 分鐘" in (
+        result.payload["decision_output"]["firstLayer"]["limit"]
+    )
+    assert result.payload["results"][0]["decision_output"]["decision"] == (
+        "CONDITIONAL_GO"
+    )
     assert result.payload["missing_fields"] == []
     assert result.payload["provided_fields"]["heart_rate_bpm"] == 162.0
     assert result.payload["provided_fields"]["reserve_band"] == "rest_suggested"
@@ -608,6 +639,15 @@ def test_execute_energy_vitals_assessor_loads_workspace_energy_artifacts(tmp_pat
     assert result.payload["provided_fields"]["reserve_score"] > 0
     assert result.payload["provided_fields"]["heart_rate_drift_ratio"] == 0.174
     assert result.payload["advisory"]["cue_band"] == "rest_suggested"
+    assert result.payload["decision"] == "CONDITIONAL_GO"
+    assert result.payload["decision_output"]["decisionObjectSchema"] == (
+        "ContextualPermission"
+    )
+    assert result.payload["decision_output"]["decision"] == "CONDITIONAL_GO"
+    assert result.payload["decision_output"]["allowed"] is True
+    assert "Missing field: hrv_ms" in result.payload["decision_output"][
+        "uncertaintyNotes"
+    ]
     assert "建議短暫休息" in result.payload["advisory"]["message_zh"]
     assert "hrv_ms" in result.payload["missing_fields"]
     assert "pace_mps" in result.payload["missing_fields"]
