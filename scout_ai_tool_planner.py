@@ -305,6 +305,10 @@ def _plan_item(
         overrides = _route_readiness_request_overrides(query.question)
         if overrides:
             request["arguments"] = overrides
+    if request is not None and contract.tool_id == ROUTE_ARCHITECTURE_TOOL_ID:
+        overrides = _route_architecture_request_overrides(query.question)
+        if overrides:
+            request["arguments"] = overrides
     if request is not None and contract.tool_id == CONTEXTUAL_PERMISSION_TOOL_ID:
         overrides = _contextual_permission_request_overrides(query.question)
         if overrides:
@@ -399,6 +403,20 @@ def _route_readiness_request_overrides(question: str) -> dict[str, Any]:
         ("留守已確認", "緊急聯絡已確認", "remotecontactconfirmed", "rcconfirmed"),
     ):
         overrides["remote_contact_confirmed"] = True
+    return overrides
+
+
+def _route_architecture_request_overrides(question: str) -> dict[str, Any]:
+    normalized = _normalize(question)
+    overrides: dict[str, Any] = {}
+    current_time = _extract_iso_datetime(question)
+    if not current_time:
+        current_time = _extract_clock_time(normalized)
+    if current_time:
+        overrides["current_time"] = current_time
+    current_cp = _extract_current_cp_label(question)
+    if current_cp:
+        overrides["current_cp_id"] = current_cp
     return overrides
 
 
@@ -569,6 +587,33 @@ def _extract_iso_datetime(question: str) -> str | None:
     if not match:
         return None
     return match.group(1)
+
+
+def _extract_current_cp_label(question: str) -> str | None:
+    text = str(question or "")
+    patterns = (
+        r"(?<!現)(?:在|位於)\s*([^，,。?？]+)",
+        r"(?:現在|目前)?\s*CP\s*([^，,。?？]+)",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, text, flags=re.IGNORECASE)
+        if not match:
+            continue
+        candidate = match.group(1).strip()
+        candidate = re.sub(
+            r"^\d{4}-\d{2}-\d{2}[tT]\d{2}:\d{2}(?::\d{2})?(?:[zZ]|[+-]\d{2}:\d{2})?\s*",
+            "",
+            candidate,
+        )
+        candidate = re.sub(r"^\d{1,2}[:：]\d{2}\s*", "", candidate)
+        candidate = re.sub(r"^(?:在|位於)\s*", "", candidate)
+        candidate = candidate.strip(" ，,。?？")
+        if not candidate or candidate in {"哪", "哪裡", "哪邊", "這裡", "此處"}:
+            continue
+        if candidate.startswith(("哪", "是不是")):
+            continue
+        return candidate
+    return None
 
 
 def _extract_minutes(normalized_question: str) -> float | None:
