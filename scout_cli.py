@@ -260,6 +260,22 @@ def _add_pretrip_group(subparsers: argparse._SubParsersAction) -> None:
     pace_fit.add_argument("--authorized-by", default=None)
     pace_fit.add_argument("--output", type=Path, default=None)
     pace_fit.add_argument("--json", action="store_true")
+    navigation_terrain = pretrip_sub.add_parser("navigation-terrain-collect")
+    navigation_terrain.add_argument("--project-root", type=Path, default=None)
+    navigation_terrain.add_argument("--project-id", default=None)
+    navigation_terrain.add_argument("--workspace-root", type=Path, default=None)
+    navigation_terrain.add_argument("--offline-map-downloaded", default=None)
+    navigation_terrain.add_argument("--gpx-loaded-on-device", default=None)
+    navigation_terrain.add_argument("--contour-skill-confirmed", default=None)
+    navigation_terrain.add_argument("--terrain-feature-skill-confirmed", default=None)
+    navigation_terrain.add_argument("--retreat-direction-understood", default=None)
+    navigation_terrain.add_argument("--backup-positioning-available", default=None)
+    navigation_terrain.add_argument("--team-map-user-count", default=None)
+    navigation_terrain.add_argument("--generated-at", default=None)
+    navigation_terrain.add_argument("--dry-run", action="store_true")
+    navigation_terrain.add_argument("--authorized-by", default=None)
+    navigation_terrain.add_argument("--output", type=Path, default=None)
+    navigation_terrain.add_argument("--json", action="store_true")
     weather_decision = pretrip_sub.add_parser("weather-decision-collect")
     weather_decision.add_argument("--project-root", type=Path, default=None)
     weather_decision.add_argument("--project-id", default=None)
@@ -694,6 +710,26 @@ def _tool_request_for_args(args: argparse.Namespace) -> tuple[str, dict[str, Any
             if value is not None:
                 request[key] = value
         return "scout.pretrip.pace_fit_collect", request
+    if group == "pretrip" and args.pretrip_command == "navigation-terrain-collect":
+        request = {}
+        _set_path(request, "project_root", args.project_root)
+        _set_path(request, "workspace_root", args.workspace_root)
+        if args.project_id:
+            request["project_id"] = args.project_id
+        for key in (
+            "offline_map_downloaded",
+            "gpx_loaded_on_device",
+            "contour_skill_confirmed",
+            "terrain_feature_skill_confirmed",
+            "retreat_direction_understood",
+            "backup_positioning_available",
+            "team_map_user_count",
+            "generated_at",
+        ):
+            value = getattr(args, key)
+            if value is not None:
+                request[key] = value
+        return "scout.pretrip.navigation_terrain_collect", request
     if group == "pretrip" and args.pretrip_command == "weather-decision-collect":
         request = {"provider": args.provider}
         _set_path(request, "project_root", args.project_root)

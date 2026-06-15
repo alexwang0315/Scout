@@ -7,6 +7,7 @@ from pathlib import Path
 from scout_agent_trace import load_agent_trace
 from scout_cli import run_scout_cli
 from pretrip_contextual_permission_collection import CONTEXTUAL_PERMISSION_RULES_REF
+from pretrip_navigation_terrain_collection import OFFLINE_MAP_MANIFEST_REF
 from pretrip_pace_fit_collection import TEAM_PACE_FIT_REF
 from pretrip_route_architecture_collection import ROUTE_ARCHITECTURE_REF
 from pretrip_route_context_collection import (
@@ -585,6 +586,76 @@ def test_scout_pretrip_pace_fit_collect_facade(tmp_path: Path) -> None:
     assert output["result"]["member_count"] == 2
     assert output["result"]["boundary"]["average_pace_used"] is False
     assert (project_root / TEAM_PACE_FIT_REF).is_file()
+
+
+def test_scout_pretrip_navigation_terrain_collect_facade(tmp_path: Path) -> None:
+    project_root = tmp_path / "chilai_nanhua_day1"
+    shutil.copytree(CHILAI_PROJECT, project_root)
+
+    dry_exit, dry_payload = run_scout_cli(
+        [
+            "pretrip",
+            "navigation-terrain-collect",
+            "--project-root",
+            str(project_root),
+            "--offline-map-downloaded",
+            "false",
+            "--gpx-loaded-on-device",
+            "false",
+            "--contour-skill-confirmed",
+            "false",
+            "--terrain-feature-skill-confirmed",
+            "false",
+            "--retreat-direction-understood",
+            "false",
+            "--backup-positioning-available",
+            "false",
+            "--team-map-user-count",
+            "1",
+            "--dry-run",
+            "--json",
+        ]
+    )
+    assert dry_exit == 0
+    dry_output = json.loads(dry_payload["outputs"]["stdout"])
+    assert dry_output["result"]["writes_performed"] is False
+    assert not (project_root / OFFLINE_MAP_MANIFEST_REF).exists()
+
+    exit_code, payload = run_scout_cli(
+        [
+            "pretrip",
+            "navigation-terrain-collect",
+            "--project-root",
+            str(project_root),
+            "--offline-map-downloaded",
+            "false",
+            "--gpx-loaded-on-device",
+            "false",
+            "--contour-skill-confirmed",
+            "false",
+            "--terrain-feature-skill-confirmed",
+            "false",
+            "--retreat-direction-understood",
+            "false",
+            "--backup-positioning-available",
+            "false",
+            "--team-map-user-count",
+            "1",
+            "--authorized-by",
+            "operator.alex",
+            "--json",
+        ]
+    )
+
+    assert exit_code == 0
+    output = json.loads(payload["outputs"]["stdout"])
+    assert output["artifact_kind"] == (
+        "scout_pretrip_navigation_terrain_collect_tool_output"
+    )
+    assert output["result"]["decision"] == "GUIDED_ONLY"
+    assert output["result"]["writes_performed"] is True
+    assert output["result"]["boundary"]["live_sensor_read_allowed"] is False
+    assert (project_root / OFFLINE_MAP_MANIFEST_REF).is_file()
 
 
 def test_scout_pretrip_weather_decision_collect_facade(tmp_path: Path) -> None:

@@ -63,6 +63,8 @@ OPTIONAL_PROJECT_ARTIFACTS: tuple[tuple[str, str], ...] = (
     ("route_architecture", "route_architecture_ref"),
     ("pace_coefficients", "pace_coefficients_ref"),
     ("team_pace_fit", "team_pace_fit_ref"),
+    ("offline_map_manifest", "offline_map_manifest_ref"),
+    ("ins_dr_readiness", "ins_dr_readiness_ref"),
     ("route_weather_package", "route_weather_package_ref"),
     ("weather_source_manifest", "weather_source_manifest_ref"),
     ("weather_decision_candidates", "weather_decision_candidates_ref"),
@@ -425,6 +427,71 @@ def _project_artifact_summary(artifact_kind: str, payload: Any) -> dict[str, Any
             "average_pace_used": pace_guardian.get("average_pace_used")
             if isinstance(pace_guardian, dict)
             else boundary.get("average_pace_used"),
+            "human_review_required": payload.get("human_review_required"),
+            "candidate_only": boundary.get("candidate_only"),
+            "runtime_safety_truth": boundary.get("runtime_safety_truth"),
+        }
+
+    if artifact_kind == "offline_map_manifest":
+        boundary = payload.get("boundary", {})
+        map_readiness = payload.get("map_readiness", {})
+        terrain_readiness = payload.get("terrain_readiness", {})
+        demand = payload.get("navigation_demand", {})
+        return {
+            "project_id": payload.get("project_id"),
+            "schema_version": payload.get("schema_version"),
+            "decision": payload.get("decision"),
+            "answerability": payload.get("answerability"),
+            "navigation_demand_level": demand.get("demand_level")
+            if isinstance(demand, dict)
+            else None,
+            "offline_map_downloaded": map_readiness.get("offline_map_downloaded")
+            if isinstance(map_readiness, dict)
+            else None,
+            "gpx_loaded_on_device": map_readiness.get("gpx_loaded_on_device")
+            if isinstance(map_readiness, dict)
+            else None,
+            "risk_layers_available": map_readiness.get("risk_layers_available")
+            if isinstance(map_readiness, dict)
+            else None,
+            "terrain_layers_available": map_readiness.get("terrain_layers_available")
+            if isinstance(map_readiness, dict)
+            else None,
+            "risk_ribbon_segment_count": terrain_readiness.get(
+                "risk_ribbon_segment_count"
+            )
+            if isinstance(terrain_readiness, dict)
+            else None,
+            "human_review_required": payload.get("human_review_required"),
+            "candidate_only": boundary.get("candidate_only"),
+            "runtime_safety_truth": boundary.get("runtime_safety_truth"),
+        }
+
+    if artifact_kind == "ins_dr_readiness":
+        boundary = payload.get("boundary", {})
+        positioning = payload.get("positioning_readiness", {})
+        map_skill = payload.get("map_skill_readiness", {})
+        return {
+            "project_id": payload.get("project_id"),
+            "schema_version": payload.get("schema_version"),
+            "decision": payload.get("decision"),
+            "answerability": payload.get("answerability"),
+            "backup_positioning_available": positioning.get(
+                "backup_positioning_available"
+            )
+            if isinstance(positioning, dict)
+            else None,
+            "team_map_user_count": positioning.get("team_map_user_count")
+            if isinstance(positioning, dict)
+            else None,
+            "live_sensor_probe_performed": positioning.get(
+                "live_sensor_probe_performed"
+            )
+            if isinstance(positioning, dict)
+            else None,
+            "contour_skill_confirmed": map_skill.get("contour_skill_confirmed")
+            if isinstance(map_skill, dict)
+            else None,
             "human_review_required": payload.get("human_review_required"),
             "candidate_only": boundary.get("candidate_only"),
             "runtime_safety_truth": boundary.get("runtime_safety_truth"),
