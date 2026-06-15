@@ -25,6 +25,7 @@ from scout_equipment_resource_tool import EQUIPMENT_RESOURCE_TOOL_ID
 from scout_team_status_tool import TEAM_STATUS_TOOL_ID
 from scout_post_trip_review_tool import POST_TRIP_REVIEW_TOOL_ID
 from scout_route_architecture_tool import ROUTE_ARCHITECTURE_TOOL_ID
+from scout_media_literacy_tool import MEDIA_LITERACY_TOOL_ID
 
 
 EXECUTABLE_TOOL_IDS = set(EXECUTABLE_TOOL_ALIASES)
@@ -503,6 +504,34 @@ def _execute_ready_current_tool(tool_id: str, arguments: dict[str, Any]) -> dict
             limit=limit,
         )
 
+    if tool_id == MEDIA_LITERACY_TOOL_ID:
+        from scout_media_literacy_tool import assess_scout_media_literacy
+
+        return assess_scout_media_literacy(
+            project_root,
+            query=query,
+            media_claim=_str_or_none(arguments.get("media_claim")),
+            source_platform=_str_or_none(arguments.get("source_platform")),
+            target_context_point=_str_or_none(arguments.get("target_context_point")),
+            route_context_path=_str_or_none(arguments.get("route_context_path")),
+            mcp_candidates_path=_str_or_none(arguments.get("mcp_candidates_path")),
+            weather_daylight_path=_str_or_none(
+                arguments.get("weather_daylight_path")
+            ),
+            route_condition_reviewed=_bool_or_none(
+                arguments.get("route_condition_reviewed")
+            ),
+            weather_reviewed=_bool_or_none(arguments.get("weather_reviewed")),
+            user_experience_level=_str_or_none(
+                arguments.get("user_experience_level")
+            ),
+            guided_party=_bool_or_none(arguments.get("guided_party")),
+            remaining_safety_buffer_minutes=_float_or_none(
+                arguments.get("remaining_safety_buffer_minutes")
+            ),
+            limit=limit,
+        )
+
     if tool_id == EQUIPMENT_RESOURCE_TOOL_ID:
         from scout_equipment_resource_tool import assess_scout_equipment_resource
 
@@ -663,6 +692,7 @@ def _completed_missing_fields(tool_id: str, payload: dict[str, Any]) -> list[str
         EQUIPMENT_RESOURCE_TOOL_ID,
         TEAM_STATUS_TOOL_ID,
         POST_TRIP_REVIEW_TOOL_ID,
+        MEDIA_LITERACY_TOOL_ID,
     }:
         return []
     value = payload.get("missing_fields")

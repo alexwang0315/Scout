@@ -79,6 +79,10 @@ CURRENT_TOOLS = {
         "label": "route architecture / CP Graph",
         "evidence_scope": "candidate CP Graph, hard points, retreat options, turn-back checkpoint, route forgiveness, and alternative/short-route structure",
     },
+    "scout.ai.media_literacy.assess.v0": {
+        "label": "media literacy / bias sentinel",
+        "evidence_scope": "social photo/video/check-in pressure, success-story, season, weather, equipment, guide, speed, and image-scale bias detection with conservative action guidance",
+    },
 }
 
 
@@ -410,6 +414,8 @@ def _missing_evidence(question: str, recommended_tools: list[str]) -> list[str]:
         missing.append("fresh_weather_or_nowcast_with_ttl")
     if _has_any(question, _ROUTE_READINESS_TERMS):
         missing.append("route_date_team_equipment_weather_inputs")
+    if _has_any(question, _MEDIA_LITERACY_TERMS):
+        missing.append("media_source_or_route_context_review")
     if _has_any(question, _PRIVATE_PROFILE_TERMS):
         missing.append("user_or_team_baseline_profile")
     if _has_any(question, _PACE_PROFILE_TERMS):
@@ -481,6 +487,7 @@ _CURRENT_TOOL_TERMS = (
     ("scout.ai.team_status.assess.v0", ("隊友在哪", "後隊在哪", "隊友不見", "隊友走散", "隊伍走散", "脫隊", "留守", "回報", "最後一次有效位置", "最後聯絡", "集合", "集合點", "約定山屋", "checkin", "rendezvous")),
     ("scout.ai.post_trip_review.assess.v0", ("行後", "回顧", "覆盤", "事後", "完成行程", "實際cp", "實際通過", "實際耗時", "停留時間", "比預期慢", "路段比預期", "體感難度", "near miss", "nearmiss", "裝備缺口", "天氣與路況", "下次行前", "下一次規劃", "模型更新", "能力摘要", "capability timeline", "capability capsule", "incident package", "field case")),
     ("scout.ai.route_architecture.assess.v0", ("route architecture", "cp graph", "checkpoint graph", "路線結構", "行程結構", "cp圖", "撤退點", "撤退路線", "折返點", "最晚折返", "難點位置", "難點在哪", "容錯率", "低容錯", "替代路線", "短版路線", "岔路可以切", "回頭成本")),
+    ("scout.ai.media_literacy.assess.v0", ("ig", "instagram", "網紅", "美照", "熱門照片", "打卡", "朝聖", "攻略說", "網路上都說", "影片看起來", "照片看起來", "成功者", "乾季照片", "晴天影片", "輕裝", "專業帶隊", "嚮導", "媒體偏誤", "社群", "checkin", "social photo", "media bias", "survivorship bias")),
 )
 
 
@@ -507,6 +514,7 @@ _SAFETY_BOUNDARY_TERMS = ("ln", "safety", "/safety", "phase 1", "l0", "l1", "l2"
 _REVIEW_GAP_TERMS = ("人工複核", "複核", "互相矛盾", "provenance", "缺少什麼", "缺少哪些", "context 缺失", "最相關", "不能回答", "可信度", "sources", "引用")
 _WEATHER_TERMS = ("天氣", "下雨", "白牆", "風雨", "日落", "起霧", "溪水", "風寒", "濕衣", "暴漲", "落石區", "紮營", "延後出發", "有效期限", "變冷")
 _ROUTE_READINESS_TERMS = ("go/no-go", "gono", "出發前", "行前", "可以出發", "能出發", "要不要出發", "是否出發", "出發決策", "departure gate", "departure readiness", "route readiness", "pretrip readiness", "go no go", "gonogo")
+_MEDIA_LITERACY_TERMS = ("ig", "instagram", "網紅", "美照", "熱門照片", "打卡", "朝聖", "攻略說", "網路上都說", "影片看起來", "照片看起來", "成功者", "乾季照片", "晴天影片", "輕裝", "專業帶隊", "嚮導", "媒體偏誤", "社群", "checkin", "social photo", "media bias", "survivorship bias")
 _PRIVATE_PROFILE_TERMS = ("我的體能", "我的速度", "我今天", "我需要", "我晚出發", "我補", "我是不是", "我該")
 _PACE_PROFILE_TERMS = ("最慢者", "最慢成員", "腳程差", "隊伍腳程", "隊伍速度", "隊伍節奏", "休息節奏", "午餐點", "午餐前移", "縮短行程", "改短版", "能準時抵達", "下一個 cp")
 _VITALS_TERMS = ("心率", "高山症", "補水", "補給", "太累", "速度下降", "決策品質", "休息", "下撤", "體能", "vitals", "health evidence", "source value", "body battery", "privacy boundary")

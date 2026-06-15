@@ -16,6 +16,7 @@ from scout_team_status_tool import TEAM_STATUS_TOOL_ID
 from scout_post_trip_review_tool import POST_TRIP_REVIEW_TOOL_ID
 from scout_route_architecture_tool import ROUTE_ARCHITECTURE_TOOL_ID
 from scout_route_context_tool import ROUTE_CONTEXT_TOOL_ID
+from scout_media_literacy_tool import MEDIA_LITERACY_TOOL_ID
 from scout_risk_score_tool import RISK_SCORE_TOOL_ID
 from scout_terrain_score_tool import TERRAIN_SCORE_TOOL_ID
 
@@ -294,6 +295,33 @@ def test_evidence_collection_keeps_route_readiness_payload() -> None:
     assert payload["departure_gate"]["approval_granted"] is False
     assert "user_experience_level" in readiness.missing_fields
     assert readiness.boundary.runtime_safety_truth is False
+
+
+def test_evidence_collection_keeps_media_literacy_payload() -> None:
+    result = collect_scout_ai_evidence(
+        "IG 大崩壁美照會不會誤導？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=3,
+    )
+
+    assert result.selected_tool_count >= 1
+    assert result.executed_tool_count >= 1
+    assert result.completed_tool_count >= 1
+    assert result.missing_input_count == 0
+
+    media = _record(result, MEDIA_LITERACY_TOOL_ID)
+    assert media.collection_status == "completed"
+    assert media.result is not None
+    payload = media.result["payload"]
+    assert payload["answerability"] == "media_literacy_missing_context"
+    assert payload["decision"] == "NO_GO"
+    assert payload["media_literacy"]["role"] == "Media Literacy / Bias Sentinel"
+    assert payload["media_bias_analysis"]["target_context_points"][0]["label"] == (
+        "大崩壁"
+    )
+    assert "fresh_weather_or_route_condition_review" in media.missing_fields
+    assert media.boundary.runtime_safety_truth is False
 
 
 def test_evidence_collection_keeps_team_status_payload() -> None:

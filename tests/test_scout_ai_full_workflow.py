@@ -16,6 +16,7 @@ from scout_post_trip_review_tool import POST_TRIP_REVIEW_TOOL_ID
 from scout_route_readiness_tool import ROUTE_READINESS_TOOL_ID
 from scout_route_architecture_tool import ROUTE_ARCHITECTURE_TOOL_ID
 from scout_route_context_tool import ROUTE_CONTEXT_TOOL_ID
+from scout_media_literacy_tool import MEDIA_LITERACY_TOOL_ID
 from scout_risk_score_tool import RISK_SCORE_TOOL_ID
 from scout_terrain_score_tool import TERRAIN_SCORE_TOOL_ID
 
@@ -281,6 +282,33 @@ def test_full_workflow_runs_route_readiness_question() -> None:
     )
     assert "user_experience_level" in result.sources[0]["missing_fields"]
     assert "出發前判斷" in result.answer
+    assert "runtime safety truth" in result.answer
+    assert result.boundary.runtime_safety_truth is False
+
+
+def test_full_workflow_runs_media_literacy_question() -> None:
+    result = run_scout_ai_full_workflow(
+        "IG 大崩壁美照會不會誤導？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=3,
+    )
+
+    assert result.answerability == "partial_evidence_with_missing_context"
+    assert result.selected_tool_count >= 1
+    assert result.executed_tool_count >= 1
+    assert result.completed_tool_count >= 1
+    assert result.contract_gap_count == 0
+    assert result.failed_tool_count == 0
+    assert result.missing_evidence_count == 1
+    sources = [source for source in result.sources if source["tool_id"] == MEDIA_LITERACY_TOOL_ID]
+    assert len(sources) == 1
+    source = sources[0]
+    assert source["top_result_summary"]["decision"] == "NO_GO"
+    assert source["top_result_summary"]["media_literacy"]["role"] == (
+        "Media Literacy / Bias Sentinel"
+    )
+    assert "媒體識讀判斷" in result.answer
     assert "runtime safety truth" in result.answer
     assert result.boundary.runtime_safety_truth is False
 

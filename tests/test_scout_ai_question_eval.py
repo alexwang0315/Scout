@@ -91,6 +91,14 @@ def test_question_eval_classifies_current_tools_and_missing_live_evidence() -> N
             "question": "出發前 Go/No-Go 可以出發嗎？",
         }
     )
+    media_eval = evaluate_question(
+        {
+            "id": "q-media-literacy",
+            "source_set": "test",
+            "category": "media_literacy",
+            "question": "IG 大崩壁美照會不會誤導？",
+        }
+    )
     route_architecture_eval = evaluate_question(
         {
             "id": "q-route-architecture",
@@ -137,6 +145,9 @@ def test_question_eval_classifies_current_tools_and_missing_live_evidence() -> N
         "route_date_team_equipment_weather_inputs"
         in route_readiness_eval.missing_evidence
     )
+    assert media_eval.answerability == "requires_missing_evidence"
+    assert "scout.ai.media_literacy.assess.v0" in media_eval.current_tool_ids
+    assert "media_source_or_route_context_review" in media_eval.missing_evidence
     assert route_architecture_eval.answerability == "answerable_by_current_read_only_tools"
     assert (
         "scout.ai.route_architecture.assess.v0"

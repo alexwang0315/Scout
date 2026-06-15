@@ -28,6 +28,7 @@ from scout_equipment_resource_tool import EQUIPMENT_RESOURCE_TOOL_ID
 from scout_team_status_tool import TEAM_STATUS_TOOL_ID
 from scout_post_trip_review_tool import POST_TRIP_REVIEW_TOOL_ID
 from scout_route_architecture_tool import ROUTE_ARCHITECTURE_TOOL_ID
+from scout_media_literacy_tool import MEDIA_LITERACY_TOOL_ID
 from scout_workspace_search_tools import (
     MAJOR_POINT_TOOL_ID,
     ROUTE_STRUCTURE_TOOL_ID,
@@ -191,6 +192,13 @@ def plan_scout_ai_tools(
             (
                 POST_TRIP_REVIEW_TOOL_ID,
                 "Question asks for Post-Trip Review / learning governance: completed-trip evidence, after-action candidates, actual CP timing, slow segments, near miss, equipment gaps, or next-plan model updates.",
+            )
+        )
+    if _looks_like_media_literacy_question(normalized_question):
+        selected.append(
+            (
+                MEDIA_LITERACY_TOOL_ID,
+                "Question asks for Media Literacy / Bias Sentinel: social photos, videos, guides, check-in pressure, speed claims, season mismatch, or copying guided/pro content.",
             )
         )
     if _looks_like_live_navigation_state_question(normalized_question):
@@ -916,6 +924,8 @@ def _looks_like_contextual_permission_question(text: str) -> bool:
 def _looks_like_route_context_question(text: str) -> bool:
     if _looks_like_contextual_permission_question(text):
         return False
+    if _looks_like_media_literacy_question(text):
+        return False
     return _has_any(
         text,
         (
@@ -940,6 +950,37 @@ def _looks_like_route_context_question(text: str) -> bool:
             "routecontext",
             "whattosee",
             "viewpoint",
+        ),
+    )
+
+
+def _looks_like_media_literacy_question(text: str) -> bool:
+    return _has_any(
+        text,
+        (
+            "ig",
+            "instagram",
+            "網紅",
+            "美照",
+            "熱門照片",
+            "打卡",
+            "朝聖",
+            "攻略說",
+            "網路上都說",
+            "影片看起來",
+            "照片看起來",
+            "成功者",
+            "乾季照片",
+            "晴天影片",
+            "輕裝",
+            "專業帶隊",
+            "嚮導",
+            "媒體偏誤",
+            "社群",
+            "checkin",
+            "socialphoto",
+            "mediabias",
+            "survivorshipbias",
         ),
     )
 
