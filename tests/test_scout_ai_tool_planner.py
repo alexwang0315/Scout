@@ -1054,6 +1054,29 @@ def test_planner_selects_route_context_for_experience_guide_question() -> None:
     assert item.boundary.runtime_safety_truth is False
 
 
+def test_planner_selects_route_context_and_permission_for_experience_stop_question() -> None:
+    plan = plan_scout_ai_tools(
+        _query("哪裡適合拍攝？可以停多久？"),
+        project_root=PROJECT_ROOT,
+    )
+
+    tool_ids = _tool_ids(plan)
+    assert ROUTE_CONTEXT_TOOL_ID in tool_ids
+    assert CONTEXTUAL_PERMISSION_TOOL_ID in tool_ids
+    assert LIVE_NAVIGATION_STATE_TOOL_ID in tool_ids
+    assert ROUTE_ARCHITECTURE_TOOL_ID in tool_ids
+    assert WEATHER_WINDOW_TOOL_ID in tool_ids
+    assert PACE_GUARDIAN_TOOL_ID in tool_ids
+    assert RISK_SCORE_TOOL_ID in tool_ids
+
+    contextual = _single_tool(plan, CONTEXTUAL_PERMISSION_TOOL_ID)
+    assert contextual.request is not None
+    assert contextual.request["arguments"]["action"] == "photo"
+    route_context = _single_tool(plan, ROUTE_CONTEXT_TOOL_ID)
+    assert route_context.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+    assert route_context.boundary.runtime_safety_truth is False
+
+
 def test_planner_selects_route_context_for_route_briefing_questions() -> None:
     questions = [
         "奇萊南華建議幾天？",

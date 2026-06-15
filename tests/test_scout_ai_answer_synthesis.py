@@ -1019,6 +1019,35 @@ def test_answer_synthesis_uses_route_context_field_answer_without_guessing() -> 
     assert "runtime safety truth" in result.answer
 
 
+def test_answer_synthesis_combines_experience_guide_with_stop_permission() -> None:
+    result = collect_and_synthesize_scout_ai_answer(
+        "哪裡適合拍攝？可以停多久？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=6,
+    )
+
+    assert result.answerability == "partial_evidence_with_missing_context"
+    assert result.completed_source_count == 7
+    assert result.missing_evidence_count == 4
+    _assert_on_route_micro_decision_support_sources(result)
+    contextual = _source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
+    route_context = _source(result, ROUTE_CONTEXT_TOOL_ID)
+    assert contextual.top_result_summary["action"] == "photo"
+    assert contextual.top_result_summary["decision"] == "NO_GO"
+    assert route_context.top_result_summary["route_context"]["role"] == (
+        "Experience Guide"
+    )
+    assert result.decision_output["answerSourceToolId"] == CONTEXTUAL_PERMISSION_TOOL_ID
+    assert result.decision_output["action"] == "photo"
+    assert result.decision_output["decision"] == "NO_GO"
+    assert result.decision_output["dataConfidence"]["missingEvidenceCount"] == 4
+    assert "不建議拍照" in result.answer
+    assert "候選路線脈絡" in result.answer
+    assert "不是現場停留授權" in result.answer
+    assert "信心：中等" in result.answer
+
+
 def test_answer_synthesis_uses_route_context_for_standard_context_layers() -> None:
     questions = [
         "有哪些原住民族地名或舊社脈絡？",

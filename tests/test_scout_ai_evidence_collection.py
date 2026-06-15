@@ -366,6 +366,33 @@ def test_evidence_collection_keeps_contextual_permission_decision_object() -> No
     assert contextual.boundary.runtime_safety_truth is False
 
 
+def test_evidence_collection_combines_experience_guide_and_permission() -> None:
+    result = collect_scout_ai_evidence(
+        "哪裡適合拍攝？可以停多久？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=6,
+    )
+
+    assert result.selected_tool_count == 7
+    assert result.executed_tool_count == 7
+    assert result.completed_tool_count == 7
+    assert result.missing_input_count == 0
+    _assert_on_route_micro_decision_support_records(result)
+
+    contextual = _record(result, CONTEXTUAL_PERMISSION_TOOL_ID)
+    assert contextual.result is not None
+    assert contextual.result["payload"]["action"] == "photo"
+    assert contextual.result["payload"]["decision"] == "NO_GO"
+
+    route_context = _record(result, ROUTE_CONTEXT_TOOL_ID)
+    assert route_context.result is not None
+    payload = route_context.result["payload"]
+    assert payload["route_context"]["role"] == "Experience Guide"
+    assert payload["route_context"]["stop_permission_required"] is True
+    assert any(item["label"] == "稜線啞口觀景點" for item in payload["results"])
+
+
 def test_evidence_collection_keeps_tripod_micro_decision() -> None:
     result = collect_scout_ai_evidence(
         "現在 2026-06-07T13:36:00+08:00，安全 buffer 還有 21 分鐘，可以架腳架 4 分鐘嗎？",
