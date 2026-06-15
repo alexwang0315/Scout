@@ -724,6 +724,35 @@ def test_answer_synthesis_uses_equipment_resource_field_answer_without_guessing(
     assert "runtime safety truth" in result.answer
 
 
+def test_answer_synthesis_blocks_autonomous_departure_without_offline_map() -> None:
+    result = collect_and_synthesize_scout_ai_answer(
+        "我沒下載離線地圖，可以自主出發嗎？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=4,
+    )
+
+    source_ids = {source.tool_id for source in result.sources}
+    assert ROUTE_READINESS_TOOL_ID in source_ids
+    assert EQUIPMENT_RESOURCE_TOOL_ID in source_ids
+    assert MAP_PERCEPTION_TOOL_ID not in source_ids
+
+    equipment = _source(result, EQUIPMENT_RESOURCE_TOOL_ID)
+    assert equipment.top_result_summary["decision"] == "NO_GO"
+    assert equipment.top_result_summary["resource_state"]["offline_map_ready"] is False
+    assert "離線地圖未就緒。" in equipment.top_result_summary["critical_gaps"]
+
+    assert result.decision_output["answerSourceToolId"] == EQUIPMENT_RESOURCE_TOOL_ID
+    assert result.decision_output["decision"] == "NO_GO"
+    assert result.decision_output["allowed"] is False
+    assert result.decision_output["firstLayer"]["decision"] == (
+        "不建議照原計畫出發或推進。"
+    )
+    assert "不得照原計畫出發" in result.decision_output["firstLayer"]["limit"]
+    assert "離線地圖未就緒" in result.answer
+    assert "runtime safety truth" in result.answer
+
+
 def test_answer_synthesis_uses_route_readiness_field_answer_without_guessing() -> None:
     result = collect_and_synthesize_scout_ai_answer(
         "出發前 Go/No-Go 可以出發嗎？",

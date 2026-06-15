@@ -296,6 +296,10 @@ def _plan_item(
         overrides = _route_readiness_request_overrides(query.question)
         if overrides:
             request["arguments"] = overrides
+    if request is not None and contract.tool_id == EQUIPMENT_RESOURCE_TOOL_ID:
+        overrides = _equipment_resource_request_overrides(query.question)
+        if overrides:
+            request["arguments"] = overrides
     return ScoutAiToolPlanItem(
         tool_id=contract.tool_id,
         label=contract.label,
@@ -346,12 +350,77 @@ def _route_readiness_request_overrides(question: str) -> dict[str, Any]:
         ("裝備已確認", "equipmentreviewed", "equipmentconfirmed", "gearconfirmed"),
     ):
         overrides["equipment_confirmed"] = True
+    if _states_missing_offline_map(normalized) or _states_missing_gpx(normalized):
+        overrides["equipment_confirmed"] = False
     if _has_any(
         normalized,
         ("留守已確認", "緊急聯絡已確認", "remotecontactconfirmed", "rcconfirmed"),
     ):
         overrides["remote_contact_confirmed"] = True
     return overrides
+
+
+def _equipment_resource_request_overrides(question: str) -> dict[str, Any]:
+    normalized = _normalize(question)
+    overrides: dict[str, Any] = {}
+    if _states_missing_offline_map(normalized):
+        overrides["offline_map_ready"] = False
+    if _has_any(
+        normalized,
+        (
+            "離線地圖已下載",
+            "下載好離線地圖",
+            "offlinemapready",
+            "offlinemapdownloaded",
+        ),
+    ):
+        overrides["offline_map_ready"] = True
+    if _states_missing_gpx(normalized):
+        overrides["gpx_loaded"] = False
+    if _has_any(
+        normalized,
+        ("gpx已載入", "路線檔已載入", "gpxloaded", "routefileloaded"),
+    ):
+        overrides["gpx_loaded"] = True
+    return overrides
+
+
+def _states_missing_offline_map(normalized_question: str) -> bool:
+    return _has_any(
+        normalized_question,
+        (
+            "沒下載離線地圖",
+            "沒有下載離線地圖",
+            "未下載離線地圖",
+            "離線地圖沒下載",
+            "離線地圖未下載",
+            "沒有離線地圖",
+            "沒離線地圖",
+            "noofflinemap",
+            "offlinemapmissing",
+            "offlinemapnotdownloaded",
+        ),
+    )
+
+
+def _states_missing_gpx(normalized_question: str) -> bool:
+    return _has_any(
+        normalized_question,
+        (
+            "沒載入gpx",
+            "沒有載入gpx",
+            "未載入gpx",
+            "gpx沒載入",
+            "gpx未載入",
+            "沒有gpx",
+            "沒gpx",
+            "沒有路線檔",
+            "路線檔未載入",
+            "nogpx",
+            "gpxmissing",
+            "gpxnotloaded",
+        ),
+    )
 
 
 def _route_readiness_experience_level(normalized_question: str) -> str | None:
@@ -507,6 +576,24 @@ def _looks_like_terrain_question(text: str) -> bool:
 
 
 def _looks_like_map_perception_question(text: str) -> bool:
+    map_readiness_terms = ("離線地圖", "下載地圖", "地圖下載", "offline map")
+    map_perception_terms = (
+        "ocr",
+        "annotation",
+        "label",
+        "mapperception",
+        "圖磚",
+        "標註",
+        "標注",
+        "文字",
+        "圖層",
+        "等高線",
+        "contour",
+    )
+    if _has_any(text, map_readiness_terms) and not _has_any(
+        text, map_perception_terms
+    ):
+        return False
     return _has_any(
         text,
         (
@@ -587,6 +674,11 @@ def _looks_like_route_readiness_question(text: str) -> bool:
             "行前",
             "可以出發",
             "能出發",
+            "自主出發",
+            "可以自主出發",
+            "能不能自主出發",
+            "不建議自主前往",
+            "自主前往",
             "要不要出發",
             "是否出發",
             "出發決策",

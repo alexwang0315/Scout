@@ -69,6 +69,25 @@ def test_equipment_resource_no_go_for_low_battery_and_missing_offline_map() -> N
     assert result["equipment_resource"]["runtime_safety_truth"] is False
 
 
+def test_equipment_resource_no_go_for_missing_offline_map_even_with_other_missing_fields() -> None:
+    result = assess_scout_equipment_resource(
+        PROJECT_ROOT,
+        query="我沒下載離線地圖，可以自主出發嗎？",
+        offline_map_ready=False,
+    )
+
+    assert result["answerability"] == "equipment_resource_missing_required_fields"
+    assert result["decision"] == "NO_GO"
+    assert result["decision_output"]["decision"] == "NO_GO"
+    assert result["decision_output"]["allowed"] is False
+    assert result["decision_output"]["firstLayer"]["decision"] == (
+        "不建議照原計畫出發或推進。"
+    )
+    assert "離線地圖未就緒。" in result["resource_readiness"]["critical_gaps"]
+    assert "gpx_loaded" in result["missing_fields"]
+    assert result["decision_output"]["runtimeSafetyTruth"] is False
+
+
 def test_equipment_resource_go_when_direct_required_resources_are_ready(tmp_path: Path) -> None:
     project_root = tmp_path / "equipment_ready_project"
     project_root.mkdir()

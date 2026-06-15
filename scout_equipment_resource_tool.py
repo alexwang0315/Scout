@@ -358,10 +358,10 @@ def _readiness(
 
 
 def _decision(*, readiness: dict[str, Any], missing_fields: list[str]) -> str:
-    if missing_fields:
-        return "DELAY"
     if readiness["critical_gaps"]:
         return "NO_GO"
+    if missing_fields:
+        return "DELAY"
     if readiness["warning_gaps"] or readiness["required_conditions"]:
         return "CONDITIONAL_GO"
     return "GO"

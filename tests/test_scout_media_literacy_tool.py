@@ -45,6 +45,26 @@ def test_media_literacy_blocks_social_photo_pressure_on_risk_context() -> None:
     assert result["boundary"]["outbound_send_performed"] is False
 
 
+def test_media_literacy_blocks_beauty_photo_bias_even_when_review_is_incomplete() -> None:
+    result = assess_scout_media_literacy(
+        PROJECT_ROOT,
+        query="IG 大崩壁美照會不會誤導？",
+    )
+
+    assert result["answerability"] == "media_literacy_missing_context"
+    assert result["decision"] == "NO_GO"
+    assert result["allowed"] is False
+    assert result["media_bias_analysis"]["target_context_points"][0]["label"] == (
+        "大崩壁"
+    )
+    assert "fresh_weather_or_route_condition_review" in result["missing_fields"]
+    assert result["decision_output"]["decision"] == "NO_GO"
+    assert result["decision_output"]["firstLayer"]["decision"] == (
+        "不建議為媒體點位停留或改線。"
+    )
+    assert result["decision_output"]["runtimeSafetyTruth"] is False
+
+
 def test_media_literacy_guided_content_requires_guided_or_equivalent_support() -> None:
     result = assess_scout_media_literacy(
         PROJECT_ROOT,

@@ -177,6 +177,8 @@ decision such as `CONDITIONAL_GO`; missing or unmatched material maps to `DELAY`
 runtime-truth claims in map perception material map to `ESCALATE`. This is
 candidate map context only and never authorizes stopping, rerouting, shortcutting,
 Ln, `/safety/*`, SOS, outbound send, or hardware control.
+Offline-map download, GPX loading, and autonomous-departure readiness are routed
+to equipment/resource and route-readiness gates, not to map perception.
 
 `scout.ai.ins_dr_trace.analyze.v0` now returns a native `decision_output` for
 Sec. 11 navigation-truth and Sec. 19.2 trace-corroboration questions. Missing or
@@ -265,6 +267,9 @@ layer turns battery, offline map, GPX, headlamp, water, food, and critical gear
 gaps into Go / Delay / Conditional / No-Go style field decisions. It remains a
 read-only resource gate and never grants departure approval or runtime safety
 truth by itself.
+Questions that state a missing offline map or unloaded GPX, such as
+"我沒下載離線地圖，可以自主出發嗎？", route through route readiness plus this
+equipment gate and must not be answered by candidate map OCR/perception alone.
 
 `scout.ai.team_status.assess.v0` returns a native `decision_output` for Sec. 18.1
 team/remote-contact inputs and Sec. 19 team-status recalculation. It converts

@@ -523,7 +523,7 @@ def _answer_decision_output(
 def _decision_source_priority(source: ScoutAiAnswerSource) -> tuple[int, str]:
     if source.tool_id.startswith("pydantic_ai.tool.search_"):
         if source.tool_id == MAP_PERCEPTION_TOOL_ID:
-            return (10, source.tool_id)
+            return (15, source.tool_id)
         if source.tool_id == INS_DR_TRACE_TOOL_ID:
             return (10, source.tool_id)
         return (50, source.tool_id)
@@ -542,11 +542,15 @@ def _decision_source_priority(source: ScoutAiAnswerSource) -> tuple[int, str]:
         return (2, source.tool_id)
     if source.tool_id == ROUTE_READINESS_TOOL_ID:
         return (5, source.tool_id)
+    if source.tool_id == EQUIPMENT_RESOURCE_TOOL_ID:
+        decision = str(source.top_result_summary.get("decision") or "").upper()
+        if decision in {"ESCALATE", "NO_GO"}:
+            return (4, source.tool_id)
+        return (10, source.tool_id)
     if source.tool_id in {
         WEATHER_WINDOW_TOOL_ID,
         LIVE_NAVIGATION_STATE_TOOL_ID,
         PACE_GUARDIAN_TOOL_ID,
-        EQUIPMENT_RESOURCE_TOOL_ID,
         TEAM_STATUS_TOOL_ID,
         ROUTE_ARCHITECTURE_TOOL_ID,
         ROUTE_CONTEXT_TOOL_ID,
