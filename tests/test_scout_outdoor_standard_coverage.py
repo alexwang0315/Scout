@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -208,6 +209,44 @@ SECTION_25_EXAMPLE_SCENARIOS = [
         id="section-25-social-photo",
     ),
 ]
+
+
+def test_standard_completion_audit_covers_all_sections_and_primary_surfaces() -> None:
+    missing_sections = _missing_standard_section_numbers()
+    assert missing_sections == []
+
+    registry = tool_registry_output(include_not_implemented=True)
+    assert registry.tool_count == 26
+    assert registry.ready_current_tool_count == 26
+    assert registry.contract_only_tool_count == 0
+    assert registry.implementation_status_counts == {"ready_current_tool": 26}
+
+    result = run_scout_ai_full_workflow(
+        "請以 SCOUT_OUTDOOR_AI_AGENT_STANDARD 為基準，檢視目前 Scout 體系還缺哪些東西，六力是否都有實作？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=8,
+    )
+    decision_output = result.decision_output
+
+    assert decision_output["answerSourceToolId"] == "scout.ai.standard_gap_overview.v0"
+    assert decision_output["decision"] == "GUIDED_ONLY"
+    assert decision_output["allowed"] is False
+    assert decision_output["runtimeSafetyTruth"] is False
+    assert result.boundary.runtime_safety_truth is False
+    assert decision_output["cost"]["standardGroupCount"] == 10
+    assert decision_output["cost"]["coveredStandardGroupCount"] == 10
+    for label in ("探索力", "自信力", "勇氣力", "路線力", "天氣力", "地圖力"):
+        assert label in result.answer
+    for source_id in (
+        "scout.ai.product_identity_standard.v0",
+        "scout.ai.standard_glossary.v0",
+        "scout.ai.contextual_permission.assess.v0",
+        "scout.ai.route_readiness.assess.v0",
+        "scout.ai.media_literacy.assess.v0",
+    ):
+        assert source_id in result.answer
+    assert "不是出發批准或 runtime safety truth" in result.answer
 
 
 def test_tool_registry_marks_all_six_force_tools_ready_current() -> None:
@@ -644,3 +683,31 @@ def _assert_no_forbidden_safety_language(payload: dict[str, object]) -> None:
     text = str(payload)
     for phrase in FORBIDDEN_SAFETY_PHRASES:
         assert phrase not in text
+
+
+def _missing_standard_section_numbers() -> list[int]:
+    spec_text = (ROOT / "docs/specs/SCOUT_OUTDOOR_AI_AGENT_STANDARD.md").read_text(
+        encoding="utf-8"
+    )
+    section_numbers = [
+        int(match.group(1))
+        for match in re.finditer(r"^## (\d+)\.\s+", spec_text, re.MULTILINE)
+    ]
+    coverage_paths = [
+        *ROOT.glob("scout_*_tool.py"),
+        ROOT / "scout_ai_answer_synthesis.py",
+        ROOT / "scout_ai_tool_planner.py",
+        ROOT / "tests/test_scout_outdoor_standard_coverage.py",
+    ]
+    coverage_text = "\n".join(
+        path.read_text(encoding="utf-8") for path in coverage_paths if path.exists()
+    )
+    missing = []
+    for section_number in section_numbers:
+        pattern = re.compile(
+            rf"section {section_number}(?:\D|$)|section {section_number}\.|## {section_number}\.\s+",
+            re.IGNORECASE,
+        )
+        if not pattern.search(coverage_text):
+            missing.append(section_number)
+    return missing
