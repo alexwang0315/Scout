@@ -354,6 +354,30 @@ def test_answer_synthesis_treats_fog_photo_as_wait_permission() -> None:
     assert "runtime safety truth" in result.answer
 
 
+def test_answer_synthesis_allows_bounded_teammate_wait() -> None:
+    result = collect_and_synthesize_scout_ai_answer(
+        "現在 2026-06-07T13:50:00+08:00，安全 buffer 還有 18 分鐘，可以等隊友 5 分鐘嗎？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=3,
+    )
+
+    assert result.answerability == "evidence_available"
+    assert result.completed_source_count == 1
+    assert result.missing_evidence_count == 0
+    source = _source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
+    assert source.top_result_summary["action"] == "wait_teammate"
+    assert source.top_result_summary["decision"] == "CONDITIONAL_GO"
+    assert source.top_result_summary["allowed"] is True
+    assert source.top_result_summary["max_duration_minutes"] == 5
+    assert result.decision_output["answerSourceToolId"] == CONTEXTUAL_PERMISSION_TOOL_ID
+    assert result.decision_output["action"] == "wait_teammate"
+    assert result.decision_output["firstLayer"]["decision"] == "可以，最多 5 分鐘。"
+    assert "未會合" in result.answer
+    assert "隊伍狀態檢查" in result.answer
+    assert "runtime safety truth" in result.answer
+
+
 def test_answer_synthesis_blocks_wind_exposed_lunch() -> None:
     result = collect_and_synthesize_scout_ai_answer(
         "這裡是風口，我們可以在這裡吃午餐嗎？",

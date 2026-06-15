@@ -72,6 +72,7 @@ class OutdoorAction(StrEnum):
     SUMMIT = "summit"
     REROUTE = "reroute"
     WAIT = "wait"
+    WAIT_TEAMMATE = "wait_teammate"
     CONTINUE = "continue"
     RETREAT = "retreat"
     WEAR_RAIN_GEAR = "wear_rain_gear"
@@ -240,6 +241,7 @@ _BUDGET_ACTIONS = {
     OutdoorAction.SUMMIT,
     OutdoorAction.REROUTE,
     OutdoorAction.WAIT,
+    OutdoorAction.WAIT_TEAMMATE,
     OutdoorAction.CROSS_STREAM,
     OutdoorAction.ENTER_EXPOSED_SECTION,
 }
@@ -263,6 +265,7 @@ _DEFAULT_DURATION_BY_ACTION = {
     OutdoorAction.SUMMIT: 30,
     OutdoorAction.REROUTE: 12,
     OutdoorAction.WAIT: 5,
+    OutdoorAction.WAIT_TEAMMATE: 5,
     OutdoorAction.SPLIT_TEAM: 0,
     OutdoorAction.CROSS_STREAM: 0,
     OutdoorAction.ENTER_EXPOSED_SECTION: 0,
@@ -278,6 +281,7 @@ _MINIMUM_USEFUL_DURATION_BY_ACTION = {
     OutdoorAction.SUMMIT: 25,
     OutdoorAction.REROUTE: 8,
     OutdoorAction.WAIT: 1,
+    OutdoorAction.WAIT_TEAMMATE: 1,
 }
 
 _HIGH_RISK_LEVELS = {"high", "very_high", "critical", "severe", "extreme"}
@@ -776,6 +780,11 @@ def _permission(
                 leave_by=leave_by,
                 max_duration=max_duration,
                 action=action,
+            ),
+            alternative_actions=(
+                _alternative_actions(action, next_cp_id)
+                if action == OutdoorAction.WAIT_TEAMMATE
+                else []
             ),
         )
 
@@ -1433,7 +1442,9 @@ def _resolve_action(action: str | None, query: str) -> OutdoorAction:
         return OutdoorAction.TRIPOD
     if _has_any(text, ("拍影片", "拍片", "影片", "video", "film")):
         return OutdoorAction.FILM
-    if _has_any(text, ("等霧", "等隊友", "等待", "wait")):
+    if _has_any(text, ("等隊友", "等後隊", "等待隊友", "等待後隊", "waitteammate")):
+        return OutdoorAction.WAIT_TEAMMATE
+    if _has_any(text, ("等霧", "等待", "wait")):
         return OutdoorAction.WAIT
     if _has_any(
         text,
@@ -1808,6 +1819,11 @@ def _allowed_next_action(action: OutdoorAction, next_cp_id: str | None) -> str:
         return f"只做短版午餐，完成後收整裝備並前往 {destination}。"
     if action == OutdoorAction.WAIT:
         return f"若時限內能見度沒有改善，放棄拍攝與等待，直接前往 {destination}。"
+    if action == OutdoorAction.WAIT_TEAMMATE:
+        return (
+            f"最多等到時限；若仍未會合或取得明確位置，不要延長等待，"
+            f"保持隊伍完整並前往 {destination} 或啟動隊伍狀態檢查。"
+        )
     if action == OutdoorAction.SUMMIT:
         return "設定硬性折返時間，逾時立即放棄攻頂。"
     if action == OutdoorAction.REROUTE:
@@ -1825,6 +1841,7 @@ def _safe_next_action(action: OutdoorAction, next_cp_id: str | None) -> str:
         OutdoorAction.REST,
         OutdoorAction.LUNCH,
         OutdoorAction.WAIT,
+        OutdoorAction.WAIT_TEAMMATE,
     }:
         return f"不要在此停留，請先前往 {destination} 再重新評估。"
     if action == OutdoorAction.SUMMIT:
@@ -1838,6 +1855,12 @@ def _safe_next_action(action: OutdoorAction, next_cp_id: str | None) -> str:
 
 def _alternative_actions(action: OutdoorAction, next_cp_id: str | None) -> list[str]:
     destination = next_cp_id or "下一個安全 CP"
+    if action == OutdoorAction.WAIT_TEAMMATE:
+        return [
+            f"前往 {destination} 後再會合",
+            "改用既定集合點或隊伍狀態檢查",
+            "必要時撤退到共同安全點",
+        ]
     if action in {
         OutdoorAction.FILM,
         OutdoorAction.TRIPOD,
@@ -2002,12 +2025,16 @@ def _required_conditions(
         OutdoorAction.PHOTO,
         OutdoorAction.STOP,
         OutdoorAction.WAIT,
+        OutdoorAction.WAIT_TEAMMATE,
     }:
         conditions.append("不要離開步道內側或既有路線走廊")
     if action == OutdoorAction.TRIPOD:
         conditions.append("不得在風口、窄路、曝露邊坡或會阻礙通行處架腳架")
     if action == OutdoorAction.WAIT:
         conditions.append("若時限內能見度沒有改善，放棄拍攝並前往下一個 CP")
+    if action == OutdoorAction.WAIT_TEAMMATE:
+        conditions.append("等待期間保持隊伍完整，不得分隊或讓任何人單獨前進")
+        conditions.append("若時限內未會合或位置不明，啟動隊伍狀態檢查")
     conditions.append("若天氣、能見度、隊伍狀態或地形風險惡化，立即取消")
     return conditions
 
@@ -2048,6 +2075,8 @@ def _residual_risk(action: OutdoorAction, terrain_risk_level: str | None) -> lis
         risks.append("腳架會增加停留時間、佔用路徑寬度，強風時也可能造成失衡。")
     if action == OutdoorAction.WAIT:
         risks.append("等待霧散可能轉成追加拍攝時間，必須用硬性離開時間切斷。")
+    if action == OutdoorAction.WAIT_TEAMMATE:
+        risks.append("等待隊友可能壓縮日照、撤退與後續 CP buffer，不能無限延長。")
     if terrain_risk_level:
         risks.append(f"現場地形風險標記為 {terrain_risk_level}，需保守處理。")
     return risks
@@ -2061,6 +2090,7 @@ def _default_location_constraint(action: OutdoorAction) -> str | None:
         OutdoorAction.STOP,
         OutdoorAction.REST,
         OutdoorAction.WAIT,
+        OutdoorAction.WAIT_TEAMMATE,
     }:
         return "stay on the inner side of the trail or inside the known route corridor"
     if action == OutdoorAction.LUNCH:
@@ -2150,6 +2180,7 @@ def _action_label(action: OutdoorAction | str) -> str:
         OutdoorAction.SUMMIT: "攻頂",
         OutdoorAction.REROUTE: "改線",
         OutdoorAction.WAIT: "等待",
+        OutdoorAction.WAIT_TEAMMATE: "等隊友",
         OutdoorAction.CONTINUE: "繼續前進",
         OutdoorAction.RETREAT: "撤退",
         OutdoorAction.WEAR_RAIN_GEAR: "穿雨具",
