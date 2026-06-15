@@ -1022,6 +1022,57 @@ def test_full_workflow_prioritizes_pace_guardian_for_delayed_summit() -> None:
     assert result.boundary.runtime_safety_truth is False
 
 
+def test_full_workflow_prioritizes_pace_for_slowed_continue_question() -> None:
+    result = run_scout_ai_full_workflow(
+        "走到這裡比預計慢 25 分鐘，還能繼續嗎？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=6,
+    )
+
+    assert result.answerability == "partial_evidence_with_missing_context"
+    assert result.selected_tool_count == 2
+    assert result.completed_tool_count == 2
+    pace = _workflow_source(result, PACE_GUARDIAN_TOOL_ID)
+    contextual = _workflow_source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
+    assert pace["top_result_summary"]["decision"] == "NO_GO"
+    assert pace["top_result_summary"]["schedule_pressure"]["current_delay_minutes"] == 25.0
+    assert contextual["top_result_summary"]["action"] == "continue"
+    assert contextual["top_result_summary"]["decision"] == "GO"
+    assert result.decision_output["answerSourceToolId"] == PACE_GUARDIAN_TOOL_ID
+    assert result.decision_output["action"] == "pace_adjustment"
+    assert result.decision_output["decision"] == "NO_GO"
+    assert result.decision_output["cost"]["scheduleDelayMinutes"] == 25.0
+    first_answer_block = result.answer.split(" Collected evidence: ")[0]
+    assert "腳程守門員" in first_answer_block
+    assert "[決策] 可以繼續前進。" not in first_answer_block
+    assert result.boundary.runtime_safety_truth is False
+
+
+def test_full_workflow_routes_time_to_summit_to_micro_decision() -> None:
+    result = run_scout_ai_full_workflow(
+        "現在是否還有時間攻頂？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=6,
+    )
+
+    assert result.answerability == "partial_evidence_with_missing_context"
+    assert result.selected_tool_count == 2
+    assert result.completed_tool_count == 2
+    pace = _workflow_source(result, PACE_GUARDIAN_TOOL_ID)
+    contextual = _workflow_source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
+    assert pace["top_result_summary"]["decision"] == "NO_GO"
+    assert contextual["top_result_summary"]["action"] == "summit"
+    assert contextual["top_result_summary"]["decision"] == "NO_GO"
+    assert result.decision_output["answerSourceToolId"] == CONTEXTUAL_PERMISSION_TOOL_ID
+    assert result.decision_output["action"] == "summit"
+    assert result.decision_output["decision"] == "NO_GO"
+    assert result.decision_output["firstLayer"]["decision"] == "不建議攻頂。"
+    assert "不要繼續攻頂" in result.decision_output["firstLayer"]["nextStep"]
+    assert result.boundary.runtime_safety_truth is False
+
+
 def test_full_workflow_blocks_daylight_summit_pressure() -> None:
     result = run_scout_ai_full_workflow(
         "我們快摸黑了，但山頂只差一點，可以趕一下攻頂嗎？",
@@ -1794,6 +1845,37 @@ def test_full_workflow_prioritizes_media_literacy_for_social_detour() -> None:
     )
     assert "媒體識讀判斷" in result.answer
     assert "beauty_photo_bias" in result.answer
+    assert result.boundary.runtime_safety_truth is False
+
+
+def test_full_workflow_routes_media_speed_bias_to_pace_adjustment() -> None:
+    result = run_scout_ai_full_workflow(
+        "這個網紅影片說兩小時可到，我們可以照這個速度嗎？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=6,
+    )
+
+    assert result.answerability == "partial_evidence_with_missing_context"
+    assert result.selected_tool_count == 2
+    assert result.completed_tool_count == 2
+    media = _workflow_source(result, MEDIA_LITERACY_TOOL_ID)
+    pace = _workflow_source(result, PACE_GUARDIAN_TOOL_ID)
+    bias_ids = {
+        item["bias_id"]
+        for item in media["top_result_summary"]["media_bias_analysis"][
+            "detected_biases"
+        ]
+    }
+    assert "speed_bias" in bias_ids
+    assert media["top_result_summary"]["action"] == "pace_adjustment"
+    assert media["top_result_summary"]["decision"] == "NO_GO"
+    assert pace["top_result_summary"]["decision"] == "NO_GO"
+    assert result.decision_output["answerSourceToolId"] == MEDIA_LITERACY_TOOL_ID
+    assert result.decision_output["action"] == "pace_adjustment"
+    assert result.decision_output["decision"] == "NO_GO"
+    assert "媒體識讀判斷" in result.answer
+    assert "腳程守門員" in result.answer
     assert result.boundary.runtime_safety_truth is False
 
 

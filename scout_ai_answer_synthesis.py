@@ -154,6 +154,7 @@ def synthesize_scout_ai_answer_from_evidence(
             sources=sources,
             missing_evidence=missing_evidence,
             answerability=answerability,
+            decision_output=decision_output,
         ),
         decision_output=decision_output,
         evidence_collection=collection.model_dump(mode="json"),
@@ -293,13 +294,27 @@ def _answer_text(
     sources: list[ScoutAiAnswerSource],
     missing_evidence: list[dict[str, Any]],
     answerability: str,
+    decision_output: dict[str, Any],
 ) -> str:
     parts = [
         "Scout AI read-only answer draft: deterministic evidence was collected before synthesis.",
         f"Question: {question}",
     ]
     completed_sources = [source for source in sources if source.collection_status == "completed"]
-    contextual_answer = _contextual_permission_answer(completed_sources)
+    primary_answer = _field_answer_for_tool(
+        completed_sources,
+        str(decision_output.get("answerSourceToolId") or ""),
+    )
+    if primary_answer:
+        parts.append(primary_answer)
+    contextual_answer = (
+        None
+        if _should_skip_secondary_contextual_answer(
+            decision_output=decision_output,
+            sources=completed_sources,
+        )
+        else _contextual_permission_answer(completed_sources)
+    )
     if contextual_answer:
         parts.append(contextual_answer)
     safety_boundary_answer = _safety_boundary_answer(completed_sources)
@@ -371,7 +386,55 @@ def _answer_text(
     parts.append(
         "This is candidate/planning evidence only, not runtime safety truth; it cannot trigger Ln, /safety/*, SOS, beacon, outbound send, or hardware control."
     )
-    return " ".join(parts)
+    return " ".join(_dedupe_answer_parts(parts))
+
+
+def _field_answer_for_tool(
+    sources: list[ScoutAiAnswerSource],
+    tool_id: str,
+) -> str | None:
+    if not tool_id:
+        return None
+    for source in sources:
+        if source.tool_id != tool_id:
+            continue
+        field_answer = source.top_result_summary.get("field_answer")
+        if isinstance(field_answer, str) and field_answer.strip():
+            return field_answer.strip()
+    return None
+
+
+def _dedupe_answer_parts(parts: list[str]) -> list[str]:
+    seen = set()
+    result = []
+    for part in parts:
+        normalized = part.strip()
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        result.append(normalized)
+    return result
+
+
+def _should_skip_secondary_contextual_answer(
+    *,
+    decision_output: dict[str, Any],
+    sources: list[ScoutAiAnswerSource],
+) -> bool:
+    primary_tool_id = str(decision_output.get("answerSourceToolId") or "")
+    if primary_tool_id in {"", CONTEXTUAL_PERMISSION_TOOL_ID}:
+        return False
+    primary_decision = str(decision_output.get("decision") or "").upper()
+    if primary_decision not in {"NO_GO", "CHANGE_PLAN", "DELAY", "ESCALATE"}:
+        return False
+    for source in sources:
+        if source.tool_id != CONTEXTUAL_PERMISSION_TOOL_ID:
+            continue
+        contextual_decision = str(source.top_result_summary.get("decision") or "").upper()
+        contextual_action = str(source.top_result_summary.get("action") or "")
+        if contextual_decision == "GO" and contextual_action == "continue":
+            return True
+    return False
 
 
 def _completed_source_text(source: ScoutAiAnswerSource) -> str:
