@@ -24,6 +24,7 @@ from scout_contextual_permission_tool import CONTEXTUAL_PERMISSION_TOOL_ID
 from scout_route_context_tool import ROUTE_CONTEXT_TOOL_ID
 from scout_pace_guardian_tool import PACE_GUARDIAN_TOOL_ID
 from scout_equipment_resource_tool import EQUIPMENT_RESOURCE_TOOL_ID
+from scout_team_status_tool import TEAM_STATUS_TOOL_ID
 from scout_route_architecture_tool import ROUTE_ARCHITECTURE_TOOL_ID
 from scout_workspace_search_tools import (
     MAJOR_POINT_TOOL_ID,
@@ -167,6 +168,13 @@ def plan_scout_ai_tools(
             (
                 EQUIPMENT_RESOURCE_TOOL_ID,
                 "Question asks for Equipment / Resource readiness: battery, offline maps, GPX, lighting, power bank, water, food, or critical gear gaps.",
+            )
+        )
+    if _looks_like_team_status_question(normalized_question):
+        selected.append(
+            (
+                TEAM_STATUS_TOOL_ID,
+                "Question asks for Team Status / remote-contact governance: teammates, rear group, last-heard state, rendezvous, check-ins, or 留守 escalation boundaries.",
             )
         )
     if _looks_like_live_navigation_state_question(normalized_question):
@@ -510,6 +518,44 @@ def _looks_like_pace_guardian_question(text: str) -> bool:
         ),
     ):
         return False
+    if _has_any(
+        text,
+        (
+            "隊友在哪",
+            "後隊在哪",
+            "隊友不見",
+            "隊友走散",
+            "隊伍走散",
+            "脫隊",
+            "留守",
+            "回報",
+            "最後一次",
+            "最後聯絡",
+            "有效位置",
+            "集合點",
+            "約定山屋",
+        ),
+    ) and not _has_any(
+        text,
+        (
+            "最慢",
+            "腳程",
+            "節奏",
+            "午餐",
+            "需要加快",
+            "落後",
+            "晚了",
+            "縮短",
+            "改短版",
+            "直接撤退",
+            "能準時",
+            "隊友很累",
+            "隊友太累",
+            "快慢組",
+            "分隊",
+        ),
+    ):
+        return False
     return _has_any(
         text,
         (
@@ -574,6 +620,49 @@ def _looks_like_equipment_resource_question(text: str) -> bool:
             "雨衣",
             "保暖層",
             "急救包",
+        ),
+    )
+
+
+def _looks_like_team_status_question(text: str) -> bool:
+    if _looks_like_pace_guardian_question(text) and not _has_any(
+        text,
+        (
+            "留守",
+            "回報",
+            "最後一次",
+            "最後聯絡",
+            "有效位置",
+            "集合",
+            "脫隊",
+            "走散",
+            "不見",
+            "後隊在哪",
+        ),
+    ):
+        return False
+    return _has_any(
+        text,
+        (
+            "teamstatus",
+            "teamguardian",
+            "remotecontact",
+            "隊友在哪",
+            "後隊在哪",
+            "隊友不見",
+            "隊友走散",
+            "隊伍走散",
+            "脫隊",
+            "後隊",
+            "留守",
+            "回報",
+            "最後一次有效位置",
+            "最後聯絡",
+            "集合",
+            "集合點",
+            "約定山屋",
+            "checkin",
+            "rendezvous",
         ),
     )
 

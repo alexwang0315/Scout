@@ -53,6 +53,11 @@ from scout_equipment_resource_tool import (
     EQUIPMENT_RESOURCE_OUTPUT_KIND,
     EQUIPMENT_RESOURCE_TOOL_ID,
 )
+from scout_team_status_tool import (
+    TEAM_STATUS_OPTIONAL_FIELDS,
+    TEAM_STATUS_OUTPUT_KIND,
+    TEAM_STATUS_TOOL_ID,
+)
 from scout_route_architecture_tool import (
     ROUTE_ARCHITECTURE_OPTIONAL_FIELDS,
     ROUTE_ARCHITECTURE_OUTPUT_KIND,
@@ -228,6 +233,11 @@ EXECUTABLE_TOOL_ALIASES: dict[str, list[str]] = {
         "scout.ai.device_resource.assess",
         "scout.ai.gear_readiness.assess",
     ],
+    TEAM_STATUS_TOOL_ID: [
+        "scout.ai.team_status.assess",
+        "scout.ai.team_guardian.assess",
+        "scout.ai.remote_contact.assess",
+    ],
     ROUTE_ARCHITECTURE_TOOL_ID: [
         "scout.ai.route_architecture.assess",
         "scout.ai.cp_graph.assess",
@@ -253,6 +263,7 @@ EXECUTABLE_OUTPUT_KINDS: dict[str, str] = {
     ROUTE_CONTEXT_TOOL_ID: ROUTE_CONTEXT_OUTPUT_KIND,
     PACE_GUARDIAN_TOOL_ID: PACE_GUARDIAN_OUTPUT_KIND,
     EQUIPMENT_RESOURCE_TOOL_ID: EQUIPMENT_RESOURCE_OUTPUT_KIND,
+    TEAM_STATUS_TOOL_ID: TEAM_STATUS_OUTPUT_KIND,
     ROUTE_ARCHITECTURE_TOOL_ID: ROUTE_ARCHITECTURE_OUTPUT_KIND,
 }
 
@@ -583,6 +594,8 @@ def _optional_fields_for(tool_id: str) -> list[str]:
         return list(PACE_GUARDIAN_OPTIONAL_FIELDS)
     if tool_id == EQUIPMENT_RESOURCE_TOOL_ID:
         return list(EQUIPMENT_RESOURCE_OPTIONAL_FIELDS)
+    if tool_id == TEAM_STATUS_TOOL_ID:
+        return list(TEAM_STATUS_OPTIONAL_FIELDS)
     if tool_id == ROUTE_ARCHITECTURE_TOOL_ID:
         return list(ROUTE_ARCHITECTURE_OPTIONAL_FIELDS)
     return []

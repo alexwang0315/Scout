@@ -17,6 +17,7 @@ from scout_route_context_tool import ROUTE_CONTEXT_TOOL_ID
 from scout_route_architecture_tool import ROUTE_ARCHITECTURE_TOOL_ID
 from scout_pace_guardian_tool import PACE_GUARDIAN_TOOL_ID
 from scout_equipment_resource_tool import EQUIPMENT_RESOURCE_TOOL_ID
+from scout_team_status_tool import TEAM_STATUS_TOOL_ID
 from scout_weather_window_tool import WEATHER_WINDOW_TOOL_ID
 
 
@@ -177,6 +178,9 @@ def _source_from_record(record: dict[str, Any]) -> ScoutAiAnswerSource:
         "equipment_resource",
         "resource_readiness",
         "resource_state",
+        "team_status_guardian",
+        "team_status",
+        "team_governance",
         "pace_guardian",
         "team_pace_fit",
         "weather_to_decision",
@@ -254,6 +258,9 @@ def _answer_text(
     equipment_resource_answer = _equipment_resource_answer(completed_sources)
     if equipment_resource_answer:
         parts.append(equipment_resource_answer)
+    team_status_answer = _team_status_answer(completed_sources)
+    if team_status_answer:
+        parts.append(team_status_answer)
     pace_guardian_answer = _pace_guardian_answer(completed_sources)
     if pace_guardian_answer:
         parts.append(pace_guardian_answer)
@@ -366,6 +373,16 @@ def _equipment_resource_answer(sources: list[ScoutAiAnswerSource]) -> str | None
     return None
 
 
+def _team_status_answer(sources: list[ScoutAiAnswerSource]) -> str | None:
+    for source in sources:
+        if source.tool_id != TEAM_STATUS_TOOL_ID:
+            continue
+        field_answer = source.top_result_summary.get("field_answer")
+        if isinstance(field_answer, str) and field_answer.strip():
+            return field_answer.strip()
+    return None
+
+
 def _pace_guardian_answer(sources: list[ScoutAiAnswerSource]) -> str | None:
     for source in sources:
         if source.tool_id != PACE_GUARDIAN_TOOL_ID:
@@ -430,6 +447,9 @@ def _top_result_summary(value: Any) -> dict[str, Any]:
         "equipment_resource",
         "resource_readiness",
         "resource_state",
+        "team_status_guardian",
+        "team_status",
+        "team_governance",
         "critical_gaps",
         "warning_gaps",
         "route_type",

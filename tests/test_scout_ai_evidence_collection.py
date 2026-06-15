@@ -11,6 +11,7 @@ from scout_ai_evidence_collection import (
 from scout_ai_tool_planner import LIVE_NAVIGATION_STATE_TOOL_ID, WEATHER_WINDOW_TOOL_ID
 from scout_pace_guardian_tool import PACE_GUARDIAN_TOOL_ID
 from scout_equipment_resource_tool import EQUIPMENT_RESOURCE_TOOL_ID
+from scout_team_status_tool import TEAM_STATUS_TOOL_ID
 from scout_route_architecture_tool import ROUTE_ARCHITECTURE_TOOL_ID
 from scout_route_context_tool import ROUTE_CONTEXT_TOOL_ID
 from scout_risk_score_tool import RISK_SCORE_TOOL_ID
@@ -261,6 +262,33 @@ def test_evidence_collection_keeps_equipment_resource_payload() -> None:
     assert payload["resource_state"]["offline_map_ready"] is True
     assert "water_liters" in equipment.missing_fields
     assert equipment.boundary.runtime_safety_truth is False
+
+
+def test_evidence_collection_keeps_team_status_payload() -> None:
+    result = collect_scout_ai_evidence(
+        "後隊在哪？最後一次有效位置多久前？留守回報準備好了嗎？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=3,
+    )
+
+    assert result.selected_tool_count == 1
+    assert result.executed_tool_count == 1
+    assert result.completed_tool_count == 1
+    assert result.missing_input_count == 0
+
+    team_status = _record(result, TEAM_STATUS_TOOL_ID)
+    assert team_status.collection_status == "completed"
+    assert team_status.result is not None
+    payload = team_status.result["payload"]
+    assert payload["answerability"] == "team_status_missing_required_fields"
+    assert payload["decision"] == "DELAY"
+    assert payload["team_status_guardian"]["role"] == (
+        "Team Status / Remote Contact Governance"
+    )
+    assert payload["team_status"]["remote_contact"]["available"] is True
+    assert "member_positions_or_last_heard" in team_status.missing_fields
+    assert team_status.boundary.runtime_safety_truth is False
 
 
 def test_evidence_collection_reports_empty_collection_when_no_tool_matches() -> None:
