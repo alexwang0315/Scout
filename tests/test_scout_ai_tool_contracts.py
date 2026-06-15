@@ -1193,9 +1193,10 @@ def test_execute_contextual_permission_assessor_uses_local_clock_deadline() -> N
     assert result.payload["max_duration_minutes"] == 10
     assert result.payload["leave_by"] == "13:46"
     assert result.payload["decision_output"]["leaveBy"] == "13:46"
-    assert result.payload["decision_output"]["firstLayer"]["limit"] == (
-        "最多 10 分鐘，13:46 前離開。"
+    assert "最多 10 分鐘，13:46 前離開" in (
+        result.payload["decision_output"]["firstLayer"]["limit"]
     )
+    assert "路線走廊" in result.payload["decision_output"]["firstLayer"]["limit"]
     assert result.payload["boundary"]["runtime_safety_truth"] is False
 
 
@@ -1256,11 +1257,20 @@ def test_execute_contextual_permission_assessor_allows_rain_gear_micro_decision(
     assert result.payload["decision_output"]["action"] == "wear_rain_gear"
     assert result.payload["decision_output"]["decision"] == "GO"
     assert result.payload["decision_output"]["allowed"] is True
+    assert result.payload["max_duration_minutes"] == 2
+    assert result.payload["location_constraint"] == (
+        "就地安全位置；不離開步道內側或既有路線走廊"
+    )
+    assert result.payload["decision_output"]["maxDurationMinutes"] == 2
+    assert result.payload["decision_output"]["locationConstraint"] == (
+        "就地安全位置；不離開步道內側或既有路線走廊"
+    )
     assert result.payload["decision_output"]["firstLayer"]["decision"] == (
-        "可以穿雨具。"
+        "可以穿雨具，最多 2 分鐘。"
     )
     assert result.payload["decision_output"]["runtimeSafetyTruth"] is False
-    assert "不額外消耗停留 buffer" in result.payload["field_answer"]
+    assert "最多 2 分鐘" in result.payload["field_answer"]
+    assert "就地安全位置" in result.payload["field_answer"]
     assert result.boundary.runtime_safety_truth is False
 
 
@@ -1454,10 +1464,16 @@ def test_execute_contextual_permission_assessor_allows_direct_retreat() -> None:
     assert result.payload["decision_output"]["action"] == "retreat"
     assert result.payload["decision_output"]["decision"] == "GO"
     assert result.payload["decision_output"]["allowed"] is True
+    assert result.payload["max_duration_minutes"] == 0
+    assert "最近安全點" in result.payload["location_constraint"]
+    assert result.payload["decision_output"]["maxDurationMinutes"] == 0
+    assert "最近安全點" in result.payload["decision_output"]["locationConstraint"]
     assert result.payload["decision_output"]["firstLayer"]["decision"] == (
         "建議撤退。"
     )
     assert result.payload["decision_output"]["runtimeSafetyTruth"] is False
+    assert "立即開始撤退" in result.payload["field_answer"]
+    assert "不授權停留" in result.payload["field_answer"]
     assert "開始撤退" in result.payload["field_answer"]
     assert result.boundary.runtime_safety_truth is False
 

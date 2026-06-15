@@ -781,13 +781,24 @@ def test_answer_synthesis_uses_rain_gear_micro_decision_before_missing_context()
     assert summary["action"] == "wear_rain_gear"
     assert summary["decision"] == "GO"
     assert summary["allowed"] is True
+    assert summary["max_duration_minutes"] == 2
+    assert summary["location_constraint"] == (
+        "就地安全位置；不離開步道內側或既有路線走廊"
+    )
     assert source.missing_fields == []
     assert result.decision_output["answerSourceToolId"] == CONTEXTUAL_PERMISSION_TOOL_ID
     assert result.decision_output["action"] == "wear_rain_gear"
     assert result.decision_output["decision"] == "GO"
     assert result.decision_output["allowed"] is True
-    assert result.decision_output["firstLayer"]["decision"] == "可以穿雨具。"
-    assert "不額外消耗停留 buffer" in result.answer
+    assert result.decision_output["maxDurationMinutes"] == 2
+    assert result.decision_output["locationConstraint"] == (
+        "就地安全位置；不離開步道內側或既有路線走廊"
+    )
+    assert result.decision_output["firstLayer"]["decision"] == (
+        "可以穿雨具，最多 2 分鐘。"
+    )
+    assert "最多 2 分鐘" in result.answer
+    assert "就地安全位置" in result.answer
     assert "Missing evidence" in result.answer
     assert "runtime safety truth" in result.answer
 
@@ -891,6 +902,8 @@ def test_answer_synthesis_uses_direct_retreat_micro_decision() -> None:
     assert summary["action"] == "retreat"
     assert summary["decision"] == "GO"
     assert summary["allowed"] is True
+    assert summary["max_duration_minutes"] == 0
+    assert "最近安全點" in summary["location_constraint"]
     assert source.missing_fields == []
     pace_source = _source(result, PACE_GUARDIAN_TOOL_ID)
     assert pace_source.missing_fields == ["member_pace_profile"]
@@ -898,7 +911,11 @@ def test_answer_synthesis_uses_direct_retreat_micro_decision() -> None:
     assert result.decision_output["action"] == "retreat"
     assert result.decision_output["decision"] == "GO"
     assert result.decision_output["allowed"] is True
+    assert result.decision_output["maxDurationMinutes"] == 0
+    assert "最近安全點" in result.decision_output["locationConstraint"]
     assert result.decision_output["firstLayer"]["decision"] == "建議撤退。"
+    assert "立即開始撤退" in result.decision_output["firstLayer"]["limit"]
+    assert "不授權停留" in result.decision_output["firstLayer"]["limit"]
     assert "保持隊伍完整" in result.decision_output["firstLayer"]["limit"]
     assert "建議撤退" in result.answer
     assert "開始撤退" in result.answer
@@ -922,6 +939,8 @@ def test_answer_synthesis_uses_micro_decision_for_weather_fatigue_retreat() -> N
     assert summary["action"] == "retreat"
     assert summary["decision"] == "GO"
     assert summary["allowed"] is True
+    assert summary["max_duration_minutes"] == 0
+    assert "最近安全點" in summary["location_constraint"]
     assert contextual.missing_fields == []
     assert _source(result, WEATHER_WINDOW_TOOL_ID).missing_fields
     assert _source(result, ENERGY_VITALS_TOOL_ID).missing_fields
@@ -932,7 +951,10 @@ def test_answer_synthesis_uses_micro_decision_for_weather_fatigue_retreat() -> N
     assert result.decision_output["action"] == "retreat"
     assert result.decision_output["decision"] == "GO"
     assert result.decision_output["allowed"] is True
+    assert result.decision_output["maxDurationMinutes"] == 0
+    assert "最近安全點" in result.decision_output["locationConstraint"]
     assert result.decision_output["firstLayer"]["decision"] == "建議撤退。"
+    assert "立即開始撤退" in result.decision_output["firstLayer"]["limit"]
     assert "保持隊伍完整" in result.decision_output["firstLayer"]["limit"]
     assert "建議撤退" in result.answer
     assert "開始撤退" in result.answer

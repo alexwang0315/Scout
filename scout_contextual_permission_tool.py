@@ -176,6 +176,7 @@ class ScoutDecisionOutput(ScoutContextualBaseModel):
         alias="maxDurationMinutes",
     )
     leave_by: str | None = Field(default=None, alias="leaveBy")
+    location_constraint: str | None = Field(default=None, alias="locationConstraint")
     cost: ContextualPermissionCost | None = None
     confidence: ConfidenceLevel
     text: str = Field(min_length=1)
@@ -269,6 +270,8 @@ _DEFAULT_DURATION_BY_ACTION = {
     OutdoorAction.SPLIT_TEAM: 0,
     OutdoorAction.CROSS_STREAM: 0,
     OutdoorAction.ENTER_EXPOSED_SECTION: 0,
+    OutdoorAction.RETREAT: 0,
+    OutdoorAction.WEAR_RAIN_GEAR: 2,
 }
 
 _MINIMUM_USEFUL_DURATION_BY_ACTION = {
@@ -456,6 +459,7 @@ def assess_scout_contextual_permission(
         "minutes_to_next_cp": minutes_to_next_cp_value,
         "max_duration_minutes": permission.max_duration_minutes,
         "leave_by": permission.leave_by,
+        "location_constraint": permission.location_constraint,
         "field_answer": field_answer,
         "contextual_permission": permission_payload,
         "decision_object": permission_payload,
@@ -485,6 +489,7 @@ def assess_scout_contextual_permission(
                 "minutes_to_next_cp": minutes_to_next_cp_value,
                 "max_duration_minutes": permission.max_duration_minutes,
                 "leave_by": permission.leave_by,
+                "location_constraint": permission.location_constraint,
                 "field_answer": field_answer,
                 "decision_object": permission_payload,
                 "decision_output": decision_output_payload,
@@ -720,27 +725,51 @@ def _permission(
         )
 
     if action == OutdoorAction.RETREAT:
+        max_duration = _DEFAULT_DURATION_BY_ACTION[OutdoorAction.RETREAT]
+        leave_by = _leave_by(current_time, max_duration)
+        retreat_location = location_constraint or _default_location_constraint(action)
         return ContextualPermission(
             action=action,
             decision=ScoutDecision.GO,
             allowed=True,
+            max_duration_minutes=max_duration,
+            leave_by=leave_by,
+            location_constraint=retreat_location,
             main_reasons=["撤退通常降低暴露時間與後續不確定性。"],
             cost=ContextualPermissionCost(time_buffer_change_minutes=0),
             next_action="開始撤退，前往最近安全點並保持隊伍完整。",
             confidence=_confidence(confidence, default=ConfidenceLevel.MEDIUM),
             residual_risk=["撤退途中仍需注意地形、天氣與隊伍狀態。"],
+            required_conditions=_direct_action_required_conditions(
+                action=action,
+                leave_by=leave_by,
+                max_duration=max_duration,
+                location_constraint=retreat_location,
+            ),
         )
 
     if action == OutdoorAction.WEAR_RAIN_GEAR:
+        max_duration = _DEFAULT_DURATION_BY_ACTION[OutdoorAction.WEAR_RAIN_GEAR]
+        leave_by = _leave_by(current_time, max_duration)
+        rain_gear_location = location_constraint or _default_location_constraint(action)
         return ContextualPermission(
             action=action,
             decision=ScoutDecision.GO,
             allowed=True,
+            max_duration_minutes=max_duration,
+            leave_by=leave_by,
+            location_constraint=rain_gear_location,
             main_reasons=["穿雨具不應消耗主要路線 buffer，且可降低風寒與濕衣風險。"],
             cost=ContextualPermissionCost(time_buffer_change_minutes=0),
             next_action="就地穿上雨具，完成後立即回到原定節奏。",
             confidence=_confidence(confidence, default=ConfidenceLevel.MEDIUM),
             residual_risk=["若風雨持續增強，仍需重新評估撤退或改線。"],
+            required_conditions=_direct_action_required_conditions(
+                action=action,
+                leave_by=leave_by,
+                max_duration=max_duration,
+                location_constraint=rain_gear_location,
+            ),
         )
 
     if action in _BUDGET_ACTIONS:
@@ -2081,6 +2110,7 @@ def _decision_output(
         allowed=permission.allowed,
         max_duration_minutes=permission.max_duration_minutes,
         leave_by=permission.leave_by,
+        location_constraint=permission.location_constraint,
         cost=permission.cost,
         confidence=permission.confidence,
         text=text,
@@ -2153,10 +2183,16 @@ def _decision_second_layer(
 
 def _decision_phrase(permission: ContextualPermission) -> str:
     action_label = _action_label(permission.action)
-    if permission.allowed and permission.max_duration_minutes is not None:
-        return f"可以，最多 {permission.max_duration_minutes} 分鐘。"
     if permission.allowed and permission.action == OutdoorAction.RETREAT:
         return "建議撤退。"
+    if (
+        permission.allowed
+        and permission.action == OutdoorAction.WEAR_RAIN_GEAR
+        and permission.max_duration_minutes is not None
+    ):
+        return f"可以穿雨具，最多 {permission.max_duration_minutes} 分鐘。"
+    if permission.allowed and permission.max_duration_minutes is not None:
+        return f"可以，最多 {permission.max_duration_minutes} 分鐘。"
     if permission.allowed:
         return f"可以{action_label}。"
     if permission.decision == ScoutDecision.ESCALATE:
@@ -2169,15 +2205,34 @@ def _decision_phrase(permission: ContextualPermission) -> str:
 
 
 def _limit_phrase(permission: ContextualPermission) -> str:
-    if permission.allowed and permission.max_duration_minutes is not None:
-        if permission.leave_by:
-            return f"最多 {permission.max_duration_minutes} 分鐘，{permission.leave_by} 前離開。"
-        return f"最多 {permission.max_duration_minutes} 分鐘，從現在起到時立即離開。"
     if permission.allowed and permission.action == OutdoorAction.RETREAT:
-        return "保持隊伍完整，前往最近安全點；途中仍要重看地形、天氣與隊伍狀態。"
+        location = _location_limit_clause(permission.location_constraint)
+        if permission.leave_by:
+            return (
+                f"立即開始撤退，{permission.leave_by} 前離開目前位置；"
+                f"不授權停留{location}。"
+            )
+        return f"立即開始撤退，不授權停留{location}。"
+    if permission.allowed and permission.max_duration_minutes is not None:
+        location = _location_limit_clause(permission.location_constraint)
+        if permission.leave_by:
+            return (
+                f"最多 {permission.max_duration_minutes} 分鐘，"
+                f"{permission.leave_by} 前離開{location}。"
+            )
+        return (
+            f"最多 {permission.max_duration_minutes} 分鐘，"
+            f"從現在起到時立即離開{location}。"
+        )
     if permission.allowed:
         return "不額外消耗停留 buffer；執行後立即回到原定節奏。"
     return "不授權此行動；不要消耗停留或改線 buffer。"
+
+
+def _location_limit_clause(location_constraint: str | None) -> str:
+    if not location_constraint:
+        return ""
+    return f"；地點限制：{location_constraint}"
 
 
 def _reason_phrase(permission: ContextualPermission, *, budget: RiskBudget) -> str:
@@ -2198,7 +2253,9 @@ def _required_conditions(
     action: OutdoorAction,
 ) -> list[str]:
     conditions = [f"最多 {max_duration} 分鐘"]
-    conditions.append(f"{leave_by} 前離開" if leave_by else "以現在時間起算，到時立即離開")
+    conditions.append(
+        f"{leave_by} 前離開" if leave_by else "以現在時間起算，到時立即離開"
+    )
     if action in {
         OutdoorAction.FILM,
         OutdoorAction.TRIPOD,
@@ -2216,6 +2273,35 @@ def _required_conditions(
         conditions.append("等待期間保持隊伍完整，不得分隊或讓任何人單獨前進")
         conditions.append("若時限內未會合或位置不明，啟動隊伍狀態檢查")
     conditions.append("若天氣、能見度、隊伍狀態或地形風險惡化，立即取消")
+    return conditions
+
+
+def _direct_action_required_conditions(
+    *,
+    action: OutdoorAction,
+    leave_by: str | None,
+    max_duration: int,
+    location_constraint: str | None,
+) -> list[str]:
+    if action == OutdoorAction.RETREAT:
+        conditions = ["立即開始撤退，不授權原地停留"]
+        if leave_by:
+            conditions.append(f"{leave_by} 前離開目前位置")
+        conditions.append(
+            location_constraint
+            or "保持隊伍完整，沿已知路線或最近安全撤退線前往最近安全點"
+        )
+        conditions.append("不分隊，不改走未審核支線")
+        return conditions
+
+    conditions = [f"最多 {max_duration} 分鐘"]
+    conditions.append(
+        f"{leave_by} 前離開" if leave_by else "以現在時間起算，到時立即離開"
+    )
+    if location_constraint:
+        conditions.append(location_constraint)
+    conditions.append("完成後立即回到原定節奏")
+    conditions.append("若天氣、能見度、隊伍狀態或地形風險惡化，立即重新評估")
     return conditions
 
 
@@ -2272,9 +2358,16 @@ def _default_location_constraint(action: OutdoorAction) -> str | None:
         OutdoorAction.WAIT,
         OutdoorAction.WAIT_TEAMMATE,
     }:
-        return "stay on the inner side of the trail or inside the known route corridor"
+        return "留在步道內側或既有路線走廊內"
     if action == OutdoorAction.LUNCH:
-        return "use only the nearest stable, low-exposure spot inside the route corridor"
+        return "只使用路線走廊內最近的穩定、低曝露停留點"
+    if action == OutdoorAction.WEAR_RAIN_GEAR:
+        return "就地安全位置；不離開步道內側或既有路線走廊"
+    if action == OutdoorAction.RETREAT:
+        return (
+            "保持隊伍完整，沿已知路線或最近安全撤退線前往最近安全點；"
+            "不分隊、不改走未審核支線"
+        )
     return None
 
 

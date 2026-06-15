@@ -276,6 +276,7 @@ def _compact_payload(
         "minutes_to_next_cp",
         "max_duration_minutes",
         "leave_by",
+        "location_constraint",
         "field_answer",
         "contextual_permission",
         "risk_decision",

@@ -465,7 +465,17 @@ def test_evidence_collection_keeps_rain_gear_micro_decision() -> None:
     assert payload["action"] == "wear_rain_gear"
     assert payload["decision"] == "GO"
     assert payload["allowed"] is True
-    assert payload["decision_output"]["firstLayer"]["decision"] == "可以穿雨具。"
+    assert payload["max_duration_minutes"] == 2
+    assert payload["location_constraint"] == (
+        "就地安全位置；不離開步道內側或既有路線走廊"
+    )
+    assert payload["decision_output"]["maxDurationMinutes"] == 2
+    assert payload["decision_output"]["locationConstraint"] == (
+        "就地安全位置；不離開步道內側或既有路線走廊"
+    )
+    assert payload["decision_output"]["firstLayer"]["decision"] == (
+        "可以穿雨具，最多 2 分鐘。"
+    )
     assert contextual.boundary.runtime_safety_truth is False
 
 
