@@ -623,6 +623,30 @@ def test_answer_synthesis_blocks_shortcut_reroute_micro_decision() -> None:
     assert "runtime safety truth" in result.answer
 
 
+def test_answer_synthesis_blocks_rockfall_fast_passage() -> None:
+    result = collect_and_synthesize_scout_ai_answer(
+        "前方是落石區，這段要不要快速通過？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=4,
+    )
+
+    assert result.answerability == "partial_evidence_with_missing_context"
+    assert result.completed_source_count == 1
+    source = _source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
+    summary = source.top_result_summary
+    assert summary["action"] == "enter_exposed_section"
+    assert summary["decision"] == "NO_GO"
+    assert summary["allowed"] is False
+    assert result.decision_output["answerSourceToolId"] == CONTEXTUAL_PERMISSION_TOOL_ID
+    assert result.decision_output["action"] == "enter_exposed_section"
+    assert result.decision_output["decision"] == "NO_GO"
+    assert result.decision_output["allowed"] is False
+    assert result.decision_output["firstLayer"]["decision"] == "不建議進入曝露地形。"
+    assert "落石" in result.decision_output["firstLayer"]["reason"]
+    assert "runtime safety truth" in result.answer
+
+
 def test_answer_synthesis_uses_direct_retreat_micro_decision() -> None:
     result = collect_and_synthesize_scout_ai_answer(
         "隊友很累，要不要直接撤退？",
