@@ -240,6 +240,14 @@ _BUDGET_ACTIONS = {
     OutdoorAction.ENTER_EXPOSED_SECTION,
 }
 
+_EXPOSED_MEDIA_PRESSURE_ACTIONS = {
+    OutdoorAction.STOP,
+    OutdoorAction.FILM,
+    OutdoorAction.PHOTO,
+    OutdoorAction.REROUTE,
+    OutdoorAction.WAIT,
+}
+
 _DEFAULT_DURATION_BY_ACTION = {
     OutdoorAction.STOP: 6,
     OutdoorAction.FILM: 6,
@@ -570,6 +578,37 @@ def _permission(
                 "不能只因時間 buffer 足夠就授權。"
             ),
             next_action=_exposed_lunch_next_action(next_cp_id),
+            confidence=_confidence(confidence, default=ConfidenceLevel.MEDIUM),
+            uncertainty_notes=uncertainty_notes,
+            alternative_actions=_alternative_actions(action, next_cp_id),
+        )
+
+    if _looks_like_exposed_media_pressure(
+        action=action,
+        query=query,
+        terrain_risk_level=terrain_risk_level,
+        location_constraint=location_constraint,
+    ):
+        uncertainty_notes = _status_uncertainty_notes(
+            communication_status=communication_status,
+            equipment_status=equipment_status,
+        )
+        if missing_fields:
+            uncertainty_notes.append(
+                "remaining_safety_buffer_minutes is still required before any "
+                "lower-risk photo stop could be reconsidered."
+            )
+        return _no_go_permission(
+            action=action,
+            decision=ScoutDecision.NO_GO,
+            reason=(
+                "該拍攝或停留目標位於曝露或高後果地形；"
+                "不能為照片、影片或打卡期待增加停留、靠近或繞行。"
+            ),
+            next_action=(
+                "不要前往或停留拍攝；回到主線或穩定安全點，"
+                "改在已審核且不壓縮撤退 buffer 的觀察點再評估。"
+            ),
             confidence=_confidence(confidence, default=ConfidenceLevel.MEDIUM),
             uncertainty_notes=uncertainty_notes,
             alternative_actions=_alternative_actions(action, next_cp_id),
@@ -1384,7 +1423,10 @@ def _resolve_action(action: str | None, query: str) -> OutdoorAction:
         ("改線", "繞去", "支線", "岔路", "切過去", "捷徑", "reroute", "shortcut"),
     ):
         return OutdoorAction.REROUTE
-    if _has_any(text, ("拍照", "照片", "photo", "攝影", "拍攝", "很好拍")):
+    if _has_any(
+        text,
+        ("拍照", "照片", "photo", "攝影", "拍攝", "很好拍", "去拍", "想去拍"),
+    ):
         return OutdoorAction.PHOTO
     if _has_any(text, ("午餐", "吃午餐", "吃飯", "lunch")):
         return OutdoorAction.LUNCH
@@ -1414,7 +1456,22 @@ def _normalized_risk_level(level: str | None, query: str) -> str | None:
     if level and str(level).strip():
         return str(level).strip().lower()
     text = query.lower()
-    if _has_any(text, ("暴漲", "落石", "滑墜", "曝露邊坡", "暴露邊坡", "溪水")):
+    if _has_any(
+        text,
+        (
+            "暴漲",
+            "落石",
+            "滑墜",
+            "曝露邊坡",
+            "暴露邊坡",
+            "高曝露",
+            "曝露陡坡",
+            "暴露陡坡",
+            "斷崖",
+            "崩壁",
+            "溪水",
+        ),
+    ):
         return "high"
     return None
 
@@ -1494,6 +1551,61 @@ def _looks_like_exposed_lunch_context(
             "windchill",
             "exposed",
             "cold exposure",
+        ),
+    )
+
+
+def _looks_like_exposed_media_pressure(
+    *,
+    action: OutdoorAction,
+    query: str,
+    terrain_risk_level: str | None,
+    location_constraint: str | None,
+) -> bool:
+    if action not in _EXPOSED_MEDIA_PRESSURE_ACTIONS:
+        return False
+    text = _normalize_identifier(
+        " ".join(str(part or "") for part in (query, location_constraint))
+    )
+    has_media_pressure = _has_any(
+        text,
+        (
+            "拍照",
+            "照片",
+            "拍攝",
+            "拍片",
+            "影片",
+            "去拍",
+            "想去拍",
+            "很好拍",
+            "照片很好看",
+            "打卡",
+            "美照",
+            "photo",
+            "video",
+            "film",
+            "checkin",
+        ),
+    )
+    if not has_media_pressure:
+        return False
+    if terrain_risk_level in _HIGH_RISK_LEVELS:
+        return True
+    return _has_any(
+        text,
+        (
+            "高曝露",
+            "曝露",
+            "暴露",
+            "陡坡",
+            "邊坡",
+            "斷崖",
+            "崩壁",
+            "落石",
+            "滑墜",
+            "exposed",
+            "cliff",
+            "steep",
         ),
     )
 

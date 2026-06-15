@@ -189,6 +189,30 @@ def test_contextual_permission_missing_buffer_is_conservative_no_go() -> None:
     assert result["decision_output"]["secondLayer"]["alternativeActions"]
 
 
+def test_contextual_permission_blocks_exposed_photo_even_with_buffer() -> None:
+    result = assess_scout_contextual_permission(
+        PROJECT_ROOT,
+        query="前方是高曝露陡坡，但照片很好看，可以去拍嗎？",
+        remaining_safety_buffer_minutes=30,
+        communication_status="ok",
+        equipment_status="ok",
+    )
+
+    assert result["answerability"] == "contextual_permission_decision_available"
+    assert result["decision"] == "NO_GO"
+    assert result["allowed"] is False
+    assert result["missing_fields"] == []
+    assert result["action"] == "photo"
+    assert result["contextual_permission"]["decision"] == "NO_GO"
+    assert result["decision_output"]["decisionObjectSchema"] == "ContextualPermission"
+    assert result["decision_output"]["decision"] == "NO_GO"
+    assert result["decision_output"]["action"] == "photo"
+    assert result["decision_output"]["firstLayer"]["decision"] == "不建議拍照。"
+    assert "曝露或高後果地形" in result["decision_output"]["firstLayer"]["reason"]
+    assert result["decision_output"]["runtimeSafetyTruth"] is False
+    assert result["boundary"]["runtime_safety_truth"] is False
+
+
 def test_contextual_permission_allows_rain_gear_without_buffer() -> None:
     result = assess_scout_contextual_permission(
         PROJECT_ROOT,

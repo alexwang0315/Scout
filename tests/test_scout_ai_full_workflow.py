@@ -1019,6 +1019,39 @@ def test_full_workflow_prioritizes_media_literacy_for_social_detour() -> None:
     assert result.boundary.runtime_safety_truth is False
 
 
+def test_full_workflow_blocks_exposed_photo_pressure() -> None:
+    result = run_scout_ai_full_workflow(
+        "前方是高曝露陡坡，但照片很好看，可以去拍嗎？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=5,
+    )
+
+    assert result.answerability == "partial_evidence_with_missing_context"
+    assert result.selected_tool_count == 3
+    assert result.executed_tool_count == 3
+    assert result.completed_tool_count == 3
+    assert result.failed_tool_count == 0
+    media = _workflow_source(result, MEDIA_LITERACY_TOOL_ID)
+    contextual = _workflow_source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
+    terrain = _workflow_source(result, TERRAIN_SCORE_TOOL_ID)
+    assert media["top_result_summary"]["action"] == "photo"
+    assert media["top_result_summary"]["decision"] == "NO_GO"
+    assert contextual["top_result_summary"]["action"] == "photo"
+    assert contextual["top_result_summary"]["decision"] == "NO_GO"
+    assert terrain["top_result_summary"]["decision"] == "DELAY"
+    assert result.decision_output["answerSourceToolId"] == MEDIA_LITERACY_TOOL_ID
+    assert result.decision_output["action"] == "photo"
+    assert result.decision_output["decision"] == "NO_GO"
+    assert result.decision_output["allowed"] is False
+    assert result.decision_output["firstLayer"]["decision"] == (
+        "不建議為媒體點位停留或改線。"
+    )
+    assert "媒體識讀判斷" in result.answer
+    assert "beauty_photo_bias" in result.answer
+    assert result.boundary.runtime_safety_truth is False
+
+
 def test_full_workflow_runs_survival_playbook_question() -> None:
     result = run_scout_ai_full_workflow(
         "不確定自己在哪，可以下切溪谷找路嗎？",
