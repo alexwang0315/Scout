@@ -357,6 +357,36 @@ def test_evidence_collection_blocks_shortcut_reroute_micro_decision() -> None:
     assert contextual.boundary.runtime_safety_truth is False
 
 
+def test_evidence_collection_keeps_direct_retreat_micro_decision() -> None:
+    result = collect_scout_ai_evidence(
+        "隊友很累，要不要直接撤退？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=5,
+    )
+
+    assert result.selected_tool_count == 3
+    assert result.executed_tool_count == 3
+    assert result.completed_tool_count == 3
+    assert result.missing_input_count == 0
+
+    energy = _record(result, ENERGY_VITALS_TOOL_ID)
+    pace = _record(result, PACE_GUARDIAN_TOOL_ID)
+    contextual = _record(result, CONTEXTUAL_PERMISSION_TOOL_ID)
+    assert "subject_id" in energy.missing_fields
+    assert pace.missing_fields == ["member_pace_profile"]
+    assert contextual.collection_status == "completed"
+    assert contextual.missing_fields == []
+    assert contextual.result is not None
+    payload = contextual.result["payload"]
+    assert payload["answerability"] == "contextual_permission_decision_available"
+    assert payload["action"] == "retreat"
+    assert payload["decision"] == "GO"
+    assert payload["allowed"] is True
+    assert payload["decision_output"]["firstLayer"]["decision"] == "可以撤退。"
+    assert contextual.boundary.runtime_safety_truth is False
+
+
 def test_evidence_collection_executes_pace_guardian_tool_without_model_synthesis(
     tmp_path: Path,
 ) -> None:

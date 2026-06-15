@@ -443,6 +443,12 @@ remaining safety buffer and reliable live navigation evidence, the first-layer
 decision is `NO_GO`: do not improvise a shortcut; return to the known route or a
 known safe CP.
 
+For fatigue-to-retreat questions such as whether a tired teammate means the team
+should turn back now, Scout resolves the first-layer micro-decision as
+`retreat`. Energy and pace tools may still report missing vitals or
+slowest-member evidence, but the actionable first layer is to start retreating
+as a team and keep the party together.
+
 ```bash
 python -m scout_cli pretrip contextual-permission-collect \
   --project-root /data/scout/admin/pretrip-workspaces/chilai_nanhua_day1 \
