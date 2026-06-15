@@ -26,6 +26,12 @@ def test_weather_window_tool_reports_placeholder_missing_fresh_weather() -> None
     assert result["answerability"] == "weather_placeholder_only"
     assert result["source_status"] == "candidate_only"
     assert result["decision"] == "DELAY"
+    assert result["decision_output"]["decisionObjectSchema"] == "ContextualPermission"
+    assert result["decision_output"]["decision"] == "DELAY"
+    assert result["decision_output"]["firstLayer"]["decision"] == (
+        "建議延後天氣判斷。"
+    )
+    assert result["decision_output"]["runtimeSafetyTruth"] is False
     assert result["weather_to_decision"]["role"] == "Risk Sentinel / Weather-to-Decision"
     assert result["weather_to_decision"]["decision"] == "DELAY"
     assert result["weather_to_decision"]["candidate_only"] is True
@@ -123,6 +129,11 @@ def test_weather_window_tool_reads_route_weather_package_and_emits_wx_alerts(
     assert result["assessment_kind"] == "read_only_route_weather_window"
     assert result["answerability"] == "route_weather_risk_available"
     assert result["decision"] == "CHANGE_PLAN"
+    assert result["decision_output"]["decision"] == "CHANGE_PLAN"
+    assert result["decision_output"]["firstLayer"]["decision"] == (
+        "不建議照原計畫通過。"
+    )
+    assert result["decision_output"]["secondLayer"]["requiredConditions"]
     assert result["weather_to_decision"]["decision"] == "CHANGE_PLAN"
     assert result["weather_to_decision"]["highest_risk_segment"]["segment_id"] == "42"
     assert "rain / wet terrain" in result["weather_to_decision"]["route_specific_conditions"]
@@ -164,6 +175,10 @@ def test_weather_window_tool_no_go_for_critical_weather_route_interaction(
 
     assert result["answerability"] == "route_weather_risk_available"
     assert result["decision"] == "NO_GO"
+    assert result["decision_output"]["decision"] == "NO_GO"
+    assert result["decision_output"]["firstLayer"]["decision"] == (
+        "不建議進入受天氣影響路段。"
+    )
     assert result["weather_to_decision"]["decision"] == "NO_GO"
     assert result["weather_to_decision"]["weather_buffer_impact"] == (
         "weather buffer is not available for discretionary delay or exposure"

@@ -105,6 +105,14 @@ def assess_scout_media_literacy(
         guidance=guidance,
         missing_fields=missing_fields,
     )
+    decision_output = _decision_output(
+        decision=decision,
+        biases=biases,
+        matches=matches,
+        guidance=guidance,
+        missing_fields=missing_fields,
+        input_state=input_state,
+    )
     answerability = (
         "media_literacy_missing_context"
         if missing_fields
@@ -123,6 +131,7 @@ def assess_scout_media_literacy(
         "decision": decision,
         "allowed": decision in {"GO", "CONDITIONAL_GO"},
         "field_answer": field_answer,
+        "decision_output": decision_output,
         "missing_fields": missing_fields,
         "media_literacy": {
             "role": "Media Literacy / Bias Sentinel",
@@ -153,6 +162,7 @@ def assess_scout_media_literacy(
                 "detected_biases": biases,
                 "target_context_points": matches[:3],
                 "field_answer": field_answer,
+                "decision_output": decision_output,
                 "candidate_only": True,
                 "runtime_safety_truth": False,
             }
@@ -464,6 +474,210 @@ def _field_answer(
         f"{missing_text} 下一步：{guidance['next_action']} "
         "這不是現場停留授權或 runtime safety truth；若要停留、拍照或改線，仍需 contextual permission 計算時間、位置、deadline 與 buffer 代價。"
     )
+
+
+def _decision_output(
+    *,
+    decision: str,
+    biases: list[dict[str, Any]],
+    matches: list[dict[str, Any]],
+    guidance: dict[str, Any],
+    missing_fields: list[str],
+    input_state: dict[str, Any],
+) -> dict[str, Any]:
+    allowed = decision in {"GO", "CONDITIONAL_GO"}
+    reasons = _main_reasons(biases=biases, matches=matches)
+    if not reasons:
+        reasons = ["沒有足夠媒體偏誤與路線脈絡證據可支持現場授權。"]
+    uncertainty_notes = [
+        f"Missing field: {field}" for field in missing_fields
+    ]
+    required_conditions = _required_conditions(
+        decision=decision,
+        missing_fields=missing_fields,
+        input_state=input_state,
+    )
+    alternatives = _alternative_actions(decision=decision, matches=matches)
+    first_layer = {
+        "decision": _decision_phrase(decision),
+        "limit": _limit_phrase(decision),
+        "reason": " / ".join(reasons[:2]),
+        "nextStep": guidance["next_action"],
+    }
+    second_layer = {
+        "details": _second_layer_details(
+            biases=biases,
+            matches=matches,
+            guidance=guidance,
+            input_state=input_state,
+        ),
+        "uncertaintyNotes": uncertainty_notes,
+        "residualRisk": [
+            "Media evidence is not route safety proof.",
+            "Contextual permission is still required before any stop, photo, wait, or reroute.",
+            "No runtime safety truth was created.",
+        ],
+        "requiredConditions": required_conditions,
+        "alternativeActions": alternatives,
+    }
+    return {
+        "role": "Micro-Decision Agent",
+        "format": "SCOUT_OUTDOOR_AI_AGENT_STANDARD.section16",
+        "decisionObjectSchema": "ContextualPermission",
+        "text": "\n".join(
+            (
+                f"[決策] {first_layer['decision']}",
+                f"[限制] {first_layer['limit']}",
+                f"[原因] {first_layer['reason']}",
+                f"[下一步] {first_layer['nextStep']}",
+            )
+        ),
+        "firstLayer": first_layer,
+        "secondLayer": second_layer,
+        "action": "photo" if _has_photo_pressure(biases) else "continue",
+        "decision": decision,
+        "allowed": allowed,
+        "locationConstraint": _limit_phrase(decision),
+        "mainReasons": reasons[:3],
+        "cost": {
+            "timeBufferChangeMinutes": 0 if not allowed else None,
+            "weatherWindowImpact": "Media claim cannot override fresh weather review.",
+            "retreatImpact": "Do not spend retreat buffer to reach or wait at media-driven points.",
+            "teamPaceImpact": "Media pace claims do not replace slowest-member basis.",
+        },
+        "nextAction": guidance["next_action"],
+        "confidence": "low" if missing_fields else "medium",
+        "uncertaintyNotes": uncertainty_notes,
+        "residualRisk": second_layer["residualRisk"],
+        "requiredConditions": required_conditions,
+        "alternativeActions": alternatives,
+        "standardAlignment": [
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 16 required decision output format",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 17 ContextualPermission schema",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 21 Media Literacy as Product Function",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 23 acceptance criterion 7 user bias",
+        ],
+        "runtimeSafetyTruth": False,
+    }
+
+
+def _main_reasons(
+    *,
+    biases: list[dict[str, Any]],
+    matches: list[dict[str, Any]],
+) -> list[str]:
+    reasons = [str(item["risk"]) for item in biases[:2] if item.get("risk")]
+    risk_matches = [item for item in matches if item.get("risk_context")]
+    if risk_matches:
+        labels = "、".join(str(item.get("label")) for item in risk_matches[:2])
+        reasons.insert(0, f"目標點 {labels} 帶有風險脈絡。")
+    return _dedupe(reasons)
+
+
+def _required_conditions(
+    *,
+    decision: str,
+    missing_fields: list[str],
+    input_state: dict[str, Any],
+) -> list[str]:
+    conditions = []
+    if missing_fields:
+        conditions.append("補齊缺少的 route context、天氣/路況、隊伍能力或裝備證據。")
+    if not input_state.get("weather_reviewed"):
+        conditions.append("完成 fresh weather / route condition review。")
+    if not input_state.get("user_experience_available"):
+        conditions.append("補上本隊經驗與最慢者能力基準。")
+    if decision in {"CONDITIONAL_GO", "GO"}:
+        conditions.append("另行通過 contextual permission 的時間、位置、deadline 與 buffer 檢查。")
+    return _dedupe(conditions)
+
+
+def _alternative_actions(
+    *,
+    decision: str,
+    matches: list[dict[str, Any]],
+) -> list[str]:
+    safe_points = [str(item.get("label")) for item in matches[:2] if item.get("label")]
+    if decision == "NO_GO":
+        return [
+            "取消媒體點位繞行或停留。",
+            "改用安全主線、下一 CP 或已審核觀察點。",
+            "把媒體內容當作提問線索，不當作現場授權。",
+        ]
+    if decision == "GUIDED_ONLY":
+        return [
+            "改成嚮導活動或等效支援。",
+            "選擇較短、較低曝露、已審核的替代方案。",
+            "不要自主複製媒體路線。",
+        ]
+    if decision == "CONDITIONAL_GO":
+        return [
+            "只在 contextual permission 通過後短暫執行。",
+            *(f"改到已審核點位：{label}" for label in safe_points[:1]),
+            "保留撤退與日照 buffer。",
+        ]
+    return [
+        "補齊證據後重新判斷。",
+        "選擇下一 CP 或已審核觀察點。",
+        "取消打卡或拍攝目標。",
+    ]
+
+
+def _second_layer_details(
+    *,
+    biases: list[dict[str, Any]],
+    matches: list[dict[str, Any]],
+    guidance: dict[str, Any],
+    input_state: dict[str, Any],
+) -> list[str]:
+    details = []
+    if biases:
+        details.append(
+            "Detected media biases: "
+            + ", ".join(str(item["bias_id"]) for item in biases[:5])
+        )
+    if matches:
+        details.append(
+            "Matched route context: "
+            + ", ".join(str(item.get("label")) for item in matches[:3])
+        )
+    details.append(str(guidance.get("risk_reframe") or "Treat media as incomplete evidence."))
+    details.append(
+        "weather_reviewed="
+        + str(input_state.get("weather_reviewed"))
+        + ", user_experience_available="
+        + str(input_state.get("user_experience_available"))
+    )
+    return details
+
+
+def _decision_phrase(decision: str) -> str:
+    if decision == "NO_GO":
+        return "不建議為媒體點位停留或改線。"
+    if decision == "GUIDED_ONLY":
+        return "不建議自主複製媒體路線。"
+    if decision == "CONDITIONAL_GO":
+        return "可以條件式參考，但不能直接照做。"
+    if decision == "GO":
+        return "可以參考，但仍需現場授權。"
+    return "建議延後判斷。"
+
+
+def _limit_phrase(decision: str) -> str:
+    if decision == "NO_GO":
+        return "不得為拍照、打卡或美照期待離開主線、增加停留或繞行。"
+    if decision == "GUIDED_ONLY":
+        return "沒有嚮導或等效支援時，不得自主複製該媒體路線。"
+    if decision == "CONDITIONAL_GO":
+        return "只能在 CP Graph、天氣、裝備、最慢者與 contextual permission 都通過時短暫執行。"
+    if decision == "GO":
+        return "不得把媒體內容當成安全保證；仍需現場時間與 buffer 限制。"
+    return "補齊路線脈絡、天氣/路況、隊伍能力與裝備證據前，不給現場授權。"
+
+
+def _has_photo_pressure(biases: list[dict[str, Any]]) -> bool:
+    ids = {str(item.get("bias_id")) for item in biases}
+    return bool(ids & {"beauty_photo_bias", "check_in_pressure", "image_scale_bias"})
 
 
 def _context_kind(classes: list[str], label: str) -> str:

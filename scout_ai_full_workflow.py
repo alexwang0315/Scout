@@ -49,6 +49,7 @@ class ScoutAiFullWorkflowOutput(ScoutAiToolBaseModel):
     question: str
     answerability: str
     answer: str
+    decision_output: dict[str, Any] = Field(default_factory=dict)
     workflow_steps: list[ScoutAiFullWorkflowStep] = Field(default_factory=list)
     discovery_plan: dict[str, Any]
     evidence_collection: dict[str, Any]
@@ -113,6 +114,7 @@ def full_workflow_from_answer_synthesis(
         question=answer.question,
         answerability=answer.answerability,
         answer=answer.answer,
+        decision_output=dict(answer.decision_output),
         workflow_steps=_workflow_steps(
             discovery=discovery,
             evidence=evidence,
@@ -211,11 +213,22 @@ def _evidence_summary(evidence: dict[str, Any]) -> dict[str, Any]:
 
 
 def _answer_summary(answer: dict[str, Any]) -> dict[str, Any]:
+    decision_output = (
+        answer.get("decision_output")
+        if isinstance(answer.get("decision_output"), dict)
+        else {}
+    )
     return {
         "answerability": str(answer.get("answerability") or ""),
         "completed_source_count": _int_value(answer.get("completed_source_count")),
         "missing_evidence_count": _int_value(answer.get("missing_evidence_count")),
         "failed_source_count": _int_value(answer.get("failed_source_count")),
+        "decision_output_schema": str(
+            decision_output.get("decisionObjectSchema") or ""
+        ),
+        "decision_output_source_tool": str(
+            decision_output.get("answerSourceToolId") or ""
+        ),
         "model_provider_used": False,
         "runtime_safety_truth": False,
     }

@@ -37,6 +37,17 @@ def test_live_navigation_state_outputs_guidance_for_branch_check() -> None:
     ]
     assert "地形導航判斷" in result["field_answer"]
     assert "runtime safety truth" in result["field_answer"]
+    assert result["decision_output"]["decisionObjectSchema"] == "ContextualPermission"
+    assert result["decision_output"]["decision"] == "CONDITIONAL_GO"
+    assert result["decision_output"]["allowed"] is True
+    assert result["decision_output"]["firstLayer"]["decision"] == (
+        "可以保守前進到下一個可信 CP。"
+    )
+    assert "不得離開地圖走廊" in result["decision_output"]["firstLayer"]["limit"]
+    assert result["decision_output"]["firstLayer"]["nextStep"] == (
+        result["navigation_decision"]["next_action"]
+    )
+    assert result["decision_output"]["runtimeSafetyTruth"] is False
     assert result["boundary"]["runtime_safety_truth"] is False
     assert result["boundary"]["live_hardware_read_performed"] is False
 
@@ -56,6 +67,11 @@ def test_live_navigation_state_blocks_downcut_from_candidate_snapshot() -> None:
     ]
     assert "不要下切溪谷" in result["navigation_decision"]["next_action"]
     assert "NO_GO" in result["field_answer"]
+    assert result["decision_output"]["decision"] == "NO_GO"
+    assert result["decision_output"]["allowed"] is False
+    assert result["decision_output"]["firstLayer"]["decision"] == "不建議前進或下切。"
+    assert "不得下切" in result["decision_output"]["firstLayer"]["limit"]
+    assert result["decision_output"]["secondLayer"]["alternativeActions"]
     assert result["boundary"]["safety_api_called"] is False
 
 
@@ -72,6 +88,10 @@ def test_live_navigation_state_delays_without_position() -> None:
     assert result["navigation_decision"]["route_fit_status"] == "route_fit_unknown"
     assert result["route_query_plan"]["status"] == "insufficient_position"
     assert "地形導航判斷" in result["field_answer"]
+    assert result["decision_output"]["decision"] == "DELAY"
+    assert result["decision_output"]["allowed"] is False
+    assert "先取得可靠位置" in result["decision_output"]["firstLayer"]["limit"]
+    assert result["decision_output"]["secondLayer"]["uncertaintyNotes"]
 
 
 def test_live_navigation_state_output_kind_constant() -> None:

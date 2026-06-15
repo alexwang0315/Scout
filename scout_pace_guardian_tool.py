@@ -148,6 +148,19 @@ def assess_scout_pace_guardian(
         pace_fit=pace_fit,
         missing_fields=missing_fields,
     )
+    schedule_pressure = {
+        "current_delay_minutes": current_delay,
+        "minutes_to_next_cp": eta_minutes,
+        "next_cp_id": next_cp_id,
+        "eta_source": eta_source,
+    }
+    decision_output = _decision_output(
+        decision=decision,
+        pace_fit=pace_fit,
+        schedule_pressure=schedule_pressure,
+        missing_fields=missing_fields,
+        field_answer=field_answer,
+    )
 
     return {
         "tool_id": PACE_GUARDIAN_TOOL_ID,
@@ -158,6 +171,7 @@ def assess_scout_pace_guardian(
         "answerability": answerability,
         "source_status": "candidate_only",
         "decision": decision,
+        "decision_output": decision_output,
         "field_answer": field_answer,
         "missing_fields": missing_fields,
         "pace_guardian": {
@@ -167,6 +181,7 @@ def assess_scout_pace_guardian(
             "candidate_only": True,
             "runtime_safety_truth": False,
             "decision": decision,
+            "decision_output": decision_output,
             "next_action": pace_fit["next_action"],
             "guardrails": [
                 "Do not use team average pace to hide the slowest member.",
@@ -175,12 +190,7 @@ def assess_scout_pace_guardian(
             ],
         },
         "team_pace_fit": pace_fit,
-        "schedule_pressure": {
-            "current_delay_minutes": current_delay,
-            "minutes_to_next_cp": eta_minutes,
-            "next_cp_id": next_cp_id,
-            "eta_source": eta_source,
-        },
+        "schedule_pressure": schedule_pressure,
         "team_context": team_context,
         "source_report": source_report,
         "result_count": 1,
@@ -188,6 +198,7 @@ def assess_scout_pace_guardian(
             {
                 "label": "pace guardian decision",
                 "decision": decision,
+                "decision_output": decision_output,
                 "answerability": answerability,
                 "slowest_member": pace_fit.get("slowest_member"),
                 "fastest_member": pace_fit.get("fastest_member"),
@@ -367,6 +378,183 @@ def _field_answer(
         f"{reason_text} 下一步：{pace_fit['next_action']} "
         "此為 Pace Guardian 候選判斷，不是 runtime safety truth；停留或午餐可停多久仍需 contextual permission 工具。"
     )
+
+
+def _decision_output(
+    *,
+    decision: str,
+    pace_fit: dict[str, Any],
+    schedule_pressure: dict[str, Any],
+    missing_fields: list[str],
+    field_answer: str,
+) -> dict[str, Any]:
+    allowed = decision in {"GO", "CONDITIONAL_GO"}
+    reasons = _decision_reasons(pace_fit=pace_fit, missing_fields=missing_fields)
+    uncertainty_notes = [f"Missing field: {field}" for field in missing_fields]
+    required_conditions = _pace_required_conditions(
+        pace_fit=pace_fit,
+        missing_fields=missing_fields,
+    )
+    alternatives = _pace_alternative_actions(decision=decision, pace_fit=pace_fit)
+    first_layer = {
+        "decision": _decision_phrase(decision=decision, allowed=allowed),
+        "limit": _decision_limit_phrase(decision=decision, pace_fit=pace_fit),
+        "reason": " / ".join(reasons[:2]),
+        "nextStep": pace_fit["next_action"],
+    }
+    second_layer = {
+        "details": _decision_details(
+            pace_fit=pace_fit,
+            schedule_pressure=schedule_pressure,
+            field_answer=field_answer,
+        ),
+        "uncertaintyNotes": uncertainty_notes,
+        "residualRisk": [
+            "Pace guidance is candidate-only and based on available member profiles.",
+            "Actual stop/lunch duration still requires contextual permission.",
+            "No runtime safety truth was created.",
+        ],
+        "requiredConditions": required_conditions,
+        "alternativeActions": alternatives,
+    }
+    return {
+        "role": "Micro-Decision Agent",
+        "format": "SCOUT_OUTDOOR_AI_AGENT_STANDARD.section16",
+        "decisionObjectSchema": "ContextualPermission",
+        "text": "\n".join(
+            (
+                f"[決策] {first_layer['decision']}",
+                f"[限制] {first_layer['limit']}",
+                f"[原因] {first_layer['reason']}",
+                f"[下一步] {first_layer['nextStep']}",
+            )
+        ),
+        "firstLayer": first_layer,
+        "secondLayer": second_layer,
+        "action": "pace_adjustment",
+        "decision": decision,
+        "allowed": allowed,
+        "locationConstraint": first_layer["limit"],
+        "mainReasons": reasons[:3],
+        "cost": {
+            "scheduleDelayMinutes": schedule_pressure.get("current_delay_minutes"),
+            "minutesToNextCp": schedule_pressure.get("minutes_to_next_cp"),
+            "teamPaceImpact": "Slowest-member basis; team average pace was not used.",
+            "retreatImpact": "If pace pressure persists, shorten route or turn around before buffer collapse.",
+        },
+        "nextAction": pace_fit["next_action"],
+        "confidence": "low" if uncertainty_notes else "medium",
+        "uncertaintyNotes": uncertainty_notes,
+        "residualRisk": second_layer["residualRisk"],
+        "requiredConditions": required_conditions,
+        "alternativeActions": alternatives,
+        "standardAlignment": [
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 7 Readiness & Pace Fit",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 15.1 Pace Guardian",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 16 required decision output format",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 17 ContextualPermission schema",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 23 acceptance criteria",
+        ],
+        "runtimeSafetyTruth": False,
+    }
+
+
+def _decision_reasons(
+    *, pace_fit: dict[str, Any], missing_fields: list[str]
+) -> list[str]:
+    reasons = _str_list(pace_fit.get("main_reasons"))
+    if not reasons:
+        reasons = _str_list(pace_fit.get("warnings"))
+    if missing_fields:
+        reasons.append("缺少 " + "、".join(missing_fields[:5]))
+    if not reasons:
+        reasons.append("目前未見明確腳程缺口，但仍須以最慢者為基準。")
+    return _dedupe(reasons)
+
+
+def _pace_required_conditions(
+    *, pace_fit: dict[str, Any], missing_fields: list[str]
+) -> list[str]:
+    required = _str_list(pace_fit.get("required_conditions"))
+    required.extend(f"Provide {field}." for field in missing_fields)
+    if not required and pace_fit.get("decision_basis") == "slowest_member":
+        required.append("Continue using slowest-member pace basis at the next CP.")
+    return _dedupe(required)
+
+
+def _pace_alternative_actions(*, decision: str, pace_fit: dict[str, Any]) -> list[str]:
+    alternatives = [str(pace_fit["next_action"])]
+    if decision in {"CHANGE_PLAN", "NO_GO"}:
+        alternatives.extend(
+            [
+                "前移午餐或休息點，不推進到原定下一個 CP。",
+                "改短版或折返，避免用平均腳程消耗回程 buffer。",
+            ]
+        )
+    else:
+        alternatives.extend(
+            [
+                "保留午餐/休息前移選項。",
+                "下一個 CP 前重新檢查最慢者儲備與疲勞。",
+            ]
+        )
+    return _dedupe(alternatives)
+
+
+def _decision_phrase(*, decision: str, allowed: bool) -> str:
+    if decision == "NO_GO":
+        return "不建議用目前腳程資料繼續判斷。"
+    if decision == "CHANGE_PLAN":
+        return "不建議照原計畫推進。"
+    if decision == "CONDITIONAL_GO":
+        return "可繼續，但必須以最慢者控速。"
+    if decision == "GO" and allowed:
+        return "可照計畫行進。"
+    return "暫緩判斷。"
+
+
+def _decision_limit_phrase(*, decision: str, pace_fit: dict[str, Any]) -> str:
+    if decision in {"NO_GO", "CHANGE_PLAN"}:
+        return "不要用平均腳程推進；前移午餐/休息點，必要時改短版或折返。"
+    if decision == "CONDITIONAL_GO":
+        return "只能以最慢者與最脆弱成員為基準；任何停留仍需 contextual permission。"
+    if pace_fit.get("decision_basis") == "slowest_member":
+        return "維持最慢者基準；下一個 CP 前重新檢查儲備與休息節奏。"
+    return "不得把平均腳程當成現場授權。"
+
+
+def _decision_details(
+    *,
+    pace_fit: dict[str, Any],
+    schedule_pressure: dict[str, Any],
+    field_answer: str,
+) -> list[str]:
+    details = [field_answer]
+    slowest = pace_fit.get("slowest_member")
+    if isinstance(slowest, dict):
+        details.append(
+            "最慢者："
+            + str(slowest.get("label") or slowest.get("member_id"))
+            + f"，reserve_minutes={slowest.get('reserve_minutes')}"
+        )
+    fastest = pace_fit.get("fastest_member")
+    if isinstance(fastest, dict):
+        details.append(
+            "最快者："
+            + str(fastest.get("label") or fastest.get("member_id"))
+            + f"，pace_mps={fastest.get('pace_mps')}"
+        )
+    if pace_fit.get("pace_gap_ratio") is not None:
+        details.append(f"pace_gap_ratio={pace_fit.get('pace_gap_ratio')}")
+    if schedule_pressure.get("current_delay_minutes") is not None:
+        details.append(
+            f"current_delay_minutes={schedule_pressure.get('current_delay_minutes')}"
+        )
+    if schedule_pressure.get("minutes_to_next_cp") is not None:
+        details.append(
+            f"minutes_to_next_cp={schedule_pressure.get('minutes_to_next_cp')}"
+        )
+    return details
 
 
 def _member_profiles(
@@ -702,6 +890,17 @@ def _str_list(value: Any) -> list[str]:
     if isinstance(value, str) and value.strip():
         return [value]
     return []
+
+
+def _dedupe(values: list[str]) -> list[str]:
+    seen = set()
+    result = []
+    for value in values:
+        if value in seen:
+            continue
+        seen.add(value)
+        result.append(value)
+    return result
 
 
 def _nested(payload: dict[str, Any], object_key: str, value_key: str) -> Any:

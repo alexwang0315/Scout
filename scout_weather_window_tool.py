@@ -126,6 +126,11 @@ def assess_scout_weather_window(
         answerability=answerability,
         missing_fields=missing_fields,
     )
+    decision_output = _decision_output(
+        decision=weather_to_decision,
+        missing_fields=missing_fields,
+        field_answer=field_answer,
+    )
 
     return {
         "tool_id": WEATHER_WINDOW_TOOL_ID,
@@ -141,6 +146,7 @@ def assess_scout_weather_window(
             weather_evidence,
         ),
         "decision": weather_to_decision["decision"],
+        "decision_output": decision_output,
         "field_answer": field_answer,
         "weather_to_decision": weather_to_decision,
         "external_api_calls_made": _bool_from_sources(
@@ -540,6 +546,134 @@ def _field_answer(
         f"天氣決策：建議 {decision_label}。{reason_text} 下一步：{next_action} "
         "此為 Weather-to-Decision 候選判斷，不是 runtime safety truth；不得觸發 /safety、SOS、outbound send 或硬體控制。"
     )
+
+
+def _decision_output(
+    *,
+    decision: dict[str, Any],
+    missing_fields: list[str],
+    field_answer: str,
+) -> dict[str, Any]:
+    decision_label = str(decision.get("decision") or "DELAY")
+    allowed = decision_label in {"GO", "CONDITIONAL_GO"}
+    reasons = _string_list(decision.get("main_reasons"))
+    if not reasons and missing_fields:
+        reasons = ["缺少 " + "、".join(missing_fields[:5])]
+    if not reasons:
+        reasons = ["Route weather package did not expose elevated weather risk."]
+    uncertainty_notes = [f"Missing field: {field}" for field in missing_fields]
+    required_conditions = _weather_required_conditions(
+        decision=decision,
+        missing_fields=missing_fields,
+    )
+    alternatives = _string_list(decision.get("alternatives"))
+    first_layer = {
+        "decision": _decision_phrase(decision_label, allowed=allowed),
+        "limit": str(
+            decision.get("action_limit")
+            or "不得把 weather placeholder 當成現場授權。"
+        ),
+        "reason": " / ".join(reasons[:2]),
+        "nextStep": str(decision.get("next_action") or "補齊天氣與路線交互證據。"),
+    }
+    second_layer = {
+        "details": _decision_details(decision=decision, field_answer=field_answer),
+        "uncertaintyNotes": uncertainty_notes,
+        "residualRisk": [
+            "Route weather evidence is candidate-only.",
+            "Weather-to-decision output does not call /safety, SOS, outbound send, or hardware control.",
+            "Runtime admission remains separate from this advisory evidence.",
+        ],
+        "requiredConditions": required_conditions,
+        "alternativeActions": alternatives,
+    }
+    return {
+        "role": "Micro-Decision Agent",
+        "format": "SCOUT_OUTDOOR_AI_AGENT_STANDARD.section16",
+        "decisionObjectSchema": "ContextualPermission",
+        "text": "\n".join(
+            (
+                f"[決策] {first_layer['decision']}",
+                f"[限制] {first_layer['limit']}",
+                f"[原因] {first_layer['reason']}",
+                f"[下一步] {first_layer['nextStep']}",
+            )
+        ),
+        "firstLayer": first_layer,
+        "secondLayer": second_layer,
+        "action": "weather_route_decision",
+        "decision": decision_label,
+        "allowed": allowed,
+        "locationConstraint": first_layer["limit"],
+        "mainReasons": reasons[:3],
+        "cost": {
+            "weatherBufferImpact": decision.get("weather_buffer_impact"),
+            "routeSpecificConditions": decision.get("route_specific_conditions") or [],
+            "wxAlertCount": decision.get("wx_alert_count"),
+        },
+        "nextAction": first_layer["nextStep"],
+        "confidence": "low" if uncertainty_notes else "medium",
+        "uncertaintyNotes": uncertainty_notes,
+        "residualRisk": second_layer["residualRisk"],
+        "requiredConditions": required_conditions,
+        "alternativeActions": alternatives,
+        "standardAlignment": [
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 10 Weather-to-Decision Intelligence",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 15.2 Risk Sentinel",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 16 required decision output format",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 17 ContextualPermission schema",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 23 acceptance criteria",
+        ],
+        "runtimeSafetyTruth": False,
+    }
+
+
+def _weather_required_conditions(
+    *,
+    decision: dict[str, Any],
+    missing_fields: list[str],
+) -> list[str]:
+    required = [f"Provide {field}." for field in missing_fields]
+    decision_label = str(decision.get("decision") or "")
+    if decision_label in {"NO_GO", "CHANGE_PLAN"}:
+        required.append("Choose a lower-risk weather window or route alternative.")
+    if decision_label == "CONDITIONAL_GO":
+        required.append("Re-check weather and route risk at the next CP.")
+    if not required:
+        required.append("Keep route weather package fresh and reviewed.")
+    return _dedupe(required)
+
+
+def _decision_details(*, decision: dict[str, Any], field_answer: str) -> list[str]:
+    details = [field_answer]
+    conditions = _string_list(decision.get("route_specific_conditions"))
+    if conditions:
+        details.append("route_specific_conditions=" + ", ".join(conditions[:6]))
+    highest = decision.get("highest_risk_segment")
+    if isinstance(highest, dict):
+        details.append(
+            "highest_risk_segment="
+            + str(highest.get("segment_id"))
+            + f", risk_level={highest.get('risk_level')}"
+            + f", final_risk={highest.get('final_risk')}"
+        )
+    if decision.get("weather_buffer_impact"):
+        details.append("weather_buffer_impact=" + str(decision["weather_buffer_impact"]))
+    return details
+
+
+def _decision_phrase(decision: str, *, allowed: bool) -> str:
+    if decision == "NO_GO":
+        return "不建議進入受天氣影響路段。"
+    if decision == "CHANGE_PLAN":
+        return "不建議照原計畫通過。"
+    if decision == "DELAY":
+        return "建議延後天氣判斷。"
+    if decision == "CONDITIONAL_GO":
+        return "可有條件通過，但必須保留天氣重新檢查。"
+    if decision == "GO" and allowed:
+        return "可依目前天氣窗繼續。"
+    return "暫緩判斷。"
 
 
 def _weather_decision_from_risk(

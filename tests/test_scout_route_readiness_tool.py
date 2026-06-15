@@ -38,6 +38,25 @@ def test_route_readiness_fixture_delays_without_required_pretrip_reviews() -> No
     assert result["weather_daylight_state"]["human_review_required"] is True
     assert result["boundary"]["runtime_handoff_performed"] is False
     assert result["boundary"]["runtime_safety_truth"] is False
+    package = result["pretrip_decision_package"]
+    outputs = package["required_outputs"]
+    assert package["candidate_only"] is True
+    assert package["runtime_safety_truth"] is False
+    assert outputs["pretrip_decision"] == "DELAY"
+    assert len(outputs["top_risk_sources"]) == 3
+    assert outputs["top_risk_sources"][0]["source"] == "required_pretrip_input"
+    assert outputs["required_conditions"]
+    assert outputs["cp_graph"]["checkpoint_count"] == 124
+    assert outputs["cp_graph"]["segment_count"] == 123
+    assert outputs["latest_turnaround"]["checkpoint_name"] == "雲海保線所"
+    assert outputs["not_recommended_stop_points"]
+    assert outputs["alternatives_or_short_routes"]
+    assert outputs["pretrip_checklist"]
+    assert outputs["residual_risk"]
+    assert package["decision_limits"]["allowed"] is False
+    assert package["decision_limits"]["buffer_cost_statement"]
+    assert package["traceability"]["raw_payloads_embedded"] is False
+    assert package["acceptance_coverage"]["explicit_decision"] is True
 
 
 def test_route_readiness_no_go_for_hard_readiness_blocker(tmp_path: Path) -> None:
@@ -63,6 +82,11 @@ def test_route_readiness_no_go_for_hard_readiness_blocker(tmp_path: Path) -> Non
     ]["critical_gaps"]
     assert result["departure_gate"]["approval_granted"] is False
     assert "runtime safety truth" in result["field_answer"]
+    package = result["pretrip_decision_package"]
+    assert package["required_outputs"]["pretrip_decision"] == "NO_GO"
+    assert package["required_outputs"]["top_risk_sources"][0]["severity"] == "critical"
+    assert package["required_outputs"]["not_recommended_stop_points"]
+    assert package["decision_limits"]["allowed"] is False
 
 
 def test_route_readiness_go_when_all_pretrip_inputs_are_reviewed(tmp_path: Path) -> None:
@@ -88,6 +112,16 @@ def test_route_readiness_go_when_all_pretrip_inputs_are_reviewed(tmp_path: Path)
     assert result["readiness_governance"]["warning_gaps"] == []
     assert result["departure_gate"]["approval_granted"] is False
     assert "GO" in result["field_answer"]
+    package = result["pretrip_decision_package"]
+    outputs = package["required_outputs"]
+    assert outputs["pretrip_decision"] == "GO"
+    assert outputs["cp_graph"]["checkpoint_count"] == 2
+    assert outputs["latest_turnaround"]["checkpoint_name"] == "CP 2"
+    assert outputs["suggested_stop_points"]
+    assert outputs["not_recommended_stop_points"] == []
+    assert outputs["pretrip_checklist"]
+    assert package["decision_limits"]["allowed"] is True
+    assert package["acceptance_coverage"]["traceable_inputs_recorded"] is True
 
 
 def test_route_readiness_output_kind_constant() -> None:

@@ -26,11 +26,22 @@ def test_post_trip_review_reports_fixture_learning_gaps_without_writeback() -> N
     assert result["tool_id"] == POST_TRIP_REVIEW_TOOL_ID
     assert result["answerability"] == "post_trip_review_missing_required_fields"
     assert result["decision"] == "DELAY"
+    assert result["decision_output"]["decisionObjectSchema"] == "ContextualPermission"
+    assert result["decision_output"]["decision"] == "DELAY"
+    assert result["decision_output"]["firstLayer"]["decision"] == "暫緩學習寫回。"
+    assert result["decision_output"]["runtimeSafetyTruth"] is False
     assert "subjective_difficulty" in result["missing_fields"]
     assert "near_miss_incident_review" in result["missing_fields"]
     assert result["post_trip_review"]["role"] == (
         "Post-Trip Review / Learning Governance"
     )
+    assert result["post_trip_learning_package"]["role"] == "Post-Trip Learning Proposal"
+    assert result["post_trip_learning_package"]["data_to_collect"][
+        "actual_cp_pass_times"
+    ]["observed_edge_count"] == 73
+    assert result["post_trip_learning_package"]["writeback_policy"][
+        "automatic_user_model_update_allowed"
+    ] is False
     assert result["completed_trip_summary"]["edge_count"] == 73
     assert result["completed_trip_summary"]["rest_interval_count"] == 62
     assert result["privacy_share_policy"]["raw_track_shared"] is False
@@ -56,6 +67,10 @@ def test_post_trip_review_escalates_incident_feedback_without_mutation() -> None
 
     assert result["answerability"] == "post_trip_review_available"
     assert result["decision"] == "ESCALATE"
+    assert result["decision_output"]["decision"] == "ESCALATE"
+    assert result["decision_output"]["firstLayer"]["decision"] == (
+        "先升級人工事故回顧。"
+    )
     assert "行後回顧包含 incident events，必須人工事故回顧。" in result[
         "review_governance"
     ]["critical_gaps"]
@@ -142,6 +157,13 @@ def test_post_trip_review_go_when_required_feedback_is_complete(tmp_path: Path) 
     assert result["missing_fields"] == []
     assert result["review_governance"]["critical_gaps"] == []
     assert result["review_governance"]["warning_gaps"] == []
+    assert result["decision_output"]["firstLayer"]["decision"] == "可送人工學習審核。"
+    assert result["post_trip_learning_package"]["model_update_target_coverage"][
+        "team_pace_fit_model"
+    ] is True
+    assert result["post_trip_learning_package"]["model_update_target_coverage"][
+        "route_condition_risk_layer"
+    ] is True
     assert "GO" in result["field_answer"]
     assert {
         item["update_kind"] for item in result["model_update_candidates"]

@@ -154,6 +154,21 @@ def assess_scout_post_trip_review(
         governance=governance,
         missing_fields=missing_fields,
     )
+    post_trip_learning_package = _post_trip_learning_package(
+        completed_trip=completed_trip,
+        feedback_summary=feedback_summary,
+        after_action_summary=after_action_summary,
+        model_update_candidates=model_update_candidates,
+        governance=governance,
+        missing_fields=missing_fields,
+    )
+    decision_output = _decision_output(
+        decision=decision,
+        field_answer=field_answer,
+        governance=governance,
+        missing_fields=missing_fields,
+        post_trip_learning_package=post_trip_learning_package,
+    )
 
     return {
         "artifact_kind": POST_TRIP_REVIEW_OUTPUT_KIND,
@@ -165,6 +180,7 @@ def assess_scout_post_trip_review(
         "answerability": answerability,
         "source_status": "candidate_only",
         "decision": decision,
+        "decision_output": decision_output,
         "field_answer": field_answer,
         "missing_fields": missing_fields,
         "post_trip_review": {
@@ -183,6 +199,7 @@ def assess_scout_post_trip_review(
         "post_trip_feedback": feedback_summary,
         "after_action_next_plan": after_action_summary,
         "model_update_candidates": model_update_candidates,
+        "post_trip_learning_package": post_trip_learning_package,
         "review_governance": governance,
         "privacy_share_policy": _privacy_share_policy(share_preview, capsule),
         "source_report": source_report,
@@ -191,10 +208,12 @@ def assess_scout_post_trip_review(
             {
                 "label": "post-trip review decision",
                 "decision": decision,
+                "decision_output": decision_output,
                 "answerability": answerability,
                 "critical_gaps": governance["critical_gaps"],
                 "warning_gaps": governance["warning_gaps"],
                 "field_answer": field_answer,
+                "post_trip_learning_package": post_trip_learning_package,
                 "candidate_only": True,
                 "runtime_safety_truth": False,
                 "learning_write_performed": False,
@@ -387,6 +406,26 @@ def _model_update_candidates(
                 "blocked_until_human_review",
             )
         )
+    if _actionable_items(feedback_summary["route_condition_notes"]) or (
+        feedback_summary.get("weather_matched_expectation") is False
+    ):
+        candidates.append(
+            _update_candidate(
+                "route_condition_risk_layer",
+                "Review post-trip weather and route condition mismatches before changing risk layers.",
+                "blocked_until_human_review",
+            )
+        )
+    if completed_trip.get("moving_pace_min_per_km") is not None and feedback_summary.get(
+        "subjective_difficulty"
+    ):
+        candidates.append(
+            _update_candidate(
+                "team_pace_fit_model",
+                "Use subjective difficulty with actual pace only after review of party fit.",
+                "blocked_until_human_review",
+            )
+        )
     if energy_feedback:
         candidates.append(
             _update_candidate(
@@ -407,6 +446,272 @@ def _update_candidate(kind: str, summary: str, review_state: str) -> dict[str, A
         "candidate_only": True,
         "runtime_safety_truth": False,
     }
+
+
+def _post_trip_learning_package(
+    *,
+    completed_trip: dict[str, Any],
+    feedback_summary: dict[str, Any],
+    after_action_summary: dict[str, Any],
+    model_update_candidates: list[dict[str, Any]],
+    governance: dict[str, Any],
+    missing_fields: list[str],
+) -> dict[str, Any]:
+    route_time_comparison = completed_trip.get("route_time_comparison", {})
+    if not isinstance(route_time_comparison, dict):
+        route_time_comparison = {}
+    return {
+        "role": "Post-Trip Learning Proposal",
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+        "learning_write_performed": False,
+        "mission_graph_rewrite_performed": False,
+        "incident_package_rewrite_performed": False,
+        "phase2_brain_write_performed": False,
+        "data_to_collect": {
+            "actual_cp_pass_times": {
+                "status": "available"
+                if completed_trip.get("observed_edge_count")
+                else "missing",
+                "observed_edge_count": completed_trip.get("observed_edge_count") or 0,
+                "planned_segment_count": completed_trip.get("planned_segment_count"),
+                "traversed_segment_count": completed_trip.get("traversed_segment_count"),
+                "partial_segment_count": completed_trip.get("partial_segment_count"),
+                "unreached_segment_count": completed_trip.get("unreached_segment_count"),
+            },
+            "actual_stop_duration": {
+                "status": "available"
+                if completed_trip.get("rest_interval_count")
+                else "missing",
+                "rest_interval_count": completed_trip.get("rest_interval_count") or 0,
+                "rest_time_min": completed_trip.get("rest_time_min"),
+            },
+            "slower_than_expected_segments": {
+                "status": "available"
+                if route_time_comparison.get("comparison_count")
+                else "missing",
+                "slower_than_guide_count": route_time_comparison.get(
+                    "slower_than_guide_count"
+                )
+                or 0,
+                "comparison_count": route_time_comparison.get("comparison_count") or 0,
+            },
+            "subjective_difficulty": feedback_summary.get("subjective_difficulty")
+            or "missing",
+            "equipment_gaps": feedback_summary.get("equipment_gaps") or [],
+            "weather_route_condition_match": _feedback_value_or_missing(
+                feedback_summary.get("weather_matched_expectation")
+            ),
+            "route_condition_notes": feedback_summary.get("route_condition_notes") or [],
+            "near_miss_events": feedback_summary.get("near_miss_events") or [],
+            "incident_events": feedback_summary.get("incident_events") or [],
+            "route_context_updates": feedback_summary.get("route_context_updates") or [],
+            "user_feedback_items": feedback_summary.get("user_feedback_items") or [],
+        },
+        "model_update_proposals": model_update_candidates,
+        "model_update_target_coverage": {
+            "user_scout_pace_coefficient": _has_update_kind(
+                model_update_candidates, "user_scout_pace_coefficient"
+            ),
+            "team_pace_fit_model": _has_update_kind(
+                model_update_candidates, "team_pace_fit_model"
+            ),
+            "route_cp_elapsed_time": _has_update_kind(
+                model_update_candidates, "route_cp_elapsed_time"
+            ),
+            "rest_stop_safety_and_duration": _has_update_kind(
+                model_update_candidates, "rest_stop_safety_and_duration"
+            ),
+            "route_condition_risk_layer": _has_update_kind(
+                model_update_candidates, "route_condition_risk_layer"
+            ),
+            "route_context_intelligence": _has_update_kind(
+                model_update_candidates, "route_context_intelligence"
+            ),
+        },
+        "review_required": {
+            "missing_fields": missing_fields,
+            "critical_gaps": governance["critical_gaps"],
+            "warning_gaps": governance["warning_gaps"],
+            "after_action_human_review_required_count": after_action_summary.get(
+                "human_review_required_count"
+            )
+            or 0,
+            "required_conditions": governance["required_conditions"],
+        },
+        "writeback_policy": {
+            "automatic_user_model_update_allowed": False,
+            "automatic_route_model_update_allowed": False,
+            "automatic_team_model_update_allowed": False,
+            "automatic_route_context_update_allowed": False,
+            "human_review_required": True,
+            "allowed_destination_after_review": "next_pretrip_baseline_candidates",
+        },
+        "traceability": {
+            "case_id": completed_trip.get("case_id"),
+            "route_family": completed_trip.get("route_family"),
+            "completion_status": completed_trip.get("completion_status"),
+            "confidence": completed_trip.get("confidence"),
+            "data_quality": completed_trip.get("data_quality"),
+        },
+        "acceptance_coverage": {
+            "section_20_1_data_to_collect": True,
+            "section_20_2_model_update_targets": True,
+            "section_22_reviewable_reasoning": True,
+            "section_23_no_runtime_safety_truth": True,
+        },
+    }
+
+
+def _feedback_value_or_missing(value: Any) -> Any:
+    return value if value is not None else "missing"
+
+
+def _has_update_kind(candidates: list[dict[str, Any]], update_kind: str) -> bool:
+    return any(candidate.get("update_kind") == update_kind for candidate in candidates)
+
+
+def _decision_output(
+    *,
+    decision: str,
+    field_answer: str,
+    governance: dict[str, Any],
+    missing_fields: list[str],
+    post_trip_learning_package: dict[str, Any],
+) -> dict[str, Any]:
+    allowed = decision in {"GO", "CONDITIONAL_GO"}
+    reasons = _decision_reasons(governance=governance, missing_fields=missing_fields)
+    uncertainty_notes = [f"Missing field: {field}" for field in missing_fields]
+    required_conditions = governance["required_conditions"]
+    alternatives = governance["alternative_actions"]
+    first_layer = {
+        "decision": _decision_phrase(decision=decision, allowed=allowed),
+        "limit": _decision_limit_phrase(decision=decision),
+        "reason": " / ".join(reasons[:2]),
+        "nextStep": governance["next_action"],
+    }
+    second_layer = {
+        "details": _decision_details(
+            post_trip_learning_package=post_trip_learning_package,
+            field_answer=field_answer,
+        ),
+        "uncertaintyNotes": uncertainty_notes,
+        "residualRisk": [
+            "Post-trip learning evidence is candidate-only.",
+            "Human review is required before any model, MissionGraph, or route context update.",
+            "No runtime safety truth was created.",
+        ],
+        "requiredConditions": required_conditions,
+        "alternativeActions": alternatives,
+    }
+    return {
+        "role": "Micro-Decision Agent",
+        "format": "SCOUT_OUTDOOR_AI_AGENT_STANDARD.section16",
+        "decisionObjectSchema": "ContextualPermission",
+        "text": "\n".join(
+            (
+                f"[決策] {first_layer['decision']}",
+                f"[限制] {first_layer['limit']}",
+                f"[原因] {first_layer['reason']}",
+                f"[下一步] {first_layer['nextStep']}",
+            )
+        ),
+        "firstLayer": first_layer,
+        "secondLayer": second_layer,
+        "action": "post_trip_learning_review",
+        "decision": decision,
+        "allowed": allowed,
+        "locationConstraint": first_layer["limit"],
+        "mainReasons": reasons[:3],
+        "cost": {
+            "modelWritebackImpact": "No automatic model writeback is allowed.",
+            "nextPretripImpact": "Reviewed candidates may seed the next pretrip baseline.",
+            "incidentReviewImpact": "Incident or near-miss signals must remain review-gated.",
+        },
+        "nextAction": governance["next_action"],
+        "confidence": "low" if uncertainty_notes else "medium",
+        "uncertaintyNotes": uncertainty_notes,
+        "residualRisk": second_layer["residualRisk"],
+        "requiredConditions": required_conditions,
+        "alternativeActions": alternatives,
+        "standardAlignment": [
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 16 required decision output format",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 17 ContextualPermission schema",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 20 post-trip workflow",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 23 acceptance criteria",
+        ],
+        "runtimeSafetyTruth": False,
+    }
+
+
+def _decision_reasons(
+    *, governance: dict[str, Any], missing_fields: list[str]
+) -> list[str]:
+    reasons = []
+    reasons.extend(governance["critical_gaps"])
+    reasons.extend(governance["warning_gaps"])
+    if missing_fields:
+        reasons.append("缺少 " + "、".join(missing_fields[:5]))
+    if not reasons:
+        reasons.append("行後資料可形成候選學習提案，但仍需人工審核。")
+    return _dedupe(reasons)
+
+
+def _decision_phrase(*, decision: str, allowed: bool) -> str:
+    if decision == "ESCALATE":
+        return "先升級人工事故回顧。"
+    if decision == "DELAY":
+        return "暫緩學習寫回。"
+    if decision == "CHANGE_PLAN":
+        return "下一次規劃需調整。"
+    if decision == "CONDITIONAL_GO":
+        return "可有條件送人工學習審核。"
+    if decision == "GO" and allowed:
+        return "可送人工學習審核。"
+    return "暫緩判斷。"
+
+
+def _decision_limit_phrase(*, decision: str) -> str:
+    base = (
+        "不得自動寫回使用者模型、隊伍模型、路線模型、MissionGraph、"
+        "incident package、Phase 1 runtime、/safety 或 Phase 2 Brain。"
+    )
+    if decision == "ESCALATE":
+        return "事故或 near miss 未完成人工回顧前，" + base
+    return base
+
+
+def _decision_details(
+    *,
+    post_trip_learning_package: dict[str, Any],
+    field_answer: str,
+) -> list[str]:
+    coverage = post_trip_learning_package.get("model_update_target_coverage", {})
+    if not isinstance(coverage, dict):
+        coverage = {}
+    enabled_targets = [
+        name for name, available in coverage.items() if available
+    ]
+    data_to_collect = post_trip_learning_package.get("data_to_collect", {})
+    details = [field_answer]
+    if enabled_targets:
+        details.append("候選更新目標：" + "、".join(enabled_targets))
+    if isinstance(data_to_collect, dict):
+        cp_data = data_to_collect.get("actual_cp_pass_times", {})
+        stop_data = data_to_collect.get("actual_stop_duration", {})
+        if isinstance(cp_data, dict):
+            details.append(
+                "實際 CP/segment 資料："
+                f"{cp_data.get('status')}，observed_edge_count="
+                f"{cp_data.get('observed_edge_count')}"
+            )
+        if isinstance(stop_data, dict):
+            details.append(
+                "實際停留資料："
+                f"{stop_data.get('status')}，rest_interval_count="
+                f"{stop_data.get('rest_interval_count')}"
+            )
+    return details
 
 
 def _missing_fields(

@@ -24,6 +24,11 @@ def test_route_context_finds_candidate_viewpoint_and_experience_guidance() -> No
     assert result["status"] == "completed"
     assert result["answerability"] == "route_context_available"
     assert result["source_status"] == "candidate_only"
+    assert result["decision"] == "CONDITIONAL_GO"
+    assert result["decision_output"]["decisionObjectSchema"] == "ContextualPermission"
+    assert result["decision_output"]["firstLayer"]["decision"] == "可作為候選觀察點。"
+    assert "不是停留授權" in result["decision_output"]["firstLayer"]["limit"]
+    assert result["decision_output"]["runtimeSafetyTruth"] is False
     assert result["result_count"] >= 1
     assert result["route_context"]["role"] == "Experience Guide"
     assert result["route_context"]["stop_permission_required"] is True
@@ -50,6 +55,10 @@ def test_route_context_keeps_risk_context_from_becoming_stop_permission() -> Non
 
     risk_items = [item for item in result["results"] if item["label"] == "大崩壁"]
     assert risk_items
+    assert result["decision"] == "NO_GO"
+    assert result["decision_output"]["firstLayer"]["decision"] == (
+        "不建議為觀察或拍攝停留。"
+    )
     assert risk_items[0]["context_kind"] == "risk_context"
     assert "不建議" in risk_items[0]["stop_guidance"]
     assert result["route_context"]["stop_permission_tool_id"] == (

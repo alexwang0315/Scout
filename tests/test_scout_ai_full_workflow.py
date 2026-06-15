@@ -130,8 +130,16 @@ def test_full_workflow_runs_weather_to_decision_question(tmp_path: Path) -> None
     assert result.missing_evidence_count == 0
     assert result.sources[0]["tool_id"] == WEATHER_WINDOW_TOOL_ID
     assert result.sources[0]["top_result_summary"]["decision"] == "CHANGE_PLAN"
+    assert result.sources[0]["top_result_summary"]["decision_output"][
+        "decisionObjectSchema"
+    ] == "ContextualPermission"
     assert result.sources[0]["top_result_summary"]["weather_to_decision"]["role"] == (
         "Risk Sentinel / Weather-to-Decision"
+    )
+    assert result.decision_output["answerSourceToolId"] == WEATHER_WINDOW_TOOL_ID
+    assert result.decision_output["decision"] == "CHANGE_PLAN"
+    assert result.decision_output["firstLayer"]["decision"] == (
+        "不建議照原計畫通過。"
     )
     assert "天氣決策" in result.answer
     assert "CHANGE_PLAN" in result.answer
@@ -158,6 +166,14 @@ def test_full_workflow_preserves_contextual_permission_decision_object() -> None
     assert summary["decision_object"] == summary["contextual_permission"]
     assert summary["decision_output"]["decisionObjectSchema"] == "ContextualPermission"
     assert summary["decision_output"]["firstLayer"]["decision"] == "不建議拍影片。"
+    assert result.decision_output["decisionObjectSchema"] == "ContextualPermission"
+    assert result.decision_output["answerSourceToolId"] == CONTEXTUAL_PERMISSION_TOOL_ID
+    assert result.decision_output["firstLayer"]["decision"] == "不建議拍影片。"
+    answer_step = result.workflow_steps[-1]
+    assert answer_step.summary["decision_output_schema"] == "ContextualPermission"
+    assert answer_step.summary["decision_output_source_tool"] == (
+        CONTEXTUAL_PERMISSION_TOOL_ID
+    )
     assert "[決策] 不建議拍影片。" in result.answer
     assert "runtime safety truth" in result.answer
     assert result.boundary.runtime_safety_truth is False
@@ -179,9 +195,17 @@ def test_full_workflow_runs_route_context_experience_guide_question() -> None:
     assert result.failed_tool_count == 0
     assert result.missing_evidence_count == 0
     assert result.sources[0]["tool_id"] == ROUTE_CONTEXT_TOOL_ID
+    assert result.sources[0]["top_result_summary"]["decision"] == "CONDITIONAL_GO"
+    assert result.sources[0]["top_result_summary"]["decision_output"][
+        "decisionObjectSchema"
+    ] == "ContextualPermission"
     assert result.sources[0]["top_result_summary"]["route_context"]["role"] == (
         "Experience Guide"
     )
+    assert result.decision_output["answerSourceToolId"] == ROUTE_CONTEXT_TOOL_ID
+    assert result.decision_output["decision"] == "CONDITIONAL_GO"
+    assert result.decision_output["firstLayer"]["decision"] == "可作為候選觀察點。"
+    assert "不是停留授權" in result.decision_output["firstLayer"]["limit"]
     assert "候選路線脈絡" in result.answer
     assert "contextual permission" in result.answer
     assert result.boundary.runtime_safety_truth is False
@@ -208,9 +232,18 @@ def test_full_workflow_runs_pace_guardian_team_pace_question(tmp_path: Path) -> 
     assert result.sources[0]["top_result_summary"]["pace_guardian"]["role"] == (
         "Pace Guardian"
     )
+    assert result.sources[0]["top_result_summary"]["decision_output"][
+        "decisionObjectSchema"
+    ] == "ContextualPermission"
     assert result.sources[0]["top_result_summary"]["team_pace_fit"]["slowest_member"][
         "label"
     ] == "New teammate"
+    assert result.decision_output["answerSourceToolId"] == PACE_GUARDIAN_TOOL_ID
+    assert result.decision_output["decision"] == "CHANGE_PLAN"
+    assert result.decision_output["firstLayer"]["decision"] == (
+        "不建議照原計畫推進。"
+    )
+    assert "不要用平均腳程" in result.decision_output["firstLayer"]["limit"]
     assert "腳程守門員" in result.answer
     assert "不使用平均腳程" in result.answer
     assert "runtime safety truth" in result.answer
@@ -233,10 +266,19 @@ def test_full_workflow_runs_route_architecture_cp_graph_question() -> None:
     assert result.failed_tool_count == 0
     assert result.missing_evidence_count == 0
     assert result.sources[0]["tool_id"] == ROUTE_ARCHITECTURE_TOOL_ID
+    assert result.sources[0]["top_result_summary"]["decision"] == "CONDITIONAL_GO"
+    assert result.sources[0]["top_result_summary"]["decision_output"][
+        "decisionObjectSchema"
+    ] == "ContextualPermission"
     assert result.sources[0]["top_result_summary"]["route_architecture"]["role"] == (
         "Route Architecture Intelligence"
     )
     assert result.sources[0]["top_result_summary"]["cp_graph"]["node_count"] == 124
+    assert result.decision_output["answerSourceToolId"] == ROUTE_ARCHITECTURE_TOOL_ID
+    assert result.decision_output["decision"] == "CONDITIONAL_GO"
+    assert result.decision_output["firstLayer"]["decision"] == (
+        "可依 CP Graph 推進，但必須保留折返窗口。"
+    )
     assert "路線結構判斷" in result.answer
     assert "CP Graph" in result.answer
     assert result.boundary.runtime_safety_truth is False
@@ -260,6 +302,16 @@ def test_full_workflow_runs_live_navigation_uncertainty_question() -> None:
     assert result.sources[0]["top_result_summary"]["navigation_terrain"]["role"] == (
         "Navigation & Terrain Intelligence"
     )
+    assert result.sources[0]["top_result_summary"]["decision_output"][
+        "decisionObjectSchema"
+    ] == "ContextualPermission"
+    assert result.decision_output["decisionObjectSchema"] == "ContextualPermission"
+    assert result.decision_output["answerSourceToolId"] == LIVE_NAVIGATION_STATE_TOOL_ID
+    assert result.decision_output["decision"] == "DELAY"
+    assert result.decision_output["firstLayer"]["decision"] == (
+        "暫緩判斷，先取得可靠位置。"
+    )
+    assert result.decision_output["secondLayer"]["uncertaintyNotes"]
     assert "地形導航判斷" in result.answer
     assert result.boundary.runtime_safety_truth is False
 
@@ -306,8 +358,23 @@ def test_full_workflow_runs_route_readiness_question() -> None:
     assert result.sources[0]["top_result_summary"]["route_readiness"]["role"] == (
         "Pre-Trip Route Readiness / Departure Gate"
     )
+    package = result.sources[0]["top_result_summary"]["pretrip_decision_package"]
+    assert package["required_outputs"]["pretrip_decision"] == "DELAY"
+    assert package["required_outputs"]["top_risk_sources"]
+    assert result.decision_output["decisionObjectSchema"] == "ContextualPermission"
+    assert result.decision_output["answerSourceToolId"] == ROUTE_READINESS_TOOL_ID
+    assert result.decision_output["decision"] == "DELAY"
+    assert result.decision_output["allowed"] is False
+    assert result.decision_output["firstLayer"]["decision"] == "建議延後。"
+    assert "不得出發" in result.decision_output["firstLayer"]["limit"]
+    assert result.decision_output["secondLayer"]["requiredConditions"]
+    answer_step = result.workflow_steps[-1]
+    assert answer_step.summary["decision_output_schema"] == "ContextualPermission"
+    assert answer_step.summary["decision_output_source_tool"] == ROUTE_READINESS_TOOL_ID
     assert "user_experience_level" in result.sources[0]["missing_fields"]
     assert "出發前判斷" in result.answer
+    assert "標準出發前決策包" in result.answer
+    assert "停留限制" in result.answer
     assert "runtime safety truth" in result.answer
     assert result.boundary.runtime_safety_truth is False
 
@@ -334,6 +401,16 @@ def test_full_workflow_runs_media_literacy_question() -> None:
     assert source["top_result_summary"]["media_literacy"]["role"] == (
         "Media Literacy / Bias Sentinel"
     )
+    assert source["top_result_summary"]["decision_output"]["decisionObjectSchema"] == (
+        "ContextualPermission"
+    )
+    assert result.decision_output["decisionObjectSchema"] == "ContextualPermission"
+    assert result.decision_output["answerSourceToolId"] == MEDIA_LITERACY_TOOL_ID
+    assert result.decision_output["decision"] == "NO_GO"
+    assert result.decision_output["firstLayer"]["decision"] == (
+        "不建議為媒體點位停留或改線。"
+    )
+    assert "不得為拍照" in result.decision_output["firstLayer"]["limit"]
     assert "媒體識讀判斷" in result.answer
     assert "runtime safety truth" in result.answer
     assert result.boundary.runtime_safety_truth is False
@@ -408,9 +485,18 @@ def test_full_workflow_runs_post_trip_review_question() -> None:
     assert result.missing_evidence_count == 1
     assert result.sources[0]["tool_id"] == POST_TRIP_REVIEW_TOOL_ID
     assert result.sources[0]["top_result_summary"]["decision"] == "DELAY"
+    assert result.sources[0]["top_result_summary"]["decision_output"][
+        "decisionObjectSchema"
+    ] == "ContextualPermission"
+    assert result.sources[0]["top_result_summary"]["post_trip_learning_package"][
+        "role"
+    ] == "Post-Trip Learning Proposal"
     assert result.sources[0]["top_result_summary"]["post_trip_review"]["role"] == (
         "Post-Trip Review / Learning Governance"
     )
+    assert result.decision_output["answerSourceToolId"] == POST_TRIP_REVIEW_TOOL_ID
+    assert result.decision_output["decision"] == "DELAY"
+    assert result.decision_output["firstLayer"]["decision"] == "暫緩學習寫回。"
     assert "行後回顧" in result.answer
     assert result.boundary.runtime_safety_truth is False
 
