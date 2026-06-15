@@ -139,6 +139,7 @@ def test_tool_registry_lists_current_and_future_contracts() -> None:
     assert "scout.ai.departure_gate.assess" in by_id[
         ROUTE_READINESS_TOOL_ID
     ].aliases
+    assert "user_goal" in by_id[ROUTE_READINESS_TOOL_ID].optional_fields
     assert "scout.ai.experience_guide.assess" in by_id[ROUTE_CONTEXT_TOOL_ID].aliases
     assert "route_briefing_path" in by_id[ROUTE_CONTEXT_TOOL_ID].optional_fields
     assert "scout.ai.cp_graph.assess" in by_id[ROUTE_ARCHITECTURE_TOOL_ID].aliases
@@ -516,6 +517,7 @@ def test_execute_route_readiness_alias_returns_departure_gate_decision() -> None
     assert result.payload["route_readiness"]["decision_output"]["decision"] == "DELAY"
     assert result.payload["results"][0]["decision_output"]["decision"] == "DELAY"
     assert "user_experience_level" in result.missing_fields
+    assert "user_goal" in result.missing_fields
     assert result.payload["departure_gate"]["approval_granted"] is False
     assert result.payload["boundary"]["runtime_handoff_performed"] is False
     assert result.boundary.live_safety_api_calls_allowed is False
@@ -529,6 +531,7 @@ def test_execute_route_readiness_returns_guided_only_for_beginner_high_demand_ro
             "query": "beginner pretrip Go/No-Go 可以自主出發嗎？",
             "arguments": {
                 "user_experience_level": "beginner",
+                "user_goal": "training",
                 "transport_access_plan": "user_confirmed",
                 "team_slowest_basis_confirmed": True,
                 "departure_time_confirmed": True,

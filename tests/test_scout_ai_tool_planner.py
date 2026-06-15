@@ -125,7 +125,7 @@ def test_planner_selects_route_readiness_for_pretrip_go_no_go_question() -> None
 def test_planner_passes_explicit_route_readiness_inputs_as_arguments() -> None:
     plan = plan_scout_ai_tools(
         _query(
-            "beginner transportconfirmed slowestbasisconfirmed "
+            "beginner 訓練 transportconfirmed slowestbasisconfirmed "
             "departuretimeconfirmed wxconfirmed sunok gearconfirmed rcconfirmed "
             "pretrip Go/No-Go 可以自主出發嗎？"
         ),
@@ -138,6 +138,7 @@ def test_planner_passes_explicit_route_readiness_inputs_as_arguments() -> None:
     assert item.request["tool_id"] == ROUTE_READINESS_TOOL_ID
     assert item.request["arguments"] == {
         "user_experience_level": "beginner",
+        "user_goal": "training",
         "transport_access_plan": "user_confirmed",
         "team_slowest_basis_confirmed": True,
         "departure_time_confirmed": True,
@@ -147,6 +148,20 @@ def test_planner_passes_explicit_route_readiness_inputs_as_arguments() -> None:
         "remote_contact_confirmed": True,
     }
     assert _tool_ids(plan) == {ROUTE_READINESS_TOOL_ID}
+
+
+def test_planner_passes_family_photo_goal_to_route_readiness() -> None:
+    plan = plan_scout_ai_tools(
+        _query("親子拍攝目標，出發前 Go/No-Go 可以出發嗎？我是中級。"),
+        project_root=PROJECT_ROOT,
+    )
+
+    item = _single_tool(plan, ROUTE_READINESS_TOOL_ID)
+    assert item.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+    assert item.request is not None
+    assert item.request["tool_id"] == ROUTE_READINESS_TOOL_ID
+    assert item.request["arguments"]["user_experience_level"] == "intermediate"
+    assert item.request["arguments"]["user_goal"] == "photo,family"
 
 
 def test_planner_routes_latest_return_limit_to_route_readiness() -> None:

@@ -18,6 +18,7 @@ ROUTE_READINESS_OPTIONAL_FIELDS = (
     "mission_graph_path",
     "route_comparison_path",
     "user_experience_level",
+    "user_goal",
     "transport_access_plan",
     "latest_return_time",
     "team_slowest_basis_confirmed",
@@ -41,6 +42,7 @@ def assess_scout_route_readiness(
     mission_graph_path: str | None = None,
     route_comparison_path: str | None = None,
     user_experience_level: str | None = None,
+    user_goal: str | None = None,
     transport_access_plan: str | None = None,
     latest_return_time: str | None = None,
     team_slowest_basis_confirmed: bool | str | None = None,
@@ -126,6 +128,7 @@ def assess_scout_route_readiness(
 
     direct = {
         "user_experience_level": user_experience_level,
+        "user_goal": user_goal,
         "transport_access_plan": transport_access_plan,
         "latest_return_time": latest_return_time,
         "team_slowest_basis_confirmed": _bool_or_none(team_slowest_basis_confirmed),
@@ -223,6 +226,7 @@ def assess_scout_route_readiness(
         "missing_fields": missing_fields,
         "route_demand_profile": route_state["route_demand_profile"],
         "guided_only_gate": governance["guided_only_gate"],
+        "user_goal_profile": governance["user_goal_profile"],
         "route_readiness": {
             "role": "Pre-Trip Route Readiness / Departure Gate",
             "candidate_only": True,
@@ -236,6 +240,7 @@ def assess_scout_route_readiness(
             "alternative_actions": governance["alternative_actions"],
             "next_action": governance["next_action"],
             "guided_only_gate": governance["guided_only_gate"],
+            "user_goal_profile": governance["user_goal_profile"],
         },
         "departure_gate": {
             "candidate_only": True,
@@ -766,6 +771,7 @@ def _input_coverage(
         "date": bool(weather_state.get("date") or route_state.get("planned_start_time")),
         "team": bool(resource_state.get("team_member_count")),
         "user_experience": bool(_first_text(direct.get("user_experience_level"))),
+        "user_goal": bool(_goal_profile(direct.get("user_goal"))["goals"]),
         "equipment": bool(resource_state.get("equipment_count")),
         "transport_access": bool(
             _first_text(direct.get("transport_access_plan"))
@@ -802,6 +808,7 @@ def _missing_fields(*, input_coverage: dict[str, bool]) -> list[str]:
         "date": "route_date",
         "team": "team_members",
         "user_experience": "user_experience_level",
+        "user_goal": "user_goal",
         "equipment": "equipment_inventory",
         "transport_access": "transport_access_plan",
         "planned_departure_time": "planned_departure_time",
@@ -834,6 +841,7 @@ def _governance(
     required_conditions: list[str] = []
     alternative_actions: list[str] = []
     user_experience = _normalized_experience_level(direct.get("user_experience_level"))
+    user_goal_profile = _goal_profile(direct.get("user_goal"))
     latest_return_deadline = _latest_return_deadline(
         direct.get("latest_return_time"),
         route_state=route_state,
@@ -886,6 +894,32 @@ def _governance(
         alternative_actions.append(
             "Switch to a guided trip, lower-demand route, shorter route, or training route."
         )
+    if user_goal_profile["photo_or_social_goal"]:
+        warning_gaps.append(
+            "使用者目標包含拍攝、社交或慢行停留，需先轉成已審核 CP 停留點與停留上限。"
+        )
+        required_conditions.append(
+            "將拍攝/社交/慢行目標限制在已審核 CP 或觀察點，並設定每次停留上限。"
+        )
+        alternative_actions.append(
+            "把拍攝或社交目標改成低曝露 CP 內短停，或改選較短路線。"
+        )
+    if user_goal_profile["family_or_child_goal"]:
+        warning_gaps.append(
+            "親子或家庭目標需要更保守的撤退、避難與短版路線。"
+        )
+        required_conditions.append(
+            "親子/家庭行程必須預先指定較短替代路線、避風休息點與提前撤退門檻。"
+        )
+        alternative_actions.append(
+            "改成親子友善短線、較低海拔或有明確撤退支援的訓練路線。"
+        )
+    if user_goal_profile["summit_goal"] and not route_state.get(
+        "turn_back_checkpoint_node_name"
+    ):
+        warning_gaps.append("攻頂目標缺少明確折返點，不應照原計畫推進。")
+        required_conditions.append("補上攻頂前硬性折返點與山頂停留時間上限。")
+        alternative_actions.append("改成不攻頂或只到已審核折返 CP 的短版路線。")
     if route_state.get("departure_gate_required_before_runtime"):
         warning_gaps.append("Reviewed planning package is not departure approval.")
         required_conditions.append("Run an explicit departure gate before runtime handoff.")
@@ -943,6 +977,7 @@ def _governance(
             "route_demand_profile": route_demand_profile,
             "autonomous_departure_allowed": False if guided_only_required else None,
         },
+        "user_goal_profile": user_goal_profile,
         "transport_deadline": {
             "latest_return_time": _first_text(direct.get("latest_return_time")),
             "resolved_deadline": latest_return_deadline,
@@ -1061,6 +1096,7 @@ def _pretrip_decision_package(
         "required_outputs": {
             "pretrip_decision": decision,
             "guided_only_gate": governance.get("guided_only_gate"),
+            "user_goal_profile": governance["user_goal_profile"],
             "top_risk_sources": top_risks,
             "required_conditions": required_conditions,
             "cp_graph": {
@@ -1263,6 +1299,37 @@ def _stop_policy(
         )
 
     not_recommended = []
+    goal_profile = governance.get("user_goal_profile")
+    if isinstance(goal_profile, dict):
+        goal_labels = [
+            str(label)
+            for label in goal_profile.get("goal_labels", [])
+            if str(label).strip()
+        ]
+        if goal_profile.get("photo_or_social_goal"):
+            not_recommended.append(
+                {
+                    "label": "Unreviewed user-goal discretionary stops",
+                    "policy": "not_recommended_until_goal_limits_reviewed",
+                    "rationale": (
+                        "Photo, social, or slow-travel goals must be converted "
+                        "into reviewed CP stop limits before departure."
+                    ),
+                    "goal_labels": goal_labels,
+                }
+            )
+        if goal_profile.get("family_or_child_goal"):
+            not_recommended.append(
+                {
+                    "label": "Family/child trip without conservative controls",
+                    "policy": "not_recommended_until_family_controls_reviewed",
+                    "rationale": (
+                        "Family or child trips need a reviewed short-route, "
+                        "shelter, and earlier turn-back policy."
+                    ),
+                    "goal_labels": goal_labels,
+                }
+            )
     if missing_fields or governance["warning_gaps"] or decision not in {"GO"}:
         not_recommended.append(
             {
@@ -1304,6 +1371,7 @@ def _pretrip_checklist(
         ("date", "Trip date / departure date known"),
         ("team", "Team roster present"),
         ("user_experience", "Member experience reviewed"),
+        ("user_goal", "User trip goal reviewed"),
         ("equipment", "Equipment inventory present"),
         ("transport_access", "Transport and latest return limit confirmed"),
         ("planned_departure_time", "Planned departure time confirmed"),
@@ -1598,6 +1666,67 @@ def _normalized_experience_level(value: Any) -> str | None:
     if any(fragment in text for fragment in ("advanced", "experienced", "資深", "高經驗")):
         return "advanced"
     return text
+
+
+def _goal_profile(value: Any) -> dict[str, Any]:
+    raw_goal = _first_text(value)
+    goals = _normalized_goals(raw_goal)
+    goal_labels = [_goal_label(goal) for goal in goals]
+    return {
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+        "raw_goal": raw_goal,
+        "goals": goals,
+        "goal_labels": goal_labels,
+        "summit_goal": "summit" in goals,
+        "photo_or_social_goal": bool(set(goals) & {"photo", "slow", "social"}),
+        "family_or_child_goal": bool(set(goals) & {"family", "child"}),
+        "training_goal": "training" in goals,
+    }
+
+
+def _normalized_goals(value: str | None) -> list[str]:
+    text = (value or "").strip()
+    if not text:
+        return []
+    goals: list[str] = []
+
+    def add(goal: str) -> None:
+        if goal not in goals:
+            goals.append(goal)
+
+    if _has_any_text(text, ("攻頂", "登頂", "山頂", "summit")):
+        add("summit")
+    if _has_any_text(
+        text,
+        ("拍攝", "拍照", "攝影", "photo", "photography", "film", "video"),
+    ):
+        add("photo")
+    if _has_any_text(text, ("慢行", "慢走", "慢遊", "slow")):
+        add("slow")
+    if _has_any_text(text, ("訓練", "練習", "training", "train")):
+        add("training")
+    if _has_any_text(
+        text,
+        ("親子", "家庭", "小孩", "孩子", "兒童", "family", "child", "kids"),
+    ):
+        add("family")
+    if _has_any_text(text, ("社交", "朋友", "團體", "social", "friends")):
+        add("social")
+    return goals
+
+
+def _goal_label(goal: str) -> str:
+    labels = {
+        "summit": "攻頂",
+        "photo": "拍攝",
+        "slow": "慢行",
+        "training": "訓練",
+        "family": "親子/家庭",
+        "child": "親子/家庭",
+        "social": "社交",
+    }
+    return labels.get(goal, goal)
 
 
 def _has_any_text(value: str, fragments: tuple[str, ...]) -> bool:

@@ -25,6 +25,7 @@ def test_route_readiness_fixture_delays_without_required_pretrip_reviews() -> No
     assert result["answerability"] == "route_readiness_missing_required_fields"
     assert result["decision"] == "DELAY"
     assert "user_experience_level" in result["missing_fields"]
+    assert "user_goal" in result["missing_fields"]
     assert "transport_access_plan" in result["missing_fields"]
     assert "weather_review" in result["missing_fields"]
     assert "equipment_review" in result["missing_fields"]
@@ -96,6 +97,7 @@ def test_route_readiness_no_go_for_hard_readiness_blocker(tmp_path: Path) -> Non
         project_root,
         query="出發前是否出發？",
         user_experience_level="intermediate",
+        user_goal="training",
         transport_access_plan="confirmed shuttle",
         team_slowest_basis_confirmed=True,
         departure_time_confirmed=True,
@@ -126,6 +128,7 @@ def test_route_readiness_go_when_all_pretrip_inputs_are_reviewed(tmp_path: Path)
         project_root,
         query="出發前 Go/No-Go 可以出發嗎？",
         user_experience_level="intermediate",
+        user_goal="training",
         transport_access_plan="confirmed shuttle",
         team_slowest_basis_confirmed=True,
         departure_time_confirmed=True,
@@ -152,6 +155,56 @@ def test_route_readiness_go_when_all_pretrip_inputs_are_reviewed(tmp_path: Path)
     assert outputs["pretrip_checklist"]
     assert package["decision_limits"]["allowed"] is True
     assert package["acceptance_coverage"]["traceable_inputs_recorded"] is True
+
+
+def test_route_readiness_conditions_family_photo_goal_even_when_reviewed(
+    tmp_path: Path,
+) -> None:
+    project_root = _ready_project(tmp_path)
+
+    result = assess_scout_route_readiness(
+        project_root,
+        query="親子拍攝目標，出發前 Go/No-Go 可以出發嗎？",
+        user_experience_level="intermediate",
+        user_goal="親子拍攝",
+        transport_access_plan="confirmed shuttle",
+        team_slowest_basis_confirmed=True,
+        departure_time_confirmed=True,
+        weather_reviewed=True,
+        daylight_reviewed=True,
+        equipment_confirmed=True,
+        remote_contact_confirmed=True,
+    )
+
+    assert result["answerability"] == "route_readiness_decision_available"
+    assert result["decision"] == "CONDITIONAL_GO"
+    assert result["missing_fields"] == []
+    profile = result["user_goal_profile"]
+    assert set(profile["goals"]) == {"photo", "family"}
+    assert profile["candidate_only"] is True
+    assert profile["runtime_safety_truth"] is False
+    assert profile["photo_or_social_goal"] is True
+    assert profile["family_or_child_goal"] is True
+    governance = result["readiness_governance"]
+    assert any("拍攝" in gap for gap in governance["warning_gaps"])
+    assert any("親子" in gap for gap in governance["warning_gaps"])
+    package = result["pretrip_decision_package"]
+    outputs = package["required_outputs"]
+    assert outputs["pretrip_decision"] == "CONDITIONAL_GO"
+    assert outputs["user_goal_profile"]["goal_labels"] == ["拍攝", "親子/家庭"]
+    assert any(
+        item["policy"] == "not_recommended_until_goal_limits_reviewed"
+        for item in outputs["not_recommended_stop_points"]
+    )
+    assert any(
+        item["policy"] == "not_recommended_until_family_controls_reviewed"
+        for item in outputs["not_recommended_stop_points"]
+    )
+    assert package["decision_limits"]["allowed"] is True
+    assert result["decision_output"]["firstLayer"]["decision"] == (
+        "可有條件進入人工出發門檢。"
+    )
+    assert result["decision_output"]["runtimeSafetyTruth"] is False
 
 
 def test_route_readiness_output_kind_constant() -> None:
