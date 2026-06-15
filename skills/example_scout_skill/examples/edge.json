@@ -1,0 +1,15 @@
+{
+  "schema_version": "0.1.0",
+  "request_id": "req_00000002",
+  "user_query": "刪除錯誤的永久工作流",
+  "risk_level": "high",
+  "confidence": 0.74,
+  "action": "delete",
+  "provenance": {
+    "prompt_hash": "edge12345678",
+    "model_id": "local-qwen2.5-3b",
+    "skill_version": "0.1.0",
+    "data_digest": "workflowhash001",
+    "build_commit": "abcdef1"
+  }
+}

@@ -1,0 +1,71 @@
+version: scout-governance/v1
+
+required_files:
+  - ".github/PULL_REQUEST_TEMPLATE/scout-skill.md"
+  - ".codex/checklist.yaml"
+  - "skills/{skill_name}/schemas.py"
+  - "skills/{skill_name}/examples/valid.json"
+  - "skills/{skill_name}/examples/edge.json"
+  - "skills/{skill_name}/examples/invalid.json"
+  - "docs/{skill_name}-api.md"
+  - "observability/{skill_name}-events.md"
+  - "tests/test_{skill_name}_schemas.py"
+
+schema:
+  require_schema_version: true
+  semantic_versioning: true
+  provenance_fields:
+    - prompt_hash
+    - model_id
+    - skill_version
+    - data_digest
+    - build_commit
+
+risk:
+  levels: [low, medium, high]
+  matrix:
+    data_sensitivity: [public, internal, sensitive, regulated]
+    action_harm: [read_only, recommendation, human_approved_write, autonomous_write]
+  require_human_approval:
+    when:
+      - "confidence < 0.75"
+      - "risk_level == 'high'"
+      - "action in ['write_prod', 'delete', 'external_send']"
+
+telemetry:
+  required_fields:
+    - event_name
+    - skill_name
+    - skill_version
+    - schema_version
+    - request_id
+    - user_hash
+    - latency_ms
+    - success
+    - error_code
+    - risk_level
+    - hitl_required
+  pii_policy:
+    raw_pii_allowed: false
+    require_redaction_or_hash: true
+
+release_controls:
+  labels:
+    - scout-governance/v1
+    - schema:major
+    - schema:minor
+    - schema:patch
+    - risk:low
+    - risk:med
+    - risk:high
+    - needs-HITL
+    - requires-migration
+  require_changelog: true
+  require_rollback_plan: true
+  require_kill_switch: true
+
+testing:
+  commands:
+    - "make test"
+  minimums:
+    critical_path_coverage: 0.80

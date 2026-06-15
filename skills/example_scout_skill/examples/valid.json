@@ -1,0 +1,15 @@
+{
+  "schema_version": "0.1.0",
+  "request_id": "req_00000001",
+  "user_query": "距離下一個營地前 100 公尺提醒我",
+  "risk_level": "low",
+  "confidence": 0.92,
+  "action": "recommendation",
+  "provenance": {
+    "prompt_hash": "abc123456789",
+    "model_id": "gpt-5.5",
+    "skill_version": "0.1.0",
+    "data_digest": "routehash001",
+    "build_commit": "abcdef1"
+  }
+}
