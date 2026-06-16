@@ -23,8 +23,10 @@ scout-risk-engine/scout_codex_package/tests/__pycache__/**
 !go_no_go.py
 !incident_package.py
 !incident_store.py
+!application_router.py
 !ins_dr_input_adapter.py
 !ins_dr_navigation.py
+!ingress_evidence.py
 !mission_graph.py
 !mission_models.py
 !mission_progress.py
@@ -206,6 +208,8 @@ scout-risk-engine/scout_codex_package/tests/__pycache__/**
 !scout_wearable_raw_importers.py
 !scout_wearable_validator.py
 !scout_workspace_search_tools.py
+!scout_gnss_hardware_observer.py
+!scout_sensorlogger_mqtt_observer.py
 !skill_registry.py
 !spatial_imprint_debug_projection.py
 !spatial_imprint_models.py
@@ -219,6 +223,9 @@ scout-risk-engine/scout_codex_package/tests/__pycache__/**
 !skills/scout/
 !skills/scout/route-briefing-compose.yaml
 !tools/
+!tools/pi_grove_led_bar_smoke.py
+!tools/pi_oled_i2c_smoke.py
+!tools/pi_sx1303_gateway_gps_nmea_smoke.py
 !tools/pydantic_ai_cloud_latency_benchmark.py
 !tools/scout_agent_tool_manifests/
 !tools/scout_agent_tool_manifests/*.json
@@ -229,7 +236,13 @@ scout-risk-engine/scout_codex_package/tests/__pycache__/**
 !docs/admin/phase-3-6-hardware-readiness.html
 !docs/admin/phase4-pretrip-planning.html
 !docs/admin/scout-assistant-ui.js
+!docs/specs/
+!docs/specs/SCOUT_OUTDOOR_AI_AGENT_STANDARD.md
+!docs/specs/scout-ai-135-tool-data-workflow-matrix.json
 !tests/
+!tests/test_assistant_skill_router.py
+!tests/test_pretrip_admin_page.py
+!tests/test_scout_outdoor_standard_coverage.py
 !tests/fixtures/
 !tests/fixtures/field_cases/
 !tests/fixtures/field_cases/scout_260512_golden.json

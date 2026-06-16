@@ -223,6 +223,11 @@ COPY docs/admin/phase-3-5-runtime-debug.html ./docs/admin/
 COPY docs/admin/phase-3-6-hardware-readiness.html ./docs/admin/
 COPY docs/admin/phase4-pretrip-planning.html ./docs/admin/
 COPY docs/admin/scout-assistant-ui.js ./docs/admin/
+COPY docs/specs/SCOUT_OUTDOOR_AI_AGENT_STANDARD.md ./docs/specs/
+COPY docs/specs/scout-ai-135-tool-data-workflow-matrix.json ./docs/specs/
+COPY tests/test_assistant_skill_router.py ./tests/
+COPY tests/test_pretrip_admin_page.py ./tests/
+COPY tests/test_scout_outdoor_standard_coverage.py ./tests/
 
 COPY scout-risk-engine/scout_codex_package/ ./scout-risk-engine/scout_codex_package/
 RUN pip install --no-cache-dir ./scout-risk-engine/scout_codex_package
