@@ -146,6 +146,9 @@ def test_tool_registry_lists_current_and_future_contracts() -> None:
     assert "scout.ai.departure_gate.assess" in by_id[
         ROUTE_READINESS_TOOL_ID
     ].aliases
+    assert "pretrip_input_bundle_path" in by_id[
+        ROUTE_READINESS_TOOL_ID
+    ].optional_fields
     assert "user_goal" in by_id[ROUTE_READINESS_TOOL_ID].optional_fields
     assert "scout.ai.experience_guide.assess" in by_id[ROUTE_CONTEXT_TOOL_ID].aliases
     assert "route_briefing_path" in by_id[ROUTE_CONTEXT_TOOL_ID].optional_fields
@@ -312,7 +315,7 @@ def test_execute_pace_guardian_extracts_delay_from_summit_question() -> None:
 
     assert result.status == "completed"
     assert result.tool_id == PACE_GUARDIAN_TOOL_ID
-    assert result.payload["answerability"] == "pace_fit_missing_required_fields"
+    assert result.payload["answerability"] == "pace_fit_decision_available"
     assert result.payload["decision"] == "NO_GO"
     assert result.payload["schedule_pressure"]["current_delay_minutes"] == 30.0
     assert result.payload["decision_output"]["cost"]["scheduleDelayMinutes"] == 30.0
@@ -320,7 +323,10 @@ def test_execute_pace_guardian_extracts_delay_from_summit_question() -> None:
     assert result.payload["decision_output"]["allowed"] is False
     assert result.payload["decision_output"]["firstLayer"]["decision"] == "不建議繼續攻頂。"
     assert "目前已落後約 30 分鐘" in result.payload["decision_output"]["firstLayer"]["reason"]
-    assert "member_pace_profile" in result.missing_fields
+    assert result.missing_fields == []
+    assert result.payload["team_pace_fit"]["slowest_member"]["label"] == (
+        "Teammate placeholder"
+    )
     assert result.payload["pace_guardian"]["average_pace_used"] is False
     assert result.boundary.runtime_safety_truth is False
 
@@ -447,12 +453,13 @@ def test_execute_equipment_resource_alias_returns_resource_decision() -> None:
     assert result.implementation_status == "ready_current_tool"
     assert result.output_artifact_kind == "scout_ai_equipment_resource_tool_output"
     assert result.payload["artifact_kind"] == "scout_ai_equipment_resource_tool_output"
-    assert result.payload["answerability"] == "equipment_resource_missing_required_fields"
-    assert result.payload["decision"] == "DELAY"
+    assert result.payload["answerability"] == "equipment_resource_decision_available"
+    assert result.payload["decision"] == "CONDITIONAL_GO"
     assert result.payload["equipment_resource"]["role"] == (
         "Equipment / Resource Intelligence"
     )
-    assert "water_liters" in result.missing_fields
+    assert result.missing_fields == []
+    assert result.payload["resource_state"]["water_liters"] == 2.0
     assert result.payload["boundary"]["runtime_safety_truth"] is False
     assert result.boundary.live_safety_api_calls_allowed is False
 
@@ -471,12 +478,13 @@ def test_execute_team_status_alias_returns_remote_contact_decision() -> None:
     assert result.implementation_status == "ready_current_tool"
     assert result.output_artifact_kind == "scout_ai_team_status_tool_output"
     assert result.payload["artifact_kind"] == "scout_ai_team_status_tool_output"
-    assert result.payload["answerability"] == "team_status_missing_required_fields"
-    assert result.payload["decision"] == "DELAY"
+    assert result.payload["answerability"] == "team_status_decision_available"
+    assert result.payload["decision"] == "CONDITIONAL_GO"
     assert result.payload["team_status_guardian"]["role"] == (
         "Team Status / Remote Contact Governance"
     )
-    assert "member_positions_or_last_heard" in result.missing_fields
+    assert result.missing_fields == []
+    assert result.payload["team_status"]["rendezvous_point"] == "雲海保線所"
     assert result.payload["boundary"]["runtime_safety_truth"] is False
     assert result.boundary.live_safety_api_calls_allowed is False
 
@@ -536,8 +544,10 @@ def test_execute_route_readiness_alias_returns_departure_gate_decision() -> None
     )
     assert result.payload["route_readiness"]["decision_output"]["decision"] == "DELAY"
     assert result.payload["results"][0]["decision_output"]["decision"] == "DELAY"
-    assert "user_experience_level" in result.missing_fields
-    assert "user_goal" in result.missing_fields
+    assert result.missing_fields == ["weather_review", "daylight_review"]
+    assert result.payload["debug_sources"]["pretrip_input_bundle_source"] == (
+        "outputs/pretrip_input_bundle.reviewed.json"
+    )
     assert result.payload["departure_gate"]["approval_granted"] is False
     assert result.payload["boundary"]["runtime_handoff_performed"] is False
     assert result.boundary.live_safety_api_calls_allowed is False

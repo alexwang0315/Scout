@@ -17,6 +17,7 @@ ROUTE_READINESS_OPTIONAL_FIELDS = (
     "pretrip_package_path",
     "mission_graph_path",
     "route_comparison_path",
+    "pretrip_input_bundle_path",
     "user_experience_level",
     "user_goal",
     "transport_access_plan",
@@ -41,6 +42,7 @@ def assess_scout_route_readiness(
     pretrip_package_path: str | None = None,
     mission_graph_path: str | None = None,
     route_comparison_path: str | None = None,
+    pretrip_input_bundle_path: str | None = None,
     user_experience_level: str | None = None,
     user_goal: str | None = None,
     transport_access_plan: str | None = None,
@@ -125,18 +127,50 @@ def assess_scout_route_readiness(
         source_kind="route_comparison",
         source_report=source_report,
     )
+    pretrip_input_bundle, pretrip_input_bundle_source = _load_optional_json(
+        root,
+        explicit_path=pretrip_input_bundle_path,
+        project=project,
+        project_ref_keys=("pretrip_input_bundle_ref",),
+        default_refs=(
+            "outputs/pretrip_input_bundle.reviewed.json",
+            "outputs/pretrip_user_context.reviewed.json",
+        ),
+        source_kind="pretrip_input_bundle",
+        source_report=source_report,
+    )
+    bundle_inputs = _pretrip_input_bundle_inputs(pretrip_input_bundle)
 
     direct = {
-        "user_experience_level": user_experience_level,
-        "user_goal": user_goal,
-        "transport_access_plan": transport_access_plan,
-        "latest_return_time": latest_return_time,
-        "team_slowest_basis_confirmed": _bool_or_none(team_slowest_basis_confirmed),
-        "departure_time_confirmed": _bool_or_none(departure_time_confirmed),
-        "weather_reviewed": _bool_or_none(weather_reviewed),
-        "daylight_reviewed": _bool_or_none(daylight_reviewed),
-        "equipment_confirmed": _bool_or_none(equipment_confirmed),
-        "remote_contact_confirmed": _bool_or_none(remote_contact_confirmed),
+        "user_experience_level": _first_text(
+            user_experience_level, bundle_inputs.get("user_experience_level")
+        ),
+        "user_goal": _first_text(user_goal, bundle_inputs.get("user_goal")),
+        "transport_access_plan": _first_text(
+            transport_access_plan, bundle_inputs.get("transport_access_plan")
+        ),
+        "latest_return_time": _first_text(
+            latest_return_time, bundle_inputs.get("latest_return_time")
+        ),
+        "team_slowest_basis_confirmed": _first_bool(
+            team_slowest_basis_confirmed,
+            bundle_inputs.get("team_slowest_basis_confirmed"),
+        ),
+        "departure_time_confirmed": _first_bool(
+            departure_time_confirmed, bundle_inputs.get("departure_time_confirmed")
+        ),
+        "weather_reviewed": _first_bool(
+            weather_reviewed, bundle_inputs.get("weather_reviewed")
+        ),
+        "daylight_reviewed": _first_bool(
+            daylight_reviewed, bundle_inputs.get("daylight_reviewed")
+        ),
+        "equipment_confirmed": _first_bool(
+            equipment_confirmed, bundle_inputs.get("equipment_confirmed")
+        ),
+        "remote_contact_confirmed": _first_bool(
+            remote_contact_confirmed, bundle_inputs.get("remote_contact_confirmed")
+        ),
     }
     route_state = _route_state(
         project=project,
@@ -186,6 +220,7 @@ def assess_scout_route_readiness(
         "pretrip_package_source": package_source,
         "mission_graph_source": mission_graph_source,
         "route_comparison_source": route_comparison_source,
+        "pretrip_input_bundle_source": pretrip_input_bundle_source,
     }
     pretrip_decision_package = _pretrip_decision_package(
         decision=decision,
@@ -799,6 +834,72 @@ def _input_coverage(
         ),
         "remote_contact_confirmed": bool(direct.get("remote_contact_confirmed"))
         or not resource_state.get("remote_contact_needs_review"),
+    }
+
+
+def _pretrip_input_bundle_inputs(bundle: dict[str, Any]) -> dict[str, Any]:
+    if not bundle:
+        return {}
+    review = bundle.get("review") if isinstance(bundle.get("review"), dict) else {}
+    boundary = bundle.get("boundary") if isinstance(bundle.get("boundary"), dict) else {}
+    status = str(bundle.get("status") or "").strip().lower()
+    review_state = str(review.get("review_state") or "").strip().lower()
+    accepted = status in {"reviewed", "reviewed_input_bundle", "accepted"} or review_state in {
+        "accepted",
+        "reviewed",
+    }
+    if not accepted:
+        return {}
+    if boundary.get("departure_approval_granted") is True:
+        return {}
+
+    user = bundle.get("user") if isinstance(bundle.get("user"), dict) else {}
+    transport = (
+        bundle.get("transport") if isinstance(bundle.get("transport"), dict) else {}
+    )
+    team = bundle.get("team") if isinstance(bundle.get("team"), dict) else {}
+    departure = (
+        bundle.get("departure") if isinstance(bundle.get("departure"), dict) else {}
+    )
+    reviews = bundle.get("reviews") if isinstance(bundle.get("reviews"), dict) else {}
+    return {
+        "user_experience_level": _first_text(
+            bundle.get("user_experience_level"),
+            user.get("experience_level"),
+            user.get("experience"),
+        ),
+        "user_goal": _first_text(bundle.get("user_goal"), user.get("goal")),
+        "transport_access_plan": _first_text(
+            bundle.get("transport_access_plan"),
+            transport.get("access_plan"),
+            transport.get("summary"),
+        ),
+        "latest_return_time": _first_text(
+            bundle.get("latest_return_time"), transport.get("latest_return_time")
+        ),
+        "team_slowest_basis_confirmed": _first_bool(
+            bundle.get("team_slowest_basis_confirmed"),
+            team.get("slowest_basis_confirmed"),
+            team.get("leader_accepts_slowest_basis"),
+        ),
+        "departure_time_confirmed": _first_bool(
+            bundle.get("departure_time_confirmed"),
+            departure.get("time_confirmed"),
+            departure.get("departure_time_confirmed"),
+        ),
+        "weather_reviewed": _first_bool(
+            bundle.get("weather_reviewed"), reviews.get("weather_reviewed")
+        ),
+        "daylight_reviewed": _first_bool(
+            bundle.get("daylight_reviewed"), reviews.get("daylight_reviewed")
+        ),
+        "equipment_confirmed": _first_bool(
+            bundle.get("equipment_confirmed"), reviews.get("equipment_confirmed")
+        ),
+        "remote_contact_confirmed": _first_bool(
+            bundle.get("remote_contact_confirmed"),
+            reviews.get("remote_contact_confirmed"),
+        ),
     }
 
 

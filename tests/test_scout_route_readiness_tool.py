@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PROJECT_ROOT = ROOT / "tests" / "fixtures" / "pretrip" / "projects" / "chilai_nanhua_day1"
 
 
-def test_route_readiness_fixture_delays_without_required_pretrip_reviews() -> None:
+def test_route_readiness_fixture_uses_reviewed_pretrip_inputs_but_waits_for_weather_review() -> None:
     result = assess_scout_route_readiness(
         PROJECT_ROOT,
         query="出發前 Go/No-Go 可以出發嗎？",
@@ -24,11 +24,14 @@ def test_route_readiness_fixture_delays_without_required_pretrip_reviews() -> No
     assert result["tool_id"] == ROUTE_READINESS_TOOL_ID
     assert result["answerability"] == "route_readiness_missing_required_fields"
     assert result["decision"] == "DELAY"
-    assert "user_experience_level" in result["missing_fields"]
-    assert "user_goal" in result["missing_fields"]
-    assert "transport_access_plan" in result["missing_fields"]
+    assert "user_experience_level" not in result["missing_fields"]
+    assert "user_goal" not in result["missing_fields"]
+    assert "transport_access_plan" not in result["missing_fields"]
+    assert "departure_time_confirmation" not in result["missing_fields"]
     assert "weather_review" in result["missing_fields"]
-    assert "equipment_review" in result["missing_fields"]
+    assert "daylight_review" in result["missing_fields"]
+    assert "equipment_review" not in result["missing_fields"]
+    assert "remote_contact_review" not in result["missing_fields"]
     assert result["route_readiness"]["role"] == (
         "Pre-Trip Route Readiness / Departure Gate"
     )
@@ -37,6 +40,9 @@ def test_route_readiness_fixture_delays_without_required_pretrip_reviews() -> No
     assert result["route_state"]["checkpoint_count"] == 124
     assert result["route_state"]["segment_count"] == 123
     assert result["weather_daylight_state"]["human_review_required"] is True
+    assert result["debug_sources"]["pretrip_input_bundle_source"] == (
+        "outputs/pretrip_input_bundle.reviewed.json"
+    )
     assert result["boundary"]["runtime_handoff_performed"] is False
     assert result["boundary"]["runtime_safety_truth"] is False
     package = result["pretrip_decision_package"]
@@ -52,7 +58,10 @@ def test_route_readiness_fixture_delays_without_required_pretrip_reviews() -> No
     assert outputs["latest_turnaround"]["checkpoint_name"] == "雲海保線所"
     assert outputs["not_recommended_stop_points"]
     assert outputs["alternatives_or_short_routes"]
-    assert any("延後出發" in item for item in outputs["alternatives_or_short_routes"])
+    assert any(
+        "天氣證據完成審核前" in item
+        for item in outputs["alternatives_or_short_routes"]
+    )
     assert not any(
         "Delay departure" in item for item in outputs["alternatives_or_short_routes"]
     )

@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PROJECT_ROOT = ROOT / "tests" / "fixtures" / "pretrip" / "projects" / "chilai_nanhua_day1"
 
 
-def test_team_status_reports_fixture_missing_live_team_fields() -> None:
+def test_team_status_uses_reviewed_fixture_team_fields_with_remote_review_warning() -> None:
     result = assess_scout_team_status(
         PROJECT_ROOT,
         query="後隊在哪？留守回報準備好了嗎？",
@@ -21,21 +21,28 @@ def test_team_status_reports_fixture_missing_live_team_fields() -> None:
 
     assert result["artifact_kind"] == TEAM_STATUS_OUTPUT_KIND
     assert result["tool_id"] == TEAM_STATUS_TOOL_ID
-    assert result["answerability"] == "team_status_missing_required_fields"
-    assert result["decision"] == "DELAY"
+    assert result["answerability"] == "team_status_decision_available"
+    assert result["decision"] == "CONDITIONAL_GO"
     assert result["decision_output"]["decisionObjectSchema"] == "ContextualPermission"
-    assert result["decision_output"]["decision"] == "DELAY"
+    assert result["decision_output"]["decision"] == "CONDITIONAL_GO"
     assert result["decision_output"]["firstLayer"]["decision"] == (
-        "建議延後隊伍狀態判斷。"
+        "可有條件推進，但必須先完成隊伍/留守確認。"
     )
     assert result["decision_output"]["runtimeSafetyTruth"] is False
-    assert "member_positions_or_last_heard" in result["missing_fields"]
-    assert "communication_status" in result["missing_fields"]
+    assert result["missing_fields"] == []
     assert result["team_status_guardian"]["role"] == (
         "Team Status / Remote Contact Governance"
     )
     assert result["team_status"]["remote_contact"]["available"] is True
     assert result["team_status"]["remote_contact"]["review_state"] == "needs_review"
+    assert result["team_status"]["member_count"] == 2
+    assert result["team_status"]["members_missing_last_heard"] == []
+    assert result["team_status"]["communication_status"] == "ok"
+    assert result["team_status"]["rendezvous_point"] == "雲海保線所"
+    assert result["debug_sources"]["team_status_source"] == "outputs/team_status.json"
+    assert result["team_governance"]["warning_gaps"] == [
+        "留守/遠端聯絡計畫仍需人工確認。"
+    ]
     assert "隊伍守門員" in result["field_answer"]
     assert result["boundary"]["runtime_safety_truth"] is False
     assert result["boundary"]["outbound_send_performed"] is False

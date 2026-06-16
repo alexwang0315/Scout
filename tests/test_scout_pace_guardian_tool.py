@@ -162,23 +162,28 @@ def test_pace_guardian_treats_ahead_of_plan_as_controlled_pace_condition() -> No
     assert result["boundary"]["runtime_safety_truth"] is False
 
 
-def test_pace_guardian_reports_missing_member_pace_from_resource_plan() -> None:
+def test_pace_guardian_uses_reviewed_fixture_team_status_profiles() -> None:
     result = assess_scout_pace_guardian(
         PROJECT_ROOT,
         query="隊伍腳程是否能準時抵達下一個 CP？",
     )
 
-    assert result["answerability"] == "pace_fit_missing_required_fields"
-    assert result["decision"] == "NO_GO"
-    assert result["decision_output"]["decision"] == "NO_GO"
+    assert result["answerability"] == "pace_fit_decision_available"
+    assert result["decision"] == "CONDITIONAL_GO"
+    assert result["decision_output"]["decision"] == "CONDITIONAL_GO"
     assert result["decision_output"]["firstLayer"]["decision"] == (
-        "不建議用目前腳程資料繼續判斷。"
+        "可繼續，但必須以最慢者控速。"
     )
-    assert result["missing_fields"] == ["member_pace_profile"]
+    assert result["missing_fields"] == []
     assert result["team_pace_fit"]["member_count"] == 2
-    assert result["team_pace_fit"]["members_with_pace_count"] == 0
+    assert result["team_pace_fit"]["members_with_pace_count"] == 2
+    assert result["team_pace_fit"]["slowest_member"]["label"] == (
+        "Teammate placeholder"
+    )
+    assert result["team_pace_fit"]["pace_gap_ratio"] == 1.22
+    assert result["debug_sources"]["team_status_source"] == "outputs/team_status.json"
     assert result["debug_sources"]["resource_plan_source"] == "outputs/resource_plan.json"
-    assert "缺少 member_pace_profile" in result["field_answer"]
+    assert "不使用平均腳程" in result["field_answer"]
     assert result["pace_guardian"]["average_pace_used"] is False
     assert result["boundary"]["runtime_safety_truth"] is False
 
@@ -189,14 +194,14 @@ def test_pace_guardian_uses_query_reported_vulnerable_member_conditions() -> Non
         query="有人膝蓋痛又睡眠不足，還能照原計畫嗎？",
     )
 
-    assert result["answerability"] == "pace_fit_missing_required_fields"
-    assert result["decision"] == "NO_GO"
-    assert result["missing_fields"] == ["member_pace_profile"]
+    assert result["answerability"] == "pace_fit_decision_available"
+    assert result["decision"] == "CHANGE_PLAN"
+    assert result["missing_fields"] == []
     assert result["team_pace_fit"]["query_reported_vulnerabilities"] == [
         "knee_pain",
         "sleep_debt",
     ]
-    assert "使用者回報隊伍脆弱環節" in result["team_pace_fit"]["main_reasons"][1]
+    assert "使用者回報隊伍脆弱環節" in result["team_pace_fit"]["main_reasons"][0]
     assert result["decision_output"]["firstLayer"]["decision"] == (
         "不建議照原計畫推進。"
     )
@@ -211,8 +216,9 @@ def test_pace_guardian_uses_query_reported_route_experience_and_rest_mismatch() 
         query="有人第一次走類似路線，隊伍休息節奏不一致，還能照原計畫嗎？",
     )
 
-    assert result["answerability"] == "pace_fit_missing_required_fields"
-    assert result["decision"] == "NO_GO"
+    assert result["answerability"] == "pace_fit_decision_available"
+    assert result["decision"] == "CHANGE_PLAN"
+    assert result["missing_fields"] == []
     assert result["team_pace_fit"]["query_reported_vulnerabilities"] == [
         "first_time_similar_route",
         "rest_rhythm_mismatch",

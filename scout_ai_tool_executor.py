@@ -285,6 +285,9 @@ def _execute_ready_current_tool(tool_id: str, arguments: dict[str, Any]) -> dict
             route_comparison_path=_str_or_none(
                 arguments.get("route_comparison_path")
             ),
+            pretrip_input_bundle_path=_str_or_none(
+                arguments.get("pretrip_input_bundle_path")
+            ),
             user_experience_level=_str_or_none(
                 arguments.get("user_experience_level")
             ),
