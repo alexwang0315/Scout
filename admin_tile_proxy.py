@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import io
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -91,6 +92,15 @@ def load_or_build_osm_tile_payload(
             cache_path=cache_path,
             body_sha256=hashlib.sha256(body).hexdigest(),
         )
+    parent_payload = _parent_cache_tile_payload(
+        z,
+        x,
+        y,
+        cache_root=cache_root,
+        requested_cache_path=cache_path,
+    )
+    if parent_payload is not None:
+        return parent_payload
     if not fallback_enabled:
         raise FileNotFoundError(str(cache_path))
 
@@ -107,6 +117,77 @@ def load_or_build_osm_tile_payload(
         cache_path=cache_path,
         body_sha256=hashlib.sha256(body).hexdigest(),
     )
+
+
+def _parent_cache_tile_payload(
+    z: int | str,
+    x: int | str,
+    y: int | str,
+    *,
+    cache_root: Path | str,
+    requested_cache_path: Path,
+) -> AdminTilePayload | None:
+    tile = validate_osm_tile_coords(z, x, y)
+    for parent_z in range(tile["z"] - 1, -1, -1):
+        scale = 2 ** (tile["z"] - parent_z)
+        parent_x = tile["x"] // scale
+        parent_y = tile["y"] // scale
+        parent_path = osm_tile_cache_path(
+            parent_z,
+            parent_x,
+            parent_y,
+            cache_root=cache_root,
+        )
+        if not parent_path.exists():
+            continue
+        parent_body = parent_path.read_bytes()
+        body = _crop_parent_tile_to_child(
+            parent_body,
+            child_x=tile["x"] - parent_x * scale,
+            child_y=tile["y"] - parent_y * scale,
+            scale=scale,
+        )
+        if body is None:
+            continue
+        return AdminTilePayload(
+            body=body,
+            media_type="image/png",
+            source="local_parent_cache_fallback",
+            cache_path=requested_cache_path,
+            body_sha256=hashlib.sha256(body).hexdigest(),
+        )
+    return None
+
+
+def _crop_parent_tile_to_child(
+    body: bytes,
+    *,
+    child_x: int,
+    child_y: int,
+    scale: int,
+) -> bytes | None:
+    try:
+        from PIL import Image
+    except Exception:  # pragma: no cover - optional runtime dependency
+        return None
+    try:
+        with Image.open(io.BytesIO(body)) as image:
+            parent = image.convert("RGBA")
+            width, height = parent.size
+            left = int(round(child_x * width / scale))
+            upper = int(round(child_y * height / scale))
+            right = int(round((child_x + 1) * width / scale))
+            lower = int(round((child_y + 1) * height / scale))
+            if right <= left or lower <= upper:
+                return None
+            crop = parent.crop((left, upper, right, lower))
+            resample = getattr(getattr(Image, "Resampling", Image), "BICUBIC")
+            resized = crop.resize((width, height), resample=resample)
+            output = io.BytesIO()
+            resized.save(output, format="PNG")
+            return output.getvalue()
+    except Exception:
+        return None
 
 
 def validate_osm_tile_coords(

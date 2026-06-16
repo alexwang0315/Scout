@@ -1,4 +1,5 @@
 import hashlib
+import io
 from pathlib import Path
 
 import pytest
@@ -67,6 +68,33 @@ def test_osm_tile_proxy_serves_cached_png_when_present(tmp_path):
     assert payload.headers()["Cache-Control"] == "no-cache, max-age=0, must-revalidate"
 
 
+def test_osm_tile_proxy_serves_cropped_parent_cache_fallback(tmp_path):
+    try:
+        from PIL import Image
+    except Exception as exc:  # pragma: no cover - environment guard
+        pytest.skip(f"Pillow is unavailable: {exc}")
+
+    parent_path = tmp_path / "1" / "1" / "1.png"
+    parent_path.parent.mkdir(parents=True)
+    parent_path.write_bytes(_quadrant_png())
+
+    payload = load_or_build_osm_tile_payload(
+        2,
+        3,
+        2,
+        cache_root=tmp_path,
+        fallback_style="transparent",
+    )
+
+    assert payload.source == "local_parent_cache_fallback"
+    assert payload.media_type == "image/png"
+    assert payload.cache_path == tmp_path / "2" / "3" / "2.png"
+    assert payload.headers()["Cache-Control"] == "no-store"
+    with Image.open(io.BytesIO(payload.body)) as image:
+        assert image.size == (256, 256)
+        assert image.convert("RGBA").getpixel((128, 128))[:3] == (0, 255, 0)
+
+
 def test_osm_tile_proxy_rejects_invalid_coordinates_and_missing_cache(tmp_path):
     assert validate_osm_tile_coords(20, 0, 0) == {"z": 20, "x": 0, "y": 0}
     with pytest.raises(ValueError):
@@ -86,3 +114,21 @@ def test_osm_tile_proxy_rejects_invalid_coordinates_and_missing_cache(tmp_path):
     assert osm_tile_cache_path("1", "1", "1", cache_root=tmp_path) == Path(
         tmp_path / "1" / "1" / "1.png"
     )
+
+
+def _quadrant_png() -> bytes:
+    from PIL import Image
+
+    image = Image.new("RGBA", (256, 256), (0, 0, 0, 0))
+    colors = {
+        (0, 0, 128, 128): (255, 0, 0, 255),
+        (128, 0, 256, 128): (0, 255, 0, 255),
+        (0, 128, 128, 256): (0, 0, 255, 255),
+        (128, 128, 256, 256): (255, 255, 0, 255),
+    }
+    for box, color in colors.items():
+        patch = Image.new("RGBA", (box[2] - box[0], box[3] - box[1]), color)
+        image.paste(patch, box[:2])
+    output = io.BytesIO()
+    image.save(output, format="PNG")
+    return output.getvalue()

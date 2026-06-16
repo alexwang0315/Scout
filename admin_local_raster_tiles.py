@@ -514,6 +514,18 @@ def load_or_build_raster_tile_payload(
                 else None
             ),
         )
+    parent_payload = _parent_raster_cache_tile_payload(
+        project_id,
+        layer_id,
+        z,
+        x,
+        y,
+        cache_root=cache_root,
+        requested_cache_path=cache_path,
+        imagery_source=imagery_source,
+    )
+    if parent_payload is not None:
+        return parent_payload
     if allow_remote_fetch and imagery_source is not None:
         try:
             remote_tile = remote_fetcher(
@@ -560,6 +572,56 @@ def load_or_build_raster_tile_payload(
             else None
         ),
     )
+
+
+def _parent_raster_cache_tile_payload(
+    project_id: str,
+    layer_id: str,
+    z: int | str,
+    x: int | str,
+    y: int | str,
+    *,
+    cache_root: Path | str,
+    requested_cache_path: Path,
+    imagery_source: Mapping[str, Any] | None = None,
+) -> AdminRasterTilePayload | None:
+    tile = validate_osm_tile_coords(z, x, y)
+    for parent_z in range(tile["z"] - 1, -1, -1):
+        scale = 2 ** (tile["z"] - parent_z)
+        parent_x = tile["x"] // scale
+        parent_y = tile["y"] // scale
+        parent_path = raster_tile_cache_path(
+            project_id,
+            layer_id,
+            parent_z,
+            parent_x,
+            parent_y,
+            cache_root=cache_root,
+        )
+        if not parent_path.exists():
+            continue
+        parent_body = parent_path.read_bytes()
+        body = _crop_parent_tile_to_child(
+            parent_body,
+            child_x=tile["x"] - parent_x * scale,
+            child_y=tile["y"] - parent_y * scale,
+            scale=scale,
+        )
+        if body is None:
+            continue
+        return AdminRasterTilePayload(
+            body=body,
+            media_type="image/png",
+            source="local_parent_cache_fallback",
+            cache_path=requested_cache_path,
+            body_sha256=hashlib.sha256(body).hexdigest(),
+            imagery_source_id=(
+                str(imagery_source.get("source_id"))
+                if isinstance(imagery_source, Mapping) and imagery_source.get("source_id")
+                else None
+            ),
+        )
+    return None
 
 
 def tile_bounds_wgs84(z: int, x: int, y: int) -> dict[str, float]:
@@ -776,6 +838,37 @@ def _safe_identifier(value: Any, field_name: str) -> str:
 
 def _transparent_png_tile() -> bytes:
     return TRANSPARENT_PNG_TILE
+
+
+def _crop_parent_tile_to_child(
+    body: bytes,
+    *,
+    child_x: int,
+    child_y: int,
+    scale: int,
+) -> bytes | None:
+    try:
+        from PIL import Image
+    except Exception:  # pragma: no cover - optional runtime dependency
+        return None
+    try:
+        with Image.open(io.BytesIO(body)) as image:
+            parent = image.convert("RGBA")
+            width, height = parent.size
+            left = int(round(child_x * width / scale))
+            upper = int(round(child_y * height / scale))
+            right = int(round((child_x + 1) * width / scale))
+            lower = int(round((child_y + 1) * height / scale))
+            if right <= left or lower <= upper:
+                return None
+            crop = parent.crop((left, upper, right, lower))
+            resample = getattr(getattr(Image, "Resampling", Image), "BICUBIC")
+            resized = crop.resize((width, height), resample=resample)
+            output = io.BytesIO()
+            resized.save(output, format="PNG")
+            return output.getvalue()
+    except Exception:
+        return None
 
 
 def _tile_media_type(body: bytes, *, default: str) -> str:

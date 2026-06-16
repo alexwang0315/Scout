@@ -1,3 +1,4 @@
+import io
 from pathlib import Path
 
 import pytest
@@ -253,6 +254,48 @@ def test_raster_tile_proxy_detects_cached_jpeg_media_type(tmp_path):
     assert payload.source == "local_cache"
 
 
+def test_raster_tile_proxy_serves_cropped_parent_cache_fallback(tmp_path):
+    try:
+        from PIL import Image
+    except Exception as exc:  # pragma: no cover - environment guard
+        pytest.skip(f"Pillow is unavailable: {exc}")
+
+    parent_path = raster_tile_cache_path(
+        "chilai_nanhua_day1",
+        "imagery",
+        1,
+        1,
+        1,
+        cache_root=tmp_path,
+    )
+    parent_path.parent.mkdir(parents=True)
+    parent_path.write_bytes(_quadrant_png())
+
+    payload = load_or_build_raster_tile_payload(
+        "chilai_nanhua_day1",
+        "imagery",
+        2,
+        3,
+        2,
+        cache_root=tmp_path,
+    )
+
+    assert payload.source == "local_parent_cache_fallback"
+    assert payload.media_type == "image/png"
+    assert payload.cache_path == raster_tile_cache_path(
+        "chilai_nanhua_day1",
+        "imagery",
+        2,
+        3,
+        2,
+        cache_root=tmp_path,
+    )
+    assert payload.headers()["Cache-Control"] == "no-store"
+    with Image.open(io.BytesIO(payload.body)) as image:
+        assert image.size == (256, 256)
+        assert image.convert("RGBA").getpixel((128, 128))[:3] == (0, 255, 0)
+
+
 def test_raster_tile_proxy_contract_and_validation(tmp_path):
     contract = build_local_raster_tile_proxy_contract(cache_root=tmp_path)
 
@@ -342,6 +385,24 @@ def test_raster_tile_proxy_can_fill_cache_from_explicit_imagery_source(tmp_path)
     )
     assert cached.source == "local_cache"
     assert cached.body == remote_body
+
+
+def _quadrant_png() -> bytes:
+    from PIL import Image
+
+    image = Image.new("RGBA", (256, 256), (0, 0, 0, 0))
+    colors = {
+        (0, 0, 128, 128): (255, 0, 0, 255),
+        (128, 0, 256, 128): (0, 255, 0, 255),
+        (0, 128, 128, 256): (0, 0, 255, 255),
+        (128, 128, 256, 256): (255, 255, 0, 255),
+    }
+    for box, color in colors.items():
+        patch = Image.new("RGBA", (box[2] - box[0], box[3] - box[1]), color)
+        image.paste(patch, box[:2])
+    output = io.BytesIO()
+    image.save(output, format="PNG")
+    return output.getvalue()
     assert cached.headers()["X-Scout-Imagery-Source-Id"] == "nlsc_photo2"
 
 
