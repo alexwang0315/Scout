@@ -516,7 +516,42 @@ def test_route_context_collection_uses_web_media_in_presentation_html(tmp_path: 
     web_ref = "outputs/layers/normalized/web_case_evidence.json"
     web_path = project_root / web_ref
     web_path.parent.mkdir(parents=True, exist_ok=True)
-    image_refs = [
+    bad_image_refs = [
+        {
+            "url": "https://recreation.forest.gov.tw/image/icon/web-logo/30uu-logotype-primary.svg",
+            "alt": "山林悠遊網標示",
+            "caption": "山林悠遊網標示",
+            "source_tier": "P0",
+            "source_family": "official_baseline",
+            "page_url": "https://recreation.forest.gov.tw/Trail/RT?tr_id=064",
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+            "raw_image_embedded": False,
+        },
+        {
+            "url": "https://recreation.forest.gov.tw/image/icon/interfaces/search@svg.svg",
+            "alt": "搜尋",
+            "caption": "搜尋",
+            "source_tier": "P0",
+            "source_family": "official_baseline",
+            "page_url": "https://recreation.forest.gov.tw/Trail/RT?tr_id=064",
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+            "raw_image_embedded": False,
+        },
+        {
+            "url": "https://www.facebook.com/tr?id=2086363621619508&ev=PageView&noscript=1",
+            "alt": "",
+            "caption": "",
+            "source_tier": "P1",
+            "source_family": "community_article_evidence",
+            "page_url": "https://hiking.biji.co/index.php?act=gpx_detail&id=1133031&q=trail",
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+            "raw_image_embedded": False,
+        },
+    ]
+    image_refs = bad_image_refs + [
         {
             "url": "https://example.test/photos/yunhai.jpg",
             "alt": "雲海保線所",
@@ -567,8 +602,8 @@ def test_route_context_collection_uses_web_media_in_presentation_html(tmp_path: 
             "raw_image_embedded": False,
         }
     )
-    image_refs[2]["alt"] = "能高越嶺道西段導覽圖"
-    image_refs[2]["caption"] = "能高越嶺道西段導覽圖"
+    image_refs[len(bad_image_refs) + 2]["alt"] = "能高越嶺道西段導覽圖"
+    image_refs[len(bad_image_refs) + 2]["caption"] = "能高越嶺道西段導覽圖"
     web_path.write_text(
         json.dumps(
             {
@@ -662,10 +697,18 @@ def test_route_context_collection_uses_web_media_in_presentation_html(tmp_path: 
     assert media_manifest["hero_image"]["presentation_anchor"]["anchor_kind"] == "route_point"
     assert media_manifest["hero_image"]["presentation_anchor"]["label"] == "雲海保線所"
     assert media_manifest["boundary"]["raw_image_embedded"] is False
+    media_urls = {
+        image["url"]
+        for image in media_manifest["gallery_images"]
+    }
+    assert all(image["url"] not in media_urls for image in bad_image_refs)
     assert "Visual evidence gap" not in briefing
     assert "https://example.test/photos/yunhai.jpg" in briefing
     assert "https://example.test/photos/guangbei.jpg" in briefing
     assert "https://example.test/photos/context-8.jpg" in briefing
+    assert "30uu-logotype-primary.svg" not in briefing
+    assert "search@svg.svg" not in briefing
+    assert "facebook.com/tr" not in briefing
     map_atlas_fragment = briefing[
         briefing.index('class="map-atlas"') : briefing.index(
             'class="map-layer-card"'
