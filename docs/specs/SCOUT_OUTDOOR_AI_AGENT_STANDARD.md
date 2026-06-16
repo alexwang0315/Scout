@@ -1206,3 +1206,140 @@ Scout 的任務是：
 最後，所有 Scout outdoor AI agent 的設計、工程、提示、資料結構、介面、文案與驗收，都應回到這句話：
 
 > **Scout 把戶外活動中每一個「應該沒關係吧」，轉化成一個有時間、有位置、有條件、有後果的清楚決策。**
+
+---
+
+## Appendix A. Implementation Alignment Record
+
+This appendix records the current Scout implementation evidence against this
+standard. It is an engineering verification record, not a replacement for the
+standard itself and not a departure approval.
+
+### A.1 Verification Baseline
+
+Latest verified implementation baseline:
+
+- `4d66fa79 feat: validate scout standard audit ui path`
+- `821da240 feat: add scout pace coefficients and gnss indicators`
+- `b1a97844 feat: add reviewed scout post-trip context`
+- `bd814609 feat: add reviewed scout runtime safety traces`
+- `774072fb feat: add reviewed scout media literacy context`
+- `0f531a76 feat: add reviewed scout incident context evidence`
+
+The standard gap audit at this baseline reports:
+
+| Field | Verified value |
+|---|---:|
+| `standardGroupCount` | 10 |
+| `coveredStandardGroupCount` | 10 |
+| `implementationGapToolCount` | 0 |
+| `contextOrReviewEvidenceGapToolCount` | 0 |
+| `uiUxValidationNeeded` | false |
+| `uiUxValidation.status` | `validated_static_admin_ui` |
+
+The validation evidence is intentionally scoped:
+
+- It proves Scout has deterministic tool, evidence, answer, and static admin UI
+  paths for this standard.
+- It does not prove a real route, real weather package, real team state, or real
+  device state is safe.
+- It does not create or modify runtime safety truth.
+
+### A.2 Six-Force Implementation Status
+
+| Standard section | Scout force | Current implementation evidence |
+|---|---|---|
+| 6 | 探索力 / Route Context Intelligence | `scout.ai.route_context.assess.v0` is in the Scout AI evidence and answer path. |
+| 7 | 自信力 / Readiness & Pace Fit | `scout.ai.pace_guardian.assess.v0`, `scout.ai.route_readiness.assess.v0`, and Scout Pace Coefficient generation are in the pre-trip path. |
+| 8 | 勇氣力 / Contextual Permissioning | `scout.ai.contextual_permission.assess.v0` emits structured permission decisions with limits and residual risk. |
+| 9 | 路線力 / Route Architecture Intelligence | `scout.ai.route_architecture.assess.v0` covers route structure, checkpoint, retreat, and timing reasoning. |
+| 10 | 天氣力 / Weather-to-Decision Intelligence | `scout.ai.weather_window.assess.v0` converts weather into route-specific decision constraints. |
+| 11 | 地圖力 / Navigation & Terrain Intelligence | `scout.ai.navigation_terrain.assess.v0` and related map/risk evidence paths support terrain-aware decisions. |
+
+Current audit answer evidence confirms all six force labels appear in the
+standard gap answer:
+
+```text
+探索力, 自信力, 勇氣力, 路線力, 天氣力, 地圖力
+```
+
+### A.3 Standard Group Coverage
+
+| Standard group | Sections | Implementation state |
+|---|---:|---|
+| 六力動態決策 | 5-11 | Implemented through deterministic Scout AI tool and answer paths. |
+| CP Graph / Risk Budget / Micro-Decision Agent | 12-14 | Implemented through contextual permission, route architecture, live navigation state, and risk score evidence. |
+| Agent roles | 15 | Implemented through Pace Guardian, Risk Sentinel, and Experience Guide style tool responsibilities. |
+| Required decision output and schema | 16-17 | Implemented as `ContextualPermission`-style decision output with first layer, second layer, uncertainty, and boundary fields. |
+| Pre-trip / on-route / post-trip workflows | 18-20 | Implemented across readiness, live navigation, energy/vitals, and post-trip review evidence paths. |
+| Media literacy and example scenarios | 21, 25 | Implemented through reviewed media literacy context and scenario-oriented decision outputs. |
+| Safety philosophy / development standards / traceability | 2, 22-23, 28 | Implemented through safety boundary tooling, review gaps, runtime ingress traces, and deterministic evidence summaries. |
+| MVP required capabilities | 24 | Implemented through pace, readiness, route architecture, weather, equipment/resource, and team-status paths. |
+| Product identity and decision-layer positioning | 0-3, 26-27, 30 | Implemented as deterministic synthesis formatter and surfaced in standard gap answers. |
+| Standard glossary | 29 | Implemented as deterministic synthesis formatter. |
+
+### A.4 UI and Operator Surface Evidence
+
+The static admin UI path is part of the implementation record because this
+standard includes product value, copy, and operator experience requirements.
+
+Verified admin UI surface:
+
+- `docs/admin/phase4-pretrip-planning.html#assistantStandardGapAuditList`
+- `docs/admin/scout-assistant-ui.js#standardGapAuditItems`
+- `tests/test_pretrip_admin_page.py#standard-gap-audit-render`
+
+The UI renders:
+
+- schema and `runtime_safety_truth=false`;
+- `coverage: 10/10 groups`;
+- `implementation_gap_tools=0`;
+- `context_review_gap_tools=0`;
+- `ui_ux_validation_needed=false`;
+- `ui_validation: status=validated_static_admin_ui`;
+- standard groups, next slices, and boundary non-goals.
+
+Browser smoke validation used a local static server and Google Chrome to verify
+that the admin page can render the standard audit list from a full workflow
+payload. Static-server 404s for runtime API endpoints are acceptable in that
+smoke; the validated target is the standard audit renderer.
+
+### A.5 Runtime Deployment Handoff Checklist
+
+When another Scout runtime thread receives this implementation, it should use
+this checklist:
+
+1. Confirm `git status`, `HEAD`, and recent commits.
+2. Run focused tests:
+   - `tests/test_scout_outdoor_standard_coverage.py`
+   - `tests/test_assistant_skill_router.py::test_pretrip_full_workflow_source_exposes_standard_gap_audit_for_ui`
+   - `tests/test_pretrip_admin_page.py`
+3. Rerun the standard gap full workflow question and verify:
+   - `standardGroupCount=10`
+   - `coveredStandardGroupCount=10`
+   - `implementationGapToolCount=0`
+   - `contextOrReviewEvidenceGapToolCount=0`
+   - `uiUxValidationNeeded=false`
+   - all six force labels are present.
+4. If deploying to Scout runtime, keep scope to deploy/runtime verification.
+5. Smoke the admin UI standard gap audit:
+   - coverage is `10/10`;
+   - UI validation is `validated_static_admin_ui`;
+   - boundary/non-goal lines are visible.
+6. Report `HEAD`, test result, runtime/admin smoke result, and the smallest
+   repair point if any check fails.
+
+### A.6 Safety and Non-Goals
+
+This implementation record must preserve the following boundaries:
+
+- Do not treat fixture evidence as real departure approval.
+- Do not treat the standard gap audit as runtime safety truth.
+- Do not trigger `/safety/*`, SOS, outbound send, beacon, or hardware control.
+- Do not read or output secrets.
+- Do not mix deploy/runtime repair with unrelated feature development.
+- Do not change the product direction of this standard during runtime smoke.
+
+The remaining validation after deployment is field validation: real operator
+usage, real project data, real route/weather/team/device state, and reviewed
+runtime handoff evidence.
