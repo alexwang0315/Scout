@@ -154,3 +154,54 @@ def test_supervisor_autostarts_gnss_hardware_observer_from_jsonl_sources(tmp_pat
     supervisor.stop()
 
     assert started[0].terminated is True
+
+
+def test_supervisor_passes_gnss_hardware_oled_and_led_options(tmp_path: Path) -> None:
+    gateway_jsonl = tmp_path / "sx1303-gateway-gps.jsonl"
+    gateway_jsonl.write_text("{}\n", encoding="utf-8")
+    started: list[FakeProcess] = []
+
+    def fake_popen(command, **kwargs):
+        process = FakeProcess(list(command), **kwargs)
+        started.append(process)
+        return process
+
+    supervisor = IngressObserverSupervisor.from_env(
+        {
+            "SCOUT_SENSORLOGGER_MQTT_AUTOSTART": "false",
+            "SCOUT_GNSS_HARDWARE_AUTOSTART": "true",
+            "SCOUT_GNSS_HARDWARE_GATEWAY_JSONL": str(gateway_jsonl),
+            "SCOUT_GNSS_HARDWARE_GROVE_JSONL": str(tmp_path / "missing-grove.jsonl"),
+            "SCOUT_GNSS_HARDWARE_EVIDENCE_DIR": str(tmp_path / "gnss-evidence"),
+            "SCOUT_GNSS_HARDWARE_LOG_PATH": str(tmp_path / "gnss-observer.log"),
+            "SCOUT_GNSS_HARDWARE_OLED_STATUS": "true",
+            "SCOUT_GNSS_HARDWARE_OLED_DRIVER": "sh1107g",
+            "SCOUT_GNSS_HARDWARE_LED_STATUS": "true",
+            "SCOUT_GNSS_HARDWARE_LED_PORT": "D5",
+            "SCOUT_GNSS_HARDWARE_LED_FIX_BIT": "10",
+            "SCOUT_GNSS_HARDWARE_LED_NO_FIX_BIT": "1",
+            "SCOUT_GNSS_HARDWARE_LED_BLINK_COUNT": "1",
+            "SCOUT_GNSS_HARDWARE_LED_BLINK_SECONDS": "0.15",
+        },
+        app_root=tmp_path,
+        popen_factory=fake_popen,
+    )
+
+    supervisor.start()
+    command = started[0].command
+
+    assert "--oled-status" in command
+    assert "--oled-driver" in command
+    assert "sh1107g" in command
+    assert "--led-status" in command
+    assert "--led-port" in command
+    assert "D5" in command
+    assert "--led-fix-bit" in command
+    assert "10" in command
+    assert "--led-no-fix-bit" in command
+    assert "1" in command
+    assert "--led-blink-seconds" in command
+    assert "0.15" in command
+    assert "/safety/" not in " ".join(command)
+
+    supervisor.stop()

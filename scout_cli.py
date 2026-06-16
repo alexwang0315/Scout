@@ -249,6 +249,17 @@ def _add_pretrip_group(subparsers: argparse._SubParsersAction) -> None:
     pace_fit.add_argument("--project-id", default=None)
     pace_fit.add_argument("--workspace-root", type=Path, default=None)
     pace_fit.add_argument("--team-members-json", default=None)
+    pace_fit.add_argument("--build-from-capability", action="store_true")
+    pace_fit.add_argument("--capability-timeline-path", type=Path, default=None)
+    pace_fit.add_argument("--route-time-comparison-path", type=Path, default=None)
+    pace_fit.add_argument("--route-weather-package-path", type=Path, default=None)
+    pace_fit.add_argument("--weather-decision-candidates-path", type=Path, default=None)
+    pace_fit.add_argument("--member-id", default=None)
+    pace_fit.add_argument("--display-label", default=None)
+    pace_fit.add_argument("--pack-weight-kg", default=None)
+    pace_fit.add_argument("--load-impact-ratio", default=None)
+    pace_fit.add_argument("--weather-impact-ratio", default=None)
+    pace_fit.add_argument("--self-report-gap-ratio", default=None)
     pace_fit.add_argument("--current-time", default=None)
     pace_fit.add_argument("--next-cp-id", default=None)
     pace_fit.add_argument("--minutes-to-next-cp", default=None)
@@ -699,7 +710,22 @@ def _tool_request_for_args(args: argparse.Namespace) -> tuple[str, dict[str, Any
             if not isinstance(members, list):
                 raise ValueError("--team-members-json must decode to a list")
             request["team_members"] = members
+        if args.build_from_capability:
+            request["build_coefficients_from_capability"] = True
         for key in (
+            "capability_timeline_path",
+            "route_time_comparison_path",
+            "route_weather_package_path",
+            "weather_decision_candidates_path",
+        ):
+            _set_path(request, key, getattr(args, key))
+        for key in (
+            "member_id",
+            "display_label",
+            "pack_weight_kg",
+            "load_impact_ratio",
+            "weather_impact_ratio",
+            "self_report_gap_ratio",
             "current_time",
             "next_cp_id",
             "minutes_to_next_cp",

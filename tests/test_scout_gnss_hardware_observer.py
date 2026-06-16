@@ -105,6 +105,65 @@ def test_observer_writes_no_valid_fix_snapshot_without_fabricating_position(tmp_
     assert snapshot["boundary"]["runtime_safety_truth"] is False
 
 
+def test_observer_projects_oled_and_led_status_in_dry_run_mode(tmp_path: Path) -> None:
+    gateway_jsonl = tmp_path / "gateway.jsonl"
+    grove_jsonl = tmp_path / "grove.jsonl"
+    _write_jsonl(gateway_jsonl, [_gateway_record(captured_at="2026-06-16T01:00:00Z")])
+    observer = GnssHardwareObserver(
+        GnssHardwareObserverConfig(
+            evidence_dir=tmp_path / "observer",
+            gateway_jsonl=gateway_jsonl,
+            grove_jsonl=grove_jsonl,
+            oled_status=True,
+            oled_dry_run=True,
+            led_status=True,
+            led_dry_run=True,
+        )
+    )
+
+    status = observer.refresh()
+
+    oled_update = status["oled_status_updates"][0]
+    led_update = status["led_status_updates"][0]
+    assert oled_update["write_status"] == "dry_run"
+    assert "SCOUT GNSS\nFIX OK\nSRC GATEWAY" in oled_update["message"]
+    assert "JSONL ONLY" in oled_update["message"]
+    assert oled_update["runtime_safety_truth"] is False
+    assert oled_update["safety_api_called"] is False
+    assert oled_update["lorawan_uplink_allowed"] is False
+
+    assert led_update["write_status"] == "dry_run"
+    assert led_update["bits"] == "0x200"
+    assert led_update["fix_led_bit"] == 10
+    assert led_update["runtime_safety_truth"] is False
+    assert led_update["safety_api_called"] is False
+    assert led_update["rf_tx_allowed"] is False
+
+
+def test_observer_projects_no_fix_led_bit_in_dry_run_mode(tmp_path: Path) -> None:
+    gateway_jsonl = tmp_path / "gateway.jsonl"
+    grove_jsonl = tmp_path / "grove.jsonl"
+    _write_jsonl(gateway_jsonl, [_gateway_no_stream_record()])
+    observer = GnssHardwareObserver(
+        GnssHardwareObserverConfig(
+            evidence_dir=tmp_path / "observer",
+            gateway_jsonl=gateway_jsonl,
+            grove_jsonl=grove_jsonl,
+            oled_status=True,
+            oled_dry_run=True,
+            led_status=True,
+            led_dry_run=True,
+        )
+    )
+
+    status = observer.refresh()
+
+    assert status["selected_source"] is None
+    assert status["oled_status_updates"][0]["write_status"] == "dry_run"
+    assert "NO FIX" in status["oled_status_updates"][0]["message"]
+    assert status["led_status_updates"][0]["bits"] == "0x001"
+
+
 def test_candidate_parser_prefers_gateway_latest_valid_fix_over_first_sentence() -> None:
     observer = GnssHardwareObserver(GnssHardwareObserverConfig())
     gateway_spec = observer.source_specs()[0]

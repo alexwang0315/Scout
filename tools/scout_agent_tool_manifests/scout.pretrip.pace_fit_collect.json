@@ -25,7 +25,11 @@
     "pretrip.workspace.outputs.energy_vitals",
     "pretrip.workspace.outputs.readiness_report",
     "pretrip.workspace.outputs.timing_measurements",
-    "pretrip.workspace.weather_daylight_evidence"
+    "pretrip.workspace.weather_daylight_evidence",
+    "pretrip.workspace.outputs.capability_timeline",
+    "pretrip.workspace.outputs.capability_route_time_comparison",
+    "pretrip.workspace.outputs.route_weather_package",
+    "pretrip.workspace.candidates.weather_decision_candidates"
   ],
   "allowed_writes": [
     "pretrip.workspace.normalized.pace.pace_coefficients",
