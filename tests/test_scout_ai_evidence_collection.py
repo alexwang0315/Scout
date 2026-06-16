@@ -977,7 +977,8 @@ def test_evidence_collection_keeps_media_literacy_payload() -> None:
     assert media.collection_status == "completed"
     assert media.result is not None
     payload = media.result["payload"]
-    assert payload["answerability"] == "media_literacy_missing_context"
+    assert payload["answerability"] == "media_literacy_decision_available"
+    assert payload["source_status"] == "reviewed_media_literacy_context"
     assert payload["decision"] == "NO_GO"
     assert payload["media_literacy"]["role"] == "Media Literacy / Bias Sentinel"
     assert payload["media_bias_analysis"]["target_context_points"][0]["label"] == (
@@ -989,7 +990,7 @@ def test_evidence_collection_keeps_media_literacy_payload() -> None:
         "不建議為媒體點位停留或改線。"
     )
     assert payload["decision_output"]["secondLayer"]["alternativeActions"]
-    assert "fresh_weather_or_route_condition_review" in media.missing_fields
+    assert media.missing_fields == []
     assert media.boundary.runtime_safety_truth is False
 
 

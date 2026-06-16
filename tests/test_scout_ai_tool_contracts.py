@@ -194,6 +194,7 @@ def test_tool_registry_lists_current_and_future_contracts() -> None:
     assert "scout.ai.provenance_gap.assess" in by_id[REVIEW_GAP_TOOL_ID].aliases
     assert "category" in by_id[REVIEW_GAP_TOOL_ID].optional_fields
     assert "scout.ai.media_bias.assess" in by_id[MEDIA_LITERACY_TOOL_ID].aliases
+    assert "media_context_path" in by_id[MEDIA_LITERACY_TOOL_ID].optional_fields
     assert "scout.ai.sos_playbook.explain" in by_id[
         SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID
     ].aliases
@@ -718,10 +719,11 @@ def test_execute_media_literacy_alias_returns_bias_decision() -> None:
     assert result.implementation_status == "ready_current_tool"
     assert result.output_artifact_kind == "scout_ai_media_literacy_tool_output"
     assert result.payload["artifact_kind"] == "scout_ai_media_literacy_tool_output"
-    assert result.payload["answerability"] == "media_literacy_missing_context"
+    assert result.payload["answerability"] == "media_literacy_decision_available"
+    assert result.payload["source_status"] == "reviewed_media_literacy_context"
     assert result.payload["decision"] == "NO_GO"
     assert result.payload["media_literacy"]["role"] == "Media Literacy / Bias Sentinel"
-    assert "fresh_weather_or_route_condition_review" in result.missing_fields
+    assert result.missing_fields == []
     assert result.payload["boundary"]["runtime_safety_truth"] is False
     assert result.boundary.live_safety_api_calls_allowed is False
 

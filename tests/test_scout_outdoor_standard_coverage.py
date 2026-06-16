@@ -237,7 +237,7 @@ def test_standard_completion_audit_covers_all_sections_and_primary_surfaces() ->
     assert decision_output["cost"]["standardGroupCount"] == 10
     assert decision_output["cost"]["coveredStandardGroupCount"] == 10
     assert decision_output["cost"]["implementationGapToolCount"] == 0
-    assert decision_output["cost"]["contextOrReviewEvidenceGapToolCount"] == 4
+    assert decision_output["cost"]["contextOrReviewEvidenceGapToolCount"] == 3
     assert decision_output["cost"]["uiUxValidationNeeded"] is True
     audit = decision_output["standardGapAudit"]
     assert audit["schema"] == "scout_standard_gap_audit.v0"
@@ -245,7 +245,7 @@ def test_standard_completion_audit_covers_all_sections_and_primary_surfaces() ->
     assert audit["summary"]["standardGroupCount"] == 10
     assert audit["summary"]["coveredStandardGroupCount"] == 10
     assert audit["summary"]["implementationGapToolCount"] == 0
-    assert audit["summary"]["contextOrReviewEvidenceGapToolCount"] == 4
+    assert audit["summary"]["contextOrReviewEvidenceGapToolCount"] == 3
     assert audit["summary"]["uiUxValidationNeeded"] is True
     statuses = {group["status"] for group in audit["groups"]}
     assert "implemented_requires_context_or_review_evidence" in statuses
@@ -254,6 +254,7 @@ def test_standard_completion_audit_covers_all_sections_and_primary_surfaces() ->
     assert "live_navigation_state_required" not in classifications
     assert "wearable_or_energy_vitals_required" not in classifications
     assert "incident_context_required" not in classifications
+    assert "media_claim_and_target_context_required" not in classifications
     assert audit["implementationGaps"] == []
     assert any("UI/UX" in item for item in audit["nextSlices"])
     for label in ("探索力", "自信力", "勇氣力", "路線力", "天氣力", "地圖力"):
@@ -267,7 +268,7 @@ def test_standard_completion_audit_covers_all_sections_and_primary_surfaces() ->
     ):
         assert source_id in result.answer
     assert "缺口分類" in result.answer
-    assert "情境輸入/審核 evidence gap=4" in result.answer
+    assert "情境輸入/審核 evidence gap=3" in result.answer
     assert "不是出發批准或 runtime safety truth" in result.answer
 
 
@@ -654,7 +655,7 @@ def test_media_literacy_product_function_counters_bias_without_permission_leak()
     assert social_photo_result.payload["media_bias_analysis"][
         "target_context_points"
     ][0]["risk_context"] is True
-    assert "fresh_weather_or_route_condition_review" in social_photo_result.missing_fields
+    assert social_photo_result.missing_fields == []
     assert social_photo_result.payload["decision_output"]["action"] in {
         "photo",
         "stop",

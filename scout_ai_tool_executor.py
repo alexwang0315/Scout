@@ -578,6 +578,7 @@ def _execute_ready_current_tool(tool_id: str, arguments: dict[str, Any]) -> dict
         return assess_scout_media_literacy(
             project_root,
             query=query,
+            media_context_path=_str_or_none(arguments.get("media_context_path")),
             media_claim=_str_or_none(arguments.get("media_claim")),
             source_platform=_str_or_none(arguments.get("source_platform")),
             target_context_point=_str_or_none(arguments.get("target_context_point")),

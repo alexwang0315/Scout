@@ -1,0 +1,36 @@
+{
+  "artifact_kind": "media_literacy_context",
+  "artifact_version": "media_literacy_context.v1",
+  "status": "reviewed_media_literacy_context",
+  "candidate_only": true,
+  "runtime_safety_truth": false,
+  "boundary": {
+    "candidate_only": true,
+    "runtime_safety_truth": false,
+    "phase1_l0_l4_state_mutated": false,
+    "safety_api_called": false,
+    "outbound_send_performed": false,
+    "raw_payloads_embedded": false
+  },
+  "media_claim": "IG posts make the Dabenbi collapse-wall viewpoint look like an easy check-in photo stop.",
+  "source_platform": "instagram",
+  "target_context_point": "大崩壁",
+  "route_condition_reviewed": true,
+  "weather_reviewed": true,
+  "user_experience_level": "new_to_similar_routes",
+  "guided_party": false,
+  "remaining_safety_buffer_minutes": 18,
+  "review": {
+    "review_state": "accepted",
+    "human_review_required": false,
+    "reviewed_at": "2026-06-16T13:20:00+08:00",
+    "reviewed_by": "reviewer.planning_admin",
+    "notes": "Reviewed deterministic media literacy context fixture. It supports bias assessment only and does not authorize stopping, rerouting, filming, or runtime safety truth.",
+    "review_ref": "reviews/human_reviews.json#media-literacy-context-placeholder"
+  },
+  "source_refs": [
+    "candidates/route_context_points.json",
+    "outputs/route_weather_package.reviewed.json",
+    "outputs/weather_daylight_evidence.json"
+  ]
+}
