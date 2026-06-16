@@ -15,6 +15,7 @@ from scout_companion_match_models import (
     write_companion_match_review_artifact,
 )
 from scout_energy_models import load_wearable_activity_summaries
+from pretrip_boss_point_synthesis import synthesize_pretrip_boss_points
 from pretrip_admin_view import (
     build_pretrip_admin_view,
     list_pretrip_admin_projects,
@@ -364,7 +365,11 @@ def test_builds_fixture_backed_pretrip_admin_view():
         "total_evidence_count": 6268,
     }
     assert view["scout_agent_skills"]["artifact_kind"] == "scout_agent_skill_registry_summary"
-    assert view["scout_agent_skills"]["counts"]["tool_count"] == 45
+    assert view["scout_agent_skills"]["counts"]["tool_count"] >= 45
+    assert any(
+        tool["id"] == "scout.pretrip.boss_points_synthesize"
+        for tool in view["scout_agent_skills"]["tools"]
+    )
     assert view["scout_agent_skills"]["boundary"]["tool_execution_allowed_from_ui"] is False
     assert view["tabs"]["agent_skills"]["sections"][0]["id"] == "scout_agent_skills"
     assert view["readiness"]["status"] == "ready"
@@ -702,6 +707,7 @@ def test_builds_fixture_backed_pretrip_admin_view():
         "pois",
         "hazards",
         "mcp",
+        "boss-points",
         "route-notes",
         "events",
         "weather-api",
@@ -720,6 +726,12 @@ def test_builds_fixture_backed_pretrip_admin_view():
     mcp_layer = next(layer for layer in view["map_layers"] if layer["layer_id"] == "mcp")
     assert mcp_layer["source_kind"] == "major_critical_point_candidate"
     assert mcp_layer["external_api_calls_made"] is False
+    boss_layer = next(
+        layer for layer in view["map_layers"] if layer["layer_id"] == "boss-points"
+    )
+    assert boss_layer["source_kind"] == "pretrip_boss_point_challenge_fit"
+    assert boss_layer["challenge_fit_layer"] is True
+    assert boss_layer["runtime_safety_truth"] is False
     assert view["tabs"]["pre_trip_planning"]["map_layers"] == view["map_layers"]
     assert view["layer_preparation"]["status"] == "not_prepared"
     assert view["layer_preparation"]["network_policy"]["network_calls_made"] is False
@@ -953,6 +965,102 @@ def test_loads_debug_projection_view_with_shared_map_and_dense_timeline():
     assert checkpoint_event["payload"]["runtime_safety_truth"] is False
     assert segment_event["payload"]["segment_id"].startswith("seg.")
     assert segment_event["payload"]["map_target_ids"]
+
+
+def test_boss_points_challenge_fit_surfaces_in_admin_and_debug(tmp_path: Path):
+    project_root = tmp_path / PROJECT_ID
+    shutil.copytree(
+        ROOT / "tests" / "fixtures" / "pretrip" / "projects" / PROJECT_ID,
+        project_root,
+    )
+    synthesize_pretrip_boss_points(
+        project_root,
+        generated_at="2099-06-07T08:00:00Z",
+    )
+
+    view = build_pretrip_admin_view(
+        PROJECT_ID,
+        root=ROOT,
+        project_root=project_root,
+    )
+
+    boss_points = view["boss_points"]
+    assert boss_points["status"] == "completed"
+    assert boss_points["counts"]["boss_point_count"] == 5
+    assert boss_points["counts"]["geojson_feature_count"] == 5
+    assert boss_points["formula"] == {
+        "route_boss_demand": "sum(component_scores) * late_trip_multiplier",
+        "challenge_fit": (
+            "route_boss_demand_score * (1 + pace_energy_vulnerability)"
+        ),
+        "average_pace_only": False,
+        "raw_health_payload_embedded": False,
+    }
+    assert boss_points["challenge_fit_summary"]["decision"] == (
+        "CHANGE_PLAN_OR_ADD_BUFFER"
+    )
+    assert boss_points["challenge_fit_summary"]["highest_challenge_fit_label"] == (
+        "大崩壁"
+    )
+    assert boss_points["boundary"]["runtime_safety_truth"] is False
+    assert boss_points["boundary"]["phase1_runtime_mutation_allowed"] is False
+    first = boss_points["boss_points"][0]
+    _assert_pretrip_candidate_metadata(first)
+    assert first["label"] == "大崩壁"
+    assert first["display_theme"]["alias"] == "呂布關"
+    assert first["map_coordinate_source"] == "source_coordinate"
+    assert first["coordinate_uncertain"] is False
+    assert first["map_target_ids"][0] == first["boss_point_id"]
+    assert first["display_theme"]["decorative_only"] is True
+    assert first["route_boss_demand"]["score"] > 60
+    assert first["challenge_fit"]["score"] == 100
+    assert first["challenge_fit"]["user_basis"] == (
+        "slowest_member_or_private_energy_reserve"
+    )
+    assert first["challenge_fit"]["energy_factors"]["reserve_band"] == (
+        "rest_suggested"
+    )
+    assert first["source_attribution"][0]["source_kind"] == (
+        "boss_point_challenge_fit"
+    )
+    machao = next(
+        point
+        for point in boss_points["boss_points"]
+        if point["display_theme"]["alias"] == "馬超壁"
+    )
+    assert machao["source_coordinate"] == {"lat": 24.0, "lon": 121.0}
+    assert machao["map_coordinate_source"] == "route_distance_interpolation"
+    assert machao["coordinate_uncertain"] is True
+    assert machao["source_coordinate_out_of_route_bounds"] is True
+    assert 24.03 < machao["lat"] < 24.06
+    assert 121.2 < machao["lon"] < 121.3
+    assert machao["map_target_ids"][0] == machao["boss_point_id"]
+    assert machao["source_mcp_id"] in machao["map_target_ids"]
+
+    planning_sections = {
+        section["id"]: section
+        for section in view["tabs"]["pre_trip_planning"]["sections"]
+    }
+    assert planning_sections["boss_points"]["counts"]["boss_point_count"] == 5
+    assert planning_sections["boss_points"]["summary"]["decision"] == (
+        "CHANGE_PLAN_OR_ADD_BUFFER"
+    )
+
+    debug = load_pretrip_debug_projection_view(
+        PROJECT_ID,
+        root=ROOT,
+        project_root=project_root,
+    )
+    assert debug["counts"]["boss_point_count"] == 5
+    assert debug["boss_points"]["counts"]["boss_point_count"] == 5
+    assert debug["boss_points"]["boss_points"][0]["label"] == "大崩壁"
+    debug_machao = next(
+        point
+        for point in debug["boss_points"]["boss_points"]
+        if point["display_theme"]["alias"] == "馬超壁"
+    )
+    assert debug_machao["map_coordinate_source"] == "route_distance_interpolation"
+    assert debug_machao["source_coordinate"] == {"lat": 24.0, "lon": 121.0}
 
 
 def test_builds_admin_view_from_local_workspace_project_root(tmp_path):

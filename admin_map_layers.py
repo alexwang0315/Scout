@@ -46,6 +46,7 @@ WORKSPACE_LAYER_CONTROL_IDS = (
     "pois",
     "hazards",
     "mcp",
+    "boss-points",
     "route-notes",
     "events",
     "weather-api",
@@ -290,6 +291,15 @@ _LAYER_SPECS: dict[str, AdminMapLayerSpec] = {
         render_mode="svg_overlay",
         source_kind="major_critical_point_candidate",
     ),
+    "boss-points": AdminMapLayerSpec(
+        layer_id="boss-points",
+        label="Boss points",
+        label_zh="魔王點 Challenge Fit 圖層",
+        layer_kind="evidence",
+        z_index=81,
+        render_mode="svg_overlay",
+        source_kind="pretrip_boss_point_challenge_fit",
+    ),
     "events": AdminMapLayerSpec(
         layer_id="events",
         label="Ln events",
@@ -392,6 +402,10 @@ def build_pretrip_map_layers(
         "pois": ("pretrip.map_layer.pois", source_refs.get("map_candidates")),
         "route-notes": ("pretrip.map_layer.route_notes", source_refs.get("route_notes")),
         "mcp": ("pretrip.map_layer.mcp", source_refs.get("mcp_candidates")),
+        "boss-points": (
+            "pretrip.map_layer.boss_points",
+            source_refs.get("boss_points_geojson") or source_refs.get("boss_points"),
+        ),
         "events": ("pretrip.map_layer.events", source_refs.get("debug_projection_events")),
         "weather-api": (
             str(weather.get("source_id") or "pretrip.map_layer.weather_api"),
@@ -407,6 +421,7 @@ def build_pretrip_map_layers(
             "risk-heatmap": bool(sources["risk-heatmap"][1]),
             "risk-delta": bool(sources["risk-delta"][1]),
             "overpass": bool(sources["overpass"][1]),
+            "boss-points": bool(sources["boss-points"][1]),
             "events": bool(sources["events"][1]),
         },
         external_api_calls_made={
@@ -456,6 +471,7 @@ def build_after_action_map_layers(
         "pois": ("after_action.map_layer.pois", map_source_path),
         "route-notes": ("after_action.map_layer.route_notes", None),
         "mcp": ("after_action.map_layer.mcp", None),
+        "boss-points": ("after_action.map_layer.boss_points", None),
         "terrain": ("after_action.map_layer.terrain", None),
         "events": ("after_action.map_layer.events", incident_store_path),
         "weather-api": ("after_action.map_layer.weather_api", None),
@@ -473,6 +489,7 @@ def build_after_action_map_layers(
             "retreat": False,
             "route-notes": False,
             "mcp": False,
+            "boss-points": False,
             "weather-api": False,
         },
         default_enabled={
@@ -656,6 +673,16 @@ def _layer_renderer_contract(layer_id: str) -> dict[str, Any]:
             ],
             "contour_interval_m": 100.0,
             "runtime_safety_truth": False,
+        }
+    if layer_id == "boss-points":
+        return {
+            "challenge_fit_layer": True,
+            "route_boss_demand_layer": True,
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+            "uses_average_team_pace": False,
+            "raw_health_payload_embedded": False,
+            "geojson_ref_key": "boss_points_geojson_ref",
         }
     if layer_id == "weather-api":
         return {

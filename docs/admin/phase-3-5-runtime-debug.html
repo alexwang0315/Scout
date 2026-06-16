@@ -156,8 +156,8 @@
     }
 
     .panel-head .debug-button {
-      min-height: 24px;
-      padding: 2px 7px;
+      min-height: 26px;
+      padding: 3px 8px;
       font-size: 11px;
     }
 
@@ -208,19 +208,19 @@
     }
 
     .tool-button {
-      min-height: 22px;
+      min-height: 28px;
       border: 1px solid var(--border);
       border-radius: 6px;
       background: var(--panel);
       color: var(--text);
-      padding: 1px 6px;
+      padding: 4px 8px;
       cursor: pointer;
       font: inherit;
       font-size: 11px;
     }
 
     .tool-button.compact {
-      min-width: 26px;
+      min-width: 28px;
       padding-left: 0;
       padding-right: 0;
     }
@@ -246,11 +246,11 @@
       position: relative;
       width: fit-content;
       max-width: 100%;
-      z-index: 60;
+      z-index: 80;
     }
 
     .layer-menu summary {
-      min-height: 22px;
+      min-height: 28px;
       display: inline-flex;
       align-items: center;
       gap: 5px;
@@ -258,7 +258,7 @@
       border-radius: 6px;
       background: var(--panel);
       color: var(--text);
-      padding: 1px 6px;
+      padding: 3px 8px;
       cursor: pointer;
       font-size: 11px;
       list-style: none;
@@ -285,7 +285,7 @@
     .layer-menu-panel {
       position: absolute;
       top: calc(100% + 4px);
-      left: 0;
+      right: 0;
       width: min(360px, calc(100vw - 24px));
       max-height: min(300px, calc(100vh - 150px));
       overflow: auto;
@@ -294,7 +294,15 @@
       background: var(--surface);
       padding: 6px;
       box-shadow: 0 18px 42px rgba(0, 0, 0, .28);
-      z-index: 20;
+      z-index: 90;
+    }
+
+    .layer-menu:not([open]) .layer-menu-panel {
+      display: none;
+    }
+
+    .layer-menu[open] .layer-menu-panel {
+      display: block;
     }
 
     .layer-menu-header {
@@ -313,6 +321,48 @@
       font-weight: 700;
       letter-spacing: .03em;
     }
+    .layer-preset-row {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 5px;
+      margin-bottom: 7px;
+    }
+    .layer-preset-button {
+      min-height: 28px;
+      display: flex;
+      align-items: center;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--panel);
+      color: var(--text);
+      padding: 4px 6px;
+      font-size: 11px;
+      font-weight: 700;
+      text-align: left;
+      cursor: pointer;
+    }
+    .layer-preset-button.is-active {
+      border-color: var(--info);
+      background: rgba(74, 163, 255, .16);
+      color: var(--info);
+    }
+    .layer-advanced {
+      border-top: 1px solid var(--border);
+      padding-top: 6px;
+    }
+    .layer-advanced summary {
+      border: 0;
+      background: transparent;
+      padding: 4px 0 6px;
+      min-height: 28px;
+      width: max-content;
+      max-width: 100%;
+      box-sizing: border-box;
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
 
     .filters {
       display: grid;
@@ -326,11 +376,11 @@
       display: inline-flex;
       align-items: center;
       gap: 3px;
-      min-height: 19px;
+      min-height: 28px;
       border: 1px solid var(--border);
       border-radius: 5px;
       background: var(--panel);
-      padding: 0 4px;
+      padding: 4px 6px;
       white-space: nowrap;
     }
 
@@ -348,7 +398,8 @@
     }
 
     .map-pan-controls .tool-button {
-      min-height: 20px;
+      min-height: 28px;
+      min-width: 28px;
       padding: 0;
       line-height: 1;
     }
@@ -386,6 +437,8 @@
       display: grid;
       grid-template-rows: auto minmax(0, 1fr);
       min-height: 0;
+      position: relative;
+      z-index: 1;
     }
 
     .timeline-panel .panel-body {
@@ -405,6 +458,8 @@
       display: grid;
       grid-template-rows: auto auto minmax(0, 1fr);
       min-height: 0;
+      position: relative;
+      z-index: 1;
     }
 
     .map-panel {
@@ -412,6 +467,8 @@
       display: grid;
       grid-template-rows: auto minmax(0, 1fr);
       min-height: 0;
+      position: relative;
+      z-index: 20;
     }
 
     .map-panel .panel-body {
@@ -446,9 +503,15 @@
       min-width: 0;
     }
 
+    .panel-head > .pill {
+      flex: 0 1 auto;
+      min-width: 0;
+    }
+
     .panel-title {
       display: grid;
       gap: 1px;
+      flex: 1 1 auto;
       min-width: 0;
     }
 
@@ -472,9 +535,12 @@
     }
 
     .tab {
+      min-height: 28px;
+      display: inline-flex;
+      align-items: center;
       border: 1px solid var(--border);
       border-radius: 999px;
-      padding: 3px 7px;
+      padding: 4px 8px;
       color: var(--muted);
       background: rgba(255, 255, 255, 0.03);
       font-size: 11px;
@@ -535,9 +601,10 @@
       margin-top: 1px;
       font-size: 11px;
       line-height: 1.22;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
+      white-space: normal;
+      overflow: visible;
+      text-overflow: clip;
+      overflow-wrap: anywhere;
     }
 
     .grid {
@@ -564,7 +631,9 @@
       display: block;
       margin-top: 2px;
       font-size: 16px;
-      overflow-wrap: anywhere;
+      line-height: 1.22;
+      overflow-wrap: break-word;
+      word-break: normal;
     }
 
     .levels {
@@ -662,6 +731,119 @@
       box-shadow: inset 0 0 0 1px rgba(111, 168, 220, 0.32);
     }
 
+    .timeline-node > .hint,
+    .timeline-node > .summary {
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+      overflow: hidden;
+    }
+
+    .timeline-node > .summary.mono {
+      display: block;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .timeline-node.timeline-child > .hint,
+    .timeline-node.timeline-child > .summary:not(.mono) {
+      -webkit-line-clamp: 1;
+    }
+
+    .timeline-node.is-selected > .summary:not(.mono) {
+      -webkit-line-clamp: 3;
+    }
+
+    .timeline-group {
+      display: grid;
+      gap: 7px;
+    }
+
+    .timeline-group + .timeline-group {
+      margin-top: 8px;
+    }
+
+    .timeline-group-summary {
+      border-color: rgba(111, 168, 220, 0.36);
+      background: rgba(111, 168, 220, 0.06);
+    }
+
+    .timeline-group-summary .item-line {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 4px;
+    }
+
+    .timeline-group-summary h3 {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .timeline-group-summary .timeline-meta {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-start;
+      max-width: none;
+      gap: 4px;
+    }
+
+    .timeline-group-summary > .hint,
+    .timeline-group-summary > .summary.mono {
+      display: none;
+    }
+
+    .timeline-group-summary > .summary:not(.mono) {
+      -webkit-line-clamp: 1;
+    }
+
+    .timeline-group-count {
+      display: inline-flex;
+      align-items: center;
+      min-height: 18px;
+      border: 1px solid rgba(111, 168, 220, 0.5);
+      border-radius: 999px;
+      padding: 1px 7px;
+      color: var(--info);
+      background: rgba(111, 168, 220, 0.1);
+      font-size: 11px;
+      white-space: nowrap;
+    }
+
+    .timeline-group-details {
+      margin-left: 8px;
+      padding-left: 9px;
+      border-left: 1px solid rgba(111, 168, 220, 0.28);
+      color: var(--muted);
+    }
+
+    .timeline-group-details summary {
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      width: fit-content;
+      padding: 4px 0;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .timeline-group-children {
+      display: grid;
+      gap: 6px;
+      margin-top: 6px;
+    }
+
+    .timeline-group-details:not([open]) > .timeline-group-children {
+      display: none;
+    }
+
+    .timeline-child {
+      padding: 7px 8px;
+      background: rgba(255, 255, 255, 0.025);
+    }
+
     .item-line {
       display: grid;
       grid-template-columns: minmax(0, 1fr) auto;
@@ -716,6 +898,70 @@
       color: var(--muted);
       overflow-wrap: anywhere;
       max-width: 100%;
+    }
+
+    .hardware-detail-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+      gap: 6px;
+      margin-top: 7px;
+      min-width: 0;
+    }
+
+    .hardware-detail-chip,
+    .hardware-line-chip {
+      min-width: 0;
+      border: 1px solid rgba(168, 179, 191, 0.24);
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.035);
+      padding: 5px 7px;
+      overflow-wrap: anywhere;
+    }
+
+    .hardware-detail-chip span,
+    .hardware-line-chip span {
+      display: block;
+      color: var(--muted);
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .hardware-detail-chip strong,
+    .hardware-line-chip strong {
+      display: block;
+      margin-top: 1px;
+      color: var(--text);
+      font-size: 12px;
+      line-height: 1.25;
+    }
+
+    .hardware-line-chip-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 7px;
+      min-width: 0;
+    }
+
+    .hardware-line-chip {
+      flex: 1 1 88px;
+      max-width: 124px;
+    }
+
+    .hardware-line-chip.is-rw {
+      border-color: rgba(119, 184, 106, 0.46);
+    }
+
+    .hardware-line-chip.is-fixed {
+      border-color: rgba(225, 173, 80, 0.45);
+    }
+
+    .hardware-line-chip.is-more {
+      flex: 0 0 auto;
+      color: var(--muted);
+      align-content: center;
     }
 
     .ingress-memo {
@@ -804,7 +1050,7 @@
       width: 100%;
       aspect-ratio: 16 / 9;
       min-height: 260px;
-      background: #fbfcfe;
+      background: #111820;
       cursor: crosshair;
       touch-action: none;
       user-select: none;
@@ -1016,7 +1262,7 @@
     .route-line {
       fill: none;
       stroke: var(--route);
-      stroke-width: 4;
+      stroke-width: 2.5;
       stroke-linecap: round;
       stroke-linejoin: round;
       vector-effect: non-scaling-stroke;
@@ -1035,7 +1281,7 @@
     .segment-overlay {
       fill: none;
       stroke: var(--segment);
-      stroke-width: 7;
+      stroke-width: 4;
       stroke-linecap: round;
       stroke-linejoin: round;
       opacity: .28;
@@ -1065,6 +1311,17 @@
     .mcp-candidate.is-review-required {
       stroke: var(--warning);
       stroke-width: 3;
+    }
+    .boss-point {
+      fill: #ef4444;
+      stroke: #fff;
+      stroke-width: 2.2;
+      opacity: .94;
+      vector-effect: non-scaling-stroke;
+    }
+    .boss-point.is-not-ready {
+      stroke: #111827;
+      stroke-width: 2.8;
     }
     .poi,
     .overpass-poi {
@@ -1100,7 +1357,7 @@
     .risk-score-point.risk-l5 { fill: #9b2c2c; }
     .risk-ribbon {
       fill: none;
-      stroke-width: 7;
+      stroke-width: 4;
       stroke-linecap: round;
       stroke-linejoin: round;
       opacity: .48;
@@ -1114,7 +1371,7 @@
     .risk-ribbon-extreme { stroke: var(--risk-extreme); }
     .risk-heatmap {
       fill: none;
-      stroke-width: 10;
+      stroke-width: 5.5;
       stroke-linecap: round;
       stroke-linejoin: round;
       opacity: .72;
@@ -1142,23 +1399,28 @@
     .risk-delta-aligned_high { stroke: #7f1d1d; }
     .risk-delta-minor_shift { stroke: #64748b; }
     .risk-delta-aligned { stroke: #94a3b8; opacity: .28; }
+    .soil-moisture-point { fill: #2563eb; stroke: #eff6ff; stroke-width: 2; opacity: .82; }
+    .antecedent-rain-point { fill: #0f766e; stroke: #ecfeff; stroke-width: 2; opacity: .82; }
+    .antecedent-rain-point.rain-high { fill: #d6a800; stroke: #fff7ed; }
+    .antecedent-rain-point.rain-extreme { fill: #dc2626; stroke: #fff1f2; }
 
     .map-highlight {
       opacity: 1 !important;
       stroke: var(--info) !important;
-      stroke-width: 5 !important;
-      filter: drop-shadow(0 0 8px rgba(111, 168, 220, 0.88));
+      stroke-width: 4 !important;
+      filter: drop-shadow(0 0 5px rgba(111, 168, 220, 0.72));
+      vector-effect: non-scaling-stroke;
     }
 
     circle.map-highlight,
     rect.map-highlight {
       fill: var(--info) !important;
       stroke: #ffffff !important;
-      stroke-width: 3 !important;
+      stroke-width: 2 !important;
     }
 
     path.map-highlight {
-      stroke-width: 10 !important;
+      stroke-width: 4.5 !important;
     }
 
     .map-legend {
@@ -1232,13 +1494,16 @@
     .assistant-drawer .assistant-panel {
       border: 0;
       border-radius: 0;
+      height: 100%;
+      min-height: 0;
+      overflow: hidden;
     }
 
     .assistant-body {
       display: grid;
       gap: 10px;
       min-height: 0;
-      max-height: min(540px, calc(100vh - 112px));
+      max-height: none;
       overflow-y: auto;
       padding-right: 2px;
     }
@@ -1377,13 +1642,25 @@
     }
 
     @media (max-width: 1120px) {
+      body {
+        height: auto;
+        min-height: 100vh;
+        overflow: auto;
+      }
+
+      .shell {
+        grid-template-rows: auto auto;
+        height: auto;
+        min-height: 100vh;
+      }
+
       main {
         grid-template-columns: 1fr;
         grid-template-rows: auto auto auto auto;
         grid-template-areas:
-          "timeline"
           "map"
           "details"
+          "timeline"
           "assistant";
         height: auto;
         overflow: auto;
@@ -1397,24 +1674,127 @@
         display: block;
       }
 
+      .details-panel,
+      .map-panel {
+        display: block;
+        height: auto;
+      }
+
+      .details-panel .panel-head,
+      .map-panel .panel-head {
+        align-items: flex-start;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .details-panel .panel-head {
+        grid-template-columns: minmax(0, 1fr);
+      }
+
+      #runtimeProfile,
+      #selectedMapTarget {
+        justify-self: start;
+        max-width: 100%;
+      }
+
+      .tab-list {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+        padding: 8px;
+      }
+
+      .tab {
+        justify-content: center;
+        min-width: 0;
+      }
+
+      .tab-panels {
+        overflow: visible;
+      }
+
+      .map-panel .panel-body {
+        display: block;
+        overflow: visible;
+      }
+
+      .map-wrap {
+        margin-top: 8px;
+      }
+
+      .map-panel {
+        min-height: 0;
+      }
+
+      .map-panel #runtimeMap {
+        height: auto;
+        min-height: 0;
+        aspect-ratio: 1000 / 720;
+      }
+
+      .layer-menu-panel {
+        position: fixed;
+        top: 120px;
+        left: 12px;
+        right: 12px;
+        width: auto;
+        max-height: calc(100vh - 140px);
+      }
+
       .timeline-panel .panel-body {
         overflow: visible;
         scrollbar-gutter: auto;
+      }
+      .timeline-node > .hint,
+      .timeline-node > .summary,
+      .timeline-node > .summary.mono,
+      .timeline-group-summary > .summary:not(.mono) {
+        display: block;
+        white-space: normal;
+        overflow: visible;
+        text-overflow: clip;
+        -webkit-line-clamp: unset;
+        overflow-wrap: anywhere;
+      }
+      .timeline-group-summary h3 {
+        white-space: normal;
+        overflow: visible;
+        text-overflow: clip;
+        overflow-wrap: anywhere;
+        line-height: 1.25;
+      }
+      .assistant-field,
+      .assistant-answer,
+      .assistant-limitations,
+      .assistant-sources,
+      .assistant-list,
+      .assistant-list li {
+        min-width: 0;
+        max-width: 100%;
+        overflow-wrap: anywhere;
+      }
+      .assistant-list li {
+        word-break: break-word;
+      }
+      .assistant-body {
+        overflow-x: hidden;
+      }
+      .pill,
+      .assistant-body .pill {
+        white-space: normal;
+        overflow: visible;
+        text-overflow: clip;
+        border-radius: 6px;
       }
       .assistant-drawer {
         max-height: min(760px, calc(100vh - 24px));
         overflow: hidden;
       }
       .assistant-body {
-        max-height: min(680px, calc(100vh - 112px));
+        max-height: none;
         overflow-y: auto;
       }
       header { grid-template-columns: 1fr; }
       .boundary { justify-self: start; text-align: left; }
-
-      .map-panel #runtimeMap {
-        height: clamp(260px, 60vh, 520px);
-      }
     }
   </style>
 </head>
@@ -1771,7 +2151,16 @@
                       <span>Layers</span>
                       <small>debug evidence</small>
                     </div>
-                    <div class="filters" aria-label="Map layers">
+                    <div class="layer-preset-row" aria-label="Layer presets">
+                      <button class="layer-preset-button" type="button" data-layer-preset="risk-review">Risk Review</button>
+                      <button class="layer-preset-button" type="button" data-layer-preset="mcp-review">MCP Review</button>
+                      <button class="layer-preset-button" type="button" data-layer-preset="route-clean">Route Clean</button>
+                      <button class="layer-preset-button" type="button" data-layer-preset="debug-replay">Debug Replay</button>
+                      <button class="layer-preset-button" type="button" data-layer-preset="raster-check">Raster Check</button>
+                    </div>
+                    <details class="layer-advanced">
+                      <summary>Advanced layers</summary>
+                    <div class="filters" aria-label="Advanced map layers">
                       <label title="Imagery layer"><input type="checkbox" data-layer="imagery" checked> Imagery</label>
                       <label title="Rudy Map hiking topographic layer"><input type="checkbox" data-layer="rudy"> Rudy</label>
                       <label title="Rudy Map with TWMap style"><input type="checkbox" data-layer="rudy-twmap"> Rudy+TW</label>
@@ -1785,6 +2174,8 @@
                       <label title="Route-aligned baseline terrain risk layer"><input type="checkbox" data-layer="risk-ribbon" checked> Baseline</label>
                       <label title="Route-specific calibrated heat map"><input type="checkbox" data-layer="risk-heatmap" checked> Calibrated</label>
                       <label title="Difference between baseline risk and calibrated heat"><input type="checkbox" data-layer="risk-delta"> Delta</label>
+                      <label title="SMAP L4 soil moisture hydrology context"><input type="checkbox" data-layer="soil-moisture"> Soil H2O</label>
+                      <label title="GPM IMERG antecedent rain context"><input type="checkbox" data-layer="antecedent-rain"> Rain</label>
                       <label title="Corridor layer"><input type="checkbox" data-layer="corridors" checked> Corridors</label>
                       <label title="Overpass evidence layer"><input type="checkbox" data-layer="overpass"> Overpass</label>
                       <label title="Route layer"><input type="checkbox" data-layer="route" checked> Route</label>
@@ -1795,10 +2186,12 @@
                       <label title="Point-of-interest layer"><input type="checkbox" data-layer="pois" checked> POI</label>
                       <label title="Hazard layer"><input type="checkbox" data-layer="hazards" checked> Hazards</label>
                       <label title="Major Critical Point layer"><input type="checkbox" data-layer="mcp" checked> MCP</label>
+                      <label title="Route Boss Demand vs Energy Reserve Challenge Fit layer"><input type="checkbox" data-layer="boss-points" checked> Boss</label>
                       <label title="Route note layer"><input type="checkbox" data-layer="route-notes"> Notes</label>
                       <label title="Runtime/event evidence layer"><input type="checkbox" data-layer="events" checked> Ln</label>
                       <label title="Weather API layer"><input type="checkbox" data-layer="weather-api"> Weather</label>
                     </div>
+                    </details>
                   </div>
                 </details>
                 <div class="map-pan-controls" aria-label="Map pan controls">
@@ -1952,8 +2345,8 @@
     const MAP_VISUAL_PADDING = 56;
     const MAP_MIN_ZOOM = 0.6;
     const MAP_MAX_ZOOM = 12000;
-    const FOCUS_POINT_VIEWPORT_M = 1000;
-    const POINT_LABEL_VIEWPORT_M = 30;
+    const FOCUS_POINT_VIEWPORT_M = 50;
+    const POINT_LABEL_VIEWPORT_M = 50;
     const POINT_LABEL_FONT_PX = 4;
     const POINT_LABEL_STROKE_PX = 0.6;
     const POINT_LABEL_OFFSET_PX = 3;
@@ -1994,12 +2387,22 @@
     ];
     const RASTER_SOURCE_LAYER_BY_ID = Object.fromEntries(RASTER_SOURCE_LAYER_DEFINITIONS.map(layer => [layer.layerId, layer]));
     const RASTER_OVERLAY_LAYER_DEFINITIONS = RASTER_SOURCE_LAYER_DEFINITIONS.filter(layer => layer.layerId !== "imagery");
+    const RASTER_BASEMAP_LAYER_IDS = new Set([...RASTER_SOURCE_LAYER_DEFINITIONS.map(layer => layer.layerId), "osm"]);
+    const LAYER_PRESETS = {
+      "risk-review": ["imagery", "osm", "route", "segments", "checkpoints", "risk-score", "risk-ribbon", "risk-heatmap", "risk-delta", "soil-moisture", "antecedent-rain", "mcp", "boss-points"],
+      "mcp-review": ["imagery", "osm", "route", "checkpoints", "mcp", "boss-points", "route-notes", "pois", "hazards", "overpass"],
+      "route-clean": ["imagery", "osm", "route", "reference-tracks", "retreat", "segments", "checkpoints"],
+      "debug-replay": ["imagery", "osm", "route", "reference-tracks", "segments", "checkpoints", "events", "overpass", "soil-moisture", "antecedent-rain", "mcp", "boss-points"],
+      "raster-check": ["imagery", "rudy", "rudy-twmap", "relief", "geology", "topo-5k", "forest", "osm", "route"]
+    };
     const LEVELS = ["L0", "L1", "L2", "L3", "L4"];
     const STATUS_BAD = new Set(["degraded", "failed", "unavailable", "offline", "error"]);
+    const DENSE_TIMELINE_GROUP_KINDS = new Set(["checkpoint_detected", "route_progress_evaluated", "gis_perception_checkpoint_projected"]);
     const DEBUG_TAB_IDS = ["panel-state", "panel-monitor", "panel-provider", "panel-hardware", "panel-ingress", "panel-incident", "panel-skill", "panel-outbound", "panel-boundary", "panel-api"];
     const debugPageState = {
       events: [],
       chronologicalEvents: [],
+      timelineGroups: [],
       selectedEventId: "",
       selectedTabId: "panel-state",
       runtimeState: {},
@@ -2021,7 +2424,7 @@
       debug_session_started: ["runtime"],
       debug_session_completed: ["runtime"],
       observation_ingested: ["observation", "route-progress"],
-      route_progress_evaluated: ["route-progress", "route"],
+      route_progress_evaluated: ["route-progress", "route", "segment"],
       recording_policy_selected: ["runtime"],
       checkpoint_detected: ["checkpoint", "route-progress"],
       progress_update_recorded: ["route-progress", "observation"],
@@ -2353,6 +2756,30 @@
       const y = MAP_HEIGHT - pad - ((lat - bounds.south) / latSpan) * (MAP_HEIGHT - pad * 2);
       return [x, y];
     }
+    function coordinateFromMapPointForBounds(bounds, x, y) {
+      const pad = MAP_VISUAL_PADDING;
+      const drawableWidth = Math.max(MAP_WIDTH - pad * 2, 1);
+      const drawableHeight = Math.max(MAP_HEIGHT - pad * 2, 1);
+      const lonSpan = Math.max(bounds.east - bounds.west, 0.000001);
+      const latSpan = Math.max(bounds.north - bounds.south, 0.000001);
+      return {
+        lat: clamp(bounds.north - ((y - pad) / drawableHeight) * latSpan, bounds.south, bounds.north),
+        lon: clamp(bounds.west + ((x - pad) / drawableWidth) * lonSpan, bounds.west, bounds.east)
+      };
+    }
+    function visibleBoundsForProjection(projection) {
+      if (!projection?.route?.bounds) return null;
+      const bounds = boundsForProjection(projection);
+      const box = mapViewportBox();
+      const nw = coordinateFromMapPointForBounds(bounds, box.minX, box.minY);
+      const se = coordinateFromMapPointForBounds(bounds, box.minX + box.width, box.minY + box.height);
+      return {
+        north: Math.max(nw.lat, se.lat),
+        south: Math.min(nw.lat, se.lat),
+        west: Math.min(nw.lon, se.lon),
+        east: Math.max(nw.lon, se.lon)
+      };
+    }
 
     function pathFromCoords(bounds, coords) {
       return (coords || []).map((point, index) => {
@@ -2483,20 +2910,57 @@
       }
       return tiles;
     }
+    function parentTileFor(tile, minZoom = OSM_MIN_ZOOM) {
+      if (!tile || tile.z <= minZoom) return null;
+      const z = tile.z - 1;
+      const x = Math.floor(tile.x / 2);
+      const y = Math.floor(tile.y / 2);
+      return {
+        z, x, y,
+        west: tileXToLon(x, z),
+        east: tileXToLon(x + 1, z),
+        north: tileYToLat(y, z),
+        south: tileYToLat(y + 1, z)
+      };
+    }
+    function positionTileImage(image, bounds, tile) {
+      const [x1, y1] = projectPoint(bounds, tile.north, tile.west);
+      const [x2, y2] = projectPoint(bounds, tile.south, tile.east);
+      image.setAttribute("x", Math.min(x1, x2).toFixed(2));
+      image.setAttribute("y", Math.min(y1, y2).toFixed(2));
+      image.setAttribute("width", Math.abs(x2 - x1).toFixed(2));
+      image.setAttribute("height", Math.abs(y2 - y1).toFixed(2));
+    }
+    function attachTileFallback(image, bounds, tile, hrefForTile, minZoom, dataAttribute) {
+      let fallbackTile = parentTileFor(tile, minZoom);
+      image.addEventListener("error", () => {
+        if (!fallbackTile) return;
+        const tileForRetry = fallbackTile;
+        fallbackTile = parentTileFor(tileForRetry, minZoom);
+        positionTileImage(image, bounds, tileForRetry);
+        image.setAttribute("href", hrefForTile(tileForRetry));
+        if (dataAttribute) image.setAttribute(dataAttribute, `${tileForRetry.z}/${tileForRetry.x}/${tileForRetry.y}`);
+      });
+    }
 
     function rasterTileCoverage(projection, bounds, zoom = null, layerId = "imagery") {
-      const z = zoom ?? chooseRasterZoom(projection, bounds, layerId);
+      const range = rasterZoomRangeFor(projection, layerId);
+      const preferredZoom = zoom ?? chooseRasterZoom(projection, bounds, layerId);
       const rasterBounds = rasterBoundsFor(projection, layerId);
-      return tileCoverage(bounds, z)
-        .filter(tile => boundsIntersect(tile, rasterBounds))
-        .map(tile => ({
-          ...tile,
-          href: rasterTileUrl(projection, layerId, tile.z, tile.x, tile.y)
-        }));
+      for (let z = preferredZoom; z >= range.min; z -= 1) {
+        const tiles = tileCoverage(bounds, z)
+          .filter(tile => boundsIntersect(tile, rasterBounds))
+          .map(tile => ({
+            ...tile,
+            href: rasterTileUrl(projection, layerId, tile.z, tile.x, tile.y)
+          }));
+        if (tiles.length || z === range.min) return tiles;
+      }
+      return [];
     }
 
     function attachMapEvidence(node, item, mapRef = "") {
-      const id = item?.source_id || item?.candidate_id || item?.segment_id || item?.checkpoint_id || "";
+      const id = item?.boss_point_id || item?.source_mcp_id || item?.source_candidate_id || item?.source_id || item?.candidate_id || item?.segment_id || item?.checkpoint_id || "";
       if (id) node.setAttribute("data-source-id", id);
       node.setAttribute("data-map-ref", mapRef || id || item?.evidence_type || "evidence");
       node.setAttribute("data-map-hover", "true");
@@ -2573,9 +3037,17 @@
       const minY = (MAP_HEIGHT - height) / 2 + debugPageState.panY;
       return `${minX.toFixed(2)} ${minY.toFixed(2)} ${width.toFixed(2)} ${height.toFixed(2)}`;
     }
+    function mapViewportBox() {
+      const width = MAP_WIDTH / debugPageState.zoom;
+      const height = MAP_HEIGHT / debugPageState.zoom;
+      const minX = (MAP_WIDTH - width) / 2 + debugPageState.panX;
+      const minY = (MAP_HEIGHT - height) / 2 + debugPageState.panY;
+      return {minX, minY, width, height};
+    }
 
     function applyMapViewport() {
       runtimeMap.setAttribute("viewBox", mapViewBox());
+      syncRasterBasemapLayers();
       syncMapMarkerScale();
       updatePointLabels();
       updateMapZoomIndicator();
@@ -2588,12 +3060,46 @@
       node.textContent = extraLabel ? `${zoomText} ${extraLabel}` : zoomText;
       node.title = "Map zoom; rectangle drag zoom is active.";
     }
+    function mapStrokeWidthPx(node, scale) {
+      let base = 1.2;
+      if (node.classList.contains("route-line")) base = 2.2;
+      if (node.classList.contains("segment-overlay")) base = 3.2;
+      if (node.classList.contains("corridor")) base = 2.8;
+      if (node.classList.contains("retreat-line")) base = 1.8;
+      if (node.classList.contains("reference-track")) base = 1.2;
+      if (node.classList.contains("overpass-corridor")) base = 2.2;
+      if (node.classList.contains("risk-ribbon")) base = 3.0;
+      if (node.classList.contains("risk-heatmap")) base = 3.8;
+      if (node.classList.contains("risk-delta")) base = 2.6;
+      if (node.classList.contains("map-highlight")) base = Math.min(base, 2.4);
+      const factor = scale >= 128 ? 0.42 : scale >= 64 ? 0.55 : scale >= 32 ? 0.7 : 1;
+      return Math.max(0.8, base * factor);
+    }
+    function mapMarkerRadiusPx(circle, scale, baseRadius) {
+      let radius = Math.max(1.8, baseRadius);
+      if (circle.classList.contains("risk-score-point")) radius = Math.min(radius, 2.4);
+      if (circle.classList.contains("checkpoint")) radius = Math.min(radius, 4.2);
+      if (circle.classList.contains("mcp-candidate") || circle.classList.contains("boss-point")) radius = Math.min(radius, 4.8);
+      if (circle.classList.contains("map-highlight")) radius = Math.max(radius, 4.4);
+      if (scale >= 128) radius = Math.min(radius, 2.4);
+      else if (scale >= 64) radius = Math.min(radius, 3.0);
+      else if (scale >= 32) radius = Math.min(radius, 3.6);
+      return Math.max(1.4, radius);
+    }
     function syncMapMarkerScale() {
       const scale = Math.max(debugPageState.zoom, 1);
+      runtimeMap.querySelectorAll("path,line,polyline,polygon,rect,circle").forEach(node => {
+        node.setAttribute("vector-effect", "non-scaling-stroke");
+        const strokeWidth = mapStrokeWidthPx(node, scale);
+        const priority = node.classList.contains("map-highlight") ? "important" : "";
+        node.style.setProperty("stroke-width", `${strokeWidth.toFixed(2)}px`, priority);
+      });
       runtimeMap.querySelectorAll("circle").forEach(circle => {
         if (!circle.dataset.baseRadius) circle.dataset.baseRadius = circle.getAttribute("r") || "4";
         const baseRadius = Number(circle.dataset.baseRadius);
-        if (Number.isFinite(baseRadius)) circle.setAttribute("r", Math.max(baseRadius / scale, 0.001));
+        if (Number.isFinite(baseRadius)) {
+          circle.setAttribute("r", Math.max(mapMarkerRadiusPx(circle, scale, baseRadius) / scale, 0.001).toFixed(4));
+        }
       });
     }
 
@@ -2612,13 +3118,8 @@
     }
 
     function zoomMap(direction) {
-      const [minX, minY, width, height] = mapViewBox().split(/\s+/).map(Number);
-      const centerX = minX + width / 2;
-      const centerY = minY + height / 2;
       const nextZoom = direction > 0 ? debugPageState.zoom * MAP_ZOOM_STEP_FACTOR : debugPageState.zoom / MAP_ZOOM_STEP_FACTOR;
       debugPageState.zoom = Math.max(MAP_MIN_ZOOM, Math.min(MAP_MAX_ZOOM, nextZoom));
-      debugPageState.panX = centerX - MAP_WIDTH / 2;
-      debugPageState.panY = centerY - MAP_HEIGHT / 2;
       applyMapViewport();
       highlightMapForEvent(selectedMapEvent());
     }
@@ -2636,10 +3137,19 @@
       return normalized >= 5 ? "risk-l5" : normalized >= 4 ? "risk-l4" : normalized >= 3 ? "risk-l3" : normalized >= 2 ? "risk-l2" : "risk-l1";
     }
 
+    function hydrologyRainClass(point) {
+      const value = Number(point?.last_3h_mm ?? point?.precipitation_mm ?? point?.precipitation ?? 0);
+      if (value >= 80) return "rain-extreme";
+      if (value >= 30) return "rain-high";
+      return "";
+    }
+
     function updateLayers() {
       const layerInputs = [...document.querySelectorAll("[data-layer]")];
+      syncRasterBasemapLayers();
       layerInputs.forEach(input => {
         const group = runtimeMap.querySelector(`[data-layer-group="${input.dataset.layer}"]`);
+        if (group && !input.checked && RASTER_BASEMAP_LAYER_IDS.has(input.dataset.layer)) group.replaceChildren();
         if (group) group.dataset.layerHidden = input.checked ? "false" : "true";
       });
       const summary = document.getElementById("layerEnabledCount");
@@ -2649,32 +3159,94 @@
       }
       updatePointLabels();
       highlightMapForEvent(selectedMapEvent());
+      syncLayerPresetButtons();
     }
 
-    function appendRasterLayer(group, projection, bounds, kind) {
+    function layerInputChecked(layerId) {
+      const input = document.querySelector(`input[data-layer="${selectorValue(layerId)}"]`);
+      return !input || input.checked;
+    }
+
+    function syncRasterBasemapLayers(projection = debugPageState.projection) {
+      if (!projection?.route?.bounds) return;
+      const bounds = boundsForProjection(projection);
+      const coverageBounds = visibleBoundsForProjection(projection) || bounds;
+      RASTER_BASEMAP_LAYER_IDS.forEach(layerId => {
+        const group = runtimeMap.querySelector(`[data-layer-group="${selectorValue(layerId)}"]`);
+        if (!group) return;
+        group.replaceChildren();
+        if (layerInputChecked(layerId)) appendRasterLayer(group, projection, bounds, layerId, coverageBounds);
+      });
+    }
+
+    function checkedLayerIds() {
+      return new Set([...document.querySelectorAll("[data-layer]")].filter(input => input.checked).map(input => input.dataset.layer));
+    }
+
+    function availablePresetLayerSet(presetId) {
+      const available = new Set([...document.querySelectorAll("[data-layer]")].map(input => input.dataset.layer));
+      return new Set((LAYER_PRESETS[presetId] || []).filter(layer => available.has(layer)));
+    }
+
+    function matchingLayerPresetId() {
+      const checked = checkedLayerIds();
+      return Object.keys(LAYER_PRESETS).find(presetId => {
+        const preset = availablePresetLayerSet(presetId);
+        return checked.size === preset.size && [...preset].every(layer => checked.has(layer));
+      }) || "";
+    }
+
+    function syncLayerPresetButtons(activePresetId = matchingLayerPresetId()) {
+      document.querySelectorAll("[data-layer-preset]").forEach(button => {
+        const active = button.dataset.layerPreset === activePresetId;
+        button.classList.toggle("is-active", active);
+        button.setAttribute("aria-pressed", active ? "true" : "false");
+      });
+    }
+
+    function applyLayerPreset(presetId) {
+      const preset = availablePresetLayerSet(presetId);
+      if (!preset.size) return;
+      document.querySelectorAll("[data-layer]").forEach(input => {
+        input.checked = preset.has(input.dataset.layer);
+      });
+      updateLayers();
+      syncLayerPresetButtons(presetId);
+    }
+
+    function appendRasterLayer(group, projection, bounds, kind, coverageBounds = bounds) {
+      if (!layerInputChecked(kind)) return;
       const isOsm = kind === "osm";
       if (isOsm && !isLocalOsmTileMode()) {
         group.appendChild(svgEl("rect", {x: 0, y: 0, width: MAP_WIDTH, height: MAP_HEIGHT, class: "layer-osm"}));
       }
       const layer = isOsm ? mapLayerById(projection, "osm") : rasterLayerFor(projection, kind);
       const opacity = Number(layer.raster_layer_opacity ?? RASTER_SOURCE_LAYER_BY_ID[kind]?.opacity ?? 0.92);
-      const tiles = isOsm ? tileCoverage(bounds) : rasterTileCoverage(projection, bounds, null, kind);
+      const range = isOsm ? {min: OSM_MIN_ZOOM} : rasterZoomRangeFor(projection, kind);
+      const tiles = isOsm ? tileCoverage(coverageBounds) : rasterTileCoverage(projection, coverageBounds, null, kind);
       tiles.forEach(tile => {
-        const [x1, y1] = projectPoint(bounds, tile.north, tile.west);
-        const [x2, y2] = projectPoint(bounds, tile.south, tile.east);
-        group.appendChild(svgEl("image", {
+        const image = svgEl("image", {
           href: isOsm ? osmTileUrl(tile.z, tile.x, tile.y) : tile.href,
-          x: Math.min(x1, x2).toFixed(2),
-          y: Math.min(y1, y2).toFixed(2),
-          width: Math.abs(x2 - x1).toFixed(2),
-          height: Math.abs(y2 - y1).toFixed(2),
           class: isOsm ? "osm-tile" : "raster-tile",
           preserveAspectRatio: "none",
           "data-map-ref": kind,
           "data-source-id": layer.imagery_source_id || layer.source_id || "",
           "data-source-kind": layer.source_kind || (isOsm ? "openstreetmap_tile" : "local_geotiff"),
           opacity: !isOsm && Number.isFinite(opacity) ? opacity.toFixed(2) : "1"
-        }));
+        });
+        image.setAttribute(isOsm ? "data-osm-tile" : "data-raster-tile", `${tile.z}/${tile.x}/${tile.y}`);
+        positionTileImage(image, bounds, tile);
+        attachTileFallback(
+          image,
+          bounds,
+          tile,
+          fallbackTile => isOsm
+            ? osmTileUrl(fallbackTile.z, fallbackTile.x, fallbackTile.y)
+            : rasterTileUrl(projection, kind, fallbackTile.z, fallbackTile.x, fallbackTile.y),
+          range.min,
+          isOsm ? "data-osm-tile" : "data-raster-tile"
+        );
+        group.appendChild(image);
       });
       if (isOsm) {
         group.appendChild(svgEl("text", {x: MAP_WIDTH - 10, y: MAP_HEIGHT - 10, "text-anchor": "end", class: "osm-attribution"}, OSM_ATTRIBUTION));
@@ -2848,7 +3420,8 @@
         if (coords.length < 2) return;
         const path = svgEl("path", {
           d: pathFromCoords(bounds, coords),
-          class: `risk-ribbon ${segment.style_class || "risk-ribbon-moderate"}`
+          class: `risk-ribbon ${segment.style_class || "risk-ribbon-moderate"}`,
+          "data-risk-layer": "baseline"
         });
         if (segment.stroke) path.style.stroke = segment.stroke;
         attachMapEvidence(path, segment, `risk-ribbon ${segment.source_id || segment.segment_id || ""}`);
@@ -2862,7 +3435,8 @@
         if (coords.length < 2) return;
         const path = svgEl("path", {
           d: pathFromCoords(bounds, coords),
-          class: `risk-heatmap ${segment.style_class || "risk-heatmap-low"}`
+          class: `risk-heatmap ${segment.style_class || "risk-heatmap-low"}`,
+          "data-risk-layer": "calibrated"
         });
         if (segment.stroke) path.style.stroke = segment.stroke;
         attachMapEvidence(path, segment, `risk-heatmap ${segment.source_id || segment.segment_id || ""}`);
@@ -2876,13 +3450,37 @@
         if (coords.length < 2) return;
         const path = svgEl("path", {
           d: pathFromCoords(bounds, coords),
-          class: `risk-delta ${segment.style_class || "risk-delta-aligned"}`
+          class: `risk-delta ${segment.style_class || "risk-delta-aligned"}`,
+          "data-risk-layer": "delta"
         });
         if (segment.stroke) path.style.stroke = segment.stroke;
         attachMapEvidence(path, segment, `risk-delta ${segment.source_id || segment.segment_id || ""}`);
         riskDeltaGroup.appendChild(path);
       });
       runtimeMap.appendChild(riskDeltaGroup);
+
+      const soilMoistureGroup = svgEl("g", {"data-layer-group": "soil-moisture"});
+      (projection.soil_moisture?.points || []).forEach(point => {
+        const [x, y] = projectPoint(bounds, point.lat, point.lon);
+        const circle = svgEl("circle", {cx: x, cy: y, r: 4.5, class: "soil-moisture-point"});
+        attachMapEvidence(circle, point, `soil-moisture ${point.source_id || point.sample_id || ""}`);
+        soilMoistureGroup.appendChild(circle);
+      });
+      runtimeMap.appendChild(soilMoistureGroup);
+
+      const antecedentRainGroup = svgEl("g", {"data-layer-group": "antecedent-rain"});
+      (projection.antecedent_rain?.points || []).forEach(point => {
+        const [x, y] = projectPoint(bounds, point.lat, point.lon);
+        const circle = svgEl("circle", {
+          cx: x,
+          cy: y,
+          r: 4.8,
+          class: `antecedent-rain-point ${hydrologyRainClass(point)}`
+        });
+        attachMapEvidence(circle, point, `antecedent-rain ${point.source_id || point.sample_id || ""}`);
+        antecedentRainGroup.appendChild(circle);
+      });
+      runtimeMap.appendChild(antecedentRainGroup);
 
       const riskScoreGroup = svgEl("g", {"data-layer-group": "risk-score"});
       (projection.risk_score?.points || []).forEach(point => {
@@ -2980,6 +3578,31 @@
       });
       runtimeMap.appendChild(mcpGroup);
 
+      const bossGroup = svgEl("g", {"data-layer-group": "boss-points"});
+      (projection.boss_points?.boss_points || []).forEach(point => {
+        if (!Number.isFinite(Number(point.lat)) || !Number.isFinite(Number(point.lon))) return;
+        const [x, y] = projectPoint(bounds, point.lat, point.lon);
+        const className = String(point.challenge_fit?.band || "").includes("not_ready")
+          ? "boss-point is-not-ready"
+          : "boss-point";
+        const circle = svgEl("circle", {cx: x, cy: y, r: 7.5, class: className});
+        attachMapEvidence(
+          circle,
+          point,
+          [
+            "boss-points",
+            "boss",
+            point.boss_point_id,
+            point.source_mcp_id,
+            point.source_candidate_id,
+            ...(Array.isArray(point.map_target_ids) ? point.map_target_ids : [])
+          ].filter(Boolean).join(" ")
+        );
+        bossGroup.appendChild(circle);
+        appendPointLabel(bossGroup, x, y, point, "boss-points");
+      });
+      runtimeMap.appendChild(bossGroup);
+
       runtimeMap.appendChild(svgEl("g", {"data-layer-group": "route-notes"}));
       runtimeMap.appendChild(svgEl("g", {"data-layer-group": "events"}));
       runtimeMap.appendChild(svgEl("g", {"data-layer-group": "weather-api"}));
@@ -2996,6 +3619,7 @@
       if (payload.segment_id) refs.add(payload.segment_id);
       if (payload.checkpoint_id) refs.add(payload.checkpoint_id);
       if (subject.includes("checkpoint") && !payload.checkpoint_id && !specificMapTargets.length) refs.add("checkpoint");
+      if (subject.includes("segment") && !payload.segment_id && !specificMapTargets.length) refs.add("segment");
       if (subject.includes("incident") || payload.incident_id) refs.add("incident");
       if (subject.includes("message") || payload.message_id) {
         refs.add("outbound");
@@ -3041,6 +3665,81 @@
 
     function eventSequence(event) {
       return numberOr(event?.sequence, 0);
+    }
+
+    function selectorValue(value) {
+      const raw = text(value, "");
+      if (window.CSS && typeof window.CSS.escape === "function") return window.CSS.escape(raw);
+      return raw.replace(/["\\]/g, "\\$&");
+    }
+
+    function timelineGroupKey(event) {
+      const payload = event?.payload || {};
+      const kind = text(event?.kind, "runtime_event");
+      if (DENSE_TIMELINE_GROUP_KINDS.has(kind)) return kind;
+      const subject = [
+        payload.nearby_group_id,
+        payload.checkpoint_id,
+        payload.segment_id,
+        payload.candidate_id,
+        payload.imprint_id,
+        payload.tool_id,
+        event?.subject_ref
+      ].map((value) => text(value, "")).find(Boolean);
+      if (kind.startsWith("gis_") || kind.includes("checkpoint") || kind.includes("segment")) {
+        return `${kind}:${subject || "route"}`;
+      }
+      if (kind.startsWith("spatial_imprint_")) return `${kind}:${subject || "imprint"}`;
+      if (kind === "agent_tool_invocation") return `${kind}:${subject || "agent"}`;
+      return kind;
+    }
+
+    function timelineGroupRange(events) {
+      const sequences = events.map(eventSequence).filter((sequence) => Number.isFinite(sequence));
+      if (!sequences.length) return "";
+      const minSequence = Math.min(...sequences);
+      const maxSequence = Math.max(...sequences);
+      return minSequence === maxSequence ? `#${minSequence}` : `#${minSequence}-#${maxSequence}`;
+    }
+
+    function timelineGroupLabel(group) {
+      const latestEvent = group.latestEvent || {};
+      if (!group.grouped) return text(latestEvent.kind, "runtime_event");
+      return `${text(latestEvent.kind, "runtime_event")} · ${group.count} events`;
+    }
+
+    function buildTimelineGroups(orderedEvents) {
+      const groupedByKey = new Map();
+      orderedEvents.forEach((event, index) => {
+        const key = timelineGroupKey(event);
+        if (!groupedByKey.has(key)) {
+          groupedByKey.set(key, {
+            groupId: `group-${groupedByKey.size}-${key}`,
+            key,
+            latestEvent: event,
+            events: [],
+            eventIndices: [],
+            count: 0,
+            grouped: true
+          });
+        }
+        const group = groupedByKey.get(key);
+        group.events.push(event);
+        group.eventIndices.push(index);
+        group.count = group.events.length;
+      });
+      return Array.from(groupedByKey.values()).flatMap((group) => {
+        if (group.count > 1) return [group];
+        return group.events.map((event, offset) => ({
+          groupId: `event-${text(event.event_id, group.eventIndices[offset])}`,
+          key: timelineGroupKey(event),
+          latestEvent: event,
+          events: [event],
+          eventIndices: [group.eventIndices[offset]],
+          count: 1,
+          grouped: false
+        }));
+      });
     }
 
     function timelineWindowForEvent(event) {
@@ -3335,12 +4034,26 @@
     }
 
     function renderSafetySnapshot(snapshot) {
-      setText("safetyLevel", snapshot.safetyLevel, "unknown");
-      setText("latestTransition", snapshot.latestTransition, "none");
+      setReadableStateToken("safetyLevel", snapshot.safetyLevel, "unknown");
+      setReadableStateToken("latestTransition", snapshot.latestTransition, "none");
       setText("observationsProcessed", snapshot.observationsProcessed, "0");
       setText("safetyEvents", snapshot.safetyEvents, "0");
       document.getElementById("stateSelectionContext").textContent = text(snapshot.context);
       renderLevels(snapshot.safetyLevel);
+    }
+
+    function readableStateToken(value) {
+      const raw = text(value, "").trim();
+      if (!raw) return "";
+      return raw.replace(/^(L[0-4])_/, "$1 · ").replace(/_/g, " ");
+    }
+
+    function setReadableStateToken(id, value, fallback = "") {
+      const node = document.getElementById(id);
+      if (!node) return;
+      const raw = text(value, fallback);
+      node.textContent = readableStateToken(raw) || fallback;
+      node.title = raw;
     }
 
     function debugEventItem(event) {
@@ -3470,17 +4183,59 @@
       document.getElementById("monitorList").innerHTML = items.join("");
     }
 
+    function hardwareDetailChip(label, value) {
+      return `
+        <div class="hardware-detail-chip">
+          <span>${escapeHtml(label)}</span>
+          <strong>${escapeHtml(value)}</strong>
+        </div>
+      `;
+    }
+
+    function hardwareDetailGrid(entries) {
+      const visibleEntries = entries.filter(([, value]) => value !== null && value !== undefined && value !== "");
+      if (!visibleEntries.length) return "";
+      return `<div class="hardware-detail-grid">${visibleEntries.map(([label, value]) => hardwareDetailChip(label, value)).join("")}</div>`;
+    }
+
+    function hardwareLineChip(line) {
+      const pullControl = text(line.pull_control, "unknown");
+      const canReadWrite = Boolean(line.manual_read_allowed && line.manual_write_allowed);
+      const fixed = pullControl.startsWith("fixed_");
+      const classes = ["hardware-line-chip", canReadWrite ? "is-rw" : "", fixed ? "is-fixed" : ""].filter(Boolean).join(" ");
+      const label = line.header_label || line.line_ref || `GPIO${line.gpio ?? ""}`;
+      const pin = line.physical_pin ? `pin ${line.physical_pin}` : "pin unknown";
+      return `
+        <div class="${classes}" title="${escapeHtml(`${label} | ${pullControl} | ${text(line.direction, "unknown")}`)}">
+          <span>${escapeHtml(pin)} · ${escapeHtml(text(line.pull_state, "not sampled"))}</span>
+          <strong>${escapeHtml(label)}</strong>
+        </div>
+      `;
+    }
+
+    function hardwareLineChips(lines, limit = 8) {
+      if (!lines.length) return "";
+      const visibleLines = lines.slice(0, limit);
+      const remaining = lines.length - visibleLines.length;
+      return `
+        <div class="hardware-line-chip-row" aria-label="GPIO line sample">
+          ${visibleLines.map(hardwareLineChip).join("")}
+          ${remaining > 0 ? `<div class="hardware-line-chip is-more"><strong>+${remaining}</strong><span>more lines</span></div>` : ""}
+        </div>
+      `;
+    }
+
     function hardwareProviderItem(provider) {
       const status = provider.status || "unknown";
       const sampleWindow = provider.sample_window || {};
       const details = [
-        `type=${text(provider.provider_type || provider.domain, "unknown")}`,
-        `last_seen=${text(provider.last_seen_at, "not reported")}`,
-        `source=${text(provider.source_path, "not reported")}`
+        ["type", text(provider.provider_type || provider.domain, "unknown")],
+        ["last seen", text(provider.last_seen_at, "not reported")],
+        ["source", text(provider.source_path, "not reported")]
       ];
-      if (provider.degraded_reason) details.push(`reason=${provider.degraded_reason}`);
+      if (provider.degraded_reason) details.push(["reason", provider.degraded_reason]);
       Object.entries(sampleWindow).slice(0, 4).forEach(([name, value]) => {
-        details.push(`${name}=${text(value)}`);
+        details.push([name.replace(/_/g, " "), text(value)]);
       });
       return `
         <div class="item">
@@ -3489,7 +4244,7 @@
             <span class="${pillClass(status)}">${escapeHtml(status)}</span>
           </div>
           <p class="hint">${escapeHtml(LABEL_HINTS[String(provider.provider_type || provider.domain || "hardware_readiness").toLowerCase()] || "hardware-readiness context 中的一個硬體 provider。")}</p>
-          <p class="summary mono">${escapeHtml(details.join(" | "))}</p>
+          ${hardwareDetailGrid(details)}
         </div>
       `;
     }
@@ -3498,45 +4253,44 @@
       const status = interfaceItem.status || "unknown";
       const lines = interfaceItem.observed_lines || [];
       const boundary = interfaceItem.boundary || {};
+      const writable = lines.filter(line => line.manual_read_allowed && line.manual_write_allowed);
+      const advanced = lines.filter(line => line.pull_control === "reserved_advanced_use");
       const details = [
-        `type=${text(interfaceItem.interface_type, "unknown")}`,
-        `activity=${text(interfaceItem.signal_activity, "unknown")}`,
-        `manual_drive=${interfaceItem.manual_drive_allowed ? "allowed" : "blocked"}`,
-        `last_seen=${text(interfaceItem.last_seen_at, "not reported")}`,
-        `source=${text(interfaceItem.source_path, "not reported")}`
+        ["type", text(interfaceItem.interface_type, "unknown")],
+        ["activity", text(interfaceItem.signal_activity, "unknown")],
+        ["manual drive", interfaceItem.manual_drive_allowed ? "allowed" : "blocked"],
+        ["last seen", text(interfaceItem.last_seen_at, "not reported")],
+        ["source", text(interfaceItem.source_path, "not reported")]
       ];
       if (lines.length) {
-        const writable = lines.filter(line => line.manual_read_allowed && line.manual_write_allowed);
-        const advanced = lines.filter(line => line.pull_control === "reserved_advanced_use");
-        details.push(`gpio_lines=${lines.length}`);
-        details.push(`rw_lines=${writable.length}`);
-        if (advanced.length) details.push(`advanced=${advanced.map(line => text(line.header_label)).join(", ")}`);
-        details.push(`lines=${lines.map(line => `${text(line.line_ref)}:${text(line.pull_state)}`).join(", ")}`);
+        details.push(["gpio lines", lines.length]);
+        details.push(["rw lines", writable.length]);
+        if (advanced.length) details.push(["advanced", advanced.map(line => text(line.header_label)).join(", ")]);
       }
       if (Object.prototype.hasOwnProperty.call(boundary, "gpioset_command_enabled")) {
-        details.push(`gpioset_enabled=${boundary.gpioset_command_enabled ? "true" : "false"}`);
+        details.push(["gpioset", boundary.gpioset_command_enabled ? "enabled" : "disabled"]);
       }
       if (Object.prototype.hasOwnProperty.call(boundary, "wiring_manifest_confirmed")) {
-        details.push(`wiring_confirmed=${boundary.wiring_manifest_confirmed ? "true" : "false"}`);
+        details.push(["wiring", boundary.wiring_manifest_confirmed ? "confirmed" : "not confirmed"]);
       }
       if (boundary.high_low_drive_deferred_until_wiring_confirmed) {
-        details.push("drive_gate=wiring_manifest_required");
+        details.push(["drive gate", "wiring manifest required"]);
       }
       (interfaceItem.detected_addresses || []).slice(0, 4).forEach(address => {
-        details.push(`addr=${text(address)}`);
+        details.push(["addr", text(address)]);
       });
       (interfaceItem.connected_devices || []).slice(0, 4).forEach(device => {
-        details.push(`connected=${text(device)}`);
+        details.push(["connected", text(device)]);
       });
       (interfaceItem.devices || []).slice(0, 4).forEach(device => {
         if (typeof device === "object" && device !== null) {
-          details.push(`device=${text(device.id || device.label || "usb")}`);
+          details.push(["device", text(device.id || device.label || "usb")]);
         } else {
-          details.push(`device=${text(device)}`);
+          details.push(["device", text(device)]);
         }
       });
       Object.entries(interfaceItem.details || {}).slice(0, 5).forEach(([name, value]) => {
-        if (value !== null && value !== undefined && value !== "") details.push(`${name}=${text(value)}`);
+        if (value !== null && value !== undefined && value !== "") details.push([name.replace(/_/g, " "), text(value)]);
       });
       return `
         <div class="item">
@@ -3545,7 +4299,8 @@
             <span class="${pillClass(status)}">${escapeHtml(status)}</span>
           </div>
           <p class="hint">${escapeHtml(LABEL_HINTS[String(interfaceItem.interface_type || "hardware_readiness").toLowerCase()] || "hardware-readiness interface inventory 的一筆 metadata-only 狀態。")}</p>
-          <p class="summary mono">${escapeHtml(details.join(" | "))}</p>
+          ${hardwareDetailGrid(details)}
+          ${hardwareLineChips(lines)}
         </div>
       `;
     }
@@ -3934,6 +4689,14 @@
       setAssistantStatus("Querying read-only assistant...");
       try {
         const queryPayload = assistantQueryPayload(resolvedQuestion);
+        const uiActionResult = await window.ScoutAssistantUI.tryHandleUiActionRequest({
+          surface: "debug",
+          requestText: resolvedQuestion,
+          queryPayload,
+          apiBase,
+          setStatus: setAssistantStatus
+        });
+        if (uiActionResult.handled) return;
         const payload = await postJson("/assistant/query", queryPayload);
         renderAssistantResponse(payload, queryPayload);
       } catch (error) {
@@ -3962,6 +4725,62 @@
     function bindAssistantControls() {
       window.ScoutAssistantUI.bindQuestionControls({submit: runAssistantQuestion});
     }
+
+    function findDebugEventByRef(ref) {
+      const targetRef = text(ref, "").trim().replace(/[。.,，;；]+$/, "");
+      if (targetRef === "selected") {
+        return debugPageState.events.find((event) => event.event_id === debugPageState.selectedEventId)
+          || debugPageState.chronologicalEvents.find((event) => event.event_id === debugPageState.selectedEventId)
+          || null;
+      }
+      const events = [
+        ...(debugPageState.events || []),
+        ...(debugPageState.chronologicalEvents || [])
+      ];
+      const exact = events.find((event) => (
+        event.event_id === targetRef
+        || event.source_id === targetRef
+        || event.subject_ref === targetRef
+      ));
+      if (exact) return exact;
+      const suffix = targetRef.match(/\.(\d{3,})$/)?.[1] || "";
+      return suffix
+        ? events.find((event) => text(event.event_id, "").endsWith(`.${suffix}`)) || null
+        : null;
+    }
+
+    function handleScoutUiActionIntent(event) {
+      const action = event.detail?.action || {};
+      if (action.surface && action.surface !== "debug") return;
+      if (action.action_kind !== "focus_map_target") {
+        event.detail.result = {
+          status: "dispatched",
+          message: `Debug received ${text(action.action_kind, "ui action")} intent.`
+        };
+        return;
+      }
+      const targetEvent = findDebugEventByRef(action.target_ref);
+      if (!targetEvent) {
+        event.detail.result = {
+          status: "blocked",
+          message: `No debug timeline event matched ${text(action.target_ref, "selected")}.`
+        };
+        return;
+      }
+      const index = Math.max(
+        debugPageState.events.findIndex((candidate) => candidate.event_id === targetEvent.event_id),
+        0
+      );
+      selectTimelineNode(targetEvent, index, {focus: true});
+      const focused = focusMapForEvent(targetEvent, {label: action.show_label !== false});
+      event.detail.result = {
+        status: focused ? "applied" : "blocked",
+        message: focused
+          ? `Focused debug timeline event ${targetEvent.event_id || "selected"}.`
+          : `Debug event ${targetEvent.event_id || "selected"} could not be focused on the map.`
+      };
+    }
+    window.addEventListener("scout-ui-action-intent", handleScoutUiActionIntent);
 
     function renderSelectedDetails(selectedEvent) {
       const events = timelineWindowForEvent(selectedEvent);
@@ -4167,6 +4986,10 @@
     function readablePointLabel(value) {
       const text = String(value || "").trim().replace(/\s+/g, " ");
       if (!text) return "";
+      if (text.includes("/")) {
+        const leaf = text.split("/").filter(Boolean).pop() || "";
+        if (leaf) return leaf.length > 48 ? `${leaf.slice(0, 47).trim()}…` : leaf;
+      }
       if (/^(node|way|relation)\/\d+$/.test(text) || /^\d{7,}$/.test(text)) return "";
       if (/^(gis_cp[._]|gis_cp_cluster\.|gis_cp_nearby_group\.|cp_note[._]|pretrip_gis_|overpass[._]|route_note\.reference_|ln_proposal\.route_note\.)/.test(text)) return "";
       const underscoreCount = (text.match(/_/g) || []).length;
@@ -4309,6 +5132,7 @@
         if (summaryText && summaryText !== titleText) {
           const summary = document.createElement("span");
           summary.textContent = summaryText;
+          node.appendChild(document.createTextNode("\n"));
           node.appendChild(summary);
         }
       } else {
@@ -4572,8 +5396,6 @@
       const rawFactor = zoomFactor || Math.max(1, Math.min(MAP_WIDTH / box.width, MAP_HEIGHT / box.height));
       const factor = debugPageState.zoom > 1 ? Math.min(rawFactor, debugPageState.zoom) : rawFactor;
       debugPageState.zoom = Math.max(1, Math.min(MAP_MAX_ZOOM, debugPageState.zoom / factor));
-      debugPageState.panX = box.x + box.width / 2 - MAP_WIDTH / 2;
-      debugPageState.panY = box.y + box.height / 2 - MAP_HEIGHT / 2;
       clampMapPan();
       applyMapViewport();
       highlightMapForEvent(selectedMapEvent());
@@ -4653,7 +5475,10 @@
 
     function selectTimelineNode(event, index, options = {}) {
       debugPageState.selectedEventId = event?.event_id || "";
-      const node = document.querySelector(`[data-event-index="${index}"]`);
+      const eventId = debugPageState.selectedEventId;
+      const node = options.node
+        || (eventId ? document.querySelector(`[data-event-id="${selectorValue(eventId)}"]`) : null)
+        || document.querySelector(`[data-event-index="${index}"]`);
       document.querySelectorAll(".timeline-node").forEach((candidate) => {
         const isSelected = candidate === node;
         candidate.classList.toggle("is-selected", isSelected);
@@ -4666,10 +5491,32 @@
       if (options.syncUrl !== false) writeUrlSelection({ eventId: debugPageState.selectedEventId });
     }
 
+    function eventByTimelineNode(node) {
+      const eventId = node?.dataset?.eventId || "";
+      if (eventId) {
+        const event = debugPageState.events.find((candidate) => candidate.event_id === eventId);
+        if (event) return event;
+      }
+      const index = Number(node?.dataset?.eventIndex || -1);
+      return debugPageState.events[index] || null;
+    }
+
+    function eventIndexByTimelineNode(node) {
+      const eventId = node?.dataset?.eventId || "";
+      if (eventId) {
+        const index = debugPageState.events.findIndex((candidate) => candidate.event_id === eventId);
+        if (index >= 0) return index;
+      }
+      return Number(node?.dataset?.eventIndex || -1);
+    }
+
     function moveTimelineFocus(currentIndex, key) {
-      const nodes = Array.from(document.querySelectorAll(".timeline-node"));
+      const nodes = Array.from(document.querySelectorAll(".timeline-node")).filter((node) => node.offsetParent !== null);
       if (!nodes.length) return;
-      const currentNode = document.querySelector(`[data-event-index="${currentIndex}"]`);
+      const currentEvent = debugPageState.events[currentIndex] || null;
+      const currentNode = currentEvent?.event_id
+        ? document.querySelector(`[data-event-id="${selectorValue(currentEvent.event_id)}"]`)
+        : document.querySelector(`[data-event-index="${currentIndex}"]`);
       const currentPosition = Math.max(nodes.indexOf(currentNode), 0);
       let nextPosition = currentPosition;
       if (key === "ArrowDown") nextPosition = Math.min(currentPosition + 1, nodes.length - 1);
@@ -4677,28 +5524,28 @@
       if (key === "Home") nextPosition = 0;
       if (key === "End") nextPosition = nodes.length - 1;
       const nextNode = nodes[nextPosition];
-      const nextIndex = Number(nextNode.dataset.eventIndex || -1);
-      const nextEvent = debugPageState.events[nextIndex];
-      selectTimelineNode(nextEvent, nextIndex, { focus: true });
+      const nextIndex = eventIndexByTimelineNode(nextNode);
+      const nextEvent = eventByTimelineNode(nextNode);
+      selectTimelineNode(nextEvent, nextIndex, { focus: true, node: nextNode });
     }
 
     function bindTimelineNodes() {
       document.querySelectorAll(".timeline-node").forEach((node) => {
-        const index = Number(node.dataset.eventIndex || -1);
-        const event = debugPageState.events[index];
+        const index = eventIndexByTimelineNode(node);
+        const event = eventByTimelineNode(node);
         node.addEventListener("click", () => {
-          selectTimelineNode(event, index);
+          selectTimelineNode(event, index, {node});
           focusMapForEvent(event, {label: false});
         });
         node.addEventListener("dblclick", (mouseEvent) => {
           mouseEvent.preventDefault();
-          selectTimelineNode(event, index);
+          selectTimelineNode(event, index, {node});
           focusMapForEvent(event, {label: true});
         });
         node.addEventListener("keydown", (keyboardEvent) => {
           if (keyboardEvent.key === "Enter" || keyboardEvent.key === " ") {
             keyboardEvent.preventDefault();
-            selectTimelineNode(event, index);
+            selectTimelineNode(event, index, {node});
             focusMapForEvent(event, {label: false});
             return;
           }
@@ -4756,27 +5603,63 @@
       renderSelectedDetails(null);
     }
 
-    function renderEvents(events) {
-      const chronologicalEvents = events.slice().sort((left, right) => eventSequence(left) - eventSequence(right));
-      const orderedEvents = chronologicalEvents.slice().reverse();
-      debugPageState.chronologicalEvents = chronologicalEvents;
-      debugPageState.events = orderedEvents;
-      document.getElementById("eventCount").textContent = `${events.length} events`;
-      document.getElementById("timeline").innerHTML = events.length
-        ? orderedEvents.map((event, index) => `
-          <div class="item timeline-node phase-${escapeHtml(event.phase)}" role="button" tabindex="-1" aria-current="false" data-event-index="${index}" data-map-ref="${escapeHtml(mapRefsForEvent(event).join(" "))}">
+    function renderTimelineEventNode(event, index, options = {}) {
+      const extraClass = `${options.child ? " timeline-child" : ""}${options.group ? " timeline-group-summary timeline-group-node" : ""}`;
+      const title = options.title || event.kind;
+      const summary = options.summary || event.summary;
+      const groupMeta = options.groupMeta || "";
+      return `
+          <div class="item timeline-node${extraClass} phase-${escapeHtml(event.phase)}" role="button" tabindex="-1" aria-current="false" data-event-id="${escapeHtml(event.event_id || "")}" data-event-index="${index}" data-map-ref="${escapeHtml(mapRefsForEvent(event).join(" "))}">
             <div class="item-line">
-              <h3>${escapeHtml(event.kind)}</h3>
+              <h3 title="${escapeHtml(title)}">${escapeHtml(title)}</h3>
               <div class="timeline-meta">
+                ${groupMeta}
                 <span class="${pillClass(event.severity)}">${escapeHtml(event.phase)} #${escapeHtml(event.sequence)}</span>
                 <span class="${levelBadgeClassForEvent(event)}" aria-label="L state at this timeline node">${escapeHtml(levelBadgeForEvent(event))}</span>
               </div>
             </div>
-            <p class="hint">${escapeHtml(hintForEvent(event))}</p>
-            <p class="summary">${escapeHtml(event.summary)}</p>
-            <p class="summary mono">${escapeHtml(event.timestamp)} ${escapeHtml(event.subject_ref || "")}</p>
+            <p class="hint" title="${escapeHtml(hintForEvent(event))}">${escapeHtml(hintForEvent(event))}</p>
+            <p class="summary" title="${escapeHtml(summary)}">${escapeHtml(summary)}</p>
+            <p class="summary mono" title="${escapeHtml(event.timestamp)} ${escapeHtml(event.subject_ref || "")}">${escapeHtml(event.timestamp)} ${escapeHtml(event.subject_ref || "")}</p>
           </div>
-        `).join("")
+        `;
+    }
+
+    function renderTimelineGroup(group) {
+      const event = group.latestEvent;
+      const index = group.eventIndices[0];
+      if (!group.grouped) return renderTimelineEventNode(event, index);
+      const groupMeta = `<span class="timeline-group-count">${escapeHtml(group.count)} events</span>`;
+      const title = timelineGroupLabel(group);
+      const summary = `${timelineGroupRange(group.events)} · latest: ${text(event.summary, hintForEvent(event))}`;
+      const childEvents = group.events.map((childEvent, childOffset) => renderTimelineEventNode(
+        childEvent,
+        group.eventIndices[childOffset],
+        { child: true, title: childEvent.kind }
+      )).join("");
+      return `
+        <div class="timeline-group" data-timeline-group="${escapeHtml(group.groupId)}">
+          ${renderTimelineEventNode(event, index, { title, summary, groupMeta, group: true })}
+          <details class="timeline-group-details">
+            <summary>Show ${escapeHtml(group.count)} events in ${escapeHtml(timelineGroupRange(group.events))}</summary>
+            <div class="timeline-group-children">
+              ${childEvents}
+            </div>
+          </details>
+        </div>
+      `;
+    }
+
+    function renderEvents(events) {
+      const chronologicalEvents = events.slice().sort((left, right) => eventSequence(left) - eventSequence(right));
+      const orderedEvents = chronologicalEvents.slice().reverse();
+      const timelineGroups = buildTimelineGroups(orderedEvents);
+      debugPageState.chronologicalEvents = chronologicalEvents;
+      debugPageState.events = orderedEvents;
+      debugPageState.timelineGroups = timelineGroups;
+      document.getElementById("eventCount").textContent = `${events.length} events / ${timelineGroups.length} groups`;
+      document.getElementById("timeline").innerHTML = events.length
+        ? timelineGroups.map(renderTimelineGroup).join("")
         : empty("No debug events reported.");
       bindTimelineNodes();
       if (orderedEvents.length) {
@@ -4862,6 +5745,9 @@
       document.getElementById("debugClearButton").addEventListener("click", clearDebugProjection);
       document.getElementById("mobileIngressResetButton").addEventListener("click", resetMobileWearableIngressProjection);
       document.querySelectorAll("[data-layer]").forEach(input => input.addEventListener("change", updateLayers));
+      document.querySelectorAll("[data-layer-preset]").forEach(button => {
+        button.addEventListener("click", () => applyLayerPreset(button.dataset.layerPreset));
+      });
       document.getElementById("zoomIn").addEventListener("click", () => zoomMap(1));
       document.getElementById("zoomOut").addEventListener("click", () => zoomMap(-1));
       document.getElementById("fitRoute").addEventListener("click", resetMapView);

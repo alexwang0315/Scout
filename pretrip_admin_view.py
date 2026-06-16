@@ -551,6 +551,8 @@ def build_pretrip_admin_view(
         artifacts.get("mcp_cp_support_reconciliation")
     )
     mcp_review_log = _load_optional_json(artifacts.get("mcp_review_log"))
+    boss_points = _load_optional_json(artifacts.get("boss_points"))
+    boss_points_geojson = _load_optional_json(artifacts.get("boss_points_geojson"))
     spatial_imprint_candidates = _load_optional_json(
         artifacts.get("spatial_imprint_candidates")
     )
@@ -982,6 +984,14 @@ def build_pretrip_admin_view(
             mcp_review_log,
             source_refs["mcp_review_log"],
         )
+    if boss_points is not None:
+        planning_tab["boss_points"] = _boss_points_summary(
+            boss_points,
+            boss_points_geojson,
+            source_refs=source_refs,
+            route_display_geometry=planning_tab["route"]["display_geometry"],
+            route_bounds=route_projection_bounds,
+        )
     if any(
         item is not None
         for item in (
@@ -1164,6 +1174,7 @@ def build_pretrip_admin_view(
             "departure_reviewed_candidates"
         ),
         "major_critical_points": planning_tab.get("major_critical_points"),
+        "boss_points": planning_tab.get("boss_points"),
         "mcp_review_actions": planning_tab.get("mcp_review_actions"),
         "spatial_imprints": planning_tab.get("spatial_imprints"),
         "departure_bundle": planning_tab["departure_bundle"],
@@ -1316,6 +1327,8 @@ def resolve_pretrip_project_artifacts(
         "mcp_candidates": "mcp_candidates_ref",
         "mcp_cp_support_reconciliation": "mcp_cp_support_reconciliation_ref",
         "mcp_review_log": "mcp_review_log_ref",
+        "boss_points": "boss_points_ref",
+        "boss_points_geojson": "boss_points_geojson_ref",
         "spatial_imprint_candidates": "spatial_imprint_candidates_ref",
         "spatial_imprint_reviews": "spatial_imprint_reviews_ref",
         "spatial_imprint_set": "spatial_imprint_set_ref",
@@ -1537,6 +1550,10 @@ def load_pretrip_debug_projection_view(
         optional_project_path("mcp_cp_support_reconciliation_ref")
     )
     mcp_review_log_raw = _load_optional_json(optional_project_path("mcp_review_log_ref"))
+    boss_points_raw = _load_optional_json(optional_project_path("boss_points_ref"))
+    boss_points_geojson_raw = _load_optional_json(
+        optional_project_path("boss_points_geojson_ref")
+    )
     source_refs = {
         "project": "project.json",
         "route_summary": project["route_summary_ref"],
@@ -1582,6 +1599,8 @@ def load_pretrip_debug_projection_view(
             "",
         ),
         "mcp_review_log": project.get("mcp_review_log_ref", ""),
+        "boss_points": project.get("boss_points_ref", ""),
+        "boss_points_geojson": project.get("boss_points_geojson_ref", ""),
         "weather_daylight": project.get("weather_daylight_evidence_ref", ""),
     }
     checkpoints = _candidate_list(
@@ -1594,6 +1613,10 @@ def load_pretrip_debug_projection_view(
         source_path=source_refs["segments"],
         evidence_type="pretrip_segment_candidate",
         display_geometry=_segment_display_geometry_by_id(segment_display_geometry),
+    )
+    route_display_geometry = _route_display_geometry_from_segments(
+        project_id,
+        segments,
     )
     view = {
         "project_id": project_id,
@@ -1616,6 +1639,7 @@ def load_pretrip_debug_projection_view(
             "started_at": route_summary.get("started_at"),
             "ended_at": route_summary.get("ended_at"),
             "polyline": _route_polyline(map_context),
+            "display_geometry": route_display_geometry,
         },
         "checkpoints": checkpoints,
         "segments": segments,
@@ -1732,6 +1756,14 @@ def load_pretrip_debug_projection_view(
             review_log=mcp_review_log_raw,
             source_refs=source_refs,
         )
+    if boss_points_raw is not None:
+        view["boss_points"] = _boss_points_summary(
+            boss_points_raw,
+            boss_points_geojson_raw,
+            source_refs=source_refs,
+            route_display_geometry=route_display_geometry,
+            route_bounds=route_projection_bounds,
+        )
     view["gis_perception_timeline"] = _gis_perception_timeline_summary(
         project_id,
         view["gis_perception"],
@@ -1761,10 +1793,6 @@ def load_pretrip_debug_projection_view(
         "projection_only": True,
         "route": {
             **view["route"],
-            "display_geometry": _route_display_geometry_from_segments(
-                project_id,
-                view["segments"],
-            ),
         },
         "checkpoints": view["checkpoints"],
         "segments": view["segments"],
@@ -1782,6 +1810,7 @@ def load_pretrip_debug_projection_view(
         "risk_heatmap": view["risk_heatmap"],
         "risk_delta": view["risk_delta"],
         "major_critical_points": view.get("major_critical_points"),
+        "boss_points": view.get("boss_points"),
         "map_layers": view["map_layers"],
         "readiness": view["readiness"],
         "timeline_events": timeline_events,
@@ -1839,6 +1868,11 @@ def load_pretrip_debug_projection_view(
                 view.get("major_critical_points", {})
                 .get("counts", {})
                 .get("review_action_count", 0)
+            ),
+            "boss_point_count": (
+                view.get("boss_points", {})
+                .get("counts", {})
+                .get("boss_point_count", 0)
             ),
             "timeline_event_count": len(timeline_events),
             "source_lifecycle_event_count": lifecycle_events.get("event_count", 0),
@@ -3957,6 +3991,134 @@ def _display_geometry_coordinate_segments(
         display_geometry.get("coordinates", [])
     )
     return [coordinates] if len(coordinates) >= 2 else []
+
+
+def _route_coordinate_at_distance(
+    display_geometry: dict[str, Any] | None,
+    distance_m: Any,
+) -> dict[str, float] | None:
+    if not isinstance(display_geometry, dict):
+        return None
+    try:
+        target_m = float(distance_m)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(target_m):
+        return None
+
+    segments = _display_geometry_coordinate_segments(display_geometry)
+    first_point: dict[str, float] | None = None
+    last_point: dict[str, float] | None = None
+    cumulative_m = 0.0
+    for segment in segments:
+        if not segment:
+            continue
+        first_point = first_point or segment[0]
+        last_point = segment[-1]
+        if target_m <= 0:
+            return dict(segment[0])
+        for previous, current in zip(segment, segment[1:]):
+            segment_m = _haversine_m(
+                previous["lat"],
+                previous["lon"],
+                current["lat"],
+                current["lon"],
+            )
+            if segment_m <= 0:
+                continue
+            if cumulative_m + segment_m >= target_m:
+                ratio = max(0.0, min(1.0, (target_m - cumulative_m) / segment_m))
+                return {
+                    "lat": previous["lat"] + (current["lat"] - previous["lat"]) * ratio,
+                    "lon": previous["lon"] + (current["lon"] - previous["lon"]) * ratio,
+                }
+            cumulative_m += segment_m
+    if first_point is None:
+        return None
+    return dict(last_point or first_point)
+
+
+def _boss_point_source_coordinate(point: dict[str, Any]) -> dict[str, float] | None:
+    try:
+        lat = float(point["lat"])
+        lon = float(point["lon"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    if not (math.isfinite(lat) and math.isfinite(lon)):
+        return None
+    if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+        return None
+    return {"lat": lat, "lon": lon}
+
+
+def _boss_point_map_target_ids(point: dict[str, Any]) -> list[str]:
+    return _unique_limited(
+        [
+            point.get("boss_point_id"),
+            point.get("source_mcp_id"),
+            point.get("source_candidate_id"),
+            point.get("label"),
+            *((point.get("source_refs") or []) if isinstance(point.get("source_refs"), list) else []),
+        ],
+        limit=16,
+    )
+
+
+def _boss_point_display_coordinate(
+    point: dict[str, Any],
+    *,
+    route_display_geometry: dict[str, Any] | None,
+    route_bounds: dict[str, float] | None,
+) -> dict[str, Any]:
+    source_coordinate = _boss_point_source_coordinate(point)
+    if source_coordinate is not None and _point_within_projection_bounds(
+        source_coordinate,
+        route_bounds,
+    ):
+        return {
+            "lat": source_coordinate["lat"],
+            "lon": source_coordinate["lon"],
+            "map_coordinate_source": "source_coordinate",
+            "coordinate_uncertain": False,
+            "source_coordinate": dict(source_coordinate),
+            "source_coordinate_out_of_route_bounds": False,
+        }
+
+    route_position = point.get("route_position") or {}
+    distance_m = (
+        route_position.get("distance_m")
+        if isinstance(route_position, dict)
+        else None
+    )
+    interpolated = _route_coordinate_at_distance(route_display_geometry, distance_m)
+    if interpolated is not None:
+        metadata = {
+            "lat": interpolated["lat"],
+            "lon": interpolated["lon"],
+            "map_coordinate_source": "route_distance_interpolation",
+            "coordinate_uncertain": True,
+            "source_coordinate_out_of_route_bounds": source_coordinate is not None,
+        }
+        if source_coordinate is not None:
+            metadata["source_coordinate"] = dict(source_coordinate)
+        return metadata
+
+    if source_coordinate is not None:
+        return {
+            "lat": source_coordinate["lat"],
+            "lon": source_coordinate["lon"],
+            "map_coordinate_source": "source_coordinate_unbounded_fallback",
+            "coordinate_uncertain": route_bounds is not None,
+            "source_coordinate": dict(source_coordinate),
+            "source_coordinate_out_of_route_bounds": route_bounds is not None,
+        }
+    return {
+        "lat": None,
+        "lon": None,
+        "map_coordinate_source": "missing_coordinate",
+        "coordinate_uncertain": True,
+        "source_coordinate_out_of_route_bounds": False,
+    }
 
 
 def _normalized_coordinate_segment(segment: list[Any]) -> list[dict[str, float]]:
@@ -6565,6 +6727,170 @@ def _mcp_summary(
     }
 
 
+def _boss_points_summary(
+    boss_points_payload: dict[str, Any],
+    boss_points_geojson: dict[str, Any] | None,
+    *,
+    source_refs: dict[str, str],
+    route_display_geometry: dict[str, Any] | None = None,
+    route_bounds: dict[str, float] | None = None,
+) -> dict[str, Any]:
+    points = [
+        point
+        for point in boss_points_payload.get("boss_points", [])
+        if isinstance(point, dict)
+    ]
+    source_path = (
+        source_refs.get("boss_points")
+        or boss_points_payload.get("boss_points_ref")
+        or "outputs/boss_points.json"
+    )
+    geojson_source_path = (
+        source_refs.get("boss_points_geojson")
+        or boss_points_payload.get("boss_points_geojson_ref")
+        or "outputs/boss_points.geojson"
+    )
+    geojson_features = (
+        boss_points_geojson.get("features", [])
+        if isinstance(boss_points_geojson, dict)
+        else []
+    )
+    challenge_fit_summary = boss_points_payload.get("challenge_fit_summary")
+    if not isinstance(challenge_fit_summary, dict):
+        challenge_fit_summary = {}
+    demand_band_counts = Counter(
+        str((point.get("route_boss_demand") or {}).get("band") or "unknown")
+        for point in points
+    )
+    challenge_band_counts = Counter(
+        str((point.get("challenge_fit") or {}).get("band") or "unknown")
+        for point in points
+    )
+    boundary = {
+        **boss_points_payload.get("boundary", {}),
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+        "pretrip_candidate_evidence_only": True,
+        "phase1_runtime_mutation_allowed": False,
+        "phase2_brain_writeback_allowed": False,
+        "medical_diagnosis": False,
+    }
+    projected_points = []
+    for point in points:
+        coordinate = _boss_point_display_coordinate(
+            point,
+            route_display_geometry=route_display_geometry,
+            route_bounds=route_bounds,
+        )
+        map_target_ids = _boss_point_map_target_ids(point)
+        projected_points.append(
+            {
+                "boss_point_id": point.get("boss_point_id"),
+                "rank": point.get("rank"),
+                "label": point.get("label"),
+                "source_candidate_id": point.get("source_candidate_id"),
+                "source_mcp_id": point.get("source_mcp_id"),
+                "display_theme": point.get("display_theme") or {},
+                "lat": coordinate["lat"],
+                "lon": coordinate["lon"],
+                "source_coordinate": coordinate.get("source_coordinate"),
+                "map_coordinate_source": coordinate["map_coordinate_source"],
+                "coordinate_uncertain": coordinate["coordinate_uncertain"],
+                "source_coordinate_out_of_route_bounds": coordinate[
+                    "source_coordinate_out_of_route_bounds"
+                ],
+                "route_position": point.get("route_position") or {},
+                "mcp_classes": point.get("mcp_classes") or [],
+                "linked_named_points": point.get("linked_named_points") or [],
+                "map_target_ids": map_target_ids,
+                "route_boss_demand": point.get("route_boss_demand") or {},
+                "challenge_fit": point.get("challenge_fit") or {},
+                "evidence_summary": point.get("evidence_summary") or {},
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+                "human_review_required": bool(
+                    point.get("human_review_required", True)
+                ),
+                **_projection_record_metadata(
+                    {
+                        **point,
+                        "candidate_id": point.get("boss_point_id")
+                        or point.get("source_mcp_id")
+                        or point.get("source_candidate_id"),
+                        "map_target_ids": map_target_ids,
+                        "source_refs": point.get("source_refs", []),
+                    },
+                    source_path=source_path,
+                    evidence_type="pretrip_boss_point_challenge_fit",
+                    source_kind="boss_point_challenge_fit",
+                    identity_keys=(
+                        "boss_point_id",
+                        "source_mcp_id",
+                        "source_candidate_id",
+                        "label",
+                        "source_refs",
+                    ),
+                    confidence="medium",
+                    stale_risk="medium",
+                    review_state="needs_human_review",
+                    extractor_version="pretrip_boss_point_synthesis.projection.v1",
+                    prompt_version=(
+                        "not_applicable_deterministic_boss_point_projection.v1"
+                    ),
+                    summary=(
+                        "Route Boss Demand compared with user pace coefficient "
+                        "and private energy reserve bands to produce pretrip "
+                        "Challenge Fit evidence; not runtime safety truth."
+                    ),
+                ),
+            }
+        )
+    return {
+        "source_id": (
+            f"boss_points.{boss_points_payload.get('project_id', 'unknown')}.v1"
+        ),
+        "source_path": source_path,
+        "geojson_source_path": geojson_source_path,
+        "evidence_type": "pretrip_boss_point_challenge_fit",
+        "status": boss_points_payload.get("status", "candidate_only"),
+        "project_id": boss_points_payload.get("project_id"),
+        "counts": {
+            "boss_point_count": boss_points_payload.get(
+                "boss_point_count",
+                len(points),
+            ),
+            "geojson_feature_count": len(geojson_features),
+            "not_ready_without_plan_change_count": challenge_band_counts.get(
+                "not_ready_without_plan_change",
+                0,
+            ),
+            "hard_requires_reviewed_buffer_count": challenge_band_counts.get(
+                "hard_requires_reviewed_buffer",
+                0,
+            ),
+            "boss_extreme_count": demand_band_counts.get("boss_extreme", 0),
+            "boss_hard_count": demand_band_counts.get("boss_hard", 0),
+        },
+        "formula": {
+            "route_boss_demand": "sum(component_scores) * late_trip_multiplier",
+            "challenge_fit": (
+                "route_boss_demand_score * "
+                "(1 + pace_energy_vulnerability)"
+            ),
+            "average_pace_only": False,
+            "raw_health_payload_embedded": False,
+        },
+        "challenge_fit_summary": challenge_fit_summary,
+        "band_counts": {
+            "route_boss_demand": dict(demand_band_counts),
+            "challenge_fit": dict(challenge_band_counts),
+        },
+        "boss_points": projected_points,
+        "source_report": boss_points_payload.get("source_report", {}),
+        "boundary": _summary_boundary(boundary),
+    }
+
+
 def _mcp_nested_support_projection(
     record: dict[str, Any],
     *,
@@ -8325,6 +8651,7 @@ def _planning_sections(planning_tab: dict[str, Any]) -> list[dict[str, Any]]:
     overpass_evidence = planning_tab["overpass_evidence"]
     gis_perception_timeline = planning_tab["gis_perception_timeline"]
     major_critical_points = planning_tab.get("major_critical_points")
+    boss_points = planning_tab.get("boss_points")
     route_notes = planning_tab["route_notes"]
     reference_tracks = planning_tab.get("reference_tracks")
     checkpoint_events = planning_tab.get("checkpoint_events")
@@ -8766,6 +9093,35 @@ def _planning_sections(planning_tab: dict[str, Any]) -> list[dict[str, Any]]:
                     "candidates": major_critical_points["candidates"][:12],
                 },
                 boundary=major_critical_points["boundary"],
+            )
+        )
+    if boss_points is not None:
+        sections.append(
+            _section(
+                "boss_points",
+                "Boss Points",
+                boss_points,
+                status=boss_points["status"],
+                counts=boss_points["counts"],
+                summary={
+                    "decision": boss_points["challenge_fit_summary"].get(
+                        "decision"
+                    ),
+                    "highest_challenge_fit_score": boss_points[
+                        "challenge_fit_summary"
+                    ].get("highest_challenge_fit_score"),
+                    "highest_challenge_fit_label": boss_points[
+                        "challenge_fit_summary"
+                    ].get("highest_challenge_fit_label"),
+                    "route_boss_demand_formula": boss_points["formula"].get(
+                        "route_boss_demand"
+                    ),
+                    "challenge_fit_formula": boss_points["formula"].get(
+                        "challenge_fit"
+                    ),
+                    "boss_points": boss_points["boss_points"][:12],
+                },
+                boundary=boss_points["boundary"],
             )
         )
     sections.extend(

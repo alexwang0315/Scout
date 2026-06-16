@@ -26,27 +26,41 @@ def test_pretrip_admin_page_contains_expected_layout_contract():
     assert "view.energy_reserve_monitor" in html
     assert "map frame" not in html.lower()
     assert 'id="map"' in html
+    assert "background: #e9eff4;" in html
     assert 'id="evidenceTree"' in html
     assert 'id="jsonPane"' in html
     assert 'id="sectionList"' in html
     assert "grid-template-rows: auto minmax(180px, .95fr) minmax(260px, 1.05fr);" in html
     assert "grid-template-columns: minmax(290px, 360px) minmax(640px, 1fr) minmax(340px, 420px);" in html
     assert 'grid-template-areas: "features map detail";' in html
+    assert "overflow: visible;\n      z-index: 20;" in html
+    assert "z-index: 80;" in html
+    assert "z-index: 90;" in html
     assert "grid-template-rows: auto minmax(0, 1fr);" in html
     assert "grid-template-rows: auto auto minmax(0, 1fr);" in html
     assert "feature-header-row" in html
     assert 'class="metric-grid" aria-label="Feature summary"' in html
+    assert "grid-template-columns: repeat(2, minmax(0, 1fr));" in html
+    assert '.list-controls input[type="search"] { grid-column: 1 / -1; }' in html
     assert ".list-controls .control-group-header { display: none; }" in html
     assert "overflow-y: auto;" in html
     assert "overscroll-behavior: contain;" in html
     assert "scrollbar-gutter: stable;" in html
     assert "min-height: 0;" in html
+    assistant_drawer_open_css = html.split(".assistant-drawer[open]", 1)[1].split(".assistant-drawer summary", 1)[0]
+    assert "min-height: 0;" in assistant_drawer_open_css
+    assistant_panel_css = html.split(".assistant-drawer .assistant-panel", 1)[1].split(".assistant-head", 1)[0]
+    assert "height: 100%;" in assistant_panel_css
+    assert "min-height: 0;" in assistant_panel_css
+    assert "overflow-y: auto;" in assistant_panel_css
     assert "grid-template-columns: 1fr;" in html
     assert '"map"\n          "features"\n          "detail";' in html
     assert "grid-template-columns: repeat(3, minmax(0, 1fr));" in html
     assert "grid-template-columns: repeat(3, 24px);" in html
     assert "grid-template-rows: repeat(3, 24px);" in html
-    assert "#map { min-height: 420px; }" in html
+    responsive_map_css = html.split("@media (max-width: 1120px)", 1)[1].split(".toolbar-grid", 1)[0]
+    assert "#map {\n        height: auto;\n        min-height: 0;\n        aspect-ratio: 1000 / 720;" in responsive_map_css
+    assert "#map { min-height: 420px; }" not in html
     assert ".detail-body > *," in html
     assert ".tree > *," in html
     assert ".assistant-panel > *" in html
@@ -86,12 +100,20 @@ def test_pretrip_admin_page_contains_expected_layout_contract():
     assert "data-tree-status" in html
     assert ".route-note" in html
     assert ".mcp-candidate" in html
+    assert ".boss-point" in html
     assert "AI GIS CP" in html
     assert "GIS CP Areas" in html
     assert "Major Critical Points" in html
+    assert "Boss Points" in html
     assert "Evidence Timeline" in html
     assert "view.evidence_timeline?.categories" in html
     assert "view.major_critical_points?.candidates" in html
+    assert "view.boss_points?.boss_points" in html
+    assert "item?.boss_point_id || item?.source_mcp_id || item?.source_candidate_id" in html
+    assert "item.boss_point_id" in html
+    assert "item.source_mcp_id" in html
+    assert "item.source_candidate_id" in html
+    assert 'String(point.challenge_fit?.band || "").includes("not_ready")' in html
     assert "item.cp_support_reconciliation?.support_status" in html
     assert "item.accepted_evidence_page_count" in html
     assert "item.source_family_coverage?.present" in html
@@ -102,15 +124,19 @@ def test_pretrip_admin_page_contains_expected_layout_contract():
     assert "Calibrated Heat" in html
     assert "Risk Delta" in html
     assert "view.risk_ribbon?.segments" in html
+    assert 'appendEvidenceTreeGroup(tree, "map_risk", "Baseline Risk", view.risk_ribbon?.segments || []' in html
+    assert 'appendEvidenceTreeGroup(tree, "map_risk", "Calibrated Heat", view.risk_heatmap?.segments || []' in html
+    assert 'appendEvidenceTreeGroup(tree, "map_risk", "Risk Heat"' not in html
+    assert 'appendEvidenceTreeGroup(tree, "default", "Boss Points", view.boss_points?.boss_points || []' in html
     assert "Capability Timeline Import" in html
     assert "Capability Timeline" in html
     assert "view.capability_timeline_import?.edges" in html
     assert "capability_timeline_import" in html
     assert "focusMapFor" in html
-    assert "FOCUS_POINT_VIEWPORT_M = 1000" in html
+    assert "FOCUS_POINT_VIEWPORT_M = 50" in html
     assert "const widthZoom = widthMeters / FOCUS_POINT_VIEWPORT_M;" in html
     assert "const heightZoom = heightMeters / FOCUS_POINT_VIEWPORT_M;" in html
-    assert "POINT_LABEL_VIEWPORT_M = 30" in html
+    assert "POINT_LABEL_VIEWPORT_M = 50" in html
     assert "POINT_LABEL_FONT_PX = 4" in html
     assert "POINT_LABEL_STROKE_PX = 0.6" in html
     assert "POINT_LABEL_OFFSET_PX = 3" in html
@@ -155,8 +181,13 @@ def test_pretrip_admin_page_contains_expected_layout_contract():
     assert "zoomMapOutFromBox" in html
     assert "Math.max(1, Math.min(MAP_MAX_ZOOM, state.zoom / factor))" in html
     assert "isZoomOutDrag" in html
-    assert 'button.addEventListener("click", () => {\n        selectEvidence(item);\n        focusMapFor(item, {label: false});' in html
-    assert 'button.addEventListener("dblclick", event => {\n        event.preventDefault();\n        selectEvidence(item);\n        focusMapFor(item, {label: true});' in html
+    assert "let treeClickFocusTimer = null;" in html
+    assert "function scheduleTreeClickFocus(item)" in html
+    assert "window.clearTimeout(treeClickFocusTimer);" in html
+    assert "focusMapFor(item, {label: false});\n        treeClickFocusTimer = null;" in html
+    assert "function focusTreeItemImmediately(item, options = {})" in html
+    assert 'button.addEventListener("click", () => scheduleTreeClickFocus(item));' in html
+    assert 'button.addEventListener("dblclick", event => {\n        event.preventDefault();\n        focusTreeItemImmediately(item, {label: true});' in html
     assert 'addEventListener("dblclick"' in html
     assert "nearby_group_id" in html
     assert "route_note_freshness" in html
@@ -247,12 +278,47 @@ def test_pretrip_admin_page_groups_dense_controls_and_uses_short_labels():
     assert 'aria-label="Rectangle drag zoom"' in html
     assert 'id="zoomLevel" class="zoom-level"' in html
     assert "function updateMapZoomIndicator" in html
+    assert "function mapStrokeWidthPx(node, scale)" in html
+    assert "function mapMarkerRadiusPx(circle, scale, baseRadius)" in html
+    assert 'circle.classList.contains("mcp-candidate") || circle.classList.contains("boss-point")' in html
+    assert 'node.style.setProperty("stroke-width", `${strokeWidth.toFixed(2)}px`, priority)' in html
     assert "selectionZoomFactor(selection).toFixed(2)" in html
     assert 'aria-label="Map layer controls"' in html
     assert 'class="layer-menu"' in html
     assert 'id="layerControl" title="Show layer controls" aria-label="Layer controls"' in html
     assert 'id="layerEnabledCount"' in html
     assert "layer-menu-panel" in html
+    assert 'class="layer-preset-row" aria-label="Layer presets"' in html
+    assert 'data-layer-preset="risk-review"' in html
+    assert 'data-layer-preset="mcp-review"' in html
+    assert 'data-layer-preset="route-clean"' in html
+    assert 'data-layer-preset="debug-replay"' in html
+    assert 'data-layer-preset="raster-check"' in html
+    assert 'class="layer-advanced"' in html
+    assert "Advanced layers" in html
+    assert 'data-layer="boss-points" checked> Boss</label>' in html
+    assert ".filters label {\n      display: inline-flex;\n      align-items: center;\n      gap: 4px;\n      min-height: 28px;" in html
+    assert ".layer-menu summary {\n      min-height: 28px;" in html
+    assert ".layer-preset-button {\n      min-height: 28px;\n      display: flex;\n      align-items: center;" in html
+    assert ".layer-advanced summary {\n      border: 0;\n      background: transparent;\n      padding: 4px 0 6px;\n      min-height: 28px;" in html
+    assert "width: max-content;\n      max-width: 100%;\n      box-sizing: border-box;" in html
+    assert "@media (max-width: 1120px)" in html
+    mobile_readiness_css = html.split("@media (max-width: 640px)", 1)[1].split(".layer-menu-panel", 1)[0]
+    assert "grid-template-columns: repeat(2, minmax(0, 1fr));" in mobile_readiness_css
+    assert 'data-readiness-kind="energy"' in html
+    assert "white-space: nowrap;" in mobile_readiness_css
+    assert "text-overflow: ellipsis;" in mobile_readiness_css
+    assert "#energyReserveSubline {\n        white-space: normal;" in mobile_readiness_css
+    assert "text-overflow: clip;\n        line-height: 1.25;" in mobile_readiness_css
+    assert ".route-pane .metric-grid {\n        grid-template-columns: repeat(2, minmax(0, 1fr));" in mobile_readiness_css
+    assert ".route-pane .metric span,\n      .route-pane .metric strong {\n        overflow: visible;" in mobile_readiness_css
+    assert "text-overflow: clip;\n        white-space: normal;" in mobile_readiness_css
+    assert "grid-column: 1 / -1;" not in mobile_readiness_css
+    assert ".readiness-strip { grid-template-columns: 1fr; }" not in mobile_readiness_css
+    assert ".layer-menu-panel {\n        position: fixed;\n        top: 120px;\n        left: 12px;\n        right: 12px;\n        width: auto;" in html
+    assert "function applyLayerPreset" in html
+    assert "function syncLayerPresetButtons" in html
+    assert "availablePresetLayerSet" in html
     assert "summary.textContent = `${enabled}/${layerInputs.length}`;" in html
     assert "Workspace edit tools" in html
     assert 'aria-label="Workspace edit tools">Edit</summary>' in html
@@ -270,6 +336,8 @@ def test_pretrip_admin_page_groups_dense_controls_and_uses_short_labels():
     assert 'title="Route-aligned baseline terrain risk layer"><input type="checkbox" data-layer="risk-ribbon" checked> Baseline</label>' in html
     assert 'title="Route-specific calibrated heat map"><input type="checkbox" data-layer="risk-heatmap" checked> Calibrated</label>' in html
     assert 'title="Difference between baseline risk and calibrated heat"><input type="checkbox" data-layer="risk-delta"> Delta</label>' in html
+    assert 'title="SMAP L4 soil moisture hydrology context"><input type="checkbox" data-layer="soil-moisture"> Soil H2O</label>' in html
+    assert 'title="GPM IMERG antecedent rain context"><input type="checkbox" data-layer="antecedent-rain"> Rain</label>' in html
     assert 'title="Weather API layer"><input type="checkbox" data-layer="weather-api"> Weather</label>' in html
     assert 'aria-label="Move to next review item">Next</button>' in html
     assert 'aria-label="Accept selected review">Accept</button>' in html
@@ -578,7 +646,11 @@ def test_pretrip_admin_page_fetches_fixture_backed_read_only_project_api():
     assert 'sourceId: "happyman_forest"' in html
     assert "function rasterZoomRangeFor" in html
     assert "function chooseRasterZoom" in html
-    assert "const z = zoom ?? chooseRasterZoom(view, bounds, RASTER_MAX_TILES, layerId)" in html
+    assert "const preferredZoom = zoom ?? chooseRasterZoom(view, bounds, RASTER_MAX_TILES, layerId)" in html
+    assert "for (let z = preferredZoom; z >= range.min; z -= 1)" in html
+    assert "function parentTileFor" in html
+    assert "function positionTileImage" in html
+    assert "function attachTileFallback" in html
     assert 'params.get("osmSource")' in html
     assert "https://tile.openstreetmap.org/{z}/{x}/{y}.png" in html
     assert "function renderRasterLayer" in html
@@ -597,7 +669,16 @@ def test_pretrip_admin_page_fetches_fixture_backed_read_only_project_api():
     assert "function mapViewportBox" in html
     assert "function renderRasterBasemapLayers" in html
     assert "renderRasterBasemapLayers(state.view)" in html
+    assert "const RASTER_BASEMAP_LAYER_IDS" in html
+    assert "function layerInputChecked(layerId)" in html
+    assert 'if (layerInputChecked("imagery")) renderRasterLayer' in html
+    assert "if (layerInputChecked(layer.layerId)) renderRasterLayer" in html
+    assert 'if (layerInputChecked("osm")) renderOsmBasemap' in html
+    assert "RASTER_BASEMAP_LAYER_IDS.has(input.dataset.layer)" in html
+    assert "const coverageBounds = bounds" in html
     assert "const coverageBounds = visibleBoundsFor(view) || bounds" in html
+    assert ".layer-advanced summary {\n      border: 0;\n      background: transparent;\n      padding: 4px 0 6px;\n      min-height: 28px;" in html
+    assert "width: max-content;\n      max-width: 100%;\n      box-sizing: border-box;" in html
     assert "renderRasterLayer(imageryGroup, view, bounds, MAP_WIDTH, MAP_HEIGHT, \"imagery\", coverageBounds)" in html
     assert "renderRasterLayer(rasterGroup, view, bounds, MAP_WIDTH, MAP_HEIGHT, layer.layerId, coverageBounds)" in html
     assert "renderOsmBasemap(osmGroup, bounds, MAP_WIDTH, MAP_HEIGHT, coverageBounds)" in html
@@ -642,6 +723,15 @@ def test_pretrip_admin_page_fetches_fixture_backed_read_only_project_api():
     assert "/admin/pretrip/projects/${PROJECT_ID}/weather-overlay" in html
     assert "state.weatherOverlay" in html
     assert "Weather API overlay" in html
+    assert html.index('"Risk Score", view.risk_score?.points') < html.index(
+        '"Baseline Risk", view.risk_ribbon?.segments'
+    )
+    assert html.index('"Baseline Risk", view.risk_ribbon?.segments') < html.index(
+        '"Calibrated Heat", view.risk_heatmap?.segments'
+    )
+    assert html.index('"Calibrated Heat", view.risk_heatmap?.segments') < html.index(
+        '"Risk Delta", view.risk_delta?.segments'
+    )
     assert html.index('data-layer-group": "imagery"') < html.index(
         'data-layer-group": "osm"'
     )
@@ -661,14 +751,27 @@ def test_pretrip_admin_page_fetches_fixture_backed_read_only_project_api():
         'data-layer-group": "risk-delta"'
     )
     assert html.index('data-layer-group": "risk-delta"') < html.index(
+        'data-layer-group": "soil-moisture"'
+    )
+    assert html.index('data-layer-group": "soil-moisture"') < html.index(
+        'data-layer-group": "antecedent-rain"'
+    )
+    assert html.index('data-layer-group": "antecedent-rain"') < html.index(
         'data-layer-group": "terrain"'
     )
     assert html.index('data-layer-group": "terrain"') < html.index(
         'data-layer-group": "risk-score"'
     )
+    assert '"data-risk-layer": "baseline"' in html
+    assert '"data-risk-layer": "calibrated"' in html
+    assert '"data-risk-layer": "delta"' in html
     assert html.index('data-layer-group": "overpass"') < html.index(
         'data-layer-group": "weather-api"'
     )
+    assert 'class: "soil-moisture-point"' in html
+    assert "antecedent-rain-point" in html
+    assert 'appendEvidenceTreeGroup(tree, "map_risk", "Soil Moisture"' in html
+    assert 'appendEvidenceTreeGroup(tree, "map_risk", "Antecedent Rain"' in html
 
 
 def test_pretrip_admin_page_renders_overpass_evidence_layer_and_tree():
@@ -692,7 +795,7 @@ def test_pretrip_admin_page_renders_overpass_evidence_layer_and_tree():
     assert 'appendEvidenceTreeGroup(tree, "map_risk", "Reference GPX"' in html
     assert 'id="evidenceTreeTabs"' in html
     assert "EVIDENCE_TREE_TABS" in html
-    assert "details.open = false;" in html
+    assert "details.open = Boolean(open);" in html
     assert "details.open = open;" not in html
     assert 'label: "CP / Timeline"' in html
     assert 'label: "Map / Risk"' in html
@@ -742,6 +845,7 @@ def test_pretrip_admin_page_has_round1_cp_segment_panel_contract():
     for function_name in (
         "statusFor",
         "sourceLabelFor",
+        "compactTreeSourceLabel",
         "itemSearchText",
         "updateStatusFilterOptions",
         "applyTreeFilters",
@@ -751,8 +855,13 @@ def test_pretrip_admin_page_has_round1_cp_segment_panel_contract():
     assert "badge badge-status" in html
     assert "badge badge-category" in html
     assert "badge badge-source" in html
+    assert ".badge-status {\n      flex: 0 0 auto;" in html
+    assert ".badge-source {\n      flex: 1 1 9rem;" in html
     assert "data-tree-source-label" in html
     assert "sourceLabelFor(item)" in html
+    assert "sourceBadge.textContent = compactTreeSourceLabel(fullSourceLabel);" in html
+    assert "sourceBadge.title = fullSourceLabel" in html
+    assert 'node.appendChild(document.createTextNode("\\n"));' in html
     assert "tree-label" in html
     assert "data-filter-empty" in html
     assert "scrollIntoView" in html
@@ -855,8 +964,8 @@ def test_pretrip_admin_page_review_items_stay_map_target_backed_and_read_only():
     assert "view?.route_notes?.candidates || []" in html
     assert 'el("g", {"data-layer-group": "route-notes"})' in html
     assert 'class: "route-note"' in html
-    assert 'button.addEventListener("click", () => {\n        selectEvidence(item);\n        focusMapFor(item, {label: false});' in html
-    assert 'button.addEventListener("dblclick", event => {\n        event.preventDefault();\n        selectEvidence(item);\n        focusMapFor(item, {label: true});' in html
+    assert 'button.addEventListener("click", () => scheduleTreeClickFocus(item));' in html
+    assert 'button.addEventListener("dblclick", event => {\n        event.preventDefault();\n        focusTreeItemImmediately(item, {label: true});' in html
     assert "fetch(`${apiBase()}/admin/pretrip/projects/${PROJECT_ID}?compact=1`)" in html
     assert "fetch(`${apiBase()}/safety" not in html
 
