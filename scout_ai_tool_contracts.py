@@ -13,6 +13,7 @@ from scout_safety_boundary_tool import (
     SAFETY_BOUNDARY_TOOL_ID,
 )
 from scout_live_navigation_state_tool import (
+    LIVE_NAVIGATION_OPTIONAL_FIELDS,
     LIVE_NAVIGATION_REQUIRED_FIELDS,
     LIVE_NAVIGATION_STATE_OUTPUT_KIND,
     LIVE_NAVIGATION_STATE_TOOL_ID,
@@ -706,9 +707,9 @@ def _optional_fields_for(tool_id: str) -> list[str]:
             "max_interpolation_gap_s",
         ]
     if tool_id == LIVE_NAVIGATION_STATE_TOOL_ID:
-        return list(LIVE_NAVIGATION_REQUIRED_FIELDS)
+        return list(LIVE_NAVIGATION_OPTIONAL_FIELDS)
     if tool_id == NMEA_ROUTE_RISK_PROBE_TOOL_ID:
-        return list(LIVE_NAVIGATION_REQUIRED_FIELDS)
+        return list(LIVE_NAVIGATION_OPTIONAL_FIELDS)
     if tool_id == NAVIGATION_TERRAIN_TOOL_ID:
         return list(NAVIGATION_TERRAIN_OPTIONAL_FIELDS)
     if tool_id == SAFETY_BOUNDARY_TOOL_ID:

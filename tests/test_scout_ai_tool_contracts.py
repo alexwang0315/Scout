@@ -21,7 +21,10 @@ from scout_survival_incident_playbook_tool import SURVIVAL_INCIDENT_PLAYBOOK_TOO
 from scout_safety_boundary_tool import SAFETY_BOUNDARY_TOOL_ID
 from scout_map_perception_tool import MAP_PERCEPTION_TOOL_ID
 from scout_ins_dr_trace_tool import INS_DR_TRACE_TOOL_ID
-from scout_live_navigation_state_tool import NMEA_ROUTE_RISK_PROBE_TOOL_ID
+from scout_live_navigation_state_tool import (
+    LIVE_NAVIGATION_STATE_TOOL_ID,
+    NMEA_ROUTE_RISK_PROBE_TOOL_ID,
+)
 from scout_navigation_terrain_tool import NAVIGATION_TERRAIN_TOOL_ID
 from scout_ai_tool_contracts import tool_registry_output
 from scout_ai_tool_executor import execute_scout_ai_tool
@@ -163,7 +166,13 @@ def test_tool_registry_lists_current_and_future_contracts() -> None:
     assert "scout.ai.nmea_live_navigation_probe.assess" in by_id[
         NMEA_ROUTE_RISK_PROBE_TOOL_ID
     ].aliases
+    assert "live_navigation_snapshot_path" in by_id[
+        LIVE_NAVIGATION_STATE_TOOL_ID
+    ].optional_fields
     assert "lat" in by_id[NMEA_ROUTE_RISK_PROBE_TOOL_ID].optional_fields
+    assert "live_navigation_snapshot_path" in by_id[
+        NMEA_ROUTE_RISK_PROBE_TOOL_ID
+    ].optional_fields
     assert "scout.ai.runtime_admission.assess" in by_id[
         SAFETY_BOUNDARY_TOOL_ID
     ].aliases
@@ -802,7 +811,7 @@ def test_execute_weather_tool_returns_reviewed_route_weather_decision() -> None:
     assert result.boundary.live_safety_api_calls_allowed is False
 
 
-def test_execute_live_navigation_state_assessor_returns_read_only_missing_fields() -> None:
+def test_execute_live_navigation_state_assessor_loads_reviewed_fixture_snapshot() -> None:
     result = execute_scout_ai_tool(
         {
             "tool_id": "scout.ai.live_navigation_state.assess",
@@ -818,15 +827,16 @@ def test_execute_live_navigation_state_assessor_returns_read_only_missing_fields
     assert result.payload["artifact_kind"] == "scout_ai_live_navigation_state_tool_output"
     assert result.payload["tool_id"] == "scout.ai.live_navigation_state.assess.v0"
     assert result.payload["assessment_kind"] == "read_only_live_navigation_snapshot"
-    assert result.payload["answerability"] == "snapshot_missing_required_fields"
-    assert result.payload["decision"] == "DELAY"
+    assert result.payload["answerability"] == "snapshot_evidence_available"
+    assert result.payload["source_status"] == "reviewed_live_navigation_snapshot"
+    assert result.payload["decision"] == "GO"
     assert "地形導航判斷" in result.payload["field_answer"]
-    assert "lat" in result.missing_fields
-    assert "lat" in result.payload["missing_fields"]
-    assert "lon" in result.payload["missing_fields"]
-    assert "horizontal_accuracy_m" in result.payload["missing_fields"]
-    assert "ins_dr_source" in result.payload["missing_fields"]
-    assert result.payload["route_query_plan"]["status"] == "insufficient_position"
+    assert result.missing_fields == []
+    assert result.payload["missing_fields"] == []
+    assert result.payload["route_query_plan"]["status"] == "position_available_for_followup"
+    assert result.payload["navigation_decision"]["route_fit_status"] == (
+        "on_route_corridor"
+    )
     assert result.payload["boundary"]["live_hardware_read_performed"] is False
     assert result.payload["boundary"]["safety_api_called"] is False
     assert result.payload["boundary"]["phase1_l0_l4_state_mutated"] is False

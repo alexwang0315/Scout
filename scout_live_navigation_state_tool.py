@@ -31,12 +31,17 @@ LIVE_NAVIGATION_REQUIRED_FIELDS = (
     "uncertainty_m",
     "last_anchor_at",
 )
+LIVE_NAVIGATION_OPTIONAL_FIELDS = (
+    "live_navigation_snapshot_path",
+    *LIVE_NAVIGATION_REQUIRED_FIELDS,
+)
 
 
 def assess_scout_live_navigation_state(
     project_root: Path | str,
     *,
     query: str = "",
+    live_navigation_snapshot_path: str | None = None,
     observed_at: str | None = None,
     lat: float | int | str | None = None,
     lon: float | int | str | None = None,
@@ -63,7 +68,7 @@ def assess_scout_live_navigation_state(
     root = Path(project_root)
     project = _load_project(root)
     project_id = str(project.get("project_id") or project.get("id") or root.name)
-    provided = {
+    caller_provided = {
         "observed_at": observed_at,
         "lat": lat,
         "lon": lon,
@@ -85,19 +90,44 @@ def assess_scout_live_navigation_state(
         "uncertainty_m": uncertainty_m,
         "last_anchor_at": last_anchor_at,
     }
+    caller_field_count = sum(
+        1 for value in caller_provided.values() if not _is_missing(value)
+    )
+    if live_navigation_snapshot_path or caller_field_count == 0:
+        snapshot, snapshot_report = _load_live_navigation_snapshot(
+            root,
+            project,
+            explicit_path=live_navigation_snapshot_path,
+        )
+    else:
+        snapshot = {}
+        snapshot_report = [
+            {
+                "source_kind": "live_navigation_snapshot",
+                "status": "skipped_project_fallback_for_caller_snapshot",
+                "source_path": None,
+                "loaded_count": 0,
+            }
+        ]
+    provided = {
+        field: _first_non_missing(caller_provided[field], snapshot.get(field))
+        for field in LIVE_NAVIGATION_REQUIRED_FIELDS
+    }
     missing_fields = [
         field for field in LIVE_NAVIGATION_REQUIRED_FIELDS if _is_missing(provided[field])
     ]
-    available_position = not _is_missing(lat) and not _is_missing(lon)
+    available_position = (
+        not _is_missing(provided.get("lat")) and not _is_missing(provided.get("lon"))
+    )
     provided_fields = {
         field: value for field, value in provided.items() if not _is_missing(value)
     }
     quality_flags = _quality_flags(
-        hdop=hdop,
-        horizontal_accuracy_m=horizontal_accuracy_m,
-        fix_quality=fix_quality,
-        satellite_count=satellite_count,
-        uncertainty_m=uncertainty_m,
+        hdop=provided.get("hdop"),
+        horizontal_accuracy_m=provided.get("horizontal_accuracy_m"),
+        fix_quality=provided.get("fix_quality"),
+        satellite_count=provided.get("satellite_count"),
+        uncertainty_m=provided.get("uncertainty_m"),
     )
     route_query_plan = _route_query_plan(
         available_position=available_position,
@@ -132,7 +162,7 @@ def assess_scout_live_navigation_state(
         "project_id": project_id,
         "query": query,
         "assessment_kind": "read_only_live_navigation_snapshot",
-        "source_status": "caller_provided_snapshot" if provided_fields else "missing_snapshot",
+        "source_status": _source_status(snapshot=snapshot, provided_fields=provided_fields),
         "answerability": (
             "snapshot_evidence_available"
             if not missing_fields
@@ -179,6 +209,7 @@ def assess_scout_live_navigation_state(
             "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 24.1 MVP on-route route decisions",
         ],
         "source_report": [
+            *snapshot_report,
             {
                 "source_kind": "deterministic_live_navigation_snapshot_policy",
                 "status": "loaded",
@@ -670,6 +701,148 @@ def _load_project(root: Path) -> dict[str, Any]:
         return {}
     payload = json.loads(path.read_text(encoding="utf-8"))
     return payload if isinstance(payload, dict) else {}
+
+
+def _load_live_navigation_snapshot(
+    root: Path,
+    project: dict[str, Any],
+    *,
+    explicit_path: str | None,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    candidates = _candidate_paths(
+        root,
+        project,
+        explicit_path=explicit_path,
+        ref_keys=(
+            "live_navigation_snapshot_ref",
+            "reviewed_live_navigation_snapshot_ref",
+            "navigation_snapshot_ref",
+        ),
+        fallbacks=(
+            "outputs/live_navigation_snapshot.reviewed.json",
+            "outputs/live_navigation_snapshot.json",
+            "outputs/runtime/live_navigation_snapshot.json",
+        ),
+    )
+    report: list[dict[str, Any]] = []
+    for label, path in candidates:
+        if not path.exists():
+            report.append(
+                {
+                    "source_kind": "live_navigation_snapshot",
+                    "status": "missing",
+                    "source_path": label,
+                    "loaded_count": 0,
+                }
+            )
+            continue
+        payload = _load_json_object(path)
+        snapshot = _snapshot_from_payload(payload)
+        if not snapshot:
+            report.append(
+                {
+                    "source_kind": "live_navigation_snapshot",
+                    "status": "invalid_or_empty",
+                    "source_path": label,
+                    "loaded_count": 0,
+                }
+            )
+            continue
+        report.append(
+            {
+                "source_kind": "live_navigation_snapshot",
+                "status": "loaded",
+                "source_path": label,
+                "loaded_count": 1,
+                "artifact_kind": payload.get("artifact_kind"),
+                "source_status": payload.get("status") or payload.get("source_status"),
+            }
+        )
+        return snapshot, report
+    return {}, report[:3]
+
+
+def _candidate_paths(
+    root: Path,
+    project: dict[str, Any],
+    *,
+    explicit_path: str | None,
+    ref_keys: tuple[str, ...],
+    fallbacks: tuple[str, ...],
+) -> list[tuple[str, Path]]:
+    candidates: list[tuple[str, Path]] = []
+    if explicit_path:
+        candidates.append((explicit_path, _project_path(root, explicit_path)))
+    for key in ref_keys:
+        ref = project.get(key)
+        if isinstance(ref, str) and ref.strip():
+            candidates.append((ref, _project_path(root, ref)))
+    for ref in fallbacks:
+        candidates.append((ref, _project_path(root, ref)))
+    deduped: list[tuple[str, Path]] = []
+    seen: set[Path] = set()
+    for label, path in candidates:
+        resolved = path.resolve() if path.exists() else path
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        deduped.append((label, path))
+    return deduped
+
+
+def _project_path(root: Path, value: str) -> Path:
+    path = Path(value)
+    return path if path.is_absolute() else root / path
+
+
+def _load_json_object(path: Path) -> dict[str, Any]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _snapshot_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    if not payload:
+        return {}
+    nested = payload.get("live_navigation_snapshot")
+    if not isinstance(nested, dict):
+        nested = payload.get("navigation_snapshot")
+    if not isinstance(nested, dict):
+        nested = payload.get("snapshot")
+    snapshot_source = nested if isinstance(nested, dict) else payload
+    snapshot = {
+        field: snapshot_source.get(field)
+        for field in LIVE_NAVIGATION_REQUIRED_FIELDS
+        if not _is_missing(snapshot_source.get(field))
+    }
+    if "source" not in snapshot:
+        source = payload.get("source") or payload.get("provider") or payload.get("status")
+        if not _is_missing(source):
+            snapshot["source"] = source
+    if payload.get("status") and "source_status" not in snapshot:
+        snapshot["source_status"] = payload.get("status")
+    return snapshot
+
+
+def _source_status(
+    *,
+    snapshot: dict[str, Any],
+    provided_fields: dict[str, Any],
+) -> str:
+    if snapshot:
+        return str(snapshot.get("source_status") or "loaded_live_navigation_snapshot")
+    if provided_fields:
+        return "caller_provided_snapshot"
+    return "missing_snapshot"
+
+
+def _first_non_missing(*values: object) -> object:
+    for value in values:
+        if not _is_missing(value):
+            return value
+    return None
 
 
 def _is_missing(value: object) -> bool:

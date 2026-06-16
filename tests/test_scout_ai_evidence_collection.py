@@ -127,7 +127,10 @@ def test_evidence_collection_keeps_forward_high_risk_segment_as_risk_sentinel() 
         "high"
     )
     assert nav.collection_status == "completed"
-    assert "lat" in nav.missing_fields
+    assert nav.missing_fields == []
+    assert nav.result is not None
+    assert nav.result["payload"]["answerability"] == "snapshot_evidence_available"
+    assert nav.result["payload"]["source_status"] == "reviewed_live_navigation_snapshot"
     assert all(
         record.tool_id != CONTEXTUAL_PERMISSION_TOOL_ID
         for record in result.evidence_records
@@ -153,12 +156,10 @@ def test_evidence_collection_executes_weather_tool_without_model_synthesis() -> 
     assert weather.collection_status == "completed"
     assert weather.result is not None
     assert weather.result["status"] == "completed"
-    assert weather.result["payload"]["answerability"] == "weather_placeholder_only"
-    assert weather.result["payload"]["source_status"] == "candidate_only"
-    assert weather.result["payload"]["result_count"] == 0
-    assert "provider" in weather.missing_fields
-    assert "ttl_s" in weather.missing_fields
-    assert "route_weather_package" in weather.missing_fields
+    assert weather.result["payload"]["answerability"] == "route_weather_risk_available"
+    assert weather.result["payload"]["source_status"] == "reviewed_route_weather_package"
+    assert weather.result["payload"]["result_count"] == 3
+    assert weather.missing_fields == []
     assert weather.implementation_gap is None
     assert weather.boundary.runtime_safety_truth is False
 
@@ -531,7 +532,7 @@ def test_evidence_collection_blocks_shortcut_reroute_micro_decision() -> None:
     contextual = _record(result, CONTEXTUAL_PERMISSION_TOOL_ID)
     assert route.collection_status == "completed"
     assert nav.collection_status == "completed"
-    assert "lat" in nav.missing_fields
+    assert nav.missing_fields == []
     assert contextual.collection_status == "completed"
     assert contextual.missing_fields == ["remaining_safety_buffer_minutes"]
     assert contextual.result is not None
@@ -590,7 +591,7 @@ def test_evidence_collection_keeps_direct_retreat_micro_decision() -> None:
     pace = _record(result, PACE_GUARDIAN_TOOL_ID)
     contextual = _record(result, CONTEXTUAL_PERMISSION_TOOL_ID)
     assert "subject_id" in energy.missing_fields
-    assert pace.missing_fields == ["member_pace_profile"]
+    assert pace.missing_fields == []
     assert contextual.collection_status == "completed"
     assert contextual.missing_fields == []
     assert contextual.result is not None
@@ -749,18 +750,18 @@ def test_evidence_collection_keeps_live_navigation_decision_payload() -> None:
     assert navigation.collection_status == "completed"
     assert navigation.result is not None
     payload = navigation.result["payload"]
-    assert payload["answerability"] == "snapshot_missing_required_fields"
-    assert payload["decision"] == "DELAY"
+    assert payload["answerability"] == "snapshot_evidence_available"
+    assert payload["source_status"] == "reviewed_live_navigation_snapshot"
+    assert payload["decision"] == "GO"
     assert payload["navigation_terrain"]["role"] == "Navigation & Terrain Intelligence"
-    assert payload["navigation_decision"]["route_fit_status"] == "route_fit_unknown"
+    assert payload["navigation_decision"]["route_fit_status"] == "on_route_corridor"
     assert payload["decision_output"]["decisionObjectSchema"] == "ContextualPermission"
-    assert payload["decision_output"]["decision"] == "DELAY"
+    assert payload["decision_output"]["decision"] == "GO"
     assert payload["decision_output"]["firstLayer"]["decision"] == (
-        "暫緩判斷，先取得可靠位置。"
+        "可以沿路線走廊前進。"
     )
-    assert payload["decision_output"]["secondLayer"]["uncertaintyNotes"]
-    assert "lat" in navigation.missing_fields
-    assert "lon" in navigation.missing_fields
+    assert payload["route_query_plan"]["status"] == "position_available_for_followup"
+    assert navigation.missing_fields == []
     assert navigation.boundary.runtime_safety_truth is False
 
 
@@ -855,15 +856,16 @@ def test_evidence_collection_keeps_equipment_resource_payload() -> None:
     assert equipment.collection_status == "completed"
     assert equipment.result is not None
     payload = equipment.result["payload"]
-    assert payload["answerability"] == "equipment_resource_missing_required_fields"
-    assert payload["decision"] == "DELAY"
+    assert payload["answerability"] == "equipment_resource_decision_available"
+    assert payload["decision"] == "CONDITIONAL_GO"
     assert payload["decision_output"]["decisionObjectSchema"] == "ContextualPermission"
     assert payload["decision_output"]["firstLayer"]["decision"] == (
-        "建議延後裝備資源判斷。"
+        "可有條件進入下一步規劃。"
     )
     assert payload["equipment_resource"]["role"] == "Equipment / Resource Intelligence"
     assert payload["resource_state"]["offline_map_ready"] is True
-    assert "water_liters" in equipment.missing_fields
+    assert payload["resource_state"]["water_liters"] == 2.0
+    assert equipment.missing_fields == []
     assert equipment.boundary.runtime_safety_truth is False
 
 
@@ -893,29 +895,31 @@ def test_evidence_collection_keeps_route_readiness_payload() -> None:
     assert readiness.collection_status == "completed"
     assert readiness.result is not None
     payload = readiness.result["payload"]
-    assert payload["answerability"] == "route_readiness_missing_required_fields"
-    assert payload["decision"] == "DELAY"
+    assert payload["answerability"] == "route_readiness_decision_available"
+    assert payload["decision"] == "CONDITIONAL_GO"
     assert payload["decision_output"]["decisionObjectSchema"] == "ContextualPermission"
-    assert payload["decision_output"]["decision"] == "DELAY"
-    assert payload["decision_output"]["allowed"] is False
-    assert payload["decision_output"]["firstLayer"]["decision"] == "建議延後。"
-    assert "不得出發" in payload["decision_output"]["firstLayer"]["limit"]
+    assert payload["decision_output"]["decision"] == "CONDITIONAL_GO"
+    assert payload["decision_output"]["allowed"] is True
+    assert payload["decision_output"]["firstLayer"]["decision"] == (
+        "可有條件進入人工出發門檢。"
+    )
     assert payload["decision_output"]["departureApprovalGranted"] is False
     assert payload["decision_output"]["runtimeSafetyTruth"] is False
     assert payload["route_readiness"]["role"] == (
         "Pre-Trip Route Readiness / Departure Gate"
     )
-    assert payload["route_readiness"]["decision_output"]["decision"] == "DELAY"
+    assert payload["route_readiness"]["decision_output"]["decision"] == (
+        "CONDITIONAL_GO"
+    )
     package = payload["pretrip_decision_package"]
-    assert package["required_outputs"]["pretrip_decision"] == "DELAY"
+    assert package["required_outputs"]["pretrip_decision"] == "CONDITIONAL_GO"
     assert package["required_outputs"]["top_risk_sources"]
     assert package["required_outputs"]["latest_turnaround"]["checkpoint_name"] == (
         "雲海保線所"
     )
     assert package["traceability"]["raw_payloads_embedded"] is False
     assert payload["departure_gate"]["approval_granted"] is False
-    assert "user_experience_level" in readiness.missing_fields
-    assert "user_goal" in readiness.missing_fields
+    assert readiness.missing_fields == []
     assert readiness.boundary.runtime_safety_truth is False
 
 
@@ -1038,17 +1042,17 @@ def test_evidence_collection_keeps_team_status_payload() -> None:
     assert team_status.collection_status == "completed"
     assert team_status.result is not None
     payload = team_status.result["payload"]
-    assert payload["answerability"] == "team_status_missing_required_fields"
-    assert payload["decision"] == "DELAY"
+    assert payload["answerability"] == "team_status_decision_available"
+    assert payload["decision"] == "CONDITIONAL_GO"
     assert payload["decision_output"]["decisionObjectSchema"] == "ContextualPermission"
     assert payload["decision_output"]["firstLayer"]["decision"] == (
-        "建議延後隊伍狀態判斷。"
+        "可有條件推進，但必須先完成隊伍/留守確認。"
     )
     assert payload["team_status_guardian"]["role"] == (
         "Team Status / Remote Contact Governance"
     )
     assert payload["team_status"]["remote_contact"]["available"] is True
-    assert "member_positions_or_last_heard" in team_status.missing_fields
+    assert team_status.missing_fields == []
     assert team_status.boundary.runtime_safety_truth is False
 
 
@@ -1219,12 +1223,12 @@ def _assert_on_route_micro_decision_support_records(result) -> None:
     risk = _record(result, RISK_SCORE_TOOL_ID)
 
     assert live_navigation.collection_status == "completed"
-    assert "lat" in live_navigation.missing_fields
+    assert live_navigation.missing_fields == []
     assert route_architecture.collection_status == "completed"
     assert weather.collection_status == "completed"
-    assert "route_weather_package" in weather.missing_fields
+    assert weather.missing_fields == []
     assert pace.collection_status == "completed"
-    assert pace.missing_fields == ["member_pace_profile"]
+    assert pace.missing_fields == []
     assert risk.collection_status == "completed"
 
 

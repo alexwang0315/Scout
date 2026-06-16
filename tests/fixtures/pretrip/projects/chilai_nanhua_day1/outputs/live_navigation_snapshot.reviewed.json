@@ -1,0 +1,50 @@
+{
+  "artifact_kind": "live_navigation_snapshot",
+  "artifact_version": "live_navigation_snapshot.v1",
+  "boundary": {
+    "candidate_only": true,
+    "live_hardware_read_performed": false,
+    "outbound_send_performed": false,
+    "phase1_l0_l4_state_mutated": false,
+    "raw_payloads_embedded": false,
+    "runtime_safety_truth": false,
+    "safety_api_called": false
+  },
+  "candidate_only": true,
+  "confidence": 0.82,
+  "course_deg": 96,
+  "elevation_m": 2220,
+  "fix_quality": "3d",
+  "generatedAt": "2099-10-08T12:20:00+08:00",
+  "hdop": 0.9,
+  "heading_deg": 94,
+  "horizontal_accuracy_m": 5,
+  "ins_dr_source": "fixture_pdr_anchor",
+  "last_anchor_at": "2099-10-08T12:18:00+08:00",
+  "lat": 24.0509,
+  "lon": 121.216,
+  "max_cno_dbhz": 38,
+  "nearest_cp_id": "cp.004",
+  "nearest_route_distance_m": 8,
+  "observed_at": "2099-10-08T12:20:00+08:00",
+  "review": {
+    "human_review_required": false,
+    "input_status": "human_reviewed",
+    "notes": "Reviewed deterministic live-navigation fixture for Scout AI standard coverage. This is not live field position truth.",
+    "review_ref": "reviews/human_reviews.json#live-navigation-snapshot-placeholder",
+    "review_state": "accepted",
+    "reviewed_at": "2026-06-16T12:00:00+08:00",
+    "reviewed_by": "reviewer.planning_admin"
+  },
+  "route_progress_m": 1200,
+  "runtime_safety_truth": false,
+  "satellite_count": 12,
+  "source": "fixture_reviewed_live_navigation_snapshot",
+  "source_refs": [
+    "outputs/compiled_mission_graph.reviewed.json",
+    "outputs/planned_eta.json"
+  ],
+  "speed_mps": 0.82,
+  "status": "reviewed_live_navigation_snapshot",
+  "uncertainty_m": 8
+}
