@@ -23,6 +23,8 @@ FIXTURE_PROJECT_ROOT = (
 
 def test_layer_preparation_preview_is_metadata_only_and_no_write(tmp_path: Path) -> None:
     project_root = _copy_fixture_project(tmp_path)
+    layer_outputs = project_root / "outputs" / "layers"
+    before_files = _relative_file_set(layer_outputs)
 
     preview = build_layer_preparation_preview(
         LayerPreparationRequest(
@@ -42,7 +44,7 @@ def test_layer_preparation_preview_is_metadata_only_and_no_write(tmp_path: Path)
     assert preview["boundary"]["workspace_file_mutation_allowed"] is False
     assert preview["boundary"]["phase1_runtime_mutation_allowed"] is False
     assert preview["boundary"]["phase2_brain_writeback_allowed"] is False
-    assert not (project_root / "outputs" / "layers").exists()
+    assert _relative_file_set(layer_outputs) == before_files
     assert "<trkpt" not in json.dumps(preview, ensure_ascii=False).lower()
 
 
@@ -869,6 +871,10 @@ def test_layer_preparation_syncs_scout_risk_score_outputs(
     assert set(overlays) == {"hillshade", "elevation_tint", "slope_shading", "contours"}
     assert overlays["slope_shading"]["cell_resolution_m"] == 20.0
     assert overlays["slope_shading"]["corridor_half_width_m"] == 500.0
+    assert overlays["slope_shading"]["runtime_href"] == (
+        "/admin/pretrip/projects/chilai_nanhua_day1"
+        "/terrain-overlays/slope_shading.png"
+    )
     assert overlays["slope_shading"]["runtime_safety_truth"] is False
     assert (project_root / overlays["slope_shading"]["source_path"]).is_file()
     _assert_risk_features_have_pretrip_provenance(
@@ -889,6 +895,69 @@ def test_layer_preparation_syncs_scout_risk_score_outputs(
     )
     assert manifest["boundary"]["runtime_safety_truth"] is False
     assert manifest["boundary"]["phase1_runtime_mutation_allowed"] is False
+
+
+def test_layer_preparation_terrain_can_fallback_to_risk_ribbon_lines(
+    tmp_path: Path,
+) -> None:
+    project_root = _copy_fixture_project(tmp_path)
+    project_path = project_root / "project.json"
+    project = _load(project_path)
+    risk_root = project_root / "outputs" / "risk"
+    _write_risk_score_outputs(risk_root)
+    project.update(
+        {
+            "risk_ribbon_ref": "outputs/risk/risk_ribbon.geojson",
+            "risk_ribbon_metadata_ref": "outputs/risk/risk_ribbon.metadata.json",
+        }
+    )
+    for key in (
+        "risk_route_profile_ref",
+        "risk_route_profile_metadata_ref",
+        "risk_score_points_ref",
+        "risk_score_points_metadata_ref",
+    ):
+        project.pop(key, None)
+    project_path.write_text(
+        json.dumps(project, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+    manifest = run_layer_preparation(
+        LayerPreparationRequest(
+            project_id="chilai_nanhua_day1",
+            project_root=project_root,
+            layers=("terrain",),
+            prepared_at="2026-05-22T00:00:00+00:00",
+        )
+    )
+    updated_project = _load(project_path)
+    terrain_samples = _load(project_root / updated_project["terrain_route_samples_ref"])
+    terrain_visualization = _load(
+        project_root / updated_project["terrain_visualization_ref"]
+    )
+
+    assert manifest["boundary"]["runtime_safety_truth"] is False
+    assert terrain_samples["status"] == "ready_from_risk_ribbon"
+    assert terrain_samples["counts"]["feature_count"] == 2
+    assert terrain_samples["features"][0]["geometry"]["type"] == "Point"
+    assert terrain_samples["features"][0]["properties"]["source_risk_ref_key"] == (
+        "risk_ribbon_ref"
+    )
+    assert terrain_samples["features"][0]["properties"]["source_risk_ref"] == (
+        "outputs/risk/risk_ribbon.geojson"
+    )
+    assert terrain_samples["features"][0]["properties"]["runtime_safety_truth"] is False
+    assert terrain_visualization["status"] == "ready_from_dtm_20m_corridor_bitmap"
+    assert terrain_visualization["counts"]["bitmap_overlay_count"] == 4
+    assert terrain_visualization["visualization_spec"]["bitmap_cell_resolution_m"] == 20.0
+    assert terrain_visualization["visualization_spec"]["corridor_half_width_m"] == 500.0
+    overlays = {overlay["mode"]: overlay for overlay in terrain_visualization["raster_overlays"]}
+    assert overlays["hillshade"]["runtime_href"] == (
+        "/admin/pretrip/projects/chilai_nanhua_day1"
+        "/terrain-overlays/hillshade.png"
+    )
+    assert (project_root / overlays["hillshade"]["source_path"]).is_file()
 
 
 def test_layer_preparation_explicit_fetch_normalizes_overpass_with_fixture_fetcher(
@@ -1049,6 +1118,16 @@ def _copy_fixture_project(
 
 def _load(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _relative_file_set(path: Path) -> set[str]:
+    if not path.exists():
+        return set()
+    return {
+        str(item.relative_to(path))
+        for item in path.rglob("*")
+        if item.is_file()
+    }
 
 
 def _write_gpx(

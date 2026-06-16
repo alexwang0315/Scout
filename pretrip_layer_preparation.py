@@ -3975,17 +3975,17 @@ def _terrain_route_samples_from_project(
             source_plan_ref=None,
         )
     payload = _load_json(risk_path)
+    source_samples = _terrain_source_samples(payload)
     features = []
-    for index, feature in enumerate(payload.get("features", [])):
-        if not isinstance(feature, dict):
-            continue
-        properties = dict(feature.get("properties") or {})
+    for index, sample in enumerate(source_samples):
+        properties = dict(sample.get("properties") or {})
         terrain_feature = {
             "type": "Feature",
-            "geometry": feature.get("geometry"),
+            "geometry": sample.get("geometry"),
             "properties": {
                 **properties,
-                "terrain_sample_id": properties.get("sample_id")
+                "terrain_sample_id": sample.get("sample_id")
+                or properties.get("sample_id")
                 or f"terrain_route_sample.{index + 1:06d}",
                 "evidence_type": "pretrip_terrain_route_sample",
                 "source_kind": "scout_risk_engine_terrain_sample",
@@ -4022,6 +4022,7 @@ def _terrain_route_samples_from_project(
             manifest["inputs"]["source_refs"].get("risk_score_points_metadata_ref"),
             manifest["inputs"]["source_refs"].get("risk_route_profile_ref"),
             manifest["inputs"]["source_refs"].get("risk_route_profile_metadata_ref"),
+            manifest["inputs"]["source_refs"].get("risk_ribbon_metadata_ref"),
         )
         if isinstance(ref, dict)
     ]
@@ -4858,7 +4859,7 @@ def _terrain_source_ref(
     first_candidate: (
         tuple[str, dict[str, Any] | None, str | None, Path | None] | None
     ) = None
-    for ref_key in ("risk_route_profile_ref", "risk_score_points_ref"):
+    for ref_key in ("risk_route_profile_ref", "risk_score_points_ref", "risk_ribbon_ref"):
         ref_record = manifest["inputs"]["source_refs"].get(ref_key, {})
         ref = ref_record.get("ref") if isinstance(ref_record, dict) else None
         if isinstance(ref, str) and ref:
@@ -4879,21 +4880,102 @@ def _terrain_source_samples(payload: dict[str, Any]) -> list[dict[str, Any]]:
         if not isinstance(feature, dict):
             continue
         geometry = feature.get("geometry") or {}
+        geometry_type = geometry.get("type")
         coordinates = geometry.get("coordinates") or []
-        if geometry.get("type") != "Point" or len(coordinates) < 2:
-            continue
         properties = dict(feature.get("properties") or {})
-        sample_id = str(properties.get("sample_id") or f"terrain_source.{index + 1:06d}")
-        samples.append(
+        if geometry_type == "Point" and len(coordinates) >= 2:
+            sample_id = str(
+                properties.get("sample_id") or f"terrain_source.{index + 1:06d}"
+            )
+            samples.append(
+                {
+                    "sample_id": sample_id,
+                    "geometry": geometry,
+                    "properties": properties,
+                    "distance_m": _as_float(properties.get("distance_m")),
+                    "elevation_m": _as_float(properties.get("elevation_m")),
+                }
+            )
+            continue
+        if geometry_type == "LineString":
+            samples.extend(
+                _terrain_source_samples_from_line(
+                    coordinates,
+                    properties=properties,
+                    feature_index=index,
+                )
+            )
+            continue
+        if geometry_type == "MultiLineString":
+            for part_index, line in enumerate(coordinates):
+                samples.extend(
+                    _terrain_source_samples_from_line(
+                        line,
+                        properties=properties,
+                        feature_index=index,
+                        part_index=part_index,
+                    )
+                )
+    return samples
+
+
+def _terrain_source_samples_from_line(
+    coordinates: list[Any],
+    *,
+    properties: dict[str, Any],
+    feature_index: int,
+    part_index: int | None = None,
+) -> list[dict[str, Any]]:
+    line_samples: list[dict[str, Any]] = []
+    valid_coordinates = [
+        coordinate
+        for coordinate in coordinates
+        if isinstance(coordinate, list | tuple) and len(coordinate) >= 2
+    ]
+    if not valid_coordinates:
+        return line_samples
+    start_distance = _as_float(properties.get("start_distance_m"))
+    end_distance = _as_float(properties.get("end_distance_m"))
+    distance_span = (
+        end_distance - start_distance
+        if isinstance(start_distance, float)
+        and isinstance(end_distance, float)
+        and end_distance >= start_distance
+        else None
+    )
+    part_suffix = f".part{part_index + 1:02d}" if isinstance(part_index, int) else ""
+    denominator = max(1, len(valid_coordinates) - 1)
+    for point_index, coordinate in enumerate(valid_coordinates):
+        lon = _as_float(coordinate[0])
+        lat = _as_float(coordinate[1])
+        if not isinstance(lat, float) or not isinstance(lon, float):
+            continue
+        ratio = point_index / denominator
+        distance_m = (
+            start_distance + distance_span * ratio
+            if isinstance(start_distance, float) and isinstance(distance_span, float)
+            else None
+        )
+        sample_id = (
+            properties.get("sample_id")
+            or properties.get("from_sample_id")
+            or properties.get("segment_id")
+            or f"terrain_source.{feature_index + 1:06d}"
+        )
+        line_samples.append(
             {
-                "sample_id": sample_id,
-                "geometry": geometry,
-                "properties": properties,
-                "distance_m": _as_float(properties.get("distance_m")),
+                "sample_id": f"{sample_id}{part_suffix}.pt{point_index + 1:02d}",
+                "geometry": {"type": "Point", "coordinates": [lon, lat]},
+                "properties": {
+                    **properties,
+                    "source_geometry_type": "LineString",
+                    "line_point_index": point_index,
+                },
+                "distance_m": distance_m,
                 "elevation_m": _as_float(properties.get("elevation_m")),
             }
         )
-    return samples
+    return line_samples
 
 
 def _route_aligned_slope_degrees(
