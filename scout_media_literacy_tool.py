@@ -10,6 +10,7 @@ MEDIA_LITERACY_TOOL_ID = "scout.ai.media_literacy.assess.v0"
 MEDIA_LITERACY_OUTPUT_KIND = "scout_ai_media_literacy_tool_output"
 MEDIA_LITERACY_REQUIRED_FIELDS = ("project_root",)
 MEDIA_LITERACY_OPTIONAL_FIELDS = (
+    "media_context_path",
     "media_claim",
     "source_platform",
     "target_context_point",
@@ -28,6 +29,7 @@ def assess_scout_media_literacy(
     project_root: Path | str,
     *,
     query: str = "",
+    media_context_path: str | None = None,
     media_claim: str | None = None,
     source_platform: str | None = None,
     target_context_point: str | None = None,
@@ -47,7 +49,62 @@ def assess_scout_media_literacy(
     project = _load_json_object(root / "project.json")
     project_id = str(project.get("project_id") or project.get("id") or root.name)
     source_report: list[dict[str, Any]] = []
-    text = _joined_text(query, media_claim, source_platform, target_context_point)
+    media_context, media_context_report = _load_media_context(
+        root,
+        project,
+        explicit_path=media_context_path,
+    )
+    source_report.extend(media_context_report)
+    effective_media_claim = media_claim
+    effective_source_platform = source_platform
+    effective_target_context_point = target_context_point
+    base_text = _joined_text(
+        query,
+        media_claim,
+        source_platform,
+        target_context_point,
+    )
+    if (
+        media_context
+        and not _first_text(media_claim)
+        and not _detect_biases(base_text)
+    ):
+        effective_media_claim = _first_text(
+            effective_media_claim,
+            media_context.get("media_claim"),
+        ) or None
+        effective_source_platform = _first_text(
+            effective_source_platform,
+            media_context.get("source_platform"),
+        ) or None
+        effective_target_context_point = _first_text(
+            effective_target_context_point,
+            media_context.get("target_context_point"),
+        ) or None
+    effective_route_condition_reviewed = _first_bool(
+        route_condition_reviewed,
+        media_context.get("route_condition_reviewed"),
+    )
+    effective_weather_reviewed = _first_bool(
+        weather_reviewed,
+        media_context.get("weather_reviewed"),
+    )
+    effective_user_experience_level = _first_text(
+        user_experience_level,
+        media_context.get("user_experience_level"),
+    ) or None
+    effective_guided_party = _first_bool(guided_party, media_context.get("guided_party"))
+    effective_remaining_safety_buffer_minutes = (
+        _float_or_none(remaining_safety_buffer_minutes)
+        if _float_or_none(remaining_safety_buffer_minutes) is not None
+        else _float_or_none(media_context.get("remaining_safety_buffer_minutes"))
+    )
+    text = _joined_text(
+        query,
+        effective_media_claim,
+        effective_source_platform,
+        effective_target_context_point,
+    )
     biases = _detect_biases(text)
     context_points = _context_points(
         root,
@@ -59,14 +116,14 @@ def assess_scout_media_literacy(
     matches = _match_context_points(
         context_points,
         text=text,
-        target_context_point=target_context_point,
+        target_context_point=effective_target_context_point,
         limit=limit,
     )
     weather_state = _weather_state(
         root,
         project,
         weather_daylight_path=weather_daylight_path,
-        weather_reviewed=weather_reviewed,
+        weather_reviewed=effective_weather_reviewed,
         source_report=source_report,
     )
     input_state = {
@@ -74,13 +131,16 @@ def assess_scout_media_literacy(
         "target_context_available": bool(matches),
         "reroute_pressure": _has_reroute_pressure(text),
         "detour_or_stop_pressure": _has_detour_or_stop_pressure(text),
-        "route_condition_reviewed": bool(_bool_or_none(route_condition_reviewed)),
-        "weather_reviewed": bool(weather_state["weather_reviewed"]),
-        "user_experience_available": bool(_first_text(user_experience_level)),
-        "guided_party": _bool_or_none(guided_party),
-        "remaining_safety_buffer_minutes": _float_or_none(
-            remaining_safety_buffer_minutes
+        "route_condition_reviewed": bool(
+            _bool_or_none(effective_route_condition_reviewed)
         ),
+        "weather_reviewed": bool(weather_state["weather_reviewed"]),
+        "user_experience_available": bool(
+            _first_text(effective_user_experience_level)
+        ),
+        "guided_party": _bool_or_none(effective_guided_party),
+        "remaining_safety_buffer_minutes": effective_remaining_safety_buffer_minutes,
+        "media_context_loaded": bool(media_context),
     }
     missing_fields = _missing_fields(
         biases=biases,
@@ -129,7 +189,7 @@ def assess_scout_media_literacy(
         "query": query,
         "assessment_kind": "read_only_media_literacy",
         "answerability": answerability,
-        "source_status": "candidate_only",
+        "source_status": _source_status(media_context=media_context),
         "action": decision_output["action"],
         "decision": decision,
         "allowed": decision in {"GO", "CONDITIONAL_GO"},
@@ -420,14 +480,124 @@ def _weather_state(
         bool(payload.get("authoritative_weather_computed"))
         and not bool(payload.get("human_review_required")),
     )
+    human_review_required = bool(payload.get("human_review_required")) and not bool(
+        reviewed
+    )
     return {
         "available": bool(payload),
         "weather_reviewed": bool(reviewed),
-        "human_review_required": bool(payload.get("human_review_required")),
+        "human_review_required": human_review_required,
         "validation_status": _first_text(validation.get("validation_status")),
         "candidate_only": True,
         "runtime_safety_truth": False,
     }
+
+
+def _load_media_context(
+    root: Path,
+    project: dict[str, Any],
+    *,
+    explicit_path: str | None,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    candidates = _candidate_paths(
+        root,
+        project,
+        explicit_path=explicit_path,
+        ref_keys=(
+            "media_literacy_context_ref",
+            "reviewed_media_literacy_context_ref",
+            "reviewed_media_context_ref",
+        ),
+        fallbacks=(
+            "outputs/media_literacy_context.reviewed.json",
+            "outputs/media_context.reviewed.json",
+        ),
+    )
+    report: list[dict[str, Any]] = []
+    for label, path in candidates:
+        if not path.exists():
+            report.append(_source_report("media_literacy_context", label, 0))
+            continue
+        payload = _load_json_object(path)
+        context = _media_context_from_payload(payload)
+        if not context:
+            report.append(
+                {
+                    **_source_report("media_literacy_context", label, 0),
+                    "status": "invalid_or_empty",
+                }
+            )
+            continue
+        report.append(
+            {
+                **_source_report("media_literacy_context", label, 1),
+                "artifact_kind": payload.get("artifact_kind"),
+                "source_status": payload.get("status") or payload.get("source_status"),
+            }
+        )
+        return context, report
+    return {}, report[:2]
+
+
+def _candidate_paths(
+    root: Path,
+    project: dict[str, Any],
+    *,
+    explicit_path: str | None,
+    ref_keys: tuple[str, ...],
+    fallbacks: tuple[str, ...],
+) -> list[tuple[str, Path]]:
+    candidates: list[tuple[str, Path]] = []
+    if explicit_path:
+        candidates.append((explicit_path, _project_path(root, explicit_path)))
+    for key in ref_keys:
+        ref = project.get(key)
+        if isinstance(ref, str) and ref.strip():
+            candidates.append((ref, _project_path(root, ref)))
+    for ref in fallbacks:
+        candidates.append((ref, _project_path(root, ref)))
+    deduped: list[tuple[str, Path]] = []
+    seen: set[Path] = set()
+    for label, path in candidates:
+        resolved = path.resolve() if path.exists() else path
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        deduped.append((label, path))
+    return deduped
+
+
+def _media_context_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    if not payload:
+        return {}
+    nested = payload.get("media_literacy_context")
+    if not isinstance(nested, dict):
+        nested = payload.get("media_context")
+    context_source = nested if isinstance(nested, dict) else payload
+    fields = (
+        "media_claim",
+        "source_platform",
+        "target_context_point",
+        "route_condition_reviewed",
+        "weather_reviewed",
+        "user_experience_level",
+        "guided_party",
+        "remaining_safety_buffer_minutes",
+    )
+    context = {
+        field: context_source.get(field)
+        for field in fields
+        if context_source.get(field) not in (None, "")
+    }
+    if payload.get("status") and "source_status" not in context:
+        context["source_status"] = payload.get("status")
+    return context
+
+
+def _source_status(*, media_context: dict[str, Any]) -> str:
+    if media_context:
+        return str(media_context.get("source_status") or "loaded_media_context")
+    return "candidate_only"
 
 
 def _missing_fields(
