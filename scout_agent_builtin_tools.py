@@ -162,6 +162,8 @@ def run_builtin_tool(argv: Sequence[str] | None = None) -> tuple[int, dict[str, 
         return _pretrip_route_architecture_collect(args)
     if args.command == "pretrip-pace-fit-collect":
         return _pretrip_pace_fit_collect(args)
+    if args.command == "pretrip-boss-points-synthesize":
+        return _pretrip_boss_points_synthesize(args)
     if args.command == "pretrip-navigation-terrain-collect":
         return _pretrip_navigation_terrain_collect(args)
     if args.command == "pretrip-weather-decision-collect":
@@ -431,6 +433,11 @@ def _build_parser() -> argparse.ArgumentParser:
     pace_fit_parser.add_argument("--input", type=Path, required=True)
     pace_fit_parser.add_argument("--dry-run", action="store_true")
     pace_fit_parser.add_argument("--json", action="store_true")
+
+    boss_points_parser = subparsers.add_parser("pretrip-boss-points-synthesize")
+    boss_points_parser.add_argument("--input", type=Path, required=True)
+    boss_points_parser.add_argument("--dry-run", action="store_true")
+    boss_points_parser.add_argument("--json", action="store_true")
 
     navigation_terrain_parser = subparsers.add_parser(
         "pretrip-navigation-terrain-collect"
@@ -2616,6 +2623,51 @@ def _pretrip_pace_fit_collect(args: argparse.Namespace) -> tuple[int, dict[str, 
         0,
         {
             "artifact_kind": "scout_pretrip_pace_fit_collect_tool_output",
+            "status": "completed",
+            "dry_run": bool(args.dry_run),
+            "result": result,
+            "boundary": {
+                **_closed_boundary(),
+                "workspace_file_mutation_allowed": not bool(args.dry_run),
+                "candidate_only": True,
+                "raw_payloads_embedded": False,
+                "raw_health_payload_embedded": False,
+                "network_calls_made": False,
+                "live_safety_api_calls_allowed": False,
+                "medical_diagnosis": False,
+                "average_pace_used": False,
+            },
+        },
+    )
+
+
+def _pretrip_boss_points_synthesize(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
+    from pretrip_boss_point_synthesis import synthesize_pretrip_boss_points
+
+    request = _load_json(args.input)
+    project_root = _optional_path(request.get("project_root"))
+    if project_root is None:
+        project_id = request.get("project_id")
+        workspace_root = _optional_path(request.get("workspace_root"))
+        if project_id and workspace_root:
+            project_root = workspace_root / str(project_id)
+    if project_root is None:
+        return 2, _error_payload(
+            "boss point synthesis requires project_root or workspace_root plus project_id"
+        )
+
+    result = synthesize_pretrip_boss_points(
+        project_root,
+        top_n=int(request.get("top_n", 5)),
+        route_note_radius_m=float(request.get("route_note_radius_m", 300.0)),
+        risk_window_m=float(request.get("risk_window_m", 300.0)),
+        generated_at=request.get("generated_at"),
+        dry_run=bool(args.dry_run),
+    )
+    return (
+        0,
+        {
+            "artifact_kind": "scout_pretrip_boss_points_synthesize_tool_output",
             "status": "completed",
             "dry_run": bool(args.dry_run),
             "result": result,

@@ -258,7 +258,39 @@ Scout 必須評估：
 - 是否有人有膝蓋、高山症、氣喘、睡眠不足、低血糖、焦慮或其他影響行動的狀況。
 - 領隊或決策者是否願意以最慢者為基準。
 
-### 7.4 Example Decision
+### 7.4 Route Boss Demand / Challenge Fit
+
+Scout 在長距離或高難度路線中，必須把「路線本身的魔王點」和
+「使用者/隊伍能不能承受」分開量化。
+
+核心關係式：
+
+```text
+Route Boss Demand
+vs
+User Pace Coefficient / Energy Reserve
+=
+Challenge Fit
+```
+
+`Route Boss Demand` 是路線障礙本身的需求強度，來源可以包含 MCP、
+route note、大家都慢的歷史 GPX 通過狀態、休息/互等隊友跡象、terrain
+risk、risk heat/ribbon、事故/救援脈絡、網路上反覆提及的 named point、
+斷崖/好漢坡/崩壁/細瘦稜線等名稱訊號，以及中後段救援困難度。
+
+`User Pace Coefficient / Energy Reserve` 是使用者或隊伍最脆弱成員的
+能力與當下儲備，不得用隊伍平均值替代。沒有穿戴式生命徵象時，仍可用
+completed trip GPX、capability timeline、地形-時間模型、休息頻率、後段
+速度衰退與歷史活動 baseline 形成保守估計。這些資料是 advisory planning
+evidence，不是醫療診斷。
+
+`Challenge Fit` 是把路線魔王需求乘上 pace/energy vulnerability 後的
+規劃適配度。高分不代表「必然危險」，而是代表需要更保守的 buffer、拆日、
+撤退策略、隊伍調整或人工 review。它不得呼叫 live `/safety/*`，不得成為
+Phase 1 runtime safety truth，除非後續經由已審核的 runtime handoff contract
+轉成明確的 on-trip plan action。
+
+### 7.5 Example Decision
 
 錯誤輸出：
 

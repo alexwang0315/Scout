@@ -9,6 +9,7 @@ from scout_cli import run_scout_cli
 from pretrip_contextual_permission_collection import CONTEXTUAL_PERMISSION_RULES_REF
 from pretrip_navigation_terrain_collection import OFFLINE_MAP_MANIFEST_REF
 from pretrip_pace_fit_collection import PACE_COEFFICIENTS_REF, TEAM_PACE_FIT_REF
+from pretrip_boss_point_synthesis import BOSS_POINTS_REF
 from pretrip_route_architecture_collection import ROUTE_ARCHITECTURE_REF
 from pretrip_route_context_collection import (
     ROUTE_CONTEXT_BRIEFING_REF,
@@ -634,6 +635,49 @@ def test_scout_pretrip_pace_fit_collect_builds_from_capability(
     assert coefficients["member_coefficients"][0]["member_id"] == "alex"
     assert coefficients["member_coefficients"][0]["load_impact_ratio"] == 0.09
     assert (project_root / TEAM_PACE_FIT_REF).is_file()
+
+
+def test_scout_pretrip_boss_points_synthesize_facade(tmp_path: Path) -> None:
+    project_root = tmp_path / "chilai_nanhua_day1"
+    shutil.copytree(CHILAI_PROJECT, project_root)
+
+    dry_exit, dry_payload = run_scout_cli(
+        [
+            "pretrip",
+            "boss-points-synthesize",
+            "--project-root",
+            str(project_root),
+            "--dry-run",
+            "--json",
+        ]
+    )
+    assert dry_exit == 0
+    dry_output = json.loads(dry_payload["outputs"]["stdout"])
+    assert dry_output["result"]["boss_point_count"] == 5
+    assert dry_output["result"]["boundary"]["workspace_file_mutation_allowed"] is False
+    assert not (project_root / BOSS_POINTS_REF).exists()
+
+    exit_code, payload = run_scout_cli(
+        [
+            "pretrip",
+            "boss-points-synthesize",
+            "--project-root",
+            str(project_root),
+            "--authorized-by",
+            "operator.alex",
+            "--json",
+        ]
+    )
+
+    assert exit_code == 0
+    output = json.loads(payload["outputs"]["stdout"])
+    assert output["artifact_kind"] == "scout_pretrip_boss_points_synthesize_tool_output"
+    assert output["result"]["boss_points"][0]["display_theme"]["alias"] == "呂布關"
+    assert output["result"]["boss_points"][0]["label"] == "大崩壁"
+    assert output["result"]["challenge_fit_summary"]["decision"] == (
+        "CHANGE_PLAN_OR_ADD_BUFFER"
+    )
+    assert (project_root / BOSS_POINTS_REF).is_file()
 
 
 def test_scout_pretrip_navigation_terrain_collect_facade(tmp_path: Path) -> None:

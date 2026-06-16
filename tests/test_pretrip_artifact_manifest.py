@@ -1,7 +1,11 @@
 import json
 from pathlib import Path
 
-from pretrip_artifact_manifest import PROJECT_ARTIFACTS, build_pretrip_artifact_manifest
+from pretrip_artifact_manifest import (
+    OPTIONAL_PROJECT_ARTIFACTS,
+    PROJECT_ARTIFACTS,
+    build_pretrip_artifact_manifest,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -18,7 +22,14 @@ def test_builds_deterministic_manifest_with_stable_ordering():
     assert first.to_json().endswith("\n")
 
     payload = first.to_dict()
-    expected_project_kinds = [artifact_kind for artifact_kind, _ in PROJECT_ARTIFACTS]
+    project = json.loads(PROJECT_PATH.read_text(encoding="utf-8"))
+    expected_project_kinds = [
+        artifact_kind for artifact_kind, _ in PROJECT_ARTIFACTS
+    ] + [
+        artifact_kind
+        for artifact_kind, ref_key in OPTIONAL_PROJECT_ARTIFACTS
+        if project.get(ref_key)
+    ]
     project_artifacts = [
         artifact for artifact in payload["artifacts"] if artifact["source"] == "project"
     ]

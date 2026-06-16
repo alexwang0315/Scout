@@ -57,6 +57,7 @@ def test_builtin_manifest_directory_lists_read_and_proposal_tools() -> None:
     assert "scout.pretrip.route_briefing_compose" in tool_ids
     assert "scout.pretrip.route_architecture_collect" in tool_ids
     assert "scout.pretrip.pace_fit_collect" in tool_ids
+    assert "scout.pretrip.boss_points_synthesize" in tool_ids
     assert "scout.pretrip.navigation_terrain_collect" in tool_ids
     assert "scout.pretrip.weather_decision_collect" in tool_ids
     assert "scout.pretrip.contextual_permission_collect" in tool_ids
