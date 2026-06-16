@@ -48,6 +48,7 @@
     "workspace_layout_section": "Pretrip outputs/briefings",
     "network_policy": "no_live_network_fetch",
     "source_policy": "operator_reviewed_sources_only",
+    "media_quality_policy": "Prefer route-specific photos/maps; reject website chrome, SVG icons, logos, tracking pixels, social widgets, and unrelated brand or education graphics; render visual evidence gaps instead of placeholders.",
     "candidate_only": true,
     "runtime_safety_truth": false,
     "briefing_html": true

@@ -48,6 +48,7 @@
     "workspace_layout_section": "Outdoor AI Agent Data Placement",
     "network_policy": "no_live_network_fetch",
     "route_note_policy": "seed_only_by_default",
+    "media_quality_policy": "Prefer route-specific photos/maps; reject website chrome, SVG icons, logos, tracking pixels, social widgets, and unrelated brand or education graphics; render visual evidence gaps instead of placeholders.",
     "briefing_html": true,
     "candidate_only": true
   }

@@ -116,6 +116,19 @@ not fall back to a source table or engineering report:
 - color direction: use a bold expedition palette with dark ground, ember/red action accents, signal yellow, and high-contrast map/source panels. Keep Scout safety boundary text clear and do not hide candidate-only status.
 - public/share variants must redact private P2 details, but Scout-local/admin briefings should still show that P2 exists and what category/review state it has.
 
+## Media Quality Gate
+
+Before rendering a briefing HTML, curate visual evidence as route content rather than generic web-page media:
+
+- Prefer route-specific photos or maps from P0 official pages, P1 route/community pages, or reviewed P2 Scout-owned media.
+- Bind every selected image to a route point, lodging point, route segment, context layer, or source section. A photo with no route/context relationship is decoration and should not be used.
+- Reject website chrome and tracking media: logos, logotypes, SVG icons, menu/search/close/language/share buttons, app/web UI screenshots, badges, avatars, social icons, tracking pixels, and generic education/brand tiles.
+- Reject images whose URL, alt text, caption, title, or source role indicates `icon`, `logo`, `logotype`, `button`, `menu`, `search`, `close`, `language`, `facebook`, `line`, `tracking`, `pixel`, `avatar`, `badge`, or non-route campaign/education graphics.
+- Do not use a generic icon, placeholder, or decorative graphic to fill a required slot. If a suitable real photo/map is unavailable, show an explicit visual evidence gap and shot list.
+- Prefer stable content image formats such as JPG, JPEG, PNG, or WEBP. Treat SVG/GIF/ICO as suspect unless the artifact is a route map with clear provenance.
+- Keep repeated photos intentional. Reuse a hero image only when it anchors the route; avoid filling a gallery with duplicates when other verified route visuals exist.
+- After rendering, inspect the generated HTML image sources. A Scout-local route briefing should have zero selected gallery/hero images from UI chrome, tracking, generic icon, or unrelated brand assets.
+
 For each point, distinguish:
 - why it matters for route understanding;
 - source tier/family and URL;
@@ -145,3 +158,4 @@ If the user asks for a Scout-local HTML/admin briefing instead of workspace arti
 - Do not count P2 artifact existence as route context unless the artifact was parsed, summarized, and tied to a route point/segment with provenance.
 - Do not hide empty web evidence behind a fluent narrative; show the missing-source state.
 - Do not collapse P0/P1/P2 provenance into a single generic tier when merging into route context.
+- Do not let site icons, logos, tracking pixels, or generic education graphics become the cover, gallery, or route visual material.

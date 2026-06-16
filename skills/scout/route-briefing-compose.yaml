@@ -86,6 +86,18 @@ output_schema:
         - signal_yellow
         - dark_ground
       rule: Use real route images/maps where available; render missing visual slots as evidence gaps.
+    media_quality_gate:
+      must_prefer:
+        - route-specific P0/P1 photos or maps
+        - reviewed P2 Scout-owned route media
+        - images bound to route points, route segments, lodging nodes, context layers, or source sections
+      must_reject:
+        - website logos, logotypes, badges, avatars, and brand tiles
+        - SVG icons and UI controls such as menu, search, close, language, share, or audio buttons
+        - tracking pixels, social widgets, and unrelated campaign or education graphics
+        - decorative placeholders used to fill missing briefing slots
+      missing_visual_policy: Render an explicit visual evidence gap and shot list instead of substituting generic graphics.
+      post_render_check: Generated briefing HTML should have zero selected hero/gallery images from site chrome, tracking media, or unrelated brand assets.
     safety_boundary:
       candidate_only: true
       runtime_safety_truth: false
