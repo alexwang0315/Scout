@@ -447,6 +447,7 @@ def _build_pretrip_admin_case_view(
         "overpass_evidence": pretrip_view["overpass_evidence"],
         "gis_perception_timeline": pretrip_view["gis_perception_timeline"],
         "major_critical_points": pretrip_view.get("major_critical_points"),
+        "boss_points": pretrip_view.get("boss_points"),
         "review_queue": pretrip_view["review_queue"],
         "review_workbench": pretrip_view["review_workbench"],
         "departure_reviewed_candidates": pretrip_view.get(
