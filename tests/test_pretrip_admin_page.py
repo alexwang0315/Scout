@@ -231,6 +231,7 @@ def test_pretrip_admin_page_has_read_only_toolbar_and_summary_raw_sample_contrac
 
 def test_pretrip_admin_page_groups_dense_controls_and_uses_short_labels():
     html = PAGE.read_text(encoding="utf-8")
+    assistant_script = ASSISTANT_UI_SCRIPT.read_text(encoding="utf-8")
 
     assert "toolbar-grid" in html
     assert "assistant-drawer" in html
@@ -272,6 +273,18 @@ def test_pretrip_admin_page_groups_dense_controls_and_uses_short_labels():
     assert 'aria-label="Accept selected review">Accept</button>' in html
     assert 'aria-label="Route-note reviewed assumptions">Assumptions</button>' in html
     assert "function assistantQuestionLabel" in html
+    assert 'aria-label="Scout standard gap audit"' in html
+    assert 'id="assistantStandardGapAuditList"' in html
+    assert "Standard gaps?" in html
+    assert "SCOUT_OUTDOOR_AI_AGENT_STANDARD" in html
+    assert "window.ScoutAssistantUI.renderStandardGapAudit(payload)" in html
+    assert "window.ScoutAssistantUI.renderStandardGapAudit({})" in html
+    assert "function standardGapAudit" in assistant_script
+    assert "function standardGapAuditItems" in assistant_script
+    assert "function renderStandardGapAudit" in assistant_script
+    assert "assistantStandardGapAuditList" in assistant_script
+    assert "implementation_gap_tools" in assistant_script
+    assert "context_review_gap_tools" in assistant_script
 
 
 def test_pretrip_admin_page_has_import_gpx_reference_route_panel():

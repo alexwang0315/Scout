@@ -267,6 +267,45 @@ def test_pretrip_full_workflow_source_reports_weather_partial_tool_evidence() ->
     assert "route_weather_package" in summary["missing_evidence"][0]["missing_fields"]
 
 
+def test_pretrip_full_workflow_source_exposes_standard_gap_audit_for_ui() -> None:
+    query = ScoutAssistantQuery(
+        surface=AssistantSurface.PRETRIP,
+        question="請以 SCOUT_OUTDOOR_AI_AGENT_STANDARD 為基準，檢視目前 Scout 體系還缺哪些東西，六力是否都有實作？",
+        context_ref="chilai_nanhua_day1",
+        project_id="chilai_nanhua_day1",
+    )
+
+    source = build_pretrip_full_workflow_source(
+        query,
+        project_root=PROJECT_ROOT,
+        limit=8,
+    )
+
+    assert source is not None
+    summary = source.context_summary
+    assert summary is not None
+    decision_output = summary["decision_output"]
+    audit = decision_output["standardGapAudit"]
+    assert decision_output["answerSourceToolId"] == "scout.ai.standard_gap_overview.v0"
+    assert decision_output["decision"] == "GUIDED_ONLY"
+    assert decision_output["allowed"] is False
+    assert decision_output["runtimeSafetyTruth"] is False
+    assert audit["schema"] == "scout_standard_gap_audit.v0"
+    assert audit["runtimeSafetyTruth"] is False
+    assert audit["summary"]["standardGroupCount"] == 10
+    assert audit["summary"]["coveredStandardGroupCount"] == 10
+    assert audit["summary"]["implementationGapToolCount"] == 0
+    assert audit["summary"]["contextOrReviewEvidenceGapToolCount"] == 12
+    assert audit["summary"]["uiUxValidationNeeded"] is True
+    assert len(audit["groups"]) == 10
+    assert any(
+        gap["classification"] == "fresh_or_reviewed_weather_required"
+        for gap in audit["inputOrEvidenceGaps"]
+    )
+    assert audit["implementationGaps"] == []
+    assert summary["runtime_safety_truth"] is False
+
+
 def test_pretrip_full_workflow_fallback_uses_compact_workflow_source() -> None:
     query = ScoutAssistantQuery(
         surface=AssistantSurface.PRETRIP,
