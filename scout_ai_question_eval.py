@@ -61,7 +61,7 @@ CURRENT_TOOLS = {
     },
     "scout.ai.route_context.assess.v0": {
         "label": "route context / experience guide",
-        "evidence_scope": "candidate route context, named points, spatial imprints, rest-area candidates, and observation/photo context",
+        "evidence_scope": "candidate route context, named points, spatial imprints, rest-area candidates, route briefing, observation/photo context, and media quality gate evidence that rejects website chrome/icons/logos/tracking/social widgets/placeholders",
     },
     "scout.ai.pace_guardian.assess.v0": {
         "label": "pace guardian / team pace fit",
