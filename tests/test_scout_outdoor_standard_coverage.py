@@ -237,7 +237,7 @@ def test_standard_completion_audit_covers_all_sections_and_primary_surfaces() ->
     assert decision_output["cost"]["standardGroupCount"] == 10
     assert decision_output["cost"]["coveredStandardGroupCount"] == 10
     assert decision_output["cost"]["implementationGapToolCount"] == 0
-    assert decision_output["cost"]["contextOrReviewEvidenceGapToolCount"] == 9
+    assert decision_output["cost"]["contextOrReviewEvidenceGapToolCount"] == 7
     assert decision_output["cost"]["uiUxValidationNeeded"] is True
     audit = decision_output["standardGapAudit"]
     assert audit["schema"] == "scout_standard_gap_audit.v0"
@@ -245,14 +245,12 @@ def test_standard_completion_audit_covers_all_sections_and_primary_surfaces() ->
     assert audit["summary"]["standardGroupCount"] == 10
     assert audit["summary"]["coveredStandardGroupCount"] == 10
     assert audit["summary"]["implementationGapToolCount"] == 0
-    assert audit["summary"]["contextOrReviewEvidenceGapToolCount"] == 9
+    assert audit["summary"]["contextOrReviewEvidenceGapToolCount"] == 7
     assert audit["summary"]["uiUxValidationNeeded"] is True
     statuses = {group["status"] for group in audit["groups"]}
     assert "implemented_requires_context_or_review_evidence" in statuses
     assert "implemented_synthesis_formatter" in statuses
     classifications = {item["classification"] for item in audit["inputOrEvidenceGaps"]}
-    assert "fresh_or_reviewed_weather_required" in classifications
-    assert "pretrip_user_team_inputs_required" in classifications
     assert "live_navigation_state_required" in classifications
     assert audit["implementationGaps"] == []
     assert any("UI/UX" in item for item in audit["nextSlices"])
@@ -267,7 +265,7 @@ def test_standard_completion_audit_covers_all_sections_and_primary_surfaces() ->
     ):
         assert source_id in result.answer
     assert "缺口分類" in result.answer
-    assert "情境輸入/審核 evidence gap=9" in result.answer
+    assert "情境輸入/審核 evidence gap=7" in result.answer
     assert "不是出發批准或 runtime safety truth" in result.answer
 
 
@@ -371,12 +369,12 @@ def test_mvp_pretrip_go_no_go_outputs_required_package_and_conservative_gates() 
     )
 
     assert missing_result.tool_id == ROUTE_READINESS_TOOL_ID
-    assert missing_result.payload["decision"] == "DELAY"
-    assert missing_result.missing_fields == ["weather_review", "daylight_review"]
+    assert missing_result.payload["decision"] == "CONDITIONAL_GO"
+    assert missing_result.missing_fields == []
     _assert_standard_output(missing_result.payload["decision_output"])
     missing_package = missing_result.payload["pretrip_decision_package"]
     required_outputs = missing_package["required_outputs"]
-    assert required_outputs["pretrip_decision"] == "DELAY"
+    assert required_outputs["pretrip_decision"] == "CONDITIONAL_GO"
     assert required_outputs["cp_graph"]["checkpoint_count"] == 124
     assert required_outputs["cp_graph"]["segment_count"] == 123
     assert required_outputs["latest_turnaround"]["checkpoint_name"] == "雲海保線所"
@@ -385,7 +383,7 @@ def test_mvp_pretrip_go_no_go_outputs_required_package_and_conservative_gates() 
     assert required_outputs["alternatives_or_short_routes"]
     assert required_outputs["pretrip_checklist"]
     assert required_outputs["residual_risk"]
-    assert missing_package["decision_limits"]["allowed"] is False
+    assert missing_package["decision_limits"]["allowed"] is True
     assert missing_package["acceptance_coverage"]["explicit_decision"] is True
     assert missing_result.boundary.runtime_safety_truth is False
 

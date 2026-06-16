@@ -14,6 +14,7 @@ ROUTE_READINESS_OPTIONAL_FIELDS = (
     "planned_eta_path",
     "resource_plan_path",
     "weather_daylight_path",
+    "route_weather_package_path",
     "pretrip_package_path",
     "mission_graph_path",
     "route_comparison_path",
@@ -39,6 +40,7 @@ def assess_scout_route_readiness(
     planned_eta_path: str | None = None,
     resource_plan_path: str | None = None,
     weather_daylight_path: str | None = None,
+    route_weather_package_path: str | None = None,
     pretrip_package_path: str | None = None,
     mission_graph_path: str | None = None,
     route_comparison_path: str | None = None,
@@ -95,6 +97,19 @@ def assess_scout_route_readiness(
         project_ref_keys=("weather_daylight_evidence_ref",),
         default_refs=("outputs/weather_daylight_evidence.json",),
         source_kind="weather_daylight_evidence",
+        source_report=source_report,
+    )
+    route_weather_package, route_weather_source = _load_optional_json(
+        root,
+        explicit_path=route_weather_package_path,
+        project=project,
+        project_ref_keys=("route_weather_package_ref", "weather_route_package_ref"),
+        default_refs=(
+            "outputs/route_weather_package.reviewed.json",
+            "outputs/route_weather_package.json",
+            "outputs/weather/route_weather_package.json",
+        ),
+        source_kind="route_weather_package",
         source_report=source_report,
     )
     pretrip_package, package_source = _load_optional_json(
@@ -183,6 +198,7 @@ def assess_scout_route_readiness(
     resource_state = _resource_state(resource_plan)
     weather_state = _weather_daylight_state(
         weather_daylight=weather_daylight,
+        route_weather_package=route_weather_package,
         direct=direct,
     )
     input_coverage = _input_coverage(
@@ -217,6 +233,7 @@ def assess_scout_route_readiness(
         "planned_eta_source": planned_eta_source,
         "resource_plan_source": resource_plan_source,
         "weather_daylight_source": weather_source,
+        "route_weather_package_source": route_weather_source,
         "pretrip_package_source": package_source,
         "mission_graph_source": mission_graph_source,
         "route_comparison_source": route_comparison_source,
@@ -748,6 +765,7 @@ def _resource_state(resource_plan: dict[str, Any]) -> dict[str, Any]:
 def _weather_daylight_state(
     *,
     weather_daylight: dict[str, Any],
+    route_weather_package: dict[str, Any],
     direct: dict[str, Any],
 ) -> dict[str, Any]:
     daylight = (
@@ -765,32 +783,104 @@ def _weather_daylight_state(
         if isinstance(weather_daylight.get("validation"), dict)
         else {}
     )
-    human_review_required = bool(weather_daylight.get("human_review_required"))
+    package_weather_window = (
+        route_weather_package.get("weather_window")
+        if isinstance(route_weather_package.get("weather_window"), dict)
+        else {}
+    )
+    package_daylight = (
+        route_weather_package.get("daylight")
+        if isinstance(route_weather_package.get("daylight"), dict)
+        else {}
+    )
+    package_review = (
+        route_weather_package.get("review")
+        if isinstance(route_weather_package.get("review"), dict)
+        else {}
+    )
+    package_status = str(route_weather_package.get("status") or "").strip().lower()
+    package_review_state = str(package_review.get("review_state") or "").strip().lower()
+    evidence_human_review_required = bool(weather_daylight.get("human_review_required"))
     authoritative = bool(weather_daylight.get("authoritative_weather_computed"))
+    package_required_fields_present = all(
+        _first_text(route_weather_package.get(field))
+        for field in ("provider", "issued_at", "valid_from", "valid_to")
+    ) and _float_or_none(route_weather_package.get("ttl_s")) is not None
+    package_segments = (
+        route_weather_package.get("segments")
+        if isinstance(route_weather_package.get("segments"), list)
+        else []
+    )
+    package_reviewed = (
+        package_status in {"reviewed", "reviewed_route_weather_package", "accepted"}
+        or package_review_state in {"accepted", "reviewed"}
+    )
+    package_human_review_required = bool(route_weather_package.get("human_review_required"))
+    package_weather_reviewed = (
+        bool(route_weather_package)
+        and package_reviewed
+        and package_required_fields_present
+        and bool(package_segments)
+        and not package_human_review_required
+    )
+    package_daylight_reviewed = (
+        package_weather_reviewed
+        and _first_text(package_daylight.get("sunrise")) is not None
+        and _first_text(package_daylight.get("sunset")) is not None
+        and str(package_daylight.get("source_status") or "").strip().lower()
+        in {"reviewed", "accepted", "computed"}
+    )
+    human_review_required = (
+        package_human_review_required
+        if route_weather_package
+        else evidence_human_review_required
+    )
     weather_reviewed = _first_bool(
         direct.get("weather_reviewed"),
+        package_weather_reviewed,
         validation.get("validation_status") in {"reviewed", "accepted"},
-        authoritative and not human_review_required,
+        authoritative and not evidence_human_review_required,
     )
     daylight_reviewed = _first_bool(
         direct.get("daylight_reviewed"),
+        package_daylight_reviewed,
         daylight.get("source_status") in {"reviewed", "accepted", "computed"},
-        bool(daylight.get("sunrise") and daylight.get("sunset")) and not human_review_required,
+        bool(daylight.get("sunrise") and daylight.get("sunset"))
+        and not evidence_human_review_required,
     )
     return {
         "candidate_only": True,
         "runtime_safety_truth": False,
-        "available": bool(weather_daylight),
-        "date": _first_text(weather_daylight.get("date")),
-        "timezone": _first_text(weather_daylight.get("timezone")),
-        "authoritative_weather_computed": authoritative,
-        "human_review_required": human_review_required,
+        "available": bool(weather_daylight or route_weather_package),
+        "date": _first_text(
+            weather_daylight.get("date"), route_weather_package.get("date")
+        ),
+        "timezone": _first_text(
+            weather_daylight.get("timezone"), route_weather_package.get("timezone")
+        ),
+        "authoritative_weather_computed": authoritative
+        or bool(route_weather_package.get("authoritative_weather_computed")),
+        "human_review_required": human_review_required
+        or package_human_review_required,
         "weather_reviewed": bool(weather_reviewed),
         "daylight_reviewed": bool(daylight_reviewed),
-        "weather_source_status": _first_text(weather_window.get("source_status")),
-        "daylight_source_status": _first_text(daylight.get("source_status")),
-        "validation_status": _first_text(validation.get("validation_status")),
-        "hazard_notes": _normalized_text_list(weather_window.get("hazard_notes")),
+        "weather_source_status": _first_text(
+            package_weather_window.get("source_status"),
+            weather_window.get("source_status"),
+        ),
+        "daylight_source_status": _first_text(
+            package_daylight.get("source_status"), daylight.get("source_status")
+        ),
+        "validation_status": _first_text(
+            package_review_state, validation.get("validation_status")
+        ),
+        "hazard_notes": _normalized_text_list(
+            package_weather_window.get("hazard_notes")
+        )
+        or _normalized_text_list(weather_window.get("hazard_notes")),
+        "route_weather_package_available": bool(route_weather_package),
+        "route_weather_package_reviewed": package_weather_reviewed,
+        "route_weather_segment_count": len(package_segments),
     }
 
 

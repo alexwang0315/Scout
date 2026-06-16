@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PROJECT_ROOT = ROOT / "tests" / "fixtures" / "pretrip" / "projects" / "chilai_nanhua_day1"
 
 
-def test_route_readiness_fixture_uses_reviewed_pretrip_inputs_but_waits_for_weather_review() -> None:
+def test_route_readiness_fixture_uses_reviewed_pretrip_and_weather_inputs() -> None:
     result = assess_scout_route_readiness(
         PROJECT_ROOT,
         query="出發前 Go/No-Go 可以出發嗎？",
@@ -22,14 +22,14 @@ def test_route_readiness_fixture_uses_reviewed_pretrip_inputs_but_waits_for_weat
 
     assert result["artifact_kind"] == ROUTE_READINESS_OUTPUT_KIND
     assert result["tool_id"] == ROUTE_READINESS_TOOL_ID
-    assert result["answerability"] == "route_readiness_missing_required_fields"
-    assert result["decision"] == "DELAY"
+    assert result["answerability"] == "route_readiness_decision_available"
+    assert result["decision"] == "CONDITIONAL_GO"
     assert "user_experience_level" not in result["missing_fields"]
     assert "user_goal" not in result["missing_fields"]
     assert "transport_access_plan" not in result["missing_fields"]
     assert "departure_time_confirmation" not in result["missing_fields"]
-    assert "weather_review" in result["missing_fields"]
-    assert "daylight_review" in result["missing_fields"]
+    assert "weather_review" not in result["missing_fields"]
+    assert "daylight_review" not in result["missing_fields"]
     assert "equipment_review" not in result["missing_fields"]
     assert "remote_contact_review" not in result["missing_fields"]
     assert result["route_readiness"]["role"] == (
@@ -39,7 +39,10 @@ def test_route_readiness_fixture_uses_reviewed_pretrip_inputs_but_waits_for_weat
     assert result["departure_gate"]["hard_readiness_status"] == "ready"
     assert result["route_state"]["checkpoint_count"] == 124
     assert result["route_state"]["segment_count"] == 123
-    assert result["weather_daylight_state"]["human_review_required"] is True
+    assert result["weather_daylight_state"]["human_review_required"] is False
+    assert result["weather_daylight_state"]["route_weather_package_reviewed"] is True
+    assert result["weather_daylight_state"]["weather_reviewed"] is True
+    assert result["weather_daylight_state"]["daylight_reviewed"] is True
     assert result["debug_sources"]["pretrip_input_bundle_source"] == (
         "outputs/pretrip_input_bundle.reviewed.json"
     )
@@ -49,9 +52,9 @@ def test_route_readiness_fixture_uses_reviewed_pretrip_inputs_but_waits_for_weat
     outputs = package["required_outputs"]
     assert package["candidate_only"] is True
     assert package["runtime_safety_truth"] is False
-    assert outputs["pretrip_decision"] == "DELAY"
+    assert outputs["pretrip_decision"] == "CONDITIONAL_GO"
     assert len(outputs["top_risk_sources"]) == 3
-    assert outputs["top_risk_sources"][0]["source"] == "required_pretrip_input"
+    assert outputs["top_risk_sources"][0]["source"] == "readiness_governance"
     assert outputs["required_conditions"]
     assert outputs["cp_graph"]["checkpoint_count"] == 124
     assert outputs["cp_graph"]["segment_count"] == 123
@@ -59,7 +62,7 @@ def test_route_readiness_fixture_uses_reviewed_pretrip_inputs_but_waits_for_weat
     assert outputs["not_recommended_stop_points"]
     assert outputs["alternatives_or_short_routes"]
     assert any(
-        "天氣證據完成審核前" in item
+        "審核缺口仍存在" in item
         for item in outputs["alternatives_or_short_routes"]
     )
     assert not any(
@@ -67,7 +70,7 @@ def test_route_readiness_fixture_uses_reviewed_pretrip_inputs_but_waits_for_weat
     )
     assert outputs["pretrip_checklist"]
     assert outputs["residual_risk"]
-    assert package["decision_limits"]["allowed"] is False
+    assert package["decision_limits"]["allowed"] is True
     assert package["decision_limits"]["buffer_cost_statement"]
     assert package["traceability"]["raw_payloads_embedded"] is False
     assert package["acceptance_coverage"]["explicit_decision"] is True
@@ -81,7 +84,7 @@ def test_route_readiness_changes_plan_when_latest_return_is_before_target_eta() 
         transport_access_plan="latest_return_user_provided",
     )
 
-    assert result["answerability"] == "route_readiness_missing_required_fields"
+    assert result["answerability"] == "route_readiness_decision_available"
     assert result["decision"] == "CHANGE_PLAN"
     assert "transport_access_plan" not in result["missing_fields"]
     deadline = result["readiness_governance"]["transport_deadline"]

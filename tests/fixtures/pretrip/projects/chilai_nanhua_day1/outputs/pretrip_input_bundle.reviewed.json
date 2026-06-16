@@ -24,14 +24,15 @@
     "reviewed_by": "reviewer.planning_admin"
   },
   "reviews": {
-    "daylight_reviewed": false,
+    "daylight_reviewed": true,
     "equipment_confirmed": true,
     "remote_contact_confirmed": true,
-    "weather_reviewed": false
+    "weather_reviewed": true
   },
   "source_refs": [
     "outputs/pretrip_package.reviewed.json",
     "outputs/planned_eta.json",
+    "outputs/route_weather_package.reviewed.json",
     "outputs/resource_plan.json",
     "outputs/team_status.json",
     "outputs/equipment_status.json"
