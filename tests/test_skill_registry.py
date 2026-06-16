@@ -41,6 +41,22 @@ class SkillRegistryTests(unittest.TestCase):
                 "latest-team-position-check",
             ],
         )
+        route_briefing = registry.get("route-briefing-compose")
+        layout = route_briefing.output_schema.layout_contract
+        self.assertIsNotNone(layout)
+        assert layout is not None
+        self.assertIn("photo_essay", layout.required_sections)
+        self.assertEqual(layout.visual_direction.palette, "bold_expedition")
+        self.assertIsNotNone(layout.media_quality_gate)
+        assert layout.media_quality_gate is not None
+        self.assertTrue(
+            any("logos" in item for item in layout.media_quality_gate.must_reject)
+        )
+        self.assertIn(
+            "visual evidence gap",
+            layout.media_quality_gate.missing_visual_policy,
+        )
+        self.assertEqual(layout.safety_boundary.runtime_safety_truth, False)
 
     def test_manifest_schema_rejects_unknown_fields_and_overlapping_writes(self):
         payload = self._valid_manifest_payload()

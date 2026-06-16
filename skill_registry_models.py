@@ -46,6 +46,33 @@ class OutputSchema(StrictModel):
     node_types: list[str] = Field(default_factory=list)
     artifact_kinds: list[str] = Field(default_factory=list)
     required_fields: list[str] = Field(default_factory=list)
+    layout_contract: SkillLayoutContract | None = None
+
+
+class VisualDirection(StrictModel):
+    palette: str
+    accents: list[str] = Field(default_factory=list)
+    rule: str
+
+
+class MediaQualityGate(StrictModel):
+    must_prefer: list[str] = Field(default_factory=list)
+    must_reject: list[str] = Field(default_factory=list)
+    missing_visual_policy: str
+    post_render_check: str
+
+
+class SkillSafetyBoundary(StrictModel):
+    candidate_only: bool = True
+    runtime_safety_truth: bool = False
+
+
+class SkillLayoutContract(StrictModel):
+    required_sections: list[str] = Field(default_factory=list)
+    source_tiers_required: list[str] = Field(default_factory=list)
+    visual_direction: VisualDirection | None = None
+    media_quality_gate: MediaQualityGate | None = None
+    safety_boundary: SkillSafetyBoundary | None = None
 
 
 class RetryPolicy(StrictModel):

@@ -21,6 +21,7 @@ from assistant_pydantic_provider import (
     PydanticAIAssistantProvider,
     PydanticAIEnvRunner,
     RISK_SCORE_TOOL_ID,
+    ROUTE_CONTEXT_TOOL_ID,
     ROUTE_STRUCTURE_TOOL_ID,
     ScoutWorkspaceToolContext,
     TERRAIN_SCORE_TOOL_ID,
@@ -159,6 +160,22 @@ class FakeMapPerceptionToolRunner(FakeRunner):
         return f"{self.output}: top_label={top_text}"
 
 
+class FakeRouteContextToolRunner(FakeRunner):
+    def __init__(self, output_prefix: str = "route-context answer"):
+        super().__init__(output_prefix)
+        self.tool_calls = []
+
+    def run_with_workspace_tools(self, prompt: str, *, timeout_seconds: int, tool_context):
+        self.calls.append({"prompt": prompt, "timeout_seconds": timeout_seconds})
+        tool_result = tool_context.search_scout_route_context(
+            query="哪些點值得停 3 分鐘？",
+            limit=3,
+        )
+        self.tool_calls.append(tool_result)
+        field_answer = tool_result.get("field_answer")
+        return f"{self.output}: field_answer={field_answer}"
+
+
 class FakeWorkspaceCatalogToolRunner(FakeRunner):
     def __init__(self, output_prefix: str = "workspace-catalog answer"):
         super().__init__(output_prefix)
@@ -239,6 +256,10 @@ def test_workspace_tool_prompt_is_generated_from_registry_contracts():
     assert TERRAIN_SCORE_TOOL_ID in prompt
     assert "search_scout_map_perception" in prompt
     assert MAP_PERCEPTION_TOOL_ID in prompt
+    assert "search_scout_route_context" in prompt
+    assert ROUTE_CONTEXT_TOOL_ID in prompt
+    assert "media quality gate" in prompt
+    assert "website chrome" in prompt
     assert "scout.ai.weather_window.assess.v0" not in prompt
     assert "Never mutate Scout state" in prompt
 
@@ -434,6 +455,39 @@ def test_pydantic_ai_provider_can_answer_with_read_only_map_perception_tool(
     assert response.boundary.phase1_mutation_allowed is False
     assert response.boundary.outbound_send_allowed is False
     assert any(MAP_PERCEPTION_TOOL_ID in item for item in response.limitations)
+
+
+def test_pydantic_ai_provider_can_answer_with_read_only_route_context_tool(
+    tmp_path: Path,
+    monkeypatch,
+):
+    workspace_root = tmp_path / "pretrip-workspaces"
+    shutil.copytree(PROJECT_ROOT, workspace_root / "chilai_nanhua_day1")
+    monkeypatch.setenv("SCOUT_PRETRIP_WORKSPACE_ROOT", str(workspace_root))
+    runner = FakeRouteContextToolRunner()
+
+    response = PydanticAIAssistantProvider(runner=runner, timeout_seconds=2).answer(
+        ScoutAssistantQuery(
+            surface="pretrip",
+            question="哪些點值得停 3 分鐘？",
+            context_ref="chilai_nanhua_day1",
+            project_id="chilai_nanhua_day1",
+        ),
+        sources=[],
+    )
+
+    assert runner.tool_calls
+    assert response.sources[0].source_id == ROUTE_CONTEXT_TOOL_ID
+    latest = response.sources[0].context_summary["latest"]
+    assert latest["status"] == "completed"
+    assert latest["answerability"] == "route_context_available"
+    assert latest["route_context"]["role"] == "Experience Guide"
+    assert latest["route_briefing"]["candidate_only"] is True
+    assert latest["route_briefing"]["runtime_safety_truth"] is False
+    assert latest["boundary"]["runtime_safety_truth"] is False
+    assert response.boundary.phase1_mutation_allowed is False
+    assert response.boundary.outbound_send_allowed is False
+    assert any(ROUTE_CONTEXT_TOOL_ID in item for item in response.limitations)
 
 
 def test_pydantic_ai_provider_can_answer_with_workspace_catalog_tool(

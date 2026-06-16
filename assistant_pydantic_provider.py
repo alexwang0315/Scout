@@ -29,6 +29,7 @@ from scout_ai_tool_contracts import (
 from scout_ai_tool_executor import execute_scout_ai_tool
 from scout_map_perception_tool import MAP_PERCEPTION_TOOL_ID
 from scout_risk_score_tool import RISK_SCORE_TOOL_ID
+from scout_route_context_tool import ROUTE_CONTEXT_TOOL_ID
 from scout_terrain_score_tool import TERRAIN_SCORE_TOOL_ID
 from scout_workspace_search_tools import (
     EVIDENCE_FULLTEXT_TOOL_ID,
@@ -70,6 +71,7 @@ REGISTERED_WORKSPACE_TOOL_NAMES = {
     RISK_SCORE_TOOL_ID: "search_scout_risk_scores",
     TERRAIN_SCORE_TOOL_ID: "search_scout_terrain_scores",
     MAP_PERCEPTION_TOOL_ID: "search_scout_map_perception",
+    ROUTE_CONTEXT_TOOL_ID: "search_scout_route_context",
 }
 
 
@@ -102,7 +104,13 @@ def build_workspace_tool_prompt(*, include_contract_only: bool = False) -> str:
         "Use these tools to search Scout's local pretrip workspace evidence before "
         "answering questions about route notes, CP/checkpoints, MCP/major critical "
         "points, named places, map evidence, review queue, risk scores, terrain, "
-        "or planning artifacts. Treat all returned candidate/planning evidence as "
+        "route context, route briefing, observation stops, or planning artifacts. "
+        "For route briefing or route-context presentation requests, apply Scout's "
+        "media quality gate: prefer route-specific photos/maps and reject website "
+        "chrome, SVG icons, logos, tracking pixels, social widgets, unrelated brand "
+        "assets, and decorative placeholders. Missing visual slots should be reported "
+        "as evidence gaps or shot-list items, not filled with generic graphics. "
+        "Treat all returned candidate/planning evidence as "
         "not runtime safety truth unless the tool says otherwise. Never mutate "
         "Scout state, call /safety/*, send outbound messages, control hardware, "
         "or write Brain/ObservedFact/HumanReview records."
@@ -136,6 +144,12 @@ def _prompt_args_for_tool(tool_id: str) -> str:
             'query, limit=6, evidence_types=None, cp=None, lat=None, lon=None, '
             "radius_m=None, sort=\"auto\""
         )
+    if tool_id == ROUTE_CONTEXT_TOOL_ID:
+        return (
+            "query, limit=6, context_types=None, cp=None, "
+            "distance_m_min=None, distance_m_max=None, route_context_path=None, "
+            "route_briefing_path=None"
+        )
     return "query"
 
 
@@ -148,6 +162,13 @@ def _registered_tool_descriptions() -> dict[str, str]:
             f"{contract.description} Contract id: {contract.tool_id}. "
             "This tool is read-only and never mutates runtime safety state."
         )
+        if contract.tool_id == ROUTE_CONTEXT_TOOL_ID:
+            descriptions[contract.tool_id] += (
+                " For route briefing outputs, enforce the Scout media quality gate: "
+                "use route-specific photos/maps, reject site chrome/icons/logos/"
+                "tracking/social widgets, and report visual evidence gaps instead "
+                "of substituting placeholders."
+            )
     return descriptions
 
 
@@ -562,6 +583,51 @@ class ScoutWorkspaceToolContext:
         self.invocations.append(result)
         return result
 
+    def search_scout_route_context(
+        self,
+        query: str,
+        limit: int | None = None,
+        context_types: list[str] | None = None,
+        cp: str | None = None,
+        distance_m_min: float | None = None,
+        distance_m_max: float | None = None,
+        route_context_path: str | None = None,
+        route_briefing_path: str | None = None,
+    ) -> dict[str, object]:
+        search_text = str(query or "").strip()
+        bounded_limit = _bounded_tool_limit(limit, default_limit=6)
+        project_root = self._project_root()
+        if project_root is None:
+            result = self._tool_error(
+                "pretrip_workspace_unavailable",
+                search_text,
+                bounded_limit,
+                tool_id=ROUTE_CONTEXT_TOOL_ID,
+            )
+            self.invocations.append(result)
+            return result
+        try:
+            result = self._execute_registered_tool(
+                ROUTE_CONTEXT_TOOL_ID,
+                query=search_text,
+                limit=bounded_limit,
+                context_types=context_types,
+                cp=cp,
+                distance_m_min=distance_m_min,
+                distance_m_max=distance_m_max,
+                route_context_path=route_context_path,
+                route_briefing_path=route_briefing_path,
+            )
+        except Exception as exc:  # Defensive: tool failures must stay read-only.
+            result = self._tool_error(
+                type(exc).__name__,
+                search_text,
+                bounded_limit,
+                tool_id=ROUTE_CONTEXT_TOOL_ID,
+            )
+        self.invocations.append(result)
+        return result
+
     def _execute_registered_tool(
         self,
         tool_id: str,
@@ -623,6 +689,9 @@ class ScoutWorkspaceToolContext:
         elif latest_tool_id == MAP_PERCEPTION_TOOL_ID:
             source_path = "assistant_pydantic_provider.search_scout_map_perception"
             evidence_type = "assistant_map_perception_tool_invocation"
+        elif latest_tool_id == ROUTE_CONTEXT_TOOL_ID:
+            source_path = "assistant_pydantic_provider.search_scout_route_context"
+            evidence_type = "assistant_route_context_tool_invocation"
         elif latest_tool_id == WORKSPACE_CATALOG_TOOL_ID:
             source_path = "assistant_pydantic_provider.search_scout_workspace_catalog"
             evidence_type = "assistant_workspace_catalog_tool_invocation"
@@ -1914,6 +1983,31 @@ class PydanticAIEnvRunner:
                 lon=lon,
                 radius_m=radius_m,
                 sort=sort,
+            )
+
+        @agent.tool_plain(
+            name="search_scout_route_context",
+            description=tool_descriptions[ROUTE_CONTEXT_TOOL_ID],
+        )
+        def search_scout_route_context(
+            query: str,
+            limit: int = 6,
+            context_types: list[str] | None = None,
+            cp: str | None = None,
+            distance_m_min: float | None = None,
+            distance_m_max: float | None = None,
+            route_context_path: str | None = None,
+            route_briefing_path: str | None = None,
+        ) -> dict[str, object]:
+            return tool_context.search_scout_route_context(
+                query=query,
+                limit=limit,
+                context_types=context_types,
+                cp=cp,
+                distance_m_min=distance_m_min,
+                distance_m_max=distance_m_max,
+                route_context_path=route_context_path,
+                route_briefing_path=route_briefing_path,
             )
 
         tool_prompt = f"{WORKSPACE_TOOL_PROMPT}\n{prompt}"

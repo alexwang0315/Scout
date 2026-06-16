@@ -161,6 +161,8 @@ def test_tool_registry_lists_current_and_future_contracts() -> None:
     assert "user_goal" in by_id[ROUTE_READINESS_TOOL_ID].optional_fields
     assert "scout.ai.experience_guide.assess" in by_id[ROUTE_CONTEXT_TOOL_ID].aliases
     assert "route_briefing_path" in by_id[ROUTE_CONTEXT_TOOL_ID].optional_fields
+    assert "media quality gate" in by_id[ROUTE_CONTEXT_TOOL_ID].description
+    assert "website chrome" in by_id[ROUTE_CONTEXT_TOOL_ID].description
     assert "scout.ai.cp_graph.assess" in by_id[ROUTE_ARCHITECTURE_TOOL_ID].aliases
     assert "scout.ai.device_resource.assess" in by_id[EQUIPMENT_RESOURCE_TOOL_ID].aliases
     assert "scout.ai.map_readiness.assess" in by_id[
