@@ -1,0 +1,57 @@
+{
+  "activity_load": 130.5,
+  "artifact_kind": "energy_vitals_snapshot",
+  "artifact_version": "energy_vitals_snapshot.v1",
+  "baseline_window_days": 90,
+  "body_battery_or_provider_energy": 42,
+  "boundary": {
+    "candidate_only": true,
+    "live_provider_api_called": false,
+    "medical_diagnosis": false,
+    "outbound_send_performed": false,
+    "phase1_l0_l4_state_mutated": false,
+    "provider_values_are_scout_truth": false,
+    "raw_health_payload_shared": false,
+    "raw_payloads_embedded": false,
+    "runtime_safety_truth": false,
+    "safety_api_called": false
+  },
+  "cadence": 86,
+  "candidate_only": true,
+  "generatedAt": "2099-10-08T12:25:00+08:00",
+  "heart_rate_bpm": 148,
+  "heart_rate_drift_ratio": 0.132,
+  "heart_rate_trend": {
+    "direction": "elevated_vs_baseline",
+    "window_minutes": 20
+  },
+  "hrv_ms": 44,
+  "hrv_trend": {
+    "direction": "lower_than_baseline",
+    "window_minutes": 20
+  },
+  "observed_at": "2099-10-08T12:25:00+08:00",
+  "pace_mps": 0.76,
+  "privacy_scope": "private_vitals",
+  "record_gap_count": 0,
+  "reserve_band": "rest_suggested",
+  "reserve_score": 38,
+  "review": {
+    "human_review_required": false,
+    "input_status": "human_reviewed",
+    "notes": "Reviewed deterministic energy/vitals fixture for Scout AI standard coverage. This is advisory evidence only, not medical diagnosis or runtime safety truth.",
+    "review_ref": "reviews/human_reviews.json#energy-vitals-snapshot-placeholder",
+    "review_state": "accepted",
+    "reviewed_at": "2026-06-16T12:15:00+08:00",
+    "reviewed_by": "reviewer.planning_admin"
+  },
+  "runtime_safety_truth": false,
+  "source_provider": "fixture_reviewed_wearable_summary",
+  "source_refs": [
+    "outputs/team_status.json",
+    "outputs/planned_eta.json"
+  ],
+  "staleness_s": 120,
+  "status": "reviewed_energy_vitals_snapshot",
+  "subject_id": "local_user.private"
+}

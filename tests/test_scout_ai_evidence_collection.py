@@ -204,16 +204,18 @@ def test_evidence_collection_keeps_energy_vitals_decision_output() -> None:
     assert energy.collection_status == "completed"
     assert energy.result is not None
     payload = energy.result["payload"]
-    assert payload["answerability"] == "energy_vitals_missing_required_fields"
-    assert payload["decision"] == "DELAY"
+    assert payload["answerability"] == "energy_vitals_advisory_available"
+    assert payload["source_status"] == "reviewed_energy_vitals_snapshot"
+    assert payload["decision"] == "CONDITIONAL_GO"
     assert payload["decision_output"]["decisionObjectSchema"] == "ContextualPermission"
-    assert payload["decision_output"]["decision"] == "DELAY"
-    assert payload["decision_output"]["allowed"] is False
+    assert payload["decision_output"]["decision"] == "CONDITIONAL_GO"
+    assert payload["decision_output"]["allowed"] is True
     assert payload["decision_output"]["runtimeSafetyTruth"] is False
     assert payload["decision_output"]["firstLayer"]["decision"] == (
-        "建議延後體能/穿戴判斷。"
+        "可有條件繼續，但必須先降低負荷並重新確認。"
     )
-    assert "heart_rate_bpm" in energy.missing_fields
+    assert energy.missing_fields == []
+    assert payload["provided_fields"]["heart_rate_bpm"] == 148.0
     assert energy.boundary.runtime_safety_truth is False
 
 
@@ -590,7 +592,7 @@ def test_evidence_collection_keeps_direct_retreat_micro_decision() -> None:
     energy = _record(result, ENERGY_VITALS_TOOL_ID)
     pace = _record(result, PACE_GUARDIAN_TOOL_ID)
     contextual = _record(result, CONTEXTUAL_PERMISSION_TOOL_ID)
-    assert "subject_id" in energy.missing_fields
+    assert energy.missing_fields == []
     assert pace.missing_fields == []
     assert contextual.collection_status == "completed"
     assert contextual.missing_fields == []

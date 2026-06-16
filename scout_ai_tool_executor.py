@@ -417,6 +417,9 @@ def _execute_ready_current_tool(tool_id: str, arguments: dict[str, Any]) -> dict
         return assess_scout_energy_vitals(
             project_root,
             query=query,
+            energy_vitals_snapshot_path=_str_or_none(
+                arguments.get("energy_vitals_snapshot_path")
+            ),
             subject_id=_str_or_none(arguments.get("subject_id")),
             observed_at=_str_or_none(arguments.get("observed_at")),
             heart_rate_bpm=_float_or_none(arguments.get("heart_rate_bpm")),
