@@ -8,7 +8,7 @@ import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import unquote, urlsplit, urlunsplit
 
 
 ROUTE_CONTEXT_COLLECTION_ARTIFACT_KIND = "pretrip_route_context_collection"
@@ -5528,6 +5528,15 @@ def _media_items_from_web_case_evidence(
                 raw.get("label"),
                 raw.get("title"),
             )
+            alt = _first_text(image.get("alt"), caption)
+            if not _is_briefing_content_image(
+                url=url,
+                caption=caption,
+                alt=alt,
+                title=image.get("title"),
+                page_url=_first_text(image.get("page_url"), raw.get("url")),
+            ):
+                continue
             source_tier = _first_text(image.get("source_tier"), raw.get("source_tier"), "P1")
             source_family = _first_text(
                 image.get("source_family"),
@@ -5548,7 +5557,7 @@ def _media_items_from_web_case_evidence(
                     ),
                     "url": url,
                     "caption": caption[:160],
-                    "alt": _first_text(image.get("alt"), caption)[:120],
+                    "alt": alt[:120],
                     "source_tier": source_tier,
                     "source_family": source_family,
                     "context_layer": context_layer,
@@ -5563,6 +5572,80 @@ def _media_items_from_web_case_evidence(
             if len(images) >= BRIEFING_MEDIA_GALLERY_LIMIT * 3:
                 return images
     return images
+
+
+def _is_briefing_content_image(
+    *,
+    url: str,
+    caption: Any,
+    alt: Any,
+    title: Any,
+    page_url: Any,
+) -> bool:
+    """Return true for route/content imagery and false for page chrome assets."""
+
+    try:
+        parsed = urlsplit(url)
+    except ValueError:
+        return False
+    path = unquote(parsed.path or "").lower()
+    netloc = parsed.netloc.lower()
+    text = " ".join(
+        str(value or "").strip().lower()
+        for value in (caption, alt, title, page_url, path)
+        if str(value or "").strip()
+    )
+    if netloc in {"www.facebook.com", "facebook.com", "sb.scorecardresearch.com"}:
+        return False
+    if any(token in netloc for token in ("doubleclick", "googlesyndication", "google-analytics")):
+        return False
+    if path.endswith((".svg", ".gif", ".ico")):
+        return False
+    if not path.endswith((".jpg", ".jpeg", ".png", ".webp")):
+        return False
+    if re.search(r"(^|/)(icon|icons|logo|logos|sprite|avatar|badge)(/|_|-|\.)", path):
+        return False
+    if any(
+        marker in path
+        for marker in (
+            "/image/icon/",
+            "/image/web-logo/",
+            "/attachments/logo/",
+            "/assets/images/logo",
+            "/assets/images/file_exticon/",
+            "/img/logo",
+            "/default_avatar",
+            "/web_structure/2503506/",
+            "scorecardresearch",
+            "facebook.com/tr",
+        )
+    ):
+        return False
+    if any(
+        phrase in text
+        for phrase in (
+            "選單",
+            "關閉",
+            "搜尋",
+            "登入",
+            "登出",
+            "語言切換",
+            "facebook",
+            "line",
+            "我的e政府",
+            "無障礙",
+            "預設頭像",
+            "標示",
+            "logotype",
+            "logo",
+            "icon",
+            "button",
+            "tracking",
+            "pixel",
+        )
+    ):
+        return False
+    return True
 
 
 def _curate_media_items_for_briefing(
