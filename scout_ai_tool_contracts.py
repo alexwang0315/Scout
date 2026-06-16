@@ -8,6 +8,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from scout_safety_boundary_tool import (
+    SAFETY_ADMISSION_OPTIONAL_FIELDS,
     SAFETY_ADMISSION_REQUIRED_FIELDS,
     SAFETY_BOUNDARY_OUTPUT_KIND,
     SAFETY_BOUNDARY_TOOL_ID,
@@ -713,7 +714,7 @@ def _optional_fields_for(tool_id: str) -> list[str]:
     if tool_id == NAVIGATION_TERRAIN_TOOL_ID:
         return list(NAVIGATION_TERRAIN_OPTIONAL_FIELDS)
     if tool_id == SAFETY_BOUNDARY_TOOL_ID:
-        return list(SAFETY_ADMISSION_REQUIRED_FIELDS)
+        return list(SAFETY_ADMISSION_OPTIONAL_FIELDS)
     if tool_id == ENERGY_VITALS_TOOL_ID:
         return [
             *ENERGY_VITALS_REQUIRED_FIELDS,
