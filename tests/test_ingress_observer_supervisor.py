@@ -97,3 +97,60 @@ def test_supervisor_does_not_start_when_mqtt_is_not_configured(tmp_path: Path) -
     assert started == []
     assert status["observer_count"] == 0
     assert status["running_count"] == 0
+
+
+def test_supervisor_autostarts_gnss_hardware_observer_from_jsonl_sources(tmp_path: Path) -> None:
+    gateway_jsonl = tmp_path / "sx1303-gateway-gps.jsonl"
+    grove_jsonl = tmp_path / "grove-gps.jsonl"
+    gateway_jsonl.write_text("{}\n", encoding="utf-8")
+    grove_jsonl.write_text("{}\n", encoding="utf-8")
+    started: list[FakeProcess] = []
+
+    def fake_popen(command, **kwargs):
+        process = FakeProcess(list(command), **kwargs)
+        started.append(process)
+        return process
+
+    supervisor = IngressObserverSupervisor.from_env(
+        {
+            "SCOUT_SENSORLOGGER_MQTT_AUTOSTART": "false",
+            "SCOUT_GNSS_HARDWARE_AUTOSTART": "true",
+            "SCOUT_GNSS_HARDWARE_GATEWAY_JSONL": str(gateway_jsonl),
+            "SCOUT_GNSS_HARDWARE_GROVE_JSONL": str(grove_jsonl),
+            "SCOUT_GNSS_HARDWARE_EVIDENCE_DIR": str(tmp_path / "gnss-evidence"),
+            "SCOUT_GNSS_HARDWARE_LOG_PATH": str(tmp_path / "gnss-observer.log"),
+            "SCOUT_GNSS_HARDWARE_POLL_SECONDS": "1.5",
+            "SCOUT_GNSS_HARDWARE_MAX_RECORDS": "50",
+        },
+        app_root=tmp_path,
+        popen_factory=fake_popen,
+    )
+
+    supervisor.start()
+    status = supervisor.status()
+
+    assert len(started) == 1
+    command = started[0].command
+    command_text = " ".join(command)
+    assert "scout_gnss_hardware_observer.py" in command_text
+    assert "--gateway-jsonl" in command
+    assert str(gateway_jsonl) in command
+    assert "--grove-jsonl" in command
+    assert str(grove_jsonl) in command
+    assert "--print-ready" in command
+    assert "--poll-seconds" in command
+    assert "1.5" in command
+    assert "--max-records" in command
+    assert "50" in command
+    assert status["observer_count"] == 1
+    assert status["running_count"] == 1
+    assert status["configured_observer_names"] == ["gnss-hardware"]
+    assert status["observers"][0]["name"] == "gnss-hardware"
+    assert status["observers"][0]["reason"] == "configured_sources"
+    assert status["observers"][0]["phase1_l0_l4_state_mutated"] is False
+    assert status["observers"][0]["safety_api_called"] is False
+    assert status["boundary"]["phase1_l0_l4_state_mutated"] is False
+
+    supervisor.stop()
+
+    assert started[0].terminated is True

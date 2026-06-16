@@ -20,6 +20,14 @@ def test_lora_lorawan_sx1303_plan_is_mainline_and_bounded() -> None:
         "phase1_safety_decision_change_allowed",
         "remote_outbound_allowed",
         "diagnostic_gateway_evidence_only",
+        "tools/pi_sx1303_gateway_gps_nmea_smoke.py",
+        "L76K GNSS",
+        "SX1303 does not itself produce NMEA",
+        "diagnostic_gateway_gnss_uart_only",
+        "scout_gnss_hardware_observer.py",
+        "live_navigation_snapshot.json",
+        "live_hardware_read_performed=false",
+        "lorawan_uplink_allowed=false",
         "Do not transmit on unvalidated or illegal frequency plans.",
     ]
 
