@@ -194,6 +194,9 @@ def test_tool_registry_lists_current_and_future_contracts() -> None:
     assert "scout.ai.team_pace_fit.assess" in by_id[PACE_GUARDIAN_TOOL_ID].aliases
     assert "scout.ai.team_guardian.assess" in by_id[TEAM_STATUS_TOOL_ID].aliases
     assert "scout.ai.after_action.assess" in by_id[POST_TRIP_REVIEW_TOOL_ID].aliases
+    assert "post_trip_review_context_path" in by_id[
+        POST_TRIP_REVIEW_TOOL_ID
+    ].optional_fields
     assert "scout.ai.provenance_gap.assess" in by_id[REVIEW_GAP_TOOL_ID].aliases
     assert "category" in by_id[REVIEW_GAP_TOOL_ID].optional_fields
     assert "scout.ai.media_bias.assess" in by_id[MEDIA_LITERACY_TOOL_ID].aliases

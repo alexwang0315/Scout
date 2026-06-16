@@ -9,6 +9,7 @@ POST_TRIP_REVIEW_TOOL_ID = "scout.ai.post_trip_review.assess.v0"
 POST_TRIP_REVIEW_OUTPUT_KIND = "scout_ai_post_trip_review_tool_output"
 POST_TRIP_REVIEW_REQUIRED_FIELDS = ("project_root",)
 POST_TRIP_REVIEW_OPTIONAL_FIELDS = (
+    "post_trip_review_context_path",
     "capability_timeline_path",
     "capability_capsule_path",
     "route_time_comparison_path",
@@ -30,6 +31,7 @@ def assess_scout_post_trip_review(
     project_root: Path | str,
     *,
     query: str = "",
+    post_trip_review_context_path: str | None = None,
     capability_timeline_path: str | None = None,
     capability_capsule_path: str | None = None,
     route_time_comparison_path: str | None = None,
@@ -51,6 +53,12 @@ def assess_scout_post_trip_review(
     project = _load_json_object(root / "project.json")
     project_id = str(project.get("project_id") or project.get("id") or root.name)
     source_report: list[dict[str, Any]] = []
+    review_context, review_context_report = _load_post_trip_review_context(
+        root,
+        project,
+        explicit_path=post_trip_review_context_path,
+    )
+    source_report.extend(review_context_report)
 
     timeline, timeline_source = _load_optional_json(
         root,
@@ -61,6 +69,13 @@ def assess_scout_post_trip_review(
         source_kind="capability_timeline",
         source_report=source_report,
     )
+    if not timeline:
+        timeline = _context_object(
+            review_context,
+            "capability_timeline",
+            "completed_trip_timeline",
+            "timeline",
+        )
     capsule, capsule_source = _load_optional_json(
         root,
         explicit_path=capability_capsule_path,
@@ -70,6 +85,12 @@ def assess_scout_post_trip_review(
         source_kind="capability_capsule",
         source_report=source_report,
     )
+    if not capsule:
+        capsule = _context_object(
+            review_context,
+            "capability_capsule",
+            "capsule",
+        )
     comparison, comparison_source = _load_optional_json(
         root,
         explicit_path=route_time_comparison_path,
@@ -79,6 +100,12 @@ def assess_scout_post_trip_review(
         source_kind="route_time_comparison",
         source_report=source_report,
     )
+    if not comparison:
+        comparison = _context_object(
+            review_context,
+            "route_time_comparison",
+            "comparison",
+        )
     share_preview, share_preview_source = _load_optional_json(
         root,
         explicit_path=share_preview_path,
@@ -97,6 +124,12 @@ def assess_scout_post_trip_review(
         source_kind="after_action_next_plan_candidates",
         source_report=source_report,
     )
+    if not after_action:
+        after_action = _context_object(
+            review_context,
+            "after_action_next_plan_candidates",
+            "after_action",
+        )
     energy_feedback, energy_feedback_source = _load_optional_json(
         root,
         explicit_path=energy_feedback_path,
@@ -106,16 +139,52 @@ def assess_scout_post_trip_review(
         source_kind="post_analysis_energy_feedback",
         source_report=source_report,
     )
+    if not energy_feedback:
+        energy_feedback = _context_object(
+            review_context,
+            "post_analysis_energy_feedback",
+            "energy_feedback",
+        )
 
     direct = {
-        "subjective_difficulty": subjective_difficulty,
-        "equipment_gaps": _normalized_text_list(equipment_gaps),
-        "near_miss_events": _normalized_text_list(near_miss_events),
-        "incident_events": _normalized_text_list(incident_events),
-        "weather_matched_expectation": _bool_or_none(weather_matched_expectation),
-        "route_condition_notes": _normalized_text_list(route_condition_notes),
-        "route_context_updates": _normalized_text_list(route_context_updates),
-        "user_feedback_items": _normalized_text_list(user_feedback_items),
+        "subjective_difficulty": _first_present(
+            subjective_difficulty,
+            review_context.get("subjective_difficulty"),
+        ),
+        "equipment_gaps": _first_present(
+            _normalized_text_list(equipment_gaps),
+            _normalized_text_list(review_context.get("equipment_gaps")),
+        )
+        or [],
+        "near_miss_events": _first_present(
+            _normalized_text_list(near_miss_events),
+            _normalized_text_list(review_context.get("near_miss_events")),
+        )
+        or [],
+        "incident_events": _first_present(
+            _normalized_text_list(incident_events),
+            _normalized_text_list(review_context.get("incident_events")),
+        )
+        or [],
+        "weather_matched_expectation": _first_present(
+            _bool_or_none(weather_matched_expectation),
+            _bool_or_none(review_context.get("weather_matched_expectation")),
+        ),
+        "route_condition_notes": _first_present(
+            _normalized_text_list(route_condition_notes),
+            _normalized_text_list(review_context.get("route_condition_notes")),
+        )
+        or [],
+        "route_context_updates": _first_present(
+            _normalized_text_list(route_context_updates),
+            _normalized_text_list(review_context.get("route_context_updates")),
+        )
+        or [],
+        "user_feedback_items": _first_present(
+            _normalized_text_list(user_feedback_items),
+            _normalized_text_list(review_context.get("user_feedback_items")),
+        )
+        or [],
     }
 
     completed_trip = _completed_trip_summary(
@@ -178,7 +247,7 @@ def assess_scout_post_trip_review(
         "query": query,
         "assessment_kind": "read_only_post_trip_review",
         "answerability": answerability,
-        "source_status": "candidate_only",
+        "source_status": _source_status(review_context=review_context),
         "decision": decision,
         "decision_output": decision_output,
         "field_answer": field_answer,
@@ -333,6 +402,142 @@ def _after_action_summary(payload: dict[str, Any]) -> dict[str, Any]:
         "human_review_required_count": len(review_required),
         "top_candidates": titles[:5],
     }
+
+
+def _load_post_trip_review_context(
+    root: Path,
+    project: dict[str, Any],
+    *,
+    explicit_path: str | None,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    candidates = _candidate_paths(
+        root,
+        project,
+        explicit_path=explicit_path,
+        ref_keys=(
+            "post_trip_review_context_ref",
+            "reviewed_post_trip_review_context_ref",
+            "post_trip_feedback_ref",
+            "reviewed_post_trip_feedback_ref",
+        ),
+        fallbacks=(
+            "outputs/post_trip_review_context.reviewed.json",
+            "outputs/post_trip_feedback.reviewed.json",
+        ),
+    )
+    report: list[dict[str, Any]] = []
+    for label, path in candidates:
+        if not path.exists():
+            report.append(
+                {
+                    "source_kind": "post_trip_review_context",
+                    "status": "missing",
+                    "source_path": label,
+                    "loaded_count": 0,
+                    "candidate_only": True,
+                    "runtime_safety_truth": False,
+                }
+            )
+            continue
+        payload = _load_json_object(path)
+        context = _post_trip_review_context_from_payload(payload)
+        if not context:
+            report.append(
+                {
+                    "source_kind": "post_trip_review_context",
+                    "status": "invalid_or_empty",
+                    "source_path": label,
+                    "loaded_count": 0,
+                    "candidate_only": True,
+                    "runtime_safety_truth": False,
+                }
+            )
+            continue
+        report.append(
+            {
+                "source_kind": "post_trip_review_context",
+                "status": "loaded",
+                "source_path": label,
+                "loaded_count": 1,
+                "artifact_kind": payload.get("artifact_kind"),
+                "source_status": payload.get("status") or payload.get("source_status"),
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+            }
+        )
+        return context, report
+    return {}, report[:2]
+
+
+def _candidate_paths(
+    root: Path,
+    project: dict[str, Any],
+    *,
+    explicit_path: str | None,
+    ref_keys: tuple[str, ...],
+    fallbacks: tuple[str, ...],
+) -> list[tuple[str, Path]]:
+    candidates: list[tuple[str, Path]] = []
+    if explicit_path:
+        candidates.append((explicit_path, _project_path(root, explicit_path)))
+    for key in ref_keys:
+        ref = project.get(key)
+        if isinstance(ref, str) and ref.strip():
+            candidates.append((ref, _project_path(root, ref)))
+    for ref in fallbacks:
+        candidates.append((ref, _project_path(root, ref)))
+    deduped: list[tuple[str, Path]] = []
+    seen: set[Path] = set()
+    for label, path in candidates:
+        resolved = path.resolve() if path.exists() else path
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        deduped.append((label, path))
+    return deduped
+
+
+def _post_trip_review_context_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    if not payload:
+        return {}
+    nested = payload.get("post_trip_review_context")
+    if not isinstance(nested, dict):
+        nested = payload.get("post_trip_feedback")
+    context_source = nested if isinstance(nested, dict) else payload
+    if payload.get("status") and "source_status" not in context_source:
+        return {**context_source, "source_status": payload.get("status")}
+    return dict(context_source)
+
+
+def _context_object(payload: dict[str, Any], *keys: str) -> dict[str, Any]:
+    for key in keys:
+        value = payload.get(key)
+        if isinstance(value, dict) and value:
+            return value
+    return {}
+
+
+def _source_status(*, review_context: dict[str, Any]) -> str:
+    if review_context:
+        return str(review_context.get("source_status") or "loaded_post_trip_review_context")
+    return "candidate_only"
+
+
+def _first_present(*values: Any) -> Any:
+    for value in values:
+        if not _is_missing_value(value):
+            return value
+    return None
+
+
+def _is_missing_value(value: Any) -> bool:
+    if value is None:
+        return True
+    if isinstance(value, str):
+        return not value.strip()
+    if isinstance(value, (list, tuple, set, dict)):
+        return not value
+    return False
 
 
 def _feedback_summary(direct: dict[str, Any]) -> dict[str, Any]:
