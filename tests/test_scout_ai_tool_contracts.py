@@ -140,6 +140,9 @@ def test_tool_registry_lists_current_and_future_contracts() -> None:
         "ready_current_tool"
     )
     assert "scout.ai.energy_vitals.assess" in by_id[ENERGY_VITALS_TOOL_ID].aliases
+    assert "energy_vitals_snapshot_path" in by_id[
+        ENERGY_VITALS_TOOL_ID
+    ].optional_fields
     assert "scout.ai.micro_decision.assess" in by_id[
         CONTEXTUAL_PERMISSION_TOOL_ID
     ].aliases
@@ -1102,7 +1105,7 @@ def test_execute_safety_boundary_assessor_escalates_unreviewed_high_risk_state()
     assert result.boundary.phase1_safety_mutation_allowed is False
 
 
-def test_execute_energy_vitals_assessor_returns_read_only_missing_fields() -> None:
+def test_execute_energy_vitals_assessor_loads_reviewed_fixture_snapshot() -> None:
     result = execute_scout_ai_tool(
         {
             "tool_id": "scout.ai.energy_vitals.assess",
@@ -1118,26 +1121,27 @@ def test_execute_energy_vitals_assessor_returns_read_only_missing_fields() -> No
     assert result.payload["artifact_kind"] == "scout_ai_energy_vitals_tool_output"
     assert result.payload["tool_id"] == ENERGY_VITALS_TOOL_ID
     assert result.payload["assessment_kind"] == "read_only_energy_vitals"
-    assert result.payload["answerability"] == "energy_vitals_missing_required_fields"
-    assert result.payload["decision"] == "DELAY"
+    assert result.payload["answerability"] == "energy_vitals_advisory_available"
+    assert result.payload["source_status"] == "reviewed_energy_vitals_snapshot"
+    assert result.payload["decision"] == "CONDITIONAL_GO"
     assert result.payload["decision_output"]["decisionObjectSchema"] == (
         "ContextualPermission"
     )
-    assert result.payload["decision_output"]["decision"] == "DELAY"
-    assert result.payload["decision_output"]["allowed"] is False
-    assert result.payload["decision_output"]["confidence"] == "low"
+    assert result.payload["decision_output"]["decision"] == "CONDITIONAL_GO"
+    assert result.payload["decision_output"]["allowed"] is True
+    assert result.payload["decision_output"]["confidence"] == "medium"
     assert result.payload["decision_output"]["runtimeSafetyTruth"] is False
     assert result.payload["decision_output"]["firstLayer"]["decision"] == (
-        "建議延後體能/穿戴判斷。"
+        "可有條件繼續，但必須先降低負荷並重新確認。"
     )
-    assert "不得把此回答當成現場 permission" in (
+    assert "短休最多 10 分鐘" in (
         result.payload["decision_output"]["firstLayer"]["limit"]
     )
     assert result.payload["energy_vitals"]["runtime_safety_truth"] is False
-    assert result.payload["results"][0]["decision"] == "DELAY"
-    assert "heart_rate_bpm" in result.payload["missing_fields"]
-    assert "baseline_window_days" in result.payload["missing_fields"]
-    assert "reserve_score" in result.payload["missing_fields"]
+    assert result.payload["results"][0]["decision"] == "CONDITIONAL_GO"
+    assert result.payload["missing_fields"] == []
+    assert result.payload["provided_fields"]["heart_rate_bpm"] == 148.0
+    assert result.payload["provided_fields"]["reserve_band"] == "rest_suggested"
     assert result.payload["boundary"]["medical_diagnosis"] is False
     assert result.payload["boundary"]["safety_api_called"] is False
     assert result.payload["boundary"]["phase1_l0_l4_state_mutated"] is False
@@ -1239,8 +1243,11 @@ def test_execute_energy_vitals_assessor_loads_workspace_energy_artifacts(tmp_pat
     assert "建議短暫休息" in result.payload["advisory"]["message_zh"]
     assert "hrv_ms" in result.payload["missing_fields"]
     assert "pace_mps" in result.payload["missing_fields"]
-    assert result.payload["source_report"][0]["status"] == "loaded"
-    assert result.payload["source_report"][1]["status"] == "loaded"
+    source_report = {
+        item["source_kind"]: item for item in result.payload["source_report"]
+    }
+    assert source_report["energy_reserve_baseline"]["status"] == "loaded"
+    assert source_report["wearable_field_observation"]["status"] == "loaded"
     assert result.payload["privacy"]["raw_health_payload_shared"] is False
     assert result.payload["boundary"]["medical_diagnosis"] is False
     assert result.payload["boundary"]["safety_api_called"] is False

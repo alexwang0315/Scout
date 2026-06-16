@@ -32,6 +32,7 @@ ENERGY_VITALS_REQUIRED_FIELDS = (
 )
 
 ENERGY_VITALS_OPTIONAL_FIELDS = (
+    "energy_vitals_snapshot_path",
     "heart_rate_trend",
     "hrv_trend",
     "record_gap_count",
@@ -39,12 +40,20 @@ ENERGY_VITALS_OPTIONAL_FIELDS = (
     "baseline_path",
     "observation_path",
 )
+ENERGY_VITALS_SNAPSHOT_FIELDS = (
+    *ENERGY_VITALS_REQUIRED_FIELDS,
+    "heart_rate_trend",
+    "hrv_trend",
+    "record_gap_count",
+    "staleness_s",
+)
 
 
 def assess_scout_energy_vitals(
     project_root: Path | str,
     *,
     query: str = "",
+    energy_vitals_snapshot_path: str | None = None,
     subject_id: str | None = None,
     observed_at: str | None = None,
     heart_rate_bpm: float | int | str | None = None,
@@ -73,28 +82,51 @@ def assess_scout_energy_vitals(
     project_id = str(project.get("project_id") or project.get("id") or root.name)
     baseline, resolved_baseline_path = _load_baseline(root, baseline_path)
     observation, resolved_observation_path = _load_observation(root, observation_path)
-    direct = {
+    raw_direct = {
         "subject_id": subject_id,
         "observed_at": observed_at,
-        "heart_rate_bpm": _float_or_none(heart_rate_bpm),
-        "hrv_ms": _float_or_none(hrv_ms),
-        "body_battery_or_provider_energy": _float_or_none(
-            body_battery_or_provider_energy
-        ),
-        "pace_mps": _float_or_none(pace_mps),
-        "cadence": _float_or_none(cadence),
-        "activity_load": _float_or_none(activity_load),
-        "baseline_window_days": _int_or_none(baseline_window_days),
-        "reserve_score": _int_or_none(reserve_score),
+        "heart_rate_bpm": heart_rate_bpm,
+        "hrv_ms": hrv_ms,
+        "body_battery_or_provider_energy": body_battery_or_provider_energy,
+        "pace_mps": pace_mps,
+        "cadence": cadence,
+        "activity_load": activity_load,
+        "baseline_window_days": baseline_window_days,
+        "reserve_score": reserve_score,
         "reserve_band": reserve_band,
-        "heart_rate_drift_ratio": _float_or_none(heart_rate_drift_ratio),
+        "heart_rate_drift_ratio": heart_rate_drift_ratio,
         "heart_rate_trend": heart_rate_trend if isinstance(heart_rate_trend, dict) else None,
         "hrv_trend": hrv_trend if isinstance(hrv_trend, dict) else None,
-        "record_gap_count": _int_or_none(record_gap_count),
-        "staleness_s": _float_or_none(staleness_s),
+        "record_gap_count": record_gap_count,
+        "staleness_s": staleness_s,
         "privacy_scope": privacy_scope,
         "source_provider": source_provider,
     }
+    caller_field_count = sum(
+        1 for value in raw_direct.values() if not _is_missing(value)
+    )
+    if energy_vitals_snapshot_path or caller_field_count == 0:
+        snapshot, snapshot_report = _load_energy_vitals_snapshot(
+            root,
+            project,
+            explicit_path=energy_vitals_snapshot_path,
+        )
+    else:
+        snapshot = {}
+        snapshot_report = [
+            {
+                "source_kind": "energy_vitals_snapshot",
+                "status": "skipped_project_fallback_for_caller_snapshot",
+                "source_path": None,
+                "loaded_count": 0,
+            }
+        ]
+    direct = _normalize_direct_evidence(
+        {
+            field: _first_present(raw_direct.get(field), snapshot.get(field))
+            for field in ENERGY_VITALS_SNAPSHOT_FIELDS
+        }
+    )
     evidence = _merged_evidence(
         direct,
         baseline=baseline,
@@ -139,7 +171,7 @@ def assess_scout_energy_vitals(
         "query": query,
         "assessment_kind": "read_only_energy_vitals",
         "answerability": answerability,
-        "source_status": "candidate_only",
+        "source_status": _source_status(snapshot=snapshot),
         "decision": decision,
         "decision_output": decision_output,
         "field_answer": field_answer,
@@ -200,6 +232,7 @@ def assess_scout_energy_vitals(
             }
         ],
         "source_report": _source_report(
+            snapshot_report=snapshot_report,
             baseline_path=resolved_baseline_path,
             observation_path=resolved_observation_path,
             baseline_loaded=baseline is not None,
@@ -650,12 +683,14 @@ def _resolve_existing_path(
 
 def _source_report(
     *,
+    snapshot_report: list[dict[str, Any]],
     baseline_path: str | None,
     observation_path: str | None,
     baseline_loaded: bool,
     observation_loaded: bool,
 ) -> list[dict[str, Any]]:
     return [
+        *snapshot_report,
         {
             "source_kind": "energy_reserve_baseline",
             "status": "loaded" if baseline_loaded else "missing",
@@ -675,6 +710,160 @@ def _source_report(
             "loaded_count": 1,
         },
     ]
+
+
+def _load_energy_vitals_snapshot(
+    root: Path,
+    project: dict[str, Any],
+    *,
+    explicit_path: str | None,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    candidates = _candidate_paths(
+        root,
+        project,
+        explicit_path=explicit_path,
+        ref_keys=(
+            "energy_vitals_snapshot_ref",
+            "reviewed_energy_vitals_snapshot_ref",
+            "wearable_vitals_snapshot_ref",
+        ),
+        fallbacks=(
+            "outputs/energy_vitals_snapshot.reviewed.json",
+            "outputs/energy_vitals_snapshot.json",
+            "outputs/energy/energy_vitals_snapshot.json",
+        ),
+    )
+    report: list[dict[str, Any]] = []
+    for label, path in candidates:
+        if not path.exists():
+            report.append(
+                {
+                    "source_kind": "energy_vitals_snapshot",
+                    "status": "missing",
+                    "source_path": label,
+                    "loaded_count": 0,
+                }
+            )
+            continue
+        payload = _load_json_object(path)
+        snapshot = _snapshot_from_payload(payload)
+        if not snapshot:
+            report.append(
+                {
+                    "source_kind": "energy_vitals_snapshot",
+                    "status": "invalid_or_empty",
+                    "source_path": label,
+                    "loaded_count": 0,
+                }
+            )
+            continue
+        report.append(
+            {
+                "source_kind": "energy_vitals_snapshot",
+                "status": "loaded",
+                "source_path": label,
+                "loaded_count": 1,
+                "artifact_kind": payload.get("artifact_kind"),
+                "source_status": payload.get("status") or payload.get("source_status"),
+            }
+        )
+        return snapshot, report
+    return {}, report[:3]
+
+
+def _candidate_paths(
+    root: Path,
+    project: dict[str, Any],
+    *,
+    explicit_path: str | None,
+    ref_keys: tuple[str, ...],
+    fallbacks: tuple[str, ...],
+) -> list[tuple[str, Path]]:
+    candidates: list[tuple[str, Path]] = []
+    if explicit_path:
+        candidates.append((explicit_path, _project_path(root, explicit_path)))
+    for key in ref_keys:
+        ref = project.get(key)
+        if isinstance(ref, str) and ref.strip():
+            candidates.append((ref, _project_path(root, ref)))
+    for ref in fallbacks:
+        candidates.append((ref, _project_path(root, ref)))
+    deduped: list[tuple[str, Path]] = []
+    seen: set[Path] = set()
+    for label, path in candidates:
+        resolved = path.resolve() if path.exists() else path
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        deduped.append((label, path))
+    return deduped
+
+
+def _project_path(root: Path, value: str) -> Path:
+    path = Path(value)
+    return path if path.is_absolute() else root / path
+
+
+def _load_json_object(path: Path) -> dict[str, Any]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _snapshot_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    if not payload:
+        return {}
+    nested = payload.get("energy_vitals_snapshot")
+    if not isinstance(nested, dict):
+        nested = payload.get("wearable_vitals")
+    if not isinstance(nested, dict):
+        nested = payload.get("snapshot")
+    snapshot_source = nested if isinstance(nested, dict) else payload
+    snapshot = {
+        field: snapshot_source.get(field)
+        for field in ENERGY_VITALS_SNAPSHOT_FIELDS
+        if not _is_missing(snapshot_source.get(field))
+    }
+    if payload.get("status") and "source_status" not in snapshot:
+        snapshot["source_status"] = payload.get("status")
+    return snapshot
+
+
+def _normalize_direct_evidence(value: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "subject_id": value.get("subject_id"),
+        "observed_at": value.get("observed_at"),
+        "heart_rate_bpm": _float_or_none(value.get("heart_rate_bpm")),
+        "hrv_ms": _float_or_none(value.get("hrv_ms")),
+        "body_battery_or_provider_energy": _float_or_none(
+            value.get("body_battery_or_provider_energy")
+        ),
+        "pace_mps": _float_or_none(value.get("pace_mps")),
+        "cadence": _float_or_none(value.get("cadence")),
+        "activity_load": _float_or_none(value.get("activity_load")),
+        "baseline_window_days": _int_or_none(value.get("baseline_window_days")),
+        "reserve_score": _int_or_none(value.get("reserve_score")),
+        "reserve_band": value.get("reserve_band"),
+        "heart_rate_drift_ratio": _float_or_none(value.get("heart_rate_drift_ratio")),
+        "heart_rate_trend": value.get("heart_rate_trend")
+        if isinstance(value.get("heart_rate_trend"), dict)
+        else None,
+        "hrv_trend": value.get("hrv_trend")
+        if isinstance(value.get("hrv_trend"), dict)
+        else None,
+        "record_gap_count": _int_or_none(value.get("record_gap_count")),
+        "staleness_s": _float_or_none(value.get("staleness_s")),
+        "privacy_scope": value.get("privacy_scope"),
+        "source_provider": value.get("source_provider"),
+    }
+
+
+def _source_status(*, snapshot: dict[str, Any]) -> str:
+    if snapshot:
+        return str(snapshot.get("source_status") or "loaded_energy_vitals_snapshot")
+    return "candidate_only"
 
 
 def _cue_band(
