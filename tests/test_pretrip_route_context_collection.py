@@ -550,6 +550,17 @@ def test_route_context_collection_uses_web_media_in_presentation_html(tmp_path: 
             "runtime_safety_truth": False,
             "raw_image_embedded": False,
         },
+        {
+            "url": "https://recreation.forest.gov.tw/image/edu/ForestTherapy_circle.png",
+            "alt": "森療 · 身療",
+            "caption": "森療 · 身療",
+            "source_tier": "P0",
+            "source_family": "official_baseline",
+            "page_url": "https://recreation.forest.gov.tw/Trail/RT?tr_id=064",
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+            "raw_image_embedded": False,
+        },
     ]
     image_refs = bad_image_refs + [
         {
@@ -709,6 +720,7 @@ def test_route_context_collection_uses_web_media_in_presentation_html(tmp_path: 
     assert "30uu-logotype-primary.svg" not in briefing
     assert "search@svg.svg" not in briefing
     assert "facebook.com/tr" not in briefing
+    assert "ForestTherapy_circle.png" not in briefing
     map_atlas_fragment = briefing[
         briefing.index('class="map-atlas"') : briefing.index(
             'class="map-layer-card"'
