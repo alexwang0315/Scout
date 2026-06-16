@@ -1890,8 +1890,8 @@ def _standard_gap_overview_decision_output(
         "firstLayer": {
             "decision": "Scout 主要六力與核心 workflow 已接成 deterministic decision path。",
             "limit": (
-                "標準差異檢視不得視為產品完成證明、出發批准或 runtime safety truth；"
-                "產品文案/UX 原則仍需另以介面驗收。"
+                "標準差異檢視不得視為出發批准或 runtime safety truth；"
+                "static admin UI audit 可呈現 coverage/gap/boundary，但不等於真實路線資料完整。"
             ),
             "reason": standard_gap_summary + " " + missing_summary,
             "nextStep": "逐項查看仍薄弱的標準群，選下一個可驗證 slice 補實作與測試。",
@@ -1906,7 +1906,7 @@ def _standard_gap_overview_decision_output(
                 _missing_evidence_text(item) for item in missing_evidence
             ],
             "residualRisk": [
-                "0/1/3/26/27/30 等產品北極星與文案原則不能只靠工具矩陣證明，需要 UI/UX 與端到端產品驗收。",
+                "Static admin UI can render the standard audit, but real operator/device usage still needs field validation.",
                 "Raw search/catalog evidence 仍不能取代 ContextualPermission decision output。",
                 "Fixture evidence 通過不等於真實路線、真實天候、真實隊伍資料已完整。",
             ],
@@ -1971,6 +1971,7 @@ def _standard_gap_overview_answer(
         else "本次標準覆蓋工具都有 deterministic evidence path 可檢視。"
     )
     classification_summary = _standard_gap_classification_summary(standard_gap_audit)
+    ui_validation_summary = _standard_gap_ui_validation_summary(standard_gap_audit)
     return (
         "標準差異檢視：六力都有實作在 Scout AI 工具/證據/答案路徑內："
         + "；".join(six_power_lines)
@@ -1978,8 +1979,11 @@ def _standard_gap_overview_answer(
         + "；".join([*coverage_lines, *synthesis_lines])
         + "。缺口分類："
         + classification_summary
-        + "。主要仍需補強：產品北極星、文案與 UI/UX 原則不能只靠工具矩陣證明；"
-        "raw search/catalog evidence 不能取代 ContextualPermission；fixture 通過不等於真實路線資料已完整。"
+        + "。UI/UX 驗證："
+        + ui_validation_summary
+        + "。產品北極星/Product Copy：static admin UI 已可呈現 standard audit，"
+        "但真實 operator/device flow 仍需 field validation。仍需注意：raw search/catalog evidence 不能取代 ContextualPermission；"
+        "fixture 通過不等於真實路線資料已完整。"
         + missing_summary
         + " 這是差異檢視，不是出發批准或 runtime safety truth。"
     )
@@ -2071,6 +2075,25 @@ def _standard_gap_audit(
         status = str(group["status"])
         status_counts[status] = status_counts.get(status, 0) + 1
     context_or_review_gap_count = len(context_or_review_gap_tools)
+    ui_validation = _standard_gap_ui_validation()
+    next_slices = []
+    if context_or_review_gap_count:
+        next_slices.append(
+            (
+                f"把 {context_or_review_gap_count} 個情境輸入/審核 evidence gap 依工具分流："
+                "route/team/weather/live nav/post-trip/media/runtime trace。"
+            )
+        )
+    if not bool(ui_validation.get("validated")):
+        next_slices.append(
+            "針對 UI/UX 端到端驗收補畫面或截圖 smoke，證明產品北極星與 Product Copy 進入實際使用流程。"
+        )
+    next_slices.extend(
+        [
+            "用真實專案資料重跑 Route Readiness 與 Contextual Permission，確認 fixture 通過沒有被誤當 runtime safety truth。",
+            "用 UI/UX operator/browser smoke 持續驗證 admin UI 的 standard gap audit、workflow、source report 與 boundary 顯示。",
+        ]
+    )
     return {
         "schema": "scout_standard_gap_audit.v0",
         "runtimeSafetyTruth": False,
@@ -2081,25 +2104,117 @@ def _standard_gap_audit(
             ),
             "implementationGapToolCount": len(implementation_gap_tools),
             "contextOrReviewEvidenceGapToolCount": context_or_review_gap_count,
-            "uiUxValidationNeeded": True,
+            "uiUxValidationNeeded": not bool(ui_validation.get("validated")),
             "statusCounts": dict(sorted(status_counts.items())),
         },
+        "uiUxValidation": ui_validation,
         "groups": groups,
         "inputOrEvidenceGaps": context_or_review_gap_tools,
         "implementationGaps": implementation_gap_tools,
-        "nextSlices": [
-            (
-                f"把 {context_or_review_gap_count} 個情境輸入/審核 evidence gap 依工具分流："
-                "route/team/weather/live nav/post-trip/media/runtime trace。"
-            ),
-            "針對 UI/UX 端到端驗收補畫面或截圖 smoke，證明產品北極星與 Product Copy 進入實際使用流程。",
-            "用真實專案資料重跑 Route Readiness 與 Contextual Permission，確認 fixture 通過沒有被誤當 runtime safety truth。",
-        ],
+        "nextSlices": next_slices,
         "nonGoals": [
             "此 audit 不批准出發、不寫入 runtime safety truth、不觸發 /safety、SOS、outbound send 或硬體控制。",
             "此 audit 不把缺使用者輸入或缺新鮮天氣等同於未實作工具。",
         ],
     }
+
+
+def _standard_gap_ui_validation() -> dict[str, Any]:
+    repo_root = Path(__file__).resolve().parent
+    contracts = [
+        {
+            "sourceRef": "docs/admin/phase4-pretrip-planning.html#assistantStandardGapAuditList",
+            "path": repo_root / "docs" / "admin" / "phase4-pretrip-planning.html",
+            "requiredTokens": [
+                'aria-label="Scout standard gap audit"',
+                'id="assistantStandardGapAuditList"',
+                "window.ScoutAssistantUI.renderStandardGapAudit(payload)",
+            ],
+        },
+        {
+            "sourceRef": "docs/admin/scout-assistant-ui.js#standardGapAuditItems",
+            "path": repo_root / "docs" / "admin" / "scout-assistant-ui.js",
+            "requiredTokens": [
+                "function standardGapAudit",
+                "function standardGapAuditItems",
+                "function renderStandardGapAudit",
+                "ui_validation:",
+            ],
+        },
+        {
+            "sourceRef": "tests/test_pretrip_admin_page.py#standard-gap-audit-render",
+            "path": repo_root / "tests" / "test_pretrip_admin_page.py",
+            "requiredTokens": [
+                "test_standard_gap_audit_items_render_zero_gap_ui_validation_contract",
+                "standardGapAuditItems(payload)",
+                "ui_validation: status=validated_static_admin_ui",
+            ],
+        },
+    ]
+    missing_contracts: list[dict[str, Any]] = []
+    for contract in contracts:
+        path = contract["path"]
+        source_ref = str(contract["sourceRef"])
+        required_tokens = [
+            str(token) for token in contract.get("requiredTokens", [])
+        ]
+        if not isinstance(path, Path) or not path.is_file():
+            missing_contracts.append(
+                {
+                    "sourceRef": source_ref,
+                    "reason": "missing_file",
+                    "missingTokens": required_tokens,
+                }
+            )
+            continue
+        content = path.read_text(encoding="utf-8")
+        missing_tokens = [token for token in required_tokens if token not in content]
+        if missing_tokens:
+            missing_contracts.append(
+                {
+                    "sourceRef": source_ref,
+                    "reason": "missing_required_token",
+                    "missingTokens": missing_tokens,
+                }
+            )
+    validated = not missing_contracts
+    return {
+        "validated": validated,
+        "status": "validated_static_admin_ui"
+        if validated
+        else "static_admin_ui_contract_missing",
+        "surface": "pretrip_admin",
+        "sourceRefs": [str(contract["sourceRef"]) for contract in contracts],
+        "renderedFields": [
+            "standardGroupCount",
+            "coveredStandardGroupCount",
+            "implementationGapToolCount",
+            "contextOrReviewEvidenceGapToolCount",
+            "uiUxValidationNeeded",
+            "uiUxValidation",
+            "groups",
+            "inputOrEvidenceGaps",
+            "nextSlices",
+            "nonGoals",
+        ],
+        "missingContracts": missing_contracts,
+        "boundary": {
+            "runtime_safety_truth": False,
+            "outbound_send_performed": False,
+            "hardware_control_performed": False,
+        },
+    }
+
+
+def _standard_gap_ui_validation_summary(audit: dict[str, Any]) -> str:
+    ui_validation = audit.get("uiUxValidation")
+    ui_validation = ui_validation if isinstance(ui_validation, dict) else {}
+    if bool(ui_validation.get("validated")):
+        return (
+            "static admin UI 已接上 standard gap audit render path（pretrip_admin），"
+            "可呈現 coverage/gap/groups/boundary。"
+        )
+    return "仍需 UI/UX 端到端驗收。"
 
 
 def _standard_gap_audit_group(
@@ -2228,6 +2343,8 @@ def _standard_gap_classification_summary(audit: dict[str, Any]) -> str:
     ]
     if ui_needed:
         parts.append("UI/UX 端到端驗收仍需證明產品北極星與文案進入實際流程")
+    else:
+        parts.append("UI/UX static admin audit=validated")
     return "；".join(parts)
 
 

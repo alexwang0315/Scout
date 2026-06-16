@@ -172,6 +172,12 @@
       `schema: ${text(audit.schema)} | runtime_safety_truth=${audit.runtimeSafetyTruth === true ? "true" : "false"}`,
       `coverage: ${text(summary.coveredStandardGroupCount, "0")}/${text(summary.standardGroupCount, "0")} groups | implementation_gap_tools=${text(summary.implementationGapToolCount, "0")} | context_review_gap_tools=${text(summary.contextOrReviewEvidenceGapToolCount, "0")} | ui_ux_validation_needed=${summary.uiUxValidationNeeded === true ? "true" : "false"}`
     ];
+    const uiValidation = audit.uiUxValidation || null;
+    if (uiValidation && typeof uiValidation === "object") {
+      items.push(
+        `ui_validation: status=${text(uiValidation.status)} | surface=${text(uiValidation.surface)} | validated=${uiValidation.validated === true ? "true" : "false"}`
+      );
+    }
     (audit.groups || []).slice(0, 5).forEach(group => {
       items.push(`group: ${text(group.label)} | sections=${text(group.sections)} | ${text(group.status)} | missing=${text(group.missingFieldCount, "0")}`);
     });

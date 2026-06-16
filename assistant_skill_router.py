@@ -431,6 +431,9 @@ def _compact_standard_gap_audit(audit: dict[str, Any]) -> dict[str, Any]:
         "schema": audit.get("schema"),
         "runtimeSafetyTruth": False,
         "summary": audit.get("summary") if isinstance(audit.get("summary"), dict) else {},
+        "uiUxValidation": _compact_standard_gap_ui_validation(
+            audit.get("uiUxValidation"),
+        ),
         "groups": [
             _compact_standard_gap_group(group)
             for group in groups
@@ -452,6 +455,26 @@ def _compact_standard_gap_audit(audit: dict[str, Any]) -> dict[str, Any]:
         "nonGoals": audit.get("nonGoals", [])[:5]
         if isinstance(audit.get("nonGoals"), list)
         else [],
+    }
+
+
+def _compact_standard_gap_ui_validation(value: Any) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        return {}
+    return {
+        "validated": value.get("validated") is True,
+        "status": value.get("status"),
+        "surface": value.get("surface"),
+        "sourceRefs": value.get("sourceRefs", [])[:5]
+        if isinstance(value.get("sourceRefs"), list)
+        else [],
+        "renderedFields": value.get("renderedFields", [])[:12]
+        if isinstance(value.get("renderedFields"), list)
+        else [],
+        "missingContracts": value.get("missingContracts", [])[:5]
+        if isinstance(value.get("missingContracts"), list)
+        else [],
+        "boundary": value.get("boundary") if isinstance(value.get("boundary"), dict) else {},
     }
 
 
