@@ -40,6 +40,12 @@ services:
       - "9110:9099"
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    group_add:
+      - "${SCOUT_DOCKER_I2C_GID:-988}"
+      - "${SCOUT_DOCKER_GPIO_GID:-986}"
+    devices:
+      - "${SCOUT_DOCKER_I2C_DEVICE:-/dev/i2c-1}:/dev/i2c-1"
+      - "${SCOUT_DOCKER_GPIOCHIP_DEVICE:-/dev/gpiochip0}:/dev/gpiochip0"
     volumes:
       - type: bind
         source: /data/scout

@@ -45,6 +45,7 @@ COPY \
     admin_tile_cache_builder.py \
     admin_tile_proxy.py \
     admin_weather_overlay.py \
+    application_router.py \
     assistant_api.py \
     assistant_context.py \
     assistant_model_config.py \
@@ -68,6 +69,7 @@ COPY \
     incident_package.py \
     incident_store.py \
     ingress_observer_supervisor.py \
+    ingress_evidence.py \
     ins_dr_input_adapter.py \
     ins_dr_navigation.py \
     mission_graph.py \
@@ -149,6 +151,7 @@ COPY \
     runtime_artifact_resolution.py \
     runtime_debug_log.py \
     runtime_debug_models.py \
+    scout_gnss_hardware_observer.py \
     scout_agent_debug_projection.py \
     scout_agent_kb.py \
     safety_models.py \
@@ -182,6 +185,7 @@ COPY \
     scout_route_readiness_tool.py \
     scout_safety_boundary_tool.py \
     scout_sensor_vitals_record.py \
+    scout_sensorlogger_mqtt_observer.py \
     scout_survival_incident_playbook_tool.py \
     scout_team_status_tool.py \
     scout_terrain_score_tool.py \
@@ -207,6 +211,9 @@ COPY scout_ai_*.py scout_*_tool.py ./
 COPY pretrip_*.py ./
 
 COPY tools/pydantic_ai_cloud_latency_benchmark.py ./tools/
+COPY tools/pi_grove_led_bar_smoke.py ./tools/
+COPY tools/pi_oled_i2c_smoke.py ./tools/
+COPY tools/pi_sx1303_gateway_gps_nmea_smoke.py ./tools/
 COPY tools/scout_agent_tool_manifests/ ./tools/scout_agent_tool_manifests/
 COPY .agents/skills/scout-route-context-briefing/ ./.agents/skills/scout-route-context-briefing/
 COPY skills/scout/ ./skills/scout/

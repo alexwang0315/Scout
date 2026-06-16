@@ -8,7 +8,7 @@ from scout_agent_trace import load_agent_trace
 from scout_cli import run_scout_cli
 from pretrip_contextual_permission_collection import CONTEXTUAL_PERMISSION_RULES_REF
 from pretrip_navigation_terrain_collection import OFFLINE_MAP_MANIFEST_REF
-from pretrip_pace_fit_collection import TEAM_PACE_FIT_REF
+from pretrip_pace_fit_collection import PACE_COEFFICIENTS_REF, TEAM_PACE_FIT_REF
 from pretrip_route_architecture_collection import ROUTE_ARCHITECTURE_REF
 from pretrip_route_context_collection import (
     ROUTE_CONTEXT_BRIEFING_REF,
@@ -26,6 +26,14 @@ from tests.test_admin_local_raster_source import _write_sample_geotiff
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CHILAI_PROJECT = (
     REPO_ROOT / "tests" / "fixtures" / "pretrip" / "projects" / "chilai_nanhua_day1"
+)
+POST_ANALYSIS_OUTPUTS = (
+    REPO_ROOT
+    / "tests"
+    / "fixtures"
+    / "post_analysis"
+    / "chilai_nanhua_day1_post_analysis"
+    / "outputs"
 )
 
 
@@ -585,6 +593,46 @@ def test_scout_pretrip_pace_fit_collect_facade(tmp_path: Path) -> None:
     assert output["result"]["writes_performed"] is True
     assert output["result"]["member_count"] == 2
     assert output["result"]["boundary"]["average_pace_used"] is False
+    assert (project_root / TEAM_PACE_FIT_REF).is_file()
+
+
+def test_scout_pretrip_pace_fit_collect_builds_from_capability(
+    tmp_path: Path,
+) -> None:
+    project_root = tmp_path / "chilai_nanhua_day1"
+    shutil.copytree(CHILAI_PROJECT, project_root)
+    _copy_post_analysis_outputs(project_root)
+
+    exit_code, payload = run_scout_cli(
+        [
+            "pretrip",
+            "pace-fit-collect",
+            "--project-root",
+            str(project_root),
+            "--build-from-capability",
+            "--member-id",
+            "alex",
+            "--display-label",
+            "Alex",
+            "--pack-weight-kg",
+            "12",
+            "--weather-impact-ratio",
+            "0.18",
+            "--authorized-by",
+            "operator.alex",
+            "--json",
+        ]
+    )
+
+    assert exit_code == 0
+    output = json.loads(payload["outputs"]["stdout"])
+    assert output["artifact_kind"] == "scout_pretrip_pace_fit_collect_tool_output"
+    assert output["result"]["writes_performed"] is True
+    assert output["result"]["member_count"] == 1
+    assert output["result"]["coefficient_builder"]["status"] == "completed"
+    coefficients = json.loads((project_root / PACE_COEFFICIENTS_REF).read_text())
+    assert coefficients["member_coefficients"][0]["member_id"] == "alex"
+    assert coefficients["member_coefficients"][0]["load_impact_ratio"] == 0.09
     assert (project_root / TEAM_PACE_FIT_REF).is_file()
 
 
@@ -1379,6 +1427,16 @@ def _write_runtime_export_inputs(tmp_path: Path) -> tuple[Path, Path, Path]:
     final_graph_path.write_text(final_graph.to_json(), encoding="utf-8")
     handoff_path.write_text(handoff.to_json(), encoding="utf-8")
     return project_root, final_graph_path, handoff_path
+
+
+def _copy_post_analysis_outputs(project_root: Path) -> None:
+    outputs = project_root / "outputs"
+    outputs.mkdir(parents=True, exist_ok=True)
+    for filename in (
+        "capability_timeline.json",
+        "capability_route_time_comparison.json",
+    ):
+        shutil.copy2(POST_ANALYSIS_OUTPUTS / filename, outputs / filename)
 
 
 def _write_runtime_handoff_inputs(tmp_path: Path) -> tuple[Path, Path, Path, Path, Path]:

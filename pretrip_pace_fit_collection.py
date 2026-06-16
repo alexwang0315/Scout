@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from scout_pace_guardian_tool import assess_scout_pace_guardian
+from scout_pace_coefficient_builder import build_scout_pace_coefficients_from_project
 
 
 PACE_FIT_COLLECTION_ARTIFACT_KIND = "pretrip_pace_fit_collection"
@@ -103,6 +104,17 @@ def collect_pretrip_pace_fit(
     *,
     dry_run: bool = False,
     team_members: list[Any] | None = None,
+    build_coefficients_from_capability: bool = False,
+    capability_timeline_path: Path | str | None = None,
+    route_time_comparison_path: Path | str | None = None,
+    route_weather_package_path: Path | str | None = None,
+    weather_decision_candidates_path: Path | str | None = None,
+    member_id: str | None = None,
+    display_label: str | None = None,
+    pack_weight_kg: float | int | str | None = None,
+    load_impact_ratio: float | int | str | None = None,
+    weather_impact_ratio: float | int | str | None = None,
+    self_report_gap_ratio: float | int | str | None = None,
     current_time: str | None = None,
     next_cp_id: str | None = None,
     minutes_to_next_cp: float | int | str | None = None,
@@ -128,11 +140,37 @@ def collect_pretrip_pace_fit(
     )
     team_pace_fit_ref = str(project.get("team_pace_fit_ref") or TEAM_PACE_FIT_REF)
     planned_refs = [pace_coefficients_ref, team_pace_fit_ref]
+    coefficient_builder: dict[str, Any] | None = None
+    resolved_team_members = team_members
+    if build_coefficients_from_capability:
+        coefficient_builder = build_scout_pace_coefficients_from_project(
+            root,
+            capability_timeline_path=capability_timeline_path,
+            route_time_comparison_path=route_time_comparison_path,
+            route_weather_package_path=route_weather_package_path,
+            weather_decision_candidates_path=weather_decision_candidates_path,
+            member_id=member_id,
+            display_label=display_label,
+            pack_weight_kg=pack_weight_kg,
+            load_impact_ratio=load_impact_ratio,
+            weather_impact_ratio=weather_impact_ratio,
+            self_report_gap_ratio=self_report_gap_ratio,
+            generated_at=collected_at,
+        )
+        builder_members = coefficient_builder.get("team_members")
+        if isinstance(builder_members, list) and builder_members:
+            builder_members = [
+                member for member in builder_members if isinstance(member, dict)
+            ]
+            if isinstance(resolved_team_members, list) and resolved_team_members:
+                resolved_team_members = [*resolved_team_members, *builder_members]
+            else:
+                resolved_team_members = builder_members
 
     assessment = assess_scout_pace_guardian(
         root,
         query="Sec. 7 pretrip readiness and team pace fit collection",
-        team_members=team_members,
+        team_members=resolved_team_members,
         current_time=current_time,
         next_cp_id=next_cp_id,
         minutes_to_next_cp=minutes_to_next_cp,
@@ -154,7 +192,7 @@ def collect_pretrip_pace_fit(
     missing_fields = list(assessment.get("missing_fields") or [])
     boundary = _closed_boundary(workspace_file_mutation_allowed=not dry_run)
     member_coefficients = _member_coefficients(
-        team_members=team_members,
+        team_members=resolved_team_members,
         team_pace_fit=team_pace_fit,
     )
     counts = _counts(
@@ -172,6 +210,7 @@ def collect_pretrip_pace_fit(
         "coefficient_schema": COEFFICIENT_SCHEMA,
         "coefficient_schema_count": len(COEFFICIENT_SCHEMA),
         "member_coefficients": member_coefficients,
+        "coefficient_builder": _public_builder_summary(coefficient_builder),
         "counts": {
             "member_coefficient_count": len(member_coefficients),
             "missing_field_count": len(missing_fields),
@@ -193,6 +232,7 @@ def collect_pretrip_pace_fit(
         "team_pace_fit": team_pace_fit,
         "schedule_pressure": assessment.get("schedule_pressure"),
         "team_context": assessment.get("team_context"),
+        "coefficient_builder": _public_builder_summary(coefficient_builder),
         "counts": counts,
         "missing_fields": missing_fields,
         "source_report": source_report,
@@ -217,6 +257,7 @@ def collect_pretrip_pace_fit(
         "member_count": counts["member_count"],
         "members_with_pace_count": counts["members_with_pace_count"],
         "vulnerable_member_count": counts["vulnerable_member_count"],
+        "coefficient_builder": _public_builder_summary(coefficient_builder),
         "missing_fields": missing_fields,
         "source_report": source_report,
         "standard_alignment": SEC7_ALIGNMENT,
@@ -247,6 +288,22 @@ def collect_pretrip_pace_fit(
     return collection_payload
 
 
+def _public_builder_summary(builder: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not isinstance(builder, dict):
+        return None
+    return {
+        "artifact_kind": builder.get("artifact_kind"),
+        "schema_version": builder.get("schema_version"),
+        "status": builder.get("status"),
+        "counts": builder.get("counts"),
+        "missing_indicators": list(builder.get("missing_indicators") or []),
+        "indicator_provenance": builder.get("indicator_provenance"),
+        "source_report": builder.get("source_report"),
+        "limitations": list(builder.get("limitations") or []),
+        "boundary": builder.get("boundary"),
+    }
+
+
 def _member_coefficients(
     *,
     team_members: list[Any] | None,
@@ -267,8 +324,12 @@ def _member_coefficients(
 
 
 def _coefficient_from_raw_member(raw: dict[str, Any], *, index: int) -> dict[str, Any]:
+    coefficient = raw.get("scout_pace_coefficient")
+    coefficient = coefficient if isinstance(coefficient, dict) else {}
     pace = _float_or_none(
         _first_present(
+            coefficient.get("flat_speed_mps"),
+            coefficient.get("flat_pace_mps"),
             raw.get("pace_mps"),
             raw.get("current_pace_mps"),
             raw.get("planned_pace_mps"),
@@ -284,6 +345,12 @@ def _coefficient_from_raw_member(raw: dict[str, Any], *, index: int) -> dict[str
         )
     )
     review_state = raw.get("review_state")
+    explicit_experience = _first_present(
+        raw.get("experience_credibility"),
+        raw.get("self_report_credibility"),
+        coefficient.get("experience_credibility"),
+        coefficient.get("self_report_credibility"),
+    )
     return {
         "member_id": str(raw.get("member_id") or raw.get("id") or f"member_{index + 1}"),
         "label": str(
@@ -302,19 +369,79 @@ def _coefficient_from_raw_member(raw: dict[str, Any], *, index: int) -> dict[str
                 raw.get("vertical_ascent_speed_mph"),
             )
         ),
-        "descent_speed_mps": _float_or_none(raw.get("descent_speed_mps")),
+        "descent_speed_mps": _float_or_none(
+            _first_present(
+                raw.get("descent_speed_mps"),
+                raw.get("downhill_speed_mps"),
+                coefficient.get("downhill_speed_mps"),
+                coefficient.get("downhill_pace_mps"),
+            )
+        ),
         "technical_terrain_slowdown_ratio": _float_or_none(
-            raw.get("technical_terrain_slowdown_ratio")
+            _first_present(
+                raw.get("technical_terrain_slowdown_ratio"),
+                raw.get("technical_slowdown_ratio"),
+                coefficient.get("technical_terrain_slowdown_ratio"),
+                coefficient.get("technical_slowdown_ratio"),
+            )
         ),
         "rest_frequency_minutes": _float_or_none(
-            _first_present(raw.get("rest_frequency_minutes"), raw.get("rest_need_minutes"))
+            _first_present(
+                raw.get("rest_frequency_minutes"),
+                raw.get("rest_interval_minutes"),
+                raw.get("rest_need_minutes"),
+                coefficient.get("rest_frequency_minutes"),
+                coefficient.get("rest_interval_minutes"),
+            )
         ),
-        "late_trip_decay_ratio": _float_or_none(raw.get("late_trip_decay_ratio")),
-        "load_impact_ratio": _float_or_none(raw.get("load_impact_ratio")),
-        "weather_impact_ratio": _float_or_none(raw.get("weather_impact_ratio")),
-        "experience_credibility": _experience_credibility(
+        "late_trip_decay_ratio": _float_or_none(
+            _first_present(
+                raw.get("late_trip_decay_ratio"),
+                raw.get("late_trip_speed_decay_ratio"),
+                raw.get("fatigue_decay_ratio"),
+                coefficient.get("late_trip_speed_decay_ratio"),
+                coefficient.get("fatigue_decay_ratio"),
+            )
+        ),
+        "load_impact_ratio": _float_or_none(
+            _first_present(
+                raw.get("load_impact_ratio"),
+                raw.get("load_slowdown_ratio"),
+                raw.get("pack_slowdown_ratio"),
+                coefficient.get("load_slowdown_ratio"),
+                coefficient.get("pack_slowdown_ratio"),
+            )
+        ),
+        "weather_impact_ratio": _float_or_none(
+            _first_present(
+                raw.get("weather_impact_ratio"),
+                raw.get("weather_slowdown_ratio"),
+                raw.get("rain_slowdown_ratio"),
+                coefficient.get("weather_slowdown_ratio"),
+                coefficient.get("rain_slowdown_ratio"),
+            )
+        ),
+        "experience_credibility": str(explicit_experience)
+        if explicit_experience is not None
+        else _experience_credibility(
             first_time_similar_route=first_time,
             review_state=review_state,
+        ),
+        "self_report_gap_ratio": _float_or_none(
+            _first_present(
+                raw.get("self_report_gap_ratio"),
+                raw.get("actual_vs_self_report_gap_ratio"),
+                coefficient.get("self_report_gap_ratio"),
+                coefficient.get("actual_vs_self_report_gap_ratio"),
+            )
+        ),
+        "pack_weight_kg": _float_or_none(
+            _first_present(
+                raw.get("pack_weight_kg"),
+                raw.get("load_kg"),
+                coefficient.get("pack_weight_kg"),
+                coefficient.get("load_kg"),
+            )
         ),
         "reserve_minutes": _float_or_none(
             _first_present(
@@ -515,6 +642,17 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--project-root", type=Path, required=True)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--team-members-json", default=None)
+    parser.add_argument("--build-from-capability", action="store_true")
+    parser.add_argument("--capability-timeline-path", type=Path, default=None)
+    parser.add_argument("--route-time-comparison-path", type=Path, default=None)
+    parser.add_argument("--route-weather-package-path", type=Path, default=None)
+    parser.add_argument("--weather-decision-candidates-path", type=Path, default=None)
+    parser.add_argument("--member-id", default=None)
+    parser.add_argument("--display-label", default=None)
+    parser.add_argument("--pack-weight-kg", default=None)
+    parser.add_argument("--load-impact-ratio", default=None)
+    parser.add_argument("--weather-impact-ratio", default=None)
+    parser.add_argument("--self-report-gap-ratio", default=None)
     parser.add_argument("--current-time", default=None)
     parser.add_argument("--next-cp-id", default=None)
     parser.add_argument("--minutes-to-next-cp", default=None)
@@ -532,6 +670,17 @@ def main(argv: list[str] | None = None) -> int:
         args.project_root,
         dry_run=args.dry_run,
         team_members=team_members,
+        build_coefficients_from_capability=args.build_from_capability,
+        capability_timeline_path=args.capability_timeline_path,
+        route_time_comparison_path=args.route_time_comparison_path,
+        route_weather_package_path=args.route_weather_package_path,
+        weather_decision_candidates_path=args.weather_decision_candidates_path,
+        member_id=args.member_id,
+        display_label=args.display_label,
+        pack_weight_kg=args.pack_weight_kg,
+        load_impact_ratio=args.load_impact_ratio,
+        weather_impact_ratio=args.weather_impact_ratio,
+        self_report_gap_ratio=args.self_report_gap_ratio,
         current_time=args.current_time,
         next_cp_id=args.next_cp_id,
         minutes_to_next_cp=args.minutes_to_next_cp,

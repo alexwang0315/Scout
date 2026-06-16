@@ -2584,6 +2584,26 @@ def _pretrip_pace_fit_collect(args: argparse.Namespace) -> tuple[int, dict[str, 
         project_root,
         dry_run=bool(args.dry_run),
         team_members=team_members,
+        build_coefficients_from_capability=bool(
+            request.get("build_coefficients_from_capability")
+            or request.get("build_from_capability")
+        ),
+        capability_timeline_path=_optional_path(request.get("capability_timeline_path")),
+        route_time_comparison_path=_optional_path(
+            request.get("route_time_comparison_path")
+        ),
+        route_weather_package_path=_optional_path(
+            request.get("route_weather_package_path")
+        ),
+        weather_decision_candidates_path=_optional_path(
+            request.get("weather_decision_candidates_path")
+        ),
+        member_id=request.get("member_id"),
+        display_label=request.get("display_label"),
+        pack_weight_kg=request.get("pack_weight_kg"),
+        load_impact_ratio=request.get("load_impact_ratio"),
+        weather_impact_ratio=request.get("weather_impact_ratio"),
+        self_report_gap_ratio=request.get("self_report_gap_ratio"),
         current_time=request.get("current_time"),
         next_cp_id=request.get("next_cp_id"),
         minutes_to_next_cp=request.get("minutes_to_next_cp"),

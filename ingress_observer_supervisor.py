@@ -269,6 +269,7 @@ def _gnss_hardware_spec(
         str(max_records),
         "--print-ready",
     ]
+    _append_gnss_hardware_display_args(command, env)
     if gateway_jsonl.exists() or grove_jsonl.exists():
         reason = "configured_sources"
     elif explicit_autostart or force_autostart:
@@ -283,6 +284,35 @@ def _gnss_hardware_spec(
         log_path=log_path,
         reason=reason,
     )
+
+
+def _append_gnss_hardware_display_args(command: list[str], env: Mapping[str, str]) -> None:
+    if _is_true_like(env.get("SCOUT_GNSS_HARDWARE_OLED_STATUS")):
+        command.append("--oled-status")
+        _append_arg_from_env(command, "--oled-bus", env, "SCOUT_GNSS_HARDWARE_OLED_BUS")
+        _append_arg_from_env(command, "--oled-address", env, "SCOUT_GNSS_HARDWARE_OLED_ADDRESS")
+        _append_arg_from_env(command, "--oled-driver", env, "SCOUT_GNSS_HARDWARE_OLED_DRIVER")
+    if _is_true_like(env.get("SCOUT_GNSS_HARDWARE_OLED_DRY_RUN")):
+        command.append("--oled-dry-run")
+
+    if _is_true_like(env.get("SCOUT_GNSS_HARDWARE_LED_STATUS")):
+        command.append("--led-status")
+        _append_arg_from_env(command, "--led-port", env, "SCOUT_GNSS_HARDWARE_LED_PORT")
+        _append_arg_from_env(command, "--led-data-gpio", env, "SCOUT_GNSS_HARDWARE_LED_DATA_GPIO")
+        _append_arg_from_env(command, "--led-clock-gpio", env, "SCOUT_GNSS_HARDWARE_LED_CLOCK_GPIO")
+        _append_arg_from_env(command, "--led-fix-bit", env, "SCOUT_GNSS_HARDWARE_LED_FIX_BIT")
+        _append_arg_from_env(command, "--led-no-fix-bit", env, "SCOUT_GNSS_HARDWARE_LED_NO_FIX_BIT")
+        _append_arg_from_env(command, "--led-blink-count", env, "SCOUT_GNSS_HARDWARE_LED_BLINK_COUNT")
+        _append_arg_from_env(command, "--led-blink-seconds", env, "SCOUT_GNSS_HARDWARE_LED_BLINK_SECONDS")
+    if _is_true_like(env.get("SCOUT_GNSS_HARDWARE_LED_DRY_RUN")):
+        command.append("--led-dry-run")
+
+
+def _append_arg_from_env(command: list[str], option: str, env: Mapping[str, str], env_key: str) -> None:
+    value = env.get(env_key)
+    if value in (None, ""):
+        return
+    command.extend([option, value])
 
 
 def _is_true_like(value: str | None) -> bool:
