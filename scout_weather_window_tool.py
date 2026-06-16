@@ -110,6 +110,7 @@ def assess_scout_weather_window(
     daylight_buffer_status = _daylight_buffer_status(
         query=query,
         current_time=current_time,
+        route_package=route_package,
         weather_evidence=weather_evidence,
         planned_eta=planned_eta,
     )
@@ -227,6 +228,7 @@ def _load_route_weather_package(
         explicit_path=explicit_path,
         ref_keys=("route_weather_package_ref", "weather_route_package_ref"),
         fallbacks=(
+            "outputs/route_weather_package.reviewed.json",
             "outputs/route_weather_package.json",
             "outputs/weather/route_weather_package.json",
             "route_weather_package.json",
@@ -547,13 +549,17 @@ def _daylight_buffer_status(
     *,
     query: str,
     current_time: str | None,
+    route_package: dict[str, Any],
     weather_evidence: dict[str, Any],
     planned_eta: dict[str, Any],
 ) -> dict[str, Any]:
     if not _looks_like_daylight_buffer_question(query):
         return {}
-    daylight = weather_evidence.get("daylight")
-    daylight = daylight if isinstance(daylight, dict) else {}
+    route_daylight = route_package.get("daylight")
+    route_daylight = route_daylight if isinstance(route_daylight, dict) else {}
+    evidence_daylight = weather_evidence.get("daylight")
+    evidence_daylight = evidence_daylight if isinstance(evidence_daylight, dict) else {}
+    daylight = route_daylight or evidence_daylight
     sunset = _first_present(
         daylight,
         "sunset",
@@ -563,6 +569,7 @@ def _daylight_buffer_status(
     )
     target_eta = _planned_target_eta(planned_eta)
     daylight_reviewed = _daylight_window_reviewed(
+        route_package=route_package,
         weather_evidence=weather_evidence,
         daylight=daylight,
         sunset=sunset,
@@ -684,7 +691,9 @@ def _weather_to_decision(
         segments=segments,
     )
     heat_change_plan = _route_sensitive_heat_change_plan(segments)
-    query_stated_rule = _query_stated_weather_rule(query) if missing_fields else None
+    query_stated_rule = _query_stated_weather_rule(query)
+    critical_package_risk = _critical_package_weather_risk(highest)
+    applied_weather_rule: dict[str, Any] | None = None
     if source_disagreement and "SOURCE_CONFLICT" not in alert_codes:
         alert_codes.append("SOURCE_CONFLICT")
     if daylight_buffer_status:
@@ -699,25 +708,28 @@ def _weather_to_decision(
             or "補齊日照窗口、目前時間與 planned ETA 後重新計算。"
         )
         alternatives = _string_list(daylight_buffer_status.get("alternatives"))
-    elif query_stated_rule:
-        decision = str(query_stated_rule["decision"])
-        main_reasons = _string_list(query_stated_rule.get("main_reasons"))
-        action_limit = str(query_stated_rule["action_limit"])
-        next_action = str(query_stated_rule["next_action"])
-        alternatives = _string_list(query_stated_rule.get("alternatives"))
-        for code in _string_list(query_stated_rule.get("alert_codes")):
-            if code not in alert_codes:
-                alert_codes.append(code)
     elif missing_fields:
-        decision = "DELAY"
-        main_reasons = [
-            "缺少新鮮且路線化的天氣證據。",
-            "missing_fields=" + ",".join(missing_fields),
-        ]
-        action_limit = "不得用 placeholder 天氣授權出發、紮營、攻頂、曝露稜線或渡溪決策。"
-        next_action = "補齊 fresh provider、TTL、valid-time 與 route_weather_package；完成前採保守延後。"
-        alternatives = ["延後到新鮮路線天氣包完成審核", "改低曝露備援路線"]
+        if query_stated_rule:
+            applied_weather_rule = query_stated_rule
+            decision = str(query_stated_rule["decision"])
+            main_reasons = _string_list(query_stated_rule.get("main_reasons"))
+            action_limit = str(query_stated_rule["action_limit"])
+            next_action = str(query_stated_rule["next_action"])
+            alternatives = _string_list(query_stated_rule.get("alternatives"))
+            for code in _string_list(query_stated_rule.get("alert_codes")):
+                if code not in alert_codes:
+                    alert_codes.append(code)
+        else:
+            decision = "DELAY"
+            main_reasons = [
+                "缺少新鮮且路線化的天氣證據。",
+                "missing_fields=" + ",".join(missing_fields),
+            ]
+            action_limit = "不得用 placeholder 天氣授權出發、紮營、攻頂、曝露稜線或渡溪決策。"
+            next_action = "補齊 fresh provider、TTL、valid-time 與 route_weather_package；完成前採保守延後。"
+            alternatives = ["延後到新鮮路線天氣包完成審核", "改低曝露備援路線"]
     elif route_sensitive_delay:
+        applied_weather_rule = route_sensitive_delay
         decision = "DELAY"
         crossing_count = route_sensitive_delay["creek_crossing_count"]
         main_reasons = [
@@ -737,6 +749,7 @@ def _weather_to_decision(
             "路況審核後改成嚮導/專家陪同渡溪方案",
         ]
     elif source_disagreement:
+        applied_weather_rule = source_disagreement
         decision = "DELAY"
         main_reasons = [
             "預報來源分歧，天氣可信度不足。",
@@ -755,6 +768,7 @@ def _weather_to_decision(
             "路線敏感決策前先做人工作業天氣審核",
         ]
     elif heat_change_plan:
+        applied_weather_rule = heat_change_plan
         decision = "CHANGE_PLAN"
         main_reasons = [
             "路線有高溫曝曬，且水量或遮蔽條件不足。",
@@ -772,6 +786,16 @@ def _weather_to_decision(
             "增加水量餘裕並指定已審核遮蔽休息點",
             "改短版或低曝曬路線",
         ]
+    elif query_stated_rule and not critical_package_risk:
+        applied_weather_rule = query_stated_rule
+        decision = str(query_stated_rule["decision"])
+        main_reasons = _string_list(query_stated_rule.get("main_reasons"))
+        action_limit = str(query_stated_rule["action_limit"])
+        next_action = str(query_stated_rule["next_action"])
+        alternatives = _string_list(query_stated_rule.get("alternatives"))
+        for code in _string_list(query_stated_rule.get("alert_codes")):
+            if code not in alert_codes:
+                alert_codes.append(code)
     else:
         decision = _weather_decision_from_risk(highest=highest, risk_summary=risk_summary)
         main_reasons = _weather_decision_reasons(
@@ -796,12 +820,7 @@ def _weather_to_decision(
         "next_action": next_action,
         "alternatives": alternatives,
         "route_specific_conditions": _route_specific_conditions(alert_codes, highest=highest),
-        "route_sensitive_weather_rule": (
-            query_stated_rule
-            or route_sensitive_delay
-            or source_disagreement
-            or heat_change_plan
-        ),
+        "route_sensitive_weather_rule": applied_weather_rule,
         "highest_risk_segment": _compact_segment(highest) if highest else None,
         "wx_alert_count": len(wx_alerts),
         "warnings": warnings[:3],
@@ -1011,6 +1030,14 @@ def _weather_decision_from_risk(
     if isinstance(counts, dict) and any(str(key).upper() in {"HIGH", "VERY_HIGH"} for key in counts):
         return "CHANGE_PLAN"
     return "GO"
+
+
+def _critical_package_weather_risk(highest: dict[str, Any] | None) -> bool:
+    if not highest:
+        return False
+    final_risk = _float_or_none(highest.get("final_risk")) or 0.0
+    level = str(highest.get("risk_level") or "").lower()
+    return level in {"critical", "severe", "extreme"} or final_risk >= 0.85
 
 
 def _weather_decision_reasons(
@@ -1675,12 +1702,19 @@ def _planned_target_eta(planned_eta: dict[str, Any]) -> str | None:
 
 def _daylight_window_reviewed(
     *,
+    route_package: dict[str, Any],
     weather_evidence: dict[str, Any],
     daylight: dict[str, Any],
     sunset: Any,
 ) -> bool:
     if not sunset:
         return False
+    if route_package:
+        return (
+            str(daylight.get("source_status") or "").lower()
+            in {"reviewed", "accepted", "computed", "server_side_fixture"}
+            and route_package.get("human_review_required") is not True
+        )
     if weather_evidence.get("human_review_required") is True:
         return False
     validation = weather_evidence.get("validation")
@@ -1770,7 +1804,7 @@ def _warnings(
         warnings.append(
             "Only weather_daylight_evidence was found; no route_weather_package segment risk layer is available."
         )
-    if _is_placeholder(weather_evidence):
+    if _is_placeholder(weather_evidence) and not route_package:
         warnings.append(
             "Weather evidence is a manual placeholder and requires human review before departure-gate use."
         )

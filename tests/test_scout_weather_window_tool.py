@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PROJECT_ROOT = ROOT / "tests" / "fixtures" / "pretrip" / "projects" / "chilai_nanhua_day1"
 
 
-def test_weather_window_tool_reports_placeholder_missing_fresh_weather() -> None:
+def test_weather_window_tool_reads_reviewed_fixture_route_weather_package() -> None:
     result = assess_scout_weather_window(
         PROJECT_ROOT,
         query="明天午後雷雨是否要紮營?",
@@ -23,8 +23,8 @@ def test_weather_window_tool_reports_placeholder_missing_fresh_weather() -> None
 
     assert result["tool_id"] == WEATHER_WINDOW_TOOL_ID
     assert result["status"] == "completed"
-    assert result["answerability"] == "weather_placeholder_only"
-    assert result["source_status"] == "candidate_only"
+    assert result["answerability"] == "route_weather_risk_available"
+    assert result["source_status"] == "reviewed_route_weather_package"
     assert result["decision"] == "DELAY"
     assert result["decision_output"]["decisionObjectSchema"] == "ContextualPermission"
     assert result["decision_output"]["decision"] == "DELAY"
@@ -37,36 +37,37 @@ def test_weather_window_tool_reports_placeholder_missing_fresh_weather() -> None
     assert result["weather_to_decision"]["candidate_only"] is True
     assert "天氣決策" in result["field_answer"]
     assert "DELAY" in result["field_answer"]
-    assert result["result_count"] == 0
-    assert result["risk_summary"]["segment_count"] == 0
-    assert result["weather_window"]["source_status"] == "manual_placeholder"
-    assert "provider" in result["missing_fields"]
-    assert "ttl_s" in result["missing_fields"]
-    assert "route_weather_package" in result["missing_fields"]
-    assert any("manual placeholder" in warning for warning in result["warnings"])
+    assert result["result_count"] == 3
+    assert result["risk_summary"]["segment_count"] == 3
+    assert result["weather_window"]["source_status"] == "reviewed"
+    assert result["missing_fields"] == []
+    assert result["warnings"] == []
+    assert result["weather_to_decision"]["route_sensitive_weather_rule"]["rule"] == (
+        "query_reported_thunderstorm_exposure_review"
+    )
     assert result["boundary"]["runtime_safety_truth"] is False
     assert result["boundary"]["client_cwa_api_key_allowed"] is False
     assert result["boundary"]["live_provider_fetch_performed"] is False
 
 
-def test_weather_window_tool_delays_daylight_buffer_without_reviewed_sun_window() -> None:
+def test_weather_window_tool_delays_daylight_buffer_without_current_time() -> None:
     result = assess_scout_weather_window(
         PROJECT_ROOT,
         query="日照 buffer 是否下降？",
         limit=3,
     )
 
-    assert result["answerability"] == "weather_placeholder_only"
+    assert result["answerability"] == "route_weather_risk_partial"
     assert result["decision"] == "DELAY"
     status = result["daylight_buffer_status"]
     assert status["status"] == "daylight_buffer_missing_context"
     assert status["decision"] == "DELAY"
-    assert status["missing_fields"] == ["reviewed_daylight_window", "current_time"]
+    assert status["missing_fields"] == ["current_time"]
     assert result["decision_output"]["firstLayer"]["decision"] == (
         "無法確認日照 buffer 是否下降。"
     )
     assert "仍有日照 buffer" in result["decision_output"]["firstLayer"]["limit"]
-    assert "reviewed_daylight_window" in result["missing_fields"]
+    assert "reviewed_daylight_window" not in result["missing_fields"]
     assert "current_time" in result["missing_fields"]
     assert "日照 buffer 判斷" in result["field_answer"]
     assert result["decision_output"]["cost"]["daylightBufferStatus"]["status"] == (
@@ -114,7 +115,7 @@ def test_weather_window_tool_uses_query_reported_recent_rain_conservatively() ->
         limit=3,
     )
 
-    assert result["answerability"] == "weather_placeholder_only"
+    assert result["answerability"] == "route_weather_risk_available"
     assert result["decision"] == "CHANGE_PLAN"
     weather_decision = result["weather_to_decision"]
     assert weather_decision["decision"] == "CHANGE_PLAN"
@@ -129,8 +130,8 @@ def test_weather_window_tool_uses_query_reported_recent_rain_conservatively() ->
     assert result["decision_output"]["firstLayer"]["decision"] == (
         "不建議照原計畫通過。"
     )
-    assert "route_weather_package" in result["missing_fields"]
-    assert "使用者回報條件下的候選保守決策" in result["field_answer"]
+    assert result["missing_fields"] == []
+    assert "前 24 小時降雨" in result["field_answer"]
     assert result["boundary"]["runtime_safety_truth"] is False
 
 

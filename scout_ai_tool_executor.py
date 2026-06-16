@@ -280,6 +280,9 @@ def _execute_ready_current_tool(tool_id: str, arguments: dict[str, Any]) -> dict
             weather_daylight_path=_str_or_none(
                 arguments.get("weather_daylight_path")
             ),
+            route_weather_package_path=_str_or_none(
+                arguments.get("route_weather_package_path")
+            ),
             pretrip_package_path=_str_or_none(arguments.get("pretrip_package_path")),
             mission_graph_path=_str_or_none(arguments.get("mission_graph_path")),
             route_comparison_path=_str_or_none(
