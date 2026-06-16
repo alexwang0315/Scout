@@ -304,6 +304,59 @@ Forbidden in early slices:
 - no remote LoRaWAN join/uplink unless the slice explicitly enables it;
 - no public broadcast of exact participant location outside mission policy.
 
+## Gateway GPS / NMEA Boundary
+
+SX1303 does not itself produce NMEA. In the Waveshare SX1302/SX1303 Gateway
+HAT design, NMEA is expected from the HAT-side L76K GNSS module over UART,
+while SX1303 provides LoRa gateway baseband processing and fine timestamp
+capability. Scout should therefore treat gateway GPS as a separate UART
+diagnostic path:
+
+```bash
+python3 tools/pi_sx1303_gateway_gps_nmea_smoke.py \
+  --ports /dev/serial0,/dev/ttyAMA0,/dev/ttyAMA10,/dev/ttyS0 \
+  --baud-rates 9600,38400,57600,115200 \
+  --duration-seconds 4 \
+  --oled-status \
+  --led-status \
+  --output-jsonl /data/scout/providers/lora/sx1303-gateway-gps-nmea-smoke.jsonl
+```
+
+The smoke status is intentionally conservative:
+
+- `nmea_ok`: at least one valid NMEA checksum was captured;
+- `nmea_without_valid_checksum`: NMEA-like frames exist but are not yet trusted;
+- `bad_stream`: bytes arrived, but not as parseable NMEA;
+- `no_stream`: no bytes were seen on that UART/baud;
+- `missing_device`: the UART path does not exist.
+
+Only `nmea_ok` may suggest a `gps_tty_path` update for packet forwarder config.
+Even then, gateway GNSS is still provider evidence and timing/location context,
+not a direct safety-level mutation source. The tool fixes
+`packet_forwarder_started=false`, `rf_tx_allowed=false`,
+`lorawan_uplink_allowed=false`, `phase1_safety_decision_change_allowed=false`,
+`remote_outbound_allowed=false`, and
+`hardware_control_scope=diagnostic_gateway_gnss_uart_only`.
+
+Scout GNSS hardware observer should consume both gateway and direct GPS evidence
+without opening the UART itself:
+
+```bash
+python3 scout_gnss_hardware_observer.py \
+  --gateway-jsonl /data/scout/providers/lora/sx1303-gateway-gps-nmea-smoke.jsonl \
+  --grove-jsonl /data/scout/providers/gnss/manual-smoke.jsonl \
+  --evidence-dir /data/scout/admin/ingress/gnss_hardware \
+  --print-ready
+```
+
+This observer listens to JSONL evidence produced by the SX1303 gateway GPS smoke
+and the Grove GPS module smoke, selects the latest valid fix candidate, and
+writes `live_navigation_snapshot.json` plus
+`gnss_hardware_observer_status.json`. It must remain evidence-only:
+`live_hardware_read_performed=false`, `runtime_safety_truth=false`,
+`phase1_l0_l4_state_mutated=false`, `safety_api_called=false`,
+`rf_tx_allowed=false`, and `lorawan_uplink_allowed=false`.
+
 ## Capability Layers
 
 ### Alpha: Diagnostic Radio Evidence

@@ -556,3 +556,35 @@ def test_runbook_documents_wio_e5_lorawan_at_diagnostic_smoke() -> None:
         "不可接 live `/safety/*` mutation",
     ):
         assert token in source
+
+
+def test_runbook_documents_sx1303_gateway_gps_nmea_smoke() -> None:
+    source = read_runbook()
+
+    for token in (
+        "tools/pi_sx1303_gateway_gps_nmea_smoke.py",
+        "SX1303 Gateway HAT L76K GPS NMEA UART smoke",
+        "--ports /dev/serial0,/dev/ttyAMA0,/dev/ttyAMA10,/dev/ttyS0",
+        "--baud-rates 9600,38400,57600,115200",
+        "/data/scout/providers/lora/sx1303-gateway-gps-nmea-smoke.jsonl",
+        "SX1303 本身不是 NMEA 來源",
+        "L76K GNSS",
+        "`diagnostic_gateway_gnss_uart_only`",
+        "`nmea_ok`",
+        "`bad_stream`",
+        "`missing_device`",
+        "`gps_tty_path`",
+        "`selected_port`",
+        "`SCOUT GW GPS`",
+        "LED10",
+        "LED1",
+        "不是 Scout safety decision source",
+        "scout_gnss_hardware_observer.py",
+        "--gateway-jsonl /data/scout/providers/lora/sx1303-gateway-gps-nmea-smoke.jsonl",
+        "--grove-jsonl /data/scout/providers/gnss/manual-smoke.jsonl",
+        "/data/scout/admin/ingress/gnss_hardware/live_navigation_snapshot.json",
+        "`snapshot_status=no_valid_fix`",
+        "`live_hardware_read_performed=false`",
+        "`lorawan_uplink_allowed=false`",
+    ):
+        assert token in source

@@ -520,6 +520,102 @@ JSONL 裡每個回應行。若 OLED 或 LED 沒反應，但終端機已有回應
 與模組供電。這一步只證明本地序列通訊可用，不能推論山區通訊距離、網關覆蓋、團隊訊息
 可靠度或任何求救能力。
 
+SX1303 Gateway HAT L76K GPS NMEA UART smoke:
+
+```bash
+python3 tools/pi_sx1303_gateway_gps_nmea_smoke.py \
+  --ports /dev/serial0,/dev/ttyAMA0,/dev/ttyAMA10,/dev/ttyS0 \
+  --baud-rates 9600,38400,57600,115200 \
+  --duration-seconds 4 \
+  --oled-status \
+  --oled-driver sh1107g \
+  --led-status \
+  --led-port D5 \
+  --output-jsonl /data/scout/providers/lora/sx1303-gateway-gps-nmea-smoke.jsonl
+```
+
+無實體接線或本機開發時可先 dry-run：
+
+```bash
+python3 tools/pi_sx1303_gateway_gps_nmea_smoke.py \
+  --dry-run \
+  --oled-status \
+  --oled-dry-run \
+  --led-status \
+  --led-dry-run
+```
+
+中文註釋：SX1303 本身不是 NMEA 來源；Waveshare Gateway HAT 上的 L76K GNSS
+module 才會透過 UART 輸出 NMEA。這支工具掃描 Pi 上可能接到 L76K 的 UART 與 baud，
+預設包含 `/dev/serial0`、`/dev/ttyAMA0`、`/dev/ttyAMA10` 和 `/dev/ttyS0`，以及
+`9600,38400,57600,115200`。它不啟動 packet forwarder、不送 RF、不做 LoRaWAN
+join/uplink，只產生 `diagnostic_gateway_gnss_uart_only` JSONL evidence。
+
+判讀時先看 stdout / JSONL 的 `status`：
+
+- `nmea_ok`：已找到有效 `$GP...` / `$GN...` NMEA，且 checksum 至少一筆有效；
+- `nmea_without_valid_checksum`：有像 NMEA 的 sentence，但 checksum 沒通過；
+- `bad_stream`：UART 有 byte，但不像 NMEA，優先檢查 baud、UART mapping、HAT 接觸與 GPS module 狀態；
+- `no_stream`：該 UART/baud 沒資料；
+- `missing_device`：該 device path 不存在。
+
+若 `status=nmea_ok`，再考慮把 gateway packet forwarder/global_conf 的
+`gps_tty_path` 改到 `selected_port`。若仍是 `bad_stream` 或 `no_stream`，不要只因為
+`/dev/serial0` 存在就把它當作 gateway GPS。OLED 會顯示 `SCOUT GW GPS`、
+`NMEA OK` / `BAD STREAM` / `NO NMEA`；LED Bar 預設 NMEA OK 閃 LED10，失敗閃 LED1。
+LED/OLED 均只是 diagnostic feedback，不是 Scout safety decision source。
+
+2026-06-16 Scout Pi live result: SX1303 Gateway HAT L76K NMEA was confirmed on
+`/dev/serial0` at `9600` baud. The smoke returned `status=nmea_ok`,
+`selected_port=/dev/serial0`, `selected_baud=9600`, `nmea_available=true`, OLED
+write `ok`, and LED write `ok`. The older gateway config path `/dev/ttyS0` did
+not exist on this Pi, so future packet forwarder config should use the selected
+UART path only after confirming no other service owns it. Do not copy exact live
+lat/lon from field smoke into committed repo docs; keep precise coordinates in
+local evidence JSONL only.
+
+GNSS hardware observer for SX1303 gateway GPS + Grove GPS JSONL listening:
+
+```bash
+python3 scout_gnss_hardware_observer.py \
+  --once \
+  --gateway-jsonl /data/scout/providers/lora/sx1303-gateway-gps-nmea-smoke.jsonl \
+  --grove-jsonl /data/scout/providers/gnss/manual-smoke.jsonl \
+  --evidence-dir /data/scout/admin/ingress/gnss_hardware
+```
+
+長時間 observer：
+
+```bash
+python3 scout_gnss_hardware_observer.py \
+  --gateway-jsonl /data/scout/providers/lora/sx1303-gateway-gps-nmea-smoke.jsonl \
+  --grove-jsonl /data/scout/providers/gnss/manual-smoke.jsonl \
+  --evidence-dir /data/scout/admin/ingress/gnss_hardware \
+  --poll-seconds 2 \
+  --print-ready
+```
+
+中文註釋：`scout_gnss_hardware_observer.py` 不直接開 UART、不搶 `/dev/serial0` 或
+`/dev/ttyAMA0`，只讀上面兩支 smoke 工具已寫出的 JSONL。它會把 SX1303 Gateway HAT
+L76K GNSS 與 Grove GPS module 收斂成同一份
+`/data/scout/admin/ingress/gnss_hardware/live_navigation_snapshot.json`，並寫
+`gnss_hardware_observer_status.json` 讓 Scout AI / admin tool 查詢目前 listening source、
+有效 fix source、選用來源與邊界欄位。若沒有有效 fix，snapshot 仍會寫
+`snapshot_status=no_valid_fix`，但不會偽造 `lat` / `lon`。
+
+邊界：這個 observer 是 GNSS evidence listener，不是 field safety decision source。
+固定標記 `live_hardware_read_performed=false`、`runtime_safety_truth=false`、
+`phase1_l0_l4_state_mutated=false`、`safety_api_called=false`、
+`rf_tx_allowed=false`、`lorawan_uplink_allowed=false`。它不送 LoRaWAN 封包、不做
+SOS、不呼叫 live `/safety/*` mutation，也不把 GPS fix 自動提升為 L0-L4 判斷。
+
+操作順序建議先分開確認兩個來源：先跑 gateway GPS smoke，確認網關板上的定位模組
+確實有資料；再跑 Grove GPS smoke，確認外接定位模組也能輸出資料。兩邊都能寫入
+JSONL 後，才啟動這個 observer 進行彙整。若其中一邊暫時沒有定位或沒有資料，
+observer 仍會保留來源狀態，方便現場判斷是接線、天線、序列埠、波特率或天空視野
+造成的差異。這份彙整只代表目前可聽到的定位證據，不代表已完成路線比對、檢查點
+抵達判斷或安全等級變更。
+
 ## 4.2 IMU / GNSS Manual Hardware Bring-Up
 
 以下命令只供 operator 在 Pi host 上手動執行。這些工具把 Hiwonder/WIT 類 IM10A、

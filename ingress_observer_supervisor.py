@@ -12,6 +12,10 @@ from typing import Any, Callable, Mapping
 DEFAULT_SENSORLOGGER_ENV_FILE = Path("/data/scout/secrets/sensorlogger-mqtt.env")
 DEFAULT_SENSORLOGGER_EVIDENCE_DIR = Path("/data/scout/admin/ingress/sensorlogger_mqtt")
 DEFAULT_SENSORLOGGER_LOG_PATH = Path("/data/scout/admin/ingress/sensorlogger-mqtt-observer.log")
+DEFAULT_GNSS_HARDWARE_EVIDENCE_DIR = Path("/data/scout/admin/ingress/gnss_hardware")
+DEFAULT_GNSS_HARDWARE_LOG_PATH = Path("/data/scout/admin/ingress/gnss-hardware-observer.log")
+DEFAULT_GNSS_HARDWARE_GATEWAY_JSONL = Path("/data/scout/providers/lora/sx1303-gateway-gps-nmea-smoke.jsonl")
+DEFAULT_GNSS_HARDWARE_GROVE_JSONL = Path("/data/scout/providers/gnss/manual-smoke.jsonl")
 
 
 PopenFactory = Callable[..., subprocess.Popen[Any]]
@@ -62,6 +66,9 @@ class IngressObserverSupervisor:
         sensorlogger = _sensorlogger_mqtt_spec(resolved_env, app_root=app_root)
         if sensorlogger is not None:
             specs.append(sensorlogger)
+        gnss_hardware = _gnss_hardware_spec(resolved_env, app_root=app_root)
+        if gnss_hardware is not None:
+            specs.append(gnss_hardware)
         return cls(
             specs=specs,
             app_root=app_root,
@@ -200,6 +207,80 @@ def _sensorlogger_mqtt_spec(
         status_path=evidence_dir / "sensorlogger_mqtt_status.json",
         log_path=log_path,
         env_file=env_file if env_file.exists() else None,
+        reason=reason,
+    )
+
+
+def _gnss_hardware_spec(
+    env: Mapping[str, str],
+    *,
+    app_root: Path | str | None,
+) -> ObserverProcessSpec | None:
+    if not _is_true_like(env.get("SCOUT_GNSS_HARDWARE_AUTOSTART", "true")):
+        return None
+
+    gateway_jsonl = Path(
+        env.get("SCOUT_GNSS_HARDWARE_GATEWAY_JSONL", str(DEFAULT_GNSS_HARDWARE_GATEWAY_JSONL))
+    ).expanduser()
+    grove_jsonl = Path(
+        env.get("SCOUT_GNSS_HARDWARE_GROVE_JSONL", str(DEFAULT_GNSS_HARDWARE_GROVE_JSONL))
+    ).expanduser()
+    explicit_autostart = "SCOUT_GNSS_HARDWARE_AUTOSTART" in env
+    explicit_source_config = any(
+        key in env
+        for key in (
+            "SCOUT_GNSS_HARDWARE_GATEWAY_JSONL",
+            "SCOUT_GNSS_HARDWARE_GROVE_JSONL",
+            "SCOUT_GNSS_HARDWARE_EVIDENCE_DIR",
+        )
+    )
+    force_autostart = _is_true_like(env.get("SCOUT_GNSS_HARDWARE_FORCE_AUTOSTART", "false"))
+    if (
+        not explicit_autostart
+        and not explicit_source_config
+        and not force_autostart
+        and not gateway_jsonl.exists()
+        and not grove_jsonl.exists()
+    ):
+        return None
+
+    root = Path(app_root or Path(__file__).resolve().parent)
+    observer_script = root / "scout_gnss_hardware_observer.py"
+    evidence_dir = Path(
+        env.get("SCOUT_GNSS_HARDWARE_EVIDENCE_DIR", str(DEFAULT_GNSS_HARDWARE_EVIDENCE_DIR))
+    ).expanduser()
+    log_path = Path(
+        env.get("SCOUT_GNSS_HARDWARE_LOG_PATH", str(DEFAULT_GNSS_HARDWARE_LOG_PATH))
+    ).expanduser()
+    poll_seconds = env.get("SCOUT_GNSS_HARDWARE_POLL_SECONDS", "2.0")
+    max_records = env.get("SCOUT_GNSS_HARDWARE_MAX_RECORDS", "200")
+    command = [
+        sys.executable,
+        str(observer_script),
+        "--evidence-dir",
+        str(evidence_dir),
+        "--gateway-jsonl",
+        str(gateway_jsonl),
+        "--grove-jsonl",
+        str(grove_jsonl),
+        "--poll-seconds",
+        str(poll_seconds),
+        "--max-records",
+        str(max_records),
+        "--print-ready",
+    ]
+    if gateway_jsonl.exists() or grove_jsonl.exists():
+        reason = "configured_sources"
+    elif explicit_autostart or force_autostart:
+        reason = "explicit_autostart"
+    else:
+        reason = "explicit_source_config"
+    return ObserverProcessSpec(
+        name="gnss-hardware",
+        command=command,
+        evidence_dir=evidence_dir,
+        status_path=evidence_dir / "gnss_hardware_observer_status.json",
+        log_path=log_path,
         reason=reason,
     )
 
