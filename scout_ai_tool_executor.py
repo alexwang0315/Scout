@@ -319,6 +319,9 @@ def _execute_ready_current_tool(tool_id: str, arguments: dict[str, Any]) -> dict
         payload = assess_scout_live_navigation_state(
             project_root,
             query=query,
+            live_navigation_snapshot_path=_str_or_none(
+                arguments.get("live_navigation_snapshot_path")
+            ),
             observed_at=_str_or_none(arguments.get("observed_at")),
             lat=_float_or_none(arguments.get("lat")),
             lon=_float_or_none(arguments.get("lon")),

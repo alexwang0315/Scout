@@ -75,9 +75,9 @@ def test_live_navigation_state_blocks_downcut_from_candidate_snapshot() -> None:
     assert result["boundary"]["safety_api_called"] is False
 
 
-def test_live_navigation_state_delays_without_position() -> None:
+def test_live_navigation_state_delays_without_position(tmp_path) -> None:
     result = assess_scout_live_navigation_state(
-        PROJECT_ROOT,
+        tmp_path,
         query="我現在是不是偏離路線？",
     )
 
@@ -92,6 +92,22 @@ def test_live_navigation_state_delays_without_position() -> None:
     assert result["decision_output"]["allowed"] is False
     assert "先取得可靠位置" in result["decision_output"]["firstLayer"]["limit"]
     assert result["decision_output"]["secondLayer"]["uncertaintyNotes"]
+
+
+def test_live_navigation_state_loads_reviewed_fixture_snapshot() -> None:
+    result = assess_scout_live_navigation_state(
+        PROJECT_ROOT,
+        query="我現在是不是偏離路線？",
+    )
+
+    assert result["answerability"] == "snapshot_evidence_available"
+    assert result["source_status"] == "reviewed_live_navigation_snapshot"
+    assert result["decision"] == "GO"
+    assert result["missing_fields"] == []
+    assert result["navigation_decision"]["route_fit_status"] == "on_route_corridor"
+    assert result["navigation_decision"]["position_quality_status"] == "usable_quality"
+    assert result["route_query_plan"]["status"] == "position_available_for_followup"
+    assert result["boundary"]["live_hardware_read_performed"] is False
 
 
 def test_live_navigation_state_output_kind_constant() -> None:
