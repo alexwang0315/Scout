@@ -1,3 +1,5 @@
+import json
+import subprocess
 from pathlib import Path
 
 from pretrip_admin_view import build_pretrip_admin_view
@@ -285,6 +287,87 @@ def test_pretrip_admin_page_groups_dense_controls_and_uses_short_labels():
     assert "assistantStandardGapAuditList" in assistant_script
     assert "implementation_gap_tools" in assistant_script
     assert "context_review_gap_tools" in assistant_script
+    assert "ui_validation:" in assistant_script
+
+
+def test_standard_gap_audit_items_render_zero_gap_ui_validation_contract():
+    payload = {
+        "sources": [
+            {
+                "source_id": "assistant_skill.pretrip.full_workflow.v0",
+                "context_summary": {
+                    "decision_output": {
+                        "standardGapAudit": {
+                            "schema": "scout_standard_gap_audit.v0",
+                            "runtimeSafetyTruth": False,
+                            "summary": {
+                                "standardGroupCount": 10,
+                                "coveredStandardGroupCount": 10,
+                                "implementationGapToolCount": 0,
+                                "contextOrReviewEvidenceGapToolCount": 0,
+                                "uiUxValidationNeeded": False,
+                            },
+                            "uiUxValidation": {
+                                "validated": True,
+                                "status": "validated_static_admin_ui",
+                                "surface": "pretrip_admin",
+                            },
+                            "groups": [
+                                {
+                                    "label": "六力動態決策",
+                                    "sections": "5-11",
+                                    "status": "implemented_evidence_available",
+                                    "missingFieldCount": 0,
+                                }
+                            ],
+                            "inputOrEvidenceGaps": [],
+                            "nextSlices": [
+                                "用真實專案資料重跑 Route Readiness 與 Contextual Permission。"
+                            ],
+                            "nonGoals": [
+                                "此 audit 不批准出發、不寫入 runtime safety truth。"
+                            ],
+                        }
+                    }
+                },
+            }
+        ]
+    }
+    script = f"""
+const fs = require("fs");
+const vm = require("vm");
+const code = fs.readFileSync({json.dumps(str(ASSISTANT_UI_SCRIPT))}, "utf8");
+const payload = {json.dumps(payload, ensure_ascii=False)};
+const context = {{ window: {{}}, console }};
+vm.createContext(context);
+vm.runInContext(code, context);
+console.log(JSON.stringify(context.window.ScoutAssistantUI.standardGapAuditItems(payload)));
+"""
+
+    result = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+
+    items = json.loads(result.stdout)
+    assert "schema: scout_standard_gap_audit.v0 | runtime_safety_truth=false" in items
+    assert (
+        "coverage: 10/10 groups | implementation_gap_tools=0 | "
+        "context_review_gap_tools=0 | ui_ux_validation_needed=false"
+    ) in items
+    assert (
+        "ui_validation: status=validated_static_admin_ui | "
+        "surface=pretrip_admin | validated=true"
+    ) in items
+    assert any(
+        "group: 六力動態決策" in item
+        and "implemented_evidence_available" in item
+        for item in items
+    )
+    assert any(item.startswith("boundary: 此 audit 不批准出發") for item in items)
 
 
 def test_pretrip_admin_page_has_import_gpx_reference_route_panel():

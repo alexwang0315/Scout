@@ -295,13 +295,12 @@ def test_pretrip_full_workflow_source_exposes_standard_gap_audit_for_ui() -> Non
     assert audit["summary"]["standardGroupCount"] == 10
     assert audit["summary"]["coveredStandardGroupCount"] == 10
     assert audit["summary"]["implementationGapToolCount"] == 0
-    assert audit["summary"]["contextOrReviewEvidenceGapToolCount"] == 12
-    assert audit["summary"]["uiUxValidationNeeded"] is True
+    assert audit["summary"]["contextOrReviewEvidenceGapToolCount"] == 0
+    assert audit["summary"]["uiUxValidationNeeded"] is False
+    assert audit["uiUxValidation"]["validated"] is True
+    assert audit["uiUxValidation"]["status"] == "validated_static_admin_ui"
     assert len(audit["groups"]) == 10
-    assert any(
-        gap["classification"] == "fresh_or_reviewed_weather_required"
-        for gap in audit["inputOrEvidenceGaps"]
-    )
+    assert audit["inputOrEvidenceGaps"] == []
     assert audit["implementationGaps"] == []
     assert summary["runtime_safety_truth"] is False
 

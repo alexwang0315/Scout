@@ -238,7 +238,7 @@ def test_standard_completion_audit_covers_all_sections_and_primary_surfaces() ->
     assert decision_output["cost"]["coveredStandardGroupCount"] == 10
     assert decision_output["cost"]["implementationGapToolCount"] == 0
     assert decision_output["cost"]["contextOrReviewEvidenceGapToolCount"] == 0
-    assert decision_output["cost"]["uiUxValidationNeeded"] is True
+    assert decision_output["cost"]["uiUxValidationNeeded"] is False
     audit = decision_output["standardGapAudit"]
     assert audit["schema"] == "scout_standard_gap_audit.v0"
     assert audit["runtimeSafetyTruth"] is False
@@ -246,7 +246,13 @@ def test_standard_completion_audit_covers_all_sections_and_primary_surfaces() ->
     assert audit["summary"]["coveredStandardGroupCount"] == 10
     assert audit["summary"]["implementationGapToolCount"] == 0
     assert audit["summary"]["contextOrReviewEvidenceGapToolCount"] == 0
-    assert audit["summary"]["uiUxValidationNeeded"] is True
+    assert audit["summary"]["uiUxValidationNeeded"] is False
+    assert audit["uiUxValidation"]["validated"] is True
+    assert audit["uiUxValidation"]["status"] == "validated_static_admin_ui"
+    assert (
+        "docs/admin/scout-assistant-ui.js#standardGapAuditItems"
+        in audit["uiUxValidation"]["sourceRefs"]
+    )
     statuses = {group["status"] for group in audit["groups"]}
     assert "implemented_requires_context_or_review_evidence" not in statuses
     assert "implemented_evidence_available" in statuses
@@ -272,6 +278,8 @@ def test_standard_completion_audit_covers_all_sections_and_primary_surfaces() ->
         assert source_id in result.answer
     assert "缺口分類" in result.answer
     assert "情境輸入/審核 evidence gap=0" in result.answer
+    assert "UI/UX static admin audit=validated" in result.answer
+    assert "static admin UI 已接上 standard gap audit render path" in result.answer
     assert "不是出發批准或 runtime safety truth" in result.answer
 
 
