@@ -182,6 +182,9 @@ def test_tool_registry_lists_current_and_future_contracts() -> None:
         SAFETY_BOUNDARY_TOOL_ID
     ].aliases
     assert "admission_state" in by_id[SAFETY_BOUNDARY_TOOL_ID].optional_fields
+    assert "safety_admission_trace_path" in by_id[
+        SAFETY_BOUNDARY_TOOL_ID
+    ].optional_fields
     assert "junction_points_known" in by_id[
         NAVIGATION_TERRAIN_TOOL_ID
     ].optional_fields
@@ -1029,7 +1032,7 @@ def test_execute_ins_dr_trace_analyzer_returns_read_only_missing_evidence() -> N
     assert result.boundary.phase1_safety_mutation_allowed is False
 
 
-def test_execute_safety_boundary_explainer_returns_read_only_missing_fields() -> None:
+def test_execute_safety_boundary_explainer_loads_reviewed_trace() -> None:
     result = execute_scout_ai_tool(
         {
             "tool_id": "scout.ai.safety_boundary.explain",
@@ -1044,25 +1047,28 @@ def test_execute_safety_boundary_explainer_returns_read_only_missing_fields() ->
     assert result.output_artifact_kind == "scout_ai_safety_boundary_explainer_tool_output"
     assert result.payload["artifact_kind"] == "scout_ai_safety_boundary_explainer_tool_output"
     assert result.payload["tool_id"] == SAFETY_BOUNDARY_TOOL_ID
-    assert result.payload["answerability"] == "safety_boundary_missing_required_fields"
-    assert result.payload["decision"] == "DELAY"
+    assert result.payload["answerability"] == "safety_boundary_decision_available"
+    assert result.payload["source_status"] == "reviewed_safety_admission_trace"
+    assert result.payload["decision"] == "NO_GO"
     assert result.payload["decision_output"]["decisionObjectSchema"] == (
         "ContextualPermission"
     )
-    assert result.payload["decision_output"]["decision"] == "DELAY"
+    assert result.payload["decision_output"]["decision"] == "NO_GO"
     assert result.payload["decision_output"]["allowed"] is False
     assert result.payload["decision_output"]["runtimeSafetyTruth"] is False
     assert result.payload["decision_output"]["firstLayer"]["decision"] == (
-        "Hold safety-state changes until admission evidence is complete."
+        "Do not promote this candidate to Ln or runtime safety state."
     )
     assert result.payload["safety_boundary"]["role"] == (
         "Safety Boundary / Runtime Admission Guard"
     )
     assert result.payload["safety_boundary"]["runtime_safety_truth"] is False
-    assert "admission_state" in result.payload["missing_fields"]
-    assert "operator_review_status" in result.payload["missing_fields"]
-    assert "admission_state" in result.missing_fields
-    assert "operator_review_status" in result.missing_fields
+    assert result.payload["safety_boundary"]["admission_state"] == (
+        "reviewed_candidate_only"
+    )
+    assert result.payload["safety_boundary"]["operator_review_status"] == "reviewed"
+    assert result.payload["missing_fields"] == []
+    assert result.missing_fields == []
     assert result.payload["boundary"]["safety_api_called"] is False
     assert result.payload["boundary"]["phase1_l0_l4_state_mutated"] is False
     assert result.payload["boundary"]["outbound_send_performed"] is False

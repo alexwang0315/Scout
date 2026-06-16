@@ -1,0 +1,1 @@
+{"artifact_kind":"scout_sensorlogger_mqtt_routing_latency","artifact_version":"sensorlogger_mqtt_routing_latency.v0","boundary":{"safety_api_called":false},"ingress_id":"ingress-reviewed-1","message_id":7,"mqtt_receive_to_route_complete_ms":18.5,"observation_count":2,"payload_count":2,"routing_duration_ms":6.0}

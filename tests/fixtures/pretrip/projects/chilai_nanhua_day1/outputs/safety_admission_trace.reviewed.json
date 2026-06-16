@@ -1,0 +1,36 @@
+{
+  "artifact_kind": "safety_admission_trace",
+  "artifact_version": "safety_admission_trace.v1",
+  "status": "reviewed_safety_admission_trace",
+  "candidate_only": true,
+  "runtime_safety_truth": false,
+  "candidate_id": "risk.candidate.chilai_nanhua.cp4.collapse_wall_media",
+  "risk_source": "reviewed_route_context_and_runtime_ingress_trace",
+  "risk_score": 86,
+  "admission_state": "reviewed_candidate_only",
+  "persistence_window": "reviewed_fixture_no_runtime_admission",
+  "evidence_refs": [
+    "outputs/media_literacy_context.reviewed.json",
+    "transports/ingress_evidence_index.jsonl",
+    "transports/application_routes.jsonl"
+  ],
+  "operator_review_status": "reviewed",
+  "phase1_safety_decision_change_allowed": false,
+  "remote_outbound_allowed": false,
+  "last_decision_at": "2026-06-16T13:40:00+08:00",
+  "boundary": {
+    "phase1_l0_l4_state_mutated": false,
+    "safety_api_called": false,
+    "outbound_send_performed": false,
+    "hardware_control_allowed": false,
+    "model_output_is_runtime_truth": false
+  },
+  "review": {
+    "review_state": "accepted",
+    "human_review_required": false,
+    "reviewed_at": "2026-06-16T13:40:00+08:00",
+    "reviewed_by": "reviewer.runtime_admin",
+    "notes": "Reviewed deterministic safety admission fixture. It proves no runtime safety mutation or outbound send was authorized by Scout AI.",
+    "review_ref": "reviews/human_reviews.json#safety-admission-trace-placeholder"
+  }
+}

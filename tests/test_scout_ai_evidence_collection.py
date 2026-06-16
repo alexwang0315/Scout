@@ -1111,17 +1111,17 @@ def test_evidence_collection_keeps_safety_boundary_decision_output() -> None:
     assert result.completed_tool_count == 3
     safety = _record(result, SAFETY_BOUNDARY_TOOL_ID)
     payload = safety.result["payload"]
-    assert payload["answerability"] == "safety_boundary_missing_required_fields"
-    assert payload["decision"] == "DELAY"
+    assert payload["answerability"] == "safety_boundary_decision_available"
+    assert payload["source_status"] == "reviewed_safety_admission_trace"
+    assert payload["decision"] == "NO_GO"
     assert payload["decision_output"]["decisionObjectSchema"] == "ContextualPermission"
-    assert payload["decision_output"]["decision"] == "DELAY"
+    assert payload["decision_output"]["decision"] == "NO_GO"
     assert payload["decision_output"]["allowed"] is False
     assert payload["decision_output"]["runtimeSafetyTruth"] is False
     assert payload["safety_boundary"]["role"] == (
         "Safety Boundary / Runtime Admission Guard"
     )
-    assert "admission_state" in safety.missing_fields
-    assert "operator_review_status" in safety.missing_fields
+    assert safety.missing_fields == []
     assert safety.boundary.runtime_safety_truth is False
     assert safety.boundary.live_safety_api_calls_allowed is False
 

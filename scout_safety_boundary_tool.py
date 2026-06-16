@@ -20,12 +20,17 @@ SAFETY_ADMISSION_REQUIRED_FIELDS = (
     "remote_outbound_allowed",
     "last_decision_at",
 )
+SAFETY_ADMISSION_OPTIONAL_FIELDS = (
+    "safety_admission_trace_path",
+    *SAFETY_ADMISSION_REQUIRED_FIELDS,
+)
 
 
 def explain_scout_safety_boundary(
     project_root: Path | str,
     *,
     query: str = "",
+    safety_admission_trace_path: str | None = None,
     candidate_id: str | None = None,
     risk_source: str | None = None,
     risk_score: float | int | str | None = None,
@@ -42,7 +47,7 @@ def explain_scout_safety_boundary(
     root = Path(project_root)
     project = _load_project(root)
     project_id = str(project.get("project_id") or project.get("id") or root.name)
-    provided = {
+    raw_provided = {
         "candidate_id": candidate_id,
         "risk_source": risk_source,
         "risk_score": risk_score,
@@ -53,6 +58,15 @@ def explain_scout_safety_boundary(
         "phase1_safety_decision_change_allowed": phase1_safety_decision_change_allowed,
         "remote_outbound_allowed": remote_outbound_allowed,
         "last_decision_at": last_decision_at,
+    }
+    admission_trace, admission_trace_report = _load_safety_admission_trace(
+        root,
+        project,
+        explicit_path=safety_admission_trace_path,
+    )
+    provided = {
+        field: _first_present(raw_provided.get(field), admission_trace.get(field))
+        for field in raw_provided
     }
     missing_fields = [
         field for field in SAFETY_ADMISSION_REQUIRED_FIELDS if _is_missing(provided[field])
@@ -78,7 +92,7 @@ def explain_scout_safety_boundary(
             if not missing_fields
             else "safety_boundary_missing_required_fields"
         ),
-        "source_status": "candidate_only",
+        "source_status": _source_status(admission_trace=admission_trace),
         "decision": decision["decision"],
         "decision_output": decision_output,
         "field_answer": field_answer,
@@ -104,12 +118,12 @@ def explain_scout_safety_boundary(
             "runtime_safety_truth": False,
             "decision": decision["decision"],
             "decision_output": decision_output,
-            "admission_state": admission_state,
-            "operator_review_status": operator_review_status,
+            "admission_state": provided.get("admission_state"),
+            "operator_review_status": provided.get("operator_review_status"),
             "phase1_safety_decision_change_allowed": (
-                phase1_safety_decision_change_allowed
+                provided.get("phase1_safety_decision_change_allowed")
             ),
-            "remote_outbound_allowed": remote_outbound_allowed,
+            "remote_outbound_allowed": provided.get("remote_outbound_allowed"),
             "next_action": decision["next_action"],
         },
         "result_count": 1,
@@ -133,6 +147,7 @@ def explain_scout_safety_boundary(
             }
         ],
         "source_report": [
+            *admission_trace_report,
             {
                 "source_kind": "deterministic_safety_boundary_policy",
                 "status": "loaded",
@@ -157,6 +172,151 @@ def _load_project(root: Path) -> dict[str, Any]:
         return {}
     payload = json.loads(path.read_text(encoding="utf-8"))
     return payload if isinstance(payload, dict) else {}
+
+
+def _load_safety_admission_trace(
+    root: Path,
+    project: dict[str, Any],
+    *,
+    explicit_path: str | None,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    candidates = _candidate_paths(
+        root,
+        project,
+        explicit_path=explicit_path,
+        ref_keys=(
+            "safety_admission_trace_ref",
+            "reviewed_safety_admission_trace_ref",
+            "runtime_safety_admission_trace_ref",
+        ),
+        fallbacks=(
+            "outputs/safety_admission_trace.reviewed.json",
+            "outputs/runtime_safety_admission_trace.reviewed.json",
+        ),
+    )
+    report: list[dict[str, Any]] = []
+    for label, path in candidates:
+        if not path.exists():
+            report.append(
+                {
+                    "source_kind": "safety_admission_trace",
+                    "status": "missing",
+                    "source_path": label,
+                    "loaded_count": 0,
+                }
+            )
+            continue
+        payload = _load_json_object(path)
+        trace = _safety_admission_trace_from_payload(payload)
+        if not trace:
+            report.append(
+                {
+                    "source_kind": "safety_admission_trace",
+                    "status": "invalid_or_empty",
+                    "source_path": label,
+                    "loaded_count": 0,
+                }
+            )
+            continue
+        report.append(
+            {
+                "source_kind": "safety_admission_trace",
+                "status": "loaded",
+                "source_path": label,
+                "loaded_count": 1,
+                "artifact_kind": payload.get("artifact_kind"),
+                "source_status": payload.get("status") or payload.get("source_status"),
+            }
+        )
+        return trace, report
+    return {}, report[:2]
+
+
+def _candidate_paths(
+    root: Path,
+    project: dict[str, Any],
+    *,
+    explicit_path: str | None,
+    ref_keys: tuple[str, ...],
+    fallbacks: tuple[str, ...],
+) -> list[tuple[str, Path]]:
+    candidates: list[tuple[str, Path]] = []
+    if explicit_path:
+        candidates.append((explicit_path, _project_path(root, explicit_path)))
+    for key in ref_keys:
+        ref = project.get(key)
+        if isinstance(ref, str) and ref.strip():
+            candidates.append((ref, _project_path(root, ref)))
+    for ref in fallbacks:
+        candidates.append((ref, _project_path(root, ref)))
+    deduped: list[tuple[str, Path]] = []
+    seen: set[Path] = set()
+    for label, path in candidates:
+        resolved = path.resolve() if path.exists() else path
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        deduped.append((label, path))
+    return deduped
+
+
+def _project_path(root: Path, value: str) -> Path:
+    path = Path(value)
+    return path if path.is_absolute() else root / path
+
+
+def _load_json_object(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _safety_admission_trace_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    if not payload:
+        return {}
+    nested = payload.get("safety_admission_trace")
+    if not isinstance(nested, dict):
+        nested = payload.get("runtime_safety_admission")
+    trace_source = nested if isinstance(nested, dict) else payload
+    fields = (
+        "candidate_id",
+        "risk_source",
+        "risk_score",
+        "admission_state",
+        "persistence_window",
+        "evidence_refs",
+        "operator_review_status",
+        "phase1_safety_decision_change_allowed",
+        "remote_outbound_allowed",
+        "last_decision_at",
+    )
+    trace = {
+        field: trace_source.get(field)
+        for field in fields
+        if not _is_missing(trace_source.get(field))
+    }
+    if payload.get("status") and "source_status" not in trace:
+        trace["source_status"] = payload.get("status")
+    return trace
+
+
+def _source_status(*, admission_trace: dict[str, Any]) -> str:
+    if admission_trace:
+        return str(
+            admission_trace.get("source_status") or "loaded_safety_admission_trace"
+        )
+    return "candidate_only"
+
+
+def _first_present(*values: Any) -> Any:
+    for value in values:
+        if not _is_missing(value):
+            return value
+    return None
 
 
 def _is_missing(value: object) -> bool:

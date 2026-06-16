@@ -395,6 +395,9 @@ def _execute_ready_current_tool(tool_id: str, arguments: dict[str, Any]) -> dict
         return explain_scout_safety_boundary(
             project_root,
             query=query,
+            safety_admission_trace_path=_str_or_none(
+                arguments.get("safety_admission_trace_path")
+            ),
             candidate_id=_str_or_none(arguments.get("candidate_id")),
             risk_source=_str_or_none(arguments.get("risk_source")),
             risk_score=_float_or_none(arguments.get("risk_score")),
