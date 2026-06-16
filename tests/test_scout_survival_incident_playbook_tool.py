@@ -13,7 +13,7 @@ PROJECT_ROOT = (
 )
 
 
-def test_survival_playbook_explains_lost_position_without_sending_sos() -> None:
+def test_survival_playbook_uses_reviewed_incident_context_without_sending_sos() -> None:
     result = explain_scout_survival_incident_playbook(
         PROJECT_ROOT,
         query="不確定自己在哪，可以下切溪谷找路嗎？",
@@ -21,7 +21,10 @@ def test_survival_playbook_explains_lost_position_without_sending_sos() -> None:
 
     assert result["tool_id"] == SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID
     assert result["status"] == "completed"
-    assert result["answerability"] == "survival_playbook_missing_personalized_context"
+    assert result["answerability"] == (
+        "survival_playbook_personalized_context_available"
+    )
+    assert result["source_status"] == "reviewed_incident_context"
     assert result["decision"] == "NO_GO"
     assert result["decision_output"]["decisionObjectSchema"] == "ContextualPermission"
     assert result["decision_output"]["decision"] == "NO_GO"
@@ -31,9 +34,7 @@ def test_survival_playbook_explains_lost_position_without_sending_sos() -> None:
     assert "不得下切" in result["decision_output"]["firstLayer"]["limit"]
     assert result["decision_output"]["runtimeSafetyTruth"] is False
     assert result["incident_triage"]["scenario"] == "lost_or_position_uncertain"
-    assert "current_location_status" in result["missing_fields"]
-    assert "team_status" in result["missing_fields"]
-    assert "communication_status" in result["missing_fields"]
+    assert result["missing_fields"] == []
     assert "不要自動報案" in result["field_answer"]
     assert "runtime safety truth" in result["field_answer"]
     assert "發送 SOS" in result["field_answer"]
@@ -44,6 +45,24 @@ def test_survival_playbook_explains_lost_position_without_sending_sos() -> None:
     assert result["boundary"]["real_sos_sent"] is False
     assert result["boundary"]["outbound_send_performed"] is False
     assert result["boundary"]["phase1_l0_l4_state_mutated"] is False
+
+
+def test_survival_playbook_keeps_missing_context_without_reviewed_artifact(
+    tmp_path: Path,
+) -> None:
+    result = explain_scout_survival_incident_playbook(
+        tmp_path,
+        query="不確定自己在哪，可以下切溪谷找路嗎？",
+    )
+
+    assert result["answerability"] == "survival_playbook_missing_personalized_context"
+    assert result["source_status"] == "deterministic_playbook_explainer"
+    assert result["decision"] == "NO_GO"
+    assert "current_location_status" in result["missing_fields"]
+    assert "team_status" in result["missing_fields"]
+    assert "communication_status" in result["missing_fields"]
+    assert result["boundary"]["real_sos_sent"] is False
+    assert result["boundary"]["outbound_send_performed"] is False
 
 
 def test_survival_playbook_personalizes_injury_context_without_medical_diagnosis() -> None:

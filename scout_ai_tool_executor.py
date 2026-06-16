@@ -608,6 +608,7 @@ def _execute_ready_current_tool(tool_id: str, arguments: dict[str, Any]) -> dict
         return explain_scout_survival_incident_playbook(
             project_root,
             query=query,
+            incident_context_path=_str_or_none(arguments.get("incident_context_path")),
             incident_type=_str_or_none(arguments.get("incident_type")),
             current_location_status=_str_or_none(
                 arguments.get("current_location_status")

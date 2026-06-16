@@ -15,6 +15,7 @@ SURVIVAL_INCIDENT_PLAYBOOK_OUTPUT_KIND = (
 )
 SURVIVAL_INCIDENT_PLAYBOOK_REQUIRED_FIELDS = ("project_root",)
 SURVIVAL_INCIDENT_PLAYBOOK_OPTIONAL_FIELDS = (
+    "incident_context_path",
     "incident_type",
     "current_location_status",
     "injury_status",
@@ -66,6 +67,7 @@ def explain_scout_survival_incident_playbook(
     project_root: str | Path,
     *,
     query: str = "",
+    incident_context_path: str | None = None,
     incident_type: str | None = None,
     current_location_status: str | None = None,
     injury_status: str | None = None,
@@ -80,7 +82,7 @@ def explain_scout_survival_incident_playbook(
     project = _load_project(root)
     project_id = str(project.get("project_id") or project.get("id") or root.name)
     scenario = _scenario(incident_type, query)
-    provided = {
+    raw_provided = {
         "current_location_status": current_location_status,
         "injury_status": injury_status,
         "team_status": team_status,
@@ -88,6 +90,32 @@ def explain_scout_survival_incident_playbook(
         "weather_exposure": weather_exposure,
         "overnight_risk": overnight_risk,
         "operator_authorization_ref": operator_authorization_ref,
+    }
+    caller_field_count = sum(
+        1 for value in raw_provided.values() if not _is_missing(value)
+    )
+    if (
+        incident_context_path
+        or (caller_field_count == 0 and _allow_project_incident_context(scenario))
+    ):
+        incident_context, incident_context_report = _load_incident_context(
+            root,
+            project,
+            explicit_path=incident_context_path,
+        )
+    else:
+        incident_context = {}
+        incident_context_report = [
+            {
+                "source_kind": "incident_context",
+                "status": "skipped_project_fallback_for_caller_or_medical_context",
+                "source_path": None,
+                "loaded_count": 0,
+            }
+        ]
+    provided = {
+        field: _first_present(raw_provided.get(field), incident_context.get(field))
+        for field in raw_provided
     }
     missing_fields = _missing_fields(scenario=scenario, provided=provided)
     playbook_source = _load_playbook_source(
@@ -108,7 +136,11 @@ def explain_scout_survival_incident_playbook(
     )
     do_not_actions = _do_not_actions(scenario)
     evidence_pack = _evidence_pack(provided=provided)
-    share_policy = _share_policy(operator_authorization_ref=operator_authorization_ref)
+    share_policy = _share_policy(
+        operator_authorization_ref=_str_or_none(
+            provided.get("operator_authorization_ref")
+        )
+    )
     answerability = (
         "survival_playbook_personalized_context_available"
         if triage.personalized_context_available
@@ -137,7 +169,7 @@ def explain_scout_survival_incident_playbook(
         "query": query,
         "assessment_kind": "read_only_survival_incident_playbook",
         "answerability": answerability,
-        "source_status": "deterministic_playbook_explainer",
+        "source_status": _source_status(incident_context=incident_context),
         "decision": triage.decision,
         "decision_output": decision_output,
         "field_answer": field_answer,
@@ -175,6 +207,7 @@ def explain_scout_survival_incident_playbook(
             }
         ],
         "source_report": [
+            *incident_context_report,
             playbook_source,
             {
                 "source_kind": "deterministic_survival_playbook_policy",
@@ -580,6 +613,161 @@ def _load_playbook_source(
         "source_path": str(ref),
         "loaded_count": loaded_count,
     }
+
+
+def _load_incident_context(
+    root: Path,
+    project: dict[str, Any],
+    *,
+    explicit_path: str | None,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    candidates = _candidate_paths(
+        root,
+        project,
+        explicit_path=explicit_path,
+        ref_keys=(
+            "incident_context_ref",
+            "reviewed_incident_context_ref",
+            "survival_incident_context_ref",
+        ),
+        fallbacks=(
+            "outputs/incident_context.reviewed.json",
+            "outputs/survival_incident_context.reviewed.json",
+            "outputs/incident_context.json",
+        ),
+    )
+    report: list[dict[str, Any]] = []
+    for label, path in candidates:
+        if not path.exists():
+            report.append(
+                {
+                    "source_kind": "incident_context",
+                    "status": "missing",
+                    "source_path": label,
+                    "loaded_count": 0,
+                }
+            )
+            continue
+        payload = _load_json_object(path)
+        context = _incident_context_from_payload(payload)
+        if not context:
+            report.append(
+                {
+                    "source_kind": "incident_context",
+                    "status": "invalid_or_empty",
+                    "source_path": label,
+                    "loaded_count": 0,
+                }
+            )
+            continue
+        report.append(
+            {
+                "source_kind": "incident_context",
+                "status": "loaded",
+                "source_path": label,
+                "loaded_count": 1,
+                "artifact_kind": payload.get("artifact_kind"),
+                "source_status": payload.get("status") or payload.get("source_status"),
+            }
+        )
+        return context, report
+    return {}, report[:3]
+
+
+def _candidate_paths(
+    root: Path,
+    project: dict[str, Any],
+    *,
+    explicit_path: str | None,
+    ref_keys: tuple[str, ...],
+    fallbacks: tuple[str, ...],
+) -> list[tuple[str, Path]]:
+    candidates: list[tuple[str, Path]] = []
+    if explicit_path:
+        candidates.append((explicit_path, _project_path(root, explicit_path)))
+    for key in ref_keys:
+        ref = project.get(key)
+        if isinstance(ref, str) and ref.strip():
+            candidates.append((ref, _project_path(root, ref)))
+    for ref in fallbacks:
+        candidates.append((ref, _project_path(root, ref)))
+    deduped: list[tuple[str, Path]] = []
+    seen: set[Path] = set()
+    for label, path in candidates:
+        resolved = path.resolve() if path.exists() else path
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        deduped.append((label, path))
+    return deduped
+
+
+def _project_path(root: Path, value: str) -> Path:
+    path = Path(value)
+    return path if path.is_absolute() else root / path
+
+
+def _load_json_object(path: Path) -> dict[str, Any]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _incident_context_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    if not payload:
+        return {}
+    nested = payload.get("incident_context")
+    if not isinstance(nested, dict):
+        nested = payload.get("survival_incident_context")
+    if not isinstance(nested, dict):
+        nested = payload.get("snapshot")
+    context_source = nested if isinstance(nested, dict) else payload
+    fields = (
+        "current_location_status",
+        "injury_status",
+        "team_status",
+        "communication_status",
+        "weather_exposure",
+        "overnight_risk",
+        "operator_authorization_ref",
+    )
+    context = {
+        field: context_source.get(field)
+        for field in fields
+        if not _is_missing(context_source.get(field))
+    }
+    if payload.get("status") and "source_status" not in context:
+        context["source_status"] = payload.get("status")
+    return context
+
+
+def _allow_project_incident_context(scenario: str) -> bool:
+    return scenario in {
+        "general_incident_uncertainty",
+        "lost_or_position_uncertain",
+        "rescue_or_sos_preparation",
+    }
+
+
+def _source_status(*, incident_context: dict[str, Any]) -> str:
+    if incident_context:
+        return str(incident_context.get("source_status") or "loaded_incident_context")
+    return "deterministic_playbook_explainer"
+
+
+def _str_or_none(value: Any) -> str | None:
+    if _is_missing(value):
+        return None
+    return str(value)
+
+
+def _first_present(*values: Any) -> Any:
+    for value in values:
+        if not _is_missing(value):
+            return value
+    return None
 
 
 def _load_project(root: Path) -> dict[str, Any]:

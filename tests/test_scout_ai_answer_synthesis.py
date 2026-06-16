@@ -2558,9 +2558,9 @@ def test_answer_synthesis_uses_survival_playbook_field_answer_without_guessing()
         limit=3,
     )
 
-    assert result.answerability == "partial_evidence_with_missing_context"
+    assert result.answerability == "evidence_available"
     assert result.completed_source_count >= 1
-    assert result.missing_evidence_count >= 1
+    assert result.missing_evidence_count == 0
     source = _source(result, SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID)
     assert source.top_result_summary["decision"] == "NO_GO"
     assert source.top_result_summary["decision_output"]["decisionObjectSchema"] == (
@@ -2572,7 +2572,7 @@ def test_answer_synthesis_uses_survival_playbook_field_answer_without_guessing()
     assert source.top_result_summary["incident_triage"]["scenario"] == (
         "lost_or_position_uncertain"
     )
-    assert "current_location_status" in source.missing_fields
+    assert source.missing_fields == []
     assert result.decision_output["answerSourceToolId"] == (
         SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID
     )

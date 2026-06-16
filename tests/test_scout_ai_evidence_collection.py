@@ -1010,7 +1010,10 @@ def test_evidence_collection_keeps_survival_playbook_payload() -> None:
     assert survival.collection_status == "completed"
     assert survival.result is not None
     payload = survival.result["payload"]
-    assert payload["answerability"] == "survival_playbook_missing_personalized_context"
+    assert payload["answerability"] == (
+        "survival_playbook_personalized_context_available"
+    )
+    assert payload["source_status"] == "reviewed_incident_context"
     assert payload["decision"] == "NO_GO"
     assert payload["decision_output"]["decisionObjectSchema"] == "ContextualPermission"
     assert payload["decision_output"]["firstLayer"]["decision"] == (
@@ -1023,7 +1026,7 @@ def test_evidence_collection_keeps_survival_playbook_payload() -> None:
     assert payload["survival_incident_playbook"]["share_policy"][
         "can_send_or_notify"
     ] is False
-    assert "current_location_status" in survival.missing_fields
+    assert survival.missing_fields == []
     assert survival.boundary.runtime_safety_truth is False
 
 
