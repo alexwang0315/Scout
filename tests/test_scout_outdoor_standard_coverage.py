@@ -237,7 +237,7 @@ def test_standard_completion_audit_covers_all_sections_and_primary_surfaces() ->
     assert decision_output["cost"]["standardGroupCount"] == 10
     assert decision_output["cost"]["coveredStandardGroupCount"] == 10
     assert decision_output["cost"]["implementationGapToolCount"] == 0
-    assert decision_output["cost"]["contextOrReviewEvidenceGapToolCount"] == 12
+    assert decision_output["cost"]["contextOrReviewEvidenceGapToolCount"] == 9
     assert decision_output["cost"]["uiUxValidationNeeded"] is True
     audit = decision_output["standardGapAudit"]
     assert audit["schema"] == "scout_standard_gap_audit.v0"
@@ -245,7 +245,7 @@ def test_standard_completion_audit_covers_all_sections_and_primary_surfaces() ->
     assert audit["summary"]["standardGroupCount"] == 10
     assert audit["summary"]["coveredStandardGroupCount"] == 10
     assert audit["summary"]["implementationGapToolCount"] == 0
-    assert audit["summary"]["contextOrReviewEvidenceGapToolCount"] == 12
+    assert audit["summary"]["contextOrReviewEvidenceGapToolCount"] == 9
     assert audit["summary"]["uiUxValidationNeeded"] is True
     statuses = {group["status"] for group in audit["groups"]}
     assert "implemented_requires_context_or_review_evidence" in statuses
@@ -267,7 +267,7 @@ def test_standard_completion_audit_covers_all_sections_and_primary_surfaces() ->
     ):
         assert source_id in result.answer
     assert "缺口分類" in result.answer
-    assert "情境輸入/審核 evidence gap=12" in result.answer
+    assert "情境輸入/審核 evidence gap=9" in result.answer
     assert "不是出發批准或 runtime safety truth" in result.answer
 
 
@@ -372,8 +372,7 @@ def test_mvp_pretrip_go_no_go_outputs_required_package_and_conservative_gates() 
 
     assert missing_result.tool_id == ROUTE_READINESS_TOOL_ID
     assert missing_result.payload["decision"] == "DELAY"
-    assert "user_experience_level" in missing_result.missing_fields
-    assert "slowest_team_basis" in missing_result.missing_fields
+    assert missing_result.missing_fields == ["weather_review", "daylight_review"]
     _assert_standard_output(missing_result.payload["decision_output"])
     missing_package = missing_result.payload["pretrip_decision_package"]
     required_outputs = missing_package["required_outputs"]

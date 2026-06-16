@@ -363,6 +363,7 @@ def _pace_fit(
 
     return {
         "decision_basis": decision_basis,
+        "summit_question": _looks_like_summit_question(query),
         "member_count": len(members),
         "members_with_pace_count": len(pace_members),
         "average_pace_used": False,
@@ -384,6 +385,10 @@ def _decision(pace_fit: dict[str, Any], *, missing_fields: list[str]) -> str:
         return "NO_GO"
     reasons = pace_fit.get("main_reasons")
     reasons = reasons if isinstance(reasons, list) else []
+    if pace_fit.get("summit_question") and any(
+        "目前已落後約" in str(reason) for reason in reasons
+    ):
+        return "NO_GO"
     if any("不足以支撐到下一個 CP" in str(reason) for reason in reasons):
         return "CHANGE_PLAN"
     if any("低於 Scout 保守門檻" in str(reason) for reason in reasons):
