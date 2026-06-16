@@ -197,6 +197,9 @@ def test_tool_registry_lists_current_and_future_contracts() -> None:
     assert "scout.ai.sos_playbook.explain" in by_id[
         SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID
     ].aliases
+    assert "incident_context_path" in by_id[
+        SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID
+    ].optional_fields
     assert registry.ready_current_tool_count >= 16
     assert registry.executable_tool_count >= registry.ready_current_tool_count
     assert registry.contract_only_tool_count == 0
@@ -1663,12 +1666,16 @@ def test_execute_survival_playbook_alias_returns_boundary_safe_guidance() -> Non
         "scout_ai_survival_incident_playbook_tool_output"
     )
     assert result.payload["decision"] == "NO_GO"
+    assert result.payload["answerability"] == (
+        "survival_playbook_personalized_context_available"
+    )
+    assert result.payload["source_status"] == "reviewed_incident_context"
     assert result.payload["survival_incident_playbook"]["share_policy"][
         "can_send_or_notify"
     ] is False
     assert result.payload["boundary"]["real_sos_sent"] is False
     assert result.payload["boundary"]["outbound_send_performed"] is False
-    assert "current_location_status" in result.missing_fields
+    assert result.missing_fields == []
 
 
 def test_execute_contextual_permission_assessor_derives_planned_eta_buffer() -> None:

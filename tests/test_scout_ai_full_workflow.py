@@ -3017,13 +3017,13 @@ def test_full_workflow_runs_survival_playbook_question() -> None:
         limit=3,
     )
 
-    assert result.answerability == "partial_evidence_with_missing_context"
+    assert result.answerability == "evidence_available"
     assert result.selected_tool_count >= 1
     assert result.executed_tool_count >= 1
     assert result.completed_tool_count >= 1
     assert result.contract_gap_count == 0
     assert result.failed_tool_count == 0
-    assert result.missing_evidence_count >= 1
+    assert result.missing_evidence_count == 0
     source = [
         source
         for source in result.sources
