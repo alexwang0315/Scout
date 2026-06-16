@@ -237,7 +237,7 @@ def test_standard_completion_audit_covers_all_sections_and_primary_surfaces() ->
     assert decision_output["cost"]["standardGroupCount"] == 10
     assert decision_output["cost"]["coveredStandardGroupCount"] == 10
     assert decision_output["cost"]["implementationGapToolCount"] == 0
-    assert decision_output["cost"]["contextOrReviewEvidenceGapToolCount"] == 1
+    assert decision_output["cost"]["contextOrReviewEvidenceGapToolCount"] == 0
     assert decision_output["cost"]["uiUxValidationNeeded"] is True
     audit = decision_output["standardGapAudit"]
     assert audit["schema"] == "scout_standard_gap_audit.v0"
@@ -245,10 +245,11 @@ def test_standard_completion_audit_covers_all_sections_and_primary_surfaces() ->
     assert audit["summary"]["standardGroupCount"] == 10
     assert audit["summary"]["coveredStandardGroupCount"] == 10
     assert audit["summary"]["implementationGapToolCount"] == 0
-    assert audit["summary"]["contextOrReviewEvidenceGapToolCount"] == 1
+    assert audit["summary"]["contextOrReviewEvidenceGapToolCount"] == 0
     assert audit["summary"]["uiUxValidationNeeded"] is True
     statuses = {group["status"] for group in audit["groups"]}
-    assert "implemented_requires_context_or_review_evidence" in statuses
+    assert "implemented_requires_context_or_review_evidence" not in statuses
+    assert "implemented_evidence_available" in statuses
     assert "implemented_synthesis_formatter" in statuses
     classifications = {item["classification"] for item in audit["inputOrEvidenceGaps"]}
     assert "live_navigation_state_required" not in classifications
@@ -256,6 +257,7 @@ def test_standard_completion_audit_covers_all_sections_and_primary_surfaces() ->
     assert "incident_context_required" not in classifications
     assert "media_claim_and_target_context_required" not in classifications
     assert "runtime_review_trace_required" not in classifications
+    assert "post_trip_feedback_required" not in classifications
     assert audit["implementationGaps"] == []
     assert any("UI/UX" in item for item in audit["nextSlices"])
     for label in ("探索力", "自信力", "勇氣力", "路線力", "天氣力", "地圖力"):
@@ -269,7 +271,7 @@ def test_standard_completion_audit_covers_all_sections_and_primary_surfaces() ->
     ):
         assert source_id in result.answer
     assert "缺口分類" in result.answer
-    assert "情境輸入/審核 evidence gap=1" in result.answer
+    assert "情境輸入/審核 evidence gap=0" in result.answer
     assert "不是出發批准或 runtime safety truth" in result.answer
 
 

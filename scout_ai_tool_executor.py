@@ -697,6 +697,9 @@ def _execute_ready_current_tool(tool_id: str, arguments: dict[str, Any]) -> dict
         return assess_scout_post_trip_review(
             project_root,
             query=query,
+            post_trip_review_context_path=_str_or_none(
+                arguments.get("post_trip_review_context_path")
+            ),
             capability_timeline_path=_str_or_none(
                 arguments.get("capability_timeline_path")
             ),
