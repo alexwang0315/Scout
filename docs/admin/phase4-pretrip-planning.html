@@ -1794,6 +1794,7 @@
             <li><button type="button" data-assistant-question="Why does this selected item need review?" title="Why does this selected item need review?" aria-label="Why does this selected item need review?">Why review?</button></li>
             <li><button type="button" data-assistant-question="What evidence is missing for this candidate?" title="What evidence is missing for this candidate?" aria-label="What evidence is missing for this candidate?">Missing evidence?</button></li>
             <li><button type="button" data-assistant-question="Could this block departure readiness?" title="Could this block departure readiness?" aria-label="Could this block departure readiness?">Readiness impact?</button></li>
+            <li><button type="button" data-assistant-question="請以 SCOUT_OUTDOOR_AI_AGENT_STANDARD 為基準，檢視目前 Scout 體系還缺哪些東西，六力是否都有實作？" title="Review Scout outdoor AI standard gaps" aria-label="Review Scout outdoor AI standard gaps">Standard gaps?</button></li>
           </ul>
         </section>
         <section class="assistant-control" aria-label="Ask assistant">
@@ -1830,6 +1831,12 @@
           </ul>
           <ul id="assistantWorkflowList" class="assistant-list">
             <li>No full workflow summary returned.</li>
+          </ul>
+        </section>
+        <section class="assistant-sources" aria-label="Scout standard gap audit">
+          <h3>Standard gap audit</h3>
+          <ul id="assistantStandardGapAuditList" class="assistant-list">
+            <li>No standard gap audit returned.</li>
           </ul>
         </section>
         <section class="assistant-limitations" aria-label="Assistant limitations">
@@ -4331,20 +4338,23 @@
         return [
           `Why does ${item.candidate_ref} need review?`,
           "What evidence is missing for this candidate?",
-          "Could this block departure readiness?"
+          "Could this block departure readiness?",
+          "請以 SCOUT_OUTDOOR_AI_AGENT_STANDARD 為基準，檢視目前 Scout 體系還缺哪些東西，六力是否都有實作？"
         ];
       }
       if (category === "checkpoint" || category === "segment") {
         return [
           `Why is ${label} important for this plan?`,
           "What evidence supports this candidate?",
-          "Could this block departure readiness?"
+          "Could this block departure readiness?",
+          "請以 SCOUT_OUTDOOR_AI_AGENT_STANDARD 為基準，檢視目前 Scout 體系還缺哪些東西，六力是否都有實作？"
         ];
       }
       return [
         "Why does this selected item need review?",
         "What evidence is missing for this candidate?",
-        "Could this block departure readiness?"
+        "Could this block departure readiness?",
+        "請以 SCOUT_OUTDOOR_AI_AGENT_STANDARD 為基準，檢視目前 Scout 體系還缺哪些東西，六力是否都有實作？"
       ];
     }
     function assistantQuestionLabel(question) {
@@ -4353,6 +4363,7 @@
       if (question.startsWith("What evidence is missing")) return "Missing evidence?";
       if (question.startsWith("What evidence supports")) return "Evidence?";
       if (question.startsWith("Could this block")) return "Readiness impact?";
+      if (question.includes("SCOUT_OUTDOOR_AI_AGENT_STANDARD")) return "Standard gaps?";
       return "Ask";
     }
     function renderAssistantPromptSuggestions(item) {
@@ -4394,6 +4405,7 @@
       renderAssistantContext(payload, queryPayload);
       window.ScoutAssistantUI.renderOfflineFallback(payload);
       window.ScoutAssistantUI.renderWorkflowSummary(payload);
+      window.ScoutAssistantUI.renderStandardGapAudit(payload);
       renderAssistantList(
         "assistantLimitationsList",
         payload.limitations || [],
@@ -4440,6 +4452,7 @@
         );
         window.ScoutAssistantUI.renderOfflineFallback({});
         window.ScoutAssistantUI.renderWorkflowSummary({});
+        window.ScoutAssistantUI.renderStandardGapAudit({});
         setAssistantStatus("Assistant query failed", "error");
       } finally {
         document.getElementById("assistantAskButton").disabled = false;

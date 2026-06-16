@@ -156,6 +156,42 @@
     return items;
   }
 
+  function standardGapAudit(payload) {
+    const source = fullWorkflowSource(payload);
+    const summary = source?.context_summary || null;
+    const decisionOutput = summary?.decision_output || null;
+    const audit = decisionOutput?.standardGapAudit || summary?.standardGapAudit || null;
+    return audit && typeof audit === "object" ? audit : null;
+  }
+
+  function standardGapAuditItems(payload) {
+    const audit = standardGapAudit(payload);
+    if (!audit) return [];
+    const summary = audit.summary || {};
+    const items = [
+      `schema: ${text(audit.schema)} | runtime_safety_truth=${audit.runtimeSafetyTruth === true ? "true" : "false"}`,
+      `coverage: ${text(summary.coveredStandardGroupCount, "0")}/${text(summary.standardGroupCount, "0")} groups | implementation_gap_tools=${text(summary.implementationGapToolCount, "0")} | context_review_gap_tools=${text(summary.contextOrReviewEvidenceGapToolCount, "0")} | ui_ux_validation_needed=${summary.uiUxValidationNeeded === true ? "true" : "false"}`
+    ];
+    (audit.groups || []).slice(0, 5).forEach(group => {
+      items.push(`group: ${text(group.label)} | sections=${text(group.sections)} | ${text(group.status)} | missing=${text(group.missingFieldCount, "0")}`);
+    });
+    (audit.inputOrEvidenceGaps || []).slice(0, 4).forEach(gap => {
+      items.push(`gap: ${text(gap.toolId)} | ${text(gap.classification)} | fields=${text(gap.missingFieldCount, "0")}`);
+    });
+    (audit.nextSlices || []).slice(0, 3).forEach(slice => {
+      items.push(`next: ${text(slice)}`);
+    });
+    (audit.nonGoals || []).slice(0, 2).forEach(nonGoal => {
+      items.push(`boundary: ${text(nonGoal)}`);
+    });
+    return items;
+  }
+
+  function renderStandardGapAudit(payload, options = {}) {
+    const listId = options.listId || "assistantStandardGapAuditList";
+    renderList(listId, standardGapAuditItems(payload), "No standard gap audit returned.");
+  }
+
   function renderWorkflowSummary(payload, options = {}) {
     const listId = options.listId || "assistantWorkflowList";
     renderList(listId, workflowItems(payload), "No full workflow summary returned.");
@@ -223,9 +259,12 @@
     renderOfflineFallback,
     renderProviderStatus,
     renderProviderStatusFailure,
+    renderStandardGapAudit,
     renderWorkflowSummary,
     renderWorkflowStatus,
     sourceItems,
+    standardGapAudit,
+    standardGapAuditItems,
     text,
     workflowItems,
     workflowStatusItems
