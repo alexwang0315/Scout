@@ -271,6 +271,18 @@ def _add_pretrip_group(subparsers: argparse._SubParsersAction) -> None:
     pace_fit.add_argument("--authorized-by", default=None)
     pace_fit.add_argument("--output", type=Path, default=None)
     pace_fit.add_argument("--json", action="store_true")
+    boss_points = pretrip_sub.add_parser("boss-points-synthesize")
+    boss_points.add_argument("--project-root", type=Path, default=None)
+    boss_points.add_argument("--project-id", default=None)
+    boss_points.add_argument("--workspace-root", type=Path, default=None)
+    boss_points.add_argument("--top-n", type=int, default=5)
+    boss_points.add_argument("--route-note-radius-m", type=float, default=300.0)
+    boss_points.add_argument("--risk-window-m", type=float, default=300.0)
+    boss_points.add_argument("--generated-at", default=None)
+    boss_points.add_argument("--dry-run", action="store_true")
+    boss_points.add_argument("--authorized-by", default=None)
+    boss_points.add_argument("--output", type=Path, default=None)
+    boss_points.add_argument("--json", action="store_true")
     navigation_terrain = pretrip_sub.add_parser("navigation-terrain-collect")
     navigation_terrain.add_argument("--project-root", type=Path, default=None)
     navigation_terrain.add_argument("--project-id", default=None)
@@ -738,6 +750,19 @@ def _tool_request_for_args(args: argparse.Namespace) -> tuple[str, dict[str, Any
             if value is not None:
                 request[key] = value
         return "scout.pretrip.pace_fit_collect", request
+    if group == "pretrip" and args.pretrip_command == "boss-points-synthesize":
+        request = {
+            "top_n": args.top_n,
+            "route_note_radius_m": args.route_note_radius_m,
+            "risk_window_m": args.risk_window_m,
+        }
+        _set_path(request, "project_root", args.project_root)
+        _set_path(request, "workspace_root", args.workspace_root)
+        if args.project_id:
+            request["project_id"] = args.project_id
+        if args.generated_at:
+            request["generated_at"] = args.generated_at
+        return "scout.pretrip.boss_points_synthesize", request
     if group == "pretrip" and args.pretrip_command == "navigation-terrain-collect":
         request = {}
         _set_path(request, "project_root", args.project_root)

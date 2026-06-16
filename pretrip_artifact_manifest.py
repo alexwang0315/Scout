@@ -64,6 +64,8 @@ OPTIONAL_PROJECT_ARTIFACTS: tuple[tuple[str, str], ...] = (
     ("route_architecture", "route_architecture_ref"),
     ("pace_coefficients", "pace_coefficients_ref"),
     ("team_pace_fit", "team_pace_fit_ref"),
+    ("boss_points", "boss_points_ref"),
+    ("boss_points_geojson", "boss_points_geojson_ref"),
     ("offline_map_manifest", "offline_map_manifest_ref"),
     ("ins_dr_readiness", "ins_dr_readiness_ref"),
     ("route_weather_package", "route_weather_package_ref"),
@@ -463,6 +465,42 @@ def _project_artifact_summary(artifact_kind: str, payload: Any) -> dict[str, Any
             "human_review_required": payload.get("human_review_required"),
             "candidate_only": boundary.get("candidate_only"),
             "runtime_safety_truth": boundary.get("runtime_safety_truth"),
+        }
+
+    if artifact_kind == "boss_points":
+        boundary = payload.get("boundary", {})
+        challenge = payload.get("challenge_fit_summary", {})
+        return {
+            "project_id": payload.get("project_id"),
+            "schema_version": payload.get("schema_version"),
+            "status": payload.get("status"),
+            "boss_point_count": payload.get("boss_point_count"),
+            "decision": challenge.get("decision")
+            if isinstance(challenge, dict)
+            else None,
+            "highest_challenge_fit_score": challenge.get(
+                "highest_challenge_fit_score"
+            )
+            if isinstance(challenge, dict)
+            else None,
+            "candidate_only": boundary.get("candidate_only"),
+            "runtime_safety_truth": boundary.get("runtime_safety_truth"),
+            "average_pace_used": boundary.get("average_pace_used"),
+        }
+
+    if artifact_kind == "boss_points_geojson":
+        metadata = payload.get("metadata", {})
+        return {
+            "project_id": metadata.get("project_id")
+            if isinstance(metadata, dict)
+            else None,
+            "feature_count": len(payload.get("features", [])),
+            "candidate_only": metadata.get("candidate_only")
+            if isinstance(metadata, dict)
+            else None,
+            "runtime_safety_truth": metadata.get("runtime_safety_truth")
+            if isinstance(metadata, dict)
+            else None,
         }
 
     if artifact_kind == "offline_map_manifest":

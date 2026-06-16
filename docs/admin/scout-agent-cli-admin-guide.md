@@ -410,6 +410,42 @@ These artifacts are candidate-only planning evidence. They do not diagnose
 medical conditions, send messages, approve departure, call `/safety/*`, or
 become runtime safety truth.
 
+## Boss Point Challenge Fit Synthesis
+
+Boss point synthesis is the Sec. 7 bridge between route difficulty and user or
+team readiness. It reads MCP candidates, route notes, risk ribbon, rest/resume
+evidence, incident/weather context, pace coefficients, team status, and the
+private energy reserve band, then ranks the top route Boss Points.
+
+The operator-facing formula is:
+
+```text
+Route Boss Demand
+vs
+User Pace Coefficient / Energy Reserve
+=
+Challenge Fit
+```
+
+```bash
+python -m scout_cli pretrip boss-points-synthesize \
+  --project-root /data/scout/admin/pretrip-workspaces/chilai_nanhua_day1 \
+  --top-n 5 \
+  --json
+```
+
+The canonical outputs are:
+
+- `outputs/boss_points.json`
+- `outputs/boss_points.geojson`
+
+`Route Boss Demand` measures the route obstacle itself. `Challenge Fit` applies
+the slowest or most vulnerable member basis plus energy reserve vulnerability.
+The flow must not use average team pace to hide a weak link, must not embed raw
+health payloads, and must not call `/safety/*`. The outputs are pretrip
+candidate evidence for human review and buffer planning, not runtime safety
+truth.
+
 ## Navigation Terrain Collection
 
 Navigation terrain collection is the Sec. 11 pretrip enrichment flow. It reads
