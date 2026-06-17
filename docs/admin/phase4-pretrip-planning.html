@@ -2764,6 +2764,9 @@
       return Boolean(item?.boss_point_id || String(item?.evidence_type || "").includes("boss_point"));
     }
     function bossDistanceLabel(item) {
+      const displayMileage = item?.display_mileage || {};
+      const displayLabel = String(displayMileage.label || displayMileage.display_label || "").trim();
+      if (displayLabel && displayLabel !== "K待校正") return displayLabel;
       const distance = Number(item?.route_pressure_profile?.mid_distance_m ?? item?.evidence_summary?.route_pressure_profile?.mid_distance_m ?? item?.route_position?.distance_m);
       return Number.isFinite(distance) ? `${(distance / 1000).toFixed(1)}K` : "";
     }
@@ -3695,8 +3698,8 @@
     }
     function pointLabelText(item) {
       const label = [
-        bossDisplayText(item),
         item?.map_label,
+        bossDisplayText(item),
         item?.display_label,
         item?.short_label,
         item?.label,
@@ -3717,9 +3720,9 @@
     }
     function pointLabelCalloutTitle(item, fallbackLabel) {
       return [
+        item?.map_label,
         bossDisplayText(item),
         item?.display_label,
-        item?.map_label,
         item?.route_note_summary,
         item?.summary,
         hintTitle(item),

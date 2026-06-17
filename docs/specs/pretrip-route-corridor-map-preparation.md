@@ -225,14 +225,26 @@ and should not be treated as precise evidence.
 
 It may extract labels such as:
 
-- `通訊點`;
+- trail mileage anchors（步道 K）such as `5.5K`, `6K`, `13K`;
+- road mileage stones（公路公里樁）such as `台14線94K`;
+- trail names or route-branch labels;
+- `通訊點`, including carrier hints such as `遠傳`, `台哥大`, or emergency
+  `112`;
 - `水源`;
 - `山屋`;
 - `營地`;
+- contour elevation labels（等高線高程標籤）such as `1123` or `1500`;
 - `遠眺...`;
 - route names;
 - warnings;
 - viewpoint labels.
+
+For Taiwan hiking maps, **Rudy** and **Rudy+TW** are preferred OCR candidate
+sources because they commonly expose route mileage K anchors, named places,
+contour labels, trail annotations, and hazard notes in the same visual context.
+Map preparation records these sources in `raster_label_plan.json` as
+`ocr_candidate_sources`; it does not perform OCR unless an explicit OCR adapter
+run is requested.
 
 Every extracted label must preserve:
 
@@ -243,6 +255,41 @@ Every extracted label must preserve:
 - label geometry;
 - distance to route/reference tracks;
 - candidate-only boundary.
+
+Trail mileage anchors are treated as route-chainage evidence before they are
+treated as place names, but a standalone label such as `5.5K` is not unique
+enough to locate a broad mountain workspace. Road mileage stones are different:
+`台20線154K`, `投85線0K`, or `台14線94K` are road-chainage evidence and must not
+be merged into trail K anchors. The same mountain area can contain multiple
+trails and roads with their own K markers. OCR adapters must therefore group
+trail mileage anchors with at least one route context signal:
+
+- trail name or route-branch label from the same tile or nearby bbox;
+- route family from the current workspace/importer;
+- nearby named point, CP, MCP, or hazard text;
+- projection to the selected route/reference centerline.
+
+After OCR, the label bbox is georeferenced, projected to the route centerline,
+and checked for monotonic order along that route-context group. The grouping key
+should include the workspace project id, source id, trail-name label when
+available, nearest named point, projected centerline id, and normalized mileage
+value. Ambiguous mileage anchors remain review-required. A grouped label such as
+`6K` near `雲海保線所` can then help bind public pressure evidence like
+`雲海保線所後吊橋與大崩壁群` to the nearest reviewed CP/MCP/hazard or route boss
+candidate. OCR labels remain pretrip candidate evidence and never runtime safety
+truth.
+
+The route-context collector also normalizes K anchors already present in the
+workspace, even before an OCR adapter exists. Historical GPX waypoint labels,
+`outputs/mcp/mcp_ocr_labels.json`, and
+`outputs/layers/normalized/raster_label_evidence.geojson` are all converted into
+`candidates/route_mileage_k_anchors.json`. This file is a compact candidate
+summary: one grouped anchor per `route_context_key + normalized_mileage_k`, with
+supporting evidence count, coordinate source, raw label examples, and review
+reasons such as `single_source_evidence`, `coordinate_spread_over_300m`, or
+`exceeds_route_summary_distance`. Road mileage stones remain visible in
+`route_context_points` as `road_mileage_stone`, but are excluded from
+`route_mileage_k_anchors.json`.
 
 ### Historical GPX Evidence
 

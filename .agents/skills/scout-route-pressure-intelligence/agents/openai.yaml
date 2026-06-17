@@ -1,0 +1,4 @@
+interface:
+  display_name: "Scout Route Pressure Intelligence"
+  short_description: "Find public route pressure evidence"
+  default_prompt: "Use $scout-route-pressure-intelligence to collect public pressure evidence for this Scout pretrip route."

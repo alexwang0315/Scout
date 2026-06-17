@@ -12,7 +12,7 @@
     "source_fulltext_embedded": false,
     "workspace_file_mutation_allowed": true
   },
-  "generated_at": "2026-06-15T00:00:00Z",
+  "generated_at": "2026-06-17T00:00:00Z",
   "project_id": "chilai_nanhua_day1",
   "route_keywords": [
     "chilai_nanhua_day1",
@@ -1163,6 +1163,18 @@
       "tier": "P0"
     },
     {
+      "label": "地方消防局山域事故與即時災情",
+      "role": "incident_local_baseline",
+      "source_id": "regional_fire_department_incident_feeds",
+      "tier": "P0"
+    },
+    {
+      "label": "政府資料開放平臺山域事故清冊 / 消防救援統計",
+      "role": "incident_open_data_baseline",
+      "source_id": "government_open_data_mountain_incidents",
+      "tier": "P0"
+    },
+    {
       "label": "TBN 台灣生物多樣性網絡",
       "role": "natural_baseline",
       "source_id": "tbn_biodiversity",
@@ -1172,6 +1184,12 @@
       "label": "中研院臺灣百年歷史地圖",
       "role": "historical_map_baseline",
       "source_id": "as_taiwan_century_maps",
+      "tier": "P0"
+    },
+    {
+      "label": "尋路・循路－臺灣原住民族古道空間資訊網",
+      "role": "cultural_trail_baseline",
+      "source_id": "tacp_indigenous_historic_trails",
       "tier": "P0"
     },
     {
@@ -1229,9 +1247,33 @@
       "tier": "P1"
     },
     {
+      "label": "PTT Hiking",
+      "role": "community_article_evidence",
+      "source_id": "ptt_hiking",
+      "tier": "P1"
+    },
+    {
       "label": "登山補給站",
       "role": "community_article_evidence",
       "source_id": "mountain_news_bbs",
+      "tier": "P1"
+    },
+    {
+      "label": "中華民國山難救助協會 / 山域搜救訓練資料",
+      "role": "rescue_training_reference",
+      "source_id": "mountain_rescue_association_knowledge",
+      "tier": "P1"
+    },
+    {
+      "label": "跑山獸 / 山小白 / 公開搜救與登山專家影音",
+      "role": "field_rescue_expert_observation",
+      "source_id": "expert_field_rescue_media",
+      "tier": "P1"
+    },
+    {
+      "label": "公開社群影音與路線貼文",
+      "role": "community_media_evidence",
+      "source_id": "public_community_media_posts",
       "tier": "P1"
     },
     {

@@ -120,6 +120,7 @@ Current local artifacts:
 - `outputs/mcp/named_point_evidence.json`
 - `outputs/mcp/mcp_ocr_labels.json`
 - `candidates/route_note_candidates.json`
+- `candidates/route_mileage_k_anchors.json`
 - `outputs/layers/normalized/web_case_evidence.json`
 - `outputs/layers/normalized/raster_label_evidence.geojson`
 - `outputs/import_manifest.json`
@@ -132,6 +133,16 @@ they should not become briefing conclusions or representative route-context
 points unless a human explicitly promotes them or another source corroborates
 the point. For the Chilai/Nanhua alpha workspace, the broad route keyword seed is
 `chilai_nanhua_day1` plus `奇萊-南華`, `奇萊南華`, and `奇萊南峰 南華山`.
+Trail K anchors（步道 K 里程標候選點）are the exception to the general route-note
+exclusion: standalone route-note labels such as `5K` are not promoted as
+narrative route notes, but they are normalized into `trail_mileage_k_anchor`
+candidates and grouped by `route_context_key + normalized_mileage_k`. Road
+mileage stones（公路公里樁）such as `台14線94K` or `投85線0K` are retained as
+`road_mileage_stone` evidence in `route_context_points`, but must not be counted
+as trail K anchors in `route_mileage_k_anchors.json`. These labels may be
+supported by historical GPX waypoint names, OCR map labels（圖磚文字辨識標籤）,
+or raster label evidence（圖磚標註證據）. Single-source, out-of-distance, or
+spatially scattered labels remain review-required and candidate-only.
 
 Future source connectors may add official trails, historical maps, cultural
 archives, biodiversity data, weather/season evidence, disaster records, and
@@ -150,16 +161,22 @@ The default catalog contains national, regional, or community-scale sources:
 - P0 `weather_baseline`: 中央氣象署 CODiS / 開放資料.
 - P0 `hazard_baseline`: NCDR 災害潛勢資料.
 - P0 `incident_baseline`: 消防署山域事故救援案件.
+- P0 `incident_local_baseline`: 地方消防局山域事故與即時災情.
+- P0 `incident_open_data_baseline`: 政府資料開放平臺山域事故清冊 / 消防救援統計.
 - P0 `natural_baseline`: TBN 台灣生物多樣性網絡.
 - P0 `historical_map_baseline`: 中研院臺灣百年歷史地圖.
+- P0 `cultural_trail_baseline`: 尋路・循路－臺灣原住民族古道空間資訊網.
 - P1 `cultural_expansion`: 國家文化記憶庫.
 - P1 `historical_expansion`: 臺灣記憶.
 - P1 `cultural_spatial_expansion`: 原住民族古道空間資訊網.
 - P1 `geology_expansion`: 地質雲.
 - P1 `map_expansion`: OpenStreetMap / Overpass / OSM full-history、魯地圖.
 - P1 `community_route_seed`: 地圖產生器 / 山友 GPX.
-- P1 `community_article_evidence`: 健行筆記、登山補給站.
+- P1 `community_article_evidence`: 健行筆記、PTT Hiking、登山補給站.
 - P1 `community_route_evidence`: Hikingbook.
+- P1 `rescue_training_reference`: 中華民國山難救助協會 / 山域搜救訓練資料.
+- P1 `field_rescue_expert_observation`: 跑山獸 / 山小白 / 公開搜救與登山專家影音.
+- P1 `community_media_evidence`: 公開社群影音與路線貼文.
 
 The catalog is used to search or choose adapters. It must not be counted as
 evidence by itself.

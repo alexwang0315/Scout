@@ -29,6 +29,10 @@ DEFAULT_WEATHER_DAYLIGHT_REF = "outputs/weather_daylight_evidence.json"
 DEFAULT_TEAM_STATUS_REF = "outputs/team_status.json"
 DEFAULT_ENERGY_VITALS_REF = "outputs/energy_vitals_snapshot.reviewed.json"
 DEFAULT_PACE_COEFFICIENTS_REF = "normalized/pace/pace_coefficients.json"
+DEFAULT_ROUTE_MILEAGE_K_ANCHORS_REF = "candidates/route_mileage_k_anchors.json"
+DEFAULT_ROUTE_PRESSURE_EXTERNAL_CANDIDATES_REF = (
+    "outputs/route_pressure_external_candidates.json"
+)
 DEFAULT_SLOW_PASSAGE_MIN_SPAN_M = 500.0
 DEFAULT_PRESSURE_PROFILE_BIN_M = 500.0
 
@@ -155,6 +159,18 @@ def synthesize_pretrip_boss_points(
     pace_path = _project_path(
         root, project, "pace_coefficients_ref", DEFAULT_PACE_COEFFICIENTS_REF
     )
+    route_mileage_anchors_path = _project_path(
+        root,
+        project,
+        "route_mileage_k_anchors_ref",
+        DEFAULT_ROUTE_MILEAGE_K_ANCHORS_REF,
+    )
+    external_pressure_path = _project_path(
+        root,
+        project,
+        "route_pressure_external_candidates_ref",
+        DEFAULT_ROUTE_PRESSURE_EXTERNAL_CANDIDATES_REF,
+    )
 
     checkpoints = _load_json_list(checkpoints_path)
     segments = _load_json_list(segments_path)
@@ -172,6 +188,8 @@ def synthesize_pretrip_boss_points(
     team_status = _load_json_object(team_status_path)
     energy_vitals = _load_json_object(energy_path)
     pace_coefficients = _load_json_object(pace_path)
+    route_mileage_anchors = _load_json_object(route_mileage_anchors_path)
+    external_pressure_payload = _load_json_object(external_pressure_path)
 
     cp_distance = _checkpoint_route_distances(checkpoints, segments)
     named_points = _named_points_by_id(named_points_payload)
@@ -207,6 +225,15 @@ def synthesize_pretrip_boss_points(
             else risk_ribbon_path
         ),
     )
+    route_mileage_alignment = _route_mileage_alignment_from_anchors(
+        route_mileage_anchors,
+        route_display_geometry=route_display_geometry,
+        source_ref=str(
+            route_mileage_anchors_path.relative_to(root)
+            if route_mileage_anchors_path.is_relative_to(root)
+            else route_mileage_anchors_path
+        ),
+    )
     segments_with_distance = _gpx_segments_projected_to_route(
         segments_with_distance,
         gpx_route_geometry,
@@ -235,9 +262,17 @@ def synthesize_pretrip_boss_points(
         route_extent_m=route_extent_m,
         pressure_profile_bin_m=pressure_profile_bin_m,
         slow_passage_min_span_m=slow_passage_min_span_m,
+        route_mileage_alignment=route_mileage_alignment,
     )
 
     candidates = _boss_candidates_from_mcp(mcp_payload, named_points)
+    candidates.extend(
+        _external_pressure_candidates(
+            external_pressure_payload,
+            route_mileage_alignment=route_mileage_alignment,
+            route_display_geometry=route_display_geometry,
+        )
+    )
     candidates = _merge_route_pressure_peaks_into_candidates(
         candidates,
         route_pressure_profile.get("peaks", []),
@@ -273,6 +308,11 @@ def synthesize_pretrip_boss_points(
             slow_passage_min_span_m=slow_passage_min_span_m,
         )
         challenge_fit = _challenge_fit(demand, profile, candidate)
+        display_mileage = _boss_display_mileage(
+            candidate,
+            distance_m=distance_m,
+            route_mileage_alignment=route_mileage_alignment,
+        )
         boss_points.append(
             {
                 "source_candidate_id": candidate.get("candidate_id"),
@@ -285,6 +325,7 @@ def synthesize_pretrip_boss_points(
                 "lon": coordinate["lon"],
                 "coordinate_source": coordinate["coordinate_source"],
                 "source_coordinate": coordinate.get("source_coordinate"),
+                "display_mileage": display_mileage,
                 "route_position": {
                     "distance_m": _round(distance_m),
                     "route_progress_ratio": _round(_safe_ratio(distance_m, route_extent_m)),
@@ -312,6 +353,9 @@ def synthesize_pretrip_boss_points(
                     "max_risk_score": risk_summary["max_risk_score"],
                     "risk_feature_count": risk_summary["feature_count"],
                     "named_point_evidence": candidate.get("named_point_evidence"),
+                    "external_pressure_candidate": candidate.get(
+                        "external_pressure_candidate"
+                    ),
                 },
                 "source_refs": _dedupe(
                     [
@@ -319,20 +363,25 @@ def synthesize_pretrip_boss_points(
                         str(mcp_path.relative_to(root)) if mcp_path.is_relative_to(root) else str(mcp_path),
                         str(risk_ribbon_path.relative_to(root)) if risk_ribbon_path.is_relative_to(root) else str(risk_ribbon_path),
                         str(segment_display_geometry_path.relative_to(root)) if segment_display_geometry_path.is_relative_to(root) else str(segment_display_geometry_path),
+                        str(route_mileage_anchors_path.relative_to(root)) if route_mileage_anchors_path.is_relative_to(root) else str(route_mileage_anchors_path),
+                        str(external_pressure_path.relative_to(root)) if external_pressure_path.is_relative_to(root) else str(external_pressure_path),
                     ]
                 ),
             }
         )
 
+    for point in boss_points:
+        point["boss_selection"] = _boss_selection(point)
     boss_points = sorted(
         boss_points,
-        key=lambda item: item["route_boss_demand"]["score"],
+        key=lambda item: item["boss_selection"]["score"],
         reverse=True,
     )[: max(0, int(top_n))]
     for index, point in enumerate(boss_points):
         point["rank"] = index + 1
         point["boss_point_id"] = f"boss.{project_id}.{index + 1:03d}"
         point["display_theme"] = BOSS_THEMES[index % len(BOSS_THEMES)]
+        point["map_label"] = _boss_map_label(point)
 
     payload = {
         "artifact_kind": BOSS_POINT_SYNTHESIS_ARTIFACT_KIND,
@@ -359,9 +408,11 @@ def synthesize_pretrip_boss_points(
             "risk_distance_axis": "overpass_risk_ribbon_distance",
             "gpx_evidence_axis": "projected_to_overpass_risk_ribbon",
             "boss_coordinate_source": "overpass_risk_ribbon_route_distance_interpolation",
+            "display_mileage_source": "route_mileage_k_anchors_when_available",
             "candidate_only": True,
             "runtime_safety_truth": False,
         },
+        "route_mileage_alignment": route_mileage_alignment,
         "route_pressure_profile_ref": ROUTE_PRESSURE_PROFILE_REF,
         "route_pressure_profile_geojson_ref": ROUTE_PRESSURE_PROFILE_GEOJSON_REF,
         "route_pressure_profile_summary": _route_pressure_profile_summary(
@@ -394,6 +445,8 @@ def synthesize_pretrip_boss_points(
                 ("pace_coefficients", pace_path, bool(pace_coefficients), False),
                 ("team_status", team_status_path, bool(team_status), False),
                 ("energy_vitals", energy_path, bool(energy_vitals), False),
+                ("route_mileage_k_anchors", route_mileage_anchors_path, bool(route_mileage_anchors), False),
+                ("route_pressure_external_candidates", external_pressure_path, bool(external_pressure_payload), False),
             ]
         ),
         "boundary": _closed_boundary(workspace_file_mutation_allowed=not dry_run),
@@ -572,6 +625,17 @@ def _nearest_candidate_by_distance(
 
 
 def _pressure_peak_label(peak: dict[str, Any]) -> str:
+    display_mileage = peak.get("display_mileage")
+    if isinstance(display_mileage, dict):
+        label = str(display_mileage.get("label") or "").strip()
+        status = str(display_mileage.get("alignment_status") or "")
+        if label and status not in {"missing_alignment", "outside_anchor_range"}:
+            band = {
+                "pressure_extreme": "極高壓",
+                "pressure_high": "高壓",
+                "pressure_watch": "注意",
+            }.get(str(peak.get("band") or ""), "壓力")
+            return f"高壓路段 {label}（{band}）"
     km = (_float_or_none(peak.get("mid_distance_m")) or 0.0) / 1000.0
     band = {
         "pressure_extreme": "極高壓",
@@ -585,6 +649,610 @@ def _route_coordinate_source(route_display_geometry: dict[str, Any]) -> str:
     if route_display_geometry.get("evidence_type") == "pretrip_overpass_risk_ribbon_centerline":
         return "overpass_risk_ribbon_route_distance_interpolation"
     return "route_distance_interpolation"
+
+
+def _route_mileage_alignment_from_anchors(
+    payload: dict[str, Any],
+    *,
+    route_display_geometry: dict[str, Any],
+    source_ref: str,
+) -> dict[str, Any]:
+    anchors = []
+    for anchor in _payload_list(payload, "anchors"):
+        mileage_m = _float_or_none(anchor.get("mileage_m"))
+        if mileage_m is None:
+            mileage_k = _float_or_none(anchor.get("mileage_k"))
+            mileage_m = mileage_k * 1000.0 if mileage_k is not None else None
+        lat = _float_or_none(anchor.get("lat"))
+        lon = _float_or_none(anchor.get("lon"))
+        reasons = [str(value) for value in anchor.get("review_reasons") or []]
+        if mileage_m is None or lat is None or lon is None:
+            continue
+        projection = _nearest_route_projection(route_display_geometry, {"lat": lat, "lon": lon})
+        if projection is None:
+            continue
+        route_distance = _float_or_none(projection.get("route_distance_m"))
+        route_offset = _float_or_none(projection.get("distance_to_route_m"))
+        raw_labels = [str(value) for value in anchor.get("raw_label_examples") or []]
+        rejected_reasons = []
+        if any("exceeds_route_summary_distance" == reason for reason in reasons):
+            rejected_reasons.append("exceeds_route_summary_distance")
+        if route_offset is not None and route_offset > 500.0:
+            rejected_reasons.append("far_from_route_centerline")
+        if any("投85" in label or "公路" in label for label in raw_labels):
+            rejected_reasons.append("road_mileage_label_not_trail_anchor")
+        anchors.append(
+            {
+                "candidate_id": anchor.get("candidate_id"),
+                "normalized_mileage_k": anchor.get("normalized_mileage_k")
+                or anchor.get("display_label")
+                or _format_mileage_label(mileage_m),
+                "display_label": anchor.get("display_label")
+                or _format_mileage_label(mileage_m),
+                "mileage_m": _round(mileage_m),
+                "lat": lat,
+                "lon": lon,
+                "route_distance_m": _round(route_distance),
+                "route_projection_distance_m": _round(route_offset),
+                "route_projection_status": _projection_alignment_status(route_offset),
+                "route_context_key": anchor.get("route_context_key"),
+                "source_evidence_count": int(
+                    _float_or_none(anchor.get("source_evidence_count")) or 0
+                ),
+                "review_required": bool(anchor.get("review_required")),
+                "review_reasons": reasons,
+                "raw_label_examples": raw_labels[:4],
+                "rejected_reasons": rejected_reasons,
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+            }
+        )
+
+    candidate_anchors = [
+        anchor for anchor in anchors if not anchor.get("rejected_reasons")
+    ]
+    usable_anchors = _longest_monotonic_mileage_anchor_sequence(candidate_anchors)
+    usable_ids = {str(anchor.get("candidate_id")) for anchor in usable_anchors}
+    projected_anchors = []
+    for anchor in anchors:
+        copied = dict(anchor)
+        copied["usable_for_interpolation"] = str(anchor.get("candidate_id")) in usable_ids
+        if (
+            not copied["usable_for_interpolation"]
+            and not copied.get("rejected_reasons")
+        ):
+            copied["rejected_reasons"] = ["non_monotonic_with_main_trail_k_sequence"]
+        projected_anchors.append(copied)
+
+    return {
+        "artifact_kind": "pretrip_route_mileage_alignment",
+        "schema_version": "route_mileage_alignment.v1",
+        "source_ref": source_ref,
+        "projected_anchor_count": len(projected_anchors),
+        "usable_anchor_count": len(usable_anchors),
+        "rejected_anchor_count": len(projected_anchors) - len(usable_anchors),
+        "usable_anchors": usable_anchors,
+        "projected_anchors": projected_anchors,
+        "policy": {
+            "route_axis": "overpass_risk_ribbon_distance",
+            "display_axis": "trail_mileage_k_anchor",
+            "standalone_k_anchor_allowed": False,
+            "main_sequence_selection": "longest_monotonic_route_distance_sequence",
+            "public_k_labels_are_candidate_only": True,
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+        },
+    }
+
+
+def _longest_monotonic_mileage_anchor_sequence(
+    anchors: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    ordered = sorted(
+        anchors,
+        key=lambda item: (
+            _float_or_none(item.get("mileage_m")) or 0.0,
+            _float_or_none(item.get("route_distance_m")) or 0.0,
+        ),
+    )
+    if not ordered:
+        return []
+    tolerance_m = 750.0
+    best_score = [1.0 for _ in ordered]
+    previous_index: list[int | None] = [None for _ in ordered]
+    for current_index, current in enumerate(ordered):
+        current_mileage = _float_or_none(current.get("mileage_m"))
+        current_route = _float_or_none(current.get("route_distance_m"))
+        if current_mileage is None or current_route is None:
+            continue
+        for previous, previous_anchor in enumerate(ordered[:current_index]):
+            previous_mileage = _float_or_none(previous_anchor.get("mileage_m"))
+            previous_route = _float_or_none(previous_anchor.get("route_distance_m"))
+            if previous_mileage is None or previous_route is None:
+                continue
+            if current_mileage < previous_mileage:
+                continue
+            if current_route + tolerance_m < previous_route:
+                continue
+            evidence_weight = min(
+                0.25,
+                ((_float_or_none(current.get("source_evidence_count")) or 0.0) / 40.0),
+            )
+            score = best_score[previous] + 1.0 + evidence_weight
+            if score > best_score[current_index]:
+                best_score[current_index] = score
+                previous_index[current_index] = previous
+    index = max(range(len(ordered)), key=lambda value: best_score[value])
+    sequence = []
+    while index is not None:
+        sequence.append(dict(ordered[index]))
+        index = previous_index[index]
+    sequence.reverse()
+    return sequence
+
+
+def _route_distance_for_display_mileage(
+    alignment: dict[str, Any],
+    mileage_m: Any,
+) -> dict[str, Any]:
+    target = _float_or_none(mileage_m)
+    anchors = _sorted_usable_mileage_anchors(alignment, key="mileage_m")
+    if target is None or not anchors:
+        return {
+            "route_distance_m": None,
+            "alignment_status": "missing_alignment",
+            "source_ref": alignment.get("source_ref"),
+        }
+    exact = min(
+        anchors,
+        key=lambda item: abs((_float_or_none(item.get("mileage_m")) or 0.0) - target),
+    )
+    exact_delta = abs((_float_or_none(exact.get("mileage_m")) or 0.0) - target)
+    if exact_delta <= 1.0:
+        return {
+            "route_distance_m": _round(_float_or_none(exact.get("route_distance_m"))),
+            "alignment_status": "matched_mileage_anchor",
+            "source_ref": alignment.get("source_ref"),
+            "anchor_label": exact.get("display_label"),
+        }
+    lower = None
+    upper = None
+    for anchor in anchors:
+        mileage = _float_or_none(anchor.get("mileage_m"))
+        if mileage is None:
+            continue
+        if mileage < target:
+            lower = anchor
+        elif mileage > target and upper is None:
+            upper = anchor
+            break
+    if lower is not None and upper is not None:
+        route_distance = _interpolate_anchor_axis(
+            lower,
+            upper,
+            target=target,
+            source_key="mileage_m",
+            target_key="route_distance_m",
+        )
+        return {
+            "route_distance_m": _round(route_distance),
+            "alignment_status": "interpolated_between_mileage_anchors",
+            "source_ref": alignment.get("source_ref"),
+            "lower_anchor_label": lower.get("display_label"),
+            "upper_anchor_label": upper.get("display_label"),
+        }
+    if lower is not None:
+        extrapolated = _extrapolate_from_anchor_tail(
+            anchors,
+            target=target,
+            source_key="mileage_m",
+            target_key="route_distance_m",
+            tail="upper",
+            max_delta_m=1000.0,
+        )
+        if extrapolated is not None:
+            return {
+                "route_distance_m": _round(extrapolated),
+                "alignment_status": "extrapolated_after_last_mileage_anchor",
+                "source_ref": alignment.get("source_ref"),
+                "anchor_label": lower.get("display_label"),
+            }
+    if upper is not None:
+        extrapolated = _extrapolate_from_anchor_tail(
+            anchors,
+            target=target,
+            source_key="mileage_m",
+            target_key="route_distance_m",
+            tail="lower",
+            max_delta_m=1000.0,
+        )
+        if extrapolated is not None:
+            return {
+                "route_distance_m": _round(extrapolated),
+                "alignment_status": "extrapolated_before_first_mileage_anchor",
+                "source_ref": alignment.get("source_ref"),
+                "anchor_label": upper.get("display_label"),
+            }
+    return {
+        "route_distance_m": _round(target),
+        "alignment_status": "outside_trail_k_anchor_range_route_distance_passthrough",
+        "source_ref": alignment.get("source_ref"),
+    }
+
+
+def _display_mileage_for_route_distance(
+    alignment: dict[str, Any],
+    distance_m: Any,
+) -> dict[str, Any]:
+    target = _float_or_none(distance_m)
+    anchors = _sorted_usable_mileage_anchors(alignment, key="route_distance_m")
+    if target is None or not anchors:
+        return {
+            "label": "K待校正",
+            "mileage_m": None,
+            "alignment_status": "missing_alignment",
+            "source_ref": alignment.get("source_ref"),
+        }
+    exact = min(
+        anchors,
+        key=lambda item: abs((_float_or_none(item.get("route_distance_m")) or 0.0) - target),
+    )
+    exact_delta = abs((_float_or_none(exact.get("route_distance_m")) or 0.0) - target)
+    if exact_delta <= 25.0:
+        mileage = _float_or_none(exact.get("mileage_m"))
+        return {
+            "label": _format_mileage_label(mileage),
+            "mileage_m": _round(mileage),
+            "route_distance_m": _round(target),
+            "alignment_status": "matched_mileage_anchor",
+            "source_ref": alignment.get("source_ref"),
+            "anchor_label": exact.get("display_label"),
+        }
+    lower = None
+    upper = None
+    for anchor in anchors:
+        route_distance = _float_or_none(anchor.get("route_distance_m"))
+        if route_distance is None:
+            continue
+        if route_distance < target:
+            lower = anchor
+        elif route_distance > target and upper is None:
+            upper = anchor
+            break
+    mileage = None
+    status = "outside_anchor_range"
+    extra: dict[str, Any] = {}
+    if lower is not None and upper is not None:
+        mileage = _interpolate_anchor_axis(
+            lower,
+            upper,
+            target=target,
+            source_key="route_distance_m",
+            target_key="mileage_m",
+        )
+        status = "interpolated_between_mileage_anchors"
+        extra = {
+            "lower_anchor_label": lower.get("display_label"),
+            "upper_anchor_label": upper.get("display_label"),
+        }
+    elif lower is not None:
+        mileage = _extrapolate_from_anchor_tail(
+            anchors,
+            target=target,
+            source_key="route_distance_m",
+            target_key="mileage_m",
+            tail="upper",
+            max_delta_m=1000.0,
+        )
+        if mileage is not None:
+            status = "extrapolated_after_last_mileage_anchor"
+            extra = {"anchor_label": lower.get("display_label")}
+    elif upper is not None:
+        mileage = _extrapolate_from_anchor_tail(
+            anchors,
+            target=target,
+            source_key="route_distance_m",
+            target_key="mileage_m",
+            tail="lower",
+            max_delta_m=1000.0,
+        )
+        if mileage is not None:
+            status = "extrapolated_before_first_mileage_anchor"
+            extra = {"anchor_label": upper.get("display_label")}
+    return {
+        "label": _format_mileage_label(mileage) if mileage is not None else "K待校正",
+        "mileage_m": _round(mileage) if mileage is not None else None,
+        "route_distance_m": _round(target),
+        "alignment_status": status,
+        "source_ref": alignment.get("source_ref"),
+        **extra,
+    }
+
+
+def _sorted_usable_mileage_anchors(
+    alignment: dict[str, Any],
+    *,
+    key: str,
+) -> list[dict[str, Any]]:
+    anchors = [
+        anchor
+        for anchor in alignment.get("usable_anchors") or []
+        if _float_or_none(anchor.get("mileage_m")) is not None
+        and _float_or_none(anchor.get("route_distance_m")) is not None
+    ]
+    return sorted(anchors, key=lambda item: _float_or_none(item.get(key)) or 0.0)
+
+
+def _interpolate_anchor_axis(
+    lower: dict[str, Any],
+    upper: dict[str, Any],
+    *,
+    target: float,
+    source_key: str,
+    target_key: str,
+) -> float | None:
+    lower_source = _float_or_none(lower.get(source_key))
+    upper_source = _float_or_none(upper.get(source_key))
+    lower_target = _float_or_none(lower.get(target_key))
+    upper_target = _float_or_none(upper.get(target_key))
+    if None in {lower_source, upper_source, lower_target, upper_target}:
+        return None
+    denominator = upper_source - lower_source
+    if abs(denominator) <= 0.0001:
+        return lower_target
+    ratio = (target - lower_source) / denominator
+    return lower_target + (upper_target - lower_target) * ratio
+
+
+def _extrapolate_from_anchor_tail(
+    anchors: list[dict[str, Any]],
+    *,
+    target: float,
+    source_key: str,
+    target_key: str,
+    tail: str,
+    max_delta_m: float,
+) -> float | None:
+    if len(anchors) < 2:
+        return None
+    pair = anchors[:2] if tail == "lower" else anchors[-2:]
+    anchor = pair[0] if tail == "lower" else pair[-1]
+    anchor_source = _float_or_none(anchor.get(source_key))
+    if anchor_source is None or abs(target - anchor_source) > max_delta_m:
+        return None
+    return _interpolate_anchor_axis(
+        pair[0],
+        pair[1],
+        target=target,
+        source_key=source_key,
+        target_key=target_key,
+    )
+
+
+def _format_mileage_label(mileage_m: Any) -> str:
+    value = _float_or_none(mileage_m)
+    if value is None:
+        return "K待校正"
+    km = value / 1000.0
+    if abs(km - round(km)) < 0.05:
+        return f"{int(round(km))}K"
+    return f"{km:.1f}K"
+
+
+def _format_mileage_span_label(start_m: Any, end_m: Any) -> str:
+    start = _float_or_none(start_m)
+    end = _float_or_none(end_m)
+    if start is None and end is None:
+        return "K待校正"
+    if start is None:
+        return _format_mileage_label(end)
+    if end is None or abs(start - end) <= 1.0:
+        return _format_mileage_label(start)
+    return f"{_format_mileage_label(start)}-{_format_mileage_label(end)}"
+
+
+def _external_pressure_candidates(
+    payload: dict[str, Any],
+    *,
+    route_mileage_alignment: dict[str, Any],
+    route_display_geometry: dict[str, Any],
+) -> list[dict[str, Any]]:
+    candidates = []
+    for item in _payload_list(payload, "candidates"):
+        start_m = _float_or_none(item.get("route_distance_start_m"))
+        end_m = _float_or_none(item.get("route_distance_end_m"))
+        if start_m is None and end_m is None:
+            continue
+        if start_m is None:
+            start_m = end_m
+        if end_m is None:
+            end_m = start_m
+        assert start_m is not None and end_m is not None
+        midpoint_m = (start_m + end_m) / 2.0
+        route_alignment = _route_distance_for_display_mileage(
+            route_mileage_alignment,
+            midpoint_m,
+        )
+        route_distance = _float_or_none(route_alignment.get("route_distance_m"))
+        if route_distance is None:
+            continue
+        route_coordinate = _route_coordinate_at_distance(route_display_geometry, route_distance)
+        classes = _external_pressure_classes(item)
+        external_score = _float_or_none(item.get("external_pressure_score")) or 0.0
+        candidates.append(
+            {
+                "candidate_id": item.get("candidate_id"),
+                "label": item.get("label"),
+                "lat": route_coordinate.get("lat") if route_coordinate else None,
+                "lon": route_coordinate.get("lon") if route_coordinate else None,
+                "coordinate_source": "route_mileage_anchor_interpolated_pressure_span",
+                "distance_m": route_distance,
+                "mcp_classes": classes,
+                "linked_named_points": [],
+                "linked_risk_segments": [],
+                "mcp_score_components": {
+                    "total": _round(external_score),
+                    "terrain_risk_support": _round(_clamp(external_score / 5.0, 0, 18)),
+                    "external_pressure_score": _round(external_score),
+                },
+                "mention_ratio": None,
+                "accepted_evidence_page_count": len(item.get("source_refs") or []),
+                "source_family_coverage": _external_source_family_coverage(item),
+                "named_point_evidence": [],
+                "external_pressure_score": _round(external_score),
+                "external_pressure_candidate": _compact_external_pressure_candidate(item),
+                "route_mileage_span": {
+                    "label": _format_mileage_span_label(start_m, end_m),
+                    "start_m": _round(start_m),
+                    "end_m": _round(end_m),
+                    "midpoint_m": _round(midpoint_m),
+                    "public_route_distance_label": item.get("public_route_distance_label"),
+                    "route_distance_m": _round(route_distance),
+                    "route_alignment": route_alignment,
+                    "candidate_only": True,
+                    "runtime_safety_truth": False,
+                },
+            }
+        )
+    return candidates
+
+
+def _external_pressure_classes(item: dict[str, Any]) -> list[str]:
+    reasons = {str(value) for value in item.get("pressure_reason") or []}
+    classes = {"route_pressure_peak"}
+    if reasons.intersection(
+        {
+            "collapse_wall",
+            "loose_surface",
+            "rockfall_attention",
+            "steep_descent",
+            "wet_slippery",
+            "fall_attention",
+            "rain_typhoon_sensitive",
+        }
+    ):
+        classes.add("extreme_terrain_hazard")
+    if reasons.intersection({"dense_bamboo", "route_ambiguity"}):
+        classes.add("hidden_forest_route_loss")
+    if reasons.intersection({"bridge_passage", "official_notice", "route_start_attention"}):
+        classes.add("route_note_warning")
+    if reasons.intersection({"heavy_pack", "long_distance", "energy_reserve", "training_requirement"}):
+        classes.add("route_pressure_peak")
+    return sorted(classes)
+
+
+def _external_source_family_coverage(item: dict[str, Any]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for ref in item.get("source_refs") or []:
+        if not isinstance(ref, dict):
+            continue
+        family = str(ref.get("family") or ref.get("tier") or "unknown")
+        counts[family] = counts.get(family, 0) + 1
+    return counts
+
+
+def _compact_external_pressure_candidate(item: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "candidate_id": item.get("candidate_id"),
+        "label": item.get("label"),
+        "public_route_distance_label": item.get("public_route_distance_label"),
+        "pressure_reason": item.get("pressure_reason") or [],
+        "summary": item.get("summary"),
+        "external_pressure_score": item.get("external_pressure_score"),
+        "confidence": item.get("confidence"),
+        "source_ref_count": len(item.get("source_refs") or []),
+        "source_refs": item.get("source_refs") or [],
+        "requires_human_review": bool(item.get("requires_human_review", True)),
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+    }
+
+
+def _boss_display_mileage(
+    candidate: dict[str, Any],
+    *,
+    distance_m: float | None,
+    route_mileage_alignment: dict[str, Any],
+) -> dict[str, Any]:
+    span = candidate.get("route_mileage_span")
+    if isinstance(span, dict):
+        return {
+            "label": span.get("label") or "K待校正",
+            "start_m": span.get("start_m"),
+            "end_m": span.get("end_m"),
+            "midpoint_m": span.get("midpoint_m"),
+            "route_distance_m": _round(distance_m),
+            "alignment_status": (
+                (span.get("route_alignment") or {}).get("alignment_status")
+                if isinstance(span.get("route_alignment"), dict)
+                else "external_pressure_span"
+            ),
+            "source_ref": route_mileage_alignment.get("source_ref"),
+            "public_route_distance_label": span.get("public_route_distance_label"),
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+        }
+    display = _display_mileage_for_route_distance(
+        route_mileage_alignment,
+        distance_m,
+    )
+    return {
+        **display,
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+    }
+
+
+def _boss_map_label(point: dict[str, Any]) -> str:
+    alias = str((point.get("display_theme") or {}).get("alias") or "Boss").strip()
+    mileage = point.get("display_mileage") if isinstance(point.get("display_mileage"), dict) else {}
+    mileage_label = str(mileage.get("label") or "").strip()
+    if mileage_label and mileage_label != "K待校正":
+        return f"{alias} {mileage_label}"
+    return alias
+
+
+def _boss_selection(point: dict[str, Any]) -> dict[str, Any]:
+    demand_score = _float_or_none(
+        (point.get("route_boss_demand") or {}).get("score")
+    ) or 0.0
+    display_mileage = (
+        point.get("display_mileage")
+        if isinstance(point.get("display_mileage"), dict)
+        else {}
+    )
+    display_label = str(display_mileage.get("label") or "").strip()
+    has_display_mileage = bool(display_label and display_label != "K待校正")
+    external = bool(
+        (point.get("evidence_summary") or {}).get("external_pressure_candidate")
+    )
+    source_candidate_id = str(point.get("source_candidate_id") or "")
+    pure_route_pressure_peak = source_candidate_id.startswith("route_pressure_peak.")
+    display_bonus = 8.0 if has_display_mileage else 0.0
+    public_pressure_bonus = 18.0 if external else 0.0
+    missing_display_penalty = (
+        -25.0 if pure_route_pressure_peak and not has_display_mileage else 0.0
+    )
+    score = _clamp(
+        demand_score + display_bonus + public_pressure_bonus + missing_display_penalty,
+        0,
+        120,
+    )
+    return {
+        "score": _round(score),
+        "route_boss_demand_score": _round(demand_score),
+        "display_mileage_bonus": _round(display_bonus),
+        "public_pressure_bonus": _round(public_pressure_bonus),
+        "missing_display_mileage_penalty": _round(missing_display_penalty),
+        "has_display_mileage": has_display_mileage,
+        "external_pressure_supported": external,
+        "formula": (
+            "route_boss_demand + display_mileage_bonus + "
+            "public_pressure_bonus + missing_display_mileage_penalty"
+        ),
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+    }
 
 
 def _boss_candidate_coordinate(
@@ -726,6 +1394,13 @@ def _route_boss_demand(
         else {}
     )
     route_pressure_score = _float_or_none(route_pressure.get("route_pressure_score")) or 0.0
+    external_pressure_score = (
+        _float_or_none(candidate.get("external_pressure_score"))
+        or _float_or_none(
+            (candidate.get("mcp_score_components") or {}).get("external_pressure_score")
+        )
+        or 0.0
+    )
     max_risk_score = _float_or_none(risk_summary.get("max_risk_score")) or 0.0
     incident_text = json.dumps(incident_context, ensure_ascii=False)
     weather_text = json.dumps(weather_daylight, ensure_ascii=False)
@@ -775,6 +1450,7 @@ def _route_boss_demand(
             24,
         ),
         "route_pressure_profile": _clamp(route_pressure_score / 5.0, 0, 18),
+        "public_pressure_consensus": _clamp(external_pressure_score / 5.0, 0, 18),
         "environment_hardness": _clamp(
             (6 if weather_terms_present else 0)
             + (4 if "mobile_reception" not in classes and local_progress >= 0.55 else 0),
@@ -823,6 +1499,7 @@ def _route_boss_demand(
             "sample_count": route_pressure.get("sample_count"),
             "coordinate_source": route_pressure.get("coordinate_source"),
         },
+        "external_pressure_candidate": candidate.get("external_pressure_candidate"),
         "slow_passage": slow_passage,
         "rest_stop_context": {
             "nearby_rest_area_count": len(nearby_rest),
@@ -1009,6 +1686,16 @@ def _boss_points_geojson(payload: dict[str, Any]) -> dict[str, Any]:
                     "boss_point_id": point["boss_point_id"],
                     "rank": point["rank"],
                     "label": point["label"],
+                    "map_label": point.get("map_label"),
+                    "display_mileage_label": (
+                        point.get("display_mileage") or {}
+                    ).get("label"),
+                    "display_mileage_status": (
+                        point.get("display_mileage") or {}
+                    ).get("alignment_status"),
+                    "public_route_distance_label": (
+                        point.get("display_mileage") or {}
+                    ).get("public_route_distance_label"),
                     "display_alias": point["display_theme"]["alias"],
                     "icon_key": point["display_theme"]["icon_key"],
                     "coordinate_source": point.get("coordinate_source"),
@@ -1557,6 +2244,7 @@ def _build_route_pressure_profile(
     route_extent_m: float,
     pressure_profile_bin_m: float,
     slow_passage_min_span_m: float,
+    route_mileage_alignment: dict[str, Any],
 ) -> dict[str, Any]:
     bin_m = max(100.0, float(pressure_profile_bin_m or DEFAULT_PRESSURE_PROFILE_BIN_M))
     extent_m = max(route_extent_m, bin_m)
@@ -1637,13 +2325,23 @@ def _build_route_pressure_profile(
             if risk_coordinate.get("lat") is not None and risk_coordinate.get("lon") is not None
             else "missing_coordinate"
         )
+        display_mileage = _display_mileage_for_route_distance(
+            route_mileage_alignment,
+            mid_m,
+        )
         samples.append(
             {
                 "sample_id": f"route_pressure.{project_id}.sample.{index:04d}",
-                "label": _route_pressure_sample_label(index, mid_m, mcp_summary),
+                "label": _route_pressure_sample_label(
+                    index,
+                    mid_m,
+                    mcp_summary,
+                    display_mileage=display_mileage,
+                ),
                 "start_distance_m": _round(start_m),
                 "end_distance_m": _round(end_m),
                 "mid_distance_m": _round(mid_m),
+                "display_mileage": display_mileage,
                 "route_progress_ratio": _round(progress),
                 "lat": coordinate.get("lat"),
                 "lon": coordinate.get("lon"),
@@ -1680,6 +2378,7 @@ def _build_route_pressure_profile(
             "centerline": "overpass_risk_ribbon",
             "risk_distance_axis": "overpass_risk_ribbon_distance",
             "gpx_evidence_axis": "projected_to_overpass_risk_ribbon",
+            "display_mileage_source": "route_mileage_k_anchors_when_available",
             "candidate_only": True,
             "runtime_safety_truth": False,
         },
@@ -2157,11 +2856,18 @@ def _route_pressure_sample_label(
     index: int,
     mid_m: float,
     mcp_summary: dict[str, Any],
+    *,
+    display_mileage: dict[str, Any] | None = None,
 ) -> str:
     labels = mcp_summary.get("labels") or []
     if labels:
         return str(labels[0])
-    return f"路段壓力樣本 {index + 1:03d}（{mid_m / 1000.0:.1f}K）"
+    mileage_label = ""
+    if isinstance(display_mileage, dict):
+        status = str(display_mileage.get("alignment_status") or "")
+        if status not in {"missing_alignment", "outside_anchor_range"}:
+            mileage_label = str(display_mileage.get("label") or "").strip()
+    return f"路段壓力樣本 {index + 1:03d}（{mileage_label or f'{mid_m / 1000.0:.1f}K'}）"
 
 
 def _route_pressure_peaks(
@@ -2261,6 +2967,12 @@ def _route_pressure_profile_geojson(payload: dict[str, Any]) -> dict[str, Any]:
                     "start_distance_m": sample.get("start_distance_m"),
                     "end_distance_m": sample.get("end_distance_m"),
                     "mid_distance_m": sample.get("mid_distance_m"),
+                    "display_mileage_label": (
+                        sample.get("display_mileage") or {}
+                    ).get("label"),
+                    "display_mileage_status": (
+                        sample.get("display_mileage") or {}
+                    ).get("alignment_status"),
                     "route_pressure_score": sample.get("route_pressure_score"),
                     "band": sample.get("band"),
                     "coordinate_source": sample.get("coordinate_source"),

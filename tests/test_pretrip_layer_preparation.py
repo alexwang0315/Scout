@@ -536,7 +536,63 @@ def test_layer_preparation_records_gpx_filter_provenance_from_import_workspace(
     assert web_case_plan["status"] == "planned_no_network"
     assert web_case_plan["boundary"]["network_calls_allowed"] is False
     assert raster_label_plan["artifact_kind"] == "pretrip_raster_label_plan"
+    assert raster_label_plan["status"] == "planned_requires_explicit_ocr_adapter"
     assert raster_label_plan["ocr_or_vision_performed"] is False
+    assert raster_label_plan["imagery_processing_enabled"] is False
+    assert (
+        raster_label_plan["execution_policy"]["ocr_requires_explicit_adapter_run"]
+        is True
+    )
+    assert raster_label_plan["preferred_ocr_source_ids"] == [
+        "happyman_rudy_twmap",
+        "happyman_rudy",
+    ]
+    assert raster_label_plan["label_extraction_targets"] == [
+        "trail_mileage_k_anchor",
+        "road_mileage_stone",
+        "trail_name_label",
+        "named_place_label",
+        "cellular_communication_point",
+        "trail_annotation_label",
+        "contour_elevation_label",
+        "hazard_annotation_label",
+    ]
+    grouping_policy = raster_label_plan["mileage_anchor_grouping_policy"]
+    assert grouping_policy["standalone_mileage_anchor_allowed"] is False
+    assert grouping_policy["ambiguous_anchor_review_required"] is True
+    assert grouping_policy["same_tile_bbox_grouping_px"] == 256
+    assert grouping_policy["route_distance_grouping_window_m"] == 300.0
+    assert grouping_policy["required_context_any"] == [
+        "trail_name_label",
+        "route_family_from_workspace",
+        "named_place_label",
+        "route_centerline_projection",
+    ]
+    assert grouping_policy["duplicate_resolution_key"] == [
+        "route_context_key",
+        "normalized_mileage_k",
+    ]
+    assert raster_label_plan["ocr_candidate_source_count"] == 2
+    ocr_sources = {
+        source["source_id"]: source
+        for source in raster_label_plan["ocr_candidate_sources"]
+    }
+    assert set(ocr_sources) == {"happyman_rudy_twmap", "happyman_rudy"}
+    assert ocr_sources["happyman_rudy_twmap"]["ocr_capable"] is True
+    assert ocr_sources["happyman_rudy_twmap"]["raw_url_template_embedded"] is False
+    assert ocr_sources["happyman_rudy_twmap"]["wmts_layer"] == "rudy_twmap"
+    assert "trail_mileage_k_anchor" in ocr_sources["happyman_rudy_twmap"][
+        "label_extraction_roles"
+    ]
+    assert "road_mileage_stone" in ocr_sources["happyman_rudy_twmap"][
+        "label_extraction_roles"
+    ]
+    assert "cellular_communication_point" in ocr_sources["happyman_rudy_twmap"][
+        "label_extraction_roles"
+    ]
+    assert "trail_name_label" in ocr_sources["happyman_rudy_twmap"][
+        "label_extraction_roles"
+    ]
     for artifact in (
         overpass_vector_evidence,
         terrain_route_samples,

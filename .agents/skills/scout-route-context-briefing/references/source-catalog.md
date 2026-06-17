@@ -16,8 +16,11 @@ Use P2 entries as Scout-owned workspace evidence categories. They are not public
 | P0 | 中央氣象署 CODiS / 開放資料 | weather_baseline |
 | P0 | NCDR 災害潛勢資料 | hazard_baseline |
 | P0 | 消防署山域事故救援案件 | incident_baseline |
+| P0 | 地方消防局山域事故與即時災情 | incident_local_baseline |
+| P0 | 政府資料開放平臺山域事故清冊 / 消防救援統計 | incident_open_data_baseline |
 | P0 | TBN 台灣生物多樣性網絡 | natural_baseline |
 | P0 | 中研院臺灣百年歷史地圖 | historical_map_baseline |
+| P0 | 尋路・循路－臺灣原住民族古道空間資訊網 | cultural_trail_baseline |
 
 ## P1 Expansion Sources
 
@@ -32,7 +35,11 @@ Use P2 entries as Scout-owned workspace evidence categories. They are not public
 | P1 | 地圖產生器 / 山友 GPX | community_route_seed |
 | P1 | 健行筆記 | community_article_evidence |
 | P1 | Hikingbook | community_route_evidence |
+| P1 | PTT Hiking | community_article_evidence |
 | P1 | 登山補給站 | community_article_evidence |
+| P1 | 中華民國山難救助協會 / 山域搜救訓練資料 | rescue_training_reference |
+| P1 | 跑山獸 / 山小白 / 公開搜救與登山專家影音 | field_rescue_expert_observation |
+| P1 | 公開社群影音與路線貼文 | community_media_evidence |
 
 ## P2 Scout-Owned Evidence
 
@@ -81,8 +88,8 @@ P2 evidence should carry these fields when available:
 
 ## Source Use Rules
 
-- Prefer P0 sources for baseline facts: route metadata, permit/status, terrain, weather, hazard, incident, natural and historical map baselines.
-- Use P1 sources for expansion: route nicknames, repeated community descriptions, cultural context, old-place stories, geology, OSM/Overpass features, and community route evidence.
+- Prefer P0 sources for baseline facts: route metadata, permit/status, terrain, weather, hazard, national/local incident evidence, natural and historical map baselines.
+- Use P1 sources for expansion: route nicknames, repeated community descriptions, public pressure-point language, rescue-training context, expert/media route observations, cultural context, old-place stories, geology, OSM/Overpass features, and community route evidence.
 - Use unreviewed P2 Scout/user data only as route-context seeds, briefing caveats, or private admin evidence. Reviewed P2 may become route notes, observation points, pace-fit context, or next-trip pretrip suggestions.
 - Preserve `source_tier`, `source_family`, URL or artifact path, retrieval/capture time, hash/provenance, privacy/review state, and candidate-only boundary in every generated artifact.
 - Scout-local/admin HTML may include raw or detailed P2 evidence when operator intent and access boundary are clear. If exporting outside Scout, create a separate redacted/shareable variant.

@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import html
 import json
+import math
 import re
 from datetime import datetime, timezone
 from pathlib import Path
@@ -26,6 +27,7 @@ ROUTE_CONTEXT_CRAWL_SEED_PLAN_REF = "normalized/context/route_context/crawl_seed
 ROUTE_CONTEXT_MEDIA_MANIFEST_REF = "normalized/context/route_context/media_manifest.json"
 ROUTE_CONTEXT_BRIEFING_REF = "outputs/briefings/route_context_briefing.html"
 ROUTE_CONTEXT_POINTS_REF = "candidates/route_context_points.json"
+ROUTE_MILEAGE_K_ANCHORS_REF = "candidates/route_mileage_k_anchors.json"
 ROUTE_CONTEXT_SCHEMA_VERSION = "route_context_collection.v1"
 DEFAULT_ROUTE_NOTE_LIMIT = 80
 DEFAULT_ROUTE_NOTE_SEED_LIMIT = 60
@@ -44,6 +46,30 @@ BRIEFING_CONTEXT_LAYER_ORDER = (
     "observation_point",
 )
 BRIEFING_VISUAL_KIT_SLOT_COUNT = 6
+MILEAGE_K_LABEL_PATTERN = re.compile(
+    r"(?<![A-Za-z0-9])(\d{1,3}(?:\.\d{1,2})?)\s*(?:[Kk]|[Kk][Mm]|公里)(?![A-Za-z0-9])"
+)
+FULLWIDTH_MILEAGE_TRANSLATION = str.maketrans(
+    "０１２３４５６７８９．ＫｋＭｍ",
+    "0123456789.KkMm",
+)
+ROAD_MILEAGE_HINT_PATTERN = re.compile(
+    r"(?:台\s*\d|台\d|投\s*\d|投\d|縣\s*\d|縣\d|鄉\s*\d|鄉\d|"
+    r"市道|省道|公路|道路|投\d+線|台\d+線|台\d+甲|台\d+-|寶來|甲仙|清泉橋)"
+)
+CONTOUR_ELEVATION_PATTERN = re.compile(r"(?<!\d)([1-3]\d{2,3})(?:\s*m|公尺)?(?!\d)")
+MAP_LABEL_ROLE_ALIASES = {
+    "route_mileage_k_anchor": "trail_mileage_k_anchor",
+    "trail_mileage_k_anchor": "trail_mileage_k_anchor",
+    "road_mileage_stone": "road_mileage_stone",
+    "cellular_communication_point": "cellular_communication_point",
+    "communication_point": "cellular_communication_point",
+    "contour_elevation_label": "contour_elevation_label",
+    "trail_name_label": "trail_name_label",
+    "named_place_label": "named_place_label",
+    "trail_annotation_label": "trail_annotation_label",
+    "hazard_annotation_label": "hazard_annotation_label",
+}
 
 
 SEC6_ALIGNMENT = {
@@ -74,8 +100,11 @@ SOURCE_TIER_CATALOG: tuple[dict[str, str], ...] = (
     {"tier": "P0", "source_id": "cwa_codis_open_data", "label": "中央氣象署 CODiS / 開放資料", "role": "weather_baseline"},
     {"tier": "P0", "source_id": "ncdr_disaster_potential", "label": "NCDR 災害潛勢資料", "role": "hazard_baseline"},
     {"tier": "P0", "source_id": "nfa_mountain_rescue_cases", "label": "消防署山域事故救援案件", "role": "incident_baseline"},
+    {"tier": "P0", "source_id": "regional_fire_department_incident_feeds", "label": "地方消防局山域事故與即時災情", "role": "incident_local_baseline"},
+    {"tier": "P0", "source_id": "government_open_data_mountain_incidents", "label": "政府資料開放平臺山域事故清冊 / 消防救援統計", "role": "incident_open_data_baseline"},
     {"tier": "P0", "source_id": "tbn_biodiversity", "label": "TBN 台灣生物多樣性網絡", "role": "natural_baseline"},
     {"tier": "P0", "source_id": "as_taiwan_century_maps", "label": "中研院臺灣百年歷史地圖", "role": "historical_map_baseline"},
+    {"tier": "P0", "source_id": "tacp_indigenous_historic_trails", "label": "尋路・循路－臺灣原住民族古道空間資訊網", "role": "cultural_trail_baseline"},
     {"tier": "P1", "source_id": "national_culture_memory_bank", "label": "國家文化記憶庫", "role": "cultural_expansion"},
     {"tier": "P1", "source_id": "taiwan_memory", "label": "臺灣記憶", "role": "historical_expansion"},
     {"tier": "P1", "source_id": "indigenous_trail_spatial_info", "label": "原住民族古道空間資訊網", "role": "cultural_spatial_expansion"},
@@ -85,7 +114,11 @@ SOURCE_TIER_CATALOG: tuple[dict[str, str], ...] = (
     {"tier": "P1", "source_id": "map_generator_hiker_gpx", "label": "地圖產生器 / 山友 GPX", "role": "community_route_seed"},
     {"tier": "P1", "source_id": "hiking_biji", "label": "健行筆記", "role": "community_article_evidence"},
     {"tier": "P1", "source_id": "hikingbook", "label": "Hikingbook", "role": "community_route_evidence"},
+    {"tier": "P1", "source_id": "ptt_hiking", "label": "PTT Hiking", "role": "community_article_evidence"},
     {"tier": "P1", "source_id": "mountain_news_bbs", "label": "登山補給站", "role": "community_article_evidence"},
+    {"tier": "P1", "source_id": "mountain_rescue_association_knowledge", "label": "中華民國山難救助協會 / 山域搜救訓練資料", "role": "rescue_training_reference"},
+    {"tier": "P1", "source_id": "expert_field_rescue_media", "label": "跑山獸 / 山小白 / 公開搜救與登山專家影音", "role": "field_rescue_expert_observation"},
+    {"tier": "P1", "source_id": "public_community_media_posts", "label": "公開社群影音與路線貼文", "role": "community_media_evidence"},
     {"tier": "P2", "source_id": "user_completed_gpx", "label": "使用者實際 GPX", "role": "scout_owned_observation"},
     {"tier": "P2", "source_id": "off_route_records", "label": "偏航紀錄", "role": "scout_owned_observation"},
     {"tier": "P2", "source_id": "stay_points", "label": "停留點", "role": "scout_owned_observation"},
@@ -206,12 +239,25 @@ def collect_pretrip_route_context(
     raster_payload, raster_ref, _ = _load_source(root, project, "raster_label_evidence", source_report)
     points.extend(_points_from_raster_label_evidence(raster_payload, raster_ref))
 
+    route_distance_m = _route_summary_distance_m(root, project)
     route_note_payload, route_note_ref, _ = _load_source(
         root,
         project,
         "route_note_candidates",
         source_report,
     )
+    mileage_anchor_points = _points_from_route_note_mileage_anchors(
+        route_note_payload,
+        route_note_ref,
+        route_bbox=route_bbox,
+        route_distance_m=route_distance_m,
+    )
+    mileage_scan_summary = _route_note_mileage_scan_summary(
+        route_note_payload,
+        route_bbox=route_bbox,
+        route_distance_m=route_distance_m,
+    )
+    points.extend(mileage_anchor_points)
     if include_route_notes:
         if route_note_point_policy != "seed_only":
             points.extend(
@@ -238,6 +284,11 @@ def collect_pretrip_route_context(
 
     points = _dedupe_points(points)
     counts = _counts(points)
+    mileage_anchor_points = [
+        point
+        for point in points
+        if point.get("evidence_type") == "trail_mileage_k_anchor"
+    ]
     evidence_ref = str(project.get("route_context_evidence_ref") or ROUTE_CONTEXT_EVIDENCE_REF)
     source_manifest_ref = str(
         project.get("route_context_source_manifest_ref")
@@ -258,6 +309,9 @@ def collect_pretrip_route_context(
         project.get("route_context_briefing_ref") or ROUTE_CONTEXT_BRIEFING_REF
     )
     points_ref = str(project.get("route_context_points_ref") or ROUTE_CONTEXT_POINTS_REF)
+    mileage_anchors_ref = str(
+        project.get("route_mileage_k_anchors_ref") or ROUTE_MILEAGE_K_ANCHORS_REF
+    )
     planned_writes = [
         evidence_ref,
         source_manifest_ref,
@@ -265,6 +319,7 @@ def collect_pretrip_route_context(
         crawl_seed_plan_ref,
         media_manifest_ref,
         points_ref,
+        mileage_anchors_ref,
     ]
     if write_briefing:
         planned_writes.append(briefing_ref)
@@ -286,6 +341,14 @@ def collect_pretrip_route_context(
         "points": points,
         "boundary": boundary,
     }
+    mileage_anchor_payload = _build_mileage_k_anchor_payload(
+        project_id=project_id,
+        generated_at=collected_at,
+        anchors=mileage_anchor_points,
+        route_context_points_ref=points_ref,
+        scan_summary=mileage_scan_summary,
+        boundary=boundary,
+    )
     route_keywords = _route_keywords(
         project_id=project_id,
         route_keyword=route_keyword,
@@ -348,10 +411,12 @@ def collect_pretrip_route_context(
         "route_context_evidence_ref": evidence_ref,
         "source_manifest_ref": source_manifest_ref,
         "route_context_points_ref": points_ref,
+        "route_mileage_k_anchors_ref": mileage_anchors_ref,
         "crawl_seed_plan_ref": crawl_seed_plan_ref,
         "route_context_media_manifest_ref": media_manifest_ref,
         "route_context_briefing_ref": briefing_ref if write_briefing else None,
         "point_count": len(points),
+        "route_mileage_k_anchor_count": mileage_anchor_payload["anchor_count"],
         "counts": counts,
         "query_policy": {
             "mode": "cache_first_tool_second",
@@ -378,6 +443,7 @@ def collect_pretrip_route_context(
         "source_report": source_report,
         "counts": counts,
         "route_context_points_ref": points_ref,
+        "route_mileage_k_anchors_ref": mileage_anchors_ref,
         "source_manifest_ref": source_manifest_ref,
         "route_context_pack_ref": context_pack_ref,
         "crawl_seed_plan_ref": crawl_seed_plan_ref,
@@ -393,7 +459,9 @@ def collect_pretrip_route_context(
             "route_context_media_manifest_ref": media_manifest_ref,
             "route_context_briefing_ref": briefing_ref if write_briefing else None,
             "route_context_points_ref": points_ref,
+            "route_mileage_k_anchors_ref": mileage_anchors_ref,
             "route_context_point_count": len(points),
+            "route_mileage_k_anchor_count": mileage_anchor_payload["anchor_count"],
         },
         "boundary": boundary,
     }
@@ -438,6 +506,7 @@ def collect_pretrip_route_context(
             "route_context_media_manifest_ref": media_manifest_ref,
             "route_context_briefing_ref": briefing_ref if write_briefing else None,
             "route_context_points_ref": points_ref,
+            "route_mileage_k_anchors_ref": mileage_anchors_ref,
         },
         "standard_alignment": SEC6_ALIGNMENT,
         "boundary": boundary,
@@ -450,6 +519,7 @@ def collect_pretrip_route_context(
         _write_json(root / crawl_seed_plan_ref, crawl_seed_plan_payload)
         _write_json(root / media_manifest_ref, media_manifest_payload)
         _write_json(root / points_ref, points_payload)
+        _write_json(root / mileage_anchors_ref, mileage_anchor_payload)
         if write_briefing:
             _write_text(root / briefing_ref, briefing_html)
         _update_project_refs(
@@ -463,7 +533,9 @@ def collect_pretrip_route_context(
                 "route_context_media_manifest_ref": media_manifest_ref,
                 "route_context_briefing_ref": briefing_ref if write_briefing else None,
                 "route_context_points_ref": points_ref,
+                "route_mileage_k_anchors_ref": mileage_anchors_ref,
                 "route_context_point_count": len(points),
+                "route_mileage_k_anchor_count": mileage_anchor_payload["anchor_count"],
                 "route_context_crawl_seed_count": crawl_seed_plan_payload["seed_count"],
                 "route_context_collection_updated_at": collected_at,
                 "route_context_collection_schema_version": ROUTE_CONTEXT_SCHEMA_VERSION,
@@ -578,26 +650,64 @@ def _points_from_ocr_labels(payload: dict[str, Any], source_ref: str) -> list[di
         if not isinstance(raw, dict):
             continue
         label = _first_text(raw.get("label_text"), raw.get("ocr_label_id"))
+        label_role = _map_label_role_from_raw(raw, label)
+        mileage = _mileage_anchor_from_text(label, label_role=label_role)
+        if mileage:
+            label_role = mileage["label_role"]
+        lat, lon = _lat_lon_from(raw)
+        review_reasons = _mileage_review_reasons(
+            mileage,
+            lat=lat,
+            lon=lon,
+            route_distance_m=None,
+            coordinate_spread_m=None,
+            source_evidence_count=1,
+        )
         point = _base_point(
             source_kind="ocr_label_evidence",
             source_ref=source_ref,
             source_candidate_id=_first_text(raw.get("ocr_label_id"), label),
             label=label,
-            lat=None,
-            lon=None,
-            distance_m=None,
-            text_fields=[label, raw.get("named_point_id"), raw.get("source_ref")],
-            extra_evidence_families=["ocr", "map_label"],
+            lat=lat,
+            lon=lon,
+            distance_m=_float_or_none(raw.get("distance_m")),
+            text_fields=[
+                label,
+                raw.get("named_point_id"),
+                raw.get("source_ref"),
+                label_role,
+            ],
+            extra_evidence_families=_map_label_evidence_families(label_role, mileage),
         )
         point.update(
             {
-                "evidence_type": "ocr_map_label",
+                "evidence_type": _map_label_evidence_type(label_role, mileage, "ocr_map_label"),
+                "label_role": label_role,
                 "named_point_id": raw.get("named_point_id"),
                 "confidence": raw.get("confidence"),
-                "review_state": "needs_human_review" if raw.get("review_required", True) else "candidate",
+                "review_state": "needs_human_review"
+                if raw.get("review_required", True) or review_reasons
+                else "candidate",
                 "source_refs": _source_refs_for(source_ref, "ocr_label_evidence", raw),
             }
         )
+        if mileage:
+            point.update(
+                _mileage_anchor_point_fields(
+                    mileage,
+                    route_context_key=_first_text(raw.get("route_context_key"), "workspace_route"),
+                    source_evidence_count=1,
+                    coordinate_source=_first_text(
+                        raw.get("coordinate_source"),
+                        "ocr_label_geometry",
+                    ),
+                    review_reasons=review_reasons,
+                    raw_label_examples=[label],
+                    supporting_candidate_ids=[_first_text(raw.get("ocr_label_id"), label)],
+                )
+            )
+        else:
+            point.update(_map_label_role_fields(label_role, label))
         points.append(point)
     return points
 
@@ -650,6 +760,18 @@ def _points_from_raster_label_evidence(payload: dict[str, Any], source_ref: str)
         lat, lon = _lat_lon_from(raw)
         if lat is None or lon is None:
             lat, lon = _lat_lon_from(props)
+        label_role = _map_label_role_from_raw(props, label)
+        mileage = _mileage_anchor_from_text(label, label_role=label_role)
+        if mileage:
+            label_role = mileage["label_role"]
+        review_reasons = _mileage_review_reasons(
+            mileage,
+            lat=lat,
+            lon=lon,
+            route_distance_m=None,
+            coordinate_spread_m=None,
+            source_evidence_count=1,
+        )
         point = _base_point(
             source_kind="raster_label_evidence",
             source_ref=source_ref,
@@ -658,18 +780,243 @@ def _points_from_raster_label_evidence(payload: dict[str, Any], source_ref: str)
             lat=lat,
             lon=lon,
             distance_m=_float_or_none(props.get("distance_m")),
-            text_fields=[label, props.get("class"), props.get("source_ref")],
-            extra_evidence_families=["map_label", "ocr"],
+            text_fields=[label, props.get("class"), props.get("source_ref"), label_role],
+            extra_evidence_families=_map_label_evidence_families(label_role, mileage),
         )
         point.update(
             {
-                "evidence_type": "raster_map_label",
+                "evidence_type": _map_label_evidence_type(label_role, mileage, "raster_map_label"),
+                "label_role": label_role,
                 "confidence": props.get("confidence"),
+                "review_state": "needs_human_review" if review_reasons else props.get("review_state", "candidate"),
                 "source_refs": _source_refs_for(source_ref, "raster_label_evidence", props),
             }
         )
+        if mileage:
+            point.update(
+                _mileage_anchor_point_fields(
+                    mileage,
+                    route_context_key=_first_text(props.get("route_context_key"), "workspace_route"),
+                    source_evidence_count=1,
+                    coordinate_source=_first_text(
+                        props.get("coordinate_source"),
+                        "raster_label_geometry",
+                    ),
+                    review_reasons=review_reasons,
+                    raw_label_examples=[label],
+                    supporting_candidate_ids=[
+                        _first_text(props.get("candidate_id"), props.get("id"), label)
+                    ],
+                )
+            )
+        else:
+            point.update(_map_label_role_fields(label_role, label))
         points.append(point)
     return points
+
+
+def _points_from_route_note_mileage_anchors(
+    payload: dict[str, Any],
+    source_ref: str,
+    *,
+    route_bbox: dict[str, float] | None,
+    route_distance_m: float | None,
+) -> list[dict[str, Any]]:
+    candidates = payload.get("candidates") if isinstance(payload, dict) else []
+    if not isinstance(candidates, list):
+        return []
+
+    grouped: dict[tuple[str, str], dict[str, Any]] = {}
+    for raw in candidates:
+        if not isinstance(raw, dict):
+            continue
+        label = _first_text(raw.get("normalized_note"), raw.get("name"), raw.get("note"), raw.get("raw_note"))
+        mileage = _mileage_anchor_from_text(
+            label,
+            route_distance_m=route_distance_m,
+        )
+        if not mileage:
+            continue
+        lat = _float_or_none(raw.get("lat"))
+        lon = _float_or_none(raw.get("lon"))
+        if (
+            route_bbox
+            and lat is not None
+            and lon is not None
+            and not _within_bbox(lat, lon, route_bbox, padding_degrees=0.03)
+        ):
+            continue
+        route_context_key = _first_text(raw.get("route_context_key"), "workspace_route")
+        key = (
+            route_context_key,
+            mileage["label_role"],
+            mileage["normalized_mileage_k"],
+        )
+        item = grouped.setdefault(
+            key,
+            {
+                "route_context_key": route_context_key,
+                "mileage": mileage,
+                "records": [],
+                "labels": [],
+                "candidate_ids": [],
+                "source_refs": [],
+                "coordinates": [],
+                "golden_coordinates": [],
+            },
+        )
+        item["records"].append(raw)
+        item["labels"].append(label)
+        item["candidate_ids"].append(_first_text(raw.get("candidate_id"), label))
+        item["source_refs"].append(_source_refs_for(source_ref, "route_note_candidates", raw))
+        if lat is not None and lon is not None:
+            item["coordinates"].append((lat, lon))
+            if "golden_route" in str(raw.get("candidate_id") or ""):
+                item["golden_coordinates"].append((lat, lon))
+
+    points = []
+    for item in grouped.values():
+        mileage = item["mileage"]
+        coordinates = item["coordinates"]
+        lat, lon, coordinate_source = _representative_mileage_coordinate(item)
+        coordinate_spread_m = _coordinate_spread_m(coordinates)
+        source_evidence_count = len(item["records"])
+        review_reasons = _mileage_review_reasons(
+            mileage,
+            lat=lat,
+            lon=lon,
+            route_distance_m=route_distance_m,
+            coordinate_spread_m=coordinate_spread_m,
+            source_evidence_count=source_evidence_count,
+        )
+        label = mileage["normalized_mileage_k"]
+        source_candidate_id = (
+            f"{item['route_context_key']}.{mileage['normalized_mileage_k']}"
+        )
+        point = _base_point(
+            source_kind="route_note_candidates",
+            source_ref=source_ref,
+            source_candidate_id=source_candidate_id,
+            label=label,
+            lat=lat,
+            lon=lon,
+            distance_m=mileage["mileage_m"],
+        text_fields=[
+                label,
+                mileage["label_role"],
+                "里程樁",
+                *item["labels"][:8],
+            ],
+            extra_evidence_families=["route_note", "route_mileage", "map_label"],
+        )
+        point.update(
+            {
+                "evidence_type": mileage["evidence_type"],
+                "label_role": mileage["label_role"],
+                "confidence": _mileage_anchor_confidence(source_evidence_count, review_reasons),
+                "review_state": "needs_human_review" if review_reasons else "candidate",
+                "coordinate_spread_m": coordinate_spread_m,
+                "source_refs": _merge_source_refs(*item["source_refs"]),
+            }
+        )
+        point.update(
+            _mileage_anchor_point_fields(
+                mileage,
+                route_context_key=item["route_context_key"],
+                source_evidence_count=source_evidence_count,
+                coordinate_source=coordinate_source,
+                review_reasons=review_reasons,
+                raw_label_examples=_unique_texts(item["labels"], limit=8),
+                supporting_candidate_ids=_unique_texts(item["candidate_ids"], limit=24),
+            )
+        )
+        points.append(point)
+    return sorted(points, key=lambda point: (point.get("mileage_k") or 0.0, point.get("label") or ""))
+
+
+def _route_note_mileage_scan_summary(
+    payload: dict[str, Any],
+    *,
+    route_bbox: dict[str, float] | None,
+    route_distance_m: float | None,
+) -> dict[str, Any]:
+    candidates = payload.get("candidates") if isinstance(payload, dict) else []
+    if not isinstance(candidates, list):
+        candidates = []
+
+    raw_mileage_hit_count = 0
+    kept_within_route_bbox_count = 0
+    route_bbox_filtered_out_count = 0
+    missing_coordinate_count = 0
+    unique_values: dict[str, set[str]] = {
+        "trail_mileage_k_anchor": set(),
+        "road_mileage_stone": set(),
+    }
+    kept_values: dict[str, set[str]] = {
+        "trail_mileage_k_anchor": set(),
+        "road_mileage_stone": set(),
+    }
+
+    for raw in candidates:
+        if not isinstance(raw, dict):
+            continue
+        label = _first_text(
+            raw.get("normalized_note"),
+            raw.get("name"),
+            raw.get("note"),
+            raw.get("raw_note"),
+        )
+        mileage = _mileage_anchor_from_text(
+            label,
+            route_distance_m=route_distance_m,
+        )
+        if not mileage:
+            continue
+        raw_mileage_hit_count += 1
+        evidence_type = str(mileage["evidence_type"])
+        normalized = str(mileage["normalized_mileage_k"])
+        unique_values.setdefault(evidence_type, set()).add(normalized)
+
+        lat = _float_or_none(raw.get("lat"))
+        lon = _float_or_none(raw.get("lon"))
+        if lat is None or lon is None:
+            missing_coordinate_count += 1
+            continue
+        if route_bbox and not _within_bbox(lat, lon, route_bbox, padding_degrees=0.03):
+            route_bbox_filtered_out_count += 1
+            continue
+        kept_within_route_bbox_count += 1
+        kept_values.setdefault(evidence_type, set()).add(normalized)
+
+    return {
+        "source_kind": "route_note_candidates",
+        "source_candidate_count": len(candidates),
+        "raw_mileage_label_hit_count": raw_mileage_hit_count,
+        "unique_mileage_label_count": sum(len(values) for values in unique_values.values()),
+        "unique_trail_mileage_k_count": len(unique_values["trail_mileage_k_anchor"]),
+        "unique_road_mileage_stone_count": len(unique_values["road_mileage_stone"]),
+        "kept_within_route_bbox_count": kept_within_route_bbox_count,
+        "route_bbox_filtered_out_count": route_bbox_filtered_out_count,
+        "missing_coordinate_count": missing_coordinate_count,
+        "route_bbox_padding_degrees": 0.03,
+        "complete_scan_before_route_bbox_filter": True,
+        "trail_k_anchors_are_route_bbox_filtered": True,
+        "road_mileage_stones_are_not_trail_k_anchors": True,
+        "unique_trail_mileage_k_values_all": _sort_mileage_labels(
+            unique_values["trail_mileage_k_anchor"]
+        ),
+        "unique_road_mileage_stone_values_all": _sort_mileage_labels(
+            unique_values["road_mileage_stone"]
+        ),
+        "unique_trail_mileage_k_values_kept": _sort_mileage_labels(
+            kept_values["trail_mileage_k_anchor"]
+        ),
+        "unique_road_mileage_stone_values_kept": _sort_mileage_labels(
+            kept_values["road_mileage_stone"]
+        ),
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+    }
 
 
 def _points_from_route_notes(
@@ -1137,6 +1484,361 @@ def _source_count(source_kind: str, payload: dict[str, Any]) -> int:
     return 1
 
 
+def _mileage_anchor_from_text(
+    value: Any,
+    *,
+    label_role: str = "",
+    route_distance_m: float | None = None,
+) -> dict[str, Any] | None:
+    text = _normalize_mileage_text(value)
+    if not text:
+        return None
+    match = MILEAGE_K_LABEL_PATTERN.search(text)
+    if not match:
+        return None
+    mileage_k = _float_or_none(match.group(1))
+    if mileage_k is None:
+        return None
+    canonical_role = _canonical_map_label_role(label_role)
+    if not canonical_role:
+        canonical_role = (
+            "road_mileage_stone"
+            if _looks_like_road_mileage_label(text)
+            or (
+                route_distance_m is not None
+                and round(mileage_k * 1000.0, 3) > route_distance_m + 1000.0
+            )
+            else "trail_mileage_k_anchor"
+        )
+    if canonical_role == "route_mileage_k_anchor":
+        canonical_role = "trail_mileage_k_anchor"
+    if canonical_role not in {"trail_mileage_k_anchor", "road_mileage_stone"}:
+        canonical_role = "trail_mileage_k_anchor"
+    evidence_type = (
+        "road_mileage_stone"
+        if canonical_role == "road_mileage_stone"
+        else "trail_mileage_k_anchor"
+    )
+    return {
+        "label_role": canonical_role,
+        "evidence_type": evidence_type,
+        "mileage_anchor_kind": canonical_role,
+        "raw_mileage_text": match.group(0),
+        "normalized_mileage_k": _format_mileage_k(mileage_k),
+        "mileage_k": mileage_k,
+        "mileage_m": round(mileage_k * 1000.0, 3),
+    }
+
+
+def _normalize_mileage_text(value: Any) -> str:
+    return str(value or "").translate(FULLWIDTH_MILEAGE_TRANSLATION).strip()
+
+
+def _format_mileage_k(value: float) -> str:
+    text = f"{value:.2f}".rstrip("0").rstrip(".")
+    return f"{text}K"
+
+
+def _sort_mileage_labels(values: set[str]) -> list[str]:
+    return sorted(
+        values,
+        key=lambda value: (
+            _float_or_none(str(value).replace("K", "")) is None,
+            _float_or_none(str(value).replace("K", "")) or 0.0,
+            str(value),
+        ),
+    )
+
+
+def _looks_like_road_mileage_label(text: str) -> bool:
+    return bool(ROAD_MILEAGE_HINT_PATTERN.search(text))
+
+
+def _canonical_map_label_role(value: Any) -> str:
+    key = str(value or "").strip()
+    if not key:
+        return ""
+    return MAP_LABEL_ROLE_ALIASES.get(key, "")
+
+
+def _map_label_role_from_raw(raw: dict[str, Any], label: str) -> str:
+    for key in ("label_role", "role", "class", "label_class", "feature_role"):
+        role = _canonical_map_label_role(raw.get(key))
+        if role:
+            return role
+    text = _normalize_mileage_text(label)
+    if "通訊點" in text or "通信點" in text:
+        return "cellular_communication_point"
+    if "等高線" in text or "contour" in text.lower():
+        return "contour_elevation_label"
+    if _looks_like_road_mileage_label(text) and MILEAGE_K_LABEL_PATTERN.search(text):
+        return "road_mileage_stone"
+    return ""
+
+
+def _map_label_evidence_type(
+    label_role: str,
+    mileage: dict[str, Any] | None,
+    fallback: str,
+) -> str:
+    if mileage:
+        return str(mileage["evidence_type"])
+    if label_role in {
+        "cellular_communication_point",
+        "contour_elevation_label",
+        "trail_name_label",
+        "named_place_label",
+        "trail_annotation_label",
+        "hazard_annotation_label",
+    }:
+        return label_role
+    return fallback
+
+
+def _map_label_evidence_families(
+    label_role: str,
+    mileage: dict[str, Any] | None,
+) -> list[str]:
+    families = ["map_label", "ocr"]
+    if mileage:
+        families.append("route_mileage")
+        families.append("road_context" if mileage["label_role"] == "road_mileage_stone" else "trail_context")
+    if label_role == "cellular_communication_point":
+        families.extend(["communication", "readiness"])
+    if label_role == "contour_elevation_label":
+        families.extend(["terrain", "contour"])
+    return sorted(set(families))
+
+
+def _map_label_role_fields(label_role: str, label: str) -> dict[str, Any]:
+    fields: dict[str, Any] = {
+        "map_label_kind": label_role or "map_label",
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+    }
+    if label_role == "cellular_communication_point":
+        fields["communication_networks"] = _communication_networks_from_text(label)
+        fields["communication_emergency_hint"] = "112" in _normalize_mileage_text(label)
+    elif label_role == "contour_elevation_label":
+        fields["contour_elevation_m"] = _contour_elevation_from_text(label)
+    return fields
+
+
+def _communication_networks_from_text(label: str) -> list[str]:
+    text = _normalize_mileage_text(label)
+    networks = []
+    for keyword in ("中華", "遠傳", "台哥大", "台灣大", "亞太", "台灣之星", "112"):
+        if keyword in text:
+            networks.append(keyword)
+    return networks
+
+
+def _contour_elevation_from_text(label: str) -> float | None:
+    match = CONTOUR_ELEVATION_PATTERN.search(_normalize_mileage_text(label))
+    return _float_or_none(match.group(1)) if match else None
+
+
+def _mileage_anchor_point_fields(
+    mileage: dict[str, Any],
+    *,
+    route_context_key: str,
+    source_evidence_count: int,
+    coordinate_source: str,
+    review_reasons: list[str],
+    raw_label_examples: list[str],
+    supporting_candidate_ids: list[str],
+) -> dict[str, Any]:
+    return {
+        "label_role": mileage["label_role"],
+        "mileage_anchor_kind": mileage["mileage_anchor_kind"],
+        "route_context_key": route_context_key,
+        "raw_mileage_text": mileage["raw_mileage_text"],
+        "normalized_mileage_k": mileage["normalized_mileage_k"],
+        "mileage_k": mileage["mileage_k"],
+        "mileage_m": mileage["mileage_m"],
+        "route_mileage_m": mileage["mileage_m"],
+        "source_evidence_count": source_evidence_count,
+        "coordinate_source": coordinate_source,
+        "review_required": bool(review_reasons),
+        "review_reasons": review_reasons,
+        "raw_label_examples": raw_label_examples,
+        "supporting_candidate_ids": supporting_candidate_ids,
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+    }
+
+
+def _representative_mileage_coordinate(
+    item: dict[str, Any],
+) -> tuple[float | None, float | None, str]:
+    golden_coordinates = item.get("golden_coordinates") or []
+    if golden_coordinates:
+        lat, lon = golden_coordinates[0]
+        return lat, lon, "golden_route_route_note_candidate"
+    coordinates = item.get("coordinates") or []
+    if not coordinates:
+        return None, None, "missing_coordinate"
+    lat_values = sorted(float(lat) for lat, _ in coordinates)
+    lon_values = sorted(float(lon) for _, lon in coordinates)
+    mid = len(coordinates) // 2
+    if len(coordinates) % 2:
+        return lat_values[mid], lon_values[mid], "route_note_candidate_median"
+    return (
+        (lat_values[mid - 1] + lat_values[mid]) / 2,
+        (lon_values[mid - 1] + lon_values[mid]) / 2,
+        "route_note_candidate_median",
+    )
+
+
+def _coordinate_spread_m(coordinates: list[tuple[float, float]]) -> float | None:
+    if len(coordinates) < 2:
+        return None
+    max_distance = 0.0
+    for index, first in enumerate(coordinates):
+        for second in coordinates[index + 1 :]:
+            max_distance = max(max_distance, _haversine_m(first, second))
+    return round(max_distance, 2)
+
+
+def _haversine_m(first: tuple[float, float], second: tuple[float, float]) -> float:
+    lat1, lon1 = (math.radians(first[0]), math.radians(first[1]))
+    lat2, lon2 = (math.radians(second[0]), math.radians(second[1]))
+    delta_lat = lat2 - lat1
+    delta_lon = lon2 - lon1
+    a = (
+        math.sin(delta_lat / 2) ** 2
+        + math.cos(lat1) * math.cos(lat2) * math.sin(delta_lon / 2) ** 2
+    )
+    return 6371000.0 * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+
+def _mileage_review_reasons(
+    mileage: dict[str, Any] | None,
+    *,
+    lat: float | None,
+    lon: float | None,
+    route_distance_m: float | None,
+    coordinate_spread_m: float | None,
+    source_evidence_count: int,
+) -> list[str]:
+    if not mileage:
+        return []
+    reasons = []
+    if mileage.get("label_role") == "road_mileage_stone":
+        reasons.append("road_mileage_stone_not_trail_k_anchor")
+    if lat is None or lon is None:
+        reasons.append("missing_coordinate")
+    if source_evidence_count <= 1:
+        reasons.append("single_source_evidence")
+    if route_distance_m is not None and mileage["mileage_m"] > route_distance_m + 1000.0:
+        reasons.append("exceeds_route_summary_distance")
+    if coordinate_spread_m is not None and coordinate_spread_m > 300.0:
+        reasons.append("coordinate_spread_over_300m")
+    return reasons
+
+
+def _mileage_anchor_confidence(source_evidence_count: int, review_reasons: list[str]) -> float:
+    base = 0.55 + min(source_evidence_count, 8) * 0.04
+    if "coordinate_spread_over_300m" in review_reasons:
+        base -= 0.2
+    if "missing_coordinate" in review_reasons:
+        base -= 0.15
+    if "exceeds_route_summary_distance" in review_reasons:
+        base -= 0.1
+    return round(max(0.2, min(0.9, base)), 2)
+
+
+def _unique_texts(values: list[Any], *, limit: int) -> list[str]:
+    results = []
+    seen = set()
+    for value in values:
+        text = str(value or "").strip()
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        results.append(text)
+        if len(results) >= limit:
+            break
+    return results
+
+
+def _route_summary_distance_m(root: Path, project: dict[str, Any]) -> float | None:
+    ref = str(project.get("route_summary_ref") or SOURCE_DEFAULTS["route_summary"]["default_ref"])
+    route_summary = _load_json_object(_project_path(root, ref))
+    return _float_or_none(route_summary.get("distance_m"))
+
+
+def _build_mileage_k_anchor_payload(
+    *,
+    project_id: str,
+    generated_at: str,
+    anchors: list[dict[str, Any]],
+    route_context_points_ref: str,
+    scan_summary: dict[str, Any],
+    boundary: dict[str, Any],
+) -> dict[str, Any]:
+    sorted_anchors = sorted(
+        anchors,
+        key=lambda anchor: (
+            _float_or_none(anchor.get("mileage_k")) or 0.0,
+            str(anchor.get("route_context_key") or ""),
+        ),
+    )
+    review_required_count = sum(1 for anchor in sorted_anchors if anchor.get("review_required"))
+    raw_evidence_count = sum(
+        int(anchor.get("source_evidence_count") or 0) for anchor in sorted_anchors
+    )
+    return {
+        "artifact_kind": "pretrip_route_mileage_k_anchors",
+        "schema_version": ROUTE_CONTEXT_SCHEMA_VERSION,
+        "project_id": project_id,
+        "generated_at": generated_at,
+        "route_context_points_ref": route_context_points_ref,
+        "anchor_count": len(sorted_anchors),
+        "raw_evidence_count": raw_evidence_count,
+        "review_required_count": review_required_count,
+        "scan_summary": scan_summary,
+        "normalized_mileage_k_values": [
+            anchor.get("normalized_mileage_k") for anchor in sorted_anchors
+        ],
+        "anchors": [
+            {
+                "candidate_id": anchor.get("candidate_id"),
+                "display_label": anchor.get("display_label"),
+                "label_role": anchor.get("label_role"),
+                "mileage_anchor_kind": anchor.get("mileage_anchor_kind"),
+                "normalized_mileage_k": anchor.get("normalized_mileage_k"),
+                "mileage_k": anchor.get("mileage_k"),
+                "mileage_m": anchor.get("mileage_m"),
+                "lat": anchor.get("lat"),
+                "lon": anchor.get("lon"),
+                "route_context_key": anchor.get("route_context_key"),
+                "coordinate_source": anchor.get("coordinate_source"),
+                "coordinate_spread_m": anchor.get("coordinate_spread_m"),
+                "source_evidence_count": anchor.get("source_evidence_count"),
+                "review_required": anchor.get("review_required"),
+                "review_reasons": anchor.get("review_reasons") or [],
+                "raw_label_examples": anchor.get("raw_label_examples") or [],
+                "supporting_candidate_ids": anchor.get("supporting_candidate_ids") or [],
+                "source_refs": anchor.get("source_refs") or [],
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+            }
+            for anchor in sorted_anchors
+        ],
+        "policy": {
+            "included_evidence_type": "trail_mileage_k_anchor",
+            "excluded_evidence_type": "road_mileage_stone",
+            "duplicate_key": "route_context_key + normalized_mileage_k",
+            "standalone_k_labels_are_review_candidates": True,
+            "road_mileage_stones_are_not_trail_k_anchors": True,
+            "out_of_route_distance_kept_with_review_reason": True,
+            "raw_payloads_embedded": False,
+        },
+        "boundary": boundary,
+    }
+
+
 def _route_bbox(root: Path, project: dict[str, Any]) -> dict[str, float] | None:
     ref = str(project.get("route_summary_ref") or SOURCE_DEFAULTS["route_summary"]["default_ref"])
     route_summary = _load_json_object(_project_path(root, ref))
@@ -1374,12 +2076,7 @@ def _dedupe_points(points: list[dict[str, Any]]) -> list[dict[str, Any]]:
     seen: dict[tuple[str, str, float | None, float | None], int] = {}
     deduped = []
     for point in points:
-        key = (
-            _normalize(point.get("label")),
-            str(point.get("context_kind") or ""),
-            _rounded_coord(point.get("lat")),
-            _rounded_coord(point.get("lon")),
-        )
+        key = _dedupe_key_for_point(point)
         if key in seen:
             existing = deduped[seen[key]]
             _merge_point_provenance(existing, point)
@@ -1387,6 +2084,24 @@ def _dedupe_points(points: list[dict[str, Any]]) -> list[dict[str, Any]]:
         seen[key] = len(deduped)
         deduped.append(point)
     return deduped
+
+
+def _dedupe_key_for_point(
+    point: dict[str, Any],
+) -> tuple[str, str, float | None, float | None]:
+    if point.get("evidence_type") in {"trail_mileage_k_anchor", "road_mileage_stone"}:
+        return (
+            str(point.get("evidence_type") or "mileage_label"),
+            str(point.get("route_context_key") or "workspace_route"),
+            _float_or_none(point.get("mileage_k")),
+            None,
+        )
+    return (
+        _normalize(point.get("label")),
+        str(point.get("context_kind") or ""),
+        _rounded_coord(point.get("lat")),
+        _rounded_coord(point.get("lon")),
+    )
 
 
 def _merge_point_provenance(existing: dict[str, Any], incoming: dict[str, Any]) -> None:
@@ -1421,6 +2136,38 @@ def _merge_point_provenance(existing: dict[str, Any], incoming: dict[str, Any]) 
         existing["lon"] = incoming.get("lon")
     if existing.get("distance_m") is None and incoming.get("distance_m") is not None:
         existing["distance_m"] = incoming.get("distance_m")
+    if existing.get("evidence_type") in {"trail_mileage_k_anchor", "road_mileage_stone"}:
+        existing["source_evidence_count"] = int(existing.get("source_evidence_count") or 0) + int(
+            incoming.get("source_evidence_count") or 0
+        )
+        existing["raw_label_examples"] = _unique_texts(
+            [
+                *_str_list(existing.get("raw_label_examples")),
+                *_str_list(incoming.get("raw_label_examples")),
+            ],
+            limit=12,
+        )
+        existing["supporting_candidate_ids"] = _unique_texts(
+            [
+                *_str_list(existing.get("supporting_candidate_ids")),
+                *_str_list(incoming.get("supporting_candidate_ids")),
+            ],
+            limit=36,
+        )
+        review_reasons = _unique_texts(
+            [
+                *_str_list(existing.get("review_reasons")),
+                *_str_list(incoming.get("review_reasons")),
+            ],
+            limit=12,
+        )
+        if existing["source_evidence_count"] > 1:
+            review_reasons = [
+                reason for reason in review_reasons if reason != "single_source_evidence"
+            ]
+        existing["review_reasons"] = review_reasons
+        existing["review_required"] = bool(review_reasons)
+        existing["review_state"] = "needs_human_review" if review_reasons else "candidate"
     for key in (
         "mention_page_count",
         "mention_ratio",

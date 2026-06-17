@@ -725,6 +725,15 @@ def build_pretrip_admin_view(
         source_path=source_refs["retreat_routes"],
         evidence_type="pretrip_retreat_route_candidate",
     )
+    route_display_geometry = _route_display_geometry_from_segments(
+        project_id,
+        mission_segments,
+    )
+    route_centerline_geometry = _route_display_geometry_from_risk_ribbon(
+        project_id=project_id,
+        payload=risk_ribbon,
+        source_path=source_refs.get("risk_ribbon", ""),
+    ) or route_display_geometry
 
     planning_tab = {
         "summary": _project_summary(project, route_summary, pretrip_package, source_refs),
@@ -748,10 +757,7 @@ def build_pretrip_admin_view(
             "ended_at": route_summary.get("ended_at"),
             "point_samples": route_points,
             "polyline": route_polyline,
-            "display_geometry": _route_display_geometry_from_segments(
-                project_id,
-                mission_segments,
-            ),
+            "display_geometry": route_display_geometry,
         },
         "mission_candidates": {
             "checkpoints": mission_checkpoints,
@@ -989,7 +995,7 @@ def build_pretrip_admin_view(
             boss_points,
             boss_points_geojson,
             source_refs=source_refs,
-            route_display_geometry=planning_tab["route"]["display_geometry"],
+            route_display_geometry=route_centerline_geometry,
             route_bounds=route_projection_bounds,
         )
     if any(
@@ -1620,6 +1626,11 @@ def load_pretrip_debug_projection_view(
         project_id,
         segments,
     )
+    route_centerline_geometry = _route_display_geometry_from_risk_ribbon(
+        project_id=project_id,
+        payload=risk_ribbon_raw,
+        source_path=source_refs.get("risk_ribbon", ""),
+    ) or route_display_geometry
     view = {
         "project_id": project_id,
         "route": {
@@ -1763,7 +1774,7 @@ def load_pretrip_debug_projection_view(
             boss_points_raw,
             boss_points_geojson_raw,
             source_refs=source_refs,
-            route_display_geometry=route_display_geometry,
+            route_display_geometry=route_centerline_geometry,
             route_bounds=route_projection_bounds,
         )
     view["gis_perception_timeline"] = _gis_perception_timeline_summary(
@@ -2070,6 +2081,92 @@ def _route_display_geometry_from_segments(
             "runtime_safety_truth": False,
             "internal_gpx_points_preserved": True,
             "gpx_segment_boundary_preserved": True,
+        },
+    }
+
+
+def _route_display_geometry_from_risk_ribbon(
+    *,
+    project_id: str,
+    payload: dict[str, Any] | None,
+    source_path: str,
+) -> dict[str, Any] | None:
+    features = payload.get("features") if isinstance(payload, dict) else None
+    if not isinstance(features, list):
+        return None
+    coordinate_segments: list[list[dict[str, float]]] = []
+    route_segments: list[dict[str, Any]] = []
+    for index, feature in enumerate(features):
+        if not isinstance(feature, dict):
+            continue
+        geometry = feature.get("geometry")
+        if not isinstance(geometry, dict) or geometry.get("type") != "LineString":
+            continue
+        coordinates = _geojson_line_coordinates(geometry)
+        if len(coordinates) < 2:
+            continue
+        properties = feature.get("properties")
+        properties = properties if isinstance(properties, dict) else {}
+        segment_id = (
+            properties.get("segment_id")
+            or properties.get("candidate_id")
+            or f"risk_ribbon.{index:04d}"
+        )
+        segment_record = {
+            "candidate_id": segment_id,
+            "segment_candidate_id": segment_id,
+            "start_distance_m": _coerce_float(properties.get("start_distance_m")),
+            "end_distance_m": _coerce_float(properties.get("end_distance_m")),
+            "coordinates": coordinates,
+            "risk_distance_axis": properties.get("risk_distance_axis")
+            or "overpass_risk_ribbon_distance",
+        }
+        segment_record.update(
+            _projection_record_metadata(
+                {
+                    **segment_record,
+                    "source_refs": [source_path or "outputs/risk_ribbon.geojson"],
+                },
+                source_path=source_path or "outputs/risk_ribbon.geojson",
+                evidence_type="pretrip_overpass_risk_ribbon_route_segment",
+                source_kind="risk_ribbon_route_display_geometry",
+                identity_keys=("candidate_id", "segment_candidate_id"),
+                confidence="medium",
+                stale_risk="medium",
+                review_state="projection_only",
+                extractor_version="pretrip_admin_view.risk_ribbon_route_display.v1",
+                prompt_version=(
+                    "not_applicable_deterministic_risk_ribbon_projection.v1"
+                ),
+                summary=(
+                    "Risk-ribbon centerline display segment projected for "
+                    "pretrip map focus; candidate-only evidence, not runtime "
+                    "safety truth."
+                ),
+            )
+        )
+        coordinate_segments.append(coordinates)
+        route_segments.append(segment_record)
+    coordinates = [point for segment in coordinate_segments for point in segment]
+    if not coordinates:
+        return None
+    return {
+        "source_id": f"route_pressure_centerline.{project_id}",
+        "source_path": source_path or "outputs/risk_ribbon.geojson",
+        "evidence_type": "pretrip_overpass_risk_ribbon_centerline",
+        "display_point_count": len(coordinates),
+        "display_segment_count": len(coordinate_segments),
+        "coordinates": coordinates,
+        "coordinate_segments": coordinate_segments,
+        "route_segments": route_segments,
+        "boundary": {
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+            "centerline_source": "overpass_risk_ribbon",
+            "internal_gpx_points_preserved": True,
+            "gpx_segment_boundary_preserved": True,
+            "overpass_centerline_preserved": True,
+            "gpx_used_as_timing_and_behavior_evidence_only": True,
         },
     }
 
@@ -4008,6 +4105,29 @@ def _route_coordinate_at_distance(
     if not math.isfinite(target_m):
         return None
 
+    route_segments = display_geometry.get("route_segments")
+    if isinstance(route_segments, list):
+        for route_segment in route_segments:
+            if not isinstance(route_segment, dict):
+                continue
+            start_m = _coerce_float(route_segment.get("start_distance_m"))
+            end_m = _coerce_float(route_segment.get("end_distance_m"))
+            coordinates = _normalized_coordinate_segment(
+                route_segment.get("coordinates", [])
+            )
+            if (
+                start_m is None
+                or end_m is None
+                or end_m <= start_m
+                or len(coordinates) < 2
+            ):
+                continue
+            if start_m <= target_m <= end_m:
+                return _coordinate_at_segment_fraction(
+                    coordinates,
+                    (target_m - start_m) / (end_m - start_m),
+                )
+
     segments = _display_geometry_coordinate_segments(display_geometry)
     first_point: dict[str, float] | None = None
     last_point: dict[str, float] | None = None
@@ -4038,6 +4158,47 @@ def _route_coordinate_at_distance(
     if first_point is None:
         return None
     return dict(last_point or first_point)
+
+
+def _coordinate_at_segment_fraction(
+    segment: list[dict[str, float]],
+    fraction: float,
+) -> dict[str, float] | None:
+    if not segment:
+        return None
+    fraction = max(0.0, min(1.0, fraction))
+    if fraction <= 0:
+        return dict(segment[0])
+    if fraction >= 1:
+        return dict(segment[-1])
+    lengths: list[float] = []
+    total_m = 0.0
+    for previous, current in zip(segment, segment[1:]):
+        length_m = _haversine_m(
+            previous["lat"],
+            previous["lon"],
+            current["lat"],
+            current["lon"],
+        )
+        lengths.append(length_m)
+        total_m += max(0.0, length_m)
+    if total_m <= 0:
+        return dict(segment[0])
+    target_m = total_m * fraction
+    cumulative_m = 0.0
+    for index, length_m in enumerate(lengths):
+        if length_m <= 0:
+            continue
+        if cumulative_m + length_m >= target_m:
+            previous = segment[index]
+            current = segment[index + 1]
+            ratio = max(0.0, min(1.0, (target_m - cumulative_m) / length_m))
+            return {
+                "lat": previous["lat"] + (current["lat"] - previous["lat"]) * ratio,
+                "lon": previous["lon"] + (current["lon"] - previous["lon"]) * ratio,
+            }
+        cumulative_m += length_m
+    return dict(segment[-1])
 
 
 def _boss_point_source_coordinate(point: dict[str, Any]) -> dict[str, float] | None:
@@ -4092,6 +4253,9 @@ def _route_display_coordinate_source(route_display_geometry: dict[str, Any] | No
 
 
 def _boss_point_display_label(point: dict[str, Any]) -> str:
+    display_label = str(point.get("display_label") or "").strip()
+    if display_label:
+        return display_label
     alias = str((point.get("display_theme") or {}).get("alias") or "").strip()
     label = str(point.get("label") or "").strip()
     if alias and label:
@@ -6834,6 +6998,8 @@ def _boss_points_summary(
                 "rank": point.get("rank"),
                 "label": point.get("label"),
                 "display_label": _boss_point_display_label(point),
+                "map_label": point.get("map_label"),
+                "display_mileage": point.get("display_mileage") or {},
                 "source_candidate_id": point.get("source_candidate_id"),
                 "source_mcp_id": point.get("source_mcp_id"),
                 "display_theme": point.get("display_theme") or {},
@@ -6851,6 +7017,7 @@ def _boss_points_summary(
                 "linked_named_points": point.get("linked_named_points") or [],
                 "map_target_ids": map_target_ids,
                 "route_boss_demand": point.get("route_boss_demand") or {},
+                "boss_selection": point.get("boss_selection") or {},
                 "challenge_fit": point.get("challenge_fit") or {},
                 "evidence_summary": point.get("evidence_summary") or {},
                 "candidate_only": True,

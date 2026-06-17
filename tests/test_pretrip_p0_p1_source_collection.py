@@ -44,7 +44,7 @@ def test_p0_p1_source_collection_defaults_to_generic_catalog_without_route_urls(
     assert query_plan["sources"] == []
     assert query_plan["source_policy"]["default_route_specific_sources"] is False
     assert query_plan["source_policy"]["catalog_role"] == "search_scope_only"
-    assert query_plan["source_catalog_count"] == len(DEFAULT_P0_P1_SOURCE_CATALOG) == 20
+    assert query_plan["source_catalog_count"] == len(DEFAULT_P0_P1_SOURCE_CATALOG) == 27
     assert {source["source_tier"] for source in catalog} == {"P0", "P1"}
     assert {source["source_family"] for source in catalog} >= {
         "official_baseline",
@@ -53,8 +53,11 @@ def test_p0_p1_source_collection_defaults_to_generic_catalog_without_route_urls(
         "weather_baseline",
         "hazard_baseline",
         "incident_baseline",
+        "incident_local_baseline",
+        "incident_open_data_baseline",
         "natural_baseline",
         "historical_map_baseline",
+        "cultural_trail_baseline",
         "cultural_expansion",
         "historical_expansion",
         "cultural_spatial_expansion",
@@ -63,8 +66,17 @@ def test_p0_p1_source_collection_defaults_to_generic_catalog_without_route_urls(
         "community_route_seed",
         "community_article_evidence",
         "community_route_evidence",
+        "rescue_training_reference",
+        "field_rescue_expert_observation",
+        "community_media_evidence",
     }
     assert all("url" not in source for source in catalog)
+    assert any(
+        source["source_tier"] == "P0"
+        and source["source_family"] == "cultural_trail_baseline"
+        and source["label"] == "尋路・循路－臺灣原住民族古道空間資訊網"
+        for source in catalog
+    )
 
 
 def test_p0_p1_source_collection_writes_web_case_evidence_without_live_network(
@@ -456,6 +468,12 @@ def test_p0_p1_source_collection_can_read_allowlisted_links_from_briefing_html(
         """
         <a href="https://tconline.forest.gov.tw/news/index.php?id=521&mode=data">天池公告</a>
         <a href="https://hiking.biji.co/index.php?act=detail&id=430&q=trail">健行筆記</a>
+        <a href="https://trail.tacp.gov.tw/zh-hant">尋路循路</a>
+        <a href="https://www.ntfd.gov.tw/index.php?act=article&code=list&ids=70">南投消防局山域事故</a>
+        <a href="https://data.gov.tw/datasets/search?qs=山域意外事故救援案件清冊">政府開放資料山域事故</a>
+        <a href="https://www.ptt.cc/bbs/Hiking/M.1669177132.A.15F.html">PTT Hiking</a>
+        <a href="https://www.mtrescue.org.tw/">山難救助協會</a>
+        <a href="https://www.youtube.com/watch?v=1fjVWFle0A8">路線影片</a>
         """,
         encoding="utf-8",
     )
@@ -470,8 +488,20 @@ def test_p0_p1_source_collection_can_read_allowlisted_links_from_briefing_html(
 
     query_plan = result["planned_artifacts"]["query_plan"]
     assert result["writes_performed"] is False
-    assert result["source_count"] == 2
+    assert result["source_count"] == 8
     assert query_plan["sources"][0]["source_tier"] == "P0"
     assert query_plan["sources"][0]["source_family"] == "official_baseline"
     assert query_plan["sources"][1]["source_tier"] == "P1"
     assert query_plan["sources"][1]["source_family"] == "community_article_evidence"
+    assert query_plan["sources"][2]["source_tier"] == "P0"
+    assert query_plan["sources"][2]["source_family"] == "cultural_trail_baseline"
+    assert query_plan["sources"][3]["source_tier"] == "P0"
+    assert query_plan["sources"][3]["source_family"] == "incident_local_baseline"
+    assert query_plan["sources"][4]["source_tier"] == "P0"
+    assert query_plan["sources"][4]["source_family"] == "incident_open_data_baseline"
+    assert query_plan["sources"][5]["source_tier"] == "P1"
+    assert query_plan["sources"][5]["source_family"] == "community_article_evidence"
+    assert query_plan["sources"][6]["source_tier"] == "P1"
+    assert query_plan["sources"][6]["source_family"] == "rescue_training_reference"
+    assert query_plan["sources"][7]["source_tier"] == "P1"
+    assert query_plan["sources"][7]["source_family"] == "community_media_evidence"
