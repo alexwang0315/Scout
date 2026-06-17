@@ -309,6 +309,26 @@ def run_layer_preparation(request: LayerPreparationRequest) -> dict[str, Any]:
     _write_layer_plan_files(project_root, manifest)
     _write_map_preparation_spec_artifacts(project_root, manifest)
     _update_project_refs(project_root / "project.json", project, outputs, manifest["finished_at"])
+    boss_point_synthesis = _run_boss_point_synthesis_after_layer_preparation(
+        project_root=project_root,
+        manifest=manifest,
+    )
+    manifest["boss_point_synthesis"] = boss_point_synthesis
+    if boss_point_synthesis.get("status") == "completed":
+        outputs.update(boss_point_synthesis.get("output_refs", {}))
+    summary = _summary_from_manifest(manifest)
+    map_preparation_summary = _map_preparation_summary_from_manifest(manifest)
+    adapter_manifest = _adapter_manifest_from_manifest(manifest)
+    map_projection = _map_projection_from_manifest(manifest)
+    debug_events = _debug_events_from_manifest(manifest)
+    job_payload = _job_payload_from_manifest(manifest)
+    _write_json(project_root / outputs["layer_preparation_manifest_ref"], manifest)
+    _write_json(project_root / outputs["layer_preparation_job_ref"], job_payload)
+    _write_json(project_root / outputs["layer_preparation_summary_ref"], summary)
+    _write_json(project_root / outputs["map_preparation_summary_ref"], map_preparation_summary)
+    _write_json(project_root / outputs["layer_adapter_manifest_ref"], adapter_manifest)
+    _write_json(project_root / outputs["layer_map_projection_ref"], map_projection)
+    _write_jsonl(project_root / outputs["layer_debug_projection_events_ref"], debug_events)
     return manifest
 
 
@@ -1812,6 +1832,7 @@ def _summary_from_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
             for layer in manifest["layers"]
         ],
         "network_policy": manifest["network_policy"],
+        "boss_point_synthesis": manifest.get("boss_point_synthesis"),
         "boundary": manifest["boundary"],
         "notes": manifest["notes"],
     }
@@ -1860,6 +1881,7 @@ def _map_preparation_summary_from_manifest(manifest: dict[str, Any]) -> dict[str
             )
         },
         "gpx_speed_filter": manifest["inputs"]["gpx_speed_filter"],
+        "boss_point_synthesis": manifest.get("boss_point_synthesis"),
         "network_policy": manifest["network_policy"],
         "boundary": {
             **manifest["boundary"],
@@ -2191,6 +2213,101 @@ def _update_project_refs(
         "layer_preparation_schema_version": LAYER_PREPARATION_VERSION,
     }
     _write_json(project_path, updated)
+
+
+def _run_boss_point_synthesis_after_layer_preparation(
+    *,
+    project_root: Path,
+    manifest: dict[str, Any],
+) -> dict[str, Any]:
+    boundary = {
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+        "review_gated": True,
+        "phase1_runtime_mutation_allowed": False,
+        "phase2_brain_writeback_allowed": False,
+        "workspace_file_mutation_allowed": True,
+    }
+    normalized_layers = set(manifest.get("normalized_layers") or [])
+    risk_requested = bool(
+        normalized_layers
+        & {"risk-score", "risk-ribbon", "risk-heatmap", "risk-delta"}
+    )
+    if not risk_requested:
+        return {
+            "status": "not_requested",
+            "reason": "risk_layers_not_requested",
+            "trigger": "prepare_layers_with_risk",
+            "boundary": boundary,
+        }
+
+    project_path = project_root / "project.json"
+    if not project_path.exists():
+        return {
+            "status": "skipped_missing_project",
+            "trigger": "prepare_layers_with_risk",
+            "boundary": boundary,
+        }
+    project = _load_json(project_path)
+    risk_ref = project.get("risk_ribbon_ref")
+    risk_path = (
+        project_root / risk_ref if isinstance(risk_ref, str) and risk_ref else None
+    )
+    if risk_path is None or not risk_path.exists():
+        return {
+            "status": "skipped_missing_risk_ribbon",
+            "trigger": "prepare_layers_with_risk",
+            "required_ref": "risk_ribbon_ref",
+            "boundary": boundary,
+        }
+
+    try:
+        from pretrip_boss_point_synthesis import (
+            BOSS_POINTS_GEOJSON_REF,
+            BOSS_POINTS_REF,
+            ROUTE_PRESSURE_PROFILE_GEOJSON_REF,
+            ROUTE_PRESSURE_PROFILE_REF,
+            synthesize_pretrip_boss_points,
+        )
+
+        result = synthesize_pretrip_boss_points(
+            project_root,
+            generated_at=manifest.get("finished_at"),
+        )
+        pressure_policy = {}
+        pressure_path = project_root / ROUTE_PRESSURE_PROFILE_REF
+        if pressure_path.exists():
+            pressure_payload = _load_json(pressure_path)
+            pressure_policy = pressure_payload.get("policy") or {}
+    except Exception as exc:
+        return {
+            "status": "failed",
+            "trigger": "prepare_layers_with_risk",
+            "error": str(exc),
+            "boundary": boundary,
+        }
+
+    pressure_summary = result.get("route_pressure_profile_summary") or {}
+    challenge_fit = result.get("challenge_fit_summary") or {}
+    return {
+        "status": "completed",
+        "trigger": "prepare_layers_with_risk",
+        "artifact_kind": result.get("artifact_kind"),
+        "schema_version": result.get("schema_version"),
+        "boss_point_count": result.get("boss_point_count", 0),
+        "route_pressure_sample_count": pressure_summary.get("sample_count", 0),
+        "route_pressure_peak_count": pressure_summary.get("peak_count", 0),
+        "challenge_fit_decision": challenge_fit.get("decision"),
+        "centerline_policy": pressure_policy.get("centerline"),
+        "route_pressure_policy": pressure_policy,
+        "output_refs": {
+            "boss_points_ref": BOSS_POINTS_REF,
+            "boss_points_geojson_ref": BOSS_POINTS_GEOJSON_REF,
+            "route_pressure_profile_ref": ROUTE_PRESSURE_PROFILE_REF,
+            "route_pressure_profile_geojson_ref": ROUTE_PRESSURE_PROFILE_GEOJSON_REF,
+        },
+        "boundary": result.get("boundary") or boundary,
+    }
 
 
 def _sync_scout_risk_outputs(
