@@ -12,6 +12,8 @@ from pretrip_route_context_collection import (
     ROUTE_CONTEXT_MEDIA_MANIFEST_REF,
     ROUTE_CONTEXT_PACK_REF,
     ROUTE_CONTEXT_POINTS_REF,
+    ROUTE_MILEAGE_K_ANCHORS_REF,
+    SOURCE_TIER_CATALOG,
     ROUTE_CONTEXT_SOURCE_MANIFEST_REF,
     collect_pretrip_route_context,
 )
@@ -38,6 +40,24 @@ def test_route_context_collection_dry_run_uses_sec6_sources_without_writes() -> 
     assert result["writes_performed"] is False
     assert result["route_context_point_count"] >= 6
     assert result["crawl_seed_count"] > result["route_context_point_count"]
+    assert any(
+        source["tier"] == "P0"
+        and source["source_id"] == "tacp_indigenous_historic_trails"
+        and source["role"] == "cultural_trail_baseline"
+        for source in SOURCE_TIER_CATALOG
+    )
+    assert any(
+        source["tier"] == "P0"
+        and source["source_id"] == "regional_fire_department_incident_feeds"
+        and source["role"] == "incident_local_baseline"
+        for source in SOURCE_TIER_CATALOG
+    )
+    assert any(
+        source["tier"] == "P1"
+        and source["source_id"] == "mountain_rescue_association_knowledge"
+        and source["role"] == "rescue_training_reference"
+        for source in SOURCE_TIER_CATALOG
+    )
     assert "route_note_candidate" not in result["counts"]["by_evidence_type"]
     assert result["boundary"]["candidate_only"] is True
     assert result["boundary"]["runtime_safety_truth"] is False
@@ -49,6 +69,7 @@ def test_route_context_collection_dry_run_uses_sec6_sources_without_writes() -> 
     assert result["outputs"]["route_context_media_manifest_ref"] == ROUTE_CONTEXT_MEDIA_MANIFEST_REF
     assert result["outputs"]["route_context_briefing_ref"] == ROUTE_CONTEXT_BRIEFING_REF
     assert result["outputs"]["route_context_points_ref"] == ROUTE_CONTEXT_POINTS_REF
+    assert result["outputs"]["route_mileage_k_anchors_ref"] == ROUTE_MILEAGE_K_ANCHORS_REF
 
     source_status = {
         source["source_kind"]: source["status"] for source in result["source_report"]
@@ -79,6 +100,7 @@ def test_route_context_collection_writes_workspace_layout_outputs(tmp_path: Path
     media_manifest_path = project_root / ROUTE_CONTEXT_MEDIA_MANIFEST_REF
     briefing_path = project_root / ROUTE_CONTEXT_BRIEFING_REF
     points_path = project_root / ROUTE_CONTEXT_POINTS_REF
+    mileage_anchors_path = project_root / ROUTE_MILEAGE_K_ANCHORS_REF
     assert evidence_path.is_file()
     assert source_manifest_path.is_file()
     assert pack_path.is_file()
@@ -86,6 +108,7 @@ def test_route_context_collection_writes_workspace_layout_outputs(tmp_path: Path
     assert media_manifest_path.is_file()
     assert briefing_path.is_file()
     assert points_path.is_file()
+    assert mileage_anchors_path.is_file()
 
     evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
     source_manifest = json.loads(source_manifest_path.read_text(encoding="utf-8"))
@@ -94,6 +117,7 @@ def test_route_context_collection_writes_workspace_layout_outputs(tmp_path: Path
     media_manifest = json.loads(media_manifest_path.read_text(encoding="utf-8"))
     briefing = briefing_path.read_text(encoding="utf-8")
     points = json.loads(points_path.read_text(encoding="utf-8"))
+    mileage_anchors = json.loads(mileage_anchors_path.read_text(encoding="utf-8"))
     project = json.loads((project_root / "project.json").read_text(encoding="utf-8"))
     labels = {point["display_label"] for point in points["points"]}
     assert evidence["artifact_kind"] == "pretrip_route_context_evidence"
@@ -102,15 +126,49 @@ def test_route_context_collection_writes_workspace_layout_outputs(tmp_path: Path
     assert crawl_seed_plan["artifact_kind"] == "pretrip_route_context_crawl_seed_plan"
     assert media_manifest["artifact_kind"] == "pretrip_route_context_media_manifest"
     assert points["artifact_kind"] == "pretrip_route_context_points"
+    assert mileage_anchors["artifact_kind"] == "pretrip_route_mileage_k_anchors"
+    assert mileage_anchors["scan_summary"]["source_candidate_count"] == 4406
+    assert mileage_anchors["scan_summary"]["complete_scan_before_route_bbox_filter"] is True
+    assert mileage_anchors["scan_summary"]["raw_mileage_label_hit_count"] > 500
+    assert mileage_anchors["scan_summary"]["unique_trail_mileage_k_count"] > (
+        mileage_anchors["anchor_count"]
+    )
+    assert mileage_anchors["scan_summary"]["unique_road_mileage_stone_count"] >= 3
+    assert mileage_anchors["scan_summary"]["route_bbox_filtered_out_count"] > 0
+    assert set(mileage_anchors["scan_summary"]["unique_road_mileage_stone_values_kept"]) == {
+        "0K",
+        "92.3K",
+        "94K",
+    }
     assert evidence["route_context_points_ref"] == ROUTE_CONTEXT_POINTS_REF
+    assert evidence["route_mileage_k_anchors_ref"] == ROUTE_MILEAGE_K_ANCHORS_REF
     assert evidence["source_manifest_ref"] == ROUTE_CONTEXT_SOURCE_MANIFEST_REF
     assert evidence["route_context_pack_ref"] == ROUTE_CONTEXT_PACK_REF
     assert evidence["crawl_seed_plan_ref"] == ROUTE_CONTEXT_CRAWL_SEED_PLAN_REF
     assert pack["source_manifest_ref"] == ROUTE_CONTEXT_SOURCE_MANIFEST_REF
     assert pack["route_context_points_ref"] == ROUTE_CONTEXT_POINTS_REF
+    assert pack["route_mileage_k_anchors_ref"] == ROUTE_MILEAGE_K_ANCHORS_REF
     assert pack["crawl_seed_plan_ref"] == ROUTE_CONTEXT_CRAWL_SEED_PLAN_REF
     assert pack["route_context_media_manifest_ref"] == ROUTE_CONTEXT_MEDIA_MANIFEST_REF
     assert pack["route_summary"]["raw_route_points_embedded"] is False
+    assert mileage_anchors["anchor_count"] >= 20
+    assert mileage_anchors["raw_evidence_count"] >= mileage_anchors["anchor_count"]
+    assert {"0.5K", "5K", "10K", "14.5K"}.issubset(
+        set(mileage_anchors["normalized_mileage_k_values"])
+    )
+    assert "94K" not in set(mileage_anchors["normalized_mileage_k_values"])
+    assert any(
+        point["evidence_type"] == "trail_mileage_k_anchor"
+        and point["normalized_mileage_k"] == "5K"
+        and point["source_evidence_count"] >= 1
+        for point in points["points"]
+    )
+    assert any(
+        point["evidence_type"] == "road_mileage_stone"
+        and point["normalized_mileage_k"] == "94K"
+        and "road_mileage_stone_not_trail_k_anchor" in point["review_reasons"]
+        for point in points["points"]
+    )
     assert crawl_seed_plan["route_note_seed_policy"]["route_notes_are_conclusion"] is False
     assert crawl_seed_plan["route_note_seed_policy"]["route_notes_are_seed_material"] is True
     assert crawl_seed_plan["route_note_seed_count"] > 0
@@ -324,6 +382,8 @@ def test_route_context_collection_writes_workspace_layout_outputs(tmp_path: Path
     assert "Scout 回顧" in briefing
     assert "Scout 回顧是自有線索" in briefing
     assert "候選點與邊界" in briefing
+
+
     assert "短停畫面" in briefing
     assert "risk-review-grid" in briefing
     assert "risk-review-card" in briefing
@@ -508,6 +568,133 @@ def test_route_context_collection_writes_workspace_layout_outputs(tmp_path: Path
     assert route_context_summary["route_point_media_count"] >= 1
     assert route_context_summary["live_fetch_performed"] is False
     assert route_context_summary["runtime_safety_truth"] is False
+
+
+def test_route_context_collection_normalizes_workspace_k_labels_from_ocr_and_raster(
+    tmp_path: Path,
+) -> None:
+    project_root = tmp_path / "chilai_nanhua_day1"
+    shutil.copytree(FIXTURE_PROJECT, project_root)
+
+    ocr_path = project_root / "outputs" / "mcp" / "mcp_ocr_labels.json"
+    ocr_payload = json.loads(ocr_path.read_text(encoding="utf-8"))
+    ocr_payload["labels"].append(
+        {
+            "ocr_label_id": "ocr.k.5_5.fullwidth",
+            "label_text": "５．５Ｋ",
+            "label_role": "trail_mileage_k_anchor",
+            "lat": 24.0492,
+            "lon": 121.2401,
+            "confidence": 0.82,
+            "review_required": False,
+            "source_ref": "local_rudy_tw_tile.z15.x26142.y13991",
+        }
+    )
+    ocr_payload["labels"].append(
+        {
+            "ocr_label_id": "ocr.communication_point.001",
+            "label_text": "通訊點（遠傳,台哥大,112）",
+            "lat": 24.0501,
+            "lon": 121.2399,
+            "confidence": 0.81,
+            "review_required": True,
+            "source_ref": "local_rudy_tw_tile.z15.x26142.y13991",
+        }
+    )
+    ocr_path.write_text(json.dumps(ocr_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    raster_path = project_root / "outputs" / "layers" / "normalized" / "raster_label_evidence.geojson"
+    raster_path.parent.mkdir(parents=True, exist_ok=True)
+    raster_path.write_text(
+        json.dumps(
+            {
+                "type": "FeatureCollection",
+                "features": [
+                    {
+                        "type": "Feature",
+                        "geometry": {"type": "Point", "coordinates": [121.245, 24.053]},
+                        "properties": {
+                            "id": "raster.k.6",
+                            "label": "6km",
+                            "label_role": "trail_mileage_k_anchor",
+                            "confidence": 0.78,
+                            "source_ref": "rudy_tw_runtime_tile",
+                        },
+                    },
+                    {
+                        "type": "Feature",
+                        "geometry": {"type": "Point", "coordinates": [121.246, 24.052]},
+                        "properties": {
+                            "id": "raster.road_k.94",
+                            "label": "台14線94K",
+                            "confidence": 0.76,
+                            "source_ref": "rudy_tw_runtime_tile",
+                        },
+                    },
+                    {
+                        "type": "Feature",
+                        "geometry": {"type": "Point", "coordinates": [121.247, 24.051]},
+                        "properties": {
+                            "id": "raster.contour.1123",
+                            "label": "1123",
+                            "label_role": "contour_elevation_label",
+                            "confidence": 0.73,
+                            "source_ref": "rudy_tw_runtime_tile",
+                        },
+                    }
+                ],
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    collect_pretrip_route_context(
+        project_root,
+        dry_run=False,
+        write_briefing=False,
+        collected_at="2026-06-15T00:00:00Z",
+    )
+
+    mileage_anchors = json.loads(
+        (project_root / ROUTE_MILEAGE_K_ANCHORS_REF).read_text(encoding="utf-8")
+    )
+    anchors_by_k = {
+        anchor["normalized_mileage_k"]: anchor for anchor in mileage_anchors["anchors"]
+    }
+    points = json.loads(
+        (project_root / ROUTE_CONTEXT_POINTS_REF).read_text(encoding="utf-8")
+    )
+
+    assert "5.5K" in anchors_by_k
+    assert "6K" in anchors_by_k
+    assert "94K" not in anchors_by_k
+    assert any(
+        ref["source_kind"] == "ocr_label_evidence"
+        for ref in anchors_by_k["5.5K"]["source_refs"]
+    )
+    assert any(
+        ref["source_kind"] == "raster_label_evidence"
+        for ref in anchors_by_k["6K"]["source_refs"]
+    )
+    assert anchors_by_k["5.5K"]["source_evidence_count"] >= 1
+    assert anchors_by_k["6K"]["mileage_m"] == 6000.0
+    assert any(
+        point["evidence_type"] == "road_mileage_stone"
+        and point["normalized_mileage_k"] == "94K"
+        for point in points["points"]
+    )
+    assert any(
+        point["evidence_type"] == "cellular_communication_point"
+        and point["communication_networks"] == ["遠傳", "台哥大", "112"]
+        for point in points["points"]
+    )
+    assert any(
+        point["evidence_type"] == "contour_elevation_label"
+        and point["contour_elevation_m"] == 1123.0
+        for point in points["points"]
+    )
 
 
 def test_route_context_collection_uses_web_media_in_presentation_html(tmp_path: Path) -> None:

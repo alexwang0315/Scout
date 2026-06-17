@@ -16,6 +16,8 @@ from typing import Any, Literal
 from admin_imagery_sources import (
     DEFAULT_REGISTRY_ID,
     imagery_source_for_project,
+    load_imagery_source_registry,
+    wmts_source_metadata,
 )
 from admin_basemap_tiles import build_osm_basemap_contract, normalize_bbox_wgs84
 from admin_local_raster_tiles import (
@@ -236,6 +238,47 @@ TERRAIN_DTM_CORRIDOR_HALF_WIDTH_M = 500.0
 TERRAIN_DTM_CORRIDOR_TOTAL_WIDTH_M = TERRAIN_DTM_CORRIDOR_HALF_WIDTH_M * 2.0
 TERRAIN_DTM_SEGMENT_BUCKET_M = 500.0
 TERRAIN_DTM_CONTOUR_TOLERANCE_M = 5.0
+RASTER_LABEL_PREFERRED_OCR_SOURCE_IDS = (
+    "happyman_rudy_twmap",
+    "happyman_rudy",
+)
+RASTER_LABEL_EXTRACTION_TARGETS = (
+    "trail_mileage_k_anchor",
+    "road_mileage_stone",
+    "trail_name_label",
+    "named_place_label",
+    "cellular_communication_point",
+    "trail_annotation_label",
+    "contour_elevation_label",
+    "hazard_annotation_label",
+)
+RASTER_LABEL_MILEAGE_ANCHOR_GROUPING_POLICY = {
+    "standalone_mileage_anchor_allowed": False,
+    "route_context_key_fields": (
+        "project_id",
+        "source_id",
+        "trail_name_label",
+        "nearest_named_point",
+        "projected_centerline_id",
+    ),
+    "required_context_any": (
+        "trail_name_label",
+        "route_family_from_workspace",
+        "named_place_label",
+        "route_centerline_projection",
+    ),
+    "same_tile_bbox_grouping_px": 256,
+    "route_distance_grouping_window_m": 300.0,
+    "duplicate_resolution_key": (
+        "route_context_key",
+        "normalized_mileage_k",
+    ),
+    "road_mileage_stone_policy": (
+        "公路公里樁與步道 K 不同；保留為 road_mileage_stone evidence，"
+        "不得合併進 trail_mileage_k_anchor。"
+    ),
+    "ambiguous_anchor_review_required": True,
+}
 
 
 @dataclass(frozen=True)
@@ -316,6 +359,21 @@ def run_layer_preparation(request: LayerPreparationRequest) -> dict[str, Any]:
     manifest["boss_point_synthesis"] = boss_point_synthesis
     if boss_point_synthesis.get("status") == "completed":
         outputs.update(boss_point_synthesis.get("output_refs", {}))
+        outputs["boss_point_count"] = boss_point_synthesis.get("boss_point_count", 0)
+        outputs["route_pressure_sample_count"] = boss_point_synthesis.get(
+            "route_pressure_sample_count",
+            0,
+        )
+        outputs["route_pressure_peak_count"] = boss_point_synthesis.get(
+            "route_pressure_peak_count",
+            0,
+        )
+        _update_project_refs(
+            project_root / "project.json",
+            project,
+            outputs,
+            manifest["finished_at"],
+        )
     summary = _summary_from_manifest(manifest)
     map_preparation_summary = _map_preparation_summary_from_manifest(manifest)
     adapter_manifest = _adapter_manifest_from_manifest(manifest)
@@ -3941,29 +3999,83 @@ def _web_case_query_plan_from_manifest(manifest: dict[str, Any]) -> dict[str, An
 
 def _raster_label_plan_from_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
     imagery_layer = _layer_by_id(manifest, "imagery")
+    ocr_candidate_sources = _raster_label_ocr_candidate_sources()
     return {
         "artifact_kind": "pretrip_raster_label_plan",
         "schema_version": "route_corridor_map_preparation.v1",
         "project_id": manifest["project_id"],
         "source_id": manifest["job_id"] + ".raster_label_plan",
         "source_path": manifest["outputs"]["raster_label_plan_ref"],
-        "status": "disabled_imagery_processing_cancelled",
+        "status": "planned_requires_explicit_ocr_adapter",
         "route_scope_ref": manifest["inputs"]["route_evidence_bundle"].get(
             "source_ref"
         ),
         "route_corridor": manifest["route_corridor"],
         "raster_source_refs": imagery_layer.get("source_refs", []),
+        "ocr_candidate_sources": ocr_candidate_sources,
+        "ocr_candidate_source_count": len(ocr_candidate_sources),
+        "preferred_ocr_source_ids": list(RASTER_LABEL_PREFERRED_OCR_SOURCE_IDS),
+        "label_extraction_targets": list(RASTER_LABEL_EXTRACTION_TARGETS),
+        "mileage_anchor_grouping_policy": {
+            key: list(value) if isinstance(value, tuple) else value
+            for key, value in RASTER_LABEL_MILEAGE_ANCHOR_GROUPING_POLICY.items()
+        },
         "raster_bbox_wgs84": imagery_layer.get("raster_bbox_wgs84"),
         "ocr_or_vision_performed": False,
         "imagery_processing_enabled": False,
         "tile_display_mode": "runtime_wmts",
+        "execution_policy": {
+            "ocr_requires_explicit_adapter_run": True,
+            "network_fetch_requires_explicit_fetch_mode": True,
+            "raw_tiles_embedded_in_json": False,
+            "preferred_role": "map_ocr_mileage_anchor_and_named_place_seed",
+        },
         "notes_zh": [
-            "本 slice 已取消 imagery preparation（影像前處理）。",
-            "圖磚只作 runtime WMTS 顯示，不在 map preparation 階段執行 OCR/vision。",
+            "本階段只建立 raster label OCR plan，不在 map preparation 階段直接執行 OCR/vision。",
+            "Rudy+TW / Rudy 圖磚優先作為里程 K、地名、等高線與路況標註的 OCR 候選來源。",
+            "OCR 結果只能成為 CP/MCP/hazard/boss 的 pretrip candidate evidence，不能成為 runtime safety truth。",
         ],
         "output_ref": manifest["outputs"]["raster_label_evidence_ref"],
         "boundary": _map_preparation_candidate_boundary(manifest),
     }
+
+
+def _raster_label_ocr_candidate_sources() -> list[dict[str, Any]]:
+    registry = load_imagery_source_registry()
+    sources = registry.get("sources") or {}
+    candidates: list[dict[str, Any]] = []
+    for source_id in RASTER_LABEL_PREFERRED_OCR_SOURCE_IDS:
+        source = sources.get(source_id)
+        if not isinstance(source, dict) or not source.get("ocr_capable"):
+            continue
+        candidates.append(
+            {
+                "source_id": source["source_id"],
+                "label": source.get("label"),
+                "label_zh": source.get("label_zh"),
+                "provider": source.get("provider"),
+                "source_kind": source.get("source_kind"),
+                "ocr_capable": True,
+                "label_extraction_roles": list(
+                    source.get("label_extraction_roles") or ()
+                ),
+                "map_label_source_priority": source.get(
+                    "map_label_source_priority"
+                ),
+                "map_label_evidence_policy": source.get(
+                    "map_label_evidence_policy"
+                ),
+                "tile_order": source.get("tile_order"),
+                "min_zoom": source.get("min_zoom"),
+                "max_zoom": source.get("max_zoom"),
+                "url_template_sha256": hashlib.sha256(
+                    str(source.get("url_template") or "").encode("utf-8")
+                ).hexdigest(),
+                **wmts_source_metadata(source),
+                "raw_url_template_embedded": False,
+            }
+        )
+    return candidates
 
 
 def _overpass_vector_evidence_from_project(

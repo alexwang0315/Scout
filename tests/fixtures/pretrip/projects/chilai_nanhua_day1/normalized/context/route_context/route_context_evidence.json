@@ -15,57 +15,63 @@
   "counts": {
     "by_context_kind": {
       "natural_context": 2,
-      "navigation_context": 1,
-      "resource_context": 3,
-      "risk_context": 2,
-      "route_context": 2,
+      "navigation_context": 4,
+      "resource_context": 4,
+      "risk_context": 5,
+      "route_context": 25,
       "viewpoint": 1
     },
     "by_evidence_family": {
       "article": 9,
-      "map_label": 1,
+      "map_label": 31,
       "mcp_candidates": 6,
       "named_point": 8,
       "named_point_evidence": 8,
       "ocr": 1,
       "ocr_label_evidence": 1,
+      "route_mileage": 30,
+      "route_note": 30,
+      "route_note_candidates": 30,
       "web_case_evidence": 1
     },
     "by_evidence_type": {
       "major_critical_point": 6,
       "named_point": 3,
       "ocr_map_label": 1,
+      "road_mileage_stone": 3,
+      "trail_mileage_k_anchor": 27,
       "web_case_evidence": 1
     },
     "by_sec6_layer": {
       "cultural": 7,
-      "historical": 5,
+      "historical": 32,
       "natural": 4,
       "observation_point": 1,
-      "route_context": 1,
-      "seasonal": 4,
-      "terrain": 5
+      "route_context": 4,
+      "seasonal": 5,
+      "terrain": 11
     },
     "by_sensitivity_level": {
       "cultural_review": 4,
-      "public": 7
+      "public": 37
     },
     "by_source_tier": {
       "P0": 1,
-      "P1": 10
+      "P1": 10,
+      "P2": 30
     },
     "by_stop_advisory_candidate": {
-      "context_reference_only": 5,
-      "low_priority_context_reference": 1,
-      "pass_through_or_minimize_exposure": 2,
+      "context_reference_only": 28,
+      "low_priority_context_reference": 4,
+      "pass_through_or_minimize_exposure": 6,
       "short_stop_requires_contextual_permission": 3
     },
     "candidate_only": true,
-    "route_context_point_count": 11,
+    "route_context_point_count": 41,
     "runtime_safety_truth": false
   },
   "crawl_seed_plan_ref": "normalized/context/route_context/crawl_seed_plan.json",
-  "generated_at": "2026-06-15T00:00:00Z",
+  "generated_at": "2026-06-17T00:00:00Z",
   "import_manifest_ref": "outputs/import_manifest.json",
   "import_manifest_summary": {
     "artifact_kind": "pretrip_import_manifest",
@@ -87,14 +93,17 @@
     "route_context_evidence_ref": "normalized/context/route_context/route_context_evidence.json",
     "route_context_media_manifest_ref": "normalized/context/route_context/media_manifest.json",
     "route_context_pack_ref": "normalized/context/route_context/route_context_pack.json",
-    "route_context_point_count": 11,
+    "route_context_point_count": 41,
     "route_context_points_ref": "candidates/route_context_points.json",
-    "route_context_source_manifest_ref": "normalized/context/route_context/source_manifest.json"
+    "route_context_source_manifest_ref": "normalized/context/route_context/source_manifest.json",
+    "route_mileage_k_anchor_count": 27,
+    "route_mileage_k_anchors_ref": "candidates/route_mileage_k_anchors.json"
   },
   "route_context_briefing_ref": "outputs/briefings/route_context_briefing.html",
   "route_context_media_manifest_ref": "normalized/context/route_context/media_manifest.json",
   "route_context_pack_ref": "normalized/context/route_context/route_context_pack.json",
   "route_context_points_ref": "candidates/route_context_points.json",
+  "route_mileage_k_anchors_ref": "candidates/route_mileage_k_anchors.json",
   "schema_version": "route_context_collection.v1",
   "source_manifest_ref": "normalized/context/route_context/source_manifest.json",
   "source_report": [

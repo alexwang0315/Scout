@@ -46,8 +46,8 @@ Route Context Intelligence 使用三層來源：
 
 | Tier | 用途 | 例子 |
 | --- | --- | --- |
-| P0 | 官方 baseline / status / terrain / weather / hazard / incident / natural / historical map | 林業及自然保育署、山林悠遊網、入園申請、國家公園、NLSC、CWA、NCDR、消防署、TBN、中研院歷史地圖 |
-| P1 | 路線脈絡擴充與 community evidence | 國家文化記憶庫、臺灣記憶、原住民族古道資料、地質雲、OSM、魯地圖、健行筆記、Hikingbook、登山補給站 |
+| P0 | 官方 baseline / status / terrain / weather / hazard / incident / local incident / open data / natural / historical map / cultural trail baseline | 林業及自然保育署、山林悠遊網、入園申請、國家公園、NLSC、CWA、NCDR、消防署、地方消防局、政府開放事故資料、TBN、中研院歷史地圖、尋路・循路－臺灣原住民族古道空間資訊網 |
+| P1 | 路線脈絡擴充、community evidence、rescue/reference evidence | 國家文化記憶庫、臺灣記憶、原住民族古道資料、地質雲、OSM、魯地圖、健行筆記、Hikingbook、PTT Hiking、登山補給站、山難救助協會訓練資料、公開專家/社群影音 |
 | P2 | Scout-owned workspace evidence | completed GPX、偏航、停留點、照片點、語音註記、IMU/PDR、氣壓高度、隊伍距離、stop-worthiness feedback、Scout action log |
 
 規則：

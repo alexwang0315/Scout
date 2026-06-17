@@ -278,6 +278,24 @@ route note、大家都慢的歷史 GPX 通過狀態、休息/互等隊友跡象�
 risk、risk heat/ribbon、事故/救援脈絡、網路上反覆提及的 named point、
 斷崖/好漢坡/崩壁/細瘦稜線等名稱訊號，以及中後段救援困難度。
 
+Scout 提供 `$scout-route-pressure-intelligence` 作為此流程的 P0/P1
+public evidence orchestration skill。它的責任不是直接決定 Boss Point，
+而是為 `Route Boss Demand` 搜集與整理公共壓力證據：
+
+- P0：官方 trail/status、林業與天池山莊公告、DEM/DTM、NCDR/CWA、
+  消防署山水域救援統計、地方消防局山域事故、政府開放山域事故資料。
+- P1：健行筆記、Hikingbook、PTT Hiking、登山補給站、山友 GPX、
+  OSM/Overpass/魯地圖、山難救助協會訓練資料、跑山獸/山小白等公開
+  專家或社群影音。
+
+此 skill 應產生或輔助產生
+`outputs/route_pressure_external_candidates.json` 與 GeoJSON 類型的候選
+artifact，內容包含 route-distance anchor、source tier/family、pressure
+reason、confidence、missing-source gaps、review state 與 candidate-only
+metadata。這些公共壓力證據只能作為 pretrip advisory evidence，不得成為
+runtime safety truth，也不得替代 terrain/risk/Overpass-backed pressure
+profile。
+
 Scout 必須先產生全線 `Route Pressure Profile`：以固定距離 bin 掃描整條
 route，把 terrain/risk、爬升下降、route notes、slow-passage、MCP/named
 point support、resume/rest context 聚合成 `route_pressure_score`。Boss
@@ -1302,7 +1320,7 @@ The validation evidence is intentionally scoped:
 | Standard section | Scout force | Current implementation evidence |
 |---|---|---|
 | 6 | 探索力 / Route Context Intelligence | `scout.ai.route_context.assess.v0` is in the Scout AI evidence and answer path. |
-| 7 | 自信力 / Readiness & Pace Fit | `scout.ai.pace_guardian.assess.v0`, `scout.ai.route_readiness.assess.v0`, and Scout Pace Coefficient generation are in the pre-trip path. |
+| 7 | 自信力 / Readiness & Pace Fit | `scout.ai.pace_guardian.assess.v0`, `scout.ai.route_readiness.assess.v0`, Scout Pace Coefficient generation, Route Pressure Profile / Boss synthesis, and `$scout-route-pressure-intelligence` P0/P1 public pressure evidence orchestration are in the pre-trip path. |
 | 8 | 勇氣力 / Contextual Permissioning | `scout.ai.contextual_permission.assess.v0` emits structured permission decisions with limits and residual risk. |
 | 9 | 路線力 / Route Architecture Intelligence | `scout.ai.route_architecture.assess.v0` covers route structure, checkpoint, retreat, and timing reasoning. |
 | 10 | 天氣力 / Weather-to-Decision Intelligence | `scout.ai.weather_window.assess.v0` converts weather into route-specific decision constraints. |

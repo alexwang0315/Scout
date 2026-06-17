@@ -47,6 +47,10 @@ def test_synthesize_pretrip_boss_points_dry_run_keeps_workspace_clean(
     assert result["policy"]["boss_coordinate_source"] == (
         "overpass_risk_ribbon_route_distance_interpolation"
     )
+    assert result["policy"]["display_mileage_source"] == (
+        "route_mileage_k_anchors_when_available"
+    )
+    assert result["route_mileage_alignment"]["usable_anchor_count"] > 10
     assert result["route_pressure_profile_summary"]["sample_count"] > 0
     assert result["route_pressure_profile_summary"]["peak_count"] > 0
     assert result["challenge_fit_summary"]["decision"] == "CHANGE_PLAN_OR_ADD_BUFFER"
@@ -74,6 +78,9 @@ def test_synthesize_pretrip_boss_points_writes_challenge_fit_artifacts(
     assert result["boss_points"][0]["label"].startswith("高壓路段")
     assert result["boss_points"][0]["display_theme"]["alias"] == "呂布關"
     assert result["boss_points"][0]["display_theme"]["decorative_only"] is True
+    assert result["boss_points"][0]["display_mileage"]["label"].endswith("K")
+    assert result["boss_points"][0]["map_label"].startswith("呂布關 ")
+    assert result["boss_points"][0]["boss_selection"]["has_display_mileage"] is True
     assert result["boss_points"][0]["route_boss_demand"]["score"] > 80
     assert result["route_pressure_profile_summary"]["sample_count"] > 0
     assert result["route_pressure_profile_summary"]["peak_count"] > 0
@@ -121,6 +128,10 @@ def test_synthesize_pretrip_boss_points_writes_challenge_fit_artifacts(
     assert payload["policy"]["boss_coordinate_source"] == (
         "overpass_risk_ribbon_route_distance_interpolation"
     )
+    assert payload["policy"]["display_mileage_source"] == (
+        "route_mileage_k_anchors_when_available"
+    )
+    assert payload["route_mileage_alignment"]["usable_anchor_count"] > 10
     assert [point["display_theme"]["alias"] for point in payload["boss_points"]] == [
         "呂布關",
         "關羽門",
@@ -128,25 +139,25 @@ def test_synthesize_pretrip_boss_points_writes_challenge_fit_artifacts(
         "趙雲稜",
         "馬超壁",
     ]
-    machao = next(
+    display_aligned = [
         point
         for point in payload["boss_points"]
-        if point["display_theme"]["alias"] == "馬超壁"
-    )
-    assert machao["label"] == "高壓路段 69.8K（高壓）"
-    assert machao["lat"] == 23.89207000180547
-    assert machao["lon"] == 121.22026385047626
-    assert machao["coordinate_source"] == (
+        if point["display_mileage"]["label"] != "K待校正"
+    ]
+    assert len(display_aligned) >= 3
+    first = payload["boss_points"][0]
+    assert first["label"].startswith("高壓路段")
+    assert first["map_label"].startswith("呂布關 ")
+    assert first["boss_selection"]["score"] >= first["route_boss_demand"]["score"]
+    assert first["coordinate_source"] == (
         "overpass_risk_ribbon_route_distance_interpolation"
     )
     assert geojson["metadata"]["candidate_only"] is True
     assert len(geojson["features"]) == 5
-    machao_feature = next(
-        feature
-        for feature in geojson["features"]
-        if feature["properties"]["display_alias"] == "馬超壁"
-    )
-    assert machao_feature["properties"]["coordinate_source"] == (
+    first_feature = geojson["features"][0]
+    assert first_feature["properties"]["map_label"].startswith("呂布關 ")
+    assert first_feature["properties"]["display_mileage_label"].endswith("K")
+    assert first_feature["properties"]["coordinate_source"] == (
         "overpass_risk_ribbon_route_distance_interpolation"
     )
     assert pressure_profile["artifact_kind"] == "pretrip_route_pressure_profile"
@@ -159,8 +170,12 @@ def test_synthesize_pretrip_boss_points_writes_challenge_fit_artifacts(
     assert pressure_profile["policy"]["gpx_evidence_axis"] == (
         "projected_to_overpass_risk_ribbon"
     )
+    assert pressure_profile["policy"]["display_mileage_source"] == (
+        "route_mileage_k_anchors_when_available"
+    )
     assert pressure_geojson["metadata"]["candidate_only"] is True
     assert len(pressure_geojson["features"]) > 0
+    assert "display_mileage_label" in pressure_geojson["features"][0]["properties"]
     assert project["boss_points_ref"] == BOSS_POINTS_REF
     assert project["boss_points_geojson_ref"] == BOSS_POINTS_GEOJSON_REF
     assert project["route_pressure_profile_ref"] == ROUTE_PRESSURE_PROFILE_REF
@@ -185,6 +200,79 @@ def test_synthesize_pretrip_boss_points_writes_challenge_fit_artifacts(
     assert artifacts["route_pressure_profile"]["sample_count"] > 0
     assert artifacts["route_pressure_profile"]["peak_count"] > 0
     assert artifacts["route_pressure_profile_geojson"]["feature_count"] > 0
+
+
+def test_external_pressure_candidates_become_k_labeled_boss_points(
+    tmp_path: Path,
+) -> None:
+    project_root = tmp_path / "chilai_nanhua_day1"
+    shutil.copytree(PROJECT_ROOT, project_root)
+    external_path = project_root / "outputs" / "route_pressure_external_candidates.json"
+    external_path.parent.mkdir(parents=True, exist_ok=True)
+    external_path.write_text(
+        json.dumps(
+            {
+                "artifact_kind": "pretrip_route_pressure_external_candidates",
+                "schema_version": "route_pressure_external_candidates.v1",
+                "project_id": "chilai_nanhua_day1",
+                "candidate_count": 1,
+                "candidates": [
+                    {
+                        "candidate_id": "external_pressure.test.yunhai_collapse",
+                        "label": "雲海保線所後吊橋與大崩壁群",
+                        "public_route_distance_label": "4.5K-12.5K",
+                        "route_distance_start_m": 4500,
+                        "route_distance_end_m": 12500,
+                        "pressure_reason": [
+                            "collapse_wall",
+                            "bridge_passage",
+                            "rain_typhoon_sensitive",
+                        ],
+                        "summary": "公開資料反覆提醒雲海後有吊橋與崩壁。",
+                        "external_pressure_score": 95,
+                        "confidence": "high",
+                        "source_refs": [
+                            {
+                                "tier": "P1",
+                                "family": "community_article_evidence",
+                                "url": "https://example.invalid/chilai",
+                            }
+                        ],
+                        "requires_human_review": True,
+                        "candidate_only": True,
+                        "runtime_safety_truth": False,
+                    }
+                ],
+                "boundary": {
+                    "candidate_only": True,
+                    "runtime_safety_truth": False,
+                },
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = synthesize_pretrip_boss_points(
+        project_root,
+        generated_at="2099-06-07T08:00:00Z",
+    )
+
+    external_boss = next(
+        point
+        for point in result["boss_points"]
+        if point["source_candidate_id"] == "external_pressure.test.yunhai_collapse"
+    )
+    assert external_boss["display_mileage"]["label"] == "4.5K-12.5K"
+    assert external_boss["map_label"].endswith("4.5K-12.5K")
+    assert external_boss["boss_selection"]["external_pressure_supported"] is True
+    assert external_boss["route_boss_demand"]["components"][
+        "public_pressure_consensus"
+    ] > 0
+    assert external_boss["candidate_only"] is True
+    assert external_boss["runtime_safety_truth"] is False
 
 
 def test_slow_passage_requires_500m_span_and_does_not_promote_rest_stop() -> None:

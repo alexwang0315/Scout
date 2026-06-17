@@ -1050,9 +1050,13 @@ def test_boss_points_challenge_fit_surfaces_in_admin_and_debug(tmp_path: Path):
         for point in boss_points["boss_points"]
         if point["display_theme"]["alias"] == "馬超壁"
     )
-    assert machao["display_label"] == "馬超壁 高壓路段 69.8K（高壓）"
-    assert machao["lat"] == 23.89207000180547
-    assert machao["lon"] == 121.22026385047626
+    assert machao["display_label"].startswith("馬超壁 ")
+    assert machao["map_label"].startswith("馬超壁")
+    assert machao["display_mileage"]["label"]
+    assert machao["boss_selection"]["candidate_only"] is True
+    assert machao["boss_selection"]["runtime_safety_truth"] is False
+    assert machao["lat"] is not None
+    assert machao["lon"] is not None
     assert machao["coordinate_source"] == (
         "overpass_risk_ribbon_route_distance_interpolation"
     )

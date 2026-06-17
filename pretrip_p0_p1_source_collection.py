@@ -88,6 +88,22 @@ DEFAULT_P0_P1_SOURCE_CATALOG: tuple[dict[str, str], ...] = (
         "seed_role": "incident and rescue case evidence discovery",
     },
     {
+        "catalog_id": "regional_fire_department_incident_feeds",
+        "source_tier": "P0",
+        "source_family": "incident_local_baseline",
+        "label": "地方消防局山域事故與即時災情",
+        "coverage_scope": "regional",
+        "seed_role": "regional official incident and rescue-dispatch evidence discovery",
+    },
+    {
+        "catalog_id": "government_open_data_mountain_incidents",
+        "source_tier": "P0",
+        "source_family": "incident_open_data_baseline",
+        "label": "政府資料開放平臺山域事故清冊 / 消防救援統計",
+        "coverage_scope": "national",
+        "seed_role": "structured mountain incident and rescue statistics discovery",
+    },
+    {
         "catalog_id": "tbn_biodiversity_network",
         "source_tier": "P0",
         "source_family": "natural_baseline",
@@ -102,6 +118,14 @@ DEFAULT_P0_P1_SOURCE_CATALOG: tuple[dict[str, str], ...] = (
         "label": "中研院臺灣百年歷史地圖",
         "coverage_scope": "national",
         "seed_role": "historical map and old-place context baseline discovery",
+    },
+    {
+        "catalog_id": "tacp_indigenous_historic_trails",
+        "source_tier": "P0",
+        "source_family": "cultural_trail_baseline",
+        "label": "尋路・循路－臺灣原住民族古道空間資訊網",
+        "coverage_scope": "national_or_regional",
+        "seed_role": "official indigenous historic-trail baseline discovery",
     },
     {
         "catalog_id": "national_culture_memory",
@@ -176,12 +200,44 @@ DEFAULT_P0_P1_SOURCE_CATALOG: tuple[dict[str, str], ...] = (
         "seed_role": "community route evidence discovery",
     },
     {
+        "catalog_id": "ptt_hiking",
+        "source_tier": "P1",
+        "source_family": "community_article_evidence",
+        "label": "PTT Hiking",
+        "coverage_scope": "taiwan_community",
+        "seed_role": "community trip report, pace log and pressure language discovery",
+    },
+    {
         "catalog_id": "mountain_notes",
         "source_tier": "P1",
         "source_family": "community_article_evidence",
         "label": "登山補給站",
         "coverage_scope": "taiwan_community",
         "seed_role": "community article, trip report and caution-note evidence discovery",
+    },
+    {
+        "catalog_id": "mountain_rescue_association_knowledge",
+        "source_tier": "P1",
+        "source_family": "rescue_training_reference",
+        "label": "中華民國山難救助協會 / 山域搜救訓練資料",
+        "coverage_scope": "taiwan_rescue_community",
+        "seed_role": "field rescue training and terrain-reading reference discovery",
+    },
+    {
+        "catalog_id": "expert_field_rescue_media",
+        "source_tier": "P1",
+        "source_family": "field_rescue_expert_observation",
+        "label": "跑山獸 / 山小白 / 公開搜救與登山專家影音",
+        "coverage_scope": "taiwan_public_media",
+        "seed_role": "reviewed public expert field observation and rescue-context discovery",
+    },
+    {
+        "catalog_id": "public_community_media_posts",
+        "source_tier": "P1",
+        "source_family": "community_media_evidence",
+        "label": "公開社群影音與路線貼文",
+        "coverage_scope": "public_social_media",
+        "seed_role": "public route media and visual pressure evidence discovery after review",
     },
 )
 
@@ -602,12 +658,21 @@ def _classify_url(url: str, *, label: str | None = None) -> dict[str, str]:
     elif "nfa.gov.tw" in host:
         tier = "P0"
         family = "incident_baseline"
+    elif "data.gov.tw" in host:
+        tier = "P0"
+        family = "incident_open_data_baseline"
+    elif _is_regional_fire_host(host):
+        tier = "P0"
+        family = "incident_local_baseline"
     elif "tbn.org.tw" in host:
         tier = "P0"
         family = "natural_baseline"
     elif "gis.rchss.sinica.edu.tw" in host:
         tier = "P0"
         family = "historical_map_baseline"
+    elif host.endswith("trail.tacp.gov.tw"):
+        tier = "P0"
+        family = "cultural_trail_baseline"
     elif host.endswith("culture.tw"):
         tier = "P1"
         family = "cultural_expansion"
@@ -620,6 +685,29 @@ def _classify_url(url: str, *, label: str | None = None) -> dict[str, str]:
     elif "keepon" in host:
         tier = "P1"
         family = "community_article_evidence"
+    elif "ptt.cc" in host:
+        tier = "P1"
+        family = "community_article_evidence"
+    elif "mtrescue.org.tw" in host:
+        tier = "P1"
+        family = "rescue_training_reference"
+    elif host.endswith(("youtube.com", "youtu.be")):
+        tier = "P1"
+        family = "community_media_evidence"
+    elif host.endswith(("facebook.com", "instagram.com", "threads.com")):
+        tier = "P1"
+        family = "community_media_evidence"
+    elif host.endswith(
+        (
+            "hikerzoe.com",
+            "dokimitw.com",
+            "lightliterlife.tw",
+            "colorfulbutterfly.net",
+            "pixnet.net",
+        )
+    ):
+        tier = "P1"
+        family = "community_article_evidence"
     elif "openstreetmap" in host or "overpass" in host:
         tier = "P1"
         family = "map_expansion"
@@ -629,6 +717,29 @@ def _classify_url(url: str, *, label: str | None = None) -> dict[str, str]:
         "source_family": family,
         "label": label or host or url,
     }
+
+
+def _is_regional_fire_host(host: str) -> bool:
+    if host != "119.gov.taipei" and not host.endswith(".gov.tw"):
+        return False
+    if host == "119.gov.taipei":
+        return True
+    fire_host_markers = (
+        "fire",
+        "fd",
+        "119",
+        "ntfd",
+        "tyfd",
+        "ptfd",
+        "ttfd",
+        "tnfd",
+        "kmfd",
+        "hlfd",
+        "ilcfd",
+        "hccfd",
+        "cyfd",
+    )
+    return any(marker in host for marker in fire_host_markers)
 
 
 def _image_evidence_item(
