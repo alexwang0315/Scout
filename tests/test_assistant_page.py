@@ -309,6 +309,49 @@ def test_admin_after_action_page_has_read_only_assistant_shell_and_live_query_co
     assert MUTATION_BUTTON_RE.search(shell) is None
 
 
+def test_admin_after_action_map_controls_and_evidence_timeline_linkage():
+    html = read_page(ADMIN_PAGE)
+
+    assert "background: #111827;\n      color: #f8fafc;" in html
+    assert ".hover-hint {\n      position: fixed;\n      z-index: 10000;" in html
+    assert "function bindLayerMenuDismiss()" in html
+    assert "function closeLayerMenus(exceptMenu = null)" in html
+    assert "function layerMenuFromEvent(event)" in html
+    assert "event.composedPath()" in html
+    assert 'window.__scoutLayerMenuDismissVersion === "v2"' in html
+    assert "window.__scoutLayerMenuDismissBound" not in html
+    assert '["pointerdown", "mousedown", "touchstart", "click"].forEach(eventName =>' in html
+    assert "[window, document, document.documentElement, document.body]" in html
+    assert "target.addEventListener(eventName, dismissLayerMenusForEvent, {capture: true, passive: true});" in html
+    assert 'document.addEventListener("focusin", dismissLayerMenusForEvent, {capture: true});' in html
+    assert 'menu.addEventListener("toggle", () =>' in html
+    assert "if (menu.open) closeLayerMenus(menu);" in html
+    assert 'if (event.key === "Escape") closeLayerMenus();' in html
+    assert 'document.querySelectorAll(".layer-menu[open]")' in html
+    assert "function evidenceTreeTabForItem(item)" in html
+    assert "function highlightEvidenceTimelineFor(item)" in html
+    assert "const tabId = evidenceTreeTabForItem(item)" in html
+    assert "state.activeEvidenceTreeTab = tabId" in html
+    assert "highlightEvidenceTimelineFor(item)" in html
+    assert 'item.dataset.timelineSearchText = `${category.category_id || ""} ${category.label || ""}`.toLowerCase();' in html
+    assert ".evidence-timeline-item.is-selected" in html
+    assert "evidenceTreeOpenGroups: new Set()" in html
+    assert "function openEvidenceGroupForMatch(match, options = {})" in html
+    assert "openEvidenceGroupForMatch(match, {expand: options.expand === true})" in html
+    assert "selectEvidence(item, {expandEvidenceGroup: true})" in html
+    assert "const MAP_LAYER_RANKS" in html
+    assert "function orderMapLayerGroups()" in html
+    assert ".map-label-overlay {\n      position: absolute;\n      inset: 0;\n      pointer-events: none;\n      overflow: hidden;\n      z-index: 40;" in html
+    assert "function handleMapKeyboardPan(event)" in html
+    assert "mapKeyboardActive: false" in html
+    assert "function activateMapKeyboardPan()" in html
+    assert 'document.addEventListener("keydown", handleMapKeyboardPan)' in html
+    assert 'document.addEventListener("pointerdown", deactivateMapKeyboardPanOutside)' in html
+    assert 'svg.setAttribute("tabindex", "0")' in html
+    assert "focusMapBox(mapBoxFor(item), item, {preserveZoom: options.preserveZoom !== false})" in html
+    assert "if (options.preserveZoom === false)" in html
+
+
 def test_admin_assistant_surfaces_keep_scrollable_panel_bounds():
     admin_html = read_page(ADMIN_PAGE)
     pretrip_html = read_page(PRETRIP_PAGE)
@@ -324,15 +367,18 @@ def test_admin_assistant_surfaces_keep_scrollable_panel_bounds():
     assert ".assistant-panel { overflow-y: visible; }" not in pretrip_html
     pretrip_drawer = css_block(pretrip_html, "    .assistant-drawer {")
     pretrip_panel = css_block(pretrip_html, "    .assistant-panel {")
+    pretrip_drawer_panel = css_block(pretrip_html, "    .assistant-drawer .assistant-panel {")
     assert "max-height: min(760px, calc(100vh - 80px));" in pretrip_drawer
-    assert "max-height: min(680px, calc(100vh - 130px));" in pretrip_panel
+    assert "max-height: none;" in pretrip_panel
+    assert "overflow-y: auto;" in pretrip_panel
+    assert "height: 100%;" in pretrip_drawer_panel
     assert "overflow-y: auto;" in pretrip_panel
 
     debug_drawer = css_block(debug_html, "    .assistant-drawer {")
     debug_body = css_block(debug_html, "    .assistant-body {")
     assert "max-height: min(620px, calc(100vh - 24px));" in debug_drawer
     assert "overflow: hidden;" in debug_drawer
-    assert "max-height: min(540px, calc(100vh - 112px));" in debug_body
+    assert "max-height: none;" in debug_body
     assert "overflow-y: auto;" in debug_body
 
 

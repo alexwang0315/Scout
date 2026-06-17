@@ -239,7 +239,28 @@ class AdminAfterActionTests(unittest.TestCase):
             )
 
         self.assertEqual(view["boss_points"]["counts"]["boss_point_count"], 5)
-        self.assertEqual(view["boss_points"]["boss_points"][0]["label"], "大崩壁")
+        first_boss = view["boss_points"]["boss_points"][0]
+        self.assertTrue(first_boss["label"].startswith("高壓路段 "))
+        self.assertEqual(
+            first_boss["display_label"],
+            f'{first_boss["display_theme"]["alias"]} {first_boss["label"]}',
+        )
+        self.assertEqual(
+            first_boss["coordinate_source"],
+            "overpass_risk_ribbon_route_distance_interpolation",
+        )
+        machao_boss = next(
+            point
+            for point in view["boss_points"]["boss_points"]
+            if point["display_theme"]["alias"] == "馬超壁"
+        )
+        self.assertEqual(machao_boss["display_label"], "馬超壁 高壓路段 69.8K（高壓）")
+        self.assertAlmostEqual(machao_boss["lat"], 23.89207000180547)
+        self.assertAlmostEqual(machao_boss["lon"], 121.22026385047626)
+        self.assertEqual(
+            machao_boss["coordinate_source"],
+            "overpass_risk_ribbon_route_distance_interpolation",
+        )
         boss_layer = next(
             layer for layer in view["map_layers"] if layer["layer_id"] == "boss-points"
         )
@@ -688,6 +709,14 @@ class AdminAfterActionTests(unittest.TestCase):
             "item.boss_point_id || item.source_mcp_id || item.source_candidate_id",
             response.text,
         )
+        self.assertIn("function isBossPoint(item)", response.text)
+        self.assertIn("function bossDisplayText(item)", response.text)
+        self.assertIn("function bossSummaryText(item)", response.text)
+        self.assertIn("function bossDetailPayload(item)", response.text)
+        self.assertIn('canonical_centerline: "overpass_risk_ribbon"', response.text)
+        self.assertIn('gpx_evidence_axis: "projected_to_overpass_risk_ribbon"', response.text)
+        self.assertIn("label: bossDisplayText(item)", response.text)
+        self.assertIn("sublabel: bossSummaryText(item)", response.text)
         self.assertIn(
             'String(point.challenge_fit?.band || "").includes("not_ready")',
             response.text,
@@ -745,7 +774,10 @@ class AdminAfterActionTests(unittest.TestCase):
         self.assertIn('id="evidenceTreeTabs"', response.text)
         self.assertIn("EVIDENCE_TREE_TABS", response.text)
         self.assertIn("function appendEvidenceTreeGroup(tree, tabId, title, items, mapper, open = false", response.text)
-        self.assertIn("details.open = Boolean(open);", response.text)
+        self.assertIn(
+            "details.open = Boolean(open || state.evidenceTreeOpenGroups.has(groupKey));",
+            response.text,
+        )
         self.assertIn('label: "CP / Timeline"', response.text)
         self.assertIn('label: "Map / Risk"', response.text)
         self.assertIn('label: "Completed GPX"', response.text)
@@ -819,6 +851,8 @@ class AdminAfterActionTests(unittest.TestCase):
         self.assertIn('"data-label-summary": pointLabelCalloutSummary(item, pointLabelCalloutTitle(item, label))', response.text)
         self.assertIn("item?.map_label", response.text)
         self.assertIn("item?.display_label", response.text)
+        self.assertIn("bossDisplayText(item)", response.text)
+        self.assertIn("if (isBossPoint(item)) return bossSummaryText(item);", response.text)
         self.assertIn("gis_cp_cluster\\.", response.text)
         self.assertIn("function updatePointLabels", response.text)
         self.assertIn('"data-label-layer"', response.text)
@@ -878,6 +912,8 @@ class AdminAfterActionTests(unittest.TestCase):
         self.assertNotIn('), true, "segment"', response.text)
         self.assertNotIn('), true, "timeline"', response.text)
         self.assertIn('data-layer="imagery"', response.text)
+        self.assertIn('<input type="checkbox" data-layer="imagery"> Imagery', response.text)
+        self.assertIn('<input type="checkbox" data-layer="rudy-twmap" checked> Rudy+TW', response.text)
         self.assertIn('data-layer="osm"', response.text)
         self.assertIn('data-layer="weather-api"', response.text)
         self.assertIn("OSM_TILE_URL_TEMPLATE", response.text)
@@ -985,10 +1021,17 @@ class AdminAfterActionTests(unittest.TestCase):
         self.assertIn("function nextPlanCandidatesFor(item)", html)
         self.assertIn("function renderNextPlanCandidates(item)", html)
         self.assertIn("AFTER_ACTION_NEXT_PLAN_CANDIDATES", html)
-        self.assertIn('document.getElementById("detailJson").textContent = JSON.stringify(item, null, 2)', html)
-        self.assertIn("function selectEvidence(item)", html)
+        self.assertIn(
+            'document.getElementById("detailJson").textContent = JSON.stringify(isBossPoint(item) ? bossDetailPayload(item) : item, null, 2)',
+            html,
+        )
+        self.assertIn("function selectEvidence(item, options = {})", html)
         self.assertIn("setDetail(item);", html)
-        self.assertIn("highlightTreeNode(item);", html)
+        self.assertIn(
+            "highlightTreeNode(item, {expand: options.expandEvidenceGroup === true});",
+            html,
+        )
+        self.assertIn("highlightEvidenceTimelineFor(item);", html)
         self.assertIn("highlightMapFor(item);", html)
         self.assertIn("loadCase();", html)
 

@@ -233,8 +233,8 @@
       min-width: 48px;
       border: 1px solid var(--border);
       border-radius: 6px;
-      background: var(--panel-soft);
-      color: var(--text);
+      background: #111827;
+      color: #f8fafc;
       padding: 2px 5px;
       font-size: 11px;
       font-variant-numeric: tabular-nums;
@@ -1146,7 +1146,7 @@
       inset: 0;
       pointer-events: none;
       overflow: hidden;
-      z-index: 5;
+      z-index: 40;
     }
     .map-label-badge,
     .map-label-callout {
@@ -1194,7 +1194,7 @@
 
     .map-hover-tooltip {
       position: absolute;
-      z-index: 7;
+      z-index: 10000;
       max-width: min(320px, 70vw);
       padding: 7px 9px;
       border: 1px solid rgba(71, 85, 105, .38);
@@ -2161,9 +2161,9 @@
                     <details class="layer-advanced">
                       <summary>Advanced layers</summary>
                     <div class="filters" aria-label="Advanced map layers">
-                      <label title="Imagery layer"><input type="checkbox" data-layer="imagery" checked> Imagery</label>
+                      <label title="Imagery layer"><input type="checkbox" data-layer="imagery"> Imagery</label>
                       <label title="Rudy Map hiking topographic layer"><input type="checkbox" data-layer="rudy"> Rudy</label>
-                      <label title="Rudy Map with TWMap style"><input type="checkbox" data-layer="rudy-twmap"> Rudy+TW</label>
+                      <label title="Rudy Map with TWMap style"><input type="checkbox" data-layer="rudy-twmap" checked> Rudy+TW</label>
                       <label title="Taiwan color relief terrain shading layer"><input type="checkbox" data-layer="relief"> Relief</label>
                       <label title="Taiwan geology 2016 layer"><input type="checkbox" data-layer="geology"> Geology</label>
                       <label title="Taiwan 1/5000 topographic layer"><input type="checkbox" data-layer="topo-5k"> Topo 5K</label>
@@ -2417,9 +2417,41 @@
       panY: 0,
       zoomSelection: null,
       focusedLabelIds: new Set(),
+      mapKeyboardActive: false,
       hoveredMapTarget: null
     };
     const runtimeMap = document.getElementById("runtimeMap");
+    const MAP_LAYER_RANKS = {
+      imagery: 0,
+      "rudy": 4,
+      "rudy-twmap": 4,
+      relief: 4,
+      geology: 4,
+      "topo-5k": 4,
+      forest: 4,
+      osm: 8,
+      terrain: 20,
+      hazards: 22,
+      "risk-ribbon": 24,
+      "risk-heatmap": 24,
+      "risk-delta": 24,
+      "soil-moisture": 26,
+      "antecedent-rain": 26,
+      "weather-api": 28,
+      corridors: 40,
+      overpass: 42,
+      route: 44,
+      "reference-tracks": 46,
+      retreat: 48,
+      segments: 50,
+      "risk-score": 60,
+      checkpoints: 62,
+      pois: 64,
+      "route-notes": 66,
+      mcp: 68,
+      "boss-points": 70,
+      events: 72
+    };
     const EVENT_MAP_REFS = {
       debug_session_started: ["runtime"],
       debug_session_completed: ["runtime"],
@@ -2986,6 +3018,7 @@
 
     function mapFeatureTitle(item = {}) {
       return [
+        bossDisplayText(item),
         item?.map_label,
         item?.display_label,
         item?.short_label,
@@ -3006,6 +3039,7 @@
     }
 
     function mapFeatureSummary(item = {}) {
+      if (isBossPoint(item)) return bossSummaryText(item);
       return [
         item?.evidence_type,
         item?.checkpoint_type,
@@ -3052,6 +3086,42 @@
       updatePointLabels();
       updateMapZoomIndicator();
       updateScaleBar();
+    }
+    function mapLayerRank(node) {
+      return MAP_LAYER_RANKS[node.dataset.layerGroup] ?? 50;
+    }
+    function orderMapLayerGroups() {
+      [...runtimeMap.querySelectorAll(":scope > [data-layer-group]")]
+        .sort((left, right) => mapLayerRank(left) - mapLayerRank(right))
+        .forEach(node => runtimeMap.appendChild(node));
+    }
+    function mapKeyboardPanDelta(event) {
+      const step = event.shiftKey ? 140 : 70;
+      if (event.key === "ArrowUp") return [0, -step];
+      if (event.key === "ArrowDown") return [0, step];
+      if (event.key === "ArrowLeft") return [-step, 0];
+      if (event.key === "ArrowRight") return [step, 0];
+      return null;
+    }
+    function isEditableKeyboardTarget(target) {
+      const tag = String(target?.tagName || "").toLowerCase();
+      return target?.isContentEditable || ["input", "select", "textarea"].includes(tag);
+    }
+    function handleMapKeyboardPan(event) {
+      if (event.defaultPrevented) return;
+      const delta = mapKeyboardPanDelta(event);
+      if (!delta || event.altKey || event.ctrlKey || event.metaKey || isEditableKeyboardTarget(event.target)) return;
+      const mapHasFocus = document.activeElement === runtimeMap || runtimeMap.contains(document.activeElement);
+      if (!debugPageState.mapKeyboardActive && !mapHasFocus) return;
+      event.preventDefault();
+      panMap(delta[0], delta[1]);
+    }
+    function activateMapKeyboardPan() {
+      debugPageState.mapKeyboardActive = true;
+      runtimeMap.focus({preventScroll: true});
+    }
+    function deactivateMapKeyboardPanOutside(event) {
+      if (!runtimeMap.contains(event.target)) debugPageState.mapKeyboardActive = false;
     }
     function updateMapZoomIndicator(extraLabel = "") {
       const node = document.getElementById("zoomLevel");
@@ -3606,6 +3676,7 @@
       runtimeMap.appendChild(svgEl("g", {"data-layer-group": "route-notes"}));
       runtimeMap.appendChild(svgEl("g", {"data-layer-group": "events"}));
       runtimeMap.appendChild(svgEl("g", {"data-layer-group": "weather-api"}));
+      orderMapLayerGroups();
       updateLayers();
       applyMapViewport();
     }
@@ -5009,9 +5080,39 @@
       if (checkpoint) return String(Number(checkpoint[1])).padStart(3, "0");
       return text.length > 16 ? `${text.slice(0, 15).trim()}…` : text;
     }
+    function isBossPoint(item) {
+      return Boolean(item?.boss_point_id || String(item?.evidence_type || "").includes("boss_point"));
+    }
+    function bossDistanceLabel(item) {
+      const distance = Number(item?.route_pressure_profile?.mid_distance_m ?? item?.evidence_summary?.route_pressure_profile?.mid_distance_m ?? item?.route_position?.distance_m);
+      return Number.isFinite(distance) ? `${(distance / 1000).toFixed(1)}K` : "";
+    }
+    function bossDisplayText(item) {
+      if (!isBossPoint(item)) return "";
+      const displayLabel = String(item?.display_label || "").trim();
+      if (displayLabel) return displayLabel;
+      const alias = String(item?.display_theme?.alias || "Boss").trim();
+      const label = String(item?.label || "").trim();
+      return [alias, label].filter(Boolean).join(" ") || String(item?.boss_point_id || "Boss Point");
+    }
+    function bossSummaryText(item) {
+      if (!isBossPoint(item)) return "";
+      const demand = item?.route_boss_demand || {};
+      const fit = item?.challenge_fit || {};
+      const pressure = item?.evidence_summary?.route_pressure_profile || item?.route_pressure_profile || {};
+      const distanceLabel = bossDistanceLabel(item);
+      const source = item?.coordinate_source || item?.map_coordinate_source || pressure.coordinate_source || "overpass_risk_ribbon_route_distance_interpolation";
+      return [
+        `demand ${Math.round(demand.score || 0)} ${demand.band || ""}`.trim(),
+        `fit ${Math.round(fit.score || 0)} ${fit.band || ""}`.trim(),
+        distanceLabel,
+        source
+      ].filter(Boolean).join(" | ");
+    }
 
     function pointLabelText(item) {
       const label = [
+        bossDisplayText(item),
         item?.map_label,
         item?.display_label,
         item?.short_label,
@@ -5033,6 +5134,9 @@
 
     function pointLabelRefs(item) {
       return [...new Set([
+        item?.boss_point_id,
+        item?.source_mcp_id,
+        item?.source_candidate_id,
         item?.source_id,
         item?.candidate_id,
         item?.checkpoint_id,
@@ -5059,6 +5163,7 @@
     }
     function pointLabelTitle(item, fallbackLabel) {
       return [
+        bossDisplayText(item),
         item?.display_label,
         item?.map_label,
         item?.name,
@@ -5068,6 +5173,7 @@
       ].map(readablePointLabel).find(Boolean) || "selected point";
     }
     function pointLabelSummary(item) {
+      if (isBossPoint(item)) return bossSummaryText(item);
       return [
         item?.route_note_summary,
         item?.summary,
@@ -5306,12 +5412,14 @@
       return null;
     }
 
-    function focusMapBox(box, event = null) {
+    function focusMapBox(box, event = null, options = {}) {
       if (!box) return false;
-      const paddedWidth = Math.max(box.width + 90, 1);
-      const paddedHeight = Math.max(box.height + 90, 1);
-      const fitZoom = Math.min(MAP_WIDTH / paddedWidth, MAP_HEIGHT / paddedHeight);
-      debugPageState.zoom = focusZoomForBox(box, fitZoom, event);
+      if (options.preserveZoom === false) {
+        const paddedWidth = Math.max(box.width + 90, 1);
+        const paddedHeight = Math.max(box.height + 90, 1);
+        const fitZoom = Math.min(MAP_WIDTH / paddedWidth, MAP_HEIGHT / paddedHeight);
+        debugPageState.zoom = focusZoomForBox(box, fitZoom, event);
+      }
       debugPageState.panX = box.x + box.width / 2 - MAP_WIDTH / 2;
       debugPageState.panY = box.y + box.height / 2 - MAP_HEIGHT / 2;
       if (!isPointFocusEvent(event)) clampMapPan();
@@ -5322,7 +5430,7 @@
     function focusMapForEvent(event, options = {}) {
       if (options.label === true) debugPageState.focusedLabelIds = focusedLabelIdsForEvent(event);
       else if (options.label === false) debugPageState.focusedLabelIds = new Set();
-      const focused = focusMapBox(mapBoxForEvent(event), event);
+      const focused = focusMapBox(mapBoxForEvent(event), event, {preserveZoom: options.preserveZoom !== false});
       if (focused) highlightMapForEvent(event);
       updatePointLabels();
       return focused;
@@ -5410,13 +5518,15 @@
       if (event.button !== 0) return;
       const start = mapPointFromPointerEvent(event);
       if (!start) return;
+      const clickTarget = event.target?.closest?.('[data-map-hover="true"]') || null;
       debugPageState.zoomSelection = {
         pointerId: event.pointerId,
         screenX: event.clientX,
         screenY: event.clientY,
         start,
         current: start,
-        moved: false
+        moved: false,
+        clickTarget
       };
       runtimeMap.classList.add("is-selecting");
       runtimeMap.setPointerCapture(event.pointerId);
@@ -5447,6 +5557,8 @@
         const box = boxFromPoints(selection.start, selection.current);
         if (isZoomOutDrag(selection)) zoomMapOutFromBox(box, selectionZoomFactor(selection));
         else zoomMapToBox(box);
+      } else if (selection?.clickTarget) {
+        selectTimelineForMapTarget(selection.clickTarget);
       }
     }
 
@@ -5487,8 +5599,37 @@
       });
       renderSelectedDetails(event);
       highlightMapForEvent(event);
+      if (node && options.expandGroup === true) node.closest("details.timeline-group-details")?.setAttribute("open", "");
       if (node && options.focus) node.focus();
       if (options.syncUrl !== false) writeUrlSelection({ eventId: debugPageState.selectedEventId });
+    }
+
+    function eventForMapTarget(target) {
+      const genericRefs = new Set(["runtime", "imagery", "osm", "terrain"]);
+      const rawRefs = [
+        ...text(target?.dataset?.mapRef, "").split(/\s+/).filter(Boolean),
+        target?.dataset?.sourceId
+      ].filter(Boolean);
+      const preferredRefs = rawRefs.filter(ref => !genericRefs.has(ref));
+      const refs = new Set(preferredRefs.length ? preferredRefs : rawRefs);
+      if (!refs.size) return null;
+      return debugPageState.events.find(event => {
+        const eventRefs = new Set(mapRefsForEvent(event));
+        return [...refs].some(ref => eventRefs.has(ref));
+      }) || null;
+    }
+
+    function selectTimelineForMapTarget(target) {
+      const event = eventForMapTarget(target);
+      if (!event) return false;
+      const index = debugPageState.events.findIndex(candidate => candidate.event_id === event.event_id);
+      const eventSelector = event.event_id ? `[data-event-id="${selectorValue(event.event_id)}"]` : "";
+      const node = eventSelector
+        ? document.querySelector(`.timeline-group-details ${eventSelector}`) || document.querySelector(eventSelector)
+        : document.querySelector(`[data-event-index="${index}"]`);
+      selectTimelineNode(event, index, {node, focus: true, expandGroup: true});
+      focusMapForEvent(event, {label: false});
+      return true;
     }
 
     function eventByTimelineNode(node) {
@@ -5742,6 +5883,7 @@
     }
 
     function bindDebugControls() {
+      bindLayerMenuDismiss();
       document.getElementById("debugClearButton").addEventListener("click", clearDebugProjection);
       document.getElementById("mobileIngressResetButton").addEventListener("click", resetMobileWearableIngressProjection);
       document.querySelectorAll("[data-layer]").forEach(input => input.addEventListener("change", updateLayers));
@@ -5756,6 +5898,11 @@
       document.getElementById("panDown").addEventListener("click", () => panMap(0, 70));
       document.getElementById("panLeft").addEventListener("click", () => panMap(-70, 0));
       document.getElementById("panRight").addEventListener("click", () => panMap(70, 0));
+      runtimeMap.setAttribute("tabindex", "0");
+      runtimeMap.addEventListener("pointerdown", activateMapKeyboardPan);
+      runtimeMap.addEventListener("keydown", handleMapKeyboardPan);
+      document.addEventListener("keydown", handleMapKeyboardPan);
+      document.addEventListener("pointerdown", deactivateMapKeyboardPanOutside);
       runtimeMap.addEventListener("pointerdown", beginMapRectangleZoom);
       runtimeMap.addEventListener("pointermove", updateMapRectangleZoom);
       runtimeMap.addEventListener("pointermove", handleMapHoverPointerMove);
@@ -5765,9 +5912,45 @@
       runtimeMap.addEventListener("pointercancel", hideMapHoverTooltip);
     }
 
+    function closeLayerMenus(exceptMenu = null) {
+      document.querySelectorAll(".layer-menu[open]").forEach(menu => {
+        if (menu !== exceptMenu) menu.removeAttribute("open");
+      });
+    }
+    function layerMenuFromEvent(event) {
+      const path = typeof event.composedPath === "function" ? event.composedPath() : [];
+      const menuFromPath = path.find(node => node?.classList?.contains?.("layer-menu"));
+      if (menuFromPath) return menuFromPath;
+      return event.target?.closest?.(".layer-menu") || null;
+    }
+    function dismissLayerMenusForEvent(event) {
+      if (!layerMenuFromEvent(event)) closeLayerMenus();
+    }
+    function bindLayerMenuDismiss() {
+      if (window.__scoutLayerMenuDismissVersion === "v2") return;
+      window.__scoutLayerMenuDismissVersion = "v2";
+      document.querySelectorAll(".layer-menu").forEach(menu => {
+        menu.addEventListener("toggle", () => {
+          if (menu.open) closeLayerMenus(menu);
+        });
+      });
+      ["pointerdown", "mousedown", "touchstart", "click"].forEach(eventName => {
+        [window, document, document.documentElement, document.body]
+          .filter(Boolean)
+          .forEach(target => {
+            target.addEventListener(eventName, dismissLayerMenusForEvent, {capture: true, passive: true});
+          });
+      });
+      document.addEventListener("focusin", dismissLayerMenusForEvent, {capture: true});
+      document.addEventListener("keydown", event => {
+        if (event.key === "Escape") closeLayerMenus();
+      });
+    }
+
     const initialUrlSelection = readUrlSelection();
     debugPageState.selectedTabId = initialUrlSelection.tabId;
     debugPageState.selectedEventId = initialUrlSelection.eventId;
+    bindLayerMenuDismiss();
     bindAssistantControls();
     bindDebugControls();
     bindDebugTabs();

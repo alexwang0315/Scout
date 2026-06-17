@@ -574,7 +574,7 @@
       inset: 10px;
       pointer-events: none;
       overflow: hidden;
-      z-index: 5;
+      z-index: 40;
     }
     .map-label-badge,
     .map-label-callout {
@@ -1401,7 +1401,7 @@
     }
     .hover-hint {
       position: fixed;
-      z-index: 10;
+      z-index: 10000;
       max-width: 330px;
       padding: 8px 10px;
       border: 1px solid var(--line);
@@ -1574,9 +1574,9 @@
                   <details class="layer-advanced">
                     <summary>Advanced layers</summary>
                   <div class="filters" aria-label="Advanced map layers">
-                    <label title="Imagery layer"><input type="checkbox" data-layer="imagery" checked> Imagery</label>
+                    <label title="Imagery layer"><input type="checkbox" data-layer="imagery"> Imagery</label>
                     <label title="Rudy Map hiking topographic layer"><input type="checkbox" data-layer="rudy"> Rudy</label>
-                    <label title="Rudy Map with TWMap style"><input type="checkbox" data-layer="rudy-twmap"> Rudy+TW</label>
+                    <label title="Rudy Map with TWMap style"><input type="checkbox" data-layer="rudy-twmap" checked> Rudy+TW</label>
                     <label title="Taiwan color relief terrain shading layer"><input type="checkbox" data-layer="relief"> Relief</label>
                     <label title="Taiwan geology 2016 layer"><input type="checkbox" data-layer="geology"> Geology</label>
                     <label title="Taiwan 1/5000 topographic layer"><input type="checkbox" data-layer="topo-5k"> Topo 5K</label>
@@ -2081,12 +2081,15 @@
       activeTab: initialActiveTab(),
       activeEvidenceTreeTab: "default",
       evidenceTreeTabCounts: {},
+      suppressEvidenceTreeAutoSwitch: false,
       selectedSectionId: "",
       zoom: 1,
       panX: 0,
       panY: 0,
       zoomSelection: null,
       focusedLabelIds: new Set(),
+      mapKeyboardActive: false,
+      evidenceTreeOpenGroups: new Set(),
       selectedMapCoordinate: null,
       reviewQueueCursor: -1,
       selectedReviewCandidateRefs: new Set(),
@@ -2096,6 +2099,37 @@
     const svg = document.getElementById("map");
     const hoverHint = document.getElementById("hoverHint");
     let treeClickFocusTimer = null;
+    const MAP_LAYER_RANKS = {
+      imagery: 0,
+      "rudy": 4,
+      "rudy-twmap": 4,
+      relief: 4,
+      geology: 4,
+      "topo-5k": 4,
+      forest: 4,
+      osm: 8,
+      terrain: 20,
+      hazards: 22,
+      "risk-ribbon": 24,
+      "risk-heatmap": 24,
+      "risk-delta": 24,
+      "soil-moisture": 26,
+      "antecedent-rain": 26,
+      "weather-api": 28,
+      corridors: 40,
+      overpass: 42,
+      route: 44,
+      "reference-tracks": 46,
+      retreat: 48,
+      segments: 50,
+      "risk-score": 60,
+      checkpoints: 62,
+      pois: 64,
+      "route-notes": 66,
+      mcp: 68,
+      "boss-points": 70,
+      events: 72
+    };
 
     function apiBase() {
       const params = new URLSearchParams(location.search);
@@ -2724,7 +2758,83 @@
       return text.length > maxChars ? `${text.slice(0, maxChars - 3)}...` : text;
     }
     function evidenceSourceId(item) {
-      return item?.boss_point_id || item?.source_mcp_id || item?.source_candidate_id || item?.source_id || item?.mcp_id || item?.candidate_id || item?.segment_id || item?.poi_id || item?.hazard_id || "";
+      return item?.boss_point_id || item?.source_mcp_id || item?.source_candidate_id || item?.source_id || item?.mcp_id || item?.candidate_id || item?.segment_id || item?.poi_id || item?.hazard_id || item?.category_id || "";
+    }
+    function isBossPoint(item) {
+      return Boolean(item?.boss_point_id || String(item?.evidence_type || "").includes("boss_point"));
+    }
+    function bossDistanceLabel(item) {
+      const distance = Number(item?.route_pressure_profile?.mid_distance_m ?? item?.evidence_summary?.route_pressure_profile?.mid_distance_m ?? item?.route_position?.distance_m);
+      return Number.isFinite(distance) ? `${(distance / 1000).toFixed(1)}K` : "";
+    }
+    function bossDisplayText(item) {
+      if (!isBossPoint(item)) return "";
+      const displayLabel = String(item?.display_label || "").trim();
+      if (displayLabel) return displayLabel;
+      const alias = String(item?.display_theme?.alias || "Boss").trim();
+      const label = String(item?.label || "").trim();
+      return [alias, label].filter(Boolean).join(" ") || String(item?.boss_point_id || "Boss Point");
+    }
+    function bossSummaryText(item) {
+      if (!isBossPoint(item)) return "";
+      const demand = item?.route_boss_demand || {};
+      const fit = item?.challenge_fit || {};
+      const pressure = item?.evidence_summary?.route_pressure_profile || item?.route_pressure_profile || {};
+      const distanceLabel = bossDistanceLabel(item);
+      const source = item?.coordinate_source || item?.map_coordinate_source || pressure.coordinate_source || "overpass_risk_ribbon_route_distance_interpolation";
+      return [
+        `demand ${Math.round(demand.score || 0)} ${demand.band || ""}`.trim(),
+        `fit ${Math.round(fit.score || 0)} ${fit.band || ""}`.trim(),
+        distanceLabel,
+        source
+      ].filter(Boolean).join(" | ");
+    }
+    function bossDetailPayload(item) {
+      if (!isBossPoint(item)) return item || {};
+      const pressure = item?.evidence_summary?.route_pressure_profile || item?.route_pressure_profile || {};
+      return {
+        display_label: bossDisplayText(item),
+        boss_point_id: item.boss_point_id,
+        label: item.label,
+        display_theme: item.display_theme,
+        lat: item.lat,
+        lon: item.lon,
+        coordinate_source: item.coordinate_source || item.map_coordinate_source || pressure.coordinate_source,
+        map_coordinate_source: item.map_coordinate_source,
+        canonical_centerline: "overpass_risk_ribbon",
+        gpx_evidence_axis: "projected_to_overpass_risk_ribbon",
+        route_position: item.route_position,
+        route_boss_demand: {
+          score: item.route_boss_demand?.score,
+          band: item.route_boss_demand?.band,
+          components: item.route_boss_demand?.components
+        },
+        challenge_fit: {
+          score: item.challenge_fit?.score,
+          band: item.challenge_fit?.band,
+          user_basis: item.challenge_fit?.user_basis
+        },
+        route_pressure_profile: {
+          pressure_peak_id: pressure.pressure_peak_id,
+          mid_distance_m: pressure.mid_distance_m,
+          route_pressure_score: pressure.route_pressure_score,
+          band: pressure.band,
+          coordinate_source: pressure.coordinate_source
+        },
+        evidence_summary: {
+          risk: item.evidence_summary?.risk || item.evidence_summary?.max_risk_score,
+          terrain: item.evidence_summary?.terrain,
+          slow_passage: item.evidence_summary?.slow_passage,
+          rest_stop_context: item.evidence_summary?.rest_stop_context,
+          nearby_route_note_count: item.evidence_summary?.nearby_route_note_count,
+          nearby_warning_note_count: item.evidence_summary?.nearby_warning_note_count
+        },
+        candidate_only: item.candidate_only,
+        runtime_safety_truth: item.runtime_safety_truth,
+        source_path: item.source_path,
+        source_refs: item.source_refs,
+        source_attribution: item.source_attribution
+      };
     }
     function categoryColor(category) {
       const colors = {
@@ -2750,6 +2860,7 @@
       if (type.includes("risk_ribbon")) return "risk";
       if (type.includes("risk_heatmap")) return "risk";
       if (type.includes("risk_delta")) return "risk";
+      if (type.includes("boss_point") || item?.boss_point_id) return "mcp";
       if (type.includes("major_critical_point") || type.includes("mcp_")) return "mcp";
       if (type.includes("review_workbench")) return "review_group";
       if (type.includes("checkpoint")) return "checkpoint";
@@ -2762,10 +2873,65 @@
       if (type.includes("review") || type.includes("queue")) return "review";
       return "route";
     }
+    function evidenceTreeTabForItem(item) {
+      const type = String(item?.evidence_type || "");
+      const category = evidenceCategory(item);
+      if (category === "review" || category === "review_group" || item?.candidate_ref) return "review";
+      if (category === "reference" || type.includes("capability")) return "completed";
+      if (
+        category === "risk"
+        || ["overpass", "poi", "hazard", "retreat", "reference"].includes(category)
+        || type.includes("soil")
+        || type.includes("rain")
+        || type.includes("weather")
+      ) return "map_risk";
+      if (category === "route" && (type.includes("section") || type.includes("summary"))) return "info";
+      return "default";
+    }
+    function evidenceTimelineCategoryForItem(item) {
+      const type = String(item?.evidence_type || "").toLowerCase();
+      const sourceId = String(evidenceSourceId(item) || "").toLowerCase();
+      const category = evidenceCategory(item);
+      if (item?.category_id) return item.category_id;
+      if (category === "checkpoint") return "checkpoints";
+      if (category === "segment") return "segments";
+      if (category === "mcp") return "mcp";
+      if (category === "risk" || type.includes("risk")) return "risk";
+      if (category === "review" || category === "review_group") return "review";
+      if (type.includes("gis") || sourceId.includes("gis_cp") || item?.nearby_group_id) return "gis_cp";
+      if (category === "reference") return type.includes("capability") || sourceId.includes("capability") ? "capability_timeline" : "reference_tracks";
+      if (type.includes("runtime") || sourceId.includes("runtime_handoff")) return "runtime_handoff";
+      if (["overpass", "poi", "hazard", "retreat"].includes(category) || sourceId.startsWith("map.")) return "map_context";
+      return "route";
+    }
+    function highlightEvidenceTimelineFor(item, options = {}) {
+      if (!state.view) return;
+      const categoryId = evidenceTimelineCategoryForItem(item);
+      if (!categoryId) return;
+      if (state.activeEvidenceTreeTab !== "default") {
+        state.activeEvidenceTreeTab = "default";
+        state.suppressEvidenceTreeAutoSwitch = true;
+        try {
+          renderEvidenceTree(state.view);
+        } finally {
+          state.suppressEvidenceTreeAutoSwitch = false;
+        }
+      }
+      const selector = `[data-evidence-timeline-category="${selectorValue(categoryId)}"]`;
+      document.querySelectorAll("#evidenceTree button.is-selected").forEach(node => node.classList.remove("is-selected"));
+      const match = document.querySelector(selector);
+      if (match) {
+        match.classList.add("is-selected");
+        openEvidenceGroupForMatch(match, {expand: options.expand === true});
+        match.scrollIntoView({block: "nearest"});
+      }
+    }
     function hintTitle(item) {
+      if (isBossPoint(item)) return bossDisplayText(item);
       return item?.label || item?.title || item?.candidate_id || item?.source_id || item?.evidence_type || "evidence";
     }
     function hintSummary(item) {
+      if (isBossPoint(item)) return bossSummaryText(item);
       if (item?.evidence_type === "pretrip_capability_timeline_import") {
         return `${item.counts?.edge_count || 0} segments | read-only post-analysis`;
       }
@@ -3071,6 +3237,42 @@
       updateMapZoomIndicator();
       updateScaleBar();
     }
+    function mapLayerRank(node) {
+      return MAP_LAYER_RANKS[node.dataset.layerGroup] ?? 50;
+    }
+    function orderMapLayerGroups() {
+      [...svg.querySelectorAll(":scope > [data-layer-group]")]
+        .sort((left, right) => mapLayerRank(left) - mapLayerRank(right))
+        .forEach(node => svg.appendChild(node));
+    }
+    function mapKeyboardPanDelta(event) {
+      const step = event.shiftKey ? 140 : 70;
+      if (event.key === "ArrowUp") return [0, -step];
+      if (event.key === "ArrowDown") return [0, step];
+      if (event.key === "ArrowLeft") return [-step, 0];
+      if (event.key === "ArrowRight") return [step, 0];
+      return null;
+    }
+    function isEditableKeyboardTarget(target) {
+      const tag = String(target?.tagName || "").toLowerCase();
+      return target?.isContentEditable || ["input", "select", "textarea"].includes(tag);
+    }
+    function handleMapKeyboardPan(event) {
+      if (event.defaultPrevented) return;
+      const delta = mapKeyboardPanDelta(event);
+      if (!delta || event.altKey || event.ctrlKey || event.metaKey || isEditableKeyboardTarget(event.target)) return;
+      const mapHasFocus = document.activeElement === svg || svg.contains(document.activeElement);
+      if (!state.mapKeyboardActive && !mapHasFocus) return;
+      event.preventDefault();
+      panMap(delta[0], delta[1]);
+    }
+    function activateMapKeyboardPan() {
+      state.mapKeyboardActive = true;
+      svg.focus({preventScroll: true});
+    }
+    function deactivateMapKeyboardPanOutside(event) {
+      if (!svg.contains(event.target)) state.mapKeyboardActive = false;
+    }
     function updateMapZoomIndicator(extraLabel = "") {
       const node = document.getElementById("zoomLevel");
       if (!node) return;
@@ -3163,7 +3365,8 @@
       document.getElementById("detailTitle").textContent = hintTitle(item);
       document.getElementById("detailSource").textContent = `${item?.evidence_type || "evidence"} | ${item?.source_path || "no source path"}`;
       const routeNoteOption = selectedRouteNoteDraftOption();
-      document.getElementById("detailJson").textContent = JSON.stringify(routeNoteOption ? {...item, route_note_review_option: routeNoteOption} : (item || {}), null, 2);
+      const detailPayload = isBossPoint(item) ? bossDetailPayload(item) : (item || {});
+      document.getElementById("detailJson").textContent = JSON.stringify(routeNoteOption ? {...detailPayload, route_note_review_option: routeNoteOption} : detailPayload, null, 2);
       state.selectedSectionId = "";
       highlightSectionCard();
     }
@@ -3492,6 +3695,7 @@
     }
     function pointLabelText(item) {
       const label = [
+        bossDisplayText(item),
         item?.map_label,
         item?.display_label,
         item?.short_label,
@@ -3513,6 +3717,7 @@
     }
     function pointLabelCalloutTitle(item, fallbackLabel) {
       return [
+        bossDisplayText(item),
         item?.display_label,
         item?.map_label,
         item?.route_note_summary,
@@ -3522,6 +3727,7 @@
       ].map(readablePointLabel).find(Boolean) || fallbackLabel || "selected point";
     }
     function pointLabelCalloutSummary(item, title) {
+      if (isBossPoint(item)) return bossSummaryText(item);
       return [
         hintSummary(item),
         item?.source_path,
@@ -3720,12 +3926,14 @@
       const [x, y] = project(boundsFor(state.view), coordinate.lat, coordinate.lon);
       return pointBox(x, y);
     }
-    function focusMapBox(box, item = null) {
+    function focusMapBox(box, item = null, options = {}) {
       if (!box) return false;
-      const paddedWidth = Math.max(box.width + 90, 1);
-      const paddedHeight = Math.max(box.height + 90, 1);
-      const fitZoom = Math.min(MAP_WIDTH / paddedWidth, MAP_HEIGHT / paddedHeight);
-      state.zoom = focusZoomForBox(box, fitZoom, item);
+      if (options.preserveZoom === false) {
+        const paddedWidth = Math.max(box.width + 90, 1);
+        const paddedHeight = Math.max(box.height + 90, 1);
+        const fitZoom = Math.min(MAP_WIDTH / paddedWidth, MAP_HEIGHT / paddedHeight);
+        state.zoom = focusZoomForBox(box, fitZoom, item);
+      }
       state.panX = box.x + box.width / 2 - MAP_WIDTH / 2;
       state.panY = box.y + box.height / 2 - MAP_HEIGHT / 2;
       clampMapPan();
@@ -3735,7 +3943,7 @@
     function focusMapFor(item, options = {}) {
       if (options.label === true) state.focusedLabelIds = focusLabelIdsForItem(item);
       else if (options.label === false) state.focusedLabelIds = new Set();
-      const focused = focusMapBox(mapBoxFor(item), item);
+      const focused = focusMapBox(mapBoxFor(item), item, {preserveZoom: options.preserveZoom !== false});
       if (focused) highlightMapFor(item);
       updatePointLabels();
       return focused;
@@ -3916,17 +4124,26 @@
       if (value === null) return null;
       return parseRectangleInput(value);
     }
-    function highlightTreeNode(item) {
+    function highlightTreeNode(item, options = {}) {
       document.querySelectorAll(".tree button.is-selected").forEach(node => node.classList.remove("is-selected"));
       const id = selectorValue(evidenceSourceId(item));
-      const match = document.querySelector(`[data-tree-source-id="${id}"]`);
+      if (!id) return;
+      let match = document.querySelector(`[data-tree-source-id="${id}"]`);
+      if (!match && state.view && !state.suppressEvidenceTreeAutoSwitch) {
+        const tabId = evidenceTreeTabForItem(item);
+        if (state.activeEvidenceTreeTab !== tabId) {
+          state.activeEvidenceTreeTab = tabId;
+          renderEvidenceTree(state.view);
+          match = document.querySelector(`[data-tree-source-id="${id}"]`);
+        }
+      }
       if (match) {
         match.classList.add("is-selected");
-        match.closest("details")?.setAttribute("open", "");
+        openEvidenceGroupForMatch(match, {expand: options.expand === true});
         match.scrollIntoView({block: "nearest"});
       }
     }
-    function selectEvidence(item) {
+    function selectEvidence(item, options = {}) {
       setDetail(item);
       if (Array.isArray(item?.bulk_candidate_refs) && item.bulk_candidate_refs.length) {
         state.selectedReviewCandidateRefs = new Set(item.bulk_candidate_refs);
@@ -3935,7 +4152,8 @@
         setWorkspaceStatus(`Selected review group ${hintTitle(item)} with ${item.bulk_candidate_refs.length} bulk-eligible items.`, "success");
       }
       highlightMapFor(item);
-      highlightTreeNode(item);
+      if (options.timeline) highlightEvidenceTimelineFor(item, {expand: options.expandEvidenceGroup === true});
+      else highlightTreeNode(item, {expand: options.expandEvidenceGroup === true});
       renderAssistantPromptSuggestions(state.selected);
     }
     function setWorkspaceStatus(message, mode = "") {
@@ -5138,13 +5356,13 @@
       node.addEventListener("mouseenter", event => showHint(event, item));
       node.addEventListener("mousemove", moveHint);
       node.addEventListener("mouseleave", hideHint);
-      node.addEventListener("focus", event => { selectEvidence(item); showHint(event, item); });
+      node.addEventListener("focus", event => { selectEvidence(item, {timeline: true, expandEvidenceGroup: true}); showHint(event, item); });
       node.addEventListener("blur", hideHint);
-      node.addEventListener("click", event => { selectEvidence(item); focusMapFor(item); showHint(event, item); });
+      node.addEventListener("click", event => { selectEvidence(item, {timeline: true, expandEvidenceGroup: true}); focusMapFor(item); showHint(event, item); });
       node.addEventListener("keydown", event => {
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
-          selectEvidence(item);
+          selectEvidence(item, {timeline: true, expandEvidenceGroup: true});
           focusMapFor(item);
         }
       });
@@ -5428,6 +5646,7 @@
       const weatherApiGroup = el("g", {"data-layer-group": "weather-api"});
       renderWeatherOverlay(weatherApiGroup, state.weatherOverlay, MAP_WIDTH, MAP_HEIGHT);
       svg.appendChild(weatherApiGroup);
+      orderMapLayerGroups();
       updateLayers();
       applyMapViewport();
       highlightMapFor(state.selected);
@@ -5464,6 +5683,7 @@
         button.setAttribute("data-bulk-selected", "true");
       }
       button.setAttribute("data-map-target-ids", (item?.map_target_ids || []).join(" "));
+      if (item?.category_id) button.setAttribute("data-evidence-timeline-category", item.category_id);
       button.setAttribute("data-tree-search-text", itemSearchText(item, label, sublabel));
       const labelRow = document.createElement("span");
       labelRow.className = "tree-label";
@@ -5500,10 +5720,29 @@
       });
       return button;
     }
-    function treeGroup(title, items, mapper, open = false, category = "route") {
+    function evidenceGroupKey(tabId, title) {
+      return `${tabId}:${title}`;
+    }
+    function openEvidenceGroupForMatch(match, options = {}) {
+      const details = match?.closest?.("details");
+      if (!details || options.expand !== true) return;
+      details.open = true;
+      if (details.dataset.evidenceGroupKey) state.evidenceTreeOpenGroups.add(details.dataset.evidenceGroupKey);
+    }
+    function trackEvidenceGroupToggle(details) {
+      details.addEventListener("toggle", () => {
+        const key = details.dataset.evidenceGroupKey;
+        if (!key) return;
+        if (details.open) state.evidenceTreeOpenGroups.add(key);
+        else state.evidenceTreeOpenGroups.delete(key);
+      });
+    }
+    function treeGroup(title, items, mapper, open = false, category = "route", groupKey = "") {
       const details = document.createElement("details");
-      details.open = Boolean(open);
+      if (groupKey) details.dataset.evidenceGroupKey = groupKey;
+      details.open = Boolean(open || state.evidenceTreeOpenGroups.has(groupKey));
       details.style.setProperty("--category-color", categoryColor(category));
+      trackEvidenceGroupToggle(details);
       const summary = document.createElement("summary");
       summary.textContent = `${title} (${items.length})`;
       const group = document.createElement("div");
@@ -5524,23 +5763,37 @@
         const button = document.createElement("button");
         button.type = "button";
         button.className = "tree-tab";
+        button.dataset.evidenceTreeTab = tab.id;
         button.style.setProperty("--category-color", categoryColor(tab.category));
         button.setAttribute("role", "tab");
         button.setAttribute("aria-selected", state.activeEvidenceTreeTab === tab.id ? "true" : "false");
         button.classList.toggle("is-active", state.activeEvidenceTreeTab === tab.id);
         button.innerHTML = `<strong>${tab.label}</strong><small>${state.evidenceTreeTabCounts[tab.id] || 0} items</small>`;
-        button.addEventListener("click", () => {
-          state.activeEvidenceTreeTab = tab.id;
-          if (state.view) renderEvidenceTree(state.view);
-        });
         tabs.appendChild(button);
       });
+    }
+    function setActiveEvidenceTreeTab(tabId, options = {}) {
+      if (!EVIDENCE_TREE_TABS.some(tab => tab.id === tabId)) return;
+      state.activeEvidenceTreeTab = tabId;
+      const previousSuppress = state.suppressEvidenceTreeAutoSwitch;
+      if (options.suppressAutoSwitch === true) state.suppressEvidenceTreeAutoSwitch = true;
+      try {
+        if (state.view) renderEvidenceTree(state.view);
+        else renderEvidenceTreeTabs();
+      } finally {
+        state.suppressEvidenceTreeAutoSwitch = previousSuppress;
+      }
+    }
+    function handleEvidenceTreeTabClick(event) {
+      const button = event.target.closest("[data-evidence-tree-tab]");
+      if (!button) return;
+      setActiveEvidenceTreeTab(button.dataset.evidenceTreeTab, {suppressAutoSwitch: true});
     }
     function appendEvidenceTreeGroup(tree, tabId, title, items, mapper, open = false, category = "route") {
       const safeItems = items || [];
       state.evidenceTreeTabCounts[tabId] = (state.evidenceTreeTabCounts[tabId] || 0) + safeItems.length;
       if (state.activeEvidenceTreeTab !== tabId) return;
-      tree.appendChild(treeGroup(title, safeItems, mapper, open, category));
+      tree.appendChild(treeGroup(title, safeItems, mapper, open, category, evidenceGroupKey(tabId, title)));
     }
     function renderEvidenceTreeEmptyIfNeeded(tree) {
       if (tree.children.length) return;
@@ -5690,11 +5943,11 @@
       appendEvidenceTreeGroup(tree, "default", "Evidence Timeline", view.evidence_timeline?.categories || [], item => ({
         label: item.label || item.category_id,
         sublabel: `${item.count || 0} evidence | ${item.available ? "available" : "empty"}`
-      }), true, "timeline");
+      }), false, "timeline");
       appendEvidenceTreeGroup(tree, "default", "Checkpoints", view.checkpoints, item => ({
         label: item.label || item.candidate_id,
         sublabel: `${item.checkpoint_type} | ${item.review_state}`
-      }), true, "checkpoint");
+      }), false, "checkpoint");
       appendEvidenceTreeGroup(tree, "default", "AI GIS CP", view.gis_perception_timeline?.checkpoint_candidates || [], item => ({
         label: item.display_label || item.map_label || item.route_note_summary || item.candidate_id,
         sublabel: `${item.checkpoint_type} | group ${item.nearby_group_id || "-"} | ${item.route_note_freshness || "unknown"}`
@@ -5706,11 +5959,11 @@
       appendEvidenceTreeGroup(tree, "default", "Major Critical Points", view.major_critical_points?.candidates || [], item => ({
         label: item.label || item.mcp_id,
         sublabel: `${item.confidence} | ${item.cp_support_reconciliation?.support_status || "support-review"} | ${Math.round(item.distance_m || 0)}m | ${Math.round((item.mention_ratio || 0) * 100)}% / ${item.accepted_evidence_page_count || 0} pages | families ${(item.source_family_coverage?.present || []).join(", ") || "-"} | suppressed ${(item.nearby_points_suppressed_by_spacing || []).length}`
-      }), true, "mcp");
+      }), false, "mcp");
       appendEvidenceTreeGroup(tree, "default", "Boss Points", view.boss_points?.boss_points || [], item => ({
-        label: `${item.display_theme?.alias || "Boss"} ${item.label || item.boss_point_id}`,
-        sublabel: `${item.route_boss_demand?.band || "demand"} ${Math.round(item.route_boss_demand?.score || 0)} | fit ${Math.round(item.challenge_fit?.score || 0)} | ${item.challenge_fit?.band || "review"}`
-      }), true, "mcp");
+        label: bossDisplayText(item),
+        sublabel: bossSummaryText(item)
+      }), false, "mcp");
       appendEvidenceTreeGroup(tree, "map_risk", "Risk Score", view.risk_score?.points || [], item => ({
         label: `${item.score_field || "pretrip_risk"} ${Number(item.pretrip_risk || 0).toFixed(1)}`,
         sublabel: `L${item.risk_level || "-"} | ${Math.round(item.distance_m || 0)}m${item.teii_20m == null ? "" : ` | TEII ${Number(item.teii_20m).toFixed(1)}`}`
@@ -5738,11 +5991,11 @@
       appendEvidenceTreeGroup(tree, "default", "Segments", view.segments, item => ({
         label: item.label || item.candidate_id,
         sublabel: `${item.from_candidate_id} -> ${item.to_candidate_id} | ${Math.round(item.distance_m)}m`
-      }), true, "segment");
+      }), false, "segment");
       appendEvidenceTreeGroup(tree, "map_risk", "Retreat Routes", view.retreat_routes, item => ({
         label: item.label || item.candidate_id,
         sublabel: item.review_state || "candidate"
-      }), true, "retreat");
+      }), false, "retreat");
       appendEvidenceTreeGroup(tree, "map_risk", "Reference GPX", view.reference_tracks?.reference_tracks || [], item => ({
         label: item.label || item.candidate_id,
         sublabel: `${Math.round((item.route?.distance_m || 0) / 1000)}km | ${item.route?.point_count || 0} pts`
@@ -5761,7 +6014,7 @@
       appendEvidenceTreeGroup(tree, "review", "Review Groups", view.review_workbench?.category_groups || [], item => ({
         label: item.label,
         sublabel: `${item.item_count} items | ${item.bulk_eligible_count} bulk | ${item.review_action}`
-      }), true, "review_group");
+      }), false, "review_group");
       appendEvidenceTreeGroup(tree, "review", "Review Queue", view.review_queue.items, item => ({
         label: item.title,
         sublabel: `${item.severity} | ${item.category}`
@@ -5993,6 +6246,7 @@
       }
     }
     function bindControls() {
+      bindLayerMenuDismiss();
       bindAssistantControls();
       document.querySelectorAll("[data-layer]").forEach(input => input.addEventListener("change", updateLayers));
       document.querySelectorAll("[data-layer-preset]").forEach(button => {
@@ -6007,9 +6261,15 @@
       document.getElementById("panDown").addEventListener("click", () => panMap(0, 70));
       document.getElementById("panLeft").addEventListener("click", () => panMap(-70, 0));
       document.getElementById("panRight").addEventListener("click", () => panMap(70, 0));
+      svg.setAttribute("tabindex", "0");
+      svg.addEventListener("pointerdown", activateMapKeyboardPan);
+      svg.addEventListener("keydown", handleMapKeyboardPan);
+      document.addEventListener("keydown", handleMapKeyboardPan);
+      document.addEventListener("pointerdown", deactivateMapKeyboardPanOutside);
       document.getElementById("cpSegmentSearch").addEventListener("input", applyTreeFilters);
       document.getElementById("featureCategoryFilter").addEventListener("change", applyTreeFilters);
       document.getElementById("featureStatusFilter").addEventListener("change", applyTreeFilters);
+      document.getElementById("evidenceTreeTabs").addEventListener("click", handleEvidenceTreeTabClick);
       document.getElementById("reviewCategoryFilter").addEventListener("change", () => {
         state.reviewQueueCursor = -1;
         applyTreeFilters();
@@ -6072,6 +6332,40 @@
         finishMapRectangleZoom(event, clickEvent => setSelectedMapCoordinate(coordinateFromMapPointerEvent(clickEvent)));
       });
       svg.addEventListener("pointercancel", cancelMapRectangleZoom);
+    }
+    function closeLayerMenus(exceptMenu = null) {
+      document.querySelectorAll(".layer-menu[open]").forEach(menu => {
+        if (menu !== exceptMenu) menu.removeAttribute("open");
+      });
+    }
+    function layerMenuFromEvent(event) {
+      const path = typeof event.composedPath === "function" ? event.composedPath() : [];
+      const menuFromPath = path.find(node => node?.classList?.contains?.("layer-menu"));
+      if (menuFromPath) return menuFromPath;
+      return event.target?.closest?.(".layer-menu") || null;
+    }
+    function dismissLayerMenusForEvent(event) {
+      if (!layerMenuFromEvent(event)) closeLayerMenus();
+    }
+    function bindLayerMenuDismiss() {
+      if (window.__scoutLayerMenuDismissVersion === "v2") return;
+      window.__scoutLayerMenuDismissVersion = "v2";
+      document.querySelectorAll(".layer-menu").forEach(menu => {
+        menu.addEventListener("toggle", () => {
+          if (menu.open) closeLayerMenus(menu);
+        });
+      });
+      ["pointerdown", "mousedown", "touchstart", "click"].forEach(eventName => {
+        [window, document, document.documentElement, document.body]
+          .filter(Boolean)
+          .forEach(target => {
+            target.addEventListener(eventName, dismissLayerMenusForEvent, {capture: true, passive: true});
+          });
+      });
+      document.addEventListener("focusin", dismissLayerMenusForEvent, {capture: true});
+      document.addEventListener("keydown", event => {
+        if (event.key === "Escape") closeLayerMenus();
+      });
     }
     async function reloadProjectView() {
       const selectedSourceId = evidenceSourceId(state.selected);
