@@ -663,6 +663,10 @@ def test_scout_pretrip_boss_points_synthesize_facade(tmp_path: Path) -> None:
             "boss-points-synthesize",
             "--project-root",
             str(project_root),
+            "--slow-passage-min-span-m",
+            "500",
+            "--pressure-profile-bin-m",
+            "500",
             "--authorized-by",
             "operator.alex",
             "--json",
@@ -672,8 +676,11 @@ def test_scout_pretrip_boss_points_synthesize_facade(tmp_path: Path) -> None:
     assert exit_code == 0
     output = json.loads(payload["outputs"]["stdout"])
     assert output["artifact_kind"] == "scout_pretrip_boss_points_synthesize_tool_output"
+    assert output["result"]["policy"]["slow_passage_min_span_m"] == 500.0
+    assert output["result"]["policy"]["pressure_profile_bin_m"] == 500.0
+    assert output["result"]["route_pressure_profile_summary"]["sample_count"] > 0
     assert output["result"]["boss_points"][0]["display_theme"]["alias"] == "呂布關"
-    assert output["result"]["boss_points"][0]["label"] == "大崩壁"
+    assert output["result"]["boss_points"][0]["label"].startswith("高壓路段")
     assert output["result"]["challenge_fit_summary"]["decision"] == (
         "CHANGE_PLAN_OR_ADD_BUFFER"
     )

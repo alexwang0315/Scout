@@ -278,6 +278,26 @@ route note、大家都慢的歷史 GPX 通過狀態、休息/互等隊友跡象�
 risk、risk heat/ribbon、事故/救援脈絡、網路上反覆提及的 named point、
 斷崖/好漢坡/崩壁/細瘦稜線等名稱訊號，以及中後段救援困難度。
 
+Scout 必須先產生全線 `Route Pressure Profile`：以固定距離 bin 掃描整條
+route，把 terrain/risk、爬升下降、route notes、slow-passage、MCP/named
+point support、resume/rest context 聚合成 `route_pressure_score`。Boss
+Point 不應只從既有 MCP candidate pool 排序，而應從 profile peaks 加上
+MCP、named point、review evidence 合成候選後再排名。如此 top-5 Boss 才
+代表全線壓力峰值，而不是「已被命名候選點」內的相對排序。
+
+Route Pressure Profile 的共同中心線必須是 Overpass-backed risk ribbon，
+不是 user/historical/public GPX。GPX 在 Scout 中是時間、停留、慢行、行為
+與 route note evidence；這些 evidence 必須投影到 Overpass/risk ribbon
+後才可參與壓力 profile。若 GPX 因電力不足、關機重開、山谷飄移或長時間
+直線跨越而變得粗略，該段只能標成 weak/low interpretability，不得移動
+Boss Point 的中心線，也不得直接把粗略 GPX 幾何當成地形壓力真相。
+
+慢速通過不得用單點停留直接替代。Scout 必須區分「大家在休息點停留」與
+「大家在一段路上持續慢速移動」。慢速通過 evidence 預設至少需要涵蓋
+500m route span，才可以加到 `observed_impedance`；保線所、山屋、水源、
+午餐點、營地等 rest-stop context 只能作為解釋脈絡，不應單獨把平坦休息
+區升級成 Boss Point。
+
 `User Pace Coefficient / Energy Reserve` 是使用者或隊伍最脆弱成員的
 能力與當下儲備，不得用隊伍平均值替代。沒有穿戴式生命徵象時，仍可用
 completed trip GPX、capability timeline、地形-時間模型、休息頻率、後段

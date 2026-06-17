@@ -988,8 +988,17 @@ def test_boss_points_challenge_fit_surfaces_in_admin_and_debug(tmp_path: Path):
     assert boss_points["status"] == "completed"
     assert boss_points["counts"]["boss_point_count"] == 5
     assert boss_points["counts"]["geojson_feature_count"] == 5
+    assert boss_points["counts"]["route_pressure_sample_count"] > 0
+    assert boss_points["counts"]["route_pressure_peak_count"] > 0
     assert boss_points["formula"] == {
-        "route_boss_demand": "sum(component_scores) * late_trip_multiplier",
+        "route_boss_demand": (
+            "sum(component_scores) * late_trip_multiplier * "
+            "rest_stop_deemphasis_multiplier"
+        ),
+        "route_pressure_profile": (
+            "full-route fixed-distance pressure bins -> local peaks -> "
+            "Boss candidate merge"
+        ),
         "challenge_fit": (
             "route_boss_demand_score * (1 + pace_energy_vulnerability)"
         ),
@@ -999,20 +1008,29 @@ def test_boss_points_challenge_fit_surfaces_in_admin_and_debug(tmp_path: Path):
     assert boss_points["challenge_fit_summary"]["decision"] == (
         "CHANGE_PLAN_OR_ADD_BUFFER"
     )
-    assert boss_points["challenge_fit_summary"]["highest_challenge_fit_label"] == (
-        "大崩壁"
-    )
+    assert boss_points["challenge_fit_summary"][
+        "highest_challenge_fit_label"
+    ].startswith("高壓路段")
     assert boss_points["boundary"]["runtime_safety_truth"] is False
     assert boss_points["boundary"]["phase1_runtime_mutation_allowed"] is False
     first = boss_points["boss_points"][0]
     _assert_pretrip_candidate_metadata(first)
-    assert first["label"] == "大崩壁"
+    assert first["label"].startswith("高壓路段")
+    assert first["display_label"] == "呂布關 " + first["label"]
+    assert first["source_candidate_id"].startswith("route_pressure_peak.")
     assert first["display_theme"]["alias"] == "呂布關"
-    assert first["map_coordinate_source"] == "source_coordinate"
-    assert first["coordinate_uncertain"] is False
+    assert first["lat"] is not None
+    assert first["lon"] is not None
+    assert first["coordinate_source"] == (
+        "overpass_risk_ribbon_route_distance_interpolation"
+    )
+    assert first["map_coordinate_source"] == (
+        "overpass_risk_ribbon_route_distance_interpolation"
+    )
     assert first["map_target_ids"][0] == first["boss_point_id"]
     assert first["display_theme"]["decorative_only"] is True
-    assert first["route_boss_demand"]["score"] > 60
+    assert first["route_boss_demand"]["score"] > 80
+    assert first["route_boss_demand"]["components"]["route_pressure_profile"] > 0
     assert first["challenge_fit"]["score"] == 100
     assert first["challenge_fit"]["user_basis"] == (
         "slowest_member_or_private_energy_reserve"
@@ -1023,19 +1041,21 @@ def test_boss_points_challenge_fit_surfaces_in_admin_and_debug(tmp_path: Path):
     assert first["source_attribution"][0]["source_kind"] == (
         "boss_point_challenge_fit"
     )
+    assert any(
+        point["source_candidate_id"].startswith("route_pressure_peak.")
+        for point in boss_points["boss_points"]
+    )
     machao = next(
         point
         for point in boss_points["boss_points"]
         if point["display_theme"]["alias"] == "馬超壁"
     )
-    assert machao["source_coordinate"] == {"lat": 24.0, "lon": 121.0}
-    assert machao["map_coordinate_source"] == "route_distance_interpolation"
-    assert machao["coordinate_uncertain"] is True
-    assert machao["source_coordinate_out_of_route_bounds"] is True
-    assert 24.03 < machao["lat"] < 24.06
-    assert 121.2 < machao["lon"] < 121.3
-    assert machao["map_target_ids"][0] == machao["boss_point_id"]
-    assert machao["source_mcp_id"] in machao["map_target_ids"]
+    assert machao["display_label"] == "馬超壁 高壓路段 69.8K（高壓）"
+    assert machao["lat"] == 23.89207000180547
+    assert machao["lon"] == 121.22026385047626
+    assert machao["coordinate_source"] == (
+        "overpass_risk_ribbon_route_distance_interpolation"
+    )
 
     planning_sections = {
         section["id"]: section
@@ -1053,14 +1073,11 @@ def test_boss_points_challenge_fit_surfaces_in_admin_and_debug(tmp_path: Path):
     )
     assert debug["counts"]["boss_point_count"] == 5
     assert debug["boss_points"]["counts"]["boss_point_count"] == 5
-    assert debug["boss_points"]["boss_points"][0]["label"] == "大崩壁"
-    debug_machao = next(
-        point
-        for point in debug["boss_points"]["boss_points"]
-        if point["display_theme"]["alias"] == "馬超壁"
+    assert debug["boss_points"]["boss_points"][0]["label"].startswith("高壓路段")
+    assert debug["boss_points"]["boss_points"][0]["coordinate_source"] == (
+        "overpass_risk_ribbon_route_distance_interpolation"
     )
-    assert debug_machao["map_coordinate_source"] == "route_distance_interpolation"
-    assert debug_machao["source_coordinate"] == {"lat": 24.0, "lon": 121.0}
+    assert debug["boss_points"]["route_pressure_profile_summary"]["peak_count"] > 0
 
 
 def test_builds_admin_view_from_local_workspace_project_root(tmp_path):

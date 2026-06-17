@@ -278,6 +278,8 @@ def _add_pretrip_group(subparsers: argparse._SubParsersAction) -> None:
     boss_points.add_argument("--top-n", type=int, default=5)
     boss_points.add_argument("--route-note-radius-m", type=float, default=300.0)
     boss_points.add_argument("--risk-window-m", type=float, default=300.0)
+    boss_points.add_argument("--slow-passage-min-span-m", type=float, default=500.0)
+    boss_points.add_argument("--pressure-profile-bin-m", type=float, default=500.0)
     boss_points.add_argument("--generated-at", default=None)
     boss_points.add_argument("--dry-run", action="store_true")
     boss_points.add_argument("--authorized-by", default=None)
@@ -755,6 +757,8 @@ def _tool_request_for_args(args: argparse.Namespace) -> tuple[str, dict[str, Any
             "top_n": args.top_n,
             "route_note_radius_m": args.route_note_radius_m,
             "risk_window_m": args.risk_window_m,
+            "slow_passage_min_span_m": args.slow_passage_min_span_m,
+            "pressure_profile_bin_m": args.pressure_profile_bin_m,
         }
         _set_path(request, "project_root", args.project_root)
         _set_path(request, "workspace_root", args.workspace_root)

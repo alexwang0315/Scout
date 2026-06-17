@@ -53,6 +53,10 @@
   "metadata": {
     "standard_alignment": "SCOUT_OUTDOOR_AI_AGENT_STANDARD Sec. 7 Readiness & Pace Fit",
     "formula": "Route Boss Demand vs User Pace Coefficient / Energy Reserve = Challenge Fit",
+    "default_slow_passage_min_span_m": 500,
+    "default_pressure_profile_bin_m": 500,
+    "route_pressure_profile_ref": "outputs/route_pressure_profile.json",
+    "rest_stop_evidence_deemphasized": true,
     "network_policy": "no_live_network_fetch",
     "candidate_only": true,
     "runtime_safety_truth": false,

@@ -2661,6 +2661,10 @@ def _pretrip_boss_points_synthesize(args: argparse.Namespace) -> tuple[int, dict
         top_n=int(request.get("top_n", 5)),
         route_note_radius_m=float(request.get("route_note_radius_m", 300.0)),
         risk_window_m=float(request.get("risk_window_m", 300.0)),
+        slow_passage_min_span_m=float(
+            request.get("slow_passage_min_span_m", 500.0)
+        ),
+        pressure_profile_bin_m=float(request.get("pressure_profile_bin_m", 500.0)),
         generated_at=request.get("generated_at"),
         dry_run=bool(args.dry_run),
     )

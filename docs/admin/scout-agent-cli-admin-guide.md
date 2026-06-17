@@ -431,16 +431,36 @@ Challenge Fit
 python -m scout_cli pretrip boss-points-synthesize \
   --project-root /data/scout/admin/pretrip-workspaces/chilai_nanhua_day1 \
   --top-n 5 \
+  --slow-passage-min-span-m 500 \
+  --pressure-profile-bin-m 500 \
   --json
 ```
 
 The canonical outputs are:
 
+- `outputs/route_pressure_profile.json`
+- `outputs/route_pressure_profile.geojson`
 - `outputs/boss_points.json`
 - `outputs/boss_points.geojson`
 
 `Route Boss Demand` measures the route obstacle itself. `Challenge Fit` applies
 the slowest or most vulnerable member basis plus energy reserve vulnerability.
+The first stage is `Route Pressure Profile`: the full route is scored in fixed
+distance bins, local pressure peaks are selected, and those peaks are merged
+with MCP/named-point/review evidence before Boss ranking. This prevents the
+Boss list from meaning only "top MCP candidates" and lets unnamed hard route
+sections enter human review.
+The pressure profile uses the Overpass-backed risk ribbon as the canonical
+centerline. Historical/public/user GPX is timing and behavior evidence only: its
+notes, segments, rest/resume evidence, and MCP candidates are projected onto the
+risk ribbon before scoring. GPX gaps, power-off resumes, or near-straight long
+time spans must be marked as weak or low-interpretability evidence instead of
+moving the route pressure centerline.
+Slow-passage evidence must span a real route section, not just a point stop:
+the default threshold is 500m. Rest stops such as huts, maintenance stations,
+water points, lunch stops, and camp areas are preserved as context but are
+deemphasized unless they also have independent hard-terrain, warning, risk, or
+long-span slow-passage evidence.
 The flow must not use average team pace to hide a weak link, must not embed raw
 health payloads, and must not call `/safety/*`. The outputs are pretrip
 candidate evidence for human review and buffer planning, not runtime safety
