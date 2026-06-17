@@ -64,6 +64,8 @@ OPTIONAL_PROJECT_ARTIFACTS: tuple[tuple[str, str], ...] = (
     ("route_architecture", "route_architecture_ref"),
     ("pace_coefficients", "pace_coefficients_ref"),
     ("team_pace_fit", "team_pace_fit_ref"),
+    ("route_pressure_profile", "route_pressure_profile_ref"),
+    ("route_pressure_profile_geojson", "route_pressure_profile_geojson_ref"),
     ("boss_points", "boss_points_ref"),
     ("boss_points_geojson", "boss_points_geojson_ref"),
     ("offline_map_manifest", "offline_map_manifest_ref"),
@@ -470,11 +472,18 @@ def _project_artifact_summary(artifact_kind: str, payload: Any) -> dict[str, Any
     if artifact_kind == "boss_points":
         boundary = payload.get("boundary", {})
         challenge = payload.get("challenge_fit_summary", {})
+        pressure = payload.get("route_pressure_profile_summary", {})
         return {
             "project_id": payload.get("project_id"),
             "schema_version": payload.get("schema_version"),
             "status": payload.get("status"),
             "boss_point_count": payload.get("boss_point_count"),
+            "route_pressure_sample_count": pressure.get("sample_count")
+            if isinstance(pressure, dict)
+            else None,
+            "route_pressure_peak_count": pressure.get("peak_count")
+            if isinstance(pressure, dict)
+            else None,
             "decision": challenge.get("decision")
             if isinstance(challenge, dict)
             else None,
@@ -486,6 +495,41 @@ def _project_artifact_summary(artifact_kind: str, payload: Any) -> dict[str, Any
             "candidate_only": boundary.get("candidate_only"),
             "runtime_safety_truth": boundary.get("runtime_safety_truth"),
             "average_pace_used": boundary.get("average_pace_used"),
+        }
+
+    if artifact_kind == "route_pressure_profile":
+        boundary = payload.get("boundary", {})
+        counts = payload.get("counts", {})
+        summary = payload.get("summary", {})
+        return {
+            "project_id": payload.get("project_id"),
+            "schema_version": payload.get("schema_version"),
+            "sample_count": counts.get("sample_count")
+            if isinstance(counts, dict)
+            else None,
+            "peak_count": counts.get("peak_count") if isinstance(counts, dict) else None,
+            "highest_route_pressure_score": summary.get(
+                "highest_route_pressure_score"
+            )
+            if isinstance(summary, dict)
+            else None,
+            "candidate_only": boundary.get("candidate_only"),
+            "runtime_safety_truth": boundary.get("runtime_safety_truth"),
+        }
+
+    if artifact_kind == "route_pressure_profile_geojson":
+        metadata = payload.get("metadata", {})
+        return {
+            "project_id": metadata.get("project_id")
+            if isinstance(metadata, dict)
+            else None,
+            "feature_count": len(payload.get("features", [])),
+            "candidate_only": metadata.get("candidate_only")
+            if isinstance(metadata, dict)
+            else None,
+            "runtime_safety_truth": metadata.get("runtime_safety_truth")
+            if isinstance(metadata, dict)
+            else None,
         }
 
     if artifact_kind == "boss_points_geojson":

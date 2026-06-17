@@ -1329,6 +1329,8 @@ def resolve_pretrip_project_artifacts(
         "mcp_review_log": "mcp_review_log_ref",
         "boss_points": "boss_points_ref",
         "boss_points_geojson": "boss_points_geojson_ref",
+        "route_pressure_profile": "route_pressure_profile_ref",
+        "route_pressure_profile_geojson": "route_pressure_profile_geojson_ref",
         "spatial_imprint_candidates": "spatial_imprint_candidates_ref",
         "spatial_imprint_reviews": "spatial_imprint_reviews_ref",
         "spatial_imprint_set": "spatial_imprint_set_ref",
@@ -4064,6 +4066,39 @@ def _boss_point_map_target_ids(point: dict[str, Any]) -> list[str]:
     )
 
 
+def _boss_point_declared_coordinate_source(point: dict[str, Any]) -> str:
+    route_pressure = (
+        (point.get("route_boss_demand") or {}).get("route_pressure_profile")
+        if isinstance(point.get("route_boss_demand"), dict)
+        else {}
+    )
+    if not isinstance(route_pressure, dict):
+        route_pressure = {}
+    return str(
+        point.get("coordinate_source")
+        or route_pressure.get("coordinate_source")
+        or "source_coordinate"
+    )
+
+
+def _route_display_coordinate_source(route_display_geometry: dict[str, Any] | None) -> str:
+    if (
+        isinstance(route_display_geometry, dict)
+        and route_display_geometry.get("evidence_type")
+        == "pretrip_overpass_risk_ribbon_centerline"
+    ):
+        return "overpass_risk_ribbon_route_distance_interpolation"
+    return "route_distance_interpolation"
+
+
+def _boss_point_display_label(point: dict[str, Any]) -> str:
+    alias = str((point.get("display_theme") or {}).get("alias") or "").strip()
+    label = str(point.get("label") or "").strip()
+    if alias and label:
+        return f"{alias} {label}"
+    return label or alias or str(point.get("boss_point_id") or "Boss Point")
+
+
 def _boss_point_display_coordinate(
     point: dict[str, Any],
     *,
@@ -4075,10 +4110,12 @@ def _boss_point_display_coordinate(
         source_coordinate,
         route_bounds,
     ):
+        coordinate_source = _boss_point_declared_coordinate_source(point)
         return {
             "lat": source_coordinate["lat"],
             "lon": source_coordinate["lon"],
-            "map_coordinate_source": "source_coordinate",
+            "coordinate_source": coordinate_source,
+            "map_coordinate_source": coordinate_source,
             "coordinate_uncertain": False,
             "source_coordinate": dict(source_coordinate),
             "source_coordinate_out_of_route_bounds": False,
@@ -4092,10 +4129,12 @@ def _boss_point_display_coordinate(
     )
     interpolated = _route_coordinate_at_distance(route_display_geometry, distance_m)
     if interpolated is not None:
+        coordinate_source = _route_display_coordinate_source(route_display_geometry)
         metadata = {
             "lat": interpolated["lat"],
             "lon": interpolated["lon"],
-            "map_coordinate_source": "route_distance_interpolation",
+            "coordinate_source": coordinate_source,
+            "map_coordinate_source": coordinate_source,
             "coordinate_uncertain": True,
             "source_coordinate_out_of_route_bounds": source_coordinate is not None,
         }
@@ -4104,10 +4143,12 @@ def _boss_point_display_coordinate(
         return metadata
 
     if source_coordinate is not None:
+        coordinate_source = _boss_point_declared_coordinate_source(point)
         return {
             "lat": source_coordinate["lat"],
             "lon": source_coordinate["lon"],
-            "map_coordinate_source": "source_coordinate_unbounded_fallback",
+            "coordinate_source": coordinate_source,
+            "map_coordinate_source": f"{coordinate_source}_unbounded_fallback",
             "coordinate_uncertain": route_bounds is not None,
             "source_coordinate": dict(source_coordinate),
             "source_coordinate_out_of_route_bounds": route_bounds is not None,
@@ -4115,6 +4156,7 @@ def _boss_point_display_coordinate(
     return {
         "lat": None,
         "lon": None,
+        "coordinate_source": "missing_coordinate",
         "map_coordinate_source": "missing_coordinate",
         "coordinate_uncertain": True,
         "source_coordinate_out_of_route_bounds": False,
@@ -6758,6 +6800,9 @@ def _boss_points_summary(
     challenge_fit_summary = boss_points_payload.get("challenge_fit_summary")
     if not isinstance(challenge_fit_summary, dict):
         challenge_fit_summary = {}
+    pressure_summary = boss_points_payload.get("route_pressure_profile_summary")
+    if not isinstance(pressure_summary, dict):
+        pressure_summary = {}
     demand_band_counts = Counter(
         str((point.get("route_boss_demand") or {}).get("band") or "unknown")
         for point in points
@@ -6788,12 +6833,14 @@ def _boss_points_summary(
                 "boss_point_id": point.get("boss_point_id"),
                 "rank": point.get("rank"),
                 "label": point.get("label"),
+                "display_label": _boss_point_display_label(point),
                 "source_candidate_id": point.get("source_candidate_id"),
                 "source_mcp_id": point.get("source_mcp_id"),
                 "display_theme": point.get("display_theme") or {},
                 "lat": coordinate["lat"],
                 "lon": coordinate["lon"],
                 "source_coordinate": coordinate.get("source_coordinate"),
+                "coordinate_source": coordinate["coordinate_source"],
                 "map_coordinate_source": coordinate["map_coordinate_source"],
                 "coordinate_uncertain": coordinate["coordinate_uncertain"],
                 "source_coordinate_out_of_route_bounds": coordinate[
@@ -6860,6 +6907,8 @@ def _boss_points_summary(
                 len(points),
             ),
             "geojson_feature_count": len(geojson_features),
+            "route_pressure_sample_count": pressure_summary.get("sample_count"),
+            "route_pressure_peak_count": pressure_summary.get("peak_count"),
             "not_ready_without_plan_change_count": challenge_band_counts.get(
                 "not_ready_without_plan_change",
                 0,
@@ -6872,7 +6921,14 @@ def _boss_points_summary(
             "boss_hard_count": demand_band_counts.get("boss_hard", 0),
         },
         "formula": {
-            "route_boss_demand": "sum(component_scores) * late_trip_multiplier",
+            "route_boss_demand": (
+                "sum(component_scores) * late_trip_multiplier * "
+                "rest_stop_deemphasis_multiplier"
+            ),
+            "route_pressure_profile": (
+                "full-route fixed-distance pressure bins -> local peaks -> "
+                "Boss candidate merge"
+            ),
             "challenge_fit": (
                 "route_boss_demand_score * "
                 "(1 + pace_energy_vulnerability)"
@@ -6881,6 +6937,7 @@ def _boss_points_summary(
             "raw_health_payload_embedded": False,
         },
         "challenge_fit_summary": challenge_fit_summary,
+        "route_pressure_profile_summary": pressure_summary,
         "band_counts": {
             "route_boss_demand": dict(demand_band_counts),
             "challenge_fit": dict(challenge_band_counts),
