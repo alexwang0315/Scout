@@ -823,15 +823,36 @@ def test_layer_preparation_syncs_scout_risk_score_outputs(
     assert project["risk_ribbon_ref"] == "outputs/risk/risk_ribbon.geojson"
     assert project["calibrated_risk_heatmap_ref"] == "outputs/risk/calibrated_risk_heatmap.geojson"
     assert project["risk_attribution_diagnostic_ref"] == "outputs/risk/risk_attribution_diagnostic.json"
+    assert project["boss_points_ref"] == "outputs/boss_points.json"
+    assert project["boss_points_geojson_ref"] == "outputs/boss_points.geojson"
+    assert project["route_pressure_profile_ref"] == "outputs/route_pressure_profile.json"
+    assert project["route_pressure_profile_geojson_ref"] == (
+        "outputs/route_pressure_profile.geojson"
+    )
     assert project["risk_score_point_count"] == 2
     assert project["risk_route_sample_count"] == 3
     assert project["risk_ribbon_segment_count"] == 1
+    assert project["boss_point_count"] >= 0
     assert project["calibrated_risk_heatmap_segment_count"] == 2
     assert (project_root / project["risk_score_points_ref"]).is_file()
     assert (project_root / project["risk_ribbon_ref"]).is_file()
     assert (project_root / project["risk_route_profile_ref"]).is_file()
     assert (project_root / project["calibrated_risk_heatmap_ref"]).is_file()
     assert (project_root / project["calibrated_risk_heatmap_metadata_ref"]).is_file()
+    assert (project_root / project["boss_points_ref"]).is_file()
+    assert (project_root / project["boss_points_geojson_ref"]).is_file()
+    assert (project_root / project["route_pressure_profile_ref"]).is_file()
+    boss_synthesis = manifest["boss_point_synthesis"]
+    assert boss_synthesis["status"] == "completed"
+    assert boss_synthesis["trigger"] == "prepare_layers_with_risk"
+    assert boss_synthesis["boundary"]["runtime_safety_truth"] is False
+    assert boss_synthesis["boundary"]["phase1_runtime_mutation_allowed"] is False
+    boss_points = _load(project_root / project["boss_points_ref"])
+    assert boss_points["boundary"]["runtime_safety_truth"] is False
+    assert boss_points["boundary"]["phase1_runtime_mutation_allowed"] is False
+    route_pressure = _load(project_root / project["route_pressure_profile_ref"])
+    assert route_pressure["boundary"]["candidate_only"] is True
+    assert route_pressure["boundary"]["runtime_safety_truth"] is False
     terrain_samples = _load(project_root / project["terrain_route_samples_ref"])
     assert terrain_samples["artifact_kind"] == "pretrip_terrain_route_samples"
     assert terrain_samples["status"] == "ready_from_risk_route_profile"

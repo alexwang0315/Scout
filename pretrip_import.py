@@ -2384,6 +2384,19 @@ def _build_import_manifest(
             "report_ref": output_refs["rest_area_candidates_ref"],
             "policy": rest_area_report["policy"],
         },
+        "boss_point_synthesis": {
+            "status": "pending_map_preparation",
+            "trigger": "prepare_layers_with_risk",
+            "required_refs": [
+                "risk_ribbon_ref",
+                "segment_display_geometry_ref",
+                "mcp_candidates_ref",
+                "route_note_candidates_ref",
+            ],
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+            "review_gated": True,
+        },
         "planning_semantics": _planning_semantics(request),
         "boundary": {
             "pretrip_candidate_evidence_only": True,
@@ -3497,6 +3510,10 @@ def _project_payload(
             "imagery_bbox_scale_factor": imagery_scope["scale_factor"],
             "imagery_bbox_policy": imagery_scope["bbox_policy"],
             "imagery_tile_cache_policy": imagery_scope["tile_cache_policy"],
+            "boss_point_synthesis_status": "pending_map_preparation",
+            "boss_point_synthesis_trigger": "prepare_layers_with_risk",
+            "boss_point_synthesis_candidate_only": True,
+            "boss_point_synthesis_runtime_safety_truth": False,
         }
     )
     if mcp_import_summary is not None:

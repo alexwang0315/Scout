@@ -158,6 +158,10 @@ def test_pretrip_import_core_writes_pretrip_admin_and_debug_projections(tmp_path
     assert project["gis_perception_candidates_ref"] == "outputs/gis_perception_candidates.json"
     assert project["route_role"] == "golden_route"
     assert project["actual_user_track_available"] is False
+    assert project["boss_point_synthesis_status"] == "pending_map_preparation"
+    assert project["boss_point_synthesis_trigger"] == "prepare_layers_with_risk"
+    assert project["boss_point_synthesis_candidate_only"] is True
+    assert project["boss_point_synthesis_runtime_safety_truth"] is False
     assert route_summary["route_name"] == "golden route import"
     assert route_bundle["artifact_kind"] == (
         "pretrip_historical_gpx_route_evidence_bundle"
@@ -185,6 +189,9 @@ def test_pretrip_import_core_writes_pretrip_admin_and_debug_projections(tmp_path
     ]
     assert route_bundle["boundary"]["actual_user_track_available"] is False
     assert route_bundle["boundary"]["safety_api_called"] is False
+    assert manifest["boss_point_synthesis"]["status"] == "pending_map_preparation"
+    assert manifest["boss_point_synthesis"]["trigger"] == "prepare_layers_with_risk"
+    assert manifest["boss_point_synthesis"]["runtime_safety_truth"] is False
     assert "<trkpt" not in json.dumps(route_bundle, ensure_ascii=False).lower()
     assert reference_tracks["route_role"] == "golden_route"
     assert reference_tracks["golden_route"]["role"] == "golden_route_reference"
