@@ -113,6 +113,14 @@ def test_pretrip_admin_page_contains_expected_layout_contract():
     assert "item.boss_point_id" in html
     assert "item.source_mcp_id" in html
     assert "item.source_candidate_id" in html
+    assert "function isBossPoint(item)" in html
+    assert "function bossDisplayText(item)" in html
+    assert "function bossSummaryText(item)" in html
+    assert "function bossDetailPayload(item)" in html
+    assert 'canonical_centerline: "overpass_risk_ribbon"' in html
+    assert 'gpx_evidence_axis: "projected_to_overpass_risk_ribbon"' in html
+    assert "label: bossDisplayText(item)" in html
+    assert "sublabel: bossSummaryText(item)" in html
     assert 'String(point.challenge_fit?.band || "").includes("not_ready")' in html
     assert "item.cp_support_reconciliation?.support_status" in html
     assert "item.accepted_evidence_page_count" in html
@@ -159,6 +167,8 @@ def test_pretrip_admin_page_contains_expected_layout_contract():
     assert '"data-label-summary": pointLabelCalloutSummary(item, pointLabelCalloutTitle(item, label))' in html
     assert "item?.map_label" in html
     assert "item?.display_label" in html
+    assert "bossDisplayText(item)" in html
+    assert "if (isBossPoint(item)) return bossSummaryText(item);" in html
     assert "gis_cp_cluster\\." in html
     assert "function updatePointLabels" in html
     assert '"data-label-layer"' in html
@@ -280,6 +290,7 @@ def test_pretrip_admin_page_groups_dense_controls_and_uses_short_labels():
     assert "function updateMapZoomIndicator" in html
     assert "function mapStrokeWidthPx(node, scale)" in html
     assert "function mapMarkerRadiusPx(circle, scale, baseRadius)" in html
+    assert ".hover-hint {\n      position: fixed;\n      z-index: 10000;" in html
     assert 'circle.classList.contains("mcp-candidate") || circle.classList.contains("boss-point")' in html
     assert 'node.style.setProperty("stroke-width", `${strokeWidth.toFixed(2)}px`, priority)' in html
     assert "selectionZoomFactor(selection).toFixed(2)" in html
@@ -318,6 +329,21 @@ def test_pretrip_admin_page_groups_dense_controls_and_uses_short_labels():
     assert ".layer-menu-panel {\n        position: fixed;\n        top: 120px;\n        left: 12px;\n        right: 12px;\n        width: auto;" in html
     assert "function applyLayerPreset" in html
     assert "function syncLayerPresetButtons" in html
+    assert "function bindLayerMenuDismiss()" in html
+    assert "function closeLayerMenus(exceptMenu = null)" in html
+    assert "function layerMenuFromEvent(event)" in html
+    assert "event.composedPath()" in html
+    assert 'window.__scoutLayerMenuDismissVersion === "v2"' in html
+    assert "window.__scoutLayerMenuDismissBound" not in html
+    assert html.index("bindLayerMenuDismiss();") < html.index("bindAssistantControls();")
+    assert '["pointerdown", "mousedown", "touchstart", "click"].forEach(eventName =>' in html
+    assert "[window, document, document.documentElement, document.body]" in html
+    assert "target.addEventListener(eventName, dismissLayerMenusForEvent, {capture: true, passive: true});" in html
+    assert 'document.addEventListener("focusin", dismissLayerMenusForEvent, {capture: true});' in html
+    assert 'menu.addEventListener("toggle", () =>' in html
+    assert "if (menu.open) closeLayerMenus(menu);" in html
+    assert 'if (event.key === "Escape") closeLayerMenus();' in html
+    assert 'document.querySelectorAll(".layer-menu[open]")' in html
     assert "availablePresetLayerSet" in html
     assert "summary.textContent = `${enabled}/${layerInputs.length}`;" in html
     assert "Workspace edit tools" in html
@@ -598,8 +624,10 @@ def test_pretrip_admin_page_fetches_fixture_backed_read_only_project_api():
     assert "/admin/pretrip/projects/${PROJECT_ID}" in html
     assert "apiBase()" in html
     assert 'data-layer="imagery"' in html
+    assert '<input type="checkbox" data-layer="imagery"> Imagery' in html
     assert 'data-layer="rudy"' in html
     assert 'data-layer="rudy-twmap"' in html
+    assert '<input type="checkbox" data-layer="rudy-twmap" checked> Rudy+TW' in html
     assert 'data-layer="relief"' in html
     assert 'data-layer="geology"' in html
     assert 'data-layer="topo-5k"' in html
@@ -795,8 +823,19 @@ def test_pretrip_admin_page_renders_overpass_evidence_layer_and_tree():
     assert 'appendEvidenceTreeGroup(tree, "map_risk", "Reference GPX"' in html
     assert 'id="evidenceTreeTabs"' in html
     assert "EVIDENCE_TREE_TABS" in html
-    assert "details.open = Boolean(open);" in html
+    assert "button.dataset.evidenceTreeTab = tab.id" in html
+    assert "function setActiveEvidenceTreeTab(tabId, options = {})" in html
+    assert "function handleEvidenceTreeTabClick(event)" in html
+    assert "setActiveEvidenceTreeTab(button.dataset.evidenceTreeTab, {suppressAutoSwitch: true})" in html
+    assert 'document.getElementById("evidenceTreeTabs").addEventListener("click", handleEvidenceTreeTabClick)' in html
+    assert "details.open = Boolean(open || state.evidenceTreeOpenGroups.has(groupKey));" in html
     assert "details.open = open;" not in html
+    assert 'appendEvidenceTreeGroup(tree, "default", "Checkpoints", view.checkpoints, item => ({' in html
+    assert '}), true, "checkpoint");' not in html
+    assert '}), true, "segment");' not in html
+    assert '}), true, "mcp");' not in html
+    assert '}), true, "retreat");' not in html
+    assert '}), true, "review_group");' not in html
     assert 'label: "CP / Timeline"' in html
     assert 'label: "Map / Risk"' in html
     assert 'label: "Completed GPX"' in html
@@ -830,6 +869,35 @@ def test_pretrip_admin_page_has_round1_map_interaction_contract():
     assert "finishMapRectangleZoom" in html
     assert "highlightMapFor(state.selected)" in html
     assert "highlightTreeNode(state.selected)" in html
+    assert "function evidenceTreeTabForItem(item)" in html
+    assert "const tabId = evidenceTreeTabForItem(item)" in html
+    assert "state.activeEvidenceTreeTab = tabId" in html
+    assert "suppressEvidenceTreeAutoSwitch" in html
+    assert "const previousSuppress = state.suppressEvidenceTreeAutoSwitch" in html
+    assert "if (options.suppressAutoSwitch === true) state.suppressEvidenceTreeAutoSwitch = true;" in html
+    assert "state.suppressEvidenceTreeAutoSwitch = previousSuppress;" in html
+    assert "function evidenceTimelineCategoryForItem(item)" in html
+    assert "function highlightEvidenceTimelineFor(item, options = {})" in html
+    assert 'data-evidence-timeline-category' in html
+    assert "evidenceTreeOpenGroups: new Set()" in html
+    assert "function openEvidenceGroupForMatch(match, options = {})" in html
+    assert "function trackEvidenceGroupToggle(details)" in html
+    assert "openEvidenceGroupForMatch(match, {expand: options.expand === true})" in html
+    assert "details.open = Boolean(open || state.evidenceTreeOpenGroups.has(groupKey));" in html
+    assert 'appendEvidenceTreeGroup(tree, "default", "Evidence Timeline", view.evidence_timeline?.categories || [], item => ({' in html
+    assert 'selectEvidence(item, {timeline: true, expandEvidenceGroup: true})' in html
+    assert "const MAP_LAYER_RANKS" in html
+    assert "events: 72" in html
+    assert "function orderMapLayerGroups()" in html
+    assert ".map-label-overlay {\n      position: absolute;\n      inset: 10px;\n      pointer-events: none;\n      overflow: hidden;\n      z-index: 40;" in html
+    assert "function handleMapKeyboardPan(event)" in html
+    assert "mapKeyboardActive: false" in html
+    assert "function activateMapKeyboardPan()" in html
+    assert 'document.addEventListener("keydown", handleMapKeyboardPan)' in html
+    assert 'document.addEventListener("pointerdown", deactivateMapKeyboardPanOutside)' in html
+    assert 'svg.setAttribute("tabindex", "0")' in html
+    assert "focusMapBox(mapBoxFor(item), item, {preserveZoom: options.preserveZoom !== false})" in html
+    assert "if (options.preserveZoom === false)" in html
 
 
 def test_pretrip_admin_page_has_round1_cp_segment_panel_contract():
