@@ -16,6 +16,7 @@ from scout_companion_match_models import (
 )
 from scout_energy_models import load_wearable_activity_summaries
 from pretrip_boss_point_synthesis import synthesize_pretrip_boss_points
+from pretrip_mileage_tag_alignment import align_pretrip_workspace_mileage_tags
 from pretrip_admin_view import (
     build_pretrip_admin_view,
     list_pretrip_admin_projects,
@@ -977,6 +978,10 @@ def test_boss_points_challenge_fit_surfaces_in_admin_and_debug(tmp_path: Path):
         project_root,
         generated_at="2099-06-07T08:00:00Z",
     )
+    align_pretrip_workspace_mileage_tags(
+        project_root,
+        generated_at="2099-06-07T08:00:00Z",
+    )
 
     view = build_pretrip_admin_view(
         PROJECT_ID,
@@ -1060,6 +1065,13 @@ def test_boss_points_challenge_fit_surfaces_in_admin_and_debug(tmp_path: Path):
     assert machao["coordinate_source"] == (
         "overpass_risk_ribbon_route_distance_interpolation"
     )
+    mileage = view["mileage_tag_alignment"]
+    assert mileage["status"] == "completed"
+    assert mileage["counts"]["tag_count"] > 0
+    assert mileage["counts"]["runtime_safety_truth_count"] == 0
+    assert mileage["source_kind_counts"]["checkpoint"] == 124
+    assert mileage["source_kind_counts"]["segment"] == 123
+    assert mileage["raw_source_summary"]["route_note_not_expanded_count"] > 0
 
     planning_sections = {
         section["id"]: section
@@ -1068,6 +1080,9 @@ def test_boss_points_challenge_fit_surfaces_in_admin_and_debug(tmp_path: Path):
     assert planning_sections["boss_points"]["counts"]["boss_point_count"] == 5
     assert planning_sections["boss_points"]["summary"]["decision"] == (
         "CHANGE_PLAN_OR_ADD_BUFFER"
+    )
+    assert planning_sections["mileage_tag_alignment"]["counts"]["tag_count"] == (
+        mileage["counts"]["tag_count"]
     )
 
     debug = load_pretrip_debug_projection_view(
@@ -1082,6 +1097,10 @@ def test_boss_points_challenge_fit_surfaces_in_admin_and_debug(tmp_path: Path):
         "overpass_risk_ribbon_route_distance_interpolation"
     )
     assert debug["boss_points"]["route_pressure_profile_summary"]["peak_count"] > 0
+    assert debug["mileage_tag_alignment"]["counts"]["tag_count"] == (
+        mileage["counts"]["tag_count"]
+    )
+    assert debug["counts"]["mileage_tag_count"] == mileage["counts"]["tag_count"]
 
 
 def test_builds_admin_view_from_local_workspace_project_root(tmp_path):
