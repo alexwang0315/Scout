@@ -83,6 +83,9 @@ scout-risk-engine/scout_codex_package/tests/__pycache__/**
 !runtime_stream_status_surface.py
 !runtime_stream_telemetry.py
 !runtime_stream_transport_api.py
+!scout_agent_cli.py
+!scout_agent_runtime.py
+!scout_cli.py
 !server_safety_observation_admission_config.py
 !safety_api.py
 !safety_models.py
