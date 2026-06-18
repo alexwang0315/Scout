@@ -158,6 +158,8 @@ def run_builtin_tool(argv: Sequence[str] | None = None) -> tuple[int, dict[str, 
         return _pretrip_import_gpx(args)
     if args.command == "pretrip-route-context-collect":
         return _pretrip_route_context_collect(args)
+    if args.command == "pretrip-raster-label-adapter":
+        return _pretrip_raster_label_adapter(args)
     if args.command == "pretrip-route-architecture-collect":
         return _pretrip_route_architecture_collect(args)
     if args.command == "pretrip-pace-fit-collect":
@@ -423,6 +425,11 @@ def _build_parser() -> argparse.ArgumentParser:
     route_context_parser.add_argument("--input", type=Path, required=True)
     route_context_parser.add_argument("--dry-run", action="store_true")
     route_context_parser.add_argument("--json", action="store_true")
+
+    raster_label_parser = subparsers.add_parser("pretrip-raster-label-adapter")
+    raster_label_parser.add_argument("--input", type=Path, required=True)
+    raster_label_parser.add_argument("--dry-run", action="store_true")
+    raster_label_parser.add_argument("--json", action="store_true")
 
     route_architecture_parser = subparsers.add_parser("pretrip-route-architecture-collect")
     route_architecture_parser.add_argument("--input", type=Path, required=True)
@@ -2517,6 +2524,60 @@ def _pretrip_route_context_collect(args: argparse.Namespace) -> tuple[int, dict[
                 "candidate_only": True,
                 "raw_payloads_embedded": False,
                 "network_calls_made": False,
+            },
+        },
+    )
+
+
+def _pretrip_raster_label_adapter(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
+    from pretrip_raster_label_adapter import build_raster_label_evidence
+
+    request = _load_json(args.input)
+    project_root = _optional_path(request.get("project_root"))
+    if project_root is None:
+        project_id = request.get("project_id")
+        workspace_root = _optional_path(request.get("workspace_root"))
+        if project_id and workspace_root:
+            project_root = workspace_root / str(project_id)
+    if project_root is None:
+        return 2, _error_payload(
+            "raster label adapter requires project_root or workspace_root plus project_id"
+        )
+
+    source_path = request.get("source_path") or request.get("source")
+    if not source_path:
+        return 2, _error_payload("raster label adapter requires source_path")
+
+    result = build_raster_label_evidence(
+        project_root,
+        source_path=str(source_path),
+        output_ref=str(
+            request.get("output_ref")
+            or "outputs/layers/normalized/raster_label_evidence.geojson"
+        ),
+        manifest_ref=str(
+            request.get("manifest_ref")
+            or "outputs/layers/raster_label_adapter_manifest.json"
+        ),
+        collected_at=request.get("collected_at"),
+        update_project=bool(request.get("update_project", True)),
+        dry_run=bool(args.dry_run),
+    )
+    return (
+        0,
+        {
+            "artifact_kind": "scout_pretrip_raster_label_adapter_tool_output",
+            "status": "completed",
+            "dry_run": bool(args.dry_run),
+            "result": result,
+            "boundary": {
+                **_closed_boundary(),
+                "workspace_file_mutation_allowed": not bool(args.dry_run),
+                "candidate_only": True,
+                "network_calls_made": False,
+                "live_ocr_or_vision_performed": False,
+                "raw_payloads_embedded": False,
+                "raw_tiles_embedded": False,
             },
         },
     )

@@ -422,6 +422,12 @@ def test_scout_pretrip_read_only_facades_expose_manifest_readiness_and_register(
 def test_scout_pretrip_route_context_collect_facade(tmp_path: Path) -> None:
     project_root = tmp_path / "chilai_nanhua_day1"
     shutil.copytree(CHILAI_PROJECT, project_root)
+    route_context_points_path = project_root / ROUTE_CONTEXT_POINTS_REF
+    existing_route_context_points = (
+        route_context_points_path.read_text(encoding="utf-8")
+        if route_context_points_path.exists()
+        else None
+    )
 
     dry_exit, dry_payload = run_scout_cli(
         [
@@ -440,7 +446,12 @@ def test_scout_pretrip_route_context_collect_facade(tmp_path: Path) -> None:
     assert dry_exit == 0
     dry_output = json.loads(dry_payload["outputs"]["stdout"])
     assert dry_output["result"]["writes_performed"] is False
-    assert not (project_root / ROUTE_CONTEXT_POINTS_REF).exists()
+    if existing_route_context_points is None:
+        assert not route_context_points_path.exists()
+    else:
+        assert route_context_points_path.read_text(
+            encoding="utf-8"
+        ) == existing_route_context_points
 
     exit_code, payload = run_scout_cli(
         [
@@ -467,6 +478,83 @@ def test_scout_pretrip_route_context_collect_facade(tmp_path: Path) -> None:
     assert (project_root / ROUTE_CONTEXT_CRAWL_SEED_PLAN_REF).is_file()
     assert (project_root / ROUTE_CONTEXT_BRIEFING_REF).is_file()
     assert (project_root / ROUTE_CONTEXT_POINTS_REF).is_file()
+
+
+def test_scout_pretrip_raster_label_adapter_facade(tmp_path: Path) -> None:
+    project_root = tmp_path / "chilai_nanhua_day1"
+    shutil.copytree(CHILAI_PROJECT, project_root)
+    source = project_root / "outputs" / "layers" / "raw" / "cli_ocr_labels.json"
+    source.parent.mkdir(parents=True, exist_ok=True)
+    source.write_text(
+        json.dumps(
+            {
+                "labels": [
+                    {
+                        "id": "ocr.cli.k.006",
+                        "label_text": "6K",
+                        "lat": 24.0533,
+                        "lon": 121.2442,
+                        "source_ref": "rudy_twmap.cli_fixture",
+                        "source_image_hash": "sha256:cli-fixture-k",
+                        "confidence": 0.8,
+                    }
+                ]
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    output_ref = "outputs/layers/normalized/raster_label_cli_test.geojson"
+    manifest_ref = "outputs/layers/raster_label_cli_test_manifest.json"
+
+    dry_exit, dry_payload = run_scout_cli(
+        [
+            "pretrip",
+            "raster-label-adapter",
+            "--project-root",
+            str(project_root),
+            "--source",
+            str(source),
+            "--output-ref",
+            output_ref,
+            "--manifest-ref",
+            manifest_ref,
+            "--dry-run",
+            "--json",
+        ]
+    )
+    assert dry_exit == 0
+    dry_output = json.loads(dry_payload["outputs"]["stdout"])
+    assert dry_output["result"]["writes_performed"] is False
+    assert not (project_root / output_ref).exists()
+
+    exit_code, payload = run_scout_cli(
+        [
+            "pretrip",
+            "raster-label-adapter",
+            "--project-root",
+            str(project_root),
+            "--source",
+            str(source),
+            "--output-ref",
+            output_ref,
+            "--manifest-ref",
+            manifest_ref,
+            "--authorized-by",
+            "operator.alex",
+            "--json",
+        ]
+    )
+
+    assert exit_code == 0
+    output = json.loads(payload["outputs"]["stdout"])
+    assert output["artifact_kind"] == "scout_pretrip_raster_label_adapter_tool_output"
+    assert output["result"]["feature_count"] == 1
+    assert output["boundary"]["live_ocr_or_vision_performed"] is False
+    project = json.loads((project_root / "project.json").read_text(encoding="utf-8"))
+    assert project["raster_label_evidence_ref"] == output_ref
+    evidence = json.loads((project_root / output_ref).read_text(encoding="utf-8"))
+    assert evidence["features"][0]["properties"]["normalized_mileage_k"] == "6K"
 
 
 def test_scout_pretrip_route_architecture_collect_facade(tmp_path: Path) -> None:

@@ -62,6 +62,7 @@ def test_builtin_manifest_directory_lists_read_and_proposal_tools() -> None:
     assert "scout.pretrip.weather_decision_collect" in tool_ids
     assert "scout.pretrip.contextual_permission_collect" in tool_ids
     assert "scout.pretrip.prepare_layers" in tool_ids
+    assert "scout.pretrip.raster_label_adapter" in tool_ids
     assert "scout.pretrip.artifact_manifest" in tool_ids
     assert "scout.pretrip.readiness" in tool_ids
     assert "scout.pretrip.decision_register" in tool_ids
@@ -2007,6 +2008,93 @@ def test_builtin_pretrip_prepare_layers_writes_no_network_outputs_with_auth(
     assert output["boundary"]["phase1_safety_mutation_allowed"] is False
     project = json.loads((project_root / "project.json").read_text(encoding="utf-8"))
     assert (project_root / project["layer_preparation_manifest_ref"]).is_file()
+
+
+def test_builtin_pretrip_raster_label_adapter_writes_candidate_evidence(
+    tmp_path: Path,
+) -> None:
+    fixture_root = REPO_ROOT / "tests" / "fixtures" / "pretrip" / "projects" / "chilai_nanhua_day1"
+    project_root = tmp_path / "chilai_nanhua_day1"
+    shutil.copytree(fixture_root, project_root)
+    raw = project_root / "outputs" / "layers" / "raw" / "agent_ocr_labels.json"
+    raw.parent.mkdir(parents=True, exist_ok=True)
+    raw.write_text(
+        json.dumps(
+            {
+                "labels": [
+                    {
+                        "id": "ocr.agent.k.001",
+                        "label_text": "6K",
+                        "lat": 24.0533,
+                        "lon": 121.2442,
+                        "source_ref": "rudy_twmap.agent-test",
+                        "source_image_hash": "sha256:agent-test",
+                        "confidence": 0.8,
+                    }
+                ]
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    request = tmp_path / "raster-label-adapter.request.json"
+    request.write_text(
+        json.dumps(
+            {
+                "project_root": str(project_root),
+                "source_path": str(raw),
+                "collected_at": "2026-06-18T00:00:00Z",
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    dry_exit, dry_payload = run_scout_agent_cli(
+        [
+            "tools",
+            "run",
+            "scout.pretrip.raster_label_adapter",
+            "--manifest-dir",
+            str(MANIFEST_DIR),
+            "--input",
+            str(request),
+            "--dry-run",
+            "--json",
+        ]
+    )
+    assert dry_exit == 0
+    dry_output = json.loads(dry_payload["outputs"]["stdout"])
+    assert dry_output["result"]["output_ref"] == "outputs/layers/normalized/raster_label_evidence.geojson"
+    assert dry_output["boundary"]["live_ocr_or_vision_performed"] is False
+
+    exit_code, payload = run_scout_agent_cli(
+        [
+            "tools",
+            "run",
+            "scout.pretrip.raster_label_adapter",
+            "--manifest-dir",
+            str(MANIFEST_DIR),
+            "--input",
+            str(request),
+            "--authorized-by",
+            "operator.alex",
+            "--json",
+        ]
+    )
+
+    assert exit_code == 0
+    assert payload["status"] == "completed"
+    output = json.loads(payload["outputs"]["stdout"])
+    assert output["result"]["feature_count"] == 1
+    assert output["boundary"]["network_calls_made"] is False
+    project = json.loads((project_root / "project.json").read_text(encoding="utf-8"))
+    evidence = json.loads(
+        (project_root / project["raster_label_evidence_ref"]).read_text(encoding="utf-8")
+    )
+    assert evidence["features"][0]["properties"]["evidence_type"] == (
+        "trail_mileage_k_anchor"
+    )
 
 
 def test_builtin_pretrip_review_append_decisions_is_append_only(

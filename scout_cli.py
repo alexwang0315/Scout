@@ -231,6 +231,19 @@ def _add_pretrip_group(subparsers: argparse._SubParsersAction) -> None:
     route_context.add_argument("--authorized-by", default=None)
     route_context.add_argument("--output", type=Path, default=None)
     route_context.add_argument("--json", action="store_true")
+    raster_label = pretrip_sub.add_parser("raster-label-adapter")
+    raster_label.add_argument("--project-root", type=Path, default=None)
+    raster_label.add_argument("--project-id", default=None)
+    raster_label.add_argument("--workspace-root", type=Path, default=None)
+    raster_label.add_argument("--source", "--source-path", dest="source_path", type=Path, required=True)
+    raster_label.add_argument("--output-ref", default=None)
+    raster_label.add_argument("--manifest-ref", default=None)
+    raster_label.add_argument("--collected-at", default=None)
+    raster_label.add_argument("--no-project-update", action="store_true")
+    raster_label.add_argument("--dry-run", action="store_true")
+    raster_label.add_argument("--authorized-by", default=None)
+    raster_label.add_argument("--output", type=Path, default=None)
+    raster_label.add_argument("--json", action="store_true")
     route_architecture = pretrip_sub.add_parser("route-architecture-collect")
     route_architecture.add_argument("--project-root", type=Path, default=None)
     route_architecture.add_argument("--project-id", default=None)
@@ -698,6 +711,22 @@ def _tool_request_for_args(args: argparse.Namespace) -> tuple[str, dict[str, Any
         if args.collected_at:
             request["collected_at"] = args.collected_at
         return "scout.pretrip.route_context_collect", request
+    if group == "pretrip" and args.pretrip_command == "raster-label-adapter":
+        request = {
+            "source_path": str(args.source_path),
+            "update_project": not args.no_project_update,
+        }
+        _set_path(request, "project_root", args.project_root)
+        _set_path(request, "workspace_root", args.workspace_root)
+        if args.project_id:
+            request["project_id"] = args.project_id
+        if args.output_ref:
+            request["output_ref"] = args.output_ref
+        if args.manifest_ref:
+            request["manifest_ref"] = args.manifest_ref
+        if args.collected_at:
+            request["collected_at"] = args.collected_at
+        return "scout.pretrip.raster_label_adapter", request
     if group == "pretrip" and args.pretrip_command == "route-architecture-collect":
         request = {"limit": args.limit}
         _set_path(request, "project_root", args.project_root)
