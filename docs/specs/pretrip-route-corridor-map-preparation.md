@@ -246,6 +246,15 @@ Map preparation records these sources in `raster_label_plan.json` as
 `ocr_candidate_sources`; it does not perform OCR unless an explicit OCR adapter
 run is requested.
 
+The alpha adapter is `pretrip_raster_label_adapter.py` and the agent/CLI tool
+`scout.pretrip.raster_label_adapter`. It does **not** run OCR or vision itself.
+It only accepts an explicit operator- or tool-provided JSON payload from an OCR
+engine, normalizes labels into
+`outputs/layers/normalized/raster_label_evidence.geojson`, writes
+`outputs/layers/raster_label_adapter_manifest.json`, and records project refs.
+This keeps live OCR, tile fetching, and evidence normalization as separate
+steps.
+
 Every extracted label must preserve:
 
 - tile or image source ref;
@@ -518,6 +527,10 @@ pretrip_overpass_ingest.py
 pretrip_gis_perception.py
   Candidate-only GIS perception structures.
 
+pretrip_raster_label_adapter.py
+  Explicit OCR/map-label adapter output normalizer. It converts Rudy/Rudy+TW or
+  other georeferenced OCR JSON into candidate-only raster label evidence.
+
 pretrip_risk_heatmap.py
 pretrip_risk_attribution_diagnostic.py
   Risk heat/delta and factor-attribution outputs.
@@ -534,9 +547,6 @@ pretrip_route_corridor_map_preparation.py
 
 pretrip_web_case_evidence.py
   Explicit web-case query plan and fixture-backed evidence adapter.
-
-pretrip_raster_label_evidence.py
-  Local raster/tile label extraction adapter contract.
 
 tests/test_pretrip_route_corridor_map_preparation.py
   Fixture-backed route bundle, OSM, GPX, terrain, and AI input tests.
