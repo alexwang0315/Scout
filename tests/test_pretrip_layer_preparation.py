@@ -885,6 +885,10 @@ def test_layer_preparation_syncs_scout_risk_score_outputs(
     assert project["route_pressure_profile_geojson_ref"] == (
         "outputs/route_pressure_profile.geojson"
     )
+    assert project["mileage_tag_alignment_ref"] == "outputs/mileage_tag_alignment.json"
+    assert project["mileage_tag_alignment_geojson_ref"] == (
+        "outputs/mileage_tag_alignment.geojson"
+    )
     assert project["risk_score_point_count"] == 2
     assert project["risk_route_sample_count"] == 3
     assert project["risk_ribbon_segment_count"] == 1
@@ -898,14 +902,25 @@ def test_layer_preparation_syncs_scout_risk_score_outputs(
     assert (project_root / project["boss_points_ref"]).is_file()
     assert (project_root / project["boss_points_geojson_ref"]).is_file()
     assert (project_root / project["route_pressure_profile_ref"]).is_file()
+    assert (project_root / project["mileage_tag_alignment_ref"]).is_file()
+    assert (project_root / project["mileage_tag_alignment_geojson_ref"]).is_file()
     boss_synthesis = manifest["boss_point_synthesis"]
     assert boss_synthesis["status"] == "completed"
     assert boss_synthesis["trigger"] == "prepare_layers_with_risk"
     assert boss_synthesis["boundary"]["runtime_safety_truth"] is False
     assert boss_synthesis["boundary"]["phase1_runtime_mutation_allowed"] is False
+    mileage_alignment = manifest["mileage_tag_alignment"]
+    assert mileage_alignment["status"] == "completed"
+    assert mileage_alignment["tag_count"] > 0
+    assert mileage_alignment["aligned_tag_count"] > 0
+    assert mileage_alignment["boundary"]["runtime_safety_truth"] is False
     boss_points = _load(project_root / project["boss_points_ref"])
     assert boss_points["boundary"]["runtime_safety_truth"] is False
     assert boss_points["boundary"]["phase1_runtime_mutation_allowed"] is False
+    mileage_tags = _load(project_root / project["mileage_tag_alignment_ref"])
+    assert mileage_tags["boundary"]["runtime_safety_truth"] is False
+    assert mileage_tags["counts"]["source_kind_counts"]["checkpoint"] == 124
+    assert mileage_tags["counts"]["source_kind_counts"]["segment"] == 123
     route_pressure = _load(project_root / project["route_pressure_profile_ref"])
     assert route_pressure["boundary"]["candidate_only"] is True
     assert route_pressure["boundary"]["runtime_safety_truth"] is False

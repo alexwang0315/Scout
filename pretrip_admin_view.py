@@ -553,6 +553,10 @@ def build_pretrip_admin_view(
     mcp_review_log = _load_optional_json(artifacts.get("mcp_review_log"))
     boss_points = _load_optional_json(artifacts.get("boss_points"))
     boss_points_geojson = _load_optional_json(artifacts.get("boss_points_geojson"))
+    mileage_tag_alignment = _load_optional_json(artifacts.get("mileage_tag_alignment"))
+    mileage_tag_alignment_geojson = _load_optional_json(
+        artifacts.get("mileage_tag_alignment_geojson")
+    )
     spatial_imprint_candidates = _load_optional_json(
         artifacts.get("spatial_imprint_candidates")
     )
@@ -998,6 +1002,12 @@ def build_pretrip_admin_view(
             route_display_geometry=route_centerline_geometry,
             route_bounds=route_projection_bounds,
         )
+    if mileage_tag_alignment is not None:
+        planning_tab["mileage_tag_alignment"] = _mileage_tag_alignment_summary(
+            mileage_tag_alignment,
+            mileage_tag_alignment_geojson,
+            source_refs=source_refs,
+        )
     if any(
         item is not None
         for item in (
@@ -1181,6 +1191,7 @@ def build_pretrip_admin_view(
         ),
         "major_critical_points": planning_tab.get("major_critical_points"),
         "boss_points": planning_tab.get("boss_points"),
+        "mileage_tag_alignment": planning_tab.get("mileage_tag_alignment"),
         "mcp_review_actions": planning_tab.get("mcp_review_actions"),
         "spatial_imprints": planning_tab.get("spatial_imprints"),
         "departure_bundle": planning_tab["departure_bundle"],
@@ -1335,6 +1346,8 @@ def resolve_pretrip_project_artifacts(
         "mcp_review_log": "mcp_review_log_ref",
         "boss_points": "boss_points_ref",
         "boss_points_geojson": "boss_points_geojson_ref",
+        "mileage_tag_alignment": "mileage_tag_alignment_ref",
+        "mileage_tag_alignment_geojson": "mileage_tag_alignment_geojson_ref",
         "route_pressure_profile": "route_pressure_profile_ref",
         "route_pressure_profile_geojson": "route_pressure_profile_geojson_ref",
         "spatial_imprint_candidates": "spatial_imprint_candidates_ref",
@@ -1562,6 +1575,12 @@ def load_pretrip_debug_projection_view(
     boss_points_geojson_raw = _load_optional_json(
         optional_project_path("boss_points_geojson_ref")
     )
+    mileage_tag_alignment_raw = _load_optional_json(
+        optional_project_path("mileage_tag_alignment_ref")
+    )
+    mileage_tag_alignment_geojson_raw = _load_optional_json(
+        optional_project_path("mileage_tag_alignment_geojson_ref")
+    )
     source_refs = {
         "project": "project.json",
         "route_summary": project["route_summary_ref"],
@@ -1609,6 +1628,11 @@ def load_pretrip_debug_projection_view(
         "mcp_review_log": project.get("mcp_review_log_ref", ""),
         "boss_points": project.get("boss_points_ref", ""),
         "boss_points_geojson": project.get("boss_points_geojson_ref", ""),
+        "mileage_tag_alignment": project.get("mileage_tag_alignment_ref", ""),
+        "mileage_tag_alignment_geojson": project.get(
+            "mileage_tag_alignment_geojson_ref",
+            "",
+        ),
         "weather_daylight": project.get("weather_daylight_evidence_ref", ""),
     }
     checkpoints = _candidate_list(
@@ -1777,6 +1801,12 @@ def load_pretrip_debug_projection_view(
             route_display_geometry=route_centerline_geometry,
             route_bounds=route_projection_bounds,
         )
+    if mileage_tag_alignment_raw is not None:
+        view["mileage_tag_alignment"] = _mileage_tag_alignment_summary(
+            mileage_tag_alignment_raw,
+            mileage_tag_alignment_geojson_raw,
+            source_refs=source_refs,
+        )
     view["gis_perception_timeline"] = _gis_perception_timeline_summary(
         project_id,
         view["gis_perception"],
@@ -1824,6 +1854,7 @@ def load_pretrip_debug_projection_view(
         "risk_delta": view["risk_delta"],
         "major_critical_points": view.get("major_critical_points"),
         "boss_points": view.get("boss_points"),
+        "mileage_tag_alignment": view.get("mileage_tag_alignment"),
         "map_layers": view["map_layers"],
         "readiness": view["readiness"],
         "timeline_events": timeline_events,
@@ -1886,6 +1917,16 @@ def load_pretrip_debug_projection_view(
                 view.get("boss_points", {})
                 .get("counts", {})
                 .get("boss_point_count", 0)
+            ),
+            "mileage_tag_count": (
+                view.get("mileage_tag_alignment", {})
+                .get("counts", {})
+                .get("tag_count", 0)
+            ),
+            "mileage_tag_aligned_count": (
+                view.get("mileage_tag_alignment", {})
+                .get("counts", {})
+                .get("aligned_tag_count", 0)
             ),
             "timeline_event_count": len(timeline_events),
             "source_lifecycle_event_count": lifecycle_events.get("event_count", 0),
@@ -7115,6 +7156,88 @@ def _boss_points_summary(
     }
 
 
+def _mileage_tag_alignment_summary(
+    mileage_payload: dict[str, Any],
+    mileage_geojson: dict[str, Any] | None,
+    *,
+    source_refs: dict[str, str],
+) -> dict[str, Any]:
+    tags = [
+        tag
+        for tag in mileage_payload.get("mileage_tags", [])
+        if isinstance(tag, dict)
+    ]
+    counts = mileage_payload.get("counts") if isinstance(mileage_payload.get("counts"), dict) else {}
+    raw_source_summary = (
+        mileage_payload.get("raw_source_summary")
+        if isinstance(mileage_payload.get("raw_source_summary"), dict)
+        else {}
+    )
+    geojson_features = (
+        mileage_geojson.get("features", [])
+        if isinstance(mileage_geojson, dict)
+        else []
+    )
+    route_alignment = (
+        mileage_payload.get("route_mileage_alignment")
+        if isinstance(mileage_payload.get("route_mileage_alignment"), dict)
+        else {}
+    )
+    source_path = (
+        source_refs.get("mileage_tag_alignment")
+        or mileage_payload.get("mileage_tag_alignment_ref")
+        or "outputs/mileage_tag_alignment.json"
+    )
+    geojson_source_path = (
+        source_refs.get("mileage_tag_alignment_geojson")
+        or mileage_payload.get("mileage_tag_alignment_geojson_ref")
+        or "outputs/mileage_tag_alignment.geojson"
+    )
+    return {
+        "source_id": (
+            f"mileage_tag_alignment.{mileage_payload.get('project_id', 'unknown')}.v1"
+        ),
+        "source_path": source_path,
+        "geojson_source_path": geojson_source_path,
+        "evidence_type": "pretrip_workspace_mileage_tag_alignment",
+        "status": mileage_payload.get("status", "candidate_only"),
+        "project_id": mileage_payload.get("project_id"),
+        "counts": {
+            "tag_count": counts.get("tag_count", len(tags)),
+            "aligned_tag_count": counts.get("aligned_tag_count", 0),
+            "geojson_feature_count": len(geojson_features),
+            "usable_anchor_count": counts.get("usable_anchor_count", 0),
+            "projected_anchor_count": counts.get("projected_anchor_count", 0),
+            "rejected_anchor_count": counts.get("rejected_anchor_count", 0),
+            "candidate_only_count": counts.get("candidate_only_count", len(tags)),
+            "runtime_safety_truth_count": counts.get("runtime_safety_truth_count", 0),
+        },
+        "source_kind_counts": counts.get("source_kind_counts", {}),
+        "display_mileage_status_counts": counts.get(
+            "display_mileage_status_counts",
+            {},
+        ),
+        "route_projection_status_counts": counts.get(
+            "route_projection_status_counts",
+            {},
+        ),
+        "raw_source_summary": raw_source_summary,
+        "route_mileage_alignment_summary": {
+            "source_ref": route_alignment.get("source_ref"),
+            "usable_anchor_count": route_alignment.get("usable_anchor_count", 0),
+            "projected_anchor_count": route_alignment.get("projected_anchor_count", 0),
+            "rejected_anchor_count": route_alignment.get("rejected_anchor_count", 0),
+            "policy": route_alignment.get("policy", {}),
+        },
+        "sample_labels": [
+            str(tag.get("display_label") or tag.get("display_mileage_label") or "")
+            for tag in tags[:20]
+        ],
+        "policy": mileage_payload.get("policy", {}),
+        "boundary": _summary_boundary(mileage_payload.get("boundary", {})),
+    }
+
+
 def _mcp_nested_support_projection(
     record: dict[str, Any],
     *,
@@ -8876,6 +8999,7 @@ def _planning_sections(planning_tab: dict[str, Any]) -> list[dict[str, Any]]:
     gis_perception_timeline = planning_tab["gis_perception_timeline"]
     major_critical_points = planning_tab.get("major_critical_points")
     boss_points = planning_tab.get("boss_points")
+    mileage_tag_alignment = planning_tab.get("mileage_tag_alignment")
     route_notes = planning_tab["route_notes"]
     reference_tracks = planning_tab.get("reference_tracks")
     checkpoint_events = planning_tab.get("checkpoint_events")
@@ -9346,6 +9470,37 @@ def _planning_sections(planning_tab: dict[str, Any]) -> list[dict[str, Any]]:
                     "boss_points": boss_points["boss_points"][:12],
                 },
                 boundary=boss_points["boundary"],
+            )
+        )
+    if mileage_tag_alignment is not None:
+        sections.append(
+            _section(
+                "mileage_tag_alignment",
+                "Mileage Tags",
+                mileage_tag_alignment,
+                status=mileage_tag_alignment["status"],
+                counts=mileage_tag_alignment["counts"],
+                summary={
+                    "tag_count": mileage_tag_alignment["counts"].get("tag_count", 0),
+                    "aligned_tag_count": mileage_tag_alignment["counts"].get(
+                        "aligned_tag_count",
+                        0,
+                    ),
+                    "usable_anchor_count": mileage_tag_alignment["counts"].get(
+                        "usable_anchor_count",
+                        0,
+                    ),
+                    "source_kind_counts": mileage_tag_alignment.get(
+                        "source_kind_counts",
+                        {},
+                    ),
+                    "raw_source_summary": mileage_tag_alignment.get(
+                        "raw_source_summary",
+                        {},
+                    ),
+                    "sample_labels": mileage_tag_alignment.get("sample_labels", [])[:12],
+                },
+                boundary=mileage_tag_alignment["boundary"],
             )
         )
     sections.extend(

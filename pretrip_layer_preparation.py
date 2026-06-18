@@ -374,6 +374,23 @@ def run_layer_preparation(request: LayerPreparationRequest) -> dict[str, Any]:
             outputs,
             manifest["finished_at"],
         )
+    mileage_tag_alignment = _run_mileage_tag_alignment_after_layer_preparation(
+        project_root=project_root,
+        manifest=manifest,
+    )
+    manifest["mileage_tag_alignment"] = mileage_tag_alignment
+    if mileage_tag_alignment.get("status") == "completed":
+        outputs.update(mileage_tag_alignment.get("output_refs", {}))
+        outputs["mileage_tag_alignment_count"] = mileage_tag_alignment.get(
+            "tag_count",
+            0,
+        )
+        _update_project_refs(
+            project_root / "project.json",
+            project,
+            outputs,
+            manifest["finished_at"],
+        )
     summary = _summary_from_manifest(manifest)
     map_preparation_summary = _map_preparation_summary_from_manifest(manifest)
     adapter_manifest = _adapter_manifest_from_manifest(manifest)
@@ -1891,6 +1908,7 @@ def _summary_from_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
         ],
         "network_policy": manifest["network_policy"],
         "boss_point_synthesis": manifest.get("boss_point_synthesis"),
+        "mileage_tag_alignment": manifest.get("mileage_tag_alignment"),
         "boundary": manifest["boundary"],
         "notes": manifest["notes"],
     }
@@ -1936,10 +1954,14 @@ def _map_preparation_summary_from_manifest(manifest: dict[str, Any]) -> dict[str
                 "detour_route_candidates_ref",
                 "layer_map_projection_ref",
                 "layer_debug_projection_events_ref",
+                "mileage_tag_alignment_ref",
+                "mileage_tag_alignment_geojson_ref",
             )
+            if key in outputs
         },
         "gpx_speed_filter": manifest["inputs"]["gpx_speed_filter"],
         "boss_point_synthesis": manifest.get("boss_point_synthesis"),
+        "mileage_tag_alignment": manifest.get("mileage_tag_alignment"),
         "network_policy": manifest["network_policy"],
         "boundary": {
             **manifest["boundary"],
@@ -2264,7 +2286,9 @@ def _update_project_refs(
     outputs: dict[str, str],
     prepared_at: str,
 ) -> None:
+    current = _load_json(project_path) if project_path.exists() else {}
     updated = {
+        **current,
         **project,
         **outputs,
         "layer_preparation_updated_at": prepared_at,
@@ -2363,6 +2387,65 @@ def _run_boss_point_synthesis_after_layer_preparation(
             "boss_points_geojson_ref": BOSS_POINTS_GEOJSON_REF,
             "route_pressure_profile_ref": ROUTE_PRESSURE_PROFILE_REF,
             "route_pressure_profile_geojson_ref": ROUTE_PRESSURE_PROFILE_GEOJSON_REF,
+        },
+        "boundary": result.get("boundary") or boundary,
+    }
+
+
+def _run_mileage_tag_alignment_after_layer_preparation(
+    *,
+    project_root: Path,
+    manifest: dict[str, Any],
+) -> dict[str, Any]:
+    boundary = {
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+        "review_gated": True,
+        "phase1_runtime_mutation_allowed": False,
+        "phase2_brain_writeback_allowed": False,
+        "workspace_file_mutation_allowed": True,
+    }
+    project_path = project_root / "project.json"
+    if not project_path.exists():
+        return {
+            "status": "skipped_missing_project",
+            "trigger": "prepare_layers_workspace_mileage_tags",
+            "boundary": boundary,
+        }
+
+    try:
+        from pretrip_mileage_tag_alignment import (
+            MILEAGE_TAG_ALIGNMENT_GEOJSON_REF,
+            MILEAGE_TAG_ALIGNMENT_REF,
+            align_pretrip_workspace_mileage_tags,
+        )
+
+        result = align_pretrip_workspace_mileage_tags(
+            project_root,
+            generated_at=manifest.get("finished_at"),
+        )
+    except Exception as exc:
+        return {
+            "status": "failed",
+            "trigger": "prepare_layers_workspace_mileage_tags",
+            "error": str(exc),
+            "boundary": boundary,
+        }
+
+    counts = result.get("counts") or {}
+    return {
+        "status": result.get("status", "completed"),
+        "trigger": "prepare_layers_workspace_mileage_tags",
+        "artifact_kind": result.get("artifact_kind"),
+        "schema_version": result.get("schema_version"),
+        "tag_count": counts.get("tag_count", 0),
+        "aligned_tag_count": counts.get("aligned_tag_count", 0),
+        "usable_anchor_count": counts.get("usable_anchor_count", 0),
+        "source_kind_counts": counts.get("source_kind_counts", {}),
+        "raw_source_summary": result.get("raw_source_summary") or {},
+        "output_refs": {
+            "mileage_tag_alignment_ref": MILEAGE_TAG_ALIGNMENT_REF,
+            "mileage_tag_alignment_geojson_ref": MILEAGE_TAG_ALIGNMENT_GEOJSON_REF,
         },
         "boundary": result.get("boundary") or boundary,
     }
