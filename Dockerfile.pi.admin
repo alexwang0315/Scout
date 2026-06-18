@@ -152,10 +152,13 @@ COPY \
     runtime_debug_log.py \
     runtime_debug_models.py \
     scout_gnss_hardware_observer.py \
+    scout_agent_cli.py \
     scout_agent_debug_projection.py \
     scout_agent_kb.py \
+    scout_agent_runtime.py \
     safety_models.py \
     safety_state_machine.py \
+    scout_cli.py \
     scout_agent_models.py \
     scout_agent_tools.py \
     scout_agent_trace.py \
