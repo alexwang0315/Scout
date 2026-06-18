@@ -882,6 +882,7 @@ def test_phase4_admin_dockerfile_runs_admin_app_not_field_runtime() -> None:
     assert "pretrip_route_comparison.py" in source
     assert "tests/fixtures/hardware/readiness_context.json" in source
     assert "tests/fixtures/pretrip/projects/chilai_nanhua_day1/" in source
+    assert "scout_agent_builtin_tools.py" in source
     assert "scout_cli.py" in source
     assert "scout_agent_cli.py" in source
     assert "scout_agent_runtime.py" in source
@@ -938,6 +939,7 @@ def test_phase4_admin_docker_context_whitelists_only_metadata_and_admin_assets()
     assert "!pretrip_source_ingest.py" in dockerignore
     assert "!pretrip_workspace_edit.py" in dockerignore
     assert "!runtime_debug_log.py" in dockerignore
+    assert "!scout_agent_builtin_tools.py" in dockerignore
     assert "!scout_cli.py" in dockerignore
     assert "!scout_agent_cli.py" in dockerignore
     assert "!scout_agent_runtime.py" in dockerignore
