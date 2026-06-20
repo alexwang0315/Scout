@@ -448,6 +448,7 @@ def _build_pretrip_admin_case_view(
         "gis_perception_timeline": pretrip_view["gis_perception_timeline"],
         "major_critical_points": pretrip_view.get("major_critical_points"),
         "boss_points": pretrip_view.get("boss_points"),
+        "mileage_tag_alignment": pretrip_view.get("mileage_tag_alignment"),
         "review_queue": pretrip_view["review_queue"],
         "review_workbench": pretrip_view["review_workbench"],
         "departure_reviewed_candidates": pretrip_view.get(

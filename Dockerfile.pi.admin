@@ -199,6 +199,7 @@ COPY \
     scout_survival_incident_playbook_tool.py \
     scout_team_status_tool.py \
     scout_terrain_score_tool.py \
+    scout_gee_integration.py \
     scout_weather_integration.py \
     scout_weather_window_tool.py \
     scout_wearable_adapters.py \

@@ -460,10 +460,12 @@ def synthesize_pretrip_boss_points(
         _write_json(root / BOSS_POINTS_REF, payload)
         _write_json(root / BOSS_POINTS_GEOJSON_REF, geojson)
         if project_path.exists():
+            current_project = _load_json_object(project_path)
             _write_json(
                 project_path,
                 {
                     **project,
+                    **current_project,
                     "boss_points_ref": BOSS_POINTS_REF,
                     "boss_points_geojson_ref": BOSS_POINTS_GEOJSON_REF,
                     "route_pressure_profile_ref": ROUTE_PRESSURE_PROFILE_REF,

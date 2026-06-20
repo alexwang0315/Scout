@@ -18,6 +18,45 @@ Module._initPaths();
 
 const { chromium } = require("playwright");
 
+const scoutLayerIds = [
+  "imagery",
+  "rudy",
+  "rudy-twmap",
+  "relief",
+  "geology",
+  "topo-5k",
+  "forest",
+  "osm",
+  "terrain",
+  "corridors",
+  "overpass",
+  "route",
+  "completed-track",
+  "reference-tracks",
+  "retreat",
+  "segments",
+  "risk-ribbon",
+  "risk-heatmap",
+  "risk-delta",
+  "soil-moisture",
+  "antecedent-rain",
+  "risk-score",
+  "checkpoints",
+  "pois",
+  "hazards",
+  "route-notes",
+  "mcp",
+  "boss-points",
+  "events",
+  "weather-api",
+];
+
+const expectedLayerIdsBySurface = {
+  debug: scoutLayerIds.filter((layerId) => layerId !== "completed-track"),
+  "after-action": scoutLayerIds,
+  pretrip: scoutLayerIds.filter((layerId) => layerId !== "completed-track"),
+};
+
 const surfaces = [
   {
     id: "debug",
@@ -159,7 +198,13 @@ async function runBrowserChecks(baseUrl, screenshotsDir) {
         await page.goto(url, { waitUntil: "domcontentloaded", timeout: 20_000 });
         await page.waitForTimeout(250);
         await waitForSurface(surface, page);
-        const checks = await collectChecks(surface, page);
+        const expectedLayerIds = expectedLayerIdsBySurface[surface.id] || [];
+        await waitForLayerGroups(page, expectedLayerIds);
+        const checks = await collectChecks(
+          surface,
+          page,
+          expectedLayerIds,
+        );
         const screenshotPath = screenshotsDir
           ? path.join(screenshotsDir, `${surface.id}-${viewport.id}.png`)
           : "";
@@ -201,8 +246,25 @@ async function waitForSurface(surface, page) {
   }
 }
 
-async function collectChecks(surface, page) {
-  return page.evaluate(({ surfaceId, expectedTitle, selectors }) => {
+async function waitForLayerGroups(page, expectedLayerIds) {
+  if (!expectedLayerIds.length) return;
+  await page.waitForFunction(
+    (layerIds) => {
+      function selectorValue(value) {
+        if (window.CSS?.escape) return CSS.escape(value);
+        return String(value).replace(/["\\]/g, "\\$&");
+      }
+      return layerIds.every((layerId) => (
+        Boolean(document.querySelector(`[data-layer-group="${selectorValue(layerId)}"]`))
+      ));
+    },
+    expectedLayerIds,
+    { timeout: 15_000 },
+  );
+}
+
+async function collectChecks(surface, page, expectedLayerIds) {
+  return page.evaluate(({ surfaceId, expectedTitle, selectors, expectedLayerIds }) => {
     function compareCenteredMapColumns(leftSelector, mapSelector, rightSelector) {
       const left = document.querySelector(leftSelector)?.getBoundingClientRect();
       const map = document.querySelector(mapSelector)?.getBoundingClientRect();
@@ -237,6 +299,66 @@ async function collectChecks(surface, page) {
       }
       return { ok: true, skipped: true };
     }
+    function selectorValue(value) {
+      if (window.CSS?.escape) return CSS.escape(value);
+      return String(value).replace(/["\\]/g, "\\$&");
+    }
+    function layerControlChecks() {
+      if (!expectedLayerIds.length) return { ok: true, skipped: true };
+      function isGroupHidden(group) {
+        return group.getAttribute("data-layer-hidden") === "true"
+          || group.style.display === "none"
+          || getComputedStyle(group).display === "none";
+      }
+      const controls = Array.from(document.querySelectorAll("input[data-layer]"))
+        .map((input) => input.dataset.layer)
+        .filter(Boolean);
+      const unexpectedControls = controls.filter((layerId) => !expectedLayerIds.includes(layerId));
+      const missingControls = expectedLayerIds.filter((layerId) => !controls.includes(layerId));
+      const toggleResults = [];
+      for (const layerId of expectedLayerIds) {
+        const input = document.querySelector(`input[data-layer="${selectorValue(layerId)}"]`);
+        const group = document.querySelector(`[data-layer-group="${selectorValue(layerId)}"]`);
+        if (!input || !group) {
+          toggleResults.push({
+            layerId,
+            ok: false,
+            controlPresent: Boolean(input),
+            groupPresent: Boolean(group),
+          });
+          continue;
+        }
+        const originalChecked = input.checked;
+        input.checked = false;
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+        const hidden = isGroupHidden(group);
+        input.checked = true;
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+        const shown = !isGroupHidden(group);
+        input.checked = originalChecked;
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+        toggleResults.push({
+          layerId,
+          ok: hidden && shown,
+          controlPresent: true,
+          groupPresent: true,
+          hidden,
+          shown,
+        });
+      }
+      const failedToggles = toggleResults.filter((result) => !result.ok);
+      return {
+        ok: missingControls.length === 0
+          && unexpectedControls.length === 0
+          && failedToggles.length === 0,
+        expectedCount: expectedLayerIds.length,
+        controlCount: controls.length,
+        missingControls,
+        unexpectedControls,
+        failedToggles,
+        toggleResults,
+      };
+    }
     const doc = document.documentElement;
     const bodyText = document.body.innerText.trim();
     const selectorResults = selectors.map((selector) => ({
@@ -263,6 +385,7 @@ async function collectChecks(surface, page) {
     const nonBlank = bodyText.length > 80 && visibleTextBlocks >= 6;
     const noHorizontalOverflow = horizontalOverflowPx <= 24;
     const mapLayout = centeredMapLayout();
+    const layerControls = layerControlChecks();
     if (
       missingSelectors.length
       || !titleMatches
@@ -270,6 +393,7 @@ async function collectChecks(surface, page) {
       || !noHorizontalOverflow
       || tinyTargets.length
       || !mapLayout.ok
+      || !layerControls.ok
     ) {
       throw new Error(JSON.stringify({
         missingSelectors,
@@ -279,6 +403,7 @@ async function collectChecks(surface, page) {
         horizontalOverflowPx,
         tinyTargets,
         mapLayout,
+        layerControls,
       }));
     }
     return {
@@ -290,8 +415,9 @@ async function collectChecks(surface, page) {
       horizontalOverflowPx,
       tinyTargets,
       mapLayout,
+      layerControls,
     };
-  }, { surfaceId: surface.id, expectedTitle: surface.title, selectors: surface.selectors });
+  }, { surfaceId: surface.id, expectedTitle: surface.title, selectors: surface.selectors, expectedLayerIds });
 }
 
 function waitFor(url, timeoutMs) {

@@ -27,6 +27,7 @@ from admin_weather_overlay import (
     build_weather_api_runtime_status,
     fetch_open_meteo_weather_snapshot,
 )
+from scout_gee_integration import build_gee_runtime_status
 from pretrip_admin_view import (
     build_pretrip_admin_view,
     list_pretrip_admin_projects,
@@ -1988,6 +1989,7 @@ def create_admin_router(
         return build_pretrip_weather_overlay(
             weather_payload,
             runtime_status=runtime_status,
+            gee_runtime_status=build_gee_runtime_status(),
             live_weather_snapshot=live_weather_snapshot,
         )
 

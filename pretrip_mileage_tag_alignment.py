@@ -1087,8 +1087,10 @@ def _update_project_refs(
     project: dict[str, Any],
     payload: dict[str, Any],
 ) -> None:
+    current = _load_json_object(project_path) if project_path.exists() else {}
     updated = {
         **project,
+        **current,
         "mileage_tag_alignment_ref": MILEAGE_TAG_ALIGNMENT_REF,
         "mileage_tag_alignment_geojson_ref": MILEAGE_TAG_ALIGNMENT_GEOJSON_REF,
         "mileage_tag_alignment_count": payload.get("counts", {}).get("tag_count", 0),

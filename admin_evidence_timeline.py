@@ -22,6 +22,7 @@ EVIDENCE_TIMELINE_CATEGORY_ORDER = (
     "gis_cp",
     "risk",
     "map_context",
+    "mileage",
     "reference_tracks",
     "review",
     "runtime_handoff",
@@ -37,6 +38,7 @@ EVIDENCE_TIMELINE_CATEGORY_LABELS = {
     "gis_cp": "GIS CP Evidence",
     "risk": "Risk Evidence",
     "map_context": "Map Context",
+    "mileage": "Mileage Tags",
     "reference_tracks": "Reference GPX",
     "review": "Review Evidence",
     "runtime_handoff": "Runtime Handoff",
@@ -53,6 +55,7 @@ def build_pretrip_evidence_timeline(view: dict[str, Any]) -> dict[str, Any]:
     map_candidates = view.get("map_candidates") or {}
     overpass = view.get("overpass_evidence") or {}
     route = view.get("route") or {}
+    mileage = view.get("mileage_tag_alignment") or {}
     counts = {
         "route": 1 if route else 0,
         "checkpoints": _len(view.get("checkpoints")),
@@ -77,6 +80,7 @@ def build_pretrip_evidence_timeline(view: dict[str, Any]) -> dict[str, Any]:
         + int((map_candidates.get("counts") or {}).get("corridor_candidates") or 0)
         + int((map_candidates.get("counts") or {}).get("hazard_candidates") or 0)
         + int((map_candidates.get("counts") or {}).get("poi_candidates") or 0),
+        "mileage": int((mileage.get("counts") or {}).get("tag_count") or 0),
         "reference_tracks": int(
             (view.get("reference_tracks") or {}).get("reference_track_count")
             or _len((view.get("reference_tracks") or {}).get("reference_tracks"))
@@ -99,6 +103,7 @@ def build_admin_evidence_timeline(view: dict[str, Any]) -> dict[str, Any]:
     map_payload = view.get("map") or {}
     overpass = view.get("overpass_evidence") or {}
     map_candidates = view.get("map_candidates") or {}
+    mileage = view.get("mileage_tag_alignment") or {}
     counts = {
         "route": 1 if view.get("route") else 0,
         "checkpoints": _len((view.get("mission") or {}).get("checkpoints")),
@@ -127,6 +132,7 @@ def build_admin_evidence_timeline(view: dict[str, Any]) -> dict[str, Any]:
         or _len(map_payload.get("corridors"))
         + _len(map_payload.get("hazards"))
         + _len(map_payload.get("pois")),
+        "mileage": int((mileage.get("counts") or {}).get("tag_count") or 0),
         "reference_tracks": int(
             (view.get("reference_tracks") or {}).get("reference_track_count")
             or _len((view.get("reference_tracks") or {}).get("reference_tracks"))

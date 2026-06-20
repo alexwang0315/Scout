@@ -1264,8 +1264,14 @@ def resolve_pretrip_project_artifacts(
         "project": project_path,
         "route_summary": resolved_project_root / project["route_summary_ref"],
         "map_context": resolved_project_root / project["map_context_ref"],
-        "checkpoints": resolved_project_root / project["checkpoint_candidates_ref"],
-        "segments": resolved_project_root / project["segment_candidates_ref"],
+        "checkpoints": project_ref_path(
+            "overpass_aligned_checkpoint_candidates_ref",
+            default_ref=project["checkpoint_candidates_ref"],
+        ),
+        "segments": project_ref_path(
+            "overpass_aligned_segment_candidates_ref",
+            default_ref=project["segment_candidates_ref"],
+        ),
         "retreat_routes": project_ref_path("retreat_routes_ref"),
         "map_candidates": resolved_project_root / project["map_candidates_ref"],
         "package": resolved_project_root / project["package_ref"],
@@ -1316,7 +1322,7 @@ def resolve_pretrip_project_artifacts(
         "reference_tracks": "reference_tracks_ref",
         "reference_track_display_geometry": "reference_track_display_geometry_ref",
         "checkpoint_events": "checkpoint_events_ref",
-        "segment_display_geometry": "segment_display_geometry_ref",
+        "segment_display_geometry": "overpass_aligned_segment_display_geometry_ref",
         "import_manifest": "import_manifest_ref",
         "layer_preparation_manifest": "layer_preparation_manifest_ref",
         "layer_preparation_job": "layer_preparation_job_ref",
@@ -1341,7 +1347,7 @@ def resolve_pretrip_project_artifacts(
         "mcp_named_point_evidence": "mcp_named_point_evidence_ref",
         "mcp_retrieval_plan": "mcp_retrieval_plan_ref",
         "mcp_ocr_labels": "mcp_ocr_labels_ref",
-        "mcp_candidates": "mcp_candidates_ref",
+        "mcp_candidates": "overpass_aligned_mcp_candidates_ref",
         "mcp_cp_support_reconciliation": "mcp_cp_support_reconciliation_ref",
         "mcp_review_log": "mcp_review_log_ref",
         "boss_points": "boss_points_ref",
@@ -1359,6 +1365,11 @@ def resolve_pretrip_project_artifacts(
     }.items():
         if project.get(project_ref_key):
             artifacts[artifact_key] = resolved_project_root / project[project_ref_key]
+    for artifact_key, fallback_ref_key in {
+        "segment_display_geometry": "segment_display_geometry_ref",
+        "mcp_candidates": "mcp_candidates_ref",
+    }.items():
+        artifacts.setdefault(artifact_key, project_ref_path(fallback_ref_key))
     for artifact_key, default_ref in {
         "spatial_imprint_candidates": DEFAULT_SPATIAL_IMPRINT_CANDIDATES_REF,
         "spatial_imprint_reviews": DEFAULT_SPATIAL_IMPRINT_REVIEWS_REF,
@@ -1489,17 +1500,26 @@ def load_pretrip_debug_projection_view(
         project_root=project_root,
     )
     project = _load_json(resolved_project_root / "project.json")
-    def optional_project_path(ref_key: str) -> Path | None:
-        project_ref = project.get(ref_key)
-        return resolved_project_root / project_ref if project_ref else None
+    def optional_project_path(*ref_keys: str) -> Path | None:
+        for ref_key in ref_keys:
+            project_ref = project.get(ref_key)
+            if project_ref:
+                return resolved_project_root / project_ref
+        return None
 
     route_summary = _load_json(resolved_project_root / project["route_summary_ref"])
     route_projection_bounds = _route_projection_bounds(route_summary)
     map_context = _load_json(resolved_project_root / project["map_context_ref"])
-    checkpoints_raw = _load_json(
-        resolved_project_root / project["checkpoint_candidates_ref"]
+    checkpoints_path = optional_project_path(
+        "overpass_aligned_checkpoint_candidates_ref",
+        "checkpoint_candidates_ref",
     )
-    segments_raw = _load_json(resolved_project_root / project["segment_candidates_ref"])
+    segments_path = optional_project_path(
+        "overpass_aligned_segment_candidates_ref",
+        "segment_candidates_ref",
+    )
+    checkpoints_raw = _load_json(checkpoints_path)
+    segments_raw = _load_json(segments_path)
     map_candidates_raw = _load_json(resolved_project_root / project["map_candidates_ref"])
     reference_tracks_raw = _load_optional_json(
         optional_project_path("reference_tracks_ref")
@@ -1516,7 +1536,10 @@ def load_pretrip_debug_projection_view(
         optional_project_path("checkpoint_events_ref")
     )
     segment_display_geometry = _load_optional_json(
-        optional_project_path("segment_display_geometry_ref")
+        optional_project_path(
+            "overpass_aligned_segment_display_geometry_ref",
+            "segment_display_geometry_ref",
+        )
     )
     overpass_evidence_raw = _load_optional_json(
         optional_project_path("overpass_evidence_ref")
@@ -1566,7 +1589,9 @@ def load_pretrip_debug_projection_view(
         optional_project_path("mcp_retrieval_plan_ref")
     )
     mcp_ocr_labels_raw = _load_optional_json(optional_project_path("mcp_ocr_labels_ref"))
-    mcp_candidates_raw = _load_optional_json(optional_project_path("mcp_candidates_ref"))
+    mcp_candidates_raw = _load_optional_json(
+        optional_project_path("overpass_aligned_mcp_candidates_ref", "mcp_candidates_ref")
+    )
     mcp_cp_support_reconciliation_raw = _load_optional_json(
         optional_project_path("mcp_cp_support_reconciliation_ref")
     )
@@ -1585,8 +1610,14 @@ def load_pretrip_debug_projection_view(
         "project": "project.json",
         "route_summary": project["route_summary_ref"],
         "map_context": project["map_context_ref"],
-        "checkpoints": project["checkpoint_candidates_ref"],
-        "segments": project["segment_candidates_ref"],
+        "checkpoints": project.get(
+            "overpass_aligned_checkpoint_candidates_ref",
+            project["checkpoint_candidates_ref"],
+        ),
+        "segments": project.get(
+            "overpass_aligned_segment_candidates_ref",
+            project["segment_candidates_ref"],
+        ),
         "map_candidates": project["map_candidates_ref"],
         "reference_tracks": project.get("reference_tracks_ref", ""),
         "reference_track_display_geometry": project.get(
@@ -1594,7 +1625,10 @@ def load_pretrip_debug_projection_view(
             "",
         ),
         "checkpoint_events": project.get("checkpoint_events_ref", ""),
-        "segment_display_geometry": project.get("segment_display_geometry_ref", ""),
+        "segment_display_geometry": project.get(
+            "overpass_aligned_segment_display_geometry_ref",
+            project.get("segment_display_geometry_ref", ""),
+        ),
         "overpass_evidence": project.get("overpass_evidence_ref", ""),
         "retreat_routes": project.get("retreat_routes_ref", ""),
         "readiness": project.get("readiness_report_ref", ""),
@@ -1620,7 +1654,10 @@ def load_pretrip_debug_projection_view(
         "mcp_named_point_evidence": project.get("mcp_named_point_evidence_ref", ""),
         "mcp_retrieval_plan": project.get("mcp_retrieval_plan_ref", ""),
         "mcp_ocr_labels": project.get("mcp_ocr_labels_ref", ""),
-        "mcp_candidates": project.get("mcp_candidates_ref", ""),
+        "mcp_candidates": project.get(
+            "overpass_aligned_mcp_candidates_ref",
+            project.get("mcp_candidates_ref", ""),
+        ),
         "mcp_cp_support_reconciliation": project.get(
             "mcp_cp_support_reconciliation_ref",
             "",
@@ -7233,8 +7270,134 @@ def _mileage_tag_alignment_summary(
             str(tag.get("display_label") or tag.get("display_mileage_label") or "")
             for tag in tags[:20]
         ],
+        "timeline_items": [
+            _mileage_timeline_tag_projection(tag, source_path)
+            for tag in _select_mileage_timeline_tags(tags)
+        ],
         "policy": mileage_payload.get("policy", {}),
         "boundary": _summary_boundary(mileage_payload.get("boundary", {})),
+    }
+
+
+def _select_mileage_timeline_tags(tags: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    preferred_source_kinds = {
+        "checkpoint",
+        "segment",
+        "mcp_candidate",
+        "boss_point",
+        "route_pressure_sample",
+        "trail_mileage_k_anchor",
+        "road_mileage_stone",
+    }
+    candidates = [
+        tag
+        for tag in tags
+        if isinstance(tag, dict)
+        and _coerce_float(tag.get("lat")) is not None
+        and _coerce_float(tag.get("lon")) is not None
+        and (
+            str(tag.get("source_kind") or "") in preferred_source_kinds
+            or str(tag.get("route_projection_status") or "")
+            in {"aligned", "nearby_offset", "route_distance_axis"}
+        )
+    ]
+
+    def sort_key(tag: dict[str, Any]) -> tuple[int, float, str]:
+        source_kind = str(tag.get("source_kind") or "")
+        priority = 0 if source_kind in preferred_source_kinds else 1
+        route_distance = _coerce_float(tag.get("route_distance_m"))
+        if route_distance is None:
+            route_distance = _coerce_float(tag.get("source_distance_m"))
+        return (
+            priority,
+            route_distance if route_distance is not None else float("inf"),
+            str(tag.get("mileage_tag_id") or tag.get("source_id") or ""),
+        )
+
+    return sorted(candidates, key=sort_key)[:240]
+
+
+def _mileage_timeline_tag_projection(
+    tag: dict[str, Any],
+    source_path: str,
+) -> dict[str, Any]:
+    display_mileage = tag.get("display_mileage")
+    if not isinstance(display_mileage, dict):
+        display_mileage = {}
+    source_kind = str(tag.get("source_kind") or "mileage")
+    source_id = str(tag.get("source_id") or tag.get("mileage_tag_id") or "mileage")
+    label = str(
+        tag.get("display_label")
+        or tag.get("display_mileage_label")
+        or display_mileage.get("label")
+        or tag.get("source_label")
+        or source_id
+    )
+    route_distance = _coerce_float(tag.get("route_distance_m"))
+    projection_distance = _coerce_float(tag.get("route_projection_distance_m"))
+    model_hash = _stable_projection_hash(
+        {
+            "source_path": source_path,
+            "mileage_tag_id": tag.get("mileage_tag_id"),
+            "source_id": source_id,
+            "source_kind": source_kind,
+            "route_distance_m": route_distance,
+            "route_projection_status": tag.get("route_projection_status"),
+            "display_mileage_label": tag.get("display_mileage_label"),
+        }
+    )
+    source_refs = _unique_limited(
+        [
+            source_path,
+            tag.get("source_ref"),
+            tag.get("alignment_source_ref"),
+            tag.get("route_projection_source_ref"),
+        ]
+    )
+    return {
+        "candidate_id": str(tag.get("mileage_tag_id") or f"mileage_tag.{source_id}"),
+        "source_id": source_id,
+        "source_path": source_path,
+        "source_ref": tag.get("source_ref"),
+        "evidence_type": "pretrip_mileage_tag_timeline_evidence",
+        "label": label,
+        "map_label": str(tag.get("display_mileage_label") or label),
+        "source_kind": source_kind,
+        "source_label": tag.get("source_label"),
+        "lat": tag.get("lat"),
+        "lon": tag.get("lon"),
+        "route_distance_m": route_distance,
+        "route_projection_distance_m": projection_distance,
+        "route_projection_status": tag.get("route_projection_status"),
+        "display_mileage": display_mileage,
+        "display_mileage_label": tag.get("display_mileage_label"),
+        "source_refs": source_refs,
+        "review_state": "needs_review",
+        "confidence": tag.get("confidence") or "medium",
+        "stale_risk": "medium",
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+        "source_attribution": [
+            {
+                "source_kind": source_kind,
+                "source_ref": tag.get("source_ref") or source_path,
+                "source_candidate_id": source_id,
+                "source_label": tag.get("source_label") or label,
+                "evidence_type": "pretrip_mileage_tag_timeline_evidence",
+                "confidence": tag.get("confidence") or "medium",
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+            }
+        ],
+        "model_output_summary": (
+            "Route mileage tag timeline projection; candidate-only pretrip "
+            "evidence and not runtime safety truth."
+        ),
+        "model_output_sha256": model_hash,
+        "extractor_version": "pretrip_mileage_tag_alignment.timeline_projection.v1",
+        "pydantic_ai_prompt_version": (
+            "not_applicable_deterministic_mileage_tag_alignment.v1"
+        ),
     }
 
 

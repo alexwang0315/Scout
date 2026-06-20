@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 from admin_after_action import build_admin_case_view
 from admin_api import create_admin_app
 from pretrip_boss_point_synthesis import synthesize_pretrip_boss_points
+from pretrip_mileage_tag_alignment import align_pretrip_workspace_mileage_tags
 from pretrip_admin_view import build_pretrip_admin_view
 from scout_energy_models import load_wearable_activity_summaries
 from scout_energy_reserve import write_energy_reserve_artifacts
@@ -55,19 +56,22 @@ class AdminAfterActionTests(unittest.TestCase):
                 "corridors",
                 "overpass",
                 "route",
+                "completed-track",
                 "reference-tracks",
                 "retreat",
                 "segments",
-                "risk-score",
                 "risk-ribbon",
                 "risk-heatmap",
                 "risk-delta",
+                "soil-moisture",
+                "antecedent-rain",
+                "risk-score",
                 "checkpoints",
                 "pois",
                 "hazards",
+                "route-notes",
                 "mcp",
                 "boss-points",
-                "route-notes",
                 "events",
                 "weather-api",
             ],
@@ -231,14 +235,41 @@ class AdminAfterActionTests(unittest.TestCase):
                 project_root,
                 generated_at="2099-06-07T08:00:00Z",
             )
+            align_pretrip_workspace_mileage_tags(
+                project_root,
+                generated_at="2099-06-07T08:00:00Z",
+            )
 
             view = build_admin_case_view(
                 PRETRIP_CASE_ID,
                 root=ROOT,
                 pretrip_project_root=project_root,
             )
+            pretrip_view = build_pretrip_admin_view(
+                PRETRIP_CASE_ID,
+                root=ROOT,
+                project_root=project_root,
+            )
 
         self.assertEqual(view["boss_points"]["counts"]["boss_point_count"], 5)
+        self.assertEqual(
+            view["mileage_tag_alignment"]["counts"]["tag_count"],
+            pretrip_view["mileage_tag_alignment"]["counts"]["tag_count"],
+        )
+        self.assertEqual(
+            len(view["mileage_tag_alignment"]["timeline_items"]),
+            len(pretrip_view["mileage_tag_alignment"]["timeline_items"]),
+        )
+        self.assertEqual(
+            {
+                item["category_id"]: item["count"]
+                for item in view["evidence_timeline"]["categories"]
+            }["mileage"],
+            {
+                item["category_id"]: item["count"]
+                for item in pretrip_view["evidence_timeline"]["categories"]
+            }["mileage"],
+        )
         first_boss = view["boss_points"]["boss_points"][0]
         self.assertTrue(first_boss["label"].startswith("高壓路段 "))
         self.assertEqual(

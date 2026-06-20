@@ -13,6 +13,7 @@ from scout_weather_integration import (
     cwa_fileapi_url,
     fetch_cwa_dataset,
     normalize_cwa_weather_points,
+    resolve_cwa_api_key,
     segment_gpx_route,
     weather_risk_score,
     write_route_weather_package,
@@ -50,10 +51,26 @@ def test_cwa_fileapi_url_supports_zip_downloads() -> None:
 
 
 def test_fetch_cwa_dataset_requires_server_env_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("SCOUT_CWA_API_KEY", raising=False)
     monkeypatch.delenv("CWA_API_KEY", raising=False)
 
-    with pytest.raises(RuntimeError, match="CWA_API_KEY"):
+    with pytest.raises(RuntimeError, match="SCOUT_CWA_API_KEY"):
         fetch_cwa_dataset(CWA_36H_FORECAST)
+
+
+def test_resolve_cwa_api_key_prefers_scout_env_and_keeps_legacy_fallback() -> None:
+    preferred_key, preferred_env = resolve_cwa_api_key(
+        {
+            "SCOUT_CWA_API_KEY": "new-server-side-key",
+            "CWA_API_KEY": "legacy-server-side-key",
+        }
+    )
+    legacy_key, legacy_env = resolve_cwa_api_key({"CWA_API_KEY": "legacy-server-side-key"})
+
+    assert preferred_key == "new-server-side-key"
+    assert preferred_env == "SCOUT_CWA_API_KEY"
+    assert legacy_key == "legacy-server-side-key"
+    assert legacy_env == "CWA_API_KEY"
 
 
 def test_normalize_cwa_36h_forecast_to_scout_weather_points() -> None:

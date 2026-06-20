@@ -26,6 +26,7 @@ from pretrip_route_context_collection import (
 
 OCR_ENGINE_VERSION = "pretrip_raster_label_ocr.v0.1"
 DEFAULT_OCR_OUTPUT_REF = "outputs/layers/raster_label_ocr_output.json"
+DEFAULT_OCR_TILE_CACHE_REF = "outputs/layers/cache/raster_label_ocr_tiles"
 DEFAULT_RASTER_LABEL_PLAN_REF = "outputs/layers/plans/raster_label_plan.json"
 DEFAULT_TESSERACT_LANG = "chi_tra+eng"
 DEFAULT_MIN_CONFIDENCE = 0.35
@@ -57,6 +58,9 @@ def extract_raster_label_ocr(
     collected_at = collected_at or _utc_now()
     project = _load_json(root / "project.json")
     project_id = str(project.get("project_id") or project.get("id") or root.name)
+    cache_ref = str(project.get("raster_label_ocr_cache_ref") or DEFAULT_OCR_TILE_CACHE_REF)
+    cache_dir = _resolve_project_path(root, cache_ref)
+    runner_kind = "injected_runner" if ocr_runner is not None else "runtime_runner"
 
     plan_ref = _resolve_plan_ref(project, raster_label_plan_path)
     plan_path = _resolve_project_path(root, plan_ref)
@@ -126,6 +130,9 @@ def extract_raster_label_ocr(
 
     labels: list[dict[str, Any]] = []
     skipped_tiles: list[dict[str, Any]] = []
+    cache_hit_count = 0
+    cache_miss_count = 0
+    cache_write_count = 0
     for tile_index, tile in enumerate(tile_records, start=1):
         image_path = _resolve_project_path(root, str(tile.get("image_path") or ""))
         if not image_path.is_file():
@@ -139,7 +146,33 @@ def extract_raster_label_ocr(
             )
             continue
         image_hash = _sha256(image_path)
-        for label_index, raw_label in enumerate(runner(image_path), start=1):
+        cached_labels = _read_cached_tile_ocr(
+            cache_dir,
+            image_hash=image_hash,
+            engine=engine,
+            tesseract_lang=tesseract_lang,
+            runner_kind=runner_kind,
+        )
+        if cached_labels is None:
+            cache_miss_count += 1
+            raw_labels = [dict(item) for item in runner(image_path)]
+            if not dry_run:
+                _write_cached_tile_ocr(
+                    cache_dir,
+                    image_hash=image_hash,
+                    engine=engine,
+                    tesseract_lang=tesseract_lang,
+                    runner_kind=runner_kind,
+                    raw_labels=raw_labels,
+                    image_path=_project_ref_for_path(root, image_path),
+                    tile=tile,
+                    collected_at=collected_at,
+                )
+                cache_write_count += 1
+        else:
+            cache_hit_count += 1
+            raw_labels = cached_labels
+        for label_index, raw_label in enumerate(raw_labels, start=1):
             label = _label_from_ocr_record(raw_label)
             confidence = _confidence_from_ocr_record(raw_label)
             if not label:
@@ -183,9 +216,13 @@ def extract_raster_label_ocr(
         "counts": {
             "tile_record_count": len(tile_records),
             "tile_skipped_count": len(skipped_tiles),
+            "ocr_cache_hit_count": cache_hit_count,
+            "ocr_cache_miss_count": cache_miss_count,
+            "ocr_cache_write_count": cache_write_count,
             "label_count": len(labels),
             "review_required_count": len(labels),
         },
+        "ocr_tile_cache_ref": cache_ref,
         "skipped_tiles": skipped_tiles,
         "raw_tile_embedded": False,
         "raw_payload_embedded": False,
@@ -194,6 +231,109 @@ def extract_raster_label_ocr(
         "boundary": _candidate_boundary(ocr_performed=bool(labels)),
     }
     return _finish(root, payload, output_ref=output_ref, dry_run=dry_run, update_project=update_project)
+
+
+def _read_cached_tile_ocr(
+    cache_dir: Path,
+    *,
+    image_hash: str,
+    engine: str,
+    tesseract_lang: str,
+    runner_kind: str,
+) -> list[dict[str, Any]] | None:
+    path = _ocr_tile_cache_path(
+        cache_dir,
+        image_hash=image_hash,
+        engine=engine,
+        tesseract_lang=tesseract_lang,
+        runner_kind=runner_kind,
+    )
+    if not path.exists():
+        return None
+    try:
+        payload = _load_json(path)
+    except (json.JSONDecodeError, OSError):
+        return None
+    if payload.get("artifact_kind") != "pretrip_raster_label_ocr_tile_cache":
+        return None
+    if payload.get("ocr_engine_version") != OCR_ENGINE_VERSION:
+        return None
+    if payload.get("source_image_sha256") != image_hash:
+        return None
+    if payload.get("engine") != engine:
+        return None
+    if payload.get("tesseract_lang") != tesseract_lang:
+        return None
+    if payload.get("runner_kind") != runner_kind:
+        return None
+    raw_labels = payload.get("raw_labels")
+    if not isinstance(raw_labels, list):
+        return None
+    return [dict(item) for item in raw_labels if isinstance(item, Mapping)]
+
+
+def _write_cached_tile_ocr(
+    cache_dir: Path,
+    *,
+    image_hash: str,
+    engine: str,
+    tesseract_lang: str,
+    runner_kind: str,
+    raw_labels: Sequence[Mapping[str, Any]],
+    image_path: str,
+    tile: Mapping[str, Any],
+    collected_at: str,
+) -> None:
+    path = _ocr_tile_cache_path(
+        cache_dir,
+        image_hash=image_hash,
+        engine=engine,
+        tesseract_lang=tesseract_lang,
+        runner_kind=runner_kind,
+    )
+    payload = {
+        "artifact_kind": "pretrip_raster_label_ocr_tile_cache",
+        "schema_version": "route_corridor_map_preparation.v1",
+        "ocr_engine_version": OCR_ENGINE_VERSION,
+        "generated_at": collected_at,
+        "engine": engine,
+        "tesseract_lang": tesseract_lang,
+        "runner_kind": runner_kind,
+        "source_image_sha256": image_hash,
+        "source_image_ref": image_path,
+        "source_id": tile.get("source_id"),
+        "tile_z": _int_or_none(tile.get("tile_z") or tile.get("z")),
+        "tile_x": _int_or_none(tile.get("tile_x") or tile.get("x")),
+        "tile_y": _int_or_none(tile.get("tile_y") or tile.get("y")),
+        "raw_labels": [dict(item) for item in raw_labels],
+        "raw_label_count": len(raw_labels),
+        "raw_tile_embedded": False,
+        "raw_payload_embedded": False,
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+    }
+    _write_json(path, payload)
+
+
+def _ocr_tile_cache_path(
+    cache_dir: Path,
+    *,
+    image_hash: str,
+    engine: str,
+    tesseract_lang: str,
+    runner_kind: str,
+) -> Path:
+    key_payload = {
+        "engine": engine,
+        "image_hash": image_hash,
+        "ocr_engine_version": OCR_ENGINE_VERSION,
+        "runner_kind": runner_kind,
+        "tesseract_lang": tesseract_lang,
+    }
+    key = hashlib.sha256(
+        json.dumps(key_payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    return cache_dir / key[:2] / f"{key}.json"
 
 
 def _finish(
@@ -210,8 +350,11 @@ def _finish(
         project_path = root / "project.json"
         project = _load_json(project_path)
         project["raster_label_ocr_output_ref"] = output_ref
+        project["raster_label_ocr_cache_ref"] = payload.get("ocr_tile_cache_ref") or DEFAULT_OCR_TILE_CACHE_REF
         project["raster_label_ocr_status"] = payload["status"]
         project["raster_label_ocr_label_count"] = int(payload.get("counts", {}).get("label_count") or 0)
+        project["raster_label_ocr_cache_hit_count"] = int(payload.get("counts", {}).get("ocr_cache_hit_count") or 0)
+        project["raster_label_ocr_cache_miss_count"] = int(payload.get("counts", {}).get("ocr_cache_miss_count") or 0)
         _write_json(project_path, project)
     return {
         "status": payload["status"],
@@ -220,6 +363,9 @@ def _finish(
         "label_count": int(payload.get("counts", {}).get("label_count") or 0),
         "tile_record_count": int(payload.get("counts", {}).get("tile_record_count") or 0),
         "tile_skipped_count": int(payload.get("counts", {}).get("tile_skipped_count") or 0),
+        "ocr_cache_hit_count": int(payload.get("counts", {}).get("ocr_cache_hit_count") or 0),
+        "ocr_cache_miss_count": int(payload.get("counts", {}).get("ocr_cache_miss_count") or 0),
+        "ocr_cache_write_count": int(payload.get("counts", {}).get("ocr_cache_write_count") or 0),
         "writes_performed": not dry_run,
         "candidate_only": True,
         "runtime_safety_truth": False,

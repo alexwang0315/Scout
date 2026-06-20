@@ -242,6 +242,8 @@ def build_companion_capability_capsule(
         limitations=[
             "first-slice vector uses coarse activity summaries only",
             "heart-rate evidence is treated as noisy context",
+            "route-effort units in this slice normalize distance, ascent, and descent only; altitude, pack load, technical terrain, season, weather, daylight, traffic, cost, road condition, and equipment remain human-review context",
+            "capability capsule is not route approval and must not replace GPX, structured route, retreat-gate, weather, or equipment review",
             "capsule excludes raw health payloads, raw tracks, exact timestamps, and home/work traces",
         ],
     )
@@ -307,6 +309,8 @@ def build_companion_capability_capsule_from_timeline(
         data_quality=data_quality,
         limitations=[
             "first-slice vector uses coarse post-analysis timeline summary only",
+            "route-effort units in this slice normalize distance, ascent, and descent only; altitude, pack load, technical terrain, season, weather, daylight, traffic, cost, road condition, and equipment remain human-review context",
+            "capability capsule is not route approval and must not replace GPX, structured route, retreat-gate, weather, or equipment review",
             "capsule excludes raw tracks, exact timestamps, incident details, and private notes",
         ],
     )

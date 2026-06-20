@@ -9,10 +9,24 @@ from dataclasses import dataclass
 from typing import Any
 
 from admin_basemap_tiles import normalize_bbox_wgs84
+from scout_weather_integration import (
+    CWA_PROVIDER_ID,
+    LEGACY_CWA_API_KEY_ENV,
+    SCOUT_CWA_API_KEY_ENV,
+)
+from scout_gee_integration import GeeRuntimeStatus, build_gee_runtime_status
 
 
 WEATHER_OVERLAY_LAYER_ID = "weather-api"
 OPEN_METEO_PROVIDER = "open_meteo"
+CWA_PROVIDER_ALIASES = {
+    CWA_PROVIDER_ID,
+    "cwa",
+    "cwa_owdp",
+    "owdp",
+    "cwa_like_weather_api",
+}
+DEFAULT_WEATHER_API_PROVIDER = CWA_PROVIDER_ID
 OPEN_METEO_FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
 OPEN_METEO_DOCS_URL = "https://open-meteo.com/en/docs"
 DEFAULT_WEATHER_API_TIMEOUT_SECONDS = 10
@@ -44,11 +58,24 @@ class WeatherApiRuntimeStatus:
 def build_weather_api_runtime_status(
     env: Mapping[str, str] | None = None,
 ) -> WeatherApiRuntimeStatus:
-    active_env = env or os.environ
+    active_env = os.environ if env is None else env
     enabled = _truthy(active_env.get("SCOUT_WEATHER_API_ENABLED"))
-    provider = active_env.get("SCOUT_WEATHER_API_PROVIDER", "cwa_like_weather_api")
+    provider = _canonical_weather_provider(
+        active_env.get("SCOUT_WEATHER_API_PROVIDER", DEFAULT_WEATHER_API_PROVIDER)
+    )
     if provider == OPEN_METEO_PROVIDER:
         secret_ref = active_env.get("SCOUT_WEATHER_API_KEY_REF") or None
+    elif provider == CWA_PROVIDER_ID:
+        secret_ref = active_env.get(
+            "SCOUT_WEATHER_API_KEY_REF",
+            f"env:{SCOUT_CWA_API_KEY_ENV}",
+        )
+        if (
+            secret_ref == f"env:{SCOUT_CWA_API_KEY_ENV}"
+            and not active_env.get(SCOUT_CWA_API_KEY_ENV)
+            and active_env.get(LEGACY_CWA_API_KEY_ENV)
+        ):
+            secret_ref = f"env:{LEGACY_CWA_API_KEY_ENV}"
     else:
         secret_ref = active_env.get("SCOUT_WEATHER_API_KEY_REF", "env:SCOUT_WEATHER_API_KEY")
     blockers: list[str] = []
@@ -70,13 +97,22 @@ def build_weather_api_runtime_status(
     )
 
 
+def _canonical_weather_provider(raw_provider: str | None) -> str:
+    provider = (raw_provider or DEFAULT_WEATHER_API_PROVIDER).strip().lower()
+    if provider in CWA_PROVIDER_ALIASES:
+        return CWA_PROVIDER_ID
+    return provider
+
+
 def build_pretrip_weather_overlay(
     weather: Mapping[str, Any],
     *,
     runtime_status: WeatherApiRuntimeStatus | None = None,
+    gee_runtime_status: GeeRuntimeStatus | None = None,
     live_weather_snapshot: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     status = runtime_status or build_weather_api_runtime_status({})
+    gee_status = gee_runtime_status or build_gee_runtime_status({})
     live_snapshot = dict(live_weather_snapshot or {})
     live_ready = live_snapshot.get("status") == "live_summary_ready"
     daylight = dict(weather.get("daylight") or {})
@@ -161,6 +197,10 @@ def build_pretrip_weather_overlay(
             "live_open_meteo_summary" if live_ready else "fixture_backed_local_admin_api"
         ),
         "api_runtime_status": api_runtime_status,
+        "environment_api_status": {
+            "weather": api_runtime_status,
+            "gee": gee_status.to_dict(),
+        },
         "external_api_calls_made": bool(
             weather.get("external_api_calls_made", False)
             or live_snapshot.get("external_api_calls_made", False)

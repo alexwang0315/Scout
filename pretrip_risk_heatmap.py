@@ -345,26 +345,27 @@ def update_workspace_project_refs(
     if not project_path.exists():
         return
     project = json.loads(project_path.read_text(encoding="utf-8"))
-    project["calibrated_risk_heatmap_ref"] = _workspace_ref(workspace, heatmap_path)
-    project["calibrated_risk_heatmap_metadata_ref"] = _workspace_ref(
+    updated = dict(project)
+    updated["calibrated_risk_heatmap_ref"] = _workspace_ref(workspace, heatmap_path)
+    updated["calibrated_risk_heatmap_metadata_ref"] = _workspace_ref(
         workspace,
         metadata_path,
     )
     if preview_path is not None and preview_path.exists():
-        project["calibrated_risk_heatmap_preview_ref"] = _workspace_ref(
+        updated["calibrated_risk_heatmap_preview_ref"] = _workspace_ref(
             workspace,
             preview_path,
         )
     else:
-        project.pop("calibrated_risk_heatmap_preview_ref", None)
-    project["calibrated_risk_heatmap_segment_count"] = heatmap["metadata"][
+        updated.pop("calibrated_risk_heatmap_preview_ref", None)
+    updated["calibrated_risk_heatmap_segment_count"] = heatmap["metadata"][
         "segment_count"
     ]
-    project["calibrated_risk_heatmap_warning_cp_overlay_count"] = heatmap[
+    updated["calibrated_risk_heatmap_warning_cp_overlay_count"] = heatmap[
         "metadata"
     ]["warning_cp_overlay_count"]
     project_path.write_text(
-        json.dumps(project, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        json.dumps(updated, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
 

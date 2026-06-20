@@ -10,6 +10,7 @@ from debug_api import create_debug_app
 from pretrip_admin_view import build_pretrip_admin_view
 from pretrip_import import (
     PretripImportRequest,
+    _dtm_source_dirs,
     restore_durable_admin_evidence_refs,
     run_pretrip_import,
 )
@@ -17,6 +18,47 @@ from pretrip_source_ingest import wgs84_to_twd97
 from runtime_debug_log import FileRuntimeDebugEventLog
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_dtm_source_dirs_keeps_material_manifest_dirs_when_cli_adds_one(
+    tmp_path: Path,
+) -> None:
+    material_root = tmp_path / "materials" / "chilai_nanhua_day1"
+    nantou = material_root / "sources" / "dtm" / "nantou"
+    hualien = material_root / "sources" / "dtm" / "hualien"
+    extra = tmp_path / "extra-dtm"
+    for path in (nantou, hualien, extra):
+        path.mkdir(parents=True)
+    (material_root / "material_manifest.json").write_text(
+        json.dumps(
+            {
+                "sources": {
+                    "dtm_dirs": [
+                        nantou.as_posix(),
+                        hualien.as_posix(),
+                    ]
+                }
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    source_dirs = _dtm_source_dirs(
+        PretripImportRequest(
+            project_id="chilai_nanhua_day1",
+            primary_gpx=tmp_path / "route.gpx",
+            workspace_root=tmp_path / "workspaces",
+            material_root=material_root,
+            dtm_dirs=(hualien, extra),
+        )
+    )
+
+    assert [path.resolve() for path in source_dirs] == [
+        nantou.resolve(),
+        hualien.resolve(),
+        extra.resolve(),
+    ]
 
 
 def test_pretrip_import_core_writes_pretrip_admin_and_debug_projections(tmp_path: Path) -> None:

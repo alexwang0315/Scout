@@ -740,7 +740,10 @@ def main(argv: list[str] | None = None) -> None:
         type=Path,
         action="append",
         default=[],
-        help="Local DTM source directory for metadata-only terrain coverage.",
+        help=(
+            "Additional local DTM source directory for metadata-only terrain "
+            "coverage. Material-root DTM dirs remain included when present."
+        ),
     )
     parser.add_argument(
         "--mcp-named-point-evidence",
@@ -1741,12 +1744,26 @@ def _material_manifest(request: PretripImportRequest) -> dict[str, Any]:
 
 
 def _dtm_source_dirs(request: PretripImportRequest) -> list[Path]:
-    explicit = [path.expanduser() for path in request.dtm_dirs]
-    if explicit:
-        return explicit
     manifest = _material_manifest(request)
-    source_dirs = manifest.get("sources", {}).get("dtm_dirs", [])
-    return [Path(value).expanduser() for value in source_dirs if Path(value).expanduser().exists()]
+    manifest_dirs = [
+        Path(value).expanduser()
+        for value in manifest.get("sources", {}).get("dtm_dirs", [])
+        if Path(value).expanduser().exists()
+    ]
+    explicit_dirs = [
+        path.expanduser()
+        for path in request.dtm_dirs
+        if path.expanduser().exists()
+    ]
+    deduped: list[Path] = []
+    seen: set[str] = set()
+    for path in [*manifest_dirs, *explicit_dirs]:
+        key = path.resolve().as_posix()
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(path)
+    return deduped
 
 
 def _resolve_mcp_named_point_evidence(request: PretripImportRequest) -> Path | None:

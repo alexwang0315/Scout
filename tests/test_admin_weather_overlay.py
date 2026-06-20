@@ -23,20 +23,38 @@ def test_weather_api_runtime_status_requires_operator_secret_ref_when_enabled():
     assert missing.enabled is True
     assert missing.ready is False
     assert missing.blocker_reasons == [
-        "missing_weather_api_secret_ref:env:SCOUT_WEATHER_API_KEY"
+        "missing_weather_api_secret_ref:env:SCOUT_CWA_API_KEY"
     ]
 
     ready = build_weather_api_runtime_status(
         {
             "SCOUT_WEATHER_API_ENABLED": "true",
-            "SCOUT_WEATHER_API_KEY": "operator-secret-not-exported",
+            "SCOUT_CWA_API_KEY": "operator-secret-not-exported",
         }
     )
 
     assert ready.enabled is True
     assert ready.ready is True
     assert ready.blocker_reasons == []
-    assert ready.to_dict()["secret_ref"] == "env:SCOUT_WEATHER_API_KEY"
+    assert ready.provider == "cwa_opendata"
+    assert ready.to_dict()["secret_ref"] == "env:SCOUT_CWA_API_KEY"
+
+
+def test_weather_api_runtime_status_accepts_legacy_cwa_key_without_leaking_value():
+    status = build_weather_api_runtime_status(
+        {
+            "SCOUT_WEATHER_API_ENABLED": "true",
+            "SCOUT_WEATHER_API_PROVIDER": "owdp",
+            "CWA_API_KEY": "legacy-secret-not-exported",
+        }
+    )
+
+    payload = status.to_dict()
+
+    assert status.provider == "cwa_opendata"
+    assert status.ready is True
+    assert payload["secret_ref"] == "env:CWA_API_KEY"
+    assert payload["secret_value_embedded"] is False
 
 
 def test_open_meteo_runtime_status_is_opt_in_without_secret_requirement():
@@ -140,6 +158,9 @@ def test_pretrip_weather_overlay_is_summary_only_and_fixture_backed():
     assert overlay["authoritative_weather_computed"] is False
     assert overlay["raw_payloads_embedded"] is False
     assert overlay["api_runtime_status"]["ready"] is False
+    assert overlay["environment_api_status"]["weather"]["ready"] is False
+    assert overlay["environment_api_status"]["gee"]["provider"] == "google_earth_engine"
+    assert overlay["environment_api_status"]["gee"]["ready"] is False
     assert overlay["counts"] == {
         "card_count": 3,
         "glyph_count": 2,
