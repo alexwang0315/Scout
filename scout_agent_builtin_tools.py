@@ -158,6 +158,8 @@ def run_builtin_tool(argv: Sequence[str] | None = None) -> tuple[int, dict[str, 
         return _pretrip_import_gpx(args)
     if args.command == "pretrip-route-context-collect":
         return _pretrip_route_context_collect(args)
+    if args.command == "pretrip-raster-label-ocr":
+        return _pretrip_raster_label_ocr(args)
     if args.command == "pretrip-raster-label-adapter":
         return _pretrip_raster_label_adapter(args)
     if args.command == "pretrip-route-architecture-collect":
@@ -425,6 +427,11 @@ def _build_parser() -> argparse.ArgumentParser:
     route_context_parser.add_argument("--input", type=Path, required=True)
     route_context_parser.add_argument("--dry-run", action="store_true")
     route_context_parser.add_argument("--json", action="store_true")
+
+    raster_label_ocr_parser = subparsers.add_parser("pretrip-raster-label-ocr")
+    raster_label_ocr_parser.add_argument("--input", type=Path, required=True)
+    raster_label_ocr_parser.add_argument("--dry-run", action="store_true")
+    raster_label_ocr_parser.add_argument("--json", action="store_true")
 
     raster_label_parser = subparsers.add_parser("pretrip-raster-label-adapter")
     raster_label_parser.add_argument("--input", type=Path, required=True)
@@ -2576,6 +2583,67 @@ def _pretrip_raster_label_adapter(args: argparse.Namespace) -> tuple[int, dict[s
                 "candidate_only": True,
                 "network_calls_made": False,
                 "live_ocr_or_vision_performed": False,
+                "raw_payloads_embedded": False,
+                "raw_tiles_embedded": False,
+            },
+        },
+    )
+
+
+def _pretrip_raster_label_ocr(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
+    from pretrip_raster_label_ocr import extract_raster_label_ocr
+
+    request = _load_json(args.input)
+    project_root = _optional_path(request.get("project_root"))
+    if project_root is None:
+        project_id = request.get("project_id")
+        workspace_root = _optional_path(request.get("workspace_root"))
+        if project_id and workspace_root:
+            project_root = workspace_root / str(project_id)
+    if project_root is None:
+        return 2, _error_payload(
+            "raster label OCR requires project_root or workspace_root plus project_id"
+        )
+
+    source_ids = request.get("source_ids")
+    if source_ids is None and request.get("source_id"):
+        source_ids = [request["source_id"]]
+    if source_ids is None:
+        source_ids = []
+
+    result = extract_raster_label_ocr(
+        project_root,
+        tile_manifest_path=request.get("tile_manifest_path")
+        or request.get("tile_manifest"),
+        raster_label_plan_path=request.get("raster_label_plan_path")
+        or request.get("raster_label_plan"),
+        output_ref=str(
+            request.get("output_ref")
+            or "outputs/layers/raster_label_ocr_output.json"
+        ),
+        engine=str(request.get("engine") or "tesseract"),
+        tesseract_lang=str(request.get("tesseract_lang") or "chi_tra+eng"),
+        min_confidence=float(request.get("min_confidence", 0.35)),
+        source_ids=[str(source_id) for source_id in source_ids],
+        max_tiles=_optional_int(request.get("max_tiles")),
+        collected_at=request.get("collected_at"),
+        update_project=bool(request.get("update_project", True)),
+        dry_run=bool(args.dry_run),
+    )
+    ocr_performed = result["status"] == "completed"
+    return (
+        0,
+        {
+            "artifact_kind": "scout_pretrip_raster_label_ocr_tool_output",
+            "status": "completed",
+            "dry_run": bool(args.dry_run),
+            "result": result,
+            "boundary": {
+                **_closed_boundary(),
+                "workspace_file_mutation_allowed": not bool(args.dry_run),
+                "candidate_only": True,
+                "network_calls_made": False,
+                "live_ocr_or_vision_performed": ocr_performed,
                 "raw_payloads_embedded": False,
                 "raw_tiles_embedded": False,
             },

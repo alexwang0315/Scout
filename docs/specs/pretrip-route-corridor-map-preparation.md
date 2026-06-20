@@ -243,7 +243,7 @@ For Taiwan hiking maps, **Rudy** and **Rudy+TW** are preferred OCR candidate
 sources because they commonly expose route mileage K anchors, named places,
 contour labels, trail annotations, and hazard notes in the same visual context.
 Map preparation records these sources in `raster_label_plan.json` as
-`ocr_candidate_sources`; it does not perform OCR unless an explicit OCR adapter
+`ocr_candidate_sources`; it does not perform OCR unless an explicit OCR extractor
 run is requested.
 
 The alpha adapter is `pretrip_raster_label_adapter.py` and the agent/CLI tool
@@ -254,6 +254,37 @@ engine, normalizes labels into
 `outputs/layers/raster_label_adapter_manifest.json`, and records project refs.
 This keeps live OCR, tile fetching, and evidence normalization as separate
 steps.
+
+The OCR extraction entrypoint is `pretrip_raster_label_ocr.py` and the agent/CLI
+tool is `scout.pretrip.raster_label_ocr`. It reads cached Rudy/Rudy+TW tile
+manifests, invokes an optional OCR runtime, and writes explicit OCR JSON to
+`outputs/layers/raster_label_ocr_output.json`. That file is adapter input only;
+it must not write `route_context_points`, `route_mileage_k_anchors`, or runtime
+safety state directly. The default runtime path is Tesseract via `pytesseract`
+so the same contract can run on macOS and Scout Pi after the operator installs
+the OCR runtime. Apple Vision/PyObjC may be used as a macOS optional engine
+later, but it is not the portable baseline. If `tesseract` or `pytesseract` is
+unavailable, the extractor writes a `blocked_dependency_missing` OCR artifact
+with zero labels rather than fabricating OCR results.
+
+Expected operator sequence:
+
+```bash
+python -m pretrip_raster_label_ocr \
+  --project-root <project_root> \
+  --tile-manifest <rudy_or_rudy_twmap_tile_plan.json> \
+  --output-ref outputs/layers/raster_label_ocr_output.json \
+  --json
+
+python -m pretrip_raster_label_adapter \
+  --project-root <project_root> \
+  --source outputs/layers/raster_label_ocr_output.json \
+  --json
+
+python -m pretrip_route_context_collection \
+  --project-root <project_root> \
+  --json
+```
 
 Every extracted label must preserve:
 
