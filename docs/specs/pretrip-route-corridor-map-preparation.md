@@ -216,7 +216,10 @@ cache plan with:
   proxy template;
 - explicit network/cache policy.
 
-`no-network` preparation writes only the plan and existing cache refs.
+`no-network` preparation records planning metadata plus existing cache refs
+because it represents CI/offline replay. In-house pre-trip preparation should run in
+`explicit-fetch` mode and materialize the route corridor's vector evidence,
+permitted raster tile cache, OCR labels, route context, and mileage anchors.
 `explicit-fetch` preparation may seed the cache only from an allowlisted imagery
 source and only into workspace or Scout Pi cache paths, never into repo
 fixtures. The browser should request the current zoom's native tile when it is
@@ -243,8 +246,13 @@ For Taiwan hiking maps, **Rudy** and **Rudy+TW** are preferred OCR candidate
 sources because they commonly expose route mileage K anchors, named places,
 contour labels, trail annotations, and hazard notes in the same visual context.
 Map preparation records these sources in `raster_label_plan.json` as
-`ocr_candidate_sources`; it does not perform OCR unless an explicit OCR extractor
-run is requested.
+`ocr_candidate_sources`. In alpha, Rudy/Rudy+TW OCR is part of the map
+preparation pipeline itself: when `explicit-fetch` preparation has a permitted
+tile cache, map preparation runs OCR, normalizes the OCR output through the
+adapter, refreshes route-context points and `route_mileage_k_anchors.json`, and
+then reruns mileage tag alignment. This matches CP/MCP/Boss generation: the UI
+should open on prepared workspace artifacts, not require a separate operator
+command to materialize ordinary map-derived evidence.
 
 The alpha adapter is `pretrip_raster_label_adapter.py` and the agent/CLI tool
 `scout.pretrip.raster_label_adapter`. It does **not** run OCR or vision itself.
@@ -252,8 +260,10 @@ It only accepts an explicit operator- or tool-provided JSON payload from an OCR
 engine, normalizes labels into
 `outputs/layers/normalized/raster_label_evidence.geojson`, writes
 `outputs/layers/raster_label_adapter_manifest.json`, and records project refs.
-This keeps live OCR, tile fetching, and evidence normalization as separate
-steps.
+This keeps live OCR and evidence normalization as separate contracts while
+still letting `pretrip_layer_preparation.py` orchestrate them as one map
+preparation stage. The adapter may be re-run manually for debugging, fixture
+tests, or replacing OCR output, but it is not the primary user workflow.
 
 The OCR extraction entrypoint is `pretrip_raster_label_ocr.py` and the agent/CLI
 tool is `scout.pretrip.raster_label_ocr`. It reads cached Rudy/Rudy+TW tile
@@ -267,24 +277,38 @@ later, but it is not the portable baseline. If `tesseract` or `pytesseract` is
 unavailable, the extractor writes a `blocked_dependency_missing` OCR artifact
 with zero labels rather than fabricating OCR results.
 
+Imagery and OCR caching are separate:
+
+- Rudy/Rudy+TW image tiles are stored under the configured raster cache root
+  such as `/data/scout/raster-tiles`. Map preparation uses a 30-day default TTL:
+  fresh tiles are skipped, stale tiles are refreshed, and individual fetch
+  failures are recorded without invalidating the whole preparation run.
+- OCR results are stored as per-tile JSON under
+  `outputs/layers/cache/raster_label_ocr_tiles/`. The cache key includes tile
+  image SHA-256, OCR engine version, engine name, language, and runner kind.
+  This means unchanged tiles do not rerun Tesseract, while changed tiles or OCR
+  engine changes naturally miss cache. The cache stores OCR text/bbox records
+  and provenance only; it never embeds raw tile imagery.
+
 Expected operator sequence:
 
 ```bash
-python -m pretrip_raster_label_ocr \
+python -m pretrip_layer_preparation \
   --project-root <project_root> \
-  --tile-manifest <rudy_or_rudy_twmap_tile_plan.json> \
-  --output-ref outputs/layers/raster_label_ocr_output.json \
-  --json
-
-python -m pretrip_raster_label_adapter \
-  --project-root <project_root> \
-  --source outputs/layers/raster_label_ocr_output.json \
-  --json
-
-python -m pretrip_route_context_collection \
-  --project-root <project_root> \
-  --json
+  --layers imagery,overpass,terrain,risk-score,risk-ribbon,risk-heatmap \
+  --network-mode explicit-fetch \
+  --allow-network-fetch \
+  --seed-imagery-cache \
+  --imagery-provider-allows-offline-prefetch \
+  --imagery-seed-max-tiles <bounded_count>
 ```
+
+The standalone OCR, adapter, and route-context CLIs remain available for
+debugging and reproducibility, but normal workspace preparation should not ask a
+user to run them after map preparation. If OCR dependencies or cached tiles are
+missing, map preparation writes a blocked OCR stage in
+`outputs/layers/raster_label_ocr_output.json` and keeps the normalized raster
+label evidence empty instead of fabricating mileage anchors.
 
 Every extracted label must preserve:
 
@@ -639,9 +663,11 @@ Always:
 Ask first:
 
 - live web search;
-- live Overpass download outside stored fixtures;
+- live Overpass download outside stored fixtures unless the operator selected
+  `explicit-fetch --allow-network-fetch`;
 - cloud Pydantic AI model calls;
-- raster OCR/vision over copyrighted map images;
+- raster OCR/vision over map images whose source does not explicitly allow this
+  workspace/offline preparation use;
 - changing final MissionGraph compile behavior;
 - increasing corridor widths enough to include broad off-route POI searches.
 
@@ -651,8 +677,9 @@ Never:
 - send raw GPX, raw DEM, raw tiles, or large scraped text directly to AI;
 - treat AI output as `ObservedFact`, `DerivedMeasurement`, or runtime safety
   truth;
-- call `/safety/*`;
-- mutate Phase 1 runtime state;
+- directly call `/safety/*` from map preparation instead of producing reviewed
+  workspace artifacts for the on-trip Scout loop;
+- mutate Phase 1 runtime state during pre-trip materialization;
 - write Phase 2 Brain facts;
 - compile final `MissionGraph`;
 - silently render missing OSM/imagery/terrain as fake-looking map patterns.

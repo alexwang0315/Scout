@@ -356,12 +356,13 @@ def test_builds_fixture_backed_pretrip_admin_view():
         "gis_cp",
         "risk",
         "map_context",
+        "mileage",
         "reference_tracks",
         "review",
         "runtime_handoff",
     ]
     assert view["evidence_timeline"]["counts"] == {
-        "category_count": 12,
+        "category_count": 13,
         "available_category_count": 12,
         "total_evidence_count": 6268,
     }

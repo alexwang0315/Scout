@@ -32,6 +32,7 @@ DEFAULT_RASTER_TILE_SIZE = 256
 DEFAULT_ESTIMATED_RASTER_TILE_BYTES = 64 * 1024
 DEFAULT_IMAGERY_TILE_CACHE_MIN_ZOOM = 12
 DEFAULT_IMAGERY_TILE_CACHE_MAX_ZOOM = 17
+DEFAULT_IMAGERY_TILE_CACHE_TTL_DAYS = 30
 WEB_MERCATOR_MAX_LAT = 85.05112878
 TRANSPARENT_PNG_TILE = bytes.fromhex(
     "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489"
@@ -372,6 +373,7 @@ def seed_imagery_tile_cache(
     provider_allows_offline_prefetch: bool = False,
     dry_run: bool = True,
     max_tiles: int | None = None,
+    tile_ttl_days: float | None = DEFAULT_IMAGERY_TILE_CACHE_TTL_DAYS,
     fetch_tile: ImageryTileFetch | None = None,
 ) -> dict[str, Any]:
     if plan.get("artifact_kind") != "admin_imagery_tile_cache_plan":
@@ -386,8 +388,12 @@ def seed_imagery_tile_cache(
     started_at = time.time()
     tiles_seen = 0
     tiles_written = 0
+    tiles_refreshed = 0
     tiles_skipped_existing = 0
+    tiles_failed = 0
+    tile_error_samples: list[dict[str, Any]] = []
     bytes_written = 0
+    now = time.time()
 
     for tile in iter_raster_plan_tiles(plan):
         if max_tiles is not None and tiles_seen >= max_tiles:
@@ -402,28 +408,55 @@ def seed_imagery_tile_cache(
             cache_root=cache_root,
         )
         if path.exists():
-            tiles_skipped_existing += 1
-            continue
+            if _cached_tile_is_fresh(path, tile_ttl_days=tile_ttl_days, now=now):
+                tiles_skipped_existing += 1
+                continue
+            stale_existing = True
+        else:
+            stale_existing = False
         if dry_run:
             continue
-        remote_tile = fetcher(
-            imagery_source,
-            int(tile["z"]),
-            int(tile["x"]),
-            int(tile["y"]),
-        )
+        try:
+            remote_tile = fetcher(
+                imagery_source,
+                int(tile["z"]),
+                int(tile["x"]),
+                int(tile["y"]),
+            )
+        except Exception as exc:
+            tiles_failed += 1
+            if len(tile_error_samples) < 20:
+                tile_error_samples.append(
+                    {
+                        "z": int(tile["z"]),
+                        "x": int(tile["x"]),
+                        "y": int(tile["y"]),
+                        "error_type": type(exc).__name__,
+                        "error": str(exc)[:240],
+                    }
+                )
+            continue
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(remote_tile.body)
         tiles_written += 1
+        if stale_existing:
+            tiles_refreshed += 1
         bytes_written += len(remote_tile.body)
 
+    status = "dry_run_ready"
+    if not dry_run:
+        status = "seed_completed_with_errors" if tiles_failed else "seed_complete"
     return _imagery_seed_summary(
-        "dry_run_ready" if dry_run else "seed_complete",
+        status,
         plan=plan,
         dry_run=dry_run,
         tiles_seen=tiles_seen,
         tiles_written=tiles_written,
+        tiles_refreshed=tiles_refreshed,
         tiles_skipped_existing=tiles_skipped_existing,
+        tiles_failed=tiles_failed,
+        tile_error_samples=tile_error_samples,
+        tile_ttl_days=tile_ttl_days,
         bytes_written=bytes_written,
         started_at=started_at,
     )
@@ -802,7 +835,11 @@ def _imagery_seed_summary(
     dry_run: bool,
     tiles_seen: int,
     tiles_written: int,
+    tiles_refreshed: int,
     tiles_skipped_existing: int,
+    tiles_failed: int,
+    tile_error_samples: list[dict[str, Any]] | None,
+    tile_ttl_days: float | None,
     bytes_written: int,
     started_at: float,
 ) -> dict[str, Any]:
@@ -817,13 +854,34 @@ def _imagery_seed_summary(
         "dry_run": dry_run,
         "tiles_seen": tiles_seen,
         "tiles_written": tiles_written,
+        "tiles_refreshed": tiles_refreshed,
         "tiles_skipped_existing": tiles_skipped_existing,
+        "tiles_failed": tiles_failed,
+        "tile_error_samples": tile_error_samples or [],
+        "tile_ttl_days": tile_ttl_days,
         "bytes_written": bytes_written,
         "duration_seconds": round(time.time() - started_at, 3),
         "external_network_required": not dry_run,
         "network_mode_required": "explicit-fetch",
         "downloads_tiles_into_repo": False,
     }
+
+
+def _cached_tile_is_fresh(
+    path: Path,
+    *,
+    tile_ttl_days: float | None,
+    now: float,
+) -> bool:
+    if tile_ttl_days is None:
+        return True
+    if tile_ttl_days <= 0:
+        return False
+    try:
+        modified_at = path.stat().st_mtime
+    except OSError:
+        return False
+    return now - modified_at <= tile_ttl_days * 24 * 60 * 60
 
 
 def _safe_identifier(value: Any, field_name: str) -> str:

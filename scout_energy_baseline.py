@@ -223,6 +223,7 @@ def _route_family_profile(
         confidence=_route_family_confidence(activities),
         limitations=[
             "route-family profile is local baseline context, not a public capability label",
+            "route-effort units in this slice normalize distance, ascent, and descent only; altitude, pack load, technical terrain, season, weather, daylight, traffic, cost, road condition, and equipment remain human-review context",
             f"minimum activity count for this alpha profile is {MIN_ROUTE_FAMILY_ACTIVITY_COUNT}",
         ],
     )

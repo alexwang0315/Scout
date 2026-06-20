@@ -144,15 +144,16 @@ supported by historical GPX waypoint names, OCR map labels（圖磚文字辨識�
 or raster label evidence（圖磚標註證據）. Single-source, out-of-distance, or
 spatially scattered labels remain review-required and candidate-only.
 
-Explicit raster-label OCR output enters this layer through
-`scout.pretrip.raster_label_adapter` / `pretrip_raster_label_adapter.py`.
-The adapter does not fetch tiles and does not run OCR; it normalizes a provided
-OCR JSON payload into `outputs/layers/normalized/raster_label_evidence.geojson`
-and records source image hashes, tile/bbox provenance, confidence, review
-reasons, and candidate-only boundary metadata. Running
-`scout.pretrip.route_context_collect` after that folds the raster labels into
-`route_context_points.json` and, when labels are trail K anchors, into
-`route_mileage_k_anchors.json`.
+Raster-label OCR output normally enters this layer through map preparation.
+`pretrip_layer_preparation.py` orchestrates Rudy/Rudy+TW tile OCR, runs
+`pretrip_raster_label_adapter.py`, and then refreshes
+`route_context_points.json` plus `route_mileage_k_anchors.json`. The adapter
+itself does not fetch tiles and does not run OCR; it normalizes a provided OCR
+JSON payload into `outputs/layers/normalized/raster_label_evidence.geojson` and
+records source image hashes, tile/bbox provenance, confidence, review reasons,
+and candidate-only boundary metadata. Standalone
+`scout.pretrip.raster_label_adapter` and `scout.pretrip.route_context_collect`
+runs remain debug/retry paths, not the primary workspace preparation path.
 
 Future source connectors may add official trails, historical maps, cultural
 archives, biodiversity data, weather/season evidence, disaster records, and

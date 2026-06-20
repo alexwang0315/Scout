@@ -12,6 +12,11 @@ The job is a planning-side compiler for layer readiness, not a live map
 provider, crawler, route editor, safety adapter, or final `MissionGraph`
 compiler.
 
+For the fixed end-to-end operator sequence that combines GPX import, connected
+map preparation, Rudy/Rudy+TW OCR, raster label normalization, route context,
+Boss synthesis, 30-layer verification, browser smoke checks, and Scout deploy
+handoff, see `docs/specs/scout-pretrip-preparation-pipeline.md`.
+
 ## Admin API（管理介面 API）
 
 The admin surface exposes the same job through workspace-only endpoints:
@@ -53,19 +58,25 @@ python -m pretrip_layer_preparation \
   --network-mode no-network
 ```
 
-`--network-mode no-network` remains the default for CI fixtures, deterministic
-tests, and offline replay. Operator preparation should use
-`--network-mode explicit-fetch --allow-network-fetch` when network is available,
-and must still write only pretrip planning artifacts. `pi-offline` is the Pi
-lightweight profile for local/cache-only replay; `pi-online-explicit` is the
-operator profile for connected Overpass preparation.
+In-house pre-trip preparation is connected by design. Before departure, the
+operator should use `--network-mode explicit-fetch --allow-network-fetch
+--seed-imagery-cache --imagery-provider-allows-offline-prefetch` so the
+workspace stores the route corridor's vector evidence, raster tiles, OCR label
+evidence, terrain overlays, route context, mileage anchors, CP/MCP/Boss
+artifacts, and review queues while power and bandwidth are available.
+`--network-mode no-network` is only the CI fixture, deterministic test, or
+outdoor replay posture. `pi-offline` is the Pi lightweight profile for
+local/cache-only replay after departure; `pi-online-explicit` is the connected
+operator profile for pre-trip materialization.
 
 OSM raster tiles are not required when Overpass vector evidence is present.
 Overpass and OSM raster basemaps come from related OSM data, but they serve
 different purposes: Overpass is structured route-corridor evidence for CP/POI
-synthesis, while raster tiles are visual basemap support. This alpha treats
-Overpass as the required connected OSM data fetch and leaves raster tile cache
-as optional operator-provided visual support.
+synthesis, while raster tiles are visual basemap support and OCR material. This
+alpha treats Overpass as the required connected OSM data fetch and treats
+Rudy/Rudy+TW imagery tile cache as the preferred connected preparation material
+for offline maps and mileage/named-label OCR. The cache is optional only for
+CI/offline replay or when source permission/dependency checks block it.
 
 ## Offline Map Handoff
 
@@ -153,9 +164,20 @@ The `workspace`（工作區） outputs live under the selected project root:
     layer_preparation_summary.json
     layer_adapter_manifest.json
     layer_validation_report.json
+    raster_label_ocr_output.json
+    raster_label_adapter_manifest.json
+    normalized/raster_label_evidence.geojson
     projections/
       pretrip_map_layers.json
       admin_debug_events.jsonl
+  normalized/context/route_context/
+    route_context_evidence.json
+    source_manifest.json
+    route_context_pack.json
+    crawl_seed_plan.json
+  candidates/
+    route_context_points.json
+    route_mileage_k_anchors.json
 ```
 
 Expected contents:
@@ -171,6 +193,18 @@ Expected contents:
   `/admin/pretrip`.
 - `layer_validation_report.json`: blockers, warnings, stale sources, missing
   cache entries, invalid bbox/CRS, and capacity-limit results.
+- `raster_label_ocr_output.json`: Rudy/Rudy+TW OCR stage output or explicit
+  blocked-dependency/missing-tile status. It is adapter input, not route
+  context directly.
+- `cache/raster_label_ocr_tiles/*.json`: per-tile OCR result cache keyed by
+  tile image SHA-256, OCR engine version, engine name, and language. Empty OCR
+  results are cached too, so rerunning map preparation does not repeatedly run
+  Tesseract on unchanged tiles.
+- `normalized/raster_label_evidence.geojson`: normalized candidate-only raster
+  label evidence produced through the adapter contract.
+- `route_context_points.json` and `route_mileage_k_anchors.json`: route context
+  and trail-K anchors refreshed by map preparation after raster label evidence
+  is available.
 - `projections/pretrip_map_layers.json`: render-ready layer refs for the admin
   map stack.
 - `projections/admin_debug_events.jsonl`: read-only debug projection events,
@@ -361,6 +395,12 @@ hardware:
 - reads only local project files and explicit cache roots;
 - skips heavyweight raster conversion unless precomputed manifests or tile
   plans already exist;
+- runs Rudy/Rudy+TW OCR only when explicit imagery tile cache preparation is
+  permitted, otherwise records a blocked OCR stage instead of fabricating
+  mileage anchors;
+- keeps imagery tile cache entries fresh for 30 days by default, refreshing
+  only stale or missing tiles; OCR result cache is invalidated by tile image
+  hash and OCR engine/language/version rather than by clearing the workspace;
 - prefers manifests, bbox summaries, tile-count plans, transparent fallbacks,
   and debug projections over large generated assets;
 - writes under `/data/scout/pretrip/workspaces` or configured cache roots, not
@@ -378,6 +418,9 @@ hardware:
   Pi.
 - Every adapter records source refs, output refs, network policy, and validation
   status.
+- Raster OCR, adapter normalization, route-context refresh, and mileage tag
+  alignment are orchestrated by map preparation so prepared workspaces open with
+  CP/MCP/Boss/mileage evidence already materialized.
 - Workspace writes stay under the selected project output directory or declared
   cache roots.
 - The job never mutates Phase 1 runtime state, Phase 2 Brain state, incident

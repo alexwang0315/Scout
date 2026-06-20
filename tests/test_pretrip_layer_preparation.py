@@ -48,6 +48,23 @@ def test_layer_preparation_preview_is_metadata_only_and_no_write(tmp_path: Path)
     assert "<trkpt" not in json.dumps(preview, ensure_ascii=False).lower()
 
 
+def test_project_source_refs_accept_directory_refs(tmp_path: Path) -> None:
+    project_root = tmp_path / "project"
+    cache_dir = project_root / "outputs" / "layers" / "cache" / "raster_label_ocr_tiles"
+    cache_dir.mkdir(parents=True)
+    (cache_dir / "tile-cache.json").write_text("{}", encoding="utf-8")
+    refs = pretrip_layer_preparation._project_source_refs(
+        project_root,
+        {"raster_label_ocr_cache_ref": "outputs/layers/cache/raster_label_ocr_tiles"},
+    )
+
+    cache_ref = refs["raster_label_ocr_cache_ref"]
+    assert cache_ref["exists"] is True
+    assert cache_ref["source_kind"] == "directory"
+    assert cache_ref["entry_count"] == 1
+    assert cache_ref["sha256"] is None
+
+
 def test_layer_preparation_overpass_plan_uses_route_corridor_bbox(
     tmp_path: Path,
 ) -> None:
@@ -297,7 +314,7 @@ def test_layer_preparation_keeps_imagery_bbox_metadata_without_cache_plan(
     assert "imagery_tile_cache_plan_ref" not in manifest["outputs"]
 
 
-def test_layer_preparation_rejects_imagery_cache_seed_when_explicit(
+def test_layer_preparation_seeds_imagery_cache_for_raster_ocr_pipeline(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -314,23 +331,123 @@ def test_layer_preparation_rejects_imagery_cache_seed_when_explicit(
         "east": 121.21,
         "north": 24.04,
     }
+    project["raster_label_ocr_label_count"] = 99
+    project["raster_label_evidence_count"] = 99
     project_path.write_text(json.dumps(project, ensure_ascii=False), encoding="utf-8")
-    with pytest.raises(ValueError, match="seed_imagery_cache is disabled"):
-        run_layer_preparation(
-            LayerPreparationRequest(
-                project_id="chilai_nanhua_day1",
-                project_root=project_root,
-                layers=("imagery",),
-                network_mode="explicit-fetch",
-                allow_network_fetch=True,
-                imagery_min_zoom=12,
-                imagery_max_zoom=12,
-                seed_imagery_cache=True,
-                imagery_provider_allows_offline_prefetch=True,
-                imagery_seed_max_tiles=2,
-                prepared_at="2026-05-22T00:00:00+00:00",
-            )
+    def fake_seed(plan, **kwargs):
+        return {
+            "status": "seed_complete",
+            "dry_run": False,
+            "tiles_seen": 1,
+            "tiles_written": 1,
+            "tiles_skipped_existing": 0,
+            "bytes_written": 123,
+            "cache_root": plan["cache_root"],
+        }
+
+    def fake_extract(project_root_arg, **kwargs):
+        output_ref = kwargs["output_ref"]
+        payload = {
+            "artifact_kind": "pretrip_raster_label_ocr_output",
+            "schema_version": "route_corridor_map_preparation.v1",
+            "status": "completed",
+            "project_id": "chilai_nanhua_day1",
+            "source_path": output_ref,
+            "generated_at": "2026-05-22T00:00:00+00:00",
+            "labels": [
+                {
+                    "id": "ocr.rudy_tw.6k",
+                    "label_text": "6K",
+                    "label_role": "trail_mileage_k_anchor",
+                    "lat": 24.053,
+                    "lon": 121.245,
+                    "confidence": 0.91,
+                    "bbox_px": [8, 8, 34, 24],
+                    "tile_bbox_wgs84": {
+                        "west": 121.244,
+                        "south": 24.052,
+                        "east": 121.246,
+                        "north": 24.054,
+                    },
+                    "source_ref": "rudy_tw_test_tile",
+                    "source_image_hash": "sha256:test",
+                    "review_required": True,
+                    "candidate_only": True,
+                    "runtime_safety_truth": False,
+                }
+            ],
+            "counts": {"label_count": 1},
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+            "boundary": {
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+            },
+        }
+        (Path(project_root_arg) / output_ref).parent.mkdir(parents=True, exist_ok=True)
+        (Path(project_root_arg) / output_ref).write_text(
+            json.dumps(payload, ensure_ascii=False),
+            encoding="utf-8",
         )
+        project_data = _load(Path(project_root_arg) / "project.json")
+        project_data["raster_label_ocr_output_ref"] = output_ref
+        project_data["raster_label_ocr_status"] = "completed"
+        project_data["raster_label_ocr_label_count"] = 1
+        (Path(project_root_arg) / "project.json").write_text(
+            json.dumps(project_data, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        return {
+            "status": "completed",
+            "project_id": "chilai_nanhua_day1",
+            "output_ref": output_ref,
+            "label_count": 1,
+            "tile_record_count": 1,
+            "tile_skipped_count": 0,
+            "writes_performed": True,
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+            "missing_dependencies": [],
+        }
+
+    import pretrip_raster_label_ocr
+
+    monkeypatch.setattr(pretrip_layer_preparation, "seed_imagery_tile_cache", fake_seed)
+    monkeypatch.setattr(pretrip_raster_label_ocr, "extract_raster_label_ocr", fake_extract)
+
+    manifest = run_layer_preparation(
+        LayerPreparationRequest(
+            project_id="chilai_nanhua_day1",
+            project_root=project_root,
+            layers=("imagery",),
+            network_mode="explicit-fetch",
+            allow_network_fetch=True,
+            imagery_min_zoom=12,
+            imagery_max_zoom=12,
+            seed_imagery_cache=True,
+            imagery_provider_allows_offline_prefetch=True,
+            imagery_seed_max_tiles=2,
+            prepared_at="2026-05-22T00:00:00+00:00",
+        )
+    )
+    project = _load(project_path)
+    raster_pipeline = manifest["raster_label_preparation"]
+
+    assert project["imagery_tile_cache_seed_status"] == "seed_complete"
+    assert project["raster_label_ocr_label_count"] == 1
+    assert project["raster_label_evidence_count"] == 1
+    assert raster_pipeline["status"] == "completed"
+    assert raster_pipeline["ocr"]["status"] == "completed"
+    assert raster_pipeline["adapter"]["feature_count"] == 1
+    assert raster_pipeline["route_context_collection"]["status"] == "completed"
+    assert project["route_mileage_k_anchor_count"] >= 1
+    route_mileage_anchors = _load(project_root / project["route_mileage_k_anchors_ref"])
+    assert any(
+        anchor["normalized_mileage_k"] == "6K"
+        for anchor in route_mileage_anchors["anchors"]
+    )
+    mileage_tags = _load(project_root / project["mileage_tag_alignment_ref"])
+    assert mileage_tags["counts"]["usable_anchor_count"] >= 1
 
 
 def test_layer_preparation_does_not_copy_known_scout_imagery_manifests(
@@ -536,9 +653,9 @@ def test_layer_preparation_records_gpx_filter_provenance_from_import_workspace(
     assert web_case_plan["status"] == "planned_no_network"
     assert web_case_plan["boundary"]["network_calls_allowed"] is False
     assert raster_label_plan["artifact_kind"] == "pretrip_raster_label_plan"
-    assert raster_label_plan["status"] == "planned_requires_explicit_ocr_adapter"
+    assert raster_label_plan["status"] == "planned_for_map_preparation_ocr"
     assert raster_label_plan["ocr_or_vision_performed"] is False
-    assert raster_label_plan["imagery_processing_enabled"] is False
+    assert raster_label_plan["imagery_processing_enabled"] is True
     assert raster_label_plan["ocr_engine"]["entrypoint"] == "pretrip_raster_label_ocr.py"
     assert raster_label_plan["ocr_engine"]["preferred_engine"] == "tesseract"
     assert raster_label_plan["ocr_engine"]["output_ref"] == (
@@ -551,6 +668,10 @@ def test_layer_preparation_records_gpx_filter_provenance_from_import_workspace(
     assert raster_label_plan["ocr_engine"]["runtime_safety_truth"] is False
     assert (
         raster_label_plan["execution_policy"]["ocr_requires_explicit_adapter_run"]
+        is False
+    )
+    assert (
+        raster_label_plan["execution_policy"]["ocr_runs_as_map_preparation_stage"]
         is True
     )
     assert (

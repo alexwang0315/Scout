@@ -143,6 +143,7 @@ def build_raster_label_evidence(
         _write_json(root / output_ref, evidence)
         _write_json(root / manifest_ref, manifest)
     if update_project and not dry_run:
+        project = _load_json(root / "project.json")
         project["raster_label_evidence_ref"] = output_ref
         project["raster_label_adapter_manifest_ref"] = manifest_ref
         project["raster_label_evidence_count"] = len(features)

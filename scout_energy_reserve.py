@@ -1524,6 +1524,11 @@ def build_energy_reserve_explanation(
     baseline: ScoutEnergyReserveBaseline,
 ) -> ScoutEnergyReserveExplanation:
     band = baseline.reserve_trend.current_band
+    route_review_cues = [
+        "Treat this as a personal baseline-relative advisory, not route approval.",
+        "Route choice still needs GPX or structured route review, daylight and weather checks, equipment and retreat-gate planning, and human review of personal constraints.",
+        "Do not choose a route from scenery popularity or a single video recommendation.",
+    ]
     headlines = {
         "normal": "Reserve is within the recent personal baseline.",
         "watch": "Reserve is mildly below the recent personal baseline.",
@@ -1531,12 +1536,13 @@ def build_energy_reserve_explanation(
         "stop_and_check": "Reserve trend suggests stopping and checking how you feel.",
     }
     cues = {
-        "normal": ["Keep normal pacing and review conditions as usual."],
-        "watch": ["Use a quieter pace and keep rest options visible."],
-        "rest_suggested": ["Add a rest buffer before harder checkpoints.", "Avoid treating this as a safety state."],
+        "normal": ["Keep normal pacing and review conditions as usual.", *route_review_cues],
+        "watch": ["Use a quieter pace and keep rest options visible.", *route_review_cues],
+        "rest_suggested": ["Add a rest buffer before harder checkpoints.", "Avoid treating this as a safety state.", *route_review_cues],
         "stop_and_check": [
             "Pause and ask the user for a manual condition check.",
             "Escalation still requires the normal Scout safety/SOS flow.",
+            *route_review_cues,
         ],
     }
     return ScoutEnergyReserveExplanation(
@@ -1554,10 +1560,9 @@ def build_energy_reserve_explanation(
         advisory_cues=cues[band],
         forbidden_interpretations=[
             "medical diagnosis",
-            "disease inference",
-            "dehydration inference",
-            "arrhythmia inference",
-            "overtraining inference",
+            "medical condition inference",
+            "physiological condition inference",
+            "provider-value truth promotion",
             "Phase 1 runtime safety truth",
         ],
         data_quality=baseline.data_quality,

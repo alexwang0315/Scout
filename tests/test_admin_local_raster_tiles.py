@@ -1,4 +1,6 @@
 import io
+import os
+import time
 from pathlib import Path
 
 import pytest
@@ -128,6 +130,76 @@ def test_seeds_wmts_imagery_tile_cache_with_fixture_fetcher(tmp_path):
         cache_root=tmp_path / "imagery-tiles",
     )
     assert cached_path.read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
+
+
+def test_wmts_imagery_tile_cache_uses_30_day_ttl(tmp_path):
+    source = imagery_source_for_project({"imagery_source_id": "happyman_rudy"})
+    plan = build_imagery_tile_cache_plan(
+        {
+            "west": 121.2,
+            "south": 24.03,
+            "east": 121.2,
+            "north": 24.03,
+        },
+        project_id="chilai_nanhua_day1",
+        layer_id="rudy",
+        imagery_source=source,
+        cache_root=tmp_path / "imagery-tiles",
+        min_zoom=12,
+        max_zoom=12,
+    )
+    tile = plan["zoom_ranges"][0]
+    cached_path = raster_tile_cache_path(
+        "chilai_nanhua_day1",
+        "rudy",
+        12,
+        tile["x_min"],
+        tile["y_min"],
+        cache_root=tmp_path / "imagery-tiles",
+    )
+    calls: list[tuple[int, int, int]] = []
+
+    def fake_fetch(imagery_source, z, x, y):
+        calls.append((z, x, y))
+        return RemoteImageryTile(
+            body=b"\x89PNG\r\n\x1a\nwmts-fixture",
+            media_type="image/png",
+            source_id=imagery_source["source_id"],
+            url="https://example.test/wmts",
+            body_sha256="fixture-hash",
+        )
+
+    first = seed_imagery_tile_cache(
+        plan,
+        imagery_source=source,
+        provider_allows_offline_prefetch=True,
+        dry_run=False,
+        fetch_tile=fake_fetch,
+    )
+    second = seed_imagery_tile_cache(
+        plan,
+        imagery_source=source,
+        provider_allows_offline_prefetch=True,
+        dry_run=False,
+        fetch_tile=fake_fetch,
+    )
+    stale_mtime = time.time() - 31 * 24 * 60 * 60
+    os.utime(cached_path, (stale_mtime, stale_mtime))
+    third = seed_imagery_tile_cache(
+        plan,
+        imagery_source=source,
+        provider_allows_offline_prefetch=True,
+        dry_run=False,
+        fetch_tile=fake_fetch,
+    )
+
+    assert first["tiles_written"] == 1
+    assert second["tiles_skipped_existing"] == 1
+    assert second["tiles_written"] == 0
+    assert second["tile_ttl_days"] == 30
+    assert third["tiles_written"] == 1
+    assert third["tiles_refreshed"] == 1
+    assert len(calls) == 2
 
 
 def test_dry_run_does_not_write_tiles(tmp_path):

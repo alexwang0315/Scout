@@ -2232,13 +2232,6 @@
       forest: 4,
       osm: 8,
       terrain: 20,
-      hazards: 22,
-      "risk-ribbon": 24,
-      "risk-heatmap": 24,
-      "risk-delta": 24,
-      "soil-moisture": 26,
-      "antecedent-rain": 26,
-      "weather-api": 28,
       corridors: 40,
       overpass: 42,
       route: 44,
@@ -2246,13 +2239,20 @@
       "reference-tracks": 46,
       retreat: 48,
       segments: 50,
+      "risk-ribbon": 54,
+      "risk-heatmap": 55,
+      "risk-delta": 56,
+      "soil-moisture": 57,
+      "antecedent-rain": 58,
       "risk-score": 60,
       checkpoints: 62,
       pois: 64,
+      hazards: 65,
       "route-notes": 66,
       mcp: 68,
       "boss-points": 70,
-      events: 72
+      events: 72,
+      "weather-api": 80
     };
     const layerInputs = document.querySelectorAll("[data-layer]");
     const LAYER_PRESETS = {
@@ -3667,6 +3667,7 @@
       if (item.evidence_type === "completed_trip_scout_reaction_record") return "timeline";
       if (String(item.evidence_type || "").includes("boss_point") || item.boss_point_id) return "mcp";
       if (String(item.evidence_type || "").includes("major_critical_point") || item.mcp_id) return "mcp";
+      if (String(item.evidence_type || "").includes("mileage")) return "mileage";
       if (String(item.evidence_type || "").includes("gis_perception") || item.nearby_group_id) return "gis";
       if (item.evidence_type === "mission_checkpoint" || item.checkpoint_id) return "checkpoint";
       if (item.evidence_type === "mission_segment") return "segment";
@@ -3694,6 +3695,7 @@
       if (category === "risk" || type.includes("risk")) terms.add("map_risk");
       if (category === "timeline" || type.includes("capability")) terms.add("timeline");
       if (category === "mcp") terms.add("major");
+      if (category === "mileage") terms.add("mileage");
       if (category === "gis") terms.add("gis");
       return [...terms].filter(Boolean);
     }
@@ -5296,6 +5298,10 @@
         label: bossDisplayText(item),
         sublabel: bossSummaryText(item)
       }), false, "mcp");
+      appendEvidenceTreeGroup(tree, "default", "Mileage Tags", view.mileage_tag_alignment?.timeline_items || [], item => ({
+        label: item.label || item.display_mileage_label || item.source_id,
+        sublabel: `${item.source_kind || "mileage"} | ${item.route_projection_status || "projection-review"} | ${Math.round(item.route_distance_m || 0)}m`
+      }), false, "timeline");
       appendEvidenceTreeGroup(tree, "default", "AI GIS CP", view.gis_perception_timeline?.checkpoint_candidates || [], item => ({
         label: item.display_label || item.map_label || item.route_note_summary || item.candidate_id,
         sublabel: `${item.checkpoint_type || "-"} | group ${item.nearby_group_id || "-"} | ${item.route_note_freshness || "unknown"}`
@@ -5557,30 +5563,30 @@
       node.title = "Map zoom; rectangle drag zoom is active.";
     }
     function mapStrokeWidthPx(node, scale) {
-      let base = 1.2;
-      if (node.classList.contains("route-line")) base = 2.2;
-      if (node.classList.contains("segment-overlay")) base = 3.2;
-      if (node.classList.contains("corridor")) base = 2.8;
-      if (node.classList.contains("retreat-line")) base = 1.8;
-      if (node.classList.contains("reference-track")) base = 1.2;
-      if (node.classList.contains("overpass-corridor")) base = 2.2;
-      if (node.classList.contains("risk-ribbon")) base = 3.0;
-      if (node.classList.contains("risk-heatmap")) base = 3.8;
-      if (node.classList.contains("risk-delta")) base = 2.6;
-      if (node.classList.contains("map-highlight")) base = Math.min(base, 2.4);
-      const factor = scale >= 128 ? 0.42 : scale >= 64 ? 0.55 : scale >= 32 ? 0.7 : 1;
-      return Math.max(0.8, base * factor);
+      let base = 1.35;
+      if (node.classList.contains("route-line")) base = 2.55;
+      if (node.classList.contains("segment-overlay")) base = 3.55;
+      if (node.classList.contains("corridor")) base = 3.05;
+      if (node.classList.contains("retreat-line")) base = 2.05;
+      if (node.classList.contains("reference-track")) base = 1.4;
+      if (node.classList.contains("overpass-corridor")) base = 2.55;
+      if (node.classList.contains("risk-ribbon")) base = 3.35;
+      if (node.classList.contains("risk-heatmap")) base = 4.1;
+      if (node.classList.contains("risk-delta")) base = 2.9;
+      if (node.classList.contains("map-highlight")) base = Math.min(base, 2.8);
+      const factor = scale >= 128 ? 0.46 : scale >= 64 ? 0.6 : scale >= 32 ? 0.74 : 1;
+      return Math.max(1.0, base * factor);
     }
     function mapMarkerRadiusPx(circle, scale, baseRadius) {
-      let radius = Math.max(1.8, baseRadius);
-      if (circle.classList.contains("risk-score-point")) radius = Math.min(radius, 2.4);
-      if (circle.classList.contains("checkpoint")) radius = Math.min(radius, 4.2);
-      if (circle.classList.contains("mcp-candidate") || circle.classList.contains("boss-point")) radius = Math.min(radius, 4.8);
-      if (circle.classList.contains("map-highlight")) radius = Math.max(radius, 4.4);
-      if (scale >= 128) radius = Math.min(radius, 2.4);
-      else if (scale >= 64) radius = Math.min(radius, 3.0);
-      else if (scale >= 32) radius = Math.min(radius, 3.6);
-      return Math.max(1.4, radius);
+      let radius = Math.max(2.1, baseRadius);
+      if (circle.classList.contains("risk-score-point")) radius = Math.min(radius, 2.8);
+      if (circle.classList.contains("checkpoint")) radius = Math.min(radius, 4.8);
+      if (circle.classList.contains("mcp-candidate") || circle.classList.contains("boss-point")) radius = Math.min(radius, 5.4);
+      if (circle.classList.contains("map-highlight")) radius = Math.max(radius, 5.0);
+      if (scale >= 128) radius = Math.min(radius, 2.8);
+      else if (scale >= 64) radius = Math.min(radius, 3.4);
+      else if (scale >= 32) radius = Math.min(radius, 4.0);
+      return Math.max(1.7, radius);
     }
     function syncMapMarkerScale() {
       const scale = Math.max(state.zoom, 1);

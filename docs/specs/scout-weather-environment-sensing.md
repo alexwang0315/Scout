@@ -87,10 +87,24 @@ Canonical refs:
 - `outputs/weather_daylight_evidence.json`
 
 `pretrip_weather_decision_collection` is a workspace-local orchestration step. It
-does not fetch CWA, call GEE, expose `SCOUT_CWA_API_KEY`, or promote runtime
-safety truth. When local weather points are missing, it still writes a
-conservative `DELAY` candidate with missing fields so the Scout AI answer path
-does not guess from a placeholder.
+does not call GEE, expose `SCOUT_CWA_API_KEY`, or promote runtime safety truth.
+When local weather points are missing, it still writes a conservative `DELAY`
+candidate with missing fields so the Scout AI answer path does not guess from a
+placeholder.
+
+Current implementation status:
+
+- CWA/OWDP fetcher（中央氣象署開放資料抓取器） exists in the server-side
+  integration module and must resolve credentials through `SCOUT_CWA_API_KEY`
+  first, with legacy `CWA_API_KEY` accepted only as a compatibility fallback.
+- Admin live weather overlay（即時天氣圖層） remains opt-in through
+  `SCOUT_WEATHER_API_ENABLED`. Its live summary fetch path is still Open-Meteo
+  only; CWA output should be prepared as workspace evidence before becoming map
+  or review candidates.
+- GEE readiness（Google Earth Engine 可用性） is represented as a status gate:
+  project, auth mode, and credential references can be checked without calling
+  Earth Engine. Full SMAP/GPM fetching remains an explicit map-preparation
+  step, never an implicit browser request.
 
 ## Source Families
 
@@ -295,11 +309,14 @@ Scout may integrate Google Earth Engine through these server-side paths:
 Environment variables:
 
 ```text
+SCOUT_GEE_ENABLED=true|false
 SCOUT_GEE_PROJECT=<google-cloud-project-id>
 SCOUT_GEE_PROJECT_ID=<google-cloud-project-id>
-SCOUT_GEE_AUTH_MODE=adc|service_account|user
+SCOUT_GEE_AUTH_MODE=adc|service_account|user|user_oauth
 SCOUT_GEE_SERVICE_ACCOUNT=<optional-service-account-email>
+SCOUT_GEE_ACCOUNT=<optional-user-account-email>
 SCOUT_GEE_CREDENTIALS_PATH=<optional-local-json-path>
+GOOGLE_APPLICATION_CREDENTIALS=<optional-local-json-path>
 ```
 
 Credential values and service-account keys must never be committed, embedded in

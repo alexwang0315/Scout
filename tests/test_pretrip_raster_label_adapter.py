@@ -103,6 +103,8 @@ def test_raster_label_ocr_extractor_writes_explicit_adapter_input(tmp_path: Path
 
     assert result["status"] == "completed"
     assert result["label_count"] == 4
+    assert result["ocr_cache_miss_count"] == 1
+    assert result["ocr_cache_write_count"] == 1
     ocr_output = _load(project_root / result["output_ref"])
     assert ocr_output["artifact_kind"] == "pretrip_raster_label_ocr_output"
     assert ocr_output["raw_tile_embedded"] is False
@@ -126,6 +128,94 @@ def test_raster_label_ocr_extractor_writes_explicit_adapter_input(tmp_path: Path
     assert features["台14線94K"]["properties"]["label_role"] == "road_mileage_stone"
     assert features["遠傳 112"]["properties"]["communication_emergency_hint"] is True
     assert features["1500"]["properties"]["contour_elevation_m"] == 1500.0
+
+
+def test_raster_label_ocr_extractor_reuses_tile_ocr_cache(tmp_path: Path) -> None:
+    project_root = tmp_path / "chilai_nanhua_day1"
+    shutil.copytree(FIXTURE_PROJECT, project_root)
+    project_path = project_root / "project.json"
+    project = _load(project_path)
+
+    cache_root = tmp_path / "raster-tiles"
+    tile_path = raster_tile_cache_path(
+        "chilai_nanhua_day1",
+        "imagery",
+        13,
+        6853,
+        3534,
+        cache_root=cache_root,
+    )
+    tile_path.parent.mkdir(parents=True, exist_ok=True)
+    from PIL import Image
+
+    Image.new("RGB", (256, 256), (255, 255, 255)).save(tile_path)
+
+    tile_plan_ref = "outputs/layers/plans/rudy_twmap_tile_cache_plan.json"
+    (project_root / tile_plan_ref).parent.mkdir(parents=True, exist_ok=True)
+    (project_root / tile_plan_ref).write_text(
+        json.dumps(
+            {
+                "artifact_kind": "admin_imagery_tile_cache_plan",
+                "project_id": "chilai_nanhua_day1",
+                "layer_id": "imagery",
+                "source_id": "happyman_rudy_twmap",
+                "source_kind": "wmts_kvp_tile",
+                "cache_root": str(cache_root),
+                "tile_size": 256,
+                "zoom_ranges": [
+                    {
+                        "z": 13,
+                        "x_min": 6853,
+                        "x_max": 6853,
+                        "y_min": 3534,
+                        "y_max": 3534,
+                    }
+                ],
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    project["imagery_tile_cache_plan_ref"] = tile_plan_ref
+    project_path.write_text(
+        json.dumps(project, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    calls = 0
+
+    def first_runner(_image_path: Path) -> list[dict]:
+        nonlocal calls
+        calls += 1
+        return [
+            {"label_text": "6K", "bbox_px": [10, 20, 42, 36], "confidence": 0.9},
+        ]
+
+    first = extract_raster_label_ocr(
+        project_root,
+        ocr_runner=first_runner,
+        collected_at="2026-06-20T00:00:00Z",
+    )
+
+    def exploding_runner(_image_path: Path) -> list[dict]:  # pragma: no cover - must not run
+        raise AssertionError("cache hit should avoid OCR runner")
+
+    second = extract_raster_label_ocr(
+        project_root,
+        ocr_runner=exploding_runner,
+        collected_at="2026-06-20T00:01:00Z",
+    )
+    output = _load(project_root / second["output_ref"])
+
+    assert calls == 1
+    assert first["ocr_cache_miss_count"] == 1
+    assert first["ocr_cache_write_count"] == 1
+    assert second["ocr_cache_hit_count"] == 1
+    assert second["ocr_cache_miss_count"] == 0
+    assert second["label_count"] == 1
+    assert output["counts"]["ocr_cache_hit_count"] == 1
+    assert output["labels"][0]["label_text"] == "6K"
+    assert output["raw_tile_embedded"] is False
 
 
 def test_raster_label_ocr_extractor_reports_missing_dependency(

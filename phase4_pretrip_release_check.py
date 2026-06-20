@@ -1709,7 +1709,7 @@ def _check_admin_weather_overlay(root: Path) -> dict[str, Any]:
         ready_status = build_weather_api_runtime_status(
             {
                 "SCOUT_WEATHER_API_ENABLED": "true",
-                "SCOUT_WEATHER_API_KEY": "release-check-secret",
+                "SCOUT_CWA_API_KEY": "release-check-secret",
             }
         )
         open_meteo_status = build_weather_api_runtime_status(
