@@ -50,6 +50,7 @@ def assess_scout_route_context(
     resolved_context_types = _normalize_context_types(context_types)
     query_terms = _query_terms(query)
     hints = _context_hints(query)
+    requested_mileage_anchors = _mileage_anchor_keys(query)
     distance_min = _float_or_none(distance_m_min)
     distance_max = _float_or_none(distance_m_max)
 
@@ -128,6 +129,11 @@ def assess_scout_route_context(
             continue
         if distance_max is not None and (distance is None or distance > distance_max):
             continue
+        if requested_mileage_anchors and not _item_matches_mileage_anchor(
+            item,
+            requested_mileage_anchors,
+        ):
+            continue
         score = _score_item(item, query_terms=query_terms, hints=hints)
         if query_terms and score <= 0 and not generic_route_context_query:
             continue
@@ -158,6 +164,7 @@ def assess_scout_route_context(
     field_answer = briefing_answer or _field_answer(
         results,
         answerability=answerability,
+        requested_mileage_anchors=requested_mileage_anchors,
     )
     decision_output = _decision_output(
         results=results,
@@ -181,6 +188,7 @@ def assess_scout_route_context(
             "distance_m_max": distance_max,
             "query_terms": sorted(query_terms),
             "context_hints": sorted(hints),
+            "requested_mileage_anchors": sorted(requested_mileage_anchors),
         },
         "field_answer": field_answer,
         "route_briefing": route_briefing,
@@ -796,6 +804,13 @@ def _route_context_point_items(
                 "lat": _float_or_none(raw.get("lat")),
                 "lon": _float_or_none(raw.get("lon")),
                 "nearest_cp_candidate_id": raw.get("nearest_cp_candidate_id"),
+                "label_role": raw.get("label_role"),
+                "mileage_anchor_kind": raw.get("mileage_anchor_kind"),
+                "mileage_k": _float_or_none(raw.get("mileage_k")),
+                "mileage_m": _float_or_none(raw.get("mileage_m")),
+                "normalized_mileage_k": raw.get("normalized_mileage_k"),
+                "raw_mileage_text": raw.get("raw_mileage_text"),
+                "route_mileage_m": _float_or_none(raw.get("route_mileage_m")),
                 "point_classes": classes,
                 "review_state": raw.get("review_state"),
                 "confidence": raw.get("confidence"),
@@ -813,6 +828,13 @@ def _route_context_point_items(
                     raw.get("candidate_id"),
                     raw.get("source_candidate_id"),
                     raw.get("context_kind"),
+                    raw.get("label_role"),
+                    raw.get("mileage_anchor_kind"),
+                    raw.get("normalized_mileage_k"),
+                    raw.get("raw_mileage_text"),
+                    raw.get("mileage_k"),
+                    raw.get("mileage_m"),
+                    raw.get("route_mileage_m"),
                     sec6_layers,
                     evidence_families,
                     raw.get("reference_gaps"),
@@ -1304,12 +1326,21 @@ def _route_briefing_field_answer(
     return None
 
 
-def _field_answer(results: list[dict[str, Any]], *, answerability: str) -> str:
+def _field_answer(
+    results: list[dict[str, Any]],
+    *,
+    answerability: str,
+    requested_mileage_anchors: set[str] | None = None,
+) -> str:
     if not results:
         return (
             "目前缺少可用的路線脈絡候選資料。不要為拍攝或觀察臨時改線；"
             "請先查明 CP、風險預算與路線資料。"
         )
+    if requested_mileage_anchors:
+        mileage_answer = _mileage_anchor_field_answer(results[0])
+        if mileage_answer:
+            return mileage_answer
     top = results[:3]
     parts = []
     for item in top:
@@ -1323,6 +1354,36 @@ def _field_answer(results: list[dict[str, Any]], *, answerability: str) -> str:
         + "、".join(parts)
         + "。這些只代表行前 Experience Guide 候選，不是現場停留授權；"
         "若要停留或拍攝，仍需用 contextual permission 判斷最多多久與何時離開。"
+    )
+
+
+def _mileage_anchor_field_answer(item: dict[str, Any]) -> str | None:
+    if not _is_mileage_anchor_item(item):
+        return None
+    label = str(
+        item.get("normalized_mileage_k")
+        or item.get("raw_mileage_text")
+        or item.get("label")
+        or "里程錨點"
+    )
+    distance = (
+        _float_or_none(item.get("route_mileage_m"))
+        or _float_or_none(item.get("mileage_m"))
+        or _float_or_none(item.get("distance_m"))
+    )
+    distance_text = f"約 {distance / 1000:.1f} km" if distance is not None else "距離未知"
+    lat = _float_or_none(item.get("lat"))
+    lon = _float_or_none(item.get("lon"))
+    coord_text = (
+        f"，候選座標 lat {lat:.9f}, lon {lon:.9f}"
+        if lat is not None and lon is not None
+        else ""
+    )
+    source_path = str(item.get("source_path") or "unknown source")
+    return (
+        f"{label} 在本次路徑{distance_text} 處{coord_text}。"
+        f"來源：{source_path}；這是行前 candidate-only 里程錨點，"
+        "runtime_safety_truth=false，現地仍需用 GPX/離線地圖與人工 review 交叉確認。"
     )
 
 
@@ -1656,6 +1717,79 @@ def _item_references_cp(item: dict[str, Any], cp: str) -> bool:
 
 def _normalize_context_types(values: list[str] | None) -> set[str]:
     return {_normalize(value) for value in (values or []) if str(value).strip()}
+
+
+def _mileage_anchor_keys(query: str) -> set[str]:
+    text = _normalize_mileage_text(query)
+    keys: set[str] = set()
+    for match in re.finditer(r"(?<!\d)(\d+(?:\.\d+)?)(?:k|公里|km)(?![a-z0-9])", text):
+        keys.add(_format_mileage_anchor_key(float(match.group(1))))
+    return keys
+
+
+def _item_matches_mileage_anchor(
+    item: dict[str, Any],
+    requested_keys: set[str],
+) -> bool:
+    item_keys = _item_mileage_anchor_keys(item)
+    return bool(item_keys & requested_keys)
+
+
+def _item_mileage_anchor_keys(item: dict[str, Any]) -> set[str]:
+    keys: set[str] = set()
+    anchor_kind = _explicit_mileage_anchor_kind(item)
+    for value in (
+        item.get("normalized_mileage_k"),
+        item.get("raw_mileage_text"),
+        item.get("label"),
+        item.get("candidate_id"),
+    ):
+        keys.update(_mileage_anchor_keys(str(value or "")))
+    if not anchor_kind and not keys:
+        return keys
+    parsed_k = _float_or_none(item.get("mileage_k"))
+    if parsed_k is not None:
+        keys.add(_format_mileage_anchor_key(parsed_k))
+    for value in (
+        item.get("route_mileage_m"),
+        item.get("mileage_m"),
+        item.get("distance_m"),
+    ):
+        parsed_m = _float_or_none(value)
+        if parsed_m is not None:
+            keys.add(_format_mileage_anchor_key(parsed_m / 1000.0))
+    return keys
+
+
+def _is_mileage_anchor_item(item: dict[str, Any]) -> bool:
+    return bool(_explicit_mileage_anchor_kind(item)) or bool(
+        _item_mileage_anchor_keys(item)
+    )
+
+
+def _explicit_mileage_anchor_kind(item: dict[str, Any]) -> str | None:
+    evidence_type = str(item.get("evidence_type") or "")
+    label_role = str(item.get("label_role") or "")
+    kind = str(item.get("mileage_anchor_kind") or "")
+    matches = {"trail_mileage_k_anchor", "road_mileage_stone"}.intersection(
+        {evidence_type, label_role, kind}
+    )
+    return next(iter(matches), None)
+
+
+def _format_mileage_anchor_key(value: float) -> str:
+    rounded = round(value, 3)
+    if rounded.is_integer():
+        return f"{int(rounded)}k"
+    return f"{rounded:g}k"
+
+
+def _normalize_mileage_text(value: Any) -> str:
+    fullwidth = str.maketrans(
+        "０１２３４５６７８９Ｋｋ．。",
+        "0123456789kk..",
+    )
+    return str(value or "").translate(fullwidth).strip().lower().replace(" ", "")
 
 
 def _query_terms(query: str) -> set[str]:

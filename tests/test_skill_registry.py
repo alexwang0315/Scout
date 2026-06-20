@@ -28,6 +28,7 @@ class SkillRegistryTests(unittest.TestCase):
                 "latest-team-position-check",
                 "remote-status-json",
                 "route-briefing-compose",
+                "route-reference-point-lookup",
                 "team-checkin-summary",
                 "team-rendezvous-beacon",
             ],
@@ -57,6 +58,21 @@ class SkillRegistryTests(unittest.TestCase):
             layout.media_quality_gate.missing_visual_policy,
         )
         self.assertEqual(layout.safety_boundary.runtime_safety_truth, False)
+        route_reference = registry.get("route-reference-point-lookup")
+        self.assertEqual(route_reference.type, "analysis")
+        self.assertEqual(route_reference.activation_gate.mode, "manual")
+        self.assertFalse(route_reference.activation_gate.requires_human_approval)
+        self.assertIn(
+            "pretrip.workspace.candidates.route_mileage_k_anchors",
+            route_reference.allowed_reads,
+        )
+        self.assertIn("live.safety_api", route_reference.forbidden_writes)
+        self.assertEqual(route_reference.output_schema.format, "artifact")
+        self.assertIn(
+            "route_reference_lookup_answer",
+            route_reference.output_schema.artifact_kinds,
+        )
+        self.assertIn("runtime_safety_truth", route_reference.output_schema.required_fields)
 
     def test_manifest_schema_rejects_unknown_fields_and_overlapping_writes(self):
         payload = self._valid_manifest_payload()

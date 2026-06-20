@@ -164,6 +164,11 @@ def _registered_tool_descriptions() -> dict[str, str]:
         )
         if contract.tool_id == ROUTE_CONTEXT_TOOL_ID:
             descriptions[contract.tool_id] += (
+                " For route reference lookup questions, use this tool for CP/MCP/K "
+                "mileage anchors, OCR labels, route notes, named points, and "
+                "\"where is / near which point / can I trust this label\" queries. "
+                "Return candidate-only location, source refs, review state, and "
+                "confidence notes; never promote the answer to runtime safety truth."
                 " For route briefing outputs, enforce the Scout media quality gate: "
                 "use route-specific photos/maps, reject site chrome/icons/logos/"
                 "tracking/social widgets, and report visual evidence gaps instead "
