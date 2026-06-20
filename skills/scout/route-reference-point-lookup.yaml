@@ -1,0 +1,93 @@
+id: route-reference-point-lookup
+version: 0.1.0
+status: experimental
+type: analysis
+priority: 53
+triggers:
+  - event: assistant.route_reference_lookup_requested
+    description: Resolve CP/MCP/K mileage anchor/OCR label/route note/named-point location and trust questions from pretrip workspace evidence.
+    required_refs:
+      - pretrip.workspace.project
+      - pretrip.workspace.candidates.route_context_points
+activation_gate:
+  mode: manual
+  requires_human_approval: false
+  conditions:
+    - user asks where a route reference point is, which CP/MCP it is near, or whether an OCR/map/route-note label is trustworthy
+    - answer is based on pretrip candidate evidence plus source/provenance fields
+    - output remains candidate-only unless an operator review workflow promotes it outside this skill
+    - no runtime safety mutation, outbound send, or hardware control is allowed
+noise_control:
+  cooldown_seconds: 0
+  dedupe_window_seconds: 0
+  max_runs_per_mission: null
+  suppression_keys:
+    - project_id
+    - query_reference
+preflight:
+  required_skill_ids: []
+  required_capabilities:
+    - scout.ai.route_context.assess.v0
+    - pydantic_ai.tool.search_scout_route_structure.v0
+    - pydantic_ai.tool.search_scout_map_perception.v0
+    - pydantic_ai.tool.search_scout_evidence_fulltext.v0
+  required_artifacts:
+    - pretrip.workspace.project
+    - pretrip.workspace.candidates.route_context_points
+allowed_reads:
+  - pretrip.workspace.project
+  - pretrip.workspace.route_summary
+  - pretrip.workspace.candidates.route_context_points
+  - pretrip.workspace.candidates.route_mileage_k_anchors
+  - pretrip.workspace.candidates.checkpoints
+  - pretrip.workspace.outputs.mcp
+  - pretrip.workspace.outputs.mcp_ocr_labels
+  - pretrip.workspace.outputs.map_perception
+  - pretrip.workspace.outputs.layers.normalized.raster_label_evidence
+  - pretrip.workspace.candidates.route_note_candidates
+  - pretrip.workspace.evidence_fulltext
+allowed_writes: []
+forbidden_writes:
+  - phase1.runtime
+  - phase1.safety
+  - phase2.brain.observed_facts
+  - live.safety_api
+  - hardware.controls
+  - transport.egress
+output_schema:
+  format: artifact
+  node_types:
+    - RouteReferenceLookupCandidate
+    - SkillRunRecord
+  artifact_kinds:
+    - scout_ai_route_context_tool_output
+    - route_reference_lookup_answer
+  required_fields:
+    - reference_type
+    - query_reference
+    - answerability
+    - candidate_location
+    - route_distance_m
+    - lat
+    - lon
+    - source_refs
+    - review_state
+    - confidence_notes
+    - candidate_only
+    - runtime_safety_truth
+failure_policy:
+  on_error: record_failure
+  retry:
+    max_attempts: 0
+    backoff_seconds: 0
+  degrade_to: scout.ai.route_context.assess.v0
+control_surface:
+  operator_visible: true
+  manual_run_allowed: true
+  disable_allowed: true
+  status_label: Route reference point lookup
+audit:
+  log_inputs: true
+  log_outputs: true
+  log_decision: true
+  retention: mission_lifetime

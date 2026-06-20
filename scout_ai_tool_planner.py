@@ -3270,6 +3270,8 @@ def _looks_like_buffer_cost_question(text: str) -> bool:
 
 
 def _looks_like_route_context_question(text: str) -> bool:
+    if _looks_like_route_mileage_anchor_question(text):
+        return True
     if _looks_like_route_briefing_question(text):
         return True
     if _looks_like_post_trip_route_context_update_question(text):
@@ -3285,6 +3287,12 @@ def _has_route_context_terms(text: str) -> bool:
     return _has_any(
         text,
         (
+            "里程",
+            "里程樁",
+            "里程錨點",
+            "公里樁",
+            "k點",
+            "k在哪",
             "值得看",
             "探索力",
             "路線脈絡力",
@@ -3349,6 +3357,29 @@ def _has_route_context_terms(text: str) -> bool:
             "briefing",
             "whattosee",
             "viewpoint",
+        ),
+    )
+
+
+def _looks_like_route_mileage_anchor_question(text: str) -> bool:
+    if not _mileage_anchor_keys(text):
+        return False
+    return _has_any(
+        text,
+        (
+            "在哪",
+            "哪裡",
+            "位置",
+            "座標",
+            "坐標",
+            "靠近",
+            "路徑",
+            "路線",
+            "里程",
+            "里程樁",
+            "公里樁",
+            "k點",
+            "k在哪",
         ),
     )
 
@@ -3436,6 +3467,23 @@ def _looks_like_media_literacy_question(text: str) -> bool:
 
 def _normalize(text: str) -> str:
     return str(text or "").strip().lower().replace(" ", "")
+
+
+def _mileage_anchor_keys(text: str) -> set[str]:
+    normalized = _normalize_mileage_text(text)
+    keys: set[str] = set()
+    for match in re.finditer(r"(?<!\d)(\d+(?:\.\d+)?)(?:k|公里|km)(?![a-z0-9])", normalized):
+        value = round(float(match.group(1)), 3)
+        keys.add(f"{int(value)}k" if value.is_integer() else f"{value:g}k")
+    return keys
+
+
+def _normalize_mileage_text(value: str) -> str:
+    fullwidth = str.maketrans(
+        "０１２３４５６７８９Ｋｋ．。",
+        "0123456789kk..",
+    )
+    return str(value or "").translate(fullwidth).strip().lower().replace(" ", "")
 
 
 def _has_any(text: str, fragments: tuple[str, ...]) -> bool:

@@ -106,6 +106,30 @@ def test_route_context_reads_canonical_route_context_pack_for_briefing_questions
     assert "不是現場停留授權" in stops["field_answer"]
 
 
+def test_route_context_answers_exact_mileage_anchor_location() -> None:
+    result = assess_scout_route_context(
+        PROJECT_ROOT,
+        query="本次路徑的15K在哪",
+        limit=5,
+    )
+
+    assert result["answerability"] == "route_context_available"
+    assert result["filters"]["requested_mileage_anchors"] == ["15k"]
+    assert result["result_count"] == 1
+    anchor = result["results"][0]
+    assert anchor["candidate_id"] == "route_context.route_note_candidates.workspace_route.15K"
+    assert anchor["evidence_type"] == "trail_mileage_k_anchor"
+    assert anchor["normalized_mileage_k"] == "15K"
+    assert anchor["distance_m"] == 15000.0
+    assert anchor["route_mileage_m"] == 15000.0
+    assert anchor["lat"] == 24.034234788
+    assert anchor["lon"] == 121.280180449
+    assert anchor["runtime_safety_truth"] is False
+    assert "15K 在本次路徑約 15.0 km 處" in result["field_answer"]
+    assert "lat 24.034234788, lon 121.280180449" in result["field_answer"]
+    assert "runtime_safety_truth=false" in result["field_answer"]
+
+
 def test_route_context_keeps_risk_context_from_becoming_stop_permission() -> None:
     result = assess_scout_route_context(
         PROJECT_ROOT,
