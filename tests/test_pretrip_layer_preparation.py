@@ -539,8 +539,22 @@ def test_layer_preparation_records_gpx_filter_provenance_from_import_workspace(
     assert raster_label_plan["status"] == "planned_requires_explicit_ocr_adapter"
     assert raster_label_plan["ocr_or_vision_performed"] is False
     assert raster_label_plan["imagery_processing_enabled"] is False
+    assert raster_label_plan["ocr_engine"]["entrypoint"] == "pretrip_raster_label_ocr.py"
+    assert raster_label_plan["ocr_engine"]["preferred_engine"] == "tesseract"
+    assert raster_label_plan["ocr_engine"]["output_ref"] == (
+        "outputs/layers/raster_label_ocr_output.json"
+    )
+    assert raster_label_plan["ocr_engine"]["adapter_entrypoint"] == (
+        "pretrip_raster_label_adapter.py"
+    )
+    assert raster_label_plan["ocr_engine"]["raw_tiles_embedded_in_output"] is False
+    assert raster_label_plan["ocr_engine"]["runtime_safety_truth"] is False
     assert (
         raster_label_plan["execution_policy"]["ocr_requires_explicit_adapter_run"]
+        is True
+    )
+    assert (
+        raster_label_plan["execution_policy"]["ocr_engine_output_must_feed_adapter"]
         is True
     )
     assert raster_label_plan["preferred_ocr_source_ids"] == [
@@ -629,11 +643,14 @@ def test_layer_preparation_records_gpx_filter_provenance_from_import_workspace(
     semantic_judgements = _load(
         project_root / project["gis_perception_ai_judgements_ref"]
     )
-    checkpoint_candidates = _load(project_root / project["gis_checkpoint_candidates_ref"])
-    ln_proposals = _load(project_root / project["ln_proposals_ref"])
-    poi_candidates = _load(project_root / project["poi_candidates_ref"])
-    terrain_risk_candidates = _load(project_root / project["terrain_risk_candidates_ref"])
-    detour_candidates = _load(project_root / project["detour_route_candidates_ref"])
+    for ref_key in (
+        "gis_checkpoint_candidates_ref",
+        "ln_proposals_ref",
+        "poi_candidates_ref",
+        "terrain_risk_candidates_ref",
+        "detour_route_candidates_ref",
+    ):
+        assert (project_root / project[ref_key]).is_file()
     assert semantic_input["artifact_kind"] == "pretrip_gis_semantic_input_bundle"
     assert semantic_input["schema_version"] == "route_corridor_map_preparation.v1"
     assert semantic_input["route_scope_ref"] == (

@@ -104,6 +104,7 @@ OUTPUT_REFS = {
     "layer_map_projection_ref": "outputs/layers/projections/pretrip_map_layers.json",
     "layer_debug_projection_events_ref": "outputs/layers/projections/admin_debug_events.jsonl",
 }
+RASTER_LABEL_OCR_OUTPUT_REF = "outputs/layers/raster_label_ocr_output.json"
 ALLOWED_LAYERS = {
     "osm",
     "overpass",
@@ -4107,8 +4108,29 @@ def _raster_label_plan_from_manifest(manifest: dict[str, Any]) -> dict[str, Any]
         "ocr_or_vision_performed": False,
         "imagery_processing_enabled": False,
         "tile_display_mode": "runtime_wmts",
+        "ocr_engine": {
+            "entrypoint": "pretrip_raster_label_ocr.py",
+            "cli": (
+                "python -m pretrip_raster_label_ocr "
+                "--project-root <project_root> --tile-manifest <tile_plan_or_manifest>"
+            ),
+            "preferred_engine": "tesseract",
+            "supported_engines": ["tesseract"],
+            "mac_optional_engine": "apple_vision_pyobjc",
+            "output_ref": RASTER_LABEL_OCR_OUTPUT_REF,
+            "adapter_input_ref": RASTER_LABEL_OCR_OUTPUT_REF,
+            "adapter_entrypoint": "pretrip_raster_label_adapter.py",
+            "runtime_dependency_policy": (
+                "if OCR runtime dependencies are missing, emit blocked_dependency_missing "
+                "instead of fabricated OCR labels"
+            ),
+            "raw_tiles_embedded_in_output": False,
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+        },
         "execution_policy": {
             "ocr_requires_explicit_adapter_run": True,
+            "ocr_engine_output_must_feed_adapter": True,
             "network_fetch_requires_explicit_fetch_mode": True,
             "raw_tiles_embedded_in_json": False,
             "preferred_role": "map_ocr_mileage_anchor_and_named_place_seed",

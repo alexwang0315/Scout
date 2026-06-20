@@ -62,6 +62,7 @@ def test_builtin_manifest_directory_lists_read_and_proposal_tools() -> None:
     assert "scout.pretrip.weather_decision_collect" in tool_ids
     assert "scout.pretrip.contextual_permission_collect" in tool_ids
     assert "scout.pretrip.prepare_layers" in tool_ids
+    assert "scout.pretrip.raster_label_ocr" in tool_ids
     assert "scout.pretrip.raster_label_adapter" in tool_ids
     assert "scout.pretrip.artifact_manifest" in tool_ids
     assert "scout.pretrip.readiness" in tool_ids
@@ -2008,6 +2009,61 @@ def test_builtin_pretrip_prepare_layers_writes_no_network_outputs_with_auth(
     assert output["boundary"]["phase1_safety_mutation_allowed"] is False
     project = json.loads((project_root / "project.json").read_text(encoding="utf-8"))
     assert (project_root / project["layer_preparation_manifest_ref"]).is_file()
+
+
+def test_builtin_pretrip_raster_label_ocr_writes_explicit_adapter_input(
+    tmp_path: Path,
+) -> None:
+    fixture_root = REPO_ROOT / "tests" / "fixtures" / "pretrip" / "projects" / "chilai_nanhua_day1"
+    project_root = tmp_path / "chilai_nanhua_day1"
+    shutil.copytree(fixture_root, project_root)
+    tile_manifest = project_root / "outputs" / "layers" / "plans" / "empty_tiles.json"
+    tile_manifest.parent.mkdir(parents=True, exist_ok=True)
+    tile_manifest.write_text(json.dumps({"tiles": []}), encoding="utf-8")
+    request = tmp_path / "raster-label-ocr.request.json"
+    request.write_text(
+        json.dumps(
+            {
+                "project_root": str(project_root),
+                "tile_manifest_path": str(tile_manifest),
+                "engine": "unsupported-test-engine",
+                "collected_at": "2026-06-18T00:00:00Z",
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    exit_code, payload = run_scout_agent_cli(
+        [
+            "tools",
+            "run",
+            "scout.pretrip.raster_label_ocr",
+            "--manifest-dir",
+            str(MANIFEST_DIR),
+            "--input",
+            str(request),
+            "--authorized-by",
+            "operator.alex",
+            "--json",
+        ]
+    )
+
+    assert exit_code == 0
+    assert payload["status"] == "completed"
+    output = json.loads(payload["outputs"]["stdout"])
+    assert output["result"]["status"] == "blocked_dependency_missing"
+    assert output["result"]["output_ref"] == "outputs/layers/raster_label_ocr_output.json"
+    assert output["boundary"]["network_calls_made"] is False
+    assert output["boundary"]["raw_tiles_embedded"] is False
+    project = json.loads((project_root / "project.json").read_text(encoding="utf-8"))
+    assert project["raster_label_ocr_output_ref"] == output["result"]["output_ref"]
+    artifact = json.loads(
+        (project_root / output["result"]["output_ref"]).read_text(encoding="utf-8")
+    )
+    assert artifact["candidate_only"] is True
+    assert artifact["runtime_safety_truth"] is False
+    assert artifact["labels"] == []
 
 
 def test_builtin_pretrip_raster_label_adapter_writes_candidate_evidence(
