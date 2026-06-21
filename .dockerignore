@@ -181,6 +181,8 @@ scout-risk-engine/scout_codex_package/tests/__pycache__/**
 !scout_energy_models.py
 !scout_energy_reserve.py
 !scout_energy_reserve_monitor.py
+!scout_gee_integration.py
+!scout_layer_contract.py
 !scout_contextual_permission_tool.py
 !scout_energy_vitals_tool.py
 !scout_equipment_resource_tool.py

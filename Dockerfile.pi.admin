@@ -158,6 +158,7 @@ COPY \
     runtime_debug_log.py \
     runtime_debug_models.py \
     scout_gnss_hardware_observer.py \
+    scout_layer_contract.py \
     scout_agent_builtin_tools.py \
     scout_agent_cli.py \
     scout_agent_debug_projection.py \

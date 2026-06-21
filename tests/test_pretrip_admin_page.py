@@ -362,8 +362,10 @@ def test_pretrip_admin_page_groups_dense_controls_and_uses_short_labels():
     assert 'title="Route-aligned baseline terrain risk layer"><input type="checkbox" data-layer="risk-ribbon" checked> Baseline</label>' in html
     assert 'title="Route-specific calibrated heat map"><input type="checkbox" data-layer="risk-heatmap" checked> Calibrated</label>' in html
     assert 'title="Difference between baseline risk and calibrated heat"><input type="checkbox" data-layer="risk-delta"> Delta</label>' in html
+    assert 'title="CWA quantitative precipitation forecast grid"><input type="checkbox" data-layer="cwa-qpf"> QPF</label>' in html
     assert 'title="SMAP L4 soil moisture hydrology context"><input type="checkbox" data-layer="soil-moisture"> Soil H2O</label>' in html
     assert 'title="GPM IMERG antecedent rain context"><input type="checkbox" data-layer="antecedent-rain"> Rain</label>' in html
+    assert 'title="CWA warnings observations and forecast evidence"><input type="checkbox" data-layer="cwa-weather"> CWA</label>' in html
     assert 'title="Weather API layer"><input type="checkbox" data-layer="weather-api"> Weather</label>' in html
     assert 'aria-label="Move to next review item">Next</button>' in html
     assert 'aria-label="Accept selected review">Accept</button>' in html
@@ -642,7 +644,11 @@ def test_pretrip_admin_page_fetches_fixture_backed_read_only_project_api():
     assert 'data-layer="hazards"' in html
     assert 'data-layer="overpass"' in html
     assert 'data-layer="risk-ribbon"' in html
+    assert 'data-layer="cwa-qpf"' in html
+    assert 'data-layer="soil-moisture"' in html
+    assert 'data-layer="antecedent-rain"' in html
     assert 'data-layer="route-notes"' in html
+    assert 'data-layer="cwa-weather"' in html
     assert 'data-layer="weather-api"' in html
     assert "OSM_TILE_URL_TEMPLATE" in html
     assert "OSM_PUBLIC_TILE_URL_TEMPLATE" in html
@@ -779,12 +785,18 @@ def test_pretrip_admin_page_fetches_fixture_backed_read_only_project_api():
         'data-layer-group": "risk-delta"'
     )
     assert html.index('data-layer-group": "risk-delta"') < html.index(
+        'data-layer-group": "cwa-qpf"'
+    )
+    assert html.index('data-layer-group": "cwa-qpf"') < html.index(
         'data-layer-group": "soil-moisture"'
     )
     assert html.index('data-layer-group": "soil-moisture"') < html.index(
         'data-layer-group": "antecedent-rain"'
     )
     assert html.index('data-layer-group": "antecedent-rain"') < html.index(
+        'data-layer-group": "cwa-weather"'
+    )
+    assert html.index('data-layer-group": "cwa-weather"') < html.index(
         'data-layer-group": "terrain"'
     )
     assert html.index('data-layer-group": "terrain"') < html.index(
@@ -794,6 +806,9 @@ def test_pretrip_admin_page_fetches_fixture_backed_read_only_project_api():
     assert '"data-risk-layer": "calibrated"' in html
     assert '"data-risk-layer": "delta"' in html
     assert html.index('data-layer-group": "overpass"') < html.index(
+        'data-layer-group": "weather-api"'
+    )
+    assert html.index('data-layer-group": "cwa-weather"') < html.index(
         'data-layer-group": "weather-api"'
     )
     assert 'class: "soil-moisture-point"' in html

@@ -87,8 +87,11 @@ def _check_canonical_contract(
     layer_results: dict[str, dict[str, Any]],
     errors: list[str],
 ) -> None:
-    if len(SCOUT_LAYER_IDS) != 30:
-        errors.append(f"expected 30 Scout layers, got {len(SCOUT_LAYER_IDS)}")
+    if len(SCOUT_LAYER_IDS) != len(SCOUT_LAYER_CONTRACT):
+        errors.append(
+            "Scout layer ids diverge from contract entries: "
+            f"{len(SCOUT_LAYER_IDS)} ids for {len(SCOUT_LAYER_CONTRACT)} entries"
+        )
     if len(set(SCOUT_LAYER_IDS)) != len(SCOUT_LAYER_IDS):
         errors.append("Scout layer contract contains duplicate layer ids")
     for layer in SCOUT_LAYER_CONTRACT:
@@ -161,24 +164,29 @@ def _check_admin_map_layer_specs(
             )
         )
     )
-    expected_sorted_ids = tuple(
+    expected_pretrip_ids = _sorted_surface_layer_ids("pretrip")
+    expected_after_action_ids = _sorted_surface_layer_ids("after-action")
+    if pretrip_ids != expected_pretrip_ids:
+        errors.append(
+            f"build_pretrip_map_layers order mismatch: {pretrip_ids} != {expected_pretrip_ids}"
+        )
+    if after_action_ids != expected_after_action_ids:
+        errors.append(
+            "build_after_action_map_layers order mismatch: "
+            f"{after_action_ids} != {expected_after_action_ids}"
+        )
+
+
+def _sorted_surface_layer_ids(surface: str) -> tuple[str, ...]:
+    return tuple(
         sorted(
-            SCOUT_LAYER_IDS,
+            SCOUT_SURFACE_LAYER_IDS[surface],
             key=lambda layer_id: (
                 SCOUT_LAYER_RANKS[layer_id],
                 SCOUT_LAYER_IDS.index(layer_id),
             ),
         )
     )
-    if pretrip_ids != expected_sorted_ids:
-        errors.append(
-            f"build_pretrip_map_layers order mismatch: {pretrip_ids} != {expected_sorted_ids}"
-        )
-    if after_action_ids != expected_sorted_ids:
-        errors.append(
-            "build_after_action_map_layers order mismatch: "
-            f"{after_action_ids} != {expected_sorted_ids}"
-        )
 
 
 def _check_html_surfaces(

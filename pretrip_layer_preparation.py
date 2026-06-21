@@ -1096,7 +1096,6 @@ def _build_layer_record(
                 "route_weather_package_ref",
                 "weather_source_manifest_ref",
                 "weather_decision_candidates_ref",
-                "weather_daylight_evidence_ref",
             ),
             counts_from_payload=lambda payload: _environment_evidence_counts(
                 "cwa_weather",

@@ -65,11 +65,13 @@ class AdminAfterActionTests(unittest.TestCase):
                 "risk-delta",
                 "soil-moisture",
                 "antecedent-rain",
+                "cwa-qpf",
                 "risk-score",
                 "checkpoints",
                 "pois",
                 "hazards",
                 "route-notes",
+                "cwa-weather",
                 "mcp",
                 "boss-points",
                 "events",
@@ -948,6 +950,8 @@ class AdminAfterActionTests(unittest.TestCase):
         self.assertIn('<input type="checkbox" data-layer="imagery"> Imagery', response.text)
         self.assertIn('<input type="checkbox" data-layer="rudy-twmap" checked> Rudy+TW', response.text)
         self.assertIn('data-layer="osm"', response.text)
+        self.assertIn('data-layer="cwa-qpf"', response.text)
+        self.assertIn('data-layer="cwa-weather"', response.text)
         self.assertIn('data-layer="weather-api"', response.text)
         self.assertIn("OSM_TILE_URL_TEMPLATE", response.text)
         self.assertIn("OSM_PUBLIC_TILE_URL_TEMPLATE", response.text)

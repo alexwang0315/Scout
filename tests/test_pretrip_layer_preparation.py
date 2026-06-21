@@ -204,6 +204,51 @@ def test_layer_preparation_run_writes_workspace_outputs_and_project_refs(
     assert (project_root / project["layer_preparation_job_ref"]).is_file()
 
 
+def test_layer_preparation_exposes_cwa_and_gee_environment_layers_without_network(
+    tmp_path: Path,
+) -> None:
+    project_root = _copy_fixture_project(tmp_path)
+    preview = build_layer_preparation_preview(
+        LayerPreparationRequest(
+            project_id="chilai_nanhua_day1",
+            project_root=project_root,
+            layers=("cwa-weather", "cwa-qpf", "soil-moisture", "antecedent-rain"),
+            prepared_at="2026-05-22T00:00:00+00:00",
+        )
+    )
+    layers_by_id = {layer["layer_id"]: layer for layer in preview["layers"]}
+
+    assert preview["normalized_layers"] == [
+        "cwa-weather",
+        "cwa-qpf",
+        "soil-moisture",
+        "antecedent-rain",
+    ]
+    assert preview["network_policy"]["network_calls_made"] is False
+    assert preview["boundary"]["runtime_safety_truth"] is False
+    assert layers_by_id["cwa-weather"]["status"] == "missing_source"
+    assert layers_by_id["cwa-weather"]["output_refs"]["server_side_api_key_env"] == (
+        "SCOUT_CWA_API_KEY"
+    )
+    assert layers_by_id["cwa-weather"]["output_refs"]["client_api_key_allowed"] is False
+    assert layers_by_id["cwa-qpf"]["output_refs"]["cwa_qpf_grid_ref"] == (
+        "outputs/environment/cwa/qpf_grid.geojson"
+    )
+    assert layers_by_id["soil-moisture"]["output_refs"]["soil_moisture_grid_ref"] == (
+        "outputs/environment/gee/soil_moisture_grid.geojson"
+    )
+    assert layers_by_id["soil-moisture"]["output_refs"][
+        "gee_fetch_requires_explicit_network"
+    ] is True
+    assert layers_by_id["antecedent-rain"]["output_refs"][
+        "antecedent_rain_grid_ref"
+    ] == "outputs/environment/gee/antecedent_rain_grid.geojson"
+    assert all(
+        layer["lifecycle"]["fetch"]["external_network_calls_made"] is False
+        for layer in layers_by_id.values()
+    )
+
+
 def test_layer_preparation_ignores_local_imagery_refs_for_wmts_runtime(
     tmp_path: Path,
 ) -> None:

@@ -119,6 +119,7 @@ COPY \
     scout_agent_models.py \
     scout_agent_tools.py \
     scout_agent_trace.py \
+    scout_layer_contract.py \
     scout_companion_match_models.py \
     scout_energy_baseline.py \
     scout_energy_models.py \
