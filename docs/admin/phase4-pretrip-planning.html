@@ -550,6 +550,11 @@
     .antecedent-rain-point { fill: #0f766e; stroke: #ecfeff; stroke-width: 1.5; opacity: .82; vector-effect: non-scaling-stroke; }
     .antecedent-rain-point.rain-high { fill: #d6a800; stroke: #fff7ed; }
     .antecedent-rain-point.rain-extreme { fill: #dc2626; stroke: #fff1f2; }
+    .cwa-qpf-point { fill: #f59e0b; stroke: #fff7ed; stroke-width: 1.6; opacity: .9; vector-effect: non-scaling-stroke; }
+    .cwa-qpf-point.qpf-high { fill: #d97706; }
+    .cwa-qpf-point.qpf-extreme { fill: #b91c1c; }
+    .cwa-weather-point { fill: #0ea5e9; stroke: #e0f2fe; stroke-width: 1.6; opacity: .9; vector-effect: non-scaling-stroke; }
+    .cwa-weather-point.weather-warning { fill: #dc2626; stroke: #fff1f2; }
     .checkpoint { fill: var(--checkpoint); stroke: white; stroke-width: 1.5; vector-effect: non-scaling-stroke; }
     .gis-perception-cp { fill: var(--review); stroke: white; stroke-width: 1.5; opacity: .92; vector-effect: non-scaling-stroke; }
     .gis-perception-cp.is-stale { fill: var(--warning); stroke: var(--ink); }
@@ -2961,6 +2966,18 @@
       const value = Number(point?.last_3h_mm ?? point?.precipitation_mm ?? point?.precipitation ?? 0);
       if (value >= 80) return "rain-extreme";
       if (value >= 30) return "rain-high";
+      return "";
+    }
+    function cwaQpfClass(point) {
+      const probability = Number(point?.rain_probability ?? point?.rainProbability ?? 0);
+      const rainfall = Number(point?.rainfall_mm ?? point?.rainfallMm ?? 0);
+      if (probability >= 90 || rainfall >= 80) return "qpf-extreme";
+      if (probability >= 70 || rainfall >= 30) return "qpf-high";
+      return "";
+    }
+    function cwaWeatherClass(point) {
+      if (String(point?.evidence_type || "").includes("warning")) return "weather-warning";
+      if (Number(point?.last_24h_mm ?? 0) >= 80) return "weather-warning";
       return "";
     }
     function riskRibbonClass(bucket, score) {
@@ -5526,7 +5543,20 @@
       });
       svg.appendChild(riskDeltaGroup);
 
-      svg.appendChild(el("g", {"data-layer-group": "cwa-qpf"}));
+      const cwaQpfGroup = el("g", {"data-layer-group": "cwa-qpf"});
+      (view.cwa_qpf?.points || []).forEach(point => {
+        const [x, y] = project(bounds, point.lat, point.lon);
+        const circle = el("circle", {
+          cx: x,
+          cy: y,
+          r: 5.2,
+          class: `cwa-qpf-point ${cwaQpfClass(point)}`
+        });
+        attachEvidence(circle, point);
+        cwaQpfGroup.appendChild(circle);
+        appendPointLabel(cwaQpfGroup, x, y, point, "cwa-qpf");
+      });
+      svg.appendChild(cwaQpfGroup);
 
       const soilMoistureGroup = el("g", {"data-layer-group": "soil-moisture"});
       (view.soil_moisture?.points || []).forEach(point => {
@@ -5550,7 +5580,21 @@
         antecedentRainGroup.appendChild(circle);
       });
       svg.appendChild(antecedentRainGroup);
-      svg.appendChild(el("g", {"data-layer-group": "cwa-weather"}));
+
+      const cwaWeatherGroup = el("g", {"data-layer-group": "cwa-weather"});
+      (view.cwa_weather?.points || []).forEach(point => {
+        const [x, y] = project(bounds, point.lat, point.lon);
+        const circle = el("circle", {
+          cx: x,
+          cy: y,
+          r: 5,
+          class: `cwa-weather-point ${cwaWeatherClass(point)}`
+        });
+        attachEvidence(circle, point);
+        cwaWeatherGroup.appendChild(circle);
+        appendPointLabel(cwaWeatherGroup, x, y, point, "cwa-weather");
+      });
+      svg.appendChild(cwaWeatherGroup);
 
       const terrainGroup = el("g", {"data-layer-group": "terrain"});
       renderTerrainMetadata(terrainGroup, view, bounds);
@@ -5995,6 +6039,14 @@
       appendEvidenceTreeGroup(tree, "map_risk", "Risk Delta", view.risk_delta?.segments || [], item => ({
         label: `${item.delta_bucket || "delta"} ${Number(item.delta_score || 0).toFixed(1)}`,
         sublabel: `baseline ${Number(item.baseline_pretrip_risk || 0).toFixed(1)} | calibrated ${Number(item.calibrated_risk_candidate || 0).toFixed(1)}`
+      }), false, "risk");
+      appendEvidenceTreeGroup(tree, "map_risk", "CWA QPF", view.cwa_qpf?.points || [], item => ({
+        label: item.label || "CWA QPF",
+        sublabel: `${item.status || "candidate"} | PoP ${item.rain_probability ?? item.rainProbability ?? "-"}% | ${item.valid_from || "-"}`
+      }), false, "risk");
+      appendEvidenceTreeGroup(tree, "map_risk", "CWA Weather", view.cwa_weather?.points || [], item => ({
+        label: item.label || item.station_name || "CWA weather",
+        sublabel: `${item.evidence_type || "cwa"} | 24h ${item.last_24h_mm ?? "-"} mm | ${item.status || "candidate"}`
       }), false, "risk");
       appendEvidenceTreeGroup(tree, "map_risk", "Soil Moisture", view.soil_moisture?.points || [], item => ({
         label: item.label || "SMAP soil moisture",

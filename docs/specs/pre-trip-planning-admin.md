@@ -691,9 +691,19 @@ Credential and fetch rules:
 
 - CWA uses server-side `SCOUT_CWA_API_KEY`; browser code must never receive or
   persist the key.
+- The alpha CWA fetcher currently prepares `F-C0032-001` 36-hour forecast,
+  `W-C0033-001` warnings, and `O-A0002-001` rain observations. When direct
+  `F-C0041-*` QPF（定量降水預報） grid access is unavailable, `cwa-qpf` must be
+  labelled as `forecast-derived QPF candidate`（由官方預報衍生的 QPF 候選） and
+  must not pretend to be a true gridded QPF product.
 - GEE uses server-side Earth Engine authentication（Earth Engine 驗證） and the
   configured Cloud project or service account; browser code must consume only
   prepared artifacts.
+- If GEE credentials or the GEE fetcher are not ready, map preparation should
+  still write source-status GeoJSON（來源狀態 GeoJSON） markers for
+  `soil-moisture` and `antecedent-rain` so the UI can distinguish "source not
+  configured" from a broken layer. These markers carry no numeric SMAP/GPM
+  value and remain candidate-only metadata.
 - Live fetches require explicit operator intent, workspace provenance, request
   timestamp, bbox/corridor, endpoint/dataset id, response status, raw or
   reduced payload hash, and normalized artifact path.
