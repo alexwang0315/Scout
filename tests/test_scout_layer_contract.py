@@ -16,7 +16,7 @@ def test_scout_layer_contract_static_gate_passes() -> None:
     result = run_checks(repo_root=ROOT)
 
     assert result["ok"], result["errors"]
-    assert result["layer_count"] == 30
+    assert result["layer_count"] == len(SCOUT_LAYER_IDS)
     assert tuple(result["layers"].keys()) == SCOUT_LAYER_IDS
 
 

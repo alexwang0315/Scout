@@ -359,6 +359,8 @@ class DebugPageTests(unittest.TestCase):
         self.assertIn("function chooseRasterZoom", html)
         self.assertIn("function rasterTileCoverage", html)
         self.assertIn('data-layer="terrain" checked> Terrain', html)
+        self.assertIn('data-layer="cwa-qpf"', html)
+        self.assertIn('data-layer="cwa-weather"', html)
         self.assertIn(".terrain-raster-overlay", html)
         self.assertIn("const RASTER_BASEMAP_LAYER_IDS", html)
         self.assertIn("function layerInputChecked(layerId)", html)

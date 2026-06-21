@@ -1909,8 +1909,10 @@
                     <label title="Route-aligned baseline terrain risk layer"><input type="checkbox" data-layer="risk-ribbon" checked> Baseline</label>
                     <label title="Route-specific calibrated heat map"><input type="checkbox" data-layer="risk-heatmap" checked> Calibrated</label>
                     <label title="Difference between baseline risk and calibrated heat"><input type="checkbox" data-layer="risk-delta"> Delta</label>
+                    <label title="CWA quantitative precipitation forecast grid"><input type="checkbox" data-layer="cwa-qpf"> QPF</label>
                     <label title="SMAP L4 soil moisture hydrology context"><input type="checkbox" data-layer="soil-moisture"> Soil H2O</label>
                     <label title="GPM IMERG antecedent rain context"><input type="checkbox" data-layer="antecedent-rain"> Rain</label>
+                    <label title="CWA warnings observations and forecast evidence"><input type="checkbox" data-layer="cwa-weather"> CWA</label>
                     <label title="Corridor layer"><input type="checkbox" data-layer="corridors" checked> Corridors</label>
                     <label title="Overpass evidence layer"><input type="checkbox" data-layer="overpass" checked> Overpass</label>
                     <label title="Route layer"><input type="checkbox" data-layer="route" checked> Route</label>
@@ -2244,11 +2246,13 @@
       "risk-delta": 56,
       "soil-moisture": 57,
       "antecedent-rain": 58,
+      "cwa-qpf": 59,
       "risk-score": 60,
       checkpoints: 62,
       pois: 64,
       hazards: 65,
       "route-notes": 66,
+      "cwa-weather": 67,
       mcp: 68,
       "boss-points": 70,
       events: 72,
@@ -2256,10 +2260,10 @@
     };
     const layerInputs = document.querySelectorAll("[data-layer]");
     const LAYER_PRESETS = {
-      "risk-review": ["imagery", "osm", "route", "segments", "checkpoints", "risk-score", "risk-ribbon", "risk-heatmap", "risk-delta", "soil-moisture", "antecedent-rain", "mcp", "boss-points"],
+      "risk-review": ["imagery", "osm", "route", "segments", "checkpoints", "risk-score", "risk-ribbon", "risk-heatmap", "risk-delta", "cwa-qpf", "soil-moisture", "antecedent-rain", "cwa-weather", "mcp", "boss-points"],
       "mcp-review": ["imagery", "osm", "route", "checkpoints", "mcp", "boss-points", "route-notes", "pois", "hazards", "overpass"],
       "route-clean": ["imagery", "osm", "route", "completed-track", "reference-tracks", "retreat", "segments", "checkpoints"],
-      "debug-replay": ["imagery", "osm", "route", "completed-track", "reference-tracks", "segments", "checkpoints", "events", "overpass", "soil-moisture", "antecedent-rain", "mcp", "boss-points"],
+      "debug-replay": ["imagery", "osm", "route", "completed-track", "reference-tracks", "segments", "checkpoints", "events", "overpass", "cwa-qpf", "soil-moisture", "antecedent-rain", "cwa-weather", "mcp", "boss-points"],
       "raster-check": ["imagery", "rudy", "rudy-twmap", "relief", "geology", "topo-5k", "forest", "osm", "route"]
     };
 
@@ -4955,6 +4959,7 @@
         riskDeltaGroup.appendChild(path);
       });
       svg.appendChild(riskDeltaGroup);
+      svg.appendChild(el("g", {"data-layer-group": "cwa-qpf"}));
 
       const soilMoistureGroup = el("g", {"data-layer-group": "soil-moisture"});
       (view.soil_moisture?.points || []).forEach(point => {
@@ -4980,6 +4985,7 @@
         antecedentRainGroup.appendChild(circle);
       });
       svg.appendChild(antecedentRainGroup);
+      svg.appendChild(el("g", {"data-layer-group": "cwa-weather"}));
 
       const riskScoreGroup = el("g", {"data-layer-group": "risk-score"});
       (view.risk_score?.points || []).forEach(point => {

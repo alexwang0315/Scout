@@ -27,7 +27,7 @@ The preparation order is non-negotiable:
 5. Raster label adapter normalization.
 6. Route context collection and mileage tag alignment.
 7. Risk, terrain, MCP, and Boss synthesis refresh.
-8. 30-layer contract verification.
+8. 32-layer contract verification.
 9. Browser smoke across `/admin/pretrip`, `/admin/debug`, and `/admin`.
 10. Optional Scout deployment or service restart.
 
@@ -133,11 +133,12 @@ Current preparation-supported layer ids:
 
 ```text
 imagery, osm, overpass, terrain, risk-score, risk-ribbon, risk-heatmap,
-risk-delta, weather, reference-tracks, route, segments, checkpoints, mcp, pois,
-hazards, corridors, retreat, route-notes
+risk-delta, cwa-qpf, soil-moisture, antecedent-rain, cwa-weather, weather,
+reference-tracks, route, segments, checkpoints, mcp, pois, hazards, corridors,
+retreat, route-notes
 ```
 
-The broader UI contract still has 30 layers; those are verified separately by
+The broader UI contract currently has 32 layers; those are verified separately by
 the Scout layer contract gate.
 
 Canonical connected command:
@@ -146,7 +147,7 @@ Canonical connected command:
 PYTHONDONTWRITEBYTECODE=1 ./venv/bin/python -m pretrip_layer_preparation \
   --project-id <project_id> \
   --workspace-root /data/scout/admin/pretrip-workspaces \
-  --layers imagery,osm,overpass,terrain,risk-score,risk-ribbon,risk-heatmap,risk-delta,weather,reference-tracks,route,segments,checkpoints,mcp,pois,hazards,corridors,retreat,route-notes \
+  --layers imagery,osm,overpass,terrain,risk-score,risk-ribbon,risk-heatmap,risk-delta,cwa-qpf,soil-moisture,antecedent-rain,cwa-weather,weather,reference-tracks,route,segments,checkpoints,mcp,pois,hazards,corridors,retreat,route-notes \
   --profile pi-online-explicit \
   --network-mode explicit-fetch \
   --allow-network-fetch \
@@ -172,6 +173,15 @@ Map preparation must:
 - keep terrain visualization separate from risk heat layers;
 - refresh risk score, baseline risk ribbon, calibrated risk heatmap, and risk
   delta when requested;
+- expose CWA QPF/weather and GEE soil-moisture/antecedent-rain as explicit
+  pretrip evidence layers when source artifacts or explicit fetch permissions
+  exist;
+- keep weather/environment source status visible as `missing_source`,
+  `unavailable`, `stale`, or `prepared`; missing CWA/GEE credentials must never
+  produce fake data;
+- keep CWA/GEE credentials server-side and store only request/dataset metadata,
+  hashes, normalized refs, stale-risk, confidence, and review status in the
+  workspace;
 - keep source refs and candidate-only boundary metadata on every artifact;
 - write read-only admin/debug projections.
 
@@ -192,6 +202,18 @@ outputs/layers/normalized/terrain_hillshade.png
 outputs/layers/normalized/terrain_elevation_tint.png
 outputs/layers/normalized/terrain_slope_shading.png
 outputs/layers/normalized/terrain_contours.png
+outputs/environment/cwa/cwa_weather_evidence.json
+outputs/environment/cwa/warnings.geojson
+outputs/environment/cwa/observations.geojson
+outputs/environment/cwa/qpf_grid.geojson
+outputs/environment/cwa/qpf_route_timeline.json
+outputs/environment/cwa/qpf_corridor_summary.json
+outputs/environment/gee/soil_moisture_grid.geojson
+outputs/environment/gee/smap_l4_timeseries.json
+outputs/environment/gee/smap_l4_corridor_summary.json
+outputs/environment/gee/antecedent_rain_grid.geojson
+outputs/environment/gee/gpm_imerg_timeseries.json
+outputs/environment/gee/gpm_imerg_corridor_summary.json
 outputs/layers/projections/pretrip_map_layers.json
 outputs/layers/projections/admin_debug_events.jsonl
 ```
@@ -323,7 +345,7 @@ Skill/tool requirements:
 
 ## Layer Verification
 
-The complete UI/admin contract has 30 layers, documented in
+The complete UI/admin contract currently has 32 layers, documented in
 `docs/specs/scout-admin-map-layer-contract.md` and enforced by
 `scout_layer_contract.py`.
 
@@ -426,6 +448,8 @@ Map preparation: PASS/FAIL
 Overpass: PASS/FAIL/NOT APPLICABLE
 Terrain visualization: PASS/FAIL/NOT APPLICABLE
 Risk baseline/calibrated/delta: PASS/FAIL/NOT APPLICABLE
+CWA QPF/weather: PASS/FAIL/NOT APPLICABLE
+GEE soil/rain: PASS/FAIL/NOT APPLICABLE
 Rudy/Rudy+TW tile seed: PASS/FAIL/NOT APPLICABLE
 OCR: PASS/FAIL/NOT APPLICABLE
 Raster label adapter: PASS/FAIL/NOT APPLICABLE
@@ -433,8 +457,8 @@ Route context: PASS/FAIL/NOT APPLICABLE
 Mileage tags: PASS/FAIL/NOT APPLICABLE
 MCP: PASS/FAIL/NOT APPLICABLE
 Boss points: PASS/FAIL/NOT APPLICABLE
-30-layer repo gate: PASS/FAIL
-30-layer workspace gate: PASS/FAIL
+32-layer repo gate: PASS/FAIL
+32-layer workspace gate: PASS/FAIL
 Browser smoke: PASS/FAIL/NOT APPLICABLE
 Scout deployment: PASS/FAIL/NOT APPLICABLE
 Candidate-only boundary: PASS/FAIL

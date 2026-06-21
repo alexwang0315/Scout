@@ -23,6 +23,10 @@ EXPECTED_ALPHA_WORKSPACE_LAYER_CONTROLS = [
     "risk-ribbon",
     "risk-heatmap",
     "risk-delta",
+    "cwa-qpf",
+    "soil-moisture",
+    "antecedent-rain",
+    "cwa-weather",
     "corridors",
     "overpass",
     "route",
@@ -33,6 +37,7 @@ EXPECTED_ALPHA_WORKSPACE_LAYER_CONTROLS = [
     "pois",
     "hazards",
     "mcp",
+    "boss-points",
     "route-notes",
     "events",
     "weather-api",
@@ -51,6 +56,10 @@ def test_pretrip_map_layers_order_imagery_bottom_and_api_top():
             "risk_score_points": "outputs/risk_score_points.geojson",
             "risk_ribbon": "outputs/risk_ribbon.geojson",
             "calibrated_risk_heatmap": "outputs/risk_heatmap.geojson",
+            "soil_moisture": "outputs/environment/gee/soil_moisture_grid.geojson",
+            "antecedent_rain": "outputs/environment/gee/antecedent_rain_grid.geojson",
+            "cwa_qpf_grid": "outputs/environment/cwa/qpf_grid.geojson",
+            "route_weather_package": "outputs/route_weather_package.json",
             "weather_daylight": "outputs/weather_daylight_evidence.json",
         },
         weather={
@@ -77,15 +86,20 @@ def test_pretrip_map_layers_order_imagery_bottom_and_api_top():
         "reference-tracks",
         "retreat",
         "segments",
-        "risk-score",
         "risk-ribbon",
         "risk-heatmap",
         "risk-delta",
+        "soil-moisture",
+        "antecedent-rain",
+        "cwa-qpf",
+        "risk-score",
         "checkpoints",
         "pois",
         "hazards",
-        "mcp",
         "route-notes",
+        "cwa-weather",
+        "mcp",
+        "boss-points",
         "events",
         "weather-api",
     ]
@@ -144,6 +158,18 @@ def test_pretrip_map_layers_order_imagery_bottom_and_api_top():
     assert overpass["default_enabled"] is False
     events = next(layer for layer in layers if layer["layer_id"] == "events")
     assert events["available"] is False
+    cwa_qpf = next(layer for layer in layers if layer["layer_id"] == "cwa-qpf")
+    assert cwa_qpf["provider"] == "cwa_opendata"
+    assert cwa_qpf["geojson_ref_key"] == "cwa_qpf_grid_ref"
+    assert cwa_qpf["runtime_safety_truth"] is False
+    soil = next(layer for layer in layers if layer["layer_id"] == "soil-moisture")
+    assert soil["provider"] == "google_earth_engine"
+    assert soil["dataset_family"] == "SMAP"
+    rain = next(layer for layer in layers if layer["layer_id"] == "antecedent-rain")
+    assert rain["dataset_family"] == "GPM_IMERG"
+    cwa_weather = next(layer for layer in layers if layer["layer_id"] == "cwa-weather")
+    assert cwa_weather["source_kind"] == "cwa_weather_candidate"
+    assert cwa_weather["secret_value_embedded"] is False
     assert layers[-1]["layer_kind"] == "api"
     assert layers[-1]["label_zh"].startswith("氣象 API")
     assert layers[-1]["render_mode"] == "api_overlay"
@@ -202,18 +228,24 @@ def test_after_action_map_layers_reuse_the_same_base_and_api_order():
         "corridors",
         "overpass",
         "route",
+        "completed-track",
         "reference-tracks",
         "retreat",
         "segments",
-        "risk-score",
         "risk-ribbon",
         "risk-heatmap",
         "risk-delta",
+        "soil-moisture",
+        "antecedent-rain",
+        "cwa-qpf",
+        "risk-score",
         "checkpoints",
         "pois",
         "hazards",
-        "mcp",
         "route-notes",
+        "cwa-weather",
+        "mcp",
+        "boss-points",
         "events",
         "weather-api",
     ]

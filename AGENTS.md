@@ -148,7 +148,7 @@ Rudy/Rudy+TW/OCR, Boss/MCP/mileage evidence, or the three admin surfaces
 (`/admin/pretrip`, `/admin/debug`, `/admin`) must treat the Scout layer contract
 as a required gate, not an optional smoke check.
 
-Before editing those areas, enumerate the 30 Scout layers explicitly:
+Before editing those areas, enumerate the 32 Scout layers explicitly:
 
 1. `imagery`
 2. `rudy`
@@ -171,15 +171,17 @@ Before editing those areas, enumerate the 30 Scout layers explicitly:
 19. `risk-delta`
 20. `soil-moisture`
 21. `antecedent-rain`
-22. `risk-score`
-23. `checkpoints`
-24. `pois`
-25. `hazards`
-26. `route-notes`
-27. `mcp`
-28. `boss-points`
-29. `events`
-30. `weather-api`
+22. `cwa-qpf`
+23. `risk-score`
+24. `checkpoints`
+25. `pois`
+26. `hazards`
+27. `route-notes`
+28. `cwa-weather`
+29. `mcp`
+30. `boss-points`
+31. `events`
+32. `weather-api`
 
 The machine-readable source of truth is `scout_layer_contract.py`. Keep
 `admin_map_layers.py`, `pretrip_layer_preparation.py`, and these static admin

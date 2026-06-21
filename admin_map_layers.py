@@ -14,6 +14,7 @@ from scout_layer_contract import (
     ORDERING_POLICY,
     SCOUT_LAYER_IDS,
     SCOUT_LAYER_RANKS,
+    SCOUT_SURFACE_LAYER_IDS,
 )
 
 
@@ -27,6 +28,8 @@ RASTER_OVERLAY_SOURCE_IDS = {
     "forest": "happyman_forest",
 }
 WORKSPACE_LAYER_CONTROL_IDS = SCOUT_LAYER_IDS
+PRETRIP_LAYER_CONTROL_IDS = SCOUT_SURFACE_LAYER_IDS["pretrip"]
+AFTER_ACTION_LAYER_CONTROL_IDS = SCOUT_SURFACE_LAYER_IDS["after-action"]
 
 
 @dataclass(frozen=True)
@@ -459,8 +462,7 @@ def build_pretrip_map_layers(
             source_refs.get("cwa_weather_evidence")
             or source_refs.get("route_weather_package")
             or source_refs.get("weather_source_manifest")
-            or source_refs.get("weather_decision_candidates")
-            or source_refs.get("weather_daylight"),
+            or source_refs.get("weather_decision_candidates"),
         ),
         "mcp": ("pretrip.map_layer.mcp", source_refs.get("mcp_candidates")),
         "boss-points": (
@@ -474,7 +476,7 @@ def build_pretrip_map_layers(
         ),
     }
     return _build_layers(
-        WORKSPACE_LAYER_CONTROL_IDS,
+        PRETRIP_LAYER_CONTROL_IDS,
         sources=sources,
         available={
             "risk-score": bool(sources["risk-score"][1]),
@@ -548,7 +550,7 @@ def build_after_action_map_layers(
         "weather-api": ("after_action.map_layer.weather_api", None),
     }
     layers = _build_layers(
-        WORKSPACE_LAYER_CONTROL_IDS,
+        AFTER_ACTION_LAYER_CONTROL_IDS,
         sources=sources,
         available={
             "terrain": False,
