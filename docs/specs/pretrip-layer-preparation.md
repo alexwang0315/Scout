@@ -14,8 +14,11 @@ compiler.
 
 For the fixed end-to-end operator sequence that combines GPX import, connected
 map preparation, Rudy/Rudy+TW OCR, raster label normalization, route context,
-Boss synthesis, 30-layer verification, browser smoke checks, and Scout deploy
+Boss synthesis, 32-layer verification, browser smoke checks, and Scout deploy
 handoff, see `docs/specs/scout-pretrip-preparation-pipeline.md`.
+
+This spec owns only the preparation-backed layer run. The admin map UI contract
+is larger; see `docs/specs/scout-admin-map-layer-contract.md`.
 
 ## Admin API（管理介面 API）
 
@@ -41,10 +44,12 @@ network access and fetches route-corridor Overpass vector evidence:
 python -m pretrip_layer_preparation \
   --project-id chilai_nanhua_day1 \
   --workspace-root /data/scout/pretrip/workspaces \
-  --layers osm,overpass,terrain,imagery,weather,reference-tracks,route,segments,checkpoints \
+  --layers osm,imagery,overpass,terrain,risk-score,risk-ribbon,risk-heatmap,risk-delta,cwa-qpf,soil-moisture,antecedent-rain,cwa-weather,weather,reference-tracks,route,segments,checkpoints,mcp,pois,hazards,corridors,retreat,route-notes \
   --profile pi-online-explicit \
   --network-mode explicit-fetch \
-  --allow-network-fetch
+  --allow-network-fetch \
+  --seed-imagery-cache \
+  --imagery-provider-allows-offline-prefetch
 ```
 
 Offline/CI fixture contract:
@@ -53,10 +58,28 @@ Offline/CI fixture contract:
 python -m pretrip_layer_preparation \
   --project-id chilai_nanhua_day1 \
   --workspace-root /data/scout/pretrip/workspaces \
-  --layers osm,overpass,terrain,imagery,weather,reference-tracks,route,segments,checkpoints \
+  --layers osm,imagery,overpass,terrain,risk-score,risk-ribbon,risk-heatmap,risk-delta,cwa-qpf,soil-moisture,antecedent-rain,cwa-weather,weather,reference-tracks,route,segments,checkpoints,mcp,pois,hazards,corridors,retreat,route-notes \
   --profile pi-offline \
   --network-mode no-network
 ```
+
+The preparation `--layers` input is intentionally smaller than the 32-layer
+admin map contract. Valid preparation-backed layer ids are:
+
+```text
+osm, imagery, overpass, terrain, risk-score, risk-ribbon, risk-heatmap,
+risk-delta, cwa-qpf, soil-moisture, antecedent-rain, cwa-weather, weather,
+reference-tracks, route, segments, checkpoints, mcp, pois, hazards, corridors,
+retreat, route-notes
+```
+
+Do not pass `rudy`, `rudy-twmap`, `relief`, `geology`, `topo-5k`, `forest`,
+`completed-track`, `boss-points`, `events`, or `weather-api` to this command.
+Those are runtime-only WMTS/UI/post-process contract layers
+（執行時圖磚、介面、或後處理契約圖層） and are verified by
+`tools/verify_scout_layer_contract.py` and browser smoke tests. `weather-api`
+maps to the preparation alias `weather`; `boss-points` are synthesized after
+risk/route-pressure artifacts exist.
 
 In-house pre-trip preparation is connected by design. Before departure, the
 operator should use `--network-mode explicit-fetch --allow-network-fetch
@@ -142,15 +165,22 @@ Only after these refs exist should Scout run:
 ./.venv/bin/python pretrip_layer_preparation.py \
   --project-root /data/scout/admin/pretrip-workspaces/chilai_nanhua_day1 \
   --project-id chilai_nanhua_day1 \
-  --layers osm,imagery,overpass,terrain,risk-score,risk-ribbon,route,reference-tracks,segments,checkpoints,pois,hazards,corridors,retreat,route-notes,weather \
+  --layers osm,imagery,overpass,terrain,risk-score,risk-ribbon,risk-heatmap,risk-delta,cwa-qpf,soil-moisture,antecedent-rain,cwa-weather,weather,reference-tracks,route,segments,checkpoints,mcp,pois,hazards,corridors,retreat,route-notes \
   --profile pi-online-explicit \
   --network-mode explicit-fetch \
-  --allow-network-fetch
+  --allow-network-fetch \
+  --seed-imagery-cache \
+  --imagery-provider-allows-offline-prefetch
 ```
 
 The resulting imagery layer should be `ready_from_project_ref`. A
 `ready_with_fallback` imagery layer means the handoff package or project refs
 are missing and should be fixed on Mac, not papered over on Scout.
+
+When imagery has moved to WMTS runtime delivery, `imagery` may instead report
+`wmts_runtime_only`. That is valid for display layers and does not authorize
+deleting `/data/scout/raster-tiles`; the raster cache may still be needed for
+offline replay, OCR, or older handoff packages.
 
 ## Workspace Outputs（工作區輸出）
 
@@ -408,6 +438,72 @@ hardware:
 - keeps raw GPX, GeoTIFF, DTM, and tile payloads referenced by checksum/path;
 - reports blocked or missing heavy layers as warnings unless the project policy
   marks them required.
+
+## Operator Rerun Checklist
+
+When rerunning importer + map preparation on Scout hardware, the operator must
+verify these items before declaring the workspace refreshed:
+
+1. Preserve raster tile cache unless a documented cache invalidation condition
+   is met. `/data/scout/raster-tiles` is refreshed by stale/missing policy, not
+   by deletion. A small increase in tile count after a connected run can mean
+   only missing or stale tiles were fetched.
+2. Preserve OCR cache unless the tile image hash, OCR engine, language, or
+   engine version changes. Empty OCR results are valid cache entries.
+3. Check terrain source coverage separately from display overlay count. Four
+   terrain overlay PNGs mean four display modes; the actual DTM/DEM source tile
+   count, grid-cell count, and no-data coverage must be read from the terrain
+   visualization and DTM coverage artifacts.
+4. Check CWA evidence by feature family. `0` warning features can be a valid
+   result when no active CWA warning intersects the route/bbox; it does not
+   mean observation or QPF fetch failed.
+5. Check GEE evidence by status. `soil-moisture` and `antecedent-rain` may
+   produce a `missing_credentials` status feature when `SCOUT_GEE_ENABLED`,
+   Earth Engine credentials, or the live fetcher are unavailable. This is a
+   candidate status overlay, not SMAP/GPM numeric evidence. When credentials
+   are present and explicit fetch is attempted, `fetch_failed` with a
+   `gee_http_error:403` blocker means Google Earth Engine access or the Cloud
+   project registration is still incomplete; it must not be collapsed back to
+   `missing_credentials`. On Scout Pi deployments, do not override
+   `/data/scout/secrets/live-runtime.env` GEE values with empty
+   `docker-compose` environment defaults, or the credential path will disappear
+   inside the container. GEE numeric values are **no-cache evidence**
+   (不快取的數值取證): `gee_raw_summary.json`, SMAP/GPM GeoJSON, corridor
+   summaries, and timeseries files are the current preparation run's evidence
+   snapshot only. They must declare `cacheable: false`, `ttl_seconds: 0`, and
+   `must_refetch_on_prepare: true`; a later preparation run must call GEE again
+   under `network_mode=explicit-fetch` instead of reusing earlier SMAP/GPM
+   numbers as environmental state.
+6. Confirm Boss/route-pressure artifacts after risk outputs exist. Boss Points
+   are generated as a post-process and remain part of the 32-layer UI contract,
+   not a `--layers` input.
+7. Run both gates:
+
+   ```bash
+   PYTHONDONTWRITEBYTECODE=1 ./venv/bin/python tools/verify_scout_layer_contract.py \
+     --repo-root .
+
+   PYTHONDONTWRITEBYTECODE=1 ./venv/bin/python tools/verify_scout_layer_contract.py \
+     --repo-root . \
+     --project-root /data/scout/admin/pretrip-workspaces/chilai_nanhua_day1 \
+     --require-workspace
+   ```
+
+8. Run the browser smoke gate when Playwright is available:
+
+   ```bash
+   node tools/admin_ui_visual_smoke.js --python ./venv/bin/python
+   ```
+
+9. Verify Scout URLs through `scout.local`, not only loopback:
+   `/admin/pretrip?tiles=local`, `/admin/debug?tiles=local`, and
+   `/admin?tiles=local`.
+
+The expected successful connected run has a preparation manifest whose
+`requested_layers` are the 23 preparation-backed layers above. The admin UI may
+still expose 31 or 32 controls depending on surface: `completed-track` is
+after-action/admin only and should not appear on `/admin/pretrip` or
+`/admin/debug`.
 
 ## Success Criteria
 

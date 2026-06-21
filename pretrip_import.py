@@ -109,6 +109,15 @@ DURABLE_ADMIN_EVIDENCE_REF_KEYS: tuple[str, ...] = (
     "route_comparison_ref",
     "capability_timeline_import_ref",
     "post_analysis_capability_timeline_ref",
+    "dtm_coverage_summary_ref",
+    "segment_dtm_coverage_ref",
+    "terrain_visualization_ref",
+    "terrain_route_samples_ref",
+    "terrain_hillshade_overlay_ref",
+    "terrain_elevation_tint_overlay_ref",
+    "terrain_slope_shading_overlay_ref",
+    "terrain_contours_overlay_ref",
+    "terrain_risk_candidates_ref",
     "risk_route_profile_ref",
     "risk_route_profile_metadata_ref",
     "risk_route_profile_csv_ref",
@@ -136,6 +145,19 @@ DEFAULT_DURABLE_ADMIN_EVIDENCE_REFS: dict[str, str] = {
     "post_analysis_capability_timeline_ref": (
         "outputs/post_analysis_capability_timeline.json"
     ),
+    "dtm_coverage_summary_ref": "normalized/terrain/dtm_coverage_summary.json",
+    "segment_dtm_coverage_ref": "normalized/terrain/segment_dtm_coverage.json",
+    "terrain_visualization_ref": "outputs/layers/normalized/terrain_visualization.geojson",
+    "terrain_route_samples_ref": "outputs/layers/normalized/terrain_route_samples.geojson",
+    "terrain_hillshade_overlay_ref": "outputs/layers/normalized/terrain_hillshade.png",
+    "terrain_elevation_tint_overlay_ref": (
+        "outputs/layers/normalized/terrain_elevation_tint.png"
+    ),
+    "terrain_slope_shading_overlay_ref": (
+        "outputs/layers/normalized/terrain_slope_shading.png"
+    ),
+    "terrain_contours_overlay_ref": "outputs/layers/normalized/terrain_contours.png",
+    "terrain_risk_candidates_ref": "outputs/layers/candidates/terrain_risk_candidates.json",
     "risk_route_profile_ref": "outputs/risk/route_risk.geojson",
     "risk_route_profile_metadata_ref": "outputs/risk/route_risk.metadata.json",
     "risk_route_profile_csv_ref": "outputs/risk/route_risk.csv",
@@ -157,6 +179,9 @@ DEFAULT_DURABLE_ADMIN_EVIDENCE_REFS: dict[str, str] = {
 }
 DURABLE_ADMIN_EVIDENCE_METADATA_KEYS: tuple[str, ...] = (
     "risk_route_sample_count",
+    "dtm_candidate_tile_count",
+    "dtm_scanned_header_count",
+    "segment_dtm_segment_count",
     "risk_score_point_count",
     "risk_score_source_feature_count",
     "risk_score_source_profile",

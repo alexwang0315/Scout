@@ -14,6 +14,7 @@ from pretrip_layer_preparation import (
 )
 from pretrip_admin_view import build_pretrip_admin_view
 from pretrip_import import PretripImportRequest, run_pretrip_import
+from pretrip_source_ingest import wgs84_to_twd97
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -285,6 +286,7 @@ def test_layer_preparation_writes_environment_status_artifacts_for_admin_view(
     assert soil["features"][0]["properties"]["status"] in {
         "missing_credentials",
         "configured_pending_fetcher",
+        "configured_pending_explicit_fetch",
     }
 
     view = build_pretrip_admin_view(
@@ -296,6 +298,128 @@ def test_layer_preparation_writes_environment_status_artifacts_for_admin_view(
     assert view["soil_moisture"]["points"]
     assert view["antecedent_rain"]["points"]
     assert view["cwa_qpf"]["points"][0]["runtime_safety_truth"] is False
+
+
+def test_layer_preparation_writes_gee_numeric_artifacts_with_injected_fetcher(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_root = _copy_fixture_project(tmp_path)
+
+    class FakeGeeFetchResult:
+        def to_dict(self) -> dict[str, object]:
+            return {
+                "status": "fetched",
+                "blocker_reasons": [],
+                "external_api_calls_made": True,
+                "raw_summary": {
+                    "provider": "google_earth_engine",
+                    "responses": {
+                        "smap_l4_surface_rootzone_soil_moisture": {
+                            "http_status": 200,
+                            "result": {
+                                "sm_surface": 0.37,
+                                "sm_rootzone": 0.44,
+                            },
+                        },
+                        "gpm_imerg_precipitation": {
+                            "http_status": 200,
+                            "result": {"precipitation": 22.5},
+                        },
+                    },
+                    "secret_value_embedded": False,
+                },
+                "soil_moisture": {
+                    "dataset_family": "SMAP",
+                    "collection_id": "NASA/SMAP/SPL4SMGP/008",
+                    "status": "fetched",
+                    "sm_surface_wetness": 0.37,
+                    "sm_rootzone_wetness": 0.44,
+                    "antecedent_wetness_percentile": None,
+                    "sample_count": 1,
+                },
+                "antecedent_rain": {
+                    "dataset_family": "GPM_IMERG",
+                    "collection_id": "NASA/GPM_L3/IMERG_V07",
+                    "status": "fetched",
+                    "last_72h_mm": 22.5,
+                    "last_24h_mm": None,
+                    "last_3h_mm": None,
+                    "sample_count": 1,
+                },
+                "smap_timeseries": {
+                    "artifact_kind": "gee_soil_moisture_timeseries",
+                    "layer_id": "soil-moisture",
+                    "status": "fetched",
+                    "samples": [{"timestamp": "2026-05-22T00:00:00+00:00"}],
+                    "runtime_safety_truth": False,
+                },
+                "gpm_timeseries": {
+                    "artifact_kind": "gee_antecedent_rain_timeseries",
+                    "layer_id": "antecedent-rain",
+                    "status": "fetched",
+                    "samples": [{"timestamp": "2026-05-22T00:00:00+00:00"}],
+                    "runtime_safety_truth": False,
+                },
+            }
+
+    def fake_fetcher(**kwargs):
+        assert kwargs["project_id"] == "test-project"
+        assert kwargs["bbox_wgs84"]["west"] < kwargs["bbox_wgs84"]["east"]
+        return FakeGeeFetchResult()
+
+    monkeypatch.setenv("SCOUT_GEE_ENABLED", "true")
+    monkeypatch.setenv("SCOUT_GEE_PROJECT_ID", "test-project")
+    monkeypatch.setenv("EARTHENGINE_TOKEN", "test-token-ref")
+    monkeypatch.setattr(
+        "scout_gee_integration.fetch_gee_environment_evidence",
+        fake_fetcher,
+    )
+
+    manifest = run_layer_preparation(
+        LayerPreparationRequest(
+            project_id="chilai_nanhua_day1",
+            project_root=project_root,
+            layers=("soil-moisture", "antecedent-rain"),
+            network_mode="explicit-fetch",
+            allow_network_fetch=True,
+            prepared_at="2026-05-22T00:00:00+00:00",
+        )
+    )
+
+    project = json.loads((project_root / "project.json").read_text(encoding="utf-8"))
+    soil = json.loads(
+        (project_root / project["soil_moisture_grid_ref"]).read_text(encoding="utf-8")
+    )
+    rain = json.loads(
+        (project_root / project["antecedent_rain_grid_ref"]).read_text(encoding="utf-8")
+    )
+    raw_summary = json.loads(
+        (project_root / project["gee_raw_summary_ref"]).read_text(encoding="utf-8")
+    )
+
+    assert project["gee_environment_status"] == "fetched"
+    assert project["gee_external_api_calls_made"] is True
+    assert project["gee_numeric_cacheable"] is False
+    assert project["gee_numeric_ttl_seconds"] == 0
+    assert project["gee_cache_policy"]["must_refetch_on_prepare"] is True
+    assert manifest["boundary"]["external_api_calls_made"] is True
+    assert soil["cache_policy"]["cacheable"] is False
+    assert rain["cache_policy"]["ttl_seconds"] == 0
+    assert soil["features"][0]["properties"]["sm_surface_wetness"] == 0.37
+    assert soil["features"][0]["properties"]["sm_rootzone_wetness"] == 0.44
+    assert rain["features"][0]["properties"]["last_72h_mm"] == 22.5
+    assert soil["features"][0]["properties"]["raw_summary_sha256"]
+    assert (
+        soil["features"][0]["properties"]["cache_policy"][
+            "reuse_previous_numeric_values"
+        ]
+        is False
+    )
+    assert raw_summary["cache_policy"]["cacheable"] is False
+    assert raw_summary["secret_value_embedded"] is False
+    assert soil["boundary"]["external_api_calls_made"] is True
+    assert soil["features"][0]["properties"]["runtime_safety_truth"] is False
 
 
 def test_layer_preparation_ignores_local_imagery_refs_for_wmts_runtime(
@@ -1221,6 +1345,44 @@ def test_layer_preparation_syncs_scout_risk_score_outputs(
     assert manifest["boundary"]["phase1_runtime_mutation_allowed"] is False
 
 
+def test_layer_preparation_generates_workspace_risk_before_terrain_bitmap(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pytest.importorskip("numpy")
+    project_root = _write_minimal_overpass_dtm_workspace(tmp_path)
+    monkeypatch.setattr(pretrip_layer_preparation, "SCOUT_RISK_OUTPUT_SOURCES", {})
+
+    manifest = run_layer_preparation(
+        LayerPreparationRequest(
+            project_id="chilai_nanhua_day1",
+            project_root=project_root,
+            layers=("risk-score", "risk-ribbon", "terrain"),
+            prepared_at="2026-05-22T00:00:00+00:00",
+        )
+    )
+
+    project = _load(project_root / "project.json")
+    assert project["risk_score_generation_status"] == "completed"
+    assert project["risk_score_source_profile"] == (
+        "scout_risk_engine_workspace_generated_overpass_route_profile"
+    )
+    assert (project_root / project["risk_route_profile_ref"]).is_file()
+    assert (project_root / project["risk_score_points_ref"]).is_file()
+    assert (project_root / project["risk_ribbon_ref"]).is_file()
+
+    layers = {layer["layer_id"]: layer for layer in manifest["layers"]}
+    assert layers["risk-score"]["status"] == "ready_from_project_ref"
+    assert layers["terrain"]["status"] == "ready_from_project_ref"
+    terrain_visualization = _load(project_root / project["terrain_visualization_ref"])
+    assert terrain_visualization["status"] == "ready_from_dtm_20m_corridor_bitmap"
+    assert terrain_visualization["counts"]["bitmap_overlay_count"] == 4
+    assert terrain_visualization["counts"]["source_dtm_tile_count"] == 1
+    assert terrain_visualization["counts"]["cell_count"] > 0
+    assert terrain_visualization["dtm_grid"]["source_tile_count"] == 1
+    assert terrain_visualization["boundary"]["runtime_safety_truth"] is False
+
+
 def test_layer_preparation_terrain_can_fallback_to_risk_ribbon_lines(
     tmp_path: Path,
 ) -> None:
@@ -1440,8 +1602,157 @@ def _copy_fixture_project(
     return project_root
 
 
+def _write_minimal_overpass_dtm_workspace(tmp_path: Path) -> Path:
+    project_root = tmp_path / "workspaces" / "chilai_nanhua_day1"
+    (project_root / "normalized" / "routes").mkdir(parents=True)
+    (project_root / "normalized" / "map").mkdir(parents=True)
+    (project_root / "normalized" / "terrain").mkdir(parents=True)
+    (project_root / "source_inbox").mkdir(parents=True)
+
+    route_points = [
+        (23.9500, 121.0500, 1200.0, "2026-05-22T00:00:00Z"),
+        (23.9510, 121.0510, 1210.0, "2026-05-22T00:10:00Z"),
+        (23.9520, 121.0520, 1220.0, "2026-05-22T00:20:00Z"),
+        (23.9530, 121.0530, 1230.0, "2026-05-22T00:30:00Z"),
+    ]
+    gpx_path = _write_gpx(
+        project_root / "source_inbox" / "golden_reference.gpx",
+        name="golden reference",
+        points=route_points,
+    )
+    lat_values = [point[0] for point in route_points]
+    lon_values = [point[1] for point in route_points]
+    route_summary_ref = "normalized/routes/route_summary.json"
+    route_bundle_ref = "normalized/routes/route_evidence_bundle.json"
+    overpass_ref = "normalized/map/overpass_vector_evidence.geojson"
+    dtm_ref = "normalized/terrain/dtm_coverage_summary.json"
+
+    _write_json(
+        project_root / route_summary_ref,
+        {
+            "artifact_id": "artifact.gpx.chilai_nanhua_day1",
+            "bbox_wgs84": {
+                "min_lat": min(lat_values),
+                "min_lon": min(lon_values),
+                "max_lat": max(lat_values),
+                "max_lon": max(lon_values),
+            },
+            "distance_m": 450.0,
+        },
+    )
+    _write_json(
+        project_root / route_bundle_ref,
+        {
+            "artifact_kind": "pretrip_historical_gpx_route_evidence_bundle",
+            "schema_version": "historical_gpx_importer.v1",
+            "golden_route": {
+                "source_id": "artifact.gpx.chilai_nanhua_day1",
+                "source_path": gpx_path.as_posix(),
+                "filtered_geometry_ref": "source_inbox/golden_reference.gpx",
+                "role": "golden_route_reference",
+                "route_bbox_wgs84": [
+                    min(lon_values),
+                    min(lat_values),
+                    max(lon_values),
+                    max(lat_values),
+                ],
+                "route_distance_m": 450.0,
+            },
+            "route_scope_for_map_preparation": {
+                "bbox_wgs84": [
+                    min(lon_values),
+                    min(lat_values),
+                    max(lon_values),
+                    max(lat_values),
+                ],
+                "corridor_policy": "bbox_fetch_then_along_track_filter",
+            },
+            "boundary": {"candidate_only": True, "runtime_safety_truth": False},
+        },
+    )
+    _write_json(
+        project_root / overpass_ref,
+        {
+            "type": "FeatureCollection",
+            "features": [
+                {
+                    "type": "Feature",
+                    "geometry": {
+                        "type": "LineString",
+                        "coordinates": [
+                            [lon, lat]
+                            for lat, lon, _ele, _time in route_points
+                        ],
+                    },
+                    "properties": {
+                        "id": "osm.synthetic.trail.001",
+                        "candidate_type": "trail_corridor_candidate",
+                        "candidate_only": True,
+                        "runtime_safety_truth": False,
+                    },
+                }
+            ],
+        },
+    )
+
+    projected = [wgs84_to_twd97(lat, lon) for lat, lon, _ele, _time in route_points]
+    xs = [point[0] for point in projected]
+    ys = [point[1] for point in projected]
+    grid_path = project_root / "normalized" / "terrain" / "synthetic_dem.grd"
+    min_x = int(min(xs) // 20 * 20) - 360
+    max_x = int(max(xs) // 20 * 20) + 360
+    min_y = int(min(ys) // 20 * 20) - 360
+    max_y = int(max(ys) // 20 * 20) + 360
+    lines: list[str] = []
+    for x in range(min_x, max_x + 1, 20):
+        for y in range(min_y, max_y + 1, 20):
+            z = 1000.0 + (x - min_x) * 0.02 + (y - min_y) * 0.01
+            lines.append(f"{x} {y} {z:.2f}\n")
+    grid_path.write_text("".join(lines), encoding="utf-8")
+    _write_json(
+        project_root / dtm_ref,
+        {
+            "summary_id": "dtm_coverage.chilai_nanhua_day1.synthetic",
+            "candidate_tiles": [
+                {
+                    "tile_id": "synthetic",
+                    "county": "南投縣",
+                    "grid_uri": grid_path.as_posix(),
+                    "bbox_twd97": {
+                        "min_x": min_x,
+                        "min_y": min_y,
+                        "max_x": max_x,
+                        "max_y": max_y,
+                    },
+                }
+            ],
+            "scanned_header_count": 1,
+            "missing_grid_count": 0,
+        },
+    )
+    _write_json(
+        project_root / "project.json",
+        {
+            "project_id": "chilai_nanhua_day1",
+            "route_summary_ref": route_summary_ref,
+            "route_evidence_bundle_ref": route_bundle_ref,
+            "overpass_map_context_ref": overpass_ref,
+            "dtm_coverage_summary_ref": dtm_ref,
+        },
+    )
+    return project_root
+
+
 def _load(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _write_json(path: Path, payload: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
 
 
 def _relative_file_set(path: Path) -> set[str]:
