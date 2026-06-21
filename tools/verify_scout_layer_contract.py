@@ -287,7 +287,7 @@ def _check_workspace_project(
         return
     project = json.loads(project_json_path.read_text())
     refs = _collect_project_refs(project)
-    counts = project.get("counts") if isinstance(project.get("counts"), dict) else {}
+    counts = _collect_project_counts(project)
     required_refs = {
         "terrain": ("terrain_visualization", "terrain_visualization_ref"),
         "risk-score": ("risk_score_points", "risk_score_points_ref"),
@@ -310,10 +310,18 @@ def _check_workspace_project(
 
     count_expectations = {
         "risk-score": ("risk_score_point_count", "risk_score_points_count"),
-        "risk-ribbon": ("risk_ribbon_point_count", "risk_ribbon_count"),
-        "risk-heatmap": ("calibrated_risk_heatmap_point_count", "risk_heatmap_count"),
-        "segments": ("segment_count",),
-        "checkpoints": ("checkpoint_count",),
+        "risk-ribbon": (
+            "risk_ribbon_point_count",
+            "risk_ribbon_count",
+            "risk_ribbon_segment_count",
+        ),
+        "risk-heatmap": (
+            "calibrated_risk_heatmap_point_count",
+            "risk_heatmap_count",
+            "calibrated_risk_heatmap_segment_count",
+        ),
+        "segments": ("segment_count", "segment_candidate_count"),
+        "checkpoints": ("checkpoint_count", "checkpoint_candidate_count"),
         "mcp": ("mcp_candidate_count",),
         "boss-points": ("boss_point_count", "boss_points_count"),
     }
@@ -332,7 +340,50 @@ def _collect_project_refs(project: dict[str, Any]) -> dict[str, Any]:
         value = project.get(key)
         if isinstance(value, dict):
             refs.update(value)
+    for key, value in project.items():
+        if key.endswith("_ref") and value:
+            refs[key] = value
+            refs.setdefault(key[:-4], value)
+    for alias, source_key in {
+        "checkpoints": "checkpoint_candidates_ref",
+        "checkpoints_ref": "checkpoint_candidates_ref",
+        "segments": "segment_candidates_ref",
+        "segments_ref": "segment_candidates_ref",
+        "overpass_aligned_checkpoints": "overpass_aligned_checkpoint_candidates_ref",
+        "overpass_aligned_segments": "overpass_aligned_segment_candidates_ref",
+        "reference_tracks": "reference_tracks_ref",
+        "reference_track_display_geometry": "reference_track_display_geometry_ref",
+        "mcp_candidates": "mcp_candidates_ref",
+        "overpass_aligned_mcp_candidates": "overpass_aligned_mcp_candidates_ref",
+        "route_summary": "route_summary_ref",
+        "overpass_evidence": "overpass_evidence_ref",
+        "terrain_visualization": "terrain_visualization_ref",
+        "risk_score_points": "risk_score_points_ref",
+        "risk_ribbon": "risk_ribbon_ref",
+        "calibrated_risk_heatmap": "calibrated_risk_heatmap_ref",
+        "boss_points": "boss_points_ref",
+        "boss_points_geojson": "boss_points_geojson_ref",
+    }.items():
+        value = refs.get(source_key) or project.get(source_key)
+        if value:
+            refs.setdefault(alias, value)
+    if refs.get("risk_ribbon") and refs.get("calibrated_risk_heatmap"):
+        refs.setdefault("risk_delta", "project.json#derived-from-risk-ribbon-and-heatmap")
     return refs
+
+
+def _collect_project_counts(project: dict[str, Any]) -> dict[str, Any]:
+    counts: dict[str, Any] = {}
+    if isinstance(project.get("counts"), dict):
+        counts.update(project["counts"])
+    counts.update(
+        {
+            key: value
+            for key, value in project.items()
+            if key.endswith("_count") and isinstance(value, int)
+        }
+    )
+    return counts
 
 
 def _extract_map_layer_ranks(text: str) -> dict[str, int]:

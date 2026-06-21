@@ -1403,6 +1403,11 @@
     .antecedent-rain-point { fill: #0f766e; stroke: #ecfeff; stroke-width: 2; opacity: .82; }
     .antecedent-rain-point.rain-high { fill: #d6a800; stroke: #fff7ed; }
     .antecedent-rain-point.rain-extreme { fill: #dc2626; stroke: #fff1f2; }
+    .cwa-qpf-point { fill: #f59e0b; stroke: #fff7ed; stroke-width: 1.6; opacity: .9; vector-effect: non-scaling-stroke; }
+    .cwa-qpf-point.qpf-high { fill: #d97706; }
+    .cwa-qpf-point.qpf-extreme { fill: #b91c1c; }
+    .cwa-weather-point { fill: #0ea5e9; stroke: #e0f2fe; stroke-width: 1.6; opacity: .9; vector-effect: non-scaling-stroke; }
+    .cwa-weather-point.weather-warning { fill: #dc2626; stroke: #fff1f2; }
 
     .map-highlight {
       opacity: 1 !important;
@@ -3217,6 +3222,18 @@
       if (value >= 30) return "rain-high";
       return "";
     }
+    function cwaQpfClass(point) {
+      const probability = Number(point?.rain_probability ?? point?.rainProbability ?? 0);
+      const rainfall = Number(point?.rainfall_mm ?? point?.rainfallMm ?? 0);
+      if (probability >= 90 || rainfall >= 80) return "qpf-extreme";
+      if (probability >= 70 || rainfall >= 30) return "qpf-high";
+      return "";
+    }
+    function cwaWeatherClass(point) {
+      if (String(point?.evidence_type || "").includes("warning")) return "weather-warning";
+      if (Number(point?.last_24h_mm ?? 0) >= 80) return "weather-warning";
+      return "";
+    }
 
     function updateLayers() {
       const layerInputs = [...document.querySelectorAll("[data-layer]")];
@@ -3532,7 +3549,20 @@
         riskDeltaGroup.appendChild(path);
       });
       runtimeMap.appendChild(riskDeltaGroup);
-      runtimeMap.appendChild(svgEl("g", {"data-layer-group": "cwa-qpf"}));
+      const cwaQpfGroup = svgEl("g", {"data-layer-group": "cwa-qpf"});
+      (projection.cwa_qpf?.points || []).forEach(point => {
+        const [x, y] = projectPoint(bounds, point.lat, point.lon);
+        const circle = svgEl("circle", {
+          cx: x,
+          cy: y,
+          r: 5.2,
+          class: `cwa-qpf-point ${cwaQpfClass(point)}`
+        });
+        attachMapEvidence(circle, point, `cwa-qpf ${point.source_id || point.sample_id || ""}`);
+        cwaQpfGroup.appendChild(circle);
+        appendPointLabel(cwaQpfGroup, x, y, point, "cwa-qpf");
+      });
+      runtimeMap.appendChild(cwaQpfGroup);
 
       const soilMoistureGroup = svgEl("g", {"data-layer-group": "soil-moisture"});
       (projection.soil_moisture?.points || []).forEach(point => {
@@ -3556,7 +3586,21 @@
         antecedentRainGroup.appendChild(circle);
       });
       runtimeMap.appendChild(antecedentRainGroup);
-      runtimeMap.appendChild(svgEl("g", {"data-layer-group": "cwa-weather"}));
+
+      const cwaWeatherGroup = svgEl("g", {"data-layer-group": "cwa-weather"});
+      (projection.cwa_weather?.points || []).forEach(point => {
+        const [x, y] = projectPoint(bounds, point.lat, point.lon);
+        const circle = svgEl("circle", {
+          cx: x,
+          cy: y,
+          r: 5,
+          class: `cwa-weather-point ${cwaWeatherClass(point)}`
+        });
+        attachMapEvidence(circle, point, `cwa-weather ${point.source_id || point.sample_id || ""}`);
+        cwaWeatherGroup.appendChild(circle);
+        appendPointLabel(cwaWeatherGroup, x, y, point, "cwa-weather");
+      });
+      runtimeMap.appendChild(cwaWeatherGroup);
 
       const riskScoreGroup = svgEl("g", {"data-layer-group": "risk-score"});
       (projection.risk_score?.points || []).forEach(point => {

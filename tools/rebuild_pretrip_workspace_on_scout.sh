@@ -48,7 +48,25 @@ NETWORK_MODE="${SCOUT_PRETRIP_NETWORK_MODE:-explicit-fetch}"
 ALLOW_NETWORK_FETCH="${SCOUT_PRETRIP_ALLOW_NETWORK_FETCH:-1}"
 BACKUP_ROOT="${SCOUT_PRETRIP_BACKUP_ROOT:-${WORKSPACE_ROOT}}"
 LOG_ROOT="${SCOUT_PRETRIP_REBUILD_LOG_ROOT:-/tmp}"
-LAYERS="${SCOUT_PRETRIP_LAYERS:-osm,overpass,terrain,risk-score,risk-ribbon,risk-heatmap,risk-delta,imagery,weather,reference-tracks,route,segments,checkpoints,pois,hazards,corridors,retreat,route-notes}"
+LAYERS="${SCOUT_PRETRIP_LAYERS:-osm,overpass,terrain,risk-score,risk-ribbon,risk-heatmap,risk-delta,cwa-qpf,soil-moisture,antecedent-rain,cwa-weather,imagery,weather,reference-tracks,route,segments,checkpoints,pois,hazards,corridors,retreat,route-notes}"
+SCOUT_ENV_FILE="${SCOUT_ENV_FILE:-}"
+if [[ -z "${SCOUT_ENV_FILE}" ]]; then
+  for candidate in "./.env" "/home/alexwang0315/scout-fusion/.env" "/data/scout/config/.env"; do
+    if [[ -f "${candidate}" ]]; then
+      SCOUT_ENV_FILE="${candidate}"
+      break
+    fi
+  done
+fi
+if [[ -n "${SCOUT_ENV_FILE}" && -f "${SCOUT_ENV_FILE}" ]]; then
+  set -a
+  # shellcheck disable=SC1090
+  . "${SCOUT_ENV_FILE}"
+  set +a
+  SCOUT_ENV_FILE_LOADED="${SCOUT_ENV_FILE}"
+else
+  SCOUT_ENV_FILE_LOADED=""
+fi
 
 if [[ ! -x "${PYTHON_BIN}" ]]; then
   echo "Python executable not found or not executable: ${PYTHON_BIN}" >&2
@@ -82,6 +100,7 @@ mkdir -p "${WORKSPACE_ROOT}" "${BACKUP_ROOT}" "${LOG_ROOT}"
   echo "layer_profile=${LAYER_PROFILE}"
   echo "network_mode=${NETWORK_MODE}"
   echo "allow_network_fetch=${ALLOW_NETWORK_FETCH}"
+  echo "environment_layer_env_file_loaded=${SCOUT_ENV_FILE_LOADED}"
   echo "route_context_include_route_notes=${ROUTE_CONTEXT_INCLUDE_ROUTE_NOTES}"
   echo "route_context_limit_route_notes=${ROUTE_CONTEXT_LIMIT_ROUTE_NOTES}"
   echo "log_path=${LOG_PATH}"

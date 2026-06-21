@@ -636,6 +636,23 @@ def build_pretrip_admin_view(
     risk_heatmap_metadata = _load_optional_json(
         artifacts.get("calibrated_risk_heatmap_metadata")
     )
+    cwa_weather_evidence = _load_optional_json(artifacts.get("cwa_weather_evidence"))
+    cwa_warnings_geojson = _load_optional_json(artifacts.get("cwa_warnings_geojson"))
+    cwa_observations_geojson = _load_optional_json(
+        artifacts.get("cwa_observations_geojson")
+    )
+    cwa_qpf_grid = _load_optional_json(artifacts.get("cwa_qpf_grid"))
+    cwa_qpf_corridor_summary = _load_optional_json(
+        artifacts.get("cwa_qpf_corridor_summary")
+    )
+    soil_moisture_grid = _load_optional_json(artifacts.get("soil_moisture_grid"))
+    smap_l4_corridor_summary = _load_optional_json(
+        artifacts.get("smap_l4_corridor_summary")
+    )
+    antecedent_rain_grid = _load_optional_json(artifacts.get("antecedent_rain_grid"))
+    gpm_imerg_corridor_summary = _load_optional_json(
+        artifacts.get("gpm_imerg_corridor_summary")
+    )
     segment_display_geometry = _load_optional_json(
         artifacts.get("segment_display_geometry")
     )
@@ -903,6 +920,40 @@ def build_pretrip_admin_view(
         ),
         "resources": _resource_summary(resource_plan, source_refs["resource_plan"]),
         "weather": _weather_summary(weather_daylight, source_refs["weather_daylight"]),
+        "cwa_qpf": _environment_geojson_summary(
+            project_id,
+            cwa_qpf_grid,
+            source_path=source_refs.get("cwa_qpf_grid", ""),
+            layer_id="cwa-qpf",
+            evidence_type="cwa_forecast_derived_qpf_candidate",
+            summary_payload=cwa_qpf_corridor_summary,
+            summary_source_path=source_refs.get("cwa_qpf_corridor_summary", ""),
+        ),
+        "cwa_weather": _cwa_weather_environment_summary(
+            project_id,
+            evidence_payload=cwa_weather_evidence,
+            warnings_geojson=cwa_warnings_geojson,
+            observations_geojson=cwa_observations_geojson,
+            source_refs=source_refs,
+        ),
+        "soil_moisture": _environment_geojson_summary(
+            project_id,
+            soil_moisture_grid,
+            source_path=source_refs.get("soil_moisture_grid", ""),
+            layer_id="soil-moisture",
+            evidence_type="gee_soil_moisture_candidate",
+            summary_payload=smap_l4_corridor_summary,
+            summary_source_path=source_refs.get("smap_l4_corridor_summary", ""),
+        ),
+        "antecedent_rain": _environment_geojson_summary(
+            project_id,
+            antecedent_rain_grid,
+            source_path=source_refs.get("antecedent_rain_grid", ""),
+            layer_id="antecedent-rain",
+            evidence_type="gee_antecedent_rain_candidate",
+            summary_payload=gpm_imerg_corridor_summary,
+            summary_source_path=source_refs.get("gpm_imerg_corridor_summary", ""),
+        ),
         "contours": _contour_summary(contour, source_refs["contour"]),
         "remote_contacts": _remote_summary(remote_summary, source_refs["remote_summary"]),
     }
@@ -1197,6 +1248,10 @@ def build_pretrip_admin_view(
         "departure_bundle": planning_tab["departure_bundle"],
         "resources": planning_tab["resources"],
         "weather": planning_tab["weather"],
+        "cwa_qpf": planning_tab["cwa_qpf"],
+        "cwa_weather": planning_tab["cwa_weather"],
+        "soil_moisture": planning_tab["soil_moisture"],
+        "antecedent_rain": planning_tab["antecedent_rain"],
         "contours": planning_tab["contours"],
         "map_layers": planning_tab["map_layers"],
         "import_manifest": post_analysis_tab.get("import_manifest"),
@@ -1340,6 +1395,18 @@ def resolve_pretrip_project_artifacts(
         "risk_score_points": "risk_score_points_ref",
         "risk_score_points_metadata": "risk_score_points_metadata_ref",
         "terrain_visualization": "terrain_visualization_ref",
+        "cwa_weather_evidence": "cwa_weather_evidence_ref",
+        "cwa_warnings_geojson": "cwa_warnings_geojson_ref",
+        "cwa_observations_geojson": "cwa_observations_geojson_ref",
+        "cwa_qpf_grid": "cwa_qpf_grid_ref",
+        "cwa_qpf_route_timeline": "cwa_qpf_route_timeline_ref",
+        "cwa_qpf_corridor_summary": "cwa_qpf_corridor_summary_ref",
+        "soil_moisture_grid": "soil_moisture_grid_ref",
+        "smap_l4_timeseries": "smap_l4_timeseries_ref",
+        "smap_l4_corridor_summary": "smap_l4_corridor_summary_ref",
+        "antecedent_rain_grid": "antecedent_rain_grid_ref",
+        "gpm_imerg_timeseries": "gpm_imerg_timeseries_ref",
+        "gpm_imerg_corridor_summary": "gpm_imerg_corridor_summary_ref",
         "admin_projection": "admin_projection_ref",
         "debug_projection_events": "debug_projection_events_ref",
         "gis_perception": "gis_perception_candidates_ref",
@@ -1578,6 +1645,31 @@ def load_pretrip_debug_projection_view(
     risk_heatmap_metadata_raw = _load_optional_json(
         optional_project_path("calibrated_risk_heatmap_metadata_ref")
     )
+    cwa_weather_evidence_raw = _load_optional_json(
+        optional_project_path("cwa_weather_evidence_ref")
+    )
+    cwa_warnings_geojson_raw = _load_optional_json(
+        optional_project_path("cwa_warnings_geojson_ref")
+    )
+    cwa_observations_geojson_raw = _load_optional_json(
+        optional_project_path("cwa_observations_geojson_ref")
+    )
+    cwa_qpf_grid_raw = _load_optional_json(optional_project_path("cwa_qpf_grid_ref"))
+    cwa_qpf_corridor_summary_raw = _load_optional_json(
+        optional_project_path("cwa_qpf_corridor_summary_ref")
+    )
+    soil_moisture_grid_raw = _load_optional_json(
+        optional_project_path("soil_moisture_grid_ref")
+    )
+    smap_l4_corridor_summary_raw = _load_optional_json(
+        optional_project_path("smap_l4_corridor_summary_ref")
+    )
+    antecedent_rain_grid_raw = _load_optional_json(
+        optional_project_path("antecedent_rain_grid_ref")
+    )
+    gpm_imerg_corridor_summary_raw = _load_optional_json(
+        optional_project_path("gpm_imerg_corridor_summary_ref")
+    )
     terrain_visualization_raw = _load_optional_json(
         optional_project_path("terrain_visualization_ref")
     )
@@ -1671,6 +1763,18 @@ def load_pretrip_debug_projection_view(
             "",
         ),
         "weather_daylight": project.get("weather_daylight_evidence_ref", ""),
+        "cwa_weather_evidence": project.get("cwa_weather_evidence_ref", ""),
+        "cwa_warnings_geojson": project.get("cwa_warnings_geojson_ref", ""),
+        "cwa_observations_geojson": project.get("cwa_observations_geojson_ref", ""),
+        "cwa_qpf_grid": project.get("cwa_qpf_grid_ref", ""),
+        "cwa_qpf_corridor_summary": project.get("cwa_qpf_corridor_summary_ref", ""),
+        "soil_moisture_grid": project.get("soil_moisture_grid_ref", ""),
+        "smap_l4_corridor_summary": project.get("smap_l4_corridor_summary_ref", ""),
+        "antecedent_rain_grid": project.get("antecedent_rain_grid_ref", ""),
+        "gpm_imerg_corridor_summary": project.get(
+            "gpm_imerg_corridor_summary_ref",
+            "",
+        ),
     }
     checkpoints = _candidate_list(
         checkpoints_raw,
@@ -1795,6 +1899,40 @@ def load_pretrip_debug_projection_view(
                 "external_api_calls_made": False,
             },
         ),
+        "cwa_qpf": _environment_geojson_summary(
+            project_id,
+            cwa_qpf_grid_raw,
+            source_path=source_refs.get("cwa_qpf_grid", ""),
+            layer_id="cwa-qpf",
+            evidence_type="cwa_forecast_derived_qpf_candidate",
+            summary_payload=cwa_qpf_corridor_summary_raw,
+            summary_source_path=source_refs.get("cwa_qpf_corridor_summary", ""),
+        ),
+        "cwa_weather": _cwa_weather_environment_summary(
+            project_id,
+            evidence_payload=cwa_weather_evidence_raw,
+            warnings_geojson=cwa_warnings_geojson_raw,
+            observations_geojson=cwa_observations_geojson_raw,
+            source_refs=source_refs,
+        ),
+        "soil_moisture": _environment_geojson_summary(
+            project_id,
+            soil_moisture_grid_raw,
+            source_path=source_refs.get("soil_moisture_grid", ""),
+            layer_id="soil-moisture",
+            evidence_type="gee_soil_moisture_candidate",
+            summary_payload=smap_l4_corridor_summary_raw,
+            summary_source_path=source_refs.get("smap_l4_corridor_summary", ""),
+        ),
+        "antecedent_rain": _environment_geojson_summary(
+            project_id,
+            antecedent_rain_grid_raw,
+            source_path=source_refs.get("antecedent_rain_grid", ""),
+            layer_id="antecedent-rain",
+            evidence_type="gee_antecedent_rain_candidate",
+            summary_payload=gpm_imerg_corridor_summary_raw,
+            summary_source_path=source_refs.get("gpm_imerg_corridor_summary", ""),
+        ),
         "readiness": _summary_with_source(
             readiness_raw or {"status": "unknown", "findings": []},
             source_id=f"readiness.{project_id}",
@@ -1889,6 +2027,10 @@ def load_pretrip_debug_projection_view(
         "risk_ribbon": view["risk_ribbon"],
         "risk_heatmap": view["risk_heatmap"],
         "risk_delta": view["risk_delta"],
+        "cwa_qpf": view["cwa_qpf"],
+        "cwa_weather": view["cwa_weather"],
+        "soil_moisture": view["soil_moisture"],
+        "antecedent_rain": view["antecedent_rain"],
         "major_critical_points": view.get("major_critical_points"),
         "boss_points": view.get("boss_points"),
         "mileage_tag_alignment": view.get("mileage_tag_alignment"),
@@ -1921,6 +2063,22 @@ def load_pretrip_debug_projection_view(
             ),
             "risk_delta_segment_count": view["risk_delta"]["counts"].get(
                 "segment_count",
+                0,
+            ),
+            "cwa_qpf_point_count": view["cwa_qpf"]["counts"].get(
+                "point_count",
+                0,
+            ),
+            "cwa_weather_point_count": view["cwa_weather"]["counts"].get(
+                "point_count",
+                0,
+            ),
+            "soil_moisture_point_count": view["soil_moisture"]["counts"].get(
+                "point_count",
+                0,
+            ),
+            "antecedent_rain_point_count": view["antecedent_rain"]["counts"].get(
+                "point_count",
                 0,
             ),
             "terrain_bitmap_overlay_count": view["terrain_visualization"]["counts"].get(
@@ -8035,6 +8193,150 @@ def _weather_summary(payload: dict[str, Any], source_path: str) -> dict[str, Any
         "timezone": payload["timezone"],
         "daylight": payload["daylight"],
         "weather_window": payload["weather_window"],
+    }
+
+
+def _environment_geojson_summary(
+    project_id: str,
+    payload: dict[str, Any] | None,
+    *,
+    source_path: str,
+    layer_id: str,
+    evidence_type: str,
+    summary_payload: dict[str, Any] | None = None,
+    summary_source_path: str = "",
+) -> dict[str, Any]:
+    features = (
+        payload.get("features", [])
+        if isinstance(payload, dict) and isinstance(payload.get("features"), list)
+        else []
+    )
+    points = [
+        point
+        for feature in features
+        if (point := _environment_feature_point(feature, source_path, layer_id))
+        is not None
+    ]
+    status = "ready" if points else "missing_source"
+    if isinstance(summary_payload, dict) and summary_payload.get("status"):
+        status = str(summary_payload["status"])
+    return {
+        "source_id": f"{project_id}.{layer_id}",
+        "source_path": source_path,
+        "summary_source_path": summary_source_path,
+        "evidence_type": evidence_type,
+        "layer_id": layer_id,
+        "status": status,
+        "counts": {
+            "feature_count": len(features),
+            "point_count": len(points),
+        },
+        "points": points,
+        "features": points,
+        "summary": summary_payload or {},
+        "boundary": _summary_boundary(
+            (payload or {}).get("boundary", {})
+            if isinstance(payload, dict)
+            else {
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+            }
+        ),
+    }
+
+
+def _cwa_weather_environment_summary(
+    project_id: str,
+    *,
+    evidence_payload: dict[str, Any] | None,
+    warnings_geojson: dict[str, Any] | None,
+    observations_geojson: dict[str, Any] | None,
+    source_refs: dict[str, str],
+) -> dict[str, Any]:
+    warning_summary = _environment_geojson_summary(
+        project_id,
+        warnings_geojson,
+        source_path=source_refs.get("cwa_warnings_geojson", ""),
+        layer_id="cwa-weather",
+        evidence_type="cwa_weather_warning",
+    )
+    observation_summary = _environment_geojson_summary(
+        project_id,
+        observations_geojson,
+        source_path=source_refs.get("cwa_observations_geojson", ""),
+        layer_id="cwa-weather",
+        evidence_type="cwa_rain_observation",
+    )
+    points = [*warning_summary["points"], *observation_summary["points"]]
+    counts = dict((evidence_payload or {}).get("counts", {}))
+    counts.update(
+        {
+            "warning_point_count": len(warning_summary["points"]),
+            "observation_point_count": len(observation_summary["points"]),
+            "point_count": len(points),
+        }
+    )
+    return {
+        "source_id": f"{project_id}.cwa-weather",
+        "source_path": source_refs.get("cwa_weather_evidence", ""),
+        "evidence_type": "cwa_weather_environment_evidence",
+        "layer_id": "cwa-weather",
+        "status": (evidence_payload or {}).get("status", "missing_source"),
+        "counts": counts,
+        "datasets": (evidence_payload or {}).get("datasets", []),
+        "points": points,
+        "features": points,
+        "warnings": warning_summary["points"],
+        "observations": observation_summary["points"],
+        "external_api_calls_made": bool(
+            (evidence_payload or {}).get("external_api_calls_made")
+        ),
+        "boundary": _summary_boundary(
+            (evidence_payload or {}).get(
+                "boundary",
+                {"candidate_only": True, "runtime_safety_truth": False},
+            )
+        ),
+    }
+
+
+def _environment_feature_point(
+    feature: dict[str, Any],
+    source_path: str,
+    layer_id: str,
+) -> dict[str, Any] | None:
+    if not isinstance(feature, dict):
+        return None
+    geometry = feature.get("geometry") if isinstance(feature.get("geometry"), dict) else {}
+    if geometry.get("type") != "Point":
+        return None
+    try:
+        coordinate = _geojson_point_coordinate(geometry)
+    except (TypeError, ValueError):
+        return None
+    props = feature.get("properties") if isinstance(feature.get("properties"), dict) else {}
+    source_id = str(props.get("source_id") or feature.get("id") or f"{layer_id}.point")
+    label = str(
+        props.get("label")
+        or props.get("station_name")
+        or props.get("headline")
+        or props.get("area_name")
+        or source_id
+    )
+    return {
+        **props,
+        "source_id": source_id,
+        "candidate_id": source_id,
+        "source_path": source_path,
+        "source_refs": [source_path] if source_path else [],
+        "evidence_type": props.get("evidence_type") or layer_id,
+        "layer_id": props.get("layer_id") or layer_id,
+        "label": label,
+        "lat": coordinate["lat"],
+        "lon": coordinate["lon"],
+        "candidate_only": props.get("candidate_only", True),
+        "runtime_safety_truth": props.get("runtime_safety_truth", False),
+        "review_state": props.get("review_state", "needs_review"),
     }
 
 

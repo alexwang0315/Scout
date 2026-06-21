@@ -701,16 +701,20 @@ def test_builds_fixture_backed_pretrip_admin_view():
         "reference-tracks",
         "retreat",
         "segments",
-        "risk-score",
         "risk-ribbon",
         "risk-heatmap",
         "risk-delta",
+        "soil-moisture",
+        "antecedent-rain",
+        "cwa-qpf",
+        "risk-score",
         "checkpoints",
         "pois",
         "hazards",
+        "route-notes",
+        "cwa-weather",
         "mcp",
         "boss-points",
-        "route-notes",
         "events",
         "weather-api",
     ]
@@ -967,6 +971,158 @@ def test_loads_debug_projection_view_with_shared_map_and_dense_timeline():
     assert checkpoint_event["payload"]["runtime_safety_truth"] is False
     assert segment_event["payload"]["segment_id"].startswith("seg.")
     assert segment_event["payload"]["map_target_ids"]
+
+
+def test_debug_projection_exposes_environment_layer_points_from_project_refs(tmp_path):
+    fixture_project_root = (
+        ROOT / "tests" / "fixtures" / "pretrip" / "projects" / PROJECT_ID
+    )
+    project_root = tmp_path / PROJECT_ID
+    shutil.copytree(fixture_project_root, project_root)
+    project_path = project_root / "project.json"
+    project = json.loads(project_path.read_text(encoding="utf-8"))
+
+    env_root = project_root / "outputs" / "environment"
+    cwa_root = env_root / "cwa"
+    gee_root = env_root / "gee"
+    cwa_root.mkdir(parents=True)
+    gee_root.mkdir(parents=True)
+
+    def write_geojson(path: Path, layer_id: str, source_id: str, label: str) -> None:
+        path.write_text(
+            json.dumps(
+                {
+                    "type": "FeatureCollection",
+                    "features": [
+                        {
+                            "type": "Feature",
+                            "geometry": {
+                                "type": "Point",
+                                "coordinates": [121.22, 23.89],
+                            },
+                            "properties": {
+                                "source_id": source_id,
+                                "layer_id": layer_id,
+                                "label": label,
+                                "candidate_only": True,
+                                "runtime_safety_truth": False,
+                            },
+                        }
+                    ],
+                },
+                sort_keys=True,
+            ),
+            encoding="utf-8",
+        )
+
+    (cwa_root / "cwa_weather_evidence.json").write_text(
+        json.dumps(
+            {
+                "status": "ready",
+                "external_api_calls_made": True,
+                "counts": {"observation_count": 1},
+                "datasets": ["O-A0002-001"],
+                "boundary": {
+                    "candidate_only": True,
+                    "runtime_safety_truth": False,
+                },
+            },
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+    (cwa_root / "warnings.geojson").write_text(
+        json.dumps({"type": "FeatureCollection", "features": []}),
+        encoding="utf-8",
+    )
+    write_geojson(
+        cwa_root / "observations.geojson",
+        "cwa-weather",
+        "cwa.obs.001",
+        "CWA station sample",
+    )
+    write_geojson(
+        cwa_root / "qpf_grid.geojson",
+        "cwa-qpf",
+        "cwa.qpf.001",
+        "QPF sample",
+    )
+    (cwa_root / "qpf_corridor_summary.json").write_text(
+        json.dumps({"status": "ready"}, sort_keys=True),
+        encoding="utf-8",
+    )
+    write_geojson(
+        gee_root / "soil_moisture_grid.geojson",
+        "soil-moisture",
+        "gee.smap.001",
+        "Soil moisture sample",
+    )
+    (gee_root / "smap_l4_corridor_summary.json").write_text(
+        json.dumps({"status": "source_status_only"}, sort_keys=True),
+        encoding="utf-8",
+    )
+    write_geojson(
+        gee_root / "antecedent_rain_grid.geojson",
+        "antecedent-rain",
+        "gee.gpm.001",
+        "Antecedent rain sample",
+    )
+    (gee_root / "gpm_imerg_corridor_summary.json").write_text(
+        json.dumps({"status": "source_status_only"}, sort_keys=True),
+        encoding="utf-8",
+    )
+
+    project.update(
+        {
+            "cwa_weather_evidence_ref": (
+                "outputs/environment/cwa/cwa_weather_evidence.json"
+            ),
+            "cwa_warnings_geojson_ref": "outputs/environment/cwa/warnings.geojson",
+            "cwa_observations_geojson_ref": (
+                "outputs/environment/cwa/observations.geojson"
+            ),
+            "cwa_qpf_grid_ref": "outputs/environment/cwa/qpf_grid.geojson",
+            "cwa_qpf_corridor_summary_ref": (
+                "outputs/environment/cwa/qpf_corridor_summary.json"
+            ),
+            "soil_moisture_grid_ref": (
+                "outputs/environment/gee/soil_moisture_grid.geojson"
+            ),
+            "smap_l4_corridor_summary_ref": (
+                "outputs/environment/gee/smap_l4_corridor_summary.json"
+            ),
+            "antecedent_rain_grid_ref": (
+                "outputs/environment/gee/antecedent_rain_grid.geojson"
+            ),
+            "gpm_imerg_corridor_summary_ref": (
+                "outputs/environment/gee/gpm_imerg_corridor_summary.json"
+            ),
+        }
+    )
+    project_path.write_text(
+        json.dumps(project, ensure_ascii=False, sort_keys=True),
+        encoding="utf-8",
+    )
+
+    view = build_pretrip_admin_view(PROJECT_ID, root=ROOT, project_root=project_root)
+    debug = load_pretrip_debug_projection_view(
+        PROJECT_ID,
+        root=ROOT,
+        project_root=project_root,
+    )
+
+    assert len(view["cwa_qpf"]["points"]) == 1
+    assert len(view["cwa_weather"]["points"]) == 1
+    assert len(view["soil_moisture"]["points"]) == 1
+    assert len(view["antecedent_rain"]["points"]) == 1
+    assert len(debug["cwa_qpf"]["points"]) == 1
+    assert len(debug["cwa_weather"]["points"]) == 1
+    assert len(debug["soil_moisture"]["points"]) == 1
+    assert len(debug["antecedent_rain"]["points"]) == 1
+    assert debug["counts"]["cwa_qpf_point_count"] == 1
+    assert debug["counts"]["cwa_weather_point_count"] == 1
+    assert debug["counts"]["soil_moisture_point_count"] == 1
+    assert debug["counts"]["antecedent_rain_point_count"] == 1
 
 
 def test_boss_points_challenge_fit_surfaces_in_admin_and_debug(tmp_path: Path):

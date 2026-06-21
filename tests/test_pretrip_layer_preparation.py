@@ -12,6 +12,7 @@ from pretrip_layer_preparation import (
     build_layer_preparation_preview,
     run_layer_preparation,
 )
+from pretrip_admin_view import build_pretrip_admin_view
 from pretrip_import import PretripImportRequest, run_pretrip_import
 
 
@@ -247,6 +248,54 @@ def test_layer_preparation_exposes_cwa_and_gee_environment_layers_without_networ
         layer["lifecycle"]["fetch"]["external_network_calls_made"] is False
         for layer in layers_by_id.values()
     )
+
+
+def test_layer_preparation_writes_environment_status_artifacts_for_admin_view(
+    tmp_path: Path,
+) -> None:
+    project_root = _copy_fixture_project(tmp_path)
+
+    run_layer_preparation(
+        LayerPreparationRequest(
+            project_id="chilai_nanhua_day1",
+            project_root=project_root,
+            layers=("cwa-weather", "cwa-qpf", "soil-moisture", "antecedent-rain"),
+            network_mode="no-network",
+            allow_network_fetch=False,
+            prepared_at="2026-05-22T00:00:00+00:00",
+        )
+    )
+
+    project = json.loads((project_root / "project.json").read_text(encoding="utf-8"))
+    for ref_key in (
+        "cwa_qpf_grid_ref",
+        "cwa_weather_evidence_ref",
+        "soil_moisture_grid_ref",
+        "antecedent_rain_grid_ref",
+    ):
+        assert ref_key in project
+        assert (project_root / project[ref_key]).is_file()
+
+    qpf = json.loads((project_root / project["cwa_qpf_grid_ref"]).read_text(encoding="utf-8"))
+    soil = json.loads(
+        (project_root / project["soil_moisture_grid_ref"]).read_text(encoding="utf-8")
+    )
+    assert qpf["features"][0]["properties"]["layer_id"] == "cwa-qpf"
+    assert qpf["features"][0]["properties"]["runtime_safety_truth"] is False
+    assert soil["features"][0]["properties"]["status"] in {
+        "missing_credentials",
+        "configured_pending_fetcher",
+    }
+
+    view = build_pretrip_admin_view(
+        "chilai_nanhua_day1",
+        root=ROOT,
+        project_root=project_root,
+    )
+    assert view["cwa_qpf"]["points"]
+    assert view["soil_moisture"]["points"]
+    assert view["antecedent_rain"]["points"]
+    assert view["cwa_qpf"]["points"][0]["runtime_safety_truth"] is False
 
 
 def test_layer_preparation_ignores_local_imagery_refs_for_wmts_runtime(

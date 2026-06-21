@@ -109,6 +109,22 @@ DURABLE_ADMIN_EVIDENCE_REF_KEYS: tuple[str, ...] = (
     "route_comparison_ref",
     "capability_timeline_import_ref",
     "post_analysis_capability_timeline_ref",
+    "risk_route_profile_ref",
+    "risk_route_profile_metadata_ref",
+    "risk_route_profile_csv_ref",
+    "risk_score_points_ref",
+    "risk_score_points_metadata_ref",
+    "risk_score_points_csv_ref",
+    "risk_score_points_xyz_ref",
+    "risk_ribbon_ref",
+    "risk_ribbon_metadata_ref",
+    "calibrated_risk_heatmap_ref",
+    "calibrated_risk_heatmap_metadata_ref",
+    "risk_attribution_diagnostic_ref",
+    "route_pressure_profile_ref",
+    "route_pressure_profile_geojson_ref",
+    "boss_points_ref",
+    "boss_points_geojson_ref",
 )
 DEFAULT_DURABLE_ADMIN_EVIDENCE_REFS: dict[str, str] = {
     "readiness_report_ref": "outputs/readiness_report.json",
@@ -120,7 +136,45 @@ DEFAULT_DURABLE_ADMIN_EVIDENCE_REFS: dict[str, str] = {
     "post_analysis_capability_timeline_ref": (
         "outputs/post_analysis_capability_timeline.json"
     ),
+    "risk_route_profile_ref": "outputs/risk/route_risk.geojson",
+    "risk_route_profile_metadata_ref": "outputs/risk/route_risk.metadata.json",
+    "risk_route_profile_csv_ref": "outputs/risk/route_risk.csv",
+    "risk_score_points_ref": "outputs/risk/risk_score_points.geojson",
+    "risk_score_points_metadata_ref": "outputs/risk/risk_score_points.metadata.json",
+    "risk_score_points_csv_ref": "outputs/risk/risk_score_points.csv",
+    "risk_score_points_xyz_ref": "outputs/risk/risk_score_points.xyz",
+    "risk_ribbon_ref": "outputs/risk/risk_ribbon.geojson",
+    "risk_ribbon_metadata_ref": "outputs/risk/risk_ribbon.metadata.json",
+    "calibrated_risk_heatmap_ref": "outputs/risk/calibrated_risk_heatmap.geojson",
+    "calibrated_risk_heatmap_metadata_ref": (
+        "outputs/risk/calibrated_risk_heatmap.metadata.json"
+    ),
+    "risk_attribution_diagnostic_ref": "outputs/risk/risk_attribution_diagnostic.json",
+    "route_pressure_profile_ref": "outputs/route_pressure_profile.json",
+    "route_pressure_profile_geojson_ref": "outputs/route_pressure_profile.geojson",
+    "boss_points_ref": "outputs/boss_points.json",
+    "boss_points_geojson_ref": "outputs/boss_points.geojson",
 }
+DURABLE_ADMIN_EVIDENCE_METADATA_KEYS: tuple[str, ...] = (
+    "risk_route_sample_count",
+    "risk_score_point_count",
+    "risk_score_source_feature_count",
+    "risk_score_source_profile",
+    "risk_score_updated_at",
+    "risk_ribbon_segment_count",
+    "calibrated_risk_heatmap_segment_count",
+    "calibrated_risk_heatmap_warning_cp_overlay_count",
+    "risk_attribution_diagnostic_checkpoint_count",
+    "route_pressure_sample_count",
+    "route_pressure_peak_count",
+    "boss_point_count",
+    "boss_point_synthesis_status",
+    "boss_point_synthesis_schema_version",
+    "boss_point_synthesis_trigger",
+    "boss_point_synthesis_updated_at",
+    "boss_point_synthesis_candidate_only",
+    "boss_point_synthesis_runtime_safety_truth",
+)
 
 
 @dataclass(frozen=True)
@@ -3671,6 +3725,15 @@ def _restore_durable_admin_refs_from_workspace(
                 destination_root=project_root,
                 summary=summary,
             )
+            for key in DURABLE_ADMIN_EVIDENCE_METADATA_KEYS:
+                if key in payload:
+                    summary["skipped"][key] = "payload_value_already_exists"
+                    continue
+                if key not in source_project:
+                    summary["skipped"][key] = "source_value_missing"
+                    continue
+                payload[key] = source_project[key]
+                summary["restored"][key] = source_project[key]
     for key in DURABLE_ADMIN_EVIDENCE_REF_KEYS:
         if _payload_ref_exists(payload, key, project_root=project_root):
             summary["skipped"][key] = "payload_ref_already_exists"

@@ -6,11 +6,12 @@ import json
 import math
 import os
 import shutil
+import statistics
 import urllib.parse
 import urllib.request
 from collections import Counter
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Literal
 
@@ -351,6 +352,7 @@ class LayerPreparationRequest:
 def run_layer_preparation(request: LayerPreparationRequest) -> dict[str, Any]:
     _maybe_fetch_overpass_evidence(request)
     _maybe_seed_imagery_tile_cache(request)
+    _maybe_prepare_environment_evidence(request)
     manifest, project_root, project = _build_layer_preparation_manifest(
         request,
         workspace_file_mutation_allowed=True,
@@ -596,6 +598,424 @@ def _maybe_fetch_overpass_evidence(request: LayerPreparationRequest) -> None:
     _write_json(project_path, updated)
 
 
+def _maybe_prepare_environment_evidence(request: LayerPreparationRequest) -> None:
+    normalized_layers = set(_normalize_layer_ids(request.layers))
+    requested_cwa = bool({"cwa-weather", "cwa-qpf"} & normalized_layers)
+    requested_gee = bool({"soil-moisture", "antecedent-rain"} & normalized_layers)
+    if not requested_cwa and not requested_gee:
+        return
+
+    project_root = _resolve_project_root(request)
+    project_path = project_root / "project.json"
+    project = _load_json(project_path)
+    route_summary = _load_project_ref(
+        project_root,
+        project,
+        "route_summary_ref",
+        required=True,
+    )
+    route_bbox = normalize_bbox_wgs84(request.bbox or route_summary["bbox_wgs84"])
+    query_bbox = _expand_bbox_by_meters(route_bbox, request.route_corridor_m)
+    prepared_at = request.prepared_at or _utc_now()
+    outputs: dict[str, Any] = {}
+
+    if requested_cwa:
+        outputs.update(
+            _prepare_cwa_environment_artifacts(
+                project_root=project_root,
+                project=project,
+                route_summary=route_summary,
+                bbox=query_bbox,
+                request=request,
+                prepared_at=prepared_at,
+            )
+        )
+    if requested_gee:
+        outputs.update(
+            _prepare_gee_environment_artifacts(
+                project_root=project_root,
+                project=project,
+                route_summary=route_summary,
+                bbox=query_bbox,
+                request=request,
+                prepared_at=prepared_at,
+            )
+        )
+
+    if outputs:
+        _write_json(
+            project_path,
+            {
+                **project,
+                **outputs,
+                "environment_evidence_updated_at": prepared_at,
+            },
+        )
+
+
+def _prepare_cwa_environment_artifacts(
+    *,
+    project_root: Path,
+    project: dict[str, Any],
+    route_summary: dict[str, Any],
+    bbox: dict[str, float],
+    request: LayerPreparationRequest,
+    prepared_at: str,
+) -> dict[str, Any]:
+    cwa_dir = project_root / "outputs" / "environment" / "cwa"
+    weather_points: list[dict[str, Any]] = []
+    warnings: list[dict[str, Any]] = []
+    observations: list[dict[str, Any]] = []
+    fetch_results: list[dict[str, Any]] = []
+    external_calls_made = False
+    source_run_id = f"cwa.{project.get('project_id') or request.project_id}.{_job_timestamp(prepared_at)}"
+
+    if request.network_mode == "explicit-fetch" and request.allow_network_fetch:
+        external_calls_made = True
+        try:
+            from scout_weather_integration import (
+                CWA_36H_FORECAST,
+                fetch_cwa_dataset,
+                normalize_cwa_weather_points,
+            )
+
+            forecast_payload = fetch_cwa_dataset(CWA_36H_FORECAST, timeout_s=20.0)
+            weather_points = normalize_cwa_weather_points(
+                CWA_36H_FORECAST,
+                forecast_payload,
+                source_run_id=source_run_id,
+            )
+            fetch_results.append(
+                _environment_fetch_result(CWA_36H_FORECAST, status="ready")
+            )
+        except Exception as exc:  # pragma: no cover - exercised through live smoke.
+            fetch_results.append(
+                _environment_fetch_result(
+                    "F-C0032-001",
+                    status="failed",
+                    error=_safe_exception_summary(exc),
+                )
+            )
+        try:
+            from scout_weather_integration import (
+                CWA_WEATHER_WARNING,
+                fetch_cwa_dataset,
+                normalize_cwa_warnings,
+            )
+
+            warning_payload = fetch_cwa_dataset(CWA_WEATHER_WARNING, timeout_s=20.0)
+            warnings = normalize_cwa_warnings(
+                warning_payload,
+                source_run_id=source_run_id,
+            )
+            fetch_results.append(
+                _environment_fetch_result(CWA_WEATHER_WARNING, status="ready")
+            )
+        except Exception as exc:  # pragma: no cover - exercised through live smoke.
+            fetch_results.append(
+                _environment_fetch_result(
+                    "W-C0033-001",
+                    status="failed",
+                    error=_safe_exception_summary(exc),
+                )
+            )
+        try:
+            from scout_weather_integration import fetch_cwa_dataset
+
+            rain_payload = fetch_cwa_dataset("O-A0002-001", timeout_s=20.0)
+            observations = _normalize_cwa_rain_observations(
+                rain_payload,
+                bbox=bbox,
+                source_run_id=source_run_id,
+            )
+            fetch_results.append(
+                _environment_fetch_result("O-A0002-001", status="ready")
+            )
+        except Exception as exc:  # pragma: no cover - exercised through live smoke.
+            fetch_results.append(
+                _environment_fetch_result(
+                    "O-A0002-001",
+                    status="failed",
+                    error=_safe_exception_summary(exc),
+                )
+            )
+    else:
+        fetch_results.append(
+            _environment_fetch_result(
+                "cwa_opendata",
+                status="not_fetched",
+                error={
+                    "reason": "network_mode_not_explicit_fetch_or_allow_network_fetch_false"
+                },
+            )
+        )
+
+    qpf_features = _cwa_qpf_features_from_weather_points(
+        weather_points,
+        bbox=bbox,
+        source_run_id=source_run_id,
+        prepared_at=prepared_at,
+    )
+    observation_features = _cwa_observation_features(observations)
+    warning_features = _cwa_warning_features(
+        warnings,
+        bbox=bbox,
+        source_run_id=source_run_id,
+    )
+    if not qpf_features and not observation_features and not warning_features:
+        qpf_features.append(
+            _environment_status_feature(
+                bbox=bbox,
+                layer_id="cwa-qpf",
+                label="CWA QPF not available",
+                status="not_available",
+                provider="cwa_opendata",
+                source_run_id=source_run_id,
+                prepared_at=prepared_at,
+                detail="CWA fetch did not return route-visible forecast or station data.",
+            )
+        )
+
+    cwa_evidence = {
+        "artifact_kind": "cwa_weather_environment_evidence",
+        "schema_version": LAYER_PREPARATION_VERSION,
+        "project_id": project.get("project_id") or request.project_id,
+        "generated_at": prepared_at,
+        "source_run_id": source_run_id,
+        "provider": "cwa_opendata",
+        "status": "ready" if any(item["status"] == "ready" for item in fetch_results) else "not_available",
+        "external_api_calls_made": external_calls_made,
+        "datasets": fetch_results,
+        "counts": {
+            "weather_point_count": len(weather_points),
+            "warning_count": len(warnings),
+            "rain_observation_count": len(observations),
+            "qpf_feature_count": len(qpf_features),
+        },
+        "weather_points": weather_points[:80],
+        "warnings": warnings[:80],
+        "observations": observations[:120],
+        "qpf_source_note": (
+            "F-C0041 QPF direct grid was not used here; this artifact exposes "
+            "forecast-derived QPF candidates from CWA forecast/rain evidence."
+        ),
+        "boundary": _environment_boundary(external_calls_made=external_calls_made),
+    }
+    qpf_geojson = _feature_collection(
+        "cwa_qpf_grid",
+        qpf_features,
+        project_id=project.get("project_id") or request.project_id,
+        generated_at=prepared_at,
+        bbox=bbox,
+    )
+    warnings_geojson = _feature_collection(
+        "cwa_weather_warnings",
+        warning_features,
+        project_id=project.get("project_id") or request.project_id,
+        generated_at=prepared_at,
+        bbox=bbox,
+    )
+    observations_geojson = _feature_collection(
+        "cwa_rain_observations",
+        observation_features,
+        project_id=project.get("project_id") or request.project_id,
+        generated_at=prepared_at,
+        bbox=bbox,
+    )
+    qpf_timeline = _cwa_qpf_timeline(
+        qpf_features,
+        project_id=project.get("project_id") or request.project_id,
+        generated_at=prepared_at,
+    )
+    qpf_summary = _cwa_qpf_corridor_summary(
+        qpf_features,
+        observations,
+        project_id=project.get("project_id") or request.project_id,
+        route_summary=route_summary,
+        generated_at=prepared_at,
+        bbox=bbox,
+    )
+
+    _write_json(cwa_dir / "cwa_weather_evidence.json", cwa_evidence)
+    _write_json(cwa_dir / "qpf_grid.geojson", qpf_geojson)
+    _write_json(cwa_dir / "warnings.geojson", warnings_geojson)
+    _write_json(cwa_dir / "observations.geojson", observations_geojson)
+    _write_json(cwa_dir / "qpf_route_timeline.json", qpf_timeline)
+    _write_json(cwa_dir / "qpf_corridor_summary.json", qpf_summary)
+
+    return {
+        "cwa_weather_evidence_ref": OUTPUT_REFS["cwa_weather_evidence_ref"],
+        "cwa_warnings_geojson_ref": OUTPUT_REFS["cwa_warnings_geojson_ref"],
+        "cwa_observations_geojson_ref": OUTPUT_REFS["cwa_observations_geojson_ref"],
+        "cwa_qpf_grid_ref": OUTPUT_REFS["cwa_qpf_grid_ref"],
+        "cwa_qpf_route_timeline_ref": OUTPUT_REFS["cwa_qpf_route_timeline_ref"],
+        "cwa_qpf_corridor_summary_ref": OUTPUT_REFS[
+            "cwa_qpf_corridor_summary_ref"
+        ],
+        "cwa_weather_point_count": len(weather_points),
+        "cwa_warning_count": len(warnings),
+        "cwa_rain_observation_count": len(observations),
+        "cwa_qpf_feature_count": len(qpf_features),
+        "cwa_fetched_at": prepared_at if external_calls_made else "",
+        "cwa_external_api_calls_made": external_calls_made,
+    }
+
+
+def _prepare_gee_environment_artifacts(
+    *,
+    project_root: Path,
+    project: dict[str, Any],
+    route_summary: dict[str, Any],
+    bbox: dict[str, float],
+    request: LayerPreparationRequest,
+    prepared_at: str,
+) -> dict[str, Any]:
+    del route_summary
+    gee_dir = project_root / "outputs" / "environment" / "gee"
+    project_id = project.get("project_id") or request.project_id
+    try:
+        from scout_gee_integration import (
+            build_gee_runtime_status,
+            gee_environment_dataset_catalog,
+        )
+
+        gee_status = build_gee_runtime_status().to_dict()
+        dataset_catalog = gee_environment_dataset_catalog()
+    except Exception as exc:  # pragma: no cover - import should be stable.
+        gee_status = {
+            "provider": "google_earth_engine",
+            "enabled": False,
+            "ready": False,
+            "blocker_reasons": [f"gee_status_import_failed:{type(exc).__name__}"],
+            "secret_value_embedded": False,
+            "external_api_call_performed": False,
+            "runtime_safety_truth": False,
+        }
+        dataset_catalog = []
+
+    status = (
+        "configured_pending_fetcher"
+        if gee_status.get("ready")
+        else "missing_credentials"
+    )
+    blockers = list(gee_status.get("blocker_reasons") or [])
+    if not blockers and status == "configured_pending_fetcher":
+        blockers = ["gee_fetcher_not_implemented_in_map_preparation"]
+
+    soil_feature = _environment_status_feature(
+        bbox=bbox,
+        layer_id="soil-moisture",
+        label="SMAP soil moisture",
+        status=status,
+        provider="google_earth_engine",
+        source_run_id=f"gee.{project_id}.{_job_timestamp(prepared_at)}",
+        prepared_at=prepared_at,
+        detail="SMAP/GEE source status; numeric soil moisture requires GEE credentials and fetcher.",
+        extra={
+            "dataset_family": "SMAP",
+            "collection_id": "NASA/SMAP/SPL4SMGP/008",
+            "sm_surface_wetness": None,
+            "antecedent_wetness_percentile": None,
+            "gee_status": gee_status,
+            "blocker_reasons": blockers,
+        },
+    )
+    rain_feature = _environment_status_feature(
+        bbox=bbox,
+        layer_id="antecedent-rain",
+        label="GPM antecedent rain",
+        status=status,
+        provider="google_earth_engine",
+        source_run_id=f"gee.{project_id}.{_job_timestamp(prepared_at)}",
+        prepared_at=prepared_at,
+        detail="GPM IMERG/GEE source status; numeric antecedent rain requires GEE credentials and fetcher.",
+        extra={
+            "dataset_family": "GPM_IMERG",
+            "collection_id": "NASA/GPM_L3/IMERG_V07",
+            "last_3h_mm": None,
+            "last_24h_mm": None,
+            "gee_status": gee_status,
+            "blocker_reasons": blockers,
+        },
+    )
+    soil_geojson = _feature_collection(
+        "gee_soil_moisture_grid",
+        [soil_feature],
+        project_id=project_id,
+        generated_at=prepared_at,
+        bbox=bbox,
+    )
+    rain_geojson = _feature_collection(
+        "gee_antecedent_rain_grid",
+        [rain_feature],
+        project_id=project_id,
+        generated_at=prepared_at,
+        bbox=bbox,
+    )
+    smap_summary = _gee_environment_summary(
+        project_id=project_id,
+        layer_id="soil-moisture",
+        generated_at=prepared_at,
+        bbox=bbox,
+        gee_status=gee_status,
+        dataset_catalog=dataset_catalog,
+        status=status,
+        blockers=blockers,
+    )
+    gpm_summary = _gee_environment_summary(
+        project_id=project_id,
+        layer_id="antecedent-rain",
+        generated_at=prepared_at,
+        bbox=bbox,
+        gee_status=gee_status,
+        dataset_catalog=dataset_catalog,
+        status=status,
+        blockers=blockers,
+    )
+
+    _write_json(gee_dir / "soil_moisture_grid.geojson", soil_geojson)
+    _write_json(gee_dir / "antecedent_rain_grid.geojson", rain_geojson)
+    _write_json(gee_dir / "smap_l4_corridor_summary.json", smap_summary)
+    _write_json(gee_dir / "gpm_imerg_corridor_summary.json", gpm_summary)
+    _write_json(
+        gee_dir / "smap_l4_timeseries.json",
+        _gee_timeseries_placeholder(
+            project_id=project_id,
+            layer_id="soil-moisture",
+            generated_at=prepared_at,
+            status=status,
+            blockers=blockers,
+        ),
+    )
+    _write_json(
+        gee_dir / "gpm_imerg_timeseries.json",
+        _gee_timeseries_placeholder(
+            project_id=project_id,
+            layer_id="antecedent-rain",
+            generated_at=prepared_at,
+            status=status,
+            blockers=blockers,
+        ),
+    )
+
+    return {
+        "soil_moisture_grid_ref": OUTPUT_REFS["soil_moisture_grid_ref"],
+        "smap_l4_timeseries_ref": OUTPUT_REFS["smap_l4_timeseries_ref"],
+        "smap_l4_corridor_summary_ref": OUTPUT_REFS[
+            "smap_l4_corridor_summary_ref"
+        ],
+        "antecedent_rain_grid_ref": OUTPUT_REFS["antecedent_rain_grid_ref"],
+        "gpm_imerg_timeseries_ref": OUTPUT_REFS["gpm_imerg_timeseries_ref"],
+        "gpm_imerg_corridor_summary_ref": OUTPUT_REFS[
+            "gpm_imerg_corridor_summary_ref"
+        ],
+        "soil_moisture_feature_count": 1,
+        "antecedent_rain_feature_count": 1,
+        "gee_environment_status": status,
+        "gee_external_api_calls_made": False,
+    }
+
+
 def _build_layer_preparation_manifest(
     request: LayerPreparationRequest,
     *,
@@ -672,7 +1092,10 @@ def _build_layer_preparation_manifest(
         route_evidence_bundle=route_evidence_bundle,
     )
     counts = _layer_counts(layers, validation)
-    network_calls_made = bool(project.get("overpass_fetched_at"))
+    network_calls_made = bool(
+        project.get("overpass_fetched_at")
+        or project.get("cwa_external_api_calls_made")
+    )
     boundary = _boundary(
         request,
         workspace_file_mutation_allowed=workspace_file_mutation_allowed,
@@ -1087,7 +1510,7 @@ def _build_layer_record(
             missing_warning="Weather/daylight evidence summary is missing.",
         )
     if layer_id == "cwa-weather":
-        return _multi_project_ref_layer_record(
+        record = _multi_project_ref_layer_record(
             common,
             project_root=project_root,
             project=project,
@@ -1122,8 +1545,9 @@ def _build_layer_record(
                 "or explicit CWA map preparation before enabling this layer."
             ),
         )
+        return _with_environment_fetch_lifecycle(record, project=project)
     if layer_id == "cwa-qpf":
-        return _multi_project_ref_layer_record(
+        record = _multi_project_ref_layer_record(
             common,
             project_root=project_root,
             project=project,
@@ -1156,6 +1580,7 @@ def _build_layer_record(
                 "preparation before enabling this layer."
             ),
         )
+        return _with_environment_fetch_lifecycle(record, project=project)
     if layer_id == "soil-moisture":
         return _multi_project_ref_layer_record(
             common,
@@ -2256,6 +2681,20 @@ def _with_lifecycle(record: dict[str, Any]) -> dict[str, Any]:
             "writes_workspace_outputs": True,
         },
     }
+    return record
+
+
+def _with_environment_fetch_lifecycle(
+    record: dict[str, Any],
+    *,
+    project: dict[str, Any],
+) -> dict[str, Any]:
+    if not project.get("cwa_external_api_calls_made"):
+        return record
+    record["lifecycle"].setdefault("fetch", {})
+    record["lifecycle"]["fetch"]["status"] = "completed_live_fetch"
+    record["lifecycle"]["fetch"]["external_network_calls_made"] = True
+    record["lifecycle"]["fetch"]["provider"] = "cwa_opendata"
     return record
 
 
@@ -3975,6 +4414,479 @@ def _environment_evidence_counts(layer_key: str, payload: Any) -> dict[str, Any]
             "document_count": len(documents),
         }
     return {f"{prefix}_item_count": 1}
+
+
+def _environment_fetch_result(
+    dataset_id: str,
+    *,
+    status: str,
+    error: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    return {
+        "dataset_id": dataset_id,
+        "status": status,
+        "error": error,
+        "secret_value_embedded": False,
+    }
+
+
+def _safe_exception_summary(exc: Exception) -> dict[str, Any]:
+    return {
+        "error_type": type(exc).__name__,
+        "http_status": getattr(exc, "code", None),
+        "reason": str(getattr(exc, "reason", "") or getattr(exc, "msg", "") or ""),
+        "secret_value_embedded": False,
+    }
+
+
+def _environment_boundary(*, external_calls_made: bool) -> dict[str, Any]:
+    return {
+        "candidate_only": True,
+        "pretrip_candidate_evidence_only": True,
+        "runtime_safety_truth": False,
+        "phase1_runtime_mutation_allowed": False,
+        "phase2_brain_writeback_allowed": False,
+        "source_mutation_allowed": False,
+        "external_api_calls_made": external_calls_made,
+        "secret_value_embedded": False,
+    }
+
+
+def _feature_collection(
+    artifact_kind: str,
+    features: list[dict[str, Any]],
+    *,
+    project_id: str,
+    generated_at: str,
+    bbox: dict[str, float],
+) -> dict[str, Any]:
+    return {
+        "type": "FeatureCollection",
+        "artifact_kind": artifact_kind,
+        "schema_version": LAYER_PREPARATION_VERSION,
+        "project_id": project_id,
+        "generated_at": generated_at,
+        "bbox_wgs84": bbox,
+        "feature_count": len(features),
+        "features": features,
+        "boundary": _environment_boundary(external_calls_made=False),
+    }
+
+
+def _environment_status_feature(
+    *,
+    bbox: dict[str, float],
+    layer_id: str,
+    label: str,
+    status: str,
+    provider: str,
+    source_run_id: str,
+    prepared_at: str,
+    detail: str,
+    extra: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    lat, lon = _bbox_center(bbox)
+    return {
+        "type": "Feature",
+        "id": f"{layer_id}.status",
+        "geometry": {"type": "Point", "coordinates": [lon, lat]},
+        "properties": {
+            "source_id": f"{layer_id}.status",
+            "layer_id": layer_id,
+            "label": label,
+            "status": status,
+            "provider": provider,
+            "source_run_id": source_run_id,
+            "prepared_at": prepared_at,
+            "detail": detail,
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+            "secret_value_embedded": False,
+            **(extra or {}),
+        },
+    }
+
+
+def _bbox_center(bbox: dict[str, float]) -> tuple[float, float]:
+    return (
+        (float(bbox["south"]) + float(bbox["north"])) / 2.0,
+        (float(bbox["west"]) + float(bbox["east"])) / 2.0,
+    )
+
+
+def _point_in_bbox(lat: float, lon: float, bbox: dict[str, float]) -> bool:
+    return (
+        float(bbox["south"]) <= lat <= float(bbox["north"])
+        and float(bbox["west"]) <= lon <= float(bbox["east"])
+    )
+
+
+def _normalize_cwa_rain_observations(
+    payload: dict[str, Any],
+    *,
+    bbox: dict[str, float],
+    source_run_id: str,
+) -> list[dict[str, Any]]:
+    expanded_bbox = _expand_bbox_by_meters(bbox, 100_000.0)
+    records = payload.get("records") if isinstance(payload.get("records"), dict) else {}
+    stations = records.get("Station") or records.get("station") or []
+    if not isinstance(stations, list):
+        return []
+    observations: list[dict[str, Any]] = []
+    for index, station in enumerate(stations):
+        if not isinstance(station, dict):
+            continue
+        coordinate = _cwa_station_coordinate(station)
+        if coordinate is None:
+            continue
+        lat, lon = coordinate
+        if not _point_in_bbox(lat, lon, expanded_bbox):
+            continue
+        rainfall = (
+            station.get("RainfallElement")
+            if isinstance(station.get("RainfallElement"), dict)
+            else {}
+        )
+        obs_time = (
+            station.get("ObsTime")
+            if isinstance(station.get("ObsTime"), dict)
+            else {}
+        )
+        station_name = str(
+            station.get("StationName")
+            or station.get("stationName")
+            or station.get("StationID")
+            or f"CWA rain station {index + 1}"
+        )
+        observations.append(
+            {
+                "source": "O-A0002-001",
+                "source_run_id": source_run_id,
+                "station_id": str(station.get("StationID") or station.get("stationID") or ""),
+                "station_name": station_name,
+                "label": station_name,
+                "lat": lat,
+                "lon": lon,
+                "obs_time": obs_time.get("DateTime") or obs_time.get("dateTime"),
+                "last_10m_mm": _as_float(
+                    rainfall.get("Past10Min") or rainfall.get("past10Min")
+                ),
+                "last_1h_mm": _as_float(
+                    rainfall.get("Past1hr")
+                    or rainfall.get("Past1H")
+                    or rainfall.get("past1hr")
+                ),
+                "last_3h_mm": _as_float(
+                    rainfall.get("Past3hr")
+                    or rainfall.get("Past3H")
+                    or rainfall.get("past3hr")
+                ),
+                "last_24h_mm": _as_float(
+                    rainfall.get("Past24hr")
+                    or rainfall.get("Past24H")
+                    or rainfall.get("past24hr")
+                ),
+                "status": "observed",
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+            }
+        )
+    observations.sort(
+        key=lambda item: (
+            item.get("last_24h_mm") or 0.0,
+            item.get("last_3h_mm") or 0.0,
+            item.get("last_1h_mm") or 0.0,
+        ),
+        reverse=True,
+    )
+    return observations[:120]
+
+
+def _cwa_station_coordinate(station: dict[str, Any]) -> tuple[float, float] | None:
+    geo = station.get("GeoInfo") if isinstance(station.get("GeoInfo"), dict) else {}
+    for raw in geo.get("Coordinates") or geo.get("coordinates") or []:
+        if not isinstance(raw, dict):
+            continue
+        name = str(raw.get("CoordinateName") or raw.get("coordinateName") or "").upper()
+        if "WGS" not in name and name:
+            continue
+        lat = _as_float(
+            raw.get("StationLatitude")
+            or raw.get("stationLatitude")
+            or raw.get("Latitude")
+            or raw.get("lat")
+        )
+        lon = _as_float(
+            raw.get("StationLongitude")
+            or raw.get("stationLongitude")
+            or raw.get("Longitude")
+            or raw.get("lon")
+        )
+        if lat is not None and lon is not None:
+            return lat, lon
+    lat = _as_float(
+        geo.get("StationLatitude")
+        or geo.get("stationLatitude")
+        or station.get("lat")
+        or station.get("latitude")
+    )
+    lon = _as_float(
+        geo.get("StationLongitude")
+        or geo.get("stationLongitude")
+        or station.get("lon")
+        or station.get("longitude")
+    )
+    if lat is None or lon is None:
+        return None
+    return lat, lon
+
+
+def _cwa_observation_features(observations: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    features: list[dict[str, Any]] = []
+    for index, observation in enumerate(observations):
+        lat = _as_float(observation.get("lat"))
+        lon = _as_float(observation.get("lon"))
+        if lat is None or lon is None:
+            continue
+        features.append(
+            {
+                "type": "Feature",
+                "id": observation.get("station_id") or f"cwa.rain.{index:03d}",
+                "geometry": {"type": "Point", "coordinates": [lon, lat]},
+                "properties": {
+                    **observation,
+                    "source_id": observation.get("station_id") or f"cwa.rain.{index:03d}",
+                    "layer_id": "cwa-weather",
+                    "provider": "cwa_opendata",
+                    "evidence_type": "cwa_rain_observation",
+                },
+            }
+        )
+    return features
+
+
+def _cwa_qpf_features_from_weather_points(
+    weather_points: list[dict[str, Any]],
+    *,
+    bbox: dict[str, float],
+    source_run_id: str,
+    prepared_at: str,
+) -> list[dict[str, Any]]:
+    if not weather_points:
+        return []
+    preferred = [
+        point
+        for point in weather_points
+        if any(
+            token in str(point.get("areaName") or point.get("county") or "")
+            for token in ("南投", "花蓮", "仁愛", "秀林", "萬榮")
+        )
+    ]
+    selected = preferred or weather_points[:4]
+    by_area: dict[str, dict[str, Any]] = {}
+    for point in selected:
+        area = str(point.get("areaName") or point.get("county") or "CWA forecast")
+        current = by_area.get(area)
+        pop = _as_float(point.get("rainProbability")) or 0.0
+        if current is None or pop > (_as_float(current.get("rainProbability")) or 0.0):
+            by_area[area] = point
+
+    lat_center, lon_center = _bbox_center(bbox)
+    lat_span = max(float(bbox["north"]) - float(bbox["south"]), 0.01)
+    lon_span = max(float(bbox["east"]) - float(bbox["west"]), 0.01)
+    features: list[dict[str, Any]] = []
+    for index, (area, point) in enumerate(sorted(by_area.items())[:6]):
+        col = (index % 3) - 1
+        row = (index // 3) - 0.5
+        lat = min(max(lat_center + row * lat_span * 0.10, bbox["south"]), bbox["north"])
+        lon = min(max(lon_center + col * lon_span * 0.10, bbox["west"]), bbox["east"])
+        rain_probability = _as_float(point.get("rainProbability"))
+        weather_text = point.get("weatherText") or point.get("weather")
+        features.append(
+            {
+                "type": "Feature",
+                "id": f"cwa.qpf.{index:03d}",
+                "geometry": {"type": "Point", "coordinates": [lon, lat]},
+                "properties": {
+                    "source_id": f"cwa.qpf.{index:03d}",
+                    "source": point.get("source") or "F-C0032-001",
+                    "source_run_id": source_run_id,
+                    "layer_id": "cwa-qpf",
+                    "provider": "cwa_opendata",
+                    "evidence_type": "cwa_forecast_derived_qpf_candidate",
+                    "label": f"CWA QPF {area}",
+                    "area_name": area,
+                    "status": "forecast_derived",
+                    "rain_probability": rain_probability,
+                    "rainfall_mm": _as_float(point.get("rainfallMm")),
+                    "weather_text": weather_text,
+                    "valid_from": point.get("validFrom"),
+                    "valid_to": point.get("validTo"),
+                    "prepared_at": prepared_at,
+                    "candidate_only": True,
+                    "runtime_safety_truth": False,
+                    "qpf_direct_grid": False,
+                    "qpf_source_note": "Forecast-derived candidate from CWA forecast/rain evidence.",
+                },
+            }
+        )
+    return features
+
+
+def _cwa_warning_features(
+    warnings: list[dict[str, Any]],
+    *,
+    bbox: dict[str, float],
+    source_run_id: str,
+) -> list[dict[str, Any]]:
+    lat, lon = _bbox_center(bbox)
+    features: list[dict[str, Any]] = []
+    for index, warning in enumerate(warnings[:40]):
+        features.append(
+            {
+                "type": "Feature",
+                "id": warning.get("warning_id") or f"cwa.warning.{index:03d}",
+                "geometry": {"type": "Point", "coordinates": [lon, lat]},
+                "properties": {
+                    **warning,
+                    "source_id": warning.get("warning_id")
+                    or f"cwa.warning.{index:03d}",
+                    "source_run_id": warning.get("source_run_id") or source_run_id,
+                    "layer_id": "cwa-weather",
+                    "provider": "cwa_opendata",
+                    "evidence_type": "cwa_weather_warning",
+                    "label": warning.get("headline") or "CWA weather warning",
+                    "candidate_only": True,
+                    "runtime_safety_truth": False,
+                },
+            }
+        )
+    return features
+
+
+def _cwa_qpf_timeline(
+    features: list[dict[str, Any]],
+    *,
+    project_id: str,
+    generated_at: str,
+) -> dict[str, Any]:
+    items = []
+    for feature in features:
+        props = feature.get("properties", {})
+        items.append(
+            {
+                "event_id": props.get("source_id"),
+                "label": props.get("label"),
+                "valid_from": props.get("valid_from"),
+                "valid_to": props.get("valid_to"),
+                "rain_probability": props.get("rain_probability"),
+                "rainfall_mm": props.get("rainfall_mm"),
+                "weather_text": props.get("weather_text"),
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+            }
+        )
+    return {
+        "artifact_kind": "cwa_qpf_route_timeline",
+        "schema_version": LAYER_PREPARATION_VERSION,
+        "project_id": project_id,
+        "generated_at": generated_at,
+        "item_count": len(items),
+        "items": items,
+        "boundary": _environment_boundary(external_calls_made=False),
+    }
+
+
+def _cwa_qpf_corridor_summary(
+    features: list[dict[str, Any]],
+    observations: list[dict[str, Any]],
+    *,
+    project_id: str,
+    route_summary: dict[str, Any],
+    generated_at: str,
+    bbox: dict[str, float],
+) -> dict[str, Any]:
+    rain_probabilities = [
+        value
+        for feature in features
+        if (value := _as_float(feature.get("properties", {}).get("rain_probability")))
+        is not None
+    ]
+    observed_24h = [
+        value
+        for observation in observations
+        if (value := _as_float(observation.get("last_24h_mm"))) is not None
+    ]
+    return {
+        "artifact_kind": "cwa_qpf_corridor_summary",
+        "schema_version": LAYER_PREPARATION_VERSION,
+        "project_id": project_id,
+        "route_name": route_summary.get("route_name"),
+        "generated_at": generated_at,
+        "bbox_wgs84": bbox,
+        "status": "ready" if features or observations else "not_available",
+        "counts": {
+            "qpf_feature_count": len(features),
+            "rain_observation_count": len(observations),
+        },
+        "max_rain_probability": max(rain_probabilities) if rain_probabilities else None,
+        "max_observed_24h_mm": max(observed_24h) if observed_24h else None,
+        "mean_observed_24h_mm": statistics.mean(observed_24h) if observed_24h else None,
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+        "boundary": _environment_boundary(external_calls_made=False),
+    }
+
+
+def _gee_environment_summary(
+    *,
+    project_id: str,
+    layer_id: str,
+    generated_at: str,
+    bbox: dict[str, float],
+    gee_status: dict[str, Any],
+    dataset_catalog: list[dict[str, Any]],
+    status: str,
+    blockers: list[str],
+) -> dict[str, Any]:
+    return {
+        "artifact_kind": f"gee_{layer_id.replace('-', '_')}_corridor_summary",
+        "schema_version": LAYER_PREPARATION_VERSION,
+        "project_id": project_id,
+        "layer_id": layer_id,
+        "generated_at": generated_at,
+        "bbox_wgs84": bbox,
+        "status": status,
+        "blocker_reasons": blockers,
+        "gee_runtime_status": gee_status,
+        "dataset_catalog": dataset_catalog,
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+        "boundary": _environment_boundary(external_calls_made=False),
+    }
+
+
+def _gee_timeseries_placeholder(
+    *,
+    project_id: str,
+    layer_id: str,
+    generated_at: str,
+    status: str,
+    blockers: list[str],
+) -> dict[str, Any]:
+    return {
+        "artifact_kind": f"gee_{layer_id.replace('-', '_')}_timeseries",
+        "schema_version": LAYER_PREPARATION_VERSION,
+        "project_id": project_id,
+        "layer_id": layer_id,
+        "generated_at": generated_at,
+        "status": status,
+        "samples": [],
+        "blocker_reasons": blockers,
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+        "boundary": _environment_boundary(external_calls_made=False),
+    }
 
 
 def _generic_project_counts(layer_id: str, payload: Any) -> dict[str, Any]:
