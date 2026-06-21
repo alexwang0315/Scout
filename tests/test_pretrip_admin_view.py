@@ -922,6 +922,8 @@ def test_loads_debug_projection_view_with_shared_map_and_dense_timeline():
     assert projection["counts"]["mcp_review_action_count"] == 0
     assert projection["counts"]["risk_ribbon_segment_count"] == 841
     assert "terrain_bitmap_overlay_count" in projection["counts"]
+    assert "terrain_source_dtm_tile_count" in projection["counts"]
+    assert "terrain_source_dtm_grid_cell_count" in projection["counts"]
     assert "terrain_visualization" in projection
     assert projection["terrain_visualization"]["boundary"]["runtime_safety_truth"] is False
     assert projection["counts"]["source_lifecycle_event_count"] == 4
@@ -993,6 +995,13 @@ def test_debug_projection_exposes_environment_layer_points_from_project_refs(tmp
             json.dumps(
                 {
                     "type": "FeatureCollection",
+                    "bbox_wgs84": {
+                        "west": 121.2,
+                        "south": 23.8,
+                        "east": 121.3,
+                        "north": 23.9,
+                    },
+                    "cache_policy": {"cacheable": False, "ttl_seconds": 0},
                     "features": [
                         {
                             "type": "Feature",
@@ -1115,10 +1124,15 @@ def test_debug_projection_exposes_environment_layer_points_from_project_refs(tmp
     assert len(view["cwa_weather"]["points"]) == 1
     assert len(view["soil_moisture"]["points"]) == 1
     assert len(view["antecedent_rain"]["points"]) == 1
+    assert view["soil_moisture"]["bbox_wgs84"]["west"] == 121.2
+    assert view["soil_moisture"]["cache_policy"]["cacheable"] is False
+    assert view["antecedent_rain"]["bbox_wgs84"]["north"] == 23.9
     assert len(debug["cwa_qpf"]["points"]) == 1
     assert len(debug["cwa_weather"]["points"]) == 1
     assert len(debug["soil_moisture"]["points"]) == 1
     assert len(debug["antecedent_rain"]["points"]) == 1
+    assert debug["cwa_qpf"]["bbox_wgs84"]["east"] == 121.3
+    assert debug["antecedent_rain"]["cache_policy"]["ttl_seconds"] == 0
     assert debug["counts"]["cwa_qpf_point_count"] == 1
     assert debug["counts"]["cwa_weather_point_count"] == 1
     assert debug["counts"]["soil_moisture_point_count"] == 1
@@ -1462,6 +1476,10 @@ def test_admin_view_exposes_workspace_risk_score_layer(
     assert view["terrain_visualization"]["status"] == "candidate_only"
     assert view["terrain_visualization"]["counts"]["feature_count"] == 0
     assert view["terrain_visualization"]["counts"]["bitmap_overlay_count"] == 4
+    assert view["terrain_visualization"]["counts"]["source_dtm_tile_count"] > 0
+    assert view["terrain_visualization"]["dtm_grid"]["source_tile_count"] == (
+        view["terrain_visualization"]["counts"]["source_dtm_tile_count"]
+    )
     assert view["terrain_visualization"]["counts"]["cell_count"] > 0
     assert view["terrain_visualization"]["visualization_spec"]["modes"] == [
         "hillshade",

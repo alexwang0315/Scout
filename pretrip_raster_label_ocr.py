@@ -30,6 +30,7 @@ DEFAULT_OCR_TILE_CACHE_REF = "outputs/layers/cache/raster_label_ocr_tiles"
 DEFAULT_RASTER_LABEL_PLAN_REF = "outputs/layers/plans/raster_label_plan.json"
 DEFAULT_TESSERACT_LANG = "chi_tra+eng"
 DEFAULT_MIN_CONFIDENCE = 0.35
+DEFAULT_TESSERACT_TIMEOUT_S = 10.0
 DEFAULT_OCR_SOURCE_IDS = ("happyman_rudy_twmap", "happyman_rudy")
 CELLULAR_KEYWORDS = ("通訊點", "通信點", "遠傳", "台哥大", "台灣大", "中華", "亞太", "台灣之星", "112")
 CONTOUR_TEXT_MIN = 100
@@ -155,7 +156,24 @@ def extract_raster_label_ocr(
         )
         if cached_labels is None:
             cache_miss_count += 1
-            raw_labels = [dict(item) for item in runner(image_path)]
+            try:
+                raw_labels = [dict(item) for item in runner(image_path)]
+            except Exception as exc:  # pragma: no cover - runtime OCR guard.
+                skipped_tiles.append(
+                    {
+                        "tile_index": tile_index,
+                        "reason": (
+                            "ocr_timeout"
+                            if _is_ocr_timeout_error(exc)
+                            else "ocr_runner_failed"
+                        ),
+                        "image_path": _project_ref_for_path(root, image_path),
+                        "tile_id": _tile_id(tile),
+                        "error_type": type(exc).__name__,
+                        "error_summary": _safe_error_summary(exc),
+                    }
+                )
+                continue
             if not dry_run:
                 _write_cached_tile_ocr(
                     cache_dir,
@@ -205,6 +223,9 @@ def extract_raster_label_ocr(
         "engine": {
             "name": engine,
             "tesseract_lang": tesseract_lang if engine == "tesseract" else None,
+            "tesseract_timeout_s": (
+                _tesseract_timeout_s() if engine == "tesseract" else None
+            ),
             "runtime_dependency_status": "available" if ocr_runner is None else "injected_runner",
             "missing_dependencies": [],
             "min_confidence": min_confidence,
@@ -219,6 +240,14 @@ def extract_raster_label_ocr(
             "ocr_cache_hit_count": cache_hit_count,
             "ocr_cache_miss_count": cache_miss_count,
             "ocr_cache_write_count": cache_write_count,
+            "ocr_failure_count": sum(
+                1
+                for tile in skipped_tiles
+                if tile.get("reason") in {"ocr_runner_failed", "ocr_timeout"}
+            ),
+            "ocr_timeout_count": sum(
+                1 for tile in skipped_tiles if tile.get("reason") == "ocr_timeout"
+            ),
             "label_count": len(labels),
             "review_required_count": len(labels),
         },
@@ -366,6 +395,8 @@ def _finish(
         "ocr_cache_hit_count": int(payload.get("counts", {}).get("ocr_cache_hit_count") or 0),
         "ocr_cache_miss_count": int(payload.get("counts", {}).get("ocr_cache_miss_count") or 0),
         "ocr_cache_write_count": int(payload.get("counts", {}).get("ocr_cache_write_count") or 0),
+        "ocr_failure_count": int(payload.get("counts", {}).get("ocr_failure_count") or 0),
+        "ocr_timeout_count": int(payload.get("counts", {}).get("ocr_timeout_count") or 0),
         "writes_performed": not dry_run,
         "candidate_only": True,
         "runtime_safety_truth": False,
@@ -445,6 +476,7 @@ def _build_ocr_runner(
                 image,
                 lang=tesseract_lang,
                 output_type=pytesseract.Output.DICT,  # type: ignore[union-attr]
+                timeout=_tesseract_timeout_s(),
             )
         records = []
         for index, text in enumerate(data.get("text", [])):
@@ -464,6 +496,25 @@ def _build_ocr_runner(
         return records
 
     return _run, []
+
+
+def _tesseract_timeout_s() -> float:
+    raw = os.environ.get("SCOUT_TESSERACT_TIMEOUT_S")
+    if raw is None or not raw.strip():
+        return DEFAULT_TESSERACT_TIMEOUT_S
+    try:
+        return max(0.0, float(raw))
+    except ValueError:
+        return DEFAULT_TESSERACT_TIMEOUT_S
+
+
+def _is_ocr_timeout_error(exc: Exception) -> bool:
+    text = f"{type(exc).__name__} {exc}".lower()
+    return "timeout" in text or "timed out" in text
+
+
+def _safe_error_summary(exc: Exception) -> str:
+    return str(exc).replace("\n", " ")[:200]
 
 
 def _tile_records_from_manifest(root: Path, manifest: dict[str, Any] | list[Any]) -> list[dict[str, Any]]:

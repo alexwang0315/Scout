@@ -943,6 +943,16 @@
     .cwa-qpf-point.qpf-extreme { fill: #b91c1c; }
     .cwa-weather-point { fill: #0ea5e9; stroke: #e0f2fe; stroke-width: 1.6; opacity: .9; vector-effect: non-scaling-stroke; }
     .cwa-weather-point.weather-warning { fill: #dc2626; stroke: #fff1f2; }
+    .environment-extent { vector-effect: non-scaling-stroke; stroke-width: 2; stroke-dasharray: 10 6; pointer-events: visiblePainted; }
+    .environment-extent.soil-moisture { fill: rgba(37, 99, 235, .13); stroke: #2563eb; }
+    .environment-extent.antecedent-rain { fill: rgba(15, 118, 110, .12); stroke: #0f766e; }
+    .environment-extent.cwa-qpf { fill: rgba(245, 158, 11, .15); stroke: #d97706; }
+    .environment-extent.cwa-weather { fill: rgba(14, 165, 233, .10); stroke: #0284c7; }
+    .environment-value-label { font-size: 14px; font-weight: 850; letter-spacing: 0; paint-order: stroke; stroke: rgba(255, 255, 255, .92); stroke-width: 5px; stroke-linejoin: round; pointer-events: none; }
+    .environment-value-label.soil-moisture { fill: #1d4ed8; }
+    .environment-value-label.antecedent-rain { fill: #0f766e; }
+    .environment-value-label.cwa-qpf { fill: #b45309; }
+    .environment-value-label.cwa-weather { fill: #0369a1; }
 
     .map-highlight {
       opacity: 1 !important;
@@ -3747,6 +3757,8 @@
 
     function hintSummary(item) {
       if (isBossPoint(item)) return bossSummaryText(item);
+      const environmentSummary = environmentEvidenceSummary(item);
+      if (environmentSummary) return environmentSummary;
       if (item.evidence_type === "map_corridor") {
         return `${item.route_level || "corridor"} | width ${item.corridor_half_width_m}m | confidence ${item.source_metadata?.confidence ?? "-"}`;
       }
@@ -4965,6 +4977,7 @@
       });
       svg.appendChild(riskDeltaGroup);
       const cwaQpfGroup = el("g", {"data-layer-group": "cwa-qpf"});
+      renderEnvironmentExtent(cwaQpfGroup, bounds, "cwa-qpf", view.cwa_qpf, 0);
       (view.cwa_qpf?.points || []).forEach(point => {
         const [x, y] = project(bounds, point.lat, point.lon);
         const circle = el("circle", {
@@ -4981,6 +4994,7 @@
       svg.appendChild(cwaQpfGroup);
 
       const soilMoistureGroup = el("g", {"data-layer-group": "soil-moisture"});
+      renderEnvironmentExtent(soilMoistureGroup, bounds, "soil-moisture", view.soil_moisture, 1);
       (view.soil_moisture?.points || []).forEach(point => {
         const [x, y] = project(bounds, point.lat, point.lon);
         const circle = el("circle", {cx: x, cy: y, r: 4.5, class: "soil-moisture-point"});
@@ -4991,6 +5005,7 @@
       svg.appendChild(soilMoistureGroup);
 
       const antecedentRainGroup = el("g", {"data-layer-group": "antecedent-rain"});
+      renderEnvironmentExtent(antecedentRainGroup, bounds, "antecedent-rain", view.antecedent_rain, 2);
       (view.antecedent_rain?.points || []).forEach(point => {
         const [x, y] = project(bounds, point.lat, point.lon);
         const circle = el("circle", {
@@ -5006,6 +5021,7 @@
       svg.appendChild(antecedentRainGroup);
 
       const cwaWeatherGroup = el("g", {"data-layer-group": "cwa-weather"});
+      renderEnvironmentExtent(cwaWeatherGroup, bounds, "cwa-weather", view.cwa_weather, 3);
       (view.cwa_weather?.points || []).forEach(point => {
         const [x, y] = project(bounds, point.lat, point.lon);
         const circle = el("circle", {
@@ -5705,6 +5721,110 @@
       if (String(point?.evidence_type || "").includes("warning")) return "weather-warning";
       if (Number(point?.last_24h_mm ?? 0) >= 80) return "weather-warning";
       return "";
+    }
+    function environmentNumber(value, digits = 1, suffix = "") {
+      const number = Number(value);
+      if (!Number.isFinite(number)) return "n/a";
+      return `${number.toFixed(digits)}${suffix}`;
+    }
+    function environmentEvidenceSummary(item = {}) {
+      const layerId = String(item?.layer_id || item?.evidence_type || "").toLowerCase();
+      const candidateNote = "candidate-only context; not runtime safety truth";
+      if (layerId.includes("soil-moisture") || layerId.includes("soil_moisture")) {
+        return `SMAP L4 route bbox mean: surface ${environmentNumber(item?.sm_surface_wetness, 2)}, root ${environmentNumber(item?.sm_rootzone_wetness, 2)} | no-cache GEE evidence; ${candidateNote}`;
+      }
+      if (layerId.includes("antecedent-rain") || layerId.includes("antecedent_rain")) {
+        return `GPM IMERG route bbox 72h rain: ${environmentNumber(item?.last_72h_mm, 1, "mm")} | no-cache GEE evidence; ${candidateNote}`;
+      }
+      if (layerId.includes("cwa-qpf")) {
+        const pop = item?.rain_probability ?? item?.rainProbability;
+        const rain = item?.rainfall_mm ?? item?.rainfallMm;
+        const weather = item?.weather_text || item?.weatherText || item?.status || "forecast";
+        return `CWA forecast-derived QPF: PoP ${environmentNumber(pop, 0, "%")}, rain ${environmentNumber(rain, 1, "mm")} | ${weather}; ${candidateNote}`;
+      }
+      if (layerId.includes("cwa-weather")) {
+        if (String(item?.evidence_type || "").includes("warning")) {
+          return `Official CWA warning evidence: ${item?.headline || item?.label || item?.status || "warning"} | ${candidateNote}`;
+        }
+        const station = item?.station_name || item?.label || "CWA station";
+        return `CWA observation station: ${station} | 24h rain ${environmentNumber(item?.last_24h_mm, 1, "mm")} | ${candidateNote}`;
+      }
+      return "";
+    }
+    function environmentLayerBounds(layer) {
+      const bbox = layer?.bbox_wgs84 || layer?.summary?.bbox_wgs84 || {};
+      const west = Number(bbox.west ?? bbox.min_lon ?? bbox.minLon);
+      const east = Number(bbox.east ?? bbox.max_lon ?? bbox.maxLon);
+      const south = Number(bbox.south ?? bbox.min_lat ?? bbox.minLat);
+      const north = Number(bbox.north ?? bbox.max_lat ?? bbox.maxLat);
+      if (![west, east, south, north].every(Number.isFinite)) return null;
+      if (west >= east || south >= north) return null;
+      return {west, east, south, north};
+    }
+    function environmentLayerLabel(layerId, layer) {
+      const points = Array.isArray(layer?.points) ? layer.points : [];
+      const first = points[0] || {};
+      const values = layer?.summary?.values || {};
+      if (layerId === "soil-moisture") {
+        const surface = first.sm_surface_wetness ?? values.sm_surface_wetness;
+        const root = first.sm_rootzone_wetness ?? values.sm_rootzone_wetness;
+        return `SMAP surface ${environmentNumber(surface, 2)} / root ${environmentNumber(root, 2)}`;
+      }
+      if (layerId === "antecedent-rain") {
+        const rain72 = first.last_72h_mm ?? values.last_72h_mm;
+        return `GPM 72h ${environmentNumber(rain72, 1, "mm")}`;
+      }
+      if (layerId === "cwa-qpf") {
+        const maxPop = Math.max(0, ...points.map(point => Number(point.rain_probability ?? point.rainProbability ?? 0)).filter(Number.isFinite));
+        const maxRain = Math.max(0, ...points.map(point => Number(point.rainfall_mm ?? point.rainfallMm ?? 0)).filter(Number.isFinite));
+        return `CWA QPF PoP ${environmentNumber(maxPop, 0, "%")} / rain ${environmentNumber(maxRain, 1, "mm")}`;
+      }
+      if (layerId === "cwa-weather") {
+        const counts = layer?.counts || {};
+        const warnings = Number(counts.warning_point_count ?? 0);
+        const observations = Number(counts.observation_point_count ?? points.length ?? 0);
+        return `CWA warnings ${Number.isFinite(warnings) ? warnings : 0} / stations ${Number.isFinite(observations) ? observations : 0}`;
+      }
+      return layer?.label || layerId;
+    }
+    function renderEnvironmentExtent(group, bounds, layerId, layer, rowIndex = 0) {
+      const bbox = environmentLayerBounds(layer);
+      if (!bbox) return;
+      const [x1, y1] = project(bounds, bbox.north, bbox.west);
+      const [x2, y2] = project(bounds, bbox.south, bbox.east);
+      const x = Math.min(x1, x2);
+      const y = Math.min(y1, y2);
+      const width = Math.abs(x2 - x1);
+      const height = Math.abs(y2 - y1);
+      if (width < 1 || height < 1) return;
+      const points = Array.isArray(layer?.points) ? layer.points : [];
+      const item = {
+        ...(points[0] || {}),
+        source_id: layer?.source_id || `${layerId}.extent`,
+        candidate_id: layer?.source_id || `${layerId}.extent`,
+        evidence_type: layer?.evidence_type || `${layerId}_environment_extent`,
+        layer_id: layerId,
+        label: environmentLayerLabel(layerId, layer),
+        lat: (bbox.north + bbox.south) / 2,
+        lon: (bbox.west + bbox.east) / 2,
+      };
+      const rect = el("rect", {
+        x: x.toFixed(2),
+        y: y.toFixed(2),
+        width: width.toFixed(2),
+        height: height.toFixed(2),
+        rx: 8,
+        class: `environment-extent ${layerId}`,
+      });
+      attachEvidence(rect, item);
+      group.appendChild(rect);
+      const labelY = Math.min(Math.max(y + 22 + rowIndex * 24, 22), MAP_HEIGHT - 12);
+      const label = el("text", {
+        x: Math.min(Math.max(x + 10, 12), MAP_WIDTH - 320),
+        y: labelY,
+        class: `environment-value-label ${layerId}`,
+      }, item.label);
+      group.appendChild(label);
     }
 
     function updateLayers() {

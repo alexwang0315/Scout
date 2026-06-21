@@ -5,8 +5,10 @@ import hashlib
 import json
 import math
 import os
+import signal
 import shutil
 import statistics
+import sys
 import urllib.parse
 import urllib.request
 from collections import Counter
@@ -873,14 +875,23 @@ def _prepare_gee_environment_artifacts(
     del route_summary
     gee_dir = project_root / "outputs" / "environment" / "gee"
     project_id = project.get("project_id") or request.project_id
+    gee_project_id = (
+        os.environ.get("SCOUT_GEE_PROJECT_ID")
+        or os.environ.get("SCOUT_GEE_PROJECT")
+        or os.environ.get("GOOGLE_CLOUD_PROJECT")
+        or str(project_id)
+    )
     try:
         from scout_gee_integration import (
             build_gee_runtime_status,
+            fetch_gee_environment_evidence,
             gee_environment_dataset_catalog,
+            gee_numeric_no_cache_policy,
         )
 
         gee_status = build_gee_runtime_status().to_dict()
         dataset_catalog = gee_environment_dataset_catalog()
+        cache_policy = gee_numeric_no_cache_policy()
     except Exception as exc:  # pragma: no cover - import should be stable.
         gee_status = {
             "provider": "google_earth_engine",
@@ -892,15 +903,89 @@ def _prepare_gee_environment_artifacts(
             "runtime_safety_truth": False,
         }
         dataset_catalog = []
+        cache_policy = {
+            "cacheable": False,
+            "ttl_seconds": 0,
+            "must_refetch_on_prepare": True,
+            "reuse_previous_numeric_values": False,
+            "artifact_role": "current_run_evidence_snapshot",
+            "reason": "GEE values are time-sensitive and must be refetched.",
+        }
 
-    status = (
-        "configured_pending_fetcher"
-        if gee_status.get("ready")
-        else "missing_credentials"
-    )
-    blockers = list(gee_status.get("blocker_reasons") or [])
-    if not blockers and status == "configured_pending_fetcher":
-        blockers = ["gee_fetcher_not_implemented_in_map_preparation"]
+    fetch_result: dict[str, Any] | None = None
+    external_calls_made = False
+    if request.network_mode == "explicit-fetch" and request.allow_network_fetch:
+        try:
+            fetch_result = fetch_gee_environment_evidence(
+                project_id=str(gee_project_id),
+                bbox_wgs84=bbox,
+                prepared_at=prepared_at,
+            ).to_dict()
+        except Exception as exc:  # pragma: no cover - defensive integration boundary.
+            fetch_result = {
+                "status": "fetch_failed",
+                "blocker_reasons": [f"gee_fetch_failed:{type(exc).__name__}"],
+                "external_api_calls_made": True,
+                "raw_summary": {
+                    "provider": "google_earth_engine",
+                    "error_type": type(exc).__name__,
+                    "cache_policy": cache_policy,
+                    "secret_value_embedded": False,
+                    "runtime_safety_truth": False,
+                },
+                "soil_moisture": {},
+                "antecedent_rain": {},
+                "smap_timeseries": {},
+                "gpm_timeseries": {},
+            }
+        external_calls_made = bool(fetch_result.get("external_api_calls_made"))
+
+    if fetch_result:
+        status = str(fetch_result.get("status") or "fetch_failed")
+        blockers = list(fetch_result.get("blocker_reasons") or [])
+        soil_summary = dict(fetch_result.get("soil_moisture") or {})
+        rain_summary = dict(fetch_result.get("antecedent_rain") or {})
+        raw_summary = dict(fetch_result.get("raw_summary") or {})
+    else:
+        status = (
+            "configured_pending_explicit_fetch"
+            if gee_status.get("ready")
+            else "missing_credentials"
+        )
+        blockers = list(gee_status.get("blocker_reasons") or [])
+        if not blockers and status == "configured_pending_explicit_fetch":
+            blockers = ["gee_fetch_requires_explicit_network"]
+        soil_summary = {
+            "dataset_family": "SMAP",
+            "collection_id": "NASA/SMAP/SPL4SMGP/008",
+            "sm_surface_wetness": None,
+            "sm_rootzone_wetness": None,
+            "antecedent_wetness_percentile": None,
+        }
+        rain_summary = {
+            "dataset_family": "GPM_IMERG",
+            "collection_id": "NASA/GPM_L3/IMERG_V07",
+            "last_3h_mm": None,
+            "last_24h_mm": None,
+            "last_72h_mm": None,
+        }
+        raw_summary = {
+            "provider": "google_earth_engine",
+            "status": status,
+            "blocker_reasons": blockers,
+            "cache_policy": cache_policy,
+            "secret_value_embedded": False,
+            "runtime_safety_truth": False,
+        }
+    raw_summary["cache_policy"] = cache_policy
+    raw_summary_bytes = json.dumps(
+        raw_summary,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    raw_summary_hash = hashlib.sha256(raw_summary_bytes).hexdigest()
+    raw_summary_ref = "outputs/environment/gee/gee_raw_summary.json"
 
     soil_feature = _environment_status_feature(
         bbox=bbox,
@@ -910,14 +995,19 @@ def _prepare_gee_environment_artifacts(
         provider="google_earth_engine",
         source_run_id=f"gee.{project_id}.{_job_timestamp(prepared_at)}",
         prepared_at=prepared_at,
-        detail="SMAP/GEE source status; numeric soil moisture requires GEE credentials and fetcher.",
+        detail=(
+            "SMAP/GEE bbox-reduced soil moisture evidence."
+            if status == "fetched"
+            else "SMAP/GEE source status; numeric soil moisture requires configured GEE credentials and explicit fetch."
+        ),
         extra={
-            "dataset_family": "SMAP",
-            "collection_id": "NASA/SMAP/SPL4SMGP/008",
-            "sm_surface_wetness": None,
-            "antecedent_wetness_percentile": None,
+            **soil_summary,
             "gee_status": gee_status,
             "blocker_reasons": blockers,
+            "raw_summary_ref": raw_summary_ref,
+            "raw_summary_sha256": raw_summary_hash,
+            "cache_policy": cache_policy,
+            "external_api_calls_made": external_calls_made,
         },
     )
     rain_feature = _environment_status_feature(
@@ -928,14 +1018,19 @@ def _prepare_gee_environment_artifacts(
         provider="google_earth_engine",
         source_run_id=f"gee.{project_id}.{_job_timestamp(prepared_at)}",
         prepared_at=prepared_at,
-        detail="GPM IMERG/GEE source status; numeric antecedent rain requires GEE credentials and fetcher.",
+        detail=(
+            "GPM IMERG/GEE bbox-reduced antecedent rain evidence."
+            if status == "fetched"
+            else "GPM IMERG/GEE source status; numeric antecedent rain requires configured GEE credentials and explicit fetch."
+        ),
         extra={
-            "dataset_family": "GPM_IMERG",
-            "collection_id": "NASA/GPM_L3/IMERG_V07",
-            "last_3h_mm": None,
-            "last_24h_mm": None,
+            **rain_summary,
             "gee_status": gee_status,
             "blocker_reasons": blockers,
+            "raw_summary_ref": raw_summary_ref,
+            "raw_summary_sha256": raw_summary_hash,
+            "cache_policy": cache_policy,
+            "external_api_calls_made": external_calls_made,
         },
     )
     soil_geojson = _feature_collection(
@@ -944,14 +1039,18 @@ def _prepare_gee_environment_artifacts(
         project_id=project_id,
         generated_at=prepared_at,
         bbox=bbox,
+        external_calls_made=external_calls_made,
     )
+    soil_geojson["cache_policy"] = cache_policy
     rain_geojson = _feature_collection(
         "gee_antecedent_rain_grid",
         [rain_feature],
         project_id=project_id,
         generated_at=prepared_at,
         bbox=bbox,
+        external_calls_made=external_calls_made,
     )
+    rain_geojson["cache_policy"] = cache_policy
     smap_summary = _gee_environment_summary(
         project_id=project_id,
         layer_id="soil-moisture",
@@ -961,6 +1060,11 @@ def _prepare_gee_environment_artifacts(
         dataset_catalog=dataset_catalog,
         status=status,
         blockers=blockers,
+        external_calls_made=external_calls_made,
+        raw_summary_ref=raw_summary_ref,
+        raw_summary_sha256=raw_summary_hash,
+        cache_policy=cache_policy,
+        values=soil_summary,
     )
     gpm_summary = _gee_environment_summary(
         project_id=project_id,
@@ -971,32 +1075,51 @@ def _prepare_gee_environment_artifacts(
         dataset_catalog=dataset_catalog,
         status=status,
         blockers=blockers,
+        external_calls_made=external_calls_made,
+        raw_summary_ref=raw_summary_ref,
+        raw_summary_sha256=raw_summary_hash,
+        cache_policy=cache_policy,
+        values=rain_summary,
     )
 
-    _write_json(gee_dir / "soil_moisture_grid.geojson", soil_geojson)
-    _write_json(gee_dir / "antecedent_rain_grid.geojson", rain_geojson)
-    _write_json(gee_dir / "smap_l4_corridor_summary.json", smap_summary)
-    _write_json(gee_dir / "gpm_imerg_corridor_summary.json", gpm_summary)
-    _write_json(
-        gee_dir / "smap_l4_timeseries.json",
-        _gee_timeseries_placeholder(
+    smap_timeseries = (
+        fetch_result.get("smap_timeseries")
+        if fetch_result and fetch_result.get("smap_timeseries")
+        else _gee_timeseries_placeholder(
             project_id=project_id,
             layer_id="soil-moisture",
             generated_at=prepared_at,
             status=status,
             blockers=blockers,
-        ),
+            cache_policy=cache_policy,
+            external_calls_made=external_calls_made,
+        )
     )
-    _write_json(
-        gee_dir / "gpm_imerg_timeseries.json",
-        _gee_timeseries_placeholder(
+    if isinstance(smap_timeseries, dict):
+        smap_timeseries["cache_policy"] = cache_policy
+    gpm_timeseries = (
+        fetch_result.get("gpm_timeseries")
+        if fetch_result and fetch_result.get("gpm_timeseries")
+        else _gee_timeseries_placeholder(
             project_id=project_id,
             layer_id="antecedent-rain",
             generated_at=prepared_at,
             status=status,
             blockers=blockers,
-        ),
+            cache_policy=cache_policy,
+            external_calls_made=external_calls_made,
+        )
     )
+    if isinstance(gpm_timeseries, dict):
+        gpm_timeseries["cache_policy"] = cache_policy
+
+    _write_json(gee_dir / "gee_raw_summary.json", raw_summary)
+    _write_json(gee_dir / "soil_moisture_grid.geojson", soil_geojson)
+    _write_json(gee_dir / "antecedent_rain_grid.geojson", rain_geojson)
+    _write_json(gee_dir / "smap_l4_corridor_summary.json", smap_summary)
+    _write_json(gee_dir / "gpm_imerg_corridor_summary.json", gpm_summary)
+    _write_json(gee_dir / "smap_l4_timeseries.json", smap_timeseries)
+    _write_json(gee_dir / "gpm_imerg_timeseries.json", gpm_timeseries)
 
     return {
         "soil_moisture_grid_ref": OUTPUT_REFS["soil_moisture_grid_ref"],
@@ -1012,7 +1135,12 @@ def _prepare_gee_environment_artifacts(
         "soil_moisture_feature_count": 1,
         "antecedent_rain_feature_count": 1,
         "gee_environment_status": status,
-        "gee_external_api_calls_made": False,
+        "gee_external_api_calls_made": external_calls_made,
+        "gee_numeric_cacheable": False,
+        "gee_numeric_ttl_seconds": 0,
+        "gee_cache_policy": cache_policy,
+        "gee_raw_summary_ref": raw_summary_ref,
+        "gee_raw_summary_sha256": raw_summary_hash,
     }
 
 
@@ -1095,6 +1223,7 @@ def _build_layer_preparation_manifest(
     network_calls_made = bool(
         project.get("overpass_fetched_at")
         or project.get("cwa_external_api_calls_made")
+        or project.get("gee_external_api_calls_made")
     )
     boundary = _boundary(
         request,
@@ -3286,6 +3415,10 @@ def _project_state_output_refs(project: dict[str, Any]) -> dict[str, Any]:
         "risk_ribbon_segment_count",
         "risk_score_source_profile",
         "risk_score_updated_at",
+        "risk_score_generation_status",
+        "risk_score_generation_basis",
+        "risk_score_generation_skipped_reason",
+        "risk_score_generation_error",
         "calibrated_risk_heatmap_segment_count",
         "calibrated_risk_heatmap_warning_cp_overlay_count",
         "risk_attribution_diagnostic_checkpoint_count",
@@ -3576,15 +3709,28 @@ def _run_boss_point_synthesis_after_layer_preparation(
             synthesize_pretrip_boss_points,
         )
 
-        result = synthesize_pretrip_boss_points(
-            project_root,
-            generated_at=manifest.get("finished_at"),
-        )
+        timeout_s = _post_process_timeout_s("SCOUT_BOSS_SYNTHESIS_TIMEOUT_S", 90.0)
+        with _wall_clock_timeout(timeout_s):
+            result = synthesize_pretrip_boss_points(
+                project_root,
+                generated_at=manifest.get("finished_at"),
+            )
         pressure_policy = {}
         pressure_path = project_root / ROUTE_PRESSURE_PROFILE_REF
         if pressure_path.exists():
             pressure_payload = _load_json(pressure_path)
             pressure_policy = pressure_payload.get("policy") or {}
+    except TimeoutError:
+        return {
+            "status": "skipped_timeout",
+            "trigger": "prepare_layers_with_risk",
+            "timeout_s": _post_process_timeout_s(
+                "SCOUT_BOSS_SYNTHESIS_TIMEOUT_S",
+                90.0,
+            ),
+            "reason": "boss_point_synthesis_exceeded_wall_clock_timeout",
+            "boundary": boundary,
+        }
     except Exception as exc:
         return {
             "status": "failed",
@@ -3644,10 +3790,23 @@ def _run_mileage_tag_alignment_after_layer_preparation(
             align_pretrip_workspace_mileage_tags,
         )
 
-        result = align_pretrip_workspace_mileage_tags(
-            project_root,
-            generated_at=manifest.get("finished_at"),
-        )
+        timeout_s = _post_process_timeout_s("SCOUT_MILEAGE_ALIGNMENT_TIMEOUT_S", 90.0)
+        with _wall_clock_timeout(timeout_s):
+            result = align_pretrip_workspace_mileage_tags(
+                project_root,
+                generated_at=manifest.get("finished_at"),
+            )
+    except TimeoutError:
+        return {
+            "status": "skipped_timeout",
+            "trigger": "prepare_layers_workspace_mileage_tags",
+            "timeout_s": _post_process_timeout_s(
+                "SCOUT_MILEAGE_ALIGNMENT_TIMEOUT_S",
+                90.0,
+            ),
+            "reason": "mileage_tag_alignment_exceeded_wall_clock_timeout",
+            "boundary": boundary,
+        }
     except Exception as exc:
         return {
             "status": "failed",
@@ -3675,15 +3834,68 @@ def _run_mileage_tag_alignment_after_layer_preparation(
     }
 
 
+class _wall_clock_timeout:
+    def __init__(self, seconds: float) -> None:
+        self.seconds = max(0.0, float(seconds))
+        self._previous_handler: Any = None
+        self._previous_timer: tuple[float, float] | None = None
+
+    def __enter__(self) -> None:
+        if self.seconds <= 0 or not hasattr(signal, "SIGALRM"):
+            return None
+        self._previous_handler = signal.getsignal(signal.SIGALRM)
+        signal.signal(signal.SIGALRM, self._raise_timeout)
+        self._previous_timer = signal.setitimer(signal.ITIMER_REAL, self.seconds)
+        return None
+
+    def __exit__(self, exc_type: Any, exc: Any, traceback: Any) -> bool:
+        if self.seconds > 0 and hasattr(signal, "SIGALRM"):
+            signal.setitimer(signal.ITIMER_REAL, 0)
+            if self._previous_timer is not None and self._previous_timer[0] > 0:
+                signal.setitimer(signal.ITIMER_REAL, *self._previous_timer)
+            if self._previous_handler is not None:
+                signal.signal(signal.SIGALRM, self._previous_handler)
+        return False
+
+    @staticmethod
+    def _raise_timeout(signum: int, frame: Any) -> None:
+        raise TimeoutError("post-process exceeded wall-clock timeout")
+
+
+def _post_process_timeout_s(env_name: str, default_s: float) -> float:
+    value = os.environ.get(env_name)
+    if value is None or not value.strip():
+        return default_s
+    try:
+        parsed = float(value)
+    except ValueError:
+        return default_s
+    return max(0.0, parsed)
+
+
 def _sync_scout_risk_outputs(
     *,
     project_root: Path,
     project: dict[str, Any],
     prepared_at: str,
 ) -> dict[str, Any]:
+    if _workspace_scout_risk_outputs_ready(project_root=project_root, project=project):
+        updated = _project_with_scout_risk_refs(project)
+        _stamp_synced_risk_output_provenance(project_root=project_root, project=updated)
+        return _project_with_scout_risk_metadata_counts(
+            project_root=project_root,
+            project=updated,
+            prepared_at=prepared_at,
+            source_profile="scout_risk_engine_workspace",
+        )
+
     source_root = SCOUT_RISK_OUTPUT_SOURCES.get(str(project.get("project_id", "")))
     if source_root is None or not source_root.exists():
-        return project
+        return _generate_scout_risk_outputs_from_workspace(
+            project_root=project_root,
+            project=project,
+            prepared_at=prepared_at,
+        )
 
     required = (
         "route_risk.geojson",
@@ -3692,7 +3904,11 @@ def _sync_scout_risk_outputs(
         "risk_score_points.metadata.json",
     )
     if any(not (source_root / filename).exists() for filename in required):
-        return project
+        return _generate_scout_risk_outputs_from_workspace(
+            project_root=project_root,
+            project=project,
+            prepared_at=prepared_at,
+        )
 
     updated = dict(project)
     for ref_key, ref in SCOUT_RISK_OUTPUT_REFS.items():
@@ -3707,6 +3923,45 @@ def _sync_scout_risk_outputs(
 
     _stamp_synced_risk_output_provenance(project_root=project_root, project=updated)
 
+    return _project_with_scout_risk_metadata_counts(
+        project_root=project_root,
+        project=updated,
+        prepared_at=prepared_at,
+        source_profile="scout_risk_engine_overpass_route_profile",
+    )
+
+
+def _project_with_scout_risk_refs(project: dict[str, Any]) -> dict[str, Any]:
+    return {**project, **SCOUT_RISK_OUTPUT_REFS}
+
+
+def _workspace_scout_risk_outputs_ready(
+    *,
+    project_root: Path,
+    project: dict[str, Any],
+) -> bool:
+    for ref_key in (
+        "risk_route_profile_ref",
+        "risk_route_profile_metadata_ref",
+        "risk_score_points_ref",
+        "risk_score_points_metadata_ref",
+    ):
+        ref = project.get(ref_key) or SCOUT_RISK_OUTPUT_REFS.get(ref_key)
+        if not isinstance(ref, str) or not ref:
+            return False
+        if not (project_root / ref).exists():
+            return False
+    return True
+
+
+def _project_with_scout_risk_metadata_counts(
+    *,
+    project_root: Path,
+    project: dict[str, Any],
+    prepared_at: str,
+    source_profile: str,
+) -> dict[str, Any]:
+    updated = dict(project)
     metadata_path = project_root / SCOUT_RISK_OUTPUT_REFS["risk_score_points_metadata_ref"]
     route_metadata_path = project_root / SCOUT_RISK_OUTPUT_REFS[
         "risk_route_profile_metadata_ref"
@@ -3730,9 +3985,196 @@ def _sync_scout_risk_outputs(
         ribbon_segments = ribbon_metadata.get("segment_count")
         if isinstance(ribbon_segments, int):
             updated["risk_ribbon_segment_count"] = ribbon_segments
-    updated["risk_score_source_profile"] = "scout_risk_engine_overpass_route_profile"
+    updated["risk_score_source_profile"] = source_profile
     updated["risk_score_updated_at"] = prepared_at
     return updated
+
+
+def _generate_scout_risk_outputs_from_workspace(
+    *,
+    project_root: Path,
+    project: dict[str, Any],
+    prepared_at: str,
+) -> dict[str, Any]:
+    inputs = _workspace_scout_risk_generation_inputs(
+        project_root=project_root,
+        project=project,
+    )
+    if inputs.get("status") != "ready":
+        return {
+            **project,
+            "risk_score_generation_status": "skipped",
+            "risk_score_generation_skipped_reason": inputs.get(
+                "reason",
+                "workspace_risk_generation_inputs_missing",
+            ),
+        }
+
+    try:
+        _ensure_scout_risk_package_importable()
+        from scout_risk.fusion.pretrip import build_overpass_pretrip_route_profile
+        from scout_risk.route.outputs import write_route_csv, write_route_geojson
+        from scout_risk.route.risk_score_map import (
+            build_risk_ribbon_from_geojson,
+            build_risk_score_point_map_from_geojson,
+            write_risk_ribbon_geojson,
+            write_risk_ribbon_metadata,
+            write_risk_score_csv,
+            write_risk_score_geojson,
+            write_risk_score_metadata,
+            write_risk_score_xyz,
+        )
+
+        refs = SCOUT_RISK_OUTPUT_REFS
+        route_risk_path = project_root / refs["risk_route_profile_ref"]
+        route_csv_path = project_root / refs["risk_route_profile_csv_ref"]
+        route_metadata_path = project_root / refs["risk_route_profile_metadata_ref"]
+        score_geojson_path = project_root / refs["risk_score_points_ref"]
+        score_csv_path = project_root / refs["risk_score_points_csv_ref"]
+        score_xyz_path = project_root / refs["risk_score_points_xyz_ref"]
+        score_metadata_path = project_root / refs["risk_score_points_metadata_ref"]
+        ribbon_path = project_root / refs["risk_ribbon_ref"]
+        ribbon_metadata_path = project_root / refs["risk_ribbon_metadata_ref"]
+
+        profile, route_metadata = build_overpass_pretrip_route_profile(
+            dtm_coverage_path=inputs["dtm_coverage_path"],
+            overpass_geojson_path=inputs["overpass_geojson_path"],
+            reference_gpx_path=inputs["reference_gpx_path"],
+            route_id=f"{project.get('project_id', 'route')}.overpass_risk_ribbon",
+        )
+        write_route_geojson(profile, route_risk_path)
+        write_route_csv(profile, route_csv_path)
+        route_metadata_path.parent.mkdir(parents=True, exist_ok=True)
+        route_metadata_path.write_text(
+            json.dumps(route_metadata, ensure_ascii=False, indent=2, sort_keys=True)
+            + "\n",
+            encoding="utf-8",
+        )
+
+        point_map = build_risk_score_point_map_from_geojson(route_risk_path)
+        write_risk_score_csv(point_map, score_csv_path)
+        write_risk_score_xyz(point_map, score_xyz_path)
+        write_risk_score_geojson(point_map, score_geojson_path)
+        write_risk_score_metadata(point_map, score_metadata_path)
+
+        ribbon = build_risk_ribbon_from_geojson(route_risk_path)
+        write_risk_ribbon_geojson(ribbon, ribbon_path)
+        write_risk_ribbon_metadata(ribbon, ribbon_metadata_path)
+    except Exception as exc:  # pragma: no cover - surfaced in workspace metadata.
+        return {
+            **project,
+            "risk_score_generation_status": "failed",
+            "risk_score_generation_error": str(exc),
+        }
+
+    updated = {
+        **project,
+        **SCOUT_RISK_OUTPUT_REFS,
+        "risk_score_generation_status": "completed",
+        "risk_score_generation_basis": "workspace_dtm_overpass_reference_gpx",
+    }
+    _stamp_synced_risk_output_provenance(project_root=project_root, project=updated)
+    return _project_with_scout_risk_metadata_counts(
+        project_root=project_root,
+        project=updated,
+        prepared_at=prepared_at,
+        source_profile="scout_risk_engine_workspace_generated_overpass_route_profile",
+    )
+
+
+def _ensure_scout_risk_package_importable() -> None:
+    package_src = (
+        Path(__file__).resolve().parent
+        / "scout-risk-engine"
+        / "scout_codex_package"
+        / "src"
+    )
+    if package_src.exists() and package_src.as_posix() not in sys.path:
+        sys.path.insert(0, package_src.as_posix())
+
+
+def _workspace_scout_risk_generation_inputs(
+    *,
+    project_root: Path,
+    project: dict[str, Any],
+) -> dict[str, Any]:
+    dtm_path = _project_ref_path(
+        project_root,
+        project,
+        "dtm_coverage_summary_ref",
+    )
+    if dtm_path is None:
+        return {"status": "missing", "reason": "dtm_coverage_summary_ref_missing"}
+
+    overpass_path = _first_existing_project_ref_path(
+        project_root,
+        project,
+        ("overpass_map_context_ref", "overpass_vector_evidence_ref"),
+    )
+    if overpass_path is None:
+        return {"status": "missing", "reason": "overpass_geojson_ref_missing"}
+
+    reference_gpx_path = _reference_gpx_path_for_risk_generation(
+        project_root=project_root,
+        project=project,
+    )
+    if reference_gpx_path is None:
+        return {"status": "missing", "reason": "reference_gpx_ref_missing"}
+
+    return {
+        "status": "ready",
+        "dtm_coverage_path": dtm_path,
+        "overpass_geojson_path": overpass_path,
+        "reference_gpx_path": reference_gpx_path,
+    }
+
+
+def _project_ref_path(
+    project_root: Path,
+    project: dict[str, Any],
+    ref_key: str,
+) -> Path | None:
+    ref = project.get(ref_key)
+    if not isinstance(ref, str) or not ref:
+        return None
+    path = Path(ref).expanduser()
+    if not path.is_absolute():
+        path = project_root / path
+    return path if path.exists() else None
+
+
+def _first_existing_project_ref_path(
+    project_root: Path,
+    project: dict[str, Any],
+    ref_keys: tuple[str, ...],
+) -> Path | None:
+    for ref_key in ref_keys:
+        path = _project_ref_path(project_root, project, ref_key)
+        if path is not None:
+            return path
+    return None
+
+
+def _reference_gpx_path_for_risk_generation(
+    *,
+    project_root: Path,
+    project: dict[str, Any],
+) -> Path | None:
+    bundle_path = _project_ref_path(project_root, project, "route_evidence_bundle_ref")
+    if bundle_path is not None:
+        bundle = _load_json(bundle_path)
+        golden_route = bundle.get("golden_route", {})
+        if isinstance(golden_route, dict):
+            for key in ("filtered_geometry_ref", "source_path"):
+                value = golden_route.get(key)
+                if not isinstance(value, str) or not value:
+                    continue
+                path = Path(value).expanduser()
+                if not path.is_absolute():
+                    path = project_root / path
+                if path.exists():
+                    return path
+    return _project_ref_path(project_root, project, "golden_route_gpx_ref")
 
 
 def _sync_calibrated_risk_outputs(
@@ -4459,6 +4901,7 @@ def _feature_collection(
     project_id: str,
     generated_at: str,
     bbox: dict[str, float],
+    external_calls_made: bool = False,
 ) -> dict[str, Any]:
     return {
         "type": "FeatureCollection",
@@ -4469,7 +4912,7 @@ def _feature_collection(
         "bbox_wgs84": bbox,
         "feature_count": len(features),
         "features": features,
-        "boundary": _environment_boundary(external_calls_made=False),
+        "boundary": _environment_boundary(external_calls_made=external_calls_made),
     }
 
 
@@ -4848,6 +5291,11 @@ def _gee_environment_summary(
     dataset_catalog: list[dict[str, Any]],
     status: str,
     blockers: list[str],
+    external_calls_made: bool,
+    raw_summary_ref: str,
+    raw_summary_sha256: str,
+    cache_policy: dict[str, Any],
+    values: dict[str, Any],
 ) -> dict[str, Any]:
     return {
         "artifact_kind": f"gee_{layer_id.replace('-', '_')}_corridor_summary",
@@ -4858,11 +5306,15 @@ def _gee_environment_summary(
         "bbox_wgs84": bbox,
         "status": status,
         "blocker_reasons": blockers,
+        "raw_summary_ref": raw_summary_ref,
+        "raw_summary_sha256": raw_summary_sha256,
+        "cache_policy": cache_policy,
+        "values": values,
         "gee_runtime_status": gee_status,
         "dataset_catalog": dataset_catalog,
         "candidate_only": True,
         "runtime_safety_truth": False,
-        "boundary": _environment_boundary(external_calls_made=False),
+        "boundary": _environment_boundary(external_calls_made=external_calls_made),
     }
 
 
@@ -4873,6 +5325,8 @@ def _gee_timeseries_placeholder(
     generated_at: str,
     status: str,
     blockers: list[str],
+    cache_policy: dict[str, Any],
+    external_calls_made: bool = False,
 ) -> dict[str, Any]:
     return {
         "artifact_kind": f"gee_{layer_id.replace('-', '_')}_timeseries",
@@ -4883,9 +5337,10 @@ def _gee_timeseries_placeholder(
         "status": status,
         "samples": [],
         "blocker_reasons": blockers,
+        "cache_policy": cache_policy,
         "candidate_only": True,
         "runtime_safety_truth": False,
-        "boundary": _environment_boundary(external_calls_made=False),
+        "boundary": _environment_boundary(external_calls_made=external_calls_made),
     }
 
 

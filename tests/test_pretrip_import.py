@@ -1206,17 +1206,35 @@ def test_restore_durable_admin_evidence_refs_copies_safe_missing_refs(
         "departure_bundle_manifest_ref": "outputs/departure_bundle_manifest.json",
         "route_comparison_ref": "outputs/route_comparison.json",
         "capability_timeline_import_ref": "outputs/capability_timeline_import.json",
+        "terrain_visualization_ref": (
+            "outputs/layers/normalized/terrain_visualization.geojson"
+        ),
+        "terrain_hillshade_overlay_ref": (
+            "outputs/layers/normalized/terrain_hillshade.png"
+        ),
+        "terrain_elevation_tint_overlay_ref": (
+            "outputs/layers/normalized/terrain_elevation_tint.png"
+        ),
         "post_analysis_capability_timeline_ref": "../outside.json",
     }
     for key, ref in durable_refs.items():
         if ref.startswith("../"):
             continue
+        (source_root / ref).parent.mkdir(parents=True, exist_ok=True)
         (source_root / ref).write_text(
             json.dumps({"source_key": key}, sort_keys=True),
             encoding="utf-8",
         )
     (source_root / "project.json").write_text(
-        json.dumps({"project_id": "source", **durable_refs}, sort_keys=True),
+        json.dumps(
+            {
+                "project_id": "source",
+                **durable_refs,
+                "dtm_candidate_tile_count": 48,
+                "dtm_scanned_header_count": 1411,
+            },
+            sort_keys=True,
+        ),
         encoding="utf-8",
     )
     (destination_root / "outputs" / "route_comparison.json").write_text(
@@ -1249,6 +1267,17 @@ def test_restore_durable_admin_evidence_refs_copies_safe_missing_refs(
     assert project["capability_timeline_import_ref"] == (
         "outputs/capability_timeline_import.json"
     )
+    assert project["terrain_visualization_ref"] == (
+        "outputs/layers/normalized/terrain_visualization.geojson"
+    )
+    assert project["terrain_hillshade_overlay_ref"] == (
+        "outputs/layers/normalized/terrain_hillshade.png"
+    )
+    assert project["terrain_elevation_tint_overlay_ref"] == (
+        "outputs/layers/normalized/terrain_elevation_tint.png"
+    )
+    assert project["dtm_candidate_tile_count"] == 48
+    assert project["dtm_scanned_header_count"] == 1411
     assert "post_analysis_capability_timeline_ref" not in project
     assert _load(destination_root / "outputs" / "readiness_report.json") == {
         "source_key": "readiness_report_ref"
@@ -1256,7 +1285,14 @@ def test_restore_durable_admin_evidence_refs_copies_safe_missing_refs(
     assert _load(destination_root / "outputs" / "route_comparison.json") == {
         "kept": "destination"
     }
+    assert (
+        destination_root / "outputs" / "layers" / "normalized" / "terrain_hillshade.png"
+    ).exists()
     assert summary["copied"]["readiness_report_ref"] == "outputs/readiness_report.json"
+    assert summary["copied"]["terrain_hillshade_overlay_ref"] == (
+        "outputs/layers/normalized/terrain_hillshade.png"
+    )
+    assert summary["restored"]["dtm_candidate_tile_count"] == 48
     assert summary["skipped"]["route_comparison_ref"] == "payload_ref_already_exists"
     assert summary["invalid"]["post_analysis_capability_timeline_ref"] == (
         "../outside.json"

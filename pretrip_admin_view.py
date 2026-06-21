@@ -2085,6 +2085,16 @@ def load_pretrip_debug_projection_view(
                 "bitmap_overlay_count",
                 0,
             ),
+            "terrain_source_dtm_tile_count": view["terrain_visualization"]["counts"].get(
+                "source_dtm_tile_count",
+                0,
+            ),
+            "terrain_source_dtm_grid_cell_count": view["terrain_visualization"][
+                "counts"
+            ].get(
+                "source_dtm_grid_cell_count",
+                0,
+            ),
             "terrain_sample_count": view["terrain_visualization"]["counts"].get(
                 "cell_count",
                 0,
@@ -6047,9 +6057,17 @@ def _terrain_visualization_summary(
             )
 
     counts = dict(payload.get("counts") or {})
+    dtm_grid = payload.get("dtm_grid") if isinstance(payload.get("dtm_grid"), dict) else {}
     counts.setdefault("feature_count", len(samples))
     counts.setdefault("bitmap_overlay_count", len(raster_overlays))
     counts.setdefault("contour_marker_count", len(contours))
+    if "source_dtm_tile_count" not in counts and dtm_grid.get("source_tile_count") is not None:
+        counts["source_dtm_tile_count"] = dtm_grid.get("source_tile_count")
+    if (
+        "source_dtm_grid_cell_count" not in counts
+        and dtm_grid.get("source_grid_cell_count") is not None
+    ):
+        counts["source_dtm_grid_cell_count"] = dtm_grid.get("source_grid_cell_count")
     return {
         "source_id": f"terrain_visualization.{project_id}",
         "source_path": source_path,
@@ -6061,6 +6079,7 @@ def _terrain_visualization_summary(
         "status": "candidate_only" if samples or raster_overlays else "not_available",
         "visualization_spec": visualization_spec,
         "counts": counts,
+        "dtm_grid": dtm_grid,
         "raster_overlays": raster_overlays,
         "samples": samples,
         "contours": contours,
@@ -8206,6 +8225,8 @@ def _environment_geojson_summary(
     summary_payload: dict[str, Any] | None = None,
     summary_source_path: str = "",
 ) -> dict[str, Any]:
+    payload = payload if isinstance(payload, dict) else {}
+    summary_payload = summary_payload if isinstance(summary_payload, dict) else {}
     features = (
         payload.get("features", [])
         if isinstance(payload, dict) and isinstance(payload.get("features"), list)
@@ -8231,9 +8252,11 @@ def _environment_geojson_summary(
             "feature_count": len(features),
             "point_count": len(points),
         },
+        "bbox_wgs84": _environment_bbox(payload, summary_payload),
+        "cache_policy": payload.get("cache_policy") or summary_payload.get("cache_policy"),
         "points": points,
         "features": points,
-        "summary": summary_payload or {},
+        "summary": summary_payload,
         "boundary": _summary_boundary(
             (payload or {}).get("boundary", {})
             if isinstance(payload, dict)
@@ -8283,6 +8306,16 @@ def _cwa_weather_environment_summary(
         "layer_id": "cwa-weather",
         "status": (evidence_payload or {}).get("status", "missing_source"),
         "counts": counts,
+        "bbox_wgs84": (
+            warning_summary.get("bbox_wgs84")
+            or observation_summary.get("bbox_wgs84")
+            or _environment_bbox(evidence_payload or {}, {})
+        ),
+        "cache_policy": (
+            warning_summary.get("cache_policy")
+            or observation_summary.get("cache_policy")
+            or (evidence_payload or {}).get("cache_policy")
+        ),
         "datasets": (evidence_payload or {}).get("datasets", []),
         "points": points,
         "features": points,
@@ -8298,6 +8331,27 @@ def _cwa_weather_environment_summary(
             )
         ),
     }
+
+
+def _environment_bbox(
+    payload: dict[str, Any],
+    summary_payload: dict[str, Any],
+) -> dict[str, float]:
+    for raw in (payload.get("bbox_wgs84"), summary_payload.get("bbox_wgs84")):
+        if not isinstance(raw, dict):
+            continue
+        west = _coerce_float(raw.get("west") or raw.get("min_lon") or raw.get("minLon"))
+        east = _coerce_float(raw.get("east") or raw.get("max_lon") or raw.get("maxLon"))
+        south = _coerce_float(raw.get("south") or raw.get("min_lat") or raw.get("minLat"))
+        north = _coerce_float(raw.get("north") or raw.get("max_lat") or raw.get("maxLat"))
+        if None not in (west, east, south, north):
+            return {
+                "west": float(west),
+                "south": float(south),
+                "east": float(east),
+                "north": float(north),
+            }
+    return {}
 
 
 def _environment_feature_point(

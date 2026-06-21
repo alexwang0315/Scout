@@ -366,6 +366,13 @@ def test_pretrip_admin_page_groups_dense_controls_and_uses_short_labels():
     assert 'title="SMAP L4 soil moisture hydrology context"><input type="checkbox" data-layer="soil-moisture"> Soil H2O</label>' in html
     assert 'title="GPM IMERG antecedent rain context"><input type="checkbox" data-layer="antecedent-rain"> Rain</label>' in html
     assert 'title="CWA warnings observations and forecast evidence"><input type="checkbox" data-layer="cwa-weather"> CWA</label>' in html
+    assert ".environment-extent" in html
+    assert "function renderEnvironmentExtent" in html
+    assert "function environmentEvidenceSummary" in html
+    assert "SMAP L4 route bbox mean" in html
+    assert "candidate-only context; not runtime safety truth" in html
+    assert "SMAP surface" in html
+    assert "GPM 72h" in html
     assert 'title="Weather API layer"><input type="checkbox" data-layer="weather-api"> Weather</label>' in html
     assert 'aria-label="Move to next review item">Next</button>' in html
     assert 'aria-label="Accept selected review">Accept</button>' in html
@@ -813,6 +820,10 @@ def test_pretrip_admin_page_fetches_fixture_backed_read_only_project_api():
     )
     assert 'class: "soil-moisture-point"' in html
     assert "antecedent-rain-point" in html
+    assert "renderEnvironmentExtent(cwaQpfGroup" in html
+    assert "renderEnvironmentExtent(soilMoistureGroup" in html
+    assert "renderEnvironmentExtent(antecedentRainGroup" in html
+    assert "renderEnvironmentExtent(cwaWeatherGroup" in html
     assert 'appendEvidenceTreeGroup(tree, "map_risk", "Soil Moisture"' in html
     assert 'appendEvidenceTreeGroup(tree, "map_risk", "Antecedent Rain"' in html
 

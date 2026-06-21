@@ -7,6 +7,65 @@ regressions. The machine-readable source of truth is
 All layers are pretrip/admin candidate evidence or UI context unless explicitly
 stated otherwise. None of these layers may mutate Phase 1 runtime safety truth.
 
+## Contract Vs Preparation Boundary
+
+The 32 layers in this document are the admin map UI contract
+（管理介面地圖圖層契約）. They are not the same thing as the
+`pretrip_layer_preparation.py --layers` input list.
+
+`pretrip_layer_preparation.py` accepts only preparation-backed layers
+（可由行前準備流程產生或更新的圖層）:
+
+```text
+osm, imagery, overpass, terrain, risk-score, risk-ribbon, risk-heatmap,
+risk-delta, cwa-qpf, soil-moisture, antecedent-rain, cwa-weather, weather,
+reference-tracks, route, segments, checkpoints, mcp, pois, hazards, corridors,
+retreat, route-notes
+```
+
+Do not pass the full 32-layer contract list to `--layers`. Runtime-only WMTS
+or UI layers such as `rudy`, `rudy-twmap`, `relief`, `geology`, `topo-5k`,
+`forest`, `completed-track`, `boss-points`, `events`, and `weather-api` are
+validated through the layer contract and browser smoke gates instead.
+`boss-points` are synthesized as a preparation post-process when risk and
+route-pressure inputs exist; `weather-api` is an overlay/status layer whose
+preparation alias is `weather`.
+
+This distinction is intentional:
+
+- 32-layer contract gate: verifies controls, ordering, `data-layer-group`
+  presence, surface-specific availability, and source/provenance contracts.
+- 23-layer preparation run: refreshes workspace artifacts, refs, summaries,
+  environment evidence placeholders, terrain outputs, OCR/mileage, route
+  context, and risk outputs.
+- WMTS-only（執行時圖磚）layers do not require workspace artifacts and must not be
+  treated as missing preparation output.
+- `completed-track` is after-action/admin only; it must be absent from
+  `/admin/pretrip` and `/admin/debug` controls but present on `/admin`.
+
+## Regression Notes From Operator Reruns
+
+The following mistakes are easy to repeat and are considered contract
+regressions:
+
+- Treating a preparation manifest with 23 ready layers as incomplete because
+  the UI contract contains 32 layers. The missing nine are runtime-only or
+  post-process/UI contract layers, not preparation inputs.
+- Treating `rudy` or `rudy-twmap` as failed just because they do not appear in
+  `pretrip_layer_preparation.py --layers`. They are WMTS/runtime layers, while
+  Rudy+TW may still be used as the OCR source during preparation.
+- Treating four terrain overlay PNGs as the total terrain source count. The
+  four files are display modes; the terrain source coverage must be checked
+  separately through DTM coverage and terrain visualization counts.
+- Treating `soil-moisture` or `antecedent-rain` placeholder features as live
+  GEE/SMAP/GPM measurements. When GEE credentials or the fetcher are absent,
+  the layer may correctly render a `missing_credentials` status feature only.
+- Treating `cwa-weather` with zero warning features as failed. It can be a
+  valid fetched result when CWA warnings do not intersect the route/bbox.
+- Clearing `/data/scout/raster-tiles` or OCR cache to force a rerun. Cache
+  refresh must be stale/missing driven; OCR invalidation is keyed by tile
+  image hash, OCR engine, language, and version.
+
 | Scout layer | Required behavior | Files/components responsible | Ordering/dependency constraints | States and edge cases | Verification |
 |-------------|-------------------|------------------------------|---------------------------------|-----------------------|--------------|
 | `imagery` | WMTS imagery basemap, bottom-most visual layer. | `admin_map_layers.py`, `admin_imagery_sources.py`, three `docs/admin/*.html` pages. | z-index 0; below OSM and all evidence. | Can use runtime WMTS or seeded cache; failed tiles must not blank vector evidence. | Contract verifier plus browser layer toggle/group check. |
